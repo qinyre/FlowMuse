@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
+import '../../../app/app_theme_preset.dart';
 import '../../../app/view_models/theme_view_model.dart';
 import '../../../shared/widgets/app_shell.dart';
 
@@ -13,8 +13,9 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedColor = ref.watch(themeViewModelProvider);
+    final selectedPreset = ref.watch(themeViewModelProvider);
     final themeViewModel = ref.read(themeViewModelProvider.notifier);
+    final selectedColor = Theme.of(context).colorScheme.primary;
 
     return AppShell(
       section: ShellSection.settings,
@@ -30,8 +31,8 @@ class SettingsPage extends ConsumerWidget {
           ),
           Expanded(
             child: _SettingsContent(
-              selectedColor: selectedColor,
-              onColorChanged: themeViewModel.changeColor,
+              selectedPreset: selectedPreset,
+              onPresetChanged: themeViewModel.changePreset,
             ),
           ),
         ],
@@ -48,10 +49,16 @@ class _SettingsSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: Color(0xFFFCFEFD),
-        border: Border(right: BorderSide(color: Color(0xFFE8EFEA))),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        border: Border(
+          right: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.72),
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -70,7 +77,7 @@ class _SettingsSidebar extends StatelessWidget {
               '设置',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF1F2624),
+                color: colorScheme.onSurface,
               ),
             ),
           ),
@@ -173,7 +180,8 @@ class _SettingsNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = selected ? selectedColor : const Color(0xFF202827);
+    final colorScheme = Theme.of(context).colorScheme;
+    final foreground = selected ? selectedColor : colorScheme.onSurface;
 
     return Container(
       height: 70,
@@ -214,15 +222,18 @@ class _SettingsNavItem extends StatelessWidget {
 
 class _SettingsContent extends StatelessWidget {
   const _SettingsContent({
-    required this.selectedColor,
-    required this.onColorChanged,
+    required this.selectedPreset,
+    required this.onPresetChanged,
   });
 
-  final Color selectedColor;
-  final ValueChanged<Color> onColorChanged;
+  final AppThemePreset selectedPreset;
+  final ValueChanged<AppThemePreset> onPresetChanged;
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final selectedColor = Theme.of(context).colorScheme.primary;
+
     return ColoredBox(
       color: selectedColor.withValues(alpha: 0.035),
       child: Column(
@@ -230,14 +241,18 @@ class _SettingsContent extends StatelessWidget {
           Container(
             height: 96,
             alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Color(0xFFE7F0EC))),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.72),
+                ),
+              ),
             ),
             child: Text(
               '本地备份',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF1F2624),
+                color: colorScheme.onSurface,
               ),
             ),
           ),
@@ -248,7 +263,7 @@ class _SettingsContent extends StatelessWidget {
                 Text(
                   '上次备份时间:2026-05-28 09:29:49',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFFA5AFAA),
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -307,13 +322,13 @@ class _SettingsContent extends StatelessWidget {
                 Text(
                   '路径：/storage/emulated/0/Documents/StarNote/backup',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFFA5AFAA),
+                    color: colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 34),
-                _ThemeColorSection(
-                  selectedColor: selectedColor,
-                  onColorChanged: onColorChanged,
+                _ThemePresetSection(
+                  selectedPreset: selectedPreset,
+                  onPresetChanged: onPresetChanged,
                 ),
               ],
             ),
@@ -332,7 +347,7 @@ class _SettingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card.outlined(
-      color: const Color(0xFFFCFEFD),
+      color: Theme.of(context).colorScheme.surface,
       child: SizedBox(height: 74, child: Center(child: child)),
     );
   }
@@ -346,6 +361,8 @@ class _SectionCaption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mutedColor = Theme.of(context).colorScheme.onSurfaceVariant;
+
     return Padding(
       padding: const EdgeInsets.only(left: 26),
       child: Column(
@@ -354,7 +371,7 @@ class _SectionCaption extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: const Color(0xFFA5AFAA),
+              color: mutedColor,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -364,7 +381,7 @@ class _SectionCaption extends StatelessWidget {
               subtitle!,
               style: Theme.of(
                 context,
-              ).textTheme.bodySmall?.copyWith(color: const Color(0xFFA5AFAA)),
+              ).textTheme.bodySmall?.copyWith(color: mutedColor),
             ),
           ],
         ],
@@ -373,14 +390,55 @@ class _SectionCaption extends StatelessWidget {
   }
 }
 
-class _ThemeColorSection extends StatelessWidget {
-  const _ThemeColorSection({
-    required this.selectedColor,
-    required this.onColorChanged,
+class _ThemePresetSection extends StatelessWidget {
+  const _ThemePresetSection({
+    required this.selectedPreset,
+    required this.onPresetChanged,
   });
 
-  final Color selectedColor;
-  final ValueChanged<Color> onColorChanged;
+  final AppThemePreset selectedPreset;
+  final ValueChanged<AppThemePreset> onPresetChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionCaption(
+          title: '主题设置',
+          subtitle: '主题是一整套视觉方案，包含明暗、强调色和背景',
+        ),
+        const SizedBox(height: 20),
+        _ThemePresetGroup(
+          title: '基础主题',
+          presets: appThemePresets.take(3).toList(),
+          selectedPreset: selectedPreset,
+          onPresetChanged: onPresetChanged,
+        ),
+        const SizedBox(height: 20),
+        _ThemePresetGroup(
+          title: '特色主题',
+          presets: appThemePresets.skip(3).toList(),
+          selectedPreset: selectedPreset,
+          onPresetChanged: onPresetChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _ThemePresetGroup extends StatelessWidget {
+  const _ThemePresetGroup({
+    required this.title,
+    required this.presets,
+    required this.selectedPreset,
+    required this.onPresetChanged,
+  });
+
+  final String title;
+  final List<AppThemePreset> presets;
+  final AppThemePreset selectedPreset;
+  final ValueChanged<AppThemePreset> onPresetChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -389,17 +447,27 @@ class _ThemeColorSection extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 26),
         child: Row(
           children: [
-            const Expanded(child: Text('主题设置')),
-            IconButton(
-              tooltip: '选择主题色',
-              onPressed: () => _showThemeColorDialog(context),
-              icon: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: selectedColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFE2ECE7)),
-                ),
-                child: const SizedBox(width: 34, height: 34),
+            SizedBox(
+              width: 86,
+              child: Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            Expanded(
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final preset in presets)
+                    _ThemePresetChip(
+                      preset: preset,
+                      selected: preset.id == selectedPreset.id,
+                      onSelected: () => onPresetChanged(preset),
+                    ),
+                ],
               ),
             ),
           ],
@@ -407,41 +475,84 @@ class _ThemeColorSection extends StatelessWidget {
       ),
     );
   }
+}
 
-  Future<void> _showThemeColorDialog(BuildContext context) async {
-    var pendingColor = selectedColor;
+class _ThemePresetChip extends StatelessWidget {
+  const _ThemePresetChip({
+    required this.preset,
+    required this.selected,
+    required this.onSelected,
+  });
 
-    final nextColor = await showDialog<Color>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('主题色'),
-          content: SingleChildScrollView(
-            child: ColorPicker(
-              pickerColor: selectedColor,
-              onColorChanged: (color) => pendingColor = color,
-              enableAlpha: false,
-              labelTypes: const [],
-              pickerAreaBorderRadius: BorderRadius.circular(8),
-              hexInputBar: true,
-            ),
+  final AppThemePreset preset;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = selected
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.outlineVariant;
+
+    return Tooltip(
+      message: preset.description,
+      child: InkWell(
+        onTap: onSelected,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 112,
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: borderColor, width: selected ? 1.5 : 1),
+            color: selected
+                ? preset.seedColor.withValues(alpha: 0.10)
+                : Theme.of(context).cardTheme.color,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(pendingColor),
-              child: const Text('应用'),
-            ),
-          ],
-        );
-      },
+          child: Row(
+            children: [
+              _ThemeSwatch(preset: preset),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  preset.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
+  }
+}
 
-    if (nextColor != null) {
-      onColorChanged(nextColor);
-    }
+class _ThemeSwatch extends StatelessWidget {
+  const _ThemeSwatch({required this.preset});
+
+  final AppThemePreset preset;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            preset.backgroundStart,
+            preset.seedColor,
+            preset.backgroundEnd,
+          ],
+        ),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: const SizedBox(width: 22, height: 22),
+    );
   }
 }

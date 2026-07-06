@@ -1,33 +1,39 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const defaultThemeColor = Color(0xFF66B7A8);
+import '../app_theme_preset.dart';
 
-class ThemeViewModel extends Notifier<Color> {
-  static const _themeColorKey = 'theme_color';
+class ThemeViewModel extends Notifier<AppThemePreset> {
+  static const _themePresetKey = 'theme_preset';
+  static const _legacyThemeColorKey = 'theme_color';
 
   @override
-  Color build() {
+  AppThemePreset build() {
     _restore();
-    return defaultThemeColor;
+    return defaultThemePreset;
   }
 
   Future<void> _restore() async {
     final preferences = await SharedPreferences.getInstance();
-    final value = preferences.getInt(_themeColorKey);
-    if (value != null) {
-      state = Color(value);
+    final presetName = preferences.getString(_themePresetKey);
+
+    if (presetName != null) {
+      state = appThemePresetByName(presetName);
+      return;
+    }
+
+    if (preferences.containsKey(_legacyThemeColorKey)) {
+      state = appThemePresetById(AppThemeId.auroraGreen);
     }
   }
 
-  Future<void> changeColor(Color color) async {
-    state = color;
+  Future<void> changePreset(AppThemePreset preset) async {
+    state = preset;
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setInt(_themeColorKey, color.toARGB32());
+    await preferences.setString(_themePresetKey, preset.id.name);
   }
 }
 
-final themeViewModelProvider = NotifierProvider<ThemeViewModel, Color>(
+final themeViewModelProvider = NotifierProvider<ThemeViewModel, AppThemePreset>(
   ThemeViewModel.new,
 );

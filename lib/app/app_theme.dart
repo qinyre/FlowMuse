@@ -1,22 +1,29 @@
 import 'package:flutter/material.dart';
 
+import 'app_theme_preset.dart';
+
 class AppTheme {
   const AppTheme._();
 
-  static ThemeData light(Color seedColor) {
+  static ThemeData fromPreset(AppThemePreset preset) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: seedColor,
-      brightness: Brightness.light,
+      seedColor: preset.seedColor,
+      brightness: preset.brightness,
     );
+    final surface = preset.isDark ? const Color(0xFF111514) : Colors.white;
+    final scaffold = preset.isDark
+        ? const Color(0xFF090C0B)
+        : const Color(0xFFFAFCFA);
 
     return ThemeData(
       useMaterial3: true,
+      brightness: preset.brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: const Color(0xFFFAFCFA),
+      scaffoldBackgroundColor: scaffold,
       fontFamily: 'serif',
       cardTheme: CardThemeData(
         elevation: 0,
-        color: Colors.white,
+        color: surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       iconButtonTheme: IconButtonThemeData(
