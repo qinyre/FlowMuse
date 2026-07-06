@@ -6,7 +6,7 @@ class WhiteboardScene {
     this.zoom = 1,
     this.panX = 0,
     this.panY = 0,
-    this.source = 'flowmuse',
+    this.source = 'https://excalidraw.com',
     this.appState = const {},
     this.files = const {},
   });
@@ -75,7 +75,7 @@ class WhiteboardScene {
           : (rawZoom as num?)?.toDouble() ?? 1,
       panX: -((appState['scrollX'] as num?)?.toDouble() ?? 0),
       panY: -((appState['scrollY'] as num?)?.toDouble() ?? 0),
-      source: json['source'] as String? ?? 'flowmuse',
+      source: json['source'] as String? ?? 'https://excalidraw.com',
       appState: appState,
       files: Map<String, Object?>.from(json['files'] as Map? ?? const {}),
     );

@@ -40,10 +40,8 @@ class WhiteboardPoint {
         (json[1] as num).toDouble(),
       );
     }
-    final map = Map<String, Object?>.from(json! as Map);
-    return WhiteboardPoint(
-      (map['x']! as num).toDouble(),
-      (map['y']! as num).toDouble(),
+    throw const FormatException(
+      'Whiteboard points must use Excalidraw point arrays.',
     );
   }
 }

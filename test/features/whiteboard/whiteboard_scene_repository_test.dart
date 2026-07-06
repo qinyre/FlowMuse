@@ -101,7 +101,7 @@ void main() {
 
     expect(json['type'], 'excalidraw');
     expect(json['version'], 2);
-    expect(json['source'], 'flowmuse');
+    expect(json['source'], 'https://excalidraw.com');
     expect(json['files'], <String, Object?>{});
     expect(element['index'], 'a0');
     expect(element['updated'], 1000);

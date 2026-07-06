@@ -198,4 +198,41 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  test('rejects legacy object point json', () {
+    expect(
+      () => WhiteboardElement.fromJson({
+        'id': 'draw-legacy-point',
+        'type': 'freedraw',
+        'x': 10,
+        'y': 20,
+        'width': 12,
+        'height': 8,
+        'angle': 0,
+        'strokeColor': '#1e1e1e',
+        'backgroundColor': 'transparent',
+        'fillStyle': 'solid',
+        'strokeWidth': 2,
+        'strokeStyle': 'solid',
+        'roughness': 0,
+        'opacity': 100,
+        'seed': 1,
+        'version': 4,
+        'versionNonce': 5,
+        'index': 'a0',
+        'isDeleted': false,
+        'groupIds': <String>[],
+        'frameId': null,
+        'boundElements': null,
+        'updated': 1000,
+        'link': null,
+        'locked': false,
+        'points': [
+          {'x': 0, 'y': 0},
+          {'x': 12, 'y': 8},
+        ],
+      }),
+      throwsA(isA<FormatException>()),
+    );
+  });
 }
