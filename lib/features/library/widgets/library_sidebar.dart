@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
+import '../../folders/view_models/folders_view_model.dart';
 import '../../../shared/widgets/app_shell.dart';
 
-class LibrarySidebar extends StatelessWidget {
+class LibrarySidebar extends ConsumerWidget {
   const LibrarySidebar({super.key, required this.section});
 
   final ShellSection section;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     final accent = colorScheme.primary;
 
     return Container(
-      width: 318,
+      width: sharedSidebarWidth,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -31,7 +33,7 @@ class LibrarySidebar extends StatelessWidget {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(26, 26, 26, 22),
+            padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -92,6 +94,10 @@ class LibrarySidebar extends StatelessWidget {
                   selected: section == ShellSection.folders,
                   count: '暂无文件夹',
                   actionIcon: LucideIcons.circlePlus,
+                  onActionTap: () {
+                    ref.read(foldersViewModelProvider.notifier).createFolder();
+                    context.go(AppRoutes.folders);
+                  },
                   onTap: () => context.go(AppRoutes.folders),
                 ),
                 const _SidebarItem(
@@ -125,7 +131,7 @@ class _SidebarSearch extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: 66,
-        padding: const EdgeInsets.symmetric(horizontal: 28),
+        padding: const EdgeInsets.symmetric(horizontal: 22),
         color: selected
             ? colorScheme.primary.withValues(alpha: 0.10)
             : Colors.transparent,
@@ -155,6 +161,7 @@ class _SidebarItem extends StatelessWidget {
     this.count,
     this.trailingIcon,
     this.actionIcon,
+    this.onActionTap,
     this.onTap,
   });
 
@@ -164,6 +171,7 @@ class _SidebarItem extends StatelessWidget {
   final String? count;
   final IconData? trailingIcon;
   final IconData? actionIcon;
+  final VoidCallback? onActionTap;
   final VoidCallback? onTap;
 
   @override
@@ -175,7 +183,7 @@ class _SidebarItem extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: 58,
-        padding: const EdgeInsets.symmetric(horizontal: 28),
+        padding: const EdgeInsets.symmetric(horizontal: 22),
         color: selected
             ? colorScheme.primary.withValues(alpha: 0.10)
             : Colors.transparent,
@@ -193,8 +201,17 @@ class _SidebarItem extends StatelessWidget {
               ),
             ),
             if (actionIcon != null) ...[
-              Icon(actionIcon, color: colorScheme.primary, size: 18),
-              const SizedBox(width: 26),
+              IconButton(
+                tooltip: '新建$label',
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
+                ),
+                padding: EdgeInsets.zero,
+                onPressed: onActionTap,
+                icon: Icon(actionIcon, color: colorScheme.primary, size: 18),
+              ),
+              const SizedBox(width: 16),
             ],
             if (count != null)
               Text(
@@ -242,7 +259,7 @@ class _MountainFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 220,
+      height: 190,
       width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
@@ -254,7 +271,7 @@ class _MountainFooter extends StatelessWidget {
             bottom: 0,
             child: Icon(
               LucideIcons.mountain,
-              size: 260,
+              size: 220,
               color: accent.withValues(alpha: 0.32),
             ),
           ),

@@ -6,7 +6,6 @@ import '../../../app/app_router.dart';
 import '../models/notebook_item.dart';
 import '../view_models/library_home_view_model.dart';
 import '../widgets/library_content.dart';
-import '../../../shared/widgets/app_shell.dart';
 
 class LibraryHomePage extends ConsumerWidget {
   const LibraryHomePage({super.key});
@@ -20,22 +19,22 @@ class LibraryHomePage extends ConsumerWidget {
     final state = ref.watch(libraryHomeViewModelProvider);
     final viewModel = ref.read(libraryHomeViewModelProvider.notifier);
 
-    return AppShell(
-      section: ShellSection.library,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 820;
-          return LibraryContent(
-            compact: compact,
-            state: state,
-            onFilterChanged: viewModel.selectFilter,
-            onCreate: () => _openWhiteboard(context),
-            onOpenNotebook: (NotebookItem item) {
-              _openWhiteboard(context, title: item.title);
-            },
-          );
-        },
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 820;
+        return LibraryContent(
+          compact: compact,
+          state: state,
+          onFilterChanged: viewModel.selectFilter,
+          onViewModeChanged: viewModel.changeViewMode,
+          onSortDirectionChanged: viewModel.toggleSortDirection,
+          onSelectionModeChanged: viewModel.toggleSelectionMode,
+          onCreate: () => _openWhiteboard(context),
+          onOpenNotebook: (NotebookItem item) {
+            _openWhiteboard(context, title: item.title);
+          },
+        );
+      },
     );
   }
 }

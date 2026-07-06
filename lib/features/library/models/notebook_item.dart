@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 enum LibraryFilter { all, notes, pdf }
 
+enum LibraryViewMode { grid, list }
+
 class NotebookItem {
   const NotebookItem({
     required this.title,

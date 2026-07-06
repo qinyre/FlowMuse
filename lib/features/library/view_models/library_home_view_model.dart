@@ -7,22 +7,41 @@ import '../models/notebook_item.dart';
 class LibraryHomeState {
   const LibraryHomeState({
     this.selectedFilter = LibraryFilter.all,
+    this.viewMode = LibraryViewMode.grid,
+    this.sortAscending = false,
+    this.selectionMode = false,
     this.notebooks = sampleNotebooks,
   });
 
   final LibraryFilter selectedFilter;
+  final LibraryViewMode viewMode;
+  final bool sortAscending;
+  final bool selectionMode;
   final List<NotebookItem> notebooks;
 
   List<NotebookItem> get visibleNotebooks {
-    if (selectedFilter == LibraryFilter.all) {
-      return notebooks;
-    }
-    return notebooks.where((item) => item.kind == selectedFilter).toList();
+    final filtered = selectedFilter == LibraryFilter.all
+        ? notebooks
+        : notebooks.where((item) => item.kind == selectedFilter);
+    final sorted = filtered.toList()
+      ..sort((a, b) {
+        final result = a.date.compareTo(b.date);
+        return sortAscending ? result : -result;
+      });
+    return sorted;
   }
 
-  LibraryHomeState copyWith({LibraryFilter? selectedFilter}) {
+  LibraryHomeState copyWith({
+    LibraryFilter? selectedFilter,
+    LibraryViewMode? viewMode,
+    bool? sortAscending,
+    bool? selectionMode,
+  }) {
     return LibraryHomeState(
       selectedFilter: selectedFilter ?? this.selectedFilter,
+      viewMode: viewMode ?? this.viewMode,
+      sortAscending: sortAscending ?? this.sortAscending,
+      selectionMode: selectionMode ?? this.selectionMode,
       notebooks: notebooks,
     );
   }
@@ -39,6 +58,18 @@ class LibraryHomeViewModel extends Notifier<LibraryHomeState> {
       return;
     }
     state = state.copyWith(selectedFilter: filter);
+  }
+
+  void changeViewMode(LibraryViewMode viewMode) {
+    state = state.copyWith(viewMode: viewMode);
+  }
+
+  void toggleSortDirection() {
+    state = state.copyWith(sortAscending: !state.sortAscending);
+  }
+
+  void toggleSelectionMode() {
+    state = state.copyWith(selectionMode: !state.selectionMode);
   }
 }
 

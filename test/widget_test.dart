@@ -65,6 +65,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('这里空空如也...'), findsOneWidget);
 
+    await tester.tap(find.byTooltip('新建文件夹').first);
+    await tester.pumpAndSettle();
+    expect(find.text('新建文件夹 1'), findsOneWidget);
+
     await tester.tap(find.byTooltip('设置').first);
     await tester.pumpAndSettle();
     expect(find.text('本地备份'), findsWidgets);

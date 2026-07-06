@@ -6,6 +6,7 @@ import '../features/search/views/search_page.dart';
 import '../features/settings/views/settings_page.dart';
 import '../features/folders/views/folders_page.dart';
 import '../features/whiteboard/views/whiteboard_page.dart';
+import '../shared/widgets/app_shell.dart';
 
 class AppRoutes {
   const AppRoutes._();
@@ -25,17 +26,33 @@ GoRouter createAppRouter() {
   return GoRouter(
     initialLocation: AppRoutes.library,
     routes: [
-      GoRoute(
-        path: AppRoutes.library,
-        builder: (context, state) => const LibraryHomePage(),
-      ),
-      GoRoute(
-        path: AppRoutes.search,
-        builder: (context, state) => const SearchPage(),
-      ),
-      GoRoute(
-        path: AppRoutes.folders,
-        builder: (context, state) => const FoldersPage(),
+      ShellRoute(
+        builder: (context, state, child) {
+          return AppShell(
+            section: _sectionForPath(state.uri.path),
+            child: child,
+          );
+        },
+        routes: [
+          GoRoute(
+            path: AppRoutes.library,
+            pageBuilder: (context, state) {
+              return _contentPage(state, const LibraryHomePage());
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.search,
+            pageBuilder: (context, state) {
+              return _contentPage(state, const SearchPage());
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.folders,
+            pageBuilder: (context, state) {
+              return _contentPage(state, const FoldersPage());
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.settings,
@@ -52,5 +69,25 @@ GoRouter createAppRouter() {
         },
       ),
     ],
+  );
+}
+
+ShellSection _sectionForPath(String path) {
+  return switch (path) {
+    AppRoutes.search => ShellSection.search,
+    AppRoutes.folders => ShellSection.folders,
+    _ => ShellSection.library,
+  };
+}
+
+CustomTransitionPage<void> _contentPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    transitionDuration: const Duration(milliseconds: 160),
+    reverseTransitionDuration: const Duration(milliseconds: 120),
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return FadeTransition(opacity: animation, child: child);
+    },
   );
 }

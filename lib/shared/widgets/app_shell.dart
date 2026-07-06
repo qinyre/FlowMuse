@@ -4,6 +4,8 @@ import '../../features/library/widgets/library_sidebar.dart';
 
 enum ShellSection { library, search, folders, settings }
 
+const sharedSidebarWidth = 268.0;
+
 class AppShell extends StatelessWidget {
   const AppShell({
     super.key,

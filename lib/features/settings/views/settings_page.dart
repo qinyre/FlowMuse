@@ -22,7 +22,7 @@ class SettingsPage extends ConsumerWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 318,
+            width: sharedSidebarWidth,
             child: _SettingsSidebar(
               selectedColor: selectedColor,
               onBack: () => context.go(AppRoutes.library),

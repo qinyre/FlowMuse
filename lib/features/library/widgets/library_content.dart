@@ -12,6 +12,9 @@ class LibraryContent extends StatelessWidget {
     required this.compact,
     required this.state,
     required this.onFilterChanged,
+    required this.onViewModeChanged,
+    required this.onSortDirectionChanged,
+    required this.onSelectionModeChanged,
     required this.onCreate,
     required this.onOpenNotebook,
   });
@@ -19,6 +22,9 @@ class LibraryContent extends StatelessWidget {
   final bool compact;
   final LibraryHomeState state;
   final ValueChanged<LibraryFilter> onFilterChanged;
+  final ValueChanged<LibraryViewMode> onViewModeChanged;
+  final VoidCallback onSortDirectionChanged;
+  final VoidCallback onSelectionModeChanged;
   final VoidCallback onCreate;
   final ValueChanged<NotebookItem> onOpenNotebook;
 
@@ -29,7 +35,15 @@ class LibraryContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _LibraryHeader(compact: compact),
+          _LibraryHeader(
+            compact: compact,
+            viewMode: state.viewMode,
+            sortAscending: state.sortAscending,
+            selectionMode: state.selectionMode,
+            onViewModeChanged: onViewModeChanged,
+            onSortDirectionChanged: onSortDirectionChanged,
+            onSelectionModeChanged: onSelectionModeChanged,
+          ),
           const SizedBox(height: 46),
           _FilterTabs(
             selected: state.selectedFilter,
@@ -37,24 +51,11 @@ class LibraryContent extends StatelessWidget {
           ),
           const SizedBox(height: 34),
           Expanded(
-            child: GridView.builder(
-              itemCount: state.visibleNotebooks.length + 1,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: compact ? 2 : 3,
-                mainAxisExtent: 332,
-                crossAxisSpacing: compact ? 26 : 66,
-                mainAxisSpacing: 62,
-              ),
-              itemBuilder: (context, index) {
-                if (index == 0) {
-                  return CreateNotebookCard(onTap: onCreate);
-                }
-                final item = state.visibleNotebooks[index - 1];
-                return NotebookCard(
-                  item: item,
-                  onTap: () => onOpenNotebook(item),
-                );
-              },
+            child: _LibraryItems(
+              state: state,
+              compact: compact,
+              onCreate: onCreate,
+              onOpenNotebook: onOpenNotebook,
             ),
           ),
         ],
@@ -71,50 +72,198 @@ class _FilterTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SegmentedButton<LibraryFilter>(
       key: const ValueKey('library-filter-tabs'),
-      children: [
-        _FilterTab(
-          label: '全部',
-          selected: selected == LibraryFilter.all,
-          onTap: () => onFilterChanged(LibraryFilter.all),
+      showSelectedIcon: false,
+      style: ButtonStyle(
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 0),
         ),
-        const SizedBox(width: 42),
-        _FilterTab(
-          label: '笔记',
-          selected: selected == LibraryFilter.notes,
-          onTap: () => onFilterChanged(LibraryFilter.notes),
+        visualDensity: VisualDensity.compact,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+        overlayColor: WidgetStatePropertyAll(
+          colorScheme.primary.withValues(alpha: 0.08),
         ),
-        const SizedBox(width: 42),
-        _FilterTab(
-          label: 'PDF',
-          selected: selected == LibraryFilter.pdf,
-          onTap: () => onFilterChanged(LibraryFilter.pdf),
+        side: const WidgetStatePropertyAll(BorderSide.none),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
+        ),
+      ),
+      segments: [
+        ButtonSegment(
+          value: LibraryFilter.all,
+          label: _FilterSegmentLabel(
+            label: '全部',
+            selected: selected == LibraryFilter.all,
+          ),
+          icon: const SizedBox.shrink(),
+        ),
+        ButtonSegment(
+          value: LibraryFilter.notes,
+          label: _FilterSegmentLabel(
+            label: '笔记',
+            selected: selected == LibraryFilter.notes,
+          ),
+          icon: const SizedBox.shrink(),
+        ),
+        ButtonSegment(
+          value: LibraryFilter.pdf,
+          label: _FilterSegmentLabel(
+            label: 'PDF',
+            selected: selected == LibraryFilter.pdf,
+          ),
+          icon: const SizedBox.shrink(),
         ),
       ],
+      selected: {selected},
+      onSelectionChanged: (values) => onFilterChanged(values.single),
+      selectedIcon: const SizedBox.shrink(),
+      emptySelectionAllowed: false,
     );
   }
 }
 
-class _FilterTab extends StatelessWidget {
-  const _FilterTab({
-    required this.label,
-    required this.selected,
+class _LibraryItems extends StatelessWidget {
+  const _LibraryItems({
+    required this.state,
+    required this.compact,
+    required this.onCreate,
+    required this.onOpenNotebook,
+  });
+
+  final LibraryHomeState state;
+  final bool compact;
+  final VoidCallback onCreate;
+  final ValueChanged<NotebookItem> onOpenNotebook;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.viewMode == LibraryViewMode.list) {
+      return ListView.separated(
+        itemCount: state.visibleNotebooks.length + 1,
+        separatorBuilder: (context, index) => const SizedBox(height: 14),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return _CreateNotebookTile(onTap: onCreate);
+          }
+          final item = state.visibleNotebooks[index - 1];
+          return _NotebookTile(
+            item: item,
+            selectionMode: state.selectionMode,
+            onTap: () => onOpenNotebook(item),
+          );
+        },
+      );
+    }
+
+    return GridView.builder(
+      itemCount: state.visibleNotebooks.length + 1,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: compact ? 2 : 3,
+        mainAxisExtent: 332,
+        crossAxisSpacing: compact ? 26 : 66,
+        mainAxisSpacing: 62,
+      ),
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return CreateNotebookCard(onTap: onCreate);
+        }
+        final item = state.visibleNotebooks[index - 1];
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: NotebookCard(
+                item: item,
+                onTap: () => onOpenNotebook(item),
+              ),
+            ),
+            if (state.selectionMode)
+              const Positioned(
+                top: 10,
+                right: 10,
+                child: Checkbox(value: false, onChanged: null),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CreateNotebookTile extends StatelessWidget {
+  const _CreateNotebookTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card.outlined(
+      child: ListTile(
+        key: const ValueKey('create-notebook-list-tile'),
+        leading: const Icon(LucideIcons.plus),
+        title: const Text('新建'),
+        subtitle: const Text('创建快捷笔记'),
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _NotebookTile extends StatelessWidget {
+  const _NotebookTile({
+    required this.item,
+    required this.selectionMode,
     required this.onTap,
   });
 
+  final NotebookItem item;
+  final bool selectionMode;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card.outlined(
+      child: ListTile(
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            width: 48,
+            height: 58,
+            child: NotebookCover(item: item),
+          ),
+        ),
+        title: Text(item.title),
+        subtitle: Text(item.date),
+        trailing: selectionMode
+            ? const Checkbox(value: false, onChanged: null)
+            : Icon(
+                item.kind == LibraryFilter.pdf
+                    ? LucideIcons.fileText
+                    : LucideIcons.bookOpen,
+              ),
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _FilterSegmentLabel extends StatelessWidget {
+  const _FilterSegmentLabel({required this.label, required this.selected});
+
   final String label;
   final bool selected;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return InkWell(
-      onTap: onTap,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             label,
@@ -137,9 +286,23 @@ class _FilterTab extends StatelessWidget {
 }
 
 class _LibraryHeader extends StatelessWidget {
-  const _LibraryHeader({required this.compact});
+  const _LibraryHeader({
+    required this.compact,
+    required this.viewMode,
+    required this.sortAscending,
+    required this.selectionMode,
+    required this.onViewModeChanged,
+    required this.onSortDirectionChanged,
+    required this.onSelectionModeChanged,
+  });
 
   final bool compact;
+  final LibraryViewMode viewMode;
+  final bool sortAscending;
+  final bool selectionMode;
+  final ValueChanged<LibraryViewMode> onViewModeChanged;
+  final VoidCallback onSortDirectionChanged;
+  final VoidCallback onSelectionModeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -159,22 +322,50 @@ class _LibraryHeader extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        IconButton(
-          tooltip: '网格视图',
-          onPressed: () {},
-          icon: const Icon(LucideIcons.layoutGrid),
+        MenuAnchor(
+          builder: (context, controller, child) {
+            return IconButton(
+              tooltip: viewMode == LibraryViewMode.grid ? '网格视图' : '列表视图',
+              onPressed: () {
+                controller.isOpen ? controller.close() : controller.open();
+              },
+              icon: Icon(
+                viewMode == LibraryViewMode.grid
+                    ? LucideIcons.layoutGrid
+                    : LucideIcons.list,
+              ),
+            );
+          },
+          menuChildren: [
+            MenuItemButton(
+              leadingIcon: const Icon(LucideIcons.layoutGrid),
+              onPressed: () => onViewModeChanged(LibraryViewMode.grid),
+              child: const Text('网格视图'),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(LucideIcons.list),
+              onPressed: () => onViewModeChanged(LibraryViewMode.list),
+              child: const Text('列表视图'),
+            ),
+          ],
         ),
         const SizedBox(width: 8),
         IconButton(
-          tooltip: '排序',
-          onPressed: () {},
-          icon: const Icon(LucideIcons.arrowDownUp),
+          tooltip: sortAscending ? '按日期升序' : '按日期降序',
+          onPressed: onSortDirectionChanged,
+          icon: Icon(
+            sortAscending
+                ? LucideIcons.arrowUpNarrowWide
+                : LucideIcons.arrowDownWideNarrow,
+          ),
         ),
         const SizedBox(width: 8),
         IconButton(
-          tooltip: '多选',
-          onPressed: () {},
+          tooltip: selectionMode ? '退出多选' : '多选',
+          isSelected: selectionMode,
+          onPressed: onSelectionModeChanged,
           icon: const Icon(LucideIcons.squareCheck),
+          selectedIcon: const Icon(LucideIcons.checkSquare),
         ),
       ],
     );
