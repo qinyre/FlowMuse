@@ -62,17 +62,7 @@ class WhiteboardState {
 
   List<CollaborativeElement> get collaborativeElements {
     return [
-      for (final element in elements)
-        CollaborativeElement(
-          id: element.id,
-          type: element.type,
-          version: element.version,
-          versionNonce: element.versionNonce,
-          updatedAt: element.updatedAt,
-          fractionalIndex: element.fractionalIndex,
-          isDeleted: element.isDeleted,
-          data: element.data,
-        ),
+      for (final element in elements) CollaborativeElement.fromElement(element),
     ];
   }
 

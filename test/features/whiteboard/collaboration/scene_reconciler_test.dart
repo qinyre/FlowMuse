@@ -20,7 +20,33 @@ void main() {
       updatedAt: updatedAt,
       fractionalIndex: index,
       isDeleted: deleted,
-      data: const {'x': 10, 'y': 20},
+      elementJson: {
+        'id': id,
+        'type': 'rectangle',
+        'x': 10,
+        'y': 20,
+        'width': 30,
+        'height': 40,
+        'angle': 0,
+        'strokeColor': '#1e1e1e',
+        'backgroundColor': 'transparent',
+        'fillStyle': 'solid',
+        'strokeWidth': 2,
+        'strokeStyle': 'solid',
+        'roughness': 0,
+        'opacity': 100,
+        'seed': 1,
+        'version': version,
+        'versionNonce': nonce,
+        'index': index,
+        'isDeleted': deleted,
+        'groupIds': <String>[],
+        'frameId': null,
+        'boundElements': null,
+        'updated': updatedAt,
+        'link': null,
+        'locked': false,
+      },
     );
   }
 
@@ -106,5 +132,40 @@ void main() {
     ]);
 
     expect(syncable.map((item) => item.id), ['fresh-delete']);
+  });
+
+  test('sync payload keeps full Excalidraw element json', () {
+    final text = WhiteboardElement.text(
+      id: 'text-1',
+      x: 10,
+      y: 20,
+      text: '节点',
+      fractionalIndex: 'a0',
+      version: 3,
+      versionNonce: 7,
+      updatedAt: 1000,
+    ).newWith(
+      containerId: 'rect-1',
+      originalText: '节点',
+      autoResize: false,
+      lineHeight: 1.25,
+      boundElements: const [
+        {'id': 'arrow-1', 'type': 'arrow'},
+      ],
+    );
+
+    final collaborative = CollaborativeElement.fromElement(text);
+    final json = collaborative.toJson();
+
+    expect(json['data'], isNull);
+    expect(json['x'], 10);
+    expect(json['text'], '节点');
+    expect(json['containerId'], 'rect-1');
+    expect(json['originalText'], '节点');
+    expect(json['autoResize'], false);
+    expect(json['lineHeight'], 1.25);
+    expect(json['boundElements'], [
+      {'id': 'arrow-1', 'type': 'arrow'},
+    ]);
   });
 }

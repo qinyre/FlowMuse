@@ -9,7 +9,7 @@ class CollaborativeElement {
     required this.updatedAt,
     required this.fractionalIndex,
     required this.isDeleted,
-    required this.data,
+    required this.elementJson,
   });
 
   final String id;
@@ -19,7 +19,20 @@ class CollaborativeElement {
   final int updatedAt;
   final String? fractionalIndex;
   final bool isDeleted;
-  final Map<String, Object?> data;
+  final Map<String, Object?> elementJson;
+
+  factory CollaborativeElement.fromElement(WhiteboardElement element) {
+    return CollaborativeElement(
+      id: element.id,
+      type: element.type,
+      version: element.version,
+      versionNonce: element.versionNonce,
+      updatedAt: element.updatedAt,
+      fractionalIndex: element.fractionalIndex,
+      isDeleted: element.isDeleted,
+      elementJson: element.toJson(),
+    );
+  }
 
   CollaborativeElement copyWith({
     int? version,
@@ -27,43 +40,68 @@ class CollaborativeElement {
     int? updatedAt,
     String? fractionalIndex,
     bool? isDeleted,
-    Map<String, Object?>? data,
+    Map<String, Object?>? elementJson,
   }) {
+    final nextVersion = version ?? this.version;
+    final nextVersionNonce = versionNonce ?? this.versionNonce;
+    final nextUpdatedAt = updatedAt ?? this.updatedAt;
+    final nextFractionalIndex = fractionalIndex ?? this.fractionalIndex;
+    final nextIsDeleted = isDeleted ?? this.isDeleted;
+    final nextElementJson = Map<String, Object?>.from(
+      elementJson ?? this.elementJson,
+    );
+    nextElementJson['version'] = nextVersion;
+    nextElementJson['versionNonce'] = nextVersionNonce;
+    nextElementJson['updated'] = nextUpdatedAt;
+    nextElementJson['index'] = nextFractionalIndex;
+    nextElementJson['isDeleted'] = nextIsDeleted;
     return CollaborativeElement(
       id: id,
       type: type,
-      version: version ?? this.version,
-      versionNonce: versionNonce ?? this.versionNonce,
-      updatedAt: updatedAt ?? this.updatedAt,
-      fractionalIndex: fractionalIndex ?? this.fractionalIndex,
-      isDeleted: isDeleted ?? this.isDeleted,
-      data: data ?? this.data,
+      version: nextVersion,
+      versionNonce: nextVersionNonce,
+      updatedAt: nextUpdatedAt,
+      fractionalIndex: nextFractionalIndex,
+      isDeleted: nextIsDeleted,
+      elementJson: nextElementJson,
     );
   }
 
   Map<String, Object?> toJson() {
-    return {
-      'id': id,
-      'type': type.name,
-      'version': version,
-      'versionNonce': versionNonce,
-      'updated': updatedAt,
-      'index': fractionalIndex,
-      'isDeleted': isDeleted,
-      'data': data,
-    };
+    return Map<String, Object?>.from(elementJson)
+      ..['id'] = id
+      ..['type'] = _typeToJson(type)
+      ..['version'] = version
+      ..['versionNonce'] = versionNonce
+      ..['updated'] = updatedAt
+      ..['index'] = fractionalIndex
+      ..['isDeleted'] = isDeleted;
   }
 
   factory CollaborativeElement.fromJson(Map<String, Object?> json) {
+    final element = WhiteboardElement.fromJson(json);
     return CollaborativeElement(
       id: json['id']! as String,
-      type: WhiteboardElementType.values.byName(json['type']! as String),
+      type: element.type,
       version: (json['version']! as num).toInt(),
       versionNonce: (json['versionNonce']! as num).toInt(),
       updatedAt: ((json['updated'] ?? json['updatedAt'])! as num).toInt(),
       fractionalIndex: (json['index'] ?? json['fractionalIndex']) as String?,
       isDeleted: json['isDeleted']! as bool,
-      data: Map<String, Object?>.from(json['data']! as Map),
+      elementJson: json.containsKey('data')
+          ? {
+              ...element.toJson(),
+              'data': Map<String, Object?>.from(json['data']! as Map),
+            }
+          : Map<String, Object?>.from(json),
     );
+  }
+
+  static String _typeToJson(WhiteboardElementType type) {
+    return switch (type) {
+      WhiteboardElementType.freedraw => 'freedraw',
+      WhiteboardElementType.magicFrame => 'magicframe',
+      _ => type.name,
+    };
   }
 }
