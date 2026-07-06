@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../folders/view_models/folders_view_model.dart';
+import '../../tags/view_models/tags_view_model.dart';
 import '../../../shared/widgets/app_shell.dart';
 
 class LibrarySidebar extends ConsumerStatefulWidget {
@@ -18,10 +19,16 @@ class LibrarySidebar extends ConsumerStatefulWidget {
 
 class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
   bool _allNotesExpanded = true;
+  bool _foldersExpanded = true;
+  bool _tagsExpanded = true;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final folders = ref.watch(foldersViewModelProvider).visibleFolders;
+    final tags = ref.watch(tagsViewModelProvider).tags;
+    final hasFolders = folders.isNotEmpty;
+    final hasTags = tags.isNotEmpty;
 
     return Container(
       width: sharedSidebarWidth,
@@ -122,20 +129,73 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                   icon: LucideIcons.folder,
                   label: '文件夹',
                   selected: widget.section == ShellSection.folders,
-                  count: '暂无文件夹',
                   actionIcon: LucideIcons.circlePlus,
+                  leadingAction: true,
+                  trailingIcon: hasFolders
+                      ? (_foldersExpanded
+                            ? LucideIcons.chevronDown
+                            : LucideIcons.chevronRight)
+                      : null,
                   onActionTap: () {
                     ref.read(foldersViewModelProvider.notifier).createFolder();
                     context.go(AppRoutes.folders);
                   },
+                  onTrailingTap: () {
+                    setState(() => _foldersExpanded = !_foldersExpanded);
+                  },
                   onTap: () => context.go(AppRoutes.folders),
                 ),
-                const _SidebarItem(
+                if (!hasFolders)
+                  const _SidebarEmptyItem(label: '暂无文件夹')
+                else
+                  _SidebarChildren(
+                    expanded: _foldersExpanded,
+                    emptyKey: 'empty-folders',
+                    childrenKey: 'folder-children',
+                    children: [
+                      for (final folder in folders)
+                        _SidebarItem(
+                          icon: LucideIcons.folder,
+                          label: folder.name,
+                          count: folder.count.toString(),
+                          level: 1,
+                        ),
+                    ],
+                  ),
+                _SidebarItem(
                   icon: LucideIcons.hash,
                   label: '标签',
-                  count: '暂无标签',
                   actionIcon: LucideIcons.circlePlus,
+                  leadingAction: true,
+                  trailingIcon: hasTags
+                      ? (_tagsExpanded
+                            ? LucideIcons.chevronDown
+                            : LucideIcons.chevronRight)
+                      : null,
+                  onActionTap: () {
+                    ref.read(tagsViewModelProvider.notifier).createTag();
+                  },
+                  onTrailingTap: () {
+                    setState(() => _tagsExpanded = !_tagsExpanded);
+                  },
                 ),
+                if (!hasTags)
+                  const _SidebarEmptyItem(label: '暂无标签')
+                else
+                  _SidebarChildren(
+                    expanded: _tagsExpanded,
+                    emptyKey: 'empty-tags',
+                    childrenKey: 'tag-children',
+                    children: [
+                      for (final tag in tags)
+                        _SidebarItem(
+                          icon: LucideIcons.hash,
+                          label: tag.name,
+                          count: tag.count.toString(),
+                          level: 1,
+                        ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -153,6 +213,7 @@ class _SidebarItem extends StatelessWidget {
     this.count,
     this.trailingIcon,
     this.actionIcon,
+    this.leadingAction = false,
     this.onActionTap,
     this.onTrailingTap,
     this.onTap,
@@ -165,6 +226,7 @@ class _SidebarItem extends StatelessWidget {
   final String? count;
   final IconData? trailingIcon;
   final IconData? actionIcon;
+  final bool leadingAction;
   final VoidCallback? onActionTap;
   final VoidCallback? onTrailingTap;
   final VoidCallback? onTap;
@@ -173,7 +235,7 @@ class _SidebarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final foreground = selected ? colorScheme.primary : const Color(0xFF252C2A);
+    final foreground = selected ? colorScheme.primary : colorScheme.onSurface;
 
     return InkWell(
       onTap: onTap,
@@ -192,25 +254,37 @@ class _SidebarItem extends StatelessWidget {
             Icon(icon, color: foreground.withValues(alpha: 0.86), size: 18),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: foreground,
-                  height: 1.1,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                ),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: foreground,
+                        height: 1.1,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  if (leadingAction && actionIcon != null) ...[
+                    const SizedBox(width: 6),
+                    _SidebarActionButton(
+                      tooltip: '新建$label',
+                      icon: actionIcon!,
+                      onPressed: onActionTap,
+                    ),
+                  ],
+                ],
               ),
             ),
-            if (actionIcon != null) ...[
-              IconButton(
+            if (!leadingAction && actionIcon != null) ...[
+              _SidebarActionButton(
                 tooltip: '新建$label',
-                constraints: const BoxConstraints.tightFor(
-                  width: 28,
-                  height: 28,
-                ),
-                padding: EdgeInsets.zero,
+                icon: actionIcon!,
                 onPressed: onActionTap,
-                icon: Icon(actionIcon, color: colorScheme.primary, size: 16),
               ),
               const SizedBox(width: 8),
             ],
@@ -218,7 +292,7 @@ class _SidebarItem extends StatelessWidget {
               Text(
                 count!,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFFA5AFAA),
+                  color: colorScheme.onSurfaceVariant,
                   height: 1.1,
                 ),
               ),
@@ -233,13 +307,87 @@ class _SidebarItem extends StatelessWidget {
                 onPressed: onTrailingTap,
                 icon: Icon(
                   trailingIcon,
-                  color: const Color(0xFF69736F),
+                  color: colorScheme.onSurfaceVariant,
                   size: 16,
                 ),
               ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SidebarChildren extends StatelessWidget {
+  const _SidebarChildren({
+    required this.expanded,
+    required this.emptyKey,
+    required this.childrenKey,
+    required this.children,
+  });
+
+  final bool expanded;
+  final String emptyKey;
+  final String childrenKey;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 160),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      child: expanded
+          ? Column(key: ValueKey(childrenKey), children: children)
+          : SizedBox.shrink(key: ValueKey(emptyKey)),
+    );
+  }
+}
+
+class _SidebarEmptyItem extends StatelessWidget {
+  const _SidebarEmptyItem({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      height: 30,
+      margin: const EdgeInsets.fromLTRB(36, 0, 10, 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.centerLeft,
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+          height: 1.1,
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarActionButton extends StatelessWidget {
+  const _SidebarActionButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+      padding: EdgeInsets.zero,
+      onPressed: onPressed,
+      icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),
     );
   }
 }
@@ -251,7 +399,9 @@ class _UserAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return CircleAvatar(
       radius: 18,
-      backgroundColor: const Color(0xFFF9F5EA),
+      backgroundColor: Theme.of(
+        context,
+      ).colorScheme.primary.withValues(alpha: 0.12),
       child: Icon(
         LucideIcons.sparkles,
         color: Theme.of(context).colorScheme.primary,
@@ -280,7 +430,7 @@ class _HeaderIconButton extends StatelessWidget {
       constraints: const BoxConstraints.tightFor(width: 32, height: 32),
       padding: EdgeInsets.zero,
       iconSize: 18,
-      color: const Color(0xFF53605B),
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
       icon: icon,
     );
   }
