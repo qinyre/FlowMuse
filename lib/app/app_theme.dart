@@ -25,7 +25,7 @@ class AppTheme {
         ),
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: const Color(0xFFEAF6F2),
+        backgroundColor: colorScheme.primary.withValues(alpha: 0.08),
         indicatorColor: colorScheme.primaryContainer,
         selectedIconTheme: IconThemeData(color: colorScheme.primary),
         selectedLabelTextStyle: TextStyle(
@@ -35,7 +35,9 @@ class AppTheme {
       ),
       searchBarTheme: SearchBarThemeData(
         elevation: const WidgetStatePropertyAll(0),
-        backgroundColor: const WidgetStatePropertyAll(Color(0xFFF7FBF9)),
+        backgroundColor: WidgetStatePropertyAll(
+          colorScheme.primary.withValues(alpha: 0.045),
+        ),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),

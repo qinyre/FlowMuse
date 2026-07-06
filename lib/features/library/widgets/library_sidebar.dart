@@ -22,7 +22,6 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final accent = colorScheme.primary;
 
     return Container(
       width: sharedSidebarWidth,
@@ -35,7 +34,9 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
             colorScheme.primary.withValues(alpha: 0.11),
           ],
         ),
-        border: const Border(right: BorderSide(color: Color(0xFFE3EFEC))),
+        border: Border(
+          right: BorderSide(color: colorScheme.primary.withValues(alpha: 0.14)),
+        ),
       ),
       child: Column(
         children: [
@@ -108,11 +109,11 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                       : const SizedBox.shrink(key: ValueKey('empty-children')),
                 ),
                 const _SidebarItem(icon: LucideIcons.trash2, label: '回收站'),
-                const Divider(
+                Divider(
                   height: 20,
                   indent: 24,
                   endIndent: 28,
-                  color: Color(0xFFE3EFEC),
+                  color: colorScheme.primary.withValues(alpha: 0.14),
                 ),
                 _SidebarItem(
                   icon: LucideIcons.folder,
@@ -135,7 +136,6 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
               ],
             ),
           ),
-          _MountainFooter(accent: accent),
         ],
       ),
     );
@@ -326,36 +326,6 @@ class _HeaderIconButton extends StatelessWidget {
       iconSize: 18,
       color: const Color(0xFF53605B),
       icon: icon,
-    );
-  }
-}
-
-class _MountainFooter extends StatelessWidget {
-  const _MountainFooter({required this.accent});
-
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 190,
-      width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ColoredBox(color: accent.withValues(alpha: 0.08)),
-          Positioned(
-            left: -20,
-            right: -20,
-            bottom: 0,
-            child: Icon(
-              LucideIcons.mountain,
-              size: 220,
-              color: accent.withValues(alpha: 0.32),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
