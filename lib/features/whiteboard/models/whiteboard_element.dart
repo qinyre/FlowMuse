@@ -711,6 +711,11 @@ class WhiteboardElement {
         'Whiteboard elements must use Excalidraw element JSON.',
       );
     }
+    if (json.containsKey('updatedAt') || json.containsKey('fractionalIndex')) {
+      throw const FormatException(
+        'Whiteboard elements must use Excalidraw updated/index fields.',
+      );
+    }
     final type = _typeFromJson(json['type']! as String);
     final points = json['points'] is List
         ? [
@@ -738,8 +743,8 @@ class WhiteboardElement {
       seed: (json['seed'] as num?)?.toInt() ?? _random.nextInt(1 << 31),
       version: (json['version']! as num).toInt(),
       versionNonce: (json['versionNonce']! as num).toInt(),
-      updatedAt: ((json['updated'] ?? json['updatedAt'])! as num).toInt(),
-      fractionalIndex: (json['index'] ?? json['fractionalIndex']) as String?,
+      updatedAt: (json['updated']! as num).toInt(),
+      fractionalIndex: json['index'] as String?,
       isDeleted: json['isDeleted']! as bool,
       groupIds: [
         for (final groupId in json['groupIds'] as List? ?? const [])

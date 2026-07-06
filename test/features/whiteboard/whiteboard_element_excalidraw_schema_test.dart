@@ -235,4 +235,37 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  test('rejects legacy timestamp and index field names', () {
+    expect(
+      () => WhiteboardElement.fromJson({
+        'id': 'rect-legacy-fields',
+        'type': 'rectangle',
+        'x': 10,
+        'y': 20,
+        'width': 30,
+        'height': 40,
+        'angle': 0,
+        'strokeColor': '#1e1e1e',
+        'backgroundColor': 'transparent',
+        'fillStyle': 'solid',
+        'strokeWidth': 2,
+        'strokeStyle': 'solid',
+        'roughness': 0,
+        'opacity': 100,
+        'seed': 1,
+        'version': 4,
+        'versionNonce': 5,
+        'fractionalIndex': 'a0',
+        'isDeleted': false,
+        'groupIds': <String>[],
+        'frameId': null,
+        'boundElements': null,
+        'updatedAt': 1000,
+        'link': null,
+        'locked': false,
+      }),
+      throwsA(isA<FormatException>()),
+    );
+  });
 }

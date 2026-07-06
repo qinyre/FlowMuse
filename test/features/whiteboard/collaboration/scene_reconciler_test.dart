@@ -135,24 +135,25 @@ void main() {
   });
 
   test('sync payload keeps full Excalidraw element json', () {
-    final text = WhiteboardElement.text(
-      id: 'text-1',
-      x: 10,
-      y: 20,
-      text: '节点',
-      fractionalIndex: 'a0',
-      version: 3,
-      versionNonce: 7,
-      updatedAt: 1000,
-    ).newWith(
-      containerId: 'rect-1',
-      originalText: '节点',
-      autoResize: false,
-      lineHeight: 1.25,
-      boundElements: const [
-        {'id': 'arrow-1', 'type': 'arrow'},
-      ],
-    );
+    final text =
+        WhiteboardElement.text(
+          id: 'text-1',
+          x: 10,
+          y: 20,
+          text: '节点',
+          fractionalIndex: 'a0',
+          version: 3,
+          versionNonce: 7,
+          updatedAt: 1000,
+        ).newWith(
+          containerId: 'rect-1',
+          originalText: '节点',
+          autoResize: false,
+          lineHeight: 1.25,
+          boundElements: const [
+            {'id': 'arrow-1', 'type': 'arrow'},
+          ],
+        );
 
     final collaborative = CollaborativeElement.fromElement(text);
     final json = collaborative.toJson();
@@ -180,6 +181,39 @@ void main() {
         'index': 'a0',
         'isDeleted': false,
         'data': {'x': 10, 'y': 20, 'width': 30, 'height': 40},
+      }),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('rejects legacy collaboration timestamp and index field names', () {
+    expect(
+      () => CollaborativeElement.fromJson({
+        'id': 'collab-legacy-fields',
+        'type': 'rectangle',
+        'x': 10,
+        'y': 20,
+        'width': 30,
+        'height': 40,
+        'angle': 0,
+        'strokeColor': '#1e1e1e',
+        'backgroundColor': 'transparent',
+        'fillStyle': 'solid',
+        'strokeWidth': 2,
+        'strokeStyle': 'solid',
+        'roughness': 0,
+        'opacity': 100,
+        'seed': 1,
+        'version': 4,
+        'versionNonce': 5,
+        'fractionalIndex': 'a0',
+        'isDeleted': false,
+        'groupIds': <String>[],
+        'frameId': null,
+        'boundElements': null,
+        'updatedAt': 1000,
+        'link': null,
+        'locked': false,
       }),
       throwsA(isA<FormatException>()),
     );

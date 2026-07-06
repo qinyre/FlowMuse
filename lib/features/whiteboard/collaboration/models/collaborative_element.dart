@@ -84,14 +84,19 @@ class CollaborativeElement {
         'Collaborative elements must use full Excalidraw element JSON.',
       );
     }
+    if (json.containsKey('updatedAt') || json.containsKey('fractionalIndex')) {
+      throw const FormatException(
+        'Collaborative elements must use Excalidraw updated/index fields.',
+      );
+    }
     final element = WhiteboardElement.fromJson(json);
     return CollaborativeElement(
       id: json['id']! as String,
       type: element.type,
       version: (json['version']! as num).toInt(),
       versionNonce: (json['versionNonce']! as num).toInt(),
-      updatedAt: ((json['updated'] ?? json['updatedAt'])! as num).toInt(),
-      fractionalIndex: (json['index'] ?? json['fractionalIndex']) as String?,
+      updatedAt: (json['updated']! as num).toInt(),
+      fractionalIndex: json['index'] as String?,
       isDeleted: json['isDeleted']! as bool,
       elementJson: Map<String, Object?>.from(json),
     );
