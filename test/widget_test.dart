@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flowmush/main.dart';
+import 'package:flow_muse/main.dart';
 
 void main() {
   testWidgets('shows the library shell with sample notebooks', (
