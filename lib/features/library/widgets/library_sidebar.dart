@@ -45,26 +45,29 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const _ProMark(),
-                _HeaderIconButton(
-                  tooltip: '侧边栏',
-                  onPressed: () {},
-                  icon: const Icon(LucideIcons.panelLeft),
-                ),
-                _HeaderIconButton(
-                  tooltip: '设置',
-                  onPressed: () => context.go(AppRoutes.settings),
-                  icon: const Icon(LucideIcons.settings),
-                ),
-                _HeaderIconButton(
-                  tooltip: '商店',
-                  onPressed: () {},
-                  icon: const Icon(LucideIcons.store),
+                const _UserAvatar(),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _HeaderIconButton(
+                      tooltip: '侧边栏',
+                      onPressed: () {},
+                      icon: const Icon(LucideIcons.panelLeft),
+                    ),
+                    const SizedBox(width: 4),
+                    _HeaderIconButton(
+                      tooltip: '设置',
+                      onPressed: () => context.go(AppRoutes.settings),
+                      icon: const Icon(LucideIcons.settings),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          _SidebarSearch(
+          _SidebarItem(
+            icon: LucideIcons.search,
+            label: '搜索',
             selected: widget.section == ShellSection.search,
             onTap: () => context.go(AppRoutes.search),
           ),
@@ -137,48 +140,6 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SidebarSearch extends StatelessWidget {
-  const _SidebarSearch({required this.selected, required this.onTap});
-
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final color = selected ? colorScheme.primary : const Color(0xFF202827);
-
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 46,
-        margin: const EdgeInsets.symmetric(horizontal: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: selected
-              ? colorScheme.primary.withValues(alpha: 0.08)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Icon(LucideIcons.search, size: 20, color: color),
-            const SizedBox(width: 10),
-            Text(
-              '搜索',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: color,
-                height: 1.1,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -283,23 +244,18 @@ class _SidebarItem extends StatelessWidget {
   }
 }
 
-class _ProMark extends StatelessWidget {
-  const _ProMark();
+class _UserAvatar extends StatelessWidget {
+  const _UserAvatar();
 
   @override
   Widget build(BuildContext context) {
-    return Badge(
-      label: const Text('PRO'),
-      backgroundColor: const Color(0xFFE7D5BC),
-      textColor: const Color(0xFF876D43),
-      child: CircleAvatar(
-        radius: 18,
-        backgroundColor: const Color(0xFFF9F5EA),
-        child: Icon(
-          LucideIcons.sparkles,
-          color: Theme.of(context).colorScheme.primary,
-          size: 20,
-        ),
+    return CircleAvatar(
+      radius: 18,
+      backgroundColor: const Color(0xFFF9F5EA),
+      child: Icon(
+        LucideIcons.sparkles,
+        color: Theme.of(context).colorScheme.primary,
+        size: 20,
       ),
     );
   }
