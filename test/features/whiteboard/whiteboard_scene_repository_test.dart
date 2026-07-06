@@ -114,40 +114,57 @@ void main() {
     expect(appState['zoom'], {'value': 1.25});
   });
 
-  test('preserves Excalidraw appState fields while updating viewport fields', () {
+  test(
+    'preserves Excalidraw appState fields while updating viewport fields',
+    () {
+      final scene = WhiteboardScene.fromJson({
+        'type': 'excalidraw',
+        'version': 2,
+        'source': 'https://excalidraw.com',
+        'elements': <Object?>[],
+        'appState': {
+          'theme': 'dark',
+          'viewBackgroundColor': '#ffffff',
+          'currentItemStrokeColor': '#ff0000',
+          'gridSize': 20,
+          'scrollX': -40,
+          'scrollY': 12,
+          'zoom': {'value': 2},
+        },
+        'files': {
+          'file-1': {'mimeType': 'image/png'},
+        },
+      });
+
+      final json = scene.copyWith(zoom: 1.5, panX: 8, panY: -6).toJson();
+      final appState = json['appState']! as Map<String, Object?>;
+
+      expect(json['source'], 'https://excalidraw.com');
+      expect(appState['theme'], 'dark');
+      expect(appState['viewBackgroundColor'], '#ffffff');
+      expect(appState['currentItemStrokeColor'], '#ff0000');
+      expect(appState['gridSize'], 20);
+      expect(appState['scrollX'], -8);
+      expect(appState['scrollY'], 6);
+      expect(appState['zoom'], {'value': 1.5});
+      expect(json['files'], {
+        'file-1': {'mimeType': 'image/png'},
+      });
+    },
+  );
+
+  test('ignores legacy pan fields when reading Excalidraw appState', () {
     final scene = WhiteboardScene.fromJson({
       'type': 'excalidraw',
       'version': 2,
       'source': 'https://excalidraw.com',
       'elements': <Object?>[],
-      'appState': {
-        'theme': 'dark',
-        'viewBackgroundColor': '#ffffff',
-        'currentItemStrokeColor': '#ff0000',
-        'gridSize': 20,
-        'scrollX': -40,
-        'scrollY': 12,
-        'zoom': {'value': 2},
-      },
-      'files': {
-        'file-1': {'mimeType': 'image/png'},
-      },
+      'appState': {'panX': 24, 'panY': -16},
+      'files': <String, Object?>{},
     });
 
-    final json = scene.copyWith(zoom: 1.5, panX: 8, panY: -6).toJson();
-    final appState = json['appState']! as Map<String, Object?>;
-
-    expect(json['source'], 'https://excalidraw.com');
-    expect(appState['theme'], 'dark');
-    expect(appState['viewBackgroundColor'], '#ffffff');
-    expect(appState['currentItemStrokeColor'], '#ff0000');
-    expect(appState['gridSize'], 20);
-    expect(appState['scrollX'], -8);
-    expect(appState['scrollY'], 6);
-    expect(appState['zoom'], {'value': 1.5});
-    expect(json['files'], {
-      'file-1': {'mimeType': 'image/png'},
-    });
+    expect(scene.panX, 0);
+    expect(scene.panY, 0);
   });
 
   test('persists scenes through shared preferences storage', () async {

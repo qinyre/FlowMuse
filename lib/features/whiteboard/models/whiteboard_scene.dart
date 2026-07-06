@@ -73,12 +73,8 @@ class WhiteboardScene {
       zoom: rawZoom is Map
           ? (rawZoom['value'] as num?)?.toDouble() ?? 1
           : (rawZoom as num?)?.toDouble() ?? 1,
-      panX:
-          (appState['panX'] as num?)?.toDouble() ??
-          -((appState['scrollX'] as num?)?.toDouble() ?? 0),
-      panY:
-          (appState['panY'] as num?)?.toDouble() ??
-          -((appState['scrollY'] as num?)?.toDouble() ?? 0),
+      panX: -((appState['scrollX'] as num?)?.toDouble() ?? 0),
+      panY: -((appState['scrollY'] as num?)?.toDouble() ?? 0),
       source: json['source'] as String? ?? 'flowmuse',
       appState: appState,
       files: Map<String, Object?>.from(json['files'] as Map? ?? const {}),
