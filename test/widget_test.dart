@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flow_muse/app/flow_muse_app.dart';
 
 Widget _testApp() {
-  return const ProviderScope(child: FlowMuseApp());
+  return ProviderScope(child: FlowMuseApp());
 }
 
 void main() {
@@ -47,5 +47,27 @@ void main() {
 
     expect(find.text('未命名白板'), findsOneWidget);
     expect(find.text('白板工作台'), findsOneWidget);
+  });
+
+  testWidgets('opens search, folders, and settings pages from navigation', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(_testApp());
+
+    await tester.tap(find.text('搜索').first);
+    await tester.pumpAndSettle();
+    expect(find.text('请输入关键字搜索笔记'), findsOneWidget);
+
+    await tester.tap(find.text('文件夹').first);
+    await tester.pumpAndSettle();
+    expect(find.text('这里空空如也...'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('设置').first);
+    await tester.pumpAndSettle();
+    expect(find.text('本地备份'), findsWidgets);
+    expect(find.text('主题设置'), findsWidgets);
   });
 }

@@ -15,6 +15,8 @@ class NotebookCard extends StatelessWidget {
       children: [
         Expanded(
           child: Card(
+            elevation: 5,
+            shadowColor: const Color(0x165A625F),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: onTap,
@@ -72,7 +74,7 @@ class NotebookCover extends StatelessWidget {
     return ColoredBox(
       color: item.coverColor,
       child: Padding(
-        padding: const EdgeInsets.all(22),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
             Row(
@@ -109,9 +111,11 @@ class NotebookCover extends StatelessWidget {
             Align(
               alignment: Alignment.bottomRight,
               child: Icon(
-                LucideIcons.layers,
-                color: foreground.withValues(alpha: 0.34),
-                size: 58,
+                item.kind == LibraryFilter.pdf
+                    ? LucideIcons.fileImage
+                    : LucideIcons.mountain,
+                color: foreground.withValues(alpha: 0.30),
+                size: 72,
               ),
             ),
           ],

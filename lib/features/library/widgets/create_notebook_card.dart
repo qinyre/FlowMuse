@@ -15,6 +15,7 @@ class CreateNotebookCard extends StatelessWidget {
         Expanded(
           child: Card.outlined(
             clipBehavior: Clip.antiAlias,
+            color: colorScheme.primary.withValues(alpha: 0.035),
             child: InkWell(
               key: const ValueKey('create-notebook-card'),
               onTap: onTap,

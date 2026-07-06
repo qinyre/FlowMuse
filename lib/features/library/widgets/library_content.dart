@@ -25,34 +25,25 @@ class LibraryContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 20 : 36, 30, compact ? 20 : 36, 0),
+      padding: EdgeInsets.fromLTRB(compact ? 20 : 36, 34, compact ? 20 : 36, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _LibraryHeader(compact: compact),
-          const SizedBox(height: 28),
-          SegmentedButton<LibraryFilter>(
-            key: const ValueKey('library-filter-tabs'),
-            segments: const [
-              ButtonSegment(value: LibraryFilter.all, label: Text('全部')),
-              ButtonSegment(value: LibraryFilter.notes, label: Text('笔记')),
-              ButtonSegment(value: LibraryFilter.pdf, label: Text('PDF')),
-            ],
-            selected: {state.selectedFilter},
-            showSelectedIcon: false,
-            onSelectionChanged: (selection) {
-              onFilterChanged(selection.first);
-            },
+          const SizedBox(height: 46),
+          _FilterTabs(
+            selected: state.selectedFilter,
+            onFilterChanged: onFilterChanged,
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 34),
           Expanded(
             child: GridView.builder(
               itemCount: state.visibleNotebooks.length + 1,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: compact ? 2 : 3,
-                mainAxisExtent: 310,
-                crossAxisSpacing: compact ? 24 : 48,
-                mainAxisSpacing: 40,
+                mainAxisExtent: 332,
+                crossAxisSpacing: compact ? 26 : 66,
+                mainAxisSpacing: 62,
               ),
               itemBuilder: (context, index) {
                 if (index == 0) {
@@ -65,6 +56,79 @@ class LibraryContent extends StatelessWidget {
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterTabs extends StatelessWidget {
+  const _FilterTabs({required this.selected, required this.onFilterChanged});
+
+  final LibraryFilter selected;
+  final ValueChanged<LibraryFilter> onFilterChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      key: const ValueKey('library-filter-tabs'),
+      children: [
+        _FilterTab(
+          label: '全部',
+          selected: selected == LibraryFilter.all,
+          onTap: () => onFilterChanged(LibraryFilter.all),
+        ),
+        const SizedBox(width: 42),
+        _FilterTab(
+          label: '笔记',
+          selected: selected == LibraryFilter.notes,
+          onTap: () => onFilterChanged(LibraryFilter.notes),
+        ),
+        const SizedBox(width: 42),
+        _FilterTab(
+          label: 'PDF',
+          selected: selected == LibraryFilter.pdf,
+          onTap: () => onFilterChanged(LibraryFilter.pdf),
+        ),
+      ],
+    );
+  }
+}
+
+class _FilterTab extends StatelessWidget {
+  const _FilterTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: selected ? colorScheme.primary : const Color(0xFF151918),
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+          const SizedBox(height: 12),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: selected ? 58 : 0,
+            height: 2,
+            color: colorScheme.primary,
           ),
         ],
       ),
@@ -90,7 +154,7 @@ class _LibraryHeader extends StatelessWidget {
         Text(
           '全部笔记',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
             color: const Color(0xFF1F2624),
           ),
         ),

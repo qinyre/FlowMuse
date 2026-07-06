@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 class AppTheme {
   const AppTheme._();
 
-  static ThemeData light() {
-    const seedColor = Color(0xFF66B7A8);
+  static ThemeData light(Color seedColor) {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: seedColor,
       brightness: Brightness.light,
@@ -39,6 +38,13 @@ class AppTheme {
         backgroundColor: const WidgetStatePropertyAll(Color(0xFFF7FBF9)),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          selectedBackgroundColor: colorScheme.primary.withValues(alpha: 0.12),
+          selectedForegroundColor: colorScheme.primary,
+          side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.28)),
         ),
       ),
     );
