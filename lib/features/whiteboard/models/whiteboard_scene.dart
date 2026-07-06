@@ -6,6 +6,8 @@ class WhiteboardScene {
     this.zoom = 1,
     this.panX = 0,
     this.panY = 0,
+    this.source = 'flowmuse',
+    this.appState = const {},
     this.files = const {},
   });
 
@@ -13,6 +15,8 @@ class WhiteboardScene {
   final double zoom;
   final double panX;
   final double panY;
+  final String source;
+  final Map<String, Object?> appState;
   final Map<String, Object?> files;
 
   WhiteboardScene copyWith({
@@ -20,6 +24,8 @@ class WhiteboardScene {
     double? zoom,
     double? panX,
     double? panY,
+    String? source,
+    Map<String, Object?>? appState,
     Map<String, Object?>? files,
   }) {
     return WhiteboardScene(
@@ -27,6 +33,8 @@ class WhiteboardScene {
       zoom: zoom ?? this.zoom,
       panX: panX ?? this.panX,
       panY: panY ?? this.panY,
+      source: source ?? this.source,
+      appState: appState ?? this.appState,
       files: files ?? this.files,
     );
   }
@@ -35,9 +43,10 @@ class WhiteboardScene {
     return {
       'type': 'excalidraw',
       'version': 2,
-      'source': 'flowmuse',
+      'source': source,
       'elements': [for (final element in elements) element.toJson()],
       'appState': {
+        ...appState,
         'scrollX': -panX,
         'scrollY': -panY,
         'zoom': {'value': zoom},
@@ -70,6 +79,8 @@ class WhiteboardScene {
       panY:
           (appState['panY'] as num?)?.toDouble() ??
           -((appState['scrollY'] as num?)?.toDouble() ?? 0),
+      source: json['source'] as String? ?? 'flowmuse',
+      appState: appState,
       files: Map<String, Object?>.from(json['files'] as Map? ?? const {}),
     );
   }
