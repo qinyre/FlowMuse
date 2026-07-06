@@ -79,6 +79,11 @@ class CollaborativeElement {
   }
 
   factory CollaborativeElement.fromJson(Map<String, Object?> json) {
+    if (json.containsKey('data')) {
+      throw const FormatException(
+        'Collaborative elements must use full Excalidraw element JSON.',
+      );
+    }
     final element = WhiteboardElement.fromJson(json);
     return CollaborativeElement(
       id: json['id']! as String,
@@ -88,12 +93,7 @@ class CollaborativeElement {
       updatedAt: ((json['updated'] ?? json['updatedAt'])! as num).toInt(),
       fractionalIndex: (json['index'] ?? json['fractionalIndex']) as String?,
       isDeleted: json['isDeleted']! as bool,
-      elementJson: json.containsKey('data')
-          ? {
-              ...element.toJson(),
-              'data': Map<String, Object?>.from(json['data']! as Map),
-            }
-          : Map<String, Object?>.from(json),
+      elementJson: Map<String, Object?>.from(json),
     );
   }
 

@@ -168,4 +168,20 @@ void main() {
       {'id': 'arrow-1', 'type': 'arrow'},
     ]);
   });
+
+  test('rejects legacy compact collaboration payloads', () {
+    expect(
+      () => CollaborativeElement.fromJson({
+        'id': 'legacy-1',
+        'type': 'rectangle',
+        'version': 1,
+        'versionNonce': 2,
+        'updated': 1000,
+        'index': 'a0',
+        'isDeleted': false,
+        'data': {'x': 10, 'y': 20, 'width': 30, 'height': 40},
+      }),
+      throwsA(isA<FormatException>()),
+    );
+  });
 }
