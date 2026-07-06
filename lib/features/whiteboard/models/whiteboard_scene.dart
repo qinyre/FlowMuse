@@ -6,31 +6,43 @@ class WhiteboardScene {
     this.zoom = 1,
     this.panX = 0,
     this.panY = 0,
+    this.files = const {},
   });
 
   final List<WhiteboardElement> elements;
   final double zoom;
   final double panX;
   final double panY;
+  final Map<String, Object?> files;
 
   WhiteboardScene copyWith({
     List<WhiteboardElement>? elements,
     double? zoom,
     double? panX,
     double? panY,
+    Map<String, Object?>? files,
   }) {
     return WhiteboardScene(
       elements: elements ?? this.elements,
       zoom: zoom ?? this.zoom,
       panX: panX ?? this.panX,
       panY: panY ?? this.panY,
+      files: files ?? this.files,
     );
   }
 
   Map<String, Object?> toJson() {
     return {
+      'type': 'excalidraw',
+      'version': 2,
+      'source': 'flowmuse',
       'elements': [for (final element in elements) element.toJson()],
-      'appState': {'zoom': zoom, 'panX': panX, 'panY': panY},
+      'appState': {
+        'scrollX': -panX,
+        'scrollY': -panY,
+        'zoom': {'value': zoom},
+      },
+      'files': files,
     };
   }
 
@@ -38,6 +50,7 @@ class WhiteboardScene {
     final appState = Map<String, Object?>.from(
       json['appState'] as Map? ?? const {},
     );
+    final rawZoom = appState['zoom'];
     final rawElements = json['elements'];
     return WhiteboardScene(
       elements: rawElements is List
@@ -48,9 +61,16 @@ class WhiteboardScene {
                 ),
             ]
           : const [],
-      zoom: (appState['zoom'] as num?)?.toDouble() ?? 1,
-      panX: (appState['panX'] as num?)?.toDouble() ?? 0,
-      panY: (appState['panY'] as num?)?.toDouble() ?? 0,
+      zoom: rawZoom is Map
+          ? (rawZoom['value'] as num?)?.toDouble() ?? 1
+          : (rawZoom as num?)?.toDouble() ?? 1,
+      panX:
+          (appState['panX'] as num?)?.toDouble() ??
+          -((appState['scrollX'] as num?)?.toDouble() ?? 0),
+      panY:
+          (appState['panY'] as num?)?.toDouble() ??
+          -((appState['scrollY'] as num?)?.toDouble() ?? 0),
+      files: Map<String, Object?>.from(json['files'] as Map? ?? const {}),
     );
   }
 }

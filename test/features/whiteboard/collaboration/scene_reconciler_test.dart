@@ -58,6 +58,28 @@ void main() {
     expect(result.map((item) => item.id), ['remote', 'local']);
   });
 
+  test('breaks duplicate fractional index ties by element id', () {
+    final reconciler = SceneReconciler(now: () => DateTime(2026, 1, 1));
+
+    final result = reconciler.reconcile(
+      localElements: [element(id: 'b', version: 1, nonce: 1, index: 'a0')],
+      remoteElements: [element(id: 'a', version: 1, nonce: 1, index: 'a0')],
+    );
+
+    expect(result.map((item) => item.id), ['a', 'b']);
+  });
+
+  test('computes Excalidraw-compatible scene version and nonce hash', () {
+    final reconciler = SceneReconciler(now: () => DateTime(2026, 1, 1));
+    final elements = [
+      element(id: 'a', version: 2, nonce: 3, index: 'a0'),
+      element(id: 'b', version: 5, nonce: 7, index: 'a1'),
+    ];
+
+    expect(reconciler.getSceneVersion(elements), 7);
+    expect(reconciler.hashElementsVersion(elements), 5860015);
+  });
+
   test('filters old deleted elements from syncable payload', () {
     final now = DateTime(2026, 1, 2);
     final reconciler = SceneReconciler(now: () => now);

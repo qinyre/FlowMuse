@@ -262,8 +262,9 @@ class _WhiteboardPainter extends CustomPainter {
         );
         canvas.drawLine(start, end, stroke);
         _drawArrowHead(canvas, start, end, stroke);
-      case WhiteboardElementType.path:
-        final points = element.points;
+      case WhiteboardElementType.freedraw:
+      case WhiteboardElementType.line:
+        final points = element.scenePoints;
         if (points.length < 2) {
           return;
         }
@@ -275,7 +276,7 @@ class _WhiteboardPainter extends CustomPainter {
       case WhiteboardElementType.text:
         final painter = TextPainter(
           text: TextSpan(
-            text: element.data['text'] as String? ?? '',
+            text: element.text ?? '',
             style: TextStyle(
               color: color,
               fontSize: 20,
@@ -284,14 +285,10 @@ class _WhiteboardPainter extends CustomPainter {
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        painter.paint(
-          canvas,
-          Offset(
-            (element.data['x']! as num).toDouble(),
-            (element.data['y']! as num).toDouble(),
-          ),
-        );
+        painter.paint(canvas, Offset(element.x, element.y));
       case WhiteboardElementType.image:
+      case WhiteboardElementType.diamond:
+      case WhiteboardElementType.frame:
         break;
     }
   }

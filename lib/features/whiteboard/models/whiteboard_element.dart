@@ -1,6 +1,24 @@
 import 'dart:math';
 
-enum WhiteboardElementType { path, rectangle, ellipse, arrow, text, image }
+enum WhiteboardElementType {
+  rectangle,
+  diamond,
+  ellipse,
+  arrow,
+  line,
+  freedraw,
+  text,
+  image,
+  frame,
+}
+
+enum WhiteboardFillStyle { hachure, crossHatch, solid, zigzag }
+
+enum WhiteboardStrokeStyle { solid, dashed, dotted }
+
+enum WhiteboardTextAlign { left, center, right }
+
+enum WhiteboardVerticalAlign { top, middle, bottom }
 
 class WhiteboardPoint {
   const WhiteboardPoint(this.x, this.y);
@@ -8,12 +26,21 @@ class WhiteboardPoint {
   final double x;
   final double y;
 
+  List<double> toExcalidrawJson() => [x, y];
+
   Map<String, Object?> toJson() => {'x': x, 'y': y};
 
-  factory WhiteboardPoint.fromJson(Map<String, Object?> json) {
+  factory WhiteboardPoint.fromJson(Object? json) {
+    if (json is List && json.length >= 2) {
+      return WhiteboardPoint(
+        (json[0] as num).toDouble(),
+        (json[1] as num).toDouble(),
+      );
+    }
+    final map = Map<String, Object?>.from(json! as Map);
     return WhiteboardPoint(
-      (json['x']! as num).toDouble(),
-      (json['y']! as num).toDouble(),
+      (map['x']! as num).toDouble(),
+      (map['y']! as num).toDouble(),
     );
   }
 }
@@ -22,24 +49,80 @@ class WhiteboardElement {
   const WhiteboardElement({
     required this.id,
     required this.type,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    required this.angle,
+    required this.strokeColor,
+    required this.backgroundColor,
+    required this.fillStyle,
+    required this.strokeWidth,
+    required this.strokeStyle,
+    required this.roughness,
+    required this.opacity,
+    required this.seed,
     required this.version,
     required this.versionNonce,
     required this.updatedAt,
     required this.fractionalIndex,
     required this.isDeleted,
-    required this.data,
+    required this.groupIds,
+    required this.frameId,
+    required this.boundElements,
+    required this.link,
+    required this.locked,
+    required this.points,
+    required this.text,
+    required this.fontSize,
+    required this.fontFamily,
+    required this.textAlign,
+    required this.verticalAlign,
+    required this.fileId,
+    required this.status,
+    required this.scale,
+    required this.crop,
+    required this.customData,
   });
 
   static final Random _random = Random.secure();
 
   final String id;
   final WhiteboardElementType type;
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+  final double angle;
+  final String strokeColor;
+  final String backgroundColor;
+  final WhiteboardFillStyle fillStyle;
+  final double strokeWidth;
+  final WhiteboardStrokeStyle strokeStyle;
+  final double roughness;
+  final int opacity;
+  final int seed;
   final int version;
   final int versionNonce;
   final int updatedAt;
-  final String fractionalIndex;
+  final String? fractionalIndex;
   final bool isDeleted;
-  final Map<String, Object?> data;
+  final List<String> groupIds;
+  final String? frameId;
+  final List<Map<String, Object?>>? boundElements;
+  final String? link;
+  final bool locked;
+  final List<WhiteboardPoint> points;
+  final String? text;
+  final double? fontSize;
+  final int? fontFamily;
+  final WhiteboardTextAlign? textAlign;
+  final WhiteboardVerticalAlign? verticalAlign;
+  final String? fileId;
+  final String? status;
+  final List<double>? scale;
+  final Map<String, Object?>? crop;
+  final Map<String, Object?>? customData;
 
   factory WhiteboardElement.rectangle({
     required String id,
@@ -52,7 +135,7 @@ class WhiteboardElement {
     int? versionNonce,
     int? updatedAt,
   }) {
-    return WhiteboardElement._shape(
+    return WhiteboardElement._base(
       id: id,
       type: WhiteboardElementType.rectangle,
       x: x,
@@ -77,7 +160,7 @@ class WhiteboardElement {
     int? versionNonce,
     int? updatedAt,
   }) {
-    return WhiteboardElement._shape(
+    return WhiteboardElement._base(
       id: id,
       type: WhiteboardElementType.ellipse,
       x: x,
@@ -102,15 +185,18 @@ class WhiteboardElement {
     int? versionNonce,
     int? updatedAt,
   }) {
-    return WhiteboardElement(
+    return WhiteboardElement._base(
       id: id,
       type: WhiteboardElementType.arrow,
-      version: version,
-      versionNonce: versionNonce ?? _random.nextInt(1 << 31),
-      updatedAt: updatedAt ?? DateTime.now().millisecondsSinceEpoch,
+      x: x1,
+      y: y1,
+      width: x2 - x1,
+      height: y2 - y1,
       fractionalIndex: fractionalIndex,
-      isDeleted: false,
-      data: {'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2},
+      version: version,
+      versionNonce: versionNonce,
+      updatedAt: updatedAt,
+      points: [const WhiteboardPoint(0, 0), WhiteboardPoint(x2 - x1, y2 - y1)],
     );
   }
 
@@ -122,17 +208,27 @@ class WhiteboardElement {
     int? versionNonce,
     int? updatedAt,
   }) {
-    return WhiteboardElement(
+    final origin = points.isEmpty ? const WhiteboardPoint(0, 0) : points.first;
+    final localPoints = [
+      for (final point in points)
+        WhiteboardPoint(point.x - origin.x, point.y - origin.y),
+    ];
+    final xs = localPoints.map((point) => point.x);
+    final ys = localPoints.map((point) => point.y);
+    final width = xs.isEmpty ? 0.0 : xs.reduce(max) - xs.reduce(min);
+    final height = ys.isEmpty ? 0.0 : ys.reduce(max) - ys.reduce(min);
+    return WhiteboardElement._base(
       id: id,
-      type: WhiteboardElementType.path,
-      version: version,
-      versionNonce: versionNonce ?? _random.nextInt(1 << 31),
-      updatedAt: updatedAt ?? DateTime.now().millisecondsSinceEpoch,
+      type: WhiteboardElementType.freedraw,
+      x: origin.x,
+      y: origin.y,
+      width: width,
+      height: height,
       fractionalIndex: fractionalIndex,
-      isDeleted: false,
-      data: {
-        'points': [for (final point in points) point.toJson()],
-      },
+      version: version,
+      versionNonce: versionNonce,
+      updatedAt: updatedAt,
+      points: localPoints,
     );
   }
 
@@ -146,19 +242,26 @@ class WhiteboardElement {
     int? versionNonce,
     int? updatedAt,
   }) {
-    return WhiteboardElement(
+    return WhiteboardElement._base(
       id: id,
       type: WhiteboardElementType.text,
-      version: version,
-      versionNonce: versionNonce ?? _random.nextInt(1 << 31),
-      updatedAt: updatedAt ?? DateTime.now().millisecondsSinceEpoch,
+      x: x,
+      y: y,
+      width: text.isEmpty ? 20 : text.length * 20,
+      height: 24,
       fractionalIndex: fractionalIndex,
-      isDeleted: false,
-      data: {'x': x, 'y': y, 'text': text},
+      version: version,
+      versionNonce: versionNonce,
+      updatedAt: updatedAt,
+      text: text,
+      fontSize: 20,
+      fontFamily: 1,
+      textAlign: WhiteboardTextAlign.left,
+      verticalAlign: WhiteboardVerticalAlign.top,
     );
   }
 
-  factory WhiteboardElement._shape({
+  factory WhiteboardElement._base({
     required String id,
     required WhiteboardElementType type,
     required double x,
@@ -169,27 +272,72 @@ class WhiteboardElement {
     required int version,
     int? versionNonce,
     int? updatedAt,
+    List<WhiteboardPoint> points = const [],
+    String? text,
+    double? fontSize,
+    int? fontFamily,
+    WhiteboardTextAlign? textAlign,
+    WhiteboardVerticalAlign? verticalAlign,
   }) {
     return WhiteboardElement(
       id: id,
       type: type,
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      angle: 0,
+      strokeColor: '#1e1e1e',
+      backgroundColor: 'transparent',
+      fillStyle: WhiteboardFillStyle.solid,
+      strokeWidth: 2,
+      strokeStyle: WhiteboardStrokeStyle.solid,
+      roughness: 0,
+      opacity: 100,
+      seed: _random.nextInt(1 << 31),
       version: version,
       versionNonce: versionNonce ?? _random.nextInt(1 << 31),
       updatedAt: updatedAt ?? DateTime.now().millisecondsSinceEpoch,
       fractionalIndex: fractionalIndex,
       isDeleted: false,
-      data: {'x': x, 'y': y, 'width': width, 'height': height},
+      groupIds: const [],
+      frameId: null,
+      boundElements: null,
+      link: null,
+      locked: false,
+      points: points,
+      text: text,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      textAlign: textAlign,
+      verticalAlign: verticalAlign,
+      fileId: null,
+      status: null,
+      scale: null,
+      crop: null,
+      customData: null,
     );
   }
 
-  List<WhiteboardPoint> get points {
-    final raw = data['points'];
-    if (raw is! List) {
-      return const [];
-    }
+  Map<String, Object?> get data {
+    return switch (type) {
+      WhiteboardElementType.arrow => {
+        'x1': x,
+        'y1': y,
+        'x2': x + (points.length > 1 ? points[1].x : width),
+        'y2': y + (points.length > 1 ? points[1].y : height),
+      },
+      WhiteboardElementType.freedraw || WhiteboardElementType.line => {
+        'points': [for (final point in scenePoints) point.toJson()],
+      },
+      WhiteboardElementType.text => {'x': x, 'y': y, 'text': text ?? ''},
+      _ => {'x': x, 'y': y, 'width': width, 'height': height},
+    };
+  }
+
+  List<WhiteboardPoint> get scenePoints {
     return [
-      for (final item in raw)
-        WhiteboardPoint.fromJson(Map<String, Object?>.from(item as Map)),
+      for (final point in points) WhiteboardPoint(x + point.x, y + point.y),
     ];
   }
 
@@ -204,38 +352,247 @@ class WhiteboardElement {
     return WhiteboardElement(
       id: id,
       type: type,
+      x: _numberFromData(data, 'x') ?? x,
+      y: _numberFromData(data, 'y') ?? y,
+      width: _numberFromData(data, 'width') ?? width,
+      height: _numberFromData(data, 'height') ?? height,
+      angle: angle,
+      strokeColor: strokeColor,
+      backgroundColor: backgroundColor,
+      fillStyle: fillStyle,
+      strokeWidth: strokeWidth,
+      strokeStyle: strokeStyle,
+      roughness: roughness,
+      opacity: opacity,
+      seed: seed,
       version: version ?? this.version,
       versionNonce: versionNonce ?? this.versionNonce,
       updatedAt: updatedAt ?? this.updatedAt,
       fractionalIndex: fractionalIndex ?? this.fractionalIndex,
       isDeleted: isDeleted ?? this.isDeleted,
-      data: data ?? this.data,
+      groupIds: groupIds,
+      frameId: frameId,
+      boundElements: boundElements,
+      link: link,
+      locked: locked,
+      points: points,
+      text: data?['text'] as String? ?? text,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      textAlign: textAlign,
+      verticalAlign: verticalAlign,
+      fileId: fileId,
+      status: status,
+      scale: scale,
+      crop: crop,
+      customData: customData,
     );
   }
 
   Map<String, Object?> toJson() {
     return {
       'id': id,
-      'type': type.name,
+      'type': _typeToJson(type),
+      'x': x,
+      'y': y,
+      'width': width,
+      'height': height,
+      'angle': angle,
+      'strokeColor': strokeColor,
+      'backgroundColor': backgroundColor,
+      'fillStyle': _fillStyleToJson(fillStyle),
+      'strokeWidth': strokeWidth,
+      'strokeStyle': strokeStyle.name,
+      'roughness': roughness,
+      'opacity': opacity,
+      'seed': seed,
       'version': version,
       'versionNonce': versionNonce,
-      'updatedAt': updatedAt,
-      'fractionalIndex': fractionalIndex,
+      'index': fractionalIndex,
       'isDeleted': isDeleted,
-      'data': data,
+      'groupIds': groupIds,
+      'frameId': frameId,
+      'boundElements': boundElements,
+      'updated': updatedAt,
+      'link': link,
+      'locked': locked,
+      if (points.isNotEmpty)
+        'points': [for (final point in points) point.toExcalidrawJson()],
+      if (text != null) 'text': text,
+      if (fontSize != null) 'fontSize': fontSize,
+      if (fontFamily != null) 'fontFamily': fontFamily,
+      if (textAlign != null) 'textAlign': textAlign!.name,
+      if (verticalAlign != null) 'verticalAlign': verticalAlign!.name,
+      if (fileId != null) 'fileId': fileId,
+      if (status != null) 'status': status,
+      if (scale != null) 'scale': scale,
+      if (crop != null) 'crop': crop,
+      if (customData != null) 'customData': customData,
     };
   }
 
   factory WhiteboardElement.fromJson(Map<String, Object?> json) {
+    final legacyData = json['data'] is Map
+        ? Map<String, Object?>.from(json['data']! as Map)
+        : const <String, Object?>{};
+    final type = _typeFromJson(json['type']! as String);
+    final points = json['points'] is List
+        ? [
+            for (final point in json['points']! as List)
+              WhiteboardPoint.fromJson(point),
+          ]
+        : _legacyPoints(type, legacyData);
     return WhiteboardElement(
       id: json['id']! as String,
-      type: WhiteboardElementType.values.byName(json['type']! as String),
-      version: json['version']! as int,
-      versionNonce: json['versionNonce']! as int,
-      updatedAt: json['updatedAt']! as int,
-      fractionalIndex: json['fractionalIndex']! as String,
+      type: type,
+      x:
+          _number(json['x']) ??
+          _number(legacyData['x']) ??
+          _number(legacyData['x1']) ??
+          0,
+      y:
+          _number(json['y']) ??
+          _number(legacyData['y']) ??
+          _number(legacyData['y1']) ??
+          0,
+      width:
+          _number(json['width']) ??
+          _number(legacyData['width']) ??
+          _legacyWidth(type, legacyData),
+      height:
+          _number(json['height']) ??
+          _number(legacyData['height']) ??
+          _legacyHeight(type, legacyData),
+      angle: _number(json['angle']) ?? 0,
+      strokeColor: json['strokeColor'] as String? ?? '#1e1e1e',
+      backgroundColor: json['backgroundColor'] as String? ?? 'transparent',
+      fillStyle: _fillStyleFromJson(json['fillStyle'] as String? ?? 'solid'),
+      strokeWidth: _number(json['strokeWidth']) ?? 2,
+      strokeStyle: WhiteboardStrokeStyle.values.byName(
+        json['strokeStyle'] as String? ?? 'solid',
+      ),
+      roughness: _number(json['roughness']) ?? 0,
+      opacity: (json['opacity'] as num?)?.toInt() ?? 100,
+      seed: (json['seed'] as num?)?.toInt() ?? _random.nextInt(1 << 31),
+      version: (json['version']! as num).toInt(),
+      versionNonce: (json['versionNonce']! as num).toInt(),
+      updatedAt: ((json['updated'] ?? json['updatedAt'])! as num).toInt(),
+      fractionalIndex: (json['index'] ?? json['fractionalIndex']) as String?,
       isDeleted: json['isDeleted']! as bool,
-      data: Map<String, Object?>.from(json['data']! as Map),
+      groupIds: [
+        for (final groupId in json['groupIds'] as List? ?? const [])
+          groupId as String,
+      ],
+      frameId: json['frameId'] as String?,
+      boundElements: json['boundElements'] is List
+          ? [
+              for (final item in json['boundElements']! as List)
+                Map<String, Object?>.from(item as Map),
+            ]
+          : null,
+      link: json['link'] as String?,
+      locked: json['locked'] as bool? ?? false,
+      points: points,
+      text: json['text'] as String? ?? legacyData['text'] as String?,
+      fontSize: _number(json['fontSize']),
+      fontFamily: (json['fontFamily'] as num?)?.toInt(),
+      textAlign: json['textAlign'] is String
+          ? WhiteboardTextAlign.values.byName(json['textAlign']! as String)
+          : null,
+      verticalAlign: json['verticalAlign'] is String
+          ? WhiteboardVerticalAlign.values.byName(
+              json['verticalAlign']! as String,
+            )
+          : null,
+      fileId: json['fileId'] as String?,
+      status: json['status'] as String?,
+      scale: json['scale'] is List
+          ? [
+              for (final item in json['scale']! as List)
+                (item as num).toDouble(),
+            ]
+          : null,
+      crop: json['crop'] is Map
+          ? Map<String, Object?>.from(json['crop']! as Map)
+          : null,
+      customData: json['customData'] is Map
+          ? Map<String, Object?>.from(json['customData']! as Map)
+          : null,
     );
+  }
+
+  static double? _number(Object? value) =>
+      value is num ? value.toDouble() : null;
+
+  static double? _numberFromData(Map<String, Object?>? data, String key) {
+    return data == null ? null : _number(data[key]);
+  }
+
+  static List<WhiteboardPoint> _legacyPoints(
+    WhiteboardElementType type,
+    Map<String, Object?> data,
+  ) {
+    if (data['points'] is List) {
+      return [
+        for (final point in data['points']! as List)
+          WhiteboardPoint.fromJson(point),
+      ];
+    }
+    if (type == WhiteboardElementType.arrow) {
+      final x1 = _number(data['x1']) ?? 0;
+      final y1 = _number(data['y1']) ?? 0;
+      final x2 = _number(data['x2']) ?? x1;
+      final y2 = _number(data['y2']) ?? y1;
+      return [const WhiteboardPoint(0, 0), WhiteboardPoint(x2 - x1, y2 - y1)];
+    }
+    return const [];
+  }
+
+  static double _legacyWidth(
+    WhiteboardElementType type,
+    Map<String, Object?> data,
+  ) {
+    if (type != WhiteboardElementType.arrow) {
+      return 0;
+    }
+    return (_number(data['x2']) ?? 0) - (_number(data['x1']) ?? 0);
+  }
+
+  static double _legacyHeight(
+    WhiteboardElementType type,
+    Map<String, Object?> data,
+  ) {
+    if (type != WhiteboardElementType.arrow) {
+      return 0;
+    }
+    return (_number(data['y2']) ?? 0) - (_number(data['y1']) ?? 0);
+  }
+
+  static String _typeToJson(WhiteboardElementType type) {
+    return switch (type) {
+      WhiteboardElementType.freedraw => 'freedraw',
+      _ => type.name,
+    };
+  }
+
+  static WhiteboardElementType _typeFromJson(String type) {
+    return switch (type) {
+      'path' || 'freedraw' => WhiteboardElementType.freedraw,
+      _ => WhiteboardElementType.values.byName(type),
+    };
+  }
+
+  static String _fillStyleToJson(WhiteboardFillStyle fillStyle) {
+    return switch (fillStyle) {
+      WhiteboardFillStyle.crossHatch => 'cross-hatch',
+      _ => fillStyle.name,
+    };
+  }
+
+  static WhiteboardFillStyle _fillStyleFromJson(String fillStyle) {
+    return switch (fillStyle) {
+      'cross-hatch' => WhiteboardFillStyle.crossHatch,
+      _ => WhiteboardFillStyle.values.byName(fillStyle),
+    };
   }
 }

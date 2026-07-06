@@ -75,6 +75,45 @@ void main() {
     expect(restored.elements.single.versionNonce, 9);
   });
 
+  test('serializes scenes with Excalidraw-compatible shape', () {
+    final scene = WhiteboardScene(
+      zoom: 1.25,
+      panX: 12,
+      panY: -8,
+      elements: [
+        WhiteboardElement.rectangle(
+          id: 'rect-1',
+          x: 10,
+          y: 20,
+          width: 120,
+          height: 80,
+          fractionalIndex: 'a0',
+          version: 3,
+          versionNonce: 9,
+          updatedAt: 1000,
+        ),
+      ],
+    );
+
+    final json = scene.toJson();
+    final element = (json['elements']! as List).single as Map<String, Object?>;
+    final appState = json['appState']! as Map<String, Object?>;
+
+    expect(json['type'], 'excalidraw');
+    expect(json['version'], 2);
+    expect(json['source'], 'flowmuse');
+    expect(json['files'], <String, Object?>{});
+    expect(element['index'], 'a0');
+    expect(element['updated'], 1000);
+    expect(element['strokeColor'], '#1e1e1e');
+    expect(element['backgroundColor'], 'transparent');
+    expect(element['roughness'], 0);
+    expect(element['groupIds'], <Object?>[]);
+    expect(appState['scrollX'], -12);
+    expect(appState['scrollY'], 8);
+    expect(appState['zoom'], {'value': 1.25});
+  });
+
   test('persists scenes through shared preferences storage', () async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();

@@ -17,7 +17,7 @@ class CollaborativeElement {
   final int version;
   final int versionNonce;
   final int updatedAt;
-  final String fractionalIndex;
+  final String? fractionalIndex;
   final bool isDeleted;
   final Map<String, Object?> data;
 
@@ -47,8 +47,8 @@ class CollaborativeElement {
       'type': type.name,
       'version': version,
       'versionNonce': versionNonce,
-      'updatedAt': updatedAt,
-      'fractionalIndex': fractionalIndex,
+      'updated': updatedAt,
+      'index': fractionalIndex,
       'isDeleted': isDeleted,
       'data': data,
     };
@@ -58,10 +58,10 @@ class CollaborativeElement {
     return CollaborativeElement(
       id: json['id']! as String,
       type: WhiteboardElementType.values.byName(json['type']! as String),
-      version: json['version']! as int,
-      versionNonce: json['versionNonce']! as int,
-      updatedAt: json['updatedAt']! as int,
-      fractionalIndex: json['fractionalIndex']! as String,
+      version: (json['version']! as num).toInt(),
+      versionNonce: (json['versionNonce']! as num).toInt(),
+      updatedAt: ((json['updated'] ?? json['updatedAt'])! as num).toInt(),
+      fractionalIndex: (json['index'] ?? json['fractionalIndex']) as String?,
       isDeleted: json['isDeleted']! as bool,
       data: Map<String, Object?>.from(json['data']! as Map),
     );

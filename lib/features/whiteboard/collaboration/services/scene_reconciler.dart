@@ -33,7 +33,7 @@ class SceneReconciler {
       }
     }
 
-    result.sort((a, b) => a.fractionalIndex.compareTo(b.fractionalIndex));
+    result.sort(_compareFractionalIndex);
     return result;
   }
 
@@ -64,5 +64,30 @@ class SceneReconciler {
       return true;
     }
     return false;
+  }
+
+  int getSceneVersion(List<CollaborativeElement> elements) {
+    return elements.fold(0, (sum, element) => sum + element.version);
+  }
+
+  int hashElementsVersion(List<CollaborativeElement> elements) {
+    var hash = 5381;
+    for (final element in elements) {
+      hash = ((hash << 5) + hash + element.versionNonce).toUnsigned(32);
+    }
+    return hash;
+  }
+
+  int _compareFractionalIndex(CollaborativeElement a, CollaborativeElement b) {
+    final aIndex = a.fractionalIndex;
+    final bIndex = b.fractionalIndex;
+    if (aIndex != null && bIndex != null) {
+      final indexCompare = aIndex.compareTo(bIndex);
+      if (indexCompare != 0) {
+        return indexCompare;
+      }
+      return a.id.compareTo(b.id);
+    }
+    return 1;
   }
 }
