@@ -34,17 +34,7 @@ class AppShell extends ConsumerWidget {
     return Scaffold(
       body: SafeArea(
         child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                effectivePreset.backgroundStart,
-                effectivePreset.backgroundMiddle,
-                effectivePreset.backgroundEnd,
-              ],
-            ),
-          ),
+          decoration: BoxDecoration(color: effectivePreset.backgroundEnd),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 820;
