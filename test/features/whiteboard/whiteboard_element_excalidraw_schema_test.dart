@@ -142,7 +142,10 @@ void main() {
 
     expect(json['pressures'], [0.1, 0.6]);
     expect(json['simulatePressure'], true);
-    expect(json['strokeOptions'], {'variability': 'constant', 'streamline': 0.5});
+    expect(json['strokeOptions'], {
+      'variability': 'constant',
+      'streamline': 0.5,
+    });
   });
 
   test('round trips Excalidraw frame name and embedded element types', () {
@@ -178,5 +181,21 @@ void main() {
     expect(frame.type, WhiteboardElementType.magicFrame);
     expect(frame.toJson()['type'], 'magicframe');
     expect(frame.toJson()['name'], '流程');
+  });
+
+  test('rejects legacy nested data element json', () {
+    expect(
+      () => WhiteboardElement.fromJson({
+        'id': 'legacy-1',
+        'type': 'rectangle',
+        'version': 1,
+        'versionNonce': 2,
+        'updated': 1000,
+        'index': 'a0',
+        'isDeleted': false,
+        'data': {'x': 10, 'y': 20, 'width': 30, 'height': 40},
+      }),
+      throwsA(isA<FormatException>()),
+    );
   });
 }

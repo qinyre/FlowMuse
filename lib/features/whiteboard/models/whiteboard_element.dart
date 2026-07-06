@@ -708,37 +708,25 @@ class WhiteboardElement {
   }
 
   factory WhiteboardElement.fromJson(Map<String, Object?> json) {
-    final legacyData = json['data'] is Map
-        ? Map<String, Object?>.from(json['data']! as Map)
-        : const <String, Object?>{};
+    if (json.containsKey('data')) {
+      throw const FormatException(
+        'Whiteboard elements must use Excalidraw element JSON.',
+      );
+    }
     final type = _typeFromJson(json['type']! as String);
     final points = json['points'] is List
         ? [
             for (final point in json['points']! as List)
               WhiteboardPoint.fromJson(point),
           ]
-        : _legacyPoints(type, legacyData);
+        : const <WhiteboardPoint>[];
     return WhiteboardElement(
       id: json['id']! as String,
       type: type,
-      x:
-          _number(json['x']) ??
-          _number(legacyData['x']) ??
-          _number(legacyData['x1']) ??
-          0,
-      y:
-          _number(json['y']) ??
-          _number(legacyData['y']) ??
-          _number(legacyData['y1']) ??
-          0,
-      width:
-          _number(json['width']) ??
-          _number(legacyData['width']) ??
-          _legacyWidth(type, legacyData),
-      height:
-          _number(json['height']) ??
-          _number(legacyData['height']) ??
-          _legacyHeight(type, legacyData),
+      x: _number(json['x']) ?? 0,
+      y: _number(json['y']) ?? 0,
+      width: _number(json['width']) ?? 0,
+      height: _number(json['height']) ?? 0,
       angle: _number(json['angle']) ?? 0,
       strokeColor: json['strokeColor'] as String? ?? '#1e1e1e',
       backgroundColor: json['backgroundColor'] as String? ?? 'transparent',
@@ -769,7 +757,7 @@ class WhiteboardElement {
       link: json['link'] as String?,
       locked: json['locked'] as bool? ?? false,
       points: points,
-      text: json['text'] as String? ?? legacyData['text'] as String?,
+      text: json['text'] as String?,
       fontSize: _number(json['fontSize']),
       fontFamily: (json['fontFamily'] as num?)?.toInt(),
       textAlign: json['textAlign'] is String
@@ -876,46 +864,6 @@ class WhiteboardElement {
       }
     }
     return true;
-  }
-
-  static List<WhiteboardPoint> _legacyPoints(
-    WhiteboardElementType type,
-    Map<String, Object?> data,
-  ) {
-    if (data['points'] is List) {
-      return [
-        for (final point in data['points']! as List)
-          WhiteboardPoint.fromJson(point),
-      ];
-    }
-    if (type == WhiteboardElementType.arrow) {
-      final x1 = _number(data['x1']) ?? 0;
-      final y1 = _number(data['y1']) ?? 0;
-      final x2 = _number(data['x2']) ?? x1;
-      final y2 = _number(data['y2']) ?? y1;
-      return [const WhiteboardPoint(0, 0), WhiteboardPoint(x2 - x1, y2 - y1)];
-    }
-    return const [];
-  }
-
-  static double _legacyWidth(
-    WhiteboardElementType type,
-    Map<String, Object?> data,
-  ) {
-    if (type != WhiteboardElementType.arrow) {
-      return 0;
-    }
-    return (_number(data['x2']) ?? 0) - (_number(data['x1']) ?? 0);
-  }
-
-  static double _legacyHeight(
-    WhiteboardElementType type,
-    Map<String, Object?> data,
-  ) {
-    if (type != WhiteboardElementType.arrow) {
-      return 0;
-    }
-    return (_number(data['y2']) ?? 0) - (_number(data['y1']) ?? 0);
   }
 
   static String _typeToJson(WhiteboardElementType type) {
