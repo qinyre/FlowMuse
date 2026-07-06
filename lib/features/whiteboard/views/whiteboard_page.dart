@@ -1,12 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:markdraw/markdraw.dart'
+    hide Element, SelectionOverlay, TextAlign;
 
 import '../view_models/whiteboard_view_model.dart';
-import '../widgets/whiteboard_canvas.dart';
-import '../widgets/whiteboard_toolbar.dart';
-import '../widgets/zoom_controls.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
   const WhiteboardPage({
@@ -23,9 +24,13 @@ class WhiteboardPage extends ConsumerStatefulWidget {
 }
 
 class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
+  late final MarkdrawController _markdrawController;
+  bool _loadingScene = false;
+
   @override
   void initState() {
     super.initState();
+    _markdrawController = MarkdrawController();
     Future.microtask(_openNotebook);
   }
 
@@ -38,10 +43,38 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
   }
 
+  @override
+  void dispose() {
+    _markdrawController.dispose();
+    super.dispose();
+  }
+
   Future<void> _openNotebook() async {
     await ref
         .read(whiteboardViewModelProvider.notifier)
         .openNotebook(notebookId: widget.notebookId, title: widget.title);
+    final repository = ref.read(whiteboardSceneRepositoryProvider);
+    final content = await repository.loadSceneContent(widget.notebookId);
+    if (!mounted) {
+      return;
+    }
+    _loadingScene = true;
+    _markdrawController.loadFromContent(
+      content,
+      '${widget.notebookId}.excalidraw',
+    );
+    _loadingScene = false;
+  }
+
+  Future<void> _saveMarkdrawScene() async {
+    if (_loadingScene) {
+      return;
+    }
+    final repository = ref.read(whiteboardSceneRepositoryProvider);
+    final content = _markdrawController.serializeScene(
+      format: DocumentFormat.excalidraw,
+    );
+    await repository.saveSceneContent(widget.notebookId, content);
   }
 
   @override
@@ -56,9 +89,20 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: WhiteboardCanvas(
-                state: state,
-                onDragComplete: viewModel.addElementFromDrag,
+              child: KeyedSubtree(
+                key: const ValueKey('flowmuse-markdraw-editor'),
+                child: MarkdrawEditor(
+                  controller: _markdrawController,
+                  config: const MarkdrawEditorConfig(
+                    initialBackground: '#fdfdfb',
+                    showMenu: false,
+                    showMarkdownButton: false,
+                    showLibraryPanel: false,
+                  ),
+                  onSceneChanged: (_) {
+                    unawaited(_saveMarkdrawScene());
+                  },
+                ),
               ),
             ),
             Positioned(
@@ -78,17 +122,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             ),
             Align(
               alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 22),
-                child: WhiteboardToolbar(
-                  activeTool: state.activeTool,
-                  canUndo: state.canUndo,
-                  canRedo: state.canRedo,
-                  onToolSelected: viewModel.selectTool,
-                  onUndo: viewModel.undo,
-                  onRedo: viewModel.redo,
-                ),
-              ),
+              child: const SizedBox.shrink(),
             ),
             Positioned(
               right: 24,
@@ -108,16 +142,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
                 saved: state.saveStatus == WhiteboardSaveStatus.saved,
               ),
             ),
-            Positioned(
-              left: 24,
-              bottom: 24,
-              child: ZoomControls(
-                zoom: state.zoom,
-                onZoomIn: viewModel.zoomIn,
-                onZoomOut: viewModel.zoomOut,
-                onResetZoom: viewModel.resetZoom,
-              ),
-            ),
+            Positioned(left: 24, bottom: 24, child: const SizedBox.shrink()),
           ],
         ),
       ),

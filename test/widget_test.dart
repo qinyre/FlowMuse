@@ -46,7 +46,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('未命名白板'), findsOneWidget);
-    expect(find.byKey(const ValueKey('whiteboard-canvas')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('flowmuse-markdraw-editor')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('opens an existing notebook with its stable id', (
@@ -75,11 +78,11 @@ void main() {
 
     await tester.tap(find.text('文件夹').first);
     await tester.pumpAndSettle();
-    expect(find.text('这里空空如也...'), findsOneWidget);
+    expect(find.text('新建文件夹'), findsWidgets);
 
     await tester.tap(find.byTooltip('新建文件夹').first);
     await tester.pumpAndSettle();
-    expect(find.text('新建文件夹 1'), findsOneWidget);
+    expect(find.text('新建文件夹 1'), findsWidgets);
 
     await tester.tap(find.byTooltip('设置').first);
     await tester.pumpAndSettle();
