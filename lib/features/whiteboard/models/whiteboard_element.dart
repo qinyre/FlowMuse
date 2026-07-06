@@ -389,6 +389,150 @@ class WhiteboardElement {
     );
   }
 
+  WhiteboardElement newWith({
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+    double? angle,
+    String? strokeColor,
+    String? backgroundColor,
+    WhiteboardFillStyle? fillStyle,
+    double? strokeWidth,
+    WhiteboardStrokeStyle? strokeStyle,
+    double? roughness,
+    int? opacity,
+    int? version,
+    int? versionNonce,
+    int? updatedAt,
+    String? fractionalIndex,
+    bool? isDeleted,
+    List<String>? groupIds,
+    String? frameId,
+    List<Map<String, Object?>>? boundElements,
+    String? link,
+    bool? locked,
+    List<WhiteboardPoint>? points,
+    String? text,
+    double? fontSize,
+    int? fontFamily,
+    WhiteboardTextAlign? textAlign,
+    WhiteboardVerticalAlign? verticalAlign,
+    String? fileId,
+    String? status,
+    List<double>? scale,
+    Map<String, Object?>? crop,
+    Map<String, Object?>? customData,
+    bool force = false,
+  }) {
+    final nextX = x ?? this.x;
+    final nextY = y ?? this.y;
+    final nextWidth = width ?? this.width;
+    final nextHeight = height ?? this.height;
+    final nextAngle = angle ?? this.angle;
+    final nextStrokeColor = strokeColor ?? this.strokeColor;
+    final nextBackgroundColor = backgroundColor ?? this.backgroundColor;
+    final nextFillStyle = fillStyle ?? this.fillStyle;
+    final nextStrokeWidth = strokeWidth ?? this.strokeWidth;
+    final nextStrokeStyle = strokeStyle ?? this.strokeStyle;
+    final nextRoughness = roughness ?? this.roughness;
+    final nextOpacity = opacity ?? this.opacity;
+    final nextFractionalIndex = fractionalIndex ?? this.fractionalIndex;
+    final nextIsDeleted = isDeleted ?? this.isDeleted;
+    final nextGroupIds = groupIds ?? this.groupIds;
+    final nextFrameId = frameId ?? this.frameId;
+    final nextBoundElements = boundElements ?? this.boundElements;
+    final nextLink = link ?? this.link;
+    final nextLocked = locked ?? this.locked;
+    final nextPoints = points ?? this.points;
+    final nextText = text ?? this.text;
+    final nextFontSize = fontSize ?? this.fontSize;
+    final nextFontFamily = fontFamily ?? this.fontFamily;
+    final nextTextAlign = textAlign ?? this.textAlign;
+    final nextVerticalAlign = verticalAlign ?? this.verticalAlign;
+    final nextFileId = fileId ?? this.fileId;
+    final nextStatus = status ?? this.status;
+    final nextScale = scale ?? this.scale;
+    final nextCrop = crop ?? this.crop;
+    final nextCustomData = customData ?? this.customData;
+
+    final didChange =
+        force ||
+        nextX != this.x ||
+        nextY != this.y ||
+        nextWidth != this.width ||
+        nextHeight != this.height ||
+        nextAngle != this.angle ||
+        nextStrokeColor != this.strokeColor ||
+        nextBackgroundColor != this.backgroundColor ||
+        nextFillStyle != this.fillStyle ||
+        nextStrokeWidth != this.strokeWidth ||
+        nextStrokeStyle != this.strokeStyle ||
+        nextRoughness != this.roughness ||
+        nextOpacity != this.opacity ||
+        nextFractionalIndex != this.fractionalIndex ||
+        nextIsDeleted != this.isDeleted ||
+        !_stringListsEqual(nextGroupIds, this.groupIds) ||
+        nextFrameId != this.frameId ||
+        !identical(nextBoundElements, this.boundElements) ||
+        nextLink != this.link ||
+        nextLocked != this.locked ||
+        !_pointsEqual(nextPoints, this.points) ||
+        nextText != this.text ||
+        nextFontSize != this.fontSize ||
+        nextFontFamily != this.fontFamily ||
+        nextTextAlign != this.textAlign ||
+        nextVerticalAlign != this.verticalAlign ||
+        nextFileId != this.fileId ||
+        nextStatus != this.status ||
+        !_doubleListsEqual(nextScale, this.scale) ||
+        !identical(nextCrop, this.crop) ||
+        !identical(nextCustomData, this.customData);
+
+    if (!didChange) {
+      return this;
+    }
+
+    return WhiteboardElement(
+      id: id,
+      type: type,
+      x: nextX,
+      y: nextY,
+      width: nextWidth,
+      height: nextHeight,
+      angle: nextAngle,
+      strokeColor: nextStrokeColor,
+      backgroundColor: nextBackgroundColor,
+      fillStyle: nextFillStyle,
+      strokeWidth: nextStrokeWidth,
+      strokeStyle: nextStrokeStyle,
+      roughness: nextRoughness,
+      opacity: nextOpacity,
+      seed: seed,
+      version: version ?? this.version + 1,
+      versionNonce: versionNonce ?? _random.nextInt(1 << 31),
+      updatedAt: updatedAt ?? DateTime.now().millisecondsSinceEpoch,
+      fractionalIndex: nextFractionalIndex,
+      isDeleted: nextIsDeleted,
+      groupIds: nextGroupIds,
+      frameId: nextFrameId,
+      boundElements: nextBoundElements,
+      link: nextLink,
+      locked: nextLocked,
+      points: nextPoints,
+      text: nextText,
+      fontSize: nextFontSize,
+      fontFamily: nextFontFamily,
+      textAlign: nextTextAlign,
+      verticalAlign: nextVerticalAlign,
+      fileId: nextFileId,
+      status: nextStatus,
+      scale: nextScale,
+      crop: nextCrop,
+      customData: nextCustomData,
+    );
+  }
+
   Map<String, Object?> toJson() {
     return {
       'id': id,
@@ -526,6 +670,51 @@ class WhiteboardElement {
 
   static double? _numberFromData(Map<String, Object?>? data, String key) {
     return data == null ? null : _number(data[key]);
+  }
+
+  static bool _stringListsEqual(List<String>? a, List<String>? b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a == null || b == null || a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i += 1) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _doubleListsEqual(List<double>? a, List<double>? b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a == null || b == null || a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i += 1) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _pointsEqual(List<WhiteboardPoint> a, List<WhiteboardPoint> b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i += 1) {
+      if (a[i].x != b[i].x || a[i].y != b[i].y) {
+        return false;
+      }
+    }
+    return true;
   }
 
   static List<WhiteboardPoint> _legacyPoints(

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../collaboration/models/collaborative_element.dart';
 import '../collaboration/models/collaboration_room.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
+import '../models/fractional_index.dart';
 import '../models/whiteboard_element.dart';
 import '../models/whiteboard_scene.dart';
 import '../repositories/whiteboard_scene_repository.dart';
@@ -303,7 +304,10 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
 
   String _nextFractionalIndex() {
     _nextElementNumber += 1;
-    return _nextElementNumber.toString().padLeft(8, '0');
+    final lastIndex = state.elements.isEmpty
+        ? null
+        : state.elements.last.fractionalIndex;
+    return generateKeyBetween(lastIndex, null);
   }
 
   void _pushUndo() {
