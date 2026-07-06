@@ -27,6 +27,14 @@ Widget _testSidebar() {
               );
             },
           ),
+          GoRoute(
+            path: '/tags',
+            builder: (context, state) {
+              return const Scaffold(
+                body: LibrarySidebar(section: ShellSection.tags),
+              );
+            },
+          ),
         ],
       ),
     ),

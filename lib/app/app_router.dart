@@ -5,6 +5,7 @@ import '../features/library/views/library_home_page.dart';
 import '../features/search/views/search_page.dart';
 import '../features/settings/views/settings_page.dart';
 import '../features/folders/views/folders_page.dart';
+import '../features/tags/views/tags_page.dart';
 import '../features/whiteboard/views/whiteboard_page.dart';
 import '../shared/widgets/app_shell.dart';
 
@@ -14,8 +15,19 @@ class AppRoutes {
   static const library = '/library';
   static const search = '/search';
   static const folders = '/folders';
+  static const folderDetail = '/folders/:folderId';
+  static const tags = '/tags';
+  static const tagDetail = '/tags/:tagId';
   static const settings = '/settings';
   static const whiteboard = '/whiteboard/:notebookId/:title';
+
+  static String folderPath(String folderId) {
+    return '/folders/${Uri.encodeComponent(folderId)}';
+  }
+
+  static String tagPath(String tagId) {
+    return '/tags/${Uri.encodeComponent(tagId)}';
+  }
 
   static String whiteboardPath({
     required String notebookId,
@@ -55,6 +67,26 @@ GoRouter createAppRouter() {
               return _contentPage(state, const FoldersPage());
             },
           ),
+          GoRoute(
+            path: AppRoutes.folderDetail,
+            pageBuilder: (context, state) {
+              final folderId = state.pathParameters['folderId'] ?? '';
+              return _contentPage(state, FolderDetailPage(folderId: folderId));
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.tags,
+            pageBuilder: (context, state) {
+              return _contentPage(state, const TagsPage());
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.tagDetail,
+            pageBuilder: (context, state) {
+              final tagId = state.pathParameters['tagId'] ?? '';
+              return _contentPage(state, TagDetailPage(tagId: tagId));
+            },
+          ),
         ],
       ),
       GoRoute(
@@ -78,11 +110,16 @@ GoRouter createAppRouter() {
 }
 
 ShellSection _sectionForPath(String path) {
-  return switch (path) {
-    AppRoutes.search => ShellSection.search,
-    AppRoutes.folders => ShellSection.folders,
-    _ => ShellSection.library,
-  };
+  if (path == AppRoutes.search) {
+    return ShellSection.search;
+  }
+  if (path == AppRoutes.folders || path.startsWith('${AppRoutes.folders}/')) {
+    return ShellSection.folders;
+  }
+  if (path == AppRoutes.tags || path.startsWith('${AppRoutes.tags}/')) {
+    return ShellSection.tags;
+  }
+  return ShellSection.library;
 }
 
 CustomTransitionPage<void> _contentPage(GoRouterState state, Widget child) {

@@ -80,7 +80,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.only(top: 8),
+              padding: EdgeInsets.zero,
               children: [
                 _SidebarItem(
                   icon: LucideIcons.squarePen,
@@ -119,18 +119,13 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                       : const SizedBox.shrink(key: ValueKey('empty-children')),
                 ),
                 const _SidebarItem(icon: LucideIcons.trash2, label: '回收站'),
-                Divider(
-                  height: 20,
-                  indent: 24,
-                  endIndent: 28,
-                  color: colorScheme.primary.withValues(alpha: 0.14),
-                ),
                 _SidebarItem(
                   icon: LucideIcons.folder,
                   label: '文件夹',
                   selected: widget.section == ShellSection.folders,
                   actionIcon: LucideIcons.circlePlus,
                   leadingAction: true,
+                  emptyLabel: hasFolders ? null : '暂无文件夹',
                   trailingIcon: hasFolders
                       ? (_foldersExpanded
                             ? LucideIcons.chevronDown
@@ -145,9 +140,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                   },
                   onTap: () => context.go(AppRoutes.folders),
                 ),
-                if (!hasFolders)
-                  const _SidebarEmptyItem(label: '暂无文件夹')
-                else
+                if (hasFolders)
                   _SidebarChildren(
                     expanded: _foldersExpanded,
                     emptyKey: 'empty-folders',
@@ -159,14 +152,18 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                           label: folder.name,
                           count: folder.count.toString(),
                           level: 1,
+                          onTap: () =>
+                              context.go(AppRoutes.folderPath(folder.id)),
                         ),
                     ],
                   ),
                 _SidebarItem(
                   icon: LucideIcons.hash,
                   label: '标签',
+                  selected: widget.section == ShellSection.tags,
                   actionIcon: LucideIcons.circlePlus,
                   leadingAction: true,
+                  emptyLabel: hasTags ? null : '暂无标签',
                   trailingIcon: hasTags
                       ? (_tagsExpanded
                             ? LucideIcons.chevronDown
@@ -174,14 +171,14 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                       : null,
                   onActionTap: () {
                     ref.read(tagsViewModelProvider.notifier).createTag();
+                    context.go(AppRoutes.tags);
                   },
                   onTrailingTap: () {
                     setState(() => _tagsExpanded = !_tagsExpanded);
                   },
+                  onTap: () => context.go(AppRoutes.tags),
                 ),
-                if (!hasTags)
-                  const _SidebarEmptyItem(label: '暂无标签')
-                else
+                if (hasTags)
                   _SidebarChildren(
                     expanded: _tagsExpanded,
                     emptyKey: 'empty-tags',
@@ -193,6 +190,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                           label: tag.name,
                           count: tag.count.toString(),
                           level: 1,
+                          onTap: () => context.go(AppRoutes.tagPath(tag.id)),
                         ),
                     ],
                   ),
@@ -213,6 +211,7 @@ class _SidebarItem extends StatelessWidget {
     this.count,
     this.trailingIcon,
     this.actionIcon,
+    this.emptyLabel,
     this.leadingAction = false,
     this.onActionTap,
     this.onTrailingTap,
@@ -226,6 +225,7 @@ class _SidebarItem extends StatelessWidget {
   final String? count;
   final IconData? trailingIcon;
   final IconData? actionIcon;
+  final String? emptyLabel;
   final bool leadingAction;
   final VoidCallback? onActionTap;
   final VoidCallback? onTrailingTap;
@@ -240,19 +240,22 @@ class _SidebarItem extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        height: level == 0 ? 42 : 36,
-        margin: EdgeInsets.fromLTRB(10 + level * 16, 1, 10, 1),
-        padding: EdgeInsets.fromLTRB(level == 0 ? 12 : 10, 0, 8, 0),
+        height: level == 0 ? 36 : 32,
+        padding: EdgeInsets.fromLTRB(16 + level * 18, 0, 10, 0),
         decoration: BoxDecoration(
           color: selected
               ? colorScheme.primary.withValues(alpha: 0.08)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          border: Border(
+            bottom: BorderSide(
+              color: colorScheme.primary.withValues(alpha: 0.10),
+            ),
+          ),
         ),
         child: Row(
           children: [
-            Icon(icon, color: foreground.withValues(alpha: 0.86), size: 18),
-            const SizedBox(width: 10),
+            Icon(icon, color: foreground.withValues(alpha: 0.78), size: 16),
+            const SizedBox(width: 8),
             Expanded(
               child: Row(
                 children: [
@@ -262,7 +265,8 @@ class _SidebarItem extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: foreground,
-                        height: 1.1,
+                        fontSize: level == 0 ? 13 : 12,
+                        height: 1.0,
                         fontWeight: selected
                             ? FontWeight.w600
                             : FontWeight.w500,
@@ -293,15 +297,25 @@ class _SidebarItem extends StatelessWidget {
                 count!,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
-                  height: 1.1,
+                  fontSize: 11,
+                  height: 1.0,
+                ),
+              ),
+            if (emptyLabel != null)
+              Text(
+                emptyLabel!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.78),
+                  fontSize: 11,
+                  height: 1.0,
                 ),
               ),
             if (trailingIcon != null)
               IconButton(
                 tooltip: '$label展开收起',
                 constraints: const BoxConstraints.tightFor(
-                  width: 28,
-                  height: 28,
+                  width: 26,
+                  height: 26,
                 ),
                 padding: EdgeInsets.zero,
                 onPressed: onTrailingTap,
@@ -340,31 +354,6 @@ class _SidebarChildren extends StatelessWidget {
       child: expanded
           ? Column(key: ValueKey(childrenKey), children: children)
           : SizedBox.shrink(key: ValueKey(emptyKey)),
-    );
-  }
-}
-
-class _SidebarEmptyItem extends StatelessWidget {
-  const _SidebarEmptyItem({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      height: 30,
-      margin: const EdgeInsets.fromLTRB(36, 0, 10, 2),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      alignment: Alignment.centerLeft,
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: colorScheme.onSurfaceVariant,
-          height: 1.1,
-        ),
-      ),
     );
   }
 }

@@ -5,10 +5,19 @@ import '../../library/models/notebook_item.dart';
 
 @immutable
 class FolderItem {
-  const FolderItem({required this.name, required this.count});
+  const FolderItem({
+    required this.id,
+    required this.name,
+    required this.count,
+    required this.coverColor,
+    this.notebookIds = const [],
+  });
 
+  final String id;
   final String name;
   final int count;
+  final Color coverColor;
+  final List<String> notebookIds;
 }
 
 @immutable
@@ -60,7 +69,12 @@ class FoldersViewModel extends Notifier<FoldersState> {
     state = state.copyWith(
       folders: [
         ...state.folders,
-        FolderItem(name: '新建文件夹 $nextIndex', count: 0),
+        FolderItem(
+          id: 'folder-$nextIndex',
+          name: '新建文件夹 $nextIndex',
+          count: 0,
+          coverColor: _folderColors[(nextIndex - 1) % _folderColors.length],
+        ),
       ],
     );
   }
@@ -80,3 +94,10 @@ class FoldersViewModel extends Notifier<FoldersState> {
 
 final foldersViewModelProvider =
     NotifierProvider<FoldersViewModel, FoldersState>(FoldersViewModel.new);
+
+const _folderColors = [
+  Color(0xFF8DB6C9),
+  Color(0xFFD9B48F),
+  Color(0xFF8CBDB5),
+  Color(0xFF9CA2E6),
+];
