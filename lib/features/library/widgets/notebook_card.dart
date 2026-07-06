@@ -6,6 +6,9 @@ import '../models/notebook_item.dart';
 class NotebookCard extends StatelessWidget {
   const NotebookCard({super.key, required this.item, required this.onTap});
 
+  static const coverWidth = 154.0;
+  static const coverHeight = 204.0;
+
   final NotebookItem item;
   final VoidCallback onTap;
 
@@ -13,11 +16,16 @@ class NotebookCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Expanded(
+        SizedBox(
+          width: coverWidth,
+          height: coverHeight,
           child: Card(
             elevation: 5,
             shadowColor: const Color(0x165A625F),
             clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: InkWell(
               onTap: onTap,
               child: NotebookCover(item: item),
@@ -71,55 +79,138 @@ class NotebookCover extends StatelessWidget {
         ? Colors.white
         : const Color(0xFF202523);
 
-    return ColoredBox(
-      color: item.coverColor,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: item.coverColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(
+              Colors.white.withValues(alpha: 0.10),
+              item.coverColor,
+            ),
+            item.coverColor,
+            Color.alphaBlend(
+              Colors.black.withValues(alpha: 0.08),
+              item.coverColor,
+            ),
+          ],
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.10),
+                border: Border(
+                  right: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: const SizedBox(width: 16),
+            ),
+          ),
+          Positioned(
+            right: 0,
+            top: 10,
+            bottom: 10,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.22),
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(3),
+                ),
+              ),
+              child: const SizedBox(width: 5),
+            ),
+          ),
+          Positioned(
+            left: 30,
+            right: 18,
+            top: 58,
+            child: Column(
+              children: List.generate(
+                5,
+                (index) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: foreground.withValues(alpha: 0.10),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(30, 18, 18, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  isPdf ? LucideIcons.fileText : LucideIcons.bookOpen,
-                  color: foreground.withValues(alpha: 0.9),
-                  size: 22,
+                Row(
+                  children: [
+                    Icon(
+                      isPdf ? LucideIcons.fileText : LucideIcons.bookOpen,
+                      color: foreground.withValues(alpha: 0.86),
+                      size: 20,
+                    ),
+                    const Spacer(),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: foreground.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        child: Text(
+                          isPdf ? 'PDF' : 'NOTE',
+                          style: TextStyle(
+                            color: foreground.withValues(alpha: 0.86),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 26),
+                Text(
+                  item.subtitle ?? (isPdf ? 'PDF 文档' : '手写笔记'),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: 15,
+                    height: 1.28,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const Spacer(),
-                Text(
-                  isPdf ? 'PDF' : 'NOTEBOOK',
-                  style: TextStyle(
-                    color: foreground.withValues(alpha: 0.82),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: Icon(
+                    item.kind == LibraryFilter.pdf
+                        ? LucideIcons.fileImage
+                        : LucideIcons.mountain,
+                    color: foreground.withValues(alpha: 0.24),
+                    size: 56,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 18),
-            if (item.subtitle != null)
-              Text(
-                item.subtitle!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            const Spacer(),
-            Align(
-              alignment: Alignment.bottomRight,
-              child: Icon(
-                item.kind == LibraryFilter.pdf
-                    ? LucideIcons.fileImage
-                    : LucideIcons.mountain,
-                color: foreground.withValues(alpha: 0.30),
-                size: 72,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

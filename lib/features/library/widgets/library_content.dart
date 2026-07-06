@@ -161,11 +161,11 @@ class _LibraryItems extends StatelessWidget {
 
     return GridView.builder(
       itemCount: state.visibleNotebooks.length + 1,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: compact ? 2 : 3,
-        mainAxisExtent: 332,
-        crossAxisSpacing: compact ? 26 : 66,
-        mainAxisSpacing: 62,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 218,
+        mainAxisExtent: 276,
+        crossAxisSpacing: 34,
+        mainAxisSpacing: 46,
       ),
       itemBuilder: (context, index) {
         if (index == 0) {
