@@ -5,6 +5,42 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('saves and loads raw Excalidraw scene content by notebook id', () async {
+    final repository = InMemoryWhiteboardSceneRepository();
+    const content =
+        '{"type":"excalidraw","version":2,"source":"https://excalidraw.com","elements":[],"appState":{},"files":{}}';
+
+    await repository.saveSceneContent('notebook-a', content);
+
+    expect(await repository.loadSceneContent('notebook-a'), content);
+  });
+
+  test('returns an empty Excalidraw scene for missing raw scene content', () async {
+    final repository = InMemoryWhiteboardSceneRepository();
+
+    final content = await repository.loadSceneContent('missing');
+
+    expect(content, contains('"type":"excalidraw"'));
+    expect(content, contains('"elements":[]'));
+  });
+
+  test('persists raw scene content through shared preferences storage', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = SharedPreferencesWhiteboardSceneRepository.value(
+      preferences,
+    );
+    const content =
+        '{"type":"excalidraw","version":2,"source":"https://excalidraw.com","elements":[{"id":"rect-1"}],"appState":{},"files":{}}';
+
+    await repository.saveSceneContent('notebook-a', content);
+
+    final restored = await SharedPreferencesWhiteboardSceneRepository.value(
+      preferences,
+    ).loadSceneContent('notebook-a');
+    expect(restored, content);
+  });
+
   test('saves and loads scenes by notebook id', () async {
     final repository = InMemoryWhiteboardSceneRepository();
     final scene = WhiteboardScene(
