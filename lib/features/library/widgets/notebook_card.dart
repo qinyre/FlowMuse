@@ -27,6 +27,7 @@ class NotebookCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: InkWell(
+              key: ValueKey('notebook-card-${item.id}'),
               onTap: onTap,
               child: NotebookCover(item: item),
             ),

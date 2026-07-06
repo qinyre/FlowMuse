@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaborative_element.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/scene_reconciler.dart';
+import 'package:flow_muse/features/whiteboard/models/whiteboard_element.dart';
 
 void main() {
   CollaborativeElement element({

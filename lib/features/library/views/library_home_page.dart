@@ -10,8 +10,14 @@ import '../widgets/library_content.dart';
 class LibraryHomePage extends ConsumerWidget {
   const LibraryHomePage({super.key});
 
-  void _openWhiteboard(BuildContext context, {String title = '未命名白板'}) {
-    context.push(AppRoutes.whiteboardPath(title));
+  void _openWhiteboard(
+    BuildContext context, {
+    String notebookId = 'whiteboard-new',
+    String title = '未命名白板',
+  }) {
+    context.push(
+      AppRoutes.whiteboardPath(notebookId: notebookId, title: title),
+    );
   }
 
   @override
@@ -31,7 +37,7 @@ class LibraryHomePage extends ConsumerWidget {
           onSelectionModeChanged: viewModel.toggleSelectionMode,
           onCreate: () => _openWhiteboard(context),
           onOpenNotebook: (NotebookItem item) {
-            _openWhiteboard(context, title: item.title);
+            _openWhiteboard(context, notebookId: item.id, title: item.title);
           },
         );
       },

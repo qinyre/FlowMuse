@@ -1,4 +1,4 @@
-enum WhiteboardElementType { path, rectangle, ellipse, arrow, text, image }
+import '../../models/whiteboard_element.dart';
 
 class CollaborativeElement {
   const CollaborativeElement({

@@ -6,6 +6,7 @@ enum LibraryViewMode { grid, list }
 
 class NotebookItem {
   const NotebookItem({
+    required this.id,
     required this.title,
     required this.date,
     required this.kind,
@@ -13,6 +14,7 @@ class NotebookItem {
     this.subtitle,
   });
 
+  final String id;
   final String title;
   final String date;
   final LibraryFilter kind;

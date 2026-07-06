@@ -46,7 +46,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('未命名白板'), findsOneWidget);
-    expect(find.text('白板工作台'), findsOneWidget);
+    expect(find.byKey(const ValueKey('whiteboard-canvas')), findsOneWidget);
+  });
+
+  testWidgets('opens an existing notebook with its stable id', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_testApp());
+
+    await tester.tap(find.byKey(const ValueKey('notebook-card-whiteboard-os')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('whiteboard-os')), findsOneWidget);
+    expect(find.text('操作系统'), findsOneWidget);
   });
 
   testWidgets('opens search, folders, and settings pages from navigation', (

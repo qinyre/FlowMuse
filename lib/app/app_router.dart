@@ -15,10 +15,13 @@ class AppRoutes {
   static const search = '/search';
   static const folders = '/folders';
   static const settings = '/settings';
-  static const whiteboard = '/whiteboard/:title';
+  static const whiteboard = '/whiteboard/:notebookId/:title';
 
-  static String whiteboardPath(String title) {
-    return '/whiteboard/${Uri.encodeComponent(title)}';
+  static String whiteboardPath({
+    required String notebookId,
+    required String title,
+  }) {
+    return '/whiteboard/${Uri.encodeComponent(notebookId)}/${Uri.encodeComponent(title)}';
   }
 }
 
@@ -61,10 +64,12 @@ GoRouter createAppRouter() {
       GoRoute(
         path: AppRoutes.whiteboard,
         pageBuilder: (context, state) {
+          final notebookId =
+              state.pathParameters['notebookId'] ?? 'whiteboard-untitled';
           final title = state.pathParameters['title'] ?? '未命名白板';
           return MaterialPage<void>(
             key: state.pageKey,
-            child: WhiteboardPage(title: title),
+            child: WhiteboardPage(notebookId: notebookId, title: title),
           );
         },
       ),
