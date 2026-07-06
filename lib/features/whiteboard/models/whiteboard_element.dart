@@ -10,6 +10,9 @@ enum WhiteboardElementType {
   text,
   image,
   frame,
+  magicFrame,
+  embeddable,
+  iframe,
 }
 
 enum WhiteboardFillStyle { hachure, crossHatch, solid, zigzag }
@@ -78,10 +81,23 @@ class WhiteboardElement {
     required this.fontFamily,
     required this.textAlign,
     required this.verticalAlign,
+    required this.containerId,
+    required this.originalText,
+    required this.autoResize,
+    required this.lineHeight,
     required this.fileId,
     required this.status,
     required this.scale,
     required this.crop,
+    required this.startBinding,
+    required this.endBinding,
+    required this.startArrowhead,
+    required this.endArrowhead,
+    required this.elbowed,
+    required this.pressures,
+    required this.simulatePressure,
+    required this.strokeOptions,
+    required this.name,
     required this.customData,
   });
 
@@ -118,10 +134,23 @@ class WhiteboardElement {
   final int? fontFamily;
   final WhiteboardTextAlign? textAlign;
   final WhiteboardVerticalAlign? verticalAlign;
+  final String? containerId;
+  final String? originalText;
+  final bool? autoResize;
+  final double? lineHeight;
   final String? fileId;
   final String? status;
   final List<double>? scale;
   final Map<String, Object?>? crop;
+  final Map<String, Object?>? startBinding;
+  final Map<String, Object?>? endBinding;
+  final String? startArrowhead;
+  final String? endArrowhead;
+  final bool? elbowed;
+  final List<double>? pressures;
+  final bool? simulatePressure;
+  final Map<String, Object?>? strokeOptions;
+  final String? name;
   final Map<String, Object?>? customData;
 
   factory WhiteboardElement.rectangle({
@@ -258,6 +287,9 @@ class WhiteboardElement {
       fontFamily: 1,
       textAlign: WhiteboardTextAlign.left,
       verticalAlign: WhiteboardVerticalAlign.top,
+      originalText: text,
+      autoResize: true,
+      lineHeight: 1.25,
     );
   }
 
@@ -278,6 +310,9 @@ class WhiteboardElement {
     int? fontFamily,
     WhiteboardTextAlign? textAlign,
     WhiteboardVerticalAlign? verticalAlign,
+    String? originalText,
+    bool? autoResize,
+    double? lineHeight,
   }) {
     return WhiteboardElement(
       id: id,
@@ -311,10 +346,27 @@ class WhiteboardElement {
       fontFamily: fontFamily,
       textAlign: textAlign,
       verticalAlign: verticalAlign,
+      containerId: null,
+      originalText: originalText,
+      autoResize: autoResize,
+      lineHeight: lineHeight,
       fileId: null,
       status: null,
       scale: null,
       crop: null,
+      startBinding: null,
+      endBinding: null,
+      startArrowhead: null,
+      endArrowhead: type == WhiteboardElementType.arrow ? 'arrow' : null,
+      elbowed: type == WhiteboardElementType.arrow ? false : null,
+      pressures: type == WhiteboardElementType.freedraw
+          ? List<double>.filled(points.length, 0.5, growable: false)
+          : null,
+      simulatePressure: type == WhiteboardElementType.freedraw ? true : null,
+      strokeOptions: type == WhiteboardElementType.freedraw
+          ? const {'variability': 'variable', 'streamline': 0.5}
+          : null,
+      name: null,
       customData: null,
     );
   }
@@ -381,10 +433,23 @@ class WhiteboardElement {
       fontFamily: fontFamily,
       textAlign: textAlign,
       verticalAlign: verticalAlign,
+      containerId: containerId,
+      originalText: originalText,
+      autoResize: autoResize,
+      lineHeight: lineHeight,
       fileId: fileId,
       status: status,
       scale: scale,
       crop: crop,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      startArrowhead: startArrowhead,
+      endArrowhead: endArrowhead,
+      elbowed: elbowed,
+      pressures: pressures,
+      simulatePressure: simulatePressure,
+      strokeOptions: strokeOptions,
+      name: name,
       customData: customData,
     );
   }
@@ -418,10 +483,23 @@ class WhiteboardElement {
     int? fontFamily,
     WhiteboardTextAlign? textAlign,
     WhiteboardVerticalAlign? verticalAlign,
+    String? containerId,
+    String? originalText,
+    bool? autoResize,
+    double? lineHeight,
     String? fileId,
     String? status,
     List<double>? scale,
     Map<String, Object?>? crop,
+    Map<String, Object?>? startBinding,
+    Map<String, Object?>? endBinding,
+    String? startArrowhead,
+    String? endArrowhead,
+    bool? elbowed,
+    List<double>? pressures,
+    bool? simulatePressure,
+    Map<String, Object?>? strokeOptions,
+    String? name,
     Map<String, Object?>? customData,
     bool force = false,
   }) {
@@ -450,10 +528,23 @@ class WhiteboardElement {
     final nextFontFamily = fontFamily ?? this.fontFamily;
     final nextTextAlign = textAlign ?? this.textAlign;
     final nextVerticalAlign = verticalAlign ?? this.verticalAlign;
+    final nextContainerId = containerId ?? this.containerId;
+    final nextOriginalText = originalText ?? this.originalText;
+    final nextAutoResize = autoResize ?? this.autoResize;
+    final nextLineHeight = lineHeight ?? this.lineHeight;
     final nextFileId = fileId ?? this.fileId;
     final nextStatus = status ?? this.status;
     final nextScale = scale ?? this.scale;
     final nextCrop = crop ?? this.crop;
+    final nextStartBinding = startBinding ?? this.startBinding;
+    final nextEndBinding = endBinding ?? this.endBinding;
+    final nextStartArrowhead = startArrowhead ?? this.startArrowhead;
+    final nextEndArrowhead = endArrowhead ?? this.endArrowhead;
+    final nextElbowed = elbowed ?? this.elbowed;
+    final nextPressures = pressures ?? this.pressures;
+    final nextSimulatePressure = simulatePressure ?? this.simulatePressure;
+    final nextStrokeOptions = strokeOptions ?? this.strokeOptions;
+    final nextName = name ?? this.name;
     final nextCustomData = customData ?? this.customData;
 
     final didChange =
@@ -483,10 +574,23 @@ class WhiteboardElement {
         nextFontFamily != this.fontFamily ||
         nextTextAlign != this.textAlign ||
         nextVerticalAlign != this.verticalAlign ||
+        nextContainerId != this.containerId ||
+        nextOriginalText != this.originalText ||
+        nextAutoResize != this.autoResize ||
+        nextLineHeight != this.lineHeight ||
         nextFileId != this.fileId ||
         nextStatus != this.status ||
         !_doubleListsEqual(nextScale, this.scale) ||
         !identical(nextCrop, this.crop) ||
+        !identical(nextStartBinding, this.startBinding) ||
+        !identical(nextEndBinding, this.endBinding) ||
+        nextStartArrowhead != this.startArrowhead ||
+        nextEndArrowhead != this.endArrowhead ||
+        nextElbowed != this.elbowed ||
+        !_doubleListsEqual(nextPressures, this.pressures) ||
+        nextSimulatePressure != this.simulatePressure ||
+        !identical(nextStrokeOptions, this.strokeOptions) ||
+        nextName != this.name ||
         !identical(nextCustomData, this.customData);
 
     if (!didChange) {
@@ -525,10 +629,23 @@ class WhiteboardElement {
       fontFamily: nextFontFamily,
       textAlign: nextTextAlign,
       verticalAlign: nextVerticalAlign,
+      containerId: nextContainerId,
+      originalText: nextOriginalText,
+      autoResize: nextAutoResize,
+      lineHeight: nextLineHeight,
       fileId: nextFileId,
       status: nextStatus,
       scale: nextScale,
       crop: nextCrop,
+      startBinding: nextStartBinding,
+      endBinding: nextEndBinding,
+      startArrowhead: nextStartArrowhead,
+      endArrowhead: nextEndArrowhead,
+      elbowed: nextElbowed,
+      pressures: nextPressures,
+      simulatePressure: nextSimulatePressure,
+      strokeOptions: nextStrokeOptions,
+      name: nextName,
       customData: nextCustomData,
     );
   }
@@ -567,10 +684,25 @@ class WhiteboardElement {
       if (fontFamily != null) 'fontFamily': fontFamily,
       if (textAlign != null) 'textAlign': textAlign!.name,
       if (verticalAlign != null) 'verticalAlign': verticalAlign!.name,
+      if (containerId != null) 'containerId': containerId,
+      if (originalText != null) 'originalText': originalText,
+      if (autoResize != null) 'autoResize': autoResize,
+      if (lineHeight != null) 'lineHeight': lineHeight,
       if (fileId != null) 'fileId': fileId,
       if (status != null) 'status': status,
       if (scale != null) 'scale': scale,
       if (crop != null) 'crop': crop,
+      if (_isLinearElement) ...{
+        'startBinding': startBinding,
+        'endBinding': endBinding,
+        'startArrowhead': startArrowhead,
+        'endArrowhead': endArrowhead,
+      },
+      if (elbowed != null) 'elbowed': elbowed,
+      if (pressures != null) 'pressures': pressures,
+      if (simulatePressure != null) 'simulatePressure': simulatePressure,
+      if (strokeOptions != null) 'strokeOptions': strokeOptions,
+      if (name != null) 'name': name,
       if (customData != null) 'customData': customData,
     };
   }
@@ -648,6 +780,10 @@ class WhiteboardElement {
               json['verticalAlign']! as String,
             )
           : null,
+      containerId: json['containerId'] as String?,
+      originalText: json['originalText'] as String?,
+      autoResize: json['autoResize'] as bool?,
+      lineHeight: _number(json['lineHeight']),
       fileId: json['fileId'] as String?,
       status: json['status'] as String?,
       scale: json['scale'] is List
@@ -659,10 +795,35 @@ class WhiteboardElement {
       crop: json['crop'] is Map
           ? Map<String, Object?>.from(json['crop']! as Map)
           : null,
+      startBinding: json['startBinding'] is Map
+          ? Map<String, Object?>.from(json['startBinding']! as Map)
+          : null,
+      endBinding: json['endBinding'] is Map
+          ? Map<String, Object?>.from(json['endBinding']! as Map)
+          : null,
+      startArrowhead: json['startArrowhead'] as String?,
+      endArrowhead: json['endArrowhead'] as String?,
+      elbowed: json['elbowed'] as bool?,
+      pressures: json['pressures'] is List
+          ? [
+              for (final item in json['pressures']! as List)
+                (item as num).toDouble(),
+            ]
+          : null,
+      simulatePressure: json['simulatePressure'] as bool?,
+      strokeOptions: json['strokeOptions'] is Map
+          ? Map<String, Object?>.from(json['strokeOptions']! as Map)
+          : null,
+      name: json['name'] as String?,
       customData: json['customData'] is Map
           ? Map<String, Object?>.from(json['customData']! as Map)
           : null,
     );
+  }
+
+  bool get _isLinearElement {
+    return type == WhiteboardElementType.arrow ||
+        type == WhiteboardElementType.line;
   }
 
   static double? _number(Object? value) =>
@@ -760,6 +921,7 @@ class WhiteboardElement {
   static String _typeToJson(WhiteboardElementType type) {
     return switch (type) {
       WhiteboardElementType.freedraw => 'freedraw',
+      WhiteboardElementType.magicFrame => 'magicframe',
       _ => type.name,
     };
   }
@@ -767,6 +929,7 @@ class WhiteboardElement {
   static WhiteboardElementType _typeFromJson(String type) {
     return switch (type) {
       'path' || 'freedraw' => WhiteboardElementType.freedraw,
+      'magicframe' => WhiteboardElementType.magicFrame,
       _ => WhiteboardElementType.values.byName(type),
     };
   }

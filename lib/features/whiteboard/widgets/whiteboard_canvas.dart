@@ -289,6 +289,9 @@ class _WhiteboardPainter extends CustomPainter {
       case WhiteboardElementType.image:
       case WhiteboardElementType.diamond:
       case WhiteboardElementType.frame:
+      case WhiteboardElementType.magicFrame:
+      case WhiteboardElementType.embeddable:
+      case WhiteboardElementType.iframe:
         break;
     }
   }
