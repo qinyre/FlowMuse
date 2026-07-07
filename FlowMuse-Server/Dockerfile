@@ -1,5 +1,8 @@
 FROM golang:1.25-alpine AS builder
 
+ENV GOPROXY=https://goproxy.cn,direct \
+    GOSUMDB=sum.golang.google.cn
+
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
