@@ -144,6 +144,35 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
   }
 
+  Future<void> _joinCollaborationFromInput(String value) async {
+    final room = _parseRoomInput(value);
+    if (room == null) {
+      throw const FormatException('请输入完整房间链接或 roomId,roomKey');
+    }
+    await _joinCollaboration(room);
+  }
+
+  CollaborationRoom? _parseRoomInput(String value) {
+    final input = value.trim();
+    if (input.isEmpty) {
+      return null;
+    }
+    final candidates = <String>[
+      input,
+      if (input.startsWith('#room=')) 'https://flowmuse.local/whiteboard$input',
+      if (input.startsWith('room=')) 'https://flowmuse.local/whiteboard#$input',
+      if (input.contains(',') && !input.contains('#room='))
+        'https://flowmuse.local/whiteboard#room=$input',
+    ];
+    for (final candidate in candidates) {
+      final room = CollaborationRoom.tryParseLink(candidate);
+      if (room != null) {
+        return room;
+      }
+    }
+    return null;
+  }
+
   Future<void> _stopCollaboration() async {
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = null;
@@ -288,6 +317,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             collaborators: _remoteCollaboratorOverlays(state),
             onBack: () => context.pop(),
             onStartCollaboration: _startCollaboration,
+            onJoinCollaboration: _joinCollaborationFromInput,
             onStopCollaboration: _stopCollaboration,
             onPointerPresence: _broadcastPointerPresence,
             onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,

@@ -34,6 +34,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.collaboratorCount = 0,
     this.collaborators = const [],
     this.onStartCollaboration,
+    this.onJoinCollaboration,
     this.onStopCollaboration,
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
@@ -71,6 +72,7 @@ class MarkdrawEditor extends StatefulWidget {
   final int collaboratorCount;
   final List<RemoteCollaboratorOverlay> collaborators;
   final Future<void> Function()? onStartCollaboration;
+  final Future<void> Function(String value)? onJoinCollaboration;
   final Future<void> Function()? onStopCollaboration;
   final void Function(Offset localPosition, bool pointerDown)?
   onPointerPresence;
@@ -290,6 +292,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
               roomLink: widget.roomLink,
               collaboratorCount: widget.collaboratorCount,
               onStartCollaboration: widget.onStartCollaboration,
+              onJoinCollaboration: widget.onJoinCollaboration,
               onStopCollaboration: widget.onStopCollaboration,
               viewMode: _controller.viewMode,
               zenMode: _controller.zenMode,
@@ -497,6 +500,7 @@ class _RightChrome extends StatelessWidget {
     required this.roomLink,
     required this.collaboratorCount,
     required this.onStartCollaboration,
+    required this.onJoinCollaboration,
     required this.onStopCollaboration,
     required this.viewMode,
     required this.zenMode,
@@ -509,6 +513,7 @@ class _RightChrome extends StatelessWidget {
   final String? roomLink;
   final int collaboratorCount;
   final Future<void> Function()? onStartCollaboration;
+  final Future<void> Function(String value)? onJoinCollaboration;
   final Future<void> Function()? onStopCollaboration;
   final bool viewMode;
   final bool zenMode;
@@ -540,6 +545,7 @@ class _RightChrome extends StatelessWidget {
               roomLink: roomLink,
               collaboratorCount: collaboratorCount,
               onStart: onStartCollaboration!,
+              onJoin: onJoinCollaboration,
               onStop: onStopCollaboration!,
             ),
         ],
@@ -619,13 +625,14 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-class _CollaborationChip extends StatelessWidget {
+class _CollaborationChip extends StatefulWidget {
   const _CollaborationChip({
     required this.compact,
     required this.collaborating,
     required this.roomLink,
     required this.collaboratorCount,
     required this.onStart,
+    required this.onJoin,
     required this.onStop,
   });
 
@@ -634,30 +641,84 @@ class _CollaborationChip extends StatelessWidget {
   final String? roomLink;
   final int collaboratorCount;
   final Future<void> Function() onStart;
+  final Future<void> Function(String value)? onJoin;
   final Future<void> Function() onStop;
+
+  @override
+  State<_CollaborationChip> createState() => _CollaborationChipState();
+}
+
+class _CollaborationChipState extends State<_CollaborationChip> {
+  final TextEditingController _joinController = TextEditingController();
+  bool _joining = false;
+  String? _joinError;
+
+  @override
+  void dispose() {
+    _joinController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _join(MenuController controller) async {
+    final onJoin = widget.onJoin;
+    if (onJoin == null || _joining) {
+      return;
+    }
+    final value = _joinController.text.trim();
+    if (value.isEmpty) {
+      setState(() => _joinError = '请输入房间链接或 roomId,roomKey');
+      return;
+    }
+    setState(() {
+      _joining = true;
+      _joinError = null;
+    });
+    try {
+      await onJoin(value);
+      if (!mounted) {
+        return;
+      }
+      _joinController.clear();
+      controller.close();
+    } on FormatException catch (error) {
+      if (mounted) {
+        setState(() => _joinError = error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _joinError = '加入失败，请检查服务器和房间信息');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _joining = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final label = collaborating
-        ? (collaboratorCount > 0 ? '协作中 $collaboratorCount' : '协作中')
+    final label = widget.collaborating
+        ? (widget.collaboratorCount > 0
+              ? '协作中 ${widget.collaboratorCount}'
+              : '协作中')
         : '创建房间';
     return MenuAnchor(
       menuChildren: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Text(
-            collaborating ? '协作中' : '本地白板',
+            widget.collaborating ? '协作中' : '本地白板',
             style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700),
           ),
         ),
-        if (roomLink != null)
+        if (widget.roomLink != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 280),
               child: SelectableText(
-                roomLink!,
+                widget.roomLink!,
                 maxLines: 3,
                 style: TextStyle(
                   color: cs.onSurfaceVariant,
@@ -668,21 +729,78 @@ class _CollaborationChip extends StatelessWidget {
             ),
           ),
         MenuItemButton(
-          leadingIcon: Icon(collaborating ? Icons.link_off : Icons.link),
-          onPressed: collaborating ? onStop : onStart,
-          child: Text(collaborating ? '停止协作' : '创建房间'),
+          leadingIcon: Icon(widget.collaborating ? Icons.link_off : Icons.link),
+          onPressed: widget.collaborating ? widget.onStop : widget.onStart,
+          child: Text(widget.collaborating ? '停止协作' : '创建房间'),
         ),
+        if (!widget.collaborating && widget.onJoin != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 300),
+              child: Builder(
+                builder: (context) {
+                  final controller = MenuController.maybeOf(context);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: _joinController,
+                        enabled: !_joining,
+                        minLines: 1,
+                        maxLines: 2,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) {
+                          if (controller != null) {
+                            _join(controller);
+                          }
+                        },
+                        decoration: InputDecoration(
+                          isDense: true,
+                          labelText: '加入房间',
+                          hintText: '粘贴链接或 roomId,roomKey',
+                          errorText: _joinError,
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      FilledButton.icon(
+                        onPressed: _joining || controller == null
+                            ? null
+                            : () => _join(controller),
+                        icon: _joining
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.login, size: 18),
+                        label: const Text('加入'),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
       ],
       builder: (context, controller, child) {
         return FilledButton.icon(
           onPressed: () {
             controller.isOpen ? controller.close() : controller.open();
           },
-          icon: Icon(collaborating ? Icons.sensors : Icons.add_link, size: 18),
-          label: compact ? const SizedBox.shrink() : Text(label),
+          icon: Icon(
+            widget.collaborating ? Icons.sensors : Icons.add_link,
+            size: 18,
+          ),
+          label: widget.compact ? const SizedBox.shrink() : Text(label),
           style: FilledButton.styleFrom(
-            minimumSize: compact ? const Size(44, 44) : const Size(0, 44),
-            padding: compact
+            minimumSize: widget.compact
+                ? const Size(44, 44)
+                : const Size(0, 44),
+            padding: widget.compact
                 ? EdgeInsets.zero
                 : const EdgeInsets.symmetric(horizontal: 14),
             shape: RoundedRectangleBorder(
