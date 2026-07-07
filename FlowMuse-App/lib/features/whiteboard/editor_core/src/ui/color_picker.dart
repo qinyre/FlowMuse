@@ -3,6 +3,7 @@ library;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import 'color_utils.dart';
@@ -131,8 +132,7 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
 
   @override
   void dispose() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
+    _removeOverlay();
     super.dispose();
   }
 
@@ -187,13 +187,37 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
         canvasSize: widget.canvasSize,
       ),
     );
-    overlay.insert(_overlayEntry!);
+    _insertOverlay(overlay, _overlayEntry!);
     widget.onAutoOpened?.call();
   }
 
   void _removeOverlay() {
-    _overlayEntry?.remove();
+    final entry = _overlayEntry;
     _overlayEntry = null;
+    if (entry == null) {
+      return;
+    }
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        entry.remove();
+      });
+      return;
+    }
+    entry.remove();
+  }
+
+  void _insertOverlay(OverlayState overlay, OverlayEntry entry) {
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted && identical(_overlayEntry, entry)) {
+          overlay.insert(entry);
+        }
+      });
+      return;
+    }
+    overlay.insert(entry);
   }
 }
 

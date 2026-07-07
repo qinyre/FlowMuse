@@ -1,6 +1,7 @@
 library;
 
 import 'package:flutter/material.dart' hide Element;
+import 'package:flutter/scheduler.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     as core
@@ -1079,16 +1080,40 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
         },
       ),
     );
-    overlay.insert(_fontPickerEntry!);
+    _insertFontPickerOverlay(overlay, _fontPickerEntry!);
   }
 
   void _removeFontPickerOverlay({bool restoreFocus = true}) {
-    _fontPickerEntry?.remove();
+    final entry = _fontPickerEntry;
     _fontPickerEntry = null;
     controller.fontPickerOpen = false;
     if (!restoreFocus) {
       controller.suppressFocusCommit = false;
     }
+    if (entry == null) {
+      return;
+    }
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        entry.remove();
+      });
+      return;
+    }
+    entry.remove();
+  }
+
+  void _insertFontPickerOverlay(OverlayState overlay, OverlayEntry entry) {
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted && identical(_fontPickerEntry, entry)) {
+          overlay.insert(entry);
+        }
+      });
+      return;
+    }
+    overlay.insert(entry);
   }
 
   void _showCompactFontPicker(BuildContext context, String? current) {
