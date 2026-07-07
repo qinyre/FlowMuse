@@ -28,6 +28,7 @@ class FindOverlay extends StatefulWidget {
 class _FindOverlayState extends State<FindOverlay> {
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
+  final _keyboardFocusNode = FocusNode();
   Timer? _debounce;
 
   @override
@@ -41,6 +42,7 @@ class _FindOverlayState extends State<FindOverlay> {
     _debounce?.cancel();
     _textController.dispose();
     _focusNode.dispose();
+    _keyboardFocusNode.dispose();
     super.dispose();
   }
 
@@ -85,7 +87,7 @@ class _FindOverlayState extends State<FindOverlay> {
     }
 
     return KeyboardListener(
-      focusNode: FocusNode(),
+      focusNode: _keyboardFocusNode,
       onKeyEvent: (event) {
         if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.escape) {

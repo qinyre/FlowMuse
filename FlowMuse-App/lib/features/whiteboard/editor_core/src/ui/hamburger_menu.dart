@@ -36,6 +36,7 @@ void showRenameDocumentDialog(
       ],
     ),
   ).then((value) {
+    textController.dispose();
     if (value != null) {
       controller.renameDocument(value);
       onRenamed?.call();

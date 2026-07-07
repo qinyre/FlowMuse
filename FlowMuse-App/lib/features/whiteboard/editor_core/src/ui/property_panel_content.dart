@@ -929,6 +929,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
         ],
       ),
     ).then((_) {
+      sizeController.dispose();
       controller.restoreTextFocus(wasEditing, savedSelection);
     });
   }

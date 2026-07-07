@@ -27,6 +27,7 @@ class LinkOverlay extends StatefulWidget {
 class _LinkOverlayState extends State<LinkOverlay> {
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
+  final _keyboardFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -50,6 +51,9 @@ class _LinkOverlayState extends State<LinkOverlay> {
     }
     if (widget.controller.isLinkEditorEditing) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
         _focusNode.requestFocus();
         _textController.selection = TextSelection(
           baseOffset: 0,
@@ -63,6 +67,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
   void dispose() {
     _textController.dispose();
     _focusNode.dispose();
+    _keyboardFocusNode.dispose();
     super.dispose();
   }
 
@@ -100,7 +105,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
     }
 
     return KeyboardListener(
-      focusNode: FocusNode(),
+      focusNode: _keyboardFocusNode,
       onKeyEvent: (event) {
         if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.escape) {
