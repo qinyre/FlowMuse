@@ -62,6 +62,7 @@ services:
       FLOWMUSE_S3_SECRET_ACCESS_KEY: "flowmuse_dev_password"
       FLOWMUSE_S3_USE_SSL: "false"
       FLOWMUSE_ALLOWED_ORIGINS: "*"
+      FLOWMUSE_AUTH_SECRET: "flowmuse_dev_auth_secret"
     ports:
       - "48931:48931"
 

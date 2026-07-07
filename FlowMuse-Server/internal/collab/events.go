@@ -21,5 +21,9 @@ type EncryptedFrame struct {
 }
 
 type RoomUser struct {
-	SocketID string `json:"socketId"`
+	SocketID  string `json:"socketId"`
+	UserID    string `json:"userId,omitempty"`
+	Username  string `json:"username"`
+	AvatarURL string `json:"avatarUrl,omitempty"`
+	IsGuest   bool   `json:"isGuest"`
 }

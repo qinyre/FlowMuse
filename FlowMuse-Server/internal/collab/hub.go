@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"flowmuse/server/internal/auth"
 	"flowmuse/server/internal/storage"
 
 	"github.com/jackc/pgx/v5"
@@ -18,19 +19,33 @@ const maxEncryptedFrameBytes = 8 * 1024 * 1024
 type Hub struct {
 	server     *socket.Server
 	sceneStore *storage.SceneStore
+	roomStore  *storage.RoomStore
+	userStore  *auth.UserStore
+	tokens     *auth.TokenService
 
 	mu          sync.Mutex
-	roomUsers   map[string]map[string]struct{}
+	roomUsers   map[string]map[string]RoomUser
 	socketRooms map[string]string
+	socketUsers map[string]RoomUser
 	followRooms map[string]map[string]struct{}
 }
 
-func NewHub(server *socket.Server, sceneStore *storage.SceneStore) *Hub {
+func NewHub(
+	server *socket.Server,
+	sceneStore *storage.SceneStore,
+	roomStore *storage.RoomStore,
+	userStore *auth.UserStore,
+	tokens *auth.TokenService,
+) *Hub {
 	return &Hub{
 		server:      server,
 		sceneStore:  sceneStore,
-		roomUsers:   map[string]map[string]struct{}{},
+		roomStore:   roomStore,
+		userStore:   userStore,
+		tokens:      tokens,
+		roomUsers:   map[string]map[string]RoomUser{},
 		socketRooms: map[string]string{},
+		socketUsers: map[string]RoomUser{},
 		followRooms: map[string]map[string]struct{}{},
 	}
 }
@@ -38,6 +53,7 @@ func NewHub(server *socket.Server, sceneStore *storage.SceneStore) *Hub {
 func (h *Hub) Register() {
 	h.server.On("connection", func(clients ...any) {
 		client := clients[0].(*socket.Socket)
+		h.rememberSocketIdentity(client)
 		client.Emit(EventInitRoom)
 
 		client.On(EventJoinRoom, func(args ...any) {
@@ -90,19 +106,28 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 	users := h.roomUsers[roomID]
 	first := len(users) == 0
 	if users == nil {
-		users = map[string]struct{}{}
+		users = map[string]RoomUser{}
 		h.roomUsers[roomID] = users
 	}
-	users[socketID] = struct{}{}
+	user := h.socketUsers[socketID]
+	if user.SocketID == "" {
+		user = roomUserFromSocket(client, auth.Identity{
+			DisplayName: auth.GuestName(socketID),
+			IsGuest:     true,
+		})
+		h.socketUsers[socketID] = user
+	}
+	users[socketID] = user
 	h.socketRooms[socketID] = roomID
-	currentUsers := socketIDList(users)
+	currentUsers := roomUserList(users)
 	h.mu.Unlock()
 
+	h.recordRoomJoin(roomID, user)
 	client.Join(room)
 	if first {
 		client.Emit(EventFirstInRoom)
 	} else {
-		client.To(room).Emit(EventNewUser, socketID)
+		client.To(room).Emit(EventNewUser, user)
 	}
 	h.server.To(room).Emit(EventRoomUserChange, currentUsers)
 }
@@ -140,7 +165,7 @@ func (h *Hub) leaveRoom(client *socket.Socket, roomID string) {
 		return
 	}
 	h.removeFromRoomLocked(socketID, roomID)
-	users := socketIDList(h.roomUsers[roomID])
+	users := roomUserList(h.roomUsers[roomID])
 	h.mu.Unlock()
 
 	client.Leave(socket.Room(roomID))
@@ -185,10 +210,11 @@ func (h *Hub) leaveAll(client *socket.Socket) {
 			delete(h.followRooms, followRoomID)
 		}
 	}
-	var users []string
+	var users []RoomUser
 	if roomID != "" {
-		users = socketIDList(h.roomUsers[roomID])
+		users = roomUserList(h.roomUsers[roomID])
 	}
+	delete(h.socketUsers, socketID)
 	h.mu.Unlock()
 
 	if roomID != "" {
@@ -290,12 +316,76 @@ func asString(value any) (string, bool) {
 	return text, ok && text != ""
 }
 
-func socketIDList(users map[string]struct{}) []string {
-	list := make([]string, 0, len(users))
-	for socketID := range users {
-		list = append(list, socketID)
+func roomUserList(users map[string]RoomUser) []RoomUser {
+	list := make([]RoomUser, 0, len(users))
+	for _, user := range users {
+		list = append(list, user)
 	}
 	return list
+}
+
+func (h *Hub) rememberSocketIdentity(client *socket.Socket) {
+	identity := h.identityFromSocket(client)
+	user := roomUserFromSocket(client, identity)
+	h.mu.Lock()
+	h.socketUsers[user.SocketID] = user
+	h.mu.Unlock()
+}
+
+func (h *Hub) identityFromSocket(client *socket.Socket) auth.Identity {
+	token := auth.BearerToken(requestHeader(client, "Authorization"))
+	if token != "" {
+		if userID, err := h.tokens.Verify(token); err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if user, err := h.userStore.Load(ctx, userID); err == nil {
+				return auth.Identity{
+					UserID:      user.ID,
+					Email:       user.Email,
+					DisplayName: user.DisplayName,
+					AvatarURL:   user.AvatarURL,
+					IsGuest:     false,
+				}
+			}
+		}
+	}
+	return auth.Identity{
+		DisplayName: auth.GuestName(string(client.Id()) + remoteAddress(client)),
+		IsGuest:     true,
+	}
+}
+
+func roomUserFromSocket(client *socket.Socket, identity auth.Identity) RoomUser {
+	return RoomUser{
+		SocketID:  string(client.Id()),
+		UserID:    identity.UserID,
+		Username:  identity.Username(),
+		AvatarURL: identity.AvatarURL,
+		IsGuest:   identity.IsGuest,
+	}
+}
+
+func (h *Hub) recordRoomJoin(roomID string, user RoomUser) {
+	if user.UserID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_ = h.roomStore.UpsertMember(ctx, roomID, user.UserID, "editor")
+}
+
+func requestHeader(client *socket.Socket, key string) string {
+	if client == nil || client.Request() == nil || client.Request().Request() == nil {
+		return ""
+	}
+	return client.Request().Request().Header.Get(key)
+}
+
+func remoteAddress(client *socket.Socket) string {
+	if client == nil || client.Request() == nil || client.Request().Request() == nil {
+		return ""
+	}
+	return client.Request().Request().RemoteAddr
 }
 
 func parseUserFollowArgs(args []any) (string, string, bool) {

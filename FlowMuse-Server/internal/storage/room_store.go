@@ -1,0 +1,134 @@
+package storage
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var ErrRoomAccessDenied = errors.New("room access denied")
+
+type RoomMetadata struct {
+	RoomID        string `json:"roomId"`
+	OwnerID       string `json:"ownerId,omitempty"`
+	AccessPolicy  string `json:"accessPolicy"`
+	CreatedAt     int64  `json:"createdAt"`
+	LastJoinedAt  int64  `json:"lastJoinedAt,omitempty"`
+	MemberRole    string `json:"memberRole,omitempty"`
+	Authenticated bool   `json:"authenticated"`
+}
+
+type RoomStore struct {
+	db *pgxpool.Pool
+}
+
+func NewRoomStore(db *pgxpool.Pool) *RoomStore {
+	return &RoomStore{db: db}
+}
+
+func (s *RoomStore) EnsureSchema(ctx context.Context) error {
+	_, err := s.db.Exec(ctx, `
+CREATE TABLE IF NOT EXISTS collaboration_rooms (
+	room_id TEXT PRIMARY KEY,
+	owner_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+	access_policy TEXT NOT NULL DEFAULT 'link_guest',
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS room_members (
+	room_id TEXT NOT NULL REFERENCES collaboration_rooms(room_id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	role TEXT NOT NULL DEFAULT 'editor',
+	joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	PRIMARY KEY (room_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS room_invites (
+	id TEXT PRIMARY KEY,
+	room_id TEXT NOT NULL REFERENCES collaboration_rooms(room_id) ON DELETE CASCADE,
+	created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+	role TEXT NOT NULL DEFAULT 'editor',
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	expires_at TIMESTAMPTZ
+)`)
+	return err
+}
+
+func (s *RoomStore) CreateRoom(ctx context.Context, roomID string, ownerID string) (RoomMetadata, error) {
+	var createdAt time.Time
+	err := s.db.QueryRow(ctx, `
+INSERT INTO collaboration_rooms (room_id, owner_id)
+VALUES ($1, NULLIF($2, ''))
+ON CONFLICT (room_id) DO UPDATE SET room_id = EXCLUDED.room_id
+RETURNING created_at`, roomID, ownerID).Scan(&createdAt)
+	if err != nil {
+		return RoomMetadata{}, err
+	}
+	if ownerID != "" {
+		if err := s.UpsertMember(ctx, roomID, ownerID, "owner"); err != nil {
+			return RoomMetadata{}, err
+		}
+	}
+	return RoomMetadata{
+		RoomID:        roomID,
+		OwnerID:       ownerID,
+		AccessPolicy:  "link_guest",
+		CreatedAt:     createdAt.UnixMilli(),
+		MemberRole:    roleForOwner(ownerID),
+		Authenticated: ownerID != "",
+	}, nil
+}
+
+func (s *RoomStore) LoadRoom(ctx context.Context, roomID string, userID string) (RoomMetadata, error) {
+	var metadata RoomMetadata
+	var createdAt time.Time
+	var joinedAt *time.Time
+	err := s.db.QueryRow(ctx, `
+SELECT r.room_id, COALESCE(r.owner_id, ''), r.access_policy, r.created_at,
+	COALESCE(m.role, ''), m.joined_at
+FROM collaboration_rooms r
+LEFT JOIN room_members m ON m.room_id = r.room_id AND m.user_id = NULLIF($2, '')
+WHERE r.room_id = $1`, roomID, userID).Scan(
+		&metadata.RoomID,
+		&metadata.OwnerID,
+		&metadata.AccessPolicy,
+		&createdAt,
+		&metadata.MemberRole,
+		&joinedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return RoomMetadata{RoomID: roomID, AccessPolicy: "link_guest"}, nil
+	}
+	if err != nil {
+		return RoomMetadata{}, err
+	}
+	metadata.CreatedAt = createdAt.UnixMilli()
+	metadata.Authenticated = userID != ""
+	if joinedAt != nil {
+		metadata.LastJoinedAt = joinedAt.UnixMilli()
+	}
+	return metadata, nil
+}
+
+func (s *RoomStore) UpsertMember(ctx context.Context, roomID, userID, role string) error {
+	if roomID == "" || userID == "" {
+		return nil
+	}
+	_, err := s.db.Exec(ctx, `
+INSERT INTO room_members (room_id, user_id, role)
+VALUES ($1, $2, $3)
+ON CONFLICT (room_id, user_id) DO UPDATE SET
+	role = room_members.role,
+	joined_at = now()`, roomID, userID, role)
+	return err
+}
+
+func roleForOwner(ownerID string) string {
+	if ownerID == "" {
+		return ""
+	}
+	return "owner"
+}

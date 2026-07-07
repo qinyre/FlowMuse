@@ -18,6 +18,8 @@ type Config struct {
 	S3UseSSL          bool
 	AllowedOrigins    []string
 	RequestTimeout    time.Duration
+	AuthSecret        string
+	AuthTokenTTL      time.Duration
 }
 
 func Load() (Config, error) {
@@ -29,6 +31,8 @@ func Load() (Config, error) {
 		S3UseSSL:       envBool("FLOWMUSE_S3_USE_SSL", true),
 		AllowedOrigins: envList("FLOWMUSE_ALLOWED_ORIGINS", "*"),
 		RequestTimeout: envDuration("FLOWMUSE_REQUEST_TIMEOUT", 10*time.Second),
+		AuthSecret:     os.Getenv("FLOWMUSE_AUTH_SECRET"),
+		AuthTokenTTL:   envDuration("FLOWMUSE_AUTH_TOKEN_TTL", 30*24*time.Hour),
 	}
 	cfg.S3AccessKeyID = os.Getenv("FLOWMUSE_S3_ACCESS_KEY_ID")
 	cfg.S3SecretAccessKey = os.Getenv("FLOWMUSE_S3_SECRET_ACCESS_KEY")
@@ -44,6 +48,9 @@ func Load() (Config, error) {
 		return cfg, errors.New("FLOWMUSE_S3_ACCESS_KEY_ID is required")
 	case cfg.S3SecretAccessKey == "":
 		return cfg, errors.New("FLOWMUSE_S3_SECRET_ACCESS_KEY is required")
+	}
+	if cfg.AuthSecret == "" {
+		cfg.AuthSecret = "flowmuse-dev-auth-secret:" + cfg.DatabaseURL
 	}
 
 	return cfg, nil
