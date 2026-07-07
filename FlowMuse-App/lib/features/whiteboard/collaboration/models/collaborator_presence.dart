@@ -10,10 +10,16 @@ class CollaboratorPresence {
     this.sceneBounds,
     this.idleState = CollaboratorIdleState.active,
     this.isCurrentUser = false,
+    this.userId,
+    this.avatarUrl = '',
+    this.isGuest = true,
   });
 
   final String socketId;
   final String username;
+  final String? userId;
+  final String avatarUrl;
+  final bool isGuest;
   final Map<String, Object?>? pointer;
   final String button;
   final Map<String, bool> selectedElementIds;
@@ -29,10 +35,16 @@ class CollaboratorPresence {
     Map<String, Object?>? sceneBounds,
     CollaboratorIdleState? idleState,
     bool? isCurrentUser,
+    String? userId,
+    String? avatarUrl,
+    bool? isGuest,
   }) {
     return CollaboratorPresence(
       socketId: socketId,
       username: username ?? this.username,
+      userId: userId ?? this.userId,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      isGuest: isGuest ?? this.isGuest,
       pointer: pointer ?? this.pointer,
       button: button ?? this.button,
       selectedElementIds: selectedElementIds ?? this.selectedElementIds,

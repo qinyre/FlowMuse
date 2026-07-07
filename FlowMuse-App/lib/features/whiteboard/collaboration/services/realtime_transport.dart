@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../models/encrypted_payload.dart';
+import '../models/room_collaborator.dart';
 
 enum RealtimeConnectionStatus {
   idle,
@@ -16,7 +17,7 @@ abstract interface class RealtimeTransport {
 
   Stream<String> get newUsers;
 
-  Stream<List<String>> get roomUsers;
+  Stream<List<RoomCollaborator>> get roomUsers;
 
   Stream<void> get firstInRoom;
 
@@ -43,7 +44,7 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
   Stream<String> get newUsers => const Stream.empty();
 
   @override
-  Stream<List<String>> get roomUsers => const Stream.empty();
+  Stream<List<RoomCollaborator>> get roomUsers => const Stream.empty();
 
   @override
   Stream<void> get firstInRoom => const Stream.empty();
@@ -75,12 +76,14 @@ class MemoryRealtimeRoomHub {
     if (!transports.contains(transport)) {
       transports.add(transport);
     }
-    final socketIds = transports.map((item) => item.socketId ?? '').toList();
+    final users = transports
+        .map((item) => RoomCollaborator.fromSocketId(item.socketId ?? ''))
+        .toList();
     for (final item in transports) {
       if (!identical(item, transport)) {
         item._receiveNewUser(transport.socketId ?? '');
       }
-      item._receiveRoomUsers(socketIds);
+      item._receiveRoomUsers(users);
     }
     return transports.length == 1;
   }
@@ -95,9 +98,11 @@ class MemoryRealtimeRoomHub {
       _rooms.remove(roomId);
       return;
     }
-    final socketIds = transports.map((item) => item.socketId ?? '').toList();
+    final users = transports
+        .map((item) => RoomCollaborator.fromSocketId(item.socketId ?? ''))
+        .toList();
     for (final item in transports) {
-      item._receiveRoomUsers(socketIds);
+      item._receiveRoomUsers(users);
     }
   }
 
@@ -129,8 +134,8 @@ class MemoryRealtimeTransport implements RealtimeTransport {
       StreamController<EncryptedPayload>.broadcast();
   final StreamController<String> _newUsers =
       StreamController<String>.broadcast();
-  final StreamController<List<String>> _roomUsers =
-      StreamController<List<String>>.broadcast();
+  final StreamController<List<RoomCollaborator>> _roomUsers =
+      StreamController<List<RoomCollaborator>>.broadcast();
   final StreamController<void> _firstInRoom =
       StreamController<void>.broadcast();
   final StreamController<String> _errors = StreamController<String>.broadcast();
@@ -145,7 +150,7 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   Stream<String> get newUsers => _newUsers.stream;
 
   @override
-  Stream<List<String>> get roomUsers => _roomUsers.stream;
+  Stream<List<RoomCollaborator>> get roomUsers => _roomUsers.stream;
 
   @override
   Stream<void> get firstInRoom => _firstInRoom.stream;
@@ -206,9 +211,9 @@ class MemoryRealtimeTransport implements RealtimeTransport {
     }
   }
 
-  void _receiveRoomUsers(List<String> socketIds) {
+  void _receiveRoomUsers(List<RoomCollaborator> users) {
     if (!_roomUsers.isClosed) {
-      _roomUsers.add(socketIds);
+      _roomUsers.add(users);
     }
   }
 }

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/app_spacing.dart';
+import '../models/library_special_view.dart';
 import '../models/note_item.dart';
+import '../repositories/library_repository.dart';
 import '../view_models/library_home_view_model.dart';
 import 'create_note_card.dart';
 import 'note_card.dart';
@@ -12,10 +14,21 @@ class LibraryContent extends StatelessWidget {
     super.key,
     required this.compact,
     required this.state,
+    required this.title,
+    required this.notes,
+    required this.libraryIndex,
+    required this.specialView,
     required this.onFilterChanged,
     required this.onViewModeChanged,
     required this.onSortDirectionChanged,
     required this.onSelectionModeChanged,
+    required this.onSelectionChanged,
+    required this.onClearSelection,
+    required this.onDeleteSelected,
+    required this.onRestoreSelected,
+    required this.onDeleteSelectedForever,
+    required this.onMoveSelectedToNotebook,
+    required this.onAddTagsToSelected,
     required this.onCreate,
     required this.onJoinRoom,
     required this.onOpenNote,
@@ -23,10 +36,21 @@ class LibraryContent extends StatelessWidget {
 
   final bool compact;
   final LibraryHomeState state;
+  final String title;
+  final List<NoteItem> notes;
+  final LibraryIndex libraryIndex;
+  final LibrarySpecialView specialView;
   final ValueChanged<LibraryFilter> onFilterChanged;
   final ValueChanged<LibraryViewMode> onViewModeChanged;
   final VoidCallback onSortDirectionChanged;
   final VoidCallback onSelectionModeChanged;
+  final ValueChanged<String> onSelectionChanged;
+  final VoidCallback onClearSelection;
+  final Future<void> Function() onDeleteSelected;
+  final Future<void> Function() onRestoreSelected;
+  final Future<void> Function() onDeleteSelectedForever;
+  final Future<void> Function(String? notebookId) onMoveSelectedToNotebook;
+  final Future<void> Function(List<String> tagIds) onAddTagsToSelected;
   final VoidCallback onCreate;
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
@@ -40,6 +64,7 @@ class LibraryContent extends StatelessWidget {
         children: [
           _LibraryHeader(
             compact: compact,
+            title: title,
             viewMode: state.viewMode,
             sortAscending: state.sortAscending,
             selectionMode: state.selectionMode,
@@ -48,16 +73,35 @@ class LibraryContent extends StatelessWidget {
             onSelectionModeChanged: onSelectionModeChanged,
           ),
           const SizedBox(height: AppSpacing.headerToContent),
-          _FilterTabs(
-            selected: state.selectedFilter,
-            onFilterChanged: onFilterChanged,
-          ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          if (specialView == LibrarySpecialView.none) ...[
+            _FilterTabs(
+              selected: state.selectedFilter,
+              onFilterChanged: onFilterChanged,
+            ),
+            const SizedBox(height: AppSpacing.sectionGap),
+          ],
+          if (state.selectionMode)
+            _BulkActionBar(
+              trash: specialView == LibrarySpecialView.trash,
+              selectedCount: state.selectedNoteIds.length,
+              libraryIndex: libraryIndex,
+              onClearSelection: onClearSelection,
+              onDeleteSelected: onDeleteSelected,
+              onRestoreSelected: onRestoreSelected,
+              onDeleteSelectedForever: onDeleteSelectedForever,
+              onMoveSelectedToNotebook: onMoveSelectedToNotebook,
+              onAddTagsToSelected: onAddTagsToSelected,
+            ),
+          if (state.selectionMode)
+            const SizedBox(height: AppSpacing.sectionGap),
           Expanded(
             child: _LibraryItems(
               state: state,
+              notes: notes,
+              specialView: specialView,
               compact: compact,
               onFilterChanged: onFilterChanged,
+              onSelectionChanged: onSelectionChanged,
               onCreate: onCreate,
               onJoinRoom: onJoinRoom,
               onOpenNote: onOpenNote,
@@ -134,16 +178,22 @@ class _FilterTabs extends StatelessWidget {
 class _LibraryItems extends StatelessWidget {
   const _LibraryItems({
     required this.state,
+    required this.notes,
+    required this.specialView,
     required this.compact,
     required this.onFilterChanged,
+    required this.onSelectionChanged,
     required this.onCreate,
     required this.onJoinRoom,
     required this.onOpenNote,
   });
 
   final LibraryHomeState state;
+  final List<NoteItem> notes;
+  final LibrarySpecialView specialView;
   final bool compact;
   final ValueChanged<LibraryFilter> onFilterChanged;
+  final ValueChanged<String> onSelectionChanged;
   final VoidCallback onCreate;
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
@@ -162,7 +212,10 @@ class _LibraryItems extends StatelessWidget {
 
     final content = _LibraryItemsContent(
       state: state,
+      notes: notes,
+      specialView: specialView,
       compact: compact,
+      onSelectionChanged: onSelectionChanged,
       onCreate: onCreate,
       onJoinRoom: onJoinRoom,
       onOpenNote: onOpenNote,
@@ -185,14 +238,20 @@ class _LibraryItems extends StatelessWidget {
 class _LibraryItemsContent extends StatelessWidget {
   const _LibraryItemsContent({
     required this.state,
+    required this.notes,
+    required this.specialView,
     required this.compact,
+    required this.onSelectionChanged,
     required this.onCreate,
     required this.onJoinRoom,
     required this.onOpenNote,
   });
 
   final LibraryHomeState state;
+  final List<NoteItem> notes;
+  final LibrarySpecialView specialView;
   final bool compact;
+  final ValueChanged<String> onSelectionChanged;
   final VoidCallback onCreate;
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
@@ -201,32 +260,45 @@ class _LibraryItemsContent extends StatelessWidget {
   Widget build(BuildContext context) {
     if (state.viewMode == LibraryViewMode.list) {
       return ListView.separated(
-        itemCount: state.visibleNotes.length + 2,
+        itemCount:
+            notes.length + (specialView == LibrarySpecialView.none ? 2 : 0),
         separatorBuilder: (context, index) =>
             const SizedBox(height: AppSpacing.listGap),
         itemBuilder: (context, index) {
-          if (index == 0) {
+          if (specialView == LibrarySpecialView.none && index == 0) {
             return _CreateNoteTile(onTap: onCreate);
           }
-          if (index == 1) {
+          if (specialView == LibrarySpecialView.none && index == 1) {
             return _JoinRoomTile(onTap: onJoinRoom);
           }
-          final item = state.visibleNotes[index - 2];
+          final noteIndex = specialView == LibrarySpecialView.none
+              ? index - 2
+              : index;
+          final item = notes[noteIndex];
           return _NoteTile(
             item: item,
             selectionMode: state.selectionMode,
-            onTap: () => onOpenNote(item),
+            selected: state.selectedNoteIds.contains(item.id),
+            onSelectionChanged: () => onSelectionChanged(item.id),
+            onTap: state.selectionMode
+                ? () => onSelectionChanged(item.id)
+                : () => onOpenNote(item),
           );
         },
       );
     }
 
-    if (state.visibleNotes.isEmpty) {
-      return _EmptyLibrary(onCreate: onCreate, onJoinRoom: onJoinRoom);
+    if (notes.isEmpty) {
+      return _EmptyLibrary(
+        specialView: specialView,
+        onCreate: onCreate,
+        onJoinRoom: onJoinRoom,
+      );
     }
 
     return GridView.builder(
-      itemCount: state.visibleNotes.length + 2,
+      itemCount:
+          notes.length + (specialView == LibrarySpecialView.none ? 2 : 0),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 218,
         mainAxisExtent: 276,
@@ -238,10 +310,10 @@ class _LibraryItemsContent extends StatelessWidget {
             : AppSpacing.gridMainGap,
       ),
       itemBuilder: (context, index) {
-        if (index == 0) {
+        if (specialView == LibrarySpecialView.none && index == 0) {
           return CreateNoteCard(onTap: onCreate);
         }
-        if (index == 1) {
+        if (specialView == LibrarySpecialView.none && index == 1) {
           return CreateNoteCard(
             onTap: onJoinRoom,
             icon: LucideIcons.logIn,
@@ -249,17 +321,28 @@ class _LibraryItemsContent extends StatelessWidget {
             subtitle: '粘贴协作链接，进入实时白板',
           );
         }
-        final item = state.visibleNotes[index - 2];
+        final noteIndex = specialView == LibrarySpecialView.none
+            ? index - 2
+            : index;
+        final item = notes[noteIndex];
         return Stack(
           children: [
             Positioned.fill(
-              child: NoteCard(item: item, onTap: () => onOpenNote(item)),
+              child: NoteCard(
+                item: item,
+                onTap: state.selectionMode
+                    ? () => onSelectionChanged(item.id)
+                    : () => onOpenNote(item),
+              ),
             ),
             if (state.selectionMode)
-              const Positioned(
+              Positioned(
                 top: 10,
                 right: 10,
-                child: Checkbox(value: false, onChanged: null),
+                child: Checkbox(
+                  value: state.selectedNoteIds.contains(item.id),
+                  onChanged: (_) => onSelectionChanged(item.id),
+                ),
               ),
           ],
         );
@@ -310,11 +393,15 @@ class _NoteTile extends StatelessWidget {
   const _NoteTile({
     required this.item,
     required this.selectionMode,
+    required this.selected,
+    required this.onSelectionChanged,
     required this.onTap,
   });
 
   final NoteItem item;
   final bool selectionMode;
+  final bool selected;
+  final VoidCallback onSelectionChanged;
   final VoidCallback onTap;
 
   @override
@@ -328,7 +415,7 @@ class _NoteTile extends StatelessWidget {
         title: Text(item.title),
         subtitle: Text(item.date),
         trailing: selectionMode
-            ? const Checkbox(value: false, onChanged: null)
+            ? Checkbox(value: selected, onChanged: (_) => onSelectionChanged())
             : Icon(
                 item.kind == LibraryFilter.pdf
                     ? LucideIcons.fileText
@@ -378,6 +465,7 @@ class _FilterSegmentLabel extends StatelessWidget {
 class _LibraryHeader extends StatelessWidget {
   const _LibraryHeader({
     required this.compact,
+    required this.title,
     required this.viewMode,
     required this.sortAscending,
     required this.selectionMode,
@@ -387,6 +475,7 @@ class _LibraryHeader extends StatelessWidget {
   });
 
   final bool compact;
+  final String title;
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
@@ -399,7 +488,7 @@ class _LibraryHeader extends StatelessWidget {
     return Row(
       children: [
         Text(
-          '全部笔记',
+          title,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.w600,
             color: const Color(0xFF1F2624),
@@ -457,8 +546,13 @@ class _LibraryHeader extends StatelessWidget {
 }
 
 class _EmptyLibrary extends StatelessWidget {
-  const _EmptyLibrary({required this.onCreate, required this.onJoinRoom});
+  const _EmptyLibrary({
+    required this.specialView,
+    required this.onCreate,
+    required this.onJoinRoom,
+  });
 
+  final LibrarySpecialView specialView;
   final VoidCallback onCreate;
   final VoidCallback onJoinRoom;
 
@@ -479,7 +573,12 @@ class _EmptyLibrary extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             Text(
-              '还没有笔记',
+              switch (specialView) {
+                LibrarySpecialView.none => '还没有笔记',
+                LibrarySpecialView.unnotebooked => '没有未归类笔记',
+                LibrarySpecialView.untagged => '没有未标签笔记',
+                LibrarySpecialView.trash => '回收站为空',
+              },
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: const Color(0xFF1F2624),
                 fontWeight: FontWeight.w600,
@@ -487,34 +586,198 @@ class _EmptyLibrary extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '新建第一块白板后，这里会显示真实保存的笔记。',
+              switch (specialView) {
+                LibrarySpecialView.none => '新建第一块白板后，这里会显示真实保存的笔记。',
+                LibrarySpecialView.unnotebooked => '所有笔记都已经归入笔记本。',
+                LibrarySpecialView.untagged => '所有笔记都已经添加标签。',
+                LibrarySpecialView.trash => '删除的笔记会先进入这里。',
+              },
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF8F9B96)),
             ),
             const SizedBox(height: 22),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                FilledButton.icon(
-                  key: const ValueKey('create-notebook-card'),
-                  onPressed: onCreate,
-                  icon: const Icon(LucideIcons.plus),
-                  label: const Text('新建笔记'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: onJoinRoom,
-                  icon: const Icon(LucideIcons.logIn),
-                  label: const Text('加入房间'),
-                ),
-              ],
-            ),
+            if (specialView == LibrarySpecialView.none)
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FilledButton.icon(
+                    key: const ValueKey('create-notebook-card'),
+                    onPressed: onCreate,
+                    icon: const Icon(LucideIcons.plus),
+                    label: const Text('新建笔记'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: onJoinRoom,
+                    icon: const Icon(LucideIcons.logIn),
+                    label: const Text('加入房间'),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _BulkActionBar extends StatelessWidget {
+  const _BulkActionBar({
+    required this.trash,
+    required this.selectedCount,
+    required this.libraryIndex,
+    required this.onClearSelection,
+    required this.onDeleteSelected,
+    required this.onRestoreSelected,
+    required this.onDeleteSelectedForever,
+    required this.onMoveSelectedToNotebook,
+    required this.onAddTagsToSelected,
+  });
+
+  final bool trash;
+  final int selectedCount;
+  final LibraryIndex libraryIndex;
+  final VoidCallback onClearSelection;
+  final Future<void> Function() onDeleteSelected;
+  final Future<void> Function() onRestoreSelected;
+  final Future<void> Function() onDeleteSelectedForever;
+  final Future<void> Function(String? notebookId) onMoveSelectedToNotebook;
+  final Future<void> Function(List<String> tagIds) onAddTagsToSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card.outlined(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Text('已选 $selectedCount 项'),
+            const Spacer(),
+            TextButton(onPressed: onClearSelection, child: const Text('取消')),
+            if (trash) ...[
+              TextButton(
+                onPressed: selectedCount == 0 ? null : onRestoreSelected,
+                child: const Text('恢复'),
+              ),
+              TextButton(
+                onPressed: selectedCount == 0 ? null : onDeleteSelectedForever,
+                child: const Text('永久删除'),
+              ),
+            ] else ...[
+              _NotebookMoveMenu(
+                enabled: selectedCount > 0,
+                libraryIndex: libraryIndex,
+                onSelected: onMoveSelectedToNotebook,
+              ),
+              _TagAddMenu(
+                enabled: selectedCount > 0,
+                libraryIndex: libraryIndex,
+                onSelected: onAddTagsToSelected,
+              ),
+              TextButton(
+                onPressed: selectedCount == 0 ? null : onDeleteSelected,
+                child: const Text('删除'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NotebookMoveMenu extends StatelessWidget {
+  const _NotebookMoveMenu({
+    required this.enabled,
+    required this.libraryIndex,
+    required this.onSelected,
+  });
+
+  final bool enabled;
+  final LibraryIndex libraryIndex;
+  final Future<void> Function(String? notebookId) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return _LibraryIndexMenu(
+      enabled: enabled,
+      libraryIndex: libraryIndex,
+      label: '移动到',
+      builder: (index) => [
+        MenuItemButton(
+          onPressed: () => onSelected(null),
+          child: const Text('未归入笔记本'),
+        ),
+        for (final notebook in index.notebooks)
+          MenuItemButton(
+            onPressed: () => onSelected(notebook.id),
+            child: Text(notebook.name),
+          ),
+      ],
+    );
+  }
+}
+
+class _TagAddMenu extends StatelessWidget {
+  const _TagAddMenu({
+    required this.enabled,
+    required this.libraryIndex,
+    required this.onSelected,
+  });
+
+  final bool enabled;
+  final LibraryIndex libraryIndex;
+  final Future<void> Function(List<String> tagIds) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return _LibraryIndexMenu(
+      enabled: enabled,
+      libraryIndex: libraryIndex,
+      label: '添加标签',
+      builder: (index) => [
+        for (final tag in index.tags)
+          MenuItemButton(
+            onPressed: () => onSelected([tag.id]),
+            child: Text(tag.name),
+          ),
+      ],
+    );
+  }
+}
+
+class _LibraryIndexMenu extends StatelessWidget {
+  const _LibraryIndexMenu({
+    required this.enabled,
+    required this.libraryIndex,
+    required this.label,
+    required this.builder,
+  });
+
+  final bool enabled;
+  final LibraryIndex libraryIndex;
+  final String label;
+  final List<Widget> Function(LibraryIndex index) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = builder(libraryIndex);
+    return MenuAnchor(
+      menuChildren: children.isEmpty
+          ? [const MenuItemButton(child: Text('暂无可选项'))]
+          : children,
+      builder: (context, controller, child) {
+        return TextButton(
+          onPressed: !enabled
+              ? null
+              : () =>
+                    controller.isOpen ? controller.close() : controller.open(),
+          child: Text(label),
+        );
+      },
     );
   }
 }

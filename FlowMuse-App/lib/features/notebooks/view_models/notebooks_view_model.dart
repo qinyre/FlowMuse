@@ -28,12 +28,14 @@ class NotebooksState {
     this.viewMode = LibraryViewMode.grid,
     this.sortAscending = true,
     this.selectionMode = false,
+    this.selectedNotebookIds = const {},
   });
 
   final List<NotebookCollectionItem> notebooks;
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
+  final Set<String> selectedNotebookIds;
 
   List<NotebookCollectionItem> get visibleNotebooks {
     final sorted = notebooks.toList()
@@ -49,12 +51,14 @@ class NotebooksState {
     LibraryViewMode? viewMode,
     bool? sortAscending,
     bool? selectionMode,
+    Set<String>? selectedNotebookIds,
   }) {
     return NotebooksState(
       notebooks: notebooks ?? this.notebooks,
       viewMode: viewMode ?? this.viewMode,
       sortAscending: sortAscending ?? this.sortAscending,
       selectionMode: selectionMode ?? this.selectionMode,
+      selectedNotebookIds: selectedNotebookIds ?? this.selectedNotebookIds,
     );
   }
 }
@@ -96,7 +100,37 @@ class NotebooksViewModel extends Notifier<NotebooksState> {
   }
 
   void toggleSelectionMode() {
-    state = state.copyWith(selectionMode: !state.selectionMode);
+    state = state.copyWith(
+      selectionMode: !state.selectionMode,
+      selectedNotebookIds: const {},
+    );
+  }
+
+  void toggleNotebookSelection(String notebookId) {
+    final selected = Set<String>.from(state.selectedNotebookIds);
+    selected.contains(notebookId)
+        ? selected.remove(notebookId)
+        : selected.add(notebookId);
+    state = state.copyWith(selectedNotebookIds: selected);
+  }
+
+  void clearSelection() {
+    state = state.copyWith(selectionMode: false, selectedNotebookIds: const {});
+  }
+
+  Future<void> renameNotebook(String notebookId, String name) {
+    return ref.read(libraryIndexProvider.notifier).renameNotebook(notebookId, name);
+  }
+
+  Future<void> deleteNotebook(String notebookId) {
+    return ref.read(libraryIndexProvider.notifier).deleteNotebook(notebookId);
+  }
+
+  Future<void> deleteSelectedNotebooks() async {
+    for (final id in state.selectedNotebookIds) {
+      await ref.read(libraryIndexProvider.notifier).deleteNotebook(id);
+    }
+    clearSelection();
   }
 }
 

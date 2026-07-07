@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/library/models/library_special_view.dart';
 import '../features/library/views/library_home_page.dart';
 import '../features/search/views/search_page.dart';
 import '../features/settings/views/settings_page.dart';
@@ -62,7 +63,9 @@ GoRouter createAppRouter() {
             pageBuilder: (context, state) {
               return _contentPage(
                 state,
-                const LibraryHomePage(specialView: LibrarySpecialView.unnotebooked),
+                const LibraryHomePage(
+                  specialView: LibrarySpecialView.unnotebooked,
+                ),
               );
             },
           ),

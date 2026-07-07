@@ -25,13 +25,16 @@ abstract interface class CollaborationFileStore {
 class HttpCollaborationFileStore implements CollaborationFileStore {
   HttpCollaborationFileStore({
     required String serverUrl,
+    String? authToken,
     http.Client? client,
     ExcalidrawBinaryCodec? binaryCodec,
   }) : _serverUri = Uri.parse(serverUrl),
+       _authToken = authToken,
        _client = client ?? http.Client(),
        _binaryCodec = binaryCodec ?? ExcalidrawBinaryCodec();
 
   final Uri _serverUri;
+  final String? _authToken;
   final http.Client _client;
   final ExcalidrawBinaryCodec _binaryCodec;
   static const int _maxFileBytes = 10 * 1024 * 1024;
@@ -84,6 +87,8 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
               'Content-Type': 'application/octet-stream',
               'Content-Length': '${encodedFile.length}',
               'Cache-Control': 'public, max-age=31536000',
+              if (_authToken != null && _authToken.isNotEmpty)
+                'Authorization': 'Bearer $_authToken',
             },
             body: encodedFile,
           )
@@ -110,7 +115,7 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
         continue;
       }
       final response = await _client
-          .get(_roomFileUri(roomId, fileId))
+          .get(_roomFileUri(roomId, fileId), headers: _headers())
           .timeout(_requestTimeout);
       if (response.statusCode == 404) {
         continue;
@@ -154,5 +159,12 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
         ? basePath.substring(0, basePath.length - 1)
         : basePath;
     return '$normalizedBase$suffix';
+  }
+
+  Map<String, String> _headers() {
+    return {
+      if (_authToken != null && _authToken.isNotEmpty)
+        'Authorization': 'Bearer $_authToken',
+    };
   }
 }

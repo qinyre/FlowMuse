@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../account/view_models/account_view_model.dart';
 import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
 import '../collaboration/models/collaborator_presence.dart';
 import '../collaboration/models/excalidraw_scene.dart';
+import '../collaboration/models/room_collaborator.dart';
 import '../collaboration/collaboration_config.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
 import '../collaboration/services/collaboration_crypto.dart';
@@ -258,17 +260,26 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
     state = state.copyWith(collaborators: collaborators);
   }
 
-  void applyRoomUsers(List<String> socketIds) {
-    final allowed = socketIds.toSet()..remove(_repository.socketId);
+  void applyRoomUsers(List<RoomCollaborator> roomUsers) {
+    final collaboratorsBySocketId = {
+      for (final user in roomUsers) user.socketId: user,
+    }..remove(_repository.socketId);
+    final allowed = collaboratorsBySocketId.keys.toSet();
     final collaborators = {
       for (final entry in state.collaborators.entries)
         if (allowed.contains(entry.key)) entry.key: entry.value,
     };
-    for (final socketId in allowed) {
-      collaborators.putIfAbsent(
-        socketId,
-        () => CollaboratorPresence(socketId: socketId),
-      );
+    for (final entry in collaboratorsBySocketId.entries) {
+      final user = entry.value;
+      collaborators[entry.key] =
+          collaborators[entry.key]?.copyWith(username: user.username) ??
+          CollaboratorPresence(
+            socketId: entry.key,
+            username: user.username,
+            userId: user.userId,
+            avatarUrl: user.avatarUrl,
+            isGuest: user.isGuest,
+          );
     }
     state = state.copyWith(collaborators: collaborators);
   }
@@ -286,16 +297,24 @@ final collaborationRepositoryProvider = Provider<CollaborationRepository>((
   ref,
 ) {
   final config = ref.watch(collaborationConfigProvider);
+  final identity = ref.watch(accountViewModelProvider).collaborationIdentity;
   final crypto = CollaborationCrypto();
   final reconciler = SceneReconciler();
   return CollaborationRepository(
-    transport: SocketIoRealtimeTransport(serverUrl: config.serverUrl),
+    transport: SocketIoRealtimeTransport(
+      serverUrl: config.serverUrl,
+      identity: identity,
+    ),
     sceneStore: HttpEncryptedSceneStore(
       serverUrl: config.serverUrl,
       crypto: crypto,
+      authToken: identity.token,
       reconciler: reconciler,
     ),
-    fileStore: HttpCollaborationFileStore(serverUrl: config.serverUrl),
+    fileStore: HttpCollaborationFileStore(
+      serverUrl: config.serverUrl,
+      authToken: identity.token,
+    ),
     crypto: crypto,
     reconciler: reconciler,
   );

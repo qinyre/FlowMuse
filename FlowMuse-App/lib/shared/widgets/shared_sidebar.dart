@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../app/app_router.dart';
+import '../../features/account/view_models/account_view_model.dart';
 import 'app_spacing.dart';
 import 'app_shell.dart';
 
@@ -90,20 +93,42 @@ class SharedSidebarHeader extends StatelessWidget {
   }
 }
 
-class SharedSidebarAvatar extends StatelessWidget {
+class SharedSidebarAvatar extends ConsumerWidget {
   const SharedSidebarAvatar({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 17,
-      backgroundColor: Theme.of(
-        context,
-      ).colorScheme.primary.withValues(alpha: 0.12),
-      child: Icon(
-        LucideIcons.sparkles,
-        color: Theme.of(context).colorScheme.primary,
-        size: 19,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final account = ref.watch(accountViewModelProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+    final identity = account.collaborationIdentity;
+    final label = identity.isGuest ? identity.username : identity.username;
+    final initial = label.trim().isEmpty ? '匿' : label.trim().characters.first;
+
+    return Tooltip(
+      message: identity.isGuest ? '匿名协作身份' : '账户与协作',
+      child: InkWell(
+        onTap: () => context.go(AppRoutes.settings),
+        customBorder: const CircleBorder(),
+        child: CircleAvatar(
+          radius: 17,
+          backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
+          child: account.status == AccountStatus.loading
+              ? SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colorScheme.primary,
+                  ),
+                )
+              : Text(
+                  initial,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+        ),
       ),
     );
   }

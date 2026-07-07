@@ -77,18 +77,25 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                           count: (libraryIndex?.unnotebookedCount ?? 0)
                               .toString(),
                           level: 1,
+                          onTap: () => context.go(AppRoutes.unnotebooked),
                         ),
                         SharedSidebarItem(
                           icon: LucideIcons.tags,
                           label: '未标签',
                           count: (libraryIndex?.untaggedCount ?? 0).toString(),
                           level: 1,
+                          onTap: () => context.go(AppRoutes.untagged),
                         ),
                       ],
                     )
                   : const SizedBox.shrink(key: ValueKey('empty-children')),
             ),
-            const SharedSidebarItem(icon: LucideIcons.trash2, label: '回收站'),
+            SharedSidebarItem(
+              icon: LucideIcons.trash2,
+              label: '回收站',
+              count: (libraryIndex?.deletedNotes.length ?? 0).toString(),
+              onTap: () => context.go(AppRoutes.trash),
+            ),
           ],
         ),
         SharedSidebarBlock(

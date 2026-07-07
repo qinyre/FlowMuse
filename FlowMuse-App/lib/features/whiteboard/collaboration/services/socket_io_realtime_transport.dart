@@ -3,11 +3,13 @@ import 'dart:typed_data';
 
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
+import '../../../account/models/collaboration_identity.dart';
 import '../models/encrypted_payload.dart';
+import '../models/room_collaborator.dart';
 import 'realtime_transport.dart';
 
 class SocketIoRealtimeTransport implements RealtimeTransport {
-  SocketIoRealtimeTransport({required this.serverUrl});
+  SocketIoRealtimeTransport({required this.serverUrl, required this.identity});
 
   static const String _eventJoinRoom = 'join-room';
   static const String _eventInitRoom = 'init-room';
@@ -22,12 +24,13 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   static const String _eventClientBroadcast = 'client-broadcast';
 
   final String serverUrl;
+  final CollaborationIdentity identity;
   final StreamController<EncryptedPayload> _messages =
       StreamController<EncryptedPayload>.broadcast();
   final StreamController<String> _newUsers =
       StreamController<String>.broadcast();
-  final StreamController<List<String>> _roomUsers =
-      StreamController<List<String>>.broadcast();
+  final StreamController<List<RoomCollaborator>> _roomUsers =
+      StreamController<List<RoomCollaborator>>.broadcast();
   final StreamController<void> _firstInRoom =
       StreamController<void>.broadcast();
   final StreamController<String> _errors = StreamController<String>.broadcast();
@@ -44,7 +47,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   Stream<String> get newUsers => _newUsers.stream;
 
   @override
-  Stream<List<String>> get roomUsers => _roomUsers.stream;
+  Stream<List<RoomCollaborator>> get roomUsers => _roomUsers.stream;
 
   @override
   Stream<void> get firstInRoom => _firstInRoom.stream;
@@ -71,14 +74,16 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       return;
     }
 
-    final socket = io.io(
-      serverUrl,
-      io.OptionBuilder()
-          .setTransports(['websocket', 'polling'])
-          .disableAutoConnect()
-          .enableReconnection()
-          .build(),
-    );
+    final options = io.OptionBuilder()
+        .setTransports(['websocket', 'polling'])
+        .disableAutoConnect()
+        .enableReconnection();
+    final token = identity.token;
+    if (token != null && token.isNotEmpty) {
+      options.setExtraHeaders({'Authorization': 'Bearer $token'});
+      options.setAuth({'token': token});
+    }
+    final socket = io.io(serverUrl, options.build());
     _socket = socket;
 
     final connected = Completer<void>();
@@ -127,9 +132,10 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       }
     });
     socket.on(_eventRoomUserChange, (data) {
-      final socketIds = _socketIdsFromRoomUsers(data);
+      final roomUsers = _roomUsersFromEvent(data);
+      final socketIds = roomUsers.map((item) => item.socketId).toList();
       if (!_roomUsers.isClosed) {
-        _roomUsers.add(socketIds);
+        _roomUsers.add(roomUsers);
       }
       if (!joined.isCompleted && socketIds.contains(socket.id)) {
         joined.complete();
@@ -187,7 +193,9 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     late void Function(dynamic) roomUserHandler;
     late void Function(dynamic) roomErrorHandler;
     roomUserHandler = (data) {
-      final socketIds = _socketIdsFromRoomUsers(data);
+      final socketIds = _roomUsersFromEvent(
+        data,
+      ).map((item) => item.socketId).toList();
       if (socketIds.contains(socket.id) && !joined.isCompleted) {
         joined.complete();
       }
@@ -273,16 +281,16 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     throw FormatException('Invalid Socket.IO binary payload: $value');
   }
 
-  List<String> _socketIdsFromRoomUsers(Object? value) {
+  List<RoomCollaborator> _roomUsersFromEvent(Object? value) {
     if (value is! List) {
       return const [];
     }
     return [
       for (final item in value)
         if (item is String)
-          item
+          RoomCollaborator.fromSocketId(item)
         else if (item is Map && item['socketId'] is String)
-          item['socketId']! as String,
+          RoomCollaborator.fromJson(Map<String, Object?>.from(item)),
     ];
   }
 }

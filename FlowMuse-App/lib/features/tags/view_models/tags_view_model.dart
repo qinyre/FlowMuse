@@ -28,12 +28,14 @@ class TagsState {
     this.viewMode = LibraryViewMode.grid,
     this.sortAscending = true,
     this.selectionMode = false,
+    this.selectedTagIds = const {},
   });
 
   final List<TagItem> tags;
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
+  final Set<String> selectedTagIds;
 
   List<TagItem> get visibleTags {
     final sorted = tags.toList()
@@ -49,12 +51,14 @@ class TagsState {
     LibraryViewMode? viewMode,
     bool? sortAscending,
     bool? selectionMode,
+    Set<String>? selectedTagIds,
   }) {
     return TagsState(
       tags: tags ?? this.tags,
       viewMode: viewMode ?? this.viewMode,
       sortAscending: sortAscending ?? this.sortAscending,
       selectionMode: selectionMode ?? this.selectionMode,
+      selectedTagIds: selectedTagIds ?? this.selectedTagIds,
     );
   }
 }
@@ -96,7 +100,35 @@ class TagsViewModel extends Notifier<TagsState> {
   }
 
   void toggleSelectionMode() {
-    state = state.copyWith(selectionMode: !state.selectionMode);
+    state = state.copyWith(
+      selectionMode: !state.selectionMode,
+      selectedTagIds: const {},
+    );
+  }
+
+  void toggleTagSelection(String tagId) {
+    final selected = Set<String>.from(state.selectedTagIds);
+    selected.contains(tagId) ? selected.remove(tagId) : selected.add(tagId);
+    state = state.copyWith(selectedTagIds: selected);
+  }
+
+  void clearSelection() {
+    state = state.copyWith(selectionMode: false, selectedTagIds: const {});
+  }
+
+  Future<void> renameTag(String tagId, String name) {
+    return ref.read(libraryIndexProvider.notifier).renameTag(tagId, name);
+  }
+
+  Future<void> deleteTag(String tagId) {
+    return ref.read(libraryIndexProvider.notifier).deleteTag(tagId);
+  }
+
+  Future<void> deleteSelectedTags() async {
+    for (final id in state.selectedTagIds) {
+      await ref.read(libraryIndexProvider.notifier).deleteTag(id);
+    }
+    clearSelection();
   }
 }
 

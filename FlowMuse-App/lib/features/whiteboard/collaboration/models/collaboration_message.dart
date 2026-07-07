@@ -56,6 +56,8 @@ class CollaborationMessage {
     required String button,
     required Map<String, bool> selectedElementIds,
     required String username,
+    String? userId,
+    String? avatarUrl,
   }) {
     return CollaborationMessage(
       type: CollaborationMessageType.mouseLocation,
@@ -65,6 +67,8 @@ class CollaborationMessage {
         'button': button,
         'selectedElementIds': selectedElementIds,
         'username': username,
+        'userId': userId,
+        'avatarUrl': avatarUrl,
       },
     );
   }
@@ -73,6 +77,8 @@ class CollaborationMessage {
     required String socketId,
     required String userState,
     required String username,
+    String? userId,
+    String? avatarUrl,
   }) {
     return CollaborationMessage(
       type: CollaborationMessageType.idleStatus,
@@ -80,6 +86,8 @@ class CollaborationMessage {
         'socketId': socketId,
         'userState': userState,
         'username': username,
+        'userId': userId,
+        'avatarUrl': avatarUrl,
       },
     );
   }
@@ -88,6 +96,8 @@ class CollaborationMessage {
     required String socketId,
     required String username,
     required Map<String, Object?> sceneBounds,
+    String? userId,
+    String? avatarUrl,
   }) {
     return CollaborationMessage(
       type: CollaborationMessageType.userVisibleSceneBounds,
@@ -95,6 +105,8 @@ class CollaborationMessage {
         'socketId': socketId,
         'username': username,
         'sceneBounds': sceneBounds,
+        'userId': userId,
+        'avatarUrl': avatarUrl,
       },
     );
   }

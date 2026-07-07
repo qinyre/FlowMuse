@@ -62,15 +62,18 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   HttpEncryptedSceneStore({
     required String serverUrl,
     required CollaborationCrypto crypto,
+    String? authToken,
     http.Client? client,
     SceneReconciler? reconciler,
   }) : _serverUri = Uri.parse(serverUrl),
        _crypto = crypto,
+       _authToken = authToken,
        _client = client ?? http.Client(),
        _reconciler = reconciler ?? SceneReconciler();
 
   final Uri _serverUri;
   final CollaborationCrypto _crypto;
+  final String? _authToken;
   final http.Client _client;
   final SceneReconciler _reconciler;
   final Map<String, _SceneSnapshotMeta> _snapshotMetaByRoom = {};
@@ -79,7 +82,7 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   @override
   Future<ExcalidrawScene?> loadScene(CollaborationRoom room) async {
     final response = await _client
-        .get(_roomSceneUri(room.roomId))
+        .get(_roomSceneUri(room.roomId), headers: _headers())
         .timeout(_requestTimeout);
     if (response.statusCode == 404) {
       return null;
@@ -118,7 +121,7 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
     final response = await _client
         .put(
           _roomSceneUri(room.roomId),
-          headers: const {'Content-Type': 'application/json'},
+          headers: _headers(),
           body: jsonEncode({
             'sceneVersion': _reconciler.getSceneVersion(scene.elements),
             'sceneHash': scene.collaborationHash(),
@@ -152,10 +155,11 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       roomKey: room.roomKey,
       plainBytes: utf8.encode(scene.toCollaborationContent()),
     );
+    await _createRoomMetadata(room.roomId);
     final response = await _client
         .post(
           _roomSceneUri(room.roomId),
-          headers: const {'Content-Type': 'application/json'},
+          headers: _headers(),
           body: jsonEncode({
             'sceneVersion': _reconciler.getSceneVersion(scene.elements),
             'sceneHash': scene.collaborationHash(),
@@ -177,6 +181,27 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
     return _serverUri.replace(
       path: _joinPath(_serverUri.path, '/api/rooms/$roomId/scene'),
     );
+  }
+
+  Future<void> _createRoomMetadata(String roomId) async {
+    final response = await _client
+        .post(
+          _serverUri.replace(path: _joinPath(_serverUri.path, '/api/rooms')),
+          headers: _headers(),
+          body: jsonEncode({'roomId': roomId}),
+        )
+        .timeout(_requestTimeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('创建协作房间元数据失败：HTTP ${response.statusCode}');
+    }
+  }
+
+  Map<String, String> _headers() {
+    return {
+      'Content-Type': 'application/json',
+      if (_authToken != null && _authToken.isNotEmpty)
+        'Authorization': 'Bearer $_authToken',
+    };
   }
 
   String _joinPath(String basePath, String suffix) {

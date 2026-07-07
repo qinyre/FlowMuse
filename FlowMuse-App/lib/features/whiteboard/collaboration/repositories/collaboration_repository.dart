@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../models/collaboration_message.dart';
 import '../models/collaboration_room.dart';
 import '../models/excalidraw_scene.dart';
+import '../models/room_collaborator.dart';
 import '../services/collaboration_crypto.dart';
 import '../services/collaboration_file_store.dart';
 import '../services/encrypted_scene_store.dart';
@@ -44,7 +45,7 @@ class CollaborationRepository {
 
   Stream<String> get newUsers => _transport.newUsers;
 
-  Stream<List<String>> get roomUsers => _transport.roomUsers;
+  Stream<List<RoomCollaborator>> get roomUsers => _transport.roomUsers;
 
   Stream<void> get firstInRoom => _transport.firstInRoom;
 
@@ -204,6 +205,8 @@ class CollaborationRepository {
     required String button,
     required Map<String, bool> selectedElementIds,
     required String username,
+    String? userId,
+    String? avatarUrl,
   }) {
     return _send(
       room: room,
@@ -214,6 +217,8 @@ class CollaborationRepository {
         button: button,
         selectedElementIds: selectedElementIds,
         username: username,
+        userId: userId,
+        avatarUrl: avatarUrl,
       ),
     );
   }
@@ -222,6 +227,8 @@ class CollaborationRepository {
     required CollaborationRoom room,
     required String userState,
     required String username,
+    String? userId,
+    String? avatarUrl,
   }) {
     return _send(
       room: room,
@@ -230,6 +237,8 @@ class CollaborationRepository {
         socketId: socketId,
         userState: userState,
         username: username,
+        userId: userId,
+        avatarUrl: avatarUrl,
       ),
     );
   }
@@ -238,6 +247,8 @@ class CollaborationRepository {
     required CollaborationRoom room,
     required String username,
     required Map<String, Object?> sceneBounds,
+    String? userId,
+    String? avatarUrl,
   }) {
     return _send(
       room: room,
@@ -246,6 +257,8 @@ class CollaborationRepository {
         socketId: socketId,
         username: username,
         sceneBounds: sceneBounds,
+        userId: userId,
+        avatarUrl: avatarUrl,
       ),
     );
   }

@@ -1,15 +1,20 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide Element, SelectionOverlay, TextAlign;
 
+import '../../../app/app_router.dart';
+import '../../account/models/collaboration_identity.dart';
+import '../../account/view_models/account_view_model.dart';
 import '../../library/repositories/library_repository.dart';
 import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
 import '../collaboration/models/collaborator_presence.dart';
 import '../collaboration/models/excalidraw_scene.dart';
+import '../collaboration/models/room_collaborator.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
@@ -41,11 +46,12 @@ class WhiteboardPage extends ConsumerStatefulWidget {
 
 class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   late final MarkdrawController _markdrawController;
+  late final MarkdrawFileHandler _fileHandler;
   late final WhiteboardCollaborationAdapter _collaborationAdapter;
   late final CollaborationRepository _collaborationRepository;
   StreamSubscription<CollaborationMessage>? _collaborationSubscription;
   StreamSubscription<String>? _newUserSubscription;
-  StreamSubscription<List<String>>? _roomUsersSubscription;
+  StreamSubscription<List<RoomCollaborator>>? _roomUsersSubscription;
   StreamSubscription<String>? _roomErrorSubscription;
   StreamSubscription<RealtimeConnectionStatus>? _connectionStatusSubscription;
   Timer? _idleTimer;
@@ -62,6 +68,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   void initState() {
     super.initState();
     _markdrawController = MarkdrawController();
+    _fileHandler = MarkdrawFileHandler(controller: _markdrawController);
     _collaborationAdapter = WhiteboardCollaborationAdapter(_markdrawController);
     _collaborationRepository = ref.read(collaborationRepositoryProvider);
     Future.microtask(_openNote);
@@ -173,7 +180,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     final currentStatus = ref
         .read(whiteboardViewModelProvider)
         .collaborationStatus;
-    if (currentStatus == WhiteboardCollaborationStatus.connecting) {
+    if (currentStatus == WhiteboardCollaborationStatus.connecting ||
+        ref.read(whiteboardViewModelProvider).collaborating) {
+      return;
+    }
+    final confirmed = await _confirmCreateCollaborationRoom();
+    if (confirmed != true || !mounted) {
       return;
     }
     await ref
@@ -184,6 +196,87 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       return;
     }
     await _listenToRoom(room);
+    if (mounted) {
+      await _showCreatedCollaborationRoom(room);
+    }
+  }
+
+  Future<bool?> _confirmCreateCollaborationRoom() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('创建协作房间'),
+        content: const Text('将当前笔记白板同步到协作房间。拥有房间信息的人可以加入并一起编辑。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('创建房间'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCreatedCollaborationRoom(CollaborationRoom room) {
+    final state = ref.read(whiteboardViewModelProvider);
+    final roomLink = state.roomLink;
+    final roomValue = state.roomValue ?? room.toRoomValue();
+    final shareText = roomLink ?? roomValue;
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('协作房间已创建'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('把下面的信息发给协作者，对方即可加入当前白板。'),
+              const SizedBox(height: 16),
+              _RoomInfoBlock(label: '房间号', value: roomValue),
+              if (roomLink != null) ...[
+                const SizedBox(height: 12),
+                _RoomInfoBlock(label: '房间链接', value: roomLink),
+              ] else ...[
+                const SizedBox(height: 12),
+                Text(
+                  '分享地址未配置，当前请复制房间码加入。',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 16),
+              const Text('加入指引：打开协作入口后，粘贴完整链接、#room=房间号,密钥 或 房间号,密钥。'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('知道了'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: shareText));
+              if (!context.mounted) {
+                return;
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(roomLink == null ? '房间码已复制' : '房间链接已复制'),
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy),
+            label: Text(roomLink == null ? '复制房间码' : '复制链接'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _joinCollaboration(CollaborationRoom room) async {
@@ -269,6 +362,28 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         .saveScene(note.id, content);
     await ref.read(libraryIndexProvider.notifier).touchNote(note.id);
     _temporarySaved = true;
+  }
+
+  Future<void> _openExternalSceneAsLocalNote() async {
+    await _fileHandler.open();
+    if (!mounted) {
+      return;
+    }
+    final note = await ref.read(libraryIndexProvider.notifier).createNote();
+    final title = _markdrawController.documentName?.trim();
+    if (title != null && title.isNotEmpty) {
+      await ref.read(libraryIndexProvider.notifier).renameNote(note.id, title);
+    }
+    final content = _markdrawController.serializeScene(
+      format: DocumentFormat.excalidraw,
+    );
+    await ref
+        .read(whiteboardSceneRepositoryProvider)
+        .saveScene(note.id, content);
+    await ref.read(libraryIndexProvider.notifier).touchNote(note.id);
+    if (mounted) {
+      context.go(AppRoutes.whiteboardPath(noteId: note.id));
+    }
   }
 
   Future<void> _listenToRoom(CollaborationRoom room) async {
@@ -454,6 +569,32 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
               shareOriginConfigured: state.shareOriginConfigured,
               collaboratorCount: state.collaborators.length,
               collaborators: _remoteCollaboratorOverlays(state),
+              onSave: () {
+                unawaited(_saveMarkdrawScene());
+              },
+              onSaveAs: () {
+                unawaited(_fileHandler.saveAs());
+              },
+              onOpen: widget.temporaryCollaboration
+                  ? null
+                  : () {
+                      unawaited(_openExternalSceneAsLocalNote());
+                    },
+              onExportPng: () {
+                unawaited(_fileHandler.exportPng());
+              },
+              onExportSvg: () {
+                unawaited(_fileHandler.exportSvg());
+              },
+              onImportImage: () {
+                unawaited(_fileHandler.importImage(context));
+              },
+              onImportLibrary: () {
+                unawaited(_fileHandler.importLibrary());
+              },
+              onExportLibrary: () {
+                unawaited(_fileHandler.exportLibrary());
+              },
               onBack: widget.temporaryCollaboration
                   ? () {
                       unawaited(_stopCollaboration());
@@ -534,6 +675,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (room == null) {
       return;
     }
+    final identity = _collaborationIdentity;
     unawaited(
       _collaborationRepository.broadcastMouseLocation(
         room: room,
@@ -542,7 +684,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         selectedElementIds: {
           for (final id in _collaborationAdapter.selectedElementIds()) id: true,
         },
-        username: 'FlowMuse',
+        username: identity.username,
+        userId: identity.userId,
+        avatarUrl: identity.avatarUrl,
       ),
     );
   }
@@ -552,10 +696,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (room == null) {
       return;
     }
+    final identity = _collaborationIdentity;
     unawaited(
       _collaborationRepository.broadcastVisibleSceneBounds(
         room: room,
-        username: 'FlowMuse',
+        username: identity.username,
+        userId: identity.userId,
+        avatarUrl: identity.avatarUrl,
         sceneBounds: _collaborationAdapter.visibleSceneBounds(canvasSize),
       ),
     );
@@ -582,12 +729,62 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       return;
     }
     _lastIdleState = state;
+    final identity = _collaborationIdentity;
     unawaited(
       _collaborationRepository.broadcastIdleStatus(
         room: room,
         userState: state,
-        username: 'FlowMuse',
+        username: identity.username,
+        userId: identity.userId,
+        avatarUrl: identity.avatarUrl,
       ),
+    );
+  }
+
+  CollaborationIdentity get _collaborationIdentity {
+    return ref.read(accountViewModelProvider).collaborationIdentity;
+  }
+}
+
+class _RoomInfoBlock extends StatelessWidget {
+  const _RoomInfoBlock({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: colorScheme.onSurfaceVariant,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: colorScheme.outlineVariant),
+          ),
+          child: SelectableText(
+            value,
+            style: TextStyle(
+              color: colorScheme.onSurface,
+              fontSize: 13,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

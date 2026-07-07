@@ -30,9 +30,19 @@ class NotebooksPage extends ConsumerWidget {
       onViewModeChanged: viewModel.changeViewMode,
       onSortDirectionChanged: viewModel.toggleSortDirection,
       onSelectionModeChanged: viewModel.toggleSelectionMode,
+      bulkBar: state.selectionMode
+          ? _CollectionBulkActionBar(
+              selectedCount: state.selectedNotebookIds.length,
+              onClearSelection: viewModel.clearSelection,
+              onDeleteSelected: viewModel.deleteSelectedNotebooks,
+            )
+          : null,
       child: _NotebookCollectionItems(
         state: state,
         onCreate: viewModel.createNotebook,
+        onSelectionChanged: viewModel.toggleNotebookSelection,
+        onRename: viewModel.renameNotebook,
+        onDelete: viewModel.deleteNotebook,
       ),
     );
   }
@@ -95,10 +105,19 @@ class NotebookDetailPage extends ConsumerWidget {
 }
 
 class _NotebookCollectionItems extends StatelessWidget {
-  const _NotebookCollectionItems({required this.state, required this.onCreate});
+  const _NotebookCollectionItems({
+    required this.state,
+    required this.onCreate,
+    required this.onSelectionChanged,
+    required this.onRename,
+    required this.onDelete,
+  });
 
   final NotebooksState state;
   final VoidCallback onCreate;
+  final ValueChanged<String> onSelectionChanged;
+  final Future<void> Function(String notebookId, String name) onRename;
+  final Future<void> Function(String notebookId) onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -120,6 +139,15 @@ class _NotebookCollectionItems extends StatelessWidget {
           return _NotebookCollectionTile(
             notebook: notebook,
             selectionMode: state.selectionMode,
+            selected: state.selectedNotebookIds.contains(notebook.id),
+            onSelectionChanged: () => onSelectionChanged(notebook.id),
+            onRename: () => _showNameDialog(
+              context: context,
+              title: '重命名笔记本',
+              initialValue: notebook.name,
+              onSubmitted: (name) => onRename(notebook.id, name),
+            ),
+            onDelete: () => onDelete(notebook.id),
             onTap: () => context.go(AppRoutes.notebookPath(notebook.id)),
           );
         },
@@ -155,15 +183,28 @@ class _NotebookCollectionItems extends StatelessWidget {
                 Positioned.fill(
                   child: _NotebookCollectionCoverCard(
                     notebook: notebook,
+                    selectionMode: state.selectionMode,
+                    selected: state.selectedNotebookIds.contains(notebook.id),
+                    onSelectionChanged: () => onSelectionChanged(notebook.id),
+                    onRename: () => _showNameDialog(
+                      context: context,
+                      title: '重命名笔记本',
+                      initialValue: notebook.name,
+                      onSubmitted: (name) => onRename(notebook.id, name),
+                    ),
+                    onDelete: () => onDelete(notebook.id),
                     onTap: () =>
                         context.go(AppRoutes.notebookPath(notebook.id)),
                   ),
                 ),
                 if (state.selectionMode)
-                  const Positioned(
+                  Positioned(
                     top: 10,
                     right: 10,
-                    child: Checkbox(value: false, onChanged: null),
+                    child: Checkbox(
+                      value: state.selectedNotebookIds.contains(notebook.id),
+                      onChanged: (_) => onSelectionChanged(notebook.id),
+                    ),
                   ),
               ],
             );
@@ -218,10 +259,20 @@ class _NoteItems extends StatelessWidget {
 class _NotebookCollectionCoverCard extends StatelessWidget {
   const _NotebookCollectionCoverCard({
     required this.notebook,
+    required this.selectionMode,
+    required this.selected,
+    required this.onSelectionChanged,
+    required this.onRename,
+    required this.onDelete,
     required this.onTap,
   });
 
   final NotebookCollectionItem notebook;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback onSelectionChanged;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
   final VoidCallback onTap;
 
   @override
@@ -246,7 +297,11 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        _CoverTitle(title: notebook.name),
+        _CoverTitle(
+          title: notebook.name,
+          onRename: onRename,
+          onDelete: onDelete,
+        ),
         const SizedBox(height: 6),
         _CoverSubtitle(text: '${notebook.count} 个笔记'),
       ],
@@ -332,11 +387,19 @@ class _NotebookCollectionTile extends StatelessWidget {
   const _NotebookCollectionTile({
     required this.notebook,
     required this.selectionMode,
+    required this.selected,
+    required this.onSelectionChanged,
+    required this.onRename,
+    required this.onDelete,
     required this.onTap,
   });
 
   final NotebookCollectionItem notebook;
   final bool selectionMode;
+  final bool selected;
+  final VoidCallback onSelectionChanged;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
   final VoidCallback onTap;
 
   @override
@@ -347,8 +410,8 @@ class _NotebookCollectionTile extends StatelessWidget {
         title: Text(notebook.name),
         subtitle: Text('${notebook.count} 个笔记'),
         trailing: selectionMode
-            ? const Checkbox(value: false, onChanged: null)
-            : const Icon(LucideIcons.chevronRight),
+            ? Checkbox(value: selected, onChanged: (_) => onSelectionChanged())
+            : _CollectionActions(onRename: onRename, onDelete: onDelete),
         onTap: onTap,
       ),
     );
@@ -437,6 +500,7 @@ class _CollectionPage extends StatelessWidget {
     required this.onViewModeChanged,
     required this.onSortDirectionChanged,
     required this.onSelectionModeChanged,
+    this.bulkBar,
     required this.child,
   });
 
@@ -450,6 +514,7 @@ class _CollectionPage extends StatelessWidget {
   final ValueChanged<LibraryViewMode>? onViewModeChanged;
   final VoidCallback? onSortDirectionChanged;
   final VoidCallback? onSelectionModeChanged;
+  final Widget? bulkBar;
   final Widget child;
 
   @override
@@ -475,11 +540,47 @@ class _CollectionPage extends StatelessWidget {
                 onSelectionModeChanged: onSelectionModeChanged,
               ),
               const SizedBox(height: AppSpacing.headerToContent),
+              if (bulkBar != null) ...[
+                bulkBar!,
+                const SizedBox(height: AppSpacing.sectionGap),
+              ],
               Expanded(child: child),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _CollectionBulkActionBar extends StatelessWidget {
+  const _CollectionBulkActionBar({
+    required this.selectedCount,
+    required this.onClearSelection,
+    required this.onDeleteSelected,
+  });
+
+  final int selectedCount;
+  final VoidCallback onClearSelection;
+  final Future<void> Function() onDeleteSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card.outlined(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Text('已选 $selectedCount 项'),
+            const Spacer(),
+            TextButton(onPressed: onClearSelection, child: const Text('取消')),
+            TextButton(
+              onPressed: selectedCount == 0 ? null : onDeleteSelected,
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -584,9 +685,11 @@ class _CollectionHeader extends StatelessWidget {
 }
 
 class _CoverTitle extends StatelessWidget {
-  const _CoverTitle({required this.title});
+  const _CoverTitle({required this.title, this.onRename, this.onDelete});
 
   final String title;
+  final VoidCallback? onRename;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -604,8 +707,48 @@ class _CoverTitle extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        const Icon(LucideIcons.chevronDown, color: Color(0xFF555C59), size: 18),
+        _CollectionActions(onRename: onRename, onDelete: onDelete),
       ],
+    );
+  }
+}
+
+class _CollectionActions extends StatelessWidget {
+  const _CollectionActions({this.onRename, this.onDelete});
+
+  final VoidCallback? onRename;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onRename == null || onDelete == null) {
+      return const Icon(
+        LucideIcons.chevronDown,
+        color: Color(0xFF555C59),
+        size: 18,
+      );
+    }
+    return MenuAnchor(
+      menuChildren: [
+        MenuItemButton(
+          leadingIcon: const Icon(LucideIcons.penLine),
+          onPressed: onRename,
+          child: const Text('重命名'),
+        ),
+        MenuItemButton(
+          leadingIcon: const Icon(LucideIcons.trash2),
+          onPressed: onDelete,
+          child: const Text('删除'),
+        ),
+      ],
+      builder: (context, controller, child) {
+        return IconButton(
+          tooltip: '更多操作',
+          icon: const Icon(LucideIcons.chevronDown, size: 18),
+          onPressed: () =>
+              controller.isOpen ? controller.close() : controller.open(),
+        );
+      },
     );
   }
 }
@@ -636,4 +779,43 @@ NotebookCollectionItem? _findNotebook(
     }
   }
   return null;
+}
+
+Future<void> _showNameDialog({
+  required BuildContext context,
+  required String title,
+  required String initialValue,
+  required Future<void> Function(String value) onSubmitted,
+}) async {
+  final controller = TextEditingController(text: initialValue);
+  try {
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (value != null && context.mounted) {
+      await onSubmitted(value);
+    }
+  } finally {
+    controller.dispose();
+  }
 }
