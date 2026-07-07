@@ -4,8 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
 import '../collaboration/models/collaborator_presence.dart';
+import '../collaboration/collaboration_config.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
+import '../collaboration/services/collaboration_crypto.dart';
+import '../collaboration/services/encrypted_scene_store.dart';
 import '../collaboration/services/realtime_transport.dart';
+import '../collaboration/services/scene_reconciler.dart';
+import '../collaboration/services/socket_io_realtime_transport.dart';
 import '../repositories/whiteboard_scene_repository.dart';
 
 enum WhiteboardSaveStatus { idle, saving, saved }
@@ -154,16 +159,27 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
 final collaborationRepositoryProvider = Provider<CollaborationRepository>((
   ref,
 ) {
+  final config = ref.watch(collaborationConfigProvider);
+  final crypto = CollaborationCrypto();
+  final reconciler = SceneReconciler();
   return CollaborationRepository(
-    transport: MemoryRealtimeTransport(
-      hub: ref.watch(memoryRealtimeRoomHubProvider),
-      socketId: 'client-${DateTime.now().microsecondsSinceEpoch}',
+    transport: SocketIoRealtimeTransport(serverUrl: config.serverUrl),
+    sceneStore: HttpEncryptedSceneStore(
+      serverUrl: config.serverUrl,
+      crypto: crypto,
+      reconciler: reconciler,
     ),
+    crypto: crypto,
+    reconciler: reconciler,
   );
 });
 
 final memoryRealtimeRoomHubProvider = Provider<MemoryRealtimeRoomHub>((ref) {
   return MemoryRealtimeRoomHub();
+});
+
+final collaborationConfigProvider = Provider<CollaborationConfig>((ref) {
+  return CollaborationConfig.fromEnvironment;
 });
 
 final whiteboardSceneRepositoryProvider = Provider<WhiteboardSceneRepository>((

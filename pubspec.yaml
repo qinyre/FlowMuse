@@ -50,6 +50,8 @@ dependencies:
   url_launcher: ^6.2.0
   uuid: ^4.5.1
   web: ^1.1.0
+  socket_io_client: ^3.1.6
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

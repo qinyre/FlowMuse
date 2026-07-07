@@ -1,10 +1,23 @@
 import 'package:flow_muse/app/flow_muse_app.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
+import 'package:flow_muse/features/whiteboard/view_models/whiteboard_view_model.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _testApp() {
-  return ProviderScope(child: FlowMuseApp());
+  final hub = MemoryRealtimeRoomHub();
+  return ProviderScope(
+    overrides: [
+      collaborationRepositoryProvider.overrideWith(
+        (ref) => CollaborationRepository(
+          transport: MemoryRealtimeTransport(hub: hub, socketId: 'test-client'),
+        ),
+      ),
+    ],
+    child: FlowMuseApp(),
+  );
 }
 
 void main() {

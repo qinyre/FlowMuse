@@ -31,9 +31,8 @@ class CollaborationCrypto {
       nonce: nonce,
     );
     return EncryptedPayload(
-      cipherText: secretBox.cipherText,
+      encryptedBuffer: [...secretBox.cipherText, ...secretBox.mac.bytes],
       iv: secretBox.nonce,
-      mac: secretBox.mac.bytes,
     );
   }
 
@@ -41,12 +40,16 @@ class CollaborationCrypto {
     required String roomKey,
     required EncryptedPayload encryptedPayload,
   }) {
+    final encryptedBuffer = encryptedPayload.encryptedBuffer;
+    if (encryptedBuffer.length < 16) {
+      throw const FormatException(
+        'Encrypted buffer is shorter than AES-GCM tag',
+      );
+    }
+    final cipherText = encryptedBuffer.sublist(0, encryptedBuffer.length - 16);
+    final mac = encryptedBuffer.sublist(encryptedBuffer.length - 16);
     return _algorithm.decrypt(
-      SecretBox(
-        encryptedPayload.cipherText,
-        nonce: encryptedPayload.iv,
-        mac: Mac(encryptedPayload.mac),
-      ),
+      SecretBox(cipherText, nonce: encryptedPayload.iv, mac: Mac(mac)),
       secretKey: SecretKey(_decodeRoomKey(roomKey)),
     );
   }

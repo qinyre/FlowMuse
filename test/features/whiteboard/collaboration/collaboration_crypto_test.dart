@@ -38,6 +38,6 @@ void main() {
     );
 
     expect(first.iv, isNot(second.iv));
-    expect(first.cipherText, isNot(second.cipherText));
+    expect(first.encryptedBuffer, isNot(second.encryptedBuffer));
   });
 }
