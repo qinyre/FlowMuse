@@ -56,7 +56,7 @@ class SharedSidebarHeader extends StatelessWidget {
     this.padding = const EdgeInsets.fromLTRB(
       AppSpacing.sidebarInset,
       AppSpacing.sidebarInset,
-      AppSpacing.sidebarInset,
+      12,
       12,
     ),
   });
@@ -79,7 +79,7 @@ class SharedSidebarHeader extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var index = 0; index < actions.length; index++) ...[
-                if (index > 0) const SizedBox(width: AppSpacing.controlGap),
+                if (index > 0) const SizedBox(width: 4),
                 actions[index],
               ],
             ],
@@ -167,7 +167,6 @@ class SharedSidebarItem extends StatelessWidget {
     this.trailingIcon,
     this.actionIcon,
     this.emptyLabel,
-    this.leadingAction = false,
     this.onActionTap,
     this.onTrailingTap,
     this.onTap,
@@ -181,7 +180,6 @@ class SharedSidebarItem extends StatelessWidget {
   final IconData? trailingIcon;
   final IconData? actionIcon;
   final String? emptyLabel;
-  final bool leadingAction;
   final VoidCallback? onActionTap;
   final VoidCallback? onTrailingTap;
   final VoidCallback? onTap;
@@ -210,60 +208,27 @@ class SharedSidebarItem extends StatelessWidget {
                 Icon(icon, color: foreground.withValues(alpha: 0.78), size: 16),
                 const SizedBox(width: AppSpacing.controlGap),
                 Expanded(
-                  child: leadingAction && actionIcon != null
-                      ? SizedBox(
-                          width: 100,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  label,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(
-                                        color: foreground,
-                                        fontSize: level == 0 ? 13 : 12,
-                                        height: 1.12,
-                                        fontWeight: selected
-                                            ? FontWeight.w600
-                                            : FontWeight.w500,
-                                      ),
-                                ),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          label,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: foreground,
+                                fontSize: level == 0 ? 13 : 12,
+                                height: 1.12,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
                               ),
-                              const SizedBox(width: AppSpacing.controlGap),
-                              SharedSidebarActionButton(
-                                tooltip: '新建$label',
-                                icon: actionIcon!,
-                                onPressed: onActionTap,
-                              ),
-                            ],
-                          ),
-                        )
-                      : Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                label,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      color: foreground,
-                                      fontSize: level == 0 ? 13 : 12,
-                                      height: 1.12,
-                                      fontWeight: selected
-                                          ? FontWeight.w600
-                                          : FontWeight.w500,
-                                    ),
-                              ),
-                            ),
-                          ],
                         ),
+                      ),
+                    ],
+                  ),
                 ),
-                if (!leadingAction && actionIcon != null) ...[
+                if (actionIcon != null) ...[
                   SharedSidebarActionButton(
                     tooltip: '新建$label',
                     icon: actionIcon!,
@@ -288,58 +253,70 @@ class SharedSidebarItem extends StatelessWidget {
                   )
                 else if (actionIcon != null)
                   SizedBox(
+                    height: 32,
                     width: 64,
                     child: Align(
                       alignment: Alignment.centerRight,
-                      child: trailingIcon == null
-                          ? const SizedBox.shrink()
-                          : IconButton(
-                              tooltip: '$label展开收起',
-                              constraints: const BoxConstraints.tightFor(
-                                width: 32,
-                                height: 32,
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: trailingIcon == null
+                            ? const SizedBox.shrink()
+                            : IconButton(
+                                tooltip: '$label展开收起',
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 32,
+                                  height: 32,
+                                ),
+                                padding: EdgeInsets.zero,
+                                onPressed: onTrailingTap,
+                                icon: Icon(
+                                  trailingIcon,
+                                  color: colorScheme.onSurfaceVariant,
+                                  size: 16,
+                                ),
                               ),
-                              padding: EdgeInsets.zero,
-                              onPressed: onTrailingTap,
-                              icon: Icon(
-                                trailingIcon,
-                                color: colorScheme.onSurfaceVariant,
-                                size: 16,
-                              ),
-                            ),
+                      ),
                     ),
                   )
                 else if (count != null || trailingIcon != null)
                   SizedBox(
-                    width: 32,
+                    width: 64,
                     height: 32,
-                    child: count != null
-                        ? Center(
-                            child: Text(
-                              count!,
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                    fontSize: 11,
-                                    height: 1.0,
-                                  ),
-                            ),
-                          )
-                        : IconButton(
-                            tooltip: '$label展开收起',
-                            constraints: const BoxConstraints.tightFor(
-                              width: 32,
-                              height: 32,
-                            ),
-                            padding: EdgeInsets.zero,
-                            onPressed: onTrailingTap,
-                            icon: Icon(
-                              trailingIcon,
-                              color: colorScheme.onSurfaceVariant,
-                              size: 16,
-                            ),
-                          ),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: count != null
+                            ? Center(
+                                child: Text(
+                                  count!,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                        fontSize: 11,
+                                        height: 1.0,
+                                      ),
+                                ),
+                              )
+                            : IconButton(
+                                tooltip: '$label展开收起',
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 32,
+                                  height: 32,
+                                ),
+                                padding: EdgeInsets.zero,
+                                onPressed: onTrailingTap,
+                                icon: Icon(
+                                  trailingIcon,
+                                  color: colorScheme.onSurfaceVariant,
+                                  size: 16,
+                                ),
+                              ),
+                      ),
+                    ),
                   ),
                 const SizedBox(width: 12),
               ],
