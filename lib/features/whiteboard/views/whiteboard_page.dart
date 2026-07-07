@@ -70,11 +70,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (_loadingScene) {
       return;
     }
+    final viewModel = ref.read(whiteboardViewModelProvider.notifier);
+    viewModel.markSaving();
     final repository = ref.read(whiteboardSceneRepositoryProvider);
     final content = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
     );
     await repository.saveSceneContent(widget.notebookId, content);
+    if (!mounted) {
+      return;
+    }
+    viewModel.markSaved();
   }
 
   @override
