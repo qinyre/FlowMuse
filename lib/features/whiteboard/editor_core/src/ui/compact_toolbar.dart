@@ -45,13 +45,13 @@ class CompactToolbar extends StatelessWidget {
               _compactButton(
                 cs: cs,
                 icon: Icons.undo,
-                tooltip: 'Undo',
+                tooltip: '撤销',
                 onPressed: controller.undo,
               ),
               _compactButton(
                 cs: cs,
                 icon: Icons.redo,
-                tooltip: 'Redo',
+                tooltip: '重做',
                 onPressed: controller.redo,
               ),
               Padding(
@@ -77,7 +77,7 @@ class CompactToolbar extends StatelessWidget {
                       size: 22,
                       isActive: activeType == type,
                     ),
-                    tooltip: type.name,
+                    tooltip: labelForToolType(type),
                     onPressed: () => controller.switchTool(type),
                     isActive: activeType == type,
                   ),

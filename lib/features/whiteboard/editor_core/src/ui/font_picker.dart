@@ -136,8 +136,8 @@ class _FontListContentState extends State<FontListContent> {
             autofocus: true,
             style: const TextStyle(fontSize: 13),
             decoration: InputDecoration(
-              labelText: 'Font name',
-              hintText: 'Search fonts...',
+              labelText: '字体名称',
+              hintText: '搜索字体...',
               hintStyle: TextStyle(
                 fontSize: 13,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -163,13 +163,11 @@ class _FontListContentState extends State<FontListContent> {
             shrinkWrap: widget.scrollController == null,
             children: [
               if (sceneFontList.isNotEmpty) ...[
-                _buildGroupHeader('Scene fonts'),
+                _buildGroupHeader('场景字体'),
                 for (final font in sceneFontList) _buildFontItem(font),
               ],
               if (availableFontList.isNotEmpty) ...[
-                _buildGroupHeader(
-                  sceneFontList.isNotEmpty ? 'Available fonts' : 'Fonts',
-                ),
+                _buildGroupHeader(sceneFontList.isNotEmpty ? '可用字体' : '字体'),
                 for (final font in availableFontList) _buildFontItem(font),
               ],
               if (isDynamicSearch) _buildDynamicFontItem(_searchQuery),
@@ -252,7 +250,7 @@ class _FontListContentState extends State<FontListContent> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Google Font: $displayName',
+                'Google 字体：$displayName',
                 style: TextStyle(
                   fontSize: 13,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,

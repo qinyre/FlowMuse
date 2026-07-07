@@ -28,7 +28,7 @@ class HelpButton extends StatelessWidget {
       child: IconButton(
         icon: const Icon(Icons.help_outline, size: 18),
         onPressed: () => showHelpDialog(context),
-        tooltip: 'Help (?)',
+        tooltip: '帮助 (?)',
         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         iconSize: 18,
         padding: EdgeInsets.zero,

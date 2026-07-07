@@ -2,7 +2,8 @@ library;
 
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' hide TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    hide TextAlign;
 
 /// The main canvas area with pointer/gesture handling.
 class EditorCanvas extends StatefulWidget {
@@ -285,7 +286,7 @@ class _CompactPropertyButton extends StatelessWidget {
       ),
       child: IconButton(
         icon: const Icon(Icons.tune, size: 22),
-        tooltip: 'Properties',
+        tooltip: '属性',
         constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         onPressed: () => showCompactPropertyPanel(context, controller),
       ),

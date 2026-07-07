@@ -16,24 +16,21 @@ void showRenameDocumentDialog(
   showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Rename'),
+      title: const Text('重命名'),
       content: TextField(
         controller: textController,
         autofocus: true,
-        decoration: const InputDecoration(
-          labelText: 'Document name',
-          hintText: 'Document name',
-        ),
+        decoration: const InputDecoration(labelText: '文档名称', hintText: '文档名称'),
         onSubmitted: (value) => Navigator.of(context).pop(value),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: const Text('取消'),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(textController.text),
-          child: const Text('OK'),
+          child: const Text('确定'),
         ),
       ],
     ),
@@ -90,7 +87,7 @@ class HamburgerMenu extends StatelessWidget {
       ),
       child: PopupMenuButton<String>(
         icon: const Icon(Icons.menu, size: 20),
-        tooltip: 'Menu',
+        tooltip: '菜单',
         offset: const Offset(0, 40),
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -128,22 +125,16 @@ class HamburgerMenu extends StatelessWidget {
         },
         itemBuilder: (context) => [
           if (onOpen != null)
-            _menuItem(context, 'open', Icons.folder_open, 'Open', '$mod+O'),
+            _menuItem(context, 'open', Icons.folder_open, '打开', '$mod+O'),
           if (onSave != null)
-            _menuItem(context, 'save', Icons.save, 'Save', '$mod+S'),
+            _menuItem(context, 'save', Icons.save, '保存', '$mod+S'),
           if (onSaveAs != null)
-            _menuItem(
-              context,
-              'save_as',
-              Icons.save_as,
-              'Save As',
-              '$mod+Shift+S',
-            ),
+            _menuItem(context, 'save_as', Icons.save_as, '另存为', '$mod+Shift+S'),
           _menuItem(
             context,
             'rename',
             Icons.drive_file_rename_outline,
-            'Rename...',
+            '重命名...',
             null,
           ),
           if (onOpen != null || onSave != null || onSaveAs != null)
@@ -153,11 +144,11 @@ class HamburgerMenu extends StatelessWidget {
               context,
               'export_png',
               Icons.image,
-              'Export PNG',
+              '导出 PNG',
               '$mod+Shift+E',
             ),
           if (onExportSvg != null)
-            _menuItem(context, 'export_svg', Icons.code, 'Export SVG', null),
+            _menuItem(context, 'export_svg', Icons.code, '导出 SVG', null),
           if (onExportPng != null || onExportSvg != null)
             const PopupMenuDivider(),
           PopupMenuItem<String>(
@@ -172,7 +163,7 @@ class HamburgerMenu extends StatelessWidget {
                       : cs.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
-                const Expanded(child: Text('Library')),
+                const Expanded(child: Text('素材库')),
                 if (controller.showLibraryPanel)
                   Icon(Icons.check, size: 16, color: cs.primary),
               ],
@@ -183,7 +174,7 @@ class HamburgerMenu extends StatelessWidget {
               context,
               'import_image',
               Icons.add_photo_alternate,
-              'Import Image',
+              '导入图片',
               '9',
             ),
           const PopupMenuDivider(),
@@ -199,7 +190,7 @@ class HamburgerMenu extends StatelessWidget {
                       : cs.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
-                const Expanded(child: Text('Grid')),
+                const Expanded(child: Text('网格')),
                 Text(
                   "$mod+'",
                   style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
@@ -224,7 +215,7 @@ class HamburgerMenu extends StatelessWidget {
                       : cs.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
-                const Expanded(child: Text('Snap to Objects')),
+                const Expanded(child: Text('吸附到对象')),
                 Text(
                   'Alt+S',
                   style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
@@ -237,12 +228,12 @@ class HamburgerMenu extends StatelessWidget {
               ],
             ),
           ),
-          _menuItem(context, 'frame_tool', Icons.crop_free, 'Frame Tool', 'F'),
+          _menuItem(context, 'frame_tool', Icons.crop_free, '画框工具', 'F'),
           _menuItem(
             context,
             'reset_canvas',
             Icons.delete_sweep,
-            'Reset Canvas',
+            '重置画布',
             '$mod+Del',
           ),
           const PopupMenuDivider(),
@@ -256,7 +247,7 @@ class HamburgerMenu extends StatelessWidget {
                   color: controller.zenMode ? cs.primary : cs.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
-                const Expanded(child: Text('Zen Mode')),
+                const Expanded(child: Text('专注模式')),
                 Text(
                   'Alt+Z',
                   style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
@@ -279,7 +270,7 @@ class HamburgerMenu extends StatelessWidget {
                   color: controller.viewMode ? cs.primary : cs.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
-                const Expanded(child: Text('View Mode')),
+                const Expanded(child: Text('查看模式')),
                 Text(
                   'Alt+R',
                   style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),

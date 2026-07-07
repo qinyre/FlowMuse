@@ -43,3 +43,21 @@ String? shortcutForToolType(ToolType type) {
     ToolType.laser => 'K',
   };
 }
+
+/// Returns the display label for the given [ToolType].
+String labelForToolType(ToolType type) {
+  return switch (type) {
+    ToolType.hand => '抓手',
+    ToolType.select => '选择',
+    ToolType.rectangle => '矩形',
+    ToolType.diamond => '菱形',
+    ToolType.ellipse => '椭圆',
+    ToolType.arrow => '箭头',
+    ToolType.line => '直线',
+    ToolType.freedraw => '自由绘制',
+    ToolType.text => '文字',
+    ToolType.frame => '画框',
+    ToolType.eraser => '橡皮擦',
+    ToolType.laser => '激光笔',
+  };
+}

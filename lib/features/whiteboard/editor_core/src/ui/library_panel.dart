@@ -42,7 +42,7 @@ class LibraryPanel extends StatelessWidget {
             child: Row(
               children: [
                 const Text(
-                  'Library',
+                  '素材库',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
@@ -50,7 +50,7 @@ class LibraryPanel extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.file_upload, size: 18),
                     onPressed: onImportLibrary,
-                    tooltip: 'Import Library',
+                    tooltip: '导入素材库',
                     constraints: const BoxConstraints(),
                     padding: const EdgeInsets.all(4),
                   ),
@@ -58,14 +58,14 @@ class LibraryPanel extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.file_download, size: 18),
                     onPressed: items.isEmpty ? null : onExportLibrary,
-                    tooltip: 'Export Library',
+                    tooltip: '导出素材库',
                     constraints: const BoxConstraints(),
                     padding: const EdgeInsets.all(4),
                   ),
                 IconButton(
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: () => controller.showLibraryPanel = false,
-                  tooltip: 'Close',
+                  tooltip: '关闭',
                   constraints: const BoxConstraints(),
                   padding: const EdgeInsets.all(4),
                 ),
@@ -79,7 +79,7 @@ class LibraryPanel extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add to Library'),
+                  label: const Text('添加到素材库'),
                   onPressed: controller.addToLibrary,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 8),
@@ -93,7 +93,7 @@ class LibraryPanel extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Text(
-                        'No library items.\nSelect elements and click "Add to Library".',
+                        '暂无素材。\n选择元素后点击“添加到素材库”。',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: cs.onSurfaceVariant,
@@ -113,7 +113,7 @@ class LibraryPanel extends StatelessWidget {
                           style: const TextStyle(fontSize: 13),
                         ),
                         subtitle: Text(
-                          '${item.elements.length} element${item.elements.length == 1 ? '' : 's'}',
+                          '${item.elements.length} 个元素',
                           style: const TextStyle(fontSize: 11),
                         ),
                         onTap: () {
@@ -125,7 +125,7 @@ class LibraryPanel extends StatelessWidget {
                           icon: const Icon(Icons.delete, size: 16),
                           onPressed: () =>
                               controller.removeLibraryItem(item.id),
-                          tooltip: 'Remove',
+                          tooltip: '移除',
                           constraints: const BoxConstraints(),
                           padding: const EdgeInsets.all(4),
                         ),

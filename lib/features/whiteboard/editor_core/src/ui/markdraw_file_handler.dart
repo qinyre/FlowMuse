@@ -8,7 +8,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' hide TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    hide TextAlign;
 
 /// Encapsulates all file-picker + platform-I/O + controller interactions.
 ///
@@ -38,7 +39,7 @@ class MarkdrawFileHandler {
       downloadFile('drawing.markdraw', content);
     } else {
       final path = await FilePicker.platform.saveFile(
-        dialogTitle: 'Save drawing',
+        dialogTitle: '保存绘图',
         fileName: 'drawing.markdraw',
         type: FileType.custom,
         allowedExtensions: ['markdraw', 'excalidraw'],
@@ -53,7 +54,7 @@ class MarkdrawFileHandler {
   /// Shows a file picker and loads the selected drawing.
   Future<void> open() async {
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Open drawing',
+      dialogTitle: '打开绘图',
       type: FileType.any,
       withData: true,
     );
@@ -83,7 +84,7 @@ class MarkdrawFileHandler {
       downloadBytes('drawing.png', bytes, mimeType: 'image/png');
     } else {
       final path = await FilePicker.platform.saveFile(
-        dialogTitle: 'Export PNG',
+        dialogTitle: '导出 PNG',
         fileName: 'drawing.png',
         type: FileType.any,
       );
@@ -100,7 +101,7 @@ class MarkdrawFileHandler {
       downloadFile('drawing.svg', svg);
     } else {
       final path = await FilePicker.platform.saveFile(
-        dialogTitle: 'Export SVG',
+        dialogTitle: '导出 SVG',
         fileName: 'drawing.svg',
         type: FileType.any,
       );
@@ -113,7 +114,7 @@ class MarkdrawFileHandler {
   /// [context] is used to determine screen size for centering.
   Future<void> importImage(BuildContext context) async {
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Import Image',
+      dialogTitle: '导入图片',
       type: FileType.image,
       withData: true,
     );
@@ -131,7 +132,7 @@ class MarkdrawFileHandler {
   /// Shows a file picker and imports a library file.
   Future<void> importLibrary() async {
     final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Import Library',
+      dialogTitle: '导入素材库',
       type: FileType.custom,
       allowedExtensions: ['excalidrawlib', 'markdrawlib'],
       withData: kIsWeb,
@@ -158,7 +159,7 @@ class MarkdrawFileHandler {
       downloadFile('library.excalidrawlib', content);
     } else {
       final path = await FilePicker.platform.saveFile(
-        dialogTitle: 'Export Library',
+        dialogTitle: '导出素材库',
         fileName: 'library.excalidrawlib',
         allowedExtensions: ['excalidrawlib', 'markdrawlib'],
         type: FileType.custom,

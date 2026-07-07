@@ -254,7 +254,7 @@ class _MarkdrawSplitPaneState extends State<MarkdrawSplitPane>
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Copied as markdown'),
+          content: Text('已复制为 Markdown'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -449,7 +449,7 @@ class _TextPane extends StatelessWidget {
               ),
               const Spacer(),
               Tooltip(
-                message: 'Dock right',
+                message: '停靠在右侧',
                 child: IconButton(
                   icon: Icon(
                     Icons.vertical_split,
@@ -468,7 +468,7 @@ class _TextPane extends StatelessWidget {
                 ),
               ),
               Tooltip(
-                message: 'Dock bottom',
+                message: '停靠在底部',
                 child: IconButton(
                   icon: Icon(
                     Icons.horizontal_split,
@@ -487,7 +487,7 @@ class _TextPane extends StatelessWidget {
                 ),
               ),
               Tooltip(
-                message: 'Copy as markdown',
+                message: '复制为 Markdown',
                 child: IconButton(
                   icon: Icon(
                     Symbols.markdown,
@@ -585,16 +585,16 @@ class _ParseStatusBar extends StatelessWidget {
 
     if (hasParseError) {
       dotColor = Colors.red;
-      label = 'Parse error';
+      label = '解析错误';
       detail = parseErrorMessage;
     } else if (parseWarnings.isNotEmpty) {
       dotColor = Colors.amber;
       final count = parseWarnings.length;
-      label = '$count warning${count == 1 ? '' : 's'}';
+      label = '$count 个警告';
       detail = parseWarnings.first.message;
     } else {
       dotColor = Colors.green;
-      label = 'OK';
+      label = '正常';
       detail = null;
     }
 
@@ -649,8 +649,8 @@ class _ParseStatusBar extends StatelessWidget {
 
   String _tooltipMessage() {
     if (hasParseError) return parseErrorMessage;
-    if (parseWarnings.isEmpty) return 'No issues';
-    return parseWarnings.map((w) => 'Line ${w.line}: ${w.message}').join('\n');
+    if (parseWarnings.isEmpty) return '没有问题';
+    return parseWarnings.map((w) => '第 ${w.line} 行：${w.message}').join('\n');
   }
 }
 

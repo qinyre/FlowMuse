@@ -42,7 +42,7 @@ void showCompactLibrary(
               child: Row(
                 children: [
                   const Text(
-                    'Library',
+                    '素材库',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const Spacer(),
@@ -53,7 +53,7 @@ void showCompactLibrary(
                         Navigator.pop(ctx);
                         onImportLibrary();
                       },
-                      tooltip: 'Import Library',
+                      tooltip: '导入素材库',
                     ),
                   if (onExportLibrary != null)
                     IconButton(
@@ -64,7 +64,7 @@ void showCompactLibrary(
                               Navigator.pop(ctx);
                               onExportLibrary();
                             },
-                      tooltip: 'Export Library',
+                      tooltip: '导出素材库',
                     ),
                 ],
               ),
@@ -76,7 +76,7 @@ void showCompactLibrary(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add to Library'),
+                    label: const Text('添加到素材库'),
                     onPressed: () {
                       controller.addToLibrary();
                       Navigator.pop(ctx);
@@ -88,7 +88,7 @@ void showCompactLibrary(
               child: controller.libraryItems.isEmpty
                   ? Center(
                       child: Text(
-                        'No library items.',
+                        '暂无素材。',
                         style: TextStyle(
                           color: Theme.of(ctx).colorScheme.onSurfaceVariant,
                         ),
@@ -101,9 +101,7 @@ void showCompactLibrary(
                         final item = controller.libraryItems[index];
                         return ListTile(
                           title: Text(item.name),
-                          subtitle: Text(
-                            '${item.elements.length} element${item.elements.length == 1 ? '' : 's'}',
-                          ),
+                          subtitle: Text('${item.elements.length} 个元素'),
                           onTap: () {
                             final box =
                                 context.findRenderObject() as RenderBox?;

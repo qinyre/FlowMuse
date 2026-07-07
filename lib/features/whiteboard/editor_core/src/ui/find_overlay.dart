@@ -79,9 +79,9 @@ class _FindOverlayState extends State<FindOverlay> {
     if (query.isEmpty) {
       matchLabel = '';
     } else if (results.isEmpty) {
-      matchLabel = '0 results';
+      matchLabel = '0 个结果';
     } else {
-      matchLabel = '${index + 1} of ${results.length}';
+      matchLabel = '${index + 1} / ${results.length}';
     }
 
     return KeyboardListener(
@@ -124,8 +124,8 @@ class _FindOverlayState extends State<FindOverlay> {
                   focusNode: _focusNode,
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
-                    labelText: 'Search',
-                    hintText: 'Find on canvas',
+                    labelText: '搜索',
+                    hintText: '在画布中查找',
                     hintStyle: TextStyle(
                       fontSize: 14,
                       color: cs.onSurfaceVariant,
@@ -159,7 +159,7 @@ class _FindOverlayState extends State<FindOverlay> {
               child: IconButton(
                 padding: EdgeInsets.zero,
                 iconSize: 16,
-                tooltip: 'Previous (Shift+Enter)',
+                tooltip: '上一个 (Shift+Enter)',
                 onPressed: results.isEmpty
                     ? null
                     : () => widget.controller.findPrevious(
@@ -174,7 +174,7 @@ class _FindOverlayState extends State<FindOverlay> {
               child: IconButton(
                 padding: EdgeInsets.zero,
                 iconSize: 16,
-                tooltip: 'Next (Enter)',
+                tooltip: '下一个 (Enter)',
                 onPressed: results.isEmpty
                     ? null
                     : () => widget.controller.findNext(widget.getCanvasSize()),
@@ -187,7 +187,7 @@ class _FindOverlayState extends State<FindOverlay> {
               child: IconButton(
                 padding: EdgeInsets.zero,
                 iconSize: 16,
-                tooltip: 'Close (Esc)',
+                tooltip: '关闭 (Esc)',
                 onPressed: _close,
                 icon: const Icon(Icons.close),
               ),

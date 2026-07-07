@@ -18,7 +18,7 @@ class FrameElement extends Element {
     required super.y,
     required super.width,
     required super.height,
-    this.label = 'Frame',
+    this.label = '画框',
     super.angle,
     super.strokeColor,
     super.backgroundColor,

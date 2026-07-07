@@ -2,8 +2,11 @@ library;
 
 import 'package:flutter/material.dart' hide Element;
 
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' as core show TextAlign;
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' hide TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    as core
+    show TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    hide TextAlign;
 
 import 'color_picker.dart' as cp;
 
@@ -47,12 +50,12 @@ class PropertyPanelContent extends StatelessWidget {
         ),
         if (elements.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _buildSectionLabel(context, 'Layer order'),
+          _buildSectionLabel(context, '图层顺序'),
           _buildLayerButtons(context),
           const SizedBox(height: 8),
           _buildAlignmentButtons(context, elements.length),
           const SizedBox(height: 12),
-          _buildSectionLabel(context, 'Actions'),
+          _buildSectionLabel(context, '操作'),
           _buildActionsRow(context),
         ],
       ],
@@ -63,7 +66,7 @@ class PropertyPanelContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionLabel(context, 'Stroke'),
+        _buildSectionLabel(context, '描边'),
         _buildColorPickerRow(
           context,
           selected: style.strokeColor,
@@ -74,17 +77,17 @@ class PropertyPanelContent extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         if (showFullTextProps) ...[
-          _buildSectionLabel(context, 'Font family'),
+          _buildSectionLabel(context, '字体'),
           _buildFontPicker(context, style.fontFamily),
           const SizedBox(height: 8),
         ],
         if (style.hasText) ...[
-          _buildSectionLabel(context, 'Font size'),
+          _buildSectionLabel(context, '字号'),
           _buildFontSizeRow(context, style.fontSize),
           const SizedBox(height: 8),
         ],
         if (showFullTextProps) ...[
-          _buildSectionLabel(context, 'Text align'),
+          _buildSectionLabel(context, '文字对齐'),
           _buildTextAlignCombinedRow(
             context,
             style.textAlign,
@@ -92,7 +95,7 @@ class PropertyPanelContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
         ],
-        _buildSectionLabel(context, 'Opacity'),
+        _buildSectionLabel(context, '透明度'),
         _buildOpacitySlider(context, style.opacity),
       ],
     );
@@ -102,7 +105,7 @@ class PropertyPanelContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionLabel(context, 'Stroke'),
+        _buildSectionLabel(context, '描边'),
         _buildColorPickerRow(
           context,
           selected: style.strokeColor,
@@ -113,7 +116,7 @@ class PropertyPanelContent extends StatelessWidget {
         ),
         if (!textOnly) ...[
           const SizedBox(height: 8),
-          _buildSectionLabel(context, 'Background'),
+          _buildSectionLabel(context, '背景'),
           _buildColorPickerRow(
             context,
             selected: style.backgroundColor,
@@ -123,41 +126,41 @@ class PropertyPanelContent extends StatelessWidget {
             target: ColorPickerTarget.background,
           ),
           const SizedBox(height: 8),
-          _buildSectionLabel(context, 'Fill style'),
+          _buildSectionLabel(context, '填充样式'),
           _buildFillStyleRow(context, style.fillStyle),
           const SizedBox(height: 8),
-          _buildSectionLabel(context, 'Stroke width'),
+          _buildSectionLabel(context, '描边宽度'),
           _buildStrokeWidthRow(context, style.strokeWidth),
           const SizedBox(height: 8),
-          _buildSectionLabel(context, 'Stroke style'),
+          _buildSectionLabel(context, '描边样式'),
           _buildStrokeStyleRow(context, style.strokeStyle),
           const SizedBox(height: 8),
-          _buildSectionLabel(context, 'Sloppiness'),
+          _buildSectionLabel(context, '手绘感'),
           _buildRoughnessRow(context, style.roughness),
           if (style.hasRoundness || style.canBreakPolygon) ...[
             const SizedBox(height: 8),
-            _buildSectionLabel(context, 'Edges'),
+            _buildSectionLabel(context, '边角'),
             _buildEdgesRow(context, style),
           ],
         ],
         if (style.hasArrows) ...[
           const SizedBox(height: 8),
-          _buildSectionLabel(context, 'Arrow type'),
+          _buildSectionLabel(context, '箭头类型'),
           _buildArrowTypeRow(context, style.arrowType),
         ],
         if (showFullTextProps) ...[
           const SizedBox(height: 12),
-          _buildSectionLabel(context, 'Font family'),
+          _buildSectionLabel(context, '字体'),
           _buildFontPicker(context, style.fontFamily),
         ],
         if (style.hasText) ...[
           const SizedBox(height: 8),
-          _buildSectionLabel(context, 'Font size'),
+          _buildSectionLabel(context, '字号'),
           _buildFontSizeRow(context, style.fontSize),
         ],
         if (showFullTextProps) ...[
           const SizedBox(height: 8),
-          _buildSectionLabel(context, 'Text align'),
+          _buildSectionLabel(context, '文字对齐'),
           _buildTextAlignCombinedRow(
             context,
             style.textAlign,
@@ -168,7 +171,7 @@ class PropertyPanelContent extends StatelessWidget {
           const SizedBox(height: 8),
           _buildArrowheadRow(
             context,
-            label: 'Start arrowhead',
+            label: '起点箭头',
             current: style.startArrowhead,
             isNone: style.startArrowheadNone,
             onSelect: (a) {
@@ -186,7 +189,7 @@ class PropertyPanelContent extends StatelessWidget {
           const SizedBox(height: 4),
           _buildArrowheadRow(
             context,
-            label: 'End arrowhead',
+            label: '终点箭头',
             current: style.endArrowhead,
             isNone: style.endArrowheadNone,
             onSelect: (a) {
@@ -203,7 +206,7 @@ class PropertyPanelContent extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
-        _buildSectionLabel(context, 'Opacity'),
+        _buildSectionLabel(context, '透明度'),
         _buildOpacitySlider(context, style.opacity),
       ],
     );
@@ -272,7 +275,7 @@ class PropertyPanelContent extends StatelessWidget {
   Widget _buildStrokeWidthRow(BuildContext context, double? current) {
     const widths = [1.0, 2.0, 4.0, 6.0];
     const displayWidths = [1.0, 2.0, 3.5, 5.0];
-    const tooltips = ['Thin', 'Medium', 'Bold', 'Extra bold'];
+    const tooltips = ['细', '中', '粗', '特粗'];
     return Wrap(
       spacing: 4,
       runSpacing: 4,
@@ -299,6 +302,7 @@ class PropertyPanelContent extends StatelessWidget {
   Widget _buildStrokeStyleRow(BuildContext context, StrokeStyle? current) {
     const styles = StrokeStyle.values;
     final names = ['solid', 'dashed', 'dotted'];
+    const tooltips = ['实线', '虚线', '点线'];
     return Wrap(
       spacing: 4,
       runSpacing: 4,
@@ -309,7 +313,7 @@ class PropertyPanelContent extends StatelessWidget {
             onTap: () => controller.applyStyleChange(
               ElementStyle(strokeStyle: styles[i]),
             ),
-            tooltip: names[i],
+            tooltip: tooltips[i],
             child: CustomPaint(
               size: const Size(20, 20),
               painter: StrokeStyleIcon(
@@ -325,6 +329,7 @@ class PropertyPanelContent extends StatelessWidget {
   Widget _buildFillStyleRow(BuildContext context, FillStyle? current) {
     const styles = FillStyle.values;
     final names = ['solid', 'hachure', 'cross-hatch', 'zigzag'];
+    const tooltips = ['纯色', '斜线', '交叉线', '锯齿线'];
     return Wrap(
       spacing: 4,
       runSpacing: 4,
@@ -334,7 +339,7 @@ class PropertyPanelContent extends StatelessWidget {
             isSelected: current == styles[i],
             onTap: () =>
                 controller.applyStyleChange(ElementStyle(fillStyle: styles[i])),
-            tooltip: names[i],
+            tooltip: tooltips[i],
             child: CustomPaint(
               size: const Size(20, 20),
               painter: FillStyleIcon(
@@ -349,7 +354,7 @@ class PropertyPanelContent extends StatelessWidget {
 
   Widget _buildRoughnessRow(BuildContext context, double? current) {
     const values = [0.0, 1.0, 3.0];
-    const tooltips = ['Architect', 'Artist', 'Cartoonist'];
+    const tooltips = ['精准', '自然', '夸张'];
     return Wrap(
       spacing: 4,
       runSpacing: 4,
@@ -388,7 +393,7 @@ class PropertyPanelContent extends StatelessWidget {
             min: 0,
             max: 1,
             divisions: 20,
-            label: current != null ? '${(current * 100).round()}%' : 'mixed',
+            label: current != null ? '${(current * 100).round()}%' : '混合',
             onChanged: (v) =>
                 controller.applyStyleChange(ElementStyle(opacity: v)),
           ),
@@ -412,7 +417,7 @@ class PropertyPanelContent extends StatelessWidget {
                 const ElementStyle(hasRoundness: true),
               );
             },
-            tooltip: 'Sharp',
+            tooltip: '尖角',
             child: CustomPaint(
               size: const Size(20, 20),
               painter: RoundnessIcon(
@@ -448,7 +453,7 @@ class PropertyPanelContent extends StatelessWidget {
                 );
               }
             },
-            tooltip: 'Round',
+            tooltip: '圆角',
             child: CustomPaint(
               size: const Size(20, 20),
               painter: RoundnessIcon(
@@ -471,7 +476,7 @@ class PropertyPanelContent extends StatelessWidget {
               );
               controller.applyResult(result);
             },
-            tooltip: 'Break polygon',
+            tooltip: '拆分多边形',
             child: const Icon(Icons.hexagon_outlined, size: 20),
           ),
       ],
@@ -493,10 +498,10 @@ class PropertyPanelContent extends StatelessWidget {
               );
             },
             tooltip: switch (type) {
-              ArrowType.sharp => 'Sharp',
-              ArrowType.round => 'Round',
-              ArrowType.sharpElbow => 'Sharp Elbow',
-              ArrowType.roundElbow => 'Round Elbow',
+              ArrowType.sharp => '直角',
+              ArrowType.round => '圆滑',
+              ArrowType.sharpElbow => '折线直角',
+              ArrowType.roundElbow => '折线圆角',
             },
             child: CustomPaint(
               size: const Size(20, 20),
@@ -519,7 +524,7 @@ class PropertyPanelContent extends StatelessWidget {
     required bool isNone,
     required void Function(Arrowhead?) onSelect,
   }) {
-    final isStart = label.toLowerCase().contains('start');
+    final isStart = label == '起点箭头';
     const arrowheads = Arrowhead.values;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -532,7 +537,7 @@ class PropertyPanelContent extends StatelessWidget {
             IconToggleChip(
               isSelected: isNone,
               onTap: () => onSelect(null),
-              tooltip: 'None',
+              tooltip: '无',
               child: CustomPaint(
                 size: const Size(20, 20),
                 painter: ArrowheadIcon(
@@ -546,7 +551,7 @@ class PropertyPanelContent extends StatelessWidget {
               IconToggleChip(
                 isSelected: current == ah,
                 onTap: () => onSelect(ah),
-                tooltip: ah.name[0].toUpperCase() + ah.name.substring(1),
+                tooltip: _labelForArrowhead(ah),
                 child: CustomPaint(
                   size: const Size(20, 20),
                   painter: ArrowheadIcon(
@@ -581,7 +586,7 @@ class PropertyPanelContent extends StatelessWidget {
               CompoundResult([for (final e in updated) UpdateElementResult(e)]),
             );
           },
-          tooltip: 'Send to back (Ctrl+Shift+[)',
+          tooltip: '置于底层 (Ctrl+Shift+[)',
           child: const Icon(Icons.vertical_align_bottom, size: 18),
         ),
         IconToggleChip(
@@ -598,7 +603,7 @@ class PropertyPanelContent extends StatelessWidget {
               CompoundResult([for (final e in updated) UpdateElementResult(e)]),
             );
           },
-          tooltip: 'Send backward (Ctrl+[)',
+          tooltip: '下移一层 (Ctrl+[)',
           child: const Icon(Icons.arrow_downward, size: 18),
         ),
         IconToggleChip(
@@ -615,7 +620,7 @@ class PropertyPanelContent extends StatelessWidget {
               CompoundResult([for (final e in updated) UpdateElementResult(e)]),
             );
           },
-          tooltip: 'Bring forward (Ctrl+])',
+          tooltip: '上移一层 (Ctrl+])',
           child: const Icon(Icons.arrow_upward, size: 18),
         ),
         IconToggleChip(
@@ -632,7 +637,7 @@ class PropertyPanelContent extends StatelessWidget {
               CompoundResult([for (final e in updated) UpdateElementResult(e)]),
             );
           },
-          tooltip: 'Bring to front (Ctrl+Shift+])',
+          tooltip: '置于顶层 (Ctrl+Shift+])',
           child: const Icon(Icons.vertical_align_top, size: 18),
         ),
       ],
@@ -644,64 +649,64 @@ class PropertyPanelContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionLabel(context, 'Align'),
+        _buildSectionLabel(context, '对齐'),
         Wrap(
           spacing: 4,
           children: [
             _alignButton(
               context,
               Icons.align_horizontal_left,
-              'Align left',
+              '左对齐',
               AlignmentUtils.alignLeft,
             ),
             _alignButton(
               context,
               Icons.align_horizontal_center,
-              'Align center H',
+              '水平居中',
               AlignmentUtils.alignCenterH,
             ),
             _alignButton(
               context,
               Icons.align_horizontal_right,
-              'Align right',
+              '右对齐',
               AlignmentUtils.alignRight,
             ),
             _alignButton(
               context,
               Icons.align_vertical_top,
-              'Align top',
+              '顶部对齐',
               AlignmentUtils.alignTop,
             ),
             _alignButton(
               context,
               Icons.align_vertical_center,
-              'Align center V',
+              '垂直居中',
               AlignmentUtils.alignCenterV,
             ),
             _alignButton(
               context,
               Icons.align_vertical_bottom,
-              'Align bottom',
+              '底部对齐',
               AlignmentUtils.alignBottom,
             ),
           ],
         ),
         if (selectedCount >= 3) ...[
           const SizedBox(height: 4),
-          _buildSectionLabel(context, 'Distribute'),
+          _buildSectionLabel(context, '分布'),
           Wrap(
             spacing: 4,
             children: [
               _alignButton(
                 context,
                 Icons.horizontal_distribute,
-                'Distribute H',
+                '水平分布',
                 AlignmentUtils.distributeH,
               ),
               _alignButton(
                 context,
                 Icons.vertical_distribute,
-                'Distribute V',
+                '垂直分布',
                 AlignmentUtils.distributeV,
               ),
             ],
@@ -748,28 +753,28 @@ class PropertyPanelContent extends StatelessWidget {
         IconToggleChip(
           isSelected: false,
           onTap: () => controller.dispatchKey('d', ctrl: true),
-          tooltip: 'Duplicate',
+          tooltip: '复制副本',
           child: const Icon(Icons.copy, size: 18),
         ),
         if (elements.length >= 2)
           IconToggleChip(
             isSelected: false,
             onTap: () => controller.dispatchKey('g', ctrl: true),
-            tooltip: 'Group',
+            tooltip: '组合',
             child: const Icon(Icons.group_work, size: 18),
           ),
         if (hasGroup)
           IconToggleChip(
             isSelected: false,
             onTap: () => controller.dispatchKey('g', ctrl: true, shift: true),
-            tooltip: 'Ungroup',
+            tooltip: '取消组合',
             child: const Icon(Icons.group_work_outlined, size: 18),
           ),
         if (isSingle)
           IconToggleChip(
             isSelected: elements.first.link != null,
             onTap: () => controller.openLinkEditor(),
-            tooltip: 'Link (Ctrl+K)',
+            tooltip: '链接 (Ctrl+K)',
             child: const Icon(Icons.link, size: 18),
           ),
         if (isSingle &&
@@ -781,15 +786,13 @@ class PropertyPanelContent extends StatelessWidget {
             onTap: () {
               controller.isEditingLinear = !controller.isEditingLinear;
             },
-            tooltip: elements.first is ArrowElement
-                ? 'Edit arrow'
-                : 'Edit line',
+            tooltip: elements.first is ArrowElement ? '编辑箭头' : '编辑直线',
             child: const Icon(Icons.timeline, size: 18),
           ),
         IconToggleChip(
           isSelected: false,
           onTap: () => controller.dispatchKey('Delete'),
-          tooltip: 'Delete',
+          tooltip: '删除',
           child: const Icon(Icons.delete_outline, size: 18),
         ),
         _buildLockToggle(context, style.locked),
@@ -813,7 +816,7 @@ class PropertyPanelContent extends StatelessWidget {
           results.length == 1 ? results.first : CompoundResult(results),
         );
       },
-      tooltip: isLocked ? 'Unlock' : 'Lock',
+      tooltip: isLocked ? '解锁' : '锁定',
       child: Icon(isLocked ? Icons.lock : Icons.lock_open, size: 18),
     );
   }
@@ -863,13 +866,13 @@ class PropertyPanelContent extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Custom font size'),
+        title: const Text('自定义字号'),
         content: TextField(
           controller: sizeController,
           keyboardType: TextInputType.number,
           autofocus: true,
           decoration: const InputDecoration(
-            labelText: 'Font size',
+            labelText: '字号',
             hintText: '4–200',
             isDense: true,
           ),
@@ -886,7 +889,7 @@ class PropertyPanelContent extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            child: const Text('取消'),
           ),
           TextButton(
             onPressed: () {
@@ -901,7 +904,7 @@ class PropertyPanelContent extends StatelessWidget {
               }
               Navigator.of(ctx).pop();
             },
-            child: const Text('Apply'),
+            child: const Text('应用'),
           ),
         ],
       ),
@@ -931,7 +934,7 @@ class PropertyPanelContent extends StatelessWidget {
             IconToggleChip(
               isSelected: controller.fontPickerOpen,
               onTap: () => _showCompactFontPicker(context, current),
-              tooltip: 'More fonts',
+              tooltip: '更多字体',
               child: const Icon(Icons.more_horiz, size: 18),
             ),
           ],
@@ -956,7 +959,7 @@ class PropertyPanelContent extends StatelessWidget {
             IconToggleChip(
               isSelected: controller.fontPickerOpen,
               onTap: () => _showFontPickerOverlay(innerContext, current),
-              tooltip: 'More fonts',
+              tooltip: '更多字体',
               child: const Icon(Icons.more_horiz, size: 18),
             ),
           ],
@@ -983,7 +986,7 @@ class PropertyPanelContent extends StatelessWidget {
                   FontResolver.defaultForCategory[FontCategory.handDrawn],
             ),
           ),
-          tooltip: 'Hand-drawn',
+          tooltip: '手绘',
           child: Text(
             'A',
             style: FontResolver.resolve(
@@ -1001,7 +1004,7 @@ class PropertyPanelContent extends StatelessWidget {
               fontFamily: FontResolver.defaultForCategory[FontCategory.normal],
             ),
           ),
-          tooltip: 'Normal',
+          tooltip: '常规',
           child: const Text('Aa', style: TextStyle(fontSize: 13)),
         ),
         IconToggleChip(
@@ -1013,7 +1016,7 @@ class PropertyPanelContent extends StatelessWidget {
               fontFamily: FontResolver.defaultForCategory[FontCategory.code],
             ),
           ),
-          tooltip: 'Code',
+          tooltip: '代码',
           child: const Text(
             '{}',
             style: TextStyle(fontSize: 13, fontFamily: 'monospace'),
@@ -1107,14 +1110,14 @@ class PropertyPanelContent extends StatelessWidget {
       Icons.format_align_center,
       Icons.format_align_right,
     ];
-    const hTooltips = ['Align left', 'Align center', 'Align right'];
+    const hTooltips = ['左对齐', '居中对齐', '右对齐'];
     const vAligns = VerticalAlign.values;
     const vIcons = [
       Icons.vertical_align_top,
       Icons.vertical_align_center,
       Icons.vertical_align_bottom,
     ];
-    const vTooltips = ['Align top', 'Align middle', 'Align bottom'];
+    const vTooltips = ['顶部对齐', '中部对齐', '底部对齐'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1170,6 +1173,23 @@ class PropertyPanelContent extends StatelessWidget {
       ],
     );
   }
+}
+
+String _labelForArrowhead(Arrowhead arrowhead) {
+  return switch (arrowhead) {
+    Arrowhead.arrow => '箭头',
+    Arrowhead.bar => '竖线',
+    Arrowhead.dot => '圆点',
+    Arrowhead.triangle => '实心三角',
+    Arrowhead.triangleOutline => '空心三角',
+    Arrowhead.circle => '实心圆',
+    Arrowhead.circleOutline => '空心圆',
+    Arrowhead.diamond => '实心菱形',
+    Arrowhead.diamondOutline => '空心菱形',
+    Arrowhead.crowfootOne => '一端鸦脚',
+    Arrowhead.crowfootMany => '多端鸦脚',
+    Arrowhead.crowfootOneOrMany => '一或多鸦脚',
+  };
 }
 
 /// Auto-opens the font picker when [controller.pendingColorPicker] is [ColorPickerTarget.font].

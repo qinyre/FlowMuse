@@ -23,12 +23,12 @@ class ThemeButtons extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          Text('Theme', style: TextStyle(color: cs.onSurface)),
+          Text('主题', style: TextStyle(color: cs.onSurface)),
           const Spacer(),
           _themeButton(
             context: context,
             icon: Icons.light_mode,
-            tooltip: 'Light',
+            tooltip: '浅色',
             isActive: current == ThemeMode.light,
             onTap: () => _setTheme(context, ThemeMode.light),
             cs: cs,
@@ -37,7 +37,7 @@ class ThemeButtons extends StatelessWidget {
           _themeButton(
             context: context,
             icon: Icons.dark_mode,
-            tooltip: 'Dark',
+            tooltip: '深色',
             isActive: current == ThemeMode.dark,
             onTap: () => _setTheme(context, ThemeMode.dark),
             cs: cs,
@@ -46,7 +46,7 @@ class ThemeButtons extends StatelessWidget {
           _themeButton(
             context: context,
             icon: Icons.brightness_auto,
-            tooltip: 'System',
+            tooltip: '跟随系统',
             isActive: current == ThemeMode.system,
             onTap: () => _setTheme(context, ThemeMode.system),
             cs: cs,

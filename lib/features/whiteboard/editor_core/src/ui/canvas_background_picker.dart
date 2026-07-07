@@ -27,7 +27,7 @@ class CanvasBackgroundPicker extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
-          Text('Background', style: TextStyle(color: cs.onSurface)),
+          Text('背景', style: TextStyle(color: cs.onSurface)),
           const Spacer(),
           for (final c in bgPresets)
             Padding(

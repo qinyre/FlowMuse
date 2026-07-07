@@ -47,7 +47,7 @@ class CompactMenuButton extends StatelessWidget {
       ),
       child: IconButton(
         icon: const Icon(Icons.menu, size: 24),
-        tooltip: 'Menu',
+        tooltip: '菜单',
         constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         onPressed: () => _showCompactMenu(context),
       ),
@@ -62,46 +62,46 @@ class CompactMenuButton extends StatelessWidget {
           shrinkWrap: true,
           children: [
             if (onOpen != null)
-              _compactMenuItem(Icons.folder_open, 'Open', () {
+              _compactMenuItem(Icons.folder_open, '打开', () {
                 Navigator.pop(ctx);
                 onOpen!();
               }),
             if (onSave != null)
-              _compactMenuItem(Icons.save, 'Save', () {
+              _compactMenuItem(Icons.save, '保存', () {
                 Navigator.pop(ctx);
                 onSave!();
               }),
             if (onSaveAs != null)
-              _compactMenuItem(Icons.save_as, 'Save As', () {
+              _compactMenuItem(Icons.save_as, '另存为', () {
                 Navigator.pop(ctx);
                 onSaveAs!();
               }),
             if (onOpen != null || onSave != null || onSaveAs != null)
               const Divider(),
             if (onExportPng != null)
-              _compactMenuItem(Icons.image, 'Export PNG', () {
+              _compactMenuItem(Icons.image, '导出 PNG', () {
                 Navigator.pop(ctx);
                 onExportPng!();
               }),
             if (onExportSvg != null)
-              _compactMenuItem(Icons.code, 'Export SVG', () {
+              _compactMenuItem(Icons.code, '导出 SVG', () {
                 Navigator.pop(ctx);
                 onExportSvg!();
               }),
             if (onExportPng != null || onExportSvg != null) const Divider(),
             if (onImportImage != null)
-              _compactMenuItem(Icons.add_photo_alternate, 'Import Image', () {
+              _compactMenuItem(Icons.add_photo_alternate, '导入图片', () {
                 Navigator.pop(ctx);
                 onImportImage!();
               }),
             if (onShowLibrary != null)
-              _compactMenuItem(Icons.library_books, 'Library', () {
+              _compactMenuItem(Icons.library_books, '素材库', () {
                 Navigator.pop(ctx);
                 onShowLibrary!();
               }),
             _compactMenuItem(
               controller.gridSize != null ? Icons.grid_on : Icons.grid_off,
-              'Grid ${controller.gridSize != null ? "On" : "Off"}',
+              '网格${controller.gridSize != null ? "开启" : "关闭"}',
               () {
                 Navigator.pop(ctx);
                 controller.toggleGrid();
@@ -123,12 +123,12 @@ class CompactMenuButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          Text('Theme', style: TextStyle(fontSize: 16, color: cs.onSurface)),
+          Text('主题', style: TextStyle(fontSize: 16, color: cs.onSurface)),
           const Spacer(),
           _themeButton(
             ctx,
             Icons.light_mode,
-            'Light',
+            '浅色',
             current == ThemeMode.light,
             ThemeMode.light,
             cs,
@@ -137,7 +137,7 @@ class CompactMenuButton extends StatelessWidget {
           _themeButton(
             ctx,
             Icons.dark_mode,
-            'Dark',
+            '深色',
             current == ThemeMode.dark,
             ThemeMode.dark,
             cs,
@@ -146,7 +146,7 @@ class CompactMenuButton extends StatelessWidget {
           _themeButton(
             ctx,
             Icons.brightness_auto,
-            'System',
+            '跟随系统',
             current == ThemeMode.system,
             ThemeMode.system,
             cs,
@@ -195,10 +195,7 @@ class CompactMenuButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          Text(
-            'Background',
-            style: TextStyle(fontSize: 16, color: cs.onSurface),
-          ),
+          Text('背景', style: TextStyle(fontSize: 16, color: cs.onSurface)),
           const Spacer(),
           for (final c in canvasBackgroundPresets)
             Padding(

@@ -50,7 +50,7 @@ class DesktopToolbar extends StatelessWidget {
             _toolbarButton(
               cs: cs,
               icon: controller.toolLocked ? Icons.lock : Icons.lock_open,
-              tooltip: 'Keep tool active (Q)',
+              tooltip: '保持工具激活 (Q)',
               onPressed: controller.toggleToolLocked,
               isActive: controller.toolLocked,
             ),
@@ -82,7 +82,7 @@ class DesktopToolbar extends StatelessWidget {
                         ),
                       ],
                     ),
-                    tooltip: 'Import Image (9)',
+                    tooltip: '导入图片 (9)',
                     onPressed: onImportImage!,
                   ),
                 _toolbarButton(
@@ -115,7 +115,8 @@ class DesktopToolbar extends StatelessWidget {
                         ),
                     ],
                   ),
-                  tooltip: '${type.name} (${shortcutForToolType(type)})',
+                  tooltip:
+                      '${labelForToolType(type)} (${shortcutForToolType(type)})',
                   onPressed: () => controller.switchTool(type),
                   isActive: activeType == type,
                 ),
@@ -125,7 +126,7 @@ class DesktopToolbar extends StatelessWidget {
               _toolbarButton(
                 cs: cs,
                 icon: Symbols.markdown,
-                tooltip: 'Markdown panel',
+                tooltip: 'Markdown 面板',
                 onPressed: controller.toggleMarkdownPanel,
                 isActive: controller.showMarkdownPanel,
               ),

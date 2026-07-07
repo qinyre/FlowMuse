@@ -39,7 +39,7 @@ class ZoomControls extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.undo, size: 16),
             onPressed: controller.undo,
-            tooltip: 'Undo (Ctrl+Z)',
+            tooltip: '撤销 (Ctrl+Z)',
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             iconSize: 16,
             padding: EdgeInsets.zero,
@@ -47,7 +47,7 @@ class ZoomControls extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.redo, size: 16),
             onPressed: controller.redo,
-            tooltip: 'Redo (Ctrl+Shift+Z)',
+            tooltip: '重做 (Ctrl+Shift+Z)',
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             iconSize: 16,
             padding: EdgeInsets.zero,
@@ -66,13 +66,13 @@ class ZoomControls extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.remove, size: 16),
             onPressed: () => controller.zoomOut(getCanvasSize()),
-            tooltip: 'Zoom out (Ctrl+\u2212)',
+            tooltip: '缩小 (Ctrl+\u2212)',
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             iconSize: 16,
             padding: EdgeInsets.zero,
           ),
           Semantics(
-            label: 'Zoom $zoomPercent%, tap to reset',
+            label: '缩放 $zoomPercent%，点击重置',
             button: true,
             child: InkWell(
               onTap: () => controller.resetZoom(),
@@ -89,7 +89,7 @@ class ZoomControls extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.add, size: 16),
             onPressed: () => controller.zoomIn(getCanvasSize()),
-            tooltip: 'Zoom in (Ctrl++)',
+            tooltip: '放大 (Ctrl++)',
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             iconSize: 16,
             padding: EdgeInsets.zero,

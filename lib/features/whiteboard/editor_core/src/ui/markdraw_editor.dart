@@ -2,7 +2,8 @@ library;
 
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' hide TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    hide TextAlign;
 
 /// A full-featured drawing editor widget.
 ///
@@ -229,7 +230,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                           ? Colors.black
                           : Colors.white;
                       return Text(
-                        _controller.documentName ?? 'Untitled',
+                        _controller.documentName ?? '未命名',
                         style: TextStyle(
                           fontSize: 16,
                           color: _controller.documentName != null
@@ -332,7 +333,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
             right: 12,
             child: _modePill(
               context,
-              label: 'Exit view mode',
+              label: '退出查看模式',
               onTap: _controller.toggleViewMode,
             ),
           ),
@@ -343,7 +344,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
             right: 12,
             child: _modePill(
               context,
-              label: 'Exit zen mode',
+              label: '退出专注模式',
               onTap: _controller.toggleZenMode,
             ),
           ),

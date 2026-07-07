@@ -96,7 +96,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
     final cs = Theme.of(context).colorScheme;
 
     if (widget.controller.linkToElementMode) {
-      return _buildStatusMessage(cs, 'Click an element to link to');
+      return _buildStatusMessage(cs, '点击一个元素以建立链接');
     }
 
     return KeyboardListener(
@@ -164,7 +164,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
             child: IconButton(
               padding: EdgeInsets.zero,
               iconSize: 16,
-              tooltip: 'Cancel (Esc)',
+              tooltip: '取消 (Esc)',
               onPressed: _cancel,
               icon: Icon(Icons.close, color: cs.onPrimaryContainer),
             ),
@@ -180,7 +180,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
     final displayLink = link ?? '';
     final isElementLink = displayLink.startsWith('#');
     final displayText = isElementLink
-        ? 'Element: ${displayLink.substring(1)}'
+        ? '元素：${displayLink.substring(1)}'
         : (displayLink.length > 30
               ? '${displayLink.substring(0, 30)}...'
               : displayLink);
@@ -218,7 +218,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
           child: IconButton(
             padding: EdgeInsets.zero,
             iconSize: 16,
-            tooltip: 'Edit link',
+            tooltip: '编辑链接',
             onPressed: () {
               widget.controller.openLinkEditor();
             },
@@ -231,7 +231,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
           child: IconButton(
             padding: EdgeInsets.zero,
             iconSize: 16,
-            tooltip: 'Remove link',
+            tooltip: '移除链接',
             onPressed: _remove,
             icon: const Icon(Icons.link_off),
           ),
@@ -242,7 +242,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
           child: IconButton(
             padding: EdgeInsets.zero,
             iconSize: 16,
-            tooltip: 'Close',
+            tooltip: '关闭',
             onPressed: _cancel,
             icon: const Icon(Icons.close),
           ),
@@ -262,8 +262,8 @@ class _LinkOverlayState extends State<LinkOverlay> {
             focusNode: _focusNode,
             style: const TextStyle(fontSize: 14),
             decoration: InputDecoration(
-              labelText: 'Link URL',
-              hintText: 'https://... or #elementId',
+              labelText: '链接地址',
+              hintText: 'https://... 或 #元素ID',
               hintStyle: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 8,
@@ -288,10 +288,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
                   widget.controller.enterLinkToElementMode();
                 },
                 icon: const Icon(Icons.touch_app, size: 14),
-                label: const Text(
-                  'Link to element',
-                  style: TextStyle(fontSize: 12),
-                ),
+                label: const Text('链接到元素', style: TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   minimumSize: Size.zero,
@@ -308,7 +305,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
                 child: IconButton(
                   padding: EdgeInsets.zero,
                   iconSize: 16,
-                  tooltip: 'Remove link',
+                  tooltip: '移除链接',
                   onPressed: _remove,
                   icon: const Icon(Icons.link_off),
                 ),
@@ -322,7 +319,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   minimumSize: Size.zero,
                 ),
-                child: const Text('Save', style: TextStyle(fontSize: 12)),
+                child: const Text('保存', style: TextStyle(fontSize: 12)),
               ),
             ),
           ],

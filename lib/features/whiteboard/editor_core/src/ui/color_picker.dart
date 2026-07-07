@@ -474,7 +474,7 @@ class _ColorPaletteOverlayState extends State<ColorPaletteOverlay> {
             child: TextField(
               controller: _hexController,
               decoration: InputDecoration(
-                labelText: 'Hex color',
+                labelText: '十六进制颜色',
                 hintText: '#rrggbb',
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
