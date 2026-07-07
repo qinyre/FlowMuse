@@ -91,8 +91,8 @@ class CollaborationRepository {
     );
     final nextScene = localScene.copyWith(
       elements: reconciled,
-      appState: {...storedScene.appState, ...localScene.appState},
-      files: {...storedScene.files, ...localScene.files},
+      appState: localScene.appState,
+      files: localScene.files,
     );
     _latestScene = nextScene;
     _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(

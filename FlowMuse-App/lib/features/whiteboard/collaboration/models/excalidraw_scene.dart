@@ -18,8 +18,7 @@ class ExcalidrawScene {
   }
 
   factory ExcalidrawScene.fromContent(String content) {
-    final decoded = jsonDecode(content) as Map<String, Object?>;
-    return ExcalidrawScene.fromJson(decoded);
+    return ExcalidrawScene.fromCollaborationPayload(jsonDecode(content));
   }
 
   factory ExcalidrawScene.fromJson(Map<String, Object?> json) {
@@ -39,6 +38,23 @@ class ExcalidrawScene {
       appState: rawAppState is Map ? _deepMap(rawAppState) : const {},
       files: rawFiles is Map ? _deepMap(rawFiles) : const {},
     );
+  }
+
+  factory ExcalidrawScene.fromCollaborationPayload(Object? payload) {
+    if (payload is List) {
+      return ExcalidrawScene(
+        elements: [
+          for (final element in payload)
+            Map<String, Object?>.from(element as Map),
+        ],
+        appState: const {},
+        files: const {},
+      );
+    }
+    if (payload is Map) {
+      return ExcalidrawScene.fromJson(Map<String, Object?>.from(payload));
+    }
+    throw const FormatException('Invalid Excalidraw collaboration payload');
   }
 
   final String type;
@@ -77,6 +93,12 @@ class ExcalidrawScene {
   }
 
   String toContent() => jsonEncode(toJson());
+
+  List<Map<String, Object?>> toCollaborationPayload() {
+    return [for (final element in elements) _deepMap(element)];
+  }
+
+  String toCollaborationContent() => jsonEncode(toCollaborationPayload());
 }
 
 Map<String, Object?> _deepMap(Map source) {

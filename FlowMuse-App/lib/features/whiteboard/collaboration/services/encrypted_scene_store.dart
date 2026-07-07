@@ -30,7 +30,9 @@ class MemoryEncryptedSceneStore implements EncryptedSceneStore {
     required CollaborationRoom room,
     required ExcalidrawScene scene,
   }) async {
-    _scenes[room.roomId] = ExcalidrawScene.fromJson(scene.toJson());
+    _scenes[room.roomId] = ExcalidrawScene.fromCollaborationPayload(
+      scene.toCollaborationPayload(),
+    );
   }
 }
 
@@ -69,12 +71,8 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       roomKey: room.roomKey,
       encryptedPayload: payload,
     );
-    final decoded = jsonDecode(utf8.decode(bytes));
-    if (decoded is Map<String, Object?> && decoded['type'] == 'excalidraw') {
-      return ExcalidrawScene.fromJson(decoded);
-    }
-    throw const FormatException(
-      'Encrypted room scene is not an Excalidraw scene',
+    return ExcalidrawScene.fromCollaborationPayload(
+      jsonDecode(utf8.decode(bytes)),
     );
   }
 
@@ -85,7 +83,7 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   }) async {
     final payload = await _crypto.encrypt(
       roomKey: room.roomKey,
-      plainBytes: utf8.encode(scene.toContent()),
+      plainBytes: utf8.encode(scene.toCollaborationContent()),
     );
     final response = await _client.put(
       _roomSceneUri(room.roomId),
