@@ -11,7 +11,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'color_picker.dart' as cp;
 
 /// Shared property panel content used by both desktop and compact panels.
-class PropertyPanelContent extends StatelessWidget {
+class PropertyPanelContent extends StatefulWidget {
   final MarkdrawController controller;
   final ElementStyle style;
   final List<Element> elements;
@@ -32,6 +32,28 @@ class PropertyPanelContent extends StatelessWidget {
     this.textOnly = false,
     this.canvasSize,
   });
+
+  @override
+  State<PropertyPanelContent> createState() => _PropertyPanelContentState();
+}
+
+class _PropertyPanelContentState extends State<PropertyPanelContent> {
+  OverlayEntry? _fontPickerEntry;
+
+  MarkdrawController get controller => widget.controller;
+  ElementStyle get style => widget.style;
+  List<Element> get elements => widget.elements;
+  bool get isLocked => widget.isLocked;
+  bool get showFullTextProps => widget.showFullTextProps;
+  bool get isEditingText => widget.isEditingText;
+  bool get textOnly => widget.textOnly;
+  Size? get canvasSize => widget.canvasSize;
+
+  @override
+  void dispose() {
+    _removeFontPickerOverlay(restoreFocus: false);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1025,6 +1047,9 @@ class PropertyPanelContent extends StatelessWidget {
   }
 
   void _showFontPickerOverlay(BuildContext context, String? current) {
+    if (_fontPickerEntry != null) {
+      return;
+    }
     final renderBox = context.findRenderObject() as RenderBox;
     final offset = renderBox.localToGlobal(Offset.zero);
     final overlay = Overlay.of(context);
@@ -1035,28 +1060,34 @@ class PropertyPanelContent extends StatelessWidget {
 
     controller.fontPickerOpen = true;
 
-    late OverlayEntry entry;
-    entry = OverlayEntry(
+    _fontPickerEntry = OverlayEntry(
       builder: (ctx) => FontPickerOverlay(
         anchor: offset,
         currentFont: current ?? FontResolver.defaultFontFamily,
         sceneFonts: controller.getSceneFontFamilies(),
         onSelect: (font) {
-          entry.remove();
-          controller.fontPickerOpen = false;
+          _removeFontPickerOverlay();
           controller.applyStyleChange(
             ElementStyle(hasText: true, fontFamily: font),
           );
           controller.restoreTextFocus(wasEditing, savedSelection);
         },
         onDismiss: () {
-          entry.remove();
-          controller.fontPickerOpen = false;
+          _removeFontPickerOverlay();
           controller.restoreTextFocus(wasEditing, savedSelection);
         },
       ),
     );
-    overlay.insert(entry);
+    overlay.insert(_fontPickerEntry!);
+  }
+
+  void _removeFontPickerOverlay({bool restoreFocus = true}) {
+    _fontPickerEntry?.remove();
+    _fontPickerEntry = null;
+    controller.fontPickerOpen = false;
+    if (!restoreFocus) {
+      controller.suppressFocusCommit = false;
+    }
   }
 
   void _showCompactFontPicker(BuildContext context, String? current) {
