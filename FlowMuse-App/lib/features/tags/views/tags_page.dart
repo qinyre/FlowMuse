@@ -578,36 +578,42 @@ class _TagHeader extends StatelessWidget {
         ),
         if (onViewModeChanged != null) ...[
           const SizedBox(width: AppSpacing.controlGap),
-          MenuAnchor(
-            builder: (context, controller, child) {
-              return IconButton(
-                tooltip: viewMode == LibraryViewMode.grid ? '网格视图' : '列表视图',
-                onPressed: () {
-                  controller.isOpen ? controller.close() : controller.open();
-                },
-                icon: Icon(
-                  viewMode == LibraryViewMode.grid
-                      ? LucideIcons.layoutGrid
-                      : LucideIcons.list,
-                ),
-              );
-            },
-            menuChildren: [
-              MenuItemButton(
-                leadingIcon: const Icon(LucideIcons.layoutGrid),
-                onPressed: () => runAfterUiFrame(
-                  () => onViewModeChanged!(LibraryViewMode.grid),
-                ),
-                child: const Text('网格视图'),
+          Builder(
+            builder: (context) => IconButton(
+              tooltip: viewMode == LibraryViewMode.grid ? '网格视图' : '列表视图',
+              onPressed: () async {
+                final selected = await showAnchoredPopupMenu<LibraryViewMode>(
+                  context: context,
+                  items: const [
+                    PopupMenuItem<LibraryViewMode>(
+                      value: LibraryViewMode.grid,
+                      child: ListTile(
+                        leading: Icon(LucideIcons.layoutGrid),
+                        title: Text('网格视图'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    PopupMenuItem<LibraryViewMode>(
+                      value: LibraryViewMode.list,
+                      child: ListTile(
+                        leading: Icon(LucideIcons.list),
+                        title: Text('列表视图'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ],
+                );
+                if (selected == null || !context.mounted) {
+                  return;
+                }
+                runAfterUiFrame(() => onViewModeChanged!(selected));
+              },
+              icon: Icon(
+                viewMode == LibraryViewMode.grid
+                    ? LucideIcons.layoutGrid
+                    : LucideIcons.list,
               ),
-              MenuItemButton(
-                leadingIcon: const Icon(LucideIcons.list),
-                onPressed: () => runAfterUiFrame(
-                  () => onViewModeChanged!(LibraryViewMode.list),
-                ),
-                child: const Text('列表视图'),
-              ),
-            ],
+            ),
           ),
         ],
         if (onSortDirectionChanged != null) ...[
@@ -681,30 +687,48 @@ class _CollectionActions extends StatelessWidget {
         size: 18,
       );
     }
-    return MenuAnchor(
-      menuChildren: [
-        MenuItemButton(
-          leadingIcon: const Icon(LucideIcons.penLine),
-          onPressed: () => runAfterUiFrame(onRename!),
-          child: const Text('重命名'),
-        ),
-        MenuItemButton(
-          leadingIcon: const Icon(LucideIcons.trash2),
-          onPressed: () => runAfterUiFrame(onDelete!),
-          child: const Text('删除'),
-        ),
-      ],
-      builder: (context, controller, child) {
-        return IconButton(
-          tooltip: '更多操作',
-          icon: const Icon(LucideIcons.chevronDown, size: 18),
-          onPressed: () =>
-              controller.isOpen ? controller.close() : controller.open(),
-        );
-      },
+    return Builder(
+      builder: (context) => IconButton(
+        tooltip: '更多操作',
+        icon: const Icon(LucideIcons.chevronDown, size: 18),
+        onPressed: () async {
+          final selected = await showAnchoredPopupMenu<_CollectionAction>(
+            context: context,
+            items: const [
+              PopupMenuItem<_CollectionAction>(
+                value: _CollectionAction.rename,
+                child: ListTile(
+                  leading: Icon(LucideIcons.penLine),
+                  title: Text('重命名'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem<_CollectionAction>(
+                value: _CollectionAction.delete,
+                child: ListTile(
+                  leading: Icon(LucideIcons.trash2),
+                  title: Text('删除'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          );
+          if (selected == null || !context.mounted) {
+            return;
+          }
+          switch (selected) {
+            case _CollectionAction.rename:
+              runAfterUiFrame(onRename!);
+            case _CollectionAction.delete:
+              runAfterUiFrame(onDelete!);
+          }
+        },
+      ),
     );
   }
 }
+
+enum _CollectionAction { rename, delete }
 
 class _CoverSubtitle extends StatelessWidget {
   const _CoverSubtitle({required this.text});

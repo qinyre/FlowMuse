@@ -701,7 +701,6 @@ class _CollaborationChip extends StatefulWidget {
 class _CollaborationChipState extends State<_CollaborationChip> {
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final label =
         widget.statusLabel ??
         (widget.connecting
@@ -713,124 +712,173 @@ class _CollaborationChipState extends State<_CollaborationChip> {
                   ? '协作中 ${widget.collaboratorCount}'
                   : '协作中')
             : '创建房间');
-    return MenuAnchor(
-      menuChildren: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Text(
-            widget.connecting
+    return FilledButton.icon(
+      onPressed: () => _showCollaborationMenu(context, label),
+      icon: Icon(
+        widget.collaborating ? Icons.sensors : Icons.add_link,
+        size: 18,
+      ),
+      label: widget.compact ? const SizedBox.shrink() : Text(label),
+      style: FilledButton.styleFrom(
+        minimumSize: widget.compact ? const Size(44, 44) : const Size(0, 44),
+        padding: widget.compact
+            ? EdgeInsets.zero
+            : const EdgeInsets.symmetric(horizontal: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  Future<void> _showCollaborationMenu(
+    BuildContext anchorContext,
+    String label,
+  ) async {
+    final selected = await showAnchoredPopupMenu<_CollaborationAction>(
+      context: anchorContext,
+      items: [
+        PopupMenuItem<_CollaborationAction>(
+          enabled: false,
+          child: _CollaborationMenuHeader(
+            title: widget.connecting
                 ? label
                 : widget.error != null
                 ? '协作失败'
                 : widget.collaborating
                 ? label
                 : '本地白板',
-            style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700),
+            error: widget.error,
+            roomText: widget.roomLink ?? widget.roomValue,
+            shareOriginConfigured: widget.shareOriginConfigured,
+            usesRoomCode: widget.roomLink == null,
           ),
         ),
-        if (widget.error != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280),
-              child: Text(
-                widget.error!,
-                style: TextStyle(color: cs.error, fontSize: 12, height: 1.25),
-              ),
+        if (widget.roomLink != null || widget.roomValue != null)
+          PopupMenuItem<_CollaborationAction>(
+            value: _CollaborationAction.copy,
+            child: ListTile(
+              leading: const Icon(Icons.copy),
+              title: Text(widget.roomLink == null ? '复制房间码' : '复制链接'),
+              contentPadding: EdgeInsets.zero,
             ),
           ),
-        if (widget.roomLink != null || widget.roomValue != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (!widget.shareOriginConfigured && widget.roomValue != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Text(
-                        '分享地址未配置，请复制房间码加入',
-                        style: TextStyle(
-                          color: cs.error,
-                          fontSize: 12,
-                          height: 1.25,
-                        ),
-                      ),
-                    ),
-                  SelectableText(
-                    widget.roomLink ?? widget.roomValue!,
-                    maxLines: 3,
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 12,
-                      height: 1.25,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        PopupMenuItem<_CollaborationAction>(
+          enabled: !widget.connecting,
+          value: widget.collaborating
+              ? _CollaborationAction.leave
+              : _CollaborationAction.start,
+          child: ListTile(
+            leading: Icon(widget.collaborating ? Icons.logout : Icons.link),
+            title: Text(widget.collaborating ? '退出房间' : '创建房间'),
+            contentPadding: EdgeInsets.zero,
           ),
-        if (widget.roomLink != null || widget.roomValue != null)
-          MenuItemButton(
-            leadingIcon: const Icon(Icons.copy),
-            onPressed: () async {
-              await Clipboard.setData(
-                ClipboardData(text: widget.roomLink ?? widget.roomValue!),
-              );
-              if (!context.mounted) {
-                return;
-              }
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(widget.roomLink == null ? '房间码已复制' : '房间链接已复制'),
-                ),
-              );
-            },
-            child: Text(widget.roomLink == null ? '复制房间码' : '复制链接'),
-          ),
-        MenuItemButton(
-          leadingIcon: Icon(widget.collaborating ? Icons.logout : Icons.link),
-          onPressed: widget.connecting
-              ? null
-              : widget.collaborating
-              ? () => runAfterUiFrame(widget.onLeave)
-              : () => runAfterUiFrame(widget.onStart),
-          child: Text(widget.collaborating ? '退出房间' : '创建房间'),
         ),
         if (widget.collaborating && widget.isOwner && widget.onEnd != null)
-          MenuItemButton(
-            leadingIcon: Icon(Icons.stop_circle, color: cs.error),
-            onPressed: widget.connecting
-                ? null
-                : () => runAfterUiFrame(widget.onEnd!),
-            child: Text('结束协作', style: TextStyle(color: cs.error)),
-          ),
-      ],
-      builder: (context, controller, child) {
-        return FilledButton.icon(
-          onPressed: () {
-            controller.isOpen ? controller.close() : controller.open();
-          },
-          icon: Icon(
-            widget.collaborating ? Icons.sensors : Icons.add_link,
-            size: 18,
-          ),
-          label: widget.compact ? const SizedBox.shrink() : Text(label),
-          style: FilledButton.styleFrom(
-            minimumSize: widget.compact
-                ? const Size(44, 44)
-                : const Size(0, 44),
-            padding: widget.compact
-                ? EdgeInsets.zero
-                : const EdgeInsets.symmetric(horizontal: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+          PopupMenuItem<_CollaborationAction>(
+            enabled: !widget.connecting,
+            value: _CollaborationAction.end,
+            child: ListTile(
+              leading: Icon(
+                Icons.stop_circle,
+                color: Theme.of(anchorContext).colorScheme.error,
+              ),
+              title: Text(
+                '结束协作',
+                style: TextStyle(
+                  color: Theme.of(anchorContext).colorScheme.error,
+                ),
+              ),
+              contentPadding: EdgeInsets.zero,
             ),
           ),
+      ],
+    );
+    if (selected == null || !anchorContext.mounted) {
+      return;
+    }
+    switch (selected) {
+      case _CollaborationAction.copy:
+        await Clipboard.setData(
+          ClipboardData(text: widget.roomLink ?? widget.roomValue!),
         );
-      },
+        if (!anchorContext.mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(anchorContext).showSnackBar(
+          SnackBar(
+            content: Text(widget.roomLink == null ? '房间码已复制' : '房间链接已复制'),
+          ),
+        );
+      case _CollaborationAction.start:
+        runAfterUiFrame(widget.onStart);
+      case _CollaborationAction.leave:
+        runAfterUiFrame(widget.onLeave);
+      case _CollaborationAction.end:
+        final onEnd = widget.onEnd;
+        if (onEnd != null) {
+          runAfterUiFrame(onEnd);
+        }
+    }
+  }
+}
+
+enum _CollaborationAction { copy, start, leave, end }
+
+class _CollaborationMenuHeader extends StatelessWidget {
+  const _CollaborationMenuHeader({
+    required this.title,
+    required this.error,
+    required this.roomText,
+    required this.shareOriginConfigured,
+    required this.usesRoomCode,
+  });
+
+  final String title;
+  final String? error;
+  final String? roomText;
+  final bool shareOriginConfigured;
+  final bool usesRoomCode;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700),
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              error!,
+              style: TextStyle(color: cs.error, fontSize: 12, height: 1.25),
+            ),
+          ],
+          if (roomText != null) ...[
+            if (!shareOriginConfigured && usesRoomCode) ...[
+              const SizedBox(height: 8),
+              Text(
+                '分享地址未配置，请复制房间码加入',
+                style: TextStyle(color: cs.error, fontSize: 12, height: 1.25),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              roomText!,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: cs.onSurfaceVariant,
+                fontSize: 12,
+                height: 1.25,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

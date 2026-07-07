@@ -496,36 +496,42 @@ class _LibraryHeader extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        MenuAnchor(
-          builder: (context, controller, child) {
-            return IconButton(
-              tooltip: viewMode == LibraryViewMode.grid ? '网格视图' : '列表视图',
-              onPressed: () {
-                controller.isOpen ? controller.close() : controller.open();
-              },
-              icon: Icon(
-                viewMode == LibraryViewMode.grid
-                    ? LucideIcons.layoutGrid
-                    : LucideIcons.list,
-              ),
-            );
-          },
-          menuChildren: [
-            MenuItemButton(
-              leadingIcon: const Icon(LucideIcons.layoutGrid),
-              onPressed: () => runAfterUiFrame(
-                () => onViewModeChanged(LibraryViewMode.grid),
-              ),
-              child: const Text('网格视图'),
+        Builder(
+          builder: (context) => IconButton(
+            tooltip: viewMode == LibraryViewMode.grid ? '网格视图' : '列表视图',
+            onPressed: () async {
+              final selected = await showAnchoredPopupMenu<LibraryViewMode>(
+                context: context,
+                items: const [
+                  PopupMenuItem<LibraryViewMode>(
+                    value: LibraryViewMode.grid,
+                    child: ListTile(
+                      leading: Icon(LucideIcons.layoutGrid),
+                      title: Text('网格视图'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  PopupMenuItem<LibraryViewMode>(
+                    value: LibraryViewMode.list,
+                    child: ListTile(
+                      leading: Icon(LucideIcons.list),
+                      title: Text('列表视图'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              );
+              if (selected == null || !context.mounted) {
+                return;
+              }
+              runAfterUiFrame(() => onViewModeChanged(selected));
+            },
+            icon: Icon(
+              viewMode == LibraryViewMode.grid
+                  ? LucideIcons.layoutGrid
+                  : LucideIcons.list,
             ),
-            MenuItemButton(
-              leadingIcon: const Icon(LucideIcons.list),
-              onPressed: () => runAfterUiFrame(
-                () => onViewModeChanged(LibraryViewMode.list),
-              ),
-              child: const Text('列表视图'),
-            ),
-          ],
+          ),
         ),
         const SizedBox(width: AppSpacing.controlGap),
         IconButton(
@@ -704,24 +710,23 @@ class _NotebookMoveMenu extends StatelessWidget {
   final bool enabled;
   final LibraryIndex libraryIndex;
   final Future<void> Function(String? notebookId) onSelected;
+  static const _unfiledNotebookId = '__flow_muse_unfiled_notebook__';
 
   @override
   Widget build(BuildContext context) {
-    return _LibraryIndexMenu(
+    return _LibraryPopupMenuButton<String>(
       enabled: enabled,
-      libraryIndex: libraryIndex,
       label: '移动到',
-      builder: (index) => [
-        MenuItemButton(
-          onPressed: () => runAfterUiFrame(() => onSelected(null)),
-          child: const Text('未归入笔记本'),
+      items: [
+        const PopupMenuItem<String>(
+          value: _unfiledNotebookId,
+          child: Text('未归入笔记本'),
         ),
-        for (final notebook in index.notebooks)
-          MenuItemButton(
-            onPressed: () => runAfterUiFrame(() => onSelected(notebook.id)),
-            child: Text(notebook.name),
-          ),
+        for (final notebook in libraryIndex.notebooks)
+          PopupMenuItem<String>(value: notebook.id, child: Text(notebook.name)),
       ],
+      onSelected: (notebookId) =>
+          onSelected(notebookId == _unfiledNotebookId ? null : notebookId),
     );
   }
 }
@@ -739,50 +744,49 @@ class _TagAddMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _LibraryIndexMenu(
-      enabled: enabled,
-      libraryIndex: libraryIndex,
+    return _LibraryPopupMenuButton<String>(
+      enabled: enabled && libraryIndex.tags.isNotEmpty,
       label: '添加标签',
-      builder: (index) => [
-        for (final tag in index.tags)
-          MenuItemButton(
-            onPressed: () => runAfterUiFrame(() => onSelected([tag.id])),
-            child: Text(tag.name),
-          ),
+      items: [
+        for (final tag in libraryIndex.tags)
+          PopupMenuItem<String>(value: tag.id, child: Text(tag.name)),
       ],
+      onSelected: (tagId) => onSelected([tagId]),
     );
   }
 }
 
-class _LibraryIndexMenu extends StatelessWidget {
-  const _LibraryIndexMenu({
+class _LibraryPopupMenuButton<T extends Object> extends StatelessWidget {
+  const _LibraryPopupMenuButton({
     required this.enabled,
-    required this.libraryIndex,
     required this.label,
-    required this.builder,
+    required this.items,
+    required this.onSelected,
   });
 
   final bool enabled;
-  final LibraryIndex libraryIndex;
   final String label;
-  final List<Widget> Function(LibraryIndex index) builder;
+  final List<PopupMenuEntry<T>> items;
+  final Future<void> Function(T value) onSelected;
 
   @override
   Widget build(BuildContext context) {
-    final children = builder(libraryIndex);
-    return MenuAnchor(
-      menuChildren: children.isEmpty
-          ? [const MenuItemButton(child: Text('暂无可选项'))]
-          : children,
-      builder: (context, controller, child) {
-        return TextButton(
-          onPressed: !enabled
-              ? null
-              : () =>
-                    controller.isOpen ? controller.close() : controller.open(),
-          child: Text(label),
-        );
-      },
+    return Builder(
+      builder: (context) => TextButton(
+        onPressed: !enabled || items.isEmpty
+            ? null
+            : () async {
+                final selected = await showAnchoredPopupMenu<T>(
+                  context: context,
+                  items: items,
+                );
+                if (selected == null || !context.mounted) {
+                  return;
+                }
+                runAfterUiFrame(() => onSelected(selected));
+              },
+        child: Text(label),
+      ),
     );
   }
 }

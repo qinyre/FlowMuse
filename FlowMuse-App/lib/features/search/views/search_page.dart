@@ -167,13 +167,26 @@ class _ScopeMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MenuAnchor(
-      builder: (context, controller, child) {
+    return Builder(
+      builder: (context) {
         return ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 168),
           child: OutlinedButton(
-            onPressed: () {
-              controller.isOpen ? controller.close() : controller.open();
+            onPressed: () async {
+              final selected = await showAnchoredPopupMenu<_ScopeOption>(
+                context: context,
+                items: [
+                  for (final option in options)
+                    PopupMenuItem<_ScopeOption>(
+                      value: option,
+                      child: Text(option.label),
+                    ),
+                ],
+              );
+              if (selected == null || !context.mounted) {
+                return;
+              }
+              runAfterUiFrame(() => onSelected(selected.id));
             },
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -186,13 +199,6 @@ class _ScopeMenu extends StatelessWidget {
           ),
         );
       },
-      menuChildren: [
-        for (final option in options)
-          MenuItemButton(
-            onPressed: () => runAfterUiFrame(() => onSelected(option.id)),
-            child: Text(option.label),
-          ),
-      ],
     );
   }
 }
