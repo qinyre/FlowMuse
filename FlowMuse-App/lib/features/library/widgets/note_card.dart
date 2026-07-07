@@ -102,63 +102,57 @@ class NoteCover extends StatelessWidget {
       child: Stack(
         children: [
           Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.10),
-                border: Border(
-                  right: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: const SizedBox(width: 16),
-            ),
-          ),
-          Positioned(
-            right: 0,
-            top: 10,
-            bottom: 10,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.22),
-                borderRadius: const BorderRadius.horizontal(
-                  left: Radius.circular(3),
-                ),
-              ),
-              child: const SizedBox(width: 5),
-            ),
-          ),
-          Positioned(
-            left: 30,
+            left: 22,
             right: 18,
-            top: 58,
+            top: 62,
             child: Column(
               children: List.generate(
                 5,
                 (index) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.only(bottom: 9),
                   child: Divider(
                     height: 1,
                     thickness: 1,
-                    color: foreground.withValues(alpha: 0.10),
+                    color: foreground.withValues(
+                      alpha: index == 0 ? 0.16 : 0.10,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
+          Positioned(
+            left: 18,
+            right: 18,
+            top: 48,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: foreground.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(2),
+              ),
+              child: const SizedBox(height: 2),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: CustomPaint(
+              size: const Size(34, 34),
+              painter: _PageFoldPainter(
+                foreground: foreground,
+                background: item.coverColor,
+              ),
+            ),
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(30, 18, 18, 18),
+            padding: const EdgeInsets.fromLTRB(22, 18, 18, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Icon(
-                      isPdf ? LucideIcons.fileText : LucideIcons.bookOpen,
+                      LucideIcons.fileText,
                       color: foreground.withValues(alpha: 0.86),
                       size: 20,
                     ),
@@ -201,11 +195,9 @@ class NoteCover extends StatelessWidget {
                 Align(
                   alignment: Alignment.bottomRight,
                   child: Icon(
-                    item.kind == LibraryFilter.pdf
-                        ? LucideIcons.fileImage
-                        : LucideIcons.mountain,
+                    LucideIcons.fileText,
                     color: foreground.withValues(alpha: 0.24),
-                    size: 56,
+                    size: 54,
                   ),
                 ),
               ],
@@ -214,5 +206,40 @@ class NoteCover extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _PageFoldPainter extends CustomPainter {
+  const _PageFoldPainter({required this.foreground, required this.background});
+
+  final Color foreground;
+  final Color background;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final foldPaint = Paint()
+      ..color = Color.alphaBlend(
+        Colors.white.withValues(alpha: 0.30),
+        background,
+      );
+    final shadowPaint = Paint()
+      ..color = foreground.withValues(alpha: 0.10)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    final path = Path()
+      ..moveTo(size.width, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, 0)
+      ..close();
+
+    canvas.drawPath(path, foldPaint);
+    canvas.drawLine(Offset(0, 0), Offset(size.width, size.height), shadowPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PageFoldPainter oldDelegate) {
+    return foreground != oldDelegate.foreground ||
+        background != oldDelegate.background;
   }
 }
