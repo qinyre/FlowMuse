@@ -549,68 +549,64 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         unawaited(_stopCollaboration());
       },
       child: Scaffold(
-        key: ValueKey(widget.noteId),
         backgroundColor: const Color(0xFFFDFDFB),
         body: SafeArea(
-          child: KeyedSubtree(
-            key: const ValueKey('flowmuse-markdraw-editor'),
-            child: MarkdrawEditor(
-              controller: _markdrawController,
-              config: const MarkdrawEditorConfig(initialBackground: '#fdfdfb'),
-              saveStatusLabel: _saveStatusLabel(state.saveStatus),
-              collaborating: state.collaborating,
-              collaborationConnecting:
-                  state.collaborationStatus ==
-                  WhiteboardCollaborationStatus.connecting,
-              collaborationError: state.collaborationError,
-              collaborationStatusLabel: _collaborationStatusLabel(state),
-              roomLink: state.roomLink,
-              roomValue: state.roomValue,
-              shareOriginConfigured: state.shareOriginConfigured,
-              collaboratorCount: state.collaborators.length,
-              collaborators: _remoteCollaboratorOverlays(state),
-              onSave: () {
-                unawaited(_saveMarkdrawScene());
-              },
-              onSaveAs: () {
-                unawaited(_fileHandler.saveAs());
-              },
-              onOpen: widget.temporaryCollaboration
-                  ? null
-                  : () {
-                      unawaited(_openExternalSceneAsLocalNote());
-                    },
-              onExportPng: () {
-                unawaited(_fileHandler.exportPng());
-              },
-              onExportSvg: () {
-                unawaited(_fileHandler.exportSvg());
-              },
-              onImportImage: () {
-                unawaited(_fileHandler.importImage(context));
-              },
-              onImportLibrary: () {
-                unawaited(_fileHandler.importLibrary());
-              },
-              onExportLibrary: () {
-                unawaited(_fileHandler.exportLibrary());
-              },
-              onBack: widget.temporaryCollaboration
-                  ? () {
-                      unawaited(_stopCollaboration());
-                    }
-                  : () => context.pop(),
-              onStartCollaboration: _startCollaboration,
-              onStopCollaboration: _stopCollaboration,
-              onPointerPresence: _broadcastPointerPresence,
-              onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
-              onDocumentRenamed: () {
-                unawaited(_renameAndSaveDocument());
-              },
-              onSceneChanged: (_) {
-                unawaited(_saveMarkdrawScene());
-              },
-            ),
+          child: MarkdrawEditor(
+            controller: _markdrawController,
+            config: const MarkdrawEditorConfig(initialBackground: '#fdfdfb'),
+            saveStatusLabel: _saveStatusLabel(state.saveStatus),
+            collaborating: state.collaborating,
+            collaborationConnecting:
+                state.collaborationStatus ==
+                WhiteboardCollaborationStatus.connecting,
+            collaborationError: state.collaborationError,
+            collaborationStatusLabel: _collaborationStatusLabel(state),
+            roomLink: state.roomLink,
+            roomValue: state.roomValue,
+            shareOriginConfigured: state.shareOriginConfigured,
+            collaboratorCount: state.collaborators.length,
+            collaborators: _remoteCollaboratorOverlays(state),
+            onSave: () {
+              unawaited(_saveMarkdrawScene());
+            },
+            onSaveAs: () {
+              unawaited(_fileHandler.saveAs());
+            },
+            onOpen: widget.temporaryCollaboration
+                ? null
+                : () {
+                    unawaited(_openExternalSceneAsLocalNote());
+                  },
+            onExportPng: () {
+              unawaited(_fileHandler.exportPng());
+            },
+            onExportSvg: () {
+              unawaited(_fileHandler.exportSvg());
+            },
+            onImportImage: () {
+              unawaited(_fileHandler.importImage(context));
+            },
+            onImportLibrary: () {
+              unawaited(_fileHandler.importLibrary());
+            },
+            onExportLibrary: () {
+              unawaited(_fileHandler.exportLibrary());
+            },
+            onBack: widget.temporaryCollaboration
+                ? () {
+                    unawaited(_stopCollaboration());
+                  }
+                : () => context.pop(),
+            onStartCollaboration: _startCollaboration,
+            onStopCollaboration: _stopCollaboration,
+            onPointerPresence: _broadcastPointerPresence,
+            onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
+            onDocumentRenamed: () {
+              unawaited(_renameAndSaveDocument());
+            },
+            onSceneChanged: (_) {
+              unawaited(_saveMarkdrawScene());
+            },
           ),
         ),
       ),
