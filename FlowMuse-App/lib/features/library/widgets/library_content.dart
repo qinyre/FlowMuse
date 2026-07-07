@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
 import '../models/library_special_view.dart';
 import '../models/note_item.dart';
 import '../repositories/library_repository.dart';
@@ -512,12 +513,16 @@ class _LibraryHeader extends StatelessWidget {
           menuChildren: [
             MenuItemButton(
               leadingIcon: const Icon(LucideIcons.layoutGrid),
-              onPressed: () => onViewModeChanged(LibraryViewMode.grid),
+              onPressed: () => runAfterUiFrame(
+                () => onViewModeChanged(LibraryViewMode.grid),
+              ),
               child: const Text('网格视图'),
             ),
             MenuItemButton(
               leadingIcon: const Icon(LucideIcons.list),
-              onPressed: () => onViewModeChanged(LibraryViewMode.list),
+              onPressed: () => runAfterUiFrame(
+                () => onViewModeChanged(LibraryViewMode.list),
+              ),
               child: const Text('列表视图'),
             ),
           ],
@@ -708,12 +713,12 @@ class _NotebookMoveMenu extends StatelessWidget {
       label: '移动到',
       builder: (index) => [
         MenuItemButton(
-          onPressed: () => onSelected(null),
+          onPressed: () => runAfterUiFrame(() => onSelected(null)),
           child: const Text('未归入笔记本'),
         ),
         for (final notebook in index.notebooks)
           MenuItemButton(
-            onPressed: () => onSelected(notebook.id),
+            onPressed: () => runAfterUiFrame(() => onSelected(notebook.id)),
             child: Text(notebook.name),
           ),
       ],
@@ -741,7 +746,7 @@ class _TagAddMenu extends StatelessWidget {
       builder: (index) => [
         for (final tag in index.tags)
           MenuItemButton(
-            onPressed: () => onSelected([tag.id]),
+            onPressed: () => runAfterUiFrame(() => onSelected([tag.id])),
             child: Text(tag.name),
           ),
       ],

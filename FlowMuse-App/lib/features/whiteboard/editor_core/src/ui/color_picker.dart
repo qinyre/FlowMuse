@@ -109,6 +109,7 @@ class ColorPickerButton extends StatefulWidget {
 
 class _ColorPickerButtonState extends State<ColorPickerButton> {
   OverlayEntry? _overlayEntry;
+  bool _overlayInserted = false;
 
   @override
   void initState() {
@@ -169,7 +170,9 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
 
   void _showPalettePopup() {
     if (_overlayEntry != null) return;
-    final renderBox = context.findRenderObject() as RenderBox;
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) return;
+    final renderBox = renderObject;
     final offset = renderBox.localToGlobal(Offset.zero);
     final overlay = Overlay.of(context);
 
@@ -197,6 +200,10 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
     if (entry == null) {
       return;
     }
+    if (!_overlayInserted) {
+      return;
+    }
+    _overlayInserted = false;
     if (SchedulerBinding.instance.schedulerPhase ==
         SchedulerPhase.persistentCallbacks) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -213,11 +220,13 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
       SchedulerBinding.instance.addPostFrameCallback((_) {
         if (mounted && identical(_overlayEntry, entry)) {
           overlay.insert(entry);
+          _overlayInserted = true;
         }
       });
       return;
     }
     overlay.insert(entry);
+    _overlayInserted = true;
   }
 }
 

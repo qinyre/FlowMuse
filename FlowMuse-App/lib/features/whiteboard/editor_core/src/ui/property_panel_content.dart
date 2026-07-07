@@ -40,6 +40,7 @@ class PropertyPanelContent extends StatefulWidget {
 
 class _PropertyPanelContentState extends State<PropertyPanelContent> {
   OverlayEntry? _fontPickerEntry;
+  bool _fontPickerInserted = false;
 
   MarkdrawController get controller => widget.controller;
   ElementStyle get style => widget.style;
@@ -1052,7 +1053,11 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     if (_fontPickerEntry != null) {
       return;
     }
-    final renderBox = context.findRenderObject() as RenderBox;
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return;
+    }
+    final renderBox = renderObject;
     final offset = renderBox.localToGlobal(Offset.zero);
     final overlay = Overlay.of(context);
 
@@ -1093,6 +1098,10 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     if (entry == null) {
       return;
     }
+    if (!_fontPickerInserted) {
+      return;
+    }
+    _fontPickerInserted = false;
     if (SchedulerBinding.instance.schedulerPhase ==
         SchedulerPhase.persistentCallbacks) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -1109,11 +1118,13 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
       SchedulerBinding.instance.addPostFrameCallback((_) {
         if (mounted && identical(_fontPickerEntry, entry)) {
           overlay.insert(entry);
+          _fontPickerInserted = true;
         }
       });
       return;
     }
     overlay.insert(entry);
+    _fontPickerInserted = true;
   }
 
   void _showCompactFontPicker(BuildContext context, String? current) {

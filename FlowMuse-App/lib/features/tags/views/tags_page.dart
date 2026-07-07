@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
 import '../../library/widgets/create_note_card.dart';
@@ -594,12 +595,16 @@ class _TagHeader extends StatelessWidget {
             menuChildren: [
               MenuItemButton(
                 leadingIcon: const Icon(LucideIcons.layoutGrid),
-                onPressed: () => onViewModeChanged!(LibraryViewMode.grid),
+                onPressed: () => runAfterUiFrame(
+                  () => onViewModeChanged!(LibraryViewMode.grid),
+                ),
                 child: const Text('网格视图'),
               ),
               MenuItemButton(
                 leadingIcon: const Icon(LucideIcons.list),
-                onPressed: () => onViewModeChanged!(LibraryViewMode.list),
+                onPressed: () => runAfterUiFrame(
+                  () => onViewModeChanged!(LibraryViewMode.list),
+                ),
                 child: const Text('列表视图'),
               ),
             ],
@@ -680,12 +685,12 @@ class _CollectionActions extends StatelessWidget {
       menuChildren: [
         MenuItemButton(
           leadingIcon: const Icon(LucideIcons.penLine),
-          onPressed: onRename,
+          onPressed: () => runAfterUiFrame(onRename!),
           child: const Text('重命名'),
         ),
         MenuItemButton(
           leadingIcon: const Icon(LucideIcons.trash2),
-          onPressed: onDelete,
+          onPressed: () => runAfterUiFrame(onDelete!),
           child: const Text('删除'),
         ),
       ],

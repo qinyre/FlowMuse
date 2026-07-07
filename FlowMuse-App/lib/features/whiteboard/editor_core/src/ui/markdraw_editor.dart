@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 
@@ -794,14 +795,16 @@ class _CollaborationChipState extends State<_CollaborationChip> {
           onPressed: widget.connecting
               ? null
               : widget.collaborating
-              ? widget.onLeave
-              : widget.onStart,
+              ? () => runAfterUiFrame(widget.onLeave)
+              : () => runAfterUiFrame(widget.onStart),
           child: Text(widget.collaborating ? '退出房间' : '创建房间'),
         ),
         if (widget.collaborating && widget.isOwner && widget.onEnd != null)
           MenuItemButton(
             leadingIcon: Icon(Icons.stop_circle, color: cs.error),
-            onPressed: widget.connecting ? null : widget.onEnd,
+            onPressed: widget.connecting
+                ? null
+                : () => runAfterUiFrame(widget.onEnd!),
             child: Text('结束协作', style: TextStyle(color: cs.error)),
           ),
       ],

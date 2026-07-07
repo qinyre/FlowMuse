@@ -3,6 +3,7 @@ library;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../../markdraw.dart' hide TextAlign;
 
 /// Shows a dialog to rename the document.
@@ -38,8 +39,10 @@ void showRenameDocumentDialog(
   ).then((value) {
     textController.dispose();
     if (value != null) {
-      controller.renameDocument(value);
-      onRenamed?.call();
+      runAfterUiFrame(() {
+        controller.renameDocument(value);
+        onRenamed?.call();
+      });
     }
   });
 }
@@ -97,36 +100,38 @@ class HamburgerMenu extends StatelessWidget {
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
         onSelected: (value) {
-          switch (value) {
-            case 'open':
-              onOpen?.call();
-            case 'save':
-              onSave?.call();
-            case 'save_as':
-              onSaveAs?.call();
-            case 'rename':
-              _showRenameDialog(context);
-            case 'export_png':
-              onExportPng?.call();
-            case 'export_svg':
-              onExportSvg?.call();
-            case 'library':
-              controller.showLibraryPanel = !controller.showLibraryPanel;
-            case 'import_image':
-              onImportImage?.call();
-            case 'toggle_grid':
-              controller.toggleGrid();
-            case 'snap_to_objects':
-              controller.toggleObjectsSnapMode();
-            case 'frame_tool':
-              controller.switchTool(ToolType.frame);
-            case 'reset_canvas':
-              controller.resetCanvas();
-            case 'zen_mode':
-              controller.toggleZenMode();
-            case 'view_mode':
-              controller.toggleViewMode();
-          }
+          runAfterUiFrame(() {
+            switch (value) {
+              case 'open':
+                onOpen?.call();
+              case 'save':
+                onSave?.call();
+              case 'save_as':
+                onSaveAs?.call();
+              case 'rename':
+                _showRenameDialog(context);
+              case 'export_png':
+                onExportPng?.call();
+              case 'export_svg':
+                onExportSvg?.call();
+              case 'library':
+                controller.showLibraryPanel = !controller.showLibraryPanel;
+              case 'import_image':
+                onImportImage?.call();
+              case 'toggle_grid':
+                controller.toggleGrid();
+              case 'snap_to_objects':
+                controller.toggleObjectsSnapMode();
+              case 'frame_tool':
+                controller.switchTool(ToolType.frame);
+              case 'reset_canvas':
+                controller.resetCanvas();
+              case 'zen_mode':
+                controller.toggleZenMode();
+              case 'view_mode':
+                controller.toggleViewMode();
+            }
+          });
         },
         itemBuilder: (context) => [
           if (onOpen != null)

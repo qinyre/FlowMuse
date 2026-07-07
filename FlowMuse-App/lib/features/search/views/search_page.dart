@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
 import '../../library/widgets/note_card.dart';
@@ -188,7 +189,7 @@ class _ScopeMenu extends StatelessWidget {
       menuChildren: [
         for (final option in options)
           MenuItemButton(
-            onPressed: () => onSelected(option.id),
+            onPressed: () => runAfterUiFrame(() => onSelected(option.id)),
             child: Text(option.label),
           ),
       ],

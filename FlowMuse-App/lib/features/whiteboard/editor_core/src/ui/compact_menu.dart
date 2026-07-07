@@ -2,6 +2,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'color_picker.dart' as cp;
 import 'hamburger_menu.dart';
 import 'markdraw_controller.dart';
@@ -58,6 +59,11 @@ class CompactMenuButton extends StatelessWidget {
   }
 
   void _showCompactMenu(BuildContext context) {
+    void closeThen(VoidCallback action) {
+      Navigator.pop(context);
+      runAfterUiFrame(action);
+    }
+
     showModalBottomSheet<void>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -66,56 +72,49 @@ class CompactMenuButton extends StatelessWidget {
           children: [
             if (onOpen != null)
               _compactMenuItem(Icons.folder_open, '打开', () {
-                Navigator.pop(ctx);
-                onOpen!();
+                closeThen(onOpen!);
               }),
             if (onSave != null)
               _compactMenuItem(Icons.save, '保存', () {
-                Navigator.pop(ctx);
-                onSave!();
+                closeThen(onSave!);
               }),
             if (onSaveAs != null)
               _compactMenuItem(Icons.save_as, '另存为', () {
-                Navigator.pop(ctx);
-                onSaveAs!();
+                closeThen(onSaveAs!);
               }),
             if (onOpen != null || onSave != null || onSaveAs != null)
               const Divider(),
             _compactMenuItem(Icons.drive_file_rename_outline, '重命名', () {
-              Navigator.pop(ctx);
-              showRenameDocumentDialog(
-                context,
-                controller,
-                onDocumentRenamed,
+              closeThen(
+                () => showRenameDocumentDialog(
+                  context,
+                  controller,
+                  onDocumentRenamed,
+                ),
               );
             }),
             if (onExportPng != null)
               _compactMenuItem(Icons.image, '导出 PNG', () {
-                Navigator.pop(ctx);
-                onExportPng!();
+                closeThen(onExportPng!);
               }),
             if (onExportSvg != null)
               _compactMenuItem(Icons.code, '导出 SVG', () {
-                Navigator.pop(ctx);
-                onExportSvg!();
+                closeThen(onExportSvg!);
               }),
             if (onExportPng != null || onExportSvg != null) const Divider(),
             if (onImportImage != null)
               _compactMenuItem(Icons.add_photo_alternate, '导入图片', () {
-                Navigator.pop(ctx);
-                onImportImage!();
+                closeThen(onImportImage!);
               }),
             if (onShowLibrary != null)
               _compactMenuItem(Icons.library_books, '素材库', () {
-                Navigator.pop(ctx);
-                onShowLibrary!();
+                closeThen(onShowLibrary!);
               }),
             _compactMenuItem(
               controller.gridSize != null ? Icons.grid_on : Icons.grid_off,
               '网格${controller.gridSize != null ? "开启" : "关闭"}',
               () {
-                Navigator.pop(ctx);
-                controller.toggleGrid();
+                closeThen(controller.toggleGrid);
               },
             ),
             const Divider(),
@@ -183,8 +182,8 @@ class CompactMenuButton extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(6),
           onTap: () {
-            onThemeModeChanged?.call(mode);
             Navigator.pop(ctx);
+            runAfterUiFrame(() => onThemeModeChanged?.call(mode));
           },
           child: SizedBox(
             width: 32,
@@ -215,8 +214,10 @@ class CompactMenuButton extends StatelessWidget {
                 color: c,
                 isSelected: controller.canvasBackgroundColor == c,
                 onTap: () {
-                  controller.canvasBackgroundColor = c;
                   Navigator.pop(ctx);
+                  runAfterUiFrame(() {
+                    controller.canvasBackgroundColor = c;
+                  });
                 },
               ),
             ),

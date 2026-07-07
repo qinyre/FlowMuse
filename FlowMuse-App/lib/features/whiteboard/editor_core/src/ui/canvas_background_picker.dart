@@ -2,6 +2,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'color_picker.dart' as cp;
 import 'color_utils.dart' show canvasBackgroundPresets;
 import 'markdraw_controller.dart';
@@ -36,8 +37,14 @@ class CanvasBackgroundPicker extends StatelessWidget {
                 color: c,
                 isSelected: controller.canvasBackgroundColor == c,
                 onTap: () {
-                  controller.canvasBackgroundColor = c;
-                  if (dismissOnTap) Navigator.of(context).pop();
+                  if (dismissOnTap) {
+                    Navigator.of(context).pop();
+                    runAfterUiFrame(() {
+                      controller.canvasBackgroundColor = c;
+                    });
+                  } else {
+                    controller.canvasBackgroundColor = c;
+                  }
                 },
               ),
             ),
