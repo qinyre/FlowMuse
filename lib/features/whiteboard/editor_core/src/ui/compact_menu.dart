@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'color_picker.dart' as cp;
+import 'hamburger_menu.dart';
 import 'markdraw_controller.dart';
 import 'color_utils.dart' show canvasBackgroundPresets;
 
@@ -18,6 +19,7 @@ class CompactMenuButton extends StatelessWidget {
   final VoidCallback? onExportSvg;
   final VoidCallback? onImportImage;
   final VoidCallback? onShowLibrary;
+  final VoidCallback? onDocumentRenamed;
 
   const CompactMenuButton({
     super.key,
@@ -31,6 +33,7 @@ class CompactMenuButton extends StatelessWidget {
     this.onExportSvg,
     this.onImportImage,
     this.onShowLibrary,
+    this.onDocumentRenamed,
   });
 
   @override
@@ -78,6 +81,14 @@ class CompactMenuButton extends StatelessWidget {
               }),
             if (onOpen != null || onSave != null || onSaveAs != null)
               const Divider(),
+            _compactMenuItem(Icons.drive_file_rename_outline, '重命名', () {
+              Navigator.pop(ctx);
+              showRenameDocumentDialog(
+                context,
+                controller,
+                onDocumentRenamed,
+              );
+            }),
             if (onExportPng != null)
               _compactMenuItem(Icons.image, '导出 PNG', () {
                 Navigator.pop(ctx);

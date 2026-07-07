@@ -10,6 +10,10 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   SocketIoRealtimeTransport({required this.serverUrl});
 
   static const String _eventJoinRoom = 'join-room';
+  static const String _eventInitRoom = 'init-room';
+  static const String _eventFirstInRoom = 'first-in-room';
+  static const String _eventNewUser = 'new-user';
+  static const String _eventRoomUserChange = 'room-user-change';
   static const String _eventServerBroadcast = 'server-broadcast';
   static const String _eventServerVolatileBroadcast =
       'server-volatile-broadcast';
@@ -18,12 +22,25 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   final String serverUrl;
   final StreamController<EncryptedPayload> _messages =
       StreamController<EncryptedPayload>.broadcast();
+  final StreamController<String> _newUsers = StreamController<String>.broadcast();
+  final StreamController<List<String>> _roomUsers =
+      StreamController<List<String>>.broadcast();
+  final StreamController<void> _firstInRoom = StreamController<void>.broadcast();
 
   io.Socket? _socket;
   String? _roomId;
 
   @override
   Stream<EncryptedPayload> get messages => _messages.stream;
+
+  @override
+  Stream<String> get newUsers => _newUsers.stream;
+
+  @override
+  Stream<List<String>> get roomUsers => _roomUsers.stream;
+
+  @override
+  Stream<void> get firstInRoom => _firstInRoom.stream;
 
   @override
   String? get socketId => _socket?.id;
@@ -49,9 +66,27 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
 
     final connected = Completer<void>();
     socket.onConnect((_) {
-      socket.emit(_eventJoinRoom, roomId);
       if (!connected.isCompleted) {
         connected.complete();
+      }
+    });
+    socket.on(_eventInitRoom, (_) {
+      socket.emit(_eventJoinRoom, roomId);
+    });
+    socket.on(_eventFirstInRoom, (_) {
+      if (!_firstInRoom.isClosed) {
+        _firstInRoom.add(null);
+      }
+    });
+    socket.on(_eventNewUser, (data) {
+      if (data is String && !_newUsers.isClosed) {
+        _newUsers.add(data);
+      }
+    });
+    socket.on(_eventRoomUserChange, (data) {
+      final socketIds = _socketIdsFromRoomUsers(data);
+      if (!_roomUsers.isClosed) {
+        _roomUsers.add(socketIds);
       }
     });
     socket.onConnectError((error) {
@@ -76,6 +111,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       const Duration(seconds: 10),
       onTimeout: () => throw StateError('Socket.IO connect timed out'),
     );
+    socket.emit(_eventJoinRoom, roomId);
   }
 
   @override
@@ -127,5 +163,18 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       return [for (final item in value) (item as num).toInt()];
     }
     throw FormatException('Invalid Socket.IO binary payload: $value');
+  }
+
+  List<String> _socketIdsFromRoomUsers(Object? value) {
+    if (value is! List) {
+      return const [];
+    }
+    return [
+      for (final item in value)
+        if (item is String)
+          item
+        else if (item is Map && item['socketId'] is String)
+          item['socketId']! as String,
+    ];
   }
 }

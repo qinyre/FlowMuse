@@ -5,6 +5,12 @@ import '../models/encrypted_payload.dart';
 abstract interface class RealtimeTransport {
   Stream<EncryptedPayload> get messages;
 
+  Stream<String> get newUsers;
+
+  Stream<List<String>> get roomUsers;
+
+  Stream<void> get firstInRoom;
+
   String? get socketId;
 
   Future<void> connect(String roomId);
@@ -19,6 +25,15 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
 
   @override
   Stream<EncryptedPayload> get messages => const Stream.empty();
+
+  @override
+  Stream<String> get newUsers => const Stream.empty();
+
+  @override
+  Stream<List<String>> get roomUsers => const Stream.empty();
+
+  @override
+  Stream<void> get firstInRoom => const Stream.empty();
 
   @override
   String? get socketId => null;
@@ -36,11 +51,19 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
 class MemoryRealtimeRoomHub {
   final Map<String, List<MemoryRealtimeTransport>> _rooms = {};
 
-  void join(String roomId, MemoryRealtimeTransport transport) {
+  bool join(String roomId, MemoryRealtimeTransport transport) {
     final transports = _rooms.putIfAbsent(roomId, () => []);
     if (!transports.contains(transport)) {
       transports.add(transport);
     }
+    final socketIds = transports.map((item) => item.socketId ?? '').toList();
+    for (final item in transports) {
+      if (!identical(item, transport)) {
+        item._receiveNewUser(transport.socketId ?? '');
+      }
+      item._receiveRoomUsers(socketIds);
+    }
+    return transports.length == 1;
   }
 
   void leave(String roomId, MemoryRealtimeTransport transport) {
@@ -51,6 +74,11 @@ class MemoryRealtimeRoomHub {
     transports.remove(transport);
     if (transports.isEmpty) {
       _rooms.remove(roomId);
+      return;
+    }
+    final socketIds = transports.map((item) => item.socketId ?? '').toList();
+    for (final item in transports) {
+      item._receiveRoomUsers(socketIds);
     }
   }
 
@@ -80,10 +108,23 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   final String _socketId;
   final StreamController<EncryptedPayload> _messages =
       StreamController<EncryptedPayload>.broadcast();
+  final StreamController<String> _newUsers = StreamController<String>.broadcast();
+  final StreamController<List<String>> _roomUsers =
+      StreamController<List<String>>.broadcast();
+  final StreamController<void> _firstInRoom = StreamController<void>.broadcast();
   String? _roomId;
 
   @override
   Stream<EncryptedPayload> get messages => _messages.stream;
+
+  @override
+  Stream<String> get newUsers => _newUsers.stream;
+
+  @override
+  Stream<List<String>> get roomUsers => _roomUsers.stream;
+
+  @override
+  Stream<void> get firstInRoom => _firstInRoom.stream;
 
   @override
   String? get socketId => _socketId;
@@ -95,7 +136,10 @@ class MemoryRealtimeTransport implements RealtimeTransport {
       hub.leave(previousRoomId, this);
     }
     _roomId = roomId;
-    hub.join(roomId, this);
+    final first = hub.join(roomId, this);
+    if (first) {
+      _firstInRoom.add(null);
+    }
   }
 
   @override
@@ -119,6 +163,18 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   void _receive(EncryptedPayload payload) {
     if (!_messages.isClosed) {
       _messages.add(payload);
+    }
+  }
+
+  void _receiveNewUser(String socketId) {
+    if (!_newUsers.isClosed) {
+      _newUsers.add(socketId);
+    }
+  }
+
+  void _receiveRoomUsers(List<String> socketIds) {
+    if (!_roomUsers.isClosed) {
+      _roomUsers.add(socketIds);
     }
   }
 }

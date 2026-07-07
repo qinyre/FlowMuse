@@ -1,14 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide Element, SelectionOverlay, TextAlign;
 
 import '../collaboration/models/collaboration_message.dart';
+import '../collaboration/models/collaboration_room.dart';
+import '../collaboration/models/excalidraw_scene.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
 import '../view_models/whiteboard_view_model.dart';
 
@@ -16,11 +15,9 @@ class WhiteboardPage extends ConsumerStatefulWidget {
   const WhiteboardPage({
     super.key,
     required this.notebookId,
-    required this.title,
   });
 
   final String notebookId;
-  final String title;
 
   @override
   ConsumerState<WhiteboardPage> createState() => _WhiteboardPageState();
@@ -30,8 +27,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   late final MarkdrawController _markdrawController;
   late final CollaborationRepository _collaborationRepository;
   StreamSubscription<CollaborationMessage>? _collaborationSubscription;
+  StreamSubscription<String>? _newUserSubscription;
   bool _loadingScene = false;
   bool _applyingRemoteScene = false;
+  bool _collaborationOpening = false;
 
   @override
   void initState() {
@@ -44,8 +43,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   @override
   void didUpdateWidget(covariant WhiteboardPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.notebookId != widget.notebookId ||
-        oldWidget.title != widget.title) {
+    if (oldWidget.notebookId != widget.notebookId) {
       Future.microtask(_openNotebook);
     }
   }
@@ -53,6 +51,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   @override
   void dispose() {
     unawaited(_collaborationSubscription?.cancel());
+    unawaited(_newUserSubscription?.cancel());
     unawaited(_collaborationRepository.stop());
     _markdrawController.dispose();
     super.dispose();
@@ -61,7 +60,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   Future<void> _openNotebook() async {
     await ref
         .read(whiteboardViewModelProvider.notifier)
-        .openNotebook(notebookId: widget.notebookId, title: widget.title);
+        .openNotebook(notebookId: widget.notebookId);
     final repository = ref.read(whiteboardSceneRepositoryProvider);
     final content = await repository.loadScene(widget.notebookId);
     if (!mounted) {
@@ -73,6 +72,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       '${widget.notebookId}.excalidraw',
     );
     _loadingScene = false;
+    final room = _roomFromCurrentUri();
+    if (room != null) {
+      unawaited(_joinCollaboration(room));
+    }
   }
 
   Future<void> _saveMarkdrawScene() async {
@@ -86,7 +89,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       format: DocumentFormat.excalidraw,
     );
     await repository.saveScene(widget.notebookId, content);
-    await _broadcastCurrentScene(content);
+    await _broadcastCurrentScene(serializedScene: content);
     if (!mounted) {
       return;
     }
@@ -94,37 +97,77 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _startCollaboration() async {
-    final initialElements = _currentSceneElements();
+    final scene = _currentScene();
     await ref
         .read(whiteboardViewModelProvider.notifier)
-        .startCollaboration(initialElements: initialElements);
+        .startCollaboration(initialElements: scene.elements, files: scene.files);
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
       return;
     }
-    await _collaborationSubscription?.cancel();
-    _collaborationSubscription = _collaborationRepository
-        .encryptedMessages(room)
-        .listen(_handleCollaborationMessage);
+    await _listenToRoom(room);
+  }
+
+  Future<void> _joinCollaboration(CollaborationRoom room) async {
+    if (_collaborationOpening) {
+      return;
+    }
+    _collaborationOpening = true;
+    try {
+      final scene = _currentScene();
+      final reconciled = await ref
+          .read(whiteboardViewModelProvider.notifier)
+          .joinCollaboration(
+            room: room,
+            localElements: scene.elements,
+            files: scene.files,
+          );
+      await _listenToRoom(room);
+      if (reconciled.isNotEmpty) {
+        await _applyRemoteElements(reconciled);
+      }
+    } finally {
+      _collaborationOpening = false;
+    }
   }
 
   Future<void> _stopCollaboration() async {
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = null;
+    await _newUserSubscription?.cancel();
+    _newUserSubscription = null;
     await ref.read(whiteboardViewModelProvider.notifier).stopCollaboration();
   }
 
-  Future<void> _broadcastCurrentScene([String? serializedScene]) async {
+  Future<void> _listenToRoom(CollaborationRoom room) async {
+    await _collaborationSubscription?.cancel();
+    _collaborationSubscription = _collaborationRepository
+        .encryptedMessages(room)
+        .listen(_handleCollaborationMessage);
+    await _newUserSubscription?.cancel();
+    _newUserSubscription = _collaborationRepository.newUsers.listen((_) {
+      unawaited(_broadcastCurrentScene(syncAll: true, initial: true));
+    });
+  }
+
+  Future<void> _broadcastCurrentScene({
+    String? serializedScene,
+    bool syncAll = false,
+    bool initial = false,
+  }) async {
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
       return;
     }
-    final content =
-        serializedScene ??
-        _markdrawController.serializeScene(format: DocumentFormat.excalidraw);
+    final scene = serializedScene == null
+        ? _currentScene()
+        : ExcalidrawScene.fromContent(serializedScene);
     await _collaborationRepository.broadcastScene(
       room: room,
-      elements: _extractElements(content),
+      elements: scene.elements,
+      files: scene.files,
+      initial: initial,
+      syncAll: syncAll,
     );
   }
 
@@ -153,17 +196,28 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     final localContent = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
     );
-    final decoded = jsonDecode(localContent) as Map<String, Object?>;
+    final localScene = ExcalidrawScene.fromContent(localContent);
     final reconciled = _collaborationRepository.reconcileRemoteElements(
-      localElements: _extractElements(localContent),
+      localElements: localScene.elements,
       remoteElements: remoteElements,
       protectedElementIds: _selectedElementIds(),
     );
-    decoded['elements'] = reconciled;
-    final nextContent = jsonEncode(decoded);
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    final remoteFiles = room == null
+        ? const <String, dynamic>{}
+        : await _collaborationRepository.loadMissingFiles(
+            room: room,
+            fileIds: _imageFileIds(reconciled),
+            existingFileIds: localScene.files.keys.toSet(),
+          );
+    final nextScene = localScene.copyWith(
+      elements: reconciled,
+      files: {...localScene.files, ...remoteFiles},
+    );
+    final nextContent = nextScene.toContent();
 
     _applyingRemoteScene = true;
-    _markdrawController.applyRemoteContent(nextContent);
+    _markdrawController.applyRemoteExcalidrawSceneJson(nextScene.toJson());
     _applyingRemoteScene = false;
 
     final repository = ref.read(whiteboardSceneRepositoryProvider);
@@ -173,27 +227,30 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
   }
 
-  List<Map<String, Object?>> _currentSceneElements() {
-    return _extractElements(
-      _markdrawController.serializeScene(format: DocumentFormat.excalidraw),
+  ExcalidrawScene _currentScene() {
+    return ExcalidrawScene.fromJson(
+      _markdrawController.serializeExcalidrawSceneJson(),
     );
-  }
-
-  List<Map<String, Object?>> _extractElements(String content) {
-    final decoded = jsonDecode(content) as Map<String, Object?>;
-    final elements = decoded['elements'];
-    if (elements is! List) {
-      return const [];
-    }
-    return [
-      for (final element in elements) Map<String, Object?>.from(element as Map),
-    ];
   }
 
   Set<String> _selectedElementIds() {
     return _markdrawController.editorState.selectedIds
         .map((id) => id.value)
         .toSet();
+  }
+
+  Iterable<String> _imageFileIds(List<Map<String, Object?>> elements) sync* {
+    for (final element in elements) {
+      if (element['type'] == 'image' && element['fileId'] is String) {
+        yield element['fileId']! as String;
+      }
+    }
+  }
+
+  CollaborationRoom? _roomFromCurrentUri() {
+    final uri = Uri.base;
+    final link = uri.toString();
+    return CollaborationRoom.tryParseLink(link);
   }
 
   @override
@@ -204,202 +261,35 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       key: ValueKey(widget.notebookId),
       backgroundColor: const Color(0xFFFDFDFB),
       body: SafeArea(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: KeyedSubtree(
-                key: const ValueKey('flowmuse-markdraw-editor'),
-                child: MarkdrawEditor(
-                  controller: _markdrawController,
-                  config: const MarkdrawEditorConfig(
-                    initialBackground: '#fdfdfb',
-                  ),
-                  onSceneChanged: (_) {
-                    unawaited(_saveMarkdrawScene());
-                  },
-                ),
-              ),
-            ),
-            Positioned(
-              left: 24,
-              top: 22,
-              child: IconButton.filledTonal(
-                tooltip: '返回',
-                onPressed: () => context.pop(),
-                icon: const Icon(LucideIcons.arrowLeft),
-                style: IconButton.styleFrom(
-                  fixedSize: const Size(56, 56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.topCenter,
-              child: const SizedBox.shrink(),
-            ),
-            Positioned(
-              right: 24,
-              top: 22,
-              child: _CollaborationPanel(
-                collaborating: state.collaborating,
-                roomLink: state.roomLink,
-                onStart: _startCollaboration,
-                onStop: _stopCollaboration,
-              ),
-            ),
-            Positioned(
-              left: 92,
-              top: 32,
-              child: _BoardTitle(
-                title: widget.title,
-                saved: state.saveStatus == WhiteboardSaveStatus.saved,
-              ),
-            ),
-            Positioned(left: 24, bottom: 24, child: const SizedBox.shrink()),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BoardTitle extends StatelessWidget {
-  const _BoardTitle({required this.title, required this.saved});
-
-  final String title;
-  final bool saved;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE4E8E5)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              LucideIcons.panelTop,
-              color: Theme.of(context).colorScheme.primary,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                color: Color(0xFF2B302E),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              saved ? '已保存' : '保存中',
-              style: const TextStyle(color: Color(0xFF8E9692), fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CollaborationPanel extends StatelessWidget {
-  const _CollaborationPanel({
-    required this.collaborating,
-    required this.roomLink,
-    required this.onStart,
-    required this.onStop,
-  });
-
-  final bool collaborating;
-  final String? roomLink;
-  final Future<void> Function() onStart;
-  final Future<void> Function() onStop;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE4E8E5)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x145A625F),
-            blurRadius: 24,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 280),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    collaborating ? LucideIcons.radio : LucideIcons.radioTower,
-                    color: collaborating
-                        ? colorScheme.primary
-                        : const Color(0xFF8E9692),
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    collaborating ? '协作中' : '本地白板',
-                    style: const TextStyle(
-                      color: Color(0xFF2B302E),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-              if (roomLink != null) ...[
-                const SizedBox(height: 8),
-                SelectableText(
-                  roomLink!,
-                  maxLines: 2,
-                  style: const TextStyle(
-                    color: Color(0xFF66706B),
-                    fontSize: 12,
-                    height: 1.25,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: collaborating ? onStop : onStart,
-                  icon: Icon(
-                    collaborating ? LucideIcons.unlink : LucideIcons.link,
-                    size: 18,
-                  ),
-                  label: Text(collaborating ? '停止协作' : '创建房间'),
-                  style: FilledButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        child: KeyedSubtree(
+          key: const ValueKey('flowmuse-markdraw-editor'),
+          child: MarkdrawEditor(
+            controller: _markdrawController,
+            config: const MarkdrawEditorConfig(initialBackground: '#fdfdfb'),
+            saveStatusLabel: _saveStatusLabel(state.saveStatus),
+            collaborating: state.collaborating,
+            roomLink: state.roomLink,
+            collaboratorCount: state.collaborators.length,
+            onBack: () => context.pop(),
+            onStartCollaboration: _startCollaboration,
+            onStopCollaboration: _stopCollaboration,
+            onDocumentRenamed: () {
+              unawaited(_saveMarkdrawScene());
+            },
+            onSceneChanged: (_) {
+              unawaited(_saveMarkdrawScene());
+            },
           ),
         ),
       ),
     );
+  }
+
+  String _saveStatusLabel(WhiteboardSaveStatus status) {
+    return switch (status) {
+      WhiteboardSaveStatus.idle => '未保存',
+      WhiteboardSaveStatus.saving => '保存中',
+      WhiteboardSaveStatus.saved => '已保存',
+    };
   }
 }

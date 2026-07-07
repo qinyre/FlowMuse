@@ -7,6 +7,7 @@ import '../collaboration/models/collaborator_presence.dart';
 import '../collaboration/collaboration_config.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
 import '../collaboration/services/collaboration_crypto.dart';
+import '../collaboration/services/collaboration_file_store.dart';
 import '../collaboration/services/encrypted_scene_store.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/scene_reconciler.dart';
@@ -18,7 +19,6 @@ enum WhiteboardSaveStatus { idle, saving, saved }
 class WhiteboardState {
   const WhiteboardState({
     this.notebookId = '',
-    this.title = '未命名白板',
     this.saveStatus = WhiteboardSaveStatus.idle,
     this.activeRoom,
     this.collaborating = false,
@@ -26,7 +26,6 @@ class WhiteboardState {
   });
 
   final String notebookId;
-  final String title;
   final WhiteboardSaveStatus saveStatus;
   final CollaborationRoom? activeRoom;
   final bool collaborating;
@@ -42,7 +41,6 @@ class WhiteboardState {
 
   WhiteboardState copyWith({
     String? notebookId,
-    String? title,
     WhiteboardSaveStatus? saveStatus,
     CollaborationRoom? activeRoom,
     bool? collaborating,
@@ -51,7 +49,6 @@ class WhiteboardState {
   }) {
     return WhiteboardState(
       notebookId: notebookId ?? this.notebookId,
-      title: title ?? this.title,
       saveStatus: saveStatus ?? this.saveStatus,
       activeRoom: clearRoom ? null : activeRoom ?? this.activeRoom,
       collaborating: collaborating ?? this.collaborating,
@@ -69,13 +66,9 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
     return const WhiteboardState();
   }
 
-  Future<void> openNotebook({
-    required String notebookId,
-    required String title,
-  }) async {
+  Future<void> openNotebook({required String notebookId}) async {
     state = state.copyWith(
       notebookId: notebookId,
-      title: title,
       saveStatus: WhiteboardSaveStatus.saved,
     );
   }
@@ -96,11 +89,27 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
 
   Future<void> startCollaboration({
     required List<Map<String, Object?>> initialElements,
+    Map<String, Object?> files = const {},
   }) async {
     final room = await _repository.startNewRoom(
       initialElements: initialElements,
+      files: files,
     );
     state = state.copyWith(activeRoom: room, collaborating: true);
+  }
+
+  Future<List<Map<String, Object?>>> joinCollaboration({
+    required CollaborationRoom room,
+    required List<Map<String, Object?>> localElements,
+    Map<String, Object?> files = const {},
+  }) async {
+    final elements = await _repository.joinRoom(
+      room: room,
+      localElements: localElements,
+      files: files,
+    );
+    state = state.copyWith(activeRoom: room, collaborating: true);
+    return elements;
   }
 
   Future<void> stopCollaboration() async {
@@ -169,6 +178,7 @@ final collaborationRepositoryProvider = Provider<CollaborationRepository>((
       crypto: crypto,
       reconciler: reconciler,
     ),
+    fileStore: HttpCollaborationFileStore(serverUrl: config.serverUrl),
     crypto: crypto,
     reconciler: reconciler,
   );

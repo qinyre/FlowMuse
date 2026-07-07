@@ -1,7 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-const emptyExcalidrawSceneContent =
-    '{"type":"excalidraw","version":2,"source":"https://excalidraw.com","elements":[],"appState":{},"files":{}}';
+import '../collaboration/models/excalidraw_scene.dart';
 
 abstract interface class WhiteboardSceneRepository {
   Future<String> loadScene(String notebookId);

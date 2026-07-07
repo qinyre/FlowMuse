@@ -13,11 +13,8 @@ class LibraryHomePage extends ConsumerWidget {
   void _openWhiteboard(
     BuildContext context, {
     String notebookId = 'whiteboard-new',
-    String title = '未命名白板',
   }) {
-    context.push(
-      AppRoutes.whiteboardPath(notebookId: notebookId, title: title),
-    );
+    context.push(AppRoutes.whiteboardPath(notebookId: notebookId));
   }
 
   @override
@@ -37,7 +34,7 @@ class LibraryHomePage extends ConsumerWidget {
           onSelectionModeChanged: viewModel.toggleSelectionMode,
           onCreate: () => _openWhiteboard(context),
           onOpenNotebook: (NotebookItem item) {
-            _openWhiteboard(context, notebookId: item.id, title: item.title);
+            _openWhiteboard(context, notebookId: item.id);
           },
         );
       },

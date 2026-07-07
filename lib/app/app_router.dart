@@ -19,7 +19,7 @@ class AppRoutes {
   static const tags = '/tags';
   static const tagDetail = '/tags/:tagId';
   static const settings = '/settings';
-  static const whiteboard = '/whiteboard/:notebookId/:title';
+  static const whiteboard = '/whiteboard/:notebookId';
 
   static String folderPath(String folderId) {
     return '/folders/${Uri.encodeComponent(folderId)}';
@@ -29,11 +29,8 @@ class AppRoutes {
     return '/tags/${Uri.encodeComponent(tagId)}';
   }
 
-  static String whiteboardPath({
-    required String notebookId,
-    required String title,
-  }) {
-    return '/whiteboard/${Uri.encodeComponent(notebookId)}/${Uri.encodeComponent(title)}';
+  static String whiteboardPath({required String notebookId}) {
+    return '/whiteboard/${Uri.encodeComponent(notebookId)}';
   }
 }
 
@@ -98,10 +95,9 @@ GoRouter createAppRouter() {
         pageBuilder: (context, state) {
           final notebookId =
               state.pathParameters['notebookId'] ?? 'whiteboard-untitled';
-          final title = state.pathParameters['title'] ?? '未命名白板';
           return MaterialPage<void>(
             key: state.pageKey,
-            child: WhiteboardPage(notebookId: notebookId, title: title),
+            child: WhiteboardPage(notebookId: notebookId),
           );
         },
       ),

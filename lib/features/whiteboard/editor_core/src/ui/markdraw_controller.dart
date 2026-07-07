@@ -1,5 +1,6 @@
 library;
 
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -2079,6 +2080,13 @@ class MarkdrawController extends ChangeNotifier {
     };
   }
 
+  /// Serializes the current scene as an Excalidraw JSON object.
+  Map<String, Object?> serializeExcalidrawSceneJson() {
+    return jsonDecode(
+      serializeScene(format: DocumentFormat.excalidraw),
+    ) as Map<String, Object?>;
+  }
+
   /// Loads a scene from file content. Detects format from [filename].
   void loadFromContent(String content, String filename) {
     final format = DocumentService.detectFormat(filename);
@@ -2107,6 +2115,11 @@ class MarkdrawController extends ChangeNotifier {
         regenerateIndices: false,
       ),
     );
+  }
+
+  /// Applies a full Excalidraw scene object received from collaboration.
+  void applyRemoteExcalidrawSceneJson(Map<String, Object?> sceneJson) {
+    applyRemoteContent(jsonEncode(sceneJson));
   }
 
   /// Exports the scene (or selection) as PNG bytes.

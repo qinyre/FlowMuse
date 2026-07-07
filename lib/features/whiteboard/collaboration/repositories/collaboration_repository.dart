@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
 import '../models/collaboration_message.dart';
 import '../models/collaboration_room.dart';
 import '../services/collaboration_crypto.dart';
+import '../services/collaboration_file_store.dart';
 import '../services/encrypted_scene_store.dart';
 import '../services/realtime_transport.dart';
 import '../services/scene_reconciler.dart';
@@ -11,10 +13,12 @@ class CollaborationRepository {
   CollaborationRepository({
     RealtimeTransport? transport,
     EncryptedSceneStore? sceneStore,
+    CollaborationFileStore? fileStore,
     CollaborationCrypto? crypto,
     SceneReconciler? reconciler,
   }) : _transport = transport ?? const DisconnectedRealtimeTransport(),
        _sceneStore = sceneStore ?? MemoryEncryptedSceneStore(),
+       _fileStore = fileStore,
        _crypto = crypto ?? CollaborationCrypto(),
        _reconciler = reconciler ?? SceneReconciler();
 
@@ -22,6 +26,7 @@ class CollaborationRepository {
 
   final RealtimeTransport _transport;
   final EncryptedSceneStore _sceneStore;
+  final CollaborationFileStore? _fileStore;
   final CollaborationCrypto _crypto;
   final SceneReconciler _reconciler;
   final Map<String, int> _broadcastedElementVersions = {};
@@ -32,6 +37,12 @@ class CollaborationRepository {
   int _lastBroadcastedOrReceivedSceneVersion = -1;
 
   String get socketId => _transport.socketId ?? 'local-client';
+
+  Stream<String> get newUsers => _transport.newUsers;
+
+  Stream<List<String>> get roomUsers => _transport.roomUsers;
+
+  Stream<void> get firstInRoom => _transport.firstInRoom;
 
   Stream<CollaborationMessage> encryptedMessages(CollaborationRoom room) {
     return _transport.messages.asyncMap((payload) async {
@@ -45,12 +56,19 @@ class CollaborationRepository {
 
   Future<CollaborationRoom> startNewRoom({
     required List<Map<String, Object?>> initialElements,
+    Map<String, Object?> files = const {},
   }) async {
     final room = CollaborationRoom.newRoom(crypto: _crypto);
     await _transport.connect(room.roomId);
     _activeRoom = room;
+    await _fileStore?.uploadFiles(roomId: room.roomId, filesJson: files);
     await _sceneStore.saveScene(room: room, elements: initialElements);
-    await broadcastScene(room: room, elements: initialElements, initial: true);
+    await broadcastScene(
+      room: room,
+      elements: initialElements,
+      files: files,
+      initial: true,
+    );
     _startFullSceneSync();
     return room;
   }
@@ -58,9 +76,11 @@ class CollaborationRepository {
   Future<List<Map<String, Object?>>> joinRoom({
     required CollaborationRoom room,
     required List<Map<String, Object?>> localElements,
+    Map<String, Object?> files = const {},
   }) async {
     await _transport.connect(room.roomId);
     _activeRoom = room;
+    await _fileStore?.uploadFiles(roomId: room.roomId, filesJson: files);
     final storedElements = await _sceneStore.loadScene(room);
     if (storedElements == null) {
       _latestElements = localElements;
@@ -82,11 +102,13 @@ class CollaborationRepository {
   Future<void> broadcastScene({
     required CollaborationRoom room,
     required List<Map<String, Object?>> elements,
+    Map<String, Object?> files = const {},
     bool initial = false,
     bool syncAll = false,
   }) async {
     final syncableElements = _reconciler.getSyncableElements(elements);
     _latestElements = syncableElements;
+    await _fileStore?.uploadFiles(roomId: room.roomId, filesJson: files);
 
     final sceneVersion = _reconciler.getSceneVersion(syncableElements);
     if (!initial &&
@@ -178,6 +200,32 @@ class CollaborationRepository {
       reconciled,
     );
     return reconciled;
+  }
+
+  Future<Map<String, dynamic>> loadMissingFiles({
+    required CollaborationRoom room,
+    required Iterable<String> fileIds,
+    required Set<String> existingFileIds,
+  }) async {
+    final files = await _fileStore?.loadMissingFiles(
+      roomId: room.roomId,
+      fileIds: fileIds,
+      existingFileIds: existingFileIds,
+    );
+    if (files == null || files.isEmpty) {
+      return const {};
+    }
+    final encoded = <String, dynamic>{};
+    for (final entry in files.entries) {
+      encoded[entry.key] = {
+        'mimeType': entry.value.mimeType,
+        'id': entry.key,
+        'dataURL':
+            'data:${entry.value.mimeType};base64,${base64Encode(entry.value.bytes)}',
+        'created': DateTime.now().millisecondsSinceEpoch,
+      };
+    }
+    return encoded;
   }
 
   Future<void> _send({

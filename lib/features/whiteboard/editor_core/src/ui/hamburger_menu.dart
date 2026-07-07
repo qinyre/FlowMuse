@@ -9,6 +9,7 @@ import '../../markdraw.dart' hide TextAlign;
 void showRenameDocumentDialog(
   BuildContext context,
   MarkdrawController controller,
+  VoidCallback? onRenamed,
 ) {
   final textController = TextEditingController(
     text: controller.documentName ?? '',
@@ -37,6 +38,7 @@ void showRenameDocumentDialog(
   ).then((value) {
     if (value != null) {
       controller.renameDocument(value);
+      onRenamed?.call();
     }
   });
 }
@@ -52,6 +54,7 @@ class HamburgerMenu extends StatelessWidget {
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
   final VoidCallback? onImportImage;
+  final VoidCallback? onDocumentRenamed;
 
   const HamburgerMenu({
     super.key,
@@ -64,6 +67,7 @@ class HamburgerMenu extends StatelessWidget {
     this.onExportPng,
     this.onExportSvg,
     this.onImportImage,
+    this.onDocumentRenamed,
   });
 
   @override
@@ -305,7 +309,7 @@ class HamburgerMenu extends StatelessWidget {
   }
 
   void _showRenameDialog(BuildContext context) {
-    showRenameDocumentDialog(context, controller);
+    showRenameDocumentDialog(context, controller, onDocumentRenamed);
   }
 
   PopupMenuItem<String> _menuItem(

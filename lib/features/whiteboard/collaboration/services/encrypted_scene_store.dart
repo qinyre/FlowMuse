@@ -72,7 +72,16 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       roomKey: room.roomKey,
       encryptedPayload: payload,
     );
-    return CollaborationMessage.fromBytes(bytes).elements;
+    final decoded = jsonDecode(utf8.decode(bytes));
+    if (decoded is List) {
+      return [
+        for (final element in decoded) Map<String, Object?>.from(element as Map),
+      ];
+    }
+    if (decoded is Map<String, Object?>) {
+      return CollaborationMessage.fromJson(decoded).elements;
+    }
+    return const [];
   }
 
   @override
@@ -80,10 +89,9 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
     required CollaborationRoom room,
     required List<Map<String, Object?>> elements,
   }) async {
-    final message = CollaborationMessage.sceneInit(elements: elements);
     final payload = await _crypto.encrypt(
       roomKey: room.roomKey,
-      plainBytes: message.toBytes(),
+      plainBytes: utf8.encode(jsonEncode(elements)),
     );
     final response = await _client.put(
       _roomSceneUri(room.roomId),

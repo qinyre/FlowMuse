@@ -27,6 +27,14 @@ class MarkdrawEditor extends StatefulWidget {
     this.onThemeModeChanged,
     this.currentThemeMode,
     this.onSceneChanged,
+    this.onBack,
+    this.saveStatusLabel,
+    this.collaborating = false,
+    this.roomLink,
+    this.collaboratorCount = 0,
+    this.onStartCollaboration,
+    this.onStopCollaboration,
+    this.onDocumentRenamed,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -51,6 +59,16 @@ class MarkdrawEditor extends StatefulWidget {
 
   /// Called when the scene changes (for auto-save, etc.).
   final void Function(Scene)? onSceneChanged;
+
+  /// FlowMuse host chrome callbacks and state.
+  final VoidCallback? onBack;
+  final String? saveStatusLabel;
+  final bool collaborating;
+  final String? roomLink;
+  final int collaboratorCount;
+  final Future<void> Function()? onStartCollaboration;
+  final Future<void> Function()? onStopCollaboration;
+  final VoidCallback? onDocumentRenamed;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -161,6 +179,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     final isCompact = _controller.isCompact;
     final showChrome = !_controller.zenMode;
     final showEditChrome = showChrome && !_controller.viewMode;
+    final topChromeOffset = isCompact ? 68.0 : 76.0;
     Widget body = Stack(
       children: [
         // Full-bleed canvas + desktop library panel
@@ -203,8 +222,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
           else ...[
             Positioned(
               top: 12,
-              left: 0,
-              right: 0,
+              left: 260,
+              right: 300,
               child: Center(
                 child: DesktopToolbar(
                   controller: _controller,
@@ -213,52 +232,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                 ),
               ),
             ),
-            // Scene name label — right of hamburger menu, behind toolbar
-            Positioned(
-              top: 23,
-              left: 60,
-              child: GestureDetector(
-                onTap: () => showRenameDocumentDialog(context, _controller),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Builder(
-                    builder: (context) {
-                      final canvasBg = parseColor(
-                        _controller.canvasBackgroundColor,
-                      );
-                      final textColor = canvasBg.computeLuminance() > 0.5
-                          ? Colors.black
-                          : Colors.white;
-                      return Text(
-                        _controller.documentName ?? '未命名',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: _controller.documentName != null
-                              ? textColor.withValues(alpha: 0.7)
-                              : textColor.withValues(alpha: 0.3),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-            if (widget.config.showMenu)
-              Positioned(
-                top: 12,
-                left: 12,
-                child: HamburgerMenu(
-                  controller: _controller,
-                  onOpen: widget.onOpen,
-                  onSave: widget.onSave,
-                  onSaveAs: widget.onSaveAs,
-                  onExportPng: widget.onExportPng,
-                  onExportSvg: widget.onExportSvg,
-                  onImportImage: widget.onImportImage,
-                  onThemeModeChanged: widget.onThemeModeChanged,
-                  currentThemeMode: widget.currentThemeMode,
-                ),
-              ),
             if (widget.config.showZoomControls)
               Positioned(
                 bottom: 12,
@@ -272,6 +245,45 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
               const Positioned(bottom: 12, right: 12, child: HelpButton()),
           ],
         ],
+        if (showEditChrome)
+          Positioned(
+            top: 12,
+            left: 12,
+            child: _LeftChrome(
+              controller: _controller,
+              compact: isCompact,
+              showMenu: widget.config.showMenu,
+              onBack: widget.onBack,
+              onOpen: widget.onOpen,
+              onSave: widget.onSave,
+              onSaveAs: widget.onSaveAs,
+              onExportPng: widget.onExportPng,
+              onExportSvg: widget.onExportSvg,
+              onImportImage: widget.onImportImage,
+              onImportLibrary: widget.onImportLibrary,
+              onExportLibrary: widget.onExportLibrary,
+              onThemeModeChanged: widget.onThemeModeChanged,
+              currentThemeMode: widget.currentThemeMode,
+              onDocumentRenamed: widget.onDocumentRenamed,
+            ),
+          ),
+        if (showChrome)
+          Positioned(
+            top: 12,
+            right: 12,
+            child: _RightChrome(
+              saveStatusLabel: widget.saveStatusLabel,
+              collaborating: widget.collaborating,
+              roomLink: widget.roomLink,
+              collaboratorCount: widget.collaboratorCount,
+              onStartCollaboration: widget.onStartCollaboration,
+              onStopCollaboration: widget.onStopCollaboration,
+              viewMode: _controller.viewMode,
+              zenMode: _controller.zenMode,
+              onExitViewMode: _controller.toggleViewMode,
+              onExitZenMode: _controller.toggleZenMode,
+            ),
+          ),
         // Floating property panel — desktop left side
         if (showEditChrome &&
             !isCompact &&
@@ -279,35 +291,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
             (_controller.selectedElements.isNotEmpty ||
                 _controller.isCreationTool))
           Positioned(
-            top: 60,
+            top: topChromeOffset,
             left: 12,
             bottom: 56,
             child: PropertyPanel(controller: _controller),
-          ),
-        // Compact menu button
-        if (showEditChrome && isCompact && widget.config.showMenu)
-          Positioned(
-            top: 12,
-            left: 12,
-            child: CompactMenuButton(
-              controller: _controller,
-              onOpen: widget.onOpen,
-              onSave: widget.onSave,
-              onSaveAs: widget.onSaveAs,
-              onExportPng: widget.onExportPng,
-              onExportSvg: widget.onExportSvg,
-              onImportImage: widget.onImportImage,
-              onShowLibrary: widget.config.showLibraryPanel
-                  ? () => showCompactLibrary(
-                      context,
-                      _controller,
-                      onImportLibrary: widget.onImportLibrary,
-                      onExportLibrary: widget.onExportLibrary,
-                    )
-                  : null,
-              onThemeModeChanged: widget.onThemeModeChanged,
-              currentThemeMode: widget.currentThemeMode,
-            ),
           ),
         // Find overlay
         if (_controller.isFindOpen)
@@ -326,28 +313,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
         if (_controller.isLinkEditorOpen &&
             _controller.selectedElements.length == 1)
           _buildLinkOverlay(),
-        // View mode indicator — click to exit
-        if (_controller.viewMode)
-          Positioned(
-            top: 12,
-            right: 12,
-            child: _modePill(
-              context,
-              label: '退出查看模式',
-              onTap: _controller.toggleViewMode,
-            ),
-          ),
-        // Zen mode indicator — click to exit
-        if (_controller.zenMode && !_controller.viewMode)
-          Positioned(
-            top: 12,
-            right: 12,
-            child: _modePill(
-              context,
-              label: '退出专注模式',
-              onTap: _controller.toggleZenMode,
-            ),
-          ),
       ],
     );
     if (!isCompact && _controller.showMarkdownPanel) {
@@ -380,31 +345,343 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     );
   }
 
-  Widget _modePill(
-    BuildContext context, {
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(16),
+}
+
+class _LeftChrome extends StatelessWidget {
+  const _LeftChrome({
+    required this.controller,
+    required this.compact,
+    required this.showMenu,
+    required this.onBack,
+    required this.onOpen,
+    required this.onSave,
+    required this.onSaveAs,
+    required this.onExportPng,
+    required this.onExportSvg,
+    required this.onImportImage,
+    required this.onImportLibrary,
+    required this.onExportLibrary,
+    required this.onThemeModeChanged,
+    required this.currentThemeMode,
+    required this.onDocumentRenamed,
+  });
+
+  final MarkdrawController controller;
+  final bool compact;
+  final bool showMenu;
+  final VoidCallback? onBack;
+  final VoidCallback? onOpen;
+  final VoidCallback? onSave;
+  final VoidCallback? onSaveAs;
+  final VoidCallback? onExportPng;
+  final VoidCallback? onExportSvg;
+  final VoidCallback? onImportImage;
+  final VoidCallback? onImportLibrary;
+  final VoidCallback? onExportLibrary;
+  final ValueChanged<ThemeMode>? onThemeModeChanged;
+  final ThemeMode? currentThemeMode;
+  final VoidCallback? onDocumentRenamed;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final title = controller.documentName?.trim().isNotEmpty == true
+        ? controller.documentName!.trim()
+        : '未命名白板';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (onBack != null) ...[
+          _ChromeIconButton(
+            tooltip: '返回',
+            icon: Icons.arrow_back,
+            onPressed: onBack!,
           ),
+          const SizedBox(width: 8),
+        ],
+        if (showMenu)
+          compact
+              ? CompactMenuButton(
+                  controller: controller,
+                  onOpen: onOpen,
+                  onSave: onSave,
+                  onSaveAs: onSaveAs,
+                  onExportPng: onExportPng,
+                  onExportSvg: onExportSvg,
+                  onImportImage: onImportImage,
+                  onShowLibrary: () => showCompactLibrary(
+                    context,
+                    controller,
+                    onImportLibrary: onImportLibrary,
+                    onExportLibrary: onExportLibrary,
+                  ),
+                  onThemeModeChanged: onThemeModeChanged,
+                  currentThemeMode: currentThemeMode,
+                  onDocumentRenamed: onDocumentRenamed,
+                )
+              : HamburgerMenu(
+                  controller: controller,
+                  onOpen: onOpen,
+                  onSave: onSave,
+                  onSaveAs: onSaveAs,
+                  onExportPng: onExportPng,
+                  onExportSvg: onExportSvg,
+                  onImportImage: onImportImage,
+                  onThemeModeChanged: onThemeModeChanged,
+                  currentThemeMode: currentThemeMode,
+                  onDocumentRenamed: onDocumentRenamed,
+                ),
+        if (!compact) ...[
+          const SizedBox(width: 10),
+          Tooltip(
+            message: '重命名',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => showRenameDocumentDialog(
+                context,
+                controller,
+                onDocumentRenamed,
+              ),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 168),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: cs.surface.withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 3,
+                    ),
+                  ],
+                ),
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: cs.onSurface,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _RightChrome extends StatelessWidget {
+  const _RightChrome({
+    required this.saveStatusLabel,
+    required this.collaborating,
+    required this.roomLink,
+    required this.collaboratorCount,
+    required this.onStartCollaboration,
+    required this.onStopCollaboration,
+    required this.viewMode,
+    required this.zenMode,
+    required this.onExitViewMode,
+    required this.onExitZenMode,
+  });
+
+  final String? saveStatusLabel;
+  final bool collaborating;
+  final String? roomLink;
+  final int collaboratorCount;
+  final Future<void> Function()? onStartCollaboration;
+  final Future<void> Function()? onStopCollaboration;
+  final bool viewMode;
+  final bool zenMode;
+  final VoidCallback onExitViewMode;
+  final VoidCallback onExitZenMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 720;
+    final canCollaborate =
+        onStartCollaboration != null && onStopCollaboration != null;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (viewMode)
+          _StatusPill(label: '退出查看模式', onTap: onExitViewMode)
+        else if (zenMode)
+          _StatusPill(label: '退出专注模式', onTap: onExitZenMode)
+        else ...[
+          if (!compact && saveStatusLabel != null)
+            _StatusPill(label: saveStatusLabel!),
+          if (!compact && saveStatusLabel != null && canCollaborate)
+            const SizedBox(width: 8),
+          if (canCollaborate)
+            _CollaborationChip(
+              compact: compact,
+              collaborating: collaborating,
+              roomLink: roomLink,
+              collaboratorCount: collaboratorCount,
+              onStart: onStartCollaboration!,
+              onStop: onStopCollaboration!,
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ChromeIconButton extends StatelessWidget {
+  const _ChromeIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.17), blurRadius: 1),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 3),
+        ],
+      ),
+      child: IconButton(
+        tooltip: tooltip,
+        icon: Icon(icon, size: 20),
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        onPressed: onPressed,
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.label, this.onTap});
+
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final pill = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 3),
+        ],
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+    if (onTap == null) {
+      return pill;
+    }
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: pill,
+    );
+  }
+}
+
+class _CollaborationChip extends StatelessWidget {
+  const _CollaborationChip({
+    required this.compact,
+    required this.collaborating,
+    required this.roomLink,
+    required this.collaboratorCount,
+    required this.onStart,
+    required this.onStop,
+  });
+
+  final bool compact;
+  final bool collaborating;
+  final String? roomLink;
+  final int collaboratorCount;
+  final Future<void> Function() onStart;
+  final Future<void> Function() onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final label = collaborating
+        ? (collaboratorCount > 0 ? '协作中 $collaboratorCount' : '协作中')
+        : '创建房间';
+    return MenuAnchor(
+      menuChildren: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Text(
-            label,
+            collaborating ? '协作中' : '本地白板',
             style: TextStyle(
-              color: theme.colorScheme.onPrimaryContainer,
-              fontSize: 13,
+              color: cs.onSurface,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
-      ),
+        if (roomLink != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 280),
+              child: SelectableText(
+                roomLink!,
+                maxLines: 3,
+                style: TextStyle(
+                  color: cs.onSurfaceVariant,
+                  fontSize: 12,
+                  height: 1.25,
+                ),
+              ),
+            ),
+          ),
+        MenuItemButton(
+          leadingIcon: Icon(collaborating ? Icons.link_off : Icons.link),
+          onPressed: collaborating ? onStop : onStart,
+          child: Text(collaborating ? '停止协作' : '创建房间'),
+        ),
+      ],
+      builder: (context, controller, child) {
+        return FilledButton.icon(
+          onPressed: () {
+            controller.isOpen ? controller.close() : controller.open();
+          },
+          icon: Icon(collaborating ? Icons.sensors : Icons.add_link, size: 18),
+          label: compact ? const SizedBox.shrink() : Text(label),
+          style: FilledButton.styleFrom(
+            minimumSize: compact ? const Size(44, 44) : const Size(0, 44),
+            padding: compact
+                ? EdgeInsets.zero
+                : const EdgeInsets.symmetric(horizontal: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -40,11 +40,8 @@ class TagDetailPage extends ConsumerWidget {
   void _openWhiteboard(
     BuildContext context, {
     String notebookId = 'whiteboard-new',
-    String title = '未命名白板',
   }) {
-    context.push(
-      AppRoutes.whiteboardPath(notebookId: notebookId, title: title),
-    );
+    context.push(AppRoutes.whiteboardPath(notebookId: notebookId));
   }
 
   @override
@@ -70,7 +67,7 @@ class TagDetailPage extends ConsumerWidget {
         notebooks: notebooks,
         onCreate: () => _openWhiteboard(context),
         onOpenNotebook: (item) {
-          _openWhiteboard(context, notebookId: item.id, title: item.title);
+          _openWhiteboard(context, notebookId: item.id);
         },
       ),
     );
