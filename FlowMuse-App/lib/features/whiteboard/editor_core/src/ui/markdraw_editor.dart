@@ -1,6 +1,7 @@
 library;
 
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
+import 'package:flutter/services.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
@@ -30,6 +31,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.onBack,
     this.saveStatusLabel,
     this.collaborating = false,
+    this.collaborationConnecting = false,
+    this.collaborationError,
     this.roomLink,
     this.collaboratorCount = 0,
     this.collaborators = const [],
@@ -67,6 +70,8 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onBack;
   final String? saveStatusLabel;
   final bool collaborating;
+  final bool collaborationConnecting;
+  final String? collaborationError;
   final String? roomLink;
   final int collaboratorCount;
   final List<RemoteCollaboratorOverlay> collaborators;
@@ -287,6 +292,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
             child: _RightChrome(
               saveStatusLabel: widget.saveStatusLabel,
               collaborating: widget.collaborating,
+              collaborationConnecting: widget.collaborationConnecting,
+              collaborationError: widget.collaborationError,
               roomLink: widget.roomLink,
               collaboratorCount: widget.collaboratorCount,
               onStartCollaboration: widget.onStartCollaboration,
@@ -494,6 +501,8 @@ class _RightChrome extends StatelessWidget {
   const _RightChrome({
     required this.saveStatusLabel,
     required this.collaborating,
+    required this.collaborationConnecting,
+    required this.collaborationError,
     required this.roomLink,
     required this.collaboratorCount,
     required this.onStartCollaboration,
@@ -506,6 +515,8 @@ class _RightChrome extends StatelessWidget {
 
   final String? saveStatusLabel;
   final bool collaborating;
+  final bool collaborationConnecting;
+  final String? collaborationError;
   final String? roomLink;
   final int collaboratorCount;
   final Future<void> Function()? onStartCollaboration;
@@ -537,6 +548,8 @@ class _RightChrome extends StatelessWidget {
             _CollaborationChip(
               compact: compact,
               collaborating: collaborating,
+              connecting: collaborationConnecting,
+              error: collaborationError,
               roomLink: roomLink,
               collaboratorCount: collaboratorCount,
               onStart: onStartCollaboration!,
@@ -623,6 +636,8 @@ class _CollaborationChip extends StatefulWidget {
   const _CollaborationChip({
     required this.compact,
     required this.collaborating,
+    required this.connecting,
+    required this.error,
     required this.roomLink,
     required this.collaboratorCount,
     required this.onStart,
@@ -631,6 +646,8 @@ class _CollaborationChip extends StatefulWidget {
 
   final bool compact;
   final bool collaborating;
+  final bool connecting;
+  final String? error;
   final String? roomLink;
   final int collaboratorCount;
   final Future<void> Function() onStart;
@@ -644,7 +661,11 @@ class _CollaborationChipState extends State<_CollaborationChip> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final label = widget.collaborating
+    final label = widget.connecting
+        ? '连接中'
+        : widget.error != null
+        ? '协作失败'
+        : widget.collaborating
         ? (widget.collaboratorCount > 0
               ? '协作中 ${widget.collaboratorCount}'
               : '协作中')
@@ -654,10 +675,27 @@ class _CollaborationChipState extends State<_CollaborationChip> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Text(
-            widget.collaborating ? '协作中' : '本地白板',
+            widget.connecting
+                ? '连接中'
+                : widget.error != null
+                ? '协作失败'
+                : widget.collaborating
+                ? '协作中'
+                : '本地白板',
             style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700),
           ),
         ),
+        if (widget.error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 280),
+              child: Text(
+                widget.error!,
+                style: TextStyle(color: cs.error, fontSize: 12, height: 1.25),
+              ),
+            ),
+          ),
         if (widget.roomLink != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -674,9 +712,27 @@ class _CollaborationChipState extends State<_CollaborationChip> {
               ),
             ),
           ),
+        if (widget.roomLink != null)
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.copy),
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: widget.roomLink!));
+              if (!context.mounted) {
+                return;
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('房间链接已复制')),
+              );
+            },
+            child: const Text('复制链接'),
+          ),
         MenuItemButton(
           leadingIcon: Icon(widget.collaborating ? Icons.link_off : Icons.link),
-          onPressed: widget.collaborating ? widget.onStop : widget.onStart,
+          onPressed: widget.connecting
+              ? null
+              : widget.collaborating
+              ? widget.onStop
+              : widget.onStart,
           child: Text(widget.collaborating ? '停止协作' : '创建房间'),
         ),
       ],

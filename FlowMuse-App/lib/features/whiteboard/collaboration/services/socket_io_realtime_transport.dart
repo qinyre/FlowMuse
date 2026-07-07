@@ -57,6 +57,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     final existing = _socket;
     if (existing != null && existing.connected) {
       existing.emit(_eventJoinRoom, roomId);
+      await _waitForRoomJoin();
       return;
     }
 
@@ -71,6 +72,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     _socket = socket;
 
     final connected = Completer<void>();
+    final joined = Completer<void>();
     socket.onConnect((_) {
       if (!connected.isCompleted) {
         connected.complete();
@@ -83,6 +85,9 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       if (!_firstInRoom.isClosed) {
         _firstInRoom.add(null);
       }
+      if (!joined.isCompleted) {
+        joined.complete();
+      }
     });
     socket.on(_eventNewUser, (data) {
       if (data is String && !_newUsers.isClosed) {
@@ -94,10 +99,17 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       if (!_roomUsers.isClosed) {
         _roomUsers.add(socketIds);
       }
+      if (!joined.isCompleted && socketIds.contains(socket.id)) {
+        joined.complete();
+      }
     });
     socket.on(_eventRoomError, (data) {
+      final message = data?.toString() ?? '协作房间错误';
       if (!_errors.isClosed) {
-        _errors.add(data?.toString() ?? '协作房间错误');
+        _errors.add(message);
+      }
+      if (!joined.isCompleted) {
+        joined.completeError(StateError(message));
       }
     });
     socket.onConnectError((error) {
@@ -123,6 +135,42 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       onTimeout: () => throw StateError('Socket.IO connect timed out'),
     );
     socket.emit(_eventJoinRoom, roomId);
+    await joined.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () => throw StateError('Socket.IO join room timed out'),
+    );
+  }
+
+  Future<void> _waitForRoomJoin() async {
+    final socket = _socket;
+    if (socket == null) {
+      throw StateError('协作连接未建立');
+    }
+    final joined = Completer<void>();
+    late void Function(dynamic) roomUserHandler;
+    late void Function(dynamic) roomErrorHandler;
+    roomUserHandler = (data) {
+      final socketIds = _socketIdsFromRoomUsers(data);
+      if (socketIds.contains(socket.id) && !joined.isCompleted) {
+        joined.complete();
+      }
+    };
+    roomErrorHandler = (data) {
+      if (!joined.isCompleted) {
+        joined.completeError(StateError(data?.toString() ?? '协作房间错误'));
+      }
+    };
+    socket.on(_eventRoomUserChange, roomUserHandler);
+    socket.on(_eventRoomError, roomErrorHandler);
+    try {
+      await joined.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw StateError('Socket.IO join room timed out'),
+      );
+    } finally {
+      socket.off(_eventRoomUserChange, roomUserHandler);
+      socket.off(_eventRoomError, roomErrorHandler);
+    }
   }
 
   @override

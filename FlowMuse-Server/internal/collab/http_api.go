@@ -108,6 +108,10 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 			return
 		}
 		if err := api.sceneStore.Create(ctx, snapshot); err != nil {
+			if errors.Is(err, storage.ErrRoomAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

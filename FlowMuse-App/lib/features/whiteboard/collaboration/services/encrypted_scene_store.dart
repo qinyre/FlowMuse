@@ -22,6 +22,15 @@ abstract interface class EncryptedSceneStore {
   });
 }
 
+class StaleSceneSnapshotException implements Exception {
+  const StaleSceneSnapshotException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class MemoryEncryptedSceneStore implements EncryptedSceneStore {
   final Map<String, ExcalidrawScene> _scenes = {};
 
@@ -108,6 +117,9 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
         'iv': base64Encode(payload.iv),
       }),
     );
+    if (response.statusCode == 409) {
+      throw const StaleSceneSnapshotException('远端场景版本已更新');
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('Save scene failed: HTTP ${response.statusCode}');
     }

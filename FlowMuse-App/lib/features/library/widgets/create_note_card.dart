@@ -17,6 +17,12 @@ class CreateNoteCard extends StatelessWidget {
   final String title;
   final String subtitle;
 
+  Key get _tapKey {
+    return title == '新建'
+        ? const ValueKey('create-notebook-card')
+        : const ValueKey('join-room-card');
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -33,7 +39,7 @@ class CreateNoteCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: InkWell(
-              key: const ValueKey('create-note-card'),
+              key: _tapKey,
               onTap: onTap,
               child: Center(
                 child: DecoratedBox(
@@ -42,8 +48,8 @@ class CreateNoteCard extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Icon(
+                    padding: const EdgeInsets.all(16),
+                    child: Icon(
                       icon,
                       size: 34,
                       color: colorScheme.primary,

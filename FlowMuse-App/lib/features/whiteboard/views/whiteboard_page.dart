@@ -157,6 +157,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _startCollaboration() async {
+    final currentStatus = ref.read(whiteboardViewModelProvider).collaborationStatus;
+    if (currentStatus == WhiteboardCollaborationStatus.connecting) {
+      return;
+    }
     await ref
         .read(whiteboardViewModelProvider.notifier)
         .startCollaboration(initialScene: _collaborationAdapter.currentScene());
@@ -347,6 +351,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _collaborationAdapter.applyRemoteScene(nextScene);
     _applyingRemoteScene = false;
 
+    if (widget.temporaryCollaboration) {
+      if (mounted) {
+        ref.read(whiteboardViewModelProvider.notifier).markSaved();
+      }
+      return;
+    }
+
     final repository = ref.read(whiteboardSceneRepositoryProvider);
     await repository.saveScene(widget.noteId, nextContent);
     await ref.read(libraryIndexProvider.notifier).touchNote(widget.noteId);
@@ -396,6 +407,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
               config: const MarkdrawEditorConfig(initialBackground: '#fdfdfb'),
               saveStatusLabel: _saveStatusLabel(state.saveStatus),
               collaborating: state.collaborating,
+              collaborationConnecting:
+                  state.collaborationStatus ==
+                  WhiteboardCollaborationStatus.connecting,
+              collaborationError: state.collaborationError,
               roomLink: state.roomLink,
               collaboratorCount: state.collaborators.length,
               collaborators: _remoteCollaboratorOverlays(state),

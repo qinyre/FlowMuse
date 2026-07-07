@@ -138,13 +138,22 @@ class CollaborationRepository {
       return;
     }
 
-    await _sceneStore.saveScene(room: room, scene: syncableScene);
+    final sceneToBroadcast = await _saveSceneResolvingConflict(
+      room: room,
+      scene: syncableScene,
+    );
+    final elementsForMessage = identical(sceneToBroadcast, syncableScene)
+        ? elementsToBroadcast
+        : sceneToBroadcast.elements;
     final message = initial
-        ? CollaborationMessage.sceneInit(elements: elementsToBroadcast)
-        : CollaborationMessage.sceneUpdate(elements: elementsToBroadcast);
+        ? CollaborationMessage.sceneInit(elements: elementsForMessage)
+        : CollaborationMessage.sceneUpdate(elements: elementsForMessage);
     await _send(room: room, message: message);
-    _rememberBroadcasted(elementsToBroadcast);
-    _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
+    _rememberBroadcasted(elementsForMessage);
+    _latestScene = sceneToBroadcast;
+    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
+      sceneToBroadcast.elements,
+    );
   }
 
   Future<void> broadcastMouseLocation({
@@ -256,6 +265,31 @@ class CollaborationRepository {
       plainBytes: message.toBytes(),
     );
     await _transport.send(encrypted, volatile: volatile);
+  }
+
+  Future<ExcalidrawScene> _saveSceneResolvingConflict({
+    required CollaborationRoom room,
+    required ExcalidrawScene scene,
+  }) async {
+    try {
+      await _sceneStore.saveScene(room: room, scene: scene);
+      return scene;
+    } on StaleSceneSnapshotException {
+      final storedScene = await _sceneStore.loadScene(room);
+      if (storedScene == null) {
+        rethrow;
+      }
+      final reconciledElements = _reconciler.reconcile(
+        localElements: scene.elements,
+        remoteElements: storedScene.elements,
+      );
+      final mergedScene = scene.copyWith(
+        elements: _reconciler.getSyncableElements(reconciledElements),
+        files: {...storedScene.files, ...scene.files},
+      );
+      await _sceneStore.saveScene(room: room, scene: mergedScene);
+      return mergedScene;
+    }
   }
 
   List<Map<String, Object?>> _changedElements(

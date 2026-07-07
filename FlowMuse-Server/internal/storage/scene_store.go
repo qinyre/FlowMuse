@@ -85,7 +85,7 @@ WHERE excalidraw_scenes.scene_version <= EXCLUDED.scene_version`,
 }
 
 func (s *SceneStore) Create(ctx context.Context, snapshot SceneSnapshot) error {
-	_, err := s.db.Exec(ctx, `
+	tag, err := s.db.Exec(ctx, `
 INSERT INTO excalidraw_scenes (room_id, scene_version, scene_hash, encrypted_buffer, iv)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (room_id) DO NOTHING`,
@@ -95,5 +95,11 @@ ON CONFLICT (room_id) DO NOTHING`,
 		snapshot.EncryptedBuffer,
 		snapshot.IV,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrRoomAlreadyExists
+	}
+	return nil
 }

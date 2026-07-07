@@ -500,6 +500,7 @@ class _EmptyLibrary extends StatelessWidget {
               runSpacing: 10,
               children: [
                 FilledButton.icon(
+                  key: const ValueKey('create-notebook-card'),
                   onPressed: onCreate,
                   icon: const Icon(LucideIcons.plus),
                   label: const Text('新建笔记'),
