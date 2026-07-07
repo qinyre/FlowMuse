@@ -10,15 +10,19 @@ import (
 )
 
 var ErrRoomAccessDenied = errors.New("room access denied")
+var ErrRoomEnded = errors.New("room ended")
 
 type RoomMetadata struct {
 	RoomID        string `json:"roomId"`
 	OwnerID       string `json:"ownerId,omitempty"`
 	AccessPolicy  string `json:"accessPolicy"`
 	CreatedAt     int64  `json:"createdAt"`
+	EndedAt       int64  `json:"endedAt,omitempty"`
+	EndedBy       string `json:"endedBy,omitempty"`
 	LastJoinedAt  int64  `json:"lastJoinedAt,omitempty"`
 	MemberRole    string `json:"memberRole,omitempty"`
 	Authenticated bool   `json:"authenticated"`
+	Ended         bool   `json:"ended"`
 }
 
 type RoomStore struct {
@@ -35,6 +39,8 @@ CREATE TABLE IF NOT EXISTS collaboration_rooms (
 	room_id TEXT PRIMARY KEY,
 	owner_id TEXT REFERENCES users(id) ON DELETE SET NULL,
 	access_policy TEXT NOT NULL DEFAULT 'link_guest',
+	ended_at TIMESTAMPTZ,
+	ended_by TEXT REFERENCES users(id) ON DELETE SET NULL,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -85,9 +91,11 @@ RETURNING created_at`, roomID, ownerID).Scan(&createdAt)
 func (s *RoomStore) LoadRoom(ctx context.Context, roomID string, userID string) (RoomMetadata, error) {
 	var metadata RoomMetadata
 	var createdAt time.Time
+	var endedAt *time.Time
 	var joinedAt *time.Time
 	err := s.db.QueryRow(ctx, `
 SELECT r.room_id, COALESCE(r.owner_id, ''), r.access_policy, r.created_at,
+	COALESCE(r.ended_by, ''), r.ended_at,
 	COALESCE(m.role, ''), m.joined_at
 FROM collaboration_rooms r
 LEFT JOIN room_members m ON m.room_id = r.room_id AND m.user_id = NULLIF($2, '')
@@ -96,6 +104,8 @@ WHERE r.room_id = $1`, roomID, userID).Scan(
 		&metadata.OwnerID,
 		&metadata.AccessPolicy,
 		&createdAt,
+		&metadata.EndedBy,
+		&endedAt,
 		&metadata.MemberRole,
 		&joinedAt,
 	)
@@ -106,9 +116,16 @@ WHERE r.room_id = $1`, roomID, userID).Scan(
 		return RoomMetadata{}, err
 	}
 	metadata.CreatedAt = createdAt.UnixMilli()
+	if endedAt != nil {
+		metadata.Ended = true
+		metadata.EndedAt = endedAt.UnixMilli()
+	}
 	metadata.Authenticated = userID != ""
 	if joinedAt != nil {
 		metadata.LastJoinedAt = joinedAt.UnixMilli()
+	}
+	if metadata.MemberRole == "" && metadata.OwnerID != "" && metadata.OwnerID == userID {
+		metadata.MemberRole = "owner"
 	}
 	return metadata, nil
 }
@@ -124,6 +141,32 @@ ON CONFLICT (room_id, user_id) DO UPDATE SET
 	role = room_members.role,
 	joined_at = now()`, roomID, userID, role)
 	return err
+}
+
+func (s *RoomStore) EndRoom(ctx context.Context, roomID, userID string) (RoomMetadata, error) {
+	metadata, err := s.LoadRoom(ctx, roomID, userID)
+	if err != nil {
+		return RoomMetadata{}, err
+	}
+	if metadata.Ended {
+		return metadata, nil
+	}
+	if userID == "" || metadata.OwnerID == "" || metadata.OwnerID != userID {
+		return RoomMetadata{}, ErrRoomAccessDenied
+	}
+	var endedAt time.Time
+	err = s.db.QueryRow(ctx, `
+UPDATE collaboration_rooms
+SET ended_at = now(), ended_by = NULLIF($2, '')
+WHERE room_id = $1
+RETURNING ended_at`, roomID, userID).Scan(&endedAt)
+	if err != nil {
+		return RoomMetadata{}, err
+	}
+	metadata.Ended = true
+	metadata.EndedAt = endedAt.UnixMilli()
+	metadata.EndedBy = userID
+	return metadata, nil
 }
 
 func roleForOwner(ownerID string) string {

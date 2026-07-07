@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../models/encrypted_payload.dart';
+import '../models/collaboration_room.dart';
 import '../models/room_collaborator.dart';
 
 enum RealtimeConnectionStatus {
@@ -19,6 +20,8 @@ abstract interface class RealtimeTransport {
 
   Stream<List<RoomCollaborator>> get roomUsers;
 
+  Stream<CollaborationRoomMetadata> get roomEnded;
+
   Stream<void> get firstInRoom;
 
   Stream<String> get errors;
@@ -30,6 +33,8 @@ abstract interface class RealtimeTransport {
   Future<void> connect(String roomId);
 
   Future<void> send(EncryptedPayload payload, {bool volatile = false});
+
+  Future<void> endRoom();
 
   Future<void> disconnect();
 }
@@ -45,6 +50,9 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
 
   @override
   Stream<List<RoomCollaborator>> get roomUsers => const Stream.empty();
+
+  @override
+  Stream<CollaborationRoomMetadata> get roomEnded => const Stream.empty();
 
   @override
   Stream<void> get firstInRoom => const Stream.empty();
@@ -63,6 +71,9 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
 
   @override
   Future<void> disconnect() async {}
+
+  @override
+  Future<void> endRoom() async {}
 
   @override
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {}
@@ -106,6 +117,19 @@ class MemoryRealtimeRoomHub {
     }
   }
 
+  void end(String roomId, MemoryRealtimeTransport sender) {
+    final transports = _rooms.remove(roomId);
+    if (transports == null) {
+      return;
+    }
+    final metadata = CollaborationRoomMetadata.localOwner(roomId);
+    for (final transport in transports) {
+      transport._roomId = null;
+      transport._receiveRoomEnded(metadata);
+      transport._receiveRoomUsers(const []);
+    }
+  }
+
   void broadcast({
     required String roomId,
     required MemoryRealtimeTransport sender,
@@ -136,6 +160,8 @@ class MemoryRealtimeTransport implements RealtimeTransport {
       StreamController<String>.broadcast();
   final StreamController<List<RoomCollaborator>> _roomUsers =
       StreamController<List<RoomCollaborator>>.broadcast();
+  final StreamController<CollaborationRoomMetadata> _roomEnded =
+      StreamController<CollaborationRoomMetadata>.broadcast();
   final StreamController<void> _firstInRoom =
       StreamController<void>.broadcast();
   final StreamController<String> _errors = StreamController<String>.broadcast();
@@ -151,6 +177,9 @@ class MemoryRealtimeTransport implements RealtimeTransport {
 
   @override
   Stream<List<RoomCollaborator>> get roomUsers => _roomUsers.stream;
+
+  @override
+  Stream<CollaborationRoomMetadata> get roomEnded => _roomEnded.stream;
 
   @override
   Stream<void> get firstInRoom => _firstInRoom.stream;
@@ -190,6 +219,16 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   }
 
   @override
+  Future<void> endRoom() async {
+    final roomId = _roomId;
+    if (roomId == null) {
+      throw StateError('协作连接未建立');
+    }
+    hub.end(roomId, this);
+    _connectionStatus.add(RealtimeConnectionStatus.disconnected);
+  }
+
+  @override
   Future<void> disconnect() async {
     final roomId = _roomId;
     if (roomId != null) {
@@ -214,6 +253,12 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   void _receiveRoomUsers(List<RoomCollaborator> users) {
     if (!_roomUsers.isClosed) {
       _roomUsers.add(users);
+    }
+  }
+
+  void _receiveRoomEnded(CollaborationRoomMetadata metadata) {
+    if (!_roomEnded.isClosed) {
+      _roomEnded.add(metadata);
     }
   }
 }

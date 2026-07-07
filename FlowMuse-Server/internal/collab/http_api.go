@@ -214,6 +214,10 @@ func (api *HTTPAPI) rooms(w http.ResponseWriter, r *http.Request) {
 		api.joinRoom(w, r, roomID)
 		return
 	}
+	if suffix == "end" {
+		api.endRoom(w, r, roomID)
+		return
+	}
 	if suffix == "access" {
 		api.roomAccess(w, r, roomID)
 		return
@@ -238,13 +242,22 @@ func (api *HTTPAPI) joinRoom(w http.ResponseWriter, r *http.Request, roomID stri
 	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
 	defer cancel()
 	identity, _ := api.identityFromRequest(r)
+	metadata, err := api.roomStore.LoadRoom(ctx, roomID, identity.UserID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if metadata.Ended {
+		http.Error(w, "协作房间已结束", http.StatusGone)
+		return
+	}
 	if !identity.IsGuest {
 		if err := api.roomStore.UpsertMember(ctx, roomID, identity.UserID, "editor"); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
-	metadata, err := api.roomStore.LoadRoom(ctx, roomID, identity.UserID)
+	metadata, err = api.roomStore.LoadRoom(ctx, roomID, identity.UserID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -268,9 +281,43 @@ func (api *HTTPAPI) roomAccess(w http.ResponseWriter, r *http.Request, roomID st
 	writeJSON(w, http.StatusOK, metadata)
 }
 
+func (api *HTTPAPI) endRoom(w http.ResponseWriter, r *http.Request, roomID string) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, "POST")
+		return
+	}
+	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
+	defer cancel()
+	identity, ok := api.identityFromRequest(r)
+	if !ok || identity.IsGuest {
+		http.Error(w, "未登录", http.StatusUnauthorized)
+		return
+	}
+	metadata, err := api.roomStore.EndRoom(ctx, roomID, identity.UserID)
+	if errors.Is(err, storage.ErrRoomAccessDenied) {
+		http.Error(w, "只有房主可以结束协作", http.StatusForbidden)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, metadata)
+}
+
 func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string) {
 	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
 	defer cancel()
+	identity, _ := api.identityFromRequest(r)
+	metadata, err := api.roomStore.LoadRoom(ctx, roomID, identity.UserID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if metadata.Ended {
+		http.Error(w, "协作房间已结束", http.StatusGone)
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:

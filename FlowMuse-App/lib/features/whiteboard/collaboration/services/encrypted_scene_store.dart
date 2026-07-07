@@ -9,6 +9,12 @@ import 'collaboration_crypto.dart';
 import 'scene_reconciler.dart';
 
 abstract interface class EncryptedSceneStore {
+  Future<CollaborationRoomMetadata> loadMetadata(CollaborationRoom room);
+
+  Future<CollaborationRoomMetadata> joinRoom(CollaborationRoom room);
+
+  Future<CollaborationRoomMetadata> endRoom(CollaborationRoom room);
+
   Future<ExcalidrawScene?> loadScene(CollaborationRoom room);
 
   Future<void> saveScene({
@@ -33,6 +39,27 @@ class StaleSceneSnapshotException implements Exception {
 
 class MemoryEncryptedSceneStore implements EncryptedSceneStore {
   final Map<String, ExcalidrawScene> _scenes = {};
+  final Set<String> _endedRooms = {};
+
+  @override
+  Future<CollaborationRoomMetadata> loadMetadata(CollaborationRoom room) async {
+    return CollaborationRoomMetadata(
+      roomId: room.roomId,
+      role: CollaborationRoomRole.owner,
+      ended: _endedRooms.contains(room.roomId),
+    );
+  }
+
+  @override
+  Future<CollaborationRoomMetadata> joinRoom(CollaborationRoom room) {
+    return loadMetadata(room);
+  }
+
+  @override
+  Future<CollaborationRoomMetadata> endRoom(CollaborationRoom room) async {
+    _endedRooms.add(room.roomId);
+    return loadMetadata(room);
+  }
 
   @override
   Future<ExcalidrawScene?> loadScene(CollaborationRoom room) async {
@@ -80,12 +107,60 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   static const Duration _requestTimeout = Duration(seconds: 15);
 
   @override
+  Future<CollaborationRoomMetadata> loadMetadata(CollaborationRoom room) async {
+    final response = await _client
+        .get(_roomAccessUri(room.roomId), headers: _headers())
+        .timeout(_requestTimeout);
+    if (response.statusCode == 410) {
+      throw StateError('协作房间已结束');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('加载协作房间信息失败：HTTP ${response.statusCode}');
+    }
+    return CollaborationRoomMetadata.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<CollaborationRoomMetadata> joinRoom(CollaborationRoom room) async {
+    final response = await _client
+        .post(_roomJoinUri(room.roomId), headers: _headers())
+        .timeout(_requestTimeout);
+    if (response.statusCode == 410) {
+      throw StateError('协作房间已结束');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('加入协作房间失败：HTTP ${response.statusCode}');
+    }
+    return CollaborationRoomMetadata.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<CollaborationRoomMetadata> endRoom(CollaborationRoom room) async {
+    final response = await _client
+        .post(_roomEndUri(room.roomId), headers: _headers())
+        .timeout(_requestTimeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('结束协作房间失败：HTTP ${response.statusCode}');
+    }
+    return CollaborationRoomMetadata.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
+  @override
   Future<ExcalidrawScene?> loadScene(CollaborationRoom room) async {
     final response = await _client
         .get(_roomSceneUri(room.roomId), headers: _headers())
         .timeout(_requestTimeout);
     if (response.statusCode == 404) {
       return null;
+    }
+    if (response.statusCode == 410) {
+      throw StateError('协作房间已结束');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('加载协作房间失败：HTTP ${response.statusCode}');
@@ -180,6 +255,24 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   Uri _roomSceneUri(String roomId) {
     return _serverUri.replace(
       path: _joinPath(_serverUri.path, '/api/rooms/$roomId/scene'),
+    );
+  }
+
+  Uri _roomJoinUri(String roomId) {
+    return _serverUri.replace(
+      path: _joinPath(_serverUri.path, '/api/rooms/$roomId/join'),
+    );
+  }
+
+  Uri _roomAccessUri(String roomId) {
+    return _serverUri.replace(
+      path: _joinPath(_serverUri.path, '/api/rooms/$roomId/access'),
+    );
+  }
+
+  Uri _roomEndUri(String roomId) {
+    return _serverUri.replace(
+      path: _joinPath(_serverUri.path, '/api/rooms/$roomId/end'),
     );
   }
 

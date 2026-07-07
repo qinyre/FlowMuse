@@ -44,6 +44,8 @@ class WhiteboardPage extends ConsumerStatefulWidget {
   ConsumerState<WhiteboardPage> createState() => _WhiteboardPageState();
 }
 
+enum _OwnerExitAction { cancel, leave, end }
+
 class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   late final MarkdrawController _markdrawController;
   late final MarkdrawFileHandler _fileHandler;
@@ -52,6 +54,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   StreamSubscription<CollaborationMessage>? _collaborationSubscription;
   StreamSubscription<String>? _newUserSubscription;
   StreamSubscription<List<RoomCollaborator>>? _roomUsersSubscription;
+  StreamSubscription<CollaborationRoomMetadata>? _roomEndedSubscription;
   StreamSubscription<String>? _roomErrorSubscription;
   StreamSubscription<RealtimeConnectionStatus>? _connectionStatusSubscription;
   Timer? _idleTimer;
@@ -87,6 +90,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     unawaited(_collaborationSubscription?.cancel());
     unawaited(_newUserSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
+    unawaited(_roomEndedSubscription?.cancel());
     unawaited(_roomErrorSubscription?.cancel());
     unawaited(_connectionStatusSubscription?.cancel());
     _idleTimer?.cancel();
@@ -298,9 +302,19 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
   }
 
-  Future<void> _stopCollaboration() async {
-    if (widget.temporaryCollaboration && mounted && !_temporarySaved) {
-      final save = await _confirmTemporaryRoomExit();
+  Future<void> _leaveCollaboration() async {
+    final state = ref.read(whiteboardViewModelProvider);
+    if (state.isRoomOwner && state.collaborating) {
+      final action = await _confirmOwnerCollaborationExit();
+      if (action == _OwnerExitAction.cancel || !mounted) {
+        return;
+      }
+      if (action == _OwnerExitAction.end) {
+        await _endCollaboration();
+        return;
+      }
+    } else if (widget.temporaryCollaboration && mounted && !_temporarySaved) {
+      final save = await _confirmMemberRoomExit();
       if (save == null) {
         return;
       }
@@ -308,12 +322,50 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         await _saveTemporaryRoomAsLocalNote();
       }
     }
+    await _disconnectCollaboration();
+    if (widget.temporaryCollaboration && mounted) {
+      context.pop();
+    }
+  }
+
+  Future<void> _handleBack() async {
+    final state = ref.read(whiteboardViewModelProvider);
+    if (state.collaborating) {
+      await _leaveCollaboration();
+      if (!widget.temporaryCollaboration && mounted) {
+        context.pop();
+      }
+      return;
+    }
+    context.pop();
+  }
+
+  Future<void> _endCollaboration() async {
+    final confirmed = await _confirmEndCollaborationRoom();
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    await _cancelCollaborationStreams();
+    await ref.read(whiteboardViewModelProvider.notifier).endCollaboration();
+    if (widget.temporaryCollaboration && mounted) {
+      context.pop();
+    }
+  }
+
+  Future<void> _disconnectCollaboration() async {
+    await _cancelCollaborationStreams();
+    await ref.read(whiteboardViewModelProvider.notifier).stopCollaboration();
+  }
+
+  Future<void> _cancelCollaborationStreams() async {
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = null;
     await _newUserSubscription?.cancel();
     _newUserSubscription = null;
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = null;
+    await _roomEndedSubscription?.cancel();
+    _roomEndedSubscription = null;
     await _roomErrorSubscription?.cancel();
     _roomErrorSubscription = null;
     await _connectionStatusSubscription?.cancel();
@@ -322,18 +374,62 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _awayTimer?.cancel();
     _lastIdleState = null;
     _lastRealtimeStatus = null;
-    await ref.read(whiteboardViewModelProvider.notifier).stopCollaboration();
-    if (widget.temporaryCollaboration && mounted) {
-      context.pop();
-    }
   }
 
-  Future<bool?> _confirmTemporaryRoomExit() {
+  Future<_OwnerExitAction> _confirmOwnerCollaborationExit() async {
+    return await showDialog<_OwnerExitAction>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('退出协作房间'),
+            content: const Text('你是房主。可以只让自己离开，或结束整个协作房间。'),
+            actions: [
+              TextButton(
+                onPressed: () =>
+                    Navigator.of(context).pop(_OwnerExitAction.cancel),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () =>
+                    Navigator.of(context).pop(_OwnerExitAction.leave),
+                child: const Text('仅自己退出'),
+              ),
+              FilledButton(
+                onPressed: () =>
+                    Navigator.of(context).pop(_OwnerExitAction.end),
+                child: const Text('结束协作'),
+              ),
+            ],
+          ),
+        ) ??
+        _OwnerExitAction.cancel;
+  }
+
+  Future<bool?> _confirmEndCollaborationRoom() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('结束协作'),
+        content: const Text('结束后，所有成员都会离开房间，已有链接不能再次加入。当前画布内容会保留在各自设备上。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('结束协作'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _confirmMemberRoomExit() {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('退出协作房间'),
-        content: const Text('是否把当前协作白板保存为本地笔记？'),
+        content: const Text('退出后将停止接收此房间的协作更新。是否保存当前白板为本地笔记？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(null),
@@ -341,7 +437,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('不保存退出'),
+            child: const Text('直接退出'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -406,6 +502,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _roomUsersSubscription = _collaborationRepository.roomUsers.listen((users) {
       ref.read(whiteboardViewModelProvider.notifier).applyRoomUsers(users);
     });
+    await _roomEndedSubscription?.cancel();
+    _roomEndedSubscription = _collaborationRepository.roomEnded.listen((
+      metadata,
+    ) {
+      unawaited(_handleRoomEnded(metadata));
+    });
     await _roomErrorSubscription?.cancel();
     _roomErrorSubscription = _collaborationRepository.errors.listen((message) {
       ref
@@ -425,6 +527,42 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             unawaited(_refreshCollaborationSnapshot(room));
           }
         });
+  }
+
+  Future<void> _handleRoomEnded(CollaborationRoomMetadata metadata) async {
+    await _cancelCollaborationStreams();
+    if (!mounted) {
+      return;
+    }
+    ref.read(whiteboardViewModelProvider.notifier).applyRoomEnded(metadata);
+    final save = await _showRoomEndedDialog();
+    if (save == true) {
+      await _saveTemporaryRoomAsLocalNote();
+    }
+    if (widget.temporaryCollaboration && mounted) {
+      context.pop();
+    }
+  }
+
+  Future<bool?> _showRoomEndedDialog() {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('协作已结束'),
+        content: const Text('房主已结束协作。你可以把当前白板保存为本地笔记，或直接返回。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('直接返回'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('保存到本地'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _refreshCollaborationSnapshot(CollaborationRoom room) async {
@@ -546,7 +684,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         if (didPop || !widget.temporaryCollaboration) {
           return;
         }
-        unawaited(_stopCollaboration());
+        unawaited(_leaveCollaboration());
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFFDFDFB),
@@ -566,6 +704,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             shareOriginConfigured: state.shareOriginConfigured,
             collaboratorCount: state.collaborators.length,
             collaborators: _remoteCollaboratorOverlays(state),
+            isCollaborationOwner: state.isRoomOwner,
             onSave: () {
               unawaited(_saveMarkdrawScene());
             },
@@ -594,11 +733,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             },
             onBack: widget.temporaryCollaboration
                 ? () {
-                    unawaited(_stopCollaboration());
+                    unawaited(_leaveCollaboration());
                   }
-                : () => context.pop(),
+                : () {
+                    unawaited(_handleBack());
+                  },
             onStartCollaboration: _startCollaboration,
-            onStopCollaboration: _stopCollaboration,
+            onLeaveCollaboration: _leaveCollaboration,
+            onEndCollaboration: _endCollaboration,
             onPointerPresence: _broadcastPointerPresence,
             onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
             onDocumentRenamed: () {

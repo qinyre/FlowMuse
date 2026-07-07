@@ -47,6 +47,8 @@ class CollaborationRepository {
 
   Stream<List<RoomCollaborator>> get roomUsers => _transport.roomUsers;
 
+  Stream<CollaborationRoomMetadata> get roomEnded => _transport.roomEnded;
+
   Stream<void> get firstInRoom => _transport.firstInRoom;
 
   Stream<String> get errors {
@@ -100,7 +102,11 @@ class CollaborationRepository {
     return room;
   }
 
-  Future<ExcalidrawScene> joinRoom({
+  Future<CollaborationRoomMetadata> loadMetadata(CollaborationRoom room) {
+    return _sceneStore.loadMetadata(room);
+  }
+
+  Future<CollaborationJoinResult> joinRoom({
     required CollaborationRoom room,
     required ExcalidrawScene localScene,
   }) async {
@@ -108,6 +114,7 @@ class CollaborationRepository {
     if (storedScene == null) {
       throw StateError('房间不存在或尚未创建');
     }
+    final metadata = await _sceneStore.joinRoom(room);
     await _transport.connect(room.roomId);
     _activeRoom = room;
     final reconciledElements = _reconciler.reconcile(
@@ -124,7 +131,18 @@ class CollaborationRepository {
     );
     _rememberBroadcasted(nextScene.elements);
     _startFullSceneSync();
-    return nextScene;
+    return CollaborationJoinResult(scene: nextScene, metadata: metadata);
+  }
+
+  Future<CollaborationRoomMetadata> endRoom() async {
+    final room = _activeRoom;
+    if (room == null) {
+      throw StateError('协作连接未建立');
+    }
+    final metadata = await _sceneStore.endRoom(room);
+    await _transport.endRoom();
+    _resetLocalState();
+    return metadata;
   }
 
   Future<ExcalidrawScene?> refreshFromSnapshot({
@@ -405,6 +423,11 @@ class CollaborationRepository {
       (element['version']! as num).toInt();
 
   Future<void> stop() async {
+    _resetLocalState();
+    await _transport.disconnect();
+  }
+
+  void _resetLocalState() {
     _fullSceneSyncTimer?.cancel();
     _fullSceneSyncTimer = null;
     _activeRoom = null;
@@ -412,6 +435,12 @@ class CollaborationRepository {
     _broadcastedElementVersions.clear();
     _uploadedFileIds.clear();
     _lastBroadcastedOrReceivedSceneVersion = -1;
-    await _transport.disconnect();
   }
+}
+
+class CollaborationJoinResult {
+  const CollaborationJoinResult({required this.scene, required this.metadata});
+
+  final ExcalidrawScene scene;
+  final CollaborationRoomMetadata metadata;
 }

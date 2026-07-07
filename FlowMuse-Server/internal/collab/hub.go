@@ -72,6 +72,14 @@ func (h *Hub) Register() {
 			h.leaveRoom(client, roomID)
 		})
 
+		client.On(EventEndRoom, func(args ...any) {
+			roomID, ok := firstString(args)
+			if !ok {
+				return
+			}
+			h.endRoom(client, roomID)
+		})
+
 		client.On(EventServerBroadcast, func(args ...any) {
 			h.forward(client, args, false)
 		})
@@ -93,6 +101,10 @@ func (h *Hub) Register() {
 func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 	if !h.roomExists(roomID) {
 		client.Emit(EventRoomError, "房间不存在或尚未创建")
+		return
+	}
+	if h.roomEnded(roomID) {
+		client.Emit(EventRoomError, "协作房间已结束")
 		return
 	}
 	socketID := string(client.Id())
@@ -172,6 +184,38 @@ func (h *Hub) leaveRoom(client *socket.Socket, roomID string) {
 	h.server.To(socket.Room(roomID)).Emit(EventRoomUserChange, users)
 }
 
+func (h *Hub) endRoom(client *socket.Socket, roomID string) {
+	identity := h.identityFromSocket(client)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	metadata, err := h.roomStore.EndRoom(ctx, roomID, identity.UserID)
+	if errors.Is(err, storage.ErrRoomAccessDenied) {
+		client.Emit(EventRoomError, "只有房主可以结束协作")
+		return
+	}
+	if err != nil {
+		client.Emit(EventRoomError, err.Error())
+		return
+	}
+
+	h.mu.Lock()
+	users := h.roomUsers[roomID]
+	socketIDs := make([]string, 0, len(users))
+	for socketID := range users {
+		socketIDs = append(socketIDs, socketID)
+		delete(h.socketRooms, socketID)
+	}
+	delete(h.roomUsers, roomID)
+	h.mu.Unlock()
+
+	room := socket.Room(roomID)
+	h.server.To(room).Emit(EventRoomEnded, metadata)
+	h.server.To(room).Emit(EventRoomUserChange, []RoomUser{})
+	for _, socketID := range socketIDs {
+		h.server.In(socket.Room(socketID)).SocketsLeave(room)
+	}
+}
+
 func (h *Hub) userFollow(client *socket.Socket, args []any) {
 	roomID, followedSocketID, ok := parseUserFollowArgs(args)
 	if !ok {
@@ -242,6 +286,13 @@ func (h *Hub) roomExists(roomID string) bool {
 		return true
 	}
 	return !errors.Is(err, pgx.ErrNoRows)
+}
+
+func (h *Hub) roomEnded(roomID string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	metadata, err := h.roomStore.LoadRoom(ctx, roomID, "")
+	return err == nil && metadata.Ended
 }
 
 func parseBroadcastArgs(args []any) (string, EncryptedFrame, bool) {

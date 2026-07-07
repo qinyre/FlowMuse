@@ -39,8 +39,10 @@ class MarkdrawEditor extends StatefulWidget {
     this.shareOriginConfigured = true,
     this.collaboratorCount = 0,
     this.collaborators = const [],
+    this.isCollaborationOwner = false,
     this.onStartCollaboration,
-    this.onStopCollaboration,
+    this.onLeaveCollaboration,
+    this.onEndCollaboration,
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
     this.onDocumentRenamed,
@@ -81,8 +83,10 @@ class MarkdrawEditor extends StatefulWidget {
   final bool shareOriginConfigured;
   final int collaboratorCount;
   final List<RemoteCollaboratorOverlay> collaborators;
+  final bool isCollaborationOwner;
   final Future<void> Function()? onStartCollaboration;
-  final Future<void> Function()? onStopCollaboration;
+  final Future<void> Function()? onLeaveCollaboration;
+  final Future<void> Function()? onEndCollaboration;
   final void Function(Offset localPosition, bool pointerDown)?
   onPointerPresence;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
@@ -305,8 +309,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
               roomValue: widget.roomValue,
               shareOriginConfigured: widget.shareOriginConfigured,
               collaboratorCount: widget.collaboratorCount,
+              isCollaborationOwner: widget.isCollaborationOwner,
               onStartCollaboration: widget.onStartCollaboration,
-              onStopCollaboration: widget.onStopCollaboration,
+              onLeaveCollaboration: widget.onLeaveCollaboration,
+              onEndCollaboration: widget.onEndCollaboration,
               viewMode: _controller.viewMode,
               zenMode: _controller.zenMode,
               onExitViewMode: _controller.toggleViewMode,
@@ -517,8 +523,10 @@ class _RightChrome extends StatelessWidget {
     required this.roomValue,
     required this.shareOriginConfigured,
     required this.collaboratorCount,
+    required this.isCollaborationOwner,
     required this.onStartCollaboration,
-    required this.onStopCollaboration,
+    required this.onLeaveCollaboration,
+    required this.onEndCollaboration,
     required this.viewMode,
     required this.zenMode,
     required this.onExitViewMode,
@@ -534,8 +542,10 @@ class _RightChrome extends StatelessWidget {
   final String? roomValue;
   final bool shareOriginConfigured;
   final int collaboratorCount;
+  final bool isCollaborationOwner;
   final Future<void> Function()? onStartCollaboration;
-  final Future<void> Function()? onStopCollaboration;
+  final Future<void> Function()? onLeaveCollaboration;
+  final Future<void> Function()? onEndCollaboration;
   final bool viewMode;
   final bool zenMode;
   final VoidCallback onExitViewMode;
@@ -545,7 +555,7 @@ class _RightChrome extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 720;
     final canCollaborate =
-        onStartCollaboration != null && onStopCollaboration != null;
+        onStartCollaboration != null && onLeaveCollaboration != null;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -570,8 +580,10 @@ class _RightChrome extends StatelessWidget {
               roomValue: roomValue,
               shareOriginConfigured: shareOriginConfigured,
               collaboratorCount: collaboratorCount,
+              isOwner: isCollaborationOwner,
               onStart: onStartCollaboration!,
-              onStop: onStopCollaboration!,
+              onLeave: onLeaveCollaboration!,
+              onEnd: onEndCollaboration,
             ),
         ],
       ],
@@ -661,8 +673,10 @@ class _CollaborationChip extends StatefulWidget {
     required this.roomValue,
     required this.shareOriginConfigured,
     required this.collaboratorCount,
+    required this.isOwner,
     required this.onStart,
-    required this.onStop,
+    required this.onLeave,
+    required this.onEnd,
   });
 
   final bool compact;
@@ -674,8 +688,10 @@ class _CollaborationChip extends StatefulWidget {
   final String? roomValue;
   final bool shareOriginConfigured;
   final int collaboratorCount;
+  final bool isOwner;
   final Future<void> Function() onStart;
-  final Future<void> Function() onStop;
+  final Future<void> Function() onLeave;
+  final Future<void> Function()? onEnd;
 
   @override
   State<_CollaborationChip> createState() => _CollaborationChipState();
@@ -774,14 +790,20 @@ class _CollaborationChipState extends State<_CollaborationChip> {
             child: Text(widget.roomLink == null ? '复制房间码' : '复制链接'),
           ),
         MenuItemButton(
-          leadingIcon: Icon(widget.collaborating ? Icons.link_off : Icons.link),
+          leadingIcon: Icon(widget.collaborating ? Icons.logout : Icons.link),
           onPressed: widget.connecting
               ? null
               : widget.collaborating
-              ? widget.onStop
+              ? widget.onLeave
               : widget.onStart,
-          child: Text(widget.collaborating ? '停止协作' : '创建房间'),
+          child: Text(widget.collaborating ? '退出房间' : '创建房间'),
         ),
+        if (widget.collaborating && widget.isOwner && widget.onEnd != null)
+          MenuItemButton(
+            leadingIcon: Icon(Icons.stop_circle, color: cs.error),
+            onPressed: widget.connecting ? null : widget.onEnd,
+            child: Text('结束协作', style: TextStyle(color: cs.error)),
+          ),
       ],
       builder: (context, controller, child) {
         return FilledButton.icon(

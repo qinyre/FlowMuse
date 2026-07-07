@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../../../account/models/collaboration_identity.dart';
+import '../models/collaboration_room.dart';
 import '../models/encrypted_payload.dart';
 import '../models/room_collaborator.dart';
 import 'realtime_transport.dart';
@@ -18,6 +19,8 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   static const String _eventRoomUserChange = 'room-user-change';
   static const String _eventRoomError = 'room-error';
   static const String _eventLeaveRoom = 'leave-room';
+  static const String _eventEndRoom = 'end-room';
+  static const String _eventRoomEnded = 'room-ended';
   static const String _eventServerBroadcast = 'server-broadcast';
   static const String _eventServerVolatileBroadcast =
       'server-volatile-broadcast';
@@ -31,6 +34,8 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       StreamController<String>.broadcast();
   final StreamController<List<RoomCollaborator>> _roomUsers =
       StreamController<List<RoomCollaborator>>.broadcast();
+  final StreamController<CollaborationRoomMetadata> _roomEnded =
+      StreamController<CollaborationRoomMetadata>.broadcast();
   final StreamController<void> _firstInRoom =
       StreamController<void>.broadcast();
   final StreamController<String> _errors = StreamController<String>.broadcast();
@@ -48,6 +53,9 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
 
   @override
   Stream<List<RoomCollaborator>> get roomUsers => _roomUsers.stream;
+
+  @override
+  Stream<CollaborationRoomMetadata> get roomEnded => _roomEnded.stream;
 
   @override
   Stream<void> get firstInRoom => _firstInRoom.stream;
@@ -154,6 +162,17 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       }
       _emitStatus(RealtimeConnectionStatus.failed);
     });
+    socket.on(_eventRoomEnded, (data) {
+      final metadata = _metadataFromEvent(data);
+      if (!_roomEnded.isClosed) {
+        _roomEnded.add(metadata);
+      }
+      _roomId = null;
+      if (!_roomUsers.isClosed) {
+        _roomUsers.add(const []);
+      }
+      _emitStatus(RealtimeConnectionStatus.disconnected);
+    });
     socket.onConnectError((error) {
       if (!connected.isCompleted) {
         connected.completeError(StateError('Socket.IO connect failed: $error'));
@@ -237,6 +256,16 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   }
 
   @override
+  Future<void> endRoom() async {
+    final roomId = _roomId;
+    final socket = _socket;
+    if (roomId == null || socket == null || !socket.connected) {
+      throw StateError('协作连接未建立');
+    }
+    socket.emit(_eventEndRoom, roomId);
+  }
+
+  @override
   Future<void> disconnect() async {
     final roomId = _roomId;
     final socket = _socket;
@@ -292,5 +321,18 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
         else if (item is Map && item['socketId'] is String)
           RoomCollaborator.fromJson(Map<String, Object?>.from(item)),
     ];
+  }
+
+  CollaborationRoomMetadata _metadataFromEvent(Object? value) {
+    if (value is Map) {
+      return CollaborationRoomMetadata.fromJson(
+        Map<String, Object?>.from(value),
+      );
+    }
+    return CollaborationRoomMetadata(
+      roomId: _roomId ?? '',
+      role: CollaborationRoomRole.unknown,
+      ended: true,
+    );
   }
 }

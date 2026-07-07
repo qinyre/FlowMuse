@@ -85,6 +85,65 @@ class CollaborationRoom {
   }
 }
 
+enum CollaborationRoomRole {
+  unknown(''),
+  owner('owner'),
+  editor('editor');
+
+  const CollaborationRoomRole(this.wireName);
+
+  final String wireName;
+
+  bool get isOwner => this == owner;
+
+  static CollaborationRoomRole fromWireName(String? value) {
+    return switch (value) {
+      'owner' => owner,
+      'editor' => editor,
+      _ => unknown,
+    };
+  }
+}
+
+class CollaborationRoomMetadata {
+  const CollaborationRoomMetadata({
+    required this.roomId,
+    required this.role,
+    required this.ended,
+    this.ownerId = '',
+    this.endedBy = '',
+    this.endedAt = 0,
+  });
+
+  final String roomId;
+  final String ownerId;
+  final CollaborationRoomRole role;
+  final bool ended;
+  final String endedBy;
+  final int endedAt;
+
+  bool get isOwner => role.isOwner;
+
+  factory CollaborationRoomMetadata.fromJson(Map<String, Object?> json) {
+    return CollaborationRoomMetadata(
+      roomId: json['roomId'] as String? ?? '',
+      ownerId: json['ownerId'] as String? ?? '',
+      role: CollaborationRoomRole.fromWireName(json['memberRole'] as String?),
+      ended: json['ended'] as bool? ?? false,
+      endedBy: json['endedBy'] as String? ?? '',
+      endedAt: (json['endedAt'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  static CollaborationRoomMetadata localOwner(String roomId) {
+    return CollaborationRoomMetadata(
+      roomId: roomId,
+      role: CollaborationRoomRole.owner,
+      ended: false,
+    );
+  }
+}
+
 enum CollaborationRoomParseError { empty, invalid }
 
 class CollaborationRoomParseResult {

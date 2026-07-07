@@ -28,6 +28,8 @@ enum WhiteboardCollaborationStatus {
   failed,
 }
 
+enum WhiteboardCollaborationExitReason { none, leftBySelf, endedByHost }
+
 class WhiteboardState {
   const WhiteboardState({
     this.noteId = '',
@@ -37,6 +39,8 @@ class WhiteboardState {
     this.collaborators = const {},
     this.collaborationStatus = WhiteboardCollaborationStatus.idle,
     this.collaborationError,
+    this.roomMetadata,
+    this.exitReason = WhiteboardCollaborationExitReason.none,
     this.shareOrigin = 'https://flowmuse.local',
     this.shareOriginConfigured = false,
   });
@@ -48,8 +52,14 @@ class WhiteboardState {
   final Map<String, CollaboratorPresence> collaborators;
   final WhiteboardCollaborationStatus collaborationStatus;
   final String? collaborationError;
+  final CollaborationRoomMetadata? roomMetadata;
+  final WhiteboardCollaborationExitReason exitReason;
   final String shareOrigin;
   final bool shareOriginConfigured;
+
+  bool get isRoomOwner => roomMetadata?.isOwner ?? false;
+
+  bool get roomEnded => roomMetadata?.ended ?? false;
 
   String? get roomLink {
     final room = activeRoom;
@@ -69,10 +79,13 @@ class WhiteboardState {
     Map<String, CollaboratorPresence>? collaborators,
     WhiteboardCollaborationStatus? collaborationStatus,
     String? collaborationError,
+    CollaborationRoomMetadata? roomMetadata,
+    WhiteboardCollaborationExitReason? exitReason,
     String? shareOrigin,
     bool? shareOriginConfigured,
     bool clearRoom = false,
     bool clearError = false,
+    bool clearMetadata = false,
   }) {
     return WhiteboardState(
       noteId: noteId ?? this.noteId,
@@ -84,6 +97,8 @@ class WhiteboardState {
       collaborationError: clearError
           ? null
           : collaborationError ?? this.collaborationError,
+      roomMetadata: clearMetadata ? null : roomMetadata ?? this.roomMetadata,
+      exitReason: exitReason ?? this.exitReason,
       shareOrigin: shareOrigin ?? this.shareOrigin,
       shareOriginConfigured:
           shareOriginConfigured ?? this.shareOriginConfigured,
@@ -136,6 +151,8 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
       final room = await _repository.startNewRoom(initialScene: initialScene);
       state = state.copyWith(
         activeRoom: room,
+        roomMetadata: CollaborationRoomMetadata.localOwner(room.roomId),
+        exitReason: WhiteboardCollaborationExitReason.none,
         collaborating: true,
         collaborationStatus: WhiteboardCollaborationStatus.connected,
       );
@@ -158,16 +175,18 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
       clearError: true,
     );
     try {
-      final scene = await _repository.joinRoom(
+      final result = await _repository.joinRoom(
         room: room,
         localScene: localScene,
       );
       state = state.copyWith(
         activeRoom: room,
+        roomMetadata: result.metadata,
+        exitReason: WhiteboardCollaborationExitReason.none,
         collaborating: true,
         collaborationStatus: WhiteboardCollaborationStatus.connected,
       );
-      return scene;
+      return result.scene;
     } catch (error) {
       state = state.copyWith(
         collaborating: false,
@@ -184,7 +203,32 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
       collaborating: false,
       clearRoom: true,
       clearError: true,
+      clearMetadata: true,
+      exitReason: WhiteboardCollaborationExitReason.leftBySelf,
       collaborationStatus: WhiteboardCollaborationStatus.idle,
+    );
+  }
+
+  Future<void> endCollaboration() async {
+    final metadata = await _repository.endRoom();
+    state = state.copyWith(
+      collaborating: false,
+      clearRoom: true,
+      clearError: true,
+      roomMetadata: metadata,
+      exitReason: WhiteboardCollaborationExitReason.endedByHost,
+      collaborationStatus: WhiteboardCollaborationStatus.idle,
+    );
+  }
+
+  void applyRoomEnded(CollaborationRoomMetadata metadata) {
+    state = state.copyWith(
+      collaborating: false,
+      clearRoom: true,
+      clearError: true,
+      roomMetadata: metadata,
+      exitReason: WhiteboardCollaborationExitReason.endedByHost,
+      collaborationStatus: WhiteboardCollaborationStatus.disconnected,
     );
   }
 

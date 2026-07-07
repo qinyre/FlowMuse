@@ -4,6 +4,8 @@ const (
 	EventInitRoom             = "init-room"
 	EventJoinRoom             = "join-room"
 	EventLeaveRoom            = "leave-room"
+	EventEndRoom              = "end-room"
+	EventRoomEnded            = "room-ended"
 	EventRoomError            = "room-error"
 	EventNewUser              = "new-user"
 	EventFirstInRoom          = "first-in-room"
