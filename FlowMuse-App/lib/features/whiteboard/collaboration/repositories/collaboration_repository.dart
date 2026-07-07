@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import '../models/collaboration_message.dart';
 import '../models/collaboration_room.dart';
+import '../models/excalidraw_scene.dart';
 import '../services/collaboration_crypto.dart';
 import '../services/collaboration_file_store.dart';
 import '../services/encrypted_scene_store.dart';
@@ -33,8 +34,7 @@ class CollaborationRepository {
 
   Timer? _fullSceneSyncTimer;
   CollaborationRoom? _activeRoom;
-  List<Map<String, Object?>> _latestElements = const [];
-  Map<String, Object?> _latestFiles = const {};
+  ExcalidrawScene _latestScene = ExcalidrawScene.empty();
   int _lastBroadcastedOrReceivedSceneVersion = -1;
 
   String get socketId => _transport.socketId ?? 'local-client';
@@ -56,68 +56,65 @@ class CollaborationRepository {
   }
 
   Future<CollaborationRoom> startNewRoom({
-    required List<Map<String, Object?>> initialElements,
-    Map<String, Object?> files = const {},
+    required ExcalidrawScene initialScene,
   }) async {
     final room = CollaborationRoom.newRoom(crypto: _crypto);
     await _transport.connect(room.roomId);
     _activeRoom = room;
-    await broadcastScene(
-      room: room,
-      elements: initialElements,
-      files: files,
-      initial: true,
-    );
+    await broadcastScene(room: room, scene: initialScene, initial: true);
     _startFullSceneSync();
     return room;
   }
 
-  Future<List<Map<String, Object?>>> joinRoom({
+  Future<ExcalidrawScene> joinRoom({
     required CollaborationRoom room,
-    required List<Map<String, Object?>> localElements,
-    Map<String, Object?> files = const {},
+    required ExcalidrawScene localScene,
   }) async {
     await _transport.connect(room.roomId);
     _activeRoom = room;
     await _fileStore?.uploadFiles(
       roomId: room.roomId,
       roomKey: room.roomKey,
-      filesJson: files,
+      filesJson: localScene.files,
     );
-    final storedElements = await _sceneStore.loadScene(room);
-    if (storedElements == null) {
-      _latestElements = _reconciler.getSyncableElements(localElements);
-      _latestFiles = files;
+    final storedScene = await _sceneStore.loadScene(room);
+    if (storedScene == null) {
+      _latestScene = localScene.copyWith(
+        elements: _reconciler.getSyncableElements(localScene.elements),
+      );
       _startFullSceneSync();
-      return localElements;
+      return localScene;
     }
     final reconciled = _reconciler.reconcile(
-      localElements: localElements,
-      remoteElements: storedElements,
+      localElements: localScene.elements,
+      remoteElements: storedScene.elements,
     );
-    _latestElements = reconciled;
-    _latestFiles = files;
+    final nextScene = localScene.copyWith(
+      elements: reconciled,
+      appState: {...storedScene.appState, ...localScene.appState},
+      files: {...storedScene.files, ...localScene.files},
+    );
+    _latestScene = nextScene;
     _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
       reconciled,
     );
     _startFullSceneSync();
-    return reconciled;
+    return nextScene;
   }
 
   Future<void> broadcastScene({
     required CollaborationRoom room,
-    required List<Map<String, Object?>> elements,
-    Map<String, Object?> files = const {},
+    required ExcalidrawScene scene,
     bool initial = false,
     bool syncAll = false,
   }) async {
-    final syncableElements = _reconciler.getSyncableElements(elements);
-    _latestElements = syncableElements;
-    _latestFiles = files;
+    final syncableElements = _reconciler.getSyncableElements(scene.elements);
+    final syncableScene = scene.copyWith(elements: syncableElements);
+    _latestScene = syncableScene;
     await _fileStore?.uploadFiles(
       roomId: room.roomId,
       roomKey: room.roomKey,
-      filesJson: files,
+      filesJson: scene.files,
     );
 
     final sceneVersion = _reconciler.getSceneVersion(syncableElements);
@@ -134,7 +131,7 @@ class CollaborationRepository {
       return;
     }
 
-    await _sceneStore.saveScene(room: room, elements: syncableElements);
+    await _sceneStore.saveScene(room: room, scene: syncableScene);
     final message = initial
         ? CollaborationMessage.sceneInit(elements: elementsToBroadcast)
         : CollaborationMessage.sceneUpdate(elements: elementsToBroadcast);
@@ -195,21 +192,24 @@ class CollaborationRepository {
     );
   }
 
-  List<Map<String, Object?>> reconcileRemoteElements({
-    required List<Map<String, Object?>> localElements,
+  ExcalidrawScene reconcileRemoteScene({
+    required ExcalidrawScene localScene,
     required List<Map<String, Object?>> remoteElements,
     Set<String> protectedElementIds = const {},
   }) {
     final reconciled = _reconciler.reconcile(
-      localElements: localElements,
+      localElements: localScene.elements,
       remoteElements: remoteElements,
       protectedElementIds: protectedElementIds,
     );
-    _latestElements = _reconciler.getSyncableElements(reconciled);
+    final nextScene = localScene.copyWith(
+      elements: _reconciler.getSyncableElements(reconciled),
+    );
+    _latestScene = nextScene;
     _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
       reconciled,
     );
-    return reconciled;
+    return nextScene.copyWith(elements: reconciled);
   }
 
   Future<Map<String, dynamic>> loadMissingFiles({
@@ -272,17 +272,10 @@ class CollaborationRepository {
     _fullSceneSyncTimer?.cancel();
     _fullSceneSyncTimer = Timer.periodic(fullSceneSyncInterval, (_) {
       final room = _activeRoom;
-      if (room == null || _latestElements.isEmpty) {
+      if (room == null || _latestScene.elements.isEmpty) {
         return;
       }
-      unawaited(
-        broadcastScene(
-          room: room,
-          elements: _latestElements,
-          files: _latestFiles,
-          syncAll: true,
-        ),
-      );
+      unawaited(broadcastScene(room: room, scene: _latestScene, syncAll: true));
     });
   }
 
@@ -295,8 +288,7 @@ class CollaborationRepository {
     _fullSceneSyncTimer?.cancel();
     _fullSceneSyncTimer = null;
     _activeRoom = null;
-    _latestElements = const [];
-    _latestFiles = const {};
+    _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();
     _lastBroadcastedOrReceivedSceneVersion = -1;
     await _transport.disconnect();

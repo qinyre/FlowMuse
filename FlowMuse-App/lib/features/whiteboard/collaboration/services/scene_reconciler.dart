@@ -74,7 +74,8 @@ class SceneReconciler {
         .millisecondsSinceEpoch;
     return [
       for (final element in elements)
-        if (!_isDeleted(element) || _updatedAt(element) > deletedCutoff)
+        if ((_isDeleted(element) && _updatedAt(element) > deletedCutoff) ||
+            (!_isDeleted(element) && !_isInvisiblySmallElement(element)))
           element,
     ];
   }
@@ -142,4 +143,18 @@ class SceneReconciler {
 
   bool _isDeleted(Map<String, Object?> element) =>
       element['isDeleted']! as bool;
+
+  bool _isInvisiblySmallElement(Map<String, Object?> element) {
+    final type = element['type'];
+    if (type == 'text') {
+      return false;
+    }
+    final width = ((element['width'] as num?) ?? 0).toDouble().abs();
+    final height = ((element['height'] as num?) ?? 0).toDouble().abs();
+    if (type == 'line' || type == 'arrow' || type == 'freedraw') {
+      final points = element['points'];
+      return width < 1 && height < 1 && (points is! List || points.length < 2);
+    }
+    return width < 1 && height < 1;
+  }
 }

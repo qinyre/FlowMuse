@@ -32,8 +32,11 @@ class MarkdrawEditor extends StatefulWidget {
     this.collaborating = false,
     this.roomLink,
     this.collaboratorCount = 0,
+    this.collaborators = const [],
     this.onStartCollaboration,
     this.onStopCollaboration,
+    this.onPointerPresence,
+    this.onVisibleSceneBoundsChanged,
     this.onDocumentRenamed,
   });
 
@@ -66,8 +69,12 @@ class MarkdrawEditor extends StatefulWidget {
   final bool collaborating;
   final String? roomLink;
   final int collaboratorCount;
+  final List<RemoteCollaboratorOverlay> collaborators;
   final Future<void> Function()? onStartCollaboration;
   final Future<void> Function()? onStopCollaboration;
+  final void Function(Offset localPosition, bool pointerDown)?
+  onPointerPresence;
+  final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
   final VoidCallback? onDocumentRenamed;
 
   @override
@@ -195,7 +202,13 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                   _controller.placeLibraryItemAt(details.data, localPos);
                 },
                 builder: (context, candidateData, rejectedData) {
-                  return EditorCanvas(controller: _controller);
+                  return EditorCanvas(
+                    controller: _controller,
+                    collaborators: widget.collaborators,
+                    onPointerPresence: widget.onPointerPresence,
+                    onVisibleSceneBoundsChanged:
+                        widget.onVisibleSceneBoundsChanged,
+                  );
                 },
               ),
             ),
@@ -344,7 +357,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       ),
     );
   }
-
 }
 
 class _LeftChrome extends StatelessWidget {
@@ -636,10 +648,7 @@ class _CollaborationChip extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Text(
             collaborating ? '协作中' : '本地白板',
-            style: TextStyle(
-              color: cs.onSurface,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700),
           ),
         ),
         if (roomLink != null)

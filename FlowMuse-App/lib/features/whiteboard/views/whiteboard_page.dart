@@ -8,8 +8,10 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import '../../library/repositories/library_repository.dart';
 import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
+import '../collaboration/models/collaborator_presence.dart';
 import '../collaboration/models/excalidraw_scene.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
+import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../view_models/whiteboard_view_model.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
@@ -23,17 +25,23 @@ class WhiteboardPage extends ConsumerStatefulWidget {
 
 class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   late final MarkdrawController _markdrawController;
+  late final WhiteboardCollaborationAdapter _collaborationAdapter;
   late final CollaborationRepository _collaborationRepository;
   StreamSubscription<CollaborationMessage>? _collaborationSubscription;
   StreamSubscription<String>? _newUserSubscription;
+  StreamSubscription<List<String>>? _roomUsersSubscription;
+  Timer? _idleTimer;
+  Timer? _awayTimer;
   bool _loadingScene = false;
   bool _applyingRemoteScene = false;
   bool _collaborationOpening = false;
+  String? _lastIdleState;
 
   @override
   void initState() {
     super.initState();
     _markdrawController = MarkdrawController();
+    _collaborationAdapter = WhiteboardCollaborationAdapter(_markdrawController);
     _collaborationRepository = ref.read(collaborationRepositoryProvider);
     Future.microtask(_openNote);
   }
@@ -50,6 +58,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   void dispose() {
     unawaited(_collaborationSubscription?.cancel());
     unawaited(_newUserSubscription?.cancel());
+    unawaited(_roomUsersSubscription?.cancel());
+    _idleTimer?.cancel();
+    _awayTimer?.cancel();
     unawaited(_collaborationRepository.stop());
     _markdrawController.dispose();
     super.dispose();
@@ -104,13 +115,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _startCollaboration() async {
-    final scene = _currentScene();
     await ref
         .read(whiteboardViewModelProvider.notifier)
-        .startCollaboration(
-          initialElements: scene.elements,
-          files: scene.files,
-        );
+        .startCollaboration(initialScene: _collaborationAdapter.currentScene());
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
       return;
@@ -125,16 +132,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _collaborationOpening = true;
     try {
       final scene = _currentScene();
-      final reconciled = await ref
+      final reconciledScene = await ref
           .read(whiteboardViewModelProvider.notifier)
-          .joinCollaboration(
-            room: room,
-            localElements: scene.elements,
-            files: scene.files,
-          );
+          .joinCollaboration(room: room, localScene: scene);
       await _listenToRoom(room);
-      if (reconciled.isNotEmpty) {
-        await _applyRemoteElements(reconciled);
+      if (reconciledScene.elements.isNotEmpty) {
+        await _applyRemoteScene(reconciledScene);
       }
     } finally {
       _collaborationOpening = false;
@@ -146,6 +149,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _collaborationSubscription = null;
     await _newUserSubscription?.cancel();
     _newUserSubscription = null;
+    await _roomUsersSubscription?.cancel();
+    _roomUsersSubscription = null;
+    _idleTimer?.cancel();
+    _awayTimer?.cancel();
+    _lastIdleState = null;
     await ref.read(whiteboardViewModelProvider.notifier).stopCollaboration();
   }
 
@@ -157,6 +165,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     await _newUserSubscription?.cancel();
     _newUserSubscription = _collaborationRepository.newUsers.listen((_) {
       unawaited(_broadcastCurrentScene(syncAll: true, initial: true));
+    });
+    await _roomUsersSubscription?.cancel();
+    _roomUsersSubscription = _collaborationRepository.roomUsers.listen((users) {
+      ref.read(whiteboardViewModelProvider.notifier).applyRoomUsers(users);
     });
   }
 
@@ -170,12 +182,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       return;
     }
     final scene = serializedScene == null
-        ? _currentScene()
+        ? _collaborationAdapter.currentScene()
         : ExcalidrawScene.fromContent(serializedScene);
     await _collaborationRepository.broadcastScene(
       room: room,
-      elements: scene.elements,
-      files: scene.files,
+      scene: scene,
       initial: initial,
       syncAll: syncAll,
     );
@@ -203,31 +214,32 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (remoteElements.isEmpty || !mounted) {
       return;
     }
-    final localContent = _markdrawController.serializeScene(
-      format: DocumentFormat.excalidraw,
-    );
-    final localScene = ExcalidrawScene.fromContent(localContent);
-    final reconciled = _collaborationRepository.reconcileRemoteElements(
-      localElements: localScene.elements,
+    final localScene = _collaborationAdapter.currentScene();
+    final reconciledScene = _collaborationRepository.reconcileRemoteScene(
+      localScene: localScene,
       remoteElements: remoteElements,
-      protectedElementIds: _selectedElementIds(),
+      protectedElementIds: _collaborationAdapter.protectedElementIds(),
     );
+    await _applyRemoteScene(reconciledScene);
+  }
+
+  Future<void> _applyRemoteScene(ExcalidrawScene remoteScene) async {
+    final localScene = _collaborationAdapter.currentScene();
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     final remoteFiles = room == null
         ? const <String, dynamic>{}
         : await _collaborationRepository.loadMissingFiles(
             room: room,
-            fileIds: _imageFileIds(reconciled),
+            fileIds: _imageFileIds(remoteScene.elements),
             existingFileIds: localScene.files.keys.toSet(),
           );
-    final nextScene = localScene.copyWith(
-      elements: reconciled,
-      files: {...localScene.files, ...remoteFiles},
+    final nextScene = remoteScene.copyWith(
+      files: {...localScene.files, ...remoteScene.files, ...remoteFiles},
     );
     final nextContent = nextScene.toContent();
 
     _applyingRemoteScene = true;
-    _markdrawController.applyRemoteExcalidrawSceneJson(nextScene.toJson());
+    _collaborationAdapter.applyRemoteScene(nextScene);
     _applyingRemoteScene = false;
 
     final repository = ref.read(whiteboardSceneRepositoryProvider);
@@ -239,15 +251,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   ExcalidrawScene _currentScene() {
-    return ExcalidrawScene.fromJson(
-      _markdrawController.serializeExcalidrawSceneJson(),
-    );
-  }
-
-  Set<String> _selectedElementIds() {
-    return _markdrawController.editorState.selectedIds
-        .map((id) => id.value)
-        .toSet();
+    return _collaborationAdapter.currentScene();
   }
 
   Iterable<String> _imageFileIds(List<Map<String, Object?>> elements) sync* {
@@ -281,9 +285,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             collaborating: state.collaborating,
             roomLink: state.roomLink,
             collaboratorCount: state.collaborators.length,
+            collaborators: _remoteCollaboratorOverlays(state),
             onBack: () => context.pop(),
             onStartCollaboration: _startCollaboration,
             onStopCollaboration: _stopCollaboration,
+            onPointerPresence: _broadcastPointerPresence,
+            onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
             onDocumentRenamed: () {
               unawaited(_renameAndSaveDocument());
             },
@@ -302,5 +309,98 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       WhiteboardSaveStatus.saving => '保存中',
       WhiteboardSaveStatus.saved => '已保存',
     };
+  }
+
+  List<RemoteCollaboratorOverlay> _remoteCollaboratorOverlays(
+    WhiteboardState state,
+  ) {
+    return [
+      for (final presence in state.collaborators.values)
+        RemoteCollaboratorOverlay(
+          socketId: presence.socketId,
+          username: presence.username,
+          pointer: _pointerFromPayload(presence.pointer),
+          selectedElementIds: presence.selectedElementIds.entries
+              .where((entry) => entry.value)
+              .map((entry) => entry.key)
+              .toSet(),
+          idle: presence.idleState != CollaboratorIdleState.active,
+        ),
+    ];
+  }
+
+  Point? _pointerFromPayload(Map<String, Object?>? payload) {
+    if (payload == null) {
+      return null;
+    }
+    final x = payload['x'];
+    final y = payload['y'];
+    if (x is! num || y is! num) {
+      return null;
+    }
+    return Point(x.toDouble(), y.toDouble());
+  }
+
+  void _broadcastPointerPresence(Offset localPosition, bool pointerDown) {
+    _markUserActive();
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room == null) {
+      return;
+    }
+    unawaited(
+      _collaborationRepository.broadcastMouseLocation(
+        room: room,
+        pointer: _collaborationAdapter.pointerPayload(localPosition),
+        button: pointerDown ? 'down' : 'up',
+        selectedElementIds: {
+          for (final id in _collaborationAdapter.selectedElementIds()) id: true,
+        },
+        username: 'FlowMuse',
+      ),
+    );
+  }
+
+  void _broadcastVisibleSceneBounds(Size canvasSize) {
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room == null) {
+      return;
+    }
+    unawaited(
+      _collaborationRepository.broadcastVisibleSceneBounds(
+        room: room,
+        username: 'FlowMuse',
+        sceneBounds: _collaborationAdapter.visibleSceneBounds(canvasSize),
+      ),
+    );
+  }
+
+  void _markUserActive() {
+    _idleTimer?.cancel();
+    _awayTimer?.cancel();
+    _broadcastIdleState('active');
+    _idleTimer = Timer(const Duration(minutes: 1), () {
+      _broadcastIdleState('idle');
+    });
+    _awayTimer = Timer(const Duration(minutes: 5), () {
+      _broadcastIdleState('away');
+    });
+  }
+
+  void _broadcastIdleState(String state) {
+    if (_lastIdleState == state) {
+      return;
+    }
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room == null) {
+      return;
+    }
+    _lastIdleState = state;
+    unawaited(
+      _collaborationRepository.broadcastIdleStatus(
+        room: room,
+        userState: state,
+        username: 'FlowMuse',
+      ),
+    );
   }
 }

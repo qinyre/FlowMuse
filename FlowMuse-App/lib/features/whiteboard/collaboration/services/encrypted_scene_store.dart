@@ -2,38 +2,35 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../models/collaboration_message.dart';
 import '../models/collaboration_room.dart';
 import '../models/encrypted_payload.dart';
+import '../models/excalidraw_scene.dart';
 import 'collaboration_crypto.dart';
 import 'scene_reconciler.dart';
 
 abstract interface class EncryptedSceneStore {
-  Future<List<Map<String, Object?>>?> loadScene(CollaborationRoom room);
+  Future<ExcalidrawScene?> loadScene(CollaborationRoom room);
 
   Future<void> saveScene({
     required CollaborationRoom room,
-    required List<Map<String, Object?>> elements,
+    required ExcalidrawScene scene,
   });
 }
 
 class MemoryEncryptedSceneStore implements EncryptedSceneStore {
-  final Map<String, List<Map<String, Object?>>> _scenes = {};
+  final Map<String, ExcalidrawScene> _scenes = {};
 
   @override
-  Future<List<Map<String, Object?>>?> loadScene(CollaborationRoom room) async {
-    final elements = _scenes[room.roomId];
-    return elements == null ? null : List.unmodifiable(elements);
+  Future<ExcalidrawScene?> loadScene(CollaborationRoom room) async {
+    return _scenes[room.roomId];
   }
 
   @override
   Future<void> saveScene({
     required CollaborationRoom room,
-    required List<Map<String, Object?>> elements,
+    required ExcalidrawScene scene,
   }) async {
-    _scenes[room.roomId] = List.unmodifiable([
-      for (final element in elements) Map<String, Object?>.from(element),
-    ]);
+    _scenes[room.roomId] = ExcalidrawScene.fromJson(scene.toJson());
   }
 }
 
@@ -54,7 +51,7 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   final SceneReconciler _reconciler;
 
   @override
-  Future<List<Map<String, Object?>>?> loadScene(CollaborationRoom room) async {
+  Future<ExcalidrawScene?> loadScene(CollaborationRoom room) async {
     final response = await _client.get(_roomSceneUri(room.roomId));
     if (response.statusCode == 404) {
       return null;
@@ -73,31 +70,28 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       encryptedPayload: payload,
     );
     final decoded = jsonDecode(utf8.decode(bytes));
-    if (decoded is List) {
-      return [
-        for (final element in decoded) Map<String, Object?>.from(element as Map),
-      ];
+    if (decoded is Map<String, Object?> && decoded['type'] == 'excalidraw') {
+      return ExcalidrawScene.fromJson(decoded);
     }
-    if (decoded is Map<String, Object?>) {
-      return CollaborationMessage.fromJson(decoded).elements;
-    }
-    return const [];
+    throw const FormatException(
+      'Encrypted room scene is not an Excalidraw scene',
+    );
   }
 
   @override
   Future<void> saveScene({
     required CollaborationRoom room,
-    required List<Map<String, Object?>> elements,
+    required ExcalidrawScene scene,
   }) async {
     final payload = await _crypto.encrypt(
       roomKey: room.roomKey,
-      plainBytes: utf8.encode(jsonEncode(elements)),
+      plainBytes: utf8.encode(scene.toContent()),
     );
     final response = await _client.put(
       _roomSceneUri(room.roomId),
       headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({
-        'sceneVersion': _reconciler.getSceneVersion(elements),
+        'sceneVersion': _reconciler.getSceneVersion(scene.elements),
         'encryptedBuffer': base64Encode(payload.encryptedBuffer),
         'iv': base64Encode(payload.iv),
       }),

@@ -14,11 +14,7 @@ class ExcalidrawScene {
   });
 
   factory ExcalidrawScene.empty() {
-    return const ExcalidrawScene(
-      elements: [],
-      appState: {},
-      files: {},
-    );
+    return const ExcalidrawScene(elements: [], appState: {}, files: {});
   }
 
   factory ExcalidrawScene.fromContent(String content) {
@@ -40,10 +36,8 @@ class ExcalidrawScene {
                 Map<String, Object?>.from(element as Map),
             ]
           : const [],
-      appState: rawAppState is Map
-          ? Map<String, Object?>.from(rawAppState)
-          : const {},
-      files: rawFiles is Map ? Map<String, Object?>.from(rawFiles) : const {},
+      appState: rawAppState is Map ? _deepMap(rawAppState) : const {},
+      files: rawFiles is Map ? _deepMap(rawFiles) : const {},
     );
   }
 
@@ -63,9 +57,11 @@ class ExcalidrawScene {
       type: type,
       version: version,
       source: source,
-      elements: elements ?? this.elements,
-      appState: appState ?? this.appState,
-      files: files ?? this.files,
+      elements: elements == null
+          ? this.elements
+          : [for (final element in elements) _deepMap(element)],
+      appState: appState == null ? this.appState : _deepMap(appState),
+      files: files == null ? this.files : _deepMap(files),
     );
   }
 
@@ -81,4 +77,21 @@ class ExcalidrawScene {
   }
 
   String toContent() => jsonEncode(toJson());
+}
+
+Map<String, Object?> _deepMap(Map source) {
+  return {
+    for (final entry in source.entries)
+      entry.key as String: _deepValue(entry.value),
+  };
+}
+
+Object? _deepValue(Object? value) {
+  if (value is Map) {
+    return _deepMap(value);
+  }
+  if (value is List) {
+    return [for (final item in value) _deepValue(item)];
+  }
+  return value;
 }

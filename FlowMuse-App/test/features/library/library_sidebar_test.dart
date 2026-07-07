@@ -23,7 +23,7 @@ Widget _testSidebar() {
             path: '/folders',
             builder: (context, state) {
               return const Scaffold(
-                body: LibrarySidebar(section: ShellSection.folders),
+                body: LibrarySidebar(section: ShellSection.notebooks),
               );
             },
           ),

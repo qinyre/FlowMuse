@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
 import '../collaboration/models/collaborator_presence.dart';
+import '../collaboration/models/excalidraw_scene.dart';
 import '../collaboration/collaboration_config.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
 import '../collaboration/services/collaboration_crypto.dart';
@@ -88,28 +89,22 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
   }
 
   Future<void> startCollaboration({
-    required List<Map<String, Object?>> initialElements,
-    Map<String, Object?> files = const {},
+    required ExcalidrawScene initialScene,
   }) async {
-    final room = await _repository.startNewRoom(
-      initialElements: initialElements,
-      files: files,
-    );
+    final room = await _repository.startNewRoom(initialScene: initialScene);
     state = state.copyWith(activeRoom: room, collaborating: true);
   }
 
-  Future<List<Map<String, Object?>>> joinCollaboration({
+  Future<ExcalidrawScene> joinCollaboration({
     required CollaborationRoom room,
-    required List<Map<String, Object?>> localElements,
-    Map<String, Object?> files = const {},
+    required ExcalidrawScene localScene,
   }) async {
-    final elements = await _repository.joinRoom(
+    final scene = await _repository.joinRoom(
       room: room,
-      localElements: localElements,
-      files: files,
+      localScene: localScene,
     );
     state = state.copyWith(activeRoom: room, collaborating: true);
-    return elements;
+    return scene;
   }
 
   Future<void> stopCollaboration() async {
@@ -147,12 +142,34 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
           idleState: _idleStateFromWire(message.payload['userState']),
         );
       case CollaborationMessageType.userVisibleSceneBounds:
+        final sceneBounds = message.payload['sceneBounds'];
+        collaborators[socketId] = current.copyWith(
+          username: message.payload['username'] as String?,
+          sceneBounds: sceneBounds is Map
+              ? Map<String, Object?>.from(sceneBounds)
+              : null,
+        );
       case CollaborationMessageType.sceneInit:
       case CollaborationMessageType.sceneUpdate:
       case CollaborationMessageType.invalidResponse:
         return;
     }
 
+    state = state.copyWith(collaborators: collaborators);
+  }
+
+  void applyRoomUsers(List<String> socketIds) {
+    final allowed = socketIds.toSet()..remove(_repository.socketId);
+    final collaborators = {
+      for (final entry in state.collaborators.entries)
+        if (allowed.contains(entry.key)) entry.key: entry.value,
+    };
+    for (final socketId in allowed) {
+      collaborators.putIfAbsent(
+        socketId,
+        () => CollaboratorPresence(socketId: socketId),
+      );
+    }
     state = state.copyWith(collaborators: collaborators);
   }
 

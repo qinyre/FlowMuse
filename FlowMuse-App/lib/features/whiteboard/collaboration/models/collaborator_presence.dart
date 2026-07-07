@@ -7,6 +7,7 @@ class CollaboratorPresence {
     this.pointer,
     this.button = 'up',
     this.selectedElementIds = const {},
+    this.sceneBounds,
     this.idleState = CollaboratorIdleState.active,
     this.isCurrentUser = false,
   });
@@ -16,6 +17,7 @@ class CollaboratorPresence {
   final Map<String, Object?>? pointer;
   final String button;
   final Map<String, bool> selectedElementIds;
+  final Map<String, Object?>? sceneBounds;
   final CollaboratorIdleState idleState;
   final bool isCurrentUser;
 
@@ -24,6 +26,7 @@ class CollaboratorPresence {
     Map<String, Object?>? pointer,
     String? button,
     Map<String, bool>? selectedElementIds,
+    Map<String, Object?>? sceneBounds,
     CollaboratorIdleState? idleState,
     bool? isCurrentUser,
   }) {
@@ -33,6 +36,7 @@ class CollaboratorPresence {
       pointer: pointer ?? this.pointer,
       button: button ?? this.button,
       selectedElementIds: selectedElementIds ?? this.selectedElementIds,
+      sceneBounds: sceneBounds ?? this.sceneBounds,
       idleState: idleState ?? this.idleState,
       isCurrentUser: isCurrentUser ?? this.isCurrentUser,
     );

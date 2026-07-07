@@ -26,6 +26,24 @@ class LinkIconInfo {
   });
 }
 
+class RemoteCollaboratorOverlay {
+  const RemoteCollaboratorOverlay({
+    required this.socketId,
+    required this.username,
+    required this.pointer,
+    required this.selectedElementIds,
+    this.selectionBounds = const [],
+    this.idle = false,
+  });
+
+  final String socketId;
+  final String username;
+  final Point? pointer;
+  final Set<String> selectedElementIds;
+  final List<ElementSelectionBounds> selectionBounds;
+  final bool idle;
+}
+
 /// A [CustomPainter] that renders the interactive overlay layer.
 ///
 /// This painter sits on top of [StaticCanvasPainter] and draws selection UI
@@ -51,6 +69,7 @@ class InteractiveCanvasPainter extends CustomPainter {
   final Point? closeIndicatorCenter;
   final List<LaserPoint>? laserTrail;
   final List<LinkIconInfo>? linkIcons;
+  final List<RemoteCollaboratorOverlay> remoteCollaborators;
 
   const InteractiveCanvasPainter({
     required this.viewport,
@@ -69,6 +88,7 @@ class InteractiveCanvasPainter extends CustomPainter {
     this.closeIndicatorCenter,
     this.laserTrail,
     this.linkIcons,
+    this.remoteCollaborators = const [],
   });
 
   @override
@@ -222,12 +242,105 @@ class InteractiveCanvasPainter extends CustomPainter {
       }
     }
 
+    for (var i = 0; i < remoteCollaborators.length; i++) {
+      _drawRemoteCollaborator(canvas, remoteCollaborators[i], i);
+    }
+
     canvas.restore();
 
     // Laser trail — drawn in screen space (after restore)
     if (laserTrail != null && laserTrail!.length >= 2) {
       LaserRenderer.draw(canvas, laserTrail!, viewport);
     }
+  }
+
+  void _drawRemoteCollaborator(
+    Canvas canvas,
+    RemoteCollaboratorOverlay collaborator,
+    int index,
+  ) {
+    final color = _remoteColor(
+      index,
+    ).withValues(alpha: collaborator.idle ? 0.45 : 1);
+    final selectionPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final labelPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    for (final bounds in collaborator.selectionBounds) {
+      final rect = Rect.fromLTWH(
+        bounds.bounds.left - selectionPadding,
+        bounds.bounds.top - selectionPadding,
+        bounds.bounds.size.width + selectionPadding * 2,
+        bounds.bounds.size.height + selectionPadding * 2,
+      );
+      if (bounds.angle != 0) {
+        canvas.save();
+        final center = bounds.bounds.center;
+        canvas.translate(center.x, center.y);
+        canvas.rotate(bounds.angle);
+        canvas.translate(-center.x, -center.y);
+      }
+      canvas.drawRect(rect, selectionPaint);
+      if (bounds.angle != 0) {
+        canvas.restore();
+      }
+    }
+
+    final pointer = collaborator.pointer;
+    if (pointer == null) {
+      return;
+    }
+
+    final path = Path()
+      ..moveTo(pointer.x, pointer.y)
+      ..lineTo(pointer.x + 12, pointer.y + 5)
+      ..lineTo(pointer.x + 5, pointer.y + 12)
+      ..close();
+    canvas.drawPath(path, labelPaint);
+    canvas.drawPath(path, selectionPaint);
+
+    final name = collaborator.username.isEmpty
+        ? collaborator.socketId
+        : collaborator.username;
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: name,
+        style: const TextStyle(
+          color: Color(0xFFFFFFFF),
+          fontSize: 12,
+          height: 1.2,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout(maxWidth: 160);
+    final labelRect = Rect.fromLTWH(
+      pointer.x + 14,
+      pointer.y + 8,
+      textPainter.width + 10,
+      textPainter.height + 6,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
+      labelPaint,
+    );
+    textPainter.paint(canvas, Offset(labelRect.left + 5, labelRect.top + 3));
+  }
+
+  Color _remoteColor(int index) {
+    const colors = [
+      Color(0xFFE03131),
+      Color(0xFF2F9E44),
+      Color(0xFF1971C2),
+      Color(0xFFF08C00),
+      Color(0xFF9C36B5),
+      Color(0xFF0C8599),
+    ];
+    return colors[index % colors.length];
   }
 
   void _drawLinkIcon(Canvas canvas, LinkIconInfo info) {
@@ -299,6 +412,7 @@ class InteractiveCanvasPainter extends CustomPainter {
         !listEquals(midpointHandles, oldDelegate.midpointHandles) ||
         !listEquals(segmentMidpoints, oldDelegate.segmentMidpoints) ||
         laserTrail != oldDelegate.laserTrail ||
-        !listEquals(linkIcons, oldDelegate.linkIcons);
+        !listEquals(linkIcons, oldDelegate.linkIcons) ||
+        !listEquals(remoteCollaborators, oldDelegate.remoteCollaborators);
   }
 }
