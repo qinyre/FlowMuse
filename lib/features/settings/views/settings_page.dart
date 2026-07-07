@@ -7,6 +7,7 @@ import '../../../app/app_router.dart';
 import '../../../app/app_theme_preset.dart';
 import '../../../app/view_models/theme_view_model.dart';
 import '../../../shared/widgets/app_shell.dart';
+import '../../../shared/widgets/shared_sidebar.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -15,20 +16,13 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedPreset = ref.watch(themeViewModelProvider);
     final themeViewModel = ref.read(themeViewModelProvider.notifier);
-    final selectedColor = Theme.of(context).colorScheme.primary;
 
     return AppShell(
       section: ShellSection.settings,
       showSidebar: false,
       child: Row(
         children: [
-          SizedBox(
-            width: sharedSidebarWidth,
-            child: _SettingsSidebar(
-              selectedColor: selectedColor,
-              onBack: () => context.go(AppRoutes.library),
-            ),
-          ),
+          _SettingsSidebar(onBack: () => context.go(AppRoutes.library)),
           Expanded(
             child: _SettingsContent(
               selectedPreset: selectedPreset,
@@ -42,123 +36,67 @@ class SettingsPage extends ConsumerWidget {
 }
 
 class _SettingsSidebar extends StatelessWidget {
-  const _SettingsSidebar({required this.selectedColor, required this.onBack});
+  const _SettingsSidebar({required this.onBack});
 
-  final Color selectedColor;
   final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: Border(
-          right: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.72),
-          ),
+    return SharedSidebar(
+      header: SharedSidebarHeader(
+        leading: SharedSidebarIconButton(
+          tooltip: '返回',
+          onPressed: onBack,
+          icon: const Icon(LucideIcons.chevronLeft),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 56),
-            child: IconButton(
-              tooltip: '返回',
-              onPressed: onBack,
-              icon: const Icon(LucideIcons.chevronLeft, size: 30),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              '设置',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: colorScheme.onSurface,
-              ),
-            ),
-          ),
-          const SizedBox(height: 40),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _SettingsNavItem(
-                  icon: LucideIcons.download,
-                  label: '本地备份',
-                  selected: true,
-                  selectedColor: selectedColor,
-                ),
-                _SettingsNavItem(
-                  icon: LucideIcons.database,
-                  label: '网盘备份',
-                  selectedColor: selectedColor,
-                ),
-                _SettingsNavItem(
-                  icon: LucideIcons.palette,
-                  label: '主题设置',
-                  selectedColor: selectedColor,
-                ),
-                _SettingsNavItem(
-                  icon: LucideIcons.fileCog,
-                  label: '文档设置',
-                  selectedColor: selectedColor,
-                ),
-                _SettingsNavItem(
-                  icon: LucideIcons.wrench,
-                  label: '工具设置',
-                  selectedColor: selectedColor,
-                ),
-                _SettingsNavItem(
-                  icon: LucideIcons.penLine,
-                  label: '手写笔设置',
-                  selectedColor: selectedColor,
-                ),
-                _SettingsNavItem(
-                  icon: LucideIcons.hand,
-                  label: '手势设置',
-                  selectedColor: selectedColor,
-                ),
-                _SettingsNavItem(
-                  icon: LucideIcons.wandSparkles,
-                  label: 'StarNote 实验室',
-                  trailing: 'Beta  AI',
-                  selectedColor: selectedColor,
-                ),
-                _SettingsNavItem(
-                  icon: LucideIcons.shield,
-                  label: '隐私设置',
-                  selectedColor: selectedColor,
-                ),
-                _SettingsNavItem(
-                  icon: LucideIcons.ellipsis,
-                  label: '其他设置',
-                  selectedColor: selectedColor,
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
-            child: Row(
-              children: [
-                Icon(LucideIcons.circleHelp, color: selectedColor, size: 18),
-                const SizedBox(width: 10),
-                Text(
-                  '帮助与反馈',
-                  style: TextStyle(
-                    color: selectedColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+        trailing: [
+          Text(
+            '设置',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: colorScheme.onSurface,
             ),
           ),
         ],
       ),
+      footer: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
+        child: SharedSidebarBlock(
+          children: [
+            SharedSidebarItem(
+              icon: LucideIcons.circleHelp,
+              label: '帮助与反馈',
+              onTap: () {},
+            ),
+          ],
+        ),
+      ),
+      children: [
+        SharedSidebarBlock(
+          children: const [
+            _SettingsNavItem(
+              icon: LucideIcons.download,
+              label: '本地备份',
+              selected: true,
+            ),
+            _SettingsNavItem(icon: LucideIcons.database, label: '网盘备份'),
+            _SettingsNavItem(icon: LucideIcons.palette, label: '主题设置'),
+            _SettingsNavItem(icon: LucideIcons.fileCog, label: '文档设置'),
+            _SettingsNavItem(icon: LucideIcons.wrench, label: '工具设置'),
+            _SettingsNavItem(icon: LucideIcons.penLine, label: '手写笔设置'),
+            _SettingsNavItem(icon: LucideIcons.hand, label: '手势设置'),
+            _SettingsNavItem(
+              icon: LucideIcons.wandSparkles,
+              label: 'StarNote 实验室',
+              trailing: 'Beta AI',
+            ),
+            _SettingsNavItem(icon: LucideIcons.shield, label: '隐私设置'),
+            _SettingsNavItem(icon: LucideIcons.ellipsis, label: '其他设置'),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -167,55 +105,22 @@ class _SettingsNavItem extends StatelessWidget {
   const _SettingsNavItem({
     required this.icon,
     required this.label,
-    required this.selectedColor,
     this.selected = false,
     this.trailing,
   });
 
   final IconData icon;
   final String label;
-  final Color selectedColor;
   final bool selected;
   final String? trailing;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final foreground = selected ? selectedColor : colorScheme.onSurface;
-
-    return Container(
-      height: 70,
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      color: selected ? selectedColor.withValues(alpha: 0.08) : null,
-      child: Row(
-        children: [
-          Icon(icon, color: foreground, size: 26),
-          const SizedBox(width: 24),
-          Expanded(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: foreground,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ),
-          if (trailing != null)
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: selectedColor.withValues(alpha: 0.20),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  trailing!,
-                  style: TextStyle(color: selectedColor, fontSize: 11),
-                ),
-              ),
-            ),
-        ],
-      ),
+    return SharedSidebarItem(
+      icon: icon,
+      label: label,
+      selected: selected,
+      emptyLabel: trailing,
     );
   }
 }

@@ -31,7 +31,7 @@ class LibraryContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 20 : 36, 34, compact ? 20 : 36, 0),
+      padding: EdgeInsets.fromLTRB(compact ? 18 : 30, 26, compact ? 18 : 30, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -44,16 +44,17 @@ class LibraryContent extends StatelessWidget {
             onSortDirectionChanged: onSortDirectionChanged,
             onSelectionModeChanged: onSelectionModeChanged,
           ),
-          const SizedBox(height: 46),
+          const SizedBox(height: 30),
           _FilterTabs(
             selected: state.selectedFilter,
             onFilterChanged: onFilterChanged,
           ),
-          const SizedBox(height: 34),
+          const SizedBox(height: 24),
           Expanded(
             child: _LibraryItems(
               state: state,
               compact: compact,
+              onFilterChanged: onFilterChanged,
               onCreate: onCreate,
               onOpenNotebook: onOpenNotebook,
             ),
@@ -130,6 +131,54 @@ class _LibraryItems extends StatelessWidget {
   const _LibraryItems({
     required this.state,
     required this.compact,
+    required this.onFilterChanged,
+    required this.onCreate,
+    required this.onOpenNotebook,
+  });
+
+  final LibraryHomeState state;
+  final bool compact;
+  final ValueChanged<LibraryFilter> onFilterChanged;
+  final VoidCallback onCreate;
+  final ValueChanged<NotebookItem> onOpenNotebook;
+
+  @override
+  Widget build(BuildContext context) {
+    final filters = LibraryFilter.values;
+    final currentIndex = filters.indexOf(state.selectedFilter);
+
+    void selectOffset(int offset) {
+      final nextIndex = (currentIndex + offset).clamp(0, filters.length - 1);
+      if (nextIndex != currentIndex) {
+        onFilterChanged(filters[nextIndex]);
+      }
+    }
+
+    final content = _LibraryItemsContent(
+      state: state,
+      compact: compact,
+      onCreate: onCreate,
+      onOpenNotebook: onOpenNotebook,
+    );
+
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragEnd: (details) {
+        final velocity = details.primaryVelocity ?? 0;
+        if (velocity.abs() < 240) {
+          return;
+        }
+        selectOffset(velocity < 0 ? 1 : -1);
+      },
+      child: content,
+    );
+  }
+}
+
+class _LibraryItemsContent extends StatelessWidget {
+  const _LibraryItemsContent({
+    required this.state,
+    required this.compact,
     required this.onCreate,
     required this.onOpenNotebook,
   });
@@ -144,7 +193,7 @@ class _LibraryItems extends StatelessWidget {
     if (state.viewMode == LibraryViewMode.list) {
       return ListView.separated(
         itemCount: state.visibleNotebooks.length + 1,
-        separatorBuilder: (context, index) => const SizedBox(height: 14),
+        separatorBuilder: (context, index) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           if (index == 0) {
             return _CreateNotebookTile(onTap: onCreate);
@@ -161,11 +210,11 @@ class _LibraryItems extends StatelessWidget {
 
     return GridView.builder(
       itemCount: state.visibleNotebooks.length + 1,
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 218,
         mainAxisExtent: 276,
-        crossAxisSpacing: 34,
-        mainAxisSpacing: 46,
+        crossAxisSpacing: compact ? 18 : 24,
+        mainAxisSpacing: compact ? 24 : 30,
       ),
       itemBuilder: (context, index) {
         if (index == 0) {
