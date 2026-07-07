@@ -69,12 +69,21 @@ class SceneDocumentConverter {
   /// Bound arrows are updated so their endpoints match the current positions
   /// of their binding targets — the parser stores placeholder points that
   /// must be resolved once all elements are present.
-  static Scene documentToScene(MarkdrawDocument doc) {
+  static Scene documentToScene(
+    MarkdrawDocument doc, {
+    bool regenerateIndices = true,
+  }) {
     var scene = Scene();
     final allElements = doc.allElements;
-    final keys = FractionalIndex.generateNKeys(allElements.length);
+    final keys = regenerateIndices
+        ? FractionalIndex.generateNKeys(allElements.length)
+        : const <String>[];
     for (var i = 0; i < allElements.length; i++) {
-      scene = scene.addElement(allElements[i].copyWith(index: keys[i]));
+      scene = scene.addElement(
+        regenerateIndices
+            ? allElements[i].copyWith(index: keys[i])
+            : allElements[i],
+      );
     }
     for (final entry in doc.files.entries) {
       scene = scene.addFile(entry.key, entry.value);

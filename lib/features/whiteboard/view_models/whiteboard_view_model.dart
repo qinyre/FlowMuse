@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
+import '../collaboration/models/collaborator_presence.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
+import '../collaboration/services/realtime_transport.dart';
 import '../repositories/whiteboard_scene_repository.dart';
 
 enum WhiteboardSaveStatus { idle, saving, saved }
@@ -14,6 +17,7 @@ class WhiteboardState {
     this.saveStatus = WhiteboardSaveStatus.idle,
     this.activeRoom,
     this.collaborating = false,
+    this.collaborators = const {},
   });
 
   final String notebookId;
@@ -21,6 +25,7 @@ class WhiteboardState {
   final WhiteboardSaveStatus saveStatus;
   final CollaborationRoom? activeRoom;
   final bool collaborating;
+  final Map<String, CollaboratorPresence> collaborators;
 
   String? get roomLink {
     final room = activeRoom;
@@ -36,6 +41,7 @@ class WhiteboardState {
     WhiteboardSaveStatus? saveStatus,
     CollaborationRoom? activeRoom,
     bool? collaborating,
+    Map<String, CollaboratorPresence>? collaborators,
     bool clearRoom = false,
   }) {
     return WhiteboardState(
@@ -44,6 +50,7 @@ class WhiteboardState {
       saveStatus: saveStatus ?? this.saveStatus,
       activeRoom: clearRoom ? null : activeRoom ?? this.activeRoom,
       collaborating: collaborating ?? this.collaborating,
+      collaborators: clearRoom ? const {} : collaborators ?? this.collaborators,
     );
   }
 }
@@ -82,8 +89,12 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
     state = state.copyWith(saveStatus: WhiteboardSaveStatus.saved);
   }
 
-  Future<void> startCollaboration() async {
-    final room = await _repository.startNewRoom(initialElements: const []);
+  Future<void> startCollaboration({
+    required List<Map<String, Object?>> initialElements,
+  }) async {
+    final room = await _repository.startNewRoom(
+      initialElements: initialElements,
+    );
     state = state.copyWith(activeRoom: room, collaborating: true);
   }
 
@@ -91,12 +102,68 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
     await _repository.stop();
     state = state.copyWith(collaborating: false, clearRoom: true);
   }
+
+  void applyPresenceMessage(CollaborationMessage message) {
+    final socketId = message.payload['socketId'];
+    if (socketId is! String || socketId == _repository.socketId) {
+      return;
+    }
+    final collaborators = Map<String, CollaboratorPresence>.from(
+      state.collaborators,
+    );
+    final current =
+        collaborators[socketId] ?? CollaboratorPresence(socketId: socketId);
+
+    switch (message.type) {
+      case CollaborationMessageType.mouseLocation:
+        final pointer = message.payload['pointer'];
+        final selectedElementIds = message.payload['selectedElementIds'];
+        collaborators[socketId] = current.copyWith(
+          username: message.payload['username'] as String?,
+          pointer: pointer is Map ? Map<String, Object?>.from(pointer) : null,
+          button: message.payload['button'] as String?,
+          selectedElementIds: selectedElementIds is Map
+              ? Map<String, bool>.from(selectedElementIds)
+              : null,
+          idleState: CollaboratorIdleState.active,
+        );
+      case CollaborationMessageType.idleStatus:
+        collaborators[socketId] = current.copyWith(
+          username: message.payload['username'] as String?,
+          idleState: _idleStateFromWire(message.payload['userState']),
+        );
+      case CollaborationMessageType.userVisibleSceneBounds:
+      case CollaborationMessageType.sceneInit:
+      case CollaborationMessageType.sceneUpdate:
+      case CollaborationMessageType.invalidResponse:
+        return;
+    }
+
+    state = state.copyWith(collaborators: collaborators);
+  }
+
+  CollaboratorIdleState _idleStateFromWire(Object? value) {
+    return switch (value) {
+      'idle' => CollaboratorIdleState.idle,
+      'away' => CollaboratorIdleState.away,
+      _ => CollaboratorIdleState.active,
+    };
+  }
 }
 
 final collaborationRepositoryProvider = Provider<CollaborationRepository>((
   ref,
 ) {
-  return CollaborationRepository();
+  return CollaborationRepository(
+    transport: MemoryRealtimeTransport(
+      hub: ref.watch(memoryRealtimeRoomHubProvider),
+      socketId: 'client-${DateTime.now().microsecondsSinceEpoch}',
+    ),
+  );
+});
+
+final memoryRealtimeRoomHubProvider = Provider<MemoryRealtimeRoomHub>((ref) {
+  return MemoryRealtimeRoomHub();
 });
 
 final whiteboardSceneRepositoryProvider = Provider<WhiteboardSceneRepository>((

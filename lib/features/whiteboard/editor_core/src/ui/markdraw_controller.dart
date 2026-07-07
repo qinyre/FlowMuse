@@ -8,8 +8,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
 
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' as core show TextAlign;
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' hide TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    as core
+    show TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    hide TextAlign;
 
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
@@ -1524,6 +1527,16 @@ class MarkdrawController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Applies a scene received from collaboration without touching undo history.
+  void applyRemoteScene(Scene scene, {String? background}) {
+    final validated = TextBoundsValidator.validateScene(scene);
+    _editorState = _editorState.copyWith(scene: validated);
+    if (background != null) {
+      _canvasBackgroundColor = background;
+    }
+    notifyListeners();
+  }
+
   /// Clears the scene and undo history.
   void clear() {
     _historyManager.clear();
@@ -2080,6 +2093,20 @@ class MarkdrawController extends ChangeNotifier {
     _gridSize = parseResult.value.settings.grid;
     _documentName = parseResult.value.settings.name;
     loadScene(SceneDocumentConverter.documentToScene(parseResult.value));
+  }
+
+  /// Applies Excalidraw JSON received from collaboration.
+  void applyRemoteContent(String content) {
+    final parseResult = ExcalidrawJsonCodec.parse(content);
+    _canvasBackgroundColor = parseResult.value.settings.background;
+    _gridSize = parseResult.value.settings.grid;
+    _documentName = parseResult.value.settings.name;
+    applyRemoteScene(
+      SceneDocumentConverter.documentToScene(
+        parseResult.value,
+        regenerateIndices: false,
+      ),
+    );
   }
 
   /// Exports the scene (or selection) as PNG bytes.

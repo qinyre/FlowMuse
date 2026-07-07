@@ -8,6 +8,7 @@ class SceneReconciler {
   List<Map<String, Object?>> reconcile({
     required List<Map<String, Object?>> localElements,
     required List<Map<String, Object?>> remoteElements,
+    Set<String> protectedElementIds = const {},
   }) {
     final localById = {
       for (final element in localElements) _id(element): element,
@@ -21,7 +22,11 @@ class SceneReconciler {
         continue;
       }
       final local = localById[remoteId];
-      final chosen = _shouldKeepLocal(local, remote) ? local! : remote;
+      final chosen =
+          (local != null && protectedElementIds.contains(remoteId)) ||
+              _shouldKeepLocal(local, remote)
+          ? local!
+          : remote;
       result.add(chosen);
       added.add(_id(chosen));
     }
@@ -80,10 +85,7 @@ class SceneReconciler {
     return hash;
   }
 
-  int _compareFractionalIndex(
-    Map<String, Object?> a,
-    Map<String, Object?> b,
-  ) {
+  int _compareFractionalIndex(Map<String, Object?> a, Map<String, Object?> b) {
     final aIndex = _fractionalIndex(a);
     final bIndex = _fractionalIndex(b);
     if (aIndex != null && bIndex != null) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide Element, SelectionOverlay, TextAlign;
 
+import '../collaboration/models/collaboration_message.dart';
+import '../collaboration/repositories/collaboration_repository.dart';
 import '../view_models/whiteboard_view_model.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
@@ -25,12 +28,16 @@ class WhiteboardPage extends ConsumerStatefulWidget {
 
 class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   late final MarkdrawController _markdrawController;
+  late final CollaborationRepository _collaborationRepository;
+  StreamSubscription<CollaborationMessage>? _collaborationSubscription;
   bool _loadingScene = false;
+  bool _applyingRemoteScene = false;
 
   @override
   void initState() {
     super.initState();
     _markdrawController = MarkdrawController();
+    _collaborationRepository = ref.read(collaborationRepositoryProvider);
     Future.microtask(_openNotebook);
   }
 
@@ -45,6 +52,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
   @override
   void dispose() {
+    unawaited(_collaborationSubscription?.cancel());
+    unawaited(_collaborationRepository.stop());
     _markdrawController.dispose();
     super.dispose();
   }
@@ -67,7 +76,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _saveMarkdrawScene() async {
-    if (_loadingScene) {
+    if (_loadingScene || _applyingRemoteScene) {
       return;
     }
     final viewModel = ref.read(whiteboardViewModelProvider.notifier);
@@ -77,16 +86,119 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       format: DocumentFormat.excalidraw,
     );
     await repository.saveScene(widget.notebookId, content);
+    await _broadcastCurrentScene(content);
     if (!mounted) {
       return;
     }
     viewModel.markSaved();
   }
 
+  Future<void> _startCollaboration() async {
+    final initialElements = _currentSceneElements();
+    await ref
+        .read(whiteboardViewModelProvider.notifier)
+        .startCollaboration(initialElements: initialElements);
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room == null) {
+      return;
+    }
+    await _collaborationSubscription?.cancel();
+    _collaborationSubscription = _collaborationRepository
+        .encryptedMessages(room)
+        .listen(_handleCollaborationMessage);
+  }
+
+  Future<void> _stopCollaboration() async {
+    await _collaborationSubscription?.cancel();
+    _collaborationSubscription = null;
+    await ref.read(whiteboardViewModelProvider.notifier).stopCollaboration();
+  }
+
+  Future<void> _broadcastCurrentScene([String? serializedScene]) async {
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room == null) {
+      return;
+    }
+    final content =
+        serializedScene ??
+        _markdrawController.serializeScene(format: DocumentFormat.excalidraw);
+    await _collaborationRepository.broadcastScene(
+      room: room,
+      elements: _extractElements(content),
+    );
+  }
+
+  Future<void> _handleCollaborationMessage(CollaborationMessage message) async {
+    switch (message.type) {
+      case CollaborationMessageType.sceneInit:
+      case CollaborationMessageType.sceneUpdate:
+        await _applyRemoteElements(message.elements);
+      case CollaborationMessageType.mouseLocation:
+      case CollaborationMessageType.idleStatus:
+      case CollaborationMessageType.userVisibleSceneBounds:
+        ref
+            .read(whiteboardViewModelProvider.notifier)
+            .applyPresenceMessage(message);
+      case CollaborationMessageType.invalidResponse:
+        break;
+    }
+  }
+
+  Future<void> _applyRemoteElements(
+    List<Map<String, Object?>> remoteElements,
+  ) async {
+    if (remoteElements.isEmpty || !mounted) {
+      return;
+    }
+    final localContent = _markdrawController.serializeScene(
+      format: DocumentFormat.excalidraw,
+    );
+    final decoded = jsonDecode(localContent) as Map<String, Object?>;
+    final reconciled = _collaborationRepository.reconcileRemoteElements(
+      localElements: _extractElements(localContent),
+      remoteElements: remoteElements,
+      protectedElementIds: _selectedElementIds(),
+    );
+    decoded['elements'] = reconciled;
+    final nextContent = jsonEncode(decoded);
+
+    _applyingRemoteScene = true;
+    _markdrawController.applyRemoteContent(nextContent);
+    _applyingRemoteScene = false;
+
+    final repository = ref.read(whiteboardSceneRepositoryProvider);
+    await repository.saveScene(widget.notebookId, nextContent);
+    if (mounted) {
+      ref.read(whiteboardViewModelProvider.notifier).markSaved();
+    }
+  }
+
+  List<Map<String, Object?>> _currentSceneElements() {
+    return _extractElements(
+      _markdrawController.serializeScene(format: DocumentFormat.excalidraw),
+    );
+  }
+
+  List<Map<String, Object?>> _extractElements(String content) {
+    final decoded = jsonDecode(content) as Map<String, Object?>;
+    final elements = decoded['elements'];
+    if (elements is! List) {
+      return const [];
+    }
+    return [
+      for (final element in elements) Map<String, Object?>.from(element as Map),
+    ];
+  }
+
+  Set<String> _selectedElementIds() {
+    return _markdrawController.editorState.selectedIds
+        .map((id) => id.value)
+        .toSet();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(whiteboardViewModelProvider);
-    final viewModel = ref.read(whiteboardViewModelProvider.notifier);
 
     return Scaffold(
       key: ValueKey(widget.notebookId),
@@ -133,8 +245,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
               child: _CollaborationPanel(
                 collaborating: state.collaborating,
                 roomLink: state.roomLink,
-                onStart: viewModel.startCollaboration,
-                onStop: viewModel.stopCollaboration,
+                onStart: _startCollaboration,
+                onStop: _stopCollaboration,
               ),
             ),
             Positioned(
