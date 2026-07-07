@@ -109,7 +109,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     super.initState();
     _controller.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
-    _controller.keyboardFocusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _controller.keyboardFocusNode.requestFocus();
+      }
+    });
   }
 
   @override
@@ -130,6 +134,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
   }
 
   void _onControllerChanged() {
+    if (!mounted) {
+      return;
+    }
     setState(() {});
   }
 

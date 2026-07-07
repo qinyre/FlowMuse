@@ -199,22 +199,14 @@ class CollaborationRepository {
       return;
     }
 
-    final sceneToBroadcast = await _saveSceneResolvingConflict(
-      room: room,
-      scene: syncableScene,
-    );
-    final elementsForMessage = identical(sceneToBroadcast, syncableScene)
-        ? elementsToBroadcast
-        : sceneToBroadcast.elements;
     final message = initial
-        ? CollaborationMessage.sceneInit(elements: elementsForMessage)
-        : CollaborationMessage.sceneUpdate(elements: elementsForMessage);
+        ? CollaborationMessage.sceneInit(elements: elementsToBroadcast)
+        : CollaborationMessage.sceneUpdate(elements: elementsToBroadcast);
     await _send(room: room, message: message);
-    _rememberBroadcasted(elementsForMessage);
-    _latestScene = sceneToBroadcast;
-    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
-      sceneToBroadcast.elements,
-    );
+    _rememberBroadcasted(elementsToBroadcast);
+    _latestScene = syncableScene;
+    _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
+    unawaited(_saveSceneSnapshot(room: room, scene: syncableScene));
   }
 
   Future<void> broadcastMouseLocation({
@@ -386,6 +378,23 @@ class CollaborationRepository {
       );
       await _sceneStore.saveScene(room: room, scene: mergedScene);
       return mergedScene;
+    }
+  }
+
+  Future<void> _saveSceneSnapshot({
+    required CollaborationRoom room,
+    required ExcalidrawScene scene,
+  }) async {
+    try {
+      final savedScene = await _saveSceneResolvingConflict(
+        room: room,
+        scene: scene,
+      );
+      _latestScene = savedScene;
+    } catch (error) {
+      if (!_repositoryErrors.isClosed) {
+        _repositoryErrors.add('协作快照保存失败，实时协作会继续尝试同步：$error');
+      }
     }
   }
 

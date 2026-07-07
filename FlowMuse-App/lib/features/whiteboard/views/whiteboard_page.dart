@@ -19,6 +19,7 @@ import '../collaboration/repositories/collaboration_repository.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../view_models/whiteboard_view_model.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
   const WhiteboardPage({super.key, required this.noteId})
@@ -293,7 +294,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       final reconciledScene = await ref
           .read(whiteboardViewModelProvider.notifier)
           .joinCollaboration(room: room, localScene: scene);
+      if (!mounted) {
+        return;
+      }
       await _listenToRoom(room);
+      if (!mounted) {
+        return;
+      }
       if (reconciledScene.elements.isNotEmpty) {
         await _applyRemoteScene(reconciledScene);
       }
@@ -489,9 +496,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         .listen(
           _handleCollaborationMessage,
           onError: (Object error) {
-            ref
-                .read(whiteboardViewModelProvider.notifier)
-                .applyCollaborationError(error.toString());
+            _afterUiFrame(() {
+              ref
+                  .read(whiteboardViewModelProvider.notifier)
+                  .applyCollaborationError(error.toString());
+            });
           },
         );
     await _newUserSubscription?.cancel();
@@ -500,7 +509,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     });
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = _collaborationRepository.roomUsers.listen((users) {
-      ref.read(whiteboardViewModelProvider.notifier).applyRoomUsers(users);
+      _afterUiFrame(() {
+        ref.read(whiteboardViewModelProvider.notifier).applyRoomUsers(users);
+      });
     });
     await _roomEndedSubscription?.cancel();
     _roomEndedSubscription = _collaborationRepository.roomEnded.listen((
@@ -510,18 +521,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     });
     await _roomErrorSubscription?.cancel();
     _roomErrorSubscription = _collaborationRepository.errors.listen((message) {
-      ref
-          .read(whiteboardViewModelProvider.notifier)
-          .applyCollaborationError(message);
+      _afterUiFrame(() {
+        ref
+            .read(whiteboardViewModelProvider.notifier)
+            .applyCollaborationError(message);
+      });
     });
     await _connectionStatusSubscription?.cancel();
     _connectionStatusSubscription = _collaborationRepository.connectionStatus
         .listen((status) {
           final previous = _lastRealtimeStatus;
           _lastRealtimeStatus = status;
-          ref
-              .read(whiteboardViewModelProvider.notifier)
-              .applyConnectionStatus(status);
+          _afterUiFrame(() {
+            ref
+                .read(whiteboardViewModelProvider.notifier)
+                .applyConnectionStatus(status);
+          });
           if (status == RealtimeConnectionStatus.joined &&
               previous == RealtimeConnectionStatus.reconnecting) {
             unawaited(_refreshCollaborationSnapshot(room));
@@ -601,13 +616,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     switch (message.type) {
       case CollaborationMessageType.sceneInit:
       case CollaborationMessageType.sceneUpdate:
-        await _applyRemoteElements(message.elements);
+        _afterUiFrame(() {
+          unawaited(_applyRemoteElements(message.elements));
+        });
       case CollaborationMessageType.mouseLocation:
       case CollaborationMessageType.idleStatus:
       case CollaborationMessageType.userVisibleSceneBounds:
-        ref
-            .read(whiteboardViewModelProvider.notifier)
-            .applyPresenceMessage(message);
+        _afterUiFrame(() {
+          ref
+              .read(whiteboardViewModelProvider.notifier)
+              .applyPresenceMessage(message);
+        });
       case CollaborationMessageType.invalidResponse:
         break;
     }
@@ -629,6 +648,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _applyRemoteScene(ExcalidrawScene remoteScene) async {
+    if (!mounted) {
+      return;
+    }
     final localScene = _collaborationAdapter.currentScene();
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     final remoteFiles = room == null
@@ -638,14 +660,20 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             fileIds: _imageFileIds(remoteScene.elements),
             existingFileIds: localScene.files.keys.toSet(),
           );
+    if (!mounted) {
+      return;
+    }
     final nextScene = remoteScene.copyWith(
       files: {...localScene.files, ...remoteScene.files, ...remoteFiles},
     );
     final nextContent = nextScene.toContent();
 
     _applyingRemoteScene = true;
-    _collaborationAdapter.applyRemoteScene(nextScene);
-    _applyingRemoteScene = false;
+    try {
+      _collaborationAdapter.applyRemoteScene(nextScene);
+    } finally {
+      _applyingRemoteScene = false;
+    }
 
     if (widget.temporaryCollaboration) {
       if (mounted) {
@@ -660,6 +688,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (mounted) {
       ref.read(whiteboardViewModelProvider.notifier).markSaved();
     }
+  }
+
+  void _afterUiFrame(VoidCallback action) {
+    runAfterUiFrame(() {
+      if (mounted) {
+        action();
+      }
+    });
   }
 
   ExcalidrawScene _currentScene() {

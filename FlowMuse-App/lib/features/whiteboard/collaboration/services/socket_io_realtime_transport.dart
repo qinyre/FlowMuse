@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:socket_io_client/socket_io_client.dart' as io;
@@ -309,6 +310,9 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     }
     if (value is List) {
       return [for (final item in value) (item as num).toInt()];
+    }
+    if (value is String) {
+      return base64Decode(value);
     }
     throw FormatException('Invalid Socket.IO binary payload: $value');
   }

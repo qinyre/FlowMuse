@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class EncryptedPayload {
   const EncryptedPayload({required this.encryptedBuffer, required this.iv});
 
@@ -21,6 +23,9 @@ class EncryptedPayload {
     }
     if (value is List) {
       return [for (final item in value) (item as num).toInt()];
+    }
+    if (value is String) {
+      return base64Decode(value);
     }
     throw FormatException('Invalid encrypted payload bytes: $value');
   }

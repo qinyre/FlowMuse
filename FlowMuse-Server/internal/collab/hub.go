@@ -165,7 +165,7 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	if volatile {
 		operator = operator.Volatile()
 	}
-	operator.Emit(EventClientBroadcast, frame)
+	operator.Emit(EventClientBroadcast, frame.EncryptedBuffer, frame.IV)
 }
 
 func (h *Hub) leaveRoom(client *socket.Socket, roomID string) {
