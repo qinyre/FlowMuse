@@ -100,7 +100,6 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
               label: '文件夹',
               selected: widget.section == ShellSection.folders,
               actionIcon: LucideIcons.circlePlus,
-              leadingAction: true,
               emptyLabel: hasFolders ? null : '暂无文件夹',
               trailingIcon: hasFolders
                   ? (_foldersExpanded
@@ -141,7 +140,6 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
               label: '标签',
               selected: widget.section == ShellSection.tags,
               actionIcon: LucideIcons.circlePlus,
-              leadingAction: true,
               emptyLabel: hasTags ? null : '暂无标签',
               trailingIcon: hasTags
                   ? (_tagsExpanded
