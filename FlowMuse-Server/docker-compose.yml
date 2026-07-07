@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: flowmuse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: flowmuse
+      POSTGRES_USER: flowmuse
+      POSTGRES_PASSWORD: flowmuse_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - flowmuse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowmuse -d flowmuse"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: flowmuse-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: flowmuse
+      MINIO_ROOT_PASSWORD: flowmuse_dev_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - flowmuse_minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: flowmuse-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 flowmuse flowmuse_dev_password; do sleep 2; done &&
+      mc mb --ignore-existing local/flowmuse
+      "
+    restart: "no"
+
+  collab-server:
+    build:
+      context: .
+    container_name: flowmuse-collab-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      FLOWMUSE_ADDR: ":48931"
+      DATABASE_URL: "postgres://flowmuse:flowmuse_dev_password@postgres:5432/flowmuse?sslmode=disable"
+      FLOWMUSE_S3_ENDPOINT: "minio:9000"
+      FLOWMUSE_S3_BUCKET: "flowmuse"
+      FLOWMUSE_S3_ACCESS_KEY_ID: "flowmuse"
+      FLOWMUSE_S3_SECRET_ACCESS_KEY: "flowmuse_dev_password"
+      FLOWMUSE_S3_USE_SSL: "false"
+      FLOWMUSE_ALLOWED_ORIGINS: "*"
+    ports:
+      - "48931:48931"
+
+volumes:
+  flowmuse_postgres_data:
+  flowmuse_minio_data:
