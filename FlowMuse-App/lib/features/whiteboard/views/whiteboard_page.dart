@@ -44,6 +44,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   bool _collaborationOpening = false;
   String? _lastIdleState;
   bool _temporarySaved = false;
+  int _openGeneration = 0;
 
   @override
   void initState() {
@@ -76,6 +77,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _openNote() async {
+    final generation = ++_openGeneration;
     if (widget.temporaryCollaboration) {
       _loadingScene = true;
       _markdrawController.loadFromContent(
@@ -89,17 +91,24 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       }
       return;
     }
-    await ref.read(libraryIndexProvider.notifier).ensureNote(widget.noteId);
+    final noteId = widget.noteId;
+    await ref.read(libraryIndexProvider.notifier).ensureNote(noteId);
+    if (!mounted || generation != _openGeneration || noteId != widget.noteId) {
+      return;
+    }
     await ref
         .read(whiteboardViewModelProvider.notifier)
-        .openNote(noteId: widget.noteId);
+        .openNote(noteId: noteId);
+    if (!mounted || generation != _openGeneration || noteId != widget.noteId) {
+      return;
+    }
     final repository = ref.read(whiteboardSceneRepositoryProvider);
-    final content = await repository.loadScene(widget.noteId);
-    if (!mounted) {
+    final content = await repository.loadScene(noteId);
+    if (!mounted || generation != _openGeneration || noteId != widget.noteId) {
       return;
     }
     _loadingScene = true;
-    _markdrawController.loadFromContent(content, '${widget.noteId}.excalidraw');
+    _markdrawController.loadFromContent(content, '$noteId.excalidraw');
     _loadingScene = false;
     final room = _roomFromCurrentUri();
     if (room != null) {
@@ -233,7 +242,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     final content = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
     );
-    await ref.read(whiteboardSceneRepositoryProvider).saveScene(note.id, content);
+    await ref
+        .read(whiteboardSceneRepositoryProvider)
+        .saveScene(note.id, content);
     await ref.read(libraryIndexProvider.notifier).touchNote(note.id);
     _temporarySaved = true;
   }
@@ -375,37 +386,37 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         unawaited(_stopCollaboration());
       },
       child: Scaffold(
-      key: ValueKey(widget.noteId),
-      backgroundColor: const Color(0xFFFDFDFB),
-      body: SafeArea(
-        child: KeyedSubtree(
-          key: const ValueKey('flowmuse-markdraw-editor'),
-          child: MarkdrawEditor(
-            controller: _markdrawController,
-            config: const MarkdrawEditorConfig(initialBackground: '#fdfdfb'),
-            saveStatusLabel: _saveStatusLabel(state.saveStatus),
-            collaborating: state.collaborating,
-            roomLink: state.roomLink,
-            collaboratorCount: state.collaborators.length,
-            collaborators: _remoteCollaboratorOverlays(state),
-            onBack: widget.temporaryCollaboration
-                ? () {
-                    unawaited(_stopCollaboration());
-                  }
-                : () => context.pop(),
-            onStartCollaboration: _startCollaboration,
-            onStopCollaboration: _stopCollaboration,
-            onPointerPresence: _broadcastPointerPresence,
-            onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
-            onDocumentRenamed: () {
-              unawaited(_renameAndSaveDocument());
-            },
-            onSceneChanged: (_) {
-              unawaited(_saveMarkdrawScene());
-            },
+        key: ValueKey(widget.noteId),
+        backgroundColor: const Color(0xFFFDFDFB),
+        body: SafeArea(
+          child: KeyedSubtree(
+            key: const ValueKey('flowmuse-markdraw-editor'),
+            child: MarkdrawEditor(
+              controller: _markdrawController,
+              config: const MarkdrawEditorConfig(initialBackground: '#fdfdfb'),
+              saveStatusLabel: _saveStatusLabel(state.saveStatus),
+              collaborating: state.collaborating,
+              roomLink: state.roomLink,
+              collaboratorCount: state.collaborators.length,
+              collaborators: _remoteCollaboratorOverlays(state),
+              onBack: widget.temporaryCollaboration
+                  ? () {
+                      unawaited(_stopCollaboration());
+                    }
+                  : () => context.pop(),
+              onStartCollaboration: _startCollaboration,
+              onStopCollaboration: _stopCollaboration,
+              onPointerPresence: _broadcastPointerPresence,
+              onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
+              onDocumentRenamed: () {
+                unawaited(_renameAndSaveDocument());
+              },
+              onSceneChanged: (_) {
+                unawaited(_saveMarkdrawScene());
+              },
+            ),
           ),
         ),
-      ),
       ),
     );
   }

@@ -1489,8 +1489,20 @@ class MarkdrawController extends ChangeNotifier {
 
   // --- Scene management ---
 
+  void _endTextEditingBeforeSceneReplace() {
+    if (_editingTextElementId == null) {
+      return;
+    }
+    _editingTextElementId = null;
+    _isEditingExisting = false;
+    _originalText = null;
+    textEditingController.clear();
+    _textFocusNode.unfocus();
+  }
+
   /// Loads a new scene, clearing undo history. Use for file-open operations.
   void loadScene(Scene scene, {String? background}) {
+    _endTextEditingBeforeSceneReplace();
     _historyManager.clear();
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
@@ -1505,6 +1517,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Unlike [loadScene], this pushes the current scene onto the undo stack
   /// so the change can be undone. Used by the split-pane text editor.
   void applyScene(Scene scene, {String? background}) {
+    _endTextEditingBeforeSceneReplace();
     _historyManager.push(_editorState.scene);
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
@@ -1520,6 +1533,7 @@ class MarkdrawController extends ChangeNotifier {
   /// into a single undo entry. Call [applyScene] first to create the undo
   /// point, then [replaceScene] for subsequent updates in the same session.
   void replaceScene(Scene scene, {String? background}) {
+    _endTextEditingBeforeSceneReplace();
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
     if (background != null) {
@@ -1530,6 +1544,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Applies a scene received from collaboration without touching undo history.
   void applyRemoteScene(Scene scene, {String? background}) {
+    _endTextEditingBeforeSceneReplace();
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated);
     if (background != null) {
@@ -1540,6 +1555,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Clears the scene and undo history.
   void clear() {
+    _endTextEditingBeforeSceneReplace();
     _historyManager.clear();
     _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
     notifyListeners();
@@ -2082,9 +2098,8 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Serializes the current scene as an Excalidraw JSON object.
   Map<String, Object?> serializeExcalidrawSceneJson() {
-    return jsonDecode(
-      serializeScene(format: DocumentFormat.excalidraw),
-    ) as Map<String, Object?>;
+    return jsonDecode(serializeScene(format: DocumentFormat.excalidraw))
+        as Map<String, Object?>;
   }
 
   /// Loads a scene from file content. Detects format from [filename].
