@@ -73,15 +73,19 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   final CollaborationCrypto _crypto;
   final http.Client _client;
   final SceneReconciler _reconciler;
+  final Map<String, _SceneSnapshotMeta> _snapshotMetaByRoom = {};
+  static const Duration _requestTimeout = Duration(seconds: 15);
 
   @override
   Future<ExcalidrawScene?> loadScene(CollaborationRoom room) async {
-    final response = await _client.get(_roomSceneUri(room.roomId));
+    final response = await _client
+        .get(_roomSceneUri(room.roomId))
+        .timeout(_requestTimeout);
     if (response.statusCode == 404) {
       return null;
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Load scene failed: HTTP ${response.statusCode}');
+      throw StateError('加载协作房间失败：HTTP ${response.statusCode}');
     }
 
     final json = jsonDecode(response.body) as Map<String, Object?>;
@@ -92,6 +96,10 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
     final bytes = await _crypto.decrypt(
       roomKey: room.roomKey,
       encryptedPayload: payload,
+    );
+    _snapshotMetaByRoom[room.roomId] = _SceneSnapshotMeta(
+      sceneVersion: (json['sceneVersion']! as num).toInt(),
+      sceneHash: json['sceneHash']! as String,
     );
     return ExcalidrawScene.fromCollaborationPayload(
       jsonDecode(utf8.decode(bytes)),
@@ -107,22 +115,32 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       roomKey: room.roomKey,
       plainBytes: utf8.encode(scene.toCollaborationContent()),
     );
-    final response = await _client.put(
-      _roomSceneUri(room.roomId),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'sceneVersion': _reconciler.getSceneVersion(scene.elements),
-        'sceneHash': scene.collaborationHash(),
-        'encryptedBuffer': base64Encode(payload.encryptedBuffer),
-        'iv': base64Encode(payload.iv),
-      }),
-    );
+    final response = await _client
+        .put(
+          _roomSceneUri(room.roomId),
+          headers: const {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'sceneVersion': _reconciler.getSceneVersion(scene.elements),
+            'sceneHash': scene.collaborationHash(),
+            if (_snapshotMetaByRoom[room.roomId] case final meta?)
+              'baseSceneVersion': meta.sceneVersion,
+            if (_snapshotMetaByRoom[room.roomId] case final meta?)
+              'baseSceneHash': meta.sceneHash,
+            'encryptedBuffer': base64Encode(payload.encryptedBuffer),
+            'iv': base64Encode(payload.iv),
+          }),
+        )
+        .timeout(_requestTimeout);
     if (response.statusCode == 409) {
       throw const StaleSceneSnapshotException('远端场景版本已更新');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Save scene failed: HTTP ${response.statusCode}');
+      throw StateError('保存协作场景失败：HTTP ${response.statusCode}');
     }
+    _snapshotMetaByRoom[room.roomId] = _SceneSnapshotMeta(
+      sceneVersion: _reconciler.getSceneVersion(scene.elements),
+      sceneHash: scene.collaborationHash(),
+    );
   }
 
   @override
@@ -134,19 +152,25 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       roomKey: room.roomKey,
       plainBytes: utf8.encode(scene.toCollaborationContent()),
     );
-    final response = await _client.post(
-      _roomSceneUri(room.roomId),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'sceneVersion': _reconciler.getSceneVersion(scene.elements),
-        'sceneHash': scene.collaborationHash(),
-        'encryptedBuffer': base64Encode(payload.encryptedBuffer),
-        'iv': base64Encode(payload.iv),
-      }),
-    );
+    final response = await _client
+        .post(
+          _roomSceneUri(room.roomId),
+          headers: const {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'sceneVersion': _reconciler.getSceneVersion(scene.elements),
+            'sceneHash': scene.collaborationHash(),
+            'encryptedBuffer': base64Encode(payload.encryptedBuffer),
+            'iv': base64Encode(payload.iv),
+          }),
+        )
+        .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Create room failed: HTTP ${response.statusCode}');
+      throw StateError('创建协作房间失败：HTTP ${response.statusCode}');
     }
+    _snapshotMetaByRoom[room.roomId] = _SceneSnapshotMeta(
+      sceneVersion: _reconciler.getSceneVersion(scene.elements),
+      sceneHash: scene.collaborationHash(),
+    );
   }
 
   Uri _roomSceneUri(String roomId) {
@@ -161,4 +185,14 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
         : basePath;
     return '$normalizedBase$suffix';
   }
+}
+
+class _SceneSnapshotMeta {
+  const _SceneSnapshotMeta({
+    required this.sceneVersion,
+    required this.sceneHash,
+  });
+
+  final int sceneVersion;
+  final String sceneHash;
 }

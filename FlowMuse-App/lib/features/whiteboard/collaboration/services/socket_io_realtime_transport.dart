@@ -24,11 +24,15 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   final String serverUrl;
   final StreamController<EncryptedPayload> _messages =
       StreamController<EncryptedPayload>.broadcast();
-  final StreamController<String> _newUsers = StreamController<String>.broadcast();
+  final StreamController<String> _newUsers =
+      StreamController<String>.broadcast();
   final StreamController<List<String>> _roomUsers =
       StreamController<List<String>>.broadcast();
-  final StreamController<void> _firstInRoom = StreamController<void>.broadcast();
+  final StreamController<void> _firstInRoom =
+      StreamController<void>.broadcast();
   final StreamController<String> _errors = StreamController<String>.broadcast();
+  final StreamController<RealtimeConnectionStatus> _connectionStatus =
+      StreamController<RealtimeConnectionStatus>.broadcast();
 
   io.Socket? _socket;
   String? _roomId;
@@ -49,15 +53,21 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   Stream<String> get errors => _errors.stream;
 
   @override
+  Stream<RealtimeConnectionStatus> get connectionStatus =>
+      _connectionStatus.stream;
+
+  @override
   String? get socketId => _socket?.id;
 
   @override
   Future<void> connect(String roomId) async {
     _roomId = roomId;
+    _emitStatus(RealtimeConnectionStatus.connecting);
     final existing = _socket;
     if (existing != null && existing.connected) {
       existing.emit(_eventJoinRoom, roomId);
       await _waitForRoomJoin();
+      _emitStatus(RealtimeConnectionStatus.joined);
       return;
     }
 
@@ -76,6 +86,28 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     socket.onConnect((_) {
       if (!connected.isCompleted) {
         connected.complete();
+      }
+    });
+    socket.onReconnect((_) {
+      final activeRoomId = _roomId;
+      if (activeRoomId == null) {
+        return;
+      }
+      _emitStatus(RealtimeConnectionStatus.reconnecting);
+      socket.emit(_eventJoinRoom, activeRoomId);
+    });
+    socket.onReconnectAttempt((_) {
+      _emitStatus(RealtimeConnectionStatus.reconnecting);
+    });
+    socket.onReconnectError((error) {
+      _emitStatus(RealtimeConnectionStatus.failed);
+      if (!_errors.isClosed) {
+        _errors.add('协作重连失败: $error');
+      }
+    });
+    socket.onDisconnect((_) {
+      if (_roomId != null) {
+        _emitStatus(RealtimeConnectionStatus.disconnected);
       }
     });
     socket.on(_eventInitRoom, (_) {
@@ -102,6 +134,9 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       if (!joined.isCompleted && socketIds.contains(socket.id)) {
         joined.complete();
       }
+      if (socketIds.contains(socket.id)) {
+        _emitStatus(RealtimeConnectionStatus.joined);
+      }
     });
     socket.on(_eventRoomError, (data) {
       final message = data?.toString() ?? '协作房间错误';
@@ -111,6 +146,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       if (!joined.isCompleted) {
         joined.completeError(StateError(message));
       }
+      _emitStatus(RealtimeConnectionStatus.failed);
     });
     socket.onConnectError((error) {
       if (!connected.isCompleted) {
@@ -139,6 +175,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       const Duration(seconds: 10),
       onTimeout: () => throw StateError('Socket.IO join room timed out'),
     );
+    _emitStatus(RealtimeConnectionStatus.joined);
   }
 
   Future<void> _waitForRoomJoin() async {
@@ -167,6 +204,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
         const Duration(seconds: 10),
         onTimeout: () => throw StateError('Socket.IO join room timed out'),
       );
+      _emitStatus(RealtimeConnectionStatus.joined);
     } finally {
       socket.off(_eventRoomUserChange, roomUserHandler);
       socket.off(_eventRoomError, roomErrorHandler);
@@ -200,6 +238,13 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     _roomId = null;
     _socket = null;
     socket?.dispose();
+    _emitStatus(RealtimeConnectionStatus.disconnected);
+  }
+
+  void _emitStatus(RealtimeConnectionStatus status) {
+    if (!_connectionStatus.isClosed) {
+      _connectionStatus.add(status);
+    }
   }
 
   EncryptedPayload? _payloadFromEventData(Object? data) {

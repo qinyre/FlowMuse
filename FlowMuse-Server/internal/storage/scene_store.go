@@ -8,12 +8,14 @@ import (
 )
 
 type SceneSnapshot struct {
-	RoomID          string `json:"roomId"`
-	SceneVersion    int64  `json:"sceneVersion"`
-	SceneHash       string `json:"sceneHash"`
-	EncryptedBuffer []byte `json:"encryptedBuffer"`
-	IV              []byte `json:"iv"`
-	UpdatedAt       int64  `json:"updatedAt"`
+	RoomID           string `json:"roomId"`
+	SceneVersion     int64  `json:"sceneVersion"`
+	SceneHash        string `json:"sceneHash"`
+	BaseSceneVersion int64  `json:"baseSceneVersion"`
+	BaseSceneHash    string `json:"baseSceneHash"`
+	EncryptedBuffer  []byte `json:"encryptedBuffer"`
+	IV               []byte `json:"iv"`
+	UpdatedAt        int64  `json:"updatedAt"`
 }
 
 type SceneStore struct {
@@ -68,12 +70,15 @@ ON CONFLICT (room_id) DO UPDATE SET
 	encrypted_buffer = EXCLUDED.encrypted_buffer,
 	iv = EXCLUDED.iv,
 	updated_at = now()
-WHERE excalidraw_scenes.scene_version <= EXCLUDED.scene_version`,
+WHERE excalidraw_scenes.scene_version = $6
+	AND excalidraw_scenes.scene_hash = $7`,
 		snapshot.RoomID,
 		snapshot.SceneVersion,
 		snapshot.SceneHash,
 		snapshot.EncryptedBuffer,
 		snapshot.IV,
+		snapshot.BaseSceneVersion,
+		snapshot.BaseSceneHash,
 	)
 	if err != nil {
 		return err

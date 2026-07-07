@@ -17,7 +17,14 @@ import '../repositories/whiteboard_scene_repository.dart';
 
 enum WhiteboardSaveStatus { idle, saving, saved }
 
-enum WhiteboardCollaborationStatus { idle, connecting, connected, failed }
+enum WhiteboardCollaborationStatus {
+  idle,
+  connecting,
+  connected,
+  reconnecting,
+  disconnected,
+  failed,
+}
 
 class WhiteboardState {
   const WhiteboardState({
@@ -29,6 +36,7 @@ class WhiteboardState {
     this.collaborationStatus = WhiteboardCollaborationStatus.idle,
     this.collaborationError,
     this.shareOrigin = 'https://flowmuse.local',
+    this.shareOriginConfigured = false,
   });
 
   final String noteId;
@@ -39,14 +47,17 @@ class WhiteboardState {
   final WhiteboardCollaborationStatus collaborationStatus;
   final String? collaborationError;
   final String shareOrigin;
+  final bool shareOriginConfigured;
 
   String? get roomLink {
     final room = activeRoom;
-    if (room == null) {
+    if (room == null || !shareOriginConfigured) {
       return null;
     }
     return room.toLink(origin: shareOrigin, path: '/whiteboard/collaboration');
   }
+
+  String? get roomValue => activeRoom?.toRoomValue();
 
   WhiteboardState copyWith({
     String? noteId,
@@ -57,6 +68,7 @@ class WhiteboardState {
     WhiteboardCollaborationStatus? collaborationStatus,
     String? collaborationError,
     String? shareOrigin,
+    bool? shareOriginConfigured,
     bool clearRoom = false,
     bool clearError = false,
   }) {
@@ -71,6 +83,8 @@ class WhiteboardState {
           ? null
           : collaborationError ?? this.collaborationError,
       shareOrigin: shareOrigin ?? this.shareOrigin,
+      shareOriginConfigured:
+          shareOriginConfigured ?? this.shareOriginConfigured,
     );
   }
 }
@@ -82,7 +96,10 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
   WhiteboardState build() {
     _repository = ref.watch(collaborationRepositoryProvider);
     final config = ref.watch(collaborationConfigProvider);
-    return WhiteboardState(shareOrigin: config.shareOrigin);
+    return WhiteboardState(
+      shareOrigin: config.shareOrigin,
+      shareOriginConfigured: config.hasConfiguredShareOrigin,
+    );
   }
 
   Future<void> openNote({required String noteId}) async {
@@ -173,6 +190,25 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
     state = state.copyWith(
       collaborationStatus: WhiteboardCollaborationStatus.failed,
       collaborationError: message,
+    );
+  }
+
+  void applyConnectionStatus(RealtimeConnectionStatus status) {
+    final nextStatus = switch (status) {
+      RealtimeConnectionStatus.idle => WhiteboardCollaborationStatus.idle,
+      RealtimeConnectionStatus.connecting =>
+        WhiteboardCollaborationStatus.connecting,
+      RealtimeConnectionStatus.joined =>
+        WhiteboardCollaborationStatus.connected,
+      RealtimeConnectionStatus.reconnecting =>
+        WhiteboardCollaborationStatus.reconnecting,
+      RealtimeConnectionStatus.disconnected =>
+        WhiteboardCollaborationStatus.disconnected,
+      RealtimeConnectionStatus.failed => WhiteboardCollaborationStatus.failed,
+    };
+    state = state.copyWith(
+      collaborationStatus: nextStatus,
+      clearError: nextStatus != WhiteboardCollaborationStatus.failed,
     );
   }
 

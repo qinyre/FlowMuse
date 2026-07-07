@@ -34,6 +34,8 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
   final Uri _serverUri;
   final http.Client _client;
   final ExcalidrawBinaryCodec _binaryCodec;
+  static const int _maxFileBytes = 10 * 1024 * 1024;
+  static const Duration _requestTimeout = Duration(seconds: 20);
 
   @override
   Future<void> uploadFiles({
@@ -72,15 +74,20 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
           'lastRetrieved': DateTime.now().millisecondsSinceEpoch,
         },
       );
-      final response = await _client.put(
-        _roomFileUri(roomId, entry.key),
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'Content-Length': '${encodedFile.length}',
-          'Cache-Control': 'public, max-age=31536000',
-        },
-        body: encodedFile,
-      );
+      if (encodedFile.length > _maxFileBytes) {
+        throw StateError('图片文件 ${entry.key} 超过 10MB 限制');
+      }
+      final response = await _client
+          .put(
+            _roomFileUri(roomId, entry.key),
+            headers: {
+              'Content-Type': 'application/octet-stream',
+              'Content-Length': '${encodedFile.length}',
+              'Cache-Control': 'public, max-age=31536000',
+            },
+            body: encodedFile,
+          )
+          .timeout(_requestTimeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError(
           'Upload file ${entry.key} failed: HTTP ${response.statusCode}',
@@ -102,7 +109,9 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
       if (existingFileIds.contains(fileId)) {
         continue;
       }
-      final response = await _client.get(_roomFileUri(roomId, fileId));
+      final response = await _client
+          .get(_roomFileUri(roomId, fileId))
+          .timeout(_requestTimeout);
       if (response.statusCode == 404) {
         continue;
       }

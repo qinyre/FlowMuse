@@ -32,6 +32,8 @@ class CollaborationRepository {
   final SceneReconciler _reconciler;
   final Map<String, int> _broadcastedElementVersions = {};
   final Set<String> _uploadedFileIds = {};
+  final StreamController<String> _repositoryErrors =
+      StreamController<String>.broadcast();
 
   Timer? _fullSceneSyncTimer;
   CollaborationRoom? _activeRoom;
@@ -46,7 +48,19 @@ class CollaborationRepository {
 
   Stream<void> get firstInRoom => _transport.firstInRoom;
 
-  Stream<String> get errors => _transport.errors;
+  Stream<String> get errors {
+    return Stream.multi((controller) {
+      final transportErrors = _transport.errors.listen(controller.add);
+      final repositoryErrors = _repositoryErrors.stream.listen(controller.add);
+      controller.onCancel = () async {
+        await transportErrors.cancel();
+        await repositoryErrors.cancel();
+      };
+    });
+  }
+
+  Stream<RealtimeConnectionStatus> get connectionStatus =>
+      _transport.connectionStatus;
 
   Stream<CollaborationMessage> encryptedMessages(CollaborationRoom room) {
     return _transport.messages.asyncMap((payload) async {
@@ -65,11 +79,10 @@ class CollaborationRepository {
     final syncableScene = initialScene.copyWith(
       elements: _reconciler.getSyncableElements(initialScene.elements),
     );
-    await _fileStore?.uploadFiles(
+    await _uploadFiles(
       roomId: room.roomId,
       roomKey: room.roomKey,
       filesJson: syncableScene.files,
-      alreadyUploadedFileIds: _uploadedFileIds,
     );
     await _sceneStore.createRoom(room: room, scene: syncableScene);
     await _transport.connect(room.roomId);
@@ -96,8 +109,13 @@ class CollaborationRepository {
     }
     await _transport.connect(room.roomId);
     _activeRoom = room;
+    final reconciledElements = _reconciler.reconcile(
+      localElements: localScene.elements,
+      remoteElements: storedScene.elements,
+    );
     final nextScene = storedScene.copyWith(
-      elements: _reconciler.getSyncableElements(storedScene.elements),
+      elements: _reconciler.getSyncableElements(reconciledElements),
+      files: {...localScene.files, ...storedScene.files},
     );
     _latestScene = nextScene;
     _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
@@ -105,6 +123,30 @@ class CollaborationRepository {
     );
     _rememberBroadcasted(nextScene.elements);
     _startFullSceneSync();
+    return nextScene;
+  }
+
+  Future<ExcalidrawScene?> refreshFromSnapshot({
+    required CollaborationRoom room,
+    required ExcalidrawScene localScene,
+  }) async {
+    final storedScene = await _sceneStore.loadScene(room);
+    if (storedScene == null) {
+      return null;
+    }
+    final reconciledElements = _reconciler.reconcile(
+      localElements: localScene.elements,
+      remoteElements: storedScene.elements,
+    );
+    final nextScene = storedScene.copyWith(
+      elements: _reconciler.getSyncableElements(reconciledElements),
+      files: {...localScene.files, ...storedScene.files},
+    );
+    _latestScene = nextScene;
+    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
+      nextScene.elements,
+    );
+    _rememberBroadcasted(nextScene.elements);
     return nextScene;
   }
 
@@ -117,11 +159,11 @@ class CollaborationRepository {
     final syncableElements = _reconciler.getSyncableElements(scene.elements);
     final syncableScene = scene.copyWith(elements: syncableElements);
     _latestScene = syncableScene;
-    await _fileStore?.uploadFiles(
+    await _uploadFiles(
       roomId: room.roomId,
       roomKey: room.roomKey,
       filesJson: scene.files,
-      alreadyUploadedFileIds: _uploadedFileIds,
+      reportOnly: true,
     );
 
     final sceneVersion = _reconciler.getSceneVersion(syncableElements);
@@ -265,6 +307,30 @@ class CollaborationRepository {
       plainBytes: message.toBytes(),
     );
     await _transport.send(encrypted, volatile: volatile);
+  }
+
+  Future<void> _uploadFiles({
+    required String roomId,
+    required String roomKey,
+    required Map<String, Object?> filesJson,
+    bool reportOnly = false,
+  }) async {
+    try {
+      await _fileStore?.uploadFiles(
+        roomId: roomId,
+        roomKey: roomKey,
+        filesJson: filesJson,
+        alreadyUploadedFileIds: _uploadedFileIds,
+      );
+    } catch (error) {
+      final message = '图片文件同步失败，图形和文字会继续同步：$error';
+      if (!_repositoryErrors.isClosed) {
+        _repositoryErrors.add(message);
+      }
+      if (!reportOnly) {
+        rethrow;
+      }
+    }
   }
 
   Future<ExcalidrawScene> _saveSceneResolvingConflict({

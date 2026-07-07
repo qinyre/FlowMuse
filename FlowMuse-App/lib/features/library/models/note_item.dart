@@ -14,6 +14,7 @@ class NoteItem {
     this.notebookId,
     this.tagIds = const [],
     this.subtitle,
+    this.deletedAt,
   });
 
   final String id;
@@ -24,11 +25,40 @@ class NoteItem {
   final String? notebookId;
   final List<String> tagIds;
   final String? subtitle;
+  final DateTime? deletedAt;
+
+  bool get isDeleted => deletedAt != null;
 
   String get date {
     final year = updatedAt.year.toString().padLeft(4, '0');
     final month = updatedAt.month.toString().padLeft(2, '0');
     final day = updatedAt.day.toString().padLeft(2, '0');
     return '$year/$month/$day';
+  }
+
+  NoteItem copyWith({
+    String? id,
+    String? title,
+    DateTime? updatedAt,
+    LibraryFilter? kind,
+    Color? coverColor,
+    String? notebookId,
+    List<String>? tagIds,
+    String? subtitle,
+    DateTime? deletedAt,
+    bool clearNotebook = false,
+    bool clearDeletedAt = false,
+  }) {
+    return NoteItem(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      updatedAt: updatedAt ?? this.updatedAt,
+      kind: kind ?? this.kind,
+      coverColor: coverColor ?? this.coverColor,
+      notebookId: clearNotebook ? null : notebookId ?? this.notebookId,
+      tagIds: tagIds ?? this.tagIds,
+      subtitle: subtitle ?? this.subtitle,
+      deletedAt: clearDeletedAt ? null : deletedAt ?? this.deletedAt,
+    );
   }
 }

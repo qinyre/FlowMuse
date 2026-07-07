@@ -2,6 +2,15 @@ import 'dart:async';
 
 import '../models/encrypted_payload.dart';
 
+enum RealtimeConnectionStatus {
+  idle,
+  connecting,
+  joined,
+  reconnecting,
+  disconnected,
+  failed,
+}
+
 abstract interface class RealtimeTransport {
   Stream<EncryptedPayload> get messages;
 
@@ -12,6 +21,8 @@ abstract interface class RealtimeTransport {
   Stream<void> get firstInRoom;
 
   Stream<String> get errors;
+
+  Stream<RealtimeConnectionStatus> get connectionStatus;
 
   String? get socketId;
 
@@ -39,6 +50,9 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
 
   @override
   Stream<String> get errors => const Stream.empty();
+
+  @override
+  Stream<RealtimeConnectionStatus> get connectionStatus => const Stream.empty();
 
   @override
   String? get socketId => null;
@@ -113,11 +127,15 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   final String _socketId;
   final StreamController<EncryptedPayload> _messages =
       StreamController<EncryptedPayload>.broadcast();
-  final StreamController<String> _newUsers = StreamController<String>.broadcast();
+  final StreamController<String> _newUsers =
+      StreamController<String>.broadcast();
   final StreamController<List<String>> _roomUsers =
       StreamController<List<String>>.broadcast();
-  final StreamController<void> _firstInRoom = StreamController<void>.broadcast();
+  final StreamController<void> _firstInRoom =
+      StreamController<void>.broadcast();
   final StreamController<String> _errors = StreamController<String>.broadcast();
+  final StreamController<RealtimeConnectionStatus> _connectionStatus =
+      StreamController<RealtimeConnectionStatus>.broadcast();
   String? _roomId;
 
   @override
@@ -136,10 +154,15 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   Stream<String> get errors => _errors.stream;
 
   @override
+  Stream<RealtimeConnectionStatus> get connectionStatus =>
+      _connectionStatus.stream;
+
+  @override
   String? get socketId => _socketId;
 
   @override
   Future<void> connect(String roomId) async {
+    _connectionStatus.add(RealtimeConnectionStatus.connecting);
     final previousRoomId = _roomId;
     if (previousRoomId != null) {
       hub.leave(previousRoomId, this);
@@ -149,6 +172,7 @@ class MemoryRealtimeTransport implements RealtimeTransport {
     if (first) {
       _firstInRoom.add(null);
     }
+    _connectionStatus.add(RealtimeConnectionStatus.joined);
   }
 
   @override
@@ -167,6 +191,7 @@ class MemoryRealtimeTransport implements RealtimeTransport {
       hub.leave(roomId, this);
       _roomId = null;
     }
+    _connectionStatus.add(RealtimeConnectionStatus.disconnected);
   }
 
   void _receive(EncryptedPayload payload) {

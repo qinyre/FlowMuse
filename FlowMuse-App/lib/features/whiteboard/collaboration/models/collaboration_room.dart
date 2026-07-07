@@ -5,8 +5,8 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/collaborati
 class CollaborationRoom {
   const CollaborationRoom({required this.roomId, required this.roomKey});
 
-  static final RegExp _roomHashPattern = RegExp(
-    r'^#room=([a-zA-Z0-9_-]+),([a-zA-Z0-9_-]{22})$',
+  static final RegExp _roomValuePattern = RegExp(
+    r'^([a-zA-Z0-9_-]+),([a-zA-Z0-9_-]{22})$',
   );
   static const int _roomIdBytes = 10;
   static final Random _random = Random.secure();
@@ -37,16 +37,70 @@ class CollaborationRoom {
   }
 
   static CollaborationRoom? tryParseLink(String link) {
-    final uri = Uri.tryParse(link);
-    if (uri == null) {
-      return null;
+    return parse(link).room;
+  }
+
+  static CollaborationRoomParseResult parse(String value) {
+    final input = value.trim();
+    if (input.isEmpty) {
+      return const CollaborationRoomParseResult.empty();
     }
-    final match = _roomHashPattern.firstMatch(
-      uri.fragment.isEmpty ? '' : '#${uri.fragment}',
-    );
+    final direct = _parseRoomValue(input);
+    if (direct != null) {
+      return CollaborationRoomParseResult.room(direct);
+    }
+    if (input.startsWith('#room=')) {
+      final room = _parseRoomValue(input.substring('#room='.length));
+      return room == null
+          ? const CollaborationRoomParseResult.invalid()
+          : CollaborationRoomParseResult.room(room);
+    }
+    if (input.startsWith('room=')) {
+      final room = _parseRoomValue(input.substring('room='.length));
+      return room == null
+          ? const CollaborationRoomParseResult.invalid()
+          : CollaborationRoomParseResult.room(room);
+    }
+
+    final uri = Uri.tryParse(input);
+    if (uri == null) {
+      return const CollaborationRoomParseResult.invalid();
+    }
+    final fragment = uri.fragment;
+    if (fragment.startsWith('room=')) {
+      final room = _parseRoomValue(fragment.substring('room='.length));
+      return room == null
+          ? const CollaborationRoomParseResult.invalid()
+          : CollaborationRoomParseResult.room(room);
+    }
+    return const CollaborationRoomParseResult.invalid();
+  }
+
+  static CollaborationRoom? _parseRoomValue(String value) {
+    final match = _roomValuePattern.firstMatch(value.trim());
     if (match == null) {
       return null;
     }
     return CollaborationRoom(roomId: match.group(1)!, roomKey: match.group(2)!);
   }
+}
+
+enum CollaborationRoomParseError { empty, invalid }
+
+class CollaborationRoomParseResult {
+  const CollaborationRoomParseResult._({this.room, this.error});
+
+  const CollaborationRoomParseResult.empty()
+    : this._(error: CollaborationRoomParseError.empty);
+
+  const CollaborationRoomParseResult.invalid()
+    : this._(error: CollaborationRoomParseError.invalid);
+
+  const CollaborationRoomParseResult.room(CollaborationRoom room)
+    : this._(room: room);
+
+  final CollaborationRoom? room;
+  final CollaborationRoomParseError? error;
+
+  bool get isValid => room != null;
 }

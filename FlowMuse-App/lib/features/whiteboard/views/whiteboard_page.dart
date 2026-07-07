@@ -11,19 +11,29 @@ import '../collaboration/models/collaboration_room.dart';
 import '../collaboration/models/collaborator_presence.dart';
 import '../collaboration/models/excalidraw_scene.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
+import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../view_models/whiteboard_view_model.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
   const WhiteboardPage({super.key, required this.noteId})
-    : temporaryCollaboration = false;
+    : temporaryCollaboration = false,
+      initialRoom = null;
 
   const WhiteboardPage.collaboration({super.key})
     : noteId = 'collaboration-room',
-      temporaryCollaboration = true;
+      temporaryCollaboration = true,
+      initialRoom = null;
+
+  const WhiteboardPage.collaborationRoom({
+    super.key,
+    required CollaborationRoom this.initialRoom,
+  }) : noteId = 'collaboration-room',
+       temporaryCollaboration = true;
 
   final String noteId;
   final bool temporaryCollaboration;
+  final CollaborationRoom? initialRoom;
 
   @override
   ConsumerState<WhiteboardPage> createState() => _WhiteboardPageState();
@@ -37,6 +47,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   StreamSubscription<String>? _newUserSubscription;
   StreamSubscription<List<String>>? _roomUsersSubscription;
   StreamSubscription<String>? _roomErrorSubscription;
+  StreamSubscription<RealtimeConnectionStatus>? _connectionStatusSubscription;
   Timer? _idleTimer;
   Timer? _awayTimer;
   bool _loadingScene = false;
@@ -45,6 +56,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   String? _lastIdleState;
   bool _temporarySaved = false;
   int _openGeneration = 0;
+  RealtimeConnectionStatus? _lastRealtimeStatus;
 
   @override
   void initState() {
@@ -69,6 +81,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     unawaited(_newUserSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
     unawaited(_roomErrorSubscription?.cancel());
+    unawaited(_connectionStatusSubscription?.cancel());
     _idleTimer?.cancel();
     _awayTimer?.cancel();
     unawaited(_collaborationRepository.stop());
@@ -85,7 +98,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         'collaboration.excalidraw',
       );
       _loadingScene = false;
-      final room = _roomFromCurrentUri();
+      final room = widget.initialRoom;
       if (room != null) {
         unawaited(_joinCollaboration(room));
       }
@@ -110,7 +123,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _loadingScene = true;
     _markdrawController.loadFromContent(content, '$noteId.excalidraw');
     _loadingScene = false;
-    final room = _roomFromCurrentUri();
+    final room = widget.initialRoom;
     if (room != null) {
       unawaited(_joinCollaboration(room));
     }
@@ -157,7 +170,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _startCollaboration() async {
-    final currentStatus = ref.read(whiteboardViewModelProvider).collaborationStatus;
+    final currentStatus = ref
+        .read(whiteboardViewModelProvider)
+        .collaborationStatus;
     if (currentStatus == WhiteboardCollaborationStatus.connecting) {
       return;
     }
@@ -208,9 +223,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _roomUsersSubscription = null;
     await _roomErrorSubscription?.cancel();
     _roomErrorSubscription = null;
+    await _connectionStatusSubscription?.cancel();
+    _connectionStatusSubscription = null;
     _idleTimer?.cancel();
     _awayTimer?.cancel();
     _lastIdleState = null;
+    _lastRealtimeStatus = null;
     await ref.read(whiteboardViewModelProvider.notifier).stopCollaboration();
     if (widget.temporaryCollaboration && mounted) {
       context.pop();
@@ -279,6 +297,31 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
           .read(whiteboardViewModelProvider.notifier)
           .applyCollaborationError(message);
     });
+    await _connectionStatusSubscription?.cancel();
+    _connectionStatusSubscription = _collaborationRepository.connectionStatus
+        .listen((status) {
+          final previous = _lastRealtimeStatus;
+          _lastRealtimeStatus = status;
+          ref
+              .read(whiteboardViewModelProvider.notifier)
+              .applyConnectionStatus(status);
+          if (status == RealtimeConnectionStatus.joined &&
+              previous == RealtimeConnectionStatus.reconnecting) {
+            unawaited(_refreshCollaborationSnapshot(room));
+          }
+        });
+  }
+
+  Future<void> _refreshCollaborationSnapshot(CollaborationRoom room) async {
+    final refreshed = await _collaborationRepository.refreshFromSnapshot(
+      room: room,
+      localScene: _currentScene(),
+    );
+    if (refreshed == null || !mounted) {
+      return;
+    }
+    await _applyRemoteScene(refreshed);
+    await _broadcastCurrentScene(syncAll: true);
   }
 
   Future<void> _broadcastCurrentScene({
@@ -378,12 +421,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
   }
 
-  CollaborationRoom? _roomFromCurrentUri() {
-    final uri = Uri.base;
-    final link = uri.toString();
-    return CollaborationRoom.tryParseLink(link);
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(whiteboardViewModelProvider);
@@ -411,7 +448,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
                   state.collaborationStatus ==
                   WhiteboardCollaborationStatus.connecting,
               collaborationError: state.collaborationError,
+              collaborationStatusLabel: _collaborationStatusLabel(state),
               roomLink: state.roomLink,
+              roomValue: state.roomValue,
+              shareOriginConfigured: state.shareOriginConfigured,
               collaboratorCount: state.collaborators.length,
               collaborators: _remoteCollaboratorOverlays(state),
               onBack: widget.temporaryCollaboration
@@ -441,6 +481,20 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       WhiteboardSaveStatus.idle => '未保存',
       WhiteboardSaveStatus.saving => '保存中',
       WhiteboardSaveStatus.saved => '已保存',
+    };
+  }
+
+  String? _collaborationStatusLabel(WhiteboardState state) {
+    return switch (state.collaborationStatus) {
+      WhiteboardCollaborationStatus.connecting => '连接中',
+      WhiteboardCollaborationStatus.reconnecting => '重连中',
+      WhiteboardCollaborationStatus.disconnected => '已断开',
+      WhiteboardCollaborationStatus.failed => '协作失败',
+      WhiteboardCollaborationStatus.connected
+          when state.collaborators.isNotEmpty =>
+        '协作中 ${state.collaborators.length}',
+      WhiteboardCollaborationStatus.connected => '协作中',
+      WhiteboardCollaborationStatus.idle => null,
     };
   }
 

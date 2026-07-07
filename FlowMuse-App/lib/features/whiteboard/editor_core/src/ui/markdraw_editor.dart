@@ -33,7 +33,10 @@ class MarkdrawEditor extends StatefulWidget {
     this.collaborating = false,
     this.collaborationConnecting = false,
     this.collaborationError,
+    this.collaborationStatusLabel,
     this.roomLink,
+    this.roomValue,
+    this.shareOriginConfigured = true,
     this.collaboratorCount = 0,
     this.collaborators = const [],
     this.onStartCollaboration,
@@ -72,7 +75,10 @@ class MarkdrawEditor extends StatefulWidget {
   final bool collaborating;
   final bool collaborationConnecting;
   final String? collaborationError;
+  final String? collaborationStatusLabel;
   final String? roomLink;
+  final String? roomValue;
+  final bool shareOriginConfigured;
   final int collaboratorCount;
   final List<RemoteCollaboratorOverlay> collaborators;
   final Future<void> Function()? onStartCollaboration;
@@ -294,7 +300,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
               collaborating: widget.collaborating,
               collaborationConnecting: widget.collaborationConnecting,
               collaborationError: widget.collaborationError,
+              collaborationStatusLabel: widget.collaborationStatusLabel,
               roomLink: widget.roomLink,
+              roomValue: widget.roomValue,
+              shareOriginConfigured: widget.shareOriginConfigured,
               collaboratorCount: widget.collaboratorCount,
               onStartCollaboration: widget.onStartCollaboration,
               onStopCollaboration: widget.onStopCollaboration,
@@ -503,7 +512,10 @@ class _RightChrome extends StatelessWidget {
     required this.collaborating,
     required this.collaborationConnecting,
     required this.collaborationError,
+    required this.collaborationStatusLabel,
     required this.roomLink,
+    required this.roomValue,
+    required this.shareOriginConfigured,
     required this.collaboratorCount,
     required this.onStartCollaboration,
     required this.onStopCollaboration,
@@ -517,7 +529,10 @@ class _RightChrome extends StatelessWidget {
   final bool collaborating;
   final bool collaborationConnecting;
   final String? collaborationError;
+  final String? collaborationStatusLabel;
   final String? roomLink;
+  final String? roomValue;
+  final bool shareOriginConfigured;
   final int collaboratorCount;
   final Future<void> Function()? onStartCollaboration;
   final Future<void> Function()? onStopCollaboration;
@@ -550,7 +565,10 @@ class _RightChrome extends StatelessWidget {
               collaborating: collaborating,
               connecting: collaborationConnecting,
               error: collaborationError,
+              statusLabel: collaborationStatusLabel,
               roomLink: roomLink,
+              roomValue: roomValue,
+              shareOriginConfigured: shareOriginConfigured,
               collaboratorCount: collaboratorCount,
               onStart: onStartCollaboration!,
               onStop: onStopCollaboration!,
@@ -638,7 +656,10 @@ class _CollaborationChip extends StatefulWidget {
     required this.collaborating,
     required this.connecting,
     required this.error,
+    required this.statusLabel,
     required this.roomLink,
+    required this.roomValue,
+    required this.shareOriginConfigured,
     required this.collaboratorCount,
     required this.onStart,
     required this.onStop,
@@ -648,7 +669,10 @@ class _CollaborationChip extends StatefulWidget {
   final bool collaborating;
   final bool connecting;
   final String? error;
+  final String? statusLabel;
   final String? roomLink;
+  final String? roomValue;
+  final bool shareOriginConfigured;
   final int collaboratorCount;
   final Future<void> Function() onStart;
   final Future<void> Function() onStop;
@@ -661,26 +685,28 @@ class _CollaborationChipState extends State<_CollaborationChip> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final label = widget.connecting
-        ? '连接中'
-        : widget.error != null
-        ? '协作失败'
-        : widget.collaborating
-        ? (widget.collaboratorCount > 0
-              ? '协作中 ${widget.collaboratorCount}'
-              : '协作中')
-        : '创建房间';
+    final label =
+        widget.statusLabel ??
+        (widget.connecting
+            ? '连接中'
+            : widget.error != null
+            ? '协作失败'
+            : widget.collaborating
+            ? (widget.collaboratorCount > 0
+                  ? '协作中 ${widget.collaboratorCount}'
+                  : '协作中')
+            : '创建房间');
     return MenuAnchor(
       menuChildren: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Text(
             widget.connecting
-                ? '连接中'
+                ? label
                 : widget.error != null
                 ? '协作失败'
                 : widget.collaborating
-                ? '协作中'
+                ? label
                 : '本地白板',
             style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700),
           ),
@@ -696,35 +722,56 @@ class _CollaborationChipState extends State<_CollaborationChip> {
               ),
             ),
           ),
-        if (widget.roomLink != null)
+        if (widget.roomLink != null || widget.roomValue != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 280),
-              child: SelectableText(
-                widget.roomLink!,
-                maxLines: 3,
-                style: TextStyle(
-                  color: cs.onSurfaceVariant,
-                  fontSize: 12,
-                  height: 1.25,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!widget.shareOriginConfigured && widget.roomValue != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        '分享地址未配置，请复制房间码加入',
+                        style: TextStyle(
+                          color: cs.error,
+                          fontSize: 12,
+                          height: 1.25,
+                        ),
+                      ),
+                    ),
+                  SelectableText(
+                    widget.roomLink ?? widget.roomValue!,
+                    maxLines: 3,
+                    style: TextStyle(
+                      color: cs.onSurfaceVariant,
+                      fontSize: 12,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        if (widget.roomLink != null)
+        if (widget.roomLink != null || widget.roomValue != null)
           MenuItemButton(
             leadingIcon: const Icon(Icons.copy),
             onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: widget.roomLink!));
+              await Clipboard.setData(
+                ClipboardData(text: widget.roomLink ?? widget.roomValue!),
+              );
               if (!context.mounted) {
                 return;
               }
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('房间链接已复制')),
+                SnackBar(
+                  content: Text(widget.roomLink == null ? '房间码已复制' : '房间链接已复制'),
+                ),
               );
             },
-            child: const Text('复制链接'),
+            child: Text(widget.roomLink == null ? '复制房间码' : '复制链接'),
           ),
         MenuItemButton(
           leadingIcon: Icon(widget.collaborating ? Icons.link_off : Icons.link),

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/minio/minio-go/v7"
 )
+
+const (
+	maxSceneBodyBytes = 8 * 1024 * 1024
+	maxFileBodyBytes  = 10 * 1024 * 1024
+)
+
+var safeIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
 type HTTPAPI struct {
 	sceneStore     *storage.SceneStore
@@ -40,7 +48,7 @@ func (api *HTTPAPI) health(w http.ResponseWriter, _ *http.Request) {
 
 func (api *HTTPAPI) rooms(w http.ResponseWriter, r *http.Request) {
 	roomID, suffix, ok := parseRoomPath(r.URL.Path)
-	if !ok {
+	if !ok || !safeIDPattern.MatchString(roomID) {
 		http.NotFound(w, r)
 		return
 	}
@@ -50,7 +58,7 @@ func (api *HTTPAPI) rooms(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(suffix, "files/") {
 		fileID := strings.TrimPrefix(suffix, "files/")
-		if fileID == "" || strings.Contains(fileID, "/") {
+		if fileID == "" || strings.Contains(fileID, "/") || !safeIDPattern.MatchString(fileID) {
 			http.NotFound(w, r)
 			return
 		}
@@ -78,6 +86,7 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 		writeJSON(w, http.StatusOK, snapshot)
 	case http.MethodPut:
 		var snapshot storage.SceneSnapshot
+		r.Body = http.MaxBytesReader(w, r.Body, maxSceneBodyBytes)
 		if err := json.NewDecoder(r.Body).Decode(&snapshot); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -85,6 +94,10 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 		snapshot.RoomID = roomID
 		if snapshot.EncryptedBuffer == nil || snapshot.IV == nil {
 			http.Error(w, "encryptedBuffer and iv are required", http.StatusBadRequest)
+			return
+		}
+		if snapshot.BaseSceneHash == "" {
+			http.Error(w, "baseSceneVersion and baseSceneHash are required", http.StatusBadRequest)
 			return
 		}
 		if err := api.sceneStore.Save(ctx, snapshot); err != nil {
@@ -98,6 +111,7 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodPost:
 		var snapshot storage.SceneSnapshot
+		r.Body = http.MaxBytesReader(w, r.Body, maxSceneBodyBytes)
 		if err := json.NewDecoder(r.Body).Decode(&snapshot); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -148,6 +162,11 @@ func (api *HTTPAPI) file(w http.ResponseWriter, r *http.Request, roomID, fileID 
 			http.Error(w, "Content-Length is required", http.StatusLengthRequired)
 			return
 		}
+		if r.ContentLength > maxFileBodyBytes {
+			http.Error(w, "file is too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxFileBodyBytes)
 		contentType := r.Header.Get("Content-Type")
 		if contentType == "" {
 			contentType = "application/octet-stream"

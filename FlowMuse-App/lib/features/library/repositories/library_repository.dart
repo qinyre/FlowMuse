@@ -70,11 +70,21 @@ class LibraryIndex {
   final List<LibraryTag> tags;
 
   int get unnotebookedCount {
-    return notes.where((item) => item.notebookId == null).length;
+    return notes
+        .where((item) => !item.isDeleted && item.notebookId == null)
+        .length;
   }
 
   int get untaggedCount {
-    return notes.where((item) => item.tagIds.isEmpty).length;
+    return notes.where((item) => !item.isDeleted && item.tagIds.isEmpty).length;
+  }
+
+  List<NoteItem> get activeNotes {
+    return notes.where((item) => !item.isDeleted).toList();
+  }
+
+  List<NoteItem> get deletedNotes {
+    return notes.where((item) => item.isDeleted).toList();
   }
 
   Map<String, Object?> toJson() {
@@ -136,6 +146,26 @@ abstract interface class LibraryRepository {
   Future<LibraryNotebook> createNotebook();
 
   Future<LibraryTag> createTag();
+
+  Future<void> deleteNotes(List<String> noteIds);
+
+  Future<void> restoreNotes(List<String> noteIds);
+
+  Future<void> deleteNotesForever(List<String> noteIds);
+
+  Future<void> moveNotesToNotebook(List<String> noteIds, String? notebookId);
+
+  Future<void> addTagsToNotes(List<String> noteIds, List<String> tagIds);
+
+  Future<void> removeTagFromNotes(List<String> noteIds, String tagId);
+
+  Future<void> renameNotebook(String notebookId, String name);
+
+  Future<void> deleteNotebook(String notebookId);
+
+  Future<void> renameTag(String tagId, String name);
+
+  Future<void> deleteTag(String tagId);
 }
 
 class SharedPreferencesLibraryRepository implements LibraryRepository {
@@ -205,15 +235,9 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     }
     await _updateNote(
       noteId,
-      (item) => NoteItem(
-        id: item.id,
+      (item) => item.copyWith(
         title: trimmed,
         updatedAt: DateTime.now(),
-        kind: item.kind,
-        coverColor: item.coverColor,
-        notebookId: item.notebookId,
-        tagIds: item.tagIds,
-        subtitle: item.subtitle,
       ),
     );
   }
@@ -222,15 +246,8 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
   Future<void> touchNote(String noteId) async {
     await _updateNote(
       noteId,
-      (item) => NoteItem(
-        id: item.id,
-        title: item.title,
+      (item) => item.copyWith(
         updatedAt: DateTime.now(),
-        kind: item.kind,
-        coverColor: item.coverColor,
-        notebookId: item.notebookId,
-        tagIds: item.tagIds,
-        subtitle: item.subtitle,
       ),
     );
   }
@@ -261,6 +278,189 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     return tag;
   }
 
+  @override
+  Future<void> deleteNotes(List<String> noteIds) async {
+    final ids = noteIds.toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+    final now = DateTime.now();
+    await _updateNotes(
+      (item) => ids.contains(item.id)
+          ? item.copyWith(updatedAt: now, deletedAt: now)
+          : item,
+    );
+  }
+
+  @override
+  Future<void> restoreNotes(List<String> noteIds) async {
+    final ids = noteIds.toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+    await _updateNotes(
+      (item) => ids.contains(item.id)
+          ? item.copyWith(updatedAt: DateTime.now(), clearDeletedAt: true)
+          : item,
+    );
+  }
+
+  @override
+  Future<void> deleteNotesForever(List<String> noteIds) async {
+    final ids = noteIds.toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+    final index = await loadIndex();
+    await _saveIndex(
+      index.copyWith(
+        notes: [for (final item in index.notes) if (!ids.contains(item.id)) item],
+      ),
+    );
+  }
+
+  @override
+  Future<void> moveNotesToNotebook(
+    List<String> noteIds,
+    String? notebookId,
+  ) async {
+    final ids = noteIds.toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+    await _updateNotes(
+      (item) => ids.contains(item.id)
+          ? item.copyWith(
+              notebookId: notebookId,
+              clearNotebook: notebookId == null,
+              updatedAt: DateTime.now(),
+            )
+          : item,
+    );
+  }
+
+  @override
+  Future<void> addTagsToNotes(List<String> noteIds, List<String> tagIds) async {
+    final ids = noteIds.toSet();
+    final tags = tagIds.toSet();
+    if (ids.isEmpty || tags.isEmpty) {
+      return;
+    }
+    await _updateNotes(
+      (item) => ids.contains(item.id)
+          ? item.copyWith(
+              tagIds: {...item.tagIds, ...tags}.toList(),
+              updatedAt: DateTime.now(),
+            )
+          : item,
+    );
+  }
+
+  @override
+  Future<void> removeTagFromNotes(List<String> noteIds, String tagId) async {
+    final ids = noteIds.toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+    await _updateNotes(
+      (item) => ids.contains(item.id)
+          ? item.copyWith(
+              tagIds: [
+                for (final id in item.tagIds)
+                  if (id != tagId) id,
+              ],
+              updatedAt: DateTime.now(),
+            )
+          : item,
+    );
+  }
+
+  @override
+  Future<void> renameNotebook(String notebookId, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    final index = await loadIndex();
+    await _saveIndex(
+      index.copyWith(
+        notebooks: [
+          for (final notebook in index.notebooks)
+            notebook.id == notebookId
+                ? LibraryNotebook(
+                    id: notebook.id,
+                    name: trimmed,
+                    coverColor: notebook.coverColor,
+                  )
+                : notebook,
+        ],
+      ),
+    );
+  }
+
+  @override
+  Future<void> deleteNotebook(String notebookId) async {
+    final index = await loadIndex();
+    await _saveIndex(
+      index.copyWith(
+        notebooks: [
+          for (final notebook in index.notebooks)
+            if (notebook.id != notebookId) notebook,
+        ],
+        notes: [
+          for (final note in index.notes)
+            note.notebookId == notebookId
+                ? note.copyWith(clearNotebook: true, updatedAt: DateTime.now())
+                : note,
+        ],
+      ),
+    );
+  }
+
+  @override
+  Future<void> renameTag(String tagId, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    final index = await loadIndex();
+    await _saveIndex(
+      index.copyWith(
+        tags: [
+          for (final tag in index.tags)
+            tag.id == tagId
+                ? LibraryTag(id: tag.id, name: trimmed, coverColor: tag.coverColor)
+                : tag,
+        ],
+      ),
+    );
+  }
+
+  @override
+  Future<void> deleteTag(String tagId) async {
+    final index = await loadIndex();
+    await _saveIndex(
+      index.copyWith(
+        tags: [
+          for (final tag in index.tags)
+            if (tag.id != tagId) tag,
+        ],
+        notes: [
+          for (final note in index.notes)
+            note.tagIds.contains(tagId)
+                ? note.copyWith(
+                    tagIds: [
+                      for (final id in note.tagIds)
+                        if (id != tagId) id,
+                    ],
+                    updatedAt: DateTime.now(),
+                  )
+                : note,
+        ],
+      ),
+    );
+  }
+
   Future<void> _updateNote(
     String noteId,
     NoteItem Function(NoteItem item) update,
@@ -274,6 +474,13 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
             if (item.id == noteId) update(item) else item,
         ],
       ),
+    );
+  }
+
+  Future<void> _updateNotes(NoteItem Function(NoteItem item) update) async {
+    final index = await loadIndex();
+    await _saveIndex(
+      index.copyWith(notes: [for (final item in index.notes) update(item)]),
     );
   }
 
@@ -329,6 +536,59 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     await refresh();
   }
 
+  Future<void> deleteNotes(List<String> noteIds) async {
+    await _repository.deleteNotes(noteIds);
+    await refresh();
+  }
+
+  Future<void> restoreNotes(List<String> noteIds) async {
+    await _repository.restoreNotes(noteIds);
+    await refresh();
+  }
+
+  Future<void> deleteNotesForever(List<String> noteIds) async {
+    await _repository.deleteNotesForever(noteIds);
+    await refresh();
+  }
+
+  Future<void> moveNotesToNotebook(
+    List<String> noteIds,
+    String? notebookId,
+  ) async {
+    await _repository.moveNotesToNotebook(noteIds, notebookId);
+    await refresh();
+  }
+
+  Future<void> addTagsToNotes(List<String> noteIds, List<String> tagIds) async {
+    await _repository.addTagsToNotes(noteIds, tagIds);
+    await refresh();
+  }
+
+  Future<void> removeTagFromNotes(List<String> noteIds, String tagId) async {
+    await _repository.removeTagFromNotes(noteIds, tagId);
+    await refresh();
+  }
+
+  Future<void> renameNotebook(String notebookId, String name) async {
+    await _repository.renameNotebook(notebookId, name);
+    await refresh();
+  }
+
+  Future<void> deleteNotebook(String notebookId) async {
+    await _repository.deleteNotebook(notebookId);
+    await refresh();
+  }
+
+  Future<void> renameTag(String tagId, String name) async {
+    await _repository.renameTag(tagId, name);
+    await refresh();
+  }
+
+  Future<void> deleteTag(String tagId) async {
+    await _repository.deleteTag(tagId);
+    await refresh();
+  }
+
   Future<void> refresh() async {
     state = const AsyncLoading<LibraryIndex>();
     state = await AsyncValue.guard(_repository.loadIndex);
@@ -354,6 +614,7 @@ Map<String, Object?> _noteToJson(NoteItem item) {
     'notebookId': item.notebookId,
     'tagIds': item.tagIds,
     'subtitle': item.subtitle,
+    'deletedAt': item.deletedAt?.toIso8601String(),
   };
 }
 
@@ -367,6 +628,9 @@ NoteItem _noteFromJson(Map<String, Object?> json) {
     notebookId: json['notebookId'] as String?,
     tagIds: (json['tagIds'] as List? ?? const []).whereType<String>().toList(),
     subtitle: json['subtitle'] as String?,
+    deletedAt: json['deletedAt'] is String
+        ? DateTime.parse(json['deletedAt']! as String)
+        : null,
   );
 }
 

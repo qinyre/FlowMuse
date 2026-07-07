@@ -25,7 +25,10 @@ class LibraryHomePage extends ConsumerWidget {
       if (room == null || !context.mounted) {
         return;
       }
-      context.push('${AppRoutes.collaborationWhiteboard}#room=${room.toRoomValue()}');
+      context.push(
+        '${AppRoutes.collaborationWhiteboard}#room=${room.toRoomValue()}',
+        extra: room,
+      );
     } finally {
       controller.dispose();
     }
@@ -86,24 +89,7 @@ class _JoinRoomDialogState extends State<_JoinRoomDialog> {
   }
 
   CollaborationRoom? _parseRoomInput(String value) {
-    final input = value.trim();
-    if (input.isEmpty) {
-      return null;
-    }
-    final candidates = <String>[
-      input,
-      if (input.startsWith('#room=')) 'https://flowmuse.local/whiteboard$input',
-      if (input.startsWith('room=')) 'https://flowmuse.local/whiteboard#$input',
-      if (input.contains(',') && !input.contains('#room='))
-        'https://flowmuse.local/whiteboard#room=$input',
-    ];
-    for (final candidate in candidates) {
-      final room = CollaborationRoom.tryParseLink(candidate);
-      if (room != null) {
-        return room;
-      }
-    }
-    return null;
+    return CollaborationRoom.parse(value).room;
   }
 
   @override
@@ -129,10 +115,7 @@ class _JoinRoomDialogState extends State<_JoinRoomDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('加入'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('加入')),
       ],
     );
   }

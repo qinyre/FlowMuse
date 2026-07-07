@@ -13,6 +13,8 @@ import (
 	"github.com/zishang520/socket.io/v2/socket"
 )
 
+const maxEncryptedFrameBytes = 8 * 1024 * 1024
+
 type Hub struct {
 	server     *socket.Server
 	sceneStore *storage.SceneStore
@@ -116,6 +118,10 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	h.mu.Unlock()
 	if currentRoomID != roomID {
 		client.Emit(EventRoomError, "当前连接不在目标房间")
+		return
+	}
+	if len(frame.EncryptedBuffer)+len(frame.IV) > maxEncryptedFrameBytes {
+		client.Emit(EventRoomError, "协作消息过大")
 		return
 	}
 	operator := client.To(socket.Room(roomID))
