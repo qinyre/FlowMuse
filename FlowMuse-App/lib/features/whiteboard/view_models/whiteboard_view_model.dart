@@ -17,6 +17,8 @@ import '../repositories/whiteboard_scene_repository.dart';
 
 enum WhiteboardSaveStatus { idle, saving, saved }
 
+enum WhiteboardCollaborationStatus { idle, connecting, connected, failed }
+
 class WhiteboardState {
   const WhiteboardState({
     this.noteId = '',
@@ -24,6 +26,9 @@ class WhiteboardState {
     this.activeRoom,
     this.collaborating = false,
     this.collaborators = const {},
+    this.collaborationStatus = WhiteboardCollaborationStatus.idle,
+    this.collaborationError,
+    this.shareOrigin = 'https://flowmuse.local',
   });
 
   final String noteId;
@@ -31,13 +36,16 @@ class WhiteboardState {
   final CollaborationRoom? activeRoom;
   final bool collaborating;
   final Map<String, CollaboratorPresence> collaborators;
+  final WhiteboardCollaborationStatus collaborationStatus;
+  final String? collaborationError;
+  final String shareOrigin;
 
   String? get roomLink {
     final room = activeRoom;
     if (room == null) {
       return null;
     }
-    return room.toLink(origin: 'https://flowmuse.local', path: '/whiteboard');
+    return room.toLink(origin: shareOrigin, path: '/whiteboard/collaboration');
   }
 
   WhiteboardState copyWith({
@@ -46,7 +54,11 @@ class WhiteboardState {
     CollaborationRoom? activeRoom,
     bool? collaborating,
     Map<String, CollaboratorPresence>? collaborators,
+    WhiteboardCollaborationStatus? collaborationStatus,
+    String? collaborationError,
+    String? shareOrigin,
     bool clearRoom = false,
+    bool clearError = false,
   }) {
     return WhiteboardState(
       noteId: noteId ?? this.noteId,
@@ -54,6 +66,11 @@ class WhiteboardState {
       activeRoom: clearRoom ? null : activeRoom ?? this.activeRoom,
       collaborating: collaborating ?? this.collaborating,
       collaborators: clearRoom ? const {} : collaborators ?? this.collaborators,
+      collaborationStatus: collaborationStatus ?? this.collaborationStatus,
+      collaborationError: clearError
+          ? null
+          : collaborationError ?? this.collaborationError,
+      shareOrigin: shareOrigin ?? this.shareOrigin,
     );
   }
 }
@@ -64,7 +81,8 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
   @override
   WhiteboardState build() {
     _repository = ref.watch(collaborationRepositoryProvider);
-    return const WhiteboardState();
+    final config = ref.watch(collaborationConfigProvider);
+    return WhiteboardState(shareOrigin: config.shareOrigin);
   }
 
   Future<void> openNote({required String noteId}) async {
@@ -91,25 +109,71 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
   Future<void> startCollaboration({
     required ExcalidrawScene initialScene,
   }) async {
-    final room = await _repository.startNewRoom(initialScene: initialScene);
-    state = state.copyWith(activeRoom: room, collaborating: true);
+    state = state.copyWith(
+      collaborationStatus: WhiteboardCollaborationStatus.connecting,
+      clearError: true,
+    );
+    try {
+      final room = await _repository.startNewRoom(initialScene: initialScene);
+      state = state.copyWith(
+        activeRoom: room,
+        collaborating: true,
+        collaborationStatus: WhiteboardCollaborationStatus.connected,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        collaborating: false,
+        collaborationStatus: WhiteboardCollaborationStatus.failed,
+        collaborationError: error.toString(),
+      );
+      rethrow;
+    }
   }
 
   Future<ExcalidrawScene> joinCollaboration({
     required CollaborationRoom room,
     required ExcalidrawScene localScene,
   }) async {
-    final scene = await _repository.joinRoom(
-      room: room,
-      localScene: localScene,
+    state = state.copyWith(
+      collaborationStatus: WhiteboardCollaborationStatus.connecting,
+      clearError: true,
     );
-    state = state.copyWith(activeRoom: room, collaborating: true);
-    return scene;
+    try {
+      final scene = await _repository.joinRoom(
+        room: room,
+        localScene: localScene,
+      );
+      state = state.copyWith(
+        activeRoom: room,
+        collaborating: true,
+        collaborationStatus: WhiteboardCollaborationStatus.connected,
+      );
+      return scene;
+    } catch (error) {
+      state = state.copyWith(
+        collaborating: false,
+        collaborationStatus: WhiteboardCollaborationStatus.failed,
+        collaborationError: error.toString(),
+      );
+      rethrow;
+    }
   }
 
   Future<void> stopCollaboration() async {
     await _repository.stop();
-    state = state.copyWith(collaborating: false, clearRoom: true);
+    state = state.copyWith(
+      collaborating: false,
+      clearRoom: true,
+      clearError: true,
+      collaborationStatus: WhiteboardCollaborationStatus.idle,
+    );
+  }
+
+  void applyCollaborationError(String message) {
+    state = state.copyWith(
+      collaborationStatus: WhiteboardCollaborationStatus.failed,
+      collaborationError: message,
+    );
   }
 
   void applyPresenceMessage(CollaborationMessage message) {

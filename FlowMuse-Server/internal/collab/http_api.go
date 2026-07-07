@@ -88,12 +88,32 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 			return
 		}
 		if err := api.sceneStore.Save(ctx, snapshot); err != nil {
+			if errors.Is(err, storage.ErrStaleSceneSnapshot) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	case http.MethodPost:
+		var snapshot storage.SceneSnapshot
+		if err := json.NewDecoder(r.Body).Decode(&snapshot); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		snapshot.RoomID = roomID
+		if snapshot.EncryptedBuffer == nil || snapshot.IV == nil {
+			http.Error(w, "encryptedBuffer and iv are required", http.StatusBadRequest)
+			return
+		}
+		if err := api.sceneStore.Create(ctx, snapshot); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
 	default:
-		w.Header().Set("Allow", "GET, PUT")
+		w.Header().Set("Allow", "GET, PUT, POST")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }

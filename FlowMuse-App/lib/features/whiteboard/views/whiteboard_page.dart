@@ -15,9 +15,15 @@ import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../view_models/whiteboard_view_model.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
-  const WhiteboardPage({super.key, required this.noteId});
+  const WhiteboardPage({super.key, required this.noteId})
+    : temporaryCollaboration = false;
+
+  const WhiteboardPage.collaboration({super.key})
+    : noteId = 'collaboration-room',
+      temporaryCollaboration = true;
 
   final String noteId;
+  final bool temporaryCollaboration;
 
   @override
   ConsumerState<WhiteboardPage> createState() => _WhiteboardPageState();
@@ -30,12 +36,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   StreamSubscription<CollaborationMessage>? _collaborationSubscription;
   StreamSubscription<String>? _newUserSubscription;
   StreamSubscription<List<String>>? _roomUsersSubscription;
+  StreamSubscription<String>? _roomErrorSubscription;
   Timer? _idleTimer;
   Timer? _awayTimer;
   bool _loadingScene = false;
   bool _applyingRemoteScene = false;
   bool _collaborationOpening = false;
   String? _lastIdleState;
+  bool _temporarySaved = false;
 
   @override
   void initState() {
@@ -59,6 +67,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     unawaited(_collaborationSubscription?.cancel());
     unawaited(_newUserSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
+    unawaited(_roomErrorSubscription?.cancel());
     _idleTimer?.cancel();
     _awayTimer?.cancel();
     unawaited(_collaborationRepository.stop());
@@ -67,6 +76,19 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _openNote() async {
+    if (widget.temporaryCollaboration) {
+      _loadingScene = true;
+      _markdrawController.loadFromContent(
+        emptyExcalidrawSceneContent,
+        'collaboration.excalidraw',
+      );
+      _loadingScene = false;
+      final room = _roomFromCurrentUri();
+      if (room != null) {
+        unawaited(_joinCollaboration(room));
+      }
+      return;
+    }
     await ref.read(libraryIndexProvider.notifier).ensureNote(widget.noteId);
     await ref
         .read(whiteboardViewModelProvider.notifier)
@@ -89,6 +111,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (_loadingScene || _applyingRemoteScene) {
       return;
     }
+    if (widget.temporaryCollaboration) {
+      await _broadcastCurrentScene();
+      if (mounted) {
+        ref.read(whiteboardViewModelProvider.notifier).markSaved();
+      }
+      return;
+    }
     final viewModel = ref.read(whiteboardViewModelProvider.notifier);
     viewModel.markSaving();
     final repository = ref.read(whiteboardSceneRepositoryProvider);
@@ -105,6 +134,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _renameAndSaveDocument() async {
+    if (widget.temporaryCollaboration) {
+      await _broadcastCurrentScene();
+      return;
+    }
     final title = _markdrawController.documentName?.trim();
     if (title != null && title.isNotEmpty) {
       await ref
@@ -144,53 +177,79 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
   }
 
-  Future<void> _joinCollaborationFromInput(String value) async {
-    final room = _parseRoomInput(value);
-    if (room == null) {
-      throw const FormatException('请输入完整房间链接或 roomId,roomKey');
-    }
-    await _joinCollaboration(room);
-  }
-
-  CollaborationRoom? _parseRoomInput(String value) {
-    final input = value.trim();
-    if (input.isEmpty) {
-      return null;
-    }
-    final candidates = <String>[
-      input,
-      if (input.startsWith('#room=')) 'https://flowmuse.local/whiteboard$input',
-      if (input.startsWith('room=')) 'https://flowmuse.local/whiteboard#$input',
-      if (input.contains(',') && !input.contains('#room='))
-        'https://flowmuse.local/whiteboard#room=$input',
-    ];
-    for (final candidate in candidates) {
-      final room = CollaborationRoom.tryParseLink(candidate);
-      if (room != null) {
-        return room;
+  Future<void> _stopCollaboration() async {
+    if (widget.temporaryCollaboration && mounted && !_temporarySaved) {
+      final save = await _confirmTemporaryRoomExit();
+      if (save == null) {
+        return;
+      }
+      if (save) {
+        await _saveTemporaryRoomAsLocalNote();
       }
     }
-    return null;
-  }
-
-  Future<void> _stopCollaboration() async {
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = null;
     await _newUserSubscription?.cancel();
     _newUserSubscription = null;
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = null;
+    await _roomErrorSubscription?.cancel();
+    _roomErrorSubscription = null;
     _idleTimer?.cancel();
     _awayTimer?.cancel();
     _lastIdleState = null;
     await ref.read(whiteboardViewModelProvider.notifier).stopCollaboration();
+    if (widget.temporaryCollaboration && mounted) {
+      context.pop();
+    }
+  }
+
+  Future<bool?> _confirmTemporaryRoomExit() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('退出协作房间'),
+        content: const Text('是否把当前协作白板保存为本地笔记？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(null),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('不保存退出'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('保存到本地'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveTemporaryRoomAsLocalNote() async {
+    final note = await ref.read(libraryIndexProvider.notifier).createNote();
+    final content = _markdrawController.serializeScene(
+      format: DocumentFormat.excalidraw,
+    );
+    await ref.read(whiteboardSceneRepositoryProvider).saveScene(note.id, content);
+    await ref.read(libraryIndexProvider.notifier).touchNote(note.id);
+    _temporarySaved = true;
   }
 
   Future<void> _listenToRoom(CollaborationRoom room) async {
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = _collaborationRepository
         .encryptedMessages(room)
-        .listen(_handleCollaborationMessage);
+        .listen(
+          _handleCollaborationMessage,
+          onError: (Object error) {
+            ref
+                .read(whiteboardViewModelProvider.notifier)
+                .applyCollaborationError(error.toString());
+          },
+        );
     await _newUserSubscription?.cancel();
     _newUserSubscription = _collaborationRepository.newUsers.listen((_) {
       unawaited(_broadcastCurrentScene(syncAll: true, initial: true));
@@ -198,6 +257,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = _collaborationRepository.roomUsers.listen((users) {
       ref.read(whiteboardViewModelProvider.notifier).applyRoomUsers(users);
+    });
+    await _roomErrorSubscription?.cancel();
+    _roomErrorSubscription = _collaborationRepository.errors.listen((message) {
+      ref
+          .read(whiteboardViewModelProvider.notifier)
+          .applyCollaborationError(message);
     });
   }
 
@@ -240,7 +305,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   Future<void> _applyRemoteElements(
     List<Map<String, Object?>> remoteElements,
   ) async {
-    if (remoteElements.isEmpty || !mounted) {
+    if (!mounted) {
       return;
     }
     final localScene = _collaborationAdapter.currentScene();
@@ -301,7 +366,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   Widget build(BuildContext context) {
     final state = ref.watch(whiteboardViewModelProvider);
 
-    return Scaffold(
+    return PopScope(
+      canPop: !widget.temporaryCollaboration || _temporarySaved,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop || !widget.temporaryCollaboration) {
+          return;
+        }
+        unawaited(_stopCollaboration());
+      },
+      child: Scaffold(
       key: ValueKey(widget.noteId),
       backgroundColor: const Color(0xFFFDFDFB),
       body: SafeArea(
@@ -315,9 +388,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             roomLink: state.roomLink,
             collaboratorCount: state.collaborators.length,
             collaborators: _remoteCollaboratorOverlays(state),
-            onBack: () => context.pop(),
+            onBack: widget.temporaryCollaboration
+                ? () {
+                    unawaited(_stopCollaboration());
+                  }
+                : () => context.pop(),
             onStartCollaboration: _startCollaboration,
-            onJoinCollaboration: _joinCollaborationFromInput,
             onStopCollaboration: _stopCollaboration,
             onPointerPresence: _broadcastPointerPresence,
             onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
@@ -329,6 +405,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             },
           ),
         ),
+      ),
       ),
     );
   }

@@ -14,6 +14,8 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   static const String _eventFirstInRoom = 'first-in-room';
   static const String _eventNewUser = 'new-user';
   static const String _eventRoomUserChange = 'room-user-change';
+  static const String _eventRoomError = 'room-error';
+  static const String _eventLeaveRoom = 'leave-room';
   static const String _eventServerBroadcast = 'server-broadcast';
   static const String _eventServerVolatileBroadcast =
       'server-volatile-broadcast';
@@ -26,6 +28,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   final StreamController<List<String>> _roomUsers =
       StreamController<List<String>>.broadcast();
   final StreamController<void> _firstInRoom = StreamController<void>.broadcast();
+  final StreamController<String> _errors = StreamController<String>.broadcast();
 
   io.Socket? _socket;
   String? _roomId;
@@ -41,6 +44,9 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
 
   @override
   Stream<void> get firstInRoom => _firstInRoom.stream;
+
+  @override
+  Stream<String> get errors => _errors.stream;
 
   @override
   String? get socketId => _socket?.id;
@@ -89,6 +95,11 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
         _roomUsers.add(socketIds);
       }
     });
+    socket.on(_eventRoomError, (data) {
+      if (!_errors.isClosed) {
+        _errors.add(data?.toString() ?? '协作房间错误');
+      }
+    });
     socket.onConnectError((error) {
       if (!connected.isCompleted) {
         connected.completeError(StateError('Socket.IO connect failed: $error'));
@@ -119,7 +130,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     final roomId = _roomId;
     final socket = _socket;
     if (roomId == null || socket == null || !socket.connected) {
-      return;
+      throw StateError('协作连接未建立');
     }
     socket.emit(
       volatile ? _eventServerVolatileBroadcast : _eventServerBroadcast,
@@ -133,8 +144,12 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
 
   @override
   Future<void> disconnect() async {
-    _roomId = null;
+    final roomId = _roomId;
     final socket = _socket;
+    if (roomId != null && socket != null && socket.connected) {
+      socket.emit(_eventLeaveRoom, roomId);
+    }
+    _roomId = null;
     _socket = null;
     socket?.dispose();
   }

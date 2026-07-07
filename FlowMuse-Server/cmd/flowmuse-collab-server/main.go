@@ -59,7 +59,7 @@ func main() {
 	io := socket.NewServer(nil, socketOptions)
 	defer io.Close(nil)
 
-	hub := collab.NewHub(io)
+	hub := collab.NewHub(io, sceneStore)
 	hub.Register()
 
 	mux := http.NewServeMux()

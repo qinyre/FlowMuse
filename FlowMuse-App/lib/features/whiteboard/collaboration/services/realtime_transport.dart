@@ -11,6 +11,8 @@ abstract interface class RealtimeTransport {
 
   Stream<void> get firstInRoom;
 
+  Stream<String> get errors;
+
   String? get socketId;
 
   Future<void> connect(String roomId);
@@ -34,6 +36,9 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
 
   @override
   Stream<void> get firstInRoom => const Stream.empty();
+
+  @override
+  Stream<String> get errors => const Stream.empty();
 
   @override
   String? get socketId => null;
@@ -112,6 +117,7 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   final StreamController<List<String>> _roomUsers =
       StreamController<List<String>>.broadcast();
   final StreamController<void> _firstInRoom = StreamController<void>.broadcast();
+  final StreamController<String> _errors = StreamController<String>.broadcast();
   String? _roomId;
 
   @override
@@ -125,6 +131,9 @@ class MemoryRealtimeTransport implements RealtimeTransport {
 
   @override
   Stream<void> get firstInRoom => _firstInRoom.stream;
+
+  @override
+  Stream<String> get errors => _errors.stream;
 
   @override
   String? get socketId => _socketId;
@@ -146,7 +155,7 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {
     final roomId = _roomId;
     if (roomId == null) {
-      return;
+      throw StateError('协作连接未建立');
     }
     hub.broadcast(roomId: roomId, sender: this, payload: payload);
   }

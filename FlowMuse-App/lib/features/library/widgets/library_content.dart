@@ -17,6 +17,7 @@ class LibraryContent extends StatelessWidget {
     required this.onSortDirectionChanged,
     required this.onSelectionModeChanged,
     required this.onCreate,
+    required this.onJoinRoom,
     required this.onOpenNote,
   });
 
@@ -27,6 +28,7 @@ class LibraryContent extends StatelessWidget {
   final VoidCallback onSortDirectionChanged;
   final VoidCallback onSelectionModeChanged;
   final VoidCallback onCreate;
+  final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
 
   @override
@@ -57,6 +59,7 @@ class LibraryContent extends StatelessWidget {
               compact: compact,
               onFilterChanged: onFilterChanged,
               onCreate: onCreate,
+              onJoinRoom: onJoinRoom,
               onOpenNote: onOpenNote,
             ),
           ),
@@ -134,6 +137,7 @@ class _LibraryItems extends StatelessWidget {
     required this.compact,
     required this.onFilterChanged,
     required this.onCreate,
+    required this.onJoinRoom,
     required this.onOpenNote,
   });
 
@@ -141,6 +145,7 @@ class _LibraryItems extends StatelessWidget {
   final bool compact;
   final ValueChanged<LibraryFilter> onFilterChanged;
   final VoidCallback onCreate;
+  final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
 
   @override
@@ -159,6 +164,7 @@ class _LibraryItems extends StatelessWidget {
       state: state,
       compact: compact,
       onCreate: onCreate,
+      onJoinRoom: onJoinRoom,
       onOpenNote: onOpenNote,
     );
 
@@ -181,26 +187,31 @@ class _LibraryItemsContent extends StatelessWidget {
     required this.state,
     required this.compact,
     required this.onCreate,
+    required this.onJoinRoom,
     required this.onOpenNote,
   });
 
   final LibraryHomeState state;
   final bool compact;
   final VoidCallback onCreate;
+  final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
 
   @override
   Widget build(BuildContext context) {
     if (state.viewMode == LibraryViewMode.list) {
       return ListView.separated(
-        itemCount: state.visibleNotes.length + 1,
+        itemCount: state.visibleNotes.length + 2,
         separatorBuilder: (context, index) =>
             const SizedBox(height: AppSpacing.listGap),
         itemBuilder: (context, index) {
           if (index == 0) {
             return _CreateNoteTile(onTap: onCreate);
           }
-          final item = state.visibleNotes[index - 1];
+          if (index == 1) {
+            return _JoinRoomTile(onTap: onJoinRoom);
+          }
+          final item = state.visibleNotes[index - 2];
           return _NoteTile(
             item: item,
             selectionMode: state.selectionMode,
@@ -211,11 +222,11 @@ class _LibraryItemsContent extends StatelessWidget {
     }
 
     if (state.visibleNotes.isEmpty) {
-      return _EmptyLibrary(onCreate: onCreate);
+      return _EmptyLibrary(onCreate: onCreate, onJoinRoom: onJoinRoom);
     }
 
     return GridView.builder(
-      itemCount: state.visibleNotes.length + 1,
+      itemCount: state.visibleNotes.length + 2,
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 218,
         mainAxisExtent: 276,
@@ -230,7 +241,15 @@ class _LibraryItemsContent extends StatelessWidget {
         if (index == 0) {
           return CreateNoteCard(onTap: onCreate);
         }
-        final item = state.visibleNotes[index - 1];
+        if (index == 1) {
+          return CreateNoteCard(
+            onTap: onJoinRoom,
+            icon: LucideIcons.logIn,
+            title: '加入房间',
+            subtitle: '粘贴协作链接，进入实时白板',
+          );
+        }
+        final item = state.visibleNotes[index - 2];
         return Stack(
           children: [
             Positioned.fill(
@@ -262,6 +281,25 @@ class _CreateNoteTile extends StatelessWidget {
         leading: const Icon(LucideIcons.plus),
         title: const Text('新建'),
         subtitle: const Text('创建快捷笔记'),
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _JoinRoomTile extends StatelessWidget {
+  const _JoinRoomTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card.outlined(
+      child: ListTile(
+        key: const ValueKey('join-room-list-tile'),
+        leading: const Icon(LucideIcons.logIn),
+        title: const Text('加入房间'),
+        subtitle: const Text('粘贴协作链接，进入实时白板'),
         onTap: onTap,
       ),
     );
@@ -419,9 +457,10 @@ class _LibraryHeader extends StatelessWidget {
 }
 
 class _EmptyLibrary extends StatelessWidget {
-  const _EmptyLibrary({required this.onCreate});
+  const _EmptyLibrary({required this.onCreate, required this.onJoinRoom});
 
   final VoidCallback onCreate;
+  final VoidCallback onJoinRoom;
 
   @override
   Widget build(BuildContext context) {
@@ -455,10 +494,22 @@ class _EmptyLibrary extends StatelessWidget {
               ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF8F9B96)),
             ),
             const SizedBox(height: 22),
-            FilledButton.icon(
-              onPressed: onCreate,
-              icon: const Icon(LucideIcons.plus),
-              label: const Text('新建笔记'),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  onPressed: onCreate,
+                  icon: const Icon(LucideIcons.plus),
+                  label: const Text('新建笔记'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onJoinRoom,
+                  icon: const Icon(LucideIcons.logIn),
+                  label: const Text('加入房间'),
+                ),
+              ],
             ),
           ],
         ),

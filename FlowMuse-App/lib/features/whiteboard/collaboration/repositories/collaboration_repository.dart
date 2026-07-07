@@ -31,6 +31,7 @@ class CollaborationRepository {
   final CollaborationCrypto _crypto;
   final SceneReconciler _reconciler;
   final Map<String, int> _broadcastedElementVersions = {};
+  final Set<String> _uploadedFileIds = {};
 
   Timer? _fullSceneSyncTimer;
   CollaborationRoom? _activeRoom;
@@ -44,6 +45,8 @@ class CollaborationRepository {
   Stream<List<String>> get roomUsers => _transport.roomUsers;
 
   Stream<void> get firstInRoom => _transport.firstInRoom;
+
+  Stream<String> get errors => _transport.errors;
 
   Stream<CollaborationMessage> encryptedMessages(CollaborationRoom room) {
     return _transport.messages.asyncMap((payload) async {
@@ -59,9 +62,26 @@ class CollaborationRepository {
     required ExcalidrawScene initialScene,
   }) async {
     final room = CollaborationRoom.newRoom(crypto: _crypto);
+    final syncableScene = initialScene.copyWith(
+      elements: _reconciler.getSyncableElements(initialScene.elements),
+    );
+    await _fileStore?.uploadFiles(
+      roomId: room.roomId,
+      roomKey: room.roomKey,
+      filesJson: syncableScene.files,
+      alreadyUploadedFileIds: _uploadedFileIds,
+    );
+    await _sceneStore.createRoom(room: room, scene: syncableScene);
     await _transport.connect(room.roomId);
     _activeRoom = room;
-    await broadcastScene(room: room, scene: initialScene, initial: true);
+    _latestScene = syncableScene;
+    final sceneVersion = _reconciler.getSceneVersion(syncableScene.elements);
+    _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
+    _rememberBroadcasted(syncableScene.elements);
+    await _send(
+      room: room,
+      message: CollaborationMessage.sceneInit(elements: syncableScene.elements),
+    );
     _startFullSceneSync();
     return room;
   }
@@ -70,34 +90,20 @@ class CollaborationRepository {
     required CollaborationRoom room,
     required ExcalidrawScene localScene,
   }) async {
-    await _transport.connect(room.roomId);
-    _activeRoom = room;
-    await _fileStore?.uploadFiles(
-      roomId: room.roomId,
-      roomKey: room.roomKey,
-      filesJson: localScene.files,
-    );
     final storedScene = await _sceneStore.loadScene(room);
     if (storedScene == null) {
-      _latestScene = localScene.copyWith(
-        elements: _reconciler.getSyncableElements(localScene.elements),
-      );
-      _startFullSceneSync();
-      return localScene;
+      throw StateError('房间不存在或尚未创建');
     }
-    final reconciled = _reconciler.reconcile(
-      localElements: localScene.elements,
-      remoteElements: storedScene.elements,
-    );
-    final nextScene = localScene.copyWith(
-      elements: reconciled,
-      appState: localScene.appState,
-      files: localScene.files,
+    await _transport.connect(room.roomId);
+    _activeRoom = room;
+    final nextScene = storedScene.copyWith(
+      elements: _reconciler.getSyncableElements(storedScene.elements),
     );
     _latestScene = nextScene;
     _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
-      reconciled,
+      nextScene.elements,
     );
+    _rememberBroadcasted(nextScene.elements);
     _startFullSceneSync();
     return nextScene;
   }
@@ -115,6 +121,7 @@ class CollaborationRepository {
       roomId: room.roomId,
       roomKey: room.roomKey,
       filesJson: scene.files,
+      alreadyUploadedFileIds: _uploadedFileIds,
     );
 
     final sceneVersion = _reconciler.getSceneVersion(syncableElements);
@@ -290,6 +297,7 @@ class CollaborationRepository {
     _activeRoom = null;
     _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();
+    _uploadedFileIds.clear();
     _lastBroadcastedOrReceivedSceneVersion = -1;
     await _transport.disconnect();
   }

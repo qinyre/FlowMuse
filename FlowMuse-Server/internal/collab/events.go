@@ -3,6 +3,8 @@ package collab
 const (
 	EventInitRoom             = "init-room"
 	EventJoinRoom             = "join-room"
+	EventLeaveRoom            = "leave-room"
+	EventRoomError            = "room-error"
 	EventNewUser              = "new-user"
 	EventFirstInRoom          = "first-in-room"
 	EventRoomUserChange       = "room-user-change"

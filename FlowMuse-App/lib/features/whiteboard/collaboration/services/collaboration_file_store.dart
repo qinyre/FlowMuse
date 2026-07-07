@@ -11,6 +11,7 @@ abstract interface class CollaborationFileStore {
     required String roomId,
     required String roomKey,
     required Map<String, Object?> filesJson,
+    Set<String>? alreadyUploadedFileIds,
   });
 
   Future<Map<String, ImageFile>> loadMissingFiles({
@@ -39,8 +40,12 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
     required String roomId,
     required String roomKey,
     required Map<String, Object?> filesJson,
+    Set<String>? alreadyUploadedFileIds,
   }) async {
     for (final entry in filesJson.entries) {
+      if (alreadyUploadedFileIds?.contains(entry.key) ?? false) {
+        continue;
+      }
       final file = entry.value;
       if (file is! Map) {
         continue;
@@ -81,6 +86,7 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
           'Upload file ${entry.key} failed: HTTP ${response.statusCode}',
         );
       }
+      alreadyUploadedFileIds?.add(entry.key);
     }
   }
 

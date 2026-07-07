@@ -15,6 +15,11 @@ abstract interface class EncryptedSceneStore {
     required CollaborationRoom room,
     required ExcalidrawScene scene,
   });
+
+  Future<void> createRoom({
+    required CollaborationRoom room,
+    required ExcalidrawScene scene,
+  });
 }
 
 class MemoryEncryptedSceneStore implements EncryptedSceneStore {
@@ -33,6 +38,14 @@ class MemoryEncryptedSceneStore implements EncryptedSceneStore {
     _scenes[room.roomId] = ExcalidrawScene.fromCollaborationPayload(
       scene.toCollaborationPayload(),
     );
+  }
+
+  @override
+  Future<void> createRoom({
+    required CollaborationRoom room,
+    required ExcalidrawScene scene,
+  }) {
+    return saveScene(room: room, scene: scene);
   }
 }
 
@@ -90,12 +103,37 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({
         'sceneVersion': _reconciler.getSceneVersion(scene.elements),
+        'sceneHash': scene.collaborationHash(),
         'encryptedBuffer': base64Encode(payload.encryptedBuffer),
         'iv': base64Encode(payload.iv),
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('Save scene failed: HTTP ${response.statusCode}');
+    }
+  }
+
+  @override
+  Future<void> createRoom({
+    required CollaborationRoom room,
+    required ExcalidrawScene scene,
+  }) async {
+    final payload = await _crypto.encrypt(
+      roomKey: room.roomKey,
+      plainBytes: utf8.encode(scene.toCollaborationContent()),
+    );
+    final response = await _client.post(
+      _roomSceneUri(room.roomId),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'sceneVersion': _reconciler.getSceneVersion(scene.elements),
+        'sceneHash': scene.collaborationHash(),
+        'encryptedBuffer': base64Encode(payload.encryptedBuffer),
+        'iv': base64Encode(payload.iv),
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('Create room failed: HTTP ${response.statusCode}');
     }
   }
 

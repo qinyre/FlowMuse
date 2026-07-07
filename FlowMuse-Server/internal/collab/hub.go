@@ -1,14 +1,21 @@
 package collab
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"sync"
+	"time"
 
+	"flowmuse/server/internal/storage"
+
+	"github.com/jackc/pgx/v5"
 	"github.com/zishang520/socket.io/v2/socket"
 )
 
 type Hub struct {
-	server *socket.Server
+	server     *socket.Server
+	sceneStore *storage.SceneStore
 
 	mu          sync.Mutex
 	roomUsers   map[string]map[string]struct{}
@@ -16,9 +23,10 @@ type Hub struct {
 	followRooms map[string]map[string]struct{}
 }
 
-func NewHub(server *socket.Server) *Hub {
+func NewHub(server *socket.Server, sceneStore *storage.SceneStore) *Hub {
 	return &Hub{
 		server:      server,
+		sceneStore:  sceneStore,
 		roomUsers:   map[string]map[string]struct{}{},
 		socketRooms: map[string]string{},
 		followRooms: map[string]map[string]struct{}{},
@@ -36,6 +44,14 @@ func (h *Hub) Register() {
 				return
 			}
 			h.joinRoom(client, roomID)
+		})
+
+		client.On(EventLeaveRoom, func(args ...any) {
+			roomID, ok := firstString(args)
+			if !ok {
+				return
+			}
+			h.leaveRoom(client, roomID)
 		})
 
 		client.On(EventServerBroadcast, func(args ...any) {
@@ -57,6 +73,10 @@ func (h *Hub) Register() {
 }
 
 func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
+	if !h.roomExists(roomID) {
+		client.Emit(EventRoomError, "房间不存在或尚未创建")
+		return
+	}
 	socketID := string(client.Id())
 	room := socket.Room(roomID)
 
@@ -90,11 +110,35 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	if !ok {
 		return
 	}
+	socketID := string(client.Id())
+	h.mu.Lock()
+	currentRoomID := h.socketRooms[socketID]
+	h.mu.Unlock()
+	if currentRoomID != roomID {
+		client.Emit(EventRoomError, "当前连接不在目标房间")
+		return
+	}
 	operator := client.To(socket.Room(roomID))
 	if volatile {
 		operator = operator.Volatile()
 	}
 	operator.Emit(EventClientBroadcast, frame.EncryptedBuffer, frame.IV)
+}
+
+func (h *Hub) leaveRoom(client *socket.Socket, roomID string) {
+	socketID := string(client.Id())
+
+	h.mu.Lock()
+	if h.socketRooms[socketID] != roomID {
+		h.mu.Unlock()
+		return
+	}
+	h.removeFromRoomLocked(socketID, roomID)
+	users := socketIDList(h.roomUsers[roomID])
+	h.mu.Unlock()
+
+	client.Leave(socket.Room(roomID))
+	h.server.To(socket.Room(roomID)).Emit(EventRoomUserChange, users)
 }
 
 func (h *Hub) userFollow(client *socket.Socket, args []any) {
@@ -156,6 +200,16 @@ func (h *Hub) removeFromRoomLocked(socketID, roomID string) {
 	if len(users) == 0 {
 		delete(h.roomUsers, roomID)
 	}
+}
+
+func (h *Hub) roomExists(roomID string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err := h.sceneStore.Load(ctx, roomID)
+	if err == nil {
+		return true
+	}
+	return !errors.Is(err, pgx.ErrNoRows)
 }
 
 func parseBroadcastArgs(args []any) (string, EncryptedFrame, bool) {

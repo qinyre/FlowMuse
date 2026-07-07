@@ -20,6 +20,7 @@ class AppRoutes {
   static const tagDetail = '/tags/:tagId';
   static const settings = '/settings';
   static const whiteboard = '/whiteboard/:noteId';
+  static const collaborationWhiteboard = '/whiteboard/collaboration';
 
   static String notebookPath(String notebookId) {
     return '/notebooks/${Uri.encodeComponent(notebookId)}';
@@ -92,6 +93,15 @@ GoRouter createAppRouter() {
       GoRoute(
         path: AppRoutes.settings,
         builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.collaborationWhiteboard,
+        pageBuilder: (context, state) {
+          return MaterialPage<void>(
+            key: state.pageKey,
+            child: const WhiteboardPage.collaboration(),
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.whiteboard,

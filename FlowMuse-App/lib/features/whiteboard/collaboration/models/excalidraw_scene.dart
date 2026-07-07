@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 const emptyExcalidrawSceneContent =
     '{"type":"excalidraw","version":2,"source":"https://excalidraw.com","elements":[],"appState":{},"files":{}}';
 
@@ -94,11 +96,15 @@ class ExcalidrawScene {
 
   String toContent() => jsonEncode(toJson());
 
-  List<Map<String, Object?>> toCollaborationPayload() {
-    return [for (final element in elements) _deepMap(element)];
+  Map<String, Object?> toCollaborationPayload() {
+    return toJson();
   }
 
   String toCollaborationContent() => jsonEncode(toCollaborationPayload());
+
+  String collaborationHash() {
+    return sha256.convert(utf8.encode(toCollaborationContent())).toString();
+  }
 }
 
 Map<String, Object?> _deepMap(Map source) {

@@ -32,6 +32,10 @@ class CollaborationRoom {
     return '$origin$path#room=$roomId,$roomKey';
   }
 
+  String toRoomValue() {
+    return '$roomId,$roomKey';
+  }
+
   static CollaborationRoom? tryParseLink(String link) {
     final uri = Uri.tryParse(link);
     if (uri == null) {

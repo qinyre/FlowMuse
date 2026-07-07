@@ -4,9 +4,18 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'note_card.dart';
 
 class CreateNoteCard extends StatelessWidget {
-  const CreateNoteCard({super.key, required this.onTap});
+  const CreateNoteCard({
+    super.key,
+    required this.onTap,
+    this.icon = LucideIcons.plus,
+    this.title = '新建',
+    this.subtitle = '轻点两下，创建快捷笔记',
+  });
 
   final VoidCallback onTap;
+  final IconData icon;
+  final String title;
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -33,9 +42,9 @@ class CreateNoteCard extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Icon(
-                      LucideIcons.plus,
+                      padding: const EdgeInsets.all(16),
+                      child: Icon(
+                      icon,
                       size: 34,
                       color: colorScheme.primary,
                     ),
@@ -47,7 +56,7 @@ class CreateNoteCard extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          '新建',
+          title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             color: colorScheme.primary,
             fontWeight: FontWeight.w700,
@@ -55,7 +64,7 @@ class CreateNoteCard extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          '轻点两下，创建快捷笔记',
+          subtitle,
           textAlign: TextAlign.center,
           style: Theme.of(
             context,
