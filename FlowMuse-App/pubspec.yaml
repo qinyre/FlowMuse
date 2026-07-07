@@ -64,6 +64,14 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+# 跨平台兼容修复:flutter_ohos 工具链以 "ohos" 作为目标 OS 触发 native-assets
+# hooks,但上游 code_assets 包不认识 ohos,导致 objective_c 等包的 hook 在
+# OS.fromSyntax 解析时抛 FormatException。此处 override 指向 vendor 的 fork
+# (tool/vendor/code_assets),仅加了一个 ohos 枚举值,对其他平台零影响
+dependency_overrides:
+  code_assets:
+    path: tool/vendor/code_assets
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
