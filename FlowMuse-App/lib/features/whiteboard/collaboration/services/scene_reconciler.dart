@@ -38,7 +38,32 @@ class SceneReconciler {
     }
 
     result.sort(_compareFractionalIndex);
-    return result;
+    return _ensureUniqueIndices(result);
+  }
+
+  List<Map<String, Object?>> _ensureUniqueIndices(
+    List<Map<String, Object?>> elements,
+  ) {
+    final seen = <String>{};
+    var nextFallbackIndex = 0;
+    return [
+      for (final element in elements)
+        _withValidIndex(element, seen, nextFallbackIndex++),
+    ];
+  }
+
+  Map<String, Object?> _withValidIndex(
+    Map<String, Object?> element,
+    Set<String> seen,
+    int fallbackIndex,
+  ) {
+    final index = _fractionalIndex(element);
+    if (index != null && index.isNotEmpty && seen.add(index)) {
+      return element;
+    }
+    final fallback = fallbackIndex.toString().padLeft(8, '0');
+    seen.add(fallback);
+    return {...element, 'index': fallback};
   }
 
   List<Map<String, Object?>> getSyncableElements(
@@ -95,7 +120,10 @@ class SceneReconciler {
       }
       return _id(a).compareTo(_id(b));
     }
-    return 1;
+    if (aIndex == null && bIndex == null) {
+      return _id(a).compareTo(_id(b));
+    }
+    return aIndex == null ? 1 : -1;
   }
 
   String _id(Map<String, Object?> element) => element['id']! as String;

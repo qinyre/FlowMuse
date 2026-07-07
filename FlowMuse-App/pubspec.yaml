@@ -33,6 +33,7 @@ dependencies:
 
   flutter_riverpod: ^3.3.2
   flutter_colorpicker: ^1.1.0
+  archive: ^4.0.9
   cryptography: ^2.9.0
   crypto: ^3.0.3
   equatable: ^2.0.7

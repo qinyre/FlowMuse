@@ -34,6 +34,7 @@ class CollaborationRepository {
   Timer? _fullSceneSyncTimer;
   CollaborationRoom? _activeRoom;
   List<Map<String, Object?>> _latestElements = const [];
+  Map<String, Object?> _latestFiles = const {};
   int _lastBroadcastedOrReceivedSceneVersion = -1;
 
   String get socketId => _transport.socketId ?? 'local-client';
@@ -61,8 +62,6 @@ class CollaborationRepository {
     final room = CollaborationRoom.newRoom(crypto: _crypto);
     await _transport.connect(room.roomId);
     _activeRoom = room;
-    await _fileStore?.uploadFiles(roomId: room.roomId, filesJson: files);
-    await _sceneStore.saveScene(room: room, elements: initialElements);
     await broadcastScene(
       room: room,
       elements: initialElements,
@@ -80,10 +79,15 @@ class CollaborationRepository {
   }) async {
     await _transport.connect(room.roomId);
     _activeRoom = room;
-    await _fileStore?.uploadFiles(roomId: room.roomId, filesJson: files);
+    await _fileStore?.uploadFiles(
+      roomId: room.roomId,
+      roomKey: room.roomKey,
+      filesJson: files,
+    );
     final storedElements = await _sceneStore.loadScene(room);
     if (storedElements == null) {
-      _latestElements = localElements;
+      _latestElements = _reconciler.getSyncableElements(localElements);
+      _latestFiles = files;
       _startFullSceneSync();
       return localElements;
     }
@@ -92,6 +96,7 @@ class CollaborationRepository {
       remoteElements: storedElements,
     );
     _latestElements = reconciled;
+    _latestFiles = files;
     _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
       reconciled,
     );
@@ -108,7 +113,12 @@ class CollaborationRepository {
   }) async {
     final syncableElements = _reconciler.getSyncableElements(elements);
     _latestElements = syncableElements;
-    await _fileStore?.uploadFiles(roomId: room.roomId, filesJson: files);
+    _latestFiles = files;
+    await _fileStore?.uploadFiles(
+      roomId: room.roomId,
+      roomKey: room.roomKey,
+      filesJson: files,
+    );
 
     final sceneVersion = _reconciler.getSceneVersion(syncableElements);
     if (!initial &&
@@ -209,6 +219,7 @@ class CollaborationRepository {
   }) async {
     final files = await _fileStore?.loadMissingFiles(
       roomId: room.roomId,
+      roomKey: room.roomKey,
       fileIds: fileIds,
       existingFileIds: existingFileIds,
     );
@@ -265,7 +276,12 @@ class CollaborationRepository {
         return;
       }
       unawaited(
-        broadcastScene(room: room, elements: _latestElements, syncAll: true),
+        broadcastScene(
+          room: room,
+          elements: _latestElements,
+          files: _latestFiles,
+          syncAll: true,
+        ),
       );
     });
   }
@@ -280,6 +296,7 @@ class CollaborationRepository {
     _fullSceneSyncTimer = null;
     _activeRoom = null;
     _latestElements = const [];
+    _latestFiles = const {};
     _broadcastedElementVersions.clear();
     _lastBroadcastedOrReceivedSceneVersion = -1;
     await _transport.disconnect();

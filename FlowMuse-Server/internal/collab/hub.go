@@ -73,7 +73,7 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 	}
 	users[socketID] = struct{}{}
 	h.socketRooms[socketID] = roomID
-	currentUsers := roomUserList(users)
+	currentUsers := socketIDList(users)
 	h.mu.Unlock()
 
 	client.Join(room)
@@ -98,14 +98,7 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 }
 
 func (h *Hub) userFollow(client *socket.Socket, args []any) {
-	if len(args) < 2 {
-		return
-	}
-	roomID, ok := asString(args[0])
-	if !ok {
-		return
-	}
-	followedSocketID, ok := asString(args[1])
+	roomID, followedSocketID, ok := parseUserFollowArgs(args)
 	if !ok {
 		return
 	}
@@ -142,9 +135,9 @@ func (h *Hub) leaveAll(client *socket.Socket) {
 			delete(h.followRooms, followRoomID)
 		}
 	}
-	var users []RoomUser
+	var users []string
 	if roomID != "" {
-		users = roomUserList(h.roomUsers[roomID])
+		users = socketIDList(h.roomUsers[roomID])
 	}
 	h.mu.Unlock()
 
@@ -237,10 +230,32 @@ func asString(value any) (string, bool) {
 	return text, ok && text != ""
 }
 
-func roomUserList(users map[string]struct{}) []RoomUser {
-	list := make([]RoomUser, 0, len(users))
+func socketIDList(users map[string]struct{}) []string {
+	list := make([]string, 0, len(users))
 	for socketID := range users {
-		list = append(list, RoomUser{SocketID: socketID})
+		list = append(list, socketID)
 	}
 	return list
+}
+
+func parseUserFollowArgs(args []any) (string, string, bool) {
+	if len(args) >= 2 {
+		roomID, roomOK := asString(args[0])
+		followedSocketID, socketOK := asString(args[1])
+		return roomID, followedSocketID, roomOK && socketOK
+	}
+	if len(args) == 0 {
+		return "", "", false
+	}
+	payload, ok := args[0].(map[string]any)
+	if !ok {
+		return "", "", false
+	}
+	userToFollow, ok := payload["userToFollow"].(map[string]any)
+	if !ok {
+		return "", "", false
+	}
+	roomID, roomOK := asString(payload["roomId"])
+	followedSocketID, socketOK := asString(userToFollow["socketId"])
+	return roomID, followedSocketID, roomOK && socketOK
 }
