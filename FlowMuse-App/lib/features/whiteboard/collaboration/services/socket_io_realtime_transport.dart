@@ -135,8 +135,9 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       }
     });
     socket.on(_eventNewUser, (data) {
-      if (data is String && !_newUsers.isClosed) {
-        _newUsers.add(data);
+      final socketId = _socketIdFromEvent(data);
+      if (socketId != null && !_newUsers.isClosed) {
+        _newUsers.add(socketId);
       }
     });
     socket.on(_eventRoomUserChange, (data) {
@@ -249,8 +250,10 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       volatile ? _eventServerVolatileBroadcast : _eventServerBroadcast,
       [
         roomId,
-        Uint8List.fromList(payload.encryptedBuffer),
-        Uint8List.fromList(payload.iv),
+        {
+          'encryptedBuffer': Uint8List.fromList(payload.encryptedBuffer),
+          'iv': Uint8List.fromList(payload.iv),
+        },
       ],
     );
   }
@@ -321,6 +324,16 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
         else if (item is Map && item['socketId'] is String)
           RoomCollaborator.fromJson(Map<String, Object?>.from(item)),
     ];
+  }
+
+  String? _socketIdFromEvent(Object? value) {
+    if (value is String) {
+      return value;
+    }
+    if (value is Map && value['socketId'] is String) {
+      return value['socketId']! as String;
+    }
+    return null;
   }
 
   CollaborationRoomMetadata _metadataFromEvent(Object? value) {
