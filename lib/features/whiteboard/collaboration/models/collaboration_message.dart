@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'collaborative_element.dart';
-
 enum CollaborationMessageType {
   sceneInit,
   sceneUpdate,
@@ -24,13 +22,11 @@ class CollaborationMessage {
   }
 
   factory CollaborationMessage.sceneUpdate({
-    required List<CollaborativeElement> elements,
+    required List<Map<String, Object?>> elements,
   }) {
     return CollaborationMessage(
       type: CollaborationMessageType.sceneUpdate,
-      payload: {
-        'elements': [for (final element in elements) element.toJson()],
-      },
+      payload: {'elements': elements},
     );
   }
 
@@ -47,16 +43,14 @@ class CollaborationMessage {
     );
   }
 
-  List<CollaborativeElement> get elements {
+  List<Map<String, Object?>> get elements {
     final rawElements = payload['elements'];
     if (rawElements is! List) {
       return const [];
     }
     return [
       for (final element in rawElements)
-        CollaborativeElement.fromJson(
-          Map<String, Object?>.from(element as Map),
-        ),
+        Map<String, Object?>.from(element as Map),
     ];
   }
 }

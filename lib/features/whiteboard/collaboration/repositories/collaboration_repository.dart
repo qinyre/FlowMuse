@@ -1,4 +1,3 @@
-import '../models/collaborative_element.dart';
 import '../models/collaboration_message.dart';
 import '../models/collaboration_room.dart';
 import '../services/collaboration_crypto.dart';
@@ -33,7 +32,7 @@ class CollaborationRepository {
   }
 
   Future<CollaborationRoom> startNewRoom({
-    required List<CollaborativeElement> initialElements,
+    required List<Map<String, Object?>> initialElements,
   }) async {
     final room = CollaborationRoom.newRoom(crypto: _crypto);
     await _transport.connect(room.roomId);
@@ -42,9 +41,9 @@ class CollaborationRepository {
     return room;
   }
 
-  Future<List<CollaborativeElement>> joinRoom({
+  Future<List<Map<String, Object?>>> joinRoom({
     required CollaborationRoom room,
-    required List<CollaborativeElement> localElements,
+    required List<Map<String, Object?>> localElements,
   }) async {
     await _transport.connect(room.roomId);
     final storedElements = await _sceneStore.loadScene(room);
@@ -59,7 +58,7 @@ class CollaborationRepository {
 
   Future<void> broadcastScene({
     required CollaborationRoom room,
-    required List<CollaborativeElement> elements,
+    required List<Map<String, Object?>> elements,
     bool initial = false,
   }) async {
     final syncableElements = _reconciler.getSyncableElements(elements);
@@ -67,11 +66,7 @@ class CollaborationRepository {
     final message = initial
         ? CollaborationMessage(
             type: CollaborationMessageType.sceneInit,
-            payload: {
-              'elements': [
-                for (final element in syncableElements) element.toJson(),
-              ],
-            },
+            payload: {'elements': syncableElements},
           )
         : CollaborationMessage.sceneUpdate(elements: syncableElements);
     final encrypted = await _crypto.encrypt(

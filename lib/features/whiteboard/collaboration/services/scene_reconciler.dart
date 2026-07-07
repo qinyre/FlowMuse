@@ -1,5 +1,3 @@
-import '../models/collaborative_element.dart';
-
 class SceneReconciler {
   SceneReconciler({DateTime Function()? now}) : _now = now ?? DateTime.now;
 
@@ -7,28 +5,29 @@ class SceneReconciler {
 
   final DateTime Function() _now;
 
-  List<CollaborativeElement> reconcile({
-    required List<CollaborativeElement> localElements,
-    required List<CollaborativeElement> remoteElements,
+  List<Map<String, Object?>> reconcile({
+    required List<Map<String, Object?>> localElements,
+    required List<Map<String, Object?>> remoteElements,
   }) {
     final localById = {
-      for (final element in localElements) element.id: element,
+      for (final element in localElements) _id(element): element,
     };
     final added = <String>{};
-    final result = <CollaborativeElement>[];
+    final result = <Map<String, Object?>>[];
 
     for (final remote in remoteElements) {
-      if (added.contains(remote.id)) {
+      final remoteId = _id(remote);
+      if (added.contains(remoteId)) {
         continue;
       }
-      final local = localById[remote.id];
+      final local = localById[remoteId];
       final chosen = _shouldKeepLocal(local, remote) ? local! : remote;
       result.add(chosen);
-      added.add(chosen.id);
+      added.add(_id(chosen));
     }
 
     for (final local in localElements) {
-      if (added.add(local.id)) {
+      if (added.add(_id(local))) {
         result.add(local);
       }
     }
@@ -37,57 +36,80 @@ class SceneReconciler {
     return result;
   }
 
-  List<CollaborativeElement> getSyncableElements(
-    List<CollaborativeElement> elements,
+  List<Map<String, Object?>> getSyncableElements(
+    List<Map<String, Object?>> elements,
   ) {
     final deletedCutoff = _now()
         .subtract(deletedElementTimeout)
         .millisecondsSinceEpoch;
     return [
       for (final element in elements)
-        if (!element.isDeleted || element.updatedAt > deletedCutoff) element,
+        if (!_isDeleted(element) || _updatedAt(element) > deletedCutoff)
+          element,
     ];
   }
 
   bool _shouldKeepLocal(
-    CollaborativeElement? local,
-    CollaborativeElement remote,
+    Map<String, Object?>? local,
+    Map<String, Object?> remote,
   ) {
     if (local == null) {
       return false;
     }
-    if (local.version > remote.version) {
+    final localVersion = _version(local);
+    final remoteVersion = _version(remote);
+    if (localVersion > remoteVersion) {
       return true;
     }
-    if (local.version == remote.version &&
-        local.versionNonce <= remote.versionNonce) {
+    if (localVersion == remoteVersion &&
+        _versionNonce(local) <= _versionNonce(remote)) {
       return true;
     }
     return false;
   }
 
-  int getSceneVersion(List<CollaborativeElement> elements) {
-    return elements.fold(0, (sum, element) => sum + element.version);
+  int getSceneVersion(List<Map<String, Object?>> elements) {
+    return elements.fold(0, (sum, element) => sum + _version(element));
   }
 
-  int hashElementsVersion(List<CollaborativeElement> elements) {
+  int hashElementsVersion(List<Map<String, Object?>> elements) {
     var hash = 5381;
     for (final element in elements) {
-      hash = ((hash << 5) + hash + element.versionNonce).toUnsigned(32);
+      hash = ((hash << 5) + hash + _versionNonce(element)).toUnsigned(32);
     }
     return hash;
   }
 
-  int _compareFractionalIndex(CollaborativeElement a, CollaborativeElement b) {
-    final aIndex = a.fractionalIndex;
-    final bIndex = b.fractionalIndex;
+  int _compareFractionalIndex(
+    Map<String, Object?> a,
+    Map<String, Object?> b,
+  ) {
+    final aIndex = _fractionalIndex(a);
+    final bIndex = _fractionalIndex(b);
     if (aIndex != null && bIndex != null) {
       final indexCompare = aIndex.compareTo(bIndex);
       if (indexCompare != 0) {
         return indexCompare;
       }
-      return a.id.compareTo(b.id);
+      return _id(a).compareTo(_id(b));
     }
     return 1;
   }
+
+  String _id(Map<String, Object?> element) => element['id']! as String;
+
+  int _version(Map<String, Object?> element) =>
+      (element['version']! as num).toInt();
+
+  int _versionNonce(Map<String, Object?> element) =>
+      (element['versionNonce']! as num).toInt();
+
+  int _updatedAt(Map<String, Object?> element) =>
+      (element['updated']! as num).toInt();
+
+  String? _fractionalIndex(Map<String, Object?> element) =>
+      element['index'] as String?;
+
+  bool _isDeleted(Map<String, Object?> element) =>
+      element['isDeleted']! as bool;
 }

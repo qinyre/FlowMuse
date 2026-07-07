@@ -54,7 +54,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         .read(whiteboardViewModelProvider.notifier)
         .openNotebook(notebookId: widget.notebookId, title: widget.title);
     final repository = ref.read(whiteboardSceneRepositoryProvider);
-    final content = await repository.loadSceneContent(widget.notebookId);
+    final content = await repository.loadScene(widget.notebookId);
     if (!mounted) {
       return;
     }
@@ -76,7 +76,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     final content = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
     );
-    await repository.saveSceneContent(widget.notebookId, content);
+    await repository.saveScene(widget.notebookId, content);
     if (!mounted) {
       return;
     }
