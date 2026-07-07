@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
+import '../../../shared/widgets/app_spacing.dart';
 import '../view_models/search_view_model.dart';
 
 class SearchPage extends ConsumerWidget {
@@ -14,68 +15,76 @@ class SearchPage extends ConsumerWidget {
     final state = ref.watch(searchViewModelProvider);
     final viewModel = ref.read(searchViewModelProvider.notifier);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(36, 34, 36, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 820;
+        return Padding(
+          padding: AppSpacing.pagePadding(compact: compact),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: SearchBar(
-                  leading: const Icon(LucideIcons.search),
-                  hintText: '请输入关键字搜索笔记',
-                  onChanged: viewModel.changeQuery,
-                  trailing: const [_SmartSearchChip()],
+              Row(
+                children: [
+                  Expanded(
+                    child: SearchBar(
+                      leading: const Icon(LucideIcons.search),
+                      hintText: '请输入关键字搜索笔记',
+                      onChanged: viewModel.changeQuery,
+                      trailing: const [_SmartSearchChip()],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sectionGap),
+                  TextButton(
+                    onPressed: () => context.go(AppRoutes.library),
+                    child: const Text('取消'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.headerToContent),
+              Text(
+                '搜索范围',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: const Color(0xFF8F9B96),
                 ),
               ),
-              const SizedBox(width: 28),
-              TextButton(
-                onPressed: () => context.go(AppRoutes.library),
-                child: const Text('取消'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 34),
-          Text(
-            '搜索范围',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(color: const Color(0xFF8F9B96)),
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 26,
-            runSpacing: 16,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              const Text('文件夹'),
-              _ScopeMenu(
-                label: state.folderScope,
-                options: const ['尚未选择文件夹', '新建文件夹 1'],
-                onSelected: viewModel.selectFolderScope,
-              ),
-              const Text('标签'),
-              _ScopeMenu(
-                label: state.tagScope,
-                options: const ['尚未选择标签', '未标签'],
-                onSelected: viewModel.selectTagScope,
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: AppSpacing.sectionGap,
+                runSpacing: 16,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Icon(LucideIcons.fileSearch, color: Color(0xFF8F9B96)),
-                  const SizedBox(width: 8),
-                  Text(
-                    state.query.isEmpty ? '已选搜索范围' : '搜索：${state.query}',
-                    style: const TextStyle(color: Color(0xFF8F9B96)),
+                  const Text('文件夹'),
+                  _ScopeMenu(
+                    label: state.folderScope,
+                    options: const ['尚未选择文件夹', '新建文件夹 1'],
+                    onSelected: viewModel.selectFolderScope,
+                  ),
+                  const Text('标签'),
+                  _ScopeMenu(
+                    label: state.tagScope,
+                    options: const ['尚未选择标签', '未标签'],
+                    onSelected: viewModel.selectTagScope,
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        LucideIcons.fileSearch,
+                        color: Color(0xFF8F9B96),
+                      ),
+                      const SizedBox(width: AppSpacing.controlGap),
+                      Text(
+                        state.query.isEmpty ? '已选搜索范围' : '搜索：${state.query}',
+                        style: const TextStyle(color: Color(0xFF8F9B96)),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -114,17 +123,20 @@ class _ScopeMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return MenuAnchor(
       builder: (context, controller, child) {
-        return OutlinedButton(
-          onPressed: () {
-            controller.isOpen ? controller.close() : controller.open();
-          },
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label),
-              const SizedBox(width: 58),
-              const Icon(LucideIcons.chevronDown, size: 16),
-            ],
+        return ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 168),
+          child: OutlinedButton(
+            onPressed: () {
+              controller.isOpen ? controller.close() : controller.open();
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+                const SizedBox(width: AppSpacing.controlGap),
+                const Icon(LucideIcons.chevronDown, size: 16),
+              ],
+            ),
           ),
         );
       },

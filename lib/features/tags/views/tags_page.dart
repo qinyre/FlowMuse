@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
+import '../../../shared/widgets/app_spacing.dart';
 import '../../library/models/notebook_item.dart';
 import '../../library/view_models/library_home_view_model.dart';
 import '../../library/widgets/create_notebook_card.dart';
@@ -85,7 +86,8 @@ class _TagItems extends StatelessWidget {
     if (state.viewMode == LibraryViewMode.list) {
       return ListView.separated(
         itemCount: state.visibleTags.length + 1,
-        separatorBuilder: (context, index) => const SizedBox(height: 14),
+        separatorBuilder: (context, index) =>
+            const SizedBox(height: AppSpacing.listGap),
         itemBuilder: (context, index) {
           if (index == 0) {
             return _CreateTagTile(onTap: onCreate);
@@ -100,34 +102,43 @@ class _TagItems extends StatelessWidget {
       );
     }
 
-    return GridView.builder(
-      itemCount: state.visibleTags.length + 1,
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 218,
-        mainAxisExtent: 276,
-        crossAxisSpacing: 34,
-        mainAxisSpacing: 46,
-      ),
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return _CreateTagCard(onTap: onCreate);
-        }
-        final tag = state.visibleTags[index - 1];
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: _TagCoverCard(
-                tag: tag,
-                onTap: () => context.go(AppRoutes.tagPath(tag.id)),
-              ),
-            ),
-            if (state.selectionMode)
-              const Positioned(
-                top: 10,
-                right: 10,
-                child: Checkbox(value: false, onChanged: null),
-              ),
-          ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 820;
+        return GridView.builder(
+          itemCount: state.visibleTags.length + 1,
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 218,
+            mainAxisExtent: 276,
+            crossAxisSpacing: compact
+                ? AppSpacing.compactGridCrossGap
+                : AppSpacing.gridCrossGap,
+            mainAxisSpacing: compact
+                ? AppSpacing.compactGridMainGap
+                : AppSpacing.gridMainGap,
+          ),
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return _CreateTagCard(onTap: onCreate);
+            }
+            final tag = state.visibleTags[index - 1];
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: _TagCoverCard(
+                    tag: tag,
+                    onTap: () => context.go(AppRoutes.tagPath(tag.id)),
+                  ),
+                ),
+                if (state.selectionMode)
+                  const Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Checkbox(value: false, onChanged: null),
+                  ),
+              ],
+            );
+          },
         );
       },
     );
@@ -147,20 +158,29 @@ class _NotebookItems extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      itemCount: notebooks.length + 1,
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 218,
-        mainAxisExtent: 276,
-        crossAxisSpacing: 34,
-        mainAxisSpacing: 46,
-      ),
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return CreateNotebookCard(onTap: onCreate);
-        }
-        final item = notebooks[index - 1];
-        return NotebookCard(item: item, onTap: () => onOpenNotebook(item));
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 820;
+        return GridView.builder(
+          itemCount: notebooks.length + 1,
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 218,
+            mainAxisExtent: 276,
+            crossAxisSpacing: compact
+                ? AppSpacing.compactGridCrossGap
+                : AppSpacing.gridCrossGap,
+            mainAxisSpacing: compact
+                ? AppSpacing.compactGridMainGap
+                : AppSpacing.gridMainGap,
+          ),
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return CreateNotebookCard(onTap: onCreate);
+            }
+            final item = notebooks[index - 1];
+            return NotebookCard(item: item, onTap: () => onOpenNotebook(item));
+          },
+        );
       },
     );
   }
@@ -383,25 +403,30 @@ class _TagPageFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(36, 34, 36, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _TagHeader(
-            title: title,
-            viewMode: viewMode,
-            sortAscending: sortAscending,
-            selectionMode: selectionMode,
-            onCreate: onCreate,
-            onViewModeChanged: onViewModeChanged,
-            onSortDirectionChanged: onSortDirectionChanged,
-            onSelectionModeChanged: onSelectionModeChanged,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 820;
+        return Padding(
+          padding: AppSpacing.pagePadding(compact: compact),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _TagHeader(
+                title: title,
+                viewMode: viewMode,
+                sortAscending: sortAscending,
+                selectionMode: selectionMode,
+                onCreate: onCreate,
+                onViewModeChanged: onViewModeChanged,
+                onSortDirectionChanged: onSortDirectionChanged,
+                onSelectionModeChanged: onSelectionModeChanged,
+              ),
+              const SizedBox(height: AppSpacing.headerToContent),
+              Expanded(child: child),
+            ],
           ),
-          const SizedBox(height: 46),
-          Expanded(child: child),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -445,7 +470,7 @@ class _TagHeader extends StatelessWidget {
           icon: const Icon(LucideIcons.tag),
         ),
         if (onViewModeChanged != null) ...[
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.controlGap),
           MenuAnchor(
             builder: (context, controller, child) {
               return IconButton(
@@ -475,7 +500,7 @@ class _TagHeader extends StatelessWidget {
           ),
         ],
         if (onSortDirectionChanged != null) ...[
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.controlGap),
           IconButton(
             tooltip: sortAscending ? '按名称升序' : '按名称降序',
             onPressed: onSortDirectionChanged,
@@ -487,7 +512,7 @@ class _TagHeader extends StatelessWidget {
           ),
         ],
         if (onSelectionModeChanged != null) ...[
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.controlGap),
           IconButton(
             tooltip: selectionMode ? '退出多选' : '多选',
             isSelected: selectionMode,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'app_spacing.dart';
 import 'app_shell.dart';
 
 class SharedSidebar extends StatelessWidget {
@@ -52,7 +53,12 @@ class SharedSidebarHeader extends StatelessWidget {
     super.key,
     this.leading,
     this.trailing,
-    this.padding = const EdgeInsets.fromLTRB(14, 14, 14, 10),
+    this.padding = const EdgeInsets.fromLTRB(
+      AppSpacing.sidebarInset,
+      AppSpacing.sidebarInset,
+      AppSpacing.sidebarInset,
+      12,
+    ),
   });
 
   final Widget? leading;
@@ -73,7 +79,7 @@ class SharedSidebarHeader extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var index = 0; index < actions.length; index++) ...[
-                if (index > 0) const SizedBox(width: 4),
+                if (index > 0) const SizedBox(width: AppSpacing.controlGap),
                 actions[index],
               ],
             ],
@@ -120,7 +126,7 @@ class SharedSidebarIconButton extends StatelessWidget {
     return IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
-      constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
       padding: EdgeInsets.zero,
       iconSize: 18,
       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -197,11 +203,16 @@ class SharedSidebarItem extends StatelessWidget {
         child: SizedBox(
           height: level == 0 ? 40 : 36,
           child: Padding(
-            padding: EdgeInsets.fromLTRB(14 + level * 18, 0, 10, 0),
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.sidebarInset + level * AppSpacing.sidebarItemIndent,
+              0,
+              12,
+              0,
+            ),
             child: Row(
               children: [
                 Icon(icon, color: foreground.withValues(alpha: 0.78), size: 16),
-                const SizedBox(width: 9),
+                const SizedBox(width: AppSpacing.controlGap),
                 Expanded(
                   child: Row(
                     children: [
@@ -221,7 +232,7 @@ class SharedSidebarItem extends StatelessWidget {
                         ),
                       ),
                       if (leadingAction && actionIcon != null) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: AppSpacing.controlGap),
                         SharedSidebarActionButton(
                           tooltip: '新建$label',
                           icon: actionIcon!,
@@ -237,7 +248,7 @@ class SharedSidebarItem extends StatelessWidget {
                     icon: actionIcon!,
                     onPressed: onActionTap,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.controlGap),
                 ],
                 if (count != null)
                   Text(
@@ -263,8 +274,8 @@ class SharedSidebarItem extends StatelessWidget {
                   IconButton(
                     tooltip: '$label展开收起',
                     constraints: const BoxConstraints.tightFor(
-                      width: 28,
-                      height: 28,
+                      width: 32,
+                      height: 32,
                     ),
                     padding: EdgeInsets.zero,
                     onPressed: onTrailingTap,
@@ -326,7 +337,7 @@ class SharedSidebarActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       tooltip: tooltip,
-      constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
       padding: EdgeInsets.zero,
       onPressed: onPressed,
       icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),

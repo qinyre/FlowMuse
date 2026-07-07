@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../models/notebook_item.dart';
 import '../view_models/library_home_view_model.dart';
+import '../../../shared/widgets/app_spacing.dart';
 import 'create_notebook_card.dart';
 import 'notebook_card.dart';
 
@@ -31,7 +32,7 @@ class LibraryContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 18 : 30, 26, compact ? 18 : 30, 0),
+      padding: AppSpacing.pagePadding(compact: compact),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -44,12 +45,12 @@ class LibraryContent extends StatelessWidget {
             onSortDirectionChanged: onSortDirectionChanged,
             onSelectionModeChanged: onSelectionModeChanged,
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: AppSpacing.headerToContent),
           _FilterTabs(
             selected: state.selectedFilter,
             onFilterChanged: onFilterChanged,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: AppSpacing.sectionGap),
           Expanded(
             child: _LibraryItems(
               state: state,
@@ -193,7 +194,8 @@ class _LibraryItemsContent extends StatelessWidget {
     if (state.viewMode == LibraryViewMode.list) {
       return ListView.separated(
         itemCount: state.visibleNotebooks.length + 1,
-        separatorBuilder: (context, index) => const SizedBox(height: 10),
+        separatorBuilder: (context, index) =>
+            const SizedBox(height: AppSpacing.listGap),
         itemBuilder: (context, index) {
           if (index == 0) {
             return _CreateNotebookTile(onTap: onCreate);
@@ -213,8 +215,12 @@ class _LibraryItemsContent extends StatelessWidget {
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 218,
         mainAxisExtent: 276,
-        crossAxisSpacing: compact ? 18 : 24,
-        mainAxisSpacing: compact ? 24 : 30,
+        crossAxisSpacing: compact
+            ? AppSpacing.compactGridCrossGap
+            : AppSpacing.gridCrossGap,
+        mainAxisSpacing: compact
+            ? AppSpacing.compactGridMainGap
+            : AppSpacing.gridMainGap,
       ),
       itemBuilder: (context, index) {
         if (index == 0) {
@@ -398,7 +404,7 @@ class _LibraryHeader extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.controlGap),
         IconButton(
           tooltip: sortAscending ? '按日期升序' : '按日期降序',
           onPressed: onSortDirectionChanged,
@@ -408,7 +414,7 @@ class _LibraryHeader extends StatelessWidget {
                 : LucideIcons.arrowDownWideNarrow,
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.controlGap),
         IconButton(
           tooltip: selectionMode ? '退出多选' : '多选',
           isSelected: selectionMode,

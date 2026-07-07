@@ -7,6 +7,7 @@ import '../../../app/app_router.dart';
 import '../../../app/app_theme_preset.dart';
 import '../../../app/view_models/theme_view_model.dart';
 import '../../../shared/widgets/app_shell.dart';
+import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -62,7 +63,7 @@ class _SettingsSidebar extends StatelessWidget {
         ],
       ),
       footer: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
+        padding: const EdgeInsets.fromLTRB(0, AppSpacing.controlGap, 0, 16),
         child: SharedSidebarBlock(
           children: [
             SharedSidebarItem(
@@ -144,7 +145,7 @@ class _SettingsContent extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            height: 96,
+            height: 88,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               border: Border(
@@ -163,7 +164,12 @@ class _SettingsContent extends StatelessWidget {
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(34, 36, 36, 0),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pageInset,
+                AppSpacing.pageTopInset,
+                AppSpacing.pageInset,
+                0,
+              ),
               children: [
                 Text(
                   '上次备份时间:2026-05-28 09:29:49',
@@ -171,19 +177,19 @@ class _SettingsContent extends StatelessWidget {
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: AppSpacing.sectionGap),
                 _SettingsCard(
                   child: SwitchListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 26),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
                     value: true,
                     onChanged: (_) {},
                     title: const Text('自动备份'),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 _SettingsCard(
                   child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 26),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
                     title: const Text('手动备份'),
                     trailing: Text(
                       '马上备份',
@@ -194,15 +200,15 @@ class _SettingsContent extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 26),
+                const SizedBox(height: AppSpacing.sectionGap),
                 const _SectionCaption(
                   title: '本地导入',
                   subtitle: '从本地备份导入的文件不会覆盖现有笔记',
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 _SettingsCard(
                   child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 26),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
                     title: const Text('导入备份'),
                     trailing: Text(
                       '导入',
@@ -213,24 +219,24 @@ class _SettingsContent extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 26),
+                const SizedBox(height: AppSpacing.sectionGap),
                 const _SectionCaption(title: '备份路径'),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 _SettingsCard(
                   child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 26),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
                     title: const Text('内部储存'),
                     trailing: Icon(LucideIcons.check, color: selectedColor),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.controlGap),
                 Text(
                   '路径：/storage/emulated/0/Documents/StarNote/backup',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: 34),
+                const SizedBox(height: AppSpacing.headerToContent),
                 _ThemePresetSection(
                   selectedPreset: selectedPreset,
                   onPresetChanged: onPresetChanged,
@@ -253,7 +259,7 @@ class _SettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card.outlined(
       color: Theme.of(context).colorScheme.surface,
-      child: SizedBox(height: 74, child: Center(child: child)),
+      child: SizedBox(height: 72, child: Center(child: child)),
     );
   }
 }
@@ -269,7 +275,7 @@ class _SectionCaption extends StatelessWidget {
     final mutedColor = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Padding(
-      padding: const EdgeInsets.only(left: 26),
+      padding: const EdgeInsets.only(left: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -281,7 +287,7 @@ class _SectionCaption extends StatelessWidget {
             ),
           ),
           if (subtitle != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.controlGap),
             Text(
               subtitle!,
               style: Theme.of(
@@ -313,14 +319,14 @@ class _ThemePresetSection extends StatelessWidget {
           title: '主题设置',
           subtitle: '主题是一整套视觉方案，包含明暗、强调色和背景',
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         _ThemePresetGroup(
           title: '基础主题',
           presets: appThemePresets.take(3).toList(),
           selectedPreset: selectedPreset,
           onPresetChanged: onPresetChanged,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         _ThemePresetGroup(
           title: '特色主题',
           presets: appThemePresets.skip(3).toList(),
@@ -349,11 +355,11 @@ class _ThemePresetGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SettingsCard(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 26),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Row(
           children: [
             SizedBox(
-              width: 86,
+              width: 88,
               child: Text(
                 title,
                 style: Theme.of(
@@ -363,8 +369,8 @@ class _ThemePresetGroup extends StatelessWidget {
             ),
             Expanded(
               child: Wrap(
-                spacing: 10,
-                runSpacing: 10,
+                spacing: AppSpacing.controlGap,
+                runSpacing: AppSpacing.controlGap,
                 children: [
                   for (final preset in presets)
                     _ThemePresetChip(
@@ -403,13 +409,13 @@ class _ThemePresetChip extends StatelessWidget {
       message: preset.description,
       child: InkWell(
         onTap: onSelected,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppSpacing.radius),
         child: Container(
-          width: 112,
-          height: 46,
+          width: 116,
+          height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppSpacing.radius),
             border: Border.all(color: borderColor, width: selected ? 1.5 : 1),
             color: selected
                 ? preset.seedColor.withValues(alpha: 0.10)
@@ -418,7 +424,7 @@ class _ThemePresetChip extends StatelessWidget {
           child: Row(
             children: [
               _ThemeSwatch(preset: preset),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.controlGap),
               Expanded(
                 child: Text(
                   preset.label,
