@@ -855,9 +855,7 @@ class PropertyPanelContent extends StatelessWidget {
 
   void _showFontSizeDialog(BuildContext context, double? current) {
     final wasEditing = controller.editingTextElementId != null;
-    final savedSelection = wasEditing
-        ? controller.editableTextKey.currentState?.textEditingValue.selection
-        : null;
+    final savedSelection = wasEditing ? controller.editableTextSelection : null;
     if (wasEditing) controller.suppressFocusCommit = true;
 
     final sizeController = TextEditingController(
@@ -1032,9 +1030,7 @@ class PropertyPanelContent extends StatelessWidget {
     final overlay = Overlay.of(context);
 
     final wasEditing = controller.editingTextElementId != null;
-    final savedSelection = wasEditing
-        ? controller.editableTextKey.currentState?.textEditingValue.selection
-        : null;
+    final savedSelection = wasEditing ? controller.editableTextSelection : null;
     if (wasEditing) controller.suppressFocusCommit = true;
 
     controller.fontPickerOpen = true;
@@ -1065,9 +1061,7 @@ class PropertyPanelContent extends StatelessWidget {
 
   void _showCompactFontPicker(BuildContext context, String? current) {
     final wasEditing = controller.editingTextElementId != null;
-    final savedSelection = wasEditing
-        ? controller.editableTextKey.currentState?.textEditingValue.selection
-        : null;
+    final savedSelection = wasEditing ? controller.editableTextSelection : null;
     if (wasEditing) controller.suppressFocusCommit = true;
 
     controller.fontPickerOpen = true;

@@ -2,8 +2,11 @@ library;
 
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' as core show TextAlign;
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' hide TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    as core
+    show TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    hide TextAlign;
 
 /// Delegate for [TextSelectionGestureDetectorBuilder] to enable text
 /// selection (tap-to-place-cursor, drag-to-select) on [EditableText].
@@ -22,10 +25,62 @@ class TextSelectionDelegate
 }
 
 /// Text editing overlay positioned over the canvas during inline text editing.
-class TextEditingOverlay extends StatelessWidget {
+class TextEditingOverlay extends StatefulWidget {
   final MarkdrawController controller;
 
   const TextEditingOverlay({super.key, required this.controller});
+
+  @override
+  State<TextEditingOverlay> createState() => _TextEditingOverlayState();
+}
+
+class _TextEditingOverlayState extends State<TextEditingOverlay> {
+  final _editableTextKey = GlobalKey<EditableTextState>();
+  Object? _registration;
+
+  MarkdrawController get controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _registerEditableText();
+  }
+
+  @override
+  void didUpdateWidget(covariant TextEditingOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      if (_registration case final registration?) {
+        oldWidget.controller.unregisterEditableText(registration);
+      }
+      _registerEditableText();
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_registration case final registration?) {
+      controller.unregisterEditableText(registration);
+    }
+    super.dispose();
+  }
+
+  void _registerEditableText() {
+    _registration = controller.registerEditableText(
+      readSelection: () =>
+          _editableTextKey.currentState?.textEditingValue.selection,
+      restoreSelection: (selection) {
+        final editable = _editableTextKey.currentState;
+        if (editable == null) {
+          return;
+        }
+        editable.userUpdateTextEditingValue(
+          editable.textEditingValue.copyWith(selection: selection),
+          SelectionChangedCause.keyboard,
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -296,11 +351,11 @@ class TextEditingOverlay extends StatelessWidget {
     TextAlign flutterTextAlign,
   ) {
     return TextSelectionGestureDetectorBuilder(
-      delegate: TextSelectionDelegate(controller.editableTextKey),
+      delegate: TextSelectionDelegate(_editableTextKey),
     ).buildGestureDetector(
       behavior: HitTestBehavior.translucent,
       child: EditableText(
-        key: controller.editableTextKey,
+        key: _editableTextKey,
         rendererIgnoresPointer: true,
         controller: controller.textEditingController,
         focusNode: controller.textFocusNode,

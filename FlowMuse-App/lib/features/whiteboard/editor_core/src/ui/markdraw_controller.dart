@@ -103,8 +103,9 @@ class MarkdrawController extends ChangeNotifier {
   final textEditingController = TextEditingController();
   final _textFocusNode = FocusNode();
 
-  /// Global key for the inline [EditableText] widget.
-  final editableTextKey = GlobalKey<EditableTextState>();
+  Object? _editableTextRegistration;
+  TextSelection? Function()? _readEditableTextSelection;
+  void Function(TextSelection selection)? _restoreEditableTextSelection;
   bool _isEditingExisting = false;
   String? _originalText;
 
@@ -335,6 +336,33 @@ class MarkdrawController extends ChangeNotifier {
     _textFocusNode.removeListener(_onTextFocusChanged);
     _textFocusNode.dispose();
     super.dispose();
+  }
+
+  Object registerEditableText({
+    required TextSelection? Function() readSelection,
+    required void Function(TextSelection selection) restoreSelection,
+  }) {
+    final registration = Object();
+    _editableTextRegistration = registration;
+    _readEditableTextSelection = readSelection;
+    _restoreEditableTextSelection = restoreSelection;
+    return registration;
+  }
+
+  void unregisterEditableText(Object registration) {
+    if (!identical(_editableTextRegistration, registration)) {
+      return;
+    }
+    _editableTextRegistration = null;
+    _readEditableTextSelection = null;
+    _restoreEditableTextSelection = null;
+  }
+
+  TextSelection? get editableTextSelection =>
+      _readEditableTextSelection?.call();
+
+  void restoreEditableTextSelection(TextSelection selection) {
+    _restoreEditableTextSelection?.call(selection);
   }
 
   // --- Tool management ---
@@ -1154,9 +1182,7 @@ class MarkdrawController extends ChangeNotifier {
   /// text re-measurement.
   void applyStyleChange(ElementStyle style) {
     final wasEditing = _editingTextElementId != null;
-    final savedSelection = wasEditing
-        ? editableTextKey.currentState?.textEditingValue.selection
-        : null;
+    final savedSelection = wasEditing ? editableTextSelection : null;
     if (wasEditing) suppressFocusCommit = true;
 
     // Update sticky defaults
@@ -1272,13 +1298,7 @@ class MarkdrawController extends ChangeNotifier {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       suppressFocusCommit = false;
       if (savedSelection != null && _editingTextElementId != null) {
-        final editable = editableTextKey.currentState;
-        if (editable != null) {
-          editable.userUpdateTextEditingValue(
-            editable.textEditingValue.copyWith(selection: savedSelection),
-            SelectionChangedCause.keyboard,
-          );
-        }
+        restoreEditableTextSelection(savedSelection);
       }
     });
   }
