@@ -3,24 +3,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 @immutable
 class SearchState {
-  const SearchState({this.query = '', this.folderScopeId, this.tagScopeId});
+  const SearchState({this.query = '', this.notebookScopeId, this.tagScopeId});
 
   final String query;
-  final String? folderScopeId;
+  final String? notebookScopeId;
   final String? tagScopeId;
 
   SearchState copyWith({
     String? query,
-    String? folderScopeId,
+    String? notebookScopeId,
     String? tagScopeId,
-    bool clearFolderScope = false,
+    bool clearNotebookScope = false,
     bool clearTagScope = false,
   }) {
     return SearchState(
       query: query ?? this.query,
-      folderScopeId: clearFolderScope
+      notebookScopeId: clearNotebookScope
           ? null
-          : folderScopeId ?? this.folderScopeId,
+          : notebookScopeId ?? this.notebookScopeId,
       tagScopeId: clearTagScope ? null : tagScopeId ?? this.tagScopeId,
     );
   }
@@ -36,10 +36,10 @@ class SearchViewModel extends Notifier<SearchState> {
     state = state.copyWith(query: query);
   }
 
-  void selectFolderScope(String? folderScopeId) {
+  void selectNotebookScope(String? notebookScopeId) {
     state = state.copyWith(
-      folderScopeId: folderScopeId,
-      clearFolderScope: folderScopeId == null,
+      notebookScopeId: notebookScopeId,
+      clearNotebookScope: notebookScopeId == null,
     );
   }
 

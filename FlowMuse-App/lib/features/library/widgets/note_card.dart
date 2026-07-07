@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../models/notebook_item.dart';
+import '../models/note_item.dart';
 
-class NotebookCard extends StatelessWidget {
-  const NotebookCard({super.key, required this.item, required this.onTap});
+class NoteCard extends StatelessWidget {
+  const NoteCard({super.key, required this.item, required this.onTap});
 
   static const coverWidth = 154.0;
   static const coverHeight = 204.0;
 
-  final NotebookItem item;
+  final NoteItem item;
   final VoidCallback onTap;
 
   @override
@@ -27,9 +27,9 @@ class NotebookCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: InkWell(
-              key: ValueKey('notebook-card-${item.id}'),
+              key: ValueKey('note-card-${item.id}'),
               onTap: onTap,
-              child: NotebookCover(item: item),
+              child: NoteCover(item: item),
             ),
           ),
         ),
@@ -67,10 +67,10 @@ class NotebookCard extends StatelessWidget {
   }
 }
 
-class NotebookCover extends StatelessWidget {
-  const NotebookCover({super.key, required this.item});
+class NoteCover extends StatelessWidget {
+  const NoteCover({super.key, required this.item});
 
-  final NotebookItem item;
+  final NoteItem item;
 
   @override
   Widget build(BuildContext context) {

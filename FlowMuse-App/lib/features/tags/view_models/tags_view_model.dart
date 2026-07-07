@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../library/models/notebook_item.dart';
+import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
 
 @immutable
@@ -11,14 +11,14 @@ class TagItem {
     required this.name,
     required this.count,
     required this.coverColor,
-    this.notebookIds = const [],
+    this.noteIds = const [],
   });
 
   final String id;
   final String name;
   final int count;
   final Color coverColor;
-  final List<String> notebookIds;
+  final List<String> noteIds;
 }
 
 @immutable
@@ -70,13 +70,13 @@ class TagsViewModel extends Notifier<TagsState> {
               TagItem(
                 id: tag.id,
                 name: tag.name,
-                count: index.notebooks
+                count: index.notes
                     .where((item) => item.tagIds.contains(tag.id))
                     .length,
                 coverColor: tag.coverColor,
-                notebookIds: [
-                  for (final notebook in index.notebooks)
-                    if (notebook.tagIds.contains(tag.id)) notebook.id,
+                noteIds: [
+                  for (final note in index.notes)
+                    if (note.tagIds.contains(tag.id)) note.id,
                 ],
               ),
           ];

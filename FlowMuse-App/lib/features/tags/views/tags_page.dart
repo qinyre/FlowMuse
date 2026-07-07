@@ -5,10 +5,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
-import '../../library/models/notebook_item.dart';
+import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
-import '../../library/widgets/create_notebook_card.dart';
-import '../../library/widgets/notebook_card.dart';
+import '../../library/widgets/create_note_card.dart';
+import '../../library/widgets/note_card.dart';
 import '../view_models/tags_view_model.dart';
 
 class TagsPage extends ConsumerWidget {
@@ -38,8 +38,8 @@ class TagDetailPage extends ConsumerWidget {
 
   final String tagId;
 
-  void _openWhiteboard(BuildContext context, {required String notebookId}) {
-    context.push(AppRoutes.whiteboardPath(notebookId: notebookId));
+  void _openWhiteboard(BuildContext context, {required String noteId}) {
+    context.push(AppRoutes.whiteboardPath(noteId: noteId));
   }
 
   @override
@@ -47,11 +47,11 @@ class TagDetailPage extends ConsumerWidget {
     final state = ref.watch(tagsViewModelProvider);
     final tag = _findTag(state.tags, tagId);
     final libraryIndex = ref.watch(libraryIndexProvider).asData?.value;
-    final notebooks =
-        libraryIndex?.notebooks
+    final notes =
+        libraryIndex?.notes
             .where((item) => item.tagIds.contains(tagId))
             .toList() ??
-        const <NotebookItem>[];
+        const <NoteItem>[];
 
     return _TagPageFrame(
       title: tag?.name ?? '标签',
@@ -59,28 +59,28 @@ class TagDetailPage extends ConsumerWidget {
       sortAscending: false,
       selectionMode: false,
       onCreate: () async {
-        final notebook = await ref
+        final note = await ref
             .read(libraryIndexProvider.notifier)
-            .createNotebook(tagIds: [tagId]);
+            .createNote(tagIds: [tagId]);
         if (context.mounted) {
-          _openWhiteboard(context, notebookId: notebook.id);
+          _openWhiteboard(context, noteId: note.id);
         }
       },
       onViewModeChanged: null,
       onSortDirectionChanged: null,
       onSelectionModeChanged: null,
-      child: _NotebookItems(
-        notebooks: notebooks,
+      child: _NoteItems(
+        notes: notes,
         onCreate: () async {
-          final notebook = await ref
+          final note = await ref
               .read(libraryIndexProvider.notifier)
-              .createNotebook(tagIds: [tagId]);
+              .createNote(tagIds: [tagId]);
           if (context.mounted) {
-            _openWhiteboard(context, notebookId: notebook.id);
+            _openWhiteboard(context, noteId: note.id);
           }
         },
-        onOpenNotebook: (item) {
-          _openWhiteboard(context, notebookId: item.id);
+        onOpenNote: (item) {
+          _openWhiteboard(context, noteId: item.id);
         },
       ),
     );
@@ -157,16 +157,16 @@ class _TagItems extends StatelessWidget {
   }
 }
 
-class _NotebookItems extends StatelessWidget {
-  const _NotebookItems({
-    required this.notebooks,
+class _NoteItems extends StatelessWidget {
+  const _NoteItems({
+    required this.notes,
     required this.onCreate,
-    required this.onOpenNotebook,
+    required this.onOpenNote,
   });
 
-  final List<NotebookItem> notebooks;
+  final List<NoteItem> notes;
   final VoidCallback onCreate;
-  final ValueChanged<NotebookItem> onOpenNotebook;
+  final ValueChanged<NoteItem> onOpenNote;
 
   @override
   Widget build(BuildContext context) {
@@ -174,7 +174,7 @@ class _NotebookItems extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 820;
         return GridView.builder(
-          itemCount: notebooks.length + 1,
+          itemCount: notes.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 218,
             mainAxisExtent: 276,
@@ -187,10 +187,10 @@ class _NotebookItems extends StatelessWidget {
           ),
           itemBuilder: (context, index) {
             if (index == 0) {
-              return CreateNotebookCard(onTap: onCreate);
+              return CreateNoteCard(onTap: onCreate);
             }
-            final item = notebooks[index - 1];
-            return NotebookCard(item: item, onTap: () => onOpenNotebook(item));
+            final item = notes[index - 1];
+            return NoteCard(item: item, onTap: () => onOpenNote(item));
           },
         );
       },
@@ -209,8 +209,8 @@ class _TagCoverCard extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          width: NotebookCard.coverWidth,
-          height: NotebookCard.coverHeight,
+          width: NoteCard.coverWidth,
+          height: NoteCard.coverHeight,
           child: Card(
             elevation: 5,
             shadowColor: const Color(0x165A625F),
@@ -346,8 +346,8 @@ class _CreateTagCard extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          width: NotebookCard.coverWidth,
-          height: NotebookCard.coverHeight,
+          width: NoteCard.coverWidth,
+          height: NoteCard.coverHeight,
           child: Card.outlined(
             clipBehavior: Clip.antiAlias,
             shape: RoundedRectangleBorder(

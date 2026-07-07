@@ -13,9 +13,9 @@ import '../collaboration/repositories/collaboration_repository.dart';
 import '../view_models/whiteboard_view_model.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
-  const WhiteboardPage({super.key, required this.notebookId});
+  const WhiteboardPage({super.key, required this.noteId});
 
-  final String notebookId;
+  final String noteId;
 
   @override
   ConsumerState<WhiteboardPage> createState() => _WhiteboardPageState();
@@ -35,14 +35,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     super.initState();
     _markdrawController = MarkdrawController();
     _collaborationRepository = ref.read(collaborationRepositoryProvider);
-    Future.microtask(_openNotebook);
+    Future.microtask(_openNote);
   }
 
   @override
   void didUpdateWidget(covariant WhiteboardPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.notebookId != widget.notebookId) {
-      Future.microtask(_openNotebook);
+    if (oldWidget.noteId != widget.noteId) {
+      Future.microtask(_openNote);
     }
   }
 
@@ -55,23 +55,18 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     super.dispose();
   }
 
-  Future<void> _openNotebook() async {
-    await ref
-        .read(libraryIndexProvider.notifier)
-        .ensureNotebook(widget.notebookId);
+  Future<void> _openNote() async {
+    await ref.read(libraryIndexProvider.notifier).ensureNote(widget.noteId);
     await ref
         .read(whiteboardViewModelProvider.notifier)
-        .openNotebook(notebookId: widget.notebookId);
+        .openNote(noteId: widget.noteId);
     final repository = ref.read(whiteboardSceneRepositoryProvider);
-    final content = await repository.loadScene(widget.notebookId);
+    final content = await repository.loadScene(widget.noteId);
     if (!mounted) {
       return;
     }
     _loadingScene = true;
-    _markdrawController.loadFromContent(
-      content,
-      '${widget.notebookId}.excalidraw',
-    );
+    _markdrawController.loadFromContent(content, '${widget.noteId}.excalidraw');
     _loadingScene = false;
     final room = _roomFromCurrentUri();
     if (room != null) {
@@ -89,10 +84,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     final content = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
     );
-    await repository.saveScene(widget.notebookId, content);
-    await ref
-        .read(libraryIndexProvider.notifier)
-        .touchNotebook(widget.notebookId);
+    await repository.saveScene(widget.noteId, content);
+    await ref.read(libraryIndexProvider.notifier).touchNote(widget.noteId);
     await _broadcastCurrentScene(serializedScene: content);
     if (!mounted) {
       return;
@@ -105,7 +98,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (title != null && title.isNotEmpty) {
       await ref
           .read(libraryIndexProvider.notifier)
-          .renameNotebook(widget.notebookId, title);
+          .renameNote(widget.noteId, title);
     }
     await _saveMarkdrawScene();
   }
@@ -238,10 +231,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _applyingRemoteScene = false;
 
     final repository = ref.read(whiteboardSceneRepositoryProvider);
-    await repository.saveScene(widget.notebookId, nextContent);
-    await ref
-        .read(libraryIndexProvider.notifier)
-        .touchNotebook(widget.notebookId);
+    await repository.saveScene(widget.noteId, nextContent);
+    await ref.read(libraryIndexProvider.notifier).touchNote(widget.noteId);
     if (mounted) {
       ref.read(whiteboardViewModelProvider.notifier).markSaved();
     }
@@ -278,7 +269,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     final state = ref.watch(whiteboardViewModelProvider);
 
     return Scaffold(
-      key: ValueKey(widget.notebookId),
+      key: ValueKey(widget.noteId),
       backgroundColor: const Color(0xFFFDFDFB),
       body: SafeArea(
         child: KeyedSubtree(

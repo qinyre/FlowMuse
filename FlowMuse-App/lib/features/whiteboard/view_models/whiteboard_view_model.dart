@@ -18,14 +18,14 @@ enum WhiteboardSaveStatus { idle, saving, saved }
 
 class WhiteboardState {
   const WhiteboardState({
-    this.notebookId = '',
+    this.noteId = '',
     this.saveStatus = WhiteboardSaveStatus.idle,
     this.activeRoom,
     this.collaborating = false,
     this.collaborators = const {},
   });
 
-  final String notebookId;
+  final String noteId;
   final WhiteboardSaveStatus saveStatus;
   final CollaborationRoom? activeRoom;
   final bool collaborating;
@@ -40,7 +40,7 @@ class WhiteboardState {
   }
 
   WhiteboardState copyWith({
-    String? notebookId,
+    String? noteId,
     WhiteboardSaveStatus? saveStatus,
     CollaborationRoom? activeRoom,
     bool? collaborating,
@@ -48,7 +48,7 @@ class WhiteboardState {
     bool clearRoom = false,
   }) {
     return WhiteboardState(
-      notebookId: notebookId ?? this.notebookId,
+      noteId: noteId ?? this.noteId,
       saveStatus: saveStatus ?? this.saveStatus,
       activeRoom: clearRoom ? null : activeRoom ?? this.activeRoom,
       collaborating: collaborating ?? this.collaborating,
@@ -66,9 +66,9 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
     return const WhiteboardState();
   }
 
-  Future<void> openNotebook({required String notebookId}) async {
+  Future<void> openNote({required String noteId}) async {
     state = state.copyWith(
-      notebookId: notebookId,
+      noteId: noteId,
       saveStatus: WhiteboardSaveStatus.saved,
     );
   }

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import 'notebook_card.dart';
+import 'note_card.dart';
 
-class CreateNotebookCard extends StatelessWidget {
-  const CreateNotebookCard({super.key, required this.onTap});
+class CreateNoteCard extends StatelessWidget {
+  const CreateNoteCard({super.key, required this.onTap});
 
   final VoidCallback onTap;
 
@@ -15,8 +15,8 @@ class CreateNotebookCard extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          width: NotebookCard.coverWidth,
-          height: NotebookCard.coverHeight,
+          width: NoteCard.coverWidth,
+          height: NoteCard.coverHeight,
           child: Card.outlined(
             clipBehavior: Clip.antiAlias,
             color: colorScheme.primary.withValues(alpha: 0.035),
@@ -24,7 +24,7 @@ class CreateNotebookCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: InkWell(
-              key: const ValueKey('create-notebook-card'),
+              key: const ValueKey('create-note-card'),
               onTap: onTap,
               child: Center(
                 child: DecoratedBox(

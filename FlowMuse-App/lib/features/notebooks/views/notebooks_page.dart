@@ -5,119 +5,122 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
-import '../../library/models/notebook_item.dart';
+import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
-import '../../library/widgets/create_notebook_card.dart';
-import '../../library/widgets/notebook_card.dart';
-import '../view_models/folders_view_model.dart';
+import '../../library/widgets/create_note_card.dart';
+import '../../library/widgets/note_card.dart';
+import '../view_models/notebooks_view_model.dart';
 
-class FoldersPage extends ConsumerWidget {
-  const FoldersPage({super.key});
+class NotebooksPage extends ConsumerWidget {
+  const NotebooksPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(foldersViewModelProvider);
-    final viewModel = ref.read(foldersViewModelProvider.notifier);
+    final state = ref.watch(notebooksViewModelProvider);
+    final viewModel = ref.read(notebooksViewModelProvider.notifier);
 
     return _CollectionPage(
-      title: '文件夹',
+      title: '笔记本',
       viewMode: state.viewMode,
       sortAscending: state.sortAscending,
       selectionMode: state.selectionMode,
-      createTooltip: '新建文件夹',
-      createIcon: LucideIcons.folderPlus,
-      onCreate: viewModel.createFolder,
+      createTooltip: '新建笔记本',
+      createIcon: LucideIcons.bookPlus,
+      onCreate: viewModel.createNotebook,
       onViewModeChanged: viewModel.changeViewMode,
       onSortDirectionChanged: viewModel.toggleSortDirection,
       onSelectionModeChanged: viewModel.toggleSelectionMode,
-      child: _FolderItems(state: state, onCreate: viewModel.createFolder),
+      child: _NotebookCollectionItems(
+        state: state,
+        onCreate: viewModel.createNotebook,
+      ),
     );
   }
 }
 
-class FolderDetailPage extends ConsumerWidget {
-  const FolderDetailPage({super.key, required this.folderId});
+class NotebookDetailPage extends ConsumerWidget {
+  const NotebookDetailPage({super.key, required this.notebookId});
 
-  final String folderId;
+  final String notebookId;
 
-  void _openWhiteboard(BuildContext context, {required String notebookId}) {
-    context.push(AppRoutes.whiteboardPath(notebookId: notebookId));
+  void _openWhiteboard(BuildContext context, {required String noteId}) {
+    context.push(AppRoutes.whiteboardPath(noteId: noteId));
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(foldersViewModelProvider);
-    final folder = _findFolder(state.folders, folderId);
+    final state = ref.watch(notebooksViewModelProvider);
+    final notebook = _findNotebook(state.notebooks, notebookId);
     final libraryIndex = ref.watch(libraryIndexProvider).asData?.value;
-    final notebooks =
-        libraryIndex?.notebooks
-            .where((item) => item.folderId == folderId)
+    final notes =
+        libraryIndex?.notes
+            .where((item) => item.notebookId == notebookId)
             .toList() ??
-        const <NotebookItem>[];
+        const <NoteItem>[];
 
     return _CollectionPage(
-      title: folder?.name ?? '文件夹',
+      title: notebook?.name ?? '笔记本',
       viewMode: LibraryViewMode.grid,
       sortAscending: false,
       selectionMode: false,
       createTooltip: '新建笔记',
       createIcon: LucideIcons.plus,
       onCreate: () async {
-        final notebook = await ref
+        final note = await ref
             .read(libraryIndexProvider.notifier)
-            .createNotebook(folderId: folderId);
+            .createNote(notebookId: notebookId);
         if (context.mounted) {
-          _openWhiteboard(context, notebookId: notebook.id);
+          _openWhiteboard(context, noteId: note.id);
         }
       },
       onViewModeChanged: null,
       onSortDirectionChanged: null,
       onSelectionModeChanged: null,
-      child: _NotebookItems(
-        notebooks: notebooks,
+      child: _NoteItems(
+        notes: notes,
         onCreate: () async {
-          final notebook = await ref
+          final note = await ref
               .read(libraryIndexProvider.notifier)
-              .createNotebook(folderId: folderId);
+              .createNote(notebookId: notebookId);
           if (context.mounted) {
-            _openWhiteboard(context, notebookId: notebook.id);
+            _openWhiteboard(context, noteId: note.id);
           }
         },
-        onOpenNotebook: (item) {
-          _openWhiteboard(context, notebookId: item.id);
+        onOpenNote: (item) {
+          _openWhiteboard(context, noteId: item.id);
         },
       ),
     );
   }
 }
 
-class _FolderItems extends StatelessWidget {
-  const _FolderItems({required this.state, required this.onCreate});
+class _NotebookCollectionItems extends StatelessWidget {
+  const _NotebookCollectionItems({required this.state, required this.onCreate});
 
-  final FoldersState state;
+  final NotebooksState state;
   final VoidCallback onCreate;
 
   @override
   Widget build(BuildContext context) {
     if (state.viewMode == LibraryViewMode.list) {
       return ListView.separated(
-        itemCount: state.visibleFolders.length + 1,
+        itemCount: state.visibleNotebooks.length + 1,
         separatorBuilder: (context, index) =>
             const SizedBox(height: AppSpacing.listGap),
         itemBuilder: (context, index) {
           if (index == 0) {
             return _CreateCollectionTile(
-              label: '新建文件夹',
-              subtitle: '创建一个新的整理空间',
-              icon: LucideIcons.folderPlus,
+              label: '新建笔记本',
+              subtitle: '创建一个新的笔记集合',
+              icon: LucideIcons.bookPlus,
               onTap: onCreate,
             );
           }
-          final folder = state.visibleFolders[index - 1];
-          return _FolderTile(
-            folder: folder,
+          final notebook = state.visibleNotebooks[index - 1];
+          return _NotebookCollectionTile(
+            notebook: notebook,
             selectionMode: state.selectionMode,
-            onTap: () => context.go(AppRoutes.folderPath(folder.id)),
+            onTap: () => context.go(AppRoutes.notebookPath(notebook.id)),
           );
         },
       );
@@ -127,7 +130,7 @@ class _FolderItems extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 820;
         return GridView.builder(
-          itemCount: state.visibleFolders.length + 1,
+          itemCount: state.visibleNotebooks.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 218,
             mainAxisExtent: 276,
@@ -141,18 +144,19 @@ class _FolderItems extends StatelessWidget {
           itemBuilder: (context, index) {
             if (index == 0) {
               return _CreateCollectionCard(
-                label: '新建文件夹',
-                icon: LucideIcons.folderPlus,
+                label: '新建笔记本',
+                icon: LucideIcons.bookPlus,
                 onTap: onCreate,
               );
             }
-            final folder = state.visibleFolders[index - 1];
+            final notebook = state.visibleNotebooks[index - 1];
             return Stack(
               children: [
                 Positioned.fill(
-                  child: _FolderCoverCard(
-                    folder: folder,
-                    onTap: () => context.go(AppRoutes.folderPath(folder.id)),
+                  child: _NotebookCollectionCoverCard(
+                    notebook: notebook,
+                    onTap: () =>
+                        context.go(AppRoutes.notebookPath(notebook.id)),
                   ),
                 ),
                 if (state.selectionMode)
@@ -170,16 +174,16 @@ class _FolderItems extends StatelessWidget {
   }
 }
 
-class _NotebookItems extends StatelessWidget {
-  const _NotebookItems({
-    required this.notebooks,
+class _NoteItems extends StatelessWidget {
+  const _NoteItems({
+    required this.notes,
     required this.onCreate,
-    required this.onOpenNotebook,
+    required this.onOpenNote,
   });
 
-  final List<NotebookItem> notebooks;
+  final List<NoteItem> notes;
   final VoidCallback onCreate;
-  final ValueChanged<NotebookItem> onOpenNotebook;
+  final ValueChanged<NoteItem> onOpenNote;
 
   @override
   Widget build(BuildContext context) {
@@ -187,7 +191,7 @@ class _NotebookItems extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 820;
         return GridView.builder(
-          itemCount: notebooks.length + 1,
+          itemCount: notes.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 218,
             mainAxisExtent: 276,
@@ -200,10 +204,10 @@ class _NotebookItems extends StatelessWidget {
           ),
           itemBuilder: (context, index) {
             if (index == 0) {
-              return CreateNotebookCard(onTap: onCreate);
+              return CreateNoteCard(onTap: onCreate);
             }
-            final item = notebooks[index - 1];
-            return NotebookCard(item: item, onTap: () => onOpenNotebook(item));
+            final item = notes[index - 1];
+            return NoteCard(item: item, onTap: () => onOpenNote(item));
           },
         );
       },
@@ -211,10 +215,13 @@ class _NotebookItems extends StatelessWidget {
   }
 }
 
-class _FolderCoverCard extends StatelessWidget {
-  const _FolderCoverCard({required this.folder, required this.onTap});
+class _NotebookCollectionCoverCard extends StatelessWidget {
+  const _NotebookCollectionCoverCard({
+    required this.notebook,
+    required this.onTap,
+  });
 
-  final FolderItem folder;
+  final NotebookCollectionItem notebook;
   final VoidCallback onTap;
 
   @override
@@ -222,8 +229,8 @@ class _FolderCoverCard extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          width: NotebookCard.coverWidth,
-          height: NotebookCard.coverHeight,
+          width: NoteCard.coverWidth,
+          height: NoteCard.coverHeight,
           child: Card(
             elevation: 5,
             shadowColor: const Color(0x165A625F),
@@ -232,49 +239,49 @@ class _FolderCoverCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: InkWell(
-              key: ValueKey('folder-card-${folder.id}'),
+              key: ValueKey('notebook-card-${notebook.id}'),
               onTap: onTap,
-              child: _FolderCover(folder: folder),
+              child: _NotebookCollectionCover(notebook: notebook),
             ),
           ),
         ),
         const SizedBox(height: 16),
-        _CoverTitle(title: folder.name),
+        _CoverTitle(title: notebook.name),
         const SizedBox(height: 6),
-        _CoverSubtitle(text: '${folder.count} 个笔记'),
+        _CoverSubtitle(text: '${notebook.count} 个笔记'),
       ],
     );
   }
 }
 
-class _FolderCover extends StatelessWidget {
-  const _FolderCover({required this.folder});
+class _NotebookCollectionCover extends StatelessWidget {
+  const _NotebookCollectionCover({required this.notebook});
 
-  final FolderItem folder;
+  final NotebookCollectionItem notebook;
 
   @override
   Widget build(BuildContext context) {
     final foreground =
-        ThemeData.estimateBrightnessForColor(folder.coverColor) ==
+        ThemeData.estimateBrightnessForColor(notebook.coverColor) ==
             Brightness.dark
         ? Colors.white
         : const Color(0xFF202523);
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: folder.coverColor,
+        color: notebook.coverColor,
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
             Color.alphaBlend(
               Colors.white.withValues(alpha: 0.12),
-              folder.coverColor,
+              notebook.coverColor,
             ),
-            folder.coverColor,
+            notebook.coverColor,
             Color.alphaBlend(
               Colors.black.withValues(alpha: 0.08),
-              folder.coverColor,
+              notebook.coverColor,
             ),
           ],
         ),
@@ -285,13 +292,13 @@ class _FolderCover extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(
-              LucideIcons.folder,
+              LucideIcons.bookOpen,
               color: foreground.withValues(alpha: 0.86),
               size: 28,
             ),
             const SizedBox(height: 34),
             Text(
-              folder.name,
+              notebook.name,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -305,7 +312,7 @@ class _FolderCover extends StatelessWidget {
             Align(
               alignment: Alignment.bottomRight,
               child: Text(
-                folder.count.toString().padLeft(2, '0'),
+                notebook.count.toString().padLeft(2, '0'),
                 style: TextStyle(
                   color: foreground.withValues(alpha: 0.22),
                   fontSize: 48,
@@ -321,14 +328,14 @@ class _FolderCover extends StatelessWidget {
   }
 }
 
-class _FolderTile extends StatelessWidget {
-  const _FolderTile({
-    required this.folder,
+class _NotebookCollectionTile extends StatelessWidget {
+  const _NotebookCollectionTile({
+    required this.notebook,
     required this.selectionMode,
     required this.onTap,
   });
 
-  final FolderItem folder;
+  final NotebookCollectionItem notebook;
   final bool selectionMode;
   final VoidCallback onTap;
 
@@ -336,9 +343,9 @@ class _FolderTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card.outlined(
       child: ListTile(
-        leading: const Icon(LucideIcons.folder),
-        title: Text(folder.name),
-        subtitle: Text('${folder.count} 个笔记'),
+        leading: const Icon(LucideIcons.bookOpen),
+        title: Text(notebook.name),
+        subtitle: Text('${notebook.count} 个笔记'),
         trailing: selectionMode
             ? const Checkbox(value: false, onChanged: null)
             : const Icon(LucideIcons.chevronRight),
@@ -366,8 +373,8 @@ class _CreateCollectionCard extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          width: NotebookCard.coverWidth,
-          height: NotebookCard.coverHeight,
+          width: NoteCard.coverWidth,
+          height: NoteCard.coverHeight,
           child: Card.outlined(
             clipBehavior: Clip.antiAlias,
             shape: RoundedRectangleBorder(
@@ -619,10 +626,13 @@ class _CoverSubtitle extends StatelessWidget {
   }
 }
 
-FolderItem? _findFolder(List<FolderItem> folders, String folderId) {
-  for (final folder in folders) {
-    if (folder.id == folderId) {
-      return folder;
+NotebookCollectionItem? _findNotebook(
+  List<NotebookCollectionItem> notebooks,
+  String notebookId,
+) {
+  for (final notebook in notebooks) {
+    if (notebook.id == notebookId) {
+      return notebook;
     }
   }
   return null;

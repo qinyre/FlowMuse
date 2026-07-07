@@ -5,9 +5,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
-import '../../library/models/notebook_item.dart';
+import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
-import '../../library/widgets/notebook_card.dart';
+import '../../library/widgets/note_card.dart';
 import '../view_models/search_view_model.dart';
 
 class SearchPage extends ConsumerWidget {
@@ -19,13 +19,13 @@ class SearchPage extends ConsumerWidget {
     final viewModel = ref.read(searchViewModelProvider.notifier);
     final libraryIndex =
         ref.watch(libraryIndexProvider).asData?.value ?? const LibraryIndex();
-    final folderLabel = state.folderScopeId == null
-        ? '全部文件夹'
-        : libraryIndex.folders
-                  .where((item) => item.id == state.folderScopeId)
+    final notebookLabel = state.notebookScopeId == null
+        ? '全部笔记本'
+        : libraryIndex.notebooks
+                  .where((item) => item.id == state.notebookScopeId)
                   .firstOrNull
                   ?.name ??
-              '全部文件夹';
+              '全部笔记本';
     final tagLabel = state.tagScopeId == null
         ? '全部标签'
         : libraryIndex.tags
@@ -33,7 +33,7 @@ class SearchPage extends ConsumerWidget {
                   .firstOrNull
                   ?.name ??
               '全部标签';
-    final results = _searchNotebooks(state, libraryIndex.notebooks);
+    final results = _searchNotes(state, libraryIndex.notes);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -73,15 +73,15 @@ class SearchPage extends ConsumerWidget {
                 runSpacing: 16,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Text('文件夹'),
+                  const Text('笔记本'),
                   _ScopeMenu(
-                    label: folderLabel,
+                    label: notebookLabel,
                     options: [
-                      const _ScopeOption(id: null, label: '全部文件夹'),
-                      for (final folder in libraryIndex.folders)
-                        _ScopeOption(id: folder.id, label: folder.name),
+                      const _ScopeOption(id: null, label: '全部笔记本'),
+                      for (final notebook in libraryIndex.notebooks)
+                        _ScopeOption(id: notebook.id, label: notebook.name),
                     ],
-                    onSelected: viewModel.selectFolderScope,
+                    onSelected: viewModel.selectNotebookScope,
                   ),
                   const Text('标签'),
                   _ScopeMenu(
@@ -114,8 +114,8 @@ class SearchPage extends ConsumerWidget {
                 child: _SearchResults(
                   query: state.query,
                   results: results,
-                  onOpenNotebook: (item) {
-                    context.push(AppRoutes.whiteboardPath(notebookId: item.id));
+                  onOpenNote: (item) {
+                    context.push(AppRoutes.whiteboardPath(noteId: item.id));
                   },
                 ),
               ),
@@ -200,12 +200,12 @@ class _SearchResults extends StatelessWidget {
   const _SearchResults({
     required this.query,
     required this.results,
-    required this.onOpenNotebook,
+    required this.onOpenNote,
   });
 
   final String query;
-  final List<NotebookItem> results;
-  final ValueChanged<NotebookItem> onOpenNotebook;
+  final List<NoteItem> results;
+  final ValueChanged<NoteItem> onOpenNote;
 
   @override
   Widget build(BuildContext context) {
@@ -237,13 +237,13 @@ class _SearchResults extends StatelessWidget {
               child: SizedBox(
                 width: 48,
                 height: 58,
-                child: NotebookCover(item: item),
+                child: NoteCover(item: item),
               ),
             ),
             title: Text(item.title),
             subtitle: Text(item.date),
             trailing: const Icon(LucideIcons.chevronRight),
-            onTap: () => onOpenNotebook(item),
+            onTap: () => onOpenNote(item),
           ),
         );
       },
@@ -285,16 +285,14 @@ class _SearchEmptyState extends StatelessWidget {
   }
 }
 
-List<NotebookItem> _searchNotebooks(
-  SearchState state,
-  List<NotebookItem> notebooks,
-) {
+List<NoteItem> _searchNotes(SearchState state, List<NoteItem> notes) {
   final query = state.query.trim().toLowerCase();
   if (query.isEmpty) {
     return const [];
   }
-  final results = notebooks.where((item) {
-    if (state.folderScopeId != null && item.folderId != state.folderScopeId) {
+  final results = notes.where((item) {
+    if (state.notebookScopeId != null &&
+        item.notebookId != state.notebookScopeId) {
       return false;
     }
     if (state.tagScopeId != null && !item.tagIds.contains(state.tagScopeId)) {

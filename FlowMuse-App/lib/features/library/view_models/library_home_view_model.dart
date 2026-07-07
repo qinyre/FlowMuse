@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/notebook_item.dart';
+import '../models/note_item.dart';
 import '../repositories/library_repository.dart';
 
 @immutable
@@ -11,7 +11,7 @@ class LibraryHomeState {
     this.viewMode = LibraryViewMode.grid,
     this.sortAscending = false,
     this.selectionMode = false,
-    this.notebooks = const [],
+    this.notes = const [],
     this.loading = false,
   });
 
@@ -19,13 +19,13 @@ class LibraryHomeState {
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
-  final List<NotebookItem> notebooks;
+  final List<NoteItem> notes;
   final bool loading;
 
-  List<NotebookItem> get visibleNotebooks {
+  List<NoteItem> get visibleNotes {
     final filtered = selectedFilter == LibraryFilter.all
-        ? notebooks
-        : notebooks.where((item) => item.kind == selectedFilter);
+        ? notes
+        : notes.where((item) => item.kind == selectedFilter);
     final sorted = filtered.toList()
       ..sort((a, b) {
         final result = a.updatedAt.compareTo(b.updatedAt);
@@ -39,7 +39,7 @@ class LibraryHomeState {
     LibraryViewMode? viewMode,
     bool? sortAscending,
     bool? selectionMode,
-    List<NotebookItem>? notebooks,
+    List<NoteItem>? notes,
     bool? loading,
   }) {
     return LibraryHomeState(
@@ -47,7 +47,7 @@ class LibraryHomeState {
       viewMode: viewMode ?? this.viewMode,
       sortAscending: sortAscending ?? this.sortAscending,
       selectionMode: selectionMode ?? this.selectionMode,
-      notebooks: notebooks ?? this.notebooks,
+      notes: notes ?? this.notes,
       loading: loading ?? this.loading,
     );
   }
@@ -58,7 +58,7 @@ class LibraryHomeViewModel extends Notifier<LibraryHomeState> {
   LibraryHomeState build() {
     final libraryIndex = ref.watch(libraryIndexProvider);
     return LibraryHomeState(
-      notebooks: libraryIndex.asData?.value.notebooks ?? const [],
+      notes: libraryIndex.asData?.value.notes ?? const [],
       loading: libraryIndex.isLoading,
     );
   }
@@ -82,8 +82,8 @@ class LibraryHomeViewModel extends Notifier<LibraryHomeState> {
     state = state.copyWith(selectionMode: !state.selectionMode);
   }
 
-  Future<NotebookItem> createNotebook() {
-    return ref.read(libraryIndexProvider.notifier).createNotebook();
+  Future<NoteItem> createNote() {
+    return ref.read(libraryIndexProvider.notifier).createNote();
   }
 }
 

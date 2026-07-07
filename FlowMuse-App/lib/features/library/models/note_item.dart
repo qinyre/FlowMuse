@@ -4,14 +4,14 @@ enum LibraryFilter { all, notes, pdf }
 
 enum LibraryViewMode { grid, list }
 
-class NotebookItem {
-  const NotebookItem({
+class NoteItem {
+  const NoteItem({
     required this.id,
     required this.title,
     required this.updatedAt,
     required this.kind,
     required this.coverColor,
-    this.folderId,
+    this.notebookId,
     this.tagIds = const [],
     this.subtitle,
   });
@@ -21,7 +21,7 @@ class NotebookItem {
   final DateTime updatedAt;
   final LibraryFilter kind;
   final Color coverColor;
-  final String? folderId;
+  final String? notebookId;
   final List<String> tagIds;
   final String? subtitle;
 

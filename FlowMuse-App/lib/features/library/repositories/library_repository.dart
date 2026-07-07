@@ -5,11 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-import '../models/notebook_item.dart';
+import '../models/note_item.dart';
 
 @immutable
-class LibraryFolder {
-  const LibraryFolder({
+class LibraryNotebook {
+  const LibraryNotebook({
     required this.id,
     required this.name,
     required this.coverColor,
@@ -23,8 +23,8 @@ class LibraryFolder {
     return {'id': id, 'name': name, 'coverColor': coverColor.toARGB32()};
   }
 
-  factory LibraryFolder.fromJson(Map<String, Object?> json) {
-    return LibraryFolder(
+  factory LibraryNotebook.fromJson(Map<String, Object?> json) {
+    return LibraryNotebook(
       id: json['id']! as String,
       name: json['name']! as String,
       coverColor: Color(json['coverColor']! as int),
@@ -60,47 +60,47 @@ class LibraryTag {
 @immutable
 class LibraryIndex {
   const LibraryIndex({
+    this.notes = const [],
     this.notebooks = const [],
-    this.folders = const [],
     this.tags = const [],
   });
 
-  final List<NotebookItem> notebooks;
-  final List<LibraryFolder> folders;
+  final List<NoteItem> notes;
+  final List<LibraryNotebook> notebooks;
   final List<LibraryTag> tags;
 
-  int get unfiledCount {
-    return notebooks.where((item) => item.folderId == null).length;
+  int get unnotebookedCount {
+    return notes.where((item) => item.notebookId == null).length;
   }
 
   int get untaggedCount {
-    return notebooks.where((item) => item.tagIds.isEmpty).length;
+    return notes.where((item) => item.tagIds.isEmpty).length;
   }
 
   Map<String, Object?> toJson() {
     return {
-      'notebooks': notebooks.map(_notebookToJson).toList(),
-      'folders': folders.map((item) => item.toJson()).toList(),
+      'notes': notes.map(_noteToJson).toList(),
+      'notebooks': notebooks.map((item) => item.toJson()).toList(),
       'tags': tags.map((item) => item.toJson()).toList(),
     };
   }
 
   factory LibraryIndex.fromJson(Map<String, Object?> json) {
     return LibraryIndex(
-      notebooks: _decodeList(json['notebooks'], _notebookFromJson),
-      folders: _decodeList(json['folders'], LibraryFolder.fromJson),
+      notes: _decodeList(json['notes'], _noteFromJson),
+      notebooks: _decodeList(json['notebooks'], LibraryNotebook.fromJson),
       tags: _decodeList(json['tags'], LibraryTag.fromJson),
     );
   }
 
   LibraryIndex copyWith({
-    List<NotebookItem>? notebooks,
-    List<LibraryFolder>? folders,
+    List<NoteItem>? notes,
+    List<LibraryNotebook>? notebooks,
     List<LibraryTag>? tags,
   }) {
     return LibraryIndex(
+      notes: notes ?? this.notes,
       notebooks: notebooks ?? this.notebooks,
-      folders: folders ?? this.folders,
       tags: tags ?? this.tags,
     );
   }
@@ -122,18 +122,18 @@ class LibraryIndex {
 abstract interface class LibraryRepository {
   Future<LibraryIndex> loadIndex();
 
-  Future<NotebookItem> createNotebook({
-    String? folderId,
+  Future<NoteItem> createNote({
+    String? notebookId,
     List<String> tagIds = const [],
   });
 
-  Future<void> ensureNotebook(String notebookId);
+  Future<void> ensureNote(String noteId);
 
-  Future<void> renameNotebook(String notebookId, String title);
+  Future<void> renameNote(String noteId, String title);
 
-  Future<void> touchNotebook(String notebookId);
+  Future<void> touchNote(String noteId);
 
-  Future<LibraryFolder> createFolder();
+  Future<LibraryNotebook> createNotebook();
 
   Future<LibraryTag> createTag();
 }
@@ -143,9 +143,9 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     Future<SharedPreferences> Function() preferences,
   ) : _preferences = preferences;
 
-  static const _key = 'flowmuse.library.index.v1';
+  static const _key = 'flowmuse.library.index.v2';
   static const _uuid = Uuid();
-  static const _defaultNotebookTitle = '未命名笔记';
+  static const _defaultNoteTitle = '未命名笔记';
 
   final Future<SharedPreferences> Function() _preferences;
 
@@ -161,59 +161,57 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
   }
 
   @override
-  Future<NotebookItem> createNotebook({
-    String? folderId,
+  Future<NoteItem> createNote({
+    String? notebookId,
     List<String> tagIds = const [],
   }) async {
     final now = DateTime.now();
-    final notebook = NotebookItem(
-      id: 'whiteboard-${_uuid.v4()}',
-      title: _defaultNotebookTitle,
+    final note = NoteItem(
+      id: 'note-${_uuid.v4()}',
+      title: _defaultNoteTitle,
       updatedAt: now,
       kind: LibraryFilter.notes,
-      coverColor:
-          _notebookColors[now.millisecondsSinceEpoch % _notebookColors.length],
-      folderId: folderId,
+      coverColor: _noteColors[now.millisecondsSinceEpoch % _noteColors.length],
+      notebookId: notebookId,
       tagIds: tagIds,
     );
     final index = await loadIndex();
-    await _saveIndex(index.copyWith(notebooks: [notebook, ...index.notebooks]));
-    return notebook;
+    await _saveIndex(index.copyWith(notes: [note, ...index.notes]));
+    return note;
   }
 
   @override
-  Future<void> ensureNotebook(String notebookId) async {
+  Future<void> ensureNote(String noteId) async {
     final index = await loadIndex();
-    if (index.notebooks.any((item) => item.id == notebookId)) {
+    if (index.notes.any((item) => item.id == noteId)) {
       return;
     }
     final now = DateTime.now();
-    final notebook = NotebookItem(
-      id: notebookId,
-      title: _defaultNotebookTitle,
+    final note = NoteItem(
+      id: noteId,
+      title: _defaultNoteTitle,
       updatedAt: now,
       kind: LibraryFilter.notes,
-      coverColor:
-          _notebookColors[now.millisecondsSinceEpoch % _notebookColors.length],
+      coverColor: _noteColors[now.millisecondsSinceEpoch % _noteColors.length],
     );
-    await _saveIndex(index.copyWith(notebooks: [notebook, ...index.notebooks]));
+    await _saveIndex(index.copyWith(notes: [note, ...index.notes]));
   }
 
   @override
-  Future<void> renameNotebook(String notebookId, String title) async {
+  Future<void> renameNote(String noteId, String title) async {
     final trimmed = title.trim();
     if (trimmed.isEmpty) {
       return;
     }
-    await _updateNotebook(
-      notebookId,
-      (item) => NotebookItem(
+    await _updateNote(
+      noteId,
+      (item) => NoteItem(
         id: item.id,
         title: trimmed,
         updatedAt: DateTime.now(),
         kind: item.kind,
         coverColor: item.coverColor,
-        folderId: item.folderId,
+        notebookId: item.notebookId,
         tagIds: item.tagIds,
         subtitle: item.subtitle,
       ),
@@ -221,16 +219,16 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
   }
 
   @override
-  Future<void> touchNotebook(String notebookId) async {
-    await _updateNotebook(
-      notebookId,
-      (item) => NotebookItem(
+  Future<void> touchNote(String noteId) async {
+    await _updateNote(
+      noteId,
+      (item) => NoteItem(
         id: item.id,
         title: item.title,
         updatedAt: DateTime.now(),
         kind: item.kind,
         coverColor: item.coverColor,
-        folderId: item.folderId,
+        notebookId: item.notebookId,
         tagIds: item.tagIds,
         subtitle: item.subtitle,
       ),
@@ -238,16 +236,16 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
   }
 
   @override
-  Future<LibraryFolder> createFolder() async {
+  Future<LibraryNotebook> createNotebook() async {
     final index = await loadIndex();
-    final nextIndex = index.folders.length + 1;
-    final folder = LibraryFolder(
-      id: 'folder-${_uuid.v4()}',
-      name: '新建文件夹 $nextIndex',
-      coverColor: _folderColors[(nextIndex - 1) % _folderColors.length],
+    final nextIndex = index.notebooks.length + 1;
+    final notebook = LibraryNotebook(
+      id: 'notebook-${_uuid.v4()}',
+      name: '新建笔记本 $nextIndex',
+      coverColor: _notebookColors[(nextIndex - 1) % _notebookColors.length],
     );
-    await _saveIndex(index.copyWith(folders: [...index.folders, folder]));
-    return folder;
+    await _saveIndex(index.copyWith(notebooks: [...index.notebooks, notebook]));
+    return notebook;
   }
 
   @override
@@ -263,17 +261,17 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     return tag;
   }
 
-  Future<void> _updateNotebook(
-    String notebookId,
-    NotebookItem Function(NotebookItem item) update,
+  Future<void> _updateNote(
+    String noteId,
+    NoteItem Function(NoteItem item) update,
   ) async {
-    await ensureNotebook(notebookId);
+    await ensureNote(noteId);
     final index = await loadIndex();
     await _saveIndex(
       index.copyWith(
-        notebooks: [
-          for (final item in index.notebooks)
-            if (item.id == notebookId) update(item) else item,
+        notes: [
+          for (final item in index.notes)
+            if (item.id == noteId) update(item) else item,
         ],
       ),
     );
@@ -294,35 +292,35 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     return _repository.loadIndex();
   }
 
-  Future<NotebookItem> createNotebook({
-    String? folderId,
+  Future<NoteItem> createNote({
+    String? notebookId,
     List<String> tagIds = const [],
   }) async {
-    final notebook = await _repository.createNotebook(
-      folderId: folderId,
+    final note = await _repository.createNote(
+      notebookId: notebookId,
       tagIds: tagIds,
     );
     await refresh();
-    return notebook;
+    return note;
   }
 
-  Future<void> ensureNotebook(String notebookId) async {
-    await _repository.ensureNotebook(notebookId);
+  Future<void> ensureNote(String noteId) async {
+    await _repository.ensureNote(noteId);
     await refresh();
   }
 
-  Future<void> renameNotebook(String notebookId, String title) async {
-    await _repository.renameNotebook(notebookId, title);
+  Future<void> renameNote(String noteId, String title) async {
+    await _repository.renameNote(noteId, title);
     await refresh();
   }
 
-  Future<void> touchNotebook(String notebookId) async {
-    await _repository.touchNotebook(notebookId);
+  Future<void> touchNote(String noteId) async {
+    await _repository.touchNote(noteId);
     await refresh();
   }
 
-  Future<void> createFolder() async {
-    await _repository.createFolder();
+  Future<void> createNotebook() async {
+    await _repository.createNotebook();
     await refresh();
   }
 
@@ -346,33 +344,33 @@ final libraryIndexProvider =
       LibraryIndexNotifier.new,
     );
 
-Map<String, Object?> _notebookToJson(NotebookItem item) {
+Map<String, Object?> _noteToJson(NoteItem item) {
   return {
     'id': item.id,
     'title': item.title,
     'updatedAt': item.updatedAt.toIso8601String(),
     'kind': item.kind.name,
     'coverColor': item.coverColor.toARGB32(),
-    'folderId': item.folderId,
+    'notebookId': item.notebookId,
     'tagIds': item.tagIds,
     'subtitle': item.subtitle,
   };
 }
 
-NotebookItem _notebookFromJson(Map<String, Object?> json) {
-  return NotebookItem(
+NoteItem _noteFromJson(Map<String, Object?> json) {
+  return NoteItem(
     id: json['id']! as String,
     title: json['title']! as String,
     updatedAt: DateTime.parse(json['updatedAt']! as String),
     kind: LibraryFilter.values.byName(json['kind']! as String),
     coverColor: Color(json['coverColor']! as int),
-    folderId: json['folderId'] as String?,
+    notebookId: json['notebookId'] as String?,
     tagIds: (json['tagIds'] as List? ?? const []).whereType<String>().toList(),
     subtitle: json['subtitle'] as String?,
   );
 }
 
-const _notebookColors = [
+const _noteColors = [
   Color(0xFF8DB6C9),
   Color(0xFFD9B48F),
   Color(0xFF2E5872),
@@ -382,7 +380,7 @@ const _notebookColors = [
   Color(0xFF9CA2E6),
 ];
 
-const _folderColors = [
+const _notebookColors = [
   Color(0xFF8DB6C9),
   Color(0xFFD9B48F),
   Color(0xFF8CBDB5),

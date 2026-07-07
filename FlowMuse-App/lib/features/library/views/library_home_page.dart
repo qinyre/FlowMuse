@@ -3,15 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_router.dart';
-import '../models/notebook_item.dart';
+import '../models/note_item.dart';
 import '../view_models/library_home_view_model.dart';
 import '../widgets/library_content.dart';
 
 class LibraryHomePage extends ConsumerWidget {
   const LibraryHomePage({super.key});
 
-  void _openWhiteboard(BuildContext context, {required String notebookId}) {
-    context.push(AppRoutes.whiteboardPath(notebookId: notebookId));
+  void _openWhiteboard(BuildContext context, {required String noteId}) {
+    context.push(AppRoutes.whiteboardPath(noteId: noteId));
   }
 
   @override
@@ -30,13 +30,13 @@ class LibraryHomePage extends ConsumerWidget {
           onSortDirectionChanged: viewModel.toggleSortDirection,
           onSelectionModeChanged: viewModel.toggleSelectionMode,
           onCreate: () async {
-            final notebook = await viewModel.createNotebook();
+            final note = await viewModel.createNote();
             if (context.mounted) {
-              _openWhiteboard(context, notebookId: notebook.id);
+              _openWhiteboard(context, noteId: note.id);
             }
           },
-          onOpenNotebook: (NotebookItem item) {
-            _openWhiteboard(context, notebookId: item.id);
+          onOpenNote: (NoteItem item) {
+            _openWhiteboard(context, noteId: item.id);
           },
         );
       },

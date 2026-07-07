@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../models/notebook_item.dart';
-import '../view_models/library_home_view_model.dart';
 import '../../../shared/widgets/app_spacing.dart';
-import 'create_notebook_card.dart';
-import 'notebook_card.dart';
+import '../models/note_item.dart';
+import '../view_models/library_home_view_model.dart';
+import 'create_note_card.dart';
+import 'note_card.dart';
 
 class LibraryContent extends StatelessWidget {
   const LibraryContent({
@@ -17,7 +17,7 @@ class LibraryContent extends StatelessWidget {
     required this.onSortDirectionChanged,
     required this.onSelectionModeChanged,
     required this.onCreate,
-    required this.onOpenNotebook,
+    required this.onOpenNote,
   });
 
   final bool compact;
@@ -27,7 +27,7 @@ class LibraryContent extends StatelessWidget {
   final VoidCallback onSortDirectionChanged;
   final VoidCallback onSelectionModeChanged;
   final VoidCallback onCreate;
-  final ValueChanged<NotebookItem> onOpenNotebook;
+  final ValueChanged<NoteItem> onOpenNote;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +57,7 @@ class LibraryContent extends StatelessWidget {
               compact: compact,
               onFilterChanged: onFilterChanged,
               onCreate: onCreate,
-              onOpenNotebook: onOpenNotebook,
+              onOpenNote: onOpenNote,
             ),
           ),
         ],
@@ -134,14 +134,14 @@ class _LibraryItems extends StatelessWidget {
     required this.compact,
     required this.onFilterChanged,
     required this.onCreate,
-    required this.onOpenNotebook,
+    required this.onOpenNote,
   });
 
   final LibraryHomeState state;
   final bool compact;
   final ValueChanged<LibraryFilter> onFilterChanged;
   final VoidCallback onCreate;
-  final ValueChanged<NotebookItem> onOpenNotebook;
+  final ValueChanged<NoteItem> onOpenNote;
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +159,7 @@ class _LibraryItems extends StatelessWidget {
       state: state,
       compact: compact,
       onCreate: onCreate,
-      onOpenNotebook: onOpenNotebook,
+      onOpenNote: onOpenNote,
     );
 
     return GestureDetector(
@@ -181,41 +181,41 @@ class _LibraryItemsContent extends StatelessWidget {
     required this.state,
     required this.compact,
     required this.onCreate,
-    required this.onOpenNotebook,
+    required this.onOpenNote,
   });
 
   final LibraryHomeState state;
   final bool compact;
   final VoidCallback onCreate;
-  final ValueChanged<NotebookItem> onOpenNotebook;
+  final ValueChanged<NoteItem> onOpenNote;
 
   @override
   Widget build(BuildContext context) {
     if (state.viewMode == LibraryViewMode.list) {
       return ListView.separated(
-        itemCount: state.visibleNotebooks.length + 1,
+        itemCount: state.visibleNotes.length + 1,
         separatorBuilder: (context, index) =>
             const SizedBox(height: AppSpacing.listGap),
         itemBuilder: (context, index) {
           if (index == 0) {
-            return _CreateNotebookTile(onTap: onCreate);
+            return _CreateNoteTile(onTap: onCreate);
           }
-          final item = state.visibleNotebooks[index - 1];
-          return _NotebookTile(
+          final item = state.visibleNotes[index - 1];
+          return _NoteTile(
             item: item,
             selectionMode: state.selectionMode,
-            onTap: () => onOpenNotebook(item),
+            onTap: () => onOpenNote(item),
           );
         },
       );
     }
 
-    if (state.visibleNotebooks.isEmpty) {
+    if (state.visibleNotes.isEmpty) {
       return _EmptyLibrary(onCreate: onCreate);
     }
 
     return GridView.builder(
-      itemCount: state.visibleNotebooks.length + 1,
+      itemCount: state.visibleNotes.length + 1,
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 218,
         mainAxisExtent: 276,
@@ -228,16 +228,13 @@ class _LibraryItemsContent extends StatelessWidget {
       ),
       itemBuilder: (context, index) {
         if (index == 0) {
-          return CreateNotebookCard(onTap: onCreate);
+          return CreateNoteCard(onTap: onCreate);
         }
-        final item = state.visibleNotebooks[index - 1];
+        final item = state.visibleNotes[index - 1];
         return Stack(
           children: [
             Positioned.fill(
-              child: NotebookCard(
-                item: item,
-                onTap: () => onOpenNotebook(item),
-              ),
+              child: NoteCard(item: item, onTap: () => onOpenNote(item)),
             ),
             if (state.selectionMode)
               const Positioned(
@@ -252,8 +249,8 @@ class _LibraryItemsContent extends StatelessWidget {
   }
 }
 
-class _CreateNotebookTile extends StatelessWidget {
-  const _CreateNotebookTile({required this.onTap});
+class _CreateNoteTile extends StatelessWidget {
+  const _CreateNoteTile({required this.onTap});
 
   final VoidCallback onTap;
 
@@ -261,7 +258,7 @@ class _CreateNotebookTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card.outlined(
       child: ListTile(
-        key: const ValueKey('create-notebook-list-tile'),
+        key: const ValueKey('create-note-list-tile'),
         leading: const Icon(LucideIcons.plus),
         title: const Text('新建'),
         subtitle: const Text('创建快捷笔记'),
@@ -271,14 +268,14 @@ class _CreateNotebookTile extends StatelessWidget {
   }
 }
 
-class _NotebookTile extends StatelessWidget {
-  const _NotebookTile({
+class _NoteTile extends StatelessWidget {
+  const _NoteTile({
     required this.item,
     required this.selectionMode,
     required this.onTap,
   });
 
-  final NotebookItem item;
+  final NoteItem item;
   final bool selectionMode;
   final VoidCallback onTap;
 
@@ -288,11 +285,7 @@ class _NotebookTile extends StatelessWidget {
       child: ListTile(
         leading: ClipRRect(
           borderRadius: BorderRadius.circular(6),
-          child: SizedBox(
-            width: 48,
-            height: 58,
-            child: NotebookCover(item: item),
-          ),
+          child: SizedBox(width: 48, height: 58, child: NoteCover(item: item)),
         ),
         title: Text(item.title),
         subtitle: Text(item.date),

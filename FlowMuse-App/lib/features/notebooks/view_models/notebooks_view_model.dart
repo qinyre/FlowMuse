@@ -1,42 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../library/models/notebook_item.dart';
+import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
 
 @immutable
-class FolderItem {
-  const FolderItem({
+class NotebookCollectionItem {
+  const NotebookCollectionItem({
     required this.id,
     required this.name,
     required this.count,
     required this.coverColor,
-    this.notebookIds = const [],
+    this.noteIds = const [],
   });
 
   final String id;
   final String name;
   final int count;
   final Color coverColor;
-  final List<String> notebookIds;
+  final List<String> noteIds;
 }
 
 @immutable
-class FoldersState {
-  const FoldersState({
-    this.folders = const [],
+class NotebooksState {
+  const NotebooksState({
+    this.notebooks = const [],
     this.viewMode = LibraryViewMode.grid,
     this.sortAscending = true,
     this.selectionMode = false,
   });
 
-  final List<FolderItem> folders;
+  final List<NotebookCollectionItem> notebooks;
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
 
-  List<FolderItem> get visibleFolders {
-    final sorted = folders.toList()
+  List<NotebookCollectionItem> get visibleNotebooks {
+    final sorted = notebooks.toList()
       ..sort((a, b) {
         final result = a.name.compareTo(b.name);
         return sortAscending ? result : -result;
@@ -44,14 +44,14 @@ class FoldersState {
     return sorted;
   }
 
-  FoldersState copyWith({
-    List<FolderItem>? folders,
+  NotebooksState copyWith({
+    List<NotebookCollectionItem>? notebooks,
     LibraryViewMode? viewMode,
     bool? sortAscending,
     bool? selectionMode,
   }) {
-    return FoldersState(
-      folders: folders ?? this.folders,
+    return NotebooksState(
+      notebooks: notebooks ?? this.notebooks,
       viewMode: viewMode ?? this.viewMode,
       sortAscending: sortAscending ?? this.sortAscending,
       selectionMode: selectionMode ?? this.selectionMode,
@@ -59,32 +59,32 @@ class FoldersState {
   }
 }
 
-class FoldersViewModel extends Notifier<FoldersState> {
+class NotebooksViewModel extends Notifier<NotebooksState> {
   @override
-  FoldersState build() {
+  NotebooksState build() {
     final index = ref.watch(libraryIndexProvider).asData?.value;
-    final folders = index == null
-        ? const <FolderItem>[]
+    final notebooks = index == null
+        ? const <NotebookCollectionItem>[]
         : [
-            for (final folder in index.folders)
-              FolderItem(
-                id: folder.id,
-                name: folder.name,
-                count: index.notebooks
-                    .where((item) => item.folderId == folder.id)
+            for (final notebook in index.notebooks)
+              NotebookCollectionItem(
+                id: notebook.id,
+                name: notebook.name,
+                count: index.notes
+                    .where((item) => item.notebookId == notebook.id)
                     .length,
-                coverColor: folder.coverColor,
-                notebookIds: [
-                  for (final notebook in index.notebooks)
-                    if (notebook.folderId == folder.id) notebook.id,
+                coverColor: notebook.coverColor,
+                noteIds: [
+                  for (final note in index.notes)
+                    if (note.notebookId == notebook.id) note.id,
                 ],
               ),
           ];
-    return FoldersState(folders: folders);
+    return NotebooksState(notebooks: notebooks);
   }
 
-  Future<void> createFolder() {
-    return ref.read(libraryIndexProvider.notifier).createFolder();
+  Future<void> createNotebook() {
+    return ref.read(libraryIndexProvider.notifier).createNotebook();
   }
 
   void changeViewMode(LibraryViewMode viewMode) {
@@ -100,5 +100,7 @@ class FoldersViewModel extends Notifier<FoldersState> {
   }
 }
 
-final foldersViewModelProvider =
-    NotifierProvider<FoldersViewModel, FoldersState>(FoldersViewModel.new);
+final notebooksViewModelProvider =
+    NotifierProvider<NotebooksViewModel, NotebooksState>(
+      NotebooksViewModel.new,
+    );
