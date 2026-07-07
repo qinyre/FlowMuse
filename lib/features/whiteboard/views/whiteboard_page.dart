@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:markdraw/markdraw.dart'
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide Element, SelectionOverlay, TextAlign;
 
 import '../view_models/whiteboard_view_model.dart';
@@ -101,9 +101,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
                   controller: _markdrawController,
                   config: const MarkdrawEditorConfig(
                     initialBackground: '#fdfdfb',
-                    showMenu: false,
-                    showMarkdownButton: false,
-                    showLibraryPanel: false,
                   ),
                   onSceneChanged: (_) {
                     unawaited(_saveMarkdrawScene());

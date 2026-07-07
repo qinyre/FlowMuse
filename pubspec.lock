@@ -106,7 +106,7 @@ packages:
     source: hosted
     version: "0.3.5+4"
   crypto:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: crypto
       sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
@@ -138,7 +138,7 @@ packages:
     source: hosted
     version: "7.0.3"
   equatable:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: equatable
       sha256: "3bce007a596ff8b3119c45d68aaef631272537c03d30e5d4534dd24bf4c5eaa2"
@@ -170,7 +170,7 @@ packages:
     source: hosted
     version: "7.0.1"
   file_picker:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: file_picker
       sha256: ab13ae8ef5580a411c458d6207b6774a6c237d77ac37011b13994879f68a8810
@@ -233,7 +233,7 @@ packages:
     source: sdk
     version: "0.0.0"
   freezed_annotation:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: freezed_annotation
       sha256: c2e2d632dd9b8a2b7751117abcfc2b4888ecfe181bd9fca7170d9ef02e595fe2
@@ -265,7 +265,7 @@ packages:
     source: hosted
     version: "17.3.0"
   google_fonts:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: google_fonts
       sha256: ba03d03bcaa2f6cb7bd920e3b5027181db75ab524f8891c8bc3aa603885b8055
@@ -416,13 +416,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.1.14+2"
-  markdraw:
-    dependency: "direct main"
-    description:
-      path: "../markdraw"
-      relative: true
-    source: path
-    version: "0.2.0"
   matcher:
     dependency: transitive
     description:
@@ -440,7 +433,7 @@ packages:
     source: hosted
     version: "0.13.0"
   material_symbols_icons:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: material_symbols_icons
       sha256: "49c532dd0b74544e9d8d93ec0f821d52ec532e7c9263c889ebe71b1be4f34ba7"
@@ -584,7 +577,7 @@ packages:
     source: hosted
     version: "2.2.0"
   re_editor:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: re_editor
       sha256: dd4e6ca7350a8fa0cda4e425b82a0c3c010f0f6b3f618c74223e05b8129ab629
@@ -592,7 +585,7 @@ packages:
     source: hosted
     version: "0.8.0"
   re_highlight:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: re_highlight
       sha256: "6c4ac3f76f939fb7ca9df013df98526634e17d8f7460e028bd23a035870024f2"
@@ -616,7 +609,7 @@ packages:
     source: hosted
     version: "3.3.2"
   rough_flutter:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: rough_flutter
       sha256: "0828b3c81e475aee2308154d05ed87e671661dfc237aac04dc972b0f9b22016b"
@@ -773,7 +766,7 @@ packages:
     source: hosted
     version: "1.4.1"
   super_clipboard:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: super_clipboard
       sha256: e73f3bb7e66cc9260efa1dc507f979138e7e106c3521e2dda2d0311f6d728a16
@@ -829,7 +822,7 @@ packages:
     source: hosted
     version: "1.4.0"
   url_launcher:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: url_launcher
       sha256: f6a7e5c4835bb4e3026a04793a4199ca2d14c739ec378fdfe23fc8075d0439f8
@@ -893,7 +886,7 @@ packages:
     source: hosted
     version: "3.1.5"
   uuid:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: uuid
       sha256: "1fef9e8e11e2991bb773070d4656b7bd5d850967a2456cfc83cf47925ba79489"
@@ -925,7 +918,7 @@ packages:
     source: hosted
     version: "1.2.1"
   web:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: web
       sha256: "868d88a33d8a87b18ffc05f9f030ba328ffefba92d6c127917a2ba740f9cfe4a"
