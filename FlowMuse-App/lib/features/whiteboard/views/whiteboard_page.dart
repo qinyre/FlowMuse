@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide Element, SelectionOverlay, TextAlign;
 
+import '../../library/repositories/library_repository.dart';
 import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
 import '../collaboration/models/excalidraw_scene.dart';
@@ -12,10 +13,7 @@ import '../collaboration/repositories/collaboration_repository.dart';
 import '../view_models/whiteboard_view_model.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
-  const WhiteboardPage({
-    super.key,
-    required this.notebookId,
-  });
+  const WhiteboardPage({super.key, required this.notebookId});
 
   final String notebookId;
 
@@ -59,6 +57,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
   Future<void> _openNotebook() async {
     await ref
+        .read(libraryIndexProvider.notifier)
+        .ensureNotebook(widget.notebookId);
+    await ref
         .read(whiteboardViewModelProvider.notifier)
         .openNotebook(notebookId: widget.notebookId);
     final repository = ref.read(whiteboardSceneRepositoryProvider);
@@ -89,6 +90,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       format: DocumentFormat.excalidraw,
     );
     await repository.saveScene(widget.notebookId, content);
+    await ref
+        .read(libraryIndexProvider.notifier)
+        .touchNotebook(widget.notebookId);
     await _broadcastCurrentScene(serializedScene: content);
     if (!mounted) {
       return;
@@ -96,11 +100,24 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     viewModel.markSaved();
   }
 
+  Future<void> _renameAndSaveDocument() async {
+    final title = _markdrawController.documentName?.trim();
+    if (title != null && title.isNotEmpty) {
+      await ref
+          .read(libraryIndexProvider.notifier)
+          .renameNotebook(widget.notebookId, title);
+    }
+    await _saveMarkdrawScene();
+  }
+
   Future<void> _startCollaboration() async {
     final scene = _currentScene();
     await ref
         .read(whiteboardViewModelProvider.notifier)
-        .startCollaboration(initialElements: scene.elements, files: scene.files);
+        .startCollaboration(
+          initialElements: scene.elements,
+          files: scene.files,
+        );
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
       return;
@@ -222,6 +239,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
     final repository = ref.read(whiteboardSceneRepositoryProvider);
     await repository.saveScene(widget.notebookId, nextContent);
+    await ref
+        .read(libraryIndexProvider.notifier)
+        .touchNotebook(widget.notebookId);
     if (mounted) {
       ref.read(whiteboardViewModelProvider.notifier).markSaved();
     }
@@ -274,7 +294,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             onStartCollaboration: _startCollaboration,
             onStopCollaboration: _stopCollaboration,
             onDocumentRenamed: () {
-              unawaited(_saveMarkdrawScene());
+              unawaited(_renameAndSaveDocument());
             },
             onSceneChanged: (_) {
               unawaited(_saveMarkdrawScene());

@@ -10,10 +10,7 @@ import '../widgets/library_content.dart';
 class LibraryHomePage extends ConsumerWidget {
   const LibraryHomePage({super.key});
 
-  void _openWhiteboard(
-    BuildContext context, {
-    String notebookId = 'whiteboard-new',
-  }) {
+  void _openWhiteboard(BuildContext context, {required String notebookId}) {
     context.push(AppRoutes.whiteboardPath(notebookId: notebookId));
   }
 
@@ -32,7 +29,12 @@ class LibraryHomePage extends ConsumerWidget {
           onViewModeChanged: viewModel.changeViewMode,
           onSortDirectionChanged: viewModel.toggleSortDirection,
           onSelectionModeChanged: viewModel.toggleSelectionMode,
-          onCreate: () => _openWhiteboard(context),
+          onCreate: () async {
+            final notebook = await viewModel.createNotebook();
+            if (context.mounted) {
+              _openWhiteboard(context, notebookId: notebook.id);
+            }
+          },
           onOpenNotebook: (NotebookItem item) {
             _openWhiteboard(context, notebookId: item.id);
           },

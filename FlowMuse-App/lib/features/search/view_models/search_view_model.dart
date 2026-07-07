@@ -3,21 +3,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 @immutable
 class SearchState {
-  const SearchState({
-    this.query = '',
-    this.folderScope = '尚未选择文件夹',
-    this.tagScope = '尚未选择标签',
-  });
+  const SearchState({this.query = '', this.folderScopeId, this.tagScopeId});
 
   final String query;
-  final String folderScope;
-  final String tagScope;
+  final String? folderScopeId;
+  final String? tagScopeId;
 
-  SearchState copyWith({String? query, String? folderScope, String? tagScope}) {
+  SearchState copyWith({
+    String? query,
+    String? folderScopeId,
+    String? tagScopeId,
+    bool clearFolderScope = false,
+    bool clearTagScope = false,
+  }) {
     return SearchState(
       query: query ?? this.query,
-      folderScope: folderScope ?? this.folderScope,
-      tagScope: tagScope ?? this.tagScope,
+      folderScopeId: clearFolderScope
+          ? null
+          : folderScopeId ?? this.folderScopeId,
+      tagScopeId: clearTagScope ? null : tagScopeId ?? this.tagScopeId,
     );
   }
 }
@@ -32,12 +36,18 @@ class SearchViewModel extends Notifier<SearchState> {
     state = state.copyWith(query: query);
   }
 
-  void selectFolderScope(String folderScope) {
-    state = state.copyWith(folderScope: folderScope);
+  void selectFolderScope(String? folderScopeId) {
+    state = state.copyWith(
+      folderScopeId: folderScopeId,
+      clearFolderScope: folderScopeId == null,
+    );
   }
 
-  void selectTagScope(String tagScope) {
-    state = state.copyWith(tagScope: tagScope);
+  void selectTagScope(String? tagScopeId) {
+    state = state.copyWith(
+      tagScopeId: tagScopeId,
+      clearTagScope: tagScopeId == null,
+    );
   }
 }
 

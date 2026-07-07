@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../library/models/notebook_item.dart';
+import '../../library/repositories/library_repository.dart';
 
 @immutable
 class FolderItem {
@@ -61,22 +62,29 @@ class FoldersState {
 class FoldersViewModel extends Notifier<FoldersState> {
   @override
   FoldersState build() {
-    return const FoldersState();
+    final index = ref.watch(libraryIndexProvider).asData?.value;
+    final folders = index == null
+        ? const <FolderItem>[]
+        : [
+            for (final folder in index.folders)
+              FolderItem(
+                id: folder.id,
+                name: folder.name,
+                count: index.notebooks
+                    .where((item) => item.folderId == folder.id)
+                    .length,
+                coverColor: folder.coverColor,
+                notebookIds: [
+                  for (final notebook in index.notebooks)
+                    if (notebook.folderId == folder.id) notebook.id,
+                ],
+              ),
+          ];
+    return FoldersState(folders: folders);
   }
 
-  void createFolder() {
-    final nextIndex = state.folders.length + 1;
-    state = state.copyWith(
-      folders: [
-        ...state.folders,
-        FolderItem(
-          id: 'folder-$nextIndex',
-          name: '新建文件夹 $nextIndex',
-          count: 0,
-          coverColor: _folderColors[(nextIndex - 1) % _folderColors.length],
-        ),
-      ],
-    );
+  Future<void> createFolder() {
+    return ref.read(libraryIndexProvider.notifier).createFolder();
   }
 
   void changeViewMode(LibraryViewMode viewMode) {
@@ -94,10 +102,3 @@ class FoldersViewModel extends Notifier<FoldersState> {
 
 final foldersViewModelProvider =
     NotifierProvider<FoldersViewModel, FoldersState>(FoldersViewModel.new);
-
-const _folderColors = [
-  Color(0xFF8DB6C9),
-  Color(0xFFD9B48F),
-  Color(0xFF8CBDB5),
-  Color(0xFF9CA2E6),
-];

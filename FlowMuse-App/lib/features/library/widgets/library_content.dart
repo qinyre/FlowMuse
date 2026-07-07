@@ -210,6 +210,10 @@ class _LibraryItemsContent extends StatelessWidget {
       );
     }
 
+    if (state.visibleNotebooks.isEmpty) {
+      return _EmptyLibrary(onCreate: onCreate);
+    }
+
     return GridView.builder(
       itemCount: state.visibleNotebooks.length + 1,
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
@@ -363,12 +367,6 @@ class _LibraryHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        if (compact)
-          IconButton(
-            tooltip: '菜单',
-            onPressed: () {},
-            icon: const Icon(LucideIcons.menu),
-          ),
         Text(
           '全部笔记',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -423,6 +421,55 @@ class _LibraryHeader extends StatelessWidget {
           selectedIcon: const Icon(LucideIcons.checkSquare),
         ),
       ],
+    );
+  }
+}
+
+class _EmptyLibrary extends StatelessWidget {
+  const _EmptyLibrary({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              LucideIcons.bookOpen,
+              size: 42,
+              color: colorScheme.primary.withValues(alpha: 0.62),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              '还没有笔记',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: const Color(0xFF1F2624),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '新建第一块白板后，这里会显示真实保存的笔记。',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF8F9B96)),
+            ),
+            const SizedBox(height: 22),
+            FilledButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(LucideIcons.plus),
+              label: const Text('新建笔记'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

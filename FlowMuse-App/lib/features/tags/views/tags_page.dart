@@ -6,7 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../library/models/notebook_item.dart';
-import '../../library/view_models/library_home_view_model.dart';
+import '../../library/repositories/library_repository.dart';
 import '../../library/widgets/create_notebook_card.dart';
 import '../../library/widgets/notebook_card.dart';
 import '../view_models/tags_view_model.dart';
@@ -38,10 +38,7 @@ class TagDetailPage extends ConsumerWidget {
 
   final String tagId;
 
-  void _openWhiteboard(
-    BuildContext context, {
-    String notebookId = 'whiteboard-new',
-  }) {
+  void _openWhiteboard(BuildContext context, {required String notebookId}) {
     context.push(AppRoutes.whiteboardPath(notebookId: notebookId));
   }
 
@@ -49,24 +46,39 @@ class TagDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(tagsViewModelProvider);
     final tag = _findTag(state.tags, tagId);
-    final notebooks = tag == null
-        ? const <NotebookItem>[]
-        : sampleNotebooks
-              .where((item) => tag.notebookIds.contains(item.id))
-              .toList();
+    final libraryIndex = ref.watch(libraryIndexProvider).asData?.value;
+    final notebooks =
+        libraryIndex?.notebooks
+            .where((item) => item.tagIds.contains(tagId))
+            .toList() ??
+        const <NotebookItem>[];
 
     return _TagPageFrame(
       title: tag?.name ?? '标签',
       viewMode: LibraryViewMode.grid,
       sortAscending: false,
       selectionMode: false,
-      onCreate: () => _openWhiteboard(context),
+      onCreate: () async {
+        final notebook = await ref
+            .read(libraryIndexProvider.notifier)
+            .createNotebook(tagIds: [tagId]);
+        if (context.mounted) {
+          _openWhiteboard(context, notebookId: notebook.id);
+        }
+      },
       onViewModeChanged: null,
       onSortDirectionChanged: null,
       onSelectionModeChanged: null,
       child: _NotebookItems(
         notebooks: notebooks,
-        onCreate: () => _openWhiteboard(context),
+        onCreate: () async {
+          final notebook = await ref
+              .read(libraryIndexProvider.notifier)
+              .createNotebook(tagIds: [tagId]);
+          if (context.mounted) {
+            _openWhiteboard(context, notebookId: notebook.id);
+          }
+        },
         onOpenNotebook: (item) {
           _openWhiteboard(context, notebookId: item.id);
         },

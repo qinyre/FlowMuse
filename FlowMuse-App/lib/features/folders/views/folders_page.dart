@@ -6,7 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../library/models/notebook_item.dart';
-import '../../library/view_models/library_home_view_model.dart';
+import '../../library/repositories/library_repository.dart';
 import '../../library/widgets/create_notebook_card.dart';
 import '../../library/widgets/notebook_card.dart';
 import '../view_models/folders_view_model.dart';
@@ -40,10 +40,7 @@ class FolderDetailPage extends ConsumerWidget {
 
   final String folderId;
 
-  void _openWhiteboard(
-    BuildContext context, {
-    String notebookId = 'whiteboard-new',
-  }) {
+  void _openWhiteboard(BuildContext context, {required String notebookId}) {
     context.push(AppRoutes.whiteboardPath(notebookId: notebookId));
   }
 
@@ -51,11 +48,12 @@ class FolderDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(foldersViewModelProvider);
     final folder = _findFolder(state.folders, folderId);
-    final notebooks = folder == null
-        ? const <NotebookItem>[]
-        : sampleNotebooks
-              .where((item) => folder.notebookIds.contains(item.id))
-              .toList();
+    final libraryIndex = ref.watch(libraryIndexProvider).asData?.value;
+    final notebooks =
+        libraryIndex?.notebooks
+            .where((item) => item.folderId == folderId)
+            .toList() ??
+        const <NotebookItem>[];
 
     return _CollectionPage(
       title: folder?.name ?? '文件夹',
@@ -64,13 +62,27 @@ class FolderDetailPage extends ConsumerWidget {
       selectionMode: false,
       createTooltip: '新建笔记',
       createIcon: LucideIcons.plus,
-      onCreate: () => _openWhiteboard(context),
+      onCreate: () async {
+        final notebook = await ref
+            .read(libraryIndexProvider.notifier)
+            .createNotebook(folderId: folderId);
+        if (context.mounted) {
+          _openWhiteboard(context, notebookId: notebook.id);
+        }
+      },
       onViewModeChanged: null,
       onSortDirectionChanged: null,
       onSelectionModeChanged: null,
       child: _NotebookItems(
         notebooks: notebooks,
-        onCreate: () => _openWhiteboard(context),
+        onCreate: () async {
+          final notebook = await ref
+              .read(libraryIndexProvider.notifier)
+              .createNotebook(folderId: folderId);
+          if (context.mounted) {
+            _openWhiteboard(context, notebookId: notebook.id);
+          }
+        },
         onOpenNotebook: (item) {
           _openWhiteboard(context, notebookId: item.id);
         },

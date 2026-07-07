@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
+import '../repositories/library_repository.dart';
 import '../../folders/view_models/folders_view_model.dart';
 import '../../tags/view_models/tags_view_model.dart';
 
@@ -27,17 +28,13 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
   Widget build(BuildContext context) {
     final folders = ref.watch(foldersViewModelProvider).visibleFolders;
     final tags = ref.watch(tagsViewModelProvider).tags;
+    final libraryIndex = ref.watch(libraryIndexProvider).asData?.value;
     final hasFolders = folders.isNotEmpty;
     final hasTags = tags.isNotEmpty;
 
     return SharedSidebar(
       header: SharedSidebarHeader(
         trailing: [
-          SharedSidebarIconButton(
-            tooltip: '侧边栏',
-            onPressed: () {},
-            icon: const Icon(LucideIcons.panelLeft),
-          ),
           SharedSidebarIconButton(
             tooltip: '设置',
             onPressed: () => context.go(AppRoutes.settings),
@@ -71,19 +68,19 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeOutCubic,
               child: _allNotesExpanded
-                  ? const Column(
+                  ? Column(
                       key: ValueKey('all-notes-children'),
                       children: [
                         SharedSidebarItem(
                           icon: LucideIcons.folderX,
                           label: '未分类',
-                          count: '10',
+                          count: (libraryIndex?.unfiledCount ?? 0).toString(),
                           level: 1,
                         ),
                         SharedSidebarItem(
                           icon: LucideIcons.tags,
                           label: '未标签',
-                          count: '10',
+                          count: (libraryIndex?.untaggedCount ?? 0).toString(),
                           level: 1,
                         ),
                       ],

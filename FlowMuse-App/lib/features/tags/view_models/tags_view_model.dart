@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../library/models/notebook_item.dart';
+import '../../library/repositories/library_repository.dart';
 
 @immutable
 class TagItem {
@@ -61,22 +62,29 @@ class TagsState {
 class TagsViewModel extends Notifier<TagsState> {
   @override
   TagsState build() {
-    return const TagsState();
+    final index = ref.watch(libraryIndexProvider).asData?.value;
+    final tags = index == null
+        ? const <TagItem>[]
+        : [
+            for (final tag in index.tags)
+              TagItem(
+                id: tag.id,
+                name: tag.name,
+                count: index.notebooks
+                    .where((item) => item.tagIds.contains(tag.id))
+                    .length,
+                coverColor: tag.coverColor,
+                notebookIds: [
+                  for (final notebook in index.notebooks)
+                    if (notebook.tagIds.contains(tag.id)) notebook.id,
+                ],
+              ),
+          ];
+    return TagsState(tags: tags);
   }
 
-  void createTag() {
-    final nextIndex = state.tags.length + 1;
-    state = state.copyWith(
-      tags: [
-        ...state.tags,
-        TagItem(
-          id: 'tag-$nextIndex',
-          name: '新建标签 $nextIndex',
-          count: 0,
-          coverColor: _tagColors[(nextIndex - 1) % _tagColors.length],
-        ),
-      ],
-    );
+  Future<void> createTag() {
+    return ref.read(libraryIndexProvider.notifier).createTag();
   }
 
   void changeViewMode(LibraryViewMode viewMode) {
@@ -95,10 +103,3 @@ class TagsViewModel extends Notifier<TagsState> {
 final tagsViewModelProvider = NotifierProvider<TagsViewModel, TagsState>(
   TagsViewModel.new,
 );
-
-const _tagColors = [
-  Color(0xFF8CBDB5),
-  Color(0xFFE9993F),
-  Color(0xFF9CA2E6),
-  Color(0xFF2E5872),
-];
