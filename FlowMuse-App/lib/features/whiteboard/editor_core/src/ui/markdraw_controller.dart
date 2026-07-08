@@ -14,6 +14,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     show TextAlign;
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
@@ -39,7 +40,9 @@ class MarkdrawController extends ChangeNotifier {
     _textFocusNode.addListener(_onTextFocusChanged);
 
     _imageCache.onImageDecoded = () {
-      notifyListeners();
+      if (!_disposed) {
+        notifyListeners();
+      }
     };
   }
 
@@ -102,6 +105,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Text controller for the inline text editing overlay.
   final textEditingController = TextEditingController();
   final _textFocusNode = FocusNode();
+  bool _disposed = false;
 
   Object? _editableTextRegistration;
   TextSelection? Function()? _readEditableTextSelection;
@@ -330,12 +334,29 @@ class MarkdrawController extends ChangeNotifier {
   /// Releases all resources: image cache, focus nodes, text controller.
   @override
   void dispose() {
+    _disposed = true;
     _imageCache.dispose();
     keyboardFocusNode.dispose();
     textEditingController.dispose();
     _textFocusNode.removeListener(_onTextFocusChanged);
     _textFocusNode.dispose();
     super.dispose();
+  }
+
+  void restoreKeyboardFocusWhenStable() {
+    runWhenUiStable(() {
+      if (!_disposed && keyboardFocusNode.canRequestFocus) {
+        keyboardFocusNode.requestFocus();
+      }
+    });
+  }
+
+  void restoreTextFocusWhenStable() {
+    runWhenUiStable(() {
+      if (!_disposed && _textFocusNode.canRequestFocus) {
+        _textFocusNode.requestFocus();
+      }
+    });
   }
 
   Object registerEditableText({
@@ -379,7 +400,7 @@ class MarkdrawController extends ChangeNotifier {
       selectedIds: type == ToolType.select ? null : {},
     );
     cancelTextEditing();
-    keyboardFocusNode.requestFocus();
+    restoreKeyboardFocusWhenStable();
     notifyListeners();
   }
 
@@ -598,9 +619,7 @@ class MarkdrawController extends ChangeNotifier {
     _isEditingExisting = false;
     _originalText = null;
     textEditingController.text = '';
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _textFocusNode.requestFocus();
-    });
+    restoreTextFocusWhenStable();
   }
 
   /// Begins inline editing of an existing text element (double-click).
@@ -616,9 +635,7 @@ class MarkdrawController extends ChangeNotifier {
     );
     _editorState = _editorState.applyResult(SetSelectionResult({element.id}));
     notifyListeners();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _textFocusNode.requestFocus();
-    });
+    restoreTextFocusWhenStable();
   }
 
   /// Begins editing the bound text of a shape, creating it if needed.
@@ -660,9 +677,7 @@ class MarkdrawController extends ChangeNotifier {
       textEditingController.text = '';
     }
     notifyListeners();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _textFocusNode.requestFocus();
-    });
+    restoreTextFocusWhenStable();
   }
 
   /// Begins editing the label of an arrow, creating it if needed.
@@ -705,9 +720,7 @@ class MarkdrawController extends ChangeNotifier {
       textEditingController.text = '';
     }
     notifyListeners();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _textFocusNode.requestFocus();
-    });
+    restoreTextFocusWhenStable();
   }
 
   void _onTextFocusChanged() {
@@ -778,9 +791,7 @@ class MarkdrawController extends ChangeNotifier {
     // Request focus after the frame rebuilds — the TextEditingOverlay removal
     // detaches _textFocusNode, which triggers Scaffold's FocusScope.unfocus().
     // A synchronous requestFocus() here would be overridden by that unfocus.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      keyboardFocusNode.requestFocus();
-    });
+    restoreKeyboardFocusWhenStable();
   }
 
   /// Cancels inline text editing, reverting to original text or removing
@@ -822,9 +833,7 @@ class MarkdrawController extends ChangeNotifier {
       _originalText = null;
       textEditingController.clear();
       notifyListeners();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        keyboardFocusNode.requestFocus();
-      });
+      restoreKeyboardFocusWhenStable();
     }
   }
 
@@ -853,18 +862,14 @@ class MarkdrawController extends ChangeNotifier {
     }
     _editingFrameLabelId = null;
     notifyListeners();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      keyboardFocusNode.requestFocus();
-    });
+    restoreKeyboardFocusWhenStable();
   }
 
   /// Cancels frame label editing without saving.
   void cancelFrameLabelEditing() {
     _editingFrameLabelId = null;
     notifyListeners();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      keyboardFocusNode.requestFocus();
-    });
+    restoreKeyboardFocusWhenStable();
   }
 
   /// Hit-tests whether a scene point is within a frame's label area.
@@ -998,7 +1003,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Handles pointer down: commits text edits, dispatches to tool, handles
   /// link-to-element mode and link icon clicks.
   void onPointerDown(Offset localPosition) {
-    keyboardFocusNode.requestFocus();
+    restoreKeyboardFocusWhenStable();
     if (_editingTextElementId != null) {
       commitTextEditing();
     }
@@ -1294,8 +1299,11 @@ class MarkdrawController extends ChangeNotifier {
       suppressFocusCommit = false;
       return;
     }
-    _textFocusNode.requestFocus();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    restoreTextFocusWhenStable();
+    runAfterUiFrame(() {
+      if (_disposed) {
+        return;
+      }
       suppressFocusCommit = false;
       if (savedSelection != null && _editingTextElementId != null) {
         restoreEditableTextSelection(savedSelection);
@@ -1520,9 +1528,24 @@ class MarkdrawController extends ChangeNotifier {
     _textFocusNode.unfocus();
   }
 
+  void closeTransientUiForSceneReplace() {
+    _endTextEditingBeforeSceneReplace();
+    _editingFrameLabelId = null;
+    _fontPickerOpen = false;
+    _isLinkEditorOpen = false;
+    _isLinkEditorEditing = false;
+    _linkToElementMode = false;
+    _isFindOpen = false;
+    _findQuery = '';
+    _findResults = [];
+    _findCurrentIndex = -1;
+    suppressFocusCommit = false;
+    _pendingColorPicker = null;
+  }
+
   /// Loads a new scene, clearing undo history. Use for file-open operations.
   void loadScene(Scene scene, {String? background}) {
-    _endTextEditingBeforeSceneReplace();
+    closeTransientUiForSceneReplace();
     _historyManager.clear();
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
@@ -1537,7 +1560,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Unlike [loadScene], this pushes the current scene onto the undo stack
   /// so the change can be undone. Used by the split-pane text editor.
   void applyScene(Scene scene, {String? background}) {
-    _endTextEditingBeforeSceneReplace();
+    closeTransientUiForSceneReplace();
     _historyManager.push(_editorState.scene);
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
@@ -1553,7 +1576,7 @@ class MarkdrawController extends ChangeNotifier {
   /// into a single undo entry. Call [applyScene] first to create the undo
   /// point, then [replaceScene] for subsequent updates in the same session.
   void replaceScene(Scene scene, {String? background}) {
-    _endTextEditingBeforeSceneReplace();
+    closeTransientUiForSceneReplace();
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
     if (background != null) {
@@ -1564,7 +1587,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Applies a scene received from collaboration without touching undo history.
   void applyRemoteScene(Scene scene, {String? background}) {
-    _endTextEditingBeforeSceneReplace();
+    closeTransientUiForSceneReplace();
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated);
     if (background != null) {
@@ -1575,7 +1598,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Clears the scene and undo history.
   void clear() {
-    _endTextEditingBeforeSceneReplace();
+    closeTransientUiForSceneReplace();
     _historyManager.clear();
     _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
     notifyListeners();

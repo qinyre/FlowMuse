@@ -5,6 +5,8 @@ import 'dart:async';
 import 'package:flutter/material.dart' hide Element;
 import 'package:flutter/services.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+
 import 'markdraw_controller.dart';
 
 /// Floating search bar for finding text on the canvas.
@@ -34,7 +36,11 @@ class _FindOverlayState extends State<FindOverlay> {
   @override
   void initState() {
     super.initState();
-    _focusNode.requestFocus();
+    runWhenUiStable(() {
+      if (mounted && _focusNode.canRequestFocus) {
+        _focusNode.requestFocus();
+      }
+    });
   }
 
   @override
@@ -67,7 +73,7 @@ class _FindOverlayState extends State<FindOverlay> {
 
   void _close() {
     widget.controller.closeFind();
-    widget.controller.keyboardFocusNode.requestFocus();
+    widget.controller.restoreKeyboardFocusWhenStable();
   }
 
   @override

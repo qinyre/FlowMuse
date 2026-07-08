@@ -8,6 +8,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     show TextAlign;
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 import 'color_picker.dart' as cp;
 
@@ -932,7 +933,11 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
       ),
     ).then((_) {
       sizeController.dispose();
-      controller.restoreTextFocus(wasEditing, savedSelection);
+      runWhenUiStable(() {
+        if (mounted) {
+          controller.restoreTextFocus(wasEditing, savedSelection);
+        }
+      });
     });
   }
 
@@ -1065,7 +1070,11 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     final savedSelection = wasEditing ? controller.editableTextSelection : null;
     if (wasEditing) controller.suppressFocusCommit = true;
 
-    controller.fontPickerOpen = true;
+    runWhenUiStable(() {
+      if (mounted) {
+        controller.fontPickerOpen = true;
+      }
+    });
 
     _fontPickerEntry = OverlayEntry(
       builder: (ctx) => FontPickerOverlay(
@@ -1073,15 +1082,23 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
         currentFont: current ?? FontResolver.defaultFontFamily,
         sceneFonts: controller.getSceneFontFamilies(),
         onSelect: (font) {
-          _removeFontPickerOverlay();
-          controller.applyStyleChange(
-            ElementStyle(hasText: true, fontFamily: font),
-          );
-          controller.restoreTextFocus(wasEditing, savedSelection);
+          _removeFontPickerOverlay(restoreFocus: false);
+          runWhenUiStable(() {
+            if (mounted) {
+              controller.applyStyleChange(
+                ElementStyle(hasText: true, fontFamily: font),
+              );
+              controller.restoreTextFocus(wasEditing, savedSelection);
+            }
+          });
         },
         onDismiss: () {
           _removeFontPickerOverlay();
-          controller.restoreTextFocus(wasEditing, savedSelection);
+          runWhenUiStable(() {
+            if (mounted) {
+              controller.restoreTextFocus(wasEditing, savedSelection);
+            }
+          });
         },
       ),
     );
@@ -1091,7 +1108,11 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   void _removeFontPickerOverlay({bool restoreFocus = true}) {
     final entry = _fontPickerEntry;
     _fontPickerEntry = null;
-    controller.fontPickerOpen = false;
+    runWhenUiStable(() {
+      if (mounted) {
+        controller.fontPickerOpen = false;
+      }
+    });
     if (!restoreFocus) {
       controller.suppressFocusCommit = false;
     }
@@ -1130,9 +1151,14 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   void _showCompactFontPicker(BuildContext context, String? current) {
     final wasEditing = controller.editingTextElementId != null;
     final savedSelection = wasEditing ? controller.editableTextSelection : null;
+    String? selectedFont;
     if (wasEditing) controller.suppressFocusCommit = true;
 
-    controller.fontPickerOpen = true;
+    runWhenUiStable(() {
+      if (mounted) {
+        controller.fontPickerOpen = true;
+      }
+    });
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1147,17 +1173,26 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             sceneFonts: controller.getSceneFontFamilies(),
             scrollController: scrollController,
             onSelect: (font) {
+              selectedFont = font;
               Navigator.of(ctx).pop();
-              controller.applyStyleChange(
-                ElementStyle(hasText: true, fontFamily: font),
-              );
             },
           ),
         ),
       ),
     ).whenComplete(() {
-      controller.fontPickerOpen = false;
-      controller.restoreTextFocus(wasEditing, savedSelection);
+      runWhenUiStable(() {
+        if (!mounted) {
+          return;
+        }
+        controller.fontPickerOpen = false;
+        final font = selectedFont;
+        if (font != null) {
+          controller.applyStyleChange(
+            ElementStyle(hasText: true, fontFamily: font),
+          );
+        }
+        controller.restoreTextFocus(wasEditing, savedSelection);
+      });
     });
   }
 

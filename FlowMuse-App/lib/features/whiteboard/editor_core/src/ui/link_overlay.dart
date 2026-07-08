@@ -3,6 +3,8 @@ library;
 import 'package:flutter/material.dart' hide Element;
 import 'package:flutter/services.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+
 import 'markdraw_controller.dart';
 
 /// Floating link editor overlay positioned near the selected element.
@@ -50,10 +52,8 @@ class _LinkOverlayState extends State<LinkOverlay> {
       _textController.text = elements.first.link ?? '';
     }
     if (widget.controller.isLinkEditorEditing) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
+      runWhenUiStable(() {
+        if (!mounted || !_focusNode.canRequestFocus) return;
         _focusNode.requestFocus();
         _textController.selection = TextSelection(
           baseOffset: 0,
@@ -80,7 +80,7 @@ class _LinkOverlayState extends State<LinkOverlay> {
       url.isEmpty ? null : url,
     );
     widget.controller.closeLinkEditor();
-    widget.controller.keyboardFocusNode.requestFocus();
+    widget.controller.restoreKeyboardFocusWhenStable();
   }
 
   void _remove() {
@@ -88,12 +88,12 @@ class _LinkOverlayState extends State<LinkOverlay> {
     if (elements.length != 1) return;
     widget.controller.setElementLink(elements.first.id, null);
     widget.controller.closeLinkEditor();
-    widget.controller.keyboardFocusNode.requestFocus();
+    widget.controller.restoreKeyboardFocusWhenStable();
   }
 
   void _cancel() {
     widget.controller.closeLinkEditor();
-    widget.controller.keyboardFocusNode.requestFocus();
+    widget.controller.restoreKeyboardFocusWhenStable();
   }
 
   @override

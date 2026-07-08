@@ -1,9 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 /// Runs UI mutations after the current overlay/menu route finishes its own
 /// close/layout work.
 void runAfterUiFrame(VoidCallback action) {
   WidgetsBinding.instance.addPostFrameCallback((_) => action());
+}
+
+/// Runs UI mutations when Flutter is outside build/layout/paint callbacks.
+void runWhenUiStable(VoidCallback action) {
+  final phase = SchedulerBinding.instance.schedulerPhase;
+  if (phase == SchedulerPhase.idle) {
+    action();
+  } else {
+    runAfterUiFrame(action);
+  }
+}
+
+/// Runs [action] on a stable UI frame if [context] is still mounted.
+void runWhenContextStable(BuildContext context, VoidCallback action) {
+  runWhenUiStable(() {
+    if (context.mounted) {
+      action();
+    }
+  });
 }
 
 /// Shows a popup menu anchored to the widget identified by [context].

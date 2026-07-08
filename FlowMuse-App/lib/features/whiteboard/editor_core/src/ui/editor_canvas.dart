@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 /// The main canvas area with pointer/gesture handling.
 class EditorCanvas extends StatefulWidget {
@@ -255,8 +256,10 @@ class _FrameLabelEditingOverlayState extends State<_FrameLabelEditingOverlay> {
       extentOffset: _textController.text.length,
     );
     _focusNode.addListener(_onFocusChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNode.requestFocus();
+    runWhenUiStable(() {
+      if (mounted && _focusNode.canRequestFocus) {
+        _focusNode.requestFocus();
+      }
     });
   }
 

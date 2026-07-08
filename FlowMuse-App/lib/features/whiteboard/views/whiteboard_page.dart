@@ -67,6 +67,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   bool _temporarySaved = false;
   int _openGeneration = 0;
   RealtimeConnectionStatus? _lastRealtimeStatus;
+  bool _disposingOrLeaving = false;
+  Future<void> _remoteSceneQueue = Future<void>.value();
 
   @override
   void initState() {
@@ -88,6 +90,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
   @override
   void dispose() {
+    _disposingOrLeaving = true;
     unawaited(_collaborationSubscription?.cancel());
     unawaited(_newUserSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
@@ -103,8 +106,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
   Future<void> _openNote() async {
     final generation = ++_openGeneration;
+    _disposingOrLeaving = false;
     if (widget.temporaryCollaboration) {
       _loadingScene = true;
+      _markdrawController.closeTransientUiForSceneReplace();
       _markdrawController.loadFromContent(
         emptyExcalidrawSceneContent,
         'collaboration.excalidraw',
@@ -133,6 +138,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       return;
     }
     _loadingScene = true;
+    _markdrawController.closeTransientUiForSceneReplace();
     _markdrawController.loadFromContent(content, '$noteId.excalidraw');
     _loadingScene = false;
     final room = widget.initialRoom;
@@ -294,15 +300,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       final reconciledScene = await ref
           .read(whiteboardViewModelProvider.notifier)
           .joinCollaboration(room: room, localScene: scene);
-      if (!mounted) {
+      if (!_canMutateWhiteboard) {
         return;
       }
       await _listenToRoom(room);
-      if (!mounted) {
+      if (!_canMutateWhiteboard) {
         return;
       }
       if (reconciledScene.elements.isNotEmpty) {
-        await _applyRemoteScene(reconciledScene);
+        await _enqueueRemoteScene(reconciledScene);
       }
     } finally {
       _collaborationOpening = false;
@@ -329,9 +335,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         await _saveTemporaryRoomAsLocalNote();
       }
     }
+    _disposingOrLeaving = true;
+    _markdrawController.closeTransientUiForSceneReplace();
     await _disconnectCollaboration();
     if (widget.temporaryCollaboration && mounted) {
-      context.pop();
+      _popWhenStable();
     }
   }
 
@@ -340,11 +348,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (state.collaborating) {
       await _leaveCollaboration();
       if (!widget.temporaryCollaboration && mounted) {
-        context.pop();
+        _popWhenStable();
       }
       return;
     }
-    context.pop();
+    _disposingOrLeaving = true;
+    _markdrawController.closeTransientUiForSceneReplace();
+    _popWhenStable();
   }
 
   Future<void> _endCollaboration() async {
@@ -352,14 +362,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (confirmed != true || !mounted) {
       return;
     }
+    _disposingOrLeaving = true;
+    _markdrawController.closeTransientUiForSceneReplace();
     await _cancelCollaborationStreams();
     await ref.read(whiteboardViewModelProvider.notifier).endCollaboration();
     if (widget.temporaryCollaboration && mounted) {
-      context.pop();
+      _popWhenStable();
     }
   }
 
   Future<void> _disconnectCollaboration() async {
+    _markdrawController.closeTransientUiForSceneReplace();
     await _cancelCollaborationStreams();
     await ref.read(whiteboardViewModelProvider.notifier).stopCollaboration();
   }
@@ -485,18 +498,23 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         .saveScene(note.id, content);
     await ref.read(libraryIndexProvider.notifier).touchNote(note.id);
     if (mounted) {
-      context.go(AppRoutes.whiteboardPath(noteId: note.id));
+      runWhenUiStable(() {
+        if (mounted) {
+          context.go(AppRoutes.whiteboardPath(noteId: note.id));
+        }
+      });
     }
   }
 
   Future<void> _listenToRoom(CollaborationRoom room) async {
+    _disposingOrLeaving = false;
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = _collaborationRepository
         .encryptedMessages(room)
         .listen(
           _handleCollaborationMessage,
           onError: (Object error) {
-            _afterUiFrame(() {
+            _runAfterStableFrame(() {
               ref
                   .read(whiteboardViewModelProvider.notifier)
                   .applyCollaborationError(error.toString());
@@ -505,11 +523,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         );
     await _newUserSubscription?.cancel();
     _newUserSubscription = _collaborationRepository.newUsers.listen((_) {
+      if (!_canMutateWhiteboard) {
+        return;
+      }
       unawaited(_broadcastCurrentScene(syncAll: true, initial: true));
     });
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = _collaborationRepository.roomUsers.listen((users) {
-      _afterUiFrame(() {
+      _runAfterStableFrame(() {
         ref.read(whiteboardViewModelProvider.notifier).applyRoomUsers(users);
       });
     });
@@ -521,7 +542,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     });
     await _roomErrorSubscription?.cancel();
     _roomErrorSubscription = _collaborationRepository.errors.listen((message) {
-      _afterUiFrame(() {
+      _runAfterStableFrame(() {
         ref
             .read(whiteboardViewModelProvider.notifier)
             .applyCollaborationError(message);
@@ -532,7 +553,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         .listen((status) {
           final previous = _lastRealtimeStatus;
           _lastRealtimeStatus = status;
-          _afterUiFrame(() {
+          _runAfterStableFrame(() {
             ref
                 .read(whiteboardViewModelProvider.notifier)
                 .applyConnectionStatus(status);
@@ -545,17 +566,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _handleRoomEnded(CollaborationRoomMetadata metadata) async {
+    _markdrawController.closeTransientUiForSceneReplace();
     await _cancelCollaborationStreams();
     if (!mounted) {
       return;
     }
-    ref.read(whiteboardViewModelProvider.notifier).applyRoomEnded(metadata);
+    await _runAfterStableFrameAsync(() async {
+      ref.read(whiteboardViewModelProvider.notifier).applyRoomEnded(metadata);
+    });
     final save = await _showRoomEndedDialog();
     if (save == true) {
       await _saveTemporaryRoomAsLocalNote();
     }
     if (widget.temporaryCollaboration && mounted) {
-      context.pop();
+      _disposingOrLeaving = true;
+      _markdrawController.closeTransientUiForSceneReplace();
+      _popWhenStable();
     }
   }
 
@@ -585,10 +611,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       room: room,
       localScene: _currentScene(),
     );
-    if (refreshed == null || !mounted) {
+    if (refreshed == null || !_canMutateWhiteboard) {
       return;
     }
-    await _applyRemoteScene(refreshed);
+    await _enqueueRemoteScene(refreshed);
     await _broadcastCurrentScene(syncAll: true);
   }
 
@@ -613,16 +639,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _handleCollaborationMessage(CollaborationMessage message) async {
+    if (!_canMutateWhiteboard) {
+      return;
+    }
     switch (message.type) {
       case CollaborationMessageType.sceneInit:
       case CollaborationMessageType.sceneUpdate:
-        _afterUiFrame(() {
-          unawaited(_applyRemoteElements(message.elements));
-        });
+        _enqueueRemoteElements(message.elements);
       case CollaborationMessageType.mouseLocation:
       case CollaborationMessageType.idleStatus:
       case CollaborationMessageType.userVisibleSceneBounds:
-        _afterUiFrame(() {
+        _runAfterStableFrame(() {
           ref
               .read(whiteboardViewModelProvider.notifier)
               .applyPresenceMessage(message);
@@ -632,12 +659,57 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
   }
 
+  void _enqueueRemoteElements(List<Map<String, Object?>> remoteElements) {
+    final pending = _remoteSceneQueue.catchError(_ignoreRemoteSceneError);
+    _remoteSceneQueue = pending
+        .then<void>((_) async {
+          await _runAfterStableFrameAsync(() async {
+            await _applyRemoteElements(remoteElements);
+          });
+        })
+        .catchError(_reportRemoteSceneFutureError);
+    unawaited(_remoteSceneQueue);
+  }
+
+  Future<void> _enqueueRemoteScene(ExcalidrawScene remoteScene) {
+    final pending = _remoteSceneQueue.catchError(_ignoreRemoteSceneError);
+    _remoteSceneQueue = pending
+        .then<void>((_) async {
+          await _runAfterStableFrameAsync(() async {
+            await _applyRemoteScene(remoteScene);
+          });
+        })
+        .catchError(_reportRemoteSceneFutureError);
+    return _remoteSceneQueue;
+  }
+
+  Future<void> _ignoreRemoteSceneError(
+    Object error,
+    StackTrace stackTrace,
+  ) async {}
+
+  Future<void> _reportRemoteSceneFutureError(
+    Object error,
+    StackTrace stackTrace,
+  ) async {
+    _reportRemoteSceneError(error);
+  }
+
+  void _reportRemoteSceneError(Object error) {
+    _runAfterStableFrame(() {
+      ref
+          .read(whiteboardViewModelProvider.notifier)
+          .applyCollaborationError('协作场景同步失败：$error');
+    });
+  }
+
   Future<void> _applyRemoteElements(
     List<Map<String, Object?>> remoteElements,
   ) async {
-    if (!mounted) {
+    if (!_canMutateWhiteboard) {
       return;
     }
+    _markdrawController.closeTransientUiForSceneReplace();
     final localScene = _collaborationAdapter.currentScene();
     final reconciledScene = _collaborationRepository.reconcileRemoteScene(
       localScene: localScene,
@@ -648,9 +720,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _applyRemoteScene(ExcalidrawScene remoteScene) async {
-    if (!mounted) {
+    if (!_canMutateWhiteboard) {
       return;
     }
+    _markdrawController.closeTransientUiForSceneReplace();
     final localScene = _collaborationAdapter.currentScene();
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     final remoteFiles = room == null
@@ -660,7 +733,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             fileIds: _imageFileIds(remoteScene.elements),
             existingFileIds: localScene.files.keys.toSet(),
           );
-    if (!mounted) {
+    if (!_canMutateWhiteboard) {
       return;
     }
     final nextScene = remoteScene.copyWith(
@@ -676,7 +749,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
 
     if (widget.temporaryCollaboration) {
-      if (mounted) {
+      if (_canMutateWhiteboard) {
         ref.read(whiteboardViewModelProvider.notifier).markSaved();
       }
       return;
@@ -685,15 +758,37 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     final repository = ref.read(whiteboardSceneRepositoryProvider);
     await repository.saveScene(widget.noteId, nextContent);
     await ref.read(libraryIndexProvider.notifier).touchNote(widget.noteId);
-    if (mounted) {
+    if (_canMutateWhiteboard) {
       ref.read(whiteboardViewModelProvider.notifier).markSaved();
     }
   }
 
-  void _afterUiFrame(VoidCallback action) {
-    runAfterUiFrame(() {
-      if (mounted) {
+  bool get _canMutateWhiteboard => mounted && !_disposingOrLeaving;
+
+  void _runAfterStableFrame(VoidCallback action) {
+    runWhenUiStable(() {
+      if (_canMutateWhiteboard) {
         action();
+      }
+    });
+  }
+
+  Future<void> _runAfterStableFrameAsync(Future<void> Function() action) {
+    final completer = Completer<void>();
+    runWhenUiStable(() {
+      if (!_canMutateWhiteboard) {
+        completer.complete();
+        return;
+      }
+      action().then(completer.complete, onError: completer.completeError);
+    });
+    return completer.future;
+  }
+
+  void _popWhenStable() {
+    runWhenUiStable(() {
+      if (mounted && Navigator.of(context).canPop()) {
+        context.pop();
       }
     });
   }

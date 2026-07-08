@@ -109,11 +109,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     super.initState();
     _controller.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _controller.keyboardFocusNode.requestFocus();
-      }
-    });
+    _controller.restoreKeyboardFocusWhenStable();
   }
 
   @override
@@ -193,8 +189,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                 constraints.maxHeight,
               );
               if (isCompact != _controller.isCompact) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _controller.isCompact = isCompact;
+                runWhenUiStable(() {
+                  if (mounted) {
+                    _controller.isCompact = isCompact;
+                  }
                 });
               }
               return _buildBody();
