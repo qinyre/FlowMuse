@@ -159,13 +159,15 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
         )
         .timeout(_requestTimeout);
     if (response.statusCode == 401) {
-      throw StateError('未登录或缺少房主密钥，无法结束协作');
+      throw StateError('结束协作未授权：HTTP 401 ${_responseMessage(response)}');
     }
     if (response.statusCode == 403) {
-      throw StateError('只有房主可以结束协作');
+      throw StateError('只有房主可以结束协作：${_responseMessage(response)}');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('结束协作房间失败：HTTP ${response.statusCode}');
+      throw StateError(
+        '结束协作房间失败：HTTP ${response.statusCode} ${_responseMessage(response)}',
+      );
     }
     return CollaborationRoomMetadata.fromJson(
       jsonDecode(response.body) as Map<String, Object?>,
@@ -328,6 +330,14 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
         ? basePath.substring(0, basePath.length - 1)
         : basePath;
     return '$normalizedBase$suffix';
+  }
+
+  String _responseMessage(http.Response response) {
+    final body = response.body.trim();
+    if (body.isEmpty) {
+      return '无响应正文';
+    }
+    return body;
   }
 }
 

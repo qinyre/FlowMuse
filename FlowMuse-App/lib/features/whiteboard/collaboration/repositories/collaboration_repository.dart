@@ -176,6 +176,9 @@ class CollaborationRepository {
       throw StateError('协作连接未建立');
     }
     final ownerKey = await _ownerKeyStore.readOwnerKey(room.roomId);
+    if (ownerKey == null || ownerKey.isEmpty) {
+      throw StateError('本机缺少房主密钥，无法结束协作');
+    }
     final metadata = await _sceneStore.endRoom(room, ownerKey: ownerKey);
     try {
       await _transport.endRoom(ownerKey: ownerKey);
