@@ -238,6 +238,7 @@ class SharedSidebarItem extends StatelessWidget {
                     tooltip: '新建$label',
                     icon: actionIcon!,
                     onPressed: onActionTap,
+                    offset: const Offset(40, 0),
                   ),
                   const SizedBox(width: AppSpacing.controlGap),
                 ],
@@ -365,20 +366,25 @@ class SharedSidebarActionButton extends StatelessWidget {
     required this.tooltip,
     required this.icon,
     required this.onPressed,
+    this.offset = Offset.zero,
   });
 
   final String tooltip;
   final IconData icon;
   final VoidCallback? onPressed;
+  final Offset offset;
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-      padding: EdgeInsets.zero,
-      onPressed: onPressed,
-      icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),
+    return Transform.translate(
+      offset: offset,
+      child: IconButton(
+        tooltip: tooltip,
+        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+        icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),
+      ),
     );
   }
 }
