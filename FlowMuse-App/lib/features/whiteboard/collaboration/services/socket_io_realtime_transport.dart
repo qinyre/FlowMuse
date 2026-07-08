@@ -8,6 +8,7 @@ import '../../../account/models/collaboration_identity.dart';
 import '../models/collaboration_room.dart';
 import '../models/encrypted_payload.dart';
 import '../models/room_collaborator.dart';
+import 'collaboration_debug_log.dart';
 import 'realtime_transport.dart';
 
 class SocketIoRealtimeTransport implements RealtimeTransport {
@@ -74,9 +75,17 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   @override
   Future<void> connect(String roomId) async {
     _roomId = roomId;
+    CollaborationDebugLog.write('socket', 'connect_begin', {
+      'room': _shortRoomId(roomId),
+      'server': serverUrl,
+    });
     _emitStatus(RealtimeConnectionStatus.connecting);
     final existing = _socket;
     if (existing != null && existing.connected) {
+      CollaborationDebugLog.write('socket', 'reuse_connection', {
+        'room': _shortRoomId(roomId),
+        'socket': existing.id,
+      });
       existing.emit(_eventJoinRoom, roomId);
       await _waitForRoomJoin();
       _emitStatus(RealtimeConnectionStatus.joined);
@@ -98,6 +107,10 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     final connected = Completer<void>();
     final joined = Completer<void>();
     socket.onConnect((_) {
+      CollaborationDebugLog.write('socket', 'connected', {
+        'room': _shortRoomId(roomId),
+        'socket': socket.id,
+      });
       if (!connected.isCompleted) {
         connected.complete();
       }
@@ -107,27 +120,48 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       if (activeRoomId == null) {
         return;
       }
+      CollaborationDebugLog.write('socket', 'reconnected', {
+        'room': _shortRoomId(activeRoomId),
+        'socket': socket.id,
+      });
       _emitStatus(RealtimeConnectionStatus.reconnecting);
       socket.emit(_eventJoinRoom, activeRoomId);
     });
     socket.onReconnectAttempt((_) {
+      CollaborationDebugLog.write('socket', 'reconnect_attempt', {
+        'room': _shortRoomId(_roomId),
+      });
       _emitStatus(RealtimeConnectionStatus.reconnecting);
     });
     socket.onReconnectError((error) {
+      CollaborationDebugLog.write('socket', 'reconnect_failed', {
+        'room': _shortRoomId(_roomId),
+        'error': error,
+      });
       _emitStatus(RealtimeConnectionStatus.failed);
       if (!_errors.isClosed) {
         _errors.add('协作重连失败: $error');
       }
     });
     socket.onDisconnect((_) {
+      CollaborationDebugLog.write('socket', 'disconnected', {
+        'room': _shortRoomId(_roomId),
+        'socket': socket.id,
+      });
       if (_roomId != null) {
         _emitStatus(RealtimeConnectionStatus.disconnected);
       }
     });
     socket.on(_eventInitRoom, (_) {
+      CollaborationDebugLog.write('socket', 'init_room', {
+        'room': _shortRoomId(roomId),
+      });
       socket.emit(_eventJoinRoom, roomId);
     });
     socket.on(_eventFirstInRoom, (_) {
+      CollaborationDebugLog.write('socket', 'first_in_room', {
+        'room': _shortRoomId(roomId),
+      });
       if (!_firstInRoom.isClosed) {
         _firstInRoom.add(null);
       }
@@ -137,6 +171,10 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     });
     socket.on(_eventNewUser, (data) {
       final socketId = _socketIdFromEvent(data);
+      CollaborationDebugLog.write('socket', 'new_user', {
+        'room': _shortRoomId(_roomId),
+        'socket': _shortSocketId(socketId),
+      });
       if (socketId != null && !_newUsers.isClosed) {
         _newUsers.add(socketId);
       }
@@ -144,6 +182,11 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     socket.on(_eventRoomUserChange, (data) {
       final roomUsers = _roomUsersFromEvent(data);
       final socketIds = roomUsers.map((item) => item.socketId).toList();
+      CollaborationDebugLog.write('socket', 'room_user_change', {
+        'room': _shortRoomId(_roomId),
+        'users': roomUsers.length,
+        'self': socket.id,
+      });
       if (!_roomUsers.isClosed) {
         _roomUsers.add(roomUsers);
       }
@@ -156,6 +199,10 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     });
     socket.on(_eventRoomError, (data) {
       final message = data?.toString() ?? '协作房间错误';
+      CollaborationDebugLog.write('socket', 'room_error', {
+        'room': _shortRoomId(_roomId),
+        'message': message,
+      });
       if (!_errors.isClosed) {
         _errors.add(message);
       }
@@ -166,6 +213,9 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     });
     socket.on(_eventRoomEnded, (data) {
       final metadata = _metadataFromEvent(data);
+      CollaborationDebugLog.write('socket', 'room_ended', {
+        'room': _shortRoomId(metadata.roomId),
+      });
       if (!_roomEnded.isClosed) {
         _roomEnded.add(metadata);
       }
@@ -176,19 +226,49 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       _emitStatus(RealtimeConnectionStatus.disconnected);
     });
     socket.onConnectError((error) {
+      CollaborationDebugLog.write('socket', 'connect_failed', {
+        'room': _shortRoomId(roomId),
+        'error': error,
+      });
       if (!connected.isCompleted) {
         connected.completeError(StateError('Socket.IO connect failed: $error'));
       }
     });
     socket.onError((error) {
+      CollaborationDebugLog.write('socket', 'socket_error', {
+        'room': _shortRoomId(_roomId),
+        'error': error,
+      });
       if (!connected.isCompleted) {
         connected.completeError(StateError('Socket.IO error: $error'));
       }
     });
     socket.on(_eventClientBroadcast, (data) {
-      final payload = _payloadFromEventData(data);
-      if (payload != null && !_messages.isClosed) {
-        _messages.add(payload);
+      try {
+        final payload = _payloadFromEventData(data);
+        if (payload != null && !_messages.isClosed) {
+          CollaborationDebugLog.write('wire', 'recv', {
+            'room': _shortRoomId(_roomId),
+            'dataType': data.runtimeType,
+            'encryptedBytes': payload.encryptedBuffer.length,
+            'ivBytes': payload.iv.length,
+          });
+          _messages.add(payload);
+        } else {
+          CollaborationDebugLog.write('wire', 'parse_payload_failed', {
+            'room': _shortRoomId(_roomId),
+            'dataType': data.runtimeType,
+          });
+        }
+      } catch (error) {
+        CollaborationDebugLog.write('wire', 'parse_payload_failed', {
+          'room': _shortRoomId(_roomId),
+          'dataType': data.runtimeType,
+          'error': error,
+        });
+        if (!_errors.isClosed) {
+          _errors.add('协作消息解析失败: $error');
+        }
       }
     });
     socket.connect();
@@ -198,6 +278,10 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       onTimeout: () => throw StateError('Socket.IO connect timed out'),
     );
     socket.emit(_eventJoinRoom, roomId);
+    CollaborationDebugLog.write('socket', 'join_sent', {
+      'room': _shortRoomId(roomId),
+      'socket': socket.id,
+    });
     await joined.future.timeout(
       const Duration(seconds: 10),
       onTimeout: () => throw StateError('Socket.IO join room timed out'),
@@ -257,6 +341,14 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
         },
       ],
     );
+    CollaborationDebugLog.write('wire', 'send', {
+      'room': _shortRoomId(roomId),
+      'event': volatile ? _eventServerVolatileBroadcast : _eventServerBroadcast,
+      'socket': socket.id,
+      'encryptedBytes': payload.encryptedBuffer.length,
+      'ivBytes': payload.iv.length,
+      'connected': socket.connected,
+    });
   }
 
   @override
@@ -279,6 +371,9 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     _roomId = null;
     _socket = null;
     socket?.dispose();
+    CollaborationDebugLog.write('socket', 'dispose', {
+      'room': _shortRoomId(roomId),
+    });
     _emitStatus(RealtimeConnectionStatus.disconnected);
   }
 
@@ -315,6 +410,20 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       return base64Decode(value);
     }
     throw FormatException('Invalid Socket.IO binary payload: $value');
+  }
+
+  String _shortRoomId(String? roomId) {
+    if (roomId == null || roomId.isEmpty) {
+      return 'null';
+    }
+    return roomId.length > 8 ? roomId.substring(0, 8) : roomId;
+  }
+
+  String _shortSocketId(String? socketId) {
+    if (socketId == null || socketId.isEmpty) {
+      return 'null';
+    }
+    return socketId.length > 8 ? socketId.substring(0, 8) : socketId;
   }
 
   List<RoomCollaborator> _roomUsersFromEvent(Object? value) {

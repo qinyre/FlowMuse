@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"flowmuse/server/internal/storage"
 
 	"github.com/jackc/pgx/v5"
+	parserTypes "github.com/zishang520/engine.io-go-parser/types"
 	"github.com/zishang520/socket.io/v2/socket"
 )
 
@@ -147,6 +149,11 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	roomID, frame, ok := parseBroadcastArgs(args)
 	if !ok {
+		log.Printf(
+			"[FlowMuseCollab][server][broadcast_drop] socket=%s reason=parse_broadcast_failed args=%s",
+			client.Id(),
+			describeArgTypes(args),
+		)
 		return
 	}
 	socketID := string(client.Id())
@@ -161,6 +168,14 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 		client.Emit(EventRoomError, "协作消息过大")
 		return
 	}
+	log.Printf(
+		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=%t",
+		socketID,
+		roomID,
+		len(frame.EncryptedBuffer),
+		len(frame.IV),
+		volatile,
+	)
 	operator := client.To(socket.Room(roomID))
 	if volatile {
 		operator = operator.Volatile()
@@ -339,7 +354,9 @@ func asFrame(value any) (EncryptedFrame, bool) {
 func asBytes(value any) ([]byte, bool) {
 	switch typed := value.(type) {
 	case []byte:
-		return typed, true
+		return cloneBytes(typed), true
+	case parserTypes.BufferInterface:
+		return cloneBytes(typed.Bytes()), true
 	case []any:
 		bytes := make([]byte, 0, len(typed))
 		for _, item := range typed {
@@ -353,6 +370,39 @@ func asBytes(value any) ([]byte, bool) {
 	default:
 		return nil, false
 	}
+}
+
+func cloneBytes(value []byte) []byte {
+	bytes := make([]byte, len(value))
+	copy(bytes, value)
+	return bytes
+}
+
+func describeArgTypes(args []any) string {
+	if len(args) == 0 {
+		return "[]"
+	}
+	text := "["
+	for index, arg := range args {
+		if index > 0 {
+			text += ", "
+		}
+		text += fmt.Sprintf("%T", arg)
+		if values, ok := arg.(map[string]any); ok {
+			text += "{"
+			first := true
+			for key, value := range values {
+				if !first {
+					text += ", "
+				}
+				first = false
+				text += fmt.Sprintf("%s:%T", key, value)
+			}
+			text += "}"
+		}
+	}
+	text += "]"
+	return text
 }
 
 func firstString(args []any) (string, bool) {

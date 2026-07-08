@@ -16,6 +16,7 @@ import '../collaboration/models/collaborator_presence.dart';
 import '../collaboration/models/excalidraw_scene.dart';
 import '../collaboration/models/room_collaborator.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
+import '../collaboration/services/collaboration_debug_log.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
@@ -148,6 +149,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
   Future<void> _saveMarkdrawScene() async {
     if (_loadingScene || _applyingRemoteScene) {
+      CollaborationDebugLog.write('scene', 'local_change_skipped', {
+        'loading': _loadingScene,
+        'applyingRemote': _applyingRemoteScene,
+      });
       return;
     }
     if (widget.temporaryCollaboration) {
@@ -669,11 +674,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }) async {
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
+      CollaborationDebugLog.write('scene', 'broadcast_skipped', {
+        'reason': 'no_active_room',
+      });
       return;
     }
     final scene = serializedScene == null
         ? _collaborationAdapter.currentScene()
         : ExcalidrawScene.fromContent(serializedScene);
+    CollaborationDebugLog.write('scene', 'broadcast_current', {
+      'room': _shortRoomId(room.roomId),
+      'initial': initial,
+      'syncAll': syncAll,
+      'elements': scene.elements.length,
+      'sceneVersion': CollaborationDebugLog.sceneVersion(scene.elements),
+      'summary': CollaborationDebugLog.elementSummary(scene.elements),
+    });
     await _collaborationRepository.broadcastScene(
       room: room,
       scene: scene,
@@ -684,8 +700,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
   Future<void> _handleCollaborationMessage(CollaborationMessage message) async {
     if (!_canMutateWhiteboard) {
+      CollaborationDebugLog.write('scene', 'message_skipped', {
+        'type': message.type.wireName,
+        'reason': 'cannot_mutate',
+      });
       return;
     }
+    CollaborationDebugLog.write('scene', 'message_received', {
+      'type': message.type.wireName,
+      'elements': message.elements.length,
+      'summary': CollaborationDebugLog.elementSummary(message.elements),
+    });
     switch (message.type) {
       case CollaborationMessageType.sceneInit:
       case CollaborationMessageType.sceneUpdate:
@@ -704,6 +729,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   void _enqueueRemoteElements(List<Map<String, Object?>> remoteElements) {
+    CollaborationDebugLog.write('scene', 'remote_elements_queued', {
+      'elements': remoteElements.length,
+      'summary': CollaborationDebugLog.elementSummary(remoteElements),
+    });
     final pending = _remoteSceneQueue.catchError(_ignoreRemoteSceneError);
     _remoteSceneQueue = pending
         .then<void>((_) async {
@@ -716,6 +745,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _enqueueRemoteScene(ExcalidrawScene remoteScene) {
+    CollaborationDebugLog.write('scene', 'remote_scene_queued', {
+      'elements': remoteScene.elements.length,
+      'sceneVersion': CollaborationDebugLog.sceneVersion(remoteScene.elements),
+      'summary': CollaborationDebugLog.elementSummary(remoteScene.elements),
+    });
     final pending = _remoteSceneQueue.catchError(_ignoreRemoteSceneError);
     _remoteSceneQueue = pending
         .then<void>((_) async {
@@ -740,6 +774,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   void _reportRemoteSceneError(Object error) {
+    CollaborationDebugLog.write('scene', 'remote_apply_failed', {
+      'error': error,
+    });
     _runAfterStableFrame(() {
       ref
           .read(whiteboardViewModelProvider.notifier)
@@ -751,6 +788,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     List<Map<String, Object?>> remoteElements,
   ) async {
     if (!_canMutateWhiteboard) {
+      CollaborationDebugLog.write('scene', 'remote_elements_skipped', {
+        'reason': 'cannot_mutate',
+      });
       return;
     }
     final localScene = _collaborationAdapter.currentScene();
@@ -760,11 +800,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       remoteElements: remoteElements,
       protectedElementIds: protectedElementIds,
     );
+    CollaborationDebugLog.write('scene', 'remote_elements_reconciled', {
+      'remote': remoteElements.length,
+      'localBefore': localScene.elements.length,
+      'localAfter': reconciledScene.elements.length,
+      'protected': protectedElementIds.length,
+      'summary': CollaborationDebugLog.elementSummary(reconciledScene.elements),
+    });
     await _applyRemoteScene(reconciledScene);
   }
 
   Future<void> _applyRemoteScene(ExcalidrawScene remoteScene) async {
     if (!_canMutateWhiteboard) {
+      CollaborationDebugLog.write('scene', 'remote_scene_skipped', {
+        'reason': 'cannot_mutate',
+      });
       return;
     }
     final localScene = _collaborationAdapter.currentScene();
@@ -785,6 +835,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             existingFileIds: localScene.files.keys.toSet(),
           );
     if (!_canMutateWhiteboard) {
+      CollaborationDebugLog.write('scene', 'remote_scene_skipped', {
+        'reason': 'cannot_mutate_after_files',
+      });
       return;
     }
     final nextScene = reconciledScene.copyWith(
@@ -798,6 +851,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         nextScene,
         closeTransientUi: false,
       );
+      CollaborationDebugLog.write('scene', 'remote_scene_applied', {
+        'remote': remoteScene.elements.length,
+        'localBefore': localScene.elements.length,
+        'localAfter': nextScene.elements.length,
+        'protected': protectedElementIds.length,
+        'filesLoaded': remoteFiles.length,
+        'sceneVersion': CollaborationDebugLog.sceneVersion(nextScene.elements),
+        'summary': CollaborationDebugLog.elementSummary(nextScene.elements),
+      });
     } finally {
       _applyingRemoteScene = false;
     }
@@ -818,6 +880,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   bool get _canMutateWhiteboard => mounted && !_disposingOrLeaving;
+
+  String _shortRoomId(String roomId) =>
+      roomId.length > 8 ? roomId.substring(0, 8) : roomId;
 
   void _runAfterStableFrame(VoidCallback action) {
     runWhenUiStable(() {

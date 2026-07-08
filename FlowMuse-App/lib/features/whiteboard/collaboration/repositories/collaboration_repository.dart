@@ -8,6 +8,7 @@ import '../models/excalidraw_scene.dart';
 import '../models/room_collaborator.dart';
 import 'collaboration_owner_key_store.dart';
 import '../services/collaboration_crypto.dart';
+import '../services/collaboration_debug_log.dart';
 import '../services/collaboration_file_store.dart';
 import '../services/encrypted_scene_store.dart';
 import '../services/realtime_transport.dart';
@@ -120,6 +121,12 @@ class CollaborationRepository {
     _activeRoom = room;
     _latestScene = syncableScene;
     _rememberBroadcasted(syncableScene.elements);
+    CollaborationDebugLog.write('repo', 'start_room', {
+      'room': _shortRoomId(room.roomId),
+      'elements': syncableScene.elements.length,
+      'sceneVersion': _reconciler.getSceneVersion(syncableScene.elements),
+      'summary': CollaborationDebugLog.elementSummary(syncableScene.elements),
+    });
     _startRoomSession(room);
     try {
       await _transport.connect(room.roomId);
@@ -159,6 +166,14 @@ class CollaborationRepository {
     _latestScene = nextScene;
     _rememberBroadcasted(nextScene.elements);
     _activeRoom = room;
+    CollaborationDebugLog.write('repo', 'join_room', {
+      'room': _shortRoomId(room.roomId),
+      'localElements': localScene.elements.length,
+      'storedElements': storedScene.elements.length,
+      'mergedElements': nextScene.elements.length,
+      'sceneVersion': _reconciler.getSceneVersion(nextScene.elements),
+      'summary': CollaborationDebugLog.elementSummary(nextScene.elements),
+    });
     _startRoomSession(room);
     try {
       await _transport.connect(room.roomId);
@@ -228,6 +243,15 @@ class CollaborationRepository {
     final elementsToBroadcast = initial || syncAll
         ? syncableElements
         : _changedElements(syncableElements);
+    CollaborationDebugLog.write('scene', 'broadcast_prepare', {
+      'room': _shortRoomId(room.roomId),
+      'initial': initial,
+      'syncAll': syncAll,
+      'syncable': syncableElements.length,
+      'changed': elementsToBroadcast.length,
+      'sceneVersion': _reconciler.getSceneVersion(syncableElements),
+      'summary': CollaborationDebugLog.elementSummary(elementsToBroadcast),
+    });
     if (elementsToBroadcast.isEmpty && !initial) {
       return;
     }
@@ -356,13 +380,24 @@ class CollaborationRepository {
     _messageDecodeQueue = Future<void>.value();
     _transportMessageSubscription = _transport.messages.listen(
       (payload) {
+        CollaborationDebugLog.write('wire', 'payload_received', {
+          'room': _shortRoomId(room.roomId),
+          'encryptedBytes': payload.encryptedBuffer.length,
+          'ivBytes': payload.iv.length,
+        });
         _messageDecodeQueue = _messageDecodeQueue
             .then((_) => _handleEncryptedPayload(room, payload))
             .catchError((Object error) {
+              CollaborationDebugLog.write('repo', 'message_queue_failed', {
+                'error': error,
+              });
               _addRepositoryError('协作消息处理失败：$error');
             });
       },
       onError: (Object error) {
+        CollaborationDebugLog.write('repo', 'message_stream_failed', {
+          'error': error,
+        });
         _addRepositoryError('协作消息接收失败：$error');
       },
     );
@@ -390,12 +425,25 @@ class CollaborationRepository {
         encryptedPayload: payload,
       );
       final message = CollaborationMessage.fromBytes(bytes);
+      CollaborationDebugLog.write('crypto', 'decoded', {
+        'room': _shortRoomId(room.roomId),
+        'type': message.type.wireName,
+        'elements': message.elements.length,
+        'summary': CollaborationDebugLog.elementSummary(message.elements),
+      });
       if (_messages.hasListener) {
         _messages.add(message);
       } else {
+        CollaborationDebugLog.write('repo', 'message_backlogged', {
+          'type': message.type.wireName,
+        });
         _messageBacklog.add(message);
       }
     } catch (error) {
+      CollaborationDebugLog.write('crypto', 'decrypt_failed', {
+        'room': _shortRoomId(room.roomId),
+        'error': error,
+      });
       _addRepositoryError('协作消息解密失败：$error');
     }
   }
@@ -432,6 +480,15 @@ class CollaborationRepository {
       roomKey: room.roomKey,
       plainBytes: message.toBytes(),
     );
+    CollaborationDebugLog.write('wire', 'send_message', {
+      'room': _shortRoomId(room.roomId),
+      'type': message.type.wireName,
+      'volatile': volatile,
+      'elements': message.elements.length,
+      'encryptedBytes': encrypted.encryptedBuffer.length,
+      'ivBytes': encrypted.iv.length,
+      'summary': CollaborationDebugLog.elementSummary(message.elements),
+    });
     await _transport.send(encrypted, volatile: volatile);
   }
 
@@ -533,6 +590,9 @@ class CollaborationRepository {
 
   int _version(Map<String, Object?> element) =>
       (element['version']! as num).toInt();
+
+  String _shortRoomId(String roomId) =>
+      roomId.length > 8 ? roomId.substring(0, 8) : roomId;
 
   Future<void> stop() async {
     _resetLocalState();
