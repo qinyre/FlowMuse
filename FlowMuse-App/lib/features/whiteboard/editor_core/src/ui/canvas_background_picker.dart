@@ -39,7 +39,7 @@ class CanvasBackgroundPicker extends StatelessWidget {
                 onTap: () {
                   if (dismissOnTap) {
                     Navigator.of(context).pop();
-                    runAfterUiFrame(() {
+                    runAfterUiTeardown(() {
                       controller.canvasBackgroundColor = c;
                     });
                   } else {

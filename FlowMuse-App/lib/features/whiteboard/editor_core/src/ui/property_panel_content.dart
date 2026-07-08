@@ -1,7 +1,6 @@
 library;
 
 import 'package:flutter/material.dart' hide Element;
-import 'package:flutter/scheduler.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     as core
@@ -1123,29 +1122,20 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
       return;
     }
     _fontPickerInserted = false;
-    if (SchedulerBinding.instance.schedulerPhase ==
-        SchedulerPhase.persistentCallbacks) {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        entry.remove();
-      });
-      return;
-    }
-    entry.remove();
+    removeOverlayEntryAfterTeardown(entry);
   }
 
   void _insertFontPickerOverlay(OverlayState overlay, OverlayEntry entry) {
-    if (SchedulerBinding.instance.schedulerPhase ==
-        SchedulerPhase.persistentCallbacks) {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
+    insertOverlayEntryWhenStable(
+      overlay: overlay,
+      entry: entry,
+      shouldInsert: () => mounted && identical(_fontPickerEntry, entry),
+      onInserted: () {
         if (mounted && identical(_fontPickerEntry, entry)) {
-          overlay.insert(entry);
           _fontPickerInserted = true;
         }
-      });
-      return;
-    }
-    overlay.insert(entry);
-    _fontPickerInserted = true;
+      },
+    );
   }
 
   void _showCompactFontPicker(BuildContext context, String? current) {
@@ -1324,7 +1314,7 @@ class _AutoOpenFontPickerState extends State<_AutoOpenFontPicker> {
     if (widget.controller.pendingColorPicker == ColorPickerTarget.font &&
         !widget.controller.fontPickerOpen) {
       widget.controller.clearPendingColorPicker();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      runWhenUiStable(() {
         if (mounted) widget.onAutoOpen();
       });
     }

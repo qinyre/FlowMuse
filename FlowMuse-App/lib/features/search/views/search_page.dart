@@ -186,7 +186,7 @@ class _ScopeMenu extends StatelessWidget {
               if (selected == null || !context.mounted) {
                 return;
               }
-              runAfterUiFrame(() => onSelected(selected.id));
+              runAfterUiTeardown(() => onSelected(selected.id));
             },
             child: Row(
               mainAxisSize: MainAxisSize.min,

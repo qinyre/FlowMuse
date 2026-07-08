@@ -39,7 +39,7 @@ void showRenameDocumentDialog(
   ).then((value) {
     textController.dispose();
     if (value != null) {
-      runAfterUiFrame(() {
+      runAfterUiTeardown(() {
         controller.renameDocument(value);
         onRenamed?.call();
       });
@@ -100,7 +100,7 @@ class HamburgerMenu extends StatelessWidget {
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
         onSelected: (value) {
-          runAfterUiFrame(() {
+          runAfterUiTeardown(() {
             switch (value) {
               case 'open':
                 onOpen?.call();

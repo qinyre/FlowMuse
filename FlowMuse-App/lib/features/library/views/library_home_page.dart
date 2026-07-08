@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_router.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
 import '../../whiteboard/collaboration/models/collaboration_room.dart';
 import '../models/library_special_view.dart';
 import '../models/note_item.dart';
@@ -32,10 +33,12 @@ class LibraryHomePage extends ConsumerWidget {
       if (room == null || !context.mounted) {
         return;
       }
-      context.push(
-        '${AppRoutes.collaborationWhiteboard}#room=${room.toRoomValue()}',
-        extra: room,
-      );
+      runAfterContextTeardown(context, () {
+        context.push(
+          '${AppRoutes.collaborationWhiteboard}#room=${room.toRoomValue()}',
+          extra: room,
+        );
+      });
     } finally {
       controller.dispose();
     }

@@ -14,7 +14,7 @@ void showCompactLibrary(
 }) {
   void closeThen(BuildContext ctx, VoidCallback action) {
     Navigator.pop(ctx);
-    runAfterUiFrame(action);
+    runAfterUiTeardown(action);
   }
 
   showModalBottomSheet<void>(

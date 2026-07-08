@@ -814,13 +814,13 @@ class _CollaborationChipState extends State<_CollaborationChip> {
           ),
         );
       case _CollaborationAction.start:
-        runAfterUiFrame(widget.onStart);
+        runAfterUiTeardown(widget.onStart);
       case _CollaborationAction.leave:
-        runAfterUiFrame(widget.onLeave);
+        runAfterUiTeardown(widget.onLeave);
       case _CollaborationAction.end:
         final onEnd = widget.onEnd;
         if (onEnd != null) {
-          runAfterUiFrame(onEnd);
+          runAfterUiTeardown(onEnd);
         }
     }
   }

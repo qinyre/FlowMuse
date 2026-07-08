@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -5,6 +7,23 @@ import 'package:flutter/scheduler.dart';
 /// close/layout work.
 void runAfterUiFrame(VoidCallback action) {
   WidgetsBinding.instance.addPostFrameCallback((_) => action());
+}
+
+/// Runs UI mutations after a route/overlay/menu teardown has had a frame to
+/// detach inherited dependencies and overlay render children.
+void runAfterUiTeardown(VoidCallback action) {
+  runAfterUiFrame(action);
+}
+
+/// Runs an async UI mutation after route/overlay teardown.
+Future<void> runAfterUiTeardownAsync(FutureOr<void> Function() action) {
+  final completer = Completer<void>();
+  runAfterUiTeardown(() {
+    Future<void>.sync(
+      action,
+    ).then(completer.complete, onError: completer.completeError);
+  });
+  return completer.future;
 }
 
 /// Runs UI mutations when Flutter is outside build/layout/paint callbacks.
@@ -23,6 +42,54 @@ void runWhenContextStable(BuildContext context, VoidCallback action) {
     if (context.mounted) {
       action();
     }
+  });
+}
+
+/// Runs [action] after a route/overlay teardown if [context] is still mounted.
+void runAfterContextTeardown(BuildContext context, VoidCallback action) {
+  runAfterUiTeardown(() {
+    if (context.mounted) {
+      action();
+    }
+  });
+}
+
+/// Runs an async action after route/overlay teardown if [context] is mounted.
+Future<void> runAfterContextTeardownAsync(
+  BuildContext context,
+  FutureOr<void> Function() action,
+) {
+  return runAfterUiTeardownAsync(() async {
+    if (context.mounted) {
+      await action();
+    }
+  });
+}
+
+/// Inserts [entry] into [overlay] when it is safe to mutate the overlay tree.
+void insertOverlayEntryWhenStable({
+  required OverlayState overlay,
+  required OverlayEntry entry,
+  required bool Function() shouldInsert,
+  VoidCallback? onInserted,
+}) {
+  runWhenUiStable(() {
+    if (!shouldInsert()) {
+      return;
+    }
+    overlay.insert(entry);
+    onInserted?.call();
+  });
+}
+
+/// Removes [entry] after the current route/overlay teardown frame.
+void removeOverlayEntryAfterTeardown(
+  OverlayEntry entry, {
+  VoidCallback? onRemoved,
+}) {
+  runAfterUiTeardown(() {
+    entry.remove();
+    onRemoved?.call();
   });
 }
 

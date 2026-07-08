@@ -524,7 +524,7 @@ class _LibraryHeader extends StatelessWidget {
               if (selected == null || !context.mounted) {
                 return;
               }
-              runAfterUiFrame(() => onViewModeChanged(selected));
+              runAfterUiTeardown(() => onViewModeChanged(selected));
             },
             icon: Icon(
               viewMode == LibraryViewMode.grid
@@ -783,7 +783,7 @@ class _LibraryPopupMenuButton<T extends Object> extends StatelessWidget {
                 if (selected == null || !context.mounted) {
                   return;
                 }
-                runAfterUiFrame(() => onSelected(selected));
+                runAfterUiTeardown(() => onSelected(selected));
               },
         child: Text(label),
       ),

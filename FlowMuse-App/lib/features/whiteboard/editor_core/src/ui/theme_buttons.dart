@@ -61,7 +61,7 @@ class ThemeButtons extends StatelessWidget {
   void _setTheme(BuildContext context, ThemeMode mode) {
     if (dismissOnTap) {
       Navigator.of(context).pop();
-      runAfterUiFrame(() => onThemeModeChanged?.call(mode));
+      runAfterUiTeardown(() => onThemeModeChanged?.call(mode));
     } else {
       onThemeModeChanged?.call(mode);
     }

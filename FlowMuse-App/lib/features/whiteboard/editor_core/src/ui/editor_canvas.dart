@@ -94,7 +94,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
           final canvasSize = Size(constraints.maxWidth, constraints.maxHeight);
           if (_lastReportedSize != canvasSize) {
             _lastReportedSize = canvasSize;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
+            runWhenUiStable(() {
               if (mounted) {
                 widget.onVisibleSceneBoundsChanged?.call(canvasSize);
               }

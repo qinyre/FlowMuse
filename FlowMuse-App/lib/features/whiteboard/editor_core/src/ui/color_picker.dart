@@ -3,8 +3,8 @@ library;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 import 'color_utils.dart';
 import 'style_icon_painters.dart';
@@ -115,7 +115,7 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
   void initState() {
     super.initState();
     if (widget.autoOpen) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      runWhenUiStable(() {
         if (mounted) _showPalettePopup();
       });
     }
@@ -125,7 +125,7 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
   void didUpdateWidget(ColorPickerButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.autoOpen && !oldWidget.autoOpen && _overlayEntry == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      runWhenUiStable(() {
         if (mounted) _showPalettePopup();
       });
     }
@@ -182,7 +182,11 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
         currentColor: widget.color,
         onSelect: (c) {
           _removeOverlay();
-          widget.onColorSelected(c);
+          runAfterUiTeardown(() {
+            if (mounted) {
+              widget.onColorSelected(c);
+            }
+          });
         },
         onDismiss: _removeOverlay,
         onRenderScene: widget.onRenderScene,
@@ -191,7 +195,6 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
       ),
     );
     _insertOverlay(overlay, _overlayEntry!);
-    widget.onAutoOpened?.call();
   }
 
   void _removeOverlay() {
@@ -204,29 +207,21 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
       return;
     }
     _overlayInserted = false;
-    if (SchedulerBinding.instance.schedulerPhase ==
-        SchedulerPhase.persistentCallbacks) {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        entry.remove();
-      });
-      return;
-    }
-    entry.remove();
+    removeOverlayEntryAfterTeardown(entry);
   }
 
   void _insertOverlay(OverlayState overlay, OverlayEntry entry) {
-    if (SchedulerBinding.instance.schedulerPhase ==
-        SchedulerPhase.persistentCallbacks) {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
+    insertOverlayEntryWhenStable(
+      overlay: overlay,
+      entry: entry,
+      shouldInsert: () => mounted && identical(_overlayEntry, entry),
+      onInserted: () {
         if (mounted && identical(_overlayEntry, entry)) {
-          overlay.insert(entry);
           _overlayInserted = true;
+          widget.onAutoOpened?.call();
         }
-      });
-      return;
-    }
-    overlay.insert(entry);
-    _overlayInserted = true;
+      },
+    );
   }
 }
 

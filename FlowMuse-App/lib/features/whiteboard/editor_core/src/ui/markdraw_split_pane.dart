@@ -130,7 +130,7 @@ class _MarkdrawSplitPaneState extends State<MarkdrawSplitPane>
   // ---------------------------------------------------------------------------
 
   void _onControllerChanged() {
-    if (_isSyncing) return;
+    if (!mounted || _isSyncing) return;
     final currentName = widget.controller.documentName;
     if (currentName != _lastSyncedName) {
       _lastSyncedName = currentName;
@@ -141,13 +141,14 @@ class _MarkdrawSplitPaneState extends State<MarkdrawSplitPane>
 
   void _onSceneChanged(Scene scene) {
     _previousOnSceneChanged?.call(scene);
-    if (_isSyncing) return;
+    if (!mounted || _isSyncing) return;
     _hasPushedForSession = false;
     _syncCanvasToText();
     _textFlash.forward(from: 0);
   }
 
   void _syncCanvasToText() {
+    if (!mounted) return;
     _isSyncing = true;
     final fullText = widget.controller.serializeScene();
     final sketchLines = _extractSketchLines(fullText);
@@ -190,11 +191,14 @@ class _MarkdrawSplitPaneState extends State<MarkdrawSplitPane>
     _lastSyncedText = currentText;
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: _debounceMs), () {
-      _syncTextToCanvas();
+      if (mounted) {
+        _syncTextToCanvas();
+      }
     });
   }
 
   void _syncTextToCanvas() {
+    if (!mounted) return;
     final text = _codeController.text;
     _isSyncing = true;
     try {

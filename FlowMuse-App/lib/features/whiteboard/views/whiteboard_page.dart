@@ -939,6 +939,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   void _broadcastPointerPresence(Offset localPosition, bool pointerDown) {
+    if (!_canMutateWhiteboard) {
+      return;
+    }
     _markUserActive();
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
@@ -961,6 +964,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   void _broadcastVisibleSceneBounds(Size canvasSize) {
+    if (!_canMutateWhiteboard) {
+      return;
+    }
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
       return;
@@ -978,18 +984,28 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   void _markUserActive() {
+    if (!_canMutateWhiteboard) {
+      return;
+    }
     _idleTimer?.cancel();
     _awayTimer?.cancel();
     _broadcastIdleState('active');
     _idleTimer = Timer(const Duration(minutes: 1), () {
-      _broadcastIdleState('idle');
+      if (_canMutateWhiteboard) {
+        _broadcastIdleState('idle');
+      }
     });
     _awayTimer = Timer(const Duration(minutes: 5), () {
-      _broadcastIdleState('away');
+      if (_canMutateWhiteboard) {
+        _broadcastIdleState('away');
+      }
     });
   }
 
   void _broadcastIdleState(String state) {
+    if (!_canMutateWhiteboard) {
+      return;
+    }
     if (_lastIdleState == state) {
       return;
     }

@@ -61,7 +61,7 @@ class CompactMenuButton extends StatelessWidget {
   void _showCompactMenu(BuildContext context) {
     void closeThen(VoidCallback action) {
       Navigator.pop(context);
-      runAfterUiFrame(action);
+      runAfterUiTeardown(action);
     }
 
     showModalBottomSheet<void>(
@@ -183,7 +183,7 @@ class CompactMenuButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(6),
           onTap: () {
             Navigator.pop(ctx);
-            runAfterUiFrame(() => onThemeModeChanged?.call(mode));
+            runAfterUiTeardown(() => onThemeModeChanged?.call(mode));
           },
           child: SizedBox(
             width: 32,
@@ -215,7 +215,7 @@ class CompactMenuButton extends StatelessWidget {
                 isSelected: controller.canvasBackgroundColor == c,
                 onTap: () {
                   Navigator.pop(ctx);
-                  runAfterUiFrame(() {
+                  runAfterUiTeardown(() {
                     controller.canvasBackgroundColor = c;
                   });
                 },

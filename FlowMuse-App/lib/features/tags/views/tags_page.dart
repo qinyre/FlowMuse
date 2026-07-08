@@ -606,7 +606,7 @@ class _TagHeader extends StatelessWidget {
                 if (selected == null || !context.mounted) {
                   return;
                 }
-                runAfterUiFrame(() => onViewModeChanged!(selected));
+                runAfterUiTeardown(() => onViewModeChanged!(selected));
               },
               icon: Icon(
                 viewMode == LibraryViewMode.grid
@@ -718,9 +718,9 @@ class _CollectionActions extends StatelessWidget {
           }
           switch (selected) {
             case _CollectionAction.rename:
-              runAfterUiFrame(onRename!);
+              runAfterUiTeardown(onRename!);
             case _CollectionAction.delete:
-              runAfterUiFrame(onDelete!);
+              runAfterUiTeardown(onDelete!);
           }
         },
       ),
@@ -787,7 +787,7 @@ Future<void> _showNameDialog({
       ),
     );
     if (value != null && context.mounted) {
-      await onSubmitted(value);
+      await runAfterContextTeardownAsync(context, () => onSubmitted(value));
     }
   } finally {
     controller.dispose();
