@@ -62,6 +62,7 @@ class LibraryContent extends StatefulWidget {
 
 class _LibraryContentState extends State<LibraryContent> {
   late final PageController _pageController;
+  int? _animatingFilterIndex;
 
   @override
   void initState() {
@@ -75,6 +76,9 @@ class _LibraryContentState extends State<LibraryContent> {
     if (widget.specialView != LibrarySpecialView.none ||
         oldWidget.state.selectedFilter == widget.state.selectedFilter ||
         !_pageController.hasClients) {
+      return;
+    }
+    if (_animatingFilterIndex == _selectedFilterIndex) {
       return;
     }
     final page = _pageController.page?.round();
@@ -94,18 +98,27 @@ class _LibraryContentState extends State<LibraryContent> {
   }
 
   void _onFilterChanged(LibraryFilter filter) {
+    final filterIndex = LibraryFilter.values.indexOf(filter);
     if (widget.specialView == LibrarySpecialView.none &&
         _pageController.hasClients) {
+      _animatingFilterIndex = filterIndex;
       _pageController.animateToPage(
-        LibraryFilter.values.indexOf(filter),
-        duration: const Duration(milliseconds: 300),
+        filterIndex,
+        duration: const Duration(milliseconds: 500),
         curve: Curves.easeOutCubic,
-      );
+      ).whenComplete(() {
+        if (mounted && _animatingFilterIndex == filterIndex) {
+          _animatingFilterIndex = null;
+        }
+      });
     }
     widget.onFilterChanged(filter);
   }
 
   void _onPageChanged(int index) {
+    if (_animatingFilterIndex == index) {
+      _animatingFilterIndex = null;
+    }
     widget.onFilterChanged(LibraryFilter.values[index]);
   }
 
@@ -131,6 +144,7 @@ class _LibraryContentState extends State<LibraryContent> {
             _FilterTabs(
               selected: widget.state.selectedFilter,
               onFilterChanged: _onFilterChanged,
+              pageController: _pageController,
             ),
             const SizedBox(height: AppSpacing.sectionGap),
           ],
@@ -168,77 +182,115 @@ class _LibraryContentState extends State<LibraryContent> {
   }
 }
 
-class _FilterTabs extends StatelessWidget {
-  const _FilterTabs({required this.selected, required this.onFilterChanged});
+class _FilterTabs extends StatefulWidget {
+  const _FilterTabs({
+    required this.selected,
+    required this.onFilterChanged,
+    required this.pageController,
+  });
 
   final LibraryFilter selected;
   final ValueChanged<LibraryFilter> onFilterChanged;
+  final PageController pageController;
 
   static const _labels = {
     LibraryFilter.all: '全部',
     LibraryFilter.notes: '笔记',
     LibraryFilter.pdf: 'PDF',
   };
+  static const _indicatorWidth = 58.0;
+  static const _buttonWidth = 86.0;
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        for (final filter in LibraryFilter.values)
-          _FilterTabButton(
-            label: _labels[filter]!,
-            selected: selected == filter,
-            onTap: () => onFilterChanged(filter),
-          ),
-      ],
-    );
-  }
+  State<_FilterTabs> createState() => _FilterTabsState();
 }
 
-class _FilterTabButton extends StatelessWidget {
-  const _FilterTabButton({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+class _FilterTabsState extends State<_FilterTabs> {
+  double _indicatorPosition = 0;
 
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  @override
+  void initState() {
+    super.initState();
+    _indicatorPosition = LibraryFilter.values.indexOf(widget.selected) *
+        _FilterTabs._buttonWidth;
+    widget.pageController.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(_FilterTabs oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pageController != oldWidget.pageController) {
+      oldWidget.pageController.removeListener(_onScroll);
+      widget.pageController.addListener(_onScroll);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.pageController.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!widget.pageController.hasClients) return;
+    final offset = widget.pageController.offset;
+    final screenWidth = widget.pageController.position.viewportDimension;
+    final pagePosition = offset / screenWidth;
+    setState(() {
+      _indicatorPosition = pagePosition * _FilterTabs._buttonWidth;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return InkWell(
-      onTap: onTap,
-      highlightColor: colorScheme.primary.withValues(alpha: 0.06),
-      splashColor: Colors.transparent,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                color: selected ? colorScheme.primary : const Color(0xFF151918),
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              ),
-              child: Text(label),
-            ),
-            const SizedBox(height: 12),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              width: selected ? 58 : 0,
+    return SizedBox(
+      height: 52,
+      child: Stack(
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final filter in LibraryFilter.values)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => widget.onFilterChanged(filter),
+                  child: SizedBox(
+                    width: _FilterTabs._buttonWidth,
+                    child: Center(
+                      child: TweenAnimationBuilder<Color?>(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        tween: ColorTween(
+                          end: widget.selected == filter
+                              ? colorScheme.primary
+                              : const Color(0xFF151918),
+                        ),
+                        builder: (context, color, child) => Text(
+                          _FilterTabs._labels[filter]!,
+                          style: Theme.of(context).textTheme.titleMedium!.copyWith(
+                            color: color,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          Positioned(
+            bottom: 0,
+            left: _indicatorPosition +
+                (_FilterTabs._buttonWidth - _FilterTabs._indicatorWidth) / 2,
+            child: Container(
+              width: _FilterTabs._indicatorWidth,
               height: 2,
               color: colorScheme.primary,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
