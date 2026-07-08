@@ -160,9 +160,10 @@ ShellSection _sectionForPath(String path) {
   if (path == AppRoutes.search) {
     return ShellSection.search;
   }
-  if (path == AppRoutes.unnotebooked ||
-      path == AppRoutes.untagged ||
-      path == AppRoutes.trash) {
+  if (path == AppRoutes.trash) {
+    return ShellSection.trash;
+  }
+  if (path == AppRoutes.unnotebooked || path == AppRoutes.untagged) {
     return ShellSection.library;
   }
   if (path == AppRoutes.notebooks ||

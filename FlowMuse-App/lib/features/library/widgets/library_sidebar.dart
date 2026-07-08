@@ -93,6 +93,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
             SharedSidebarItem(
               icon: LucideIcons.trash2,
               label: '回收站',
+              selected: widget.section == ShellSection.trash,
               count: (libraryIndex?.deletedNotes.length ?? 0).toString(),
               onTap: () => context.go(AppRoutes.trash),
             ),

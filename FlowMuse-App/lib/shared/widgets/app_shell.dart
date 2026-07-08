@@ -5,7 +5,7 @@ import '../../app/app_theme_preset.dart';
 import '../../app/view_models/theme_view_model.dart';
 import '../../features/library/widgets/library_sidebar.dart';
 
-enum ShellSection { library, search, notebooks, tags, settings }
+enum ShellSection { library, search, notebooks, tags, trash, settings }
 
 const sharedSidebarWidth = 268.0;
 
