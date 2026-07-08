@@ -24,24 +24,19 @@ class LibraryHomePage extends ConsumerWidget {
   }
 
   Future<void> _joinRoom(BuildContext context) async {
-    final controller = TextEditingController();
-    try {
-      final room = await showDialog<CollaborationRoom>(
-        context: context,
-        builder: (context) => _JoinRoomDialog(controller: controller),
-      );
-      if (room == null || !context.mounted) {
-        return;
-      }
-      runAfterContextTeardown(context, () {
-        context.push(
-          '${AppRoutes.collaborationWhiteboard}#room=${room.toRoomValue()}',
-          extra: room,
-        );
-      });
-    } finally {
-      controller.dispose();
+    final room = await showDialog<CollaborationRoom>(
+      context: context,
+      builder: (context) => const _JoinRoomDialog(),
+    );
+    if (room == null || !context.mounted) {
+      return;
     }
+    runAfterContextTeardown(context, () {
+      context.push(
+        '${AppRoutes.collaborationWhiteboard}#room=${room.toRoomValue()}',
+        extra: room,
+      );
+    });
   }
 
   @override
@@ -121,19 +116,24 @@ List<NoteItem> _notesForSpecialView(
 }
 
 class _JoinRoomDialog extends StatefulWidget {
-  const _JoinRoomDialog({required this.controller});
-
-  final TextEditingController controller;
+  const _JoinRoomDialog();
 
   @override
   State<_JoinRoomDialog> createState() => _JoinRoomDialogState();
 }
 
 class _JoinRoomDialogState extends State<_JoinRoomDialog> {
+  final _controller = TextEditingController();
   String? _error;
 
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   void _submit() {
-    final room = _parseRoomInput(widget.controller.text);
+    final room = _parseRoomInput(_controller.text);
     if (room == null) {
       setState(() => _error = '请输入完整房间链接或 roomId,roomKey');
       return;
@@ -150,7 +150,7 @@ class _JoinRoomDialogState extends State<_JoinRoomDialog> {
     return AlertDialog(
       title: const Text('加入协作房间'),
       content: TextField(
-        controller: widget.controller,
+        controller: _controller,
         autofocus: true,
         minLines: 1,
         maxLines: 3,

@@ -12,32 +12,11 @@ void showRenameDocumentDialog(
   MarkdrawController controller,
   VoidCallback? onRenamed,
 ) {
-  final textController = TextEditingController(
-    text: controller.documentName ?? '',
-  );
   showDialog<String>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('重命名'),
-      content: TextField(
-        controller: textController,
-        autofocus: true,
-        decoration: const InputDecoration(labelText: '文档名称', hintText: '文档名称'),
-        onSubmitted: (value) => Navigator.of(context).pop(value),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(textController.text),
-          child: const Text('确定'),
-        ),
-      ],
-    ),
+    builder: (context) =>
+        _RenameDocumentDialog(initialName: controller.documentName ?? ''),
   ).then((value) {
-    textController.dispose();
     if (value != null) {
       runAfterUiTeardown(() {
         controller.renameDocument(value);
@@ -45,6 +24,55 @@ void showRenameDocumentDialog(
       });
     }
   });
+}
+
+class _RenameDocumentDialog extends StatefulWidget {
+  const _RenameDocumentDialog({required this.initialName});
+
+  final String initialName;
+
+  @override
+  State<_RenameDocumentDialog> createState() => _RenameDocumentDialogState();
+}
+
+class _RenameDocumentDialogState extends State<_RenameDocumentDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    Navigator.of(context).pop(value ?? _controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('重命名'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: '文档名称', hintText: '文档名称'),
+        onSubmitted: _submit,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        TextButton(onPressed: _submit, child: const Text('确定')),
+      ],
+    );
+  }
 }
 
 /// Desktop hamburger menu (top-left).

@@ -882,60 +882,22 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     final savedSelection = wasEditing ? controller.editableTextSelection : null;
     if (wasEditing) controller.suppressFocusCommit = true;
 
-    final sizeController = TextEditingController(
-      text: current != null ? current.round().toString() : '',
-    );
-    showDialog<void>(
+    showDialog<double>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('自定义字号'),
-        content: TextField(
-          controller: sizeController,
-          keyboardType: TextInputType.number,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: '字号',
-            hintText: '4–200',
-            isDense: true,
-          ),
-          onSubmitted: (value) {
-            final parsed = double.tryParse(value);
-            if (parsed != null) {
-              controller.applyStyleChange(
-                ElementStyle(hasText: true, fontSize: parsed.clamp(4.0, 200.0)),
-              );
-            }
-            Navigator.of(ctx).pop();
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              final parsed = double.tryParse(sizeController.text);
-              if (parsed != null) {
-                controller.applyStyleChange(
-                  ElementStyle(
-                    hasText: true,
-                    fontSize: parsed.clamp(4.0, 200.0),
-                  ),
-                );
-              }
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('应用'),
-          ),
-        ],
+      builder: (ctx) => _FontSizeDialog(
+        initialValue: current != null ? current.round().toString() : '',
       ),
-    ).then((_) {
-      sizeController.dispose();
+    ).then((fontSize) {
       runWhenUiStable(() {
-        if (mounted) {
-          controller.restoreTextFocus(wasEditing, savedSelection);
+        if (!mounted) {
+          return;
         }
+        if (fontSize != null) {
+          controller.applyStyleChange(
+            ElementStyle(hasText: true, fontSize: fontSize.clamp(4.0, 200.0)),
+          );
+        }
+        controller.restoreTextFocus(wasEditing, savedSelection);
       });
     });
   }
@@ -1257,6 +1219,61 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             isSelected: isSelected(i),
             onTap: () => onTap(i),
           ),
+      ],
+    );
+  }
+}
+
+class _FontSizeDialog extends StatefulWidget {
+  const _FontSizeDialog({required this.initialValue});
+
+  final String initialValue;
+
+  @override
+  State<_FontSizeDialog> createState() => _FontSizeDialogState();
+}
+
+class _FontSizeDialogState extends State<_FontSizeDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    final parsed = double.tryParse(value ?? _controller.text);
+    Navigator.of(context).pop(parsed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('自定义字号'),
+      content: TextField(
+        controller: _controller,
+        keyboardType: TextInputType.number,
+        autofocus: true,
+        decoration: const InputDecoration(
+          labelText: '字号',
+          hintText: '4–200',
+          isDense: true,
+        ),
+        onSubmitted: _submit,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        TextButton(onPressed: _submit, child: const Text('应用')),
       ],
     );
   }

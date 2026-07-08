@@ -761,35 +761,62 @@ Future<void> _showNameDialog({
   required String initialValue,
   required Future<void> Function(String value) onSubmitted,
 }) async {
-  final controller = TextEditingController(text: initialValue);
-  try {
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('保存'),
-          ),
-        ],
+  final value = await showDialog<String>(
+    context: context,
+    builder: (context) => _NameDialog(title: title, initialValue: initialValue),
+  );
+  if (value != null && context.mounted) {
+    await runAfterContextTeardownAsync(context, () => onSubmitted(value));
+  }
+}
+
+class _NameDialog extends StatefulWidget {
+  const _NameDialog({required this.title, required this.initialValue});
+
+  final String title;
+  final String initialValue;
+
+  @override
+  State<_NameDialog> createState() => _NameDialogState();
+}
+
+class _NameDialogState extends State<_NameDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    Navigator.of(context).pop(value ?? _controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        onSubmitted: _submit,
+        decoration: const InputDecoration(border: OutlineInputBorder()),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('保存')),
+      ],
     );
-    if (value != null && context.mounted) {
-      await runAfterContextTeardownAsync(context, () => onSubmitted(value));
-    }
-  } finally {
-    controller.dispose();
   }
 }
