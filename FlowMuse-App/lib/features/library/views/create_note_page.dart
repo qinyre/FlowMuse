@@ -150,6 +150,10 @@ class _TopBar extends StatelessWidget {
               onPressed: () => context.pop(),
               style: TextButton.styleFrom(
                 foregroundColor: const Color(0xFF4F8F84),
+                textStyle: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppSpacing.radius),
                 ),
@@ -162,6 +166,10 @@ class _TopBar extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4F8F84),
                 foregroundColor: Colors.white,
+                textStyle: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 18,
@@ -321,7 +329,7 @@ class _TitleInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 42,
+      height: 48,
       child: TextField(
         controller: controller,
         focusNode: focusNode,
@@ -350,9 +358,17 @@ class _TitleInput extends StatelessWidget {
           hintText: '输入笔记标题',
           filled: true,
           fillColor: const Color(0xFFF1F2F1),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radius),
+            borderSide: const BorderSide(color: Color(0xFF4F8F84)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radius),
+            borderSide: const BorderSide(color: Color(0xFF4F8F84), width: 1.5),
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radius),
-            borderSide: BorderSide.none,
+            borderSide: const BorderSide(color: Color(0xFF4F8F84)),
           ),
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(
