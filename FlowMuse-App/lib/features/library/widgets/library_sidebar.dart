@@ -105,7 +105,6 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
               label: '笔记本',
               selected: widget.section == ShellSection.notebooks,
               actionIcon: LucideIcons.circlePlus,
-              leadingAction: true,
               emptyLabel: hasNotebooks ? null : '暂无笔记本',
               trailingIcon: hasNotebooks
                   ? (_notebooksExpanded

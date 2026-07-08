@@ -192,7 +192,6 @@ class SharedSidebarItem extends StatelessWidget {
     this.trailingIcon,
     this.actionIcon,
     this.emptyLabel,
-    this.leadingAction = false,
     this.onActionTap,
     this.onTrailingTap,
     this.onTap,
@@ -206,7 +205,6 @@ class SharedSidebarItem extends StatelessWidget {
   final IconData? trailingIcon;
   final IconData? actionIcon;
   final String? emptyLabel;
-  final bool leadingAction;
   final VoidCallback? onActionTap;
   final VoidCallback? onTrailingTap;
   final VoidCallback? onTap;
@@ -256,8 +254,8 @@ class SharedSidebarItem extends StatelessWidget {
                               ),
                         ),
                       ),
-                      if (leadingAction && actionIcon != null) ...[
-                        const SizedBox(width: AppSpacing.controlGap),
+                      if (actionIcon != null) ...[
+                        const SizedBox(width: 0),
                         SharedSidebarActionButton(
                           tooltip: '新建$label',
                           icon: actionIcon!,
@@ -267,14 +265,6 @@ class SharedSidebarItem extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (!leadingAction && actionIcon != null) ...[
-                  SharedSidebarActionButton(
-                    tooltip: '新建$label',
-                    icon: actionIcon!,
-                    onPressed: onActionTap,
-                  ),
-                  const SizedBox(width: AppSpacing.controlGap),
-                ],
                 SizedBox(
                   width: 64,
                   height: 32,
@@ -293,13 +283,19 @@ class SharedSidebarItem extends StatelessWidget {
                           height: 1.0,
                         ),
                       ),
-                      (_, final String value, _) => Text(
-                        value,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontSize: 11,
-                          height: 1.0,
+                      (_, final String value, _) => SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: Center(
+                          child: Text(
+                            value,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              fontSize: 11,
+                              height: 1.0,
+                            ),
+                          ),
                         ),
                       ),
                       (_, _, final IconData icon) => IconButton(
@@ -362,20 +358,25 @@ class SharedSidebarActionButton extends StatelessWidget {
     required this.tooltip,
     required this.icon,
     required this.onPressed,
+    this.offset = Offset.zero,
   });
 
   final String tooltip;
   final IconData icon;
   final VoidCallback? onPressed;
+  final Offset offset;
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-      padding: EdgeInsets.zero,
-      onPressed: onPressed,
-      icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),
+    return Transform.translate(
+      offset: offset,
+      child: IconButton(
+        tooltip: tooltip,
+        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+        icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),
+      ),
     );
   }
 }
