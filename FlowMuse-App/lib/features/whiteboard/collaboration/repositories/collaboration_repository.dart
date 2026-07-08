@@ -5,6 +5,7 @@ import '../models/collaboration_message.dart';
 import '../models/collaboration_room.dart';
 import '../models/excalidraw_scene.dart';
 import '../models/room_collaborator.dart';
+import 'collaboration_owner_key_store.dart';
 import '../services/collaboration_crypto.dart';
 import '../services/collaboration_file_store.dart';
 import '../services/encrypted_scene_store.dart';
@@ -16,11 +17,13 @@ class CollaborationRepository {
     RealtimeTransport? transport,
     EncryptedSceneStore? sceneStore,
     CollaborationFileStore? fileStore,
+    CollaborationOwnerKeyStore? ownerKeyStore,
     CollaborationCrypto? crypto,
     SceneReconciler? reconciler,
   }) : _transport = transport ?? const DisconnectedRealtimeTransport(),
        _sceneStore = sceneStore ?? MemoryEncryptedSceneStore(),
        _fileStore = fileStore,
+       _ownerKeyStore = ownerKeyStore ?? CollaborationOwnerKeyStore(),
        _crypto = crypto ?? CollaborationCrypto(),
        _reconciler = reconciler ?? SceneReconciler();
 
@@ -29,6 +32,7 @@ class CollaborationRepository {
   final RealtimeTransport _transport;
   final EncryptedSceneStore _sceneStore;
   final CollaborationFileStore? _fileStore;
+  final CollaborationOwnerKeyStore _ownerKeyStore;
   final CollaborationCrypto _crypto;
   final SceneReconciler _reconciler;
   final Map<String, int> _broadcastedElementVersions = {};
@@ -79,6 +83,11 @@ class CollaborationRepository {
     required ExcalidrawScene initialScene,
   }) async {
     final room = CollaborationRoom.newRoom(crypto: _crypto);
+    final ownerKey = _crypto.generateRoomKey();
+    final ownerKeyHash = _crypto.hashOwnerKey(
+      roomId: room.roomId,
+      ownerKey: ownerKey,
+    );
     final syncableScene = initialScene.copyWith(
       elements: _reconciler.getSyncableElements(initialScene.elements),
     );
@@ -87,7 +96,12 @@ class CollaborationRepository {
       roomKey: room.roomKey,
       filesJson: syncableScene.files,
     );
-    await _sceneStore.createRoom(room: room, scene: syncableScene);
+    await _sceneStore.createRoom(
+      room: room,
+      scene: syncableScene,
+      ownerKeyHash: ownerKeyHash,
+    );
+    await _ownerKeyStore.writeOwnerKey(room.roomId, ownerKey);
     await _transport.connect(room.roomId);
     _activeRoom = room;
     _latestScene = syncableScene;
@@ -139,8 +153,12 @@ class CollaborationRepository {
     if (room == null) {
       throw StateError('协作连接未建立');
     }
-    final metadata = await _sceneStore.endRoom(room);
-    await _transport.endRoom();
+    final ownerKey = await _ownerKeyStore.readOwnerKey(room.roomId);
+    final metadata = await _sceneStore.endRoom(room, ownerKey: ownerKey);
+    try {
+      await _transport.endRoom(ownerKey: ownerKey);
+    } catch (_) {}
+    await _ownerKeyStore.clearOwnerKey(room.roomId);
     _resetLocalState();
     return metadata;
   }

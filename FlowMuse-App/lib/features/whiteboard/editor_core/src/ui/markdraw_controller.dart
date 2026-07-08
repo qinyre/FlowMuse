@@ -1586,8 +1586,14 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Applies a scene received from collaboration without touching undo history.
-  void applyRemoteScene(Scene scene, {String? background}) {
-    closeTransientUiForSceneReplace();
+  void applyRemoteScene(
+    Scene scene, {
+    String? background,
+    bool closeTransientUi = true,
+  }) {
+    if (closeTransientUi) {
+      closeTransientUiForSceneReplace();
+    }
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated);
     if (background != null) {
@@ -2162,7 +2168,7 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Applies Excalidraw JSON received from collaboration.
-  void applyRemoteContent(String content) {
+  void applyRemoteContent(String content, {bool closeTransientUi = true}) {
     final parseResult = ExcalidrawJsonCodec.parse(content);
     _canvasBackgroundColor = parseResult.value.settings.background;
     _gridSize = parseResult.value.settings.grid;
@@ -2172,12 +2178,19 @@ class MarkdrawController extends ChangeNotifier {
         parseResult.value,
         regenerateIndices: false,
       ),
+      closeTransientUi: closeTransientUi,
     );
   }
 
   /// Applies a full Excalidraw scene object received from collaboration.
-  void applyRemoteExcalidrawSceneJson(Map<String, Object?> sceneJson) {
-    applyRemoteContent(jsonEncode(sceneJson));
+  void applyRemoteExcalidrawSceneJson(
+    Map<String, Object?> sceneJson, {
+    bool closeTransientUi = true,
+  }) {
+    applyRemoteContent(
+      jsonEncode(sceneJson),
+      closeTransientUi: closeTransientUi,
+    );
   }
 
   /// Exports the scene (or selection) as PNG bytes.

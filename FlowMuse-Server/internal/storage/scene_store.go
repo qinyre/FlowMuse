@@ -13,6 +13,7 @@ type SceneSnapshot struct {
 	SceneHash        string `json:"sceneHash"`
 	BaseSceneVersion int64  `json:"baseSceneVersion"`
 	BaseSceneHash    string `json:"baseSceneHash"`
+	OwnerKeyHash     string `json:"ownerKeyHash,omitempty"`
 	EncryptedBuffer  []byte `json:"encryptedBuffer"`
 	IV               []byte `json:"iv"`
 	UpdatedAt        int64  `json:"updatedAt"`

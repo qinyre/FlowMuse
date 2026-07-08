@@ -260,13 +260,13 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   }
 
   @override
-  Future<void> endRoom() async {
+  Future<void> endRoom({String? ownerKey}) async {
     final roomId = _roomId;
     final socket = _socket;
     if (roomId == null || socket == null || !socket.connected) {
       throw StateError('协作连接未建立');
     }
-    socket.emit(_eventEndRoom, roomId);
+    socket.emit(_eventEndRoom, {'roomId': roomId, 'ownerKey': ?ownerKey});
   }
 
   @override

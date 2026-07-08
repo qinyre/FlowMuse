@@ -34,7 +34,7 @@ abstract interface class RealtimeTransport {
 
   Future<void> send(EncryptedPayload payload, {bool volatile = false});
 
-  Future<void> endRoom();
+  Future<void> endRoom({String? ownerKey});
 
   Future<void> disconnect();
 }
@@ -73,7 +73,7 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
   Future<void> disconnect() async {}
 
   @override
-  Future<void> endRoom() async {}
+  Future<void> endRoom({String? ownerKey}) async {}
 
   @override
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {}
@@ -219,7 +219,7 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   }
 
   @override
-  Future<void> endRoom() async {
+  Future<void> endRoom({String? ownerKey}) async {
     final roomId = _roomId;
     if (roomId == null) {
       throw StateError('协作连接未建立');

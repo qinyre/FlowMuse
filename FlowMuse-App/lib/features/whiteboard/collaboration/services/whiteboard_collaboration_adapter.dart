@@ -14,8 +14,11 @@ class WhiteboardCollaborationAdapter {
     return ExcalidrawScene.fromJson(controller.serializeExcalidrawSceneJson());
   }
 
-  void applyRemoteScene(ExcalidrawScene scene) {
-    controller.applyRemoteExcalidrawSceneJson(scene.toJson());
+  void applyRemoteScene(ExcalidrawScene scene, {bool closeTransientUi = true}) {
+    controller.applyRemoteExcalidrawSceneJson(
+      scene.toJson(),
+      closeTransientUi: closeTransientUi,
+    );
   }
 
   Set<String> selectedElementIds() {

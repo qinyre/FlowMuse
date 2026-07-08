@@ -2,8 +2,11 @@ package collab
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -23,6 +26,7 @@ const (
 )
 
 var safeIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+var ownerKeyHashPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 type HTTPAPI struct {
 	sceneStore     *storage.SceneStore
@@ -168,13 +172,22 @@ func (api *HTTPAPI) writeAuthSession(w http.ResponseWriter, status int, user aut
 	})
 }
 
+func hashOwnerKey(roomID, ownerKey string) string {
+	if ownerKey == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(roomID + ":" + ownerKey))
+	return hex.EncodeToString(sum[:])
+}
+
 func (api *HTTPAPI) roomsRoot(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		ctx, cancel := contextWithTimeout(r, api.requestTimeout)
 		defer cancel()
 		var request struct {
-			RoomID string `json:"roomId"`
+			RoomID       string `json:"roomId"`
+			OwnerKeyHash string `json:"ownerKeyHash"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -184,12 +197,16 @@ func (api *HTTPAPI) roomsRoot(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid roomId", http.StatusBadRequest)
 			return
 		}
+		if request.OwnerKeyHash != "" && !ownerKeyHashPattern.MatchString(request.OwnerKeyHash) {
+			http.Error(w, "invalid ownerKeyHash", http.StatusBadRequest)
+			return
+		}
 		identity, _ := api.identityFromRequest(r)
 		ownerID := ""
 		if !identity.IsGuest {
 			ownerID = identity.UserID
 		}
-		metadata, err := api.roomStore.CreateRoom(ctx, request.RoomID, ownerID)
+		metadata, err := api.roomStore.CreateRoom(ctx, request.RoomID, ownerID, request.OwnerKeyHash)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -288,12 +305,16 @@ func (api *HTTPAPI) endRoom(w http.ResponseWriter, r *http.Request, roomID strin
 	}
 	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
 	defer cancel()
-	identity, ok := api.identityFromRequest(r)
-	if !ok || identity.IsGuest {
-		http.Error(w, "未登录", http.StatusUnauthorized)
+	var request struct {
+		OwnerKey string `json:"ownerKey"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	metadata, err := api.roomStore.EndRoom(ctx, roomID, identity.UserID)
+	identity, _ := api.identityFromRequest(r)
+	ownerKeyHash := hashOwnerKey(roomID, request.OwnerKey)
+	metadata, err := api.roomStore.EndRoom(ctx, roomID, identity.UserID, ownerKeyHash)
 	if errors.Is(err, storage.ErrRoomAccessDenied) {
 		http.Error(w, "只有房主可以结束协作", http.StatusForbidden)
 		return
@@ -339,6 +360,10 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 			return
 		}
 		snapshot.RoomID = roomID
+		if snapshot.OwnerKeyHash != "" && !ownerKeyHashPattern.MatchString(snapshot.OwnerKeyHash) {
+			http.Error(w, "invalid ownerKeyHash", http.StatusBadRequest)
+			return
+		}
 		if snapshot.EncryptedBuffer == nil || snapshot.IV == nil {
 			http.Error(w, "encryptedBuffer and iv are required", http.StatusBadRequest)
 			return
@@ -364,6 +389,10 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 			return
 		}
 		snapshot.RoomID = roomID
+		if snapshot.OwnerKeyHash != "" && !ownerKeyHashPattern.MatchString(snapshot.OwnerKeyHash) {
+			http.Error(w, "invalid ownerKeyHash", http.StatusBadRequest)
+			return
+		}
 		if snapshot.EncryptedBuffer == nil || snapshot.IV == nil {
 			http.Error(w, "encryptedBuffer and iv are required", http.StatusBadRequest)
 			return
@@ -381,7 +410,7 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 		if !identity.IsGuest {
 			ownerID = identity.UserID
 		}
-		if _, err := api.roomStore.CreateRoom(ctx, roomID, ownerID); err != nil {
+		if _, err := api.roomStore.CreateRoom(ctx, roomID, ownerID, snapshot.OwnerKeyHash); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

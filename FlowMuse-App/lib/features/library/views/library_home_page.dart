@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../whiteboard/collaboration/models/collaboration_room.dart';
+import '../../whiteboard/collaboration/widgets/join_room_dialog.dart';
 import '../models/library_special_view.dart';
 import '../models/note_item.dart';
 import '../repositories/library_repository.dart';
@@ -26,7 +27,7 @@ class LibraryHomePage extends ConsumerWidget {
   Future<void> _joinRoom(BuildContext context) async {
     final room = await showDialog<CollaborationRoom>(
       context: context,
-      builder: (context) => const _JoinRoomDialog(),
+      builder: (context) => const JoinRoomDialog(),
     );
     if (room == null || !context.mounted) {
       return;
@@ -113,63 +114,4 @@ List<NoteItem> _notesForSpecialView(
     LibrarySpecialView.trash => libraryIndex.deletedNotes,
   };
   return source.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-}
-
-class _JoinRoomDialog extends StatefulWidget {
-  const _JoinRoomDialog();
-
-  @override
-  State<_JoinRoomDialog> createState() => _JoinRoomDialogState();
-}
-
-class _JoinRoomDialogState extends State<_JoinRoomDialog> {
-  final _controller = TextEditingController();
-  String? _error;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final room = _parseRoomInput(_controller.text);
-    if (room == null) {
-      setState(() => _error = '请输入完整房间链接或 roomId,roomKey');
-      return;
-    }
-    Navigator.of(context).pop(room);
-  }
-
-  CollaborationRoom? _parseRoomInput(String value) {
-    return CollaborationRoom.parse(value).room;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('加入协作房间'),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        minLines: 1,
-        maxLines: 3,
-        textInputAction: TextInputAction.done,
-        onSubmitted: (_) => _submit(),
-        decoration: InputDecoration(
-          labelText: '房间链接',
-          hintText: '粘贴链接或 roomId,roomKey',
-          errorText: _error,
-          border: const OutlineInputBorder(),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('加入')),
-      ],
-    );
-  }
 }

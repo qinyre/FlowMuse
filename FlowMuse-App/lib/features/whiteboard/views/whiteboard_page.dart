@@ -18,6 +18,7 @@ import '../collaboration/models/room_collaborator.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
+import '../collaboration/widgets/join_room_dialog.dart';
 import '../view_models/whiteboard_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 
@@ -212,6 +213,23 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
   }
 
+  Future<void> _promptJoinCollaboration() async {
+    final currentState = ref.read(whiteboardViewModelProvider);
+    if (currentState.collaborating ||
+        currentState.collaborationStatus ==
+            WhiteboardCollaborationStatus.connecting) {
+      return;
+    }
+    final room = await showDialog<CollaborationRoom>(
+      context: context,
+      builder: (context) => const JoinRoomDialog(),
+    );
+    if (room == null || !mounted) {
+      return;
+    }
+    await _joinCollaboration(room);
+  }
+
   Future<bool?> _confirmCreateCollaborationRoom() {
     return showDialog<bool>(
       context: context,
@@ -261,7 +279,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
                 ),
               ],
               const SizedBox(height: 16),
-              const Text('加入指引：打开协作入口后，粘贴完整链接、#room=房间号,密钥 或 房间号,密钥。'),
+              const Text(
+                '加入指引：在笔记库首页或白板右上协作菜单选择“加入房间”，粘贴完整链接、#room=房间号,密钥 或 房间号,密钥。',
+              ),
             ],
           ),
         ),
@@ -362,10 +382,19 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (confirmed != true || !mounted) {
       return;
     }
+    try {
+      await ref.read(whiteboardViewModelProvider.notifier).endCollaboration();
+    } catch (error) {
+      if (mounted) {
+        ref
+            .read(whiteboardViewModelProvider.notifier)
+            .applyCollaborationError(error.toString());
+      }
+      return;
+    }
     _disposingOrLeaving = true;
     _markdrawController.closeTransientUiForSceneReplace();
     await _cancelCollaborationStreams();
-    await ref.read(whiteboardViewModelProvider.notifier).endCollaboration();
     if (widget.temporaryCollaboration && mounted) {
       _popWhenStable();
     }
@@ -709,12 +738,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (!_canMutateWhiteboard) {
       return;
     }
-    _markdrawController.closeTransientUiForSceneReplace();
     final localScene = _collaborationAdapter.currentScene();
+    final protectedElementIds = _collaborationAdapter.protectedElementIds();
     final reconciledScene = _collaborationRepository.reconcileRemoteScene(
       localScene: localScene,
       remoteElements: remoteElements,
-      protectedElementIds: _collaborationAdapter.protectedElementIds(),
+      protectedElementIds: protectedElementIds,
     );
     await _applyRemoteScene(reconciledScene);
   }
@@ -723,27 +752,37 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (!_canMutateWhiteboard) {
       return;
     }
-    _markdrawController.closeTransientUiForSceneReplace();
     final localScene = _collaborationAdapter.currentScene();
+    final protectedElementIds = _collaborationAdapter.protectedElementIds();
+    final reconciledScene = _collaborationRepository
+        .reconcileRemoteScene(
+          localScene: localScene,
+          remoteElements: remoteScene.elements,
+          protectedElementIds: protectedElementIds,
+        )
+        .copyWith(appState: remoteScene.appState, files: remoteScene.files);
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     final remoteFiles = room == null
         ? const <String, dynamic>{}
         : await _collaborationRepository.loadMissingFiles(
             room: room,
-            fileIds: _imageFileIds(remoteScene.elements),
+            fileIds: _imageFileIds(reconciledScene.elements),
             existingFileIds: localScene.files.keys.toSet(),
           );
     if (!_canMutateWhiteboard) {
       return;
     }
-    final nextScene = remoteScene.copyWith(
-      files: {...localScene.files, ...remoteScene.files, ...remoteFiles},
+    final nextScene = reconciledScene.copyWith(
+      files: {...localScene.files, ...reconciledScene.files, ...remoteFiles},
     );
     final nextContent = nextScene.toContent();
 
     _applyingRemoteScene = true;
     try {
-      _collaborationAdapter.applyRemoteScene(nextScene);
+      _collaborationAdapter.applyRemoteScene(
+        nextScene,
+        closeTransientUi: false,
+      );
     } finally {
       _applyingRemoteScene = false;
     }
@@ -870,6 +909,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
                     unawaited(_handleBack());
                   },
             onStartCollaboration: _startCollaboration,
+            onJoinCollaboration: _promptJoinCollaboration,
             onLeaveCollaboration: _leaveCollaboration,
             onEndCollaboration: _endCollaboration,
             onPointerPresence: _broadcastPointerPresence,

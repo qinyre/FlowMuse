@@ -13,7 +13,10 @@ abstract interface class EncryptedSceneStore {
 
   Future<CollaborationRoomMetadata> joinRoom(CollaborationRoom room);
 
-  Future<CollaborationRoomMetadata> endRoom(CollaborationRoom room);
+  Future<CollaborationRoomMetadata> endRoom(
+    CollaborationRoom room, {
+    String? ownerKey,
+  });
 
   Future<ExcalidrawScene?> loadScene(CollaborationRoom room);
 
@@ -25,6 +28,7 @@ abstract interface class EncryptedSceneStore {
   Future<void> createRoom({
     required CollaborationRoom room,
     required ExcalidrawScene scene,
+    required String ownerKeyHash,
   });
 }
 
@@ -56,7 +60,10 @@ class MemoryEncryptedSceneStore implements EncryptedSceneStore {
   }
 
   @override
-  Future<CollaborationRoomMetadata> endRoom(CollaborationRoom room) async {
+  Future<CollaborationRoomMetadata> endRoom(
+    CollaborationRoom room, {
+    String? ownerKey,
+  }) async {
     _endedRooms.add(room.roomId);
     return loadMetadata(room);
   }
@@ -80,6 +87,7 @@ class MemoryEncryptedSceneStore implements EncryptedSceneStore {
   Future<void> createRoom({
     required CollaborationRoom room,
     required ExcalidrawScene scene,
+    required String ownerKeyHash,
   }) {
     return saveScene(room: room, scene: scene);
   }
@@ -139,10 +147,23 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   }
 
   @override
-  Future<CollaborationRoomMetadata> endRoom(CollaborationRoom room) async {
+  Future<CollaborationRoomMetadata> endRoom(
+    CollaborationRoom room, {
+    String? ownerKey,
+  }) async {
     final response = await _client
-        .post(_roomEndUri(room.roomId), headers: _headers())
+        .post(
+          _roomEndUri(room.roomId),
+          headers: _headers(),
+          body: jsonEncode({'ownerKey': ?ownerKey}),
+        )
         .timeout(_requestTimeout);
+    if (response.statusCode == 401) {
+      throw StateError('未登录或缺少房主密钥，无法结束协作');
+    }
+    if (response.statusCode == 403) {
+      throw StateError('只有房主可以结束协作');
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('结束协作房间失败：HTTP ${response.statusCode}');
     }
@@ -225,12 +246,13 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   Future<void> createRoom({
     required CollaborationRoom room,
     required ExcalidrawScene scene,
+    required String ownerKeyHash,
   }) async {
     final payload = await _crypto.encrypt(
       roomKey: room.roomKey,
       plainBytes: utf8.encode(scene.toCollaborationContent()),
     );
-    await _createRoomMetadata(room.roomId);
+    await _createRoomMetadata(room.roomId, ownerKeyHash: ownerKeyHash);
     final response = await _client
         .post(
           _roomSceneUri(room.roomId),
@@ -238,6 +260,7 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
           body: jsonEncode({
             'sceneVersion': _reconciler.getSceneVersion(scene.elements),
             'sceneHash': scene.collaborationHash(),
+            'ownerKeyHash': ownerKeyHash,
             'encryptedBuffer': base64Encode(payload.encryptedBuffer),
             'iv': base64Encode(payload.iv),
           }),
@@ -276,12 +299,15 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
     );
   }
 
-  Future<void> _createRoomMetadata(String roomId) async {
+  Future<void> _createRoomMetadata(
+    String roomId, {
+    required String ownerKeyHash,
+  }) async {
     final response = await _client
         .post(
           _serverUri.replace(path: _joinPath(_serverUri.path, '/api/rooms')),
           headers: _headers(),
-          body: jsonEncode({'roomId': roomId}),
+          body: jsonEncode({'roomId': roomId, 'ownerKeyHash': ownerKeyHash}),
         )
         .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {

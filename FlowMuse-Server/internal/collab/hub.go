@@ -73,11 +73,11 @@ func (h *Hub) Register() {
 		})
 
 		client.On(EventEndRoom, func(args ...any) {
-			roomID, ok := firstString(args)
+			roomID, ownerKey, ok := endRoomPayload(args)
 			if !ok {
 				return
 			}
-			h.endRoom(client, roomID)
+			h.endRoom(client, roomID, ownerKey)
 		})
 
 		client.On(EventServerBroadcast, func(args ...any) {
@@ -184,11 +184,11 @@ func (h *Hub) leaveRoom(client *socket.Socket, roomID string) {
 	h.server.To(socket.Room(roomID)).Emit(EventRoomUserChange, users)
 }
 
-func (h *Hub) endRoom(client *socket.Socket, roomID string) {
+func (h *Hub) endRoom(client *socket.Socket, roomID string, ownerKey string) {
 	identity := h.identityFromSocket(client)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	metadata, err := h.roomStore.EndRoom(ctx, roomID, identity.UserID)
+	metadata, err := h.roomStore.EndRoom(ctx, roomID, identity.UserID, hashOwnerKey(roomID, ownerKey))
 	if errors.Is(err, storage.ErrRoomAccessDenied) {
 		client.Emit(EventRoomError, "只有房主可以结束协作")
 		return
@@ -360,6 +360,25 @@ func firstString(args []any) (string, bool) {
 		return "", false
 	}
 	return asString(args[0])
+}
+
+func endRoomPayload(args []any) (string, string, bool) {
+	if len(args) == 0 {
+		return "", "", false
+	}
+	if roomID, ok := asString(args[0]); ok {
+		return roomID, "", true
+	}
+	values, ok := args[0].(map[string]any)
+	if !ok {
+		return "", "", false
+	}
+	roomID, ok := asString(values["roomId"])
+	if !ok {
+		return "", "", false
+	}
+	ownerKey, _ := asString(values["ownerKey"])
+	return roomID, ownerKey, true
 }
 
 func asString(value any) (string, bool) {
