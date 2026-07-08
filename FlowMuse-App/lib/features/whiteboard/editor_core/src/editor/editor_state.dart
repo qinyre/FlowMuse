@@ -38,7 +38,7 @@ class EditorState {
         scene: scene.updateElement(element),
       ),
       RemoveElementResult(:final id) => copyWith(
-        scene: scene.removeElement(id),
+        scene: scene.softDeleteElement(id),
       ),
       SetSelectionResult(:final selectedIds) => copyWith(
         selectedIds: selectedIds,

@@ -19,8 +19,11 @@ class SceneDocumentConverter {
   static MarkdrawDocument sceneToDocument(
     Scene scene, {
     CanvasSettings? settings,
+    bool includeDeleted = false,
   }) {
-    final elements = scene.orderedElements.where((e) => !e.isDeleted).toList();
+    final elements = scene.orderedElements
+        .where((e) => includeDeleted || !e.isDeleted)
+        .toList();
     final aliases = _generateAliases(elements);
 
     return MarkdrawDocument(

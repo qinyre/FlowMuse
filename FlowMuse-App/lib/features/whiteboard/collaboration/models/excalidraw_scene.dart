@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
+
 const emptyExcalidrawSceneContent =
     '{"type":"excalidraw","version":2,"source":"https://excalidraw.com","elements":[],"appState":{},"files":{}}';
 
@@ -14,16 +16,11 @@ class ExcalidrawScene {
   });
 
   factory ExcalidrawScene.empty() {
-    return const ExcalidrawScene(
-      elements: [],
-      appState: {},
-      files: {},
-    );
+    return const ExcalidrawScene(elements: [], appState: {}, files: {});
   }
 
   factory ExcalidrawScene.fromContent(String content) {
-    final decoded = jsonDecode(content) as Map<String, Object?>;
-    return ExcalidrawScene.fromJson(decoded);
+    return ExcalidrawScene.fromCollaborationPayload(jsonDecode(content));
   }
 
   factory ExcalidrawScene.fromJson(Map<String, Object?> json) {
@@ -40,11 +37,26 @@ class ExcalidrawScene {
                 Map<String, Object?>.from(element as Map),
             ]
           : const [],
-      appState: rawAppState is Map
-          ? Map<String, Object?>.from(rawAppState)
-          : const {},
-      files: rawFiles is Map ? Map<String, Object?>.from(rawFiles) : const {},
+      appState: rawAppState is Map ? _deepMap(rawAppState) : const {},
+      files: rawFiles is Map ? _deepMap(rawFiles) : const {},
     );
+  }
+
+  factory ExcalidrawScene.fromCollaborationPayload(Object? payload) {
+    if (payload is List) {
+      return ExcalidrawScene(
+        elements: [
+          for (final element in payload)
+            Map<String, Object?>.from(element as Map),
+        ],
+        appState: const {},
+        files: const {},
+      );
+    }
+    if (payload is Map) {
+      return ExcalidrawScene.fromJson(Map<String, Object?>.from(payload));
+    }
+    throw const FormatException('Invalid Excalidraw collaboration payload');
   }
 
   final String type;
@@ -63,9 +75,11 @@ class ExcalidrawScene {
       type: type,
       version: version,
       source: source,
-      elements: elements ?? this.elements,
-      appState: appState ?? this.appState,
-      files: files ?? this.files,
+      elements: elements == null
+          ? this.elements
+          : [for (final element in elements) _deepMap(element)],
+      appState: appState == null ? this.appState : _deepMap(appState),
+      files: files == null ? this.files : _deepMap(files),
     );
   }
 
@@ -81,4 +95,31 @@ class ExcalidrawScene {
   }
 
   String toContent() => jsonEncode(toJson());
+
+  Map<String, Object?> toCollaborationPayload() {
+    return toJson();
+  }
+
+  String toCollaborationContent() => jsonEncode(toCollaborationPayload());
+
+  String collaborationHash() {
+    return sha256.convert(utf8.encode(toCollaborationContent())).toString();
+  }
+}
+
+Map<String, Object?> _deepMap(Map source) {
+  return {
+    for (final entry in source.entries)
+      entry.key as String: _deepValue(entry.value),
+  };
+}
+
+Object? _deepValue(Object? value) {
+  if (value is Map) {
+    return _deepMap(value);
+  }
+  if (value is List) {
+    return [for (final item in value) _deepValue(item)];
+  }
+  return value;
 }

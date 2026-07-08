@@ -1,12 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import 'notebook_card.dart';
+import 'note_card.dart';
 
-class CreateNotebookCard extends StatelessWidget {
-  const CreateNotebookCard({super.key, required this.onTap});
+class CreateNoteCard extends StatelessWidget {
+  const CreateNoteCard({
+    super.key,
+    required this.onTap,
+    this.icon = LucideIcons.plus,
+    this.title = '新建',
+    this.subtitle = '轻点两下，创建快捷笔记',
+  });
 
   final VoidCallback onTap;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  Key get _tapKey {
+    return title == '新建'
+        ? const ValueKey('create-notebook-card')
+        : const ValueKey('join-room-card');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,8 +30,8 @@ class CreateNotebookCard extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          width: NotebookCard.coverWidth,
-          height: NotebookCard.coverHeight,
+          width: NoteCard.coverWidth,
+          height: NoteCard.coverHeight,
           child: Card.outlined(
             clipBehavior: Clip.antiAlias,
             color: colorScheme.primary.withValues(alpha: 0.035),
@@ -24,7 +39,7 @@ class CreateNotebookCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: InkWell(
-              key: const ValueKey('create-notebook-card'),
+              key: _tapKey,
               onTap: onTap,
               child: Center(
                 child: DecoratedBox(
@@ -35,7 +50,7 @@ class CreateNotebookCard extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Icon(
-                      LucideIcons.plus,
+                      icon,
                       size: 34,
                       color: colorScheme.primary,
                     ),
@@ -47,7 +62,7 @@ class CreateNotebookCard extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          '新建',
+          title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             color: colorScheme.primary,
             fontWeight: FontWeight.w700,
@@ -55,7 +70,7 @@ class CreateNotebookCard extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          '轻点两下，创建快捷笔记',
+          subtitle,
           textAlign: TextAlign.center,
           style: Theme.of(
             context,

@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 import 'color_utils.dart';
 import 'style_icon_painters.dart';
@@ -108,12 +109,13 @@ class ColorPickerButton extends StatefulWidget {
 
 class _ColorPickerButtonState extends State<ColorPickerButton> {
   OverlayEntry? _overlayEntry;
+  bool _overlayInserted = false;
 
   @override
   void initState() {
     super.initState();
     if (widget.autoOpen) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      runWhenUiStable(() {
         if (mounted) _showPalettePopup();
       });
     }
@@ -123,7 +125,7 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
   void didUpdateWidget(ColorPickerButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.autoOpen && !oldWidget.autoOpen && _overlayEntry == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      runWhenUiStable(() {
         if (mounted) _showPalettePopup();
       });
     }
@@ -131,8 +133,7 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
 
   @override
   void dispose() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
+    _removeOverlay();
     super.dispose();
   }
 
@@ -169,7 +170,9 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
 
   void _showPalettePopup() {
     if (_overlayEntry != null) return;
-    final renderBox = context.findRenderObject() as RenderBox;
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) return;
+    final renderBox = renderObject;
     final offset = renderBox.localToGlobal(Offset.zero);
     final overlay = Overlay.of(context);
 
@@ -179,7 +182,11 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
         currentColor: widget.color,
         onSelect: (c) {
           _removeOverlay();
-          widget.onColorSelected(c);
+          runAfterUiTeardown(() {
+            if (mounted) {
+              widget.onColorSelected(c);
+            }
+          });
         },
         onDismiss: _removeOverlay,
         onRenderScene: widget.onRenderScene,
@@ -187,13 +194,34 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
         canvasSize: widget.canvasSize,
       ),
     );
-    overlay.insert(_overlayEntry!);
-    widget.onAutoOpened?.call();
+    _insertOverlay(overlay, _overlayEntry!);
   }
 
   void _removeOverlay() {
-    _overlayEntry?.remove();
+    final entry = _overlayEntry;
     _overlayEntry = null;
+    if (entry == null) {
+      return;
+    }
+    if (!_overlayInserted) {
+      return;
+    }
+    _overlayInserted = false;
+    removeOverlayEntryAfterTeardown(entry);
+  }
+
+  void _insertOverlay(OverlayState overlay, OverlayEntry entry) {
+    insertOverlayEntryWhenStable(
+      overlay: overlay,
+      entry: entry,
+      shouldInsert: () => mounted && identical(_overlayEntry, entry),
+      onInserted: () {
+        if (mounted && identical(_overlayEntry, entry)) {
+          _overlayInserted = true;
+          widget.onAutoOpened?.call();
+        }
+      },
+    );
   }
 }
 

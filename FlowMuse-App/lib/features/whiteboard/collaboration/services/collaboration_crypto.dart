@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/encrypted_payload.dart';
 
@@ -18,6 +19,10 @@ class CollaborationCrypto {
       growable: false,
     );
     return base64Url.encode(bytes).replaceAll('=', '');
+  }
+
+  String hashOwnerKey({required String roomId, required String ownerKey}) {
+    return crypto.sha256.convert(utf8.encode('$roomId:$ownerKey')).toString();
   }
 
   Future<EncryptedPayload> encrypt({

@@ -3,6 +3,10 @@ package collab
 const (
 	EventInitRoom             = "init-room"
 	EventJoinRoom             = "join-room"
+	EventLeaveRoom            = "leave-room"
+	EventEndRoom              = "end-room"
+	EventRoomEnded            = "room-ended"
+	EventRoomError            = "room-error"
 	EventNewUser              = "new-user"
 	EventFirstInRoom          = "first-in-room"
 	EventRoomUserChange       = "room-user-change"
@@ -19,5 +23,9 @@ type EncryptedFrame struct {
 }
 
 type RoomUser struct {
-	SocketID string `json:"socketId"`
+	SocketID  string `json:"socketId"`
+	UserID    string `json:"userId,omitempty"`
+	Username  string `json:"username"`
+	AvatarURL string `json:"avatarUrl,omitempty"`
+	IsGuest   bool   `json:"isGuest"`
 }

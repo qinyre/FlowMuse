@@ -5,6 +5,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
+import '../../library/models/note_item.dart';
+import '../../library/repositories/library_repository.dart';
+import '../../library/widgets/note_card.dart';
 import '../view_models/search_view_model.dart';
 
 class SearchPage extends ConsumerWidget {
@@ -14,6 +18,23 @@ class SearchPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(searchViewModelProvider);
     final viewModel = ref.read(searchViewModelProvider.notifier);
+    final libraryIndex =
+        ref.watch(libraryIndexProvider).asData?.value ?? const LibraryIndex();
+    final notebookLabel = state.notebookScopeId == null
+        ? '全部笔记本'
+        : libraryIndex.notebooks
+                  .where((item) => item.id == state.notebookScopeId)
+                  .firstOrNull
+                  ?.name ??
+              '全部笔记本';
+    final tagLabel = state.tagScopeId == null
+        ? '全部标签'
+        : libraryIndex.tags
+                  .where((item) => item.id == state.tagScopeId)
+                  .firstOrNull
+                  ?.name ??
+              '全部标签';
+    final results = _searchNotes(state, libraryIndex.notes);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -30,7 +51,7 @@ class SearchPage extends ConsumerWidget {
                       leading: const Icon(LucideIcons.search),
                       hintText: '请输入关键字搜索笔记',
                       onChanged: viewModel.changeQuery,
-                      trailing: const [_SmartSearchChip()],
+                      trailing: const [_LocalSearchChip()],
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sectionGap),
@@ -53,16 +74,24 @@ class SearchPage extends ConsumerWidget {
                 runSpacing: 16,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Text('文件夹'),
+                  const Text('笔记本'),
                   _ScopeMenu(
-                    label: state.folderScope,
-                    options: const ['尚未选择文件夹', '新建文件夹 1'],
-                    onSelected: viewModel.selectFolderScope,
+                    label: notebookLabel,
+                    options: [
+                      const _ScopeOption(id: null, label: '全部笔记本'),
+                      for (final notebook in libraryIndex.notebooks)
+                        _ScopeOption(id: notebook.id, label: notebook.name),
+                    ],
+                    onSelected: viewModel.selectNotebookScope,
                   ),
                   const Text('标签'),
                   _ScopeMenu(
-                    label: state.tagScope,
-                    options: const ['尚未选择标签', '未标签'],
+                    label: tagLabel,
+                    options: [
+                      const _ScopeOption(id: null, label: '全部标签'),
+                      for (final tag in libraryIndex.tags)
+                        _ScopeOption(id: tag.id, label: tag.name),
+                    ],
                     onSelected: viewModel.selectTagScope,
                   ),
                   Row(
@@ -81,6 +110,16 @@ class SearchPage extends ConsumerWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: AppSpacing.sectionGap),
+              Expanded(
+                child: _SearchResults(
+                  query: state.query,
+                  results: results,
+                  onOpenNote: (item) {
+                    context.push(AppRoutes.whiteboardPath(noteId: item.id));
+                  },
+                ),
+              ),
             ],
           ),
         );
@@ -89,8 +128,8 @@ class SearchPage extends ConsumerWidget {
   }
 }
 
-class _SmartSearchChip extends StatelessWidget {
-  const _SmartSearchChip();
+class _LocalSearchChip extends StatelessWidget {
+  const _LocalSearchChip();
 
   @override
   Widget build(BuildContext context) {
@@ -101,11 +140,18 @@ class _SmartSearchChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
       ),
       child: const Text(
-        '智能搜索',
+        '本地标题',
         style: TextStyle(color: Color(0xFFFAFCFA), fontWeight: FontWeight.w600),
       ),
     );
   }
+}
+
+class _ScopeOption {
+  const _ScopeOption({required this.id, required this.label});
+
+  final String? id;
+  final String label;
 }
 
 class _ScopeMenu extends StatelessWidget {
@@ -116,18 +162,31 @@ class _ScopeMenu extends StatelessWidget {
   });
 
   final String label;
-  final List<String> options;
-  final ValueChanged<String> onSelected;
+  final List<_ScopeOption> options;
+  final ValueChanged<String?> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    return MenuAnchor(
-      builder: (context, controller, child) {
+    return Builder(
+      builder: (context) {
         return ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 168),
           child: OutlinedButton(
-            onPressed: () {
-              controller.isOpen ? controller.close() : controller.open();
+            onPressed: () async {
+              final selected = await showAnchoredPopupMenu<_ScopeOption>(
+                context: context,
+                items: [
+                  for (final option in options)
+                    PopupMenuItem<_ScopeOption>(
+                      value: option,
+                      child: Text(option.label),
+                    ),
+                ],
+              );
+              if (selected == null || !context.mounted) {
+                return;
+              }
+              runAfterUiTeardown(() => onSelected(selected.id));
             },
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -140,13 +199,113 @@ class _ScopeMenu extends StatelessWidget {
           ),
         );
       },
-      menuChildren: [
-        for (final option in options)
-          MenuItemButton(
-            onPressed: () => onSelected(option),
-            child: Text(option),
-          ),
-      ],
     );
   }
+}
+
+class _SearchResults extends StatelessWidget {
+  const _SearchResults({
+    required this.query,
+    required this.results,
+    required this.onOpenNote,
+  });
+
+  final String query;
+  final List<NoteItem> results;
+  final ValueChanged<NoteItem> onOpenNote;
+
+  @override
+  Widget build(BuildContext context) {
+    if (query.trim().isEmpty) {
+      return const _SearchEmptyState(
+        icon: LucideIcons.search,
+        title: '输入标题关键字',
+        message: '搜索会匹配本地保存的笔记标题。',
+      );
+    }
+    if (results.isEmpty) {
+      return const _SearchEmptyState(
+        icon: LucideIcons.fileX,
+        title: '没有匹配笔记',
+        message: '换一个关键字或调整搜索范围。',
+      );
+    }
+
+    return ListView.separated(
+      itemCount: results.length,
+      separatorBuilder: (context, index) =>
+          const SizedBox(height: AppSpacing.listGap),
+      itemBuilder: (context, index) {
+        final item = results[index];
+        return Card.outlined(
+          child: ListTile(
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 48,
+                height: 58,
+                child: NoteCover(item: item),
+              ),
+            ),
+            title: Text(item.title),
+            subtitle: Text(item.date),
+            trailing: const Icon(LucideIcons.chevronRight),
+            onTap: () => onOpenNote(item),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SearchEmptyState extends StatelessWidget {
+  const _SearchEmptyState({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 38, color: const Color(0xFF8F9B96)),
+          const SizedBox(height: 14),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: const Color(0xFF1F2624),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(message, style: const TextStyle(color: Color(0xFF8F9B96))),
+        ],
+      ),
+    );
+  }
+}
+
+List<NoteItem> _searchNotes(SearchState state, List<NoteItem> notes) {
+  final query = state.query.trim().toLowerCase();
+  if (query.isEmpty) {
+    return const [];
+  }
+  final results = notes.where((item) {
+    if (state.notebookScopeId != null &&
+        item.notebookId != state.notebookScopeId) {
+      return false;
+    }
+    if (state.tagScopeId != null && !item.tagIds.contains(state.tagScopeId)) {
+      return false;
+    }
+    return item.title.toLowerCase().contains(query);
+  }).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  return results;
 }

@@ -1,7 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../app/app_router.dart';
 import '../../../app/app_theme_preset.dart';
@@ -9,12 +14,21 @@ import '../../../app/view_models/theme_view_model.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
+import '../../account/view_models/account_view_model.dart';
+import '../../library/repositories/library_repository.dart';
 
-class SettingsPage extends ConsumerWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends ConsumerState<SettingsPage> {
+  _SettingsSection _section = _SettingsSection.localBackup;
+
+  @override
+  Widget build(BuildContext context) {
     final selectedPreset = ref.watch(themeViewModelProvider);
     final themeViewModel = ref.read(themeViewModelProvider.notifier);
 
@@ -23,9 +37,14 @@ class SettingsPage extends ConsumerWidget {
       showSidebar: false,
       child: Row(
         children: [
-          _SettingsSidebar(onBack: () => context.go(AppRoutes.library)),
+          _SettingsSidebar(
+            selected: _section,
+            onSelected: (section) => setState(() => _section = section),
+            onBack: () => context.go(AppRoutes.library),
+          ),
           Expanded(
             child: _SettingsContent(
+              section: _section,
               selectedPreset: selectedPreset,
               onPresetChanged: themeViewModel.changePreset,
             ),
@@ -36,9 +55,35 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
-class _SettingsSidebar extends StatelessWidget {
-  const _SettingsSidebar({required this.onBack});
+enum _SettingsSection {
+  account(LucideIcons.userRound, '账户与协作', '邮箱账号、匿名身份与协作房间身份'),
+  localBackup(LucideIcons.download, '本地备份', '导出和恢复本机库索引、白板场景与主题设置'),
+  cloudBackup(LucideIcons.database, '网盘备份', '云端同步入口预留'),
+  theme(LucideIcons.palette, '主题设置', '切换当前工作区视觉主题'),
+  document(LucideIcons.fileCog, '文档设置', '默认文档行为预留'),
+  tools(LucideIcons.wrench, '工具设置', '绘图工具偏好预留'),
+  stylus(LucideIcons.penLine, '手写笔设置', '压感与笔输入预留'),
+  gestures(LucideIcons.hand, '手势设置', '触控手势预留'),
+  lab(LucideIcons.wandSparkles, 'StarNote 实验室', 'Beta AI'),
+  privacy(LucideIcons.shield, '隐私设置', '本地数据与权限预留'),
+  other(LucideIcons.ellipsis, '其他设置', '通用设置预留');
 
+  const _SettingsSection(this.icon, this.label, this.description);
+
+  final IconData icon;
+  final String label;
+  final String description;
+}
+
+class _SettingsSidebar extends StatelessWidget {
+  const _SettingsSidebar({
+    required this.selected,
+    required this.onSelected,
+    required this.onBack,
+  });
+
+  final _SettingsSection selected;
+  final ValueChanged<_SettingsSection> onSelected;
   final VoidCallback onBack;
 
   @override
@@ -76,25 +121,15 @@ class _SettingsSidebar extends StatelessWidget {
       ),
       children: [
         SharedSidebarBlock(
-          children: const [
-            _SettingsNavItem(
-              icon: LucideIcons.download,
-              label: '本地备份',
-              selected: true,
-            ),
-            _SettingsNavItem(icon: LucideIcons.database, label: '网盘备份'),
-            _SettingsNavItem(icon: LucideIcons.palette, label: '主题设置'),
-            _SettingsNavItem(icon: LucideIcons.fileCog, label: '文档设置'),
-            _SettingsNavItem(icon: LucideIcons.wrench, label: '工具设置'),
-            _SettingsNavItem(icon: LucideIcons.penLine, label: '手写笔设置'),
-            _SettingsNavItem(icon: LucideIcons.hand, label: '手势设置'),
-            _SettingsNavItem(
-              icon: LucideIcons.wandSparkles,
-              label: 'StarNote 实验室',
-              trailing: 'Beta AI',
-            ),
-            _SettingsNavItem(icon: LucideIcons.shield, label: '隐私设置'),
-            _SettingsNavItem(icon: LucideIcons.ellipsis, label: '其他设置'),
+          children: [
+            for (final section in _SettingsSection.values)
+              _SettingsNavItem(
+                icon: section.icon,
+                label: section.label,
+                selected: section == selected,
+                trailing: section == _SettingsSection.lab ? 'Beta AI' : null,
+                onTap: () => onSelected(section),
+              ),
           ],
         ),
       ],
@@ -108,12 +143,14 @@ class _SettingsNavItem extends StatelessWidget {
     required this.label,
     this.selected = false,
     this.trailing,
+    required this.onTap,
   });
 
   final IconData icon;
   final String label;
   final bool selected;
   final String? trailing;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -122,16 +159,19 @@ class _SettingsNavItem extends StatelessWidget {
       label: label,
       selected: selected,
       emptyLabel: trailing,
+      onTap: onTap,
     );
   }
 }
 
 class _SettingsContent extends StatelessWidget {
   const _SettingsContent({
+    required this.section,
     required this.selectedPreset,
     required this.onPresetChanged,
   });
 
+  final _SettingsSection section;
   final AppThemePreset selectedPreset;
   final ValueChanged<AppThemePreset> onPresetChanged;
 
@@ -155,7 +195,7 @@ class _SettingsContent extends StatelessWidget {
               ),
             ),
             child: Text(
-              '本地备份',
+              section.label,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w600,
                 color: colorScheme.onSurface,
@@ -163,88 +203,466 @@ class _SettingsContent extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pageInset,
-                AppSpacing.pageTopInset,
-                AppSpacing.pageInset,
-                0,
+            child: _SettingsSectionBody(
+              section: section,
+              selectedPreset: selectedPreset,
+              onPresetChanged: onPresetChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsSectionBody extends ConsumerStatefulWidget {
+  const _SettingsSectionBody({
+    required this.section,
+    required this.selectedPreset,
+    required this.onPresetChanged,
+  });
+
+  final _SettingsSection section;
+  final AppThemePreset selectedPreset;
+  final ValueChanged<AppThemePreset> onPresetChanged;
+
+  @override
+  ConsumerState<_SettingsSectionBody> createState() =>
+      _SettingsSectionBodyState();
+}
+
+class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
+  bool _backupBusy = false;
+  String? _backupMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pageInset,
+        AppSpacing.pageTopInset,
+        AppSpacing.pageInset,
+        0,
+      ),
+      children: [
+        _SectionCaption(
+          title: widget.section.label,
+          subtitle: widget.section.description,
+        ),
+        const SizedBox(height: AppSpacing.sectionGap),
+        switch (widget.section) {
+          _SettingsSection.account => const _AccountSettingsSection(),
+          _SettingsSection.localBackup => _LocalBackupSection(
+            busy: _backupBusy,
+            message: _backupMessage,
+            onExport: _exportBackup,
+            onImport: _importBackup,
+          ),
+          _SettingsSection.theme => _ThemePresetSection(
+            selectedPreset: widget.selectedPreset,
+            onPresetChanged: widget.onPresetChanged,
+          ),
+          _ => _PlaceholderSettingsSection(section: widget.section),
+        },
+      ],
+    );
+  }
+
+  Future<void> _exportBackup() async {
+    setState(() {
+      _backupBusy = true;
+      _backupMessage = null;
+    });
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final payload = <String, Object?>{
+        'version': 1,
+        'createdAt': DateTime.now().toIso8601String(),
+        'values': {
+          for (final key in preferences.getKeys())
+            if (_isBackupKey(key)) key: preferences.get(key),
+        },
+      };
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: '导出 FlowMuse 备份',
+        fileName: 'flowmuse-backup.json',
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        bytes: Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _backupMessage = path == null ? '已取消导出' : '备份已导出';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _backupMessage = '导出失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _backupBusy = false);
+      }
+    }
+  }
+
+  Future<void> _importBackup() async {
+    setState(() {
+      _backupBusy = true;
+      _backupMessage = null;
+    });
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        dialogTitle: '导入 FlowMuse 备份',
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) {
+        if (mounted) {
+          setState(() => _backupMessage = '已取消导入');
+        }
+        return;
+      }
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) {
+        throw StateError('未读取到备份文件内容');
+      }
+      final decoded = jsonDecode(utf8.decode(bytes)) as Map<String, Object?>;
+      final values = decoded['values'];
+      if (values is! Map) {
+        throw const FormatException('备份文件格式不正确');
+      }
+      final preferences = await SharedPreferences.getInstance();
+      for (final entry in values.entries) {
+        final key = entry.key.toString();
+        if (!_isBackupKey(key)) {
+          continue;
+        }
+        await _setPreferenceValue(preferences, key, entry.value);
+      }
+      if (!mounted) {
+        return;
+      }
+      ref.invalidate(libraryIndexProvider);
+      setState(() {
+        _backupMessage = '备份已导入';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _backupMessage = '导入失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _backupBusy = false);
+      }
+    }
+  }
+}
+
+class _LocalBackupSection extends StatelessWidget {
+  const _LocalBackupSection({
+    required this.busy,
+    required this.message,
+    required this.onExport,
+    required this.onImport,
+  });
+
+  final bool busy;
+  final String? message;
+  final VoidCallback onExport;
+  final VoidCallback onImport;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedColor = Theme.of(context).colorScheme.primary;
+    final mutedColor = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SettingsCard(
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            leading: const Icon(LucideIcons.download),
+            title: const Text('导出本地备份'),
+            subtitle: const Text('包含库索引、白板场景和主题设置'),
+            trailing: Text(
+              busy ? '处理中' : '导出',
+              style: TextStyle(
+                color: busy ? mutedColor : selectedColor,
+                fontWeight: FontWeight.w600,
               ),
+            ),
+            onTap: busy ? null : onExport,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _SettingsCard(
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            leading: const Icon(LucideIcons.upload),
+            title: const Text('导入本地备份'),
+            subtitle: const Text('会恢复备份文件中的本地数据键'),
+            trailing: Text(
+              busy ? '处理中' : '导入',
+              style: TextStyle(
+                color: busy ? mutedColor : selectedColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            onTap: busy ? null : onImport,
+          ),
+        ),
+        if (message != null) ...[
+          const SizedBox(height: AppSpacing.controlGap),
+          Padding(
+            padding: const EdgeInsets.only(left: 24),
+            child: Text(
+              message!,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: mutedColor),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _AccountSettingsSection extends ConsumerStatefulWidget {
+  const _AccountSettingsSection();
+
+  @override
+  ConsumerState<_AccountSettingsSection> createState() =>
+      _AccountSettingsSectionState();
+}
+
+class _AccountSettingsSectionState
+    extends ConsumerState<_AccountSettingsSection> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _displayNameController = TextEditingController();
+  bool _registerMode = false;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _displayNameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final account = ref.watch(accountViewModelProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+    final selectedColor = colorScheme.primary;
+
+    if (account.isAuthenticated) {
+      final user = account.user!;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SettingsCard(
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: CircleAvatar(
+                backgroundColor: selectedColor.withValues(alpha: 0.12),
+                child: Text(
+                  user.collaboratorName.characters.first,
+                  style: TextStyle(
+                    color: selectedColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              title: Text(user.collaboratorName),
+              subtitle: Text(user.email),
+              trailing: Text(
+                '已登录',
+                style: TextStyle(
+                  color: selectedColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _SettingsCard(
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: const Icon(LucideIcons.usersRound),
+              title: const Text('协作身份'),
+              subtitle: const Text('创建协作房间时会记录房主，访客仍可通过链接加入'),
+              trailing: Text(
+                user.collaboratorName,
+                style: TextStyle(
+                  color: selectedColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _SettingsCard(
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: const Icon(LucideIcons.logOut),
+              title: const Text('退出登录'),
+              subtitle: const Text('退出后继续使用匿名协作身份'),
+              trailing: const Text('退出'),
+              onTap: _busy ? null : _logout,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SettingsCard(
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            leading: const Icon(LucideIcons.userRound),
+            title: Text(account.collaborationIdentity.username),
+            subtitle: const Text('当前使用匿名协作身份，可通过链接加入房间'),
+            trailing: const Text('访客'),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card.outlined(
+          color: colorScheme.surface,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '上次备份时间:2026-05-28 09:29:49',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sectionGap),
-                _SettingsCard(
-                  child: SwitchListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                    value: true,
-                    onChanged: (_) {},
-                    title: const Text('自动备份'),
+                  _registerMode ? '注册邮箱账号' : '登录邮箱账号',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 16),
-                _SettingsCard(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                    title: const Text('手动备份'),
-                    trailing: Text(
-                      '马上备份',
-                      style: TextStyle(
-                        color: selectedColor,
-                        fontWeight: FontWeight.w600,
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: '邮箱'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: '密码'),
+                ),
+                if (_registerMode) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _displayNameController,
+                    decoration: const InputDecoration(labelText: '昵称'),
+                  ),
+                ],
+                if (account.error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    account.error!,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: colorScheme.error),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    FilledButton(
+                      onPressed: _busy ? null : _submit,
+                      child: Text(
+                        _busy
+                            ? '处理中'
+                            : _registerMode
+                            ? '注册并登录'
+                            : '登录',
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sectionGap),
-                const _SectionCaption(
-                  title: '本地导入',
-                  subtitle: '从本地备份导入的文件不会覆盖现有笔记',
-                ),
-                const SizedBox(height: 16),
-                _SettingsCard(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                    title: const Text('导入备份'),
-                    trailing: Text(
-                      '导入',
-                      style: TextStyle(
-                        color: selectedColor,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    const SizedBox(width: AppSpacing.controlGap),
+                    TextButton(
+                      onPressed: _busy
+                          ? null
+                          : () =>
+                                setState(() => _registerMode = !_registerMode),
+                      child: Text(_registerMode ? '已有账号，去登录' : '注册新账号'),
                     ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sectionGap),
-                const _SectionCaption(title: '备份路径'),
-                const SizedBox(height: 16),
-                _SettingsCard(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                    title: const Text('内部储存'),
-                    trailing: Icon(LucideIcons.check, color: selectedColor),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.controlGap),
-                Text(
-                  '路径：/storage/emulated/0/Documents/StarNote/backup',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.headerToContent),
-                _ThemePresetSection(
-                  selectedPreset: selectedPreset,
-                  onPresetChanged: onPresetChanged,
+                  ],
                 ),
               ],
             ),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _submit() async {
+    setState(() => _busy = true);
+    try {
+      final viewModel = ref.read(accountViewModelProvider.notifier);
+      if (_registerMode) {
+        await viewModel.register(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          displayName: _displayNameController.text.trim(),
+        );
+      } else {
+        await viewModel.login(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _logout() async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(accountViewModelProvider.notifier).logout();
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+}
+
+class _PlaceholderSettingsSection extends StatelessWidget {
+  const _PlaceholderSettingsSection({required this.section});
+
+  final _SettingsSection section;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+        leading: Icon(section.icon),
+        title: Text(section.label),
+        subtitle: const Text('该设置分区已接入导航，具体配置项待后续实现'),
+        trailing: const Text('未启用'),
       ),
     );
   }
@@ -261,6 +679,30 @@ class _SettingsCard extends StatelessWidget {
       color: Theme.of(context).colorScheme.surface,
       child: SizedBox(height: 72, child: Center(child: child)),
     );
+  }
+}
+
+bool _isBackupKey(String key) {
+  return key == 'flowmuse.library.index.v2' ||
+      key == 'theme_preset' ||
+      key.startsWith('note.excalidraw.scene.');
+}
+
+Future<void> _setPreferenceValue(
+  SharedPreferences preferences,
+  String key,
+  Object? value,
+) async {
+  if (value is bool) {
+    await preferences.setBool(key, value);
+  } else if (value is int) {
+    await preferences.setInt(key, value);
+  } else if (value is double) {
+    await preferences.setDouble(key, value);
+  } else if (value is String) {
+    await preferences.setString(key, value);
+  } else if (value is List) {
+    await preferences.setStringList(key, value.whereType<String>().toList());
   }
 }
 

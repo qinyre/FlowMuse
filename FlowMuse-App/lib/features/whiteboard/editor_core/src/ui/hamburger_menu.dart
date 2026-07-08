@@ -3,6 +3,7 @@ library;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../../markdraw.dart' hide TextAlign;
 
 /// Shows a dialog to rename the document.
@@ -11,36 +12,67 @@ void showRenameDocumentDialog(
   MarkdrawController controller,
   VoidCallback? onRenamed,
 ) {
-  final textController = TextEditingController(
-    text: controller.documentName ?? '',
-  );
   showDialog<String>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) =>
+        _RenameDocumentDialog(initialName: controller.documentName ?? ''),
+  ).then((value) {
+    if (value != null) {
+      runAfterUiTeardown(() {
+        controller.renameDocument(value);
+        onRenamed?.call();
+      });
+    }
+  });
+}
+
+class _RenameDocumentDialog extends StatefulWidget {
+  const _RenameDocumentDialog({required this.initialName});
+
+  final String initialName;
+
+  @override
+  State<_RenameDocumentDialog> createState() => _RenameDocumentDialogState();
+}
+
+class _RenameDocumentDialogState extends State<_RenameDocumentDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    Navigator.of(context).pop(value ?? _controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
       title: const Text('重命名'),
       content: TextField(
-        controller: textController,
+        controller: _controller,
         autofocus: true,
         decoration: const InputDecoration(labelText: '文档名称', hintText: '文档名称'),
-        onSubmitted: (value) => Navigator.of(context).pop(value),
+        onSubmitted: _submit,
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(textController.text),
-          child: const Text('确定'),
-        ),
+        TextButton(onPressed: _submit, child: const Text('确定')),
       ],
-    ),
-  ).then((value) {
-    if (value != null) {
-      controller.renameDocument(value);
-      onRenamed?.call();
-    }
-  });
+    );
+  }
 }
 
 /// Desktop hamburger menu (top-left).
@@ -96,36 +128,38 @@ class HamburgerMenu extends StatelessWidget {
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
         onSelected: (value) {
-          switch (value) {
-            case 'open':
-              onOpen?.call();
-            case 'save':
-              onSave?.call();
-            case 'save_as':
-              onSaveAs?.call();
-            case 'rename':
-              _showRenameDialog(context);
-            case 'export_png':
-              onExportPng?.call();
-            case 'export_svg':
-              onExportSvg?.call();
-            case 'library':
-              controller.showLibraryPanel = !controller.showLibraryPanel;
-            case 'import_image':
-              onImportImage?.call();
-            case 'toggle_grid':
-              controller.toggleGrid();
-            case 'snap_to_objects':
-              controller.toggleObjectsSnapMode();
-            case 'frame_tool':
-              controller.switchTool(ToolType.frame);
-            case 'reset_canvas':
-              controller.resetCanvas();
-            case 'zen_mode':
-              controller.toggleZenMode();
-            case 'view_mode':
-              controller.toggleViewMode();
-          }
+          runAfterUiTeardown(() {
+            switch (value) {
+              case 'open':
+                onOpen?.call();
+              case 'save':
+                onSave?.call();
+              case 'save_as':
+                onSaveAs?.call();
+              case 'rename':
+                _showRenameDialog(context);
+              case 'export_png':
+                onExportPng?.call();
+              case 'export_svg':
+                onExportSvg?.call();
+              case 'library':
+                controller.showLibraryPanel = !controller.showLibraryPanel;
+              case 'import_image':
+                onImportImage?.call();
+              case 'toggle_grid':
+                controller.toggleGrid();
+              case 'snap_to_objects':
+                controller.toggleObjectsSnapMode();
+              case 'frame_tool':
+                controller.switchTool(ToolType.frame);
+              case 'reset_canvas':
+                controller.resetCanvas();
+              case 'zen_mode':
+                controller.toggleZenMode();
+              case 'view_mode':
+                controller.toggleViewMode();
+            }
+          });
         },
         itemBuilder: (context) => [
           if (onOpen != null)

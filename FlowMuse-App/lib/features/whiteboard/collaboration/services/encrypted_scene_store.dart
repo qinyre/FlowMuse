@@ -2,38 +2,94 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../models/collaboration_message.dart';
 import '../models/collaboration_room.dart';
 import '../models/encrypted_payload.dart';
+import '../models/excalidraw_scene.dart';
 import 'collaboration_crypto.dart';
 import 'scene_reconciler.dart';
 
 abstract interface class EncryptedSceneStore {
-  Future<List<Map<String, Object?>>?> loadScene(CollaborationRoom room);
+  Future<CollaborationRoomMetadata> loadMetadata(CollaborationRoom room);
+
+  Future<CollaborationRoomMetadata> joinRoom(CollaborationRoom room);
+
+  Future<CollaborationRoomMetadata> endRoom(
+    CollaborationRoom room, {
+    String? ownerKey,
+  });
+
+  Future<ExcalidrawScene?> loadScene(CollaborationRoom room);
 
   Future<void> saveScene({
     required CollaborationRoom room,
-    required List<Map<String, Object?>> elements,
+    required ExcalidrawScene scene,
+  });
+
+  Future<void> createRoom({
+    required CollaborationRoom room,
+    required ExcalidrawScene scene,
+    required String ownerKeyHash,
   });
 }
 
-class MemoryEncryptedSceneStore implements EncryptedSceneStore {
-  final Map<String, List<Map<String, Object?>>> _scenes = {};
+class StaleSceneSnapshotException implements Exception {
+  const StaleSceneSnapshotException(this.message);
+
+  final String message;
 
   @override
-  Future<List<Map<String, Object?>>?> loadScene(CollaborationRoom room) async {
-    final elements = _scenes[room.roomId];
-    return elements == null ? null : List.unmodifiable(elements);
+  String toString() => message;
+}
+
+class MemoryEncryptedSceneStore implements EncryptedSceneStore {
+  final Map<String, ExcalidrawScene> _scenes = {};
+  final Set<String> _endedRooms = {};
+
+  @override
+  Future<CollaborationRoomMetadata> loadMetadata(CollaborationRoom room) async {
+    return CollaborationRoomMetadata(
+      roomId: room.roomId,
+      role: CollaborationRoomRole.owner,
+      ended: _endedRooms.contains(room.roomId),
+    );
+  }
+
+  @override
+  Future<CollaborationRoomMetadata> joinRoom(CollaborationRoom room) {
+    return loadMetadata(room);
+  }
+
+  @override
+  Future<CollaborationRoomMetadata> endRoom(
+    CollaborationRoom room, {
+    String? ownerKey,
+  }) async {
+    _endedRooms.add(room.roomId);
+    return loadMetadata(room);
+  }
+
+  @override
+  Future<ExcalidrawScene?> loadScene(CollaborationRoom room) async {
+    return _scenes[room.roomId];
   }
 
   @override
   Future<void> saveScene({
     required CollaborationRoom room,
-    required List<Map<String, Object?>> elements,
+    required ExcalidrawScene scene,
   }) async {
-    _scenes[room.roomId] = List.unmodifiable([
-      for (final element in elements) Map<String, Object?>.from(element),
-    ]);
+    _scenes[room.roomId] = ExcalidrawScene.fromCollaborationPayload(
+      scene.toCollaborationPayload(),
+    );
+  }
+
+  @override
+  Future<void> createRoom({
+    required CollaborationRoom room,
+    required ExcalidrawScene scene,
+    required String ownerKeyHash,
+  }) {
+    return saveScene(room: room, scene: scene);
   }
 }
 
@@ -41,26 +97,94 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   HttpEncryptedSceneStore({
     required String serverUrl,
     required CollaborationCrypto crypto,
+    String? authToken,
     http.Client? client,
     SceneReconciler? reconciler,
   }) : _serverUri = Uri.parse(serverUrl),
        _crypto = crypto,
+       _authToken = authToken,
        _client = client ?? http.Client(),
        _reconciler = reconciler ?? SceneReconciler();
 
   final Uri _serverUri;
   final CollaborationCrypto _crypto;
+  final String? _authToken;
   final http.Client _client;
   final SceneReconciler _reconciler;
+  final Map<String, _SceneSnapshotMeta> _snapshotMetaByRoom = {};
+  static const Duration _requestTimeout = Duration(seconds: 15);
 
   @override
-  Future<List<Map<String, Object?>>?> loadScene(CollaborationRoom room) async {
-    final response = await _client.get(_roomSceneUri(room.roomId));
+  Future<CollaborationRoomMetadata> loadMetadata(CollaborationRoom room) async {
+    final response = await _client
+        .get(_roomAccessUri(room.roomId), headers: _headers())
+        .timeout(_requestTimeout);
+    if (response.statusCode == 410) {
+      throw StateError('协作房间已结束');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('加载协作房间信息失败：HTTP ${response.statusCode}');
+    }
+    return CollaborationRoomMetadata.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<CollaborationRoomMetadata> joinRoom(CollaborationRoom room) async {
+    final response = await _client
+        .post(_roomJoinUri(room.roomId), headers: _headers())
+        .timeout(_requestTimeout);
+    if (response.statusCode == 410) {
+      throw StateError('协作房间已结束');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('加入协作房间失败：HTTP ${response.statusCode}');
+    }
+    return CollaborationRoomMetadata.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<CollaborationRoomMetadata> endRoom(
+    CollaborationRoom room, {
+    String? ownerKey,
+  }) async {
+    final response = await _client
+        .post(
+          _roomEndUri(room.roomId),
+          headers: _headers(),
+          body: jsonEncode({'ownerKey': ?ownerKey}),
+        )
+        .timeout(_requestTimeout);
+    if (response.statusCode == 401) {
+      throw StateError('未登录或缺少房主密钥，无法结束协作');
+    }
+    if (response.statusCode == 403) {
+      throw StateError('只有房主可以结束协作');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('结束协作房间失败：HTTP ${response.statusCode}');
+    }
+    return CollaborationRoomMetadata.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
+  @override
+  Future<ExcalidrawScene?> loadScene(CollaborationRoom room) async {
+    final response = await _client
+        .get(_roomSceneUri(room.roomId), headers: _headers())
+        .timeout(_requestTimeout);
     if (response.statusCode == 404) {
       return null;
     }
+    if (response.statusCode == 410) {
+      throw StateError('协作房间已结束');
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Load scene failed: HTTP ${response.statusCode}');
+      throw StateError('加载协作房间失败：HTTP ${response.statusCode}');
     }
 
     final json = jsonDecode(response.body) as Map<String, Object?>;
@@ -72,39 +196,83 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       roomKey: room.roomKey,
       encryptedPayload: payload,
     );
-    final decoded = jsonDecode(utf8.decode(bytes));
-    if (decoded is List) {
-      return [
-        for (final element in decoded) Map<String, Object?>.from(element as Map),
-      ];
-    }
-    if (decoded is Map<String, Object?>) {
-      return CollaborationMessage.fromJson(decoded).elements;
-    }
-    return const [];
+    _snapshotMetaByRoom[room.roomId] = _SceneSnapshotMeta(
+      sceneVersion: (json['sceneVersion']! as num).toInt(),
+      sceneHash: json['sceneHash']! as String,
+    );
+    return ExcalidrawScene.fromCollaborationPayload(
+      jsonDecode(utf8.decode(bytes)),
+    );
   }
 
   @override
   Future<void> saveScene({
     required CollaborationRoom room,
-    required List<Map<String, Object?>> elements,
+    required ExcalidrawScene scene,
   }) async {
     final payload = await _crypto.encrypt(
       roomKey: room.roomKey,
-      plainBytes: utf8.encode(jsonEncode(elements)),
+      plainBytes: utf8.encode(scene.toCollaborationContent()),
     );
-    final response = await _client.put(
-      _roomSceneUri(room.roomId),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'sceneVersion': _reconciler.getSceneVersion(elements),
-        'encryptedBuffer': base64Encode(payload.encryptedBuffer),
-        'iv': base64Encode(payload.iv),
-      }),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Save scene failed: HTTP ${response.statusCode}');
+    final response = await _client
+        .put(
+          _roomSceneUri(room.roomId),
+          headers: _headers(),
+          body: jsonEncode({
+            'sceneVersion': _reconciler.getSceneVersion(scene.elements),
+            'sceneHash': scene.collaborationHash(),
+            if (_snapshotMetaByRoom[room.roomId] case final meta?)
+              'baseSceneVersion': meta.sceneVersion,
+            if (_snapshotMetaByRoom[room.roomId] case final meta?)
+              'baseSceneHash': meta.sceneHash,
+            'encryptedBuffer': base64Encode(payload.encryptedBuffer),
+            'iv': base64Encode(payload.iv),
+          }),
+        )
+        .timeout(_requestTimeout);
+    if (response.statusCode == 409) {
+      throw const StaleSceneSnapshotException('远端场景版本已更新');
     }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('保存协作场景失败：HTTP ${response.statusCode}');
+    }
+    _snapshotMetaByRoom[room.roomId] = _SceneSnapshotMeta(
+      sceneVersion: _reconciler.getSceneVersion(scene.elements),
+      sceneHash: scene.collaborationHash(),
+    );
+  }
+
+  @override
+  Future<void> createRoom({
+    required CollaborationRoom room,
+    required ExcalidrawScene scene,
+    required String ownerKeyHash,
+  }) async {
+    final payload = await _crypto.encrypt(
+      roomKey: room.roomKey,
+      plainBytes: utf8.encode(scene.toCollaborationContent()),
+    );
+    await _createRoomMetadata(room.roomId, ownerKeyHash: ownerKeyHash);
+    final response = await _client
+        .post(
+          _roomSceneUri(room.roomId),
+          headers: _headers(),
+          body: jsonEncode({
+            'sceneVersion': _reconciler.getSceneVersion(scene.elements),
+            'sceneHash': scene.collaborationHash(),
+            'ownerKeyHash': ownerKeyHash,
+            'encryptedBuffer': base64Encode(payload.encryptedBuffer),
+            'iv': base64Encode(payload.iv),
+          }),
+        )
+        .timeout(_requestTimeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('创建协作房间失败：HTTP ${response.statusCode}');
+    }
+    _snapshotMetaByRoom[room.roomId] = _SceneSnapshotMeta(
+      sceneVersion: _reconciler.getSceneVersion(scene.elements),
+      sceneHash: scene.collaborationHash(),
+    );
   }
 
   Uri _roomSceneUri(String roomId) {
@@ -113,10 +281,62 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
     );
   }
 
+  Uri _roomJoinUri(String roomId) {
+    return _serverUri.replace(
+      path: _joinPath(_serverUri.path, '/api/rooms/$roomId/join'),
+    );
+  }
+
+  Uri _roomAccessUri(String roomId) {
+    return _serverUri.replace(
+      path: _joinPath(_serverUri.path, '/api/rooms/$roomId/access'),
+    );
+  }
+
+  Uri _roomEndUri(String roomId) {
+    return _serverUri.replace(
+      path: _joinPath(_serverUri.path, '/api/rooms/$roomId/end'),
+    );
+  }
+
+  Future<void> _createRoomMetadata(
+    String roomId, {
+    required String ownerKeyHash,
+  }) async {
+    final response = await _client
+        .post(
+          _serverUri.replace(path: _joinPath(_serverUri.path, '/api/rooms')),
+          headers: _headers(),
+          body: jsonEncode({'roomId': roomId, 'ownerKeyHash': ownerKeyHash}),
+        )
+        .timeout(_requestTimeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('创建协作房间元数据失败：HTTP ${response.statusCode}');
+    }
+  }
+
+  Map<String, String> _headers() {
+    return {
+      'Content-Type': 'application/json',
+      if (_authToken != null && _authToken.isNotEmpty)
+        'Authorization': 'Bearer $_authToken',
+    };
+  }
+
   String _joinPath(String basePath, String suffix) {
     final normalizedBase = basePath.endsWith('/')
         ? basePath.substring(0, basePath.length - 1)
         : basePath;
     return '$normalizedBase$suffix';
   }
+}
+
+class _SceneSnapshotMeta {
+  const _SceneSnapshotMeta({
+    required this.sceneVersion,
+    required this.sceneHash,
+  });
+
+  final int sceneVersion;
+  final String sceneHash;
 }

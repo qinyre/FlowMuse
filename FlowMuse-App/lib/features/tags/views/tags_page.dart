@@ -5,10 +5,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
-import '../../library/models/notebook_item.dart';
-import '../../library/view_models/library_home_view_model.dart';
-import '../../library/widgets/create_notebook_card.dart';
-import '../../library/widgets/notebook_card.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
+import '../../library/models/note_item.dart';
+import '../../library/repositories/library_repository.dart';
+import '../../library/widgets/create_note_card.dart';
+import '../../library/widgets/note_card.dart';
 import '../view_models/tags_view_model.dart';
 
 class TagsPage extends ConsumerWidget {
@@ -28,7 +29,20 @@ class TagsPage extends ConsumerWidget {
       onViewModeChanged: viewModel.changeViewMode,
       onSortDirectionChanged: viewModel.toggleSortDirection,
       onSelectionModeChanged: viewModel.toggleSelectionMode,
-      child: _TagItems(state: state, onCreate: viewModel.createTag),
+      bulkBar: state.selectionMode
+          ? _TagBulkActionBar(
+              selectedCount: state.selectedTagIds.length,
+              onClearSelection: viewModel.clearSelection,
+              onDeleteSelected: viewModel.deleteSelectedTags,
+            )
+          : null,
+      child: _TagItems(
+        state: state,
+        onCreate: viewModel.createTag,
+        onSelectionChanged: viewModel.toggleTagSelection,
+        onRename: viewModel.renameTag,
+        onDelete: viewModel.deleteTag,
+      ),
     );
   }
 }
@@ -38,37 +52,49 @@ class TagDetailPage extends ConsumerWidget {
 
   final String tagId;
 
-  void _openWhiteboard(
-    BuildContext context, {
-    String notebookId = 'whiteboard-new',
-  }) {
-    context.push(AppRoutes.whiteboardPath(notebookId: notebookId));
+  void _openWhiteboard(BuildContext context, {required String noteId}) {
+    context.push(AppRoutes.whiteboardPath(noteId: noteId));
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(tagsViewModelProvider);
     final tag = _findTag(state.tags, tagId);
-    final notebooks = tag == null
-        ? const <NotebookItem>[]
-        : sampleNotebooks
-              .where((item) => tag.notebookIds.contains(item.id))
-              .toList();
+    final libraryIndex = ref.watch(libraryIndexProvider).asData?.value;
+    final notes =
+        libraryIndex?.notes
+            .where((item) => item.tagIds.contains(tagId))
+            .toList() ??
+        const <NoteItem>[];
 
     return _TagPageFrame(
       title: tag?.name ?? '标签',
       viewMode: LibraryViewMode.grid,
       sortAscending: false,
       selectionMode: false,
-      onCreate: () => _openWhiteboard(context),
+      onCreate: () async {
+        final note = await ref
+            .read(libraryIndexProvider.notifier)
+            .createNote(tagIds: [tagId]);
+        if (context.mounted) {
+          _openWhiteboard(context, noteId: note.id);
+        }
+      },
       onViewModeChanged: null,
       onSortDirectionChanged: null,
       onSelectionModeChanged: null,
-      child: _NotebookItems(
-        notebooks: notebooks,
-        onCreate: () => _openWhiteboard(context),
-        onOpenNotebook: (item) {
-          _openWhiteboard(context, notebookId: item.id);
+      child: _NoteItems(
+        notes: notes,
+        onCreate: () async {
+          final note = await ref
+              .read(libraryIndexProvider.notifier)
+              .createNote(tagIds: [tagId]);
+          if (context.mounted) {
+            _openWhiteboard(context, noteId: note.id);
+          }
+        },
+        onOpenNote: (item) {
+          _openWhiteboard(context, noteId: item.id);
         },
       ),
     );
@@ -76,10 +102,19 @@ class TagDetailPage extends ConsumerWidget {
 }
 
 class _TagItems extends StatelessWidget {
-  const _TagItems({required this.state, required this.onCreate});
+  const _TagItems({
+    required this.state,
+    required this.onCreate,
+    required this.onSelectionChanged,
+    required this.onRename,
+    required this.onDelete,
+  });
 
   final TagsState state;
   final VoidCallback onCreate;
+  final ValueChanged<String> onSelectionChanged;
+  final Future<void> Function(String tagId, String name) onRename;
+  final Future<void> Function(String tagId) onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +131,15 @@ class _TagItems extends StatelessWidget {
           return _TagTile(
             tag: tag,
             selectionMode: state.selectionMode,
+            selected: state.selectedTagIds.contains(tag.id),
+            onSelectionChanged: () => onSelectionChanged(tag.id),
+            onRename: () => _showNameDialog(
+              context: context,
+              title: '重命名标签',
+              initialValue: tag.name,
+              onSubmitted: (name) => onRename(tag.id, name),
+            ),
+            onDelete: () => onDelete(tag.id),
             onTap: () => context.go(AppRoutes.tagPath(tag.id)),
           );
         },
@@ -127,14 +171,24 @@ class _TagItems extends StatelessWidget {
                 Positioned.fill(
                   child: _TagCoverCard(
                     tag: tag,
+                    onRename: () => _showNameDialog(
+                      context: context,
+                      title: '重命名标签',
+                      initialValue: tag.name,
+                      onSubmitted: (name) => onRename(tag.id, name),
+                    ),
+                    onDelete: () => onDelete(tag.id),
                     onTap: () => context.go(AppRoutes.tagPath(tag.id)),
                   ),
                 ),
                 if (state.selectionMode)
-                  const Positioned(
+                  Positioned(
                     top: 10,
                     right: 10,
-                    child: Checkbox(value: false, onChanged: null),
+                    child: Checkbox(
+                      value: state.selectedTagIds.contains(tag.id),
+                      onChanged: (_) => onSelectionChanged(tag.id),
+                    ),
                   ),
               ],
             );
@@ -145,16 +199,16 @@ class _TagItems extends StatelessWidget {
   }
 }
 
-class _NotebookItems extends StatelessWidget {
-  const _NotebookItems({
-    required this.notebooks,
+class _NoteItems extends StatelessWidget {
+  const _NoteItems({
+    required this.notes,
     required this.onCreate,
-    required this.onOpenNotebook,
+    required this.onOpenNote,
   });
 
-  final List<NotebookItem> notebooks;
+  final List<NoteItem> notes;
   final VoidCallback onCreate;
-  final ValueChanged<NotebookItem> onOpenNotebook;
+  final ValueChanged<NoteItem> onOpenNote;
 
   @override
   Widget build(BuildContext context) {
@@ -162,7 +216,7 @@ class _NotebookItems extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 820;
         return GridView.builder(
-          itemCount: notebooks.length + 1,
+          itemCount: notes.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: 218,
             mainAxisExtent: 276,
@@ -175,10 +229,10 @@ class _NotebookItems extends StatelessWidget {
           ),
           itemBuilder: (context, index) {
             if (index == 0) {
-              return CreateNotebookCard(onTap: onCreate);
+              return CreateNoteCard(onTap: onCreate);
             }
-            final item = notebooks[index - 1];
-            return NotebookCard(item: item, onTap: () => onOpenNotebook(item));
+            final item = notes[index - 1];
+            return NoteCard(item: item, onTap: () => onOpenNote(item));
           },
         );
       },
@@ -187,9 +241,16 @@ class _NotebookItems extends StatelessWidget {
 }
 
 class _TagCoverCard extends StatelessWidget {
-  const _TagCoverCard({required this.tag, required this.onTap});
+  const _TagCoverCard({
+    required this.tag,
+    required this.onRename,
+    required this.onDelete,
+    required this.onTap,
+  });
 
   final TagItem tag;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
   final VoidCallback onTap;
 
   @override
@@ -197,8 +258,8 @@ class _TagCoverCard extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          width: NotebookCard.coverWidth,
-          height: NotebookCard.coverHeight,
+          width: NoteCard.coverWidth,
+          height: NoteCard.coverHeight,
           child: Card(
             elevation: 5,
             shadowColor: const Color(0x165A625F),
@@ -214,7 +275,7 @@ class _TagCoverCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        _CoverTitle(title: tag.name),
+        _CoverTitle(title: tag.name, onRename: onRename, onDelete: onDelete),
         const SizedBox(height: 6),
         _CoverSubtitle(text: '${tag.count} 个笔记'),
       ],
@@ -299,11 +360,19 @@ class _TagTile extends StatelessWidget {
   const _TagTile({
     required this.tag,
     required this.selectionMode,
+    required this.selected,
+    required this.onSelectionChanged,
+    required this.onRename,
+    required this.onDelete,
     required this.onTap,
   });
 
   final TagItem tag;
   final bool selectionMode;
+  final bool selected;
+  final VoidCallback onSelectionChanged;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
   final VoidCallback onTap;
 
   @override
@@ -314,8 +383,8 @@ class _TagTile extends StatelessWidget {
         title: Text(tag.name),
         subtitle: Text('${tag.count} 个笔记'),
         trailing: selectionMode
-            ? const Checkbox(value: false, onChanged: null)
-            : const Icon(LucideIcons.chevronRight),
+            ? Checkbox(value: selected, onChanged: (_) => onSelectionChanged())
+            : _CollectionActions(onRename: onRename, onDelete: onDelete),
         onTap: onTap,
       ),
     );
@@ -334,8 +403,8 @@ class _CreateTagCard extends StatelessWidget {
     return Column(
       children: [
         SizedBox(
-          width: NotebookCard.coverWidth,
-          height: NotebookCard.coverHeight,
+          width: NoteCard.coverWidth,
+          height: NoteCard.coverHeight,
           child: Card.outlined(
             clipBehavior: Clip.antiAlias,
             shape: RoundedRectangleBorder(
@@ -388,6 +457,7 @@ class _TagPageFrame extends StatelessWidget {
     required this.onViewModeChanged,
     required this.onSortDirectionChanged,
     required this.onSelectionModeChanged,
+    this.bulkBar,
     required this.child,
   });
 
@@ -399,6 +469,7 @@ class _TagPageFrame extends StatelessWidget {
   final ValueChanged<LibraryViewMode>? onViewModeChanged;
   final VoidCallback? onSortDirectionChanged;
   final VoidCallback? onSelectionModeChanged;
+  final Widget? bulkBar;
   final Widget child;
 
   @override
@@ -422,11 +493,47 @@ class _TagPageFrame extends StatelessWidget {
                 onSelectionModeChanged: onSelectionModeChanged,
               ),
               const SizedBox(height: AppSpacing.headerToContent),
+              if (bulkBar != null) ...[
+                bulkBar!,
+                const SizedBox(height: AppSpacing.sectionGap),
+              ],
               Expanded(child: child),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _TagBulkActionBar extends StatelessWidget {
+  const _TagBulkActionBar({
+    required this.selectedCount,
+    required this.onClearSelection,
+    required this.onDeleteSelected,
+  });
+
+  final int selectedCount;
+  final VoidCallback onClearSelection;
+  final Future<void> Function() onDeleteSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card.outlined(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Text('已选 $selectedCount 项'),
+            const Spacer(),
+            TextButton(onPressed: onClearSelection, child: const Text('取消')),
+            TextButton(
+              onPressed: selectedCount == 0 ? null : onDeleteSelected,
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -471,32 +578,42 @@ class _TagHeader extends StatelessWidget {
         ),
         if (onViewModeChanged != null) ...[
           const SizedBox(width: AppSpacing.controlGap),
-          MenuAnchor(
-            builder: (context, controller, child) {
-              return IconButton(
-                tooltip: viewMode == LibraryViewMode.grid ? '网格视图' : '列表视图',
-                onPressed: () {
-                  controller.isOpen ? controller.close() : controller.open();
-                },
-                icon: Icon(
-                  viewMode == LibraryViewMode.grid
-                      ? LucideIcons.layoutGrid
-                      : LucideIcons.list,
-                ),
-              );
-            },
-            menuChildren: [
-              MenuItemButton(
-                leadingIcon: const Icon(LucideIcons.layoutGrid),
-                onPressed: () => onViewModeChanged!(LibraryViewMode.grid),
-                child: const Text('网格视图'),
+          Builder(
+            builder: (context) => IconButton(
+              tooltip: viewMode == LibraryViewMode.grid ? '网格视图' : '列表视图',
+              onPressed: () async {
+                final selected = await showAnchoredPopupMenu<LibraryViewMode>(
+                  context: context,
+                  items: const [
+                    PopupMenuItem<LibraryViewMode>(
+                      value: LibraryViewMode.grid,
+                      child: ListTile(
+                        leading: Icon(LucideIcons.layoutGrid),
+                        title: Text('网格视图'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    PopupMenuItem<LibraryViewMode>(
+                      value: LibraryViewMode.list,
+                      child: ListTile(
+                        leading: Icon(LucideIcons.list),
+                        title: Text('列表视图'),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ],
+                );
+                if (selected == null || !context.mounted) {
+                  return;
+                }
+                runAfterUiTeardown(() => onViewModeChanged!(selected));
+              },
+              icon: Icon(
+                viewMode == LibraryViewMode.grid
+                    ? LucideIcons.layoutGrid
+                    : LucideIcons.list,
               ),
-              MenuItemButton(
-                leadingIcon: const Icon(LucideIcons.list),
-                onPressed: () => onViewModeChanged!(LibraryViewMode.list),
-                child: const Text('列表视图'),
-              ),
-            ],
+            ),
           ),
         ],
         if (onSortDirectionChanged != null) ...[
@@ -527,9 +644,11 @@ class _TagHeader extends StatelessWidget {
 }
 
 class _CoverTitle extends StatelessWidget {
-  const _CoverTitle({required this.title});
+  const _CoverTitle({required this.title, this.onRename, this.onDelete});
 
   final String title;
+  final VoidCallback? onRename;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -547,11 +666,69 @@ class _CoverTitle extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        const Icon(LucideIcons.chevronDown, color: Color(0xFF555C59), size: 18),
+        _CollectionActions(onRename: onRename, onDelete: onDelete),
       ],
     );
   }
 }
+
+class _CollectionActions extends StatelessWidget {
+  const _CollectionActions({this.onRename, this.onDelete});
+
+  final VoidCallback? onRename;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onRename == null || onDelete == null) {
+      return const Icon(
+        LucideIcons.chevronDown,
+        color: Color(0xFF555C59),
+        size: 18,
+      );
+    }
+    return Builder(
+      builder: (context) => IconButton(
+        tooltip: '更多操作',
+        icon: const Icon(LucideIcons.chevronDown, size: 18),
+        onPressed: () async {
+          final selected = await showAnchoredPopupMenu<_CollectionAction>(
+            context: context,
+            items: const [
+              PopupMenuItem<_CollectionAction>(
+                value: _CollectionAction.rename,
+                child: ListTile(
+                  leading: Icon(LucideIcons.penLine),
+                  title: Text('重命名'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem<_CollectionAction>(
+                value: _CollectionAction.delete,
+                child: ListTile(
+                  leading: Icon(LucideIcons.trash2),
+                  title: Text('删除'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          );
+          if (selected == null || !context.mounted) {
+            return;
+          }
+          switch (selected) {
+            case _CollectionAction.rename:
+              runAfterUiTeardown(onRename!);
+            case _CollectionAction.delete:
+              runAfterUiTeardown(onDelete!);
+          }
+        },
+      ),
+    );
+  }
+}
+
+enum _CollectionAction { rename, delete }
 
 class _CoverSubtitle extends StatelessWidget {
   const _CoverSubtitle({required this.text});
@@ -576,4 +753,70 @@ TagItem? _findTag(List<TagItem> tags, String tagId) {
     }
   }
   return null;
+}
+
+Future<void> _showNameDialog({
+  required BuildContext context,
+  required String title,
+  required String initialValue,
+  required Future<void> Function(String value) onSubmitted,
+}) async {
+  final value = await showDialog<String>(
+    context: context,
+    builder: (context) => _NameDialog(title: title, initialValue: initialValue),
+  );
+  if (value != null && context.mounted) {
+    await runAfterContextTeardownAsync(context, () => onSubmitted(value));
+  }
+}
+
+class _NameDialog extends StatefulWidget {
+  const _NameDialog({required this.title, required this.initialValue});
+
+  final String title;
+  final String initialValue;
+
+  @override
+  State<_NameDialog> createState() => _NameDialogState();
+}
+
+class _NameDialogState extends State<_NameDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    Navigator.of(context).pop(value ?? _controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        onSubmitted: _submit,
+        decoration: const InputDecoration(border: OutlineInputBorder()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('保存')),
+      ],
+    );
+  }
 }

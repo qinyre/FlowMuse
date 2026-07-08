@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"flowmuse/server/internal/auth"
 	"flowmuse/server/internal/collab"
 	"flowmuse/server/internal/config"
 	"flowmuse/server/internal/storage"
@@ -34,6 +35,15 @@ func main() {
 	if err := sceneStore.EnsureSchema(ctx); err != nil {
 		log.Fatal(err)
 	}
+	userStore := auth.NewUserStore(db)
+	if err := userStore.EnsureSchema(ctx); err != nil {
+		log.Fatal(err)
+	}
+	roomStore := storage.NewRoomStore(db)
+	if err := roomStore.EnsureSchema(ctx); err != nil {
+		log.Fatal(err)
+	}
+	tokenService := auth.NewTokenService(cfg.AuthSecret, cfg.AuthTokenTTL)
 
 	fileStore, err := storage.NewFileStore(
 		cfg.S3Endpoint,
@@ -59,12 +69,12 @@ func main() {
 	io := socket.NewServer(nil, socketOptions)
 	defer io.Close(nil)
 
-	hub := collab.NewHub(io)
+	hub := collab.NewHub(io, sceneStore, roomStore, userStore, tokenService)
 	hub.Register()
 
 	mux := http.NewServeMux()
 	mux.Handle("/socket.io/", io.ServeHandler(nil))
-	collab.NewHTTPAPI(sceneStore, fileStore, cfg.RequestTimeout).Register(mux)
+	collab.NewHTTPAPI(sceneStore, fileStore, roomStore, userStore, tokenService, cfg.RequestTimeout).Register(mux)
 
 	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)
 	if err := http.ListenAndServe(cfg.Addr, mux); err != nil {

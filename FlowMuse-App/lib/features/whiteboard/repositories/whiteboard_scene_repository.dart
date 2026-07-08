@@ -3,22 +3,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../collaboration/models/excalidraw_scene.dart';
 
 abstract interface class WhiteboardSceneRepository {
-  Future<String> loadScene(String notebookId);
+  Future<String> loadScene(String noteId);
 
-  Future<void> saveScene(String notebookId, String content);
+  Future<void> saveScene(String noteId, String content);
 }
 
 class InMemoryWhiteboardSceneRepository implements WhiteboardSceneRepository {
   final Map<String, String> _scenes = {};
 
   @override
-  Future<String> loadScene(String notebookId) async {
-    return _scenes[notebookId] ?? emptyExcalidrawSceneContent;
+  Future<String> loadScene(String noteId) async {
+    return _scenes[noteId] ?? emptyExcalidrawSceneContent;
   }
 
   @override
-  Future<void> saveScene(String notebookId, String content) async {
-    _scenes[notebookId] = content;
+  Future<void> saveScene(String noteId, String content) async {
+    _scenes[noteId] = content;
   }
 }
 
@@ -32,14 +32,14 @@ class SharedPreferencesWhiteboardSceneRepository
     SharedPreferences preferences,
   ) : _preferences = (() async => preferences);
 
-  static const _keyPrefix = 'whiteboard.excalidraw.scene.';
+  static const _keyPrefix = 'note.excalidraw.scene.';
 
   final Future<SharedPreferences> Function() _preferences;
 
   @override
-  Future<String> loadScene(String notebookId) async {
+  Future<String> loadScene(String noteId) async {
     final preferences = await _preferences();
-    final raw = preferences.getString('$_keyPrefix$notebookId');
+    final raw = preferences.getString('$_keyPrefix$noteId');
     if (raw == null || raw.isEmpty) {
       return emptyExcalidrawSceneContent;
     }
@@ -47,8 +47,8 @@ class SharedPreferencesWhiteboardSceneRepository
   }
 
   @override
-  Future<void> saveScene(String notebookId, String content) async {
+  Future<void> saveScene(String noteId, String content) async {
     final preferences = await _preferences();
-    await preferences.setString('$_keyPrefix$notebookId', content);
+    await preferences.setString('$_keyPrefix$noteId', content);
   }
 }

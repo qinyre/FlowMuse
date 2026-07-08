@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../app/app_router.dart';
+import '../../features/account/view_models/account_view_model.dart';
 import 'app_spacing.dart';
 import 'app_shell.dart';
 
@@ -90,20 +93,42 @@ class SharedSidebarHeader extends StatelessWidget {
   }
 }
 
-class SharedSidebarAvatar extends StatelessWidget {
+class SharedSidebarAvatar extends ConsumerWidget {
   const SharedSidebarAvatar({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 17,
-      backgroundColor: Theme.of(
-        context,
-      ).colorScheme.primary.withValues(alpha: 0.12),
-      child: Icon(
-        LucideIcons.sparkles,
-        color: Theme.of(context).colorScheme.primary,
-        size: 19,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final account = ref.watch(accountViewModelProvider);
+    final colorScheme = Theme.of(context).colorScheme;
+    final identity = account.collaborationIdentity;
+    final label = identity.isGuest ? identity.username : identity.username;
+    final initial = label.trim().isEmpty ? '匿' : label.trim().characters.first;
+
+    return Tooltip(
+      message: identity.isGuest ? '匿名协作身份' : '账户与协作',
+      child: InkWell(
+        onTap: () => context.go(AppRoutes.settings),
+        customBorder: const CircleBorder(),
+        child: CircleAvatar(
+          radius: 17,
+          backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
+          child: account.status == AccountStatus.loading
+              ? SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colorScheme.primary,
+                  ),
+                )
+              : Text(
+                  initial,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+        ),
       ),
     );
   }
@@ -115,27 +140,22 @@ class SharedSidebarIconButton extends StatelessWidget {
     required this.tooltip,
     required this.onPressed,
     required this.icon,
-    this.offset = Offset.zero,
   });
 
   final String tooltip;
   final VoidCallback? onPressed;
   final Widget icon;
-  final Offset offset;
 
   @override
   Widget build(BuildContext context) {
-    return Transform.translate(
-      offset: offset,
-      child: IconButton(
-        tooltip: tooltip,
-        onPressed: onPressed,
-        constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-        padding: EdgeInsets.zero,
-        iconSize: 18,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-        icon: icon,
-      ),
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      padding: EdgeInsets.zero,
+      iconSize: 18,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      icon: icon,
     );
   }
 }
@@ -172,6 +192,7 @@ class SharedSidebarItem extends StatelessWidget {
     this.trailingIcon,
     this.actionIcon,
     this.emptyLabel,
+    this.leadingAction = false,
     this.onActionTap,
     this.onTrailingTap,
     this.onTap,
@@ -185,6 +206,7 @@ class SharedSidebarItem extends StatelessWidget {
   final IconData? trailingIcon;
   final IconData? actionIcon;
   final String? emptyLabel;
+  final bool leadingAction;
   final VoidCallback? onActionTap;
   final VoidCallback? onTrailingTap;
   final VoidCallback? onTap;
@@ -205,11 +227,15 @@ class SharedSidebarItem extends StatelessWidget {
         highlightColor: colorScheme.primary.withValues(alpha: 0.06),
         child: SizedBox(
           height: level == 0 ? 40 : 36,
-          child: Row(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.sidebarInset + level * AppSpacing.sidebarItemIndent,
+              0,
+              12,
+              0,
+            ),
+            child: Row(
               children: [
-                SizedBox(
-                  width: AppSpacing.sidebarInset + level * AppSpacing.sidebarItemIndent,
-                ),
                 Icon(icon, color: foreground.withValues(alpha: 0.78), size: 16),
                 const SizedBox(width: AppSpacing.controlGap),
                 Expanded(
@@ -230,105 +256,75 @@ class SharedSidebarItem extends StatelessWidget {
                               ),
                         ),
                       ),
+                      if (leadingAction && actionIcon != null) ...[
+                        const SizedBox(width: AppSpacing.controlGap),
+                        SharedSidebarActionButton(
+                          tooltip: '新建$label',
+                          icon: actionIcon!,
+                          onPressed: onActionTap,
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                if (actionIcon != null) ...[
+                if (!leadingAction && actionIcon != null) ...[
                   SharedSidebarActionButton(
                     tooltip: '新建$label',
                     icon: actionIcon!,
                     onPressed: onActionTap,
-                    offset: const Offset(40, 0),
                   ),
                   const SizedBox(width: AppSpacing.controlGap),
                 ],
-                if (emptyLabel != null)
-                  SizedBox(
-                    width: 64,
-                    child: Text(
-                      emptyLabel!,
-                      textAlign: TextAlign.right,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant.withValues(
-                          alpha: 0.78,
+                SizedBox(
+                  width: 64,
+                  height: 32,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: switch ((emptyLabel, count, trailingIcon)) {
+                      (final String label, _, _) => Text(
+                        label,
+                        textAlign: TextAlign.right,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.78,
+                          ),
+                          fontSize: 11,
+                          height: 1.0,
                         ),
-                        fontSize: 11,
-                        height: 1.0,
                       ),
-                    ),
-                  )
-                else if (actionIcon != null)
-                  SizedBox(
-                    height: 32,
-                    width: 64,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: trailingIcon == null
-                            ? const SizedBox.shrink()
-                            : IconButton(
-                                tooltip: '$label展开收起',
-                                constraints: const BoxConstraints.tightFor(
-                                  width: 32,
-                                  height: 32,
-                                ),
-                                padding: EdgeInsets.zero,
-                                onPressed: onTrailingTap,
-                                icon: Icon(
-                                  trailingIcon,
-                                  color: colorScheme.onSurfaceVariant,
-                                  size: 16,
-                                ),
-                              ),
+                      (_, final String value, _) => Text(
+                        value,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                          height: 1.0,
+                        ),
                       ),
-                    ),
-                  )
-                else if (count != null || trailingIcon != null)
-                  SizedBox(
-                    width: 64,
-                    height: 32,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: count != null
-                            ? Center(
-                                child: Text(
-                                  count!,
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                        fontSize: 11,
-                                        height: 1.0,
-                                      ),
-                                ),
-                              )
-                            : IconButton(
-                                tooltip: '$label展开收起',
-                                constraints: const BoxConstraints.tightFor(
-                                  width: 32,
-                                  height: 32,
-                                ),
-                                padding: EdgeInsets.zero,
-                                onPressed: onTrailingTap,
-                                icon: Icon(
-                                  trailingIcon,
-                                  color: colorScheme.onSurfaceVariant,
-                                  size: 16,
-                                ),
-                              ),
+                      (_, _, final IconData icon) => IconButton(
+                        tooltip: '$label展开收起',
+                        constraints: const BoxConstraints.tightFor(
+                          width: 32,
+                          height: 32,
+                        ),
+                        padding: EdgeInsets.zero,
+                        onPressed: onTrailingTap,
+                        icon: Icon(
+                          icon,
+                          color: colorScheme.onSurfaceVariant,
+                          size: 16,
+                        ),
                       ),
-                    ),
+                      _ => const SizedBox.shrink(),
+                    },
                   ),
-                const SizedBox(width: 12),
+                ),
               ],
             ),
           ),
         ),
+      ),
     );
   }
 }
@@ -366,25 +362,20 @@ class SharedSidebarActionButton extends StatelessWidget {
     required this.tooltip,
     required this.icon,
     required this.onPressed,
-    this.offset = Offset.zero,
   });
 
   final String tooltip;
   final IconData icon;
   final VoidCallback? onPressed;
-  final Offset offset;
 
   @override
   Widget build(BuildContext context) {
-    return Transform.translate(
-      offset: offset,
-      child: IconButton(
-        tooltip: tooltip,
-        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-        padding: EdgeInsets.zero,
-        onPressed: onPressed,
-        icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),
-      ),
+    return IconButton(
+      tooltip: tooltip,
+      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+      padding: EdgeInsets.zero,
+      onPressed: onPressed,
+      icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),
     );
   }
 }

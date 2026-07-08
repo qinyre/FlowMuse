@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../library/models/notebook_item.dart';
+import '../../library/models/note_item.dart';
+import '../../library/repositories/library_repository.dart';
 
 @immutable
 class TagItem {
@@ -10,14 +11,14 @@ class TagItem {
     required this.name,
     required this.count,
     required this.coverColor,
-    this.notebookIds = const [],
+    this.noteIds = const [],
   });
 
   final String id;
   final String name;
   final int count;
   final Color coverColor;
-  final List<String> notebookIds;
+  final List<String> noteIds;
 }
 
 @immutable
@@ -27,12 +28,14 @@ class TagsState {
     this.viewMode = LibraryViewMode.grid,
     this.sortAscending = true,
     this.selectionMode = false,
+    this.selectedTagIds = const {},
   });
 
   final List<TagItem> tags;
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
+  final Set<String> selectedTagIds;
 
   List<TagItem> get visibleTags {
     final sorted = tags.toList()
@@ -48,12 +51,14 @@ class TagsState {
     LibraryViewMode? viewMode,
     bool? sortAscending,
     bool? selectionMode,
+    Set<String>? selectedTagIds,
   }) {
     return TagsState(
       tags: tags ?? this.tags,
       viewMode: viewMode ?? this.viewMode,
       sortAscending: sortAscending ?? this.sortAscending,
       selectionMode: selectionMode ?? this.selectionMode,
+      selectedTagIds: selectedTagIds ?? this.selectedTagIds,
     );
   }
 }
@@ -61,22 +66,29 @@ class TagsState {
 class TagsViewModel extends Notifier<TagsState> {
   @override
   TagsState build() {
-    return const TagsState();
+    final index = ref.watch(libraryIndexProvider).asData?.value;
+    final tags = index == null
+        ? const <TagItem>[]
+        : [
+            for (final tag in index.tags)
+              TagItem(
+                id: tag.id,
+                name: tag.name,
+                count: index.notes
+                    .where((item) => item.tagIds.contains(tag.id))
+                    .length,
+                coverColor: tag.coverColor,
+                noteIds: [
+                  for (final note in index.notes)
+                    if (note.tagIds.contains(tag.id)) note.id,
+                ],
+              ),
+          ];
+    return TagsState(tags: tags);
   }
 
-  void createTag() {
-    final nextIndex = state.tags.length + 1;
-    state = state.copyWith(
-      tags: [
-        ...state.tags,
-        TagItem(
-          id: 'tag-$nextIndex',
-          name: '新建标签 $nextIndex',
-          count: 0,
-          coverColor: _tagColors[(nextIndex - 1) % _tagColors.length],
-        ),
-      ],
-    );
+  Future<void> createTag() {
+    return ref.read(libraryIndexProvider.notifier).createTag();
   }
 
   void changeViewMode(LibraryViewMode viewMode) {
@@ -88,17 +100,38 @@ class TagsViewModel extends Notifier<TagsState> {
   }
 
   void toggleSelectionMode() {
-    state = state.copyWith(selectionMode: !state.selectionMode);
+    state = state.copyWith(
+      selectionMode: !state.selectionMode,
+      selectedTagIds: const {},
+    );
+  }
+
+  void toggleTagSelection(String tagId) {
+    final selected = Set<String>.from(state.selectedTagIds);
+    selected.contains(tagId) ? selected.remove(tagId) : selected.add(tagId);
+    state = state.copyWith(selectedTagIds: selected);
+  }
+
+  void clearSelection() {
+    state = state.copyWith(selectionMode: false, selectedTagIds: const {});
+  }
+
+  Future<void> renameTag(String tagId, String name) {
+    return ref.read(libraryIndexProvider.notifier).renameTag(tagId, name);
+  }
+
+  Future<void> deleteTag(String tagId) {
+    return ref.read(libraryIndexProvider.notifier).deleteTag(tagId);
+  }
+
+  Future<void> deleteSelectedTags() async {
+    for (final id in state.selectedTagIds) {
+      await ref.read(libraryIndexProvider.notifier).deleteTag(id);
+    }
+    clearSelection();
   }
 }
 
 final tagsViewModelProvider = NotifierProvider<TagsViewModel, TagsState>(
   TagsViewModel.new,
 );
-
-const _tagColors = [
-  Color(0xFF8CBDB5),
-  Color(0xFFE9993F),
-  Color(0xFF9CA2E6),
-  Color(0xFF2E5872),
-];

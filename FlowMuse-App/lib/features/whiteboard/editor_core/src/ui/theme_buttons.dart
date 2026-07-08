@@ -2,6 +2,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+
 /// Theme toggle buttons (light/dark/system).
 class ThemeButtons extends StatelessWidget {
   final ThemeMode? currentThemeMode;
@@ -57,9 +59,11 @@ class ThemeButtons extends StatelessWidget {
   }
 
   void _setTheme(BuildContext context, ThemeMode mode) {
-    onThemeModeChanged?.call(mode);
     if (dismissOnTap) {
       Navigator.of(context).pop();
+      runAfterUiTeardown(() => onThemeModeChanged?.call(mode));
+    } else {
+      onThemeModeChanged?.call(mode);
     }
   }
 

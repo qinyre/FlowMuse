@@ -6,7 +6,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
-import '../../folders/view_models/folders_view_model.dart';
+import '../../notebooks/view_models/notebooks_view_model.dart';
+import '../repositories/library_repository.dart';
 import '../../tags/view_models/tags_view_model.dart';
 
 class LibrarySidebar extends ConsumerStatefulWidget {
@@ -20,30 +21,24 @@ class LibrarySidebar extends ConsumerStatefulWidget {
 
 class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
   bool _allNotesExpanded = true;
-  bool _foldersExpanded = true;
+  bool _notebooksExpanded = true;
   bool _tagsExpanded = true;
 
   @override
   Widget build(BuildContext context) {
-    final folders = ref.watch(foldersViewModelProvider).visibleFolders;
+    final notebooks = ref.watch(notebooksViewModelProvider).visibleNotebooks;
     final tags = ref.watch(tagsViewModelProvider).tags;
-    final hasFolders = folders.isNotEmpty;
+    final libraryIndex = ref.watch(libraryIndexProvider).asData?.value;
+    final hasNotebooks = notebooks.isNotEmpty;
     final hasTags = tags.isNotEmpty;
 
     return SharedSidebar(
       header: SharedSidebarHeader(
         trailing: [
           SharedSidebarIconButton(
-            tooltip: '侧边栏',
-            onPressed: () {},
-            icon: const Icon(LucideIcons.panelLeft),
-            offset: const Offset(11, 0),
-          ),
-          SharedSidebarIconButton(
             tooltip: '设置',
             onPressed: () => context.go(AppRoutes.settings),
             icon: const Icon(LucideIcons.settings),
-            offset: const Offset(7, 0),
           ),
         ],
       ),
@@ -73,63 +68,73 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeOutCubic,
               child: _allNotesExpanded
-                  ? const Column(
+                  ? Column(
                       key: ValueKey('all-notes-children'),
                       children: [
                         SharedSidebarItem(
-                          icon: LucideIcons.folderX,
-                          label: '未分类',
-                          count: '10',
+                          icon: LucideIcons.bookX,
+                          label: '未归入笔记本',
+                          count: (libraryIndex?.unnotebookedCount ?? 0)
+                              .toString(),
                           level: 1,
+                          onTap: () => context.go(AppRoutes.unnotebooked),
                         ),
                         SharedSidebarItem(
                           icon: LucideIcons.tags,
                           label: '未标签',
-                          count: '10',
+                          count: (libraryIndex?.untaggedCount ?? 0).toString(),
                           level: 1,
+                          onTap: () => context.go(AppRoutes.untagged),
                         ),
                       ],
                     )
                   : const SizedBox.shrink(key: ValueKey('empty-children')),
             ),
-            const SharedSidebarItem(icon: LucideIcons.trash2, label: '回收站'),
+            SharedSidebarItem(
+              icon: LucideIcons.trash2,
+              label: '回收站',
+              count: (libraryIndex?.deletedNotes.length ?? 0).toString(),
+              onTap: () => context.go(AppRoutes.trash),
+            ),
           ],
         ),
         SharedSidebarBlock(
           children: [
             SharedSidebarItem(
-              icon: LucideIcons.folder,
-              label: '文件夹',
-              selected: widget.section == ShellSection.folders,
+              icon: LucideIcons.bookOpen,
+              label: '笔记本',
+              selected: widget.section == ShellSection.notebooks,
               actionIcon: LucideIcons.circlePlus,
-              emptyLabel: hasFolders ? null : '暂无文件夹',
-              trailingIcon: hasFolders
-                  ? (_foldersExpanded
+              leadingAction: true,
+              emptyLabel: hasNotebooks ? null : '暂无笔记本',
+              trailingIcon: hasNotebooks
+                  ? (_notebooksExpanded
                         ? LucideIcons.chevronDown
                         : LucideIcons.chevronRight)
                   : null,
               onActionTap: () {
-                ref.read(foldersViewModelProvider.notifier).createFolder();
-                context.go(AppRoutes.folders);
+                ref.read(notebooksViewModelProvider.notifier).createNotebook();
+                context.go(AppRoutes.notebooks);
               },
               onTrailingTap: () {
-                setState(() => _foldersExpanded = !_foldersExpanded);
+                setState(() => _notebooksExpanded = !_notebooksExpanded);
               },
-              onTap: () => context.go(AppRoutes.folders),
+              onTap: () => context.go(AppRoutes.notebooks),
             ),
-            if (hasFolders)
+            if (hasNotebooks)
               SharedSidebarChildren(
-                expanded: _foldersExpanded,
-                emptyKey: 'empty-folders',
-                childrenKey: 'folder-children',
+                expanded: _notebooksExpanded,
+                emptyKey: 'empty-notebooks',
+                childrenKey: 'notebook-children',
                 children: [
-                  for (final folder in folders)
+                  for (final notebook in notebooks)
                     SharedSidebarItem(
-                      icon: LucideIcons.folder,
-                      label: folder.name,
-                      count: folder.count.toString(),
+                      icon: LucideIcons.bookOpen,
+                      label: notebook.name,
+                      count: notebook.count.toString(),
                       level: 1,
-                      onTap: () => context.go(AppRoutes.folderPath(folder.id)),
+                      onTap: () =>
+                          context.go(AppRoutes.notebookPath(notebook.id)),
                     ),
                 ],
               ),

@@ -5,6 +5,8 @@ import 'dart:async';
 import 'package:flutter/material.dart' hide Element;
 import 'package:flutter/services.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+
 import 'markdraw_controller.dart';
 
 /// Floating search bar for finding text on the canvas.
@@ -28,12 +30,17 @@ class FindOverlay extends StatefulWidget {
 class _FindOverlayState extends State<FindOverlay> {
   final _textController = TextEditingController();
   final _focusNode = FocusNode();
+  final _keyboardFocusNode = FocusNode();
   Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
-    _focusNode.requestFocus();
+    runWhenUiStable(() {
+      if (mounted && _focusNode.canRequestFocus) {
+        _focusNode.requestFocus();
+      }
+    });
   }
 
   @override
@@ -41,6 +48,7 @@ class _FindOverlayState extends State<FindOverlay> {
     _debounce?.cancel();
     _textController.dispose();
     _focusNode.dispose();
+    _keyboardFocusNode.dispose();
     super.dispose();
   }
 
@@ -65,7 +73,7 @@ class _FindOverlayState extends State<FindOverlay> {
 
   void _close() {
     widget.controller.closeFind();
-    widget.controller.keyboardFocusNode.requestFocus();
+    widget.controller.restoreKeyboardFocusWhenStable();
   }
 
   @override
@@ -85,7 +93,7 @@ class _FindOverlayState extends State<FindOverlay> {
     }
 
     return KeyboardListener(
-      focusNode: FocusNode(),
+      focusNode: _keyboardFocusNode,
       onKeyEvent: (event) {
         if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.escape) {

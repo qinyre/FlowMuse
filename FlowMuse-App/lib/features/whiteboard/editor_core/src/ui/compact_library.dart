@@ -2,6 +2,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'markdraw_controller.dart';
 
 /// Shows a compact library bottom sheet for mobile layout.
@@ -11,6 +12,11 @@ void showCompactLibrary(
   VoidCallback? onImportLibrary,
   VoidCallback? onExportLibrary,
 }) {
+  void closeThen(BuildContext ctx, VoidCallback action) {
+    Navigator.pop(ctx);
+    runAfterUiTeardown(action);
+  }
+
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -50,8 +56,7 @@ void showCompactLibrary(
                     IconButton(
                       icon: const Icon(Icons.file_upload, size: 20),
                       onPressed: () {
-                        Navigator.pop(ctx);
-                        onImportLibrary();
+                        closeThen(ctx, onImportLibrary);
                       },
                       tooltip: '导入素材库',
                     ),
@@ -61,8 +66,7 @@ void showCompactLibrary(
                       onPressed: controller.libraryItems.isEmpty
                           ? null
                           : () {
-                              Navigator.pop(ctx);
-                              onExportLibrary();
+                              closeThen(ctx, onExportLibrary);
                             },
                       tooltip: '导出素材库',
                     ),
@@ -78,8 +82,7 @@ void showCompactLibrary(
                     icon: const Icon(Icons.add, size: 16),
                     label: const Text('添加到素材库'),
                     onPressed: () {
-                      controller.addToLibrary();
-                      Navigator.pop(ctx);
+                      closeThen(ctx, controller.addToLibrary);
                     },
                   ),
                 ),
@@ -106,14 +109,18 @@ void showCompactLibrary(
                             final box =
                                 context.findRenderObject() as RenderBox?;
                             final size = box?.size ?? const Size(800, 600);
-                            controller.placeLibraryItem(item, size);
-                            Navigator.pop(ctx);
+                            closeThen(
+                              ctx,
+                              () => controller.placeLibraryItem(item, size),
+                            );
                           },
                           trailing: IconButton(
                             icon: const Icon(Icons.delete, size: 18),
                             onPressed: () {
-                              controller.removeLibraryItem(item.id);
-                              Navigator.pop(ctx);
+                              closeThen(
+                                ctx,
+                                () => controller.removeLibraryItem(item.id),
+                              );
                             },
                           ),
                         );

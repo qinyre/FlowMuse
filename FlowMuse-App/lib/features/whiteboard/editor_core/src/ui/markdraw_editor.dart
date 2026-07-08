@@ -1,7 +1,9 @@
 library;
 
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
+import 'package:flutter/services.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 
@@ -30,10 +32,21 @@ class MarkdrawEditor extends StatefulWidget {
     this.onBack,
     this.saveStatusLabel,
     this.collaborating = false,
+    this.collaborationConnecting = false,
+    this.collaborationError,
+    this.collaborationStatusLabel,
     this.roomLink,
+    this.roomValue,
+    this.shareOriginConfigured = true,
     this.collaboratorCount = 0,
+    this.collaborators = const [],
+    this.isCollaborationOwner = false,
     this.onStartCollaboration,
-    this.onStopCollaboration,
+    this.onJoinCollaboration,
+    this.onLeaveCollaboration,
+    this.onEndCollaboration,
+    this.onPointerPresence,
+    this.onVisibleSceneBoundsChanged,
     this.onDocumentRenamed,
   });
 
@@ -64,10 +77,22 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onBack;
   final String? saveStatusLabel;
   final bool collaborating;
+  final bool collaborationConnecting;
+  final String? collaborationError;
+  final String? collaborationStatusLabel;
   final String? roomLink;
+  final String? roomValue;
+  final bool shareOriginConfigured;
   final int collaboratorCount;
+  final List<RemoteCollaboratorOverlay> collaborators;
+  final bool isCollaborationOwner;
   final Future<void> Function()? onStartCollaboration;
-  final Future<void> Function()? onStopCollaboration;
+  final Future<void> Function()? onJoinCollaboration;
+  final Future<void> Function()? onLeaveCollaboration;
+  final Future<void> Function()? onEndCollaboration;
+  final void Function(Offset localPosition, bool pointerDown)?
+  onPointerPresence;
+  final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
   final VoidCallback? onDocumentRenamed;
 
   @override
@@ -86,7 +111,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     super.initState();
     _controller.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
-    _controller.keyboardFocusNode.requestFocus();
+    _controller.restoreKeyboardFocusWhenStable();
   }
 
   @override
@@ -107,6 +132,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
   }
 
   void _onControllerChanged() {
+    if (!mounted) {
+      return;
+    }
     setState(() {});
   }
 
@@ -163,8 +191,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                 constraints.maxHeight,
               );
               if (isCompact != _controller.isCompact) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _controller.isCompact = isCompact;
+                runWhenUiStable(() {
+                  if (mounted) {
+                    _controller.isCompact = isCompact;
+                  }
                 });
               }
               return _buildBody();
@@ -195,7 +225,13 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                   _controller.placeLibraryItemAt(details.data, localPos);
                 },
                 builder: (context, candidateData, rejectedData) {
-                  return EditorCanvas(controller: _controller);
+                  return EditorCanvas(
+                    controller: _controller,
+                    collaborators: widget.collaborators,
+                    onPointerPresence: widget.onPointerPresence,
+                    onVisibleSceneBoundsChanged:
+                        widget.onVisibleSceneBoundsChanged,
+                  );
                 },
               ),
             ),
@@ -274,10 +310,18 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
             child: _RightChrome(
               saveStatusLabel: widget.saveStatusLabel,
               collaborating: widget.collaborating,
+              collaborationConnecting: widget.collaborationConnecting,
+              collaborationError: widget.collaborationError,
+              collaborationStatusLabel: widget.collaborationStatusLabel,
               roomLink: widget.roomLink,
+              roomValue: widget.roomValue,
+              shareOriginConfigured: widget.shareOriginConfigured,
               collaboratorCount: widget.collaboratorCount,
+              isCollaborationOwner: widget.isCollaborationOwner,
               onStartCollaboration: widget.onStartCollaboration,
-              onStopCollaboration: widget.onStopCollaboration,
+              onJoinCollaboration: widget.onJoinCollaboration,
+              onLeaveCollaboration: widget.onLeaveCollaboration,
+              onEndCollaboration: widget.onEndCollaboration,
               viewMode: _controller.viewMode,
               zenMode: _controller.zenMode,
               onExitViewMode: _controller.toggleViewMode,
@@ -344,7 +388,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       ),
     );
   }
-
 }
 
 class _LeftChrome extends StatelessWidget {
@@ -482,10 +525,18 @@ class _RightChrome extends StatelessWidget {
   const _RightChrome({
     required this.saveStatusLabel,
     required this.collaborating,
+    required this.collaborationConnecting,
+    required this.collaborationError,
+    required this.collaborationStatusLabel,
     required this.roomLink,
+    required this.roomValue,
+    required this.shareOriginConfigured,
     required this.collaboratorCount,
+    required this.isCollaborationOwner,
     required this.onStartCollaboration,
-    required this.onStopCollaboration,
+    required this.onJoinCollaboration,
+    required this.onLeaveCollaboration,
+    required this.onEndCollaboration,
     required this.viewMode,
     required this.zenMode,
     required this.onExitViewMode,
@@ -494,10 +545,18 @@ class _RightChrome extends StatelessWidget {
 
   final String? saveStatusLabel;
   final bool collaborating;
+  final bool collaborationConnecting;
+  final String? collaborationError;
+  final String? collaborationStatusLabel;
   final String? roomLink;
+  final String? roomValue;
+  final bool shareOriginConfigured;
   final int collaboratorCount;
+  final bool isCollaborationOwner;
   final Future<void> Function()? onStartCollaboration;
-  final Future<void> Function()? onStopCollaboration;
+  final Future<void> Function()? onJoinCollaboration;
+  final Future<void> Function()? onLeaveCollaboration;
+  final Future<void> Function()? onEndCollaboration;
   final bool viewMode;
   final bool zenMode;
   final VoidCallback onExitViewMode;
@@ -507,7 +566,7 @@ class _RightChrome extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 720;
     final canCollaborate =
-        onStartCollaboration != null && onStopCollaboration != null;
+        onStartCollaboration != null && onLeaveCollaboration != null;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -525,10 +584,18 @@ class _RightChrome extends StatelessWidget {
             _CollaborationChip(
               compact: compact,
               collaborating: collaborating,
+              connecting: collaborationConnecting,
+              error: collaborationError,
+              statusLabel: collaborationStatusLabel,
               roomLink: roomLink,
+              roomValue: roomValue,
+              shareOriginConfigured: shareOriginConfigured,
               collaboratorCount: collaboratorCount,
+              isOwner: isCollaborationOwner,
               onStart: onStartCollaboration!,
-              onStop: onStopCollaboration!,
+              onJoin: onJoinCollaboration,
+              onLeave: onLeaveCollaboration!,
+              onEnd: onEndCollaboration,
             ),
         ],
       ],
@@ -607,81 +674,239 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-class _CollaborationChip extends StatelessWidget {
+class _CollaborationChip extends StatefulWidget {
   const _CollaborationChip({
     required this.compact,
     required this.collaborating,
+    required this.connecting,
+    required this.error,
+    required this.statusLabel,
     required this.roomLink,
+    required this.roomValue,
+    required this.shareOriginConfigured,
     required this.collaboratorCount,
+    required this.isOwner,
     required this.onStart,
-    required this.onStop,
+    required this.onJoin,
+    required this.onLeave,
+    required this.onEnd,
   });
 
   final bool compact;
   final bool collaborating;
+  final bool connecting;
+  final String? error;
+  final String? statusLabel;
   final String? roomLink;
+  final String? roomValue;
+  final bool shareOriginConfigured;
   final int collaboratorCount;
+  final bool isOwner;
   final Future<void> Function() onStart;
-  final Future<void> Function() onStop;
+  final Future<void> Function()? onJoin;
+  final Future<void> Function() onLeave;
+  final Future<void> Function()? onEnd;
+
+  @override
+  State<_CollaborationChip> createState() => _CollaborationChipState();
+}
+
+class _CollaborationChipState extends State<_CollaborationChip> {
+  @override
+  Widget build(BuildContext context) {
+    final label =
+        widget.statusLabel ??
+        (widget.connecting
+            ? '连接中'
+            : widget.error != null
+            ? '协作失败'
+            : widget.collaborating
+            ? (widget.collaboratorCount > 0
+                  ? '协作中 ${widget.collaboratorCount}'
+                  : '协作中')
+            : '创建房间');
+    return FilledButton.icon(
+      onPressed: () => _showCollaborationMenu(context, label),
+      icon: Icon(
+        widget.collaborating ? Icons.sensors : Icons.add_link,
+        size: 18,
+      ),
+      label: widget.compact ? const SizedBox.shrink() : Text(label),
+      style: FilledButton.styleFrom(
+        minimumSize: widget.compact ? const Size(44, 44) : const Size(0, 44),
+        padding: widget.compact
+            ? EdgeInsets.zero
+            : const EdgeInsets.symmetric(horizontal: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  Future<void> _showCollaborationMenu(
+    BuildContext anchorContext,
+    String label,
+  ) async {
+    final selected = await showAnchoredPopupMenu<_CollaborationAction>(
+      context: anchorContext,
+      items: [
+        PopupMenuItem<_CollaborationAction>(
+          enabled: false,
+          child: _CollaborationMenuHeader(
+            title: widget.connecting
+                ? label
+                : widget.error != null
+                ? '协作失败'
+                : widget.collaborating
+                ? label
+                : '本地白板',
+            error: widget.error,
+            roomText: widget.roomLink ?? widget.roomValue,
+            shareOriginConfigured: widget.shareOriginConfigured,
+            usesRoomCode: widget.roomLink == null,
+          ),
+        ),
+        if (widget.roomLink != null || widget.roomValue != null)
+          PopupMenuItem<_CollaborationAction>(
+            value: _CollaborationAction.copy,
+            child: ListTile(
+              leading: const Icon(Icons.copy),
+              title: Text(widget.roomLink == null ? '复制房间码' : '复制链接'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        PopupMenuItem<_CollaborationAction>(
+          enabled: !widget.connecting,
+          value: widget.collaborating
+              ? _CollaborationAction.leave
+              : _CollaborationAction.start,
+          child: ListTile(
+            leading: Icon(widget.collaborating ? Icons.logout : Icons.link),
+            title: Text(widget.collaborating ? '退出房间' : '创建房间'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        if (!widget.collaborating && widget.onJoin != null)
+          PopupMenuItem<_CollaborationAction>(
+            enabled: !widget.connecting,
+            value: _CollaborationAction.join,
+            child: const ListTile(
+              leading: Icon(Icons.login),
+              title: Text('加入房间'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        if (widget.collaborating && widget.isOwner && widget.onEnd != null)
+          PopupMenuItem<_CollaborationAction>(
+            enabled: !widget.connecting,
+            value: _CollaborationAction.end,
+            child: ListTile(
+              leading: Icon(
+                Icons.stop_circle,
+                color: Theme.of(anchorContext).colorScheme.error,
+              ),
+              title: Text(
+                '结束协作',
+                style: TextStyle(
+                  color: Theme.of(anchorContext).colorScheme.error,
+                ),
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+      ],
+    );
+    if (selected == null || !anchorContext.mounted) {
+      return;
+    }
+    switch (selected) {
+      case _CollaborationAction.copy:
+        await Clipboard.setData(
+          ClipboardData(text: widget.roomLink ?? widget.roomValue!),
+        );
+        if (!anchorContext.mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(anchorContext).showSnackBar(
+          SnackBar(
+            content: Text(widget.roomLink == null ? '房间码已复制' : '房间链接已复制'),
+          ),
+        );
+      case _CollaborationAction.start:
+        runAfterUiTeardown(widget.onStart);
+      case _CollaborationAction.join:
+        final onJoin = widget.onJoin;
+        if (onJoin != null) {
+          runAfterUiTeardown(onJoin);
+        }
+      case _CollaborationAction.leave:
+        runAfterUiTeardown(widget.onLeave);
+      case _CollaborationAction.end:
+        final onEnd = widget.onEnd;
+        if (onEnd != null) {
+          runAfterUiTeardown(onEnd);
+        }
+    }
+  }
+}
+
+enum _CollaborationAction { copy, start, join, leave, end }
+
+class _CollaborationMenuHeader extends StatelessWidget {
+  const _CollaborationMenuHeader({
+    required this.title,
+    required this.error,
+    required this.roomText,
+    required this.shareOriginConfigured,
+    required this.usesRoomCode,
+  });
+
+  final String title;
+  final String? error;
+  final String? roomText;
+  final bool shareOriginConfigured;
+  final bool usesRoomCode;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final label = collaborating
-        ? (collaboratorCount > 0 ? '协作中 $collaboratorCount' : '协作中')
-        : '创建房间';
-    return MenuAnchor(
-      menuChildren: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Text(
-            collaborating ? '协作中' : '本地白板',
-            style: TextStyle(
-              color: cs.onSurface,
-              fontWeight: FontWeight.w700,
-            ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700),
           ),
-        ),
-        if (roomLink != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280),
-              child: SelectableText(
-                roomLink!,
-                maxLines: 3,
-                style: TextStyle(
-                  color: cs.onSurfaceVariant,
-                  fontSize: 12,
-                  height: 1.25,
-                ),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              error!,
+              style: TextStyle(color: cs.error, fontSize: 12, height: 1.25),
+            ),
+          ],
+          if (roomText != null) ...[
+            if (!shareOriginConfigured && usesRoomCode) ...[
+              const SizedBox(height: 8),
+              Text(
+                '分享地址未配置，请复制房间码加入',
+                style: TextStyle(color: cs.error, fontSize: 12, height: 1.25),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              roomText!,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: cs.onSurfaceVariant,
+                fontSize: 12,
+                height: 1.25,
               ),
             ),
-          ),
-        MenuItemButton(
-          leadingIcon: Icon(collaborating ? Icons.link_off : Icons.link),
-          onPressed: collaborating ? onStop : onStart,
-          child: Text(collaborating ? '停止协作' : '创建房间'),
-        ),
-      ],
-      builder: (context, controller, child) {
-        return FilledButton.icon(
-          onPressed: () {
-            controller.isOpen ? controller.close() : controller.open();
-          },
-          icon: Icon(collaborating ? Icons.sensors : Icons.add_link, size: 18),
-          label: compact ? const SizedBox.shrink() : Text(label),
-          style: FilledButton.styleFrom(
-            minimumSize: compact ? const Size(44, 44) : const Size(0, 44),
-            padding: compact
-                ? EdgeInsets.zero
-                : const EdgeInsets.symmetric(horizontal: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        );
-      },
+          ],
+        ],
+      ),
     );
   }
 }

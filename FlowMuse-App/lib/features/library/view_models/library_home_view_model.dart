@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/notebook_item.dart';
+import '../models/note_item.dart';
+import '../repositories/library_repository.dart';
 
 @immutable
 class LibraryHomeState {
@@ -10,22 +11,27 @@ class LibraryHomeState {
     this.viewMode = LibraryViewMode.grid,
     this.sortAscending = false,
     this.selectionMode = false,
-    this.notebooks = sampleNotebooks,
+    this.selectedNoteIds = const {},
+    this.notes = const [],
+    this.loading = false,
   });
 
   final LibraryFilter selectedFilter;
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
-  final List<NotebookItem> notebooks;
+  final Set<String> selectedNoteIds;
+  final List<NoteItem> notes;
+  final bool loading;
 
-  List<NotebookItem> get visibleNotebooks {
+  List<NoteItem> get visibleNotes {
+    final activeNotes = notes.where((item) => !item.isDeleted);
     final filtered = selectedFilter == LibraryFilter.all
-        ? notebooks
-        : notebooks.where((item) => item.kind == selectedFilter);
+        ? activeNotes
+        : activeNotes.where((item) => item.kind == selectedFilter);
     final sorted = filtered.toList()
       ..sort((a, b) {
-        final result = a.date.compareTo(b.date);
+        final result = a.updatedAt.compareTo(b.updatedAt);
         return sortAscending ? result : -result;
       });
     return sorted;
@@ -36,13 +42,18 @@ class LibraryHomeState {
     LibraryViewMode? viewMode,
     bool? sortAscending,
     bool? selectionMode,
+    Set<String>? selectedNoteIds,
+    List<NoteItem>? notes,
+    bool? loading,
   }) {
     return LibraryHomeState(
       selectedFilter: selectedFilter ?? this.selectedFilter,
       viewMode: viewMode ?? this.viewMode,
       sortAscending: sortAscending ?? this.sortAscending,
       selectionMode: selectionMode ?? this.selectionMode,
-      notebooks: notebooks,
+      selectedNoteIds: selectedNoteIds ?? this.selectedNoteIds,
+      notes: notes ?? this.notes,
+      loading: loading ?? this.loading,
     );
   }
 }
@@ -50,7 +61,11 @@ class LibraryHomeState {
 class LibraryHomeViewModel extends Notifier<LibraryHomeState> {
   @override
   LibraryHomeState build() {
-    return const LibraryHomeState();
+    final libraryIndex = ref.watch(libraryIndexProvider);
+    return LibraryHomeState(
+      notes: libraryIndex.asData?.value.notes ?? const [],
+      loading: libraryIndex.isLoading,
+    );
   }
 
   void selectFilter(LibraryFilter filter) {
@@ -69,7 +84,59 @@ class LibraryHomeViewModel extends Notifier<LibraryHomeState> {
   }
 
   void toggleSelectionMode() {
-    state = state.copyWith(selectionMode: !state.selectionMode);
+    state = state.copyWith(
+      selectionMode: !state.selectionMode,
+      selectedNoteIds: const {},
+    );
+  }
+
+  void toggleNoteSelection(String noteId) {
+    final selected = Set<String>.from(state.selectedNoteIds);
+    selected.contains(noteId) ? selected.remove(noteId) : selected.add(noteId);
+    state = state.copyWith(selectedNoteIds: selected);
+  }
+
+  void clearSelection() {
+    state = state.copyWith(selectionMode: false, selectedNoteIds: const {});
+  }
+
+  Future<NoteItem> createNote() {
+    return ref.read(libraryIndexProvider.notifier).createNote();
+  }
+
+  Future<void> deleteSelectedNotes() async {
+    await ref
+        .read(libraryIndexProvider.notifier)
+        .deleteNotes(state.selectedNoteIds.toList());
+    clearSelection();
+  }
+
+  Future<void> restoreSelectedNotes() async {
+    await ref
+        .read(libraryIndexProvider.notifier)
+        .restoreNotes(state.selectedNoteIds.toList());
+    clearSelection();
+  }
+
+  Future<void> deleteSelectedNotesForever() async {
+    await ref
+        .read(libraryIndexProvider.notifier)
+        .deleteNotesForever(state.selectedNoteIds.toList());
+    clearSelection();
+  }
+
+  Future<void> moveSelectedNotesToNotebook(String? notebookId) async {
+    await ref
+        .read(libraryIndexProvider.notifier)
+        .moveNotesToNotebook(state.selectedNoteIds.toList(), notebookId);
+    clearSelection();
+  }
+
+  Future<void> addTagsToSelectedNotes(List<String> tagIds) async {
+    await ref
+        .read(libraryIndexProvider.notifier)
+        .addTagsToNotes(state.selectedNoteIds.toList(), tagIds);
+    clearSelection();
   }
 }
 
@@ -77,63 +144,3 @@ final libraryHomeViewModelProvider =
     NotifierProvider<LibraryHomeViewModel, LibraryHomeState>(
       LibraryHomeViewModel.new,
     );
-
-const sampleNotebooks = [
-  NotebookItem(
-    id: 'whiteboard-os',
-    title: '操作系统',
-    date: '2026/06/26',
-    kind: LibraryFilter.notes,
-    coverColor: Color(0xFF8DB6C9),
-    subtitle: '操作系统概念',
-  ),
-  NotebookItem(
-    id: 'whiteboard-lecture-notes',
-    title: 'LectureNotes',
-    date: '2026/05/28',
-    kind: LibraryFilter.pdf,
-    coverColor: Color(0xFFD9B48F),
-  ),
-  NotebookItem(
-    id: 'whiteboard-quantum-computing',
-    title: '量子计算',
-    date: '2026/05/16',
-    kind: LibraryFilter.notes,
-    coverColor: Color(0xFF2E5872),
-  ),
-  NotebookItem(
-    id: 'whiteboard-novel',
-    title: '小说',
-    date: '2026/04/23',
-    kind: LibraryFilter.notes,
-    coverColor: Color(0xFF8CBDB5),
-  ),
-  NotebookItem(
-    id: 'whiteboard-drafts',
-    title: '草稿本',
-    date: '2026/04/03',
-    kind: LibraryFilter.notes,
-    coverColor: Color(0xFFD6D6D0),
-  ),
-  NotebookItem(
-    id: 'whiteboard-software-engineering',
-    title: '软件工程',
-    date: '2026/03/05',
-    kind: LibraryFilter.notes,
-    coverColor: Color(0xFFE9993F),
-  ),
-  NotebookItem(
-    id: 'whiteboard-untitled-note',
-    title: '未命名笔记',
-    date: '2026/03/04',
-    kind: LibraryFilter.notes,
-    coverColor: Color(0xFFE6E4DD),
-  ),
-  NotebookItem(
-    id: 'whiteboard-algorithm-yudandan',
-    title: '算法设计 喻丹丹',
-    date: '2026/03/02',
-    kind: LibraryFilter.notes,
-    coverColor: Color(0xFF9CA2E6),
-  ),
-];
