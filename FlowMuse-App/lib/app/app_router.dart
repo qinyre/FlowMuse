@@ -21,6 +21,7 @@ class AppRoutes {
   static const tags = '/tags';
   static const tagDetail = '/tags/:tagId';
   static const settings = '/settings';
+  static const accountSettings = '/settings?section=account';
   static const unnotebooked = '/library/unnotebooked';
   static const untagged = '/library/untagged';
   static const trash = '/library/trash';
@@ -126,7 +127,9 @@ GoRouter createAppRouter() {
       ),
       GoRoute(
         path: AppRoutes.settings,
-        builder: (context, state) => const SettingsPage(),
+        builder: (context, state) => SettingsPage(
+          showAccountFirst: state.uri.queryParameters['section'] == 'account',
+        ),
       ),
       GoRoute(
         path: AppRoutes.collaborationWhiteboard,
@@ -160,9 +163,10 @@ ShellSection _sectionForPath(String path) {
   if (path == AppRoutes.search) {
     return ShellSection.search;
   }
-  if (path == AppRoutes.unnotebooked ||
-      path == AppRoutes.untagged ||
-      path == AppRoutes.trash) {
+  if (path == AppRoutes.trash) {
+    return ShellSection.trash;
+  }
+  if (path == AppRoutes.unnotebooked || path == AppRoutes.untagged) {
     return ShellSection.library;
   }
   if (path == AppRoutes.notebooks ||
@@ -175,14 +179,9 @@ ShellSection _sectionForPath(String path) {
   return ShellSection.library;
 }
 
-CustomTransitionPage<void> _contentPage(GoRouterState state, Widget child) {
-  return CustomTransitionPage<void>(
+Page<void> _contentPage(GoRouterState state, Widget child) {
+  return NoTransitionPage<void>(
     key: state.pageKey,
-    transitionDuration: const Duration(milliseconds: 160),
-    reverseTransitionDuration: const Duration(milliseconds: 120),
     child: child,
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      return FadeTransition(opacity: animation, child: child);
-    },
   );
 }

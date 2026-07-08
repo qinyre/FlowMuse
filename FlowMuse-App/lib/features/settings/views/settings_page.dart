@@ -18,14 +18,36 @@ import '../../account/view_models/account_view_model.dart';
 import '../../library/repositories/library_repository.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.showAccountFirst});
+
+  final bool? showAccountFirst;
 
   @override
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  _SettingsSection _section = _SettingsSection.localBackup;
+  late _SettingsSection _section;
+
+  @override
+  void initState() {
+    super.initState();
+    _section = _initialSectionFor(widget.showAccountFirst);
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.showAccountFirst != widget.showAccountFirst) {
+      _section = _initialSectionFor(widget.showAccountFirst);
+    }
+  }
+
+  _SettingsSection _initialSectionFor(bool? showAccountFirst) {
+    return showAccountFirst == true
+        ? _SettingsSection.account
+        : _SettingsSection.localBackup;
+  }
 
   @override
   Widget build(BuildContext context) {
