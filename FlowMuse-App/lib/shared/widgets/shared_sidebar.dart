@@ -283,17 +283,21 @@ class SharedSidebarItem extends StatelessWidget {
                           height: 1.0,
                         ),
                       ),
-                      (_, final String value, _) => SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: Center(
-                          child: Text(
-                            value,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              fontSize: 11,
-                              height: 1.0,
+                      (_, final String value, _) => Transform.translate(
+                        offset: const Offset(-8, 0),
+                        child: SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: Text(
+                              value,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                fontSize: 11,
+                                height: 1.0,
+                              ),
                             ),
                           ),
                         ),
