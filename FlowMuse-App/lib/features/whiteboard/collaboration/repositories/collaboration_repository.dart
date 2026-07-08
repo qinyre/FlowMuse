@@ -50,7 +50,6 @@ class CollaborationRepository {
   Future<void> _messageDecodeQueue = Future<void>.value();
   CollaborationRoom? _activeRoom;
   ExcalidrawScene _latestScene = ExcalidrawScene.empty();
-  int _lastBroadcastedOrReceivedSceneVersion = -1;
 
   String get socketId => _transport.socketId ?? 'local-client';
 
@@ -120,8 +119,6 @@ class CollaborationRepository {
     await _ownerKeyStore.writeOwnerKey(room.roomId, ownerKey);
     _activeRoom = room;
     _latestScene = syncableScene;
-    final sceneVersion = _reconciler.getSceneVersion(syncableScene.elements);
-    _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
     _rememberBroadcasted(syncableScene.elements);
     _startRoomSession(room);
     try {
@@ -160,9 +157,6 @@ class CollaborationRepository {
       files: {...localScene.files, ...storedScene.files},
     );
     _latestScene = nextScene;
-    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
-      nextScene.elements,
-    );
     _rememberBroadcasted(nextScene.elements);
     _activeRoom = room;
     _startRoomSession(room);
@@ -208,9 +202,6 @@ class CollaborationRepository {
       files: {...localScene.files, ...storedScene.files},
     );
     _latestScene = nextScene;
-    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
-      nextScene.elements,
-    );
     _rememberBroadcasted(nextScene.elements);
     return nextScene;
   }
@@ -231,13 +222,6 @@ class CollaborationRepository {
       reportOnly: true,
     );
 
-    final sceneVersion = _reconciler.getSceneVersion(syncableElements);
-    if (!initial &&
-        !syncAll &&
-        sceneVersion <= _lastBroadcastedOrReceivedSceneVersion) {
-      return;
-    }
-
     final elementsToBroadcast = initial || syncAll
         ? syncableElements
         : _changedElements(syncableElements);
@@ -251,7 +235,6 @@ class CollaborationRepository {
     await _send(room: room, message: message);
     _rememberBroadcasted(elementsToBroadcast);
     _latestScene = syncableScene;
-    _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
     unawaited(_saveSceneSnapshot(room: room, scene: syncableScene));
   }
 
@@ -333,9 +316,7 @@ class CollaborationRepository {
       elements: _reconciler.getSyncableElements(reconciled),
     );
     _latestScene = nextScene;
-    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
-      reconciled,
-    );
+    _rememberBroadcasted(remoteElements);
     return nextScene.copyWith(elements: reconciled);
   }
 
@@ -563,7 +544,6 @@ class CollaborationRepository {
     _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();
     _uploadedFileIds.clear();
-    _lastBroadcastedOrReceivedSceneVersion = -1;
   }
 }
 
