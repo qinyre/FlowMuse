@@ -1,6 +1,5 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -25,8 +24,6 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
   bool _creating = false;
   final TextEditingController _titleController = TextEditingController();
   final FocusNode _titleFocusNode = FocusNode();
-  final GlobalKey<EditableTextState> _titleEditableKey =
-      GlobalKey<EditableTextState>();
 
   @override
   void dispose() {
@@ -65,14 +62,6 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     );
   }
 
-  void _focusTitle() {
-    FocusScope.of(context).requestFocus(_titleFocusNode);
-    _titleEditableKey.currentState?.requestKeyboard();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _titleEditableKey.currentState?.requestKeyboard();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -100,8 +89,6 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
                             _NoteSetupPanel(
                               titleController: _titleController,
                               titleFocusNode: _titleFocusNode,
-                              titleEditableKey: _titleEditableKey,
-                              onTitleTap: _focusTitle,
                               titleChanged: (value) => _title = value,
                               noteType: _noteType,
                               onNoteTypeChanged: (value) {
@@ -242,8 +229,6 @@ class _NoteSetupPanel extends StatelessWidget {
   const _NoteSetupPanel({
     required this.titleController,
     required this.titleFocusNode,
-    required this.titleEditableKey,
-    required this.onTitleTap,
     required this.titleChanged,
     required this.noteType,
     required this.onNoteTypeChanged,
@@ -253,8 +238,6 @@ class _NoteSetupPanel extends StatelessWidget {
 
   final TextEditingController titleController;
   final FocusNode titleFocusNode;
-  final GlobalKey<EditableTextState> titleEditableKey;
-  final VoidCallback onTitleTap;
   final ValueChanged<String> titleChanged;
   final NoteType noteType;
   final ValueChanged<NoteType> onNoteTypeChanged;
@@ -264,7 +247,7 @@ class _NoteSetupPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 390, minWidth: 320),
+      constraints: const BoxConstraints(maxWidth: 430, minWidth: 360),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: const Color(0xFFFAFBFA),
@@ -279,8 +262,6 @@ class _NoteSetupPanel extends StatelessWidget {
               _TitleInput(
                 controller: titleController,
                 focusNode: titleFocusNode,
-                editableKey: titleEditableKey,
-                onTap: onTitleTap,
                 onChanged: titleChanged,
                 onSubmitted: onSubmitted,
               ),
@@ -328,70 +309,56 @@ class _TitleInput extends StatelessWidget {
   const _TitleInput({
     required this.controller,
     required this.focusNode,
-    required this.editableKey,
-    required this.onTap,
     required this.onChanged,
     required this.onSubmitted,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
-  final GlobalKey<EditableTextState> editableKey;
-  final VoidCallback onTap;
   final ValueChanged<String> onChanged;
   final VoidCallback onSubmitted;
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
-          color: const Color(0xFF1F2624),
-        ) ??
-        const TextStyle(color: Color(0xFF1F2624), fontSize: 16);
-
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => onTap(),
-      child: Container(
-        height: 48,
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF1F2F1),
-          borderRadius: BorderRadius.circular(AppSpacing.radius),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          alignment: Alignment.centerLeft,
-          children: [
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: controller,
-              builder: (context, value, _) {
-                if (value.text.isNotEmpty) {
-                  return const SizedBox.shrink();
-                }
-                return IgnorePointer(
-                  child: Text(
-                    '输入笔记标题',
-                    style: textStyle.copyWith(color: const Color(0xFF8C9691)),
-                  ),
-                );
-              },
-            ),
-            EditableText(
-              key: editableKey,
-              controller: controller,
-              focusNode: focusNode,
-              style: textStyle,
-              cursorColor: const Color(0xFF4F8F84),
-              backgroundCursorColor: const Color(0xFFC9D4CF),
-              keyboardType: TextInputType.text,
-              textInputAction: TextInputAction.done,
-              textAlign: TextAlign.start,
-              maxLines: 1,
-              onChanged: onChanged,
-              onSubmitted: (_) => onSubmitted(),
-            ),
-          ],
+    return SizedBox(
+      height: 42,
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        keyboardType: TextInputType.text,
+        textInputAction: TextInputAction.done,
+        maxLines: 1,
+        cursorHeight: 18,
+        onTapAlwaysCalled: true,
+        onTap: () {
+          if (!focusNode.hasFocus) {
+            FocusScope.of(context).requestFocus(focusNode);
+            return;
+          }
+          focusNode.unfocus();
+          Future<void>.delayed(const Duration(milliseconds: 50), () {
+            if (context.mounted) {
+              FocusScope.of(context).requestFocus(focusNode);
+            }
+          });
+        },
+        onChanged: onChanged,
+        onSubmitted: (_) => onSubmitted(),
+        textAlign: TextAlign.start,
+        textAlignVertical: TextAlignVertical.center,
+        decoration: InputDecoration(
+          hintText: '输入笔记标题',
+          filled: true,
+          fillColor: const Color(0xFFF1F2F1),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radius),
+            borderSide: BorderSide.none,
+          ),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 4,
+          ),
         ),
       ),
     );
