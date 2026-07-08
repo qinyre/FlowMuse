@@ -21,6 +21,7 @@ class AppRoutes {
   static const tags = '/tags';
   static const tagDetail = '/tags/:tagId';
   static const settings = '/settings';
+  static const accountSettings = '/settings?section=account';
   static const unnotebooked = '/library/unnotebooked';
   static const untagged = '/library/untagged';
   static const trash = '/library/trash';
@@ -126,7 +127,9 @@ GoRouter createAppRouter() {
       ),
       GoRoute(
         path: AppRoutes.settings,
-        builder: (context, state) => const SettingsPage(),
+        builder: (context, state) => SettingsPage(
+          showAccountFirst: state.uri.queryParameters['section'] == 'account',
+        ),
       ),
       GoRoute(
         path: AppRoutes.collaborationWhiteboard,
