@@ -176,14 +176,9 @@ ShellSection _sectionForPath(String path) {
   return ShellSection.library;
 }
 
-CustomTransitionPage<void> _contentPage(GoRouterState state, Widget child) {
-  return CustomTransitionPage<void>(
+Page<void> _contentPage(GoRouterState state, Widget child) {
+  return NoTransitionPage<void>(
     key: state.pageKey,
-    transitionDuration: const Duration(milliseconds: 160),
-    reverseTransitionDuration: const Duration(milliseconds: 120),
     child: child,
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      return FadeTransition(opacity: animation, child: child);
-    },
   );
 }
