@@ -97,7 +97,7 @@ class ExcalidrawJsonCodec {
       return {
         ...base,
         'fileId': el.fileId,
-        'status': 'saved',
+        'status': el.status,
         'scale': [el.imageScale, el.imageScale],
         if (el.crop != null && !el.crop!.isFullImage)
           'crop': {
@@ -728,6 +728,7 @@ class ExcalidrawJsonCodec {
       width: _double(raw, 'width'),
       height: _double(raw, 'height'),
       fileId: raw['fileId'] as String? ?? '',
+      status: raw['status'] as String? ?? 'saved',
       imageScale: imageScale,
       crop: crop,
       angle: _double(raw, 'angle'),

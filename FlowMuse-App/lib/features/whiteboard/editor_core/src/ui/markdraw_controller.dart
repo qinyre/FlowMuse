@@ -2287,6 +2287,7 @@ class MarkdrawController extends ChangeNotifier {
       height: height,
       fileId: fileId,
       mimeType: mimeType,
+      status: 'pending',
     );
 
     _imageCache.putImage(fileId, decodedImage);

@@ -55,12 +55,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   late final WhiteboardCollaborationAdapter _collaborationAdapter;
   late final CollaborationRepository _collaborationRepository;
   StreamSubscription<CollaborationMessage>? _collaborationSubscription;
+  StreamSubscription<ExcalidrawScene>? _fileStatusSceneSubscription;
   StreamSubscription<List<RoomCollaborator>>? _roomUsersSubscription;
   StreamSubscription<CollaborationRoomMetadata>? _roomEndedSubscription;
   StreamSubscription<String>? _roomErrorSubscription;
   StreamSubscription<RealtimeConnectionStatus>? _connectionStatusSubscription;
   Timer? _idleTimer;
   Timer? _awayTimer;
+  Timer? _loadImagesTimer;
   bool _loadingScene = false;
   bool _applyingRemoteScene = false;
   bool _collaborationOpening = false;
@@ -93,12 +95,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   void dispose() {
     _disposingOrLeaving = true;
     unawaited(_collaborationSubscription?.cancel());
+    unawaited(_fileStatusSceneSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
     unawaited(_roomEndedSubscription?.cancel());
     unawaited(_roomErrorSubscription?.cancel());
     unawaited(_connectionStatusSubscription?.cancel());
     _idleTimer?.cancel();
     _awayTimer?.cancel();
+    _loadImagesTimer?.cancel();
     unawaited(_collaborationRepository.stop());
     _markdrawController.dispose();
     super.dispose();
@@ -331,7 +335,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         return;
       }
       if (reconciledScene.elements.isNotEmpty) {
-        await _enqueueRemoteScene(reconciledScene);
+        await _enqueueRemoteScene(reconciledScene, reconcile: false);
       }
       if (_canMutateWhiteboard) {
         ref
@@ -417,6 +421,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   Future<void> _cancelCollaborationStreams() async {
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = null;
+    await _fileStatusSceneSubscription?.cancel();
+    _fileStatusSceneSubscription = null;
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = null;
     await _roomEndedSubscription?.cancel();
@@ -427,6 +433,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _connectionStatusSubscription = null;
     _idleTimer?.cancel();
     _awayTimer?.cancel();
+    _loadImagesTimer?.cancel();
+    _loadImagesTimer = null;
     _lastIdleState = null;
     _lastRealtimeStatus = null;
   }
@@ -556,6 +564,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             });
           },
         );
+    await _fileStatusSceneSubscription?.cancel();
+    _fileStatusSceneSubscription = _collaborationRepository.fileStatusScenes
+        .listen((scene) {
+          _enqueueRemoteScene(scene, loadImages: false, reconcile: false);
+        });
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = _collaborationRepository.roomUsers.listen((users) {
       _runAfterStableFrame(() {
@@ -744,7 +757,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     unawaited(_remoteSceneQueue);
   }
 
-  Future<void> _enqueueRemoteScene(ExcalidrawScene remoteScene) {
+  Future<void> _enqueueRemoteScene(
+    ExcalidrawScene remoteScene, {
+    bool loadImages = true,
+    bool reconcile = true,
+  }) {
     CollaborationDebugLog.write('scene', 'remote_scene_queued', {
       'elements': remoteScene.elements.length,
       'sceneVersion': CollaborationDebugLog.sceneVersion(remoteScene.elements),
@@ -754,7 +771,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _remoteSceneQueue = pending
         .then<void>((_) async {
           await _runAfterStableFrameAsync(() async {
-            await _applyRemoteScene(remoteScene);
+            await _applyRemoteScene(remoteScene, reconcile: reconcile);
+            if (loadImages) {
+              _scheduleLoadImageFiles();
+            }
           });
         })
         .catchError(_reportRemoteSceneFutureError);
@@ -808,9 +828,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       'summary': CollaborationDebugLog.elementSummary(reconciledScene.elements),
     });
     await _applyRemoteScene(reconciledScene);
+    _scheduleLoadImageFiles();
   }
 
-  Future<void> _applyRemoteScene(ExcalidrawScene remoteScene) async {
+  Future<void> _applyRemoteScene(
+    ExcalidrawScene remoteScene, {
+    bool reconcile = true,
+  }) async {
     if (!_canMutateWhiteboard) {
       CollaborationDebugLog.write('scene', 'remote_scene_skipped', {
         'reason': 'cannot_mutate',
@@ -819,29 +843,28 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
     final localScene = _collaborationAdapter.currentScene();
     final protectedElementIds = _collaborationAdapter.protectedElementIds();
-    final reconciledScene = _collaborationRepository
-        .reconcileRemoteScene(
-          localScene: localScene,
-          remoteElements: remoteScene.elements,
-          protectedElementIds: protectedElementIds,
-        )
-        .copyWith(appState: remoteScene.appState, files: remoteScene.files);
-    final room = ref.read(whiteboardViewModelProvider).activeRoom;
-    final remoteFiles = room == null
-        ? const <String, dynamic>{}
-        : await _collaborationRepository.loadMissingFiles(
-            room: room,
-            fileIds: _imageFileIds(reconciledScene.elements),
-            existingFileIds: localScene.files.keys.toSet(),
-          );
+    final reconciledScene = reconcile
+        ? _collaborationRepository
+              .reconcileRemoteScene(
+                localScene: localScene,
+                remoteElements: remoteScene.elements,
+                protectedElementIds: protectedElementIds,
+              )
+              .copyWith(
+                appState: remoteScene.appState,
+                files: remoteScene.files,
+              )
+        : remoteScene;
     if (!_canMutateWhiteboard) {
       CollaborationDebugLog.write('scene', 'remote_scene_skipped', {
-        'reason': 'cannot_mutate_after_files',
+        'reason': 'cannot_mutate_before_apply',
       });
       return;
     }
     final nextScene = reconciledScene.copyWith(
-      files: {...localScene.files, ...reconciledScene.files, ...remoteFiles},
+      files: reconcile
+          ? {...localScene.files, ...reconciledScene.files}
+          : reconciledScene.files,
     );
     final nextContent = nextScene.toContent();
 
@@ -856,7 +879,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         'localBefore': localScene.elements.length,
         'localAfter': nextScene.elements.length,
         'protected': protectedElementIds.length,
-        'filesLoaded': remoteFiles.length,
+        'filesLoaded': 0,
         'sceneVersion': CollaborationDebugLog.sceneVersion(nextScene.elements),
         'summary': CollaborationDebugLog.elementSummary(nextScene.elements),
       });
@@ -916,12 +939,90 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     return _collaborationAdapter.currentScene();
   }
 
-  Iterable<String> _imageFileIds(List<Map<String, Object?>> elements) sync* {
+  void _scheduleLoadImageFiles() {
+    if (_loadImagesTimer?.isActive ?? false) {
+      return;
+    }
+    _loadImagesTimer = Timer(const Duration(milliseconds: 500), () {
+      _loadImagesTimer = null;
+      unawaited(_loadMissingImageFiles());
+    });
+  }
+
+  Future<void> _loadMissingImageFiles() async {
+    if (!_canMutateWhiteboard) {
+      return;
+    }
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room == null) {
+      return;
+    }
+    final scene = _collaborationAdapter.currentScene();
+    final result = await _collaborationRepository.loadMissingFiles(
+      room: room,
+      fileIds: _savedImageFileIds(scene.elements),
+      existingFileIds: scene.files.keys.toSet(),
+    );
+    if (!_canMutateWhiteboard ||
+        (result.files.isEmpty && result.erroredFileIds.isEmpty)) {
+      return;
+    }
+    final latestScene = _collaborationAdapter.currentScene();
+    final nextScene = latestScene.copyWith(
+      files: {...latestScene.files, ...result.files},
+      elements: _markErroredImageFiles(
+        latestScene.elements,
+        result.erroredFileIds,
+      ),
+    );
+    _applyingRemoteScene = true;
+    try {
+      _collaborationAdapter.applyRemoteScene(
+        nextScene,
+        closeTransientUi: false,
+      );
+      CollaborationDebugLog.write('file', 'remote_images_applied', {
+        'filesLoaded': result.files.length,
+        'filesErrored': result.erroredFileIds.length,
+      });
+    } finally {
+      _applyingRemoteScene = false;
+    }
+  }
+
+  Iterable<String> _savedImageFileIds(
+    List<Map<String, Object?>> elements,
+  ) sync* {
     for (final element in elements) {
-      if (element['type'] == 'image' && element['fileId'] is String) {
+      if (element['type'] == 'image' &&
+          element['status'] == 'saved' &&
+          element['fileId'] is String) {
         yield element['fileId']! as String;
       }
     }
+  }
+
+  List<Map<String, Object?>> _markErroredImageFiles(
+    List<Map<String, Object?>> elements,
+    Set<String> erroredFileIds,
+  ) {
+    if (erroredFileIds.isEmpty) {
+      return elements;
+    }
+    return [
+      for (final element in elements)
+        if (element['type'] == 'image' &&
+            element['fileId'] is String &&
+            erroredFileIds.contains(element['fileId']))
+          {
+            ...element,
+            'status': 'error',
+            'version': ((element['version'] as num?)?.toInt() ?? 1) + 1,
+            'updated': DateTime.now().millisecondsSinceEpoch,
+          }
+        else
+          element,
+    ];
   }
 
   @override

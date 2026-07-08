@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import '../models/collaboration_message.dart';
 import '../models/collaboration_room.dart';
@@ -9,6 +10,7 @@ import '../models/room_collaborator.dart';
 import 'collaboration_owner_key_store.dart';
 import '../services/collaboration_crypto.dart';
 import '../services/collaboration_debug_log.dart';
+import '../services/collaboration_file_manager.dart';
 import '../services/collaboration_file_store.dart';
 import '../services/encrypted_scene_store.dart';
 import '../services/realtime_transport.dart';
@@ -30,6 +32,7 @@ class CollaborationRepository {
        _reconciler = reconciler ?? SceneReconciler();
 
   static const Duration fullSceneSyncInterval = Duration(seconds: 20);
+  static const Duration fileUploadTimeout = Duration(milliseconds: 300);
 
   final RealtimeTransport _transport;
   final EncryptedSceneStore _sceneStore;
@@ -37,20 +40,25 @@ class CollaborationRepository {
   final CollaborationOwnerKeyStore _ownerKeyStore;
   final CollaborationCrypto _crypto;
   final SceneReconciler _reconciler;
+  final CollaborationFileManager _fileManager = CollaborationFileManager();
+  final math.Random _random = math.Random();
   final Map<String, int> _broadcastedElementVersions = {};
-  final Set<String> _uploadedFileIds = {};
   final StreamController<String> _repositoryErrors =
       StreamController<String>.broadcast();
   final StreamController<CollaborationMessage> _messages =
       StreamController<CollaborationMessage>.broadcast();
+  final StreamController<ExcalidrawScene> _fileStatusScenes =
+      StreamController<ExcalidrawScene>.broadcast();
   final List<CollaborationMessage> _messageBacklog = [];
 
   Timer? _fullSceneSyncTimer;
+  Timer? _fileUploadTimer;
   StreamSubscription<EncryptedPayload>? _transportMessageSubscription;
   StreamSubscription<String>? _newUserSubscription;
   Future<void> _messageDecodeQueue = Future<void>.value();
   CollaborationRoom? _activeRoom;
   ExcalidrawScene _latestScene = ExcalidrawScene.empty();
+  int _lastBroadcastedOrReceivedSceneVersion = 0;
 
   String get socketId => _transport.socketId ?? 'local-client';
 
@@ -95,6 +103,8 @@ class CollaborationRepository {
     });
   }
 
+  Stream<ExcalidrawScene> get fileStatusScenes => _fileStatusScenes.stream;
+
   Future<CollaborationRoom> startNewRoom({
     required ExcalidrawScene initialScene,
   }) async {
@@ -104,23 +114,22 @@ class CollaborationRepository {
       roomId: room.roomId,
       ownerKey: ownerKey,
     );
-    final syncableScene = initialScene.copyWith(
-      elements: _reconciler.getSyncableElements(initialScene.elements),
-    );
-    await _uploadFiles(
-      roomId: room.roomId,
-      roomKey: room.roomKey,
-      filesJson: syncableScene.files,
+    final roomScene = _markSavedImagesPending(initialScene);
+    final syncableScene = roomScene.copyWith(
+      elements: _reconciler.getSyncableElements(roomScene.elements),
     );
     await _sceneStore.createRoom(
       room: room,
-      scene: syncableScene,
+      scene: syncableScene.copyWith(files: const {}),
       ownerKeyHash: ownerKeyHash,
     );
     await _ownerKeyStore.writeOwnerKey(room.roomId, ownerKey);
     _activeRoom = room;
     _latestScene = syncableScene;
     _rememberBroadcasted(syncableScene.elements);
+    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
+      syncableScene.elements,
+    );
     CollaborationDebugLog.write('repo', 'start_room', {
       'room': _shortRoomId(room.roomId),
       'elements': syncableScene.elements.length,
@@ -138,6 +147,7 @@ class CollaborationRepository {
       room: room,
       message: CollaborationMessage.sceneInit(elements: syncableScene.elements),
     );
+    _scheduleFileUpload(room);
     _startFullSceneSync();
     return room;
   }
@@ -155,22 +165,21 @@ class CollaborationRepository {
       throw StateError('房间不存在或尚未创建');
     }
     final metadata = await _sceneStore.joinRoom(room);
-    final reconciledElements = _reconciler.reconcile(
-      localElements: localScene.elements,
-      remoteElements: storedScene.elements,
-    );
     final nextScene = storedScene.copyWith(
-      elements: _reconciler.getSyncableElements(reconciledElements),
-      files: {...localScene.files, ...storedScene.files},
+      elements: _reconciler.getSyncableElements(storedScene.elements),
     );
     _latestScene = nextScene;
     _rememberBroadcasted(nextScene.elements);
+    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
+      nextScene.elements,
+    );
     _activeRoom = room;
     CollaborationDebugLog.write('repo', 'join_room', {
       'room': _shortRoomId(room.roomId),
       'localElements': localScene.elements.length,
       'storedElements': storedScene.elements.length,
-      'mergedElements': nextScene.elements.length,
+      'mergedElements': 0,
+      'joinedElements': nextScene.elements.length,
       'sceneVersion': _reconciler.getSceneVersion(nextScene.elements),
       'summary': CollaborationDebugLog.elementSummary(nextScene.elements),
     });
@@ -233,12 +242,18 @@ class CollaborationRepository {
     final syncableElements = _reconciler.getSyncableElements(scene.elements);
     final syncableScene = scene.copyWith(elements: syncableElements);
     _latestScene = syncableScene;
-    await _uploadFiles(
-      roomId: room.roomId,
-      roomKey: room.roomKey,
-      filesJson: scene.files,
-      reportOnly: true,
-    );
+    final sceneVersion = _reconciler.getSceneVersion(syncableElements);
+    if (!initial &&
+        !syncAll &&
+        sceneVersion <= _lastBroadcastedOrReceivedSceneVersion) {
+      CollaborationDebugLog.write('scene', 'broadcast_gate_skipped', {
+        'room': _shortRoomId(room.roomId),
+        'sceneVersion': sceneVersion,
+        'lastVersion': _lastBroadcastedOrReceivedSceneVersion,
+      });
+      _scheduleFileUpload(room);
+      return;
+    }
 
     final elementsToBroadcast = initial || syncAll
         ? syncableElements
@@ -249,9 +264,10 @@ class CollaborationRepository {
       'syncAll': syncAll,
       'syncable': syncableElements.length,
       'changed': elementsToBroadcast.length,
-      'sceneVersion': _reconciler.getSceneVersion(syncableElements),
+      'sceneVersion': sceneVersion,
       'summary': CollaborationDebugLog.elementSummary(elementsToBroadcast),
     });
+    _scheduleFileUpload(room);
     if (elementsToBroadcast.isEmpty && !initial) {
       return;
     }
@@ -261,6 +277,7 @@ class CollaborationRepository {
         : CollaborationMessage.sceneUpdate(elements: elementsToBroadcast);
     await _send(room: room, message: message);
     _rememberBroadcasted(elementsToBroadcast);
+    _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
     _latestScene = syncableScene;
     unawaited(_saveSceneSnapshot(room: room, scene: syncableScene));
   }
@@ -344,25 +361,31 @@ class CollaborationRepository {
     );
     _latestScene = nextScene;
     _rememberBroadcasted(remoteElements);
+    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
+      nextScene.elements,
+    );
     return nextScene.copyWith(elements: reconciled);
   }
 
-  Future<Map<String, dynamic>> loadMissingFiles({
+  Future<CollaborationLoadedFilesResult> loadMissingFiles({
     required CollaborationRoom room,
     required Iterable<String> fileIds,
     required Set<String> existingFileIds,
   }) async {
-    final files = await _fileStore?.loadMissingFiles(
+    final ids = {
+      for (final fileId in fileIds)
+        if (!existingFileIds.contains(fileId) &&
+            !_fileManager.isFileTracked(fileId))
+          fileId,
+    };
+    final files = await _fileManager.getFiles(
+      fileStore: _fileStore,
       roomId: room.roomId,
       roomKey: room.roomKey,
-      fileIds: fileIds,
-      existingFileIds: existingFileIds,
+      fileIds: ids,
     );
-    if (files == null || files.isEmpty) {
-      return const {};
-    }
     final encoded = <String, dynamic>{};
-    for (final entry in files.entries) {
+    for (final entry in files.loadedFiles.entries) {
       encoded[entry.key] = {
         'mimeType': entry.value.mimeType,
         'id': entry.key,
@@ -371,7 +394,10 @@ class CollaborationRepository {
         'created': DateTime.now().millisecondsSinceEpoch,
       };
     }
-    return encoded;
+    return CollaborationLoadedFilesResult(
+      files: encoded,
+      erroredFileIds: files.erroredFileIds,
+    );
   }
 
   void _startRoomSession(CollaborationRoom room) {
@@ -492,27 +518,46 @@ class CollaborationRepository {
     await _transport.send(encrypted, volatile: volatile);
   }
 
-  Future<void> _uploadFiles({
-    required String roomId,
-    required String roomKey,
-    required Map<String, Object?> filesJson,
-    bool reportOnly = false,
-  }) async {
+  void _scheduleFileUpload(CollaborationRoom room) {
+    if (_fileUploadTimer?.isActive ?? false) {
+      return;
+    }
+    _fileUploadTimer = Timer(fileUploadTimeout, () {
+      _fileUploadTimer = null;
+      unawaited(_flushQueuedFileUpload(room));
+    });
+  }
+
+  Future<void> _flushQueuedFileUpload(CollaborationRoom room) async {
+    if (_activeRoom?.roomId != room.roomId) {
+      return;
+    }
     try {
-      await _fileStore?.uploadFiles(
-        roomId: roomId,
-        roomKey: roomKey,
-        filesJson: filesJson,
-        alreadyUploadedFileIds: _uploadedFileIds,
+      final result = await _fileManager.saveFiles(
+        fileStore: _fileStore,
+        roomId: room.roomId,
+        roomKey: room.roomKey,
+        elements: _latestScene.elements,
+        filesJson: _latestScene.files,
       );
+      if (result.savedFileIds.isEmpty && result.erroredFileIds.isEmpty) {
+        return;
+      }
+      final nextScene = _updateImageStatuses(
+        _latestScene,
+        savedFileIds: result.savedFileIds,
+        erroredFileIds: result.erroredFileIds,
+      );
+      if (identical(nextScene, _latestScene)) {
+        return;
+      }
+      _latestScene = nextScene;
+      if (!_fileStatusScenes.isClosed) {
+        _fileStatusScenes.add(nextScene);
+      }
+      unawaited(broadcastScene(room: room, scene: nextScene));
     } catch (error) {
-      final message = '图片文件同步失败，图形和文字会继续同步：$error';
-      if (!_repositoryErrors.isClosed) {
-        _repositoryErrors.add(message);
-      }
-      if (!reportOnly) {
-        rethrow;
-      }
+      _addRepositoryError('图片文件同步失败，图形和文字会继续同步：$error');
     }
   }
 
@@ -521,7 +566,10 @@ class CollaborationRepository {
     required ExcalidrawScene scene,
   }) async {
     try {
-      await _sceneStore.saveScene(room: room, scene: scene);
+      await _sceneStore.saveScene(
+        room: room,
+        scene: scene.copyWith(files: const {}),
+      );
       return scene;
     } on StaleSceneSnapshotException {
       final storedScene = await _sceneStore.loadScene(room);
@@ -534,9 +582,11 @@ class CollaborationRepository {
       );
       final mergedScene = scene.copyWith(
         elements: _reconciler.getSyncableElements(reconciledElements),
-        files: {...storedScene.files, ...scene.files},
       );
-      await _sceneStore.saveScene(room: room, scene: mergedScene);
+      await _sceneStore.saveScene(
+        room: room,
+        scene: mergedScene.copyWith(files: const {}),
+      );
       return mergedScene;
     }
   }
@@ -556,6 +606,81 @@ class CollaborationRepository {
         _repositoryErrors.add('协作快照保存失败，实时协作会继续尝试同步：$error');
       }
     }
+  }
+
+  ExcalidrawScene _markSavedImagesPending(ExcalidrawScene scene) {
+    var changed = false;
+    final elements = <Map<String, Object?>>[];
+    for (final element in scene.elements) {
+      if (element['type'] == 'image' && element['status'] == 'saved') {
+        changed = true;
+        elements.add(_bumpElement({...element, 'status': 'pending'}));
+      } else {
+        elements.add(element);
+      }
+    }
+    return changed ? scene.copyWith(elements: elements) : scene;
+  }
+
+  ExcalidrawScene _updateImageStatuses(
+    ExcalidrawScene scene, {
+    required Set<String> savedFileIds,
+    required Set<String> erroredFileIds,
+  }) {
+    var changed = false;
+    final elements = [
+      for (final element in scene.elements)
+        _updatedImageStatusElement(
+          element,
+          savedFileIds: savedFileIds,
+          erroredFileIds: erroredFileIds,
+          onChanged: () => changed = true,
+        ),
+    ];
+    if (!changed) {
+      return scene;
+    }
+    CollaborationDebugLog.write('file_manager', 'status_scene_updated', {
+      'saved': savedFileIds.map(_shortFileId).toList(),
+      'errored': erroredFileIds.map(_shortFileId).toList(),
+      'sceneVersion': _reconciler.getSceneVersion(elements),
+    });
+    return scene.copyWith(elements: elements);
+  }
+
+  Map<String, Object?> _updatedImageStatusElement(
+    Map<String, Object?> element, {
+    required Set<String> savedFileIds,
+    required Set<String> erroredFileIds,
+    required void Function() onChanged,
+  }) {
+    if (element['type'] != 'image') {
+      return element;
+    }
+    final fileId = element['fileId'];
+    if (fileId is! String) {
+      return element;
+    }
+    final nextStatus = savedFileIds.contains(fileId)
+        ? 'saved'
+        : erroredFileIds.contains(fileId)
+        ? 'error'
+        : null;
+    if (nextStatus == null || element['status'] == nextStatus) {
+      return element;
+    }
+    onChanged();
+    return _bumpElement({...element, 'status': nextStatus});
+  }
+
+  Map<String, Object?> _bumpElement(Map<String, Object?> element) {
+    final version = (element['version'] as num?)?.toInt() ?? 1;
+    return {
+      ...element,
+      'version': version + 1,
+      'versionNonce': _random.nextInt(1 << 31),
+      'updated': DateTime.now().millisecondsSinceEpoch,
+    };
   }
 
   List<Map<String, Object?>> _changedElements(
@@ -594,6 +719,9 @@ class CollaborationRepository {
   String _shortRoomId(String roomId) =>
       roomId.length > 8 ? roomId.substring(0, 8) : roomId;
 
+  String _shortFileId(String fileId) =>
+      fileId.length > 8 ? fileId.substring(0, 8) : fileId;
+
   Future<void> stop() async {
     _resetLocalState();
     await _transport.disconnect();
@@ -602,11 +730,14 @@ class CollaborationRepository {
   void _resetLocalState() {
     _fullSceneSyncTimer?.cancel();
     _fullSceneSyncTimer = null;
+    _fileUploadTimer?.cancel();
+    _fileUploadTimer = null;
     _stopRoomSession();
     _activeRoom = null;
     _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();
-    _uploadedFileIds.clear();
+    _lastBroadcastedOrReceivedSceneVersion = 0;
+    _fileManager.reset();
   }
 }
 
@@ -615,4 +746,14 @@ class CollaborationJoinResult {
 
   final ExcalidrawScene scene;
   final CollaborationRoomMetadata metadata;
+}
+
+class CollaborationLoadedFilesResult {
+  const CollaborationLoadedFilesResult({
+    required this.files,
+    required this.erroredFileIds,
+  });
+
+  final Map<String, dynamic> files;
+  final Set<String> erroredFileIds;
 }

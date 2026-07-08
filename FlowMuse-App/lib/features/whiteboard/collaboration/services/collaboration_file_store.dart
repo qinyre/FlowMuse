@@ -4,22 +4,42 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../../editor_core/flow_muse_whiteboard_editor.dart' show ImageFile;
+import 'collaboration_debug_log.dart';
 import 'excalidraw_binary_codec.dart';
 
 abstract interface class CollaborationFileStore {
-  Future<void> uploadFiles({
+  Future<CollaborationFileUploadResult> uploadFiles({
     required String roomId,
     required String roomKey,
     required Map<String, Object?> filesJson,
-    Set<String>? alreadyUploadedFileIds,
+    required Iterable<String> fileIds,
   });
 
-  Future<Map<String, ImageFile>> loadMissingFiles({
+  Future<CollaborationFileLoadResult> loadFiles({
     required String roomId,
     required String roomKey,
     required Iterable<String> fileIds,
-    required Set<String> existingFileIds,
   });
+}
+
+class CollaborationFileUploadResult {
+  const CollaborationFileUploadResult({
+    required this.savedFiles,
+    required this.erroredFiles,
+  });
+
+  final Map<String, Map<String, Object?>> savedFiles;
+  final Map<String, Map<String, Object?>> erroredFiles;
+}
+
+class CollaborationFileLoadResult {
+  const CollaborationFileLoadResult({
+    required this.loadedFiles,
+    required this.erroredFileIds,
+  });
+
+  final Map<String, ImageFile> loadedFiles;
+  final Set<String> erroredFileIds;
 }
 
 class HttpCollaborationFileStore implements CollaborationFileStore {
@@ -41,20 +61,20 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
   static const Duration _requestTimeout = Duration(seconds: 20);
 
   @override
-  Future<void> uploadFiles({
+  Future<CollaborationFileUploadResult> uploadFiles({
     required String roomId,
     required String roomKey,
     required Map<String, Object?> filesJson,
-    Set<String>? alreadyUploadedFileIds,
+    required Iterable<String> fileIds,
   }) async {
-    for (final entry in filesJson.entries) {
-      if (alreadyUploadedFileIds?.contains(entry.key) ?? false) {
-        continue;
-      }
-      final file = entry.value;
+    final saved = <String, Map<String, Object?>>{};
+    final errored = <String, Map<String, Object?>>{};
+    for (final fileId in fileIds.toSet()) {
+      final file = filesJson[fileId];
       if (file is! Map) {
         continue;
       }
+      final fileJson = Map<String, Object?>.from(file);
       final dataUrl = file['dataURL'];
       if (dataUrl is! String || dataUrl.isEmpty) {
         continue;
@@ -71,81 +91,136 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
         data: Uint8List.fromList(utf8.encode(dataUrl)),
         encryptionKey: roomKey,
         metadata: {
-          'id': entry.key,
+          'id': fileId,
           'mimeType': mimeType,
           'created': DateTime.now().millisecondsSinceEpoch,
           'lastRetrieved': DateTime.now().millisecondsSinceEpoch,
         },
       );
+      CollaborationDebugLog.write('file', 'upload_prepare', {
+        'room': _shortRoomId(roomId),
+        'file': _shortFileId(fileId),
+        'mimeType': mimeType,
+        'dataUrlBytes': utf8.encode(dataUrl).length,
+        'encodedBytes': encodedFile.length,
+      });
       if (encodedFile.length > _maxFileBytes) {
-        throw StateError('图片文件 ${entry.key} 超过 10MB 限制');
+        errored[fileId] = fileJson;
+        CollaborationDebugLog.write('file', 'upload_too_big', {
+          'room': _shortRoomId(roomId),
+          'file': _shortFileId(fileId),
+          'encodedBytes': encodedFile.length,
+        });
+        continue;
       }
-      final response = await _client
-          .put(
-            _roomFileUri(roomId, entry.key),
-            headers: {
-              'Content-Type': 'application/octet-stream',
-              'Content-Length': '${encodedFile.length}',
-              'Cache-Control': 'public, max-age=31536000',
-              if (_authToken != null && _authToken.isNotEmpty)
-                'Authorization': 'Bearer $_authToken',
-            },
-            body: encodedFile,
-          )
-          .timeout(_requestTimeout);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError(
-          'Upload file ${entry.key} failed: HTTP ${response.statusCode}',
-        );
+      try {
+        final response = await _client
+            .put(
+              _roomFileUri(roomId, fileId),
+              headers: {
+                'Content-Type': 'application/octet-stream',
+                'Content-Length': '${encodedFile.length}',
+                'Cache-Control': 'public, max-age=31536000',
+                if (_authToken != null && _authToken.isNotEmpty)
+                  'Authorization': 'Bearer $_authToken',
+              },
+              body: encodedFile,
+            )
+            .timeout(_requestTimeout);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          errored[fileId] = fileJson;
+          CollaborationDebugLog.write('file', 'upload_failed', {
+            'room': _shortRoomId(roomId),
+            'file': _shortFileId(fileId),
+            'statusCode': response.statusCode,
+          });
+          continue;
+        }
+        saved[fileId] = fileJson;
+        CollaborationDebugLog.write('file', 'upload_ok', {
+          'room': _shortRoomId(roomId),
+          'file': _shortFileId(fileId),
+          'encodedBytes': encodedFile.length,
+        });
+      } catch (error) {
+        errored[fileId] = fileJson;
+        CollaborationDebugLog.write('file', 'upload_error', {
+          'room': _shortRoomId(roomId),
+          'file': _shortFileId(fileId),
+          'error': error,
+        });
       }
-      alreadyUploadedFileIds?.add(entry.key);
     }
+    return CollaborationFileUploadResult(
+      savedFiles: saved,
+      erroredFiles: errored,
+    );
   }
 
   @override
-  Future<Map<String, ImageFile>> loadMissingFiles({
+  Future<CollaborationFileLoadResult> loadFiles({
     required String roomId,
     required String roomKey,
     required Iterable<String> fileIds,
-    required Set<String> existingFileIds,
   }) async {
     final loaded = <String, ImageFile>{};
+    final errored = <String>{};
     for (final fileId in fileIds.toSet()) {
-      if (existingFileIds.contains(fileId)) {
-        continue;
-      }
-      final response = await _client
-          .get(_roomFileUri(roomId, fileId), headers: _headers())
-          .timeout(_requestTimeout);
-      if (response.statusCode == 404) {
-        continue;
-      }
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError(
-          'Load file $fileId failed: HTTP ${response.statusCode}',
+      try {
+        CollaborationDebugLog.write('file', 'load_prepare', {
+          'room': _shortRoomId(roomId),
+          'file': _shortFileId(fileId),
+        });
+        final response = await _client
+            .get(_roomFileUri(roomId, fileId), headers: _headers())
+            .timeout(_requestTimeout);
+        if (response.statusCode >= 400) {
+          errored.add(fileId);
+          CollaborationDebugLog.write('file', 'load_failed', {
+            'room': _shortRoomId(roomId),
+            'file': _shortFileId(fileId),
+            'statusCode': response.statusCode,
+          });
+          continue;
+        }
+        final decoded = await _binaryCodec.decompressData(
+          buffer: Uint8List.fromList(response.bodyBytes),
+          decryptionKey: roomKey,
         );
+        final dataUrl = utf8.decode(decoded.data);
+        final comma = dataUrl.indexOf(',');
+        if (comma < 0) {
+          errored.add(fileId);
+          continue;
+        }
+        final media = dataUrl.substring(0, comma);
+        final mimeType =
+            decoded.metadata?['mimeType'] as String? ??
+            (media.startsWith('data:')
+                ? media.substring(5).split(';').first
+                : 'application/octet-stream');
+        loaded[fileId] = ImageFile(
+          mimeType: mimeType,
+          bytes: Uint8List.fromList(base64Decode(dataUrl.substring(comma + 1))),
+        );
+        CollaborationDebugLog.write('file', 'load_ok', {
+          'room': _shortRoomId(roomId),
+          'file': _shortFileId(fileId),
+          'mimeType': mimeType,
+        });
+      } catch (error) {
+        errored.add(fileId);
+        CollaborationDebugLog.write('file', 'load_error', {
+          'room': _shortRoomId(roomId),
+          'file': _shortFileId(fileId),
+          'error': error,
+        });
       }
-      final decoded = await _binaryCodec.decompressData(
-        buffer: Uint8List.fromList(response.bodyBytes),
-        decryptionKey: roomKey,
-      );
-      final dataUrl = utf8.decode(decoded.data);
-      final comma = dataUrl.indexOf(',');
-      if (comma < 0) {
-        continue;
-      }
-      final media = dataUrl.substring(0, comma);
-      final mimeType =
-          decoded.metadata?['mimeType'] as String? ??
-          (media.startsWith('data:')
-              ? media.substring(5).split(';').first
-              : 'application/octet-stream');
-      loaded[fileId] = ImageFile(
-        mimeType: mimeType,
-        bytes: Uint8List.fromList(base64Decode(dataUrl.substring(comma + 1))),
-      );
     }
-    return loaded;
+    return CollaborationFileLoadResult(
+      loadedFiles: loaded,
+      erroredFileIds: errored,
+    );
   }
 
   Uri _roomFileUri(String roomId, String fileId) {
@@ -167,4 +242,10 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
         'Authorization': 'Bearer $_authToken',
     };
   }
+
+  String _shortRoomId(String roomId) =>
+      roomId.length > 8 ? roomId.substring(0, 8) : roomId;
+
+  String _shortFileId(String fileId) =>
+      fileId.length > 8 ? fileId.substring(0, 8) : fileId;
 }

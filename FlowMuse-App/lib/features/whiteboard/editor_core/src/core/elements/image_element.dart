@@ -13,6 +13,7 @@ import 'stroke_style.dart';
 class ImageElement extends Element {
   final String fileId;
   final String? mimeType;
+  final String status;
   final ImageCrop? crop;
   final double imageScale;
 
@@ -24,6 +25,7 @@ class ImageElement extends Element {
     required super.height,
     required this.fileId,
     this.mimeType,
+    this.status = 'saved',
     this.crop,
     this.imageScale = 1.0,
     super.angle,
@@ -89,6 +91,7 @@ class ImageElement extends Element {
       height: height ?? this.height,
       fileId: fileId,
       mimeType: mimeType,
+      status: status,
       crop: crop,
       imageScale: imageScale,
       angle: angle ?? this.angle,
@@ -118,6 +121,7 @@ class ImageElement extends Element {
   ImageElement copyWithImage({
     String? fileId,
     String? mimeType,
+    String? status,
     ImageCrop? crop,
     bool clearCrop = false,
     double? imageScale,
@@ -130,6 +134,7 @@ class ImageElement extends Element {
       height: height,
       fileId: fileId ?? this.fileId,
       mimeType: mimeType ?? this.mimeType,
+      status: status ?? this.status,
       crop: clearCrop ? null : (crop ?? this.crop),
       imageScale: imageScale ?? this.imageScale,
       angle: angle,
