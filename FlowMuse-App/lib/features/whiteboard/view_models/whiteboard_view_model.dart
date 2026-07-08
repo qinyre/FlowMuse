@@ -22,8 +22,10 @@ enum WhiteboardSaveStatus { idle, saving, saved }
 enum WhiteboardCollaborationStatus {
   idle,
   connecting,
+  initializing,
   connected,
   reconnecting,
+  restoringSnapshot,
   disconnected,
   failed,
 }
@@ -184,7 +186,7 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
         roomMetadata: result.metadata,
         exitReason: WhiteboardCollaborationExitReason.none,
         collaborating: true,
-        collaborationStatus: WhiteboardCollaborationStatus.connected,
+        collaborationStatus: WhiteboardCollaborationStatus.initializing,
       );
       return result.scene;
     } catch (error) {
@@ -239,13 +241,29 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
     );
   }
 
+  void applyCollaborationInitialized() {
+    state = state.copyWith(
+      collaborationStatus: WhiteboardCollaborationStatus.connected,
+      clearError: true,
+    );
+  }
+
+  void applySnapshotRestoreStarted() {
+    state = state.copyWith(
+      collaborationStatus: WhiteboardCollaborationStatus.restoringSnapshot,
+      clearError: true,
+    );
+  }
+
   void applyConnectionStatus(RealtimeConnectionStatus status) {
     final nextStatus = switch (status) {
       RealtimeConnectionStatus.idle => WhiteboardCollaborationStatus.idle,
       RealtimeConnectionStatus.connecting =>
         WhiteboardCollaborationStatus.connecting,
       RealtimeConnectionStatus.joined =>
-        WhiteboardCollaborationStatus.connected,
+        state.collaborationStatus == WhiteboardCollaborationStatus.initializing
+            ? WhiteboardCollaborationStatus.initializing
+            : WhiteboardCollaborationStatus.connected,
       RealtimeConnectionStatus.reconnecting =>
         WhiteboardCollaborationStatus.reconnecting,
       RealtimeConnectionStatus.disconnected =>

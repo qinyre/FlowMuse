@@ -10,8 +10,10 @@ class WhiteboardCollaborationAdapter {
 
   final MarkdrawController controller;
 
-  ExcalidrawScene currentScene() {
-    return ExcalidrawScene.fromJson(controller.serializeExcalidrawSceneJson());
+  ExcalidrawScene currentScene({bool includeDeleted = true}) {
+    return ExcalidrawScene.fromJson(
+      controller.serializeExcalidrawSceneJson(includeDeleted: includeDeleted),
+    );
   }
 
   void applyRemoteScene(ExcalidrawScene scene, {bool closeTransientUi = true}) {

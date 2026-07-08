@@ -54,7 +54,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   late final WhiteboardCollaborationAdapter _collaborationAdapter;
   late final CollaborationRepository _collaborationRepository;
   StreamSubscription<CollaborationMessage>? _collaborationSubscription;
-  StreamSubscription<String>? _newUserSubscription;
   StreamSubscription<List<RoomCollaborator>>? _roomUsersSubscription;
   StreamSubscription<CollaborationRoomMetadata>? _roomEndedSubscription;
   StreamSubscription<String>? _roomErrorSubscription;
@@ -93,7 +92,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   void dispose() {
     _disposingOrLeaving = true;
     unawaited(_collaborationSubscription?.cancel());
-    unawaited(_newUserSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
     unawaited(_roomEndedSubscription?.cancel());
     unawaited(_roomErrorSubscription?.cancel());
@@ -167,7 +165,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     );
     await repository.saveScene(widget.noteId, content);
     await ref.read(libraryIndexProvider.notifier).touchNote(widget.noteId);
-    await _broadcastCurrentScene(serializedScene: content);
+    await _broadcastCurrentScene();
     if (!mounted) {
       return;
     }
@@ -330,6 +328,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       if (reconciledScene.elements.isNotEmpty) {
         await _enqueueRemoteScene(reconciledScene);
       }
+      if (_canMutateWhiteboard) {
+        ref
+            .read(whiteboardViewModelProvider.notifier)
+            .applyCollaborationInitialized();
+      }
     } finally {
       _collaborationOpening = false;
     }
@@ -409,8 +412,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   Future<void> _cancelCollaborationStreams() async {
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = null;
-    await _newUserSubscription?.cancel();
-    _newUserSubscription = null;
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = null;
     await _roomEndedSubscription?.cancel();
@@ -550,13 +551,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             });
           },
         );
-    await _newUserSubscription?.cancel();
-    _newUserSubscription = _collaborationRepository.newUsers.listen((_) {
-      if (!_canMutateWhiteboard) {
-        return;
-      }
-      unawaited(_broadcastCurrentScene(syncAll: true, initial: true));
-    });
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = _collaborationRepository.roomUsers.listen((users) {
       _runAfterStableFrame(() {
@@ -636,15 +630,36 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   }
 
   Future<void> _refreshCollaborationSnapshot(CollaborationRoom room) async {
-    final refreshed = await _collaborationRepository.refreshFromSnapshot(
-      room: room,
-      localScene: _currentScene(),
-    );
-    if (refreshed == null || !_canMutateWhiteboard) {
-      return;
+    ref
+        .read(whiteboardViewModelProvider.notifier)
+        .applySnapshotRestoreStarted();
+    try {
+      final refreshed = await _collaborationRepository.refreshFromSnapshot(
+        room: room,
+        localScene: _currentScene(),
+      );
+      if (refreshed == null || !_canMutateWhiteboard) {
+        if (_canMutateWhiteboard) {
+          ref
+              .read(whiteboardViewModelProvider.notifier)
+              .applyCollaborationInitialized();
+        }
+        return;
+      }
+      await _enqueueRemoteScene(refreshed);
+      await _broadcastCurrentScene(syncAll: true);
+      if (_canMutateWhiteboard) {
+        ref
+            .read(whiteboardViewModelProvider.notifier)
+            .applyCollaborationInitialized();
+      }
+    } catch (error) {
+      if (_canMutateWhiteboard) {
+        ref
+            .read(whiteboardViewModelProvider.notifier)
+            .applyCollaborationError('协作快照恢复失败：$error');
+      }
     }
-    await _enqueueRemoteScene(refreshed);
-    await _broadcastCurrentScene(syncAll: true);
   }
 
   Future<void> _broadcastCurrentScene({
@@ -937,7 +952,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   String? _collaborationStatusLabel(WhiteboardState state) {
     return switch (state.collaborationStatus) {
       WhiteboardCollaborationStatus.connecting => '连接中',
+      WhiteboardCollaborationStatus.initializing => '初始化中',
       WhiteboardCollaborationStatus.reconnecting => '重连中',
+      WhiteboardCollaborationStatus.restoringSnapshot => '快照恢复中',
       WhiteboardCollaborationStatus.disconnected => '已断开',
       WhiteboardCollaborationStatus.failed => '协作失败',
       WhiteboardCollaborationStatus.connected

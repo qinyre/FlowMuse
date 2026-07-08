@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import '../models/collaboration_message.dart';
 import '../models/collaboration_room.dart';
+import '../models/encrypted_payload.dart';
 import '../models/excalidraw_scene.dart';
 import '../models/room_collaborator.dart';
 import 'collaboration_owner_key_store.dart';
@@ -39,8 +40,14 @@ class CollaborationRepository {
   final Set<String> _uploadedFileIds = {};
   final StreamController<String> _repositoryErrors =
       StreamController<String>.broadcast();
+  final StreamController<CollaborationMessage> _messages =
+      StreamController<CollaborationMessage>.broadcast();
+  final List<CollaborationMessage> _messageBacklog = [];
 
   Timer? _fullSceneSyncTimer;
+  StreamSubscription<EncryptedPayload>? _transportMessageSubscription;
+  StreamSubscription<String>? _newUserSubscription;
+  Future<void> _messageDecodeQueue = Future<void>.value();
   CollaborationRoom? _activeRoom;
   ExcalidrawScene _latestScene = ExcalidrawScene.empty();
   int _lastBroadcastedOrReceivedSceneVersion = -1;
@@ -70,12 +77,21 @@ class CollaborationRepository {
       _transport.connectionStatus;
 
   Stream<CollaborationMessage> encryptedMessages(CollaborationRoom room) {
-    return _transport.messages.asyncMap((payload) async {
-      final bytes = await _crypto.decrypt(
-        roomKey: room.roomKey,
-        encryptedPayload: payload,
+    return Stream.multi((controller) {
+      if (_activeRoom?.roomId != room.roomId) {
+        controller.close();
+        return;
+      }
+      final pending = List<CollaborationMessage>.of(_messageBacklog);
+      _messageBacklog.clear();
+      for (final message in pending) {
+        controller.add(message);
+      }
+      final subscription = _messages.stream.listen(
+        controller.add,
+        onError: controller.addError,
       );
-      return CollaborationMessage.fromBytes(bytes);
+      controller.onCancel = subscription.cancel;
     });
   }
 
@@ -102,12 +118,18 @@ class CollaborationRepository {
       ownerKeyHash: ownerKeyHash,
     );
     await _ownerKeyStore.writeOwnerKey(room.roomId, ownerKey);
-    await _transport.connect(room.roomId);
     _activeRoom = room;
     _latestScene = syncableScene;
     final sceneVersion = _reconciler.getSceneVersion(syncableScene.elements);
     _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
     _rememberBroadcasted(syncableScene.elements);
+    _startRoomSession(room);
+    try {
+      await _transport.connect(room.roomId);
+    } catch (_) {
+      _resetLocalState();
+      rethrow;
+    }
     await _send(
       room: room,
       message: CollaborationMessage.sceneInit(elements: syncableScene.elements),
@@ -129,8 +151,6 @@ class CollaborationRepository {
       throw StateError('房间不存在或尚未创建');
     }
     final metadata = await _sceneStore.joinRoom(room);
-    await _transport.connect(room.roomId);
-    _activeRoom = room;
     final reconciledElements = _reconciler.reconcile(
       localElements: localScene.elements,
       remoteElements: storedScene.elements,
@@ -144,6 +164,14 @@ class CollaborationRepository {
       nextScene.elements,
     );
     _rememberBroadcasted(nextScene.elements);
+    _activeRoom = room;
+    _startRoomSession(room);
+    try {
+      await _transport.connect(room.roomId);
+    } catch (_) {
+      _resetLocalState();
+      rethrow;
+    }
     _startFullSceneSync();
     return CollaborationJoinResult(scene: nextScene, metadata: metadata);
   }
@@ -338,6 +366,79 @@ class CollaborationRepository {
     return encoded;
   }
 
+  void _startRoomSession(CollaborationRoom room) {
+    _stopRoomSession();
+    _messageBacklog.clear();
+    _messageDecodeQueue = Future<void>.value();
+    _transportMessageSubscription = _transport.messages.listen(
+      (payload) {
+        _messageDecodeQueue = _messageDecodeQueue
+            .then((_) => _handleEncryptedPayload(room, payload))
+            .catchError((Object error) {
+              _addRepositoryError('协作消息处理失败：$error');
+            });
+      },
+      onError: (Object error) {
+        _addRepositoryError('协作消息接收失败：$error');
+      },
+    );
+    _newUserSubscription = _transport.newUsers.listen((_) {
+      final activeRoom = _activeRoom;
+      if (activeRoom == null ||
+          activeRoom.roomId != room.roomId ||
+          _latestScene.elements.isEmpty) {
+        return;
+      }
+      unawaited(_sendSceneInitToNewUser(activeRoom));
+    });
+  }
+
+  Future<void> _handleEncryptedPayload(
+    CollaborationRoom room,
+    EncryptedPayload payload,
+  ) async {
+    if (_activeRoom?.roomId != room.roomId) {
+      return;
+    }
+    try {
+      final bytes = await _crypto.decrypt(
+        roomKey: room.roomKey,
+        encryptedPayload: payload,
+      );
+      final message = CollaborationMessage.fromBytes(bytes);
+      if (_messages.hasListener) {
+        _messages.add(message);
+      } else {
+        _messageBacklog.add(message);
+      }
+    } catch (error) {
+      _addRepositoryError('协作消息解密失败：$error');
+    }
+  }
+
+  Future<void> _sendSceneInitToNewUser(CollaborationRoom room) async {
+    try {
+      await broadcastScene(room: room, scene: _latestScene, initial: true);
+    } catch (error) {
+      _addRepositoryError('协作初始化同步失败：$error');
+    }
+  }
+
+  void _stopRoomSession() {
+    unawaited(_transportMessageSubscription?.cancel());
+    _transportMessageSubscription = null;
+    unawaited(_newUserSubscription?.cancel());
+    _newUserSubscription = null;
+    _messageDecodeQueue = Future<void>.value();
+    _messageBacklog.clear();
+  }
+
+  void _addRepositoryError(String message) {
+    if (!_repositoryErrors.isClosed) {
+      _repositoryErrors.add(message);
+    }
+  }
+
   Future<void> _send({
     required CollaborationRoom room,
     required CollaborationMessage message,
@@ -457,6 +558,7 @@ class CollaborationRepository {
   void _resetLocalState() {
     _fullSceneSyncTimer?.cancel();
     _fullSceneSyncTimer = null;
+    _stopRoomSession();
     _activeRoom = null;
     _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();

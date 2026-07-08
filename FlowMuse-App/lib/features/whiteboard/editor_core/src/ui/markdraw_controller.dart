@@ -2129,7 +2129,10 @@ class MarkdrawController extends ChangeNotifier {
   // --- Convenience methods for serialization / export / import ---
 
   /// Serializes the current scene to a string in the given [format].
-  String serializeScene({DocumentFormat format = DocumentFormat.markdraw}) {
+  String serializeScene({
+    DocumentFormat format = DocumentFormat.markdraw,
+    bool includeDeleted = false,
+  }) {
     final doc = SceneDocumentConverter.sceneToDocument(
       _editorState.scene,
       settings: CanvasSettings(
@@ -2137,6 +2140,7 @@ class MarkdrawController extends ChangeNotifier {
         grid: _gridSize,
         name: _documentName,
       ),
+      includeDeleted: includeDeleted,
     );
     return switch (format) {
       DocumentFormat.markdraw => DocumentSerializer.serialize(doc),
@@ -2146,8 +2150,15 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Serializes the current scene as an Excalidraw JSON object.
-  Map<String, Object?> serializeExcalidrawSceneJson() {
-    return jsonDecode(serializeScene(format: DocumentFormat.excalidraw))
+  Map<String, Object?> serializeExcalidrawSceneJson({
+    bool includeDeleted = false,
+  }) {
+    return jsonDecode(
+          serializeScene(
+            format: DocumentFormat.excalidraw,
+            includeDeleted: includeDeleted,
+          ),
+        )
         as Map<String, Object?>;
   }
 
