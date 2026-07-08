@@ -74,12 +74,11 @@ packages:
     source: hosted
     version: "1.1.2"
   code_assets:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: code_assets
-      sha256: bf394f466ba9205f1812a0433b392d6af280f155f56651eda7c18cc32ed493b8
-      url: "https://pub.flutter-io.cn"
-    source: hosted
+      path: "tool/vendor/code_assets"
+      relative: true
+    source: path
     version: "1.2.1"
   collection:
     dependency: transitive

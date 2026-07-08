@@ -10,7 +10,7 @@ import '../view_models/library_home_view_model.dart';
 import 'create_note_card.dart';
 import 'note_card.dart';
 
-class LibraryContent extends StatelessWidget {
+class LibraryContent extends StatefulWidget {
   const LibraryContent({
     super.key,
     required this.compact,
@@ -57,55 +57,123 @@ class LibraryContent extends StatelessWidget {
   final ValueChanged<NoteItem> onOpenNote;
 
   @override
+  State<LibraryContent> createState() => _LibraryContentState();
+}
+
+class _LibraryContentState extends State<LibraryContent> {
+  late final PageController _pageController;
+  int? _animatingFilterIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _selectedFilterIndex);
+  }
+
+  @override
+  void didUpdateWidget(covariant LibraryContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.specialView != LibrarySpecialView.none ||
+        oldWidget.state.selectedFilter == widget.state.selectedFilter ||
+        !_pageController.hasClients) {
+      return;
+    }
+    if (_animatingFilterIndex == _selectedFilterIndex) {
+      return;
+    }
+    final page = _pageController.page?.round();
+    if (page != _selectedFilterIndex) {
+      _pageController.jumpToPage(_selectedFilterIndex);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  int get _selectedFilterIndex {
+    return LibraryFilter.values.indexOf(widget.state.selectedFilter);
+  }
+
+  void _onFilterChanged(LibraryFilter filter) {
+    final filterIndex = LibraryFilter.values.indexOf(filter);
+    if (widget.specialView == LibrarySpecialView.none &&
+        _pageController.hasClients) {
+      _animatingFilterIndex = filterIndex;
+      _pageController.animateToPage(
+        filterIndex,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+      ).whenComplete(() {
+        if (mounted && _animatingFilterIndex == filterIndex) {
+          _animatingFilterIndex = null;
+        }
+      });
+    }
+    widget.onFilterChanged(filter);
+  }
+
+  void _onPageChanged(int index) {
+    if (_animatingFilterIndex == index) {
+      _animatingFilterIndex = null;
+    }
+    widget.onFilterChanged(LibraryFilter.values[index]);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: AppSpacing.pagePadding(compact: compact),
+      padding: AppSpacing.pagePadding(compact: widget.compact),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _LibraryHeader(
-            compact: compact,
-            title: title,
-            viewMode: state.viewMode,
-            sortAscending: state.sortAscending,
-            selectionMode: state.selectionMode,
-            onViewModeChanged: onViewModeChanged,
-            onSortDirectionChanged: onSortDirectionChanged,
-            onSelectionModeChanged: onSelectionModeChanged,
+            compact: widget.compact,
+            title: widget.title,
+            viewMode: widget.state.viewMode,
+            sortAscending: widget.state.sortAscending,
+            selectionMode: widget.state.selectionMode,
+            onViewModeChanged: widget.onViewModeChanged,
+            onSortDirectionChanged: widget.onSortDirectionChanged,
+            onSelectionModeChanged: widget.onSelectionModeChanged,
           ),
           const SizedBox(height: AppSpacing.headerToContent),
-          if (specialView == LibrarySpecialView.none) ...[
+          if (widget.specialView == LibrarySpecialView.none) ...[
             _FilterTabs(
-              selected: state.selectedFilter,
-              onFilterChanged: onFilterChanged,
+              selected: widget.state.selectedFilter,
+              onFilterChanged: _onFilterChanged,
+              pageController: _pageController,
             ),
             const SizedBox(height: AppSpacing.sectionGap),
           ],
-          if (state.selectionMode)
+          if (widget.state.selectionMode)
             _BulkActionBar(
-              trash: specialView == LibrarySpecialView.trash,
-              selectedCount: state.selectedNoteIds.length,
-              libraryIndex: libraryIndex,
-              onClearSelection: onClearSelection,
-              onDeleteSelected: onDeleteSelected,
-              onRestoreSelected: onRestoreSelected,
-              onDeleteSelectedForever: onDeleteSelectedForever,
-              onMoveSelectedToNotebook: onMoveSelectedToNotebook,
-              onAddTagsToSelected: onAddTagsToSelected,
+              trash: widget.specialView == LibrarySpecialView.trash,
+              selectedCount: widget.state.selectedNoteIds.length,
+              libraryIndex: widget.libraryIndex,
+              onClearSelection: widget.onClearSelection,
+              onDeleteSelected: widget.onDeleteSelected,
+              onRestoreSelected: widget.onRestoreSelected,
+              onDeleteSelectedForever: widget.onDeleteSelectedForever,
+              onMoveSelectedToNotebook: widget.onMoveSelectedToNotebook,
+              onAddTagsToSelected: widget.onAddTagsToSelected,
             ),
-          if (state.selectionMode)
+          if (widget.state.selectionMode)
             const SizedBox(height: AppSpacing.sectionGap),
           Expanded(
             child: _LibraryItems(
-              state: state,
-              notes: notes,
-              specialView: specialView,
-              compact: compact,
-              onFilterChanged: onFilterChanged,
-              onSelectionChanged: onSelectionChanged,
-              onCreate: onCreate,
-              onJoinRoom: onJoinRoom,
-              onOpenNote: onOpenNote,
+              state: widget.state,
+              notes: widget.notes,
+              specialView: widget.specialView,
+              compact: widget.compact,
+              pageController: _pageController,
+              onPageChanged: _onPageChanged,
+              onSelectionChanged: widget.onSelectionChanged,
+              onCreate: widget.onCreate,
+              onJoinRoom: widget.onJoinRoom,
+              onOpenNote: widget.onOpenNote,
             ),
           ),
         ],
@@ -114,64 +182,116 @@ class LibraryContent extends StatelessWidget {
   }
 }
 
-class _FilterTabs extends StatelessWidget {
-  const _FilterTabs({required this.selected, required this.onFilterChanged});
+class _FilterTabs extends StatefulWidget {
+  const _FilterTabs({
+    required this.selected,
+    required this.onFilterChanged,
+    required this.pageController,
+  });
 
   final LibraryFilter selected;
   final ValueChanged<LibraryFilter> onFilterChanged;
+  final PageController pageController;
+
+  static const _labels = {
+    LibraryFilter.all: '全部',
+    LibraryFilter.notes: '笔记',
+    LibraryFilter.pdf: 'PDF',
+  };
+  static const _indicatorWidth = 58.0;
+  static const _buttonWidth = 86.0;
+
+  @override
+  State<_FilterTabs> createState() => _FilterTabsState();
+}
+
+class _FilterTabsState extends State<_FilterTabs> {
+  double _indicatorPosition = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _indicatorPosition = LibraryFilter.values.indexOf(widget.selected) *
+        _FilterTabs._buttonWidth;
+    widget.pageController.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(_FilterTabs oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pageController != oldWidget.pageController) {
+      oldWidget.pageController.removeListener(_onScroll);
+      widget.pageController.addListener(_onScroll);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.pageController.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!widget.pageController.hasClients) return;
+    final offset = widget.pageController.offset;
+    final screenWidth = widget.pageController.position.viewportDimension;
+    final pagePosition = offset / screenWidth;
+    setState(() {
+      _indicatorPosition = pagePosition * _FilterTabs._buttonWidth;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return SegmentedButton<LibraryFilter>(
-      key: const ValueKey('library-filter-tabs'),
-      showSelectedIcon: false,
-      style: ButtonStyle(
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 0),
-        ),
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
-        overlayColor: WidgetStatePropertyAll(
-          colorScheme.primary.withValues(alpha: 0.08),
-        ),
-        side: const WidgetStatePropertyAll(BorderSide.none),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
-        ),
+    return SizedBox(
+      height: 52,
+      child: Stack(
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final filter in LibraryFilter.values)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => widget.onFilterChanged(filter),
+                  child: SizedBox(
+                    width: _FilterTabs._buttonWidth,
+                    child: Center(
+                      child: TweenAnimationBuilder<Color?>(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        tween: ColorTween(
+                          end: widget.selected == filter
+                              ? colorScheme.primary
+                              : const Color(0xFF151918),
+                        ),
+                        builder: (context, color, child) => Text(
+                          _FilterTabs._labels[filter]!,
+                          style: Theme.of(context).textTheme.titleMedium!.copyWith(
+                            color: color,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          Positioned(
+            bottom: 0,
+            left: _indicatorPosition +
+                (_FilterTabs._buttonWidth - _FilterTabs._indicatorWidth) / 2,
+            child: Container(
+              width: _FilterTabs._indicatorWidth,
+              height: 2,
+              color: colorScheme.primary,
+            ),
+          ),
+        ],
       ),
-      segments: [
-        ButtonSegment(
-          value: LibraryFilter.all,
-          label: _FilterSegmentLabel(
-            label: '全部',
-            selected: selected == LibraryFilter.all,
-          ),
-          icon: const SizedBox.shrink(),
-        ),
-        ButtonSegment(
-          value: LibraryFilter.notes,
-          label: _FilterSegmentLabel(
-            label: '笔记',
-            selected: selected == LibraryFilter.notes,
-          ),
-          icon: const SizedBox.shrink(),
-        ),
-        ButtonSegment(
-          value: LibraryFilter.pdf,
-          label: _FilterSegmentLabel(
-            label: 'PDF',
-            selected: selected == LibraryFilter.pdf,
-          ),
-          icon: const SizedBox.shrink(),
-        ),
-      ],
-      selected: {selected},
-      onSelectionChanged: (values) => onFilterChanged(values.single),
-      selectedIcon: const SizedBox.shrink(),
-      emptySelectionAllowed: false,
     );
   }
 }
@@ -182,7 +302,8 @@ class _LibraryItems extends StatelessWidget {
     required this.notes,
     required this.specialView,
     required this.compact,
-    required this.onFilterChanged,
+    required this.pageController,
+    required this.onPageChanged,
     required this.onSelectionChanged,
     required this.onCreate,
     required this.onJoinRoom,
@@ -193,7 +314,8 @@ class _LibraryItems extends StatelessWidget {
   final List<NoteItem> notes;
   final LibrarySpecialView specialView;
   final bool compact;
-  final ValueChanged<LibraryFilter> onFilterChanged;
+  final PageController pageController;
+  final ValueChanged<int> onPageChanged;
   final ValueChanged<String> onSelectionChanged;
   final VoidCallback onCreate;
   final VoidCallback onJoinRoom;
@@ -201,38 +323,47 @@ class _LibraryItems extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filters = LibraryFilter.values;
-    final currentIndex = filters.indexOf(state.selectedFilter);
-
-    void selectOffset(int offset) {
-      final nextIndex = (currentIndex + offset).clamp(0, filters.length - 1);
-      if (nextIndex != currentIndex) {
-        onFilterChanged(filters[nextIndex]);
-      }
+    if (specialView != LibrarySpecialView.none) {
+      return _LibraryItemsContent(
+        state: state,
+        notes: notes,
+        specialView: specialView,
+        compact: compact,
+        onSelectionChanged: onSelectionChanged,
+        onCreate: onCreate,
+        onJoinRoom: onJoinRoom,
+        onOpenNote: onOpenNote,
+      );
     }
 
-    final content = _LibraryItemsContent(
-      state: state,
-      notes: notes,
-      specialView: specialView,
-      compact: compact,
-      onSelectionChanged: onSelectionChanged,
-      onCreate: onCreate,
-      onJoinRoom: onJoinRoom,
-      onOpenNote: onOpenNote,
+    return PageView(
+      controller: pageController,
+      onPageChanged: onPageChanged,
+      children: [
+        for (final filter in LibraryFilter.values)
+          _LibraryItemsContent(
+            state: state,
+            notes: _notesForFilter(filter),
+            specialView: specialView,
+            compact: compact,
+            onSelectionChanged: onSelectionChanged,
+            onCreate: onCreate,
+            onJoinRoom: onJoinRoom,
+            onOpenNote: onOpenNote,
+          ),
+      ],
     );
+  }
 
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onHorizontalDragEnd: (details) {
-        final velocity = details.primaryVelocity ?? 0;
-        if (velocity.abs() < 240) {
-          return;
-        }
-        selectOffset(velocity < 0 ? 1 : -1);
-      },
-      child: content,
-    );
+  List<NoteItem> _notesForFilter(LibraryFilter filter) {
+    final activeNotes = state.notes.where((item) => !item.isDeleted);
+    final filtered = filter == LibraryFilter.all
+        ? activeNotes
+        : activeNotes.where((item) => item.kind == filter);
+    return filtered.toList()..sort((a, b) {
+      final result = a.updatedAt.compareTo(b.updatedAt);
+      return state.sortAscending ? result : -result;
+    });
   }
 }
 
@@ -423,41 +554,6 @@ class _NoteTile extends StatelessWidget {
                     : LucideIcons.bookOpen,
               ),
         onTap: onTap,
-      ),
-    );
-  }
-}
-
-class _FilterSegmentLabel extends StatelessWidget {
-  const _FilterSegmentLabel({required this.label, required this.selected});
-
-  final String label;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: selected ? colorScheme.primary : const Color(0xFF151918),
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-          const SizedBox(height: 12),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            width: selected ? 58 : 0,
-            height: 2,
-            color: colorScheme.primary,
-          ),
-        ],
       ),
     );
   }

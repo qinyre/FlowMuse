@@ -93,6 +93,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
             SharedSidebarItem(
               icon: LucideIcons.trash2,
               label: '回收站',
+              selected: widget.section == ShellSection.trash,
               count: (libraryIndex?.deletedNotes.length ?? 0).toString(),
               onTap: () => context.go(AppRoutes.trash),
             ),
@@ -105,7 +106,6 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
               label: '笔记本',
               selected: widget.section == ShellSection.notebooks,
               actionIcon: LucideIcons.circlePlus,
-              leadingAction: true,
               emptyLabel: hasNotebooks ? null : '暂无笔记本',
               trailingIcon: hasNotebooks
                   ? (_notebooksExpanded
@@ -147,7 +147,6 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
               label: '标签',
               selected: widget.section == ShellSection.tags,
               actionIcon: LucideIcons.circlePlus,
-              leadingAction: true,
               emptyLabel: hasTags ? null : '暂无标签',
               trailingIcon: hasTags
                   ? (_tagsExpanded
