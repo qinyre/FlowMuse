@@ -110,58 +110,74 @@ class _FilterTabs extends StatelessWidget {
   final LibraryFilter selected;
   final ValueChanged<LibraryFilter> onFilterChanged;
 
+  static const _labels = {
+    LibraryFilter.all: '全部',
+    LibraryFilter.notes: '笔记',
+    LibraryFilter.pdf: 'PDF',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (final filter in LibraryFilter.values)
+          _FilterTabButton(
+            label: _labels[filter]!,
+            selected: selected == filter,
+            onTap: () => onFilterChanged(filter),
+          ),
+      ],
+    );
+  }
+}
+
+class _FilterTabButton extends StatelessWidget {
+  const _FilterTabButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return SegmentedButton<LibraryFilter>(
-      key: const ValueKey('library-filter-tabs'),
-      showSelectedIcon: false,
-      style: ButtonStyle(
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 0),
-        ),
-        visualDensity: VisualDensity.compact,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
-        overlayColor: WidgetStatePropertyAll(
-          colorScheme.primary.withValues(alpha: 0.08),
-        ),
-        side: const WidgetStatePropertyAll(BorderSide.none),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(0)),
+    return InkWell(
+      onTap: onTap,
+      highlightColor: colorScheme.primary.withValues(alpha: 0.06),
+      splashColor: Colors.transparent,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              style: Theme.of(context).textTheme.titleMedium!.copyWith(
+                color: selected
+                    ? colorScheme.primary
+                    : const Color(0xFF151918),
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+              child: Text(label),
+            ),
+            const SizedBox(height: 12),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              width: selected ? 58 : 0,
+              height: 2,
+              color: colorScheme.primary,
+            ),
+          ],
         ),
       ),
-      segments: [
-        ButtonSegment(
-          value: LibraryFilter.all,
-          label: _FilterSegmentLabel(
-            label: '全部',
-            selected: selected == LibraryFilter.all,
-          ),
-          icon: const SizedBox.shrink(),
-        ),
-        ButtonSegment(
-          value: LibraryFilter.notes,
-          label: _FilterSegmentLabel(
-            label: '笔记',
-            selected: selected == LibraryFilter.notes,
-          ),
-          icon: const SizedBox.shrink(),
-        ),
-        ButtonSegment(
-          value: LibraryFilter.pdf,
-          label: _FilterSegmentLabel(
-            label: 'PDF',
-            selected: selected == LibraryFilter.pdf,
-          ),
-          icon: const SizedBox.shrink(),
-        ),
-      ],
-      selected: {selected},
-      onSelectionChanged: (values) => onFilterChanged(values.single),
-      selectedIcon: const SizedBox.shrink(),
-      emptySelectionAllowed: false,
     );
   }
 }
@@ -341,41 +357,6 @@ class _NotebookTile extends StatelessWidget {
                     : LucideIcons.bookOpen,
               ),
         onTap: onTap,
-      ),
-    );
-  }
-}
-
-class _FilterSegmentLabel extends StatelessWidget {
-  const _FilterSegmentLabel({required this.label, required this.selected});
-
-  final String label;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: selected ? colorScheme.primary : const Color(0xFF151918),
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-          const SizedBox(height: 12),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            width: selected ? 58 : 0,
-            height: 2,
-            color: colorScheme.primary,
-          ),
-        ],
       ),
     );
   }
