@@ -7,7 +7,7 @@ import '../../../shared/widgets/app_spacing.dart';
 import 'create_notebook_card.dart';
 import 'notebook_card.dart';
 
-class LibraryContent extends StatelessWidget {
+class LibraryContent extends StatefulWidget {
   const LibraryContent({
     super.key,
     required this.compact,
@@ -30,34 +30,72 @@ class LibraryContent extends StatelessWidget {
   final ValueChanged<NotebookItem> onOpenNotebook;
 
   @override
+  State<LibraryContent> createState() => _LibraryContentState();
+}
+
+class _LibraryContentState extends State<LibraryContent> {
+  late PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    final initialIndex = LibraryFilter.values.indexOf(
+      widget.state.selectedFilter,
+    );
+    _pageController = PageController(initialPage: initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _onFilterChanged(LibraryFilter filter) {
+    final index = LibraryFilter.values.indexOf(filter);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+    widget.onFilterChanged(filter);
+  }
+
+  void _onPageChanged(int index) {
+    final filter = LibraryFilter.values[index];
+    widget.onFilterChanged(filter);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: AppSpacing.pagePadding(compact: compact),
+      padding: AppSpacing.pagePadding(compact: widget.compact),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _LibraryHeader(
-            compact: compact,
-            viewMode: state.viewMode,
-            sortAscending: state.sortAscending,
-            selectionMode: state.selectionMode,
-            onViewModeChanged: onViewModeChanged,
-            onSortDirectionChanged: onSortDirectionChanged,
-            onSelectionModeChanged: onSelectionModeChanged,
+            compact: widget.compact,
+            viewMode: widget.state.viewMode,
+            sortAscending: widget.state.sortAscending,
+            selectionMode: widget.state.selectionMode,
+            onViewModeChanged: widget.onViewModeChanged,
+            onSortDirectionChanged: widget.onSortDirectionChanged,
+            onSelectionModeChanged: widget.onSelectionModeChanged,
           ),
           const SizedBox(height: AppSpacing.headerToContent),
           _FilterTabs(
-            selected: state.selectedFilter,
-            onFilterChanged: onFilterChanged,
+            selected: widget.state.selectedFilter,
+            onFilterChanged: _onFilterChanged,
           ),
           const SizedBox(height: AppSpacing.sectionGap),
           Expanded(
             child: _LibraryItems(
-              state: state,
-              compact: compact,
-              onFilterChanged: onFilterChanged,
-              onCreate: onCreate,
-              onOpenNotebook: onOpenNotebook,
+              state: widget.state,
+              compact: widget.compact,
+              pageController: _pageController,
+              onPageChanged: _onPageChanged,
+              onCreate: widget.onCreate,
+              onOpenNotebook: widget.onOpenNotebook,
             ),
           ),
         ],
@@ -132,46 +170,34 @@ class _LibraryItems extends StatelessWidget {
   const _LibraryItems({
     required this.state,
     required this.compact,
-    required this.onFilterChanged,
+    required this.pageController,
+    required this.onPageChanged,
     required this.onCreate,
     required this.onOpenNotebook,
   });
 
   final LibraryHomeState state;
   final bool compact;
-  final ValueChanged<LibraryFilter> onFilterChanged;
+  final PageController pageController;
+  final ValueChanged<int> onPageChanged;
   final VoidCallback onCreate;
   final ValueChanged<NotebookItem> onOpenNotebook;
 
   @override
   Widget build(BuildContext context) {
-    final filters = LibraryFilter.values;
-    final currentIndex = filters.indexOf(state.selectedFilter);
-
-    void selectOffset(int offset) {
-      final nextIndex = (currentIndex + offset).clamp(0, filters.length - 1);
-      if (nextIndex != currentIndex) {
-        onFilterChanged(filters[nextIndex]);
-      }
-    }
-
-    final content = _LibraryItemsContent(
-      state: state,
-      compact: compact,
-      onCreate: onCreate,
-      onOpenNotebook: onOpenNotebook,
-    );
-
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onHorizontalDragEnd: (details) {
-        final velocity = details.primaryVelocity ?? 0;
-        if (velocity.abs() < 240) {
-          return;
-        }
-        selectOffset(velocity < 0 ? 1 : -1);
-      },
-      child: content,
+    return PageView(
+      controller: pageController,
+      onPageChanged: onPageChanged,
+      children: [
+        for (final filter in LibraryFilter.values)
+          _LibraryItemsContent(
+            state: state,
+            filter: filter,
+            compact: compact,
+            onCreate: onCreate,
+            onOpenNotebook: onOpenNotebook,
+          ),
+      ],
     );
   }
 }
@@ -179,28 +205,43 @@ class _LibraryItems extends StatelessWidget {
 class _LibraryItemsContent extends StatelessWidget {
   const _LibraryItemsContent({
     required this.state,
+    required this.filter,
     required this.compact,
     required this.onCreate,
     required this.onOpenNotebook,
   });
 
   final LibraryHomeState state;
+  final LibraryFilter filter;
   final bool compact;
   final VoidCallback onCreate;
   final ValueChanged<NotebookItem> onOpenNotebook;
 
+  List<NotebookItem> get _filteredNotebooks {
+    final filtered = filter == LibraryFilter.all
+        ? state.notebooks
+        : state.notebooks.where((item) => item.kind == filter);
+    return filtered.toList()
+      ..sort((a, b) {
+        final result = a.date.compareTo(b.date);
+        return state.sortAscending ? result : -result;
+      });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final notebooks = _filteredNotebooks;
+
     if (state.viewMode == LibraryViewMode.list) {
       return ListView.separated(
-        itemCount: state.visibleNotebooks.length + 1,
+        itemCount: notebooks.length + 1,
         separatorBuilder: (context, index) =>
             const SizedBox(height: AppSpacing.listGap),
         itemBuilder: (context, index) {
           if (index == 0) {
             return _CreateNotebookTile(onTap: onCreate);
           }
-          final item = state.visibleNotebooks[index - 1];
+          final item = notebooks[index - 1];
           return _NotebookTile(
             item: item,
             selectionMode: state.selectionMode,
@@ -211,7 +252,7 @@ class _LibraryItemsContent extends StatelessWidget {
     }
 
     return GridView.builder(
-      itemCount: state.visibleNotebooks.length + 1,
+      itemCount: notebooks.length + 1,
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 218,
         mainAxisExtent: 276,
@@ -226,7 +267,7 @@ class _LibraryItemsContent extends StatelessWidget {
         if (index == 0) {
           return CreateNotebookCard(onTap: onCreate);
         }
-        final item = state.visibleNotebooks[index - 1];
+        final item = notebooks[index - 1];
         return Stack(
           children: [
             Positioned.fill(
