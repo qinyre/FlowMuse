@@ -79,7 +79,7 @@ class SharedSidebarHeader extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var index = 0; index < actions.length; index++) ...[
-                if (index > 0) const SizedBox(width: 4),
+                if (index > 0) const SizedBox(width: 0),
                 actions[index],
               ],
             ],
@@ -115,22 +115,27 @@ class SharedSidebarIconButton extends StatelessWidget {
     required this.tooltip,
     required this.onPressed,
     required this.icon,
+    this.offset = Offset.zero,
   });
 
   final String tooltip;
   final VoidCallback? onPressed;
   final Widget icon;
+  final Offset offset;
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: onPressed,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-      padding: EdgeInsets.zero,
-      iconSize: 18,
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-      icon: icon,
+    return Transform.translate(
+      offset: offset,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+        padding: EdgeInsets.zero,
+        iconSize: 18,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        icon: icon,
+      ),
     );
   }
 }

@@ -37,11 +37,13 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
             tooltip: '侧边栏',
             onPressed: () {},
             icon: const Icon(LucideIcons.panelLeft),
+            offset: const Offset(11, 0),
           ),
           SharedSidebarIconButton(
             tooltip: '设置',
             onPressed: () => context.go(AppRoutes.settings),
             icon: const Icon(LucideIcons.settings),
+            offset: const Offset(7, 0),
           ),
         ],
       ),
