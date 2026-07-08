@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/library/models/library_special_view.dart';
+import '../features/library/views/create_note_page.dart';
 import '../features/library/views/library_home_page.dart';
 import '../features/search/views/search_page.dart';
 import '../features/settings/views/settings_page.dart';
@@ -15,6 +16,7 @@ class AppRoutes {
   const AppRoutes._();
 
   static const library = '/library';
+  static const createNote = '/create-note';
   static const search = '/search';
   static const notebooks = '/notebooks';
   static const notebookDetail = '/notebooks/:notebookId';
@@ -124,6 +126,10 @@ GoRouter createAppRouter() {
             },
           ),
         ],
+      ),
+      GoRoute(
+        path: AppRoutes.createNote,
+        builder: (context, state) => const CreateNotePage(),
       ),
       GoRoute(
         path: AppRoutes.settings,

@@ -69,11 +69,8 @@ class LibraryHomePage extends ConsumerWidget {
           onDeleteSelectedForever: viewModel.deleteSelectedNotesForever,
           onMoveSelectedToNotebook: viewModel.moveSelectedNotesToNotebook,
           onAddTagsToSelected: viewModel.addTagsToSelectedNotes,
-          onCreate: () async {
-            final note = await viewModel.createNote();
-            if (context.mounted) {
-              _openWhiteboard(context, noteId: note.id);
-            }
+          onCreate: () {
+            context.push(AppRoutes.createNote);
           },
           onJoinRoom: () {
             _joinRoom(context);

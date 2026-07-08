@@ -4,6 +4,10 @@ enum LibraryFilter { all, notes, pdf }
 
 enum LibraryViewMode { grid, list }
 
+enum NoteType { bounded, unbounded }
+
+enum PageTemplate { blank, narrowLine, wideLine, grid, dotGrid }
+
 class NoteItem {
   const NoteItem({
     required this.id,
@@ -11,6 +15,8 @@ class NoteItem {
     required this.updatedAt,
     required this.kind,
     required this.coverColor,
+    this.noteType = NoteType.unbounded,
+    this.pageTemplate = PageTemplate.blank,
     this.notebookId,
     this.tagIds = const [],
     this.subtitle,
@@ -22,6 +28,8 @@ class NoteItem {
   final DateTime updatedAt;
   final LibraryFilter kind;
   final Color coverColor;
+  final NoteType noteType;
+  final PageTemplate pageTemplate;
   final String? notebookId;
   final List<String> tagIds;
   final String? subtitle;
@@ -42,6 +50,8 @@ class NoteItem {
     DateTime? updatedAt,
     LibraryFilter? kind,
     Color? coverColor,
+    NoteType? noteType,
+    PageTemplate? pageTemplate,
     String? notebookId,
     List<String>? tagIds,
     String? subtitle,
@@ -55,6 +65,8 @@ class NoteItem {
       updatedAt: updatedAt ?? this.updatedAt,
       kind: kind ?? this.kind,
       coverColor: coverColor ?? this.coverColor,
+      noteType: noteType ?? this.noteType,
+      pageTemplate: pageTemplate ?? this.pageTemplate,
       notebookId: clearNotebook ? null : notebookId ?? this.notebookId,
       tagIds: tagIds ?? this.tagIds,
       subtitle: subtitle ?? this.subtitle,

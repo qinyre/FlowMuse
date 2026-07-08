@@ -133,6 +133,9 @@ abstract interface class LibraryRepository {
   Future<LibraryIndex> loadIndex();
 
   Future<NoteItem> createNote({
+    NoteType noteType = NoteType.unbounded,
+    PageTemplate pageTemplate = PageTemplate.blank,
+    String? title,
     String? notebookId,
     List<String> tagIds = const [],
   });
@@ -192,16 +195,24 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
 
   @override
   Future<NoteItem> createNote({
+    NoteType noteType = NoteType.unbounded,
+    PageTemplate pageTemplate = PageTemplate.blank,
+    String? title,
     String? notebookId,
     List<String> tagIds = const [],
   }) async {
     final now = DateTime.now();
+    final trimmedTitle = title?.trim();
     final note = NoteItem(
       id: 'note-${_uuid.v4()}',
-      title: _defaultNoteTitle,
+      title: trimmedTitle == null || trimmedTitle.isEmpty
+          ? _defaultNoteTitle
+          : trimmedTitle,
       updatedAt: now,
       kind: LibraryFilter.notes,
       coverColor: _noteColors[now.millisecondsSinceEpoch % _noteColors.length],
+      noteType: noteType,
+      pageTemplate: pageTemplate,
       notebookId: notebookId,
       tagIds: tagIds,
     );
@@ -500,10 +511,16 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
   }
 
   Future<NoteItem> createNote({
+    NoteType noteType = NoteType.unbounded,
+    PageTemplate pageTemplate = PageTemplate.blank,
+    String? title,
     String? notebookId,
     List<String> tagIds = const [],
   }) async {
     final note = await _repository.createNote(
+      noteType: noteType,
+      pageTemplate: pageTemplate,
+      title: title,
       notebookId: notebookId,
       tagIds: tagIds,
     );
@@ -611,6 +628,8 @@ Map<String, Object?> _noteToJson(NoteItem item) {
     'updatedAt': item.updatedAt.toIso8601String(),
     'kind': item.kind.name,
     'coverColor': item.coverColor.toARGB32(),
+    'noteType': item.noteType.name,
+    'pageTemplate': item.pageTemplate.name,
     'notebookId': item.notebookId,
     'tagIds': item.tagIds,
     'subtitle': item.subtitle,
@@ -625,6 +644,16 @@ NoteItem _noteFromJson(Map<String, Object?> json) {
     updatedAt: DateTime.parse(json['updatedAt']! as String),
     kind: LibraryFilter.values.byName(json['kind']! as String),
     coverColor: Color(json['coverColor']! as int),
+    noteType: _enumByName(
+      NoteType.values,
+      json['noteType'],
+      NoteType.unbounded,
+    ),
+    pageTemplate: _enumByName(
+      PageTemplate.values,
+      json['pageTemplate'],
+      PageTemplate.blank,
+    ),
     notebookId: json['notebookId'] as String?,
     tagIds: (json['tagIds'] as List? ?? const []).whereType<String>().toList(),
     subtitle: json['subtitle'] as String?,
@@ -632,6 +661,17 @@ NoteItem _noteFromJson(Map<String, Object?> json) {
         ? DateTime.parse(json['deletedAt']! as String)
         : null,
   );
+}
+
+T _enumByName<T extends Enum>(List<T> values, Object? raw, T fallback) {
+  if (raw is String) {
+    for (final value in values) {
+      if (value.name == raw) {
+        return value;
+      }
+    }
+  }
+  return fallback;
 }
 
 const _noteColors = [
