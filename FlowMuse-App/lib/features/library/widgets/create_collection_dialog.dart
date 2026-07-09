@@ -54,6 +54,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
 
   late final TextEditingController _controller;
   late Color _selectedColor;
+  bool _showEmptyTitleTip = false;
 
   String get _name => _controller.text.trim();
 
@@ -78,6 +79,12 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
 
   void _create() {
     if (_name.isEmpty) {
+      setState(() => _showEmptyTitleTip = true);
+      Future<void>.delayed(const Duration(milliseconds: 1200), () {
+        if (mounted) {
+          setState(() => _showEmptyTitleTip = false);
+        }
+      });
       return;
     }
     Navigator.of(context).pop(
@@ -121,18 +128,27 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
                     ),
                   ),
                   TextButton(
-                    onPressed: _name.isEmpty ? null : _create,
+                    onPressed: _create,
                     style: TextButton.styleFrom(
                       foregroundColor: colorScheme.primary,
-                      disabledForegroundColor: colorScheme.onSurface
-                          .withValues(alpha: 0.32),
                     ),
                     child: const Text('创建'),
                   ),
                 ],
               ),
               const SizedBox(height: 30),
-              _CoverPreview(color: _selectedColor, icon: widget.icon),
+              Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  _CoverPreview(color: _selectedColor, icon: widget.icon),
+                  AnimatedOpacity(
+                    opacity: _showEmptyTitleTip ? 1 : 0,
+                    duration: const Duration(milliseconds: 120),
+                    child: const _InlineTip(text: '标题不能为空'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 20),
               Wrap(
                 spacing: 14,
@@ -233,6 +249,39 @@ class _CoverPreview extends StatelessWidget {
         ),
         child: Center(
           child: Icon(icon, size: 34, color: foreground.withValues(alpha: 0.8)),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineTip extends StatelessWidget {
+  const _InlineTip({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xD9353736),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x30000000),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        child: Text(
+          text,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
