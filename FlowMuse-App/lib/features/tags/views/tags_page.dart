@@ -688,41 +688,48 @@ class _CollectionActions extends StatelessWidget {
       );
     }
     return Builder(
-      builder: (context) => IconButton(
-        tooltip: '更多操作',
-        icon: const Icon(LucideIcons.chevronDown, size: 18),
-        onPressed: () async {
-          final selected = await showAnchoredPopupMenu<_CollectionAction>(
-            context: context,
-            items: const [
-              PopupMenuItem<_CollectionAction>(
-                value: _CollectionAction.rename,
-                child: ListTile(
-                  leading: Icon(LucideIcons.penLine),
-                  title: Text('重命名'),
-                  contentPadding: EdgeInsets.zero,
+      builder: (context) => Tooltip(
+        message: '更多操作',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final selected = await showAnchoredPopupMenu<_CollectionAction>(
+              context: context,
+              items: const [
+                PopupMenuItem<_CollectionAction>(
+                  value: _CollectionAction.rename,
+                  child: ListTile(
+                    leading: Icon(LucideIcons.penLine),
+                    title: Text('重命名'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
-              ),
-              PopupMenuItem<_CollectionAction>(
-                value: _CollectionAction.delete,
-                child: ListTile(
-                  leading: Icon(LucideIcons.trash2),
-                  title: Text('删除'),
-                  contentPadding: EdgeInsets.zero,
+                PopupMenuItem<_CollectionAction>(
+                  value: _CollectionAction.delete,
+                  child: ListTile(
+                    leading: Icon(LucideIcons.trash2),
+                    title: Text('删除'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
-              ),
-            ],
-          );
-          if (selected == null || !context.mounted) {
-            return;
-          }
-          switch (selected) {
-            case _CollectionAction.rename:
-              runAfterUiTeardown(onRename!);
-            case _CollectionAction.delete:
-              runAfterUiTeardown(onDelete!);
-          }
-        },
+              ],
+            );
+            if (selected == null || !context.mounted) {
+              return;
+            }
+            switch (selected) {
+              case _CollectionAction.rename:
+                runAfterUiTeardown(onRename!);
+              case _CollectionAction.delete:
+                runAfterUiTeardown(onDelete!);
+            }
+          },
+          child: const SizedBox(
+            width: 24,
+            height: 24,
+            child: Icon(LucideIcons.chevronDown, size: 18),
+          ),
+        ),
       ),
     );
   }
