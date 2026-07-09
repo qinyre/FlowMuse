@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
