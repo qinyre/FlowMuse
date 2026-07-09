@@ -7,6 +7,8 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide Element, SelectionOverlay, TextAlign;
 
 import '../../../app/app_router.dart';
+import '../../../app/app_theme_preset.dart';
+import '../../../app/view_models/theme_view_model.dart';
 import '../../account/models/collaboration_identity.dart';
 import '../../account/view_models/account_view_model.dart';
 import '../../library/models/note_item.dart';
@@ -1123,6 +1125,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(whiteboardViewModelProvider);
+    final themePreset = ref.watch(themeViewModelProvider);
+    final effectivePreset = effectiveAppThemePreset(
+      themePreset,
+      MediaQuery.platformBrightnessOf(context),
+    );
 
     return PopScope(
       canPop: !widget.temporaryCollaboration || _temporarySaved,
@@ -1133,11 +1140,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         unawaited(_leaveCollaboration());
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFFDFDFB),
+        backgroundColor: effectivePreset.backgroundEnd,
         body: SafeArea(
           child: MarkdrawEditor(
             controller: _markdrawController,
-            config: const MarkdrawEditorConfig(initialBackground: '#fdfdfb'),
+            config: MarkdrawEditorConfig(
+              initialBackground: _hexColor(effectivePreset.backgroundEnd),
+            ),
+            currentThemeMode: themePreset.themeMode,
+            onThemeModeChanged: _changeThemeMode,
             saveStatusLabel: _saveStatusLabel(state.saveStatus),
             collaborating: state.collaborating,
             collaborationConnecting:
@@ -1200,6 +1211,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _changeThemeMode(ThemeMode mode) {
+    return ref
+        .read(themeViewModelProvider.notifier)
+        .changePreset(appThemePresetByThemeMode(mode));
+  }
+
+  String _hexColor(Color color) {
+    return '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
   }
 
   String _saveStatusLabel(WhiteboardSaveStatus status) {

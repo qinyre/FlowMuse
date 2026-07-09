@@ -106,11 +106,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     final sidebarCollapsed = ref.watch(shellLayoutViewModelProvider);
     final layoutViewModel = ref.read(shellLayoutViewModelProvider.notifier);
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
-    final effectivePreset =
-        themePreset.id == AppThemeId.system &&
-            platformBrightness == Brightness.dark
-        ? systemDarkThemePreset
-        : themePreset;
+    final effectivePreset = effectiveAppThemePreset(
+      themePreset,
+      platformBrightness,
+    );
 
     return Scaffold(
       key: _scaffoldKey,

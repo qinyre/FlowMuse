@@ -117,7 +117,12 @@ class SharedSidebarAvatar extends ConsumerWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               )
-            : AccountAvatar(label: label, user: account.user, radius: 19),
+            : AccountAvatar(
+                label: label,
+                user: account.user,
+                avatarUrl: identity.avatarUrl,
+                radius: 19,
+              ),
       ),
     );
   }

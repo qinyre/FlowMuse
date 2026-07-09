@@ -339,6 +339,7 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
       if (!mounted) {
         return;
       }
+      await ref.read(themeViewModelProvider.notifier).restoreSavedPreset();
       ref.invalidate(libraryIndexProvider);
       setState(() {
         _backupMessage = '备份已导入';
