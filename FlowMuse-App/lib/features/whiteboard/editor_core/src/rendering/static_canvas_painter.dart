@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 
 import '../core/elements/elements.dart' as core show TextElement;
+import '../core/math/math.dart';
 import '../core/elements/elements.dart' hide TextElement;
 import '../core/layout/layout.dart';
 import '../core/scene/scene_exports.dart';
@@ -45,6 +46,10 @@ class StaticCanvasPainter extends CustomPainter {
   /// Whether the canvas background is dark (affects grid line colors).
   final bool isDarkBackground;
 
+  /// Content area bounds for PDF notes. When set, rendering is clipped so
+  /// nothing is drawn outside these bounds (elements, preview, grid, etc.).
+  final Bounds? contentBounds;
+
   const StaticCanvasPainter({
     required this.scene,
     required this.adapter,
@@ -56,6 +61,7 @@ class StaticCanvasPainter extends CustomPainter {
     this.pendingElements,
     this.gridSize,
     this.isDarkBackground = false,
+    this.contentBounds,
   });
 
   @override
@@ -66,13 +72,24 @@ class StaticCanvasPainter extends CustomPainter {
     canvas.scale(viewport.zoom);
     canvas.translate(-viewport.offset.dx, -viewport.offset.dy);
 
+    // Render pages BEFORE clip — so page shadows extend freely on all sides.
+    if (layout?.isPaged ?? false) {
+      _renderPages(canvas);
+    }
+
+    // Clip rendering to PDF content bounds — elements cannot draw outside.
+    if (contentBounds != null) {
+      canvas.clipRect(Rect.fromLTWH(
+        contentBounds!.left,
+        contentBounds!.top,
+        contentBounds!.size.width,
+        contentBounds!.size.height,
+      ));
+    }
+
     // Render grid behind elements
     if (gridSize != null) {
       _renderGrid(canvas, size, gridSize!);
-    }
-
-    if (layout?.isPaged ?? false) {
-      _renderPages(canvas);
     }
 
     final visible = cullElements(scene.orderedElements, viewport, size);
@@ -325,7 +342,12 @@ class StaticCanvasPainter extends CustomPainter {
 
     for (final page in pages) {
       final rect = page.bounds;
+      // 底部阴影
       canvas.drawRect(rect.shift(const Offset(0, 4)), shadowPaint);
+      // 左侧阴影
+      canvas.drawRect(rect.shift(const Offset(-4, 0)), shadowPaint);
+      // 右侧阴影
+      canvas.drawRect(rect.shift(const Offset(4, 0)), shadowPaint);
       canvas.drawRect(rect, paperPaint);
       _renderPageTemplate(canvas, page);
       canvas.drawRect(rect, borderPaint);
