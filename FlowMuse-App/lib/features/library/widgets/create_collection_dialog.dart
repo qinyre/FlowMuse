@@ -53,6 +53,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
   static const _maxTitleLength = 60;
 
   late final TextEditingController _controller;
+  late final FocusNode _focusNode;
   late Color _selectedColor;
   bool _showEmptyTitleTip = false;
 
@@ -62,6 +63,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
   void initState() {
     super.initState();
     _controller = TextEditingController()..addListener(_onTitleChanged);
+    _focusNode = FocusNode();
     _selectedColor = widget.coverColors.first;
   }
 
@@ -70,6 +72,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
     _controller
       ..removeListener(_onTitleChanged)
       ..dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -174,13 +177,31 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
               const SizedBox(height: 8),
               TextField(
                 controller: _controller,
+                focusNode: _focusNode,
                 autofocus: true,
+                keyboardType: TextInputType.text,
                 maxLength: _maxTitleLength,
+                maxLines: 1,
+                cursorHeight: 18,
                 inputFormatters: [
                   LengthLimitingTextInputFormatter(_maxTitleLength),
                 ],
                 textInputAction: TextInputAction.done,
+                onTapAlwaysCalled: true,
+                onTap: () {
+                  if (!_focusNode.hasFocus) {
+                    FocusScope.of(context).requestFocus(_focusNode);
+                    return;
+                  }
+                  _focusNode.unfocus();
+                  Future<void>.delayed(const Duration(milliseconds: 50), () {
+                    if (context.mounted) {
+                      FocusScope.of(context).requestFocus(_focusNode);
+                    }
+                  });
+                },
                 onSubmitted: (_) => _create(),
+                textAlignVertical: TextAlignVertical.center,
                 decoration: InputDecoration(
                   counterText: '',
                   hintText: widget.hintText,
