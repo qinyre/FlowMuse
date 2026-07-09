@@ -73,8 +73,8 @@ func validateRequest(request RecognizeRequest) error {
 		}
 	}
 	hint := strings.TrimSpace(request.Hint)
-	if hint != "" && hint != "auto" {
-		return errors.New("hint must be auto")
+	if hint != "" && hint != "auto" && hint != "text" && hint != "math" {
+		return errors.New("hint must be auto, text, or math")
 	}
 	return nil
 }

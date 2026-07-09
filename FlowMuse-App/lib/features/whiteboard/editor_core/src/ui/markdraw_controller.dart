@@ -838,6 +838,7 @@ class MarkdrawController extends ChangeNotifier {
     }
     return InkRecognitionRequest(
       sessionId: sessionId,
+      hint: 'math',
       strokes: absoluteStrokes,
       bounds: InkRecognitionBounds(
         x: minX,

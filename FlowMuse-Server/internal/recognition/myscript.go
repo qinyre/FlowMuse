@@ -43,7 +43,31 @@ func (r *MyScriptRecognizer) Recognize(ctx context.Context, request RecognizeReq
 	if strings.TrimSpace(r.config.AppKey) == "" || strings.TrimSpace(r.config.HMACKey) == "" {
 		return RecognizeResponse{}, errors.New("MyScript recognition is not configured")
 	}
-	body, err := json.Marshal(r.toMyScriptRequest(request))
+	switch strings.TrimSpace(request.Hint) {
+	case "math":
+		return r.recognizeContent(ctx, request, "Math")
+	case "text":
+		return r.recognizeContent(ctx, request, "Text")
+	}
+	mathResult, mathErr := r.recognizeContent(ctx, request, "Math")
+	if mathErr == nil && len(mathResult.Elements) > 0 && looksLikeMath(mathResult.Elements[0].LaTeX) {
+		return mathResult, nil
+	}
+	textResult, textErr := r.recognizeContent(ctx, request, "Text")
+	if textErr == nil && len(textResult.Elements) > 0 {
+		return textResult, nil
+	}
+	if mathErr != nil {
+		return RecognizeResponse{}, mathErr
+	}
+	if textErr != nil {
+		return RecognizeResponse{}, textErr
+	}
+	return RecognizeResponse{}, errors.New("MyScript returned no recognized elements")
+}
+
+func (r *MyScriptRecognizer) recognizeContent(ctx context.Context, request RecognizeRequest, contentType string) (RecognizeResponse, error) {
+	body, err := json.Marshal(r.toMyScriptRequest(request, contentType))
 	if err != nil {
 		return RecognizeResponse{}, err
 	}
@@ -52,7 +76,11 @@ func (r *MyScriptRecognizer) Recognize(ctx context.Context, request RecognizeReq
 		return RecognizeResponse{}, err
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
-	httpRequest.Header.Set("Accept", "application/json,text/plain")
+	if contentType == "Math" {
+		httpRequest.Header.Set("Accept", "application/x-latex,application/mathml+xml,application/vnd.myscript.jiix,application/json,text/plain")
+	} else {
+		httpRequest.Header.Set("Accept", "application/json,text/plain")
+	}
 	httpRequest.Header.Set("applicationKey", r.config.AppKey)
 	httpRequest.Header.Set("hmac", hmacSignature(r.config.AppKey, r.config.HMACKey, body))
 
@@ -73,20 +101,23 @@ func (r *MyScriptRecognizer) Recognize(ctx context.Context, request RecognizeReq
 		)
 	}
 	if text := strings.TrimSpace(string(responseBody)); text != "" && !json.Valid(responseBody) {
+		if contentType == "Math" {
+			return RecognizeResponse{Elements: []RecognizedElement{mathTextElement(text, request.Bounds)}}, nil
+		}
 		return RecognizeResponse{Elements: []RecognizedElement{textElement(text, request.Bounds)}}, nil
 	}
 	var raw map[string]any
 	if err := json.Unmarshal(responseBody, &raw); err != nil {
 		return RecognizeResponse{}, err
 	}
-	result := parseMyScriptResponse(raw, request.Bounds)
+	result := parseMyScriptResponse(raw, request.Bounds, contentType)
 	if len(result.Elements) == 0 {
 		return RecognizeResponse{}, errors.New("MyScript returned no recognized elements")
 	}
 	return result, nil
 }
 
-func (r *MyScriptRecognizer) toMyScriptRequest(request RecognizeRequest) map[string]any {
+func (r *MyScriptRecognizer) toMyScriptRequest(request RecognizeRequest, contentType string) map[string]any {
 	strokes := make([]map[string]any, 0, len(request.Strokes))
 	for _, stroke := range request.Strokes {
 		x := make([]float64, 0, len(stroke.Points))
@@ -109,19 +140,31 @@ func (r *MyScriptRecognizer) toMyScriptRequest(request RecognizeRequest) map[str
 			"t":           t,
 		})
 	}
+	configuration := map[string]any{}
+	if contentType == "Math" {
+		configuration["lang"] = "en_US"
+		configuration["math"] = map[string]any{
+			"mimeTypes": []string{"application/x-latex", "application/mathml+xml", "application/vnd.myscript.jiix"},
+			"solver":    map[string]any{"enable": true},
+			"margin":    map[string]any{"top": 0, "left": 0, "right": 0, "bottom": 0},
+		}
+		configuration["export"] = map[string]any{
+			"jiix": map[string]any{"strokes": true},
+		}
+	} else {
+		configuration["lang"] = "zh_CN"
+		configuration["text"] = map[string]any{
+			"mimeTypes": []string{"text/plain", "application/vnd.myscript.jiix"},
+		}
+	}
 	return map[string]any{
-		"configuration": map[string]any{
-			"lang": "zh_CN",
-			"text": map[string]any{
-				"mimeTypes": []string{"text/plain", "application/vnd.myscript.jiix"},
-			},
-		},
-		"contentType":  "Text",
-		"xDPI":         96,
-		"yDPI":         96,
-		"width":        request.Bounds.Width,
-		"height":       request.Bounds.Height,
-		"strokeGroups": []map[string]any{{"strokes": strokes}},
+		"configuration": configuration,
+		"contentType":   contentType,
+		"xDPI":          96,
+		"yDPI":          96,
+		"width":         request.Bounds.Width,
+		"height":        request.Bounds.Height,
+		"strokeGroups":  []map[string]any{{"strokes": strokes}},
 	}
 }
 
@@ -133,9 +176,15 @@ func hmacSignature(appKey string, hmacKey string, body []byte) string {
 	return strings.ToUpper(hex.EncodeToString(mac.Sum(nil)))
 }
 
-func parseMyScriptResponse(raw map[string]any, bounds InkBounds) RecognizeResponse {
+func parseMyScriptResponse(raw map[string]any, bounds InkBounds, contentType string) RecognizeResponse {
 	if exports, ok := raw["exports"].(map[string]any); ok {
+		if latex := firstString(exports, "application/x-latex"); latex != "" {
+			return RecognizeResponse{Elements: []RecognizedElement{mathTextElement(latex, bounds)}}
+		}
 		if text := firstString(exports, "text/plain"); text != "" {
+			if contentType == "Math" {
+				return RecognizeResponse{Elements: []RecognizedElement{mathTextElement(text, bounds)}}
+			}
 			return RecognizeResponse{Elements: []RecognizedElement{textElement(text, bounds)}}
 		}
 	}
@@ -160,6 +209,22 @@ func parseMyScriptResponse(raw map[string]any, bounds InkBounds) RecognizeRespon
 		return RecognizeResponse{Elements: []RecognizedElement{textElement(label, bounds)}}
 	}
 	return RecognizeResponse{}
+}
+
+func looksLikeMath(latex string) bool {
+	latex = strings.TrimSpace(latex)
+	if latex == "" {
+		return false
+	}
+	if strings.ContainsAny(latex, `=+\-*/^_{}\()[]<>∫√ΣΠ`) {
+		return true
+	}
+	for _, token := range []string{`\frac`, `\sqrt`, `\int`, `\sum`, `\prod`, `\lim`, `\sin`, `\cos`, `\tan`, `\log`, `\ln`, `\alpha`, `\beta`, `\theta`} {
+		if strings.Contains(latex, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseRawElements(rawElements []any, fallback InkBounds) []RecognizedElement {
