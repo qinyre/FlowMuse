@@ -735,6 +735,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.4.1"
+  shared_preferences_ohos:
+    dependency: "direct main"
+    description:
+      path: "tool/vendor/shared_preferences_ohos"
+      relative: true
+    source: path
+    version: "2.2.0"
   shared_preferences_platform_interface:
     dependency: transitive
     description:

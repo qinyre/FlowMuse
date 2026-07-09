@@ -2,9 +2,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../app/app_router.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../whiteboard/collaboration/models/excalidraw_scene.dart';
+import '../../whiteboard/repositories/whiteboard_scene_repository.dart';
 import '../models/note_item.dart';
 import '../repositories/library_repository.dart';
 
@@ -38,17 +42,31 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     }
     setState(() => _creating = true);
     try {
-      final note = await ref
-          .read(libraryIndexProvider.notifier)
-          .createNote(
-            noteType: _noteType,
-            pageTemplate: _pageTemplate,
-            title: _title,
-          );
+      FocusManager.instance.primaryFocus?.unfocus();
+      final note = await ref.read(libraryRepositoryProvider).createNote(
+        noteType: _noteType,
+        pageTemplate: _pageTemplate,
+        title: _title,
+      );
+      await SharedPreferencesWhiteboardSceneRepository(
+        SharedPreferences.getInstance,
+      ).saveScene(note.id, emptyExcalidrawSceneContent);
+      ref.invalidate(libraryIndexProvider);
       if (!mounted) {
         return;
       }
-      context.push(AppRoutes.whiteboardPath(noteId: note.id));
+      runWhenUiStable(() {
+        if (mounted) {
+          context.pushReplacement(AppRoutes.whiteboardPath(noteId: note.id));
+        }
+      });
+    } catch (error, stackTrace) {
+      debugPrint('Create note failed: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('创建失败：$error')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _creating = false);
@@ -162,7 +180,12 @@ class _TopBar extends StatelessWidget {
             ),
             const Spacer(),
             ElevatedButton(
-              onPressed: creating ? null : onCreate,
+              onPressed: creating
+                  ? null
+                  : () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      onCreate();
+                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4F8F84),
                 foregroundColor: Colors.white,
