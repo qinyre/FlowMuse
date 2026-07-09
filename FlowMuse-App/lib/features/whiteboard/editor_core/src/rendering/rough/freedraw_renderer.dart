@@ -1,18 +1,21 @@
 import 'dart:math' as dm;
 import 'dart:ui';
 
+import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
+
 import '../../core/math/math.dart';
 import 'draw_style.dart';
 
 /// Renders freehand drawing paths.
 ///
-/// 当有真实压感([pressures] 非空)时,逐段按压感缩放宽度画出变粗笔迹;
-/// 无压感时退化回平滑等粗 Bezier 曲线(向后兼容鼠标/触摸输入)。
+/// 使用 perfect_freehand 的 outline-stroke 算法:把点序列+压感转成一条
+/// 变宽的闭合多边形轮廓,既平滑又自然变粗(Excalidraw/tldraw 同款)。
+///
+/// - 有真实压感(pressures 非空):simulatePressure=false,用真压感驱动宽度
+/// - 无压感(鼠标/触摸):simulatePressure=true,perfect_freehand 用速度模拟
 class FreedrawRenderer {
-  /// 压感有效时的最小宽度倍率(防止 pressure 极小时笔迹断开)。
-  static const _minWidthScale = 0.15;
-
-  /// Builds a smooth [Path] through the given freehand [points].
+  /// Builds a smooth [Path] through the given freehand [points] (等粗,
+  /// 用于无压感退化或外部调用)。
   ///
   /// - Empty list: returns empty Path
   /// - Single point: returns a small circle (dot)
@@ -37,10 +40,38 @@ class FreedrawRenderer {
     return _buildBezierPath(points);
   }
 
+  static List<Offset> buildOutline(
+    List<Point> points, {
+    required double strokeWidth,
+    List<double>? pressures,
+  }) {
+    if (points.isEmpty) return const [];
+
+    final hasPressure = pressures != null && pressures.length == points.length;
+    final inputPoints = <PointVector>[
+      for (var i = 0; i < points.length; i++)
+        PointVector(
+          points[i].x,
+          points[i].y,
+          hasPressure ? pressures[i] : null,
+        ),
+    ];
+    final options = StrokeOptions(
+      size: dm.max(strokeWidth, 1.0),
+      thinning: hasPressure ? 0.7 : StrokeOptions.defaultThinning,
+      smoothing: StrokeOptions.defaultSmoothing,
+      streamline: StrokeOptions.defaultStreamline,
+      simulatePressure: !hasPressure,
+      isComplete: true,
+    );
+
+    return getStroke(inputPoints, options: options);
+  }
+
   /// Draws a freehand path on [canvas] with the given [style].
   ///
-  /// 当 [pressures] 非空且长度匹配 points 时,用压感驱动每段宽度(变粗笔迹);
-  /// 否则退化回等粗 Bezier 路径。
+  /// 优先用 perfect_freehand 的 outline-stroke 算法渲染(平滑+变粗);
+  /// pressures 数量与 points 不匹配时退回等粗 Bezier(容错)。
   static void draw(
     Canvas canvas,
     List<Point> points,
@@ -49,72 +80,41 @@ class FreedrawRenderer {
   }) {
     if (points.isEmpty) return;
 
-    final basePaint = style.toStrokePaint()
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
+    // perfect_freehand 的 size 是直径,而 DrawStyle.strokeWidth 在 freedraw 语境下
+    // 是期望的笔迹宽度。直接用 strokeWidth 作为 size 基准。
+    final size = dm.max(style.strokeWidth, 1.0);
 
-    // 有真压感且数量匹配 → 变粗渲染
-    if (pressures != null && pressures.length == points.length && pressures.length >= 2) {
-      _drawVariableWidth(canvas, points, pressures, basePaint, style.strokeWidth);
-      return;
-    }
+    final outline = buildOutline(
+      points,
+      strokeWidth: size,
+      pressures: pressures,
+    );
 
-    // 无压感 → 等粗 Bezier(原行为,兼容鼠标/触摸)
-    final path = buildPath(points, style.strokeWidth);
-    canvas.drawPath(path, basePaint);
-  }
-
-  /// 逐段按相邻点平均压感缩放宽度画线。
-  /// 接缝靠 StrokeCap.round 缓解;后续可升级为 perfect-freehand 多边形。
-  static void _drawVariableWidth(
-    Canvas canvas,
-    List<Point> points,
-    List<double> pressures,
-    Paint basePaint,
-    double baseWidth,
-  ) {
-    // 单点:画一个按压感缩放的圆点
-    if (points.length == 1) {
+    // 单点(点击):outline 为空,画圆点
+    if (outline.isEmpty) {
       final p = points[0];
-      final w = _widthForPressure(pressures[0], baseWidth);
-      canvas.drawCircle(Offset(p.x, p.y), w / 2, basePaint..strokeWidth = w);
+      final paint = style.toStrokePaint()..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(p.x, p.y), size / 2, paint);
       return;
     }
 
-    for (var i = 0; i < points.length - 1; i++) {
-      final avgPressure = (pressures[i] + pressures[i + 1]) / 2;
-      final width = _widthForPressure(avgPressure, baseWidth);
-      basePaint.strokeWidth = width;
-      canvas.drawLine(
-        Offset(points[i].x, points[i].y),
-        Offset(points[i + 1].x, points[i + 1].y),
-        basePaint,
-      );
-    }
-  }
-
-  /// 把压感(0.0~1.0)映射到实际像素宽度。
-  /// 用 sqrt 做非线性映射,让轻压也有可见宽度,重压不至于过粗。
-  static double _widthForPressure(double pressure, double baseWidth) {
-    final clamped = pressure.clamp(0.0, 1.0);
-    final scale = _minWidthScale + (1.0 - _minWidthScale) * dm.sqrt(clamped);
-    return baseWidth * scale;
+    // outline 是闭合多边形顶点,用 fill 绘制
+    final path = Path()..addPolygon(outline, true);
+    final paint = style.toStrokePaint()..style = PaintingStyle.fill;
+    canvas.drawPath(path, paint);
   }
 
   /// Builds a smooth cubic Bezier path through 3+ points using
-  /// Catmull-Rom to cubic Bezier conversion.
+  /// Catmull-Rom to cubic Bezier conversion (等粗退化路径用)。
   static Path _buildBezierPath(List<Point> points) {
     final path = Path()..moveTo(points[0].x, points[0].y);
 
-    // For each segment between consecutive points, compute cubic Bezier
-    // control points using Catmull-Rom interpolation.
     for (var i = 0; i < points.length - 1; i++) {
       final p0 = i > 0 ? points[i - 1] : points[i];
       final p1 = points[i];
       final p2 = points[i + 1];
       final p3 = i + 2 < points.length ? points[i + 2] : p2;
 
-      // Catmull-Rom to cubic Bezier control points
       final cp1x = p1.x + (p2.x - p0.x) / 6;
       final cp1y = p1.y + (p2.y - p0.y) / 6;
       final cp2x = p2.x - (p3.x - p1.x) / 6;
