@@ -1,0 +1,12 @@
+
+{
+  "name": "path_provider_ohos",
+  "version": "1.0.0",
+  "description": "HarmonyOS implementation of the path_provider Flutter plugin",
+  "main": "index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ohos/flutter_ohos": "file:libs/flutter.har",
+  }
+}

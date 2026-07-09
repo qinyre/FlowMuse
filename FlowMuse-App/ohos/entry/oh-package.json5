@@ -6,6 +6,9 @@
   "main": "",
   "author": "",
   "license": "",
-  "dependencies": {},
+  "dependencies": {
+    "path_provider_ohos": "file:../../tool/vendor/path_provider_ohos/ohos",
+    "shared_preferences_ohos": "file:../../tool/vendor/shared_preferences_ohos/ohos"
+  },
 }
 

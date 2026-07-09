@@ -615,6 +615,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.2.2"
+  path_provider_ohos:
+    dependency: "direct main"
+    description:
+      path: "tool/vendor/path_provider_ohos"
+      relative: true
+    source: path
+    version: "1.0.0"
   path_provider_platform_interface:
     dependency: transitive
     description:
