@@ -42,10 +42,23 @@ void main() {
     expect(element.pressures, isEmpty);
     expect(element.simulatePressure, isTrue);
   });
+
+  test('keeps freedraw active after completing a stroke', () {
+    final tool = FreedrawTool();
+
+    tool.onPointerDown(const Point(0, 0), context, pressure: 0.3);
+    final result = tool.onPointerUp(const Point(2, 2), context, pressure: 0.4);
+
+    expect(result, isA<AddElementResult>());
+  });
 }
 
 FreedrawElement _createdElement(ToolResult? result) {
-  final compound = result! as CompoundResult;
-  return (compound.results.whereType<AddElementResult>().single.element)
-      as FreedrawElement;
+  final addResult = switch (result) {
+    AddElementResult() => result,
+    CompoundResult(:final results) =>
+      results.whereType<AddElementResult>().single,
+    _ => throw StateError('Expected a freedraw element result'),
+  };
+  return addResult.element as FreedrawElement;
 }

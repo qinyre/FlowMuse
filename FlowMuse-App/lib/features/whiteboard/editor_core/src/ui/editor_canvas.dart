@@ -121,6 +121,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     onPointerDown: (event) {
                       controller.onPointerDown(
                         event.localPosition,
+                        kind: event.kind,
                         pressure: reliableStylusPressure(
                           kind: event.kind,
                           pressure: event.pressure,
@@ -134,6 +135,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                       controller.onPointerMove(
                         event.localPosition,
                         event.delta,
+                        kind: event.kind,
                         pressure: reliableStylusPressure(
                           kind: event.kind,
                           pressure: event.pressure,
@@ -146,6 +148,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     onPointerUp: (event) {
                       controller.onPointerUp(
                         event.localPosition,
+                        kind: event.kind,
                         pressure: reliableStylusPressure(
                           kind: event.kind,
                           pressure: event.pressure,

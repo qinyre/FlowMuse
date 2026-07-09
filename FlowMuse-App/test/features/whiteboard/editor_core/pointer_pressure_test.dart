@@ -41,4 +41,14 @@ void main() {
       );
     }
   });
+
+  test('routes stylus and mouse creation input but reserves touch for pan', () {
+    expect(shouldDispatchToCreationTool(PointerDeviceKind.stylus), isTrue);
+    expect(
+      shouldDispatchToCreationTool(PointerDeviceKind.invertedStylus),
+      isTrue,
+    );
+    expect(shouldDispatchToCreationTool(PointerDeviceKind.mouse), isTrue);
+    expect(shouldDispatchToCreationTool(PointerDeviceKind.touch), isFalse);
+  });
 }

@@ -709,6 +709,10 @@ class RoughCanvasAdapter implements RoughAdapter {
     return (a.x - b.x).abs() < eps && (a.y - b.y).abs() < eps;
   }
 
+  /// 压感灵敏度 (0.0–1.0)：控制压力对线条粗细的影响。
+  /// 由 [MarkdrawController.pressureSensitivity] 同步。
+  double pressureSensitivity = 0.7;
+
   @override
   void drawFreedraw(
     Canvas canvas,
@@ -725,6 +729,7 @@ class RoughCanvasAdapter implements RoughAdapter {
       points,
       style,
       pressures: usePressure ? pressures : null,
+      pressureSensitivity: pressureSensitivity,
     );
   }
 

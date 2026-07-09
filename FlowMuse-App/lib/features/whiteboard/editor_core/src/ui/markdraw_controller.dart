@@ -16,6 +16,8 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
+import 'pointer_pressure.dart';
+
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
 
@@ -107,6 +109,7 @@ class MarkdrawController extends ChangeNotifier {
   late CanvasLayout _layout;
   int? _gridSize;
   bool _objectsSnapMode = false;
+  double _pressureSensitivity = 0.7;
   String? _documentName;
 
   // Link editor state
@@ -228,6 +231,13 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Whether snap-to-objects alignment guides are enabled.
   bool get objectsSnapMode => _objectsSnapMode;
+
+  double get pressureSensitivity => _pressureSensitivity;
+  set pressureSensitivity(double value) {
+    _pressureSensitivity = value.clamp(0.0, 1.0);
+    _adapter.pressureSensitivity = _pressureSensitivity;
+    notifyListeners();
+  }
 
   /// The user-assigned document name, or null.
   String? get documentName => _documentName;
@@ -1084,7 +1094,12 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Handles pointer down: commits text edits, dispatches to tool, handles
   /// link-to-element mode and link icon clicks.
-  void onPointerDown(Offset localPosition, {double? pressure}) {
+  void onPointerDown(
+    Offset localPosition, {
+    double? pressure,
+    PointerDeviceKind kind = PointerDeviceKind.mouse,
+  }) {
+    if (isCreationTool && !shouldDispatchToCreationTool(kind)) return;
     restoreKeyboardFocusWhenStable();
     if (_editingTextElementId != null) {
       commitTextEditing();
@@ -1144,7 +1159,13 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Handles pointer move: dispatches to the active tool.
-  void onPointerMove(Offset localPosition, Offset delta, {double? pressure}) {
+  void onPointerMove(
+    Offset localPosition,
+    Offset delta, {
+    double? pressure,
+    PointerDeviceKind kind = PointerDeviceKind.mouse,
+  }) {
+    if (isCreationTool && !shouldDispatchToCreationTool(kind)) return;
     final point = toScene(localPosition);
     applyResult(
       _activeTool.onPointerMove(
@@ -1160,7 +1181,12 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Handles pointer up: dispatches to tool, detects double-click for
   /// text/label editing, and pushes drag history.
-  void onPointerUp(Offset localPosition, {double? pressure}) {
+  void onPointerUp(
+    Offset localPosition, {
+    double? pressure,
+    PointerDeviceKind kind = PointerDeviceKind.mouse,
+  }) {
+    if (isCreationTool && !shouldDispatchToCreationTool(kind)) return;
     final point = toScene(localPosition);
     final now = DateTime.now();
     final isDoubleClick =

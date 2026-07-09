@@ -28,4 +28,21 @@ void main() {
 
     expect(outline, isNotEmpty);
   });
+
+  test('pressure sensitivity changes the generated outline', () {
+    final low = FreedrawRenderer.buildOutline(
+      points,
+      strokeWidth: 4,
+      pressures: const [0.2, 0.4, 0.7, 1.0],
+      pressureSensitivity: 0,
+    );
+    final high = FreedrawRenderer.buildOutline(
+      points,
+      strokeWidth: 4,
+      pressures: const [0.2, 0.4, 0.7, 1.0],
+      pressureSensitivity: 1,
+    );
+
+    expect(high, isNot(equals(low)));
+  });
 }

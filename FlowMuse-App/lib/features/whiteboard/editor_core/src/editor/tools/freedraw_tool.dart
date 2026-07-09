@@ -85,11 +85,7 @@ class FreedrawTool implements Tool {
     );
 
     reset();
-    return CompoundResult([
-      AddElementResult(element),
-      SetSelectionResult({element.id}),
-      SwitchToolResult(ToolType.select),
-    ]);
+    return AddElementResult(element);
   }
 
   /// 记录压感。首点收到非 null pressure 即判定本次笔画为真压感,
