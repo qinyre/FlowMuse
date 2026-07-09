@@ -16,9 +16,13 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 /// Create one per editor and pass its methods as callbacks to
 /// [MarkdrawEditor].
 class MarkdrawFileHandler {
-  MarkdrawFileHandler({required this.controller});
+  MarkdrawFileHandler({
+    required this.controller,
+    PdfPageRenderer? pdfPageRenderer,
+  }) : _pdfPageRenderer = pdfPageRenderer ?? createDefaultPdfPageRenderer();
 
   final MarkdrawController controller;
+  final PdfPageRenderer _pdfPageRenderer;
 
   /// The native file path of the currently-open file (null on web).
   String? currentFilePath;
@@ -134,7 +138,7 @@ class MarkdrawFileHandler {
     Size canvasSize, {
     bool asBackground = false,
   }) async {
-    final importer = PdfImporter(renderer: createDefaultPdfPageRenderer());
+    final importer = PdfImporter(renderer: _pdfPageRenderer);
     await importer.importPdf(
       source: source,
       controller: controller,
