@@ -58,6 +58,23 @@ func main() {
 	if err := fileStore.EnsureBucket(ctx); err != nil {
 		log.Fatal(err)
 	}
+	mailer := auth.NewMailer(auth.MailConfig{
+		Host:     cfg.SMTPHost,
+		Port:     cfg.SMTPPort,
+		Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword,
+		From:     cfg.SMTPFrom,
+	})
+	authAPI := auth.NewHTTPAPI(
+		userStore,
+		fileStore,
+		tokenService,
+		mailer,
+		cfg.PublicAppURL,
+		cfg.RequestTimeout,
+		cfg.EmailVerifyTTL,
+		cfg.PasswordResetTTL,
+	)
 
 	socketOptions := socket.DefaultServerOptions()
 	socketOptions.SetCors(&types.Cors{
@@ -74,7 +91,8 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/socket.io/", io.ServeHandler(nil))
-	collab.NewHTTPAPI(sceneStore, fileStore, roomStore, userStore, tokenService, cfg.RequestTimeout).Register(mux)
+	authAPI.Register(mux)
+	collab.NewHTTPAPI(sceneStore, fileStore, roomStore, authAPI, cfg.RequestTimeout).Register(mux)
 
 	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)
 	if err := http.ListenAndServe(cfg.Addr, mux); err != nil {
