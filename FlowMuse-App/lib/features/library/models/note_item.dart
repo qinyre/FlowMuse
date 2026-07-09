@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 enum LibraryFilter { all, notes, pdf }
@@ -21,6 +23,7 @@ class NoteItem {
     this.tagIds = const [],
     this.subtitle,
     this.deletedAt,
+    this.coverThumbnailBytes,
   });
 
   final String id;
@@ -34,6 +37,7 @@ class NoteItem {
   final List<String> tagIds;
   final String? subtitle;
   final DateTime? deletedAt;
+  final Uint8List? coverThumbnailBytes;
 
   bool get isDeleted => deletedAt != null;
 
@@ -56,8 +60,10 @@ class NoteItem {
     List<String>? tagIds,
     String? subtitle,
     DateTime? deletedAt,
+    Uint8List? coverThumbnailBytes,
     bool clearNotebook = false,
     bool clearDeletedAt = false,
+    bool clearCoverThumbnail = false,
   }) {
     return NoteItem(
       id: id ?? this.id,
@@ -71,6 +77,9 @@ class NoteItem {
       tagIds: tagIds ?? this.tagIds,
       subtitle: subtitle ?? this.subtitle,
       deletedAt: clearDeletedAt ? null : deletedAt ?? this.deletedAt,
+      coverThumbnailBytes: clearCoverThumbnail
+          ? null
+          : coverThumbnailBytes ?? this.coverThumbnailBytes,
     );
   }
 }

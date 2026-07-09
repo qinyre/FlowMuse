@@ -2359,6 +2359,83 @@ class MarkdrawController extends ChangeNotifier {
     return image;
   }
 
+  /// Exports a card-sized cover thumbnail for the current note.
+  ///
+  /// Paged notes render the first page. Unbounded notes render the current
+  /// content bounds. Returns null for empty unbounded notes.
+  Future<Uint8List?> exportCoverThumbnail({
+    Size outputSize = const Size(308, 408),
+  }) async {
+    final sourceRect = _coverThumbnailSourceRect();
+    if (sourceRect == null || outputSize.width <= 0 || outputSize.height <= 0) {
+      return null;
+    }
+
+    const padding = 10.0;
+    final drawableWidth = math.max(1.0, outputSize.width - padding * 2);
+    final drawableHeight = math.max(1.0, outputSize.height - padding * 2);
+    final sourceWidth = math.max(1.0, sourceRect.width);
+    final sourceHeight = math.max(1.0, sourceRect.height);
+    final zoom = math.min(
+      drawableWidth / sourceWidth,
+      drawableHeight / sourceHeight,
+    );
+    final renderedWidth = sourceWidth * zoom;
+    final renderedHeight = sourceHeight * zoom;
+    final horizontalInset = (outputSize.width - renderedWidth) / 2;
+    final verticalInset = (outputSize.height - renderedHeight) / 2;
+    final viewport = ViewportState(
+      offset: Offset(
+        sourceRect.left - horizontalInset / zoom,
+        sourceRect.top - verticalInset / zoom,
+      ),
+      zoom: zoom,
+    );
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+      Offset.zero & outputSize,
+      Paint()..color = parseColor(_canvasBackgroundColor),
+    );
+    StaticCanvasPainter(
+      scene: _editorState.scene,
+      adapter: _adapter,
+      viewport: viewport,
+      layout: _layout,
+      resolvedImages: resolveImages(),
+      gridSize: _gridSize,
+      contentBounds: _contentBounds,
+    ).paint(canvas, outputSize);
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(
+      outputSize.width.ceil(),
+      outputSize.height.ceil(),
+    );
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    picture.dispose();
+    return byteData?.buffer.asUint8List();
+  }
+
+  Rect? _coverThumbnailSourceRect() {
+    if (_layout.isPaged) {
+      final layoutWithPage = _layout.ensurePage();
+      return layoutWithPage.pages.first.bounds;
+    }
+    final bounds = ExportBounds.compute(_editorState.scene, padding: 40);
+    if (bounds == null) {
+      return null;
+    }
+    return Rect.fromLTWH(
+      bounds.left,
+      bounds.top,
+      bounds.size.width,
+      bounds.size.height,
+    );
+  }
+
   /// Reads the pixel color at [screenPosition] from a pre-rendered [image].
   ///
   /// Returns a hex color string like '#ff0000', or null if out of bounds.

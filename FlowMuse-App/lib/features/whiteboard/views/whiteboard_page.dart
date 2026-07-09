@@ -206,6 +206,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         format: DocumentFormat.excalidraw,
       );
       await repository.saveScene(noteId, updatedContent);
+      await _touchNoteWithCurrentCover(noteId);
       await _broadcastCurrentScene(serializedScene: updatedContent);
     }
     _loadingScene = false;
@@ -255,7 +256,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       format: DocumentFormat.excalidraw,
     );
     await repository.saveScene(widget.noteId, content);
-    await ref.read(libraryIndexProvider.notifier).touchNote(widget.noteId);
+    await _touchNoteWithCurrentCover(widget.noteId);
     await _broadcastCurrentScene();
     if (!mounted) {
       return;
@@ -601,7 +602,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     await ref
         .read(whiteboardSceneRepositoryProvider)
         .saveScene(note.id, content);
-    await ref.read(libraryIndexProvider.notifier).touchNote(note.id);
+    await _touchNoteWithCurrentCover(note.id);
     _temporarySaved = true;
   }
 
@@ -621,7 +622,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     await ref
         .read(whiteboardSceneRepositoryProvider)
         .saveScene(note.id, content);
-    await ref.read(libraryIndexProvider.notifier).touchNote(note.id);
+    await _touchNoteWithCurrentCover(note.id);
     if (mounted) {
       runWhenUiStable(() {
         if (mounted) {
@@ -978,10 +979,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
     final repository = ref.read(whiteboardSceneRepositoryProvider);
     await repository.saveScene(widget.noteId, nextContent);
-    await ref.read(libraryIndexProvider.notifier).touchNote(widget.noteId);
+    await _touchNoteWithCurrentCover(widget.noteId);
     if (_canMutateWhiteboard) {
       ref.read(whiteboardViewModelProvider.notifier).markSaved();
     }
+  }
+
+  Future<void> _touchNoteWithCurrentCover(String noteId) async {
+    final coverThumbnailBytes = await _markdrawController
+        .exportCoverThumbnail();
+    await ref
+        .read(libraryIndexProvider.notifier)
+        .touchNote(
+          noteId,
+          coverThumbnailBytes: coverThumbnailBytes,
+          clearCoverThumbnail: coverThumbnailBytes == null,
+        );
   }
 
   bool get _canMutateWhiteboard => mounted && !_disposingOrLeaving;
