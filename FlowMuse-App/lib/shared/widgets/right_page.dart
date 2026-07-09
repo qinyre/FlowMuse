@@ -33,8 +33,10 @@ class RightPageScaffold extends StatelessWidget {
         final compact =
             chrome?.compact ?? constraints.maxWidth < shellCompactBreakpoint;
 
+        final pagePadding = AppSpacing.pagePadding(compact: compact);
+
         return Padding(
-          padding: AppSpacing.pagePadding(compact: compact),
+          padding: pagePadding.copyWith(top: 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

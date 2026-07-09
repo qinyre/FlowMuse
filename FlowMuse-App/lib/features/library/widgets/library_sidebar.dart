@@ -35,12 +35,12 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
 
     return SharedSidebar(
       header: SharedSidebarHeader(
-        leading: SharedSidebarIconButton(
-          tooltip: '收起侧边栏',
-          onPressed: widget.onCollapse,
-          icon: const Icon(LucideIcons.panelLeftClose),
-        ),
         trailing: [
+          SharedSidebarIconButton(
+            tooltip: '收起侧边栏',
+            onPressed: widget.onCollapse,
+            icon: const Icon(LucideIcons.panelLeftClose),
+          ),
           SharedSidebarIconButton(
             tooltip: '设置',
             onPressed: () => context.go(AppRoutes.settings),

@@ -57,12 +57,7 @@ class SharedSidebarHeader extends StatelessWidget {
     super.key,
     this.leading,
     this.trailing,
-    this.padding = const EdgeInsets.fromLTRB(
-      AppSpacing.sidebarInset,
-      AppSpacing.sidebarInset,
-      12,
-      12,
-    ),
+    this.padding = const EdgeInsets.fromLTRB(AppSpacing.sidebarInset, 0, 12, 0),
   });
 
   final Widget? leading;
@@ -77,20 +72,22 @@ class SharedSidebarHeader extends StatelessWidget {
       height: AppSpacing.shellHeaderHeight,
       child: Padding(
         padding: padding,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            leading ?? const SharedSidebarAvatar(),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var index = 0; index < actions.length; index++) ...[
-                  if (index > 0) const SizedBox(width: 0),
-                  actions[index],
+        child: Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              leading ?? const SharedSidebarAvatar(),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var index = 0; index < actions.length; index++) ...[
+                    if (index > 0) const SizedBox(width: 0),
+                    actions[index],
+                  ],
                 ],
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
