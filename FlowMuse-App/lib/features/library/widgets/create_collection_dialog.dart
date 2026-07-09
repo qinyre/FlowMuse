@@ -1,7 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/app_spacing.dart';
+
+// ---------------------------------------------------------------------------
+// 封面数据
+// ---------------------------------------------------------------------------
+
+class CoverItem {
+  const CoverItem({required this.id, required this.imageUrl, this.name = ''});
+
+  final String id;
+  final String imageUrl;
+  final String name;
+}
+
+/// 占位实现，后续替换为真实 API
+Future<List<CoverItem>> fetchCovers() async => const [];
 
 class CreateCollectionResult {
   const CreateCollectionResult({
@@ -95,6 +111,22 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
     );
   }
 
+  Future<void> _showCoverPicker() async {
+    final selected = await showModalBottomSheet<CoverItem>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) => const _CoverPickerSheet(),
+    );
+    if (selected != null && mounted) {
+      // 后续处理选中的封面图片
+      debugPrint('Selected cover: ${selected.id} - ${selected.imageUrl}');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -163,6 +195,23 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
                       onTap: () => setState(() => _selectedColor = color),
                     ),
                 ],
+              ),
+              const SizedBox(height: 14),
+              // 选择更多封面按钮
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: _showCoverPicker,
+                  icon: const Icon(LucideIcons.images, size: 18),
+                  label: const Text('选择更多封面'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF4F8F84),
+                    side: const BorderSide(color: Color(0xFF4F8F84)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppSpacing.radius),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  ),
+                ),
               ),
               const SizedBox(height: 26),
               Align(
@@ -342,6 +391,148 @@ class _ColorChoice extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 封面选择弹窗
+// ---------------------------------------------------------------------------
+
+class _CoverPickerSheet extends StatefulWidget {
+  const _CoverPickerSheet();
+
+  @override
+  State<_CoverPickerSheet> createState() => _CoverPickerSheetState();
+}
+
+class _CoverPickerSheetState extends State<_CoverPickerSheet> {
+  List<CoverItem> _covers = const [];
+  bool _loading = true;
+  CoverItem? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCovers();
+  }
+
+  Future<void> _loadCovers() async {
+    final covers = await fetchCovers();
+    if (mounted) {
+      setState(() {
+        _covers = covers;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.55,
+      minChildSize: 0.3,
+      maxChildSize: 0.85,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            // 顶部拖拽指示条
+            Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 8),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD0D5D2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            // 标题栏
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('取消', style: TextStyle(color: Color(0xFF4F8F84))),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      '选择封面',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1F2624),
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(_selected),
+                    child: const Text('确定', style: TextStyle(color: Color(0xFF4F8F84))),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFFE9EEEB)),
+            // 内容区域
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF4F8F84)))
+                  : _covers.isEmpty
+                      ? const Center(
+                          child: Text(
+                            '暂无更多封面',
+                            style: TextStyle(color: Color(0xFF8A908D), fontSize: 15),
+                          ),
+                        )
+                      : GridView.builder(
+                          controller: scrollController,
+                          padding: const EdgeInsets.all(20),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 14,
+                            mainAxisSpacing: 14,
+                            childAspectRatio: 0.75,
+                          ),
+                          itemCount: _covers.length,
+                          itemBuilder: (context, index) {
+                            final cover = _covers[index];
+                            final isSelected = _selected?.id == cover.id;
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() => _selected = cover);
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(AppSpacing.radius),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? const Color(0xFF4F8F84)
+                                        : const Color(0xFFE3E8E5),
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(AppSpacing.radius),
+                                  child: Image.network(
+                                    cover.imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const Center(
+                                      child: Icon(LucideIcons.imageOff, color: Color(0xFF8A908D)),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
