@@ -164,8 +164,6 @@ class MarkdrawController extends ChangeNotifier {
   Size? _lastCanvasSize;
   Bounds? _contentBounds;
   Size _canvasSize = Size.zero;
-  bool _pendingInitialPdfFit = false;
-  bool _pdfViewportUpdateScheduled = false;
 
   /// Current mouse position in screen coordinates; used for eraser cursor.
   Offset? mousePosition;
@@ -395,11 +393,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Caches the last known canvas size for link navigation from pointer events.
   set lastCanvasSize(Size? value) {
-    final sizeChanged = value != _lastCanvasSize;
     _lastCanvasSize = value;
-    if (sizeChanged) {
-      _schedulePdfViewportUpdate();
-    }
   }
 
   set contentBounds(Bounds? value) {
@@ -756,42 +750,6 @@ class MarkdrawController extends ChangeNotifier {
       );
     }
     return bounds;
-  }
-
-  void _schedulePdfViewportUpdate() {
-    final canvasSize = _lastCanvasSize;
-    if (_pdfViewportUpdateScheduled ||
-        canvasSize == null ||
-        canvasSize.width <= 0 ||
-        canvasSize.height <= 0 ||
-        _pdfContentBounds == null) {
-      return;
-    }
-    _pdfViewportUpdateScheduled = true;
-    runWhenUiStable(() {
-      _pdfViewportUpdateScheduled = false;
-      if (_disposed) return;
-      final currentCanvasSize = _lastCanvasSize;
-      final bounds = _pdfContentBounds;
-      if (currentCanvasSize == null || bounds == null) return;
-
-      var viewport = _editorState.viewport;
-      if (_pendingInitialPdfFit) {
-        final firstPdfPage = _layout.pages.firstWhere(
-          (page) => page.source == 'pdf',
-        );
-        viewport = _fitRectViewport(firstPdfPage.bounds, currentCanvasSize);
-        _pendingInitialPdfFit = false;
-      }
-      final constrained = clampViewportToBounds(
-        viewport,
-        bounds,
-        currentCanvasSize,
-      );
-      if (constrained != _editorState.viewport) {
-        applyResult(UpdateViewportResult(constrained));
-      }
-    });
   }
 
   void _syncToSystemClipboard(ToolResult result) {
@@ -1834,8 +1792,6 @@ class MarkdrawController extends ChangeNotifier {
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
     _syncLayoutFromScene();
-    _pendingInitialPdfFit = _pdfContentBounds != null;
-    _schedulePdfViewportUpdate();
     _editorState = _editorState.copyWith(
       scene: _sceneWithLayoutPages(validated),
     );
@@ -2840,19 +2796,22 @@ class MarkdrawController extends ChangeNotifier {
     if (_layout.isPaged) {
       _layout = _layout.copyWith(pages: nextPages);
     }
-    if (asBackground) {
-      _pendingInitialPdfFit = true;
-      _schedulePdfViewportUpdate();
-    }
     if (documentName != null && documentName.trim().isNotEmpty) {
       _documentName = documentName.trim();
     }
     pushHistory();
     applyResult(CompoundResult([...results, SetSelectionResult({})]));
+    final effectiveCanvasSize = _canvasSize.width > 0 && _canvasSize.height > 0
+        ? _canvasSize
+        : canvasSize;
+    if (asBackground) {
+      this.canvasSize = effectiveCanvasSize;
+      contentBounds = _pdfContentBounds;
+    }
     setViewport(
       _fitRectViewport(
         Rect.fromLTWH(0, 0, pages.first.width, pages.first.height),
-        canvasSize,
+        effectiveCanvasSize,
       ),
     );
   }
@@ -2864,7 +2823,7 @@ class MarkdrawController extends ChangeNotifier {
     final widthZoom = rect.width <= 0 ? 1.0 : canvasSize.width / rect.width;
     final heightZoom = rect.height <= 0 ? 1.0 : canvasSize.height / rect.height;
     final zoom = math
-        .min(widthZoom, heightZoom)
+        .max(widthZoom, heightZoom)
         .clamp(_config.minZoom, _config.maxZoom);
     return ViewportState(offset: rect.topLeft, zoom: zoom);
   }

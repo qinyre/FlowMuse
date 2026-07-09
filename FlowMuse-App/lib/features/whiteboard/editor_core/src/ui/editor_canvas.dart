@@ -98,6 +98,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
             _lastReportedSize = canvasSize;
             runWhenUiStable(() {
               if (mounted) {
+                controller.canvasSize = canvasSize;
                 widget.onVisibleSceneBoundsChanged?.call(canvasSize);
               }
             });

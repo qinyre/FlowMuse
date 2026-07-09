@@ -193,6 +193,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
           noteId: noteId,
           canvasSize: const Size(1000, 800),
         );
+    if (note?.kind == LibraryFilter.pdf && !consumedPdf) {
+      _restorePdfViewportBounds();
+    } else if (note?.kind != LibraryFilter.pdf) {
+      _markdrawController.contentBounds = null;
+    }
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote pdfConsumed=$consumedPdf',
     );
@@ -209,6 +214,23 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (room != null) {
       unawaited(_joinCollaboration(room));
     }
+  }
+
+  void _restorePdfViewportBounds() {
+    final controller = _markdrawController;
+    final bounds = PdfNoteConsumer.pdfBackgroundBounds(controller.currentScene);
+    controller.contentBounds = bounds;
+    if (bounds == null) {
+      return;
+    }
+    final canvasSize =
+        controller.canvasSize.width > 0 && controller.canvasSize.height > 0
+        ? controller.canvasSize
+        : const Size(1000, 800);
+    controller.canvasSize = canvasSize;
+    controller.setViewport(
+      PdfNoteConsumer.fitFirstPageViewport(controller.currentScene, canvasSize),
+    );
   }
 
   Future<void> _saveMarkdrawScene() async {

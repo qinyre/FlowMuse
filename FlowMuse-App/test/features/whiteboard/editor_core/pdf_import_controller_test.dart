@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flow_muse/features/whiteboard/pdf_note_import/pdf_note_consumer.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -90,17 +91,23 @@ void main() {
       asBackground: true,
     );
 
-    controller.lastCanvasSize = const Size(400, 600);
+    controller.canvasSize = const Size(400, 600);
+    controller.setViewport(
+      PdfNoteConsumer.fitFirstPageViewport(
+        controller.currentScene,
+        controller.canvasSize,
+      ),
+    );
 
     expect(controller.layout.isPaged, isTrue);
     expect(
       controller.layout.pages.every((page) => page.source == 'pdf'),
       isTrue,
     );
-    expect(controller.editorState.viewport.zoom, closeTo(0.75, 0.001));
+    expect(controller.editorState.viewport.zoom, closeTo(1, 0.001));
     expect(
       controller.editorState.viewport.visibleRect(const Size(400, 600)),
-      const Rect.fromLTWH(0, 0, 533.3333333333334, 800),
+      const Rect.fromLTWH(0, 0, 400, 600),
     );
 
     controller.applyResult(
@@ -140,14 +147,24 @@ void main() {
 
     final restored = MarkdrawController();
     addTearDown(restored.dispose);
-    restored.lastCanvasSize = const Size(400, 600);
+    restored.canvasSize = const Size(400, 600);
     restored.loadFromContent(
       source.serializeScene(format: DocumentFormat.excalidraw),
       'saved.excalidraw',
     );
 
     expect(restored.layout.pages.any((page) => page.source == 'pdf'), isTrue);
-    expect(restored.editorState.viewport.zoom, closeTo(0.75, 0.001));
+    restored.contentBounds = PdfNoteConsumer.pdfBackgroundBounds(
+      restored.currentScene,
+    );
+    restored.setViewport(
+      PdfNoteConsumer.fitFirstPageViewport(
+        restored.currentScene,
+        restored.canvasSize,
+      ),
+    );
+
+    expect(restored.editorState.viewport.zoom, closeTo(1, 0.001));
     expect(restored.editorState.viewport.offset.dy, closeTo(0, 0.001));
   });
 }
