@@ -140,9 +140,12 @@ class SharedSidebarIconButton extends StatelessWidget {
     return IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      constraints: const BoxConstraints.tightFor(
+        width: AppSpacing.shellHeaderIconButtonSize,
+        height: AppSpacing.shellHeaderIconButtonSize,
+      ),
       padding: EdgeInsets.zero,
-      iconSize: 18,
+      iconSize: AppSpacing.shellHeaderIconSize,
       color: Theme.of(context).colorScheme.onSurfaceVariant,
       icon: icon,
     );

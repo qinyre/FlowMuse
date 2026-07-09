@@ -7,6 +7,8 @@ class AppSpacing {
   static const pageInset = 32.0;
   static const pageTopInset = 32.0;
   static const shellHeaderHeight = 88.0;
+  static const shellHeaderIconButtonSize = 32.0;
+  static const shellHeaderIconSize = 18.0;
   static const headerToContent = 32.0;
   static const sectionGap = 24.0;
   static const listGap = 12.0;

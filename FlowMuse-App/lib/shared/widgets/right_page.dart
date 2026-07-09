@@ -71,7 +71,8 @@ class RightPageHeader extends StatelessWidget {
   final List<Widget> actions;
   final bool forceCenterTitle;
 
-  static const _controlWidth = 88.0;
+  static const _controlWidth =
+      AppSpacing.shellHeaderIconButtonSize * 2 + AppSpacing.controlGap;
 
   @override
   Widget build(BuildContext context) {
@@ -158,7 +159,43 @@ class RightPageHeader extends StatelessWidget {
     if (count == 0) {
       return 0;
     }
-    return count * 48.0 + (count - 1) * AppSpacing.controlGap;
+    return count * AppSpacing.shellHeaderIconButtonSize +
+        (count - 1) * AppSpacing.controlGap;
+  }
+}
+
+class _RightPageIconButtonTheme extends StatelessWidget {
+  const _RightPageIconButtonTheme({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconTheme.merge(
+      data: const IconThemeData(size: AppSpacing.shellHeaderIconSize),
+      child: IconButtonTheme(
+        data: IconButtonThemeData(
+          style: ButtonStyle(
+            fixedSize: const WidgetStatePropertyAll(
+              Size.square(AppSpacing.shellHeaderIconButtonSize),
+            ),
+            minimumSize: const WidgetStatePropertyAll(
+              Size.square(AppSpacing.shellHeaderIconButtonSize),
+            ),
+            maximumSize: const WidgetStatePropertyAll(
+              Size.square(AppSpacing.shellHeaderIconButtonSize),
+            ),
+            padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+            iconSize: const WidgetStatePropertyAll(
+              AppSpacing.shellHeaderIconSize,
+            ),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+        child: child,
+      ),
+    );
   }
 }
 
@@ -175,8 +212,8 @@ class _RightPageTitle extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       textAlign: textAlign,
-      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-        fontWeight: FontWeight.w600,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        fontWeight: FontWeight.w700,
         color: const Color(0xFF1F2624),
       ),
     );
@@ -190,21 +227,23 @@ class _RightPageSidebarControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          tooltip: '打开侧边栏',
-          onPressed: onOpenSidebar,
-          icon: const Icon(LucideIcons.panelLeftOpen),
-        ),
-        const SizedBox(width: AppSpacing.controlGap),
-        IconButton(
-          tooltip: '设置',
-          onPressed: () => context.go(AppRoutes.settings),
-          icon: const Icon(LucideIcons.settings),
-        ),
-      ],
+    return _RightPageIconButtonTheme(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: '打开侧边栏',
+            onPressed: onOpenSidebar,
+            icon: const Icon(LucideIcons.panelLeftOpen),
+          ),
+          const SizedBox(width: AppSpacing.controlGap),
+          IconButton(
+            tooltip: '设置',
+            onPressed: () => context.go(AppRoutes.settings),
+            icon: const Icon(LucideIcons.settings),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -216,14 +255,16 @@ class _RightPageActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var index = 0; index < actions.length; index++) ...[
-          if (index > 0) const SizedBox(width: AppSpacing.controlGap),
-          actions[index],
+    return _RightPageIconButtonTheme(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var index = 0; index < actions.length; index++) ...[
+            if (index > 0) const SizedBox(width: AppSpacing.controlGap),
+            actions[index],
+          ],
         ],
-      ],
+      ),
     );
   }
 }
