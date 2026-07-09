@@ -74,11 +74,17 @@ class SqliteLibraryRepository implements LibraryRepository {
 
   @override
   Future<LibraryIndex> loadIndex() async {
+    debugPrint('[FlowMuseCreateNote] LibraryRepository.loadIndex start');
     final db = await _openDatabase();
     final noteRows = await db.query('notes', orderBy: 'updated_at DESC');
     final notebookRows = await db.query('notebooks', orderBy: 'sort_order ASC');
     final tagRows = await db.query('tags', orderBy: 'sort_order ASC');
     final noteTagRows = await db.query('note_tags');
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryRepository.loadIndex rows '
+      'notes=${noteRows.length} notebooks=${notebookRows.length} '
+      'tags=${tagRows.length} noteTags=${noteTagRows.length}',
+    );
 
     final tagsByNoteId = <String, List<String>>{};
     for (final row in noteTagRows) {
@@ -107,6 +113,12 @@ class SqliteLibraryRepository implements LibraryRepository {
     String? notebookId,
     List<String> tagIds = const [],
   }) async {
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryRepository.createNote start '
+      'kind=${kind.name} noteType=${noteType.name} '
+      'pageTemplate=${pageTemplate.name} title="$title" '
+      'notebookId=$notebookId tagIds=${tagIds.join(',')}',
+    );
     final now = DateTime.now();
     final trimmedTitle = title?.trim();
     final db = await _openDatabase();
@@ -134,11 +146,19 @@ class SqliteLibraryRepository implements LibraryRepository {
         await txn.insert('note_tags', {'note_id': note.id, 'tag_id': tagId});
       }
     });
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryRepository.createNote inserted '
+      'noteId=${note.id} title="${note.title}" '
+      'noteType=${note.noteType.name} pageTemplate=${note.pageTemplate.name}',
+    );
     return note;
   }
 
   @override
   Future<void> ensureNote(String noteId) async {
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryRepository.ensureNote start $noteId',
+    );
     final db = await _openDatabase();
     final existing = await db.query(
       'notes',
@@ -148,6 +168,9 @@ class SqliteLibraryRepository implements LibraryRepository {
       limit: 1,
     );
     if (existing.isNotEmpty) {
+      debugPrint(
+        '[FlowMuseCreateNote] LibraryRepository.ensureNote exists $noteId',
+      );
       return;
     }
     final now = DateTime.now();
@@ -163,6 +186,9 @@ class SqliteLibraryRepository implements LibraryRepository {
               _noteColors[now.millisecondsSinceEpoch % _noteColors.length],
         ),
       ),
+    );
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryRepository.ensureNote inserted $noteId',
     );
   }
 
@@ -515,6 +541,7 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     String? notebookId,
     List<String> tagIds = const [],
   }) async {
+    debugPrint('[FlowMuseCreateNote] LibraryIndexNotifier.createNote start');
     final note = await _repository.createNote(
       kind: kind,
       noteType: noteType,
@@ -525,12 +552,23 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
       tagIds: tagIds,
     );
     await refresh();
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryIndexNotifier.createNote refreshed '
+      'noteId=${note.id} stateHasError=${state.hasError}',
+    );
     return note;
   }
 
   Future<void> ensureNote(String noteId) async {
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryIndexNotifier.ensureNote start $noteId',
+    );
     await _repository.ensureNote(noteId);
     await refresh();
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryIndexNotifier.ensureNote refreshed '
+      '$noteId stateHasError=${state.hasError}',
+    );
   }
 
   Future<void> renameNote(String noteId, String title) async {
@@ -627,8 +665,14 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
   }
 
   Future<void> refresh() async {
+    debugPrint('[FlowMuseCreateNote] LibraryIndexNotifier.refresh start');
     state = const AsyncLoading<LibraryIndex>();
     state = await AsyncValue.guard(_repository.loadIndex);
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryIndexNotifier.refresh done '
+      'hasValue=${state.hasValue} hasError=${state.hasError} '
+      'error=${state.error}',
+    );
   }
 }
 

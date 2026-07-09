@@ -39,6 +39,11 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     if (_creating) {
       return;
     }
+    debugPrint(
+      '[FlowMuseCreateNote] CreateNotePage.create pressed '
+      'title="$_title" noteType=${_noteType.name} '
+      'pageTemplate=${_pageTemplate.name}',
+    );
     setState(() => _creating = true);
     try {
       final note = await ref
@@ -48,10 +53,26 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
             pageTemplate: _pageTemplate,
             title: _title,
           );
+      debugPrint(
+        '[FlowMuseCreateNote] CreateNotePage.create success '
+        'noteId=${note.id}',
+      );
       if (!mounted) {
         return;
       }
       context.push(AppRoutes.whiteboardPath(noteId: note.id));
+    } catch (error, stackTrace) {
+      debugPrint('[FlowMuseCreateNote] CreateNotePage.create failed: $error');
+      debugPrintStack(
+        label: '[FlowMuseCreateNote] CreateNotePage.create stack',
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('创建失败：$error')));
+      }
+      rethrow;
     } finally {
       if (mounted) {
         setState(() => _creating = false);
@@ -63,6 +84,10 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     if (_creating) {
       return;
     }
+    debugPrint(
+      '[FlowMuseCreateNote] CreateNotePage.importPdf pressed '
+      'noteType=${_noteType.name} pageTemplate=${_pageTemplate.name}',
+    );
     setState(() => _creating = true);
     try {
       final note = await ref
@@ -86,9 +111,28 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
             },
           );
       if (!mounted || note == null) {
+        debugPrint('[FlowMuseCreateNote] CreateNotePage.importPdf canceled');
         return;
       }
+      debugPrint(
+        '[FlowMuseCreateNote] CreateNotePage.importPdf success '
+        'noteId=${note.id}',
+      );
       context.push(AppRoutes.whiteboardPath(noteId: note.id));
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[FlowMuseCreateNote] CreateNotePage.importPdf failed: $error',
+      );
+      debugPrintStack(
+        label: '[FlowMuseCreateNote] CreateNotePage.importPdf stack',
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导入失败：$error')));
+      }
+      rethrow;
     } finally {
       if (mounted) {
         setState(() => _creating = false);

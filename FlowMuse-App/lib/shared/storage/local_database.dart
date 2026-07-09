@@ -1,4 +1,5 @@
 import 'package:path/path.dart' as path;
+import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'local_database_path.dart';
@@ -20,17 +21,28 @@ class LocalDatabase {
     final factory = await createLocalDatabaseFactory();
     final directory = await localDatabaseDirectory();
     final databasePath = path.join(directory, databaseName);
+    debugPrint('[FlowMuseCreateNote] LocalDatabase.open path=$databasePath');
     final database = await factory.openDatabase(
       databasePath,
       options: OpenDatabaseOptions(
         version: databaseVersion,
         onConfigure: (db) async {
+          debugPrint('[FlowMuseCreateNote] LocalDatabase.onConfigure');
           await db.execute('PRAGMA foreign_keys = ON');
         },
         onCreate: (db, version) async {
+          debugPrint(
+            '[FlowMuseCreateNote] LocalDatabase.onCreate version=$version',
+          );
           await _createSchema(db);
         },
       ),
+    );
+    final tables = await database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+    );
+    debugPrint(
+      '[FlowMuseCreateNote] LocalDatabase.opened tables=${tables.map((row) => row['name']).join(',')}',
     );
     _database = database;
     return database;

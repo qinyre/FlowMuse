@@ -113,6 +113,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   Future<void> _openNote() async {
     final generation = ++_openGeneration;
     _disposingOrLeaving = false;
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote start '
+      'noteId=${widget.noteId} temporary=${widget.temporaryCollaboration} '
+      'generation=$generation',
+    );
     if (widget.temporaryCollaboration) {
       _loadingScene = true;
       _markdrawController.closeTransientUiForSceneReplace();
@@ -129,26 +134,56 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
     final noteId = widget.noteId;
     await ref.read(libraryIndexProvider.notifier).ensureNote(noteId);
+    debugPrint('[FlowMuseCreateNote] WhiteboardPage.openNote ensured $noteId');
     final libraryIndex = await ref.read(libraryIndexProvider.future);
     final note = _noteById(libraryIndex.notes, noteId);
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote note '
+      'found=${note != null} noteType=${note?.noteType.name} '
+      'pageTemplate=${note?.pageTemplate.name}',
+    );
     _markdrawController.setLayout(_layoutForNote(note));
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote layout '
+      'type=${_markdrawController.layout.type.name} '
+      'pages=${_markdrawController.layout.pages.length}',
+    );
     if (!mounted || generation != _openGeneration || noteId != widget.noteId) {
+      debugPrint(
+        '[FlowMuseCreateNote] WhiteboardPage.openNote aborted before VM open',
+      );
       return;
     }
     await ref
         .read(whiteboardViewModelProvider.notifier)
         .openNote(noteId: noteId);
+    debugPrint('[FlowMuseCreateNote] WhiteboardPage.openNote viewModel opened');
     if (!mounted || generation != _openGeneration || noteId != widget.noteId) {
+      debugPrint(
+        '[FlowMuseCreateNote] WhiteboardPage.openNote aborted before scene load',
+      );
       return;
     }
     final repository = ref.read(whiteboardSceneRepositoryProvider);
     final content = await repository.loadScene(noteId);
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote scene loaded '
+      'length=${content.length}',
+    );
     if (!mounted || generation != _openGeneration || noteId != widget.noteId) {
+      debugPrint(
+        '[FlowMuseCreateNote] WhiteboardPage.openNote aborted before controller load',
+      );
       return;
     }
     _loadingScene = true;
     _markdrawController.closeTransientUiForSceneReplace();
     _markdrawController.loadFromContent(content, '$noteId.excalidraw');
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote controller loaded '
+      'layout=${_markdrawController.layout.type.name} '
+      'pages=${_markdrawController.layout.pages.length}',
+    );
     final consumedPdf = await ref
         .read(pdfNoteConsumerProvider)
         .consume(
@@ -158,6 +193,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
           noteId: noteId,
           canvasSize: const Size(1000, 800),
         );
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote pdfConsumed=$consumedPdf',
+    );
     if (consumedPdf) {
       final updatedContent = _markdrawController.serializeScene(
         format: DocumentFormat.excalidraw,
@@ -166,6 +204,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       await _broadcastCurrentScene(serializedScene: updatedContent);
     }
     _loadingScene = false;
+    debugPrint('[FlowMuseCreateNote] WhiteboardPage.openNote done $noteId');
     final room = widget.initialRoom;
     if (room != null) {
       unawaited(_joinCollaboration(room));

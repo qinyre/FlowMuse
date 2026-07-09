@@ -1,4 +1,5 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../shared/storage/local_database.dart';
 import '../collaboration/models/excalidraw_scene.dart';
@@ -30,6 +31,9 @@ class SqliteWhiteboardSceneRepository implements WhiteboardSceneRepository {
 
   @override
   Future<String> loadScene(String noteId) async {
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardSceneRepository.loadScene start $noteId',
+    );
     final db = await _openDatabase();
     final rows = await db.query(
       'note_scenes',
@@ -40,13 +44,24 @@ class SqliteWhiteboardSceneRepository implements WhiteboardSceneRepository {
     );
     final raw = rows.isEmpty ? null : rows.first['content'] as String?;
     if (raw == null || raw.isEmpty) {
+      debugPrint(
+        '[FlowMuseCreateNote] WhiteboardSceneRepository.loadScene empty $noteId',
+      );
       return emptyExcalidrawSceneContent;
     }
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardSceneRepository.loadScene hit '
+      '$noteId length=${raw.length}',
+    );
     return raw;
   }
 
   @override
   Future<void> saveScene(String noteId, String content) async {
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardSceneRepository.saveScene '
+      '$noteId length=${content.length}',
+    );
     final db = await _openDatabase();
     await db.insert('note_scenes', {
       'note_id': noteId,
