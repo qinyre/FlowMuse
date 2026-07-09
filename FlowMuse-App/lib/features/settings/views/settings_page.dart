@@ -124,7 +124,7 @@ class _SettingsSidebar extends StatelessWidget {
         trailing: [
           Text(
             '设置',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w700,
               color: colorScheme.onSurface,
             ),

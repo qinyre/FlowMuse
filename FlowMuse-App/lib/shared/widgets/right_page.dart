@@ -46,7 +46,6 @@ class RightPageScaffold extends StatelessWidget {
                 actions: actions,
                 forceCenterTitle: forceCenterTitle,
               ),
-              const SizedBox(height: AppSpacing.headerToContent),
               for (final child in topContent) child,
               Expanded(child: body),
             ],
@@ -212,7 +211,7 @@ class _RightPageTitle extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       textAlign: textAlign,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+      style: Theme.of(context).textTheme.titleLarge?.copyWith(
         fontWeight: FontWeight.w700,
         color: const Color(0xFF1F2624),
       ),

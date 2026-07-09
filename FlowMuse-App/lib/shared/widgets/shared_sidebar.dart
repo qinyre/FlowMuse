@@ -110,14 +110,14 @@ class SharedSidebarAvatar extends ConsumerWidget {
         customBorder: const CircleBorder(),
         child: account.status == AccountStatus.loading
             ? const SizedBox(
-                width: 34,
-                height: 34,
+                width: 38,
+                height: 38,
                 child: Padding(
-                  padding: EdgeInsets.all(10),
+                  padding: EdgeInsets.all(11),
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               )
-            : AccountAvatar(label: label, user: account.user, radius: 17),
+            : AccountAvatar(label: label, user: account.user, radius: 19),
       ),
     );
   }
