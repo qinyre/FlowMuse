@@ -5,10 +5,12 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha512"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -50,19 +52,31 @@ func (r *MyScriptRecognizer) Recognize(ctx context.Context, request RecognizeReq
 		return RecognizeResponse{}, err
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
+	httpRequest.Header.Set("Accept", "application/json,text/plain")
 	httpRequest.Header.Set("applicationKey", r.config.AppKey)
-	httpRequest.Header.Set("hmac", hmacSignature(r.config.HMACKey, body))
+	httpRequest.Header.Set("hmac", hmacSignature(r.config.AppKey, r.config.HMACKey, body))
 
 	response, err := r.client.Do(httpRequest)
 	if err != nil {
 		return RecognizeResponse{}, err
 	}
 	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		return RecognizeResponse{}, err
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return RecognizeResponse{}, fmt.Errorf("MyScript recognition failed: HTTP %d", response.StatusCode)
+		return RecognizeResponse{}, fmt.Errorf(
+			"MyScript recognition failed: HTTP %d: %s",
+			response.StatusCode,
+			strings.TrimSpace(string(responseBody)),
+		)
+	}
+	if text := strings.TrimSpace(string(responseBody)); text != "" && !json.Valid(responseBody) {
+		return RecognizeResponse{Elements: []RecognizedElement{textElement(text, request.Bounds)}}, nil
 	}
 	var raw map[string]any
-	if err := json.NewDecoder(response.Body).Decode(&raw); err != nil {
+	if err := json.Unmarshal(responseBody, &raw); err != nil {
 		return RecognizeResponse{}, err
 	}
 	result := parseMyScriptResponse(raw, request.Bounds)
@@ -78,43 +92,53 @@ func (r *MyScriptRecognizer) toMyScriptRequest(request RecognizeRequest) map[str
 		x := make([]float64, 0, len(stroke.Points))
 		y := make([]float64, 0, len(stroke.Points))
 		t := make([]int64, 0, len(stroke.Points))
-		for _, point := range stroke.Points {
+		for i, point := range stroke.Points {
 			x = append(x, point.X-request.Bounds.X)
 			y = append(y, point.Y-request.Bounds.Y)
-			t = append(t, point.T)
+			if point.T > 0 {
+				t = append(t, point.T)
+			} else {
+				t = append(t, int64(i*10))
+			}
 		}
 		strokes = append(strokes, map[string]any{
-			"id": stroke.ID,
-			"x":  x,
-			"y":  y,
-			"t":  t,
+			"id":          stroke.ID,
+			"pointerType": "pen",
+			"x":           x,
+			"y":           y,
+			"t":           t,
 		})
 	}
 	return map[string]any{
 		"configuration": map[string]any{
-			"lang":         "zh_CN",
-			"contentTypes": []string{"Text", "Math", "Diagram"},
-		},
-		"content": map[string]any{
-			"type":    "Raw Content",
-			"strokes": strokes,
-			"bounds": map[string]any{
-				"x":      request.Bounds.X,
-				"y":      request.Bounds.Y,
-				"width":  request.Bounds.Width,
-				"height": request.Bounds.Height,
+			"lang": "zh_CN",
+			"text": map[string]any{
+				"mimeTypes": []string{"text/plain", "application/vnd.myscript.jiix"},
 			},
 		},
+		"contentType":  "Text",
+		"xDPI":         96,
+		"yDPI":         96,
+		"width":        request.Bounds.Width,
+		"height":       request.Bounds.Height,
+		"strokeGroups": []map[string]any{{"strokes": strokes}},
 	}
 }
 
-func hmacSignature(key string, body []byte) string {
-	mac := hmac.New(sha512.New, []byte(key))
-	mac.Write(body)
-	return hex.EncodeToString(mac.Sum(nil))
+func hmacSignature(appKey string, hmacKey string, body []byte) string {
+	key := []byte(appKey + hmacKey)
+	message := []byte(base64.StdEncoding.EncodeToString(body))
+	mac := hmac.New(sha512.New, key)
+	mac.Write(message)
+	return strings.ToUpper(hex.EncodeToString(mac.Sum(nil)))
 }
 
 func parseMyScriptResponse(raw map[string]any, bounds InkBounds) RecognizeResponse {
+	if exports, ok := raw["exports"].(map[string]any); ok {
+		if text := firstString(exports, "text/plain"); text != "" {
+			return RecognizeResponse{Elements: []RecognizedElement{textElement(text, bounds)}}
+		}
+	}
 	if elements, ok := raw["elements"].([]any); ok {
 		return RecognizeResponse{Elements: parseRawElements(elements, bounds)}
 	}
