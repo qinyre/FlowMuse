@@ -85,40 +85,11 @@ class DesktopToolbar extends StatelessWidget {
                     tooltip: '导入图片 (9)',
                     onPressed: onImportImage!,
                   ),
-                _toolbarButton(
-                  cs: cs,
-                  iconWidget: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      iconWidgetFor(
-                        type,
-                        color: activeType == type
-                            ? cs.primary
-                            : cs.onSurfaceVariant,
-                        size: 20,
-                        isActive: activeType == type,
-                      ),
-                      if (shortcutForToolType(type) != null)
-                        Positioned(
-                          right: -6,
-                          bottom: -3,
-                          child: Text(
-                            shortcutForToolType(type)!,
-                            style: TextStyle(
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
-                              color: activeType == type
-                                  ? cs.primary
-                                  : cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  tooltip:
-                      '${labelForToolType(type)} (${shortcutForToolType(type)})',
+                _ToolButton(
+                  type: type,
+                  activeType: activeType,
+                  colorScheme: cs,
                   onPressed: () => controller.switchTool(type),
-                  isActive: activeType == type,
                 ),
               ],
             if (showMarkdownButton) ...[
@@ -184,6 +155,77 @@ class DesktopToolbar extends StatelessWidget {
           width: 1,
           thickness: 1,
           color: Theme.of(context).dividerColor,
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolButton extends StatelessWidget {
+  const _ToolButton({
+    required this.type,
+    required this.activeType,
+    required this.colorScheme,
+    required this.onPressed,
+  });
+
+  final ToolType type;
+  final ToolType activeType;
+  final ColorScheme colorScheme;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final shortcut = shortcutForToolType(type);
+    final label = labelForToolType(type);
+    final active = activeType == type;
+    final tooltip = shortcut == null ? label : '$label ($shortcut)';
+    return Semantics(
+      label: tooltip,
+      button: true,
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: active ? colorScheme.primaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: onPressed,
+            child: SizedBox(
+              width: 32,
+              height: 32,
+              child: Center(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    iconWidgetFor(
+                      type,
+                      color: active
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
+                      size: 20,
+                      isActive: active,
+                    ),
+                    if (shortcut != null)
+                      Positioned(
+                        right: -6,
+                        bottom: -3,
+                        child: Text(
+                          shortcut,
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: active
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

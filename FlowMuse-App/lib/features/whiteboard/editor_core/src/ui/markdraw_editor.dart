@@ -48,6 +48,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
     this.onDocumentRenamed,
+    this.onRecognizeInk,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -94,6 +95,8 @@ class MarkdrawEditor extends StatefulWidget {
   onPointerPresence;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
   final VoidCallback? onDocumentRenamed;
+  final Future<InkRecognitionResult> Function(InkRecognitionRequest)?
+  onRecognizeInk;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -111,6 +114,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     super.initState();
     _controller.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
+    _controller.onRecognizeInk = widget.onRecognizeInk;
     _controller.restoreKeyboardFocusWhenStable();
   }
 
@@ -121,6 +125,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       oldWidget.controller?.removeListener(_onControllerChanged);
       _controller.addListener(_onControllerChanged);
       _controller.onSceneChanged = widget.onSceneChanged;
+      _controller.onRecognizeInk = widget.onRecognizeInk;
+    } else if (widget.onRecognizeInk != oldWidget.onRecognizeInk) {
+      _controller.onRecognizeInk = widget.onRecognizeInk;
     }
   }
 
