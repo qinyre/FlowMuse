@@ -25,3 +25,14 @@ void downloadBytes(
   List<int> bytes, {
   String mimeType = 'application/octet-stream',
 }) => throw UnsupportedError('downloadBytes is web-only');
+
+/// Saves raw bytes to the system temp directory and returns the saved path.
+///
+/// Used as a fallback when [FilePicker]'s saveFile is unavailable (e.g., on
+/// HarmonyOS where the plugin is not auto-registered and no native channel
+/// handler exists).
+String saveBytesToTempFile(String filename, Uint8List bytes) {
+  final path = '${Directory.systemTemp.path}/$filename';
+  File(path).writeAsBytesSync(bytes);
+  return path;
+}

@@ -3,9 +3,12 @@
 library;
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter/widgets.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
@@ -41,6 +44,11 @@ class MarkdrawFileHandler {
     final content = controller.serializeScene();
     if (kIsWeb) {
       downloadFile('drawing.markdraw', content);
+    } else if (defaultTargetPlatform == TargetPlatform.ohos) {
+      await saveFileViaOhosChannel(
+        'drawing.markdraw',
+        Uint8List.fromList(utf8.encode(content)),
+      );
     } else {
       final path = await FilePicker.platform.saveFile(
         dialogTitle: '保存绘图',
@@ -57,6 +65,21 @@ class MarkdrawFileHandler {
 
   /// Shows a file picker and loads the selected drawing.
   Future<void> open() async {
+    if (defaultTargetPlatform == TargetPlatform.ohos) {
+      try {
+        final files = await pickFilesViaOhosChannel(
+          suffixFilters: const [
+            '绘图文件(.markdraw,.excalidraw,.json)|.markdraw,.excalidraw,.json',
+          ],
+        );
+        final picked = files.first;
+        controller.loadFromContent(utf8.decode(picked.bytes), picked.name);
+      } on PlatformException {
+        return;
+      }
+      return;
+    }
+
     final result = await FilePicker.platform.pickFiles(
       dialogTitle: '打开绘图',
       type: FileType.any,
@@ -86,6 +109,8 @@ class MarkdrawFileHandler {
 
     if (kIsWeb) {
       downloadBytes('drawing.png', bytes, mimeType: 'image/png');
+    } else if (defaultTargetPlatform == TargetPlatform.ohos) {
+      await saveFileViaOhosChannel('drawing.png', bytes);
     } else {
       final path = await FilePicker.platform.saveFile(
         dialogTitle: '导出 PNG',
@@ -103,6 +128,11 @@ class MarkdrawFileHandler {
 
     if (kIsWeb) {
       downloadFile('drawing.svg', svg);
+    } else if (defaultTargetPlatform == TargetPlatform.ohos) {
+      await saveFileViaOhosChannel(
+        'drawing.svg',
+        Uint8List.fromList(utf8.encode(svg)),
+      );
     } else {
       final path = await FilePicker.platform.saveFile(
         dialogTitle: '导出 SVG',
@@ -117,6 +147,27 @@ class MarkdrawFileHandler {
   ///
   /// [context] is used to determine screen size for centering.
   Future<void> importImage(BuildContext context) async {
+    if (defaultTargetPlatform == TargetPlatform.ohos) {
+      try {
+        final files = await pickFilesViaOhosChannel(
+          suffixFilters: const [
+            '图片(.png,.jpg,.jpeg,.webp,.bmp)|.png,.jpg,.jpeg,.webp,.bmp',
+          ],
+        );
+        if (!context.mounted) return;
+        final picked = files.first;
+        final renderBox = context.findRenderObject() as RenderBox?;
+        await controller.importImage(
+          picked.bytes,
+          picked.name,
+          renderBox?.size ?? const Size(800, 600),
+        );
+      } on PlatformException {
+        return;
+      }
+      return;
+    }
+
     final result = await FilePicker.platform.pickFiles(
       dialogTitle: '导入图片',
       type: FileType.image,

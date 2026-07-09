@@ -54,3 +54,7 @@ void downloadBytes(
   anchor.click();
   web.URL.revokeObjectURL(url);
 }
+
+/// Not supported on web — native file I/O only.
+String saveBytesToTempFile(String filename, Uint8List bytes) =>
+    throw UnsupportedError('saveBytesToTempFile is native-only');
