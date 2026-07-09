@@ -185,6 +185,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                         isDarkBackground: _isDark(
                           controller.canvasBackgroundColor,
                         ),
+                        contentBounds: controller.contentBounds,
                       ),
                       foregroundPainter: InteractiveCanvasPainter(
                         viewport: controller.editorState.viewport,
