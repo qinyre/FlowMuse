@@ -86,7 +86,7 @@ class TagsViewModel extends Notifier<TagsState> {
     return TagsState(tags: tags);
   }
 
-  Future<void> createTag({String? name, Color? coverColor}) {
+  Future<LibraryTag> createTag({String? name, Color? coverColor}) {
     return ref
         .read(libraryIndexProvider.notifier)
         .createTag(name: name, coverColor: coverColor);

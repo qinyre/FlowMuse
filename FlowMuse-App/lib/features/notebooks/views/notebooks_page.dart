@@ -69,10 +69,19 @@ Future<void> _createNotebook(
   if (result == null || !context.mounted) {
     return;
   }
-  await viewModel.createNotebook(
-    name: result.name,
-    coverColor: result.coverColor,
-  );
+  try {
+    await viewModel.createNotebook(
+      name: result.name,
+      coverColor: result.coverColor,
+    );
+  } catch (error) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('\u521b\u5efa\u5931\u8d25\uff1a$error')),
+    );
+  }
 }
 
 class NotebookDetailPage extends ConsumerWidget {

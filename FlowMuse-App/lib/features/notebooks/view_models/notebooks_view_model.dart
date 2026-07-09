@@ -86,7 +86,7 @@ class NotebooksViewModel extends Notifier<NotebooksState> {
     return NotebooksState(notebooks: notebooks);
   }
 
-  Future<void> createNotebook({String? name, Color? coverColor}) {
+  Future<LibraryNotebook> createNotebook({String? name, Color? coverColor}) {
     return ref
         .read(libraryIndexProvider.notifier)
         .createNotebook(name: name, coverColor: coverColor);

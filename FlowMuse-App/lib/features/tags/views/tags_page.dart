@@ -53,10 +53,7 @@ class TagsPage extends ConsumerWidget {
   }
 }
 
-Future<void> _createTag(
-  BuildContext context,
-  TagsViewModel viewModel,
-) async {
+Future<void> _createTag(BuildContext context, TagsViewModel viewModel) async {
   final result = await showCreateCollectionDialog(
     context: context,
     title: '新建标签',
@@ -67,7 +64,16 @@ Future<void> _createTag(
   if (result == null || !context.mounted) {
     return;
   }
-  await viewModel.createTag(name: result.name, coverColor: result.coverColor);
+  try {
+    await viewModel.createTag(name: result.name, coverColor: result.coverColor);
+  } catch (error) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('\u521b\u5efa\u5931\u8d25\uff1a$error')),
+    );
+  }
 }
 
 class TagDetailPage extends ConsumerWidget {

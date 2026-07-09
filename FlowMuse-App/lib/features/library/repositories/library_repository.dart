@@ -237,52 +237,54 @@ class SqliteLibraryRepository implements LibraryRepository {
     String? name,
     Color? coverColor,
   }) async {
-    final db = await _openDatabase();
-    final now = DateTime.now();
-    final notebookCount = await db.rawQuery(
-      'SELECT COUNT(*) AS count FROM notebooks',
-    );
-    final nextIndex = (notebookCount.first['count']! as int) + 1;
-    final trimmedName = name?.trim();
-    final notebook = LibraryNotebook(
-      id: 'notebook-${_uuid.v4()}',
-      name: trimmedName == null || trimmedName.isEmpty
-          ? '新建笔记本 $nextIndex'
-          : trimmedName,
-      coverColor: coverColor ??
-          libraryNotebookColors[
-              (nextIndex - 1) % libraryNotebookColors.length],
-      createdAt: now,
-      updatedAt: now,
-      sortOrder: nextIndex - 1,
-    );
-    await db.insert('notebooks', _notebookToRow(notebook));
-    return notebook;
+    final createdAt = DateTime.now();
+    final normalizedName = name?.trim();
+    final database = await _openDatabase();
+    late final LibraryNotebook createdNotebook;
+    await database.transaction((txn) async {
+      final nextSortOrder = await _nextSortOrder(txn, 'notebooks');
+      final defaultNameIndex = nextSortOrder + 1;
+      createdNotebook = LibraryNotebook(
+        id: 'notebook-${_uuid.v4()}',
+        name: normalizedName == null || normalizedName.isEmpty
+            ? '\u65b0\u5efa\u7b14\u8bb0\u672c $defaultNameIndex'
+            : normalizedName,
+        coverColor:
+            coverColor ??
+            libraryNotebookColors[nextSortOrder % libraryNotebookColors.length],
+        createdAt: createdAt,
+        updatedAt: createdAt,
+        sortOrder: nextSortOrder,
+      );
+      await txn.insert('notebooks', _notebookToRow(createdNotebook));
+    });
+    return createdNotebook;
   }
 
   @override
-  Future<LibraryTag> createTag({
-    String? name,
-    Color? coverColor,
-  }) async {
-    final db = await _openDatabase();
-    final now = DateTime.now();
-    final tagCount = await db.rawQuery('SELECT COUNT(*) AS count FROM tags');
-    final nextIndex = (tagCount.first['count']! as int) + 1;
-    final trimmedName = name?.trim();
-    final tag = LibraryTag(
-      id: 'tag-${_uuid.v4()}',
-      name: trimmedName == null || trimmedName.isEmpty
-          ? '新建标签 $nextIndex'
-          : trimmedName,
-      coverColor: coverColor ??
-          libraryTagColors[(nextIndex - 1) % libraryTagColors.length],
-      createdAt: now,
-      updatedAt: now,
-      sortOrder: nextIndex - 1,
-    );
-    await db.insert('tags', _tagToRow(tag));
-    return tag;
+  Future<LibraryTag> createTag({String? name, Color? coverColor}) async {
+    final createdAt = DateTime.now();
+    final normalizedName = name?.trim();
+    final database = await _openDatabase();
+    late final LibraryTag createdTag;
+    await database.transaction((txn) async {
+      final nextSortOrder = await _nextSortOrder(txn, 'tags');
+      final defaultNameIndex = nextSortOrder + 1;
+      createdTag = LibraryTag(
+        id: 'tag-${_uuid.v4()}',
+        name: normalizedName == null || normalizedName.isEmpty
+            ? '\u65b0\u5efa\u6807\u7b7e $defaultNameIndex'
+            : normalizedName,
+        coverColor:
+            coverColor ??
+            libraryTagColors[nextSortOrder % libraryTagColors.length],
+        createdAt: createdAt,
+        updatedAt: createdAt,
+        sortOrder: nextSortOrder,
+      );
+      await txn.insert('tags', _tagToRow(createdTag));
+    });
+    return createdTag;
   }
 
   @override
@@ -536,6 +538,13 @@ class SqliteLibraryRepository implements LibraryRepository {
     }
     return result;
   }
+
+  Future<int> _nextSortOrder(DatabaseExecutor db, String table) async {
+    final rows = await db.rawQuery(
+      'SELECT COALESCE(MAX(sort_order), -1) AS max_sort_order FROM $table',
+    );
+    return (rows.first['max_sort_order']! as int) + 1;
+  }
 }
 
 class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
@@ -601,14 +610,28 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     await refresh();
   }
 
-  Future<void> createNotebook({String? name, Color? coverColor}) async {
-    await _repository.createNotebook(name: name, coverColor: coverColor);
+  Future<LibraryNotebook> createNotebook({
+    String? name,
+    Color? coverColor,
+  }) async {
+    final notebook = await _repository.createNotebook(
+      name: name,
+      coverColor: coverColor,
+    );
     await refresh();
+    if (state.hasError) {
+      throw state.error ?? StateError('Failed to refresh notebooks');
+    }
+    return notebook;
   }
 
-  Future<void> createTag({String? name, Color? coverColor}) async {
-    await _repository.createTag(name: name, coverColor: coverColor);
+  Future<LibraryTag> createTag({String? name, Color? coverColor}) async {
+    final tag = await _repository.createTag(name: name, coverColor: coverColor);
     await refresh();
+    if (state.hasError) {
+      throw state.error ?? StateError('Failed to refresh tags');
+    }
+    return tag;
   }
 
   Future<void> deleteNotes(List<String> noteIds) async {

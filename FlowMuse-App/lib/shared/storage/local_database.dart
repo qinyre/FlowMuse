@@ -8,7 +8,7 @@ class LocalDatabase {
   LocalDatabase._();
 
   static const databaseName = 'flowmuse_local.db';
-  static const databaseVersion = 1;
+  static const databaseVersion = 2;
 
   static Database? _database;
 
@@ -34,7 +34,18 @@ class LocalDatabase {
           debugPrint(
             '[FlowMuseCreateNote] LocalDatabase.onCreate version=$version',
           );
-          await _createSchema(db);
+          await _ensureSchema(db);
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          debugPrint(
+            '[FlowMuseCreateNote] LocalDatabase.onUpgrade '
+            'oldVersion=$oldVersion newVersion=$newVersion',
+          );
+          await _ensureSchema(db);
+        },
+        onOpen: (db) async {
+          debugPrint('[FlowMuseCreateNote] LocalDatabase.onOpen ensureSchema');
+          await _ensureSchema(db);
         },
       ),
     );
@@ -48,9 +59,9 @@ class LocalDatabase {
     return database;
   }
 
-  static Future<void> _createSchema(Database db) async {
+  static Future<void> _ensureSchema(DatabaseExecutor db) async {
     await db.execute('''
-      CREATE TABLE notebooks (
+      CREATE TABLE IF NOT EXISTS notebooks (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         cover_color INTEGER NOT NULL,
@@ -60,7 +71,7 @@ class LocalDatabase {
       )
     ''');
     await db.execute('''
-      CREATE TABLE tags (
+      CREATE TABLE IF NOT EXISTS tags (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         cover_color INTEGER NOT NULL,
@@ -70,7 +81,7 @@ class LocalDatabase {
       )
     ''');
     await db.execute('''
-      CREATE TABLE notes (
+      CREATE TABLE IF NOT EXISTS notes (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -86,7 +97,7 @@ class LocalDatabase {
       )
     ''');
     await db.execute('''
-      CREATE TABLE note_tags (
+      CREATE TABLE IF NOT EXISTS note_tags (
         note_id TEXT NOT NULL,
         tag_id TEXT NOT NULL,
         PRIMARY KEY(note_id, tag_id),
@@ -95,7 +106,7 @@ class LocalDatabase {
       )
     ''');
     await db.execute('''
-      CREATE TABLE note_scenes (
+      CREATE TABLE IF NOT EXISTS note_scenes (
         note_id TEXT PRIMARY KEY,
         content TEXT NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -103,23 +114,25 @@ class LocalDatabase {
       )
     ''');
     await db.execute('''
-      CREATE TABLE local_settings (
+      CREATE TABLE IF NOT EXISTS local_settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL,
         updated_at INTEGER NOT NULL
       )
     ''');
     await db.execute(
-      'CREATE INDEX notes_notebook_id_index ON notes(notebook_id)',
+      'CREATE INDEX IF NOT EXISTS notes_notebook_id_index '
+      'ON notes(notebook_id)',
     );
     await db.execute(
-      'CREATE INDEX notes_deleted_at_index ON notes(deleted_at)',
+      'CREATE INDEX IF NOT EXISTS notes_deleted_at_index ON notes(deleted_at)',
     );
     await db.execute(
-      'CREATE INDEX note_tags_tag_id_index ON note_tags(tag_id)',
+      'CREATE INDEX IF NOT EXISTS note_tags_tag_id_index ON note_tags(tag_id)',
     );
     await db.execute(
-      'CREATE INDEX note_scenes_updated_at_index ON note_scenes(updated_at)',
+      'CREATE INDEX IF NOT EXISTS note_scenes_updated_at_index '
+      'ON note_scenes(updated_at)',
     );
   }
 }

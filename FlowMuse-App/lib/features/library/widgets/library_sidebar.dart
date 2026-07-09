@@ -204,12 +204,15 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
     if (result == null || !context.mounted) {
       return;
     }
-    await ref.read(notebooksViewModelProvider.notifier).createNotebook(
-          name: result.name,
-          coverColor: result.coverColor,
-        );
-    if (context.mounted) {
-      context.go(AppRoutes.notebooks);
+    try {
+      await ref
+          .read(notebooksViewModelProvider.notifier)
+          .createNotebook(name: result.name, coverColor: result.coverColor);
+      if (context.mounted) {
+        context.go(AppRoutes.notebooks);
+      }
+    } catch (error) {
+      _showCreateError(context, error);
     }
   }
 
@@ -224,12 +227,24 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
     if (result == null || !context.mounted) {
       return;
     }
-    await ref.read(tagsViewModelProvider.notifier).createTag(
-          name: result.name,
-          coverColor: result.coverColor,
-        );
-    if (context.mounted) {
-      context.go(AppRoutes.tags);
+    try {
+      await ref
+          .read(tagsViewModelProvider.notifier)
+          .createTag(name: result.name, coverColor: result.coverColor);
+      if (context.mounted) {
+        context.go(AppRoutes.tags);
+      }
+    } catch (error) {
+      _showCreateError(context, error);
     }
+  }
+
+  void _showCreateError(BuildContext context, Object error) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('\u521b\u5efa\u5931\u8d25\uff1a$error')),
+    );
   }
 }
