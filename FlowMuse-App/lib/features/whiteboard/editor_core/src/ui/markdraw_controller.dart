@@ -615,8 +615,21 @@ class MarkdrawController extends ChangeNotifier {
       return element;
     }
     return element.copyWith(
-      customData: CanvasLayout.elementCustomData(page.id),
+      customData: _mergeCurrentPageCustomData(element.customData, page.id),
     );
+  }
+
+  Map<String, Object?> _mergeCurrentPageCustomData(
+    Map<String, Object?>? customData,
+    String pageId,
+  ) {
+    final next = {...?customData};
+    final existingFlowMuse = next['flowMuse'];
+    next['flowMuse'] = {
+      if (existingFlowMuse is Map<String, Object?>) ...existingFlowMuse,
+      'pageId': pageId,
+    };
+    return next;
   }
 
   Scene _sceneWithLayoutPages(Scene scene) {
