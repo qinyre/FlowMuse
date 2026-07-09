@@ -90,6 +90,10 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                     )
                   : const SizedBox.shrink(key: ValueKey('empty-children')),
             ),
+          ],
+        ),
+        SharedSidebarBlock(
+          children: [
             SharedSidebarItem(
               icon: LucideIcons.trash2,
               label: '回收站',
