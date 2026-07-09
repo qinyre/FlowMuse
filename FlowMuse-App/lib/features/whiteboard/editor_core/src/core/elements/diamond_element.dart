@@ -32,6 +32,7 @@ class DiamondElement extends Element {
     super.link,
     super.locked,
     super.index,
+    super.customData,
   }) : super(type: 'diamond');
 
   @override
@@ -66,6 +67,8 @@ class DiamondElement extends Element {
     bool? locked,
     String? index,
     bool clearIndex = false,
+    Map<String, Object?>? customData,
+    bool clearCustomData = false,
   }) {
     return DiamondElement(
       id: id ?? this.id,
@@ -93,6 +96,7 @@ class DiamondElement extends Element {
       link: clearLink ? null : (link ?? this.link),
       locked: locked ?? this.locked,
       index: clearIndex ? null : (index ?? this.index),
+      customData: clearCustomData ? null : (customData ?? this.customData),
     );
   }
 }

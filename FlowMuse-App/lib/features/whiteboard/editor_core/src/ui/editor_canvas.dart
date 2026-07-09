@@ -144,6 +144,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                         scene: controller.editorState.scene,
                         adapter: controller.adapter,
                         viewport: controller.editorState.viewport,
+                        layout: controller.layout,
                         previewElement: controller.buildPreviewElement(
                           toolOverlay,
                         ),

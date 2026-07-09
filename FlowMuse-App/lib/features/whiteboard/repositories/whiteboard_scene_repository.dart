@@ -1,5 +1,6 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../../shared/storage/local_database.dart';
 import '../collaboration/models/excalidraw_scene.dart';
 
 abstract interface class WhiteboardSceneRepository {
@@ -22,24 +23,22 @@ class InMemoryWhiteboardSceneRepository implements WhiteboardSceneRepository {
   }
 }
 
-class SharedPreferencesWhiteboardSceneRepository
-    implements WhiteboardSceneRepository {
-  SharedPreferencesWhiteboardSceneRepository(
-    Future<SharedPreferences> Function() preferences,
-  ) : _preferences = preferences;
+class SqliteWhiteboardSceneRepository implements WhiteboardSceneRepository {
+  SqliteWhiteboardSceneRepository(this._openDatabase);
 
-  SharedPreferencesWhiteboardSceneRepository.value(
-    SharedPreferences preferences,
-  ) : _preferences = (() async => preferences);
-
-  static const _keyPrefix = 'note.excalidraw.scene.';
-
-  final Future<SharedPreferences> Function() _preferences;
+  final Future<Database> Function() _openDatabase;
 
   @override
   Future<String> loadScene(String noteId) async {
-    final preferences = await _preferences();
-    final raw = preferences.getString('$_keyPrefix$noteId');
+    final db = await _openDatabase();
+    final rows = await db.query(
+      'note_scenes',
+      columns: ['content'],
+      where: 'note_id = ?',
+      whereArgs: [noteId],
+      limit: 1,
+    );
+    final raw = rows.isEmpty ? null : rows.first['content'] as String?;
     if (raw == null || raw.isEmpty) {
       return emptyExcalidrawSceneContent;
     }
@@ -48,7 +47,15 @@ class SharedPreferencesWhiteboardSceneRepository
 
   @override
   Future<void> saveScene(String noteId, String content) async {
-    final preferences = await _preferences();
-    await preferences.setString('$_keyPrefix$noteId', content);
+    final db = await _openDatabase();
+    await db.insert('note_scenes', {
+      'note_id': noteId,
+      'content': content,
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }
+
+final defaultWhiteboardSceneRepository = SqliteWhiteboardSceneRepository(
+  LocalDatabase.open,
+);

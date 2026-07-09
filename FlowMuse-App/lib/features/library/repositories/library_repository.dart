@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../shared/storage/local_database.dart';
 import '../models/library_collection.dart';
 import '../models/library_index.dart';
 import '../models/note_item.dart';
-import 'library_database.dart';
 
 export '../models/library_collection.dart';
 export '../models/library_index.dart';
@@ -16,9 +16,11 @@ abstract interface class LibraryRepository {
   Future<LibraryIndex> loadIndex();
 
   Future<NoteItem> createNote({
+    LibraryFilter kind = LibraryFilter.notes,
     NoteType noteType = NoteType.unbounded,
     PageTemplate pageTemplate = PageTemplate.blank,
     String? title,
+    String? subtitle,
     String? notebookId,
     List<String> tagIds = const [],
   });
@@ -26,6 +28,8 @@ abstract interface class LibraryRepository {
   Future<void> ensureNote(String noteId);
 
   Future<void> renameNote(String noteId, String title);
+
+  Future<void> renameSubtitle(String noteId, String? subtitle);
 
   Future<void> touchNote(String noteId);
 
@@ -95,9 +99,11 @@ class SqliteLibraryRepository implements LibraryRepository {
 
   @override
   Future<NoteItem> createNote({
+    LibraryFilter kind = LibraryFilter.notes,
     NoteType noteType = NoteType.unbounded,
     PageTemplate pageTemplate = PageTemplate.blank,
     String? title,
+    String? subtitle,
     String? notebookId,
     List<String> tagIds = const [],
   }) async {
@@ -114,11 +120,12 @@ class SqliteLibraryRepository implements LibraryRepository {
             ? _defaultNoteTitle
             : trimmedTitle,
         updatedAt: now,
-        kind: LibraryFilter.notes,
+        kind: kind,
         coverColor:
             _noteColors[now.millisecondsSinceEpoch % _noteColors.length],
         noteType: noteType,
         pageTemplate: pageTemplate,
+        subtitle: subtitle,
         notebookId: validNotebookId,
         tagIds: validTagIds,
       );
@@ -170,6 +177,18 @@ class SqliteLibraryRepository implements LibraryRepository {
     await db.update(
       'notes',
       {'title': trimmed, 'updated_at': _timestamp(DateTime.now())},
+      where: 'id = ?',
+      whereArgs: [noteId],
+    );
+  }
+
+  @override
+  Future<void> renameSubtitle(String noteId, String? subtitle) async {
+    await ensureNote(noteId);
+    final db = await _openDatabase();
+    await db.update(
+      'notes',
+      {'subtitle': subtitle?.trim(), 'updated_at': _timestamp(DateTime.now())},
       where: 'id = ?',
       whereArgs: [noteId],
     );
@@ -488,16 +507,20 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
   }
 
   Future<NoteItem> createNote({
+    LibraryFilter kind = LibraryFilter.notes,
     NoteType noteType = NoteType.unbounded,
     PageTemplate pageTemplate = PageTemplate.blank,
     String? title,
+    String? subtitle,
     String? notebookId,
     List<String> tagIds = const [],
   }) async {
     final note = await _repository.createNote(
+      kind: kind,
       noteType: noteType,
       pageTemplate: pageTemplate,
       title: title,
+      subtitle: subtitle,
       notebookId: notebookId,
       tagIds: tagIds,
     );
@@ -512,6 +535,11 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
 
   Future<void> renameNote(String noteId, String title) async {
     await _repository.renameNote(noteId, title);
+    await refresh();
+  }
+
+  Future<void> renameSubtitle(String noteId, String? subtitle) async {
+    await _repository.renameSubtitle(noteId, subtitle);
     await refresh();
   }
 
@@ -605,7 +633,7 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
 }
 
 final libraryRepositoryProvider = Provider<LibraryRepository>((ref) {
-  return SqliteLibraryRepository(LibraryDatabase.open);
+  return SqliteLibraryRepository(LocalDatabase.open);
 });
 
 final libraryIndexProvider =

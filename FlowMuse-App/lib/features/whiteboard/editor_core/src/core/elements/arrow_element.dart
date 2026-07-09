@@ -70,6 +70,7 @@ class ArrowElement extends LineElement {
     super.link,
     super.locked,
     super.index,
+    super.customData,
   }) : super(type: 'arrow');
 
   /// Creates a copy with arrow-specific properties changed.
@@ -115,6 +116,7 @@ class ArrowElement extends LineElement {
       link: link,
       locked: locked,
       index: index,
+      customData: customData,
     );
   }
 
@@ -164,6 +166,7 @@ class ArrowElement extends LineElement {
       link: link,
       locked: locked,
       index: index,
+      customData: customData,
     );
   }
 
@@ -199,6 +202,8 @@ class ArrowElement extends LineElement {
     bool? locked,
     String? index,
     bool clearIndex = false,
+    Map<String, Object?>? customData,
+    bool clearCustomData = false,
   }) {
     return ArrowElement(
       id: id ?? this.id,
@@ -233,6 +238,7 @@ class ArrowElement extends LineElement {
       link: clearLink ? null : (link ?? this.link),
       locked: locked ?? this.locked,
       index: clearIndex ? null : (index ?? this.index),
+      customData: clearCustomData ? null : (customData ?? this.customData),
     );
   }
 }

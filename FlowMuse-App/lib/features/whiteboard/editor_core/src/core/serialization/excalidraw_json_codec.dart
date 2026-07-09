@@ -180,6 +180,7 @@ class ExcalidrawJsonCodec {
       'link': el.link,
       'locked': el.locked,
       if (el.index != null) 'index': el.index,
+      if (el.customData != null) 'customData': el.customData,
     };
   }
 
@@ -461,6 +462,14 @@ class ExcalidrawJsonCodec {
         .toList();
   }
 
+  static Map<String, Object?>? _customData(Map<String, dynamic> raw) {
+    final value = raw['customData'];
+    if (value is Map<String, dynamic>) {
+      return Map<String, Object?>.from(value);
+    }
+    return null;
+  }
+
   static List<double> _pressures(Map<String, dynamic> raw) {
     final list = raw['pressures'];
     if (list == null || list is! List) return const [];
@@ -610,6 +619,7 @@ class ExcalidrawJsonCodec {
       link: raw['link'] as String?,
       locked: raw['locked'] as bool? ?? false,
       index: raw['index'] as String?,
+      customData: _customData(raw),
     );
   }
 
@@ -640,6 +650,7 @@ class ExcalidrawJsonCodec {
       link: raw['link'] as String?,
       locked: raw['locked'] as bool? ?? false,
       index: raw['index'] as String?,
+      customData: _customData(raw),
     );
   }
 
@@ -670,6 +681,7 @@ class ExcalidrawJsonCodec {
       link: raw['link'] as String?,
       locked: raw['locked'] as bool? ?? false,
       index: raw['index'] as String?,
+      customData: _customData(raw),
     );
   }
 
@@ -701,6 +713,7 @@ class ExcalidrawJsonCodec {
       link: raw['link'] as String?,
       locked: raw['locked'] as bool? ?? false,
       index: raw['index'] as String?,
+      customData: _customData(raw),
     );
   }
 
@@ -751,6 +764,7 @@ class ExcalidrawJsonCodec {
       link: raw['link'] as String?,
       locked: raw['locked'] as bool? ?? false,
       index: raw['index'] as String?,
+      customData: _customData(raw),
     );
   }
 
@@ -795,6 +809,7 @@ class ExcalidrawJsonCodec {
       link: raw['link'] as String?,
       locked: raw['locked'] as bool? ?? false,
       index: raw['index'] as String?,
+      customData: _customData(raw),
     );
   }
 
@@ -837,6 +852,7 @@ class ExcalidrawJsonCodec {
       link: raw['link'] as String?,
       locked: raw['locked'] as bool? ?? false,
       index: raw['index'] as String?,
+      customData: _customData(raw),
     );
   }
 
@@ -895,6 +911,7 @@ class ExcalidrawJsonCodec {
       link: raw['link'] as String?,
       locked: raw['locked'] as bool? ?? false,
       index: raw['index'] as String?,
+      customData: _customData(raw),
     );
   }
 
@@ -928,6 +945,7 @@ class ExcalidrawJsonCodec {
       link: raw['link'] as String?,
       locked: raw['locked'] as bool? ?? false,
       index: raw['index'] as String?,
+      customData: _customData(raw),
     );
   }
 }

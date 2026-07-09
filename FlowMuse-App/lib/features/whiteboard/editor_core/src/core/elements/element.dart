@@ -57,6 +57,7 @@ class Element {
   final String? link;
   final bool locked;
   final String? index;
+  final Map<String, Object?>? customData;
 
   Element({
     required this.id,
@@ -85,6 +86,7 @@ class Element {
     this.link,
     this.locked = false,
     this.index,
+    this.customData,
   }) : seed = seed ?? (id.value.hashCode & 0x7FFFFFFF),
        versionNonce = versionNonce ?? _random.nextInt(1 << 31),
        updated = updated ?? DateTime.now().millisecondsSinceEpoch;
@@ -121,6 +123,8 @@ class Element {
     bool? locked,
     String? index,
     bool clearIndex = false,
+    Map<String, Object?>? customData,
+    bool clearCustomData = false,
   }) {
     return Element(
       id: id ?? this.id,
@@ -149,6 +153,7 @@ class Element {
       link: clearLink ? null : (link ?? this.link),
       locked: locked ?? this.locked,
       index: clearIndex ? null : (index ?? this.index),
+      customData: clearCustomData ? null : (customData ?? this.customData),
     );
   }
 

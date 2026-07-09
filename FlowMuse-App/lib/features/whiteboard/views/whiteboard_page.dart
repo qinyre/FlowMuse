@@ -9,6 +9,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import '../../../app/app_router.dart';
 import '../../account/models/collaboration_identity.dart';
 import '../../account/view_models/account_view_model.dart';
+import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
 import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
@@ -20,6 +21,7 @@ import '../collaboration/services/collaboration_debug_log.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
+import '../pdf_note_import/pdf_note_consumer.dart';
 import '../view_models/whiteboard_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 
@@ -127,6 +129,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
     final noteId = widget.noteId;
     await ref.read(libraryIndexProvider.notifier).ensureNote(noteId);
+    final libraryIndex = await ref.read(libraryIndexProvider.future);
+    final note = _noteById(libraryIndex.notes, noteId);
+    _markdrawController.setLayout(_layoutForNote(note));
     if (!mounted || generation != _openGeneration || noteId != widget.noteId) {
       return;
     }
@@ -144,6 +149,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _loadingScene = true;
     _markdrawController.closeTransientUiForSceneReplace();
     _markdrawController.loadFromContent(content, '$noteId.excalidraw');
+    final consumedPdf = await ref
+        .read(pdfNoteConsumerProvider)
+        .consume(
+          ref,
+          controller: _markdrawController,
+          fileHandler: _fileHandler,
+          noteId: noteId,
+          canvasSize: const Size(1000, 800),
+        );
+    if (consumedPdf) {
+      final updatedContent = _markdrawController.serializeScene(
+        format: DocumentFormat.excalidraw,
+      );
+      await repository.saveScene(noteId, updatedContent);
+      await _broadcastCurrentScene(serializedScene: updatedContent);
+    }
     _loadingScene = false;
     final room = widget.initialRoom;
     if (room != null) {
@@ -1251,6 +1272,35 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
   CollaborationIdentity get _collaborationIdentity {
     return ref.read(accountViewModelProvider).collaborationIdentity;
+  }
+
+  NoteItem? _noteById(List<NoteItem> notes, String noteId) {
+    for (final note in notes) {
+      if (note.id == noteId) {
+        return note;
+      }
+    }
+    return null;
+  }
+
+  CanvasLayout _layoutForNote(NoteItem? note) {
+    final template = _templateForNote(note?.pageTemplate);
+    return CanvasLayout(
+      type: note?.noteType == NoteType.unbounded
+          ? CanvasLayoutType.unbounded
+          : CanvasLayoutType.paged,
+      template: template,
+    );
+  }
+
+  CanvasPageTemplate _templateForNote(PageTemplate? template) {
+    return switch (template) {
+      PageTemplate.narrowLine => CanvasPageTemplate.narrowLine,
+      PageTemplate.wideLine => CanvasPageTemplate.wideLine,
+      PageTemplate.grid => CanvasPageTemplate.grid,
+      PageTemplate.dotGrid => CanvasPageTemplate.dotGrid,
+      PageTemplate.blank || null => CanvasPageTemplate.blank,
+    };
   }
 }
 

@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../account/view_models/account_view_model.dart';
 import '../collaboration/models/collaboration_message.dart';
@@ -393,9 +392,7 @@ final collaborationConfigProvider = Provider<CollaborationConfig>((ref) {
 final whiteboardSceneRepositoryProvider = Provider<WhiteboardSceneRepository>((
   ref,
 ) {
-  return SharedPreferencesWhiteboardSceneRepository(
-    SharedPreferences.getInstance,
-  );
+  return defaultWhiteboardSceneRepository;
 });
 
 final whiteboardViewModelProvider =

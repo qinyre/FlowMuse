@@ -32,6 +32,7 @@ class RectangleElement extends Element {
     super.link,
     super.locked,
     super.index,
+    super.customData,
   }) : super(type: 'rectangle');
 
   @override
@@ -66,6 +67,8 @@ class RectangleElement extends Element {
     bool? locked,
     String? index,
     bool clearIndex = false,
+    Map<String, Object?>? customData,
+    bool clearCustomData = false,
   }) {
     return RectangleElement(
       id: id ?? this.id,
@@ -93,6 +96,7 @@ class RectangleElement extends Element {
       link: clearLink ? null : (link ?? this.link),
       locked: locked ?? this.locked,
       index: clearIndex ? null : (index ?? this.index),
+      customData: clearCustomData ? null : (customData ?? this.customData),
     );
   }
 }

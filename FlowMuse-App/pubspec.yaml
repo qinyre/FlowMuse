@@ -58,6 +58,7 @@ dependencies:
   flutter_secure_storage_ohos: ^1.0.0
   path: ^1.9.1
   path_provider: ^2.1.5
+  pdfx: ^2.9.2
   sqflite_common_ffi: ^2.3.6
 
 dev_dependencies:

@@ -40,6 +40,7 @@ class FreedrawElement extends Element {
     super.link,
     super.locked,
     super.index,
+    super.customData,
   }) : super(type: 'freedraw');
 
   /// Creates a copy with freedraw-specific properties changed.
@@ -77,6 +78,7 @@ class FreedrawElement extends Element {
       link: link,
       locked: locked,
       index: index,
+      customData: customData,
     );
   }
 
@@ -112,6 +114,8 @@ class FreedrawElement extends Element {
     bool? locked,
     String? index,
     bool clearIndex = false,
+    Map<String, Object?>? customData,
+    bool clearCustomData = false,
   }) {
     return FreedrawElement(
       id: id ?? this.id,
@@ -142,6 +146,7 @@ class FreedrawElement extends Element {
       link: clearLink ? null : (link ?? this.link),
       locked: locked ?? this.locked,
       index: clearIndex ? null : (index ?? this.index),
+      customData: clearCustomData ? null : (customData ?? this.customData),
     );
   }
 }

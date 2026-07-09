@@ -19,6 +19,37 @@ import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
 
+Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
+  if (!layout.isPaged) {
+    return scene;
+  }
+  var next = scene;
+  final existingPageIds = {
+    for (final element in scene.elements)
+      if (element.isCanvasPage) element.id.value,
+  };
+  for (final page in layout.pages) {
+    if (existingPageIds.contains(page.id)) {
+      continue;
+    }
+    next = next.addElement(
+      RectangleElement(
+        id: ElementId(page.id),
+        x: page.bounds.left,
+        y: page.bounds.top,
+        width: page.bounds.width,
+        height: page.bounds.height,
+        strokeColor: 'transparent',
+        backgroundColor: 'transparent',
+        opacity: 0,
+        locked: true,
+        customData: CanvasLayout.pageCustomData(page),
+      ),
+    );
+  }
+  return next;
+}
+
 /// Controller for [MarkdrawEditor]. Holds all editor state and logic.
 ///
 /// Can be created internally by the widget or provided externally
@@ -27,8 +58,9 @@ class MarkdrawController extends ChangeNotifier {
   MarkdrawController({
     MarkdrawEditorConfig config = const MarkdrawEditorConfig(),
   }) : _config = config {
+    _layout = config.initialLayout.ensurePage();
     _editorState = EditorState(
-      scene: Scene(),
+      scene: _sceneWithLayoutPagesForLayout(Scene(), _layout),
       viewport: const ViewportState(),
       selectedIds: {},
       activeToolType: ToolType.select,
@@ -72,6 +104,7 @@ class MarkdrawController extends ChangeNotifier {
   ColorPickerTarget? _pendingColorPicker;
   ElementStyle _defaultStyle = const ElementStyle();
   String _canvasBackgroundColor = '#ffffff';
+  late CanvasLayout _layout;
   int? _gridSize;
   bool _objectsSnapMode = false;
   String? _documentName;
@@ -183,6 +216,12 @@ class MarkdrawController extends ChangeNotifier {
 
   /// The canvas background color as a hex string.
   String get canvasBackgroundColor => _canvasBackgroundColor;
+
+  /// Current canvas layout. Paged layout is synchronized through page elements.
+  CanvasLayout get layout => _layout;
+
+  /// Current scene snapshot.
+  Scene get currentScene => _editorState.scene;
 
   /// The snap grid size in pixels, or null if grid is off.
   int? get gridSize => _gridSize;
@@ -321,6 +360,14 @@ class MarkdrawController extends ChangeNotifier {
   /// Sets the canvas background color (hex string).
   set canvasBackgroundColor(String value) {
     _canvasBackgroundColor = value;
+    notifyListeners();
+  }
+
+  void setLayout(CanvasLayout layout) {
+    _layout = layout.ensurePage();
+    _editorState = _editorState.copyWith(
+      scene: _sceneWithLayoutPages(_editorState.scene),
+    );
     notifyListeners();
   }
 
@@ -475,6 +522,11 @@ class MarkdrawController extends ChangeNotifier {
     applyResult(UpdateViewportResult(const ViewportState()));
   }
 
+  /// Sets the viewport directly.
+  void setViewport(ViewportState viewport) {
+    applyResult(UpdateViewportResult(viewport));
+  }
+
   /// Zooms to fit all scene elements within the canvas.
   void zoomToFit(Size canvasSize) {
     final bounds = ExportBounds.compute(_editorState.scene);
@@ -540,7 +592,37 @@ class MarkdrawController extends ChangeNotifier {
           : Roundness.adaptive(value: _defaultStyle.roundness!.value);
       styled = styled.copyWith(roundness: r);
     }
-    return styled;
+    return _attachCurrentPage(styled);
+  }
+
+  Element _attachCurrentPage(Element element) {
+    if (!_layout.isPaged || element.isCanvasPage || element.pageId != null) {
+      return element;
+    }
+    final page = _layout.pageAt(
+      Offset(element.x + element.width / 2, element.y + element.height / 2),
+    );
+    if (page == null) {
+      return element;
+    }
+    return element.copyWith(
+      customData: CanvasLayout.elementCustomData(page.id),
+    );
+  }
+
+  Scene _sceneWithLayoutPages(Scene scene) {
+    return _sceneWithLayoutPagesForLayout(scene, _layout);
+  }
+
+  void _syncLayoutFromScene({
+    CanvasLayoutType? fallbackType,
+    CanvasPageTemplate? fallbackTemplate,
+  }) {
+    _layout = CanvasLayout.fromScene(
+      _editorState.scene.elements,
+      fallbackType: fallbackType ?? _layout.type,
+      fallbackTemplate: fallbackTemplate ?? _layout.template,
+    );
   }
 
   ToolResult _applyDefaultStyleToResult(ToolResult result) {
@@ -1549,6 +1631,10 @@ class MarkdrawController extends ChangeNotifier {
     _historyManager.clear();
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
+    _syncLayoutFromScene();
+    _editorState = _editorState.copyWith(
+      scene: _sceneWithLayoutPages(validated),
+    );
     if (background != null) {
       _canvasBackgroundColor = background;
     }
@@ -1564,6 +1650,10 @@ class MarkdrawController extends ChangeNotifier {
     _historyManager.push(_editorState.scene);
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
+    _syncLayoutFromScene();
+    _editorState = _editorState.copyWith(
+      scene: _sceneWithLayoutPages(validated),
+    );
     if (background != null) {
       _canvasBackgroundColor = background;
     }
@@ -1579,6 +1669,10 @@ class MarkdrawController extends ChangeNotifier {
     closeTransientUiForSceneReplace();
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
+    _syncLayoutFromScene();
+    _editorState = _editorState.copyWith(
+      scene: _sceneWithLayoutPages(validated),
+    );
     if (background != null) {
       _canvasBackgroundColor = background;
     }
@@ -1596,6 +1690,10 @@ class MarkdrawController extends ChangeNotifier {
     }
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated);
+    _syncLayoutFromScene();
+    _editorState = _editorState.copyWith(
+      scene: _sceneWithLayoutPages(validated),
+    );
     if (background != null) {
       _canvasBackgroundColor = background;
     }
@@ -2087,6 +2185,7 @@ class MarkdrawController extends ChangeNotifier {
       scene: _editorState.scene,
       adapter: _adapter,
       viewport: _editorState.viewport,
+      layout: _layout,
       resolvedImages: resolveImages(),
     );
     painter.paint(canvas, canvasSize);
@@ -2300,6 +2399,262 @@ class MarkdrawController extends ChangeNotifier {
         SetSelectionResult({element.id}),
       ]),
     );
+  }
+
+  void insertBlankPage({int? afterIndex}) {
+    if (!_layout.isPaged) {
+      return;
+    }
+    final pages = [..._layout.ensurePage().pages];
+    final insertIndex = ((afterIndex ?? pages.length - 1) + 1).clamp(
+      0,
+      pages.length,
+    );
+    final pageId = 'page-${ElementId.generate().value}';
+    final newPage = CanvasPage(
+      id: pageId,
+      index: insertIndex,
+      bounds: Rect.fromLTWH(
+        0,
+        insertIndex * (CanvasLayout.pageHeight + CanvasLayout.pageGap),
+        CanvasLayout.pageWidth,
+        CanvasLayout.pageHeight,
+      ),
+      template: _layout.template,
+    );
+    pages.insert(insertIndex, newPage);
+    _applyPageOrder(pages);
+  }
+
+  void deletePage(String pageId) {
+    if (!_layout.isPaged || _layout.pages.length <= 1) {
+      return;
+    }
+    final remaining = [
+      for (final page in _layout.pages)
+        if (page.id != pageId) page,
+    ];
+    if (remaining.length == _layout.pages.length) {
+      return;
+    }
+    final results = <ToolResult>[
+      for (final element in _editorState.scene.elements)
+        if (element.pageId == pageId || element.id.value == pageId)
+          RemoveElementResult(element.id),
+    ];
+    _layout = _layout.copyWith(pages: remaining);
+    results.addAll(_pageReorderResults(remaining));
+    pushHistory();
+    applyResult(CompoundResult(results));
+    _syncLayoutFromScene();
+  }
+
+  void reorderPage(String pageId, int newIndex) {
+    if (!_layout.isPaged) {
+      return;
+    }
+    final pages = [..._layout.pages];
+    final oldIndex = pages.indexWhere((page) => page.id == pageId);
+    if (oldIndex < 0) {
+      return;
+    }
+    final page = pages.removeAt(oldIndex);
+    pages.insert(newIndex.clamp(0, pages.length), page);
+    _applyPageOrder(pages);
+  }
+
+  void _applyPageOrder(List<CanvasPage> pages) {
+    final results = _pageReorderResults(pages);
+    pushHistory();
+    applyResult(CompoundResult(results));
+    _syncLayoutFromScene();
+  }
+
+  List<ToolResult> _pageReorderResults(List<CanvasPage> pages) {
+    final oldPagesById = {for (final page in _layout.pages) page.id: page};
+    final nextPages = <CanvasPage>[];
+    final topDeltaByPageId = <String, double>{};
+
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final nextTop = i * (page.bounds.height + CanvasLayout.pageGap);
+      final next = CanvasPage(
+        id: page.id,
+        index: i,
+        bounds: Rect.fromLTWH(
+          page.bounds.left,
+          nextTop,
+          page.bounds.width,
+          page.bounds.height,
+        ),
+        template: page.template,
+        source: page.source,
+      );
+      nextPages.add(next);
+      topDeltaByPageId[page.id] =
+          next.bounds.top - (oldPagesById[page.id]?.bounds.top ?? nextTop);
+    }
+
+    _layout = _layout.copyWith(pages: nextPages);
+    final existingPageElementIds = {
+      for (final element in _editorState.scene.elements)
+        if (element.isCanvasPage) element.id.value,
+    };
+    final results = <ToolResult>[];
+
+    for (final page in nextPages) {
+      final pageElement = _editorState.scene.getElementById(ElementId(page.id));
+      if (pageElement == null || !existingPageElementIds.contains(page.id)) {
+        results.add(
+          AddElementResult(
+            RectangleElement(
+              id: ElementId(page.id),
+              x: page.bounds.left,
+              y: page.bounds.top,
+              width: page.bounds.width,
+              height: page.bounds.height,
+              strokeColor: 'transparent',
+              backgroundColor: 'transparent',
+              opacity: 0,
+              locked: true,
+              customData: CanvasLayout.pageCustomData(page),
+            ),
+          ),
+        );
+      } else {
+        results.add(
+          UpdateElementResult(
+            pageElement.copyWith(
+              x: page.bounds.left,
+              y: page.bounds.top,
+              width: page.bounds.width,
+              height: page.bounds.height,
+              customData: CanvasLayout.pageCustomData(page),
+            ),
+          ),
+        );
+      }
+    }
+
+    for (final element in _editorState.scene.elements) {
+      if (element.isCanvasPage || element.isDeleted) {
+        continue;
+      }
+      final pageId = element.pageId;
+      final delta = pageId == null ? null : topDeltaByPageId[pageId];
+      if (delta == null || delta == 0) {
+        continue;
+      }
+      results.add(UpdateElementResult(element.copyWith(y: element.y + delta)));
+    }
+    return results;
+  }
+
+  Future<void> importPdfPages(
+    List<PdfRenderedPage> pages,
+    Size canvasSize, {
+    String? documentName,
+    bool asBackground = false,
+  }) async {
+    if (pages.isEmpty) {
+      return;
+    }
+
+    if (asBackground) {
+      closeTransientUiForSceneReplace();
+      _historyManager.clear();
+      _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
+    }
+
+    final results = <ToolResult>[];
+    final nextPages = <CanvasPage>[];
+    var cursorY = 0.0;
+
+    for (var i = 0; i < pages.length; i++) {
+      final page = pages[i];
+      final pageId = 'page-${page.pageNumber}';
+      final pageBounds = Rect.fromLTWH(0, cursorY, page.width, page.height);
+      if (_layout.isPaged) {
+        final canvasPage = CanvasPage(
+          id: pageId,
+          index: i,
+          bounds: pageBounds,
+          template: _layout.template,
+          source: 'pdf',
+        );
+        nextPages.add(canvasPage);
+        results.add(
+          AddElementResult(
+            RectangleElement(
+              id: ElementId(pageId),
+              x: pageBounds.left,
+              y: pageBounds.top,
+              width: pageBounds.width,
+              height: pageBounds.height,
+              strokeColor: 'transparent',
+              backgroundColor: 'transparent',
+              opacity: 0,
+              locked: true,
+              customData: CanvasLayout.pageCustomData(canvasPage),
+            ),
+          ),
+        );
+      }
+
+      final digest = sha1.convert(page.bytes);
+      final fileId = 'pdf-${digest.toString().substring(0, 12)}';
+      final imageFile = ImageFile(mimeType: page.mimeType, bytes: page.bytes);
+      final codec = await ui.instantiateImageCodec(page.bytes);
+      final frame = await codec.getNextFrame();
+      _imageCache.putImage(fileId, frame.image);
+
+      final element = ImageElement(
+        id: ElementId.generate(),
+        x: 0,
+        y: cursorY,
+        width: page.width,
+        height: page.height,
+        fileId: fileId,
+        mimeType: page.mimeType,
+        status: 'pending',
+        locked: asBackground,
+        customData: asBackground
+            ? CanvasLayout.pdfBackgroundCustomData(pageId)
+            : (_layout.isPaged ? CanvasLayout.elementCustomData(pageId) : null),
+      );
+      results
+        ..add(AddFileResult(fileId: fileId, file: imageFile))
+        ..add(AddElementResult(element));
+
+      cursorY += page.height + CanvasLayout.pageGap;
+    }
+
+    if (_layout.isPaged) {
+      _layout = _layout.copyWith(pages: nextPages);
+    }
+    if (documentName != null && documentName.trim().isNotEmpty) {
+      _documentName = documentName.trim();
+    }
+    pushHistory();
+    applyResult(CompoundResult([...results, SetSelectionResult({})]));
+    setViewport(
+      _fitRectViewport(
+        Rect.fromLTWH(0, 0, pages.first.width, pages.first.height),
+        canvasSize,
+      ),
+    );
+  }
+
+  ViewportState _fitRectViewport(Rect rect, Size canvasSize) {
+    if (canvasSize.width <= 0 || canvasSize.height <= 0) {
+      return ViewportState(offset: rect.topLeft);
+    }
+    final widthZoom = rect.width <= 0 ? 1.0 : canvasSize.width / rect.width;
+    final heightZoom = rect.height <= 0 ? 1.0 : canvasSize.height / rect.height;
+    final zoom = math
+        .min(widthZoom, heightZoom)
+        .clamp(_config.minZoom, _config.maxZoom);
+    return ViewportState(offset: rect.topLeft, zoom: zoom);
   }
 
   /// Imports library items from file content. Detects format from [filename].

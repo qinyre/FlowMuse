@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../whiteboard/pdf_note_import/pdf_note_import_payload.dart';
+import '../../whiteboard/pdf_note_import/pdf_note_import_service.dart';
 import '../models/note_item.dart';
 import '../repositories/library_repository.dart';
 
@@ -17,7 +22,7 @@ class CreateNotePage extends ConsumerStatefulWidget {
 
 class _CreateNotePageState extends ConsumerState<CreateNotePage> {
   String _title = '';
-  NoteType _noteType = NoteType.unbounded;
+  NoteType _noteType = NoteType.paged;
   PageTemplate _pageTemplate = PageTemplate.blank;
   bool _creating = false;
   final TextEditingController _titleController = TextEditingController();
@@ -54,10 +59,41 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     }
   }
 
-  void _showImportHint() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('请先创建笔记后，在白板页使用打开文件导入。')));
+  Future<void> _importPdf() async {
+    if (_creating) {
+      return;
+    }
+    setState(() => _creating = true);
+    try {
+      final note = await ref
+          .read(pdfNoteImportServiceProvider)
+          .pickAndStageImport(
+            ref.read,
+            noteType: _noteType,
+            pageTemplate: _pageTemplate,
+            picker: () async {
+              final result = await FilePicker.platform.pickFiles(
+                type: FileType.custom,
+                allowedExtensions: const ['pdf'],
+                withData: true,
+              );
+              final file = result?.files.single;
+              final bytes = file?.bytes;
+              if (file == null || bytes == null) {
+                return null;
+              }
+              return PdfNoteImportPayload(bytes: bytes, name: file.name);
+            },
+          );
+      if (!mounted || note == null) {
+        return;
+      }
+      context.push(AppRoutes.whiteboardPath(noteId: note.id));
+    } finally {
+      if (mounted) {
+        setState(() => _creating = false);
+      }
+    }
   }
 
   @override
@@ -92,7 +128,9 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
                               onNoteTypeChanged: (value) {
                                 setState(() => _noteType = value);
                               },
-                              onImport: _showImportHint,
+                              onImport: () {
+                                unawaited(_importPdf());
+                              },
                               onSubmitted: _createNote,
                             ),
                           ],
@@ -278,8 +316,8 @@ class _NoteSetupPanel extends StatelessWidget {
                   showSelectedIcon: false,
                   segments: const [
                     ButtonSegment(
-                      value: NoteType.bounded,
-                      label: Text('有界'),
+                      value: NoteType.paged,
+                      label: Text('分页'),
                       icon: Icon(LucideIcons.fileText),
                     ),
                     ButtonSegment(

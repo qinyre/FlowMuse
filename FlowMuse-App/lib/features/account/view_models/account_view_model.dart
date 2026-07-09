@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../shared/storage/local_settings_repository.dart';
 import '../../whiteboard/view_models/whiteboard_view_model.dart';
 import '../models/account_user.dart';
 import '../models/collaboration_identity.dart';
@@ -154,14 +154,14 @@ class AccountViewModel extends Notifier<AccountState> {
   }
 
   Future<String> _loadGuestName() async {
-    final prefs = await SharedPreferences.getInstance();
-    final existing = prefs.getString('flowmuse.guest.name');
+    final settings = defaultLocalSettingsRepository;
+    final existing = await settings.readString('flowmuse.guest.name');
     if (existing != null && existing.isNotEmpty) {
       return existing;
     }
     final suffix = DateTime.now().millisecondsSinceEpoch % 9000 + 1000;
     final name = '匿名用户 $suffix';
-    await prefs.setString('flowmuse.guest.name', name);
+    await settings.writeString('flowmuse.guest.name', name);
     return name;
   }
 }

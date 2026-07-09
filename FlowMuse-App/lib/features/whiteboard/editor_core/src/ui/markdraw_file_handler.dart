@@ -129,6 +129,20 @@ class MarkdrawFileHandler {
     await controller.importImage(file.bytes!, file.name, screenSize);
   }
 
+  Future<void> importPdfSource(
+    PdfImportSource source,
+    Size canvasSize, {
+    bool asBackground = false,
+  }) async {
+    final importer = PdfImporter(renderer: createDefaultPdfPageRenderer());
+    await importer.importPdf(
+      source: source,
+      controller: controller,
+      canvasSize: canvasSize,
+      asBackground: asBackground,
+    );
+  }
+
   /// Shows a file picker and imports a library file.
   Future<void> importLibrary() async {
     final result = await FilePicker.platform.pickFiles(

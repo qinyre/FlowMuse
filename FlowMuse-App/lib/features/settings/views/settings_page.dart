@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../app/app_router.dart';
 import '../../../app/app_theme_preset.dart';
@@ -17,6 +16,7 @@ import '../../../shared/widgets/right_page.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
 import '../../account/view_models/account_view_model.dart';
 import '../../library/repositories/library_repository.dart';
+import '../repositories/local_backup_repository.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key, this.showAccountFirst});
@@ -276,15 +276,7 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
       _backupMessage = null;
     });
     try {
-      final preferences = await SharedPreferences.getInstance();
-      final payload = <String, Object?>{
-        'version': 1,
-        'createdAt': DateTime.now().toIso8601String(),
-        'values': {
-          for (final key in preferences.getKeys())
-            if (_isBackupKey(key)) key: preferences.get(key),
-        },
-      };
+      final payload = await defaultLocalBackupRepository.exportBackup();
       final path = await FilePicker.platform.saveFile(
         dialogTitle: '导出 FlowMuse 备份',
         fileName: 'flowmuse-backup.json',
@@ -336,18 +328,7 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
         throw StateError('未读取到备份文件内容');
       }
       final decoded = jsonDecode(utf8.decode(bytes)) as Map<String, Object?>;
-      final values = decoded['values'];
-      if (values is! Map) {
-        throw const FormatException('备份文件格式不正确');
-      }
-      final preferences = await SharedPreferences.getInstance();
-      for (final entry in values.entries) {
-        final key = entry.key.toString();
-        if (!_isBackupKey(key)) {
-          continue;
-        }
-        await _setPreferenceValue(preferences, key, entry.value);
-      }
+      await defaultLocalBackupRepository.importBackup(decoded);
       if (!mounted) {
         return;
       }
@@ -681,30 +662,6 @@ class _SettingsCard extends StatelessWidget {
       color: Theme.of(context).colorScheme.surface,
       child: SizedBox(height: 72, child: Center(child: child)),
     );
-  }
-}
-
-bool _isBackupKey(String key) {
-  return key == 'flowmuse.library.index.v2' ||
-      key == 'theme_preset' ||
-      key.startsWith('note.excalidraw.scene.');
-}
-
-Future<void> _setPreferenceValue(
-  SharedPreferences preferences,
-  String key,
-  Object? value,
-) async {
-  if (value is bool) {
-    await preferences.setBool(key, value);
-  } else if (value is int) {
-    await preferences.setInt(key, value);
-  } else if (value is double) {
-    await preferences.setDouble(key, value);
-  } else if (value is String) {
-    await preferences.setString(key, value);
-  } else if (value is List) {
-    await preferences.setStringList(key, value.whereType<String>().toList());
   }
 }
 
