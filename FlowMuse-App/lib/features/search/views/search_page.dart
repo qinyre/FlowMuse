@@ -34,7 +34,7 @@ class SearchPage extends ConsumerWidget {
                   .firstOrNull
                   ?.name ??
               '全部标签';
-    final results = _searchNotes(state, libraryIndex.notes);
+    final results = _searchNotes(state, libraryIndex);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -292,20 +292,16 @@ class _SearchEmptyState extends StatelessWidget {
   }
 }
 
-List<NoteItem> _searchNotes(SearchState state, List<NoteItem> notes) {
+List<NoteItem> _searchNotes(SearchState state, LibraryIndex libraryIndex) {
   final query = state.query.trim().toLowerCase();
   if (query.isEmpty) {
     return const [];
   }
-  final results = notes.where((item) {
-    if (state.notebookScopeId != null &&
-        item.notebookId != state.notebookScopeId) {
-      return false;
-    }
-    if (state.tagScopeId != null && !item.tagIds.contains(state.tagScopeId)) {
-      return false;
-    }
-    return item.title.toLowerCase().contains(query);
-  }).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-  return results;
+  return libraryIndex.notesForQuery(
+    LibraryQuery(
+      queryText: query,
+      notebookId: state.notebookScopeId,
+      tagIds: state.tagScopeId == null ? const [] : [state.tagScopeId!],
+    ),
+  );
 }

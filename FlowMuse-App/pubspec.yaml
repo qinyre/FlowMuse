@@ -56,6 +56,9 @@ dependencies:
   flutter_dotenv: ^6.0.1
   flutter_secure_storage: ^9.2.4
   flutter_secure_storage_ohos: ^1.0.0
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  sqflite_common_ffi: ^2.3.6
 
 dev_dependencies:
   flutter_test:
@@ -75,6 +78,13 @@ dev_dependencies:
 dependency_overrides:
   code_assets:
     path: tool/vendor/code_assets
+
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3
+      name: sqlite3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

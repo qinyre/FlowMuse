@@ -62,9 +62,7 @@ class TagDetailPage extends ConsumerWidget {
     final tag = _findTag(state.tags, tagId);
     final libraryIndex = ref.watch(libraryIndexProvider).asData?.value;
     final notes =
-        libraryIndex?.notes
-            .where((item) => item.tagIds.contains(tagId))
-            .toList() ??
+        libraryIndex?.notesForQuery(LibraryQuery(tagIds: [tagId])) ??
         const <NoteItem>[];
 
     return _TagPageFrame(

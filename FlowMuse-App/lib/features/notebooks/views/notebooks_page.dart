@@ -64,9 +64,7 @@ class NotebookDetailPage extends ConsumerWidget {
     final notebook = _findNotebook(state.notebooks, notebookId);
     final libraryIndex = ref.watch(libraryIndexProvider).asData?.value;
     final notes =
-        libraryIndex?.notes
-            .where((item) => item.notebookId == notebookId)
-            .toList() ??
+        libraryIndex?.notesForQuery(LibraryQuery(notebookId: notebookId)) ??
         const <NoteItem>[];
 
     return _CollectionPage(

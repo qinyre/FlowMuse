@@ -74,13 +74,12 @@ class TagsViewModel extends Notifier<TagsState> {
               TagItem(
                 id: tag.id,
                 name: tag.name,
-                count: index.notes
-                    .where((item) => item.tagIds.contains(tag.id))
-                    .length,
+                count: index.countNotesWithTag(tag.id),
                 coverColor: tag.coverColor,
                 noteIds: [
                   for (final note in index.notes)
-                    if (note.tagIds.contains(tag.id)) note.id,
+                    if (!note.isDeleted && note.tagIds.contains(tag.id))
+                      note.id,
                 ],
               ),
           ];

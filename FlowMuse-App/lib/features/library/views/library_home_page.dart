@@ -102,13 +102,15 @@ List<NoteItem> _notesForSpecialView(
 ) {
   final source = switch (specialView) {
     LibrarySpecialView.none => state.visibleNotes,
-    LibrarySpecialView.unnotebooked =>
-      libraryIndex.activeNotes
-          .where((item) => item.notebookId == null)
-          .toList(),
-    LibrarySpecialView.untagged =>
-      libraryIndex.activeNotes.where((item) => item.tagIds.isEmpty).toList(),
-    LibrarySpecialView.trash => libraryIndex.deletedNotes,
+    LibrarySpecialView.unnotebooked => libraryIndex.notesForQuery(
+      const LibraryQuery(onlyUnnotebooked: true),
+    ),
+    LibrarySpecialView.untagged => libraryIndex.notesForQuery(
+      const LibraryQuery(onlyUntagged: true),
+    ),
+    LibrarySpecialView.trash => libraryIndex.notesForQuery(
+      const LibraryQuery(onlyDeleted: true),
+    ),
   };
   return source.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 }

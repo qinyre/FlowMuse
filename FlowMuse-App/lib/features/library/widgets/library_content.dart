@@ -102,15 +102,17 @@ class _LibraryContentState extends State<LibraryContent> {
     if (widget.specialView == LibrarySpecialView.none &&
         _pageController.hasClients) {
       _animatingFilterIndex = filterIndex;
-      _pageController.animateToPage(
-        filterIndex,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-      ).whenComplete(() {
-        if (mounted && _animatingFilterIndex == filterIndex) {
-          _animatingFilterIndex = null;
-        }
-      });
+      _pageController
+          .animateToPage(
+            filterIndex,
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeOutCubic,
+          )
+          .whenComplete(() {
+            if (mounted && _animatingFilterIndex == filterIndex) {
+              _animatingFilterIndex = null;
+            }
+          });
     }
     widget.onFilterChanged(filter);
   }
@@ -211,7 +213,8 @@ class _FilterTabsState extends State<_FilterTabs> {
   @override
   void initState() {
     super.initState();
-    _indicatorPosition = LibraryFilter.values.indexOf(widget.selected) *
+    _indicatorPosition =
+        LibraryFilter.values.indexOf(widget.selected) *
         _FilterTabs._buttonWidth;
     widget.pageController.addListener(_onScroll);
   }
@@ -269,10 +272,11 @@ class _FilterTabsState extends State<_FilterTabs> {
                         ),
                         builder: (context, color, child) => Text(
                           _FilterTabs._labels[filter]!,
-                          style: Theme.of(context).textTheme.titleMedium!.copyWith(
-                            color: color,
-                            fontWeight: FontWeight.w400,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium!
+                              .copyWith(
+                                color: color,
+                                fontWeight: FontWeight.w400,
+                              ),
                         ),
                       ),
                     ),
@@ -282,7 +286,8 @@ class _FilterTabsState extends State<_FilterTabs> {
           ),
           Positioned(
             bottom: 0,
-            left: _indicatorPosition +
+            left:
+                _indicatorPosition +
                 (_FilterTabs._buttonWidth - _FilterTabs._indicatorWidth) / 2,
             child: Container(
               width: _FilterTabs._indicatorWidth,

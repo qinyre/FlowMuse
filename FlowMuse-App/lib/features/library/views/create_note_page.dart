@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -16,8 +16,6 @@ class CreateNotePage extends ConsumerStatefulWidget {
 }
 
 class _CreateNotePageState extends ConsumerState<CreateNotePage> {
-  static const _primary = Color(0xFF4F8F84);
-
   String _title = '';
   NoteType _noteType = NoteType.unbounded;
   PageTemplate _pageTemplate = PageTemplate.blank;
@@ -57,9 +55,9 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
   }
 
   void _showImportHint() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('请先创建笔记后，在白板页使用打开文件导入。')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('请先创建笔记后，在白板页使用打开文件导入。')));
   }
 
   @override
@@ -481,7 +479,7 @@ class _TemplateCard extends StatelessWidget {
                       size: 20,
                     )
                   : null,
-              ),
+            ),
           ],
         ),
       ),
