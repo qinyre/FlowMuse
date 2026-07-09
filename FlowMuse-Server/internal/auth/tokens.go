@@ -19,9 +19,10 @@ type TokenService struct {
 }
 
 type tokenClaims struct {
-	UserID string `json:"uid"`
-	Email  string `json:"email"`
-	Exp    int64  `json:"exp"`
+	UserID    string `json:"uid"`
+	SessionID string `json:"sid"`
+	Email     string `json:"email"`
+	Exp       int64  `json:"exp"`
 }
 
 func NewTokenService(secret string, ttl time.Duration) *TokenService {
@@ -31,12 +32,13 @@ func NewTokenService(secret string, ttl time.Duration) *TokenService {
 	}
 }
 
-func (s *TokenService) Issue(user User) (string, error) {
+func (s *TokenService) Issue(user User, sessionID string) (string, error) {
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 	body, err := json.Marshal(tokenClaims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Exp:    time.Now().Add(s.ttl).Unix(),
+		UserID:    user.ID,
+		SessionID: sessionID,
+		Email:     user.Email,
+		Exp:       time.Now().Add(s.ttl).Unix(),
 	})
 	if err != nil {
 		return "", err
@@ -46,27 +48,31 @@ func (s *TokenService) Issue(user User) (string, error) {
 	return unsigned + "." + s.sign(unsigned), nil
 }
 
-func (s *TokenService) Verify(token string) (string, error) {
+func (s *TokenService) Verify(token string) (string, string, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return "", ErrInvalidToken
+		return "", "", ErrInvalidToken
 	}
 	unsigned := parts[0] + "." + parts[1]
 	if !hmac.Equal([]byte(parts[2]), []byte(s.sign(unsigned))) {
-		return "", ErrInvalidToken
+		return "", "", ErrInvalidToken
 	}
 	body, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return "", ErrInvalidToken
+		return "", "", ErrInvalidToken
 	}
 	var claims tokenClaims
 	if err := json.Unmarshal(body, &claims); err != nil {
-		return "", ErrInvalidToken
+		return "", "", ErrInvalidToken
 	}
-	if claims.UserID == "" || claims.Exp < time.Now().Unix() {
-		return "", ErrInvalidToken
+	if claims.UserID == "" || claims.SessionID == "" || claims.Exp < time.Now().Unix() {
+		return "", "", ErrInvalidToken
 	}
-	return claims.UserID, nil
+	return claims.UserID, claims.SessionID, nil
+}
+
+func (s *TokenService) ExpiresAt() time.Time {
+	return time.Now().Add(s.ttl)
 }
 
 func (s *TokenService) sign(value string) string {

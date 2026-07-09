@@ -38,14 +38,30 @@ func (s *FileStore) EnsureBucket(ctx context.Context) error {
 }
 
 func (s *FileStore) Put(ctx context.Context, roomID, fileID, contentType string, body io.Reader, size int64) error {
-	_, err := s.client.PutObject(ctx, s.bucket, objectName(roomID, fileID), body, size, minio.PutObjectOptions{
+	return s.PutObject(ctx, objectName(roomID, fileID), contentType, body, size)
+}
+
+func (s *FileStore) Get(ctx context.Context, roomID, fileID string) (*minio.Object, minio.ObjectInfo, error) {
+	return s.GetObject(ctx, objectName(roomID, fileID))
+}
+
+func (s *FileStore) PutAvatar(ctx context.Context, userID, contentType string, body io.Reader, size int64) error {
+	return s.PutObject(ctx, avatarObjectName(userID), contentType, body, size)
+}
+
+func (s *FileStore) GetAvatar(ctx context.Context, userID string) (*minio.Object, minio.ObjectInfo, error) {
+	return s.GetObject(ctx, avatarObjectName(userID))
+}
+
+func (s *FileStore) PutObject(ctx context.Context, name, contentType string, body io.Reader, size int64) error {
+	_, err := s.client.PutObject(ctx, s.bucket, name, body, size, minio.PutObjectOptions{
 		ContentType: contentType,
 	})
 	return err
 }
 
-func (s *FileStore) Get(ctx context.Context, roomID, fileID string) (*minio.Object, minio.ObjectInfo, error) {
-	object, err := s.client.GetObject(ctx, s.bucket, objectName(roomID, fileID), minio.GetObjectOptions{})
+func (s *FileStore) GetObject(ctx context.Context, name string) (*minio.Object, minio.ObjectInfo, error) {
+	object, err := s.client.GetObject(ctx, s.bucket, name, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, minio.ObjectInfo{}, err
 	}
@@ -59,6 +75,10 @@ func (s *FileStore) Get(ctx context.Context, roomID, fileID string) (*minio.Obje
 
 func objectName(roomID, fileID string) string {
 	return fmt.Sprintf("rooms/%s/files/%s", sanitizePathPart(roomID), sanitizePathPart(fileID))
+}
+
+func avatarObjectName(userID string) string {
+	return fmt.Sprintf("users/%s/avatar", sanitizePathPart(userID))
 }
 
 func sanitizePathPart(value string) string {

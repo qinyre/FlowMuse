@@ -455,9 +455,15 @@ func (h *Hub) rememberSocketIdentity(client *socket.Socket) {
 func (h *Hub) identityFromSocket(client *socket.Socket) auth.Identity {
 	token := auth.BearerToken(requestHeader(client, "Authorization"))
 	if token != "" {
-		if userID, err := h.tokens.Verify(token); err == nil {
+		if userID, sessionID, err := h.tokens.Verify(token); err == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
+			if !h.userStore.SessionActive(ctx, sessionID, userID) {
+				return auth.Identity{
+					DisplayName: auth.GuestName(string(client.Id()) + remoteAddress(client)),
+					IsGuest:     true,
+				}
+			}
 			if user, err := h.userStore.Load(ctx, userID); err == nil {
 				return auth.Identity{
 					UserID:      user.ID,

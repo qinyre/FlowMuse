@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/app_router.dart';
 import '../../features/account/view_models/account_view_model.dart';
+import '../../features/account/widgets/account_avatar.dart';
 import 'app_spacing.dart';
 import 'app_shell.dart';
 
@@ -99,36 +100,24 @@ class SharedSidebarAvatar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final account = ref.watch(accountViewModelProvider);
-    final colorScheme = Theme.of(context).colorScheme;
     final identity = account.collaborationIdentity;
     final label = identity.isGuest ? identity.username : identity.username;
-    final initial = label.trim().isEmpty ? '匿' : label.trim().characters.first;
 
     return Tooltip(
       message: identity.isGuest ? '匿名协作身份' : '账户与协作',
       child: InkWell(
         onTap: () => context.go(AppRoutes.accountSettings),
         customBorder: const CircleBorder(),
-        child: CircleAvatar(
-          radius: 17,
-          backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
-          child: account.status == AccountStatus.loading
-              ? SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: colorScheme.primary,
-                  ),
-                )
-              : Text(
-                  initial,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w800,
-                  ),
+        child: account.status == AccountStatus.loading
+            ? const SizedBox(
+                width: 34,
+                height: 34,
+                child: Padding(
+                  padding: EdgeInsets.all(10),
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-        ),
+              )
+            : AccountAvatar(label: label, user: account.user, radius: 17),
       ),
     );
   }
@@ -293,11 +282,12 @@ class SharedSidebarItem extends StatelessWidget {
                             child: Text(
                               value,
                               textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                                fontSize: 11,
-                                height: 1.0,
-                              ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontSize: 11,
+                                    height: 1.0,
+                                  ),
                             ),
                           ),
                         ),
@@ -379,7 +369,11 @@ class SharedSidebarActionButton extends StatelessWidget {
         constraints: const BoxConstraints.tightFor(width: 28, height: 28),
         padding: EdgeInsets.zero,
         onPressed: onPressed,
-        icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),
+        icon: Icon(
+          icon,
+          color: Theme.of(context).colorScheme.primary,
+          size: 15,
+        ),
       ),
     );
   }

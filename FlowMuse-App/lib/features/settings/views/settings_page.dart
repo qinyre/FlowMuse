@@ -15,6 +15,7 @@ import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
 import '../../account/view_models/account_view_model.dart';
+import '../../account/widgets/account_avatar.dart';
 import '../../library/repositories/library_repository.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -474,6 +475,9 @@ class _AccountSettingsSectionState
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _displayNameController = TextEditingController();
+  final _oldPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _resetEmailController = TextEditingController();
   bool _registerMode = false;
   bool _busy = false;
 
@@ -482,6 +486,9 @@ class _AccountSettingsSectionState
     _emailController.dispose();
     _passwordController.dispose();
     _displayNameController.dispose();
+    _oldPasswordController.dispose();
+    _newPasswordController.dispose();
+    _resetEmailController.dispose();
     super.dispose();
   }
 
@@ -493,46 +500,106 @@ class _AccountSettingsSectionState
 
     if (account.isAuthenticated) {
       final user = account.user!;
+      if (_displayNameController.text.isEmpty) {
+        _displayNameController.text = user.displayName;
+      }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SettingsCard(
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              leading: CircleAvatar(
-                backgroundColor: selectedColor.withValues(alpha: 0.12),
-                child: Text(
-                  user.collaboratorName.characters.first,
-                  style: TextStyle(
-                    color: selectedColor,
-                    fontWeight: FontWeight.w800,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    onTap: _busy ? null : _pickAvatar,
+                    customBorder: const CircleBorder(),
+                    child: AccountAvatar(
+                      label: user.collaboratorName,
+                      user: user,
+                      radius: 34,
+                    ),
                   ),
-                ),
-              ),
-              title: Text(user.collaboratorName),
-              subtitle: Text(user.email),
-              trailing: Text(
-                '已登录',
-                style: TextStyle(
-                  color: selectedColor,
-                  fontWeight: FontWeight.w600,
-                ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.email,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          user.emailVerified ? '邮箱已验证' : '邮箱未验证',
+                          style: TextStyle(
+                            color: user.emailVerified
+                                ? selectedColor
+                                : colorScheme.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _displayNameController,
+                          decoration: const InputDecoration(labelText: '昵称'),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: AppSpacing.controlGap,
+                          runSpacing: AppSpacing.controlGap,
+                          children: [
+                            FilledButton(
+                              onPressed: _busy ? null : _updateProfile,
+                              child: const Text('保存资料'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _busy ? null : _pickAvatar,
+                              icon: const Icon(LucideIcons.imageUp),
+                              label: const Text('上传头像'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
           const SizedBox(height: 16),
           _SettingsCard(
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              leading: const Icon(LucideIcons.usersRound),
-              title: const Text('协作身份'),
-              subtitle: const Text('创建协作房间时会记录房主，访客仍可通过链接加入'),
-              trailing: Text(
-                user.collaboratorName,
-                style: TextStyle(
-                  color: selectedColor,
-                  fontWeight: FontWeight.w600,
-                ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '修改密码',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _oldPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: '旧密码'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _newPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: '新密码'),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _busy ? null : _changePassword,
+                    child: const Text('修改密码并重新登录'),
+                  ),
+                ],
               ),
             ),
           ),
@@ -547,6 +614,13 @@ class _AccountSettingsSectionState
               onTap: _busy ? null : _logout,
             ),
           ),
+          if (account.error != null || account.message != null) ...[
+            const SizedBox(height: 12),
+            _AccountMessage(
+              message: account.error ?? account.message!,
+              isError: account.error != null,
+            ),
+          ],
         ],
       );
     }
@@ -559,8 +633,16 @@ class _AccountSettingsSectionState
             contentPadding: const EdgeInsets.symmetric(horizontal: 24),
             leading: const Icon(LucideIcons.userRound),
             title: Text(account.collaborationIdentity.username),
-            subtitle: const Text('当前使用匿名协作身份，可通过链接加入房间'),
-            trailing: const Text('访客'),
+            subtitle: Text(
+              account.status == AccountStatus.verificationRequired
+                  ? '验证邮件已发送，请验证后登录'
+                  : '当前使用匿名协作身份，可通过链接加入房间',
+            ),
+            trailing: Text(
+              account.status == AccountStatus.verificationRequired
+                  ? '待验证'
+                  : '访客',
+            ),
           ),
         ),
         const SizedBox(height: 16),
@@ -598,15 +680,16 @@ class _AccountSettingsSectionState
                 ],
                 if (account.error != null) ...[
                   const SizedBox(height: 12),
-                  Text(
-                    account.error!,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: colorScheme.error),
-                  ),
+                  _AccountMessage(message: account.error!, isError: true),
+                ],
+                if (account.message != null) ...[
+                  const SizedBox(height: 12),
+                  _AccountMessage(message: account.message!, isError: false),
                 ],
                 const SizedBox(height: 18),
-                Row(
+                Wrap(
+                  spacing: AppSpacing.controlGap,
+                  runSpacing: AppSpacing.controlGap,
                   children: [
                     FilledButton(
                       onPressed: _busy ? null : _submit,
@@ -614,7 +697,7 @@ class _AccountSettingsSectionState
                         _busy
                             ? '处理中'
                             : _registerMode
-                            ? '注册并登录'
+                            ? '注册'
                             : '登录',
                       ),
                     ),
@@ -626,7 +709,25 @@ class _AccountSettingsSectionState
                                 setState(() => _registerMode = !_registerMode),
                       child: Text(_registerMode ? '已有账号，去登录' : '注册新账号'),
                     ),
+                    TextButton(
+                      onPressed: _busy ? null : _requestPasswordReset,
+                      child: const Text('忘记密码'),
+                    ),
+                    if (account.status == AccountStatus.verificationRequired)
+                      TextButton(
+                        onPressed: _busy ? null : _resendVerification,
+                        child: const Text('重发验证邮件'),
+                      ),
                   ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _resetEmailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: '找回密码邮箱',
+                    hintText: '为空时使用上方邮箱',
+                  ),
                 ),
               ],
             ),
@@ -659,6 +760,105 @@ class _AccountSettingsSectionState
     }
   }
 
+  Future<void> _updateProfile() async {
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(accountViewModelProvider.notifier)
+          .updateProfile(displayName: _displayNameController.text.trim());
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _pickAvatar() async {
+    setState(() => _busy = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        dialogTitle: '选择头像',
+        type: FileType.custom,
+        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) {
+        return;
+      }
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) {
+        throw StateError('未读取到头像文件内容');
+      }
+      await ref
+          .read(accountViewModelProvider.notifier)
+          .uploadAvatar(
+            bytes: bytes,
+            mimeType: _mimeTypeForAvatar(file.extension ?? ''),
+          );
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _changePassword() async {
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(accountViewModelProvider.notifier)
+          .changePassword(
+            oldPassword: _oldPasswordController.text,
+            newPassword: _newPasswordController.text,
+          );
+      _oldPasswordController.clear();
+      _newPasswordController.clear();
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _requestPasswordReset() async {
+    setState(() => _busy = true);
+    try {
+      final email = _resetEmailController.text.trim().isEmpty
+          ? _emailController.text.trim()
+          : _resetEmailController.text.trim();
+      await ref
+          .read(accountViewModelProvider.notifier)
+          .requestPasswordReset(email);
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _resendVerification() async {
+    setState(() => _busy = true);
+    try {
+      final email = accountEmail();
+      await ref
+          .read(accountViewModelProvider.notifier)
+          .resendVerification(email);
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  String accountEmail() {
+    final userEmail = ref.read(accountViewModelProvider).user?.email;
+    if (userEmail != null && userEmail.isNotEmpty) {
+      return userEmail;
+    }
+    return _emailController.text.trim();
+  }
+
   Future<void> _logout() async {
     setState(() => _busy = true);
     try {
@@ -668,6 +868,39 @@ class _AccountSettingsSectionState
         setState(() => _busy = false);
       }
     }
+  }
+
+  String _mimeTypeForAvatar(String extension) {
+    switch (extension.toLowerCase()) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'webp':
+        return 'image/webp';
+      case 'gif':
+        return 'image/gif';
+      default:
+        return 'image/png';
+    }
+  }
+}
+
+class _AccountMessage extends StatelessWidget {
+  const _AccountMessage({required this.message, required this.isError});
+
+  final String message;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      message,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: isError
+            ? Theme.of(context).colorScheme.error
+            : Theme.of(context).colorScheme.primary,
+      ),
+    );
   }
 }
 
@@ -699,7 +932,10 @@ class _SettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card.outlined(
       color: Theme.of(context).colorScheme.surface,
-      child: SizedBox(height: 72, child: Center(child: child)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 72),
+        child: Center(child: child),
+      ),
     );
   }
 }
