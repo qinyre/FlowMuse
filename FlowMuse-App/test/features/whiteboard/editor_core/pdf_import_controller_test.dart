@@ -63,6 +63,93 @@ void main() {
     expect(controller.editorState.scene.files, isEmpty);
     expect(controller.editorState.selectedIds, isEmpty);
   });
+
+  test('refits the first PDF page when the real canvas size arrives', () async {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    final pageBytes = await _makePng(0xffff0000);
+
+    await controller.importPdfPages(
+      [
+        PdfRenderedPage(
+          bytes: pageBytes,
+          mimeType: 'image/png',
+          width: 400,
+          height: 800,
+          pageNumber: 1,
+        ),
+        PdfRenderedPage(
+          bytes: pageBytes,
+          mimeType: 'image/png',
+          width: 400,
+          height: 800,
+          pageNumber: 2,
+        ),
+      ],
+      const Size(1000, 800),
+      asBackground: true,
+    );
+
+    controller.lastCanvasSize = const Size(400, 600);
+
+    expect(controller.layout.isPaged, isTrue);
+    expect(
+      controller.layout.pages.every((page) => page.source == 'pdf'),
+      isTrue,
+    );
+    expect(controller.editorState.viewport.zoom, closeTo(0.75, 0.001));
+    expect(
+      controller.editorState.viewport.visibleRect(const Size(400, 600)),
+      const Rect.fromLTWH(0, 0, 533.3333333333334, 800),
+    );
+
+    controller.applyResult(
+      UpdateViewportResult(
+        const ViewportState(offset: Offset(10000, 10000), zoom: 0.75),
+      ),
+    );
+
+    expect(controller.editorState.viewport.offset.dx, lessThan(10000));
+    expect(controller.editorState.viewport.offset.dy, lessThan(10000));
+  });
+
+  test('fits the first PDF page after reloading a saved scene', () async {
+    final source = MarkdrawController();
+    addTearDown(source.dispose);
+    final pageBytes = await _makePng(0xffff0000);
+    await source.importPdfPages(
+      [
+        PdfRenderedPage(
+          bytes: pageBytes,
+          mimeType: 'image/png',
+          width: 400,
+          height: 800,
+          pageNumber: 1,
+        ),
+        PdfRenderedPage(
+          bytes: pageBytes,
+          mimeType: 'image/png',
+          width: 400,
+          height: 800,
+          pageNumber: 2,
+        ),
+      ],
+      const Size(1000, 800),
+      asBackground: true,
+    );
+
+    final restored = MarkdrawController();
+    addTearDown(restored.dispose);
+    restored.lastCanvasSize = const Size(400, 600);
+    restored.loadFromContent(
+      source.serializeScene(format: DocumentFormat.excalidraw),
+      'saved.excalidraw',
+    );
+
+    expect(restored.layout.pages.any((page) => page.source == 'pdf'), isTrue);
+    expect(restored.editorState.viewport.zoom, closeTo(0.75, 0.001));
+    expect(restored.editorState.viewport.offset.dy, closeTo(0, 0.001));
+  });
 }
 
 Future<Uint8List> _makePng(int argbColor) async {
