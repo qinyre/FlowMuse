@@ -7,9 +7,12 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../whiteboard/pdf_note_import/pdf_note_import_payload.dart';
 import '../../whiteboard/pdf_note_import/pdf_note_import_service.dart';
+import '../../whiteboard/collaboration/models/excalidraw_scene.dart';
+import '../../whiteboard/repositories/whiteboard_scene_repository.dart';
 import '../models/note_item.dart';
 import '../repositories/library_repository.dart';
 
@@ -46,13 +49,19 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     );
     setState(() => _creating = true);
     try {
+      FocusManager.instance.primaryFocus?.unfocus();
       final note = await ref
-          .read(libraryIndexProvider.notifier)
+          .read(libraryRepositoryProvider)
           .createNote(
             noteType: _noteType,
             pageTemplate: _pageTemplate,
             title: _title,
           );
+      await defaultWhiteboardSceneRepository.saveScene(
+        note.id,
+        emptyExcalidrawSceneContent,
+      );
+      ref.invalidate(libraryIndexProvider);
       debugPrint(
         '[FlowMuseCreateNote] CreateNotePage.create success '
         'noteId=${note.id}',
@@ -60,7 +69,11 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
       if (!mounted) {
         return;
       }
-      context.push(AppRoutes.whiteboardPath(noteId: note.id));
+      runWhenUiStable(() {
+        if (mounted) {
+          context.pushReplacement(AppRoutes.whiteboardPath(noteId: note.id));
+        }
+      });
     } catch (error, stackTrace) {
       debugPrint('[FlowMuseCreateNote] CreateNotePage.create failed: $error');
       debugPrintStack(
@@ -72,7 +85,6 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
           context,
         ).showSnackBar(SnackBar(content: Text('创建失败：$error')));
       }
-      rethrow;
     } finally {
       if (mounted) {
         setState(() => _creating = false);
@@ -242,7 +254,12 @@ class _TopBar extends StatelessWidget {
             ),
             const Spacer(),
             ElevatedButton(
-              onPressed: creating ? null : onCreate,
+              onPressed: creating
+                  ? null
+                  : () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      onCreate();
+                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4F8F84),
                 foregroundColor: Colors.white,
