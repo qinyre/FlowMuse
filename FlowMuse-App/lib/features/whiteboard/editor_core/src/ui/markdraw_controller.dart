@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
@@ -16,6 +17,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
+import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
 
 /// Which color picker to open programmatically.
@@ -91,6 +93,7 @@ class MarkdrawController extends ChangeNotifier {
   final _imageCache = ImageElementCache();
   final _flowchartCreator = FlowchartCreator();
   final _flowchartNavigator = FlowchartNavigator();
+  final _harmonyStylusStrokeSmoother = HarmonyStylusStrokeSmoother();
 
   // UI state
   List<LibraryItem> _libraryItems = [];
@@ -1107,7 +1110,20 @@ class MarkdrawController extends ChangeNotifier {
     // Frame label editing is committed by the overlay itself on submit/blur.
     // We don't force-commit here since the TextField handles its own focus.
 
-    final point = toScene(localPosition);
+    final sample = _harmonyStylusStrokeSmoother.down(
+      point: Point(localPosition.dx, localPosition.dy),
+      pressure: pressure,
+      platform: defaultTargetPlatform,
+      kind: kind,
+      activeToolType: editorState.activeToolType,
+    );
+    final effectiveLocalPosition = sample?.point;
+    final point = toScene(
+      effectiveLocalPosition == null
+          ? localPosition
+          : Offset(effectiveLocalPosition.x, effectiveLocalPosition.y),
+    );
+    final effectivePressure = sample?.pressure ?? pressure;
 
     // Link-to-element mode: clicking an element sets the link target
     if (_linkToElementMode) {
@@ -1153,7 +1169,11 @@ class MarkdrawController extends ChangeNotifier {
       );
     } else {
       applyResult(
-        _activeTool.onPointerDown(point, toolContext, pressure: pressure),
+        _activeTool.onPointerDown(
+          point,
+          toolContext,
+          pressure: effectivePressure,
+        ),
       );
     }
   }
@@ -1166,13 +1186,24 @@ class MarkdrawController extends ChangeNotifier {
     PointerDeviceKind kind = PointerDeviceKind.mouse,
   }) {
     if (isCreationTool && !shouldDispatchToCreationTool(kind)) return;
-    final point = toScene(localPosition);
+    final sample = _harmonyStylusStrokeSmoother.move(
+      point: Point(localPosition.dx, localPosition.dy),
+      pressure: pressure,
+      platform: defaultTargetPlatform,
+      kind: kind,
+      activeToolType: editorState.activeToolType,
+    );
+    if (sample == null) {
+      mousePosition = localPosition;
+      return;
+    }
+    final point = toScene(Offset(sample.point.x, sample.point.y));
     applyResult(
       _activeTool.onPointerMove(
         point,
         toolContext,
         screenDelta: Offset(delta.dx, delta.dy),
-        pressure: pressure,
+        pressure: sample.pressure ?? pressure,
       ),
     );
     mousePosition = localPosition;
@@ -1187,7 +1218,20 @@ class MarkdrawController extends ChangeNotifier {
     PointerDeviceKind kind = PointerDeviceKind.mouse,
   }) {
     if (isCreationTool && !shouldDispatchToCreationTool(kind)) return;
-    final point = toScene(localPosition);
+    final sample = _harmonyStylusStrokeSmoother.up(
+      point: Point(localPosition.dx, localPosition.dy),
+      pressure: pressure,
+      platform: defaultTargetPlatform,
+      kind: kind,
+      activeToolType: editorState.activeToolType,
+    );
+    final effectiveLocalPosition = sample?.point;
+    final point = toScene(
+      effectiveLocalPosition == null
+          ? localPosition
+          : Offset(effectiveLocalPosition.x, effectiveLocalPosition.y),
+    );
+    final effectivePressure = sample?.pressure ?? pressure;
     final now = DateTime.now();
     final isDoubleClick =
         _lastPointerUpTime != null &&
@@ -1212,7 +1256,11 @@ class MarkdrawController extends ChangeNotifier {
       );
     } else {
       applyResult(
-        _activeTool.onPointerUp(point, toolContext, pressure: pressure),
+        _activeTool.onPointerUp(
+          point,
+          toolContext,
+          pressure: effectivePressure,
+        ),
       );
     }
 
