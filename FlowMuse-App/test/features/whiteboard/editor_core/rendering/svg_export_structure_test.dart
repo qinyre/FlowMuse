@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/export/svg_exporter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 1x1 透明 PNG 的最小合法字节。
