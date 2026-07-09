@@ -151,13 +151,21 @@ GoRouter createAppRouter() {
       ),
       GoRoute(
         path: AppRoutes.verifyEmail,
-        builder: (context, state) =>
+        pageBuilder: (context, state) {
+          return _standalonePage(
+            state,
             VerifyEmailPage(token: state.uri.queryParameters['token'] ?? ''),
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.resetPassword,
-        builder: (context, state) =>
+        pageBuilder: (context, state) {
+          return _standalonePage(
+            state,
             ResetPasswordPage(token: state.uri.queryParameters['token'] ?? ''),
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.collaborationWhiteboard,
@@ -165,8 +173,8 @@ GoRouter createAppRouter() {
           final room = state.extra is CollaborationRoom
               ? state.extra! as CollaborationRoom
               : CollaborationRoom.parse(state.uri.toString()).room;
-          return MaterialPage<void>(
-            key: state.pageKey,
+          return _workspacePage(
+            state,
             child: room == null
                 ? const WhiteboardPage.collaboration()
                 : WhiteboardPage.collaborationRoom(initialRoom: room),
@@ -177,10 +185,7 @@ GoRouter createAppRouter() {
         path: AppRoutes.whiteboard,
         pageBuilder: (context, state) {
           final noteId = state.pathParameters['noteId'] ?? 'note-untitled';
-          return MaterialPage<void>(
-            key: state.pageKey,
-            child: WhiteboardPage(noteId: noteId),
-          );
+          return _workspacePage(state, child: WhiteboardPage(noteId: noteId));
         },
       ),
     ],
@@ -212,38 +217,61 @@ Page<void> _contentPage(GoRouterState state, Widget child) {
 }
 
 Page<void> _detailPage(GoRouterState state, Widget child) {
-  return CustomTransitionPage<void>(
-    key: state.pageKey,
-    child: child,
-    transitionDuration: const Duration(milliseconds: 220),
-    reverseTransitionDuration: const Duration(milliseconds: 180),
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeInCubic,
-      );
-      return FadeTransition(
-        opacity: curved,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0.035, 0),
-            end: Offset.zero,
-          ).animate(curved),
-          child: child,
-        ),
-      );
-    },
+  return _motionPage(
+    state,
+    child,
+    enterDuration: const Duration(milliseconds: 220),
+    exitDuration: const Duration(milliseconds: 180),
+    offset: const Offset(0.035, 0),
   );
 }
 
 Page<void> _modalPage(GoRouterState state, Widget child) {
+  return _motionPage(
+    state,
+    child,
+    enterDuration: const Duration(milliseconds: 240),
+    exitDuration: const Duration(milliseconds: 180),
+    offset: const Offset(0, 0.025),
+  );
+}
+
+Page<void> _workspacePage(GoRouterState state, {required Widget child}) {
+  return _motionPage(
+    state,
+    child,
+    enterDuration: const Duration(milliseconds: 180),
+    exitDuration: const Duration(milliseconds: 140),
+    offset: Offset.zero,
+  );
+}
+
+Page<void> _standalonePage(GoRouterState state, Widget child) {
+  return _motionPage(
+    state,
+    child,
+    enterDuration: const Duration(milliseconds: 180),
+    exitDuration: const Duration(milliseconds: 140),
+    offset: const Offset(0, 0.015),
+  );
+}
+
+Page<void> _motionPage(
+  GoRouterState state,
+  Widget child, {
+  required Duration enterDuration,
+  required Duration exitDuration,
+  required Offset offset,
+}) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
     child: child,
-    transitionDuration: const Duration(milliseconds: 240),
-    reverseTransitionDuration: const Duration(milliseconds: 200),
+    transitionDuration: enterDuration,
+    reverseTransitionDuration: exitDuration,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        return child;
+      }
       final curved = CurvedAnimation(
         parent: animation,
         curve: Curves.easeOutCubic,
@@ -253,7 +281,7 @@ Page<void> _modalPage(GoRouterState state, Widget child) {
         opacity: curved,
         child: SlideTransition(
           position: Tween<Offset>(
-            begin: const Offset(0, 0.025),
+            begin: offset,
             end: Offset.zero,
           ).animate(curved),
           child: child,

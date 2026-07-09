@@ -308,10 +308,30 @@ class SharedSidebarItem extends StatelessWidget {
                         ),
                         padding: EdgeInsets.zero,
                         onPressed: onTrailingTap,
-                        icon: Icon(
-                          icon,
-                          color: colorScheme.onSurfaceVariant,
-                          size: 16,
+                        icon: AnimatedSwitcher(
+                          duration: MediaQuery.disableAnimationsOf(context)
+                              ? Duration.zero
+                              : const Duration(milliseconds: 140),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(
+                                  begin: 0.88,
+                                  end: 1,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: Icon(
+                            icon,
+                            key: ValueKey(icon),
+                            color: colorScheme.onSurfaceVariant,
+                            size: 16,
+                          ),
                         ),
                       ),
                       _ => const SizedBox.shrink(),
@@ -343,13 +363,43 @@ class SharedSidebarChildren extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 160),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeOutCubic,
-      child: expanded
-          ? Column(key: ValueKey(childrenKey), children: children)
-          : SizedBox.shrink(key: ValueKey(emptyKey)),
+    final animationsDisabled = MediaQuery.disableAnimationsOf(context);
+    final duration = animationsDisabled
+        ? Duration.zero
+        : const Duration(milliseconds: 180);
+
+    return ClipRect(
+      child: AnimatedSize(
+        duration: duration,
+        reverseDuration: animationsDisabled
+            ? Duration.zero
+            : const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topCenter,
+        child: AnimatedSwitcher(
+          duration: duration,
+          reverseDuration: animationsDisabled
+              ? Duration.zero
+              : const Duration(milliseconds: 140),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, -0.04),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            );
+          },
+          child: expanded
+              ? Column(key: ValueKey(childrenKey), children: children)
+              : SizedBox.shrink(key: ValueKey(emptyKey)),
+        ),
+      ),
     );
   }
 }
