@@ -242,6 +242,7 @@ class SvgPathConverter {
 
   /// Formats a number with up to 2 decimal places, stripping trailing zeros.
   static String _n(double v) {
+    if (v.isNaN || v.isInfinite) return '0';
     if (v == v.roundToDouble()) return v.toInt().toString();
     final s = v.toStringAsFixed(2);
     // Strip trailing zeros after decimal

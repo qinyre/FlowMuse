@@ -49,11 +49,7 @@ class CreateNoteCard extends StatelessWidget {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Icon(
-                      icon,
-                      size: 34,
-                      color: colorScheme.primary,
-                    ),
+                    child: Icon(icon, size: 34, color: colorScheme.primary),
                   ),
                 ),
               ),

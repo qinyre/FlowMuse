@@ -32,144 +32,38 @@ type HTTPAPI struct {
 	sceneStore     *storage.SceneStore
 	fileStore      *storage.FileStore
 	roomStore      *storage.RoomStore
-	userStore      *auth.UserStore
-	tokenService   *auth.TokenService
+	identitySource authIdentitySource
 	requestTimeout time.Duration
+}
+
+type authIdentitySource interface {
+	IdentityFromRequest(*http.Request) (auth.Identity, bool)
 }
 
 func NewHTTPAPI(
 	sceneStore *storage.SceneStore,
 	fileStore *storage.FileStore,
 	roomStore *storage.RoomStore,
-	userStore *auth.UserStore,
-	tokenService *auth.TokenService,
+	identitySource authIdentitySource,
 	requestTimeout time.Duration,
 ) *HTTPAPI {
 	return &HTTPAPI{
 		sceneStore:     sceneStore,
 		fileStore:      fileStore,
 		roomStore:      roomStore,
-		userStore:      userStore,
-		tokenService:   tokenService,
+		identitySource: identitySource,
 		requestTimeout: requestTimeout,
 	}
 }
 
 func (api *HTTPAPI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/health", api.health)
-	mux.HandleFunc("/api/auth/", api.auth)
 	mux.HandleFunc("/api/rooms", api.roomsRoot)
 	mux.HandleFunc("/api/rooms/", api.rooms)
 }
 
 func (api *HTTPAPI) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func (api *HTTPAPI) auth(w http.ResponseWriter, r *http.Request) {
-	action := strings.TrimPrefix(r.URL.Path, "/api/auth/")
-	switch action {
-	case "register":
-		api.register(w, r)
-	case "login":
-		api.login(w, r)
-	case "me":
-		api.me(w, r)
-	case "logout":
-		if r.Method != http.MethodPost {
-			methodNotAllowed(w, "POST")
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		http.NotFound(w, r)
-	}
-}
-
-func (api *HTTPAPI) register(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, "POST")
-		return
-	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-
-	var request struct {
-		Email       string `json:"email"`
-		Password    string `json:"password"`
-		DisplayName string `json:"displayName"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	user, err := api.userStore.Register(ctx, request.Email, request.Password, request.DisplayName)
-	if err != nil {
-		if errors.Is(err, auth.ErrEmailAlreadyRegistered) {
-			http.Error(w, "邮箱已注册", http.StatusConflict)
-			return
-		}
-		if errors.Is(err, auth.ErrInvalidRegistration) {
-			http.Error(w, "邮箱、密码或昵称不符合要求", http.StatusBadRequest)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	api.writeAuthSession(w, http.StatusCreated, user)
-}
-
-func (api *HTTPAPI) login(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, "POST")
-		return
-	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-
-	var request struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	user, err := api.userStore.Login(ctx, request.Email, request.Password)
-	if err != nil {
-		if errors.Is(err, auth.ErrInvalidCredentials) {
-			http.Error(w, "邮箱或密码错误", http.StatusUnauthorized)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	api.writeAuthSession(w, http.StatusOK, user)
-}
-
-func (api *HTTPAPI) me(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		methodNotAllowed(w, "GET")
-		return
-	}
-	identity, ok := api.identityFromRequest(r)
-	if !ok || identity.IsGuest {
-		http.Error(w, "未登录", http.StatusUnauthorized)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": identity})
-}
-
-func (api *HTTPAPI) writeAuthSession(w http.ResponseWriter, status int, user auth.User) {
-	token, err := api.tokenService.Issue(user)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, status, map[string]any{
-		"token": token,
-		"user":  user,
-	})
 }
 
 func hashOwnerKey(roomID, ownerKey string) string {
@@ -468,30 +362,7 @@ func (api *HTTPAPI) file(w http.ResponseWriter, r *http.Request, roomID, fileID 
 }
 
 func (api *HTTPAPI) identityFromRequest(r *http.Request) (auth.Identity, bool) {
-	token := auth.BearerToken(r.Header.Get("Authorization"))
-	if token == "" {
-		return auth.Identity{
-			DisplayName: auth.GuestName(r.RemoteAddr + r.UserAgent()),
-			IsGuest:     true,
-		}, false
-	}
-	userID, err := api.tokenService.Verify(token)
-	if err != nil {
-		return auth.Identity{DisplayName: "匿名用户", IsGuest: true}, false
-	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-	user, err := api.userStore.Load(ctx, userID)
-	if err != nil {
-		return auth.Identity{DisplayName: "匿名用户", IsGuest: true}, false
-	}
-	return auth.Identity{
-		UserID:      user.ID,
-		Email:       user.Email,
-		DisplayName: user.DisplayName,
-		AvatarURL:   user.AvatarURL,
-		IsGuest:     false,
-	}, true
+	return api.identitySource.IdentityFromRequest(r)
 }
 
 func parseRoomPath(path string) (string, string, bool) {

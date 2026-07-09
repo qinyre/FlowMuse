@@ -9,6 +9,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import '../../../app/app_router.dart';
 import '../../account/models/collaboration_identity.dart';
 import '../../account/view_models/account_view_model.dart';
+import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
 import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
@@ -20,6 +21,7 @@ import '../collaboration/services/collaboration_debug_log.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
+import '../pdf_note_import/pdf_note_consumer.dart';
 import '../view_models/whiteboard_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 
@@ -111,6 +113,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   Future<void> _openNote() async {
     final generation = ++_openGeneration;
     _disposingOrLeaving = false;
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote start '
+      'noteId=${widget.noteId} temporary=${widget.temporaryCollaboration} '
+      'generation=$generation',
+    );
     if (widget.temporaryCollaboration) {
       _loadingScene = true;
       _markdrawController.closeTransientUiForSceneReplace();
@@ -127,24 +134,77 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
     final noteId = widget.noteId;
     await ref.read(libraryIndexProvider.notifier).ensureNote(noteId);
+    debugPrint('[FlowMuseCreateNote] WhiteboardPage.openNote ensured $noteId');
+    final libraryIndex = await ref.read(libraryIndexProvider.future);
+    final note = _noteById(libraryIndex.notes, noteId);
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote note '
+      'found=${note != null} noteType=${note?.noteType.name} '
+      'pageTemplate=${note?.pageTemplate.name}',
+    );
+    _markdrawController.setLayout(_layoutForNote(note));
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote layout '
+      'type=${_markdrawController.layout.type.name} '
+      'pages=${_markdrawController.layout.pages.length}',
+    );
     if (!mounted || generation != _openGeneration || noteId != widget.noteId) {
+      debugPrint(
+        '[FlowMuseCreateNote] WhiteboardPage.openNote aborted before VM open',
+      );
       return;
     }
     await ref
         .read(whiteboardViewModelProvider.notifier)
         .openNote(noteId: noteId);
+    debugPrint('[FlowMuseCreateNote] WhiteboardPage.openNote viewModel opened');
     if (!mounted || generation != _openGeneration || noteId != widget.noteId) {
+      debugPrint(
+        '[FlowMuseCreateNote] WhiteboardPage.openNote aborted before scene load',
+      );
       return;
     }
     final repository = ref.read(whiteboardSceneRepositoryProvider);
     final content = await repository.loadScene(noteId);
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote scene loaded '
+      'length=${content.length}',
+    );
     if (!mounted || generation != _openGeneration || noteId != widget.noteId) {
+      debugPrint(
+        '[FlowMuseCreateNote] WhiteboardPage.openNote aborted before controller load',
+      );
       return;
     }
     _loadingScene = true;
     _markdrawController.closeTransientUiForSceneReplace();
     _markdrawController.loadFromContent(content, '$noteId.excalidraw');
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote controller loaded '
+      'layout=${_markdrawController.layout.type.name} '
+      'pages=${_markdrawController.layout.pages.length}',
+    );
+    final consumedPdf = await ref
+        .read(pdfNoteConsumerProvider)
+        .consume(
+          ref,
+          controller: _markdrawController,
+          fileHandler: _fileHandler,
+          noteId: noteId,
+          canvasSize: const Size(1000, 800),
+        );
+    debugPrint(
+      '[FlowMuseCreateNote] WhiteboardPage.openNote pdfConsumed=$consumedPdf',
+    );
+    if (consumedPdf) {
+      final updatedContent = _markdrawController.serializeScene(
+        format: DocumentFormat.excalidraw,
+      );
+      await repository.saveScene(noteId, updatedContent);
+      await _broadcastCurrentScene(serializedScene: updatedContent);
+    }
     _loadingScene = false;
+    debugPrint('[FlowMuseCreateNote] WhiteboardPage.openNote done $noteId');
     final room = widget.initialRoom;
     if (room != null) {
       unawaited(_joinCollaboration(room));
@@ -1251,6 +1311,35 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
   CollaborationIdentity get _collaborationIdentity {
     return ref.read(accountViewModelProvider).collaborationIdentity;
+  }
+
+  NoteItem? _noteById(List<NoteItem> notes, String noteId) {
+    for (final note in notes) {
+      if (note.id == noteId) {
+        return note;
+      }
+    }
+    return null;
+  }
+
+  CanvasLayout _layoutForNote(NoteItem? note) {
+    final template = _templateForNote(note?.pageTemplate);
+    return CanvasLayout(
+      type: note?.noteType == NoteType.unbounded
+          ? CanvasLayoutType.unbounded
+          : CanvasLayoutType.paged,
+      template: template,
+    );
+  }
+
+  CanvasPageTemplate _templateForNote(PageTemplate? template) {
+    return switch (template) {
+      PageTemplate.narrowLine => CanvasPageTemplate.narrowLine,
+      PageTemplate.wideLine => CanvasPageTemplate.wideLine,
+      PageTemplate.grid => CanvasPageTemplate.grid,
+      PageTemplate.dotGrid => CanvasPageTemplate.dotGrid,
+      PageTemplate.blank || null => CanvasPageTemplate.blank,
+    };
   }
 }
 

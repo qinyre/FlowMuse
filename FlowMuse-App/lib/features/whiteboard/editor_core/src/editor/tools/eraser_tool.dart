@@ -24,7 +24,7 @@ class EraserTool implements Tool {
   ToolType get type => ToolType.eraser;
 
   @override
-  ToolResult? onPointerDown(Point point, ToolContext context) {
+  ToolResult? onPointerDown(Point point, ToolContext context, {double? pressure}) {
     _isDragging = true;
     _hitIds.clear();
     _hitTestAndExpand(point, context);
@@ -36,6 +36,7 @@ class EraserTool implements Tool {
     Point point,
     ToolContext context, {
     Offset? screenDelta,
+    double? pressure,
   }) {
     if (!_isDragging) return null;
     _hitTestAndExpand(point, context);
@@ -43,7 +44,7 @@ class EraserTool implements Tool {
   }
 
   @override
-  ToolResult? onPointerUp(Point point, ToolContext context) {
+  ToolResult? onPointerUp(Point point, ToolContext context, {double? pressure}) {
     if (!_isDragging) return null;
     _hitTestAndExpand(point, context);
     final idsToDelete = Set<ElementId>.from(_hitIds);

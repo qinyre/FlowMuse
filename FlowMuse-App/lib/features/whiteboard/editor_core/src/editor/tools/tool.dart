@@ -15,20 +15,25 @@ abstract class Tool {
 
   /// Called when a pointer/touch starts.
   /// [point] is in scene coordinates.
-  ToolResult? onPointerDown(Point point, ToolContext context);
+  /// [pressure] is the normalized stylus pressure 0.0–1.0 (null when
+  /// unavailable, e.g. mouse/touch). Consumed by pressure-aware tools.
+  ToolResult? onPointerDown(Point point, ToolContext context, {double? pressure});
 
   /// Called when a pointer/touch moves.
   /// [point] is in scene coordinates.
   /// [screenDelta] is the raw screen-space movement (used by HandTool).
+  /// [pressure] is the normalized stylus pressure 0.0–1.0 (null when unavailable).
   ToolResult? onPointerMove(
     Point point,
     ToolContext context, {
     Offset? screenDelta,
+    double? pressure,
   });
 
   /// Called when a pointer/touch ends.
   /// [point] is in scene coordinates.
-  ToolResult? onPointerUp(Point point, ToolContext context);
+  /// [pressure] is the normalized stylus pressure 0.0–1.0 (null when unavailable).
+  ToolResult? onPointerUp(Point point, ToolContext context, {double? pressure});
 
   /// Called on key events.
   /// [context] is provided for tools that need scene/selection info (e.g., SelectTool).

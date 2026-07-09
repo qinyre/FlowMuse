@@ -55,6 +55,7 @@ class TextElement extends Element {
     super.link,
     super.locked,
     super.index,
+    super.customData,
   }) : super(type: 'text');
 
   /// Creates a copy with text-specific properties changed.
@@ -103,6 +104,7 @@ class TextElement extends Element {
       link: link,
       locked: locked,
       index: index,
+      customData: customData,
     );
   }
 
@@ -138,6 +140,8 @@ class TextElement extends Element {
     bool? locked,
     String? index,
     bool clearIndex = false,
+    Map<String, Object?>? customData,
+    bool clearCustomData = false,
   }) {
     return TextElement(
       id: id ?? this.id,
@@ -173,6 +177,7 @@ class TextElement extends Element {
       link: clearLink ? null : (link ?? this.link),
       locked: locked ?? this.locked,
       index: clearIndex ? null : (index ?? this.index),
+      customData: clearCustomData ? null : (customData ?? this.customData),
     );
   }
 }

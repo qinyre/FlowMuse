@@ -436,7 +436,7 @@ class SvgElementRenderer {
     buf.write('y="${_n(element.y)}" ');
     buf.write('width="${_n(element.width)}" ');
     buf.write('height="${_n(element.height)}" ');
-    buf.write('href="$dataUrl"');
+    buf.write('xlink:href="$dataUrl" href="$dataUrl"');
     buf.write(' preserveAspectRatio="none"');
     buf.write('/>');
   }
@@ -536,6 +536,7 @@ class SvgElementRenderer {
   }
 
   static String _n(double v) {
+    if (v.isNaN || v.isInfinite) return '0';
     if (v == v.roundToDouble()) return v.toInt().toString();
     final s = v.toStringAsFixed(2);
     if (s.contains('.')) {

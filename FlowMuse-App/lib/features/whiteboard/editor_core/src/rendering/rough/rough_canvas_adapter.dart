@@ -709,6 +709,10 @@ class RoughCanvasAdapter implements RoughAdapter {
     return (a.x - b.x).abs() < eps && (a.y - b.y).abs() < eps;
   }
 
+  /// 压感灵敏度 (0.0–1.0)：控制压力对线条粗细的影响。
+  /// 由 [MarkdrawController.pressureSensitivity] 同步。
+  double pressureSensitivity = 0.7;
+
   @override
   void drawFreedraw(
     Canvas canvas,
@@ -717,7 +721,16 @@ class RoughCanvasAdapter implements RoughAdapter {
     bool simulatePressure,
     DrawStyle style,
   ) {
-    FreedrawRenderer.draw(canvas, points, style);
+    // 仅当非 simulatePressure 且 pressures 非空时传给 renderer 做变粗渲染;
+    // simulatePressure=true(鼠标/触摸)时 pressures 留空,退回等粗 Bezier。
+    final usePressure = !simulatePressure && pressures.isNotEmpty;
+    FreedrawRenderer.draw(
+      canvas,
+      points,
+      style,
+      pressures: usePressure ? pressures : null,
+      pressureSensitivity: pressureSensitivity,
+    );
   }
 
   /// Draws fill clipped to [clipRect] or [clipPath], then draws stroke

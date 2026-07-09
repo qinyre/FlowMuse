@@ -12,9 +12,10 @@ import '../../tags/view_models/tags_view_model.dart';
 import 'create_collection_dialog.dart';
 
 class LibrarySidebar extends ConsumerStatefulWidget {
-  const LibrarySidebar({super.key, required this.section});
+  const LibrarySidebar({super.key, required this.section, this.onCollapse});
 
   final ShellSection section;
+  final VoidCallback? onCollapse;
 
   @override
   ConsumerState<LibrarySidebar> createState() => _LibrarySidebarState();
@@ -36,6 +37,11 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
     return SharedSidebar(
       header: SharedSidebarHeader(
         trailing: [
+          SharedSidebarIconButton(
+            tooltip: '收起侧边栏',
+            onPressed: widget.onCollapse,
+            icon: const Icon(LucideIcons.panelLeftClose),
+          ),
           SharedSidebarIconButton(
             tooltip: '设置',
             onPressed: () => context.go(AppRoutes.settings),
@@ -91,6 +97,10 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                     )
                   : const SizedBox.shrink(key: ValueKey('empty-children')),
             ),
+          ],
+        ),
+        SharedSidebarBlock(
+          children: [
             SharedSidebarItem(
               icon: LucideIcons.trash2,
               label: '回收站',

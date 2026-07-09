@@ -32,7 +32,7 @@ class ArrowTool implements Tool {
   ToolType get type => ToolType.arrow;
 
   @override
-  ToolResult? onPointerDown(Point point, ToolContext context) {
+  ToolResult? onPointerDown(Point point, ToolContext context, {double? pressure}) {
     if (_points.isEmpty) {
       // Check for binding at start point
       final target = BindingUtils.findBindTarget(context.scene, point);
@@ -63,6 +63,7 @@ class ArrowTool implements Tool {
     Point point,
     ToolContext context, {
     Offset? screenDelta,
+    double? pressure,
   }) {
     if (_points.isNotEmpty) {
       _previewPoint = point;
@@ -77,6 +78,7 @@ class ArrowTool implements Tool {
     Point point,
     ToolContext context, {
     bool isDoubleClick = false,
+    double? pressure,
   }) {
     if (_isDragCreating) {
       _isDragCreating = false;

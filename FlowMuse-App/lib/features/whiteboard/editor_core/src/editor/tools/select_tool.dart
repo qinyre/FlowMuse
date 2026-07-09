@@ -6,6 +6,7 @@ import '../../core/alignment/flip_utils.dart';
 import '../../core/elements/elements.dart';
 import '../../core/groups/groups.dart';
 import '../../core/layer/layer_utils.dart';
+import '../../core/layout/layout.dart';
 import '../../core/math/math.dart';
 import '../../core/scene/scene_exports.dart';
 import '../../rendering/interactive/interactive.dart';
@@ -79,6 +80,7 @@ class SelectTool implements Tool {
     Point point,
     ToolContext context, {
     bool shift = false,
+    double? pressure,
   }) {
     _downPoint = point;
     _current = point;
@@ -193,6 +195,7 @@ class SelectTool implements Tool {
     Point point,
     ToolContext context, {
     Offset? screenDelta,
+    double? pressure,
   }) {
     final down = _downPoint;
     if (down == null) return null;
@@ -234,7 +237,11 @@ class SelectTool implements Tool {
   }
 
   @override
-  ToolResult? onPointerUp(Point point, ToolContext context) {
+  ToolResult? onPointerUp(
+    Point point,
+    ToolContext context, {
+    double? pressure,
+  }) {
     final down = _downPoint;
     if (down == null) return null;
 
@@ -504,6 +511,7 @@ class SelectTool implements Tool {
 
     final selected = <ElementId>{};
     for (final e in context.scene.activeElements) {
+      if (e.isPdfBackground) continue;
       // Skip bound text — users interact with the parent shape
       if (e is TextElement && e.containerId != null) continue;
       final eBounds = Bounds.fromLTWH(e.x, e.y, e.width, e.height);
@@ -1620,7 +1628,11 @@ class SelectTool implements Tool {
     // Ctrl+A: Select all (skip bound text)
     if (ctrl && (key == 'a' || key == 'A')) {
       final allIds = context.scene.activeElements
-          .where((e) => e is! TextElement || e.containerId == null)
+          .where(
+            (e) =>
+                !e.isPdfBackground &&
+                (e is! TextElement || e.containerId == null),
+          )
           .map((e) => e.id)
           .toSet();
       return SetSelectionResult(allIds);

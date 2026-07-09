@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
@@ -34,96 +35,81 @@ class SearchPage extends ConsumerWidget {
                   .firstOrNull
                   ?.name ??
               '全部标签';
-    final results = _searchNotes(state, libraryIndex.notes);
+    final results = _searchNotes(state, libraryIndex);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 820;
-        return Padding(
-          padding: AppSpacing.pagePadding(compact: compact),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: SearchBar(
-                      leading: const Icon(LucideIcons.search),
-                      hintText: '请输入关键字搜索笔记',
-                      onChanged: viewModel.changeQuery,
-                      trailing: const [_LocalSearchChip()],
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sectionGap),
-                  TextButton(
-                    onPressed: () => context.go(AppRoutes.library),
-                    child: const Text('取消'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.headerToContent),
-              Text(
-                '搜索范围',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: const Color(0xFF8F9B96),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: AppSpacing.sectionGap,
-                runSpacing: 16,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  const Text('笔记本'),
-                  _ScopeMenu(
-                    label: notebookLabel,
-                    options: [
-                      const _ScopeOption(id: null, label: '全部笔记本'),
-                      for (final notebook in libraryIndex.notebooks)
-                        _ScopeOption(id: notebook.id, label: notebook.name),
-                    ],
-                    onSelected: viewModel.selectNotebookScope,
-                  ),
-                  const Text('标签'),
-                  _ScopeMenu(
-                    label: tagLabel,
-                    options: [
-                      const _ScopeOption(id: null, label: '全部标签'),
-                      for (final tag in libraryIndex.tags)
-                        _ScopeOption(id: tag.id, label: tag.name),
-                    ],
-                    onSelected: viewModel.selectTagScope,
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        LucideIcons.fileSearch,
-                        color: Color(0xFF8F9B96),
-                      ),
-                      const SizedBox(width: AppSpacing.controlGap),
-                      Text(
-                        state.query.isEmpty ? '已选搜索范围' : '搜索：${state.query}',
-                        style: const TextStyle(color: Color(0xFF8F9B96)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sectionGap),
-              Expanded(
-                child: _SearchResults(
-                  query: state.query,
-                  results: results,
-                  onOpenNote: (item) {
-                    context.push(AppRoutes.whiteboardPath(noteId: item.id));
-                  },
-                ),
-              ),
-            ],
+    return RightPageScaffold(
+      header: Row(
+        children: [
+          Expanded(
+            child: SearchBar(
+              leading: const Icon(LucideIcons.search),
+              hintText: '请输入关键字搜索笔记',
+              onChanged: viewModel.changeQuery,
+              trailing: const [_LocalSearchChip()],
+            ),
           ),
-        );
-      },
+          const SizedBox(width: AppSpacing.sectionGap),
+          TextButton(
+            onPressed: () => context.go(AppRoutes.library),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+      topContent: [
+        Text(
+          '搜索范围',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(color: const Color(0xFF8F9B96)),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: AppSpacing.sectionGap,
+          runSpacing: 16,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            const Text('笔记本'),
+            _ScopeMenu(
+              label: notebookLabel,
+              options: [
+                const _ScopeOption(id: null, label: '全部笔记本'),
+                for (final notebook in libraryIndex.notebooks)
+                  _ScopeOption(id: notebook.id, label: notebook.name),
+              ],
+              onSelected: viewModel.selectNotebookScope,
+            ),
+            const Text('标签'),
+            _ScopeMenu(
+              label: tagLabel,
+              options: [
+                const _ScopeOption(id: null, label: '全部标签'),
+                for (final tag in libraryIndex.tags)
+                  _ScopeOption(id: tag.id, label: tag.name),
+              ],
+              onSelected: viewModel.selectTagScope,
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.fileSearch, color: Color(0xFF8F9B96)),
+                const SizedBox(width: AppSpacing.controlGap),
+                Text(
+                  state.query.isEmpty ? '已选搜索范围' : '搜索：${state.query}',
+                  style: const TextStyle(color: Color(0xFF8F9B96)),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sectionGap),
+      ],
+      body: _SearchResults(
+        query: state.query,
+        results: results,
+        onOpenNote: (item) {
+          context.push(AppRoutes.whiteboardPath(noteId: item.id));
+        },
+      ),
     );
   }
 }
@@ -292,20 +278,16 @@ class _SearchEmptyState extends StatelessWidget {
   }
 }
 
-List<NoteItem> _searchNotes(SearchState state, List<NoteItem> notes) {
+List<NoteItem> _searchNotes(SearchState state, LibraryIndex libraryIndex) {
   final query = state.query.trim().toLowerCase();
   if (query.isEmpty) {
     return const [];
   }
-  final results = notes.where((item) {
-    if (state.notebookScopeId != null &&
-        item.notebookId != state.notebookScopeId) {
-      return false;
-    }
-    if (state.tagScopeId != null && !item.tagIds.contains(state.tagScopeId)) {
-      return false;
-    }
-    return item.title.toLowerCase().contains(query);
-  }).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-  return results;
+  return libraryIndex.notesForQuery(
+    LibraryQuery(
+      queryText: query,
+      notebookId: state.notebookScopeId,
+      tagIds: state.tagScopeId == null ? const [] : [state.tagScopeId!],
+    ),
+  );
 }

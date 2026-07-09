@@ -24,7 +24,7 @@ class FrameTool implements Tool {
   ToolType get type => ToolType.frame;
 
   @override
-  ToolResult? onPointerDown(Point point, ToolContext context) {
+  ToolResult? onPointerDown(Point point, ToolContext context, {double? pressure}) {
     _start = snapToGrid(point, context.gridSize);
     _current = _start;
     // Count existing frames to generate the label
@@ -39,6 +39,7 @@ class FrameTool implements Tool {
     Point point,
     ToolContext context, {
     Offset? screenDelta,
+    double? pressure,
   }) {
     if (_start == null) return null;
     _current = snapToGrid(point, context.gridSize);
@@ -46,7 +47,7 @@ class FrameTool implements Tool {
   }
 
   @override
-  ToolResult? onPointerUp(Point point, ToolContext context) {
+  ToolResult? onPointerUp(Point point, ToolContext context, {double? pressure}) {
     final start = _start;
     if (start == null) return null;
     final snapped = snapToGrid(point, context.gridSize);

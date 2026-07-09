@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../elements/elements.dart';
+import '../layout/layout.dart';
 import '../math/math.dart';
 
 /// An immutable collection of drawing elements with CRUD operations.
@@ -123,6 +124,7 @@ class Scene {
     // Iterate in reverse to find topmost (highest index) first.
     for (var i = ordered.length - 1; i >= 0; i--) {
       final e = ordered[i];
+      if (e.isCanvasPage || e.isPdfBackground) continue;
       // Skip bound text — users interact with the parent shape
       if (e is TextElement && e.containerId != null) continue;
 

@@ -1,14 +1,21 @@
+import 'dart:math' as dm;
 import 'dart:ui';
+
+import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
 
 import '../../core/math/math.dart';
 import 'draw_style.dart';
 
-/// Renders freehand drawing paths with smooth Bezier interpolation.
+/// Renders freehand drawing paths.
 ///
-/// This does not use rough_flutter — freehand strokes are inherently
-/// hand-drawn and don't need additional wobble.
+/// 使用 perfect_freehand 的 outline-stroke 算法:把点序列+压感转成一条
+/// 变宽的闭合多边形轮廓,既平滑又自然变粗(Excalidraw/tldraw 同款)。
+///
+/// - 有真实压感(pressures 非空):simulatePressure=false,用真压感驱动宽度
+/// - 无压感(鼠标/触摸):simulatePressure=true,perfect_freehand 用速度模拟
 class FreedrawRenderer {
-  /// Builds a smooth [Path] through the given freehand [points].
+  /// Builds a smooth [Path] through the given freehand [points] (等粗,
+  /// 用于无压感退化或外部调用)。
   ///
   /// - Empty list: returns empty Path
   /// - Single point: returns a small circle (dot)
@@ -33,31 +40,86 @@ class FreedrawRenderer {
     return _buildBezierPath(points);
   }
 
+  static List<Offset> buildOutline(
+    List<Point> points, {
+    required double strokeWidth,
+    List<double>? pressures,
+    double pressureSensitivity = 0.7,
+  }) {
+    if (points.isEmpty) return const [];
+
+    final hasPressure = pressures != null && pressures.length == points.length;
+    final inputPoints = <PointVector>[
+      for (var i = 0; i < points.length; i++)
+        PointVector(
+          points[i].x,
+          points[i].y,
+          hasPressure ? pressures[i] : null,
+        ),
+    ];
+    final options = StrokeOptions(
+      size: dm.max(strokeWidth, 1.0),
+      thinning: hasPressure
+          ? 0.05 + pressureSensitivity.clamp(0.0, 1.0) * 0.9
+          : StrokeOptions.defaultThinning,
+      smoothing: StrokeOptions.defaultSmoothing,
+      streamline: StrokeOptions.defaultStreamline,
+      simulatePressure: !hasPressure,
+      isComplete: true,
+    );
+
+    return getStroke(inputPoints, options: options);
+  }
+
   /// Draws a freehand path on [canvas] with the given [style].
-  static void draw(Canvas canvas, List<Point> points, DrawStyle style) {
+  ///
+  /// 优先用 perfect_freehand 的 outline-stroke 算法渲染(平滑+变粗);
+  /// pressures 数量与 points 不匹配时退回等粗 Bezier(容错)。
+  static void draw(
+    Canvas canvas,
+    List<Point> points,
+    DrawStyle style, {
+    List<double>? pressures,
+    double pressureSensitivity = 0.7,
+  }) {
     if (points.isEmpty) return;
 
-    final path = buildPath(points, style.strokeWidth);
-    final paint = style.toStrokePaint();
-    paint.strokeCap = StrokeCap.round;
-    paint.strokeJoin = StrokeJoin.round;
+    // perfect_freehand 的 size 是直径,而 DrawStyle.strokeWidth 在 freedraw 语境下
+    // 是期望的笔迹宽度。直接用 strokeWidth 作为 size 基准。
+    final size = dm.max(style.strokeWidth, 1.0);
+
+    final outline = buildOutline(
+      points,
+      strokeWidth: size,
+      pressures: pressures,
+      pressureSensitivity: pressureSensitivity,
+    );
+
+    // 单点(点击):outline 为空,画圆点
+    if (outline.isEmpty) {
+      final p = points[0];
+      final paint = style.toStrokePaint()..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(p.x, p.y), size / 2, paint);
+      return;
+    }
+
+    // outline 是闭合多边形顶点,用 fill 绘制
+    final path = Path()..addPolygon(outline, true);
+    final paint = style.toStrokePaint()..style = PaintingStyle.fill;
     canvas.drawPath(path, paint);
   }
 
   /// Builds a smooth cubic Bezier path through 3+ points using
-  /// Catmull-Rom to cubic Bezier conversion.
+  /// Catmull-Rom to cubic Bezier conversion (等粗退化路径用)。
   static Path _buildBezierPath(List<Point> points) {
     final path = Path()..moveTo(points[0].x, points[0].y);
 
-    // For each segment between consecutive points, compute cubic Bezier
-    // control points using Catmull-Rom interpolation.
     for (var i = 0; i < points.length - 1; i++) {
       final p0 = i > 0 ? points[i - 1] : points[i];
       final p1 = points[i];
       final p2 = points[i + 1];
       final p3 = i + 2 < points.length ? points[i + 2] : p2;
 
-      // Catmull-Rom to cubic Bezier control points
       final cp1x = p1.x + (p2.x - p0.x) / 6;
       final cp1y = p1.y + (p2.y - p0.y) / 6;
       final cp2x = p2.x - (p3.x - p1.x) / 6;

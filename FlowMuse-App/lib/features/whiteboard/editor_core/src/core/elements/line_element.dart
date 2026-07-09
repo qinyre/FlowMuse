@@ -58,6 +58,7 @@ class LineElement extends Element {
     super.link,
     super.locked,
     super.index,
+    super.customData,
     super.type = 'line',
   });
 
@@ -105,6 +106,7 @@ class LineElement extends Element {
       link: link,
       locked: locked,
       index: index,
+      customData: customData,
     );
   }
 
@@ -140,6 +142,8 @@ class LineElement extends Element {
     bool? locked,
     String? index,
     bool clearIndex = false,
+    Map<String, Object?>? customData,
+    bool clearCustomData = false,
   }) {
     return LineElement(
       id: id ?? this.id,
@@ -172,6 +176,7 @@ class LineElement extends Element {
       link: clearLink ? null : (link ?? this.link),
       locked: locked ?? this.locked,
       index: clearIndex ? null : (index ?? this.index),
+      customData: clearCustomData ? null : (customData ?? this.customData),
     );
   }
 }

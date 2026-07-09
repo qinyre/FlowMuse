@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/app_router.dart';
 import '../../features/account/view_models/account_view_model.dart';
+import '../../features/account/widgets/account_avatar.dart';
 import 'app_spacing.dart';
 import 'app_shell.dart';
 
@@ -56,12 +57,7 @@ class SharedSidebarHeader extends StatelessWidget {
     super.key,
     this.leading,
     this.trailing,
-    this.padding = const EdgeInsets.fromLTRB(
-      AppSpacing.sidebarInset,
-      AppSpacing.sidebarInset,
-      12,
-      12,
-    ),
+    this.padding = const EdgeInsets.fromLTRB(AppSpacing.sidebarInset, 0, 12, 0),
   });
 
   final Widget? leading;
@@ -72,22 +68,27 @@ class SharedSidebarHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final actions = trailing ?? const [];
 
-    return Padding(
-      padding: padding,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          leading ?? const SharedSidebarAvatar(),
-          Row(
-            mainAxisSize: MainAxisSize.min,
+    return SizedBox(
+      height: AppSpacing.shellHeaderHeight,
+      child: Padding(
+        padding: padding,
+        child: Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              for (var index = 0; index < actions.length; index++) ...[
-                if (index > 0) const SizedBox(width: 0),
-                actions[index],
-              ],
+              leading ?? const SharedSidebarAvatar(),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var index = 0; index < actions.length; index++) ...[
+                    if (index > 0) const SizedBox(width: 0),
+                    actions[index],
+                  ],
+                ],
+              ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -99,36 +100,24 @@ class SharedSidebarAvatar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final account = ref.watch(accountViewModelProvider);
-    final colorScheme = Theme.of(context).colorScheme;
     final identity = account.collaborationIdentity;
     final label = identity.isGuest ? identity.username : identity.username;
-    final initial = label.trim().isEmpty ? '匿' : label.trim().characters.first;
 
     return Tooltip(
       message: identity.isGuest ? '匿名协作身份' : '账户与协作',
       child: InkWell(
         onTap: () => context.go(AppRoutes.accountSettings),
         customBorder: const CircleBorder(),
-        child: CircleAvatar(
-          radius: 17,
-          backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
-          child: account.status == AccountStatus.loading
-              ? SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: colorScheme.primary,
-                  ),
-                )
-              : Text(
-                  initial,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w800,
-                  ),
+        child: account.status == AccountStatus.loading
+            ? const SizedBox(
+                width: 38,
+                height: 38,
+                child: Padding(
+                  padding: EdgeInsets.all(11),
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-        ),
+              )
+            : AccountAvatar(label: label, user: account.user, radius: 19),
       ),
     );
   }
@@ -151,9 +140,12 @@ class SharedSidebarIconButton extends StatelessWidget {
     return IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      constraints: const BoxConstraints.tightFor(
+        width: AppSpacing.shellHeaderIconButtonSize,
+        height: AppSpacing.shellHeaderIconButtonSize,
+      ),
       padding: EdgeInsets.zero,
-      iconSize: 18,
+      iconSize: AppSpacing.shellHeaderIconSize,
       color: Theme.of(context).colorScheme.onSurfaceVariant,
       icon: icon,
     );
@@ -293,11 +285,12 @@ class SharedSidebarItem extends StatelessWidget {
                             child: Text(
                               value,
                               textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                                fontSize: 11,
-                                height: 1.0,
-                              ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontSize: 11,
+                                    height: 1.0,
+                                  ),
                             ),
                           ),
                         ),
@@ -379,7 +372,11 @@ class SharedSidebarActionButton extends StatelessWidget {
         constraints: const BoxConstraints.tightFor(width: 28, height: 28),
         padding: EdgeInsets.zero,
         onPressed: onPressed,
-        icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),
+        icon: Icon(
+          icon,
+          color: Theme.of(context).colorScheme.primary,
+          size: 15,
+        ),
       ),
     );
   }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/account/views/reset_password_page.dart';
+import '../features/account/views/verify_email_page.dart';
 import '../features/library/models/library_special_view.dart';
 import '../features/library/views/create_note_page.dart';
 import '../features/library/views/library_home_page.dart';
@@ -24,6 +26,8 @@ class AppRoutes {
   static const tagDetail = '/tags/:tagId';
   static const settings = '/settings';
   static const accountSettings = '/settings?section=account';
+  static const verifyEmail = '/auth/verify-email';
+  static const resetPassword = '/auth/reset-password';
   static const unnotebooked = '/library/unnotebooked';
   static const untagged = '/library/untagged';
   static const trash = '/library/trash';
@@ -138,6 +142,16 @@ GoRouter createAppRouter() {
         ),
       ),
       GoRoute(
+        path: AppRoutes.verifyEmail,
+        builder: (context, state) =>
+            VerifyEmailPage(token: state.uri.queryParameters['token'] ?? ''),
+      ),
+      GoRoute(
+        path: AppRoutes.resetPassword,
+        builder: (context, state) =>
+            ResetPasswordPage(token: state.uri.queryParameters['token'] ?? ''),
+      ),
+      GoRoute(
         path: AppRoutes.collaborationWhiteboard,
         pageBuilder: (context, state) {
           final room = state.extra is CollaborationRoom
@@ -186,8 +200,5 @@ ShellSection _sectionForPath(String path) {
 }
 
 Page<void> _contentPage(GoRouterState state, Widget child) {
-  return NoTransitionPage<void>(
-    key: state.pageKey,
-    child: child,
-  );
+  return NoTransitionPage<void>(key: state.pageKey, child: child);
 }

@@ -14,7 +14,7 @@ class HandTool implements Tool {
   ToolType get type => ToolType.hand;
 
   @override
-  ToolResult? onPointerDown(Point point, ToolContext context) {
+  ToolResult? onPointerDown(Point point, ToolContext context, {double? pressure}) {
     _isPanning = true;
     return null;
   }
@@ -24,6 +24,7 @@ class HandTool implements Tool {
     Point point,
     ToolContext context, {
     Offset? screenDelta,
+    double? pressure,
   }) {
     if (!_isPanning || screenDelta == null) return null;
     final panned = context.viewport.pan(screenDelta);
@@ -31,7 +32,7 @@ class HandTool implements Tool {
   }
 
   @override
-  ToolResult? onPointerUp(Point point, ToolContext context) {
+  ToolResult? onPointerUp(Point point, ToolContext context, {double? pressure}) {
     _isPanning = false;
     return null;
   }

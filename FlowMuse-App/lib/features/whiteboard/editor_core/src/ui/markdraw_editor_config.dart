@@ -1,6 +1,7 @@
 library;
 
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' show ToolType, ElementStyle;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    show CanvasLayout, CanvasLayoutType, ElementStyle, ToolType;
 
 import 'color_utils.dart' as color_utils;
 
@@ -9,6 +10,7 @@ class MarkdrawEditorConfig {
   const MarkdrawEditorConfig({
     this.tools,
     this.initialBackground = '#ffffff',
+    this.initialLayout = const CanvasLayout(type: CanvasLayoutType.unbounded),
     this.initialStyle = const ElementStyle(),
     this.showToolbar = true,
     this.showPropertyPanel = true,
@@ -32,6 +34,9 @@ class MarkdrawEditorConfig {
 
   /// Initial canvas background color (hex string).
   final String initialBackground;
+
+  /// Initial canvas layout mode and page template.
+  final CanvasLayout initialLayout;
 
   /// Initial default style for new elements.
   final ElementStyle initialStyle;

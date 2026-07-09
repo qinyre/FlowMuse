@@ -26,7 +26,7 @@ class LineTool implements Tool {
   ToolType get type => ToolType.line;
 
   @override
-  ToolResult? onPointerDown(Point point, ToolContext context) {
+  ToolResult? onPointerDown(Point point, ToolContext context, {double? pressure}) {
     if (_points.isEmpty) {
       _points.add(snapToGrid(point, context.gridSize));
       _isDragCreating = true;
@@ -40,6 +40,7 @@ class LineTool implements Tool {
     Point point,
     ToolContext context, {
     Offset? screenDelta,
+    double? pressure,
   }) {
     if (_points.isNotEmpty) {
       // Check proximity to start point for close detection
@@ -66,6 +67,7 @@ class LineTool implements Tool {
     Point point,
     ToolContext context, {
     bool isDoubleClick = false,
+    double? pressure,
   }) {
     if (_isDragCreating) {
       _isDragCreating = false;

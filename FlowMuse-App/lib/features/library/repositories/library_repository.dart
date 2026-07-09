@@ -1,141 +1,26 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../shared/storage/local_database.dart';
+import '../models/library_collection.dart';
+import '../models/library_index.dart';
 import '../models/note_item.dart';
 
-@immutable
-class LibraryNotebook {
-  const LibraryNotebook({
-    required this.id,
-    required this.name,
-    required this.coverColor,
-  });
-
-  final String id;
-  final String name;
-  final Color coverColor;
-
-  Map<String, Object?> toJson() {
-    return {'id': id, 'name': name, 'coverColor': coverColor.toARGB32()};
-  }
-
-  factory LibraryNotebook.fromJson(Map<String, Object?> json) {
-    return LibraryNotebook(
-      id: json['id']! as String,
-      name: json['name']! as String,
-      coverColor: Color(json['coverColor']! as int),
-    );
-  }
-}
-
-@immutable
-class LibraryTag {
-  const LibraryTag({
-    required this.id,
-    required this.name,
-    required this.coverColor,
-  });
-
-  final String id;
-  final String name;
-  final Color coverColor;
-
-  Map<String, Object?> toJson() {
-    return {'id': id, 'name': name, 'coverColor': coverColor.toARGB32()};
-  }
-
-  factory LibraryTag.fromJson(Map<String, Object?> json) {
-    return LibraryTag(
-      id: json['id']! as String,
-      name: json['name']! as String,
-      coverColor: Color(json['coverColor']! as int),
-    );
-  }
-}
-
-@immutable
-class LibraryIndex {
-  const LibraryIndex({
-    this.notes = const [],
-    this.notebooks = const [],
-    this.tags = const [],
-  });
-
-  final List<NoteItem> notes;
-  final List<LibraryNotebook> notebooks;
-  final List<LibraryTag> tags;
-
-  int get unnotebookedCount {
-    return notes
-        .where((item) => !item.isDeleted && item.notebookId == null)
-        .length;
-  }
-
-  int get untaggedCount {
-    return notes.where((item) => !item.isDeleted && item.tagIds.isEmpty).length;
-  }
-
-  List<NoteItem> get activeNotes {
-    return notes.where((item) => !item.isDeleted).toList();
-  }
-
-  List<NoteItem> get deletedNotes {
-    return notes.where((item) => item.isDeleted).toList();
-  }
-
-  Map<String, Object?> toJson() {
-    return {
-      'notes': notes.map(_noteToJson).toList(),
-      'notebooks': notebooks.map((item) => item.toJson()).toList(),
-      'tags': tags.map((item) => item.toJson()).toList(),
-    };
-  }
-
-  factory LibraryIndex.fromJson(Map<String, Object?> json) {
-    return LibraryIndex(
-      notes: _decodeList(json['notes'], _noteFromJson),
-      notebooks: _decodeList(json['notebooks'], LibraryNotebook.fromJson),
-      tags: _decodeList(json['tags'], LibraryTag.fromJson),
-    );
-  }
-
-  LibraryIndex copyWith({
-    List<NoteItem>? notes,
-    List<LibraryNotebook>? notebooks,
-    List<LibraryTag>? tags,
-  }) {
-    return LibraryIndex(
-      notes: notes ?? this.notes,
-      notebooks: notebooks ?? this.notebooks,
-      tags: tags ?? this.tags,
-    );
-  }
-
-  static List<T> _decodeList<T>(
-    Object? raw,
-    T Function(Map<String, Object?> json) decode,
-  ) {
-    if (raw is! List) {
-      return const [];
-    }
-    return raw
-        .whereType<Map>()
-        .map((item) => decode(Map<String, Object?>.from(item)))
-        .toList();
-  }
-}
+export '../models/library_collection.dart';
+export '../models/library_index.dart';
+export '../models/library_query.dart';
 
 abstract interface class LibraryRepository {
   Future<LibraryIndex> loadIndex();
 
   Future<NoteItem> createNote({
+    LibraryFilter kind = LibraryFilter.notes,
     NoteType noteType = NoteType.unbounded,
     PageTemplate pageTemplate = PageTemplate.blank,
     String? title,
+    String? subtitle,
     String? notebookId,
     List<String> tagIds = const [],
   });
@@ -143,6 +28,8 @@ abstract interface class LibraryRepository {
   Future<void> ensureNote(String noteId);
 
   Future<void> renameNote(String noteId, String title);
+
+  Future<void> renameSubtitle(String noteId, String? subtitle);
 
   Future<void> touchNote(String noteId);
 
@@ -162,80 +49,147 @@ abstract interface class LibraryRepository {
 
   Future<void> removeTagFromNotes(List<String> noteIds, String tagId);
 
+  Future<void> setNoteTags(String noteId, List<String> tagIds);
+
   Future<void> renameNotebook(String notebookId, String name);
+
+  Future<void> recolorNotebook(String notebookId, Color color);
 
   Future<void> deleteNotebook(String notebookId);
 
   Future<void> renameTag(String tagId, String name);
 
+  Future<void> recolorTag(String tagId, Color color);
+
   Future<void> deleteTag(String tagId);
 }
 
-class SharedPreferencesLibraryRepository implements LibraryRepository {
-  SharedPreferencesLibraryRepository(
-    Future<SharedPreferences> Function() preferences,
-  ) : _preferences = preferences;
+class SqliteLibraryRepository implements LibraryRepository {
+  SqliteLibraryRepository(this._openDatabase);
 
-  static const _key = 'flowmuse.library.index.v2';
   static const _uuid = Uuid();
   static const _defaultNoteTitle = '未命名笔记';
 
-  final Future<SharedPreferences> Function() _preferences;
+  final Future<Database> Function() _openDatabase;
 
   @override
   Future<LibraryIndex> loadIndex() async {
-    final preferences = await _preferences();
-    final raw = preferences.getString(_key);
-    if (raw == null || raw.isEmpty) {
-      return const LibraryIndex();
+    debugPrint('[FlowMuseCreateNote] LibraryRepository.loadIndex start');
+    final db = await _openDatabase();
+    final noteRows = await db.query('notes', orderBy: 'updated_at DESC');
+    final notebookRows = await db.query('notebooks', orderBy: 'sort_order ASC');
+    final tagRows = await db.query('tags', orderBy: 'sort_order ASC');
+    final noteTagRows = await db.query('note_tags');
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryRepository.loadIndex rows '
+      'notes=${noteRows.length} notebooks=${notebookRows.length} '
+      'tags=${tagRows.length} noteTags=${noteTagRows.length}',
+    );
+
+    final tagsByNoteId = <String, List<String>>{};
+    for (final row in noteTagRows) {
+      final noteId = row['note_id']! as String;
+      final tagId = row['tag_id']! as String;
+      tagsByNoteId.putIfAbsent(noteId, () => []).add(tagId);
     }
-    final decoded = jsonDecode(raw) as Map<String, Object?>;
-    return LibraryIndex.fromJson(decoded);
+
+    return LibraryIndex(
+      notes: [
+        for (final row in noteRows)
+          _noteFromRow(row, tagsByNoteId[row['id'] as String] ?? const []),
+      ],
+      notebooks: [for (final row in notebookRows) _notebookFromRow(row)],
+      tags: [for (final row in tagRows) _tagFromRow(row)],
+    );
   }
 
   @override
   Future<NoteItem> createNote({
+    LibraryFilter kind = LibraryFilter.notes,
     NoteType noteType = NoteType.unbounded,
     PageTemplate pageTemplate = PageTemplate.blank,
     String? title,
+    String? subtitle,
     String? notebookId,
     List<String> tagIds = const [],
   }) async {
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryRepository.createNote start '
+      'kind=${kind.name} noteType=${noteType.name} '
+      'pageTemplate=${pageTemplate.name} title="$title" '
+      'notebookId=$notebookId tagIds=${tagIds.join(',')}',
+    );
     final now = DateTime.now();
     final trimmedTitle = title?.trim();
-    final note = NoteItem(
-      id: 'note-${_uuid.v4()}',
-      title: trimmedTitle == null || trimmedTitle.isEmpty
-          ? _defaultNoteTitle
-          : trimmedTitle,
-      updatedAt: now,
-      kind: LibraryFilter.notes,
-      coverColor: _noteColors[now.millisecondsSinceEpoch % _noteColors.length],
-      noteType: noteType,
-      pageTemplate: pageTemplate,
-      notebookId: notebookId,
-      tagIds: tagIds,
+    final db = await _openDatabase();
+    late final NoteItem note;
+    await db.transaction((txn) async {
+      final validNotebookId = await _validNotebookId(txn, notebookId);
+      final validTagIds = await _validTagIds(txn, tagIds);
+      note = NoteItem(
+        id: 'note-${_uuid.v4()}',
+        title: trimmedTitle == null || trimmedTitle.isEmpty
+            ? _defaultNoteTitle
+            : trimmedTitle,
+        updatedAt: now,
+        kind: kind,
+        coverColor:
+            _noteColors[now.millisecondsSinceEpoch % _noteColors.length],
+        noteType: noteType,
+        pageTemplate: pageTemplate,
+        subtitle: subtitle,
+        notebookId: validNotebookId,
+        tagIds: validTagIds,
+      );
+      await txn.insert('notes', _noteToRow(note));
+      for (final tagId in validTagIds) {
+        await txn.insert('note_tags', {'note_id': note.id, 'tag_id': tagId});
+      }
+    });
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryRepository.createNote inserted '
+      'noteId=${note.id} title="${note.title}" '
+      'noteType=${note.noteType.name} pageTemplate=${note.pageTemplate.name}',
     );
-    final index = await loadIndex();
-    await _saveIndex(index.copyWith(notes: [note, ...index.notes]));
     return note;
   }
 
   @override
   Future<void> ensureNote(String noteId) async {
-    final index = await loadIndex();
-    if (index.notes.any((item) => item.id == noteId)) {
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryRepository.ensureNote start $noteId',
+    );
+    final db = await _openDatabase();
+    final existing = await db.query(
+      'notes',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [noteId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      debugPrint(
+        '[FlowMuseCreateNote] LibraryRepository.ensureNote exists $noteId',
+      );
       return;
     }
     final now = DateTime.now();
-    final note = NoteItem(
-      id: noteId,
-      title: _defaultNoteTitle,
-      updatedAt: now,
-      kind: LibraryFilter.notes,
-      coverColor: _noteColors[now.millisecondsSinceEpoch % _noteColors.length],
+    await db.insert(
+      'notes',
+      _noteToRow(
+        NoteItem(
+          id: noteId,
+          title: _defaultNoteTitle,
+          updatedAt: now,
+          kind: LibraryFilter.notes,
+          coverColor:
+              _noteColors[now.millisecondsSinceEpoch % _noteColors.length],
+        ),
+      ),
     );
-    await _saveIndex(index.copyWith(notes: [note, ...index.notes]));
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryRepository.ensureNote inserted $noteId',
+    );
   }
 
   @override
@@ -244,22 +198,37 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     if (trimmed.isEmpty) {
       return;
     }
-    await _updateNote(
-      noteId,
-      (item) => item.copyWith(
-        title: trimmed,
-        updatedAt: DateTime.now(),
-      ),
+    await ensureNote(noteId);
+    final db = await _openDatabase();
+    await db.update(
+      'notes',
+      {'title': trimmed, 'updated_at': _timestamp(DateTime.now())},
+      where: 'id = ?',
+      whereArgs: [noteId],
+    );
+  }
+
+  @override
+  Future<void> renameSubtitle(String noteId, String? subtitle) async {
+    await ensureNote(noteId);
+    final db = await _openDatabase();
+    await db.update(
+      'notes',
+      {'subtitle': subtitle?.trim(), 'updated_at': _timestamp(DateTime.now())},
+      where: 'id = ?',
+      whereArgs: [noteId],
     );
   }
 
   @override
   Future<void> touchNote(String noteId) async {
-    await _updateNote(
-      noteId,
-      (item) => item.copyWith(
-        updatedAt: DateTime.now(),
-      ),
+    await ensureNote(noteId);
+    final db = await _openDatabase();
+    await db.update(
+      'notes',
+      {'updated_at': _timestamp(DateTime.now())},
+      where: 'id = ?',
+      whereArgs: [noteId],
     );
   }
 
@@ -268,8 +237,12 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     String? name,
     Color? coverColor,
   }) async {
-    final index = await loadIndex();
-    final nextIndex = index.notebooks.length + 1;
+    final db = await _openDatabase();
+    final now = DateTime.now();
+    final notebookCount = await db.rawQuery(
+      'SELECT COUNT(*) AS count FROM notebooks',
+    );
+    final nextIndex = (notebookCount.first['count']! as int) + 1;
     final trimmedName = name?.trim();
     final notebook = LibraryNotebook(
       id: 'notebook-${_uuid.v4()}',
@@ -279,8 +252,11 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
       coverColor: coverColor ??
           libraryNotebookColors[
               (nextIndex - 1) % libraryNotebookColors.length],
+      createdAt: now,
+      updatedAt: now,
+      sortOrder: nextIndex - 1,
     );
-    await _saveIndex(index.copyWith(notebooks: [...index.notebooks, notebook]));
+    await db.insert('notebooks', _notebookToRow(notebook));
     return notebook;
   }
 
@@ -289,8 +265,10 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     String? name,
     Color? coverColor,
   }) async {
-    final index = await loadIndex();
-    final nextIndex = index.tags.length + 1;
+    final db = await _openDatabase();
+    final now = DateTime.now();
+    final tagCount = await db.rawQuery('SELECT COUNT(*) AS count FROM tags');
+    final nextIndex = (tagCount.first['count']! as int) + 1;
     final trimmedName = name?.trim();
     final tag = LibraryTag(
       id: 'tag-${_uuid.v4()}',
@@ -299,36 +277,28 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
           : trimmedName,
       coverColor: coverColor ??
           libraryTagColors[(nextIndex - 1) % libraryTagColors.length],
+      createdAt: now,
+      updatedAt: now,
+      sortOrder: nextIndex - 1,
     );
-    await _saveIndex(index.copyWith(tags: [...index.tags, tag]));
+    await db.insert('tags', _tagToRow(tag));
     return tag;
   }
 
   @override
   Future<void> deleteNotes(List<String> noteIds) async {
-    final ids = noteIds.toSet();
-    if (ids.isEmpty) {
-      return;
-    }
-    final now = DateTime.now();
-    await _updateNotes(
-      (item) => ids.contains(item.id)
-          ? item.copyWith(updatedAt: now, deletedAt: now)
-          : item,
-    );
+    await _updateNotes(noteIds, {
+      'updated_at': _timestamp(DateTime.now()),
+      'deleted_at': _timestamp(DateTime.now()),
+    });
   }
 
   @override
   Future<void> restoreNotes(List<String> noteIds) async {
-    final ids = noteIds.toSet();
-    if (ids.isEmpty) {
-      return;
-    }
-    await _updateNotes(
-      (item) => ids.contains(item.id)
-          ? item.copyWith(updatedAt: DateTime.now(), clearDeletedAt: true)
-          : item,
-    );
+    await _updateNotes(noteIds, {
+      'updated_at': _timestamp(DateTime.now()),
+      'deleted_at': null,
+    });
   }
 
   @override
@@ -337,12 +307,12 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     if (ids.isEmpty) {
       return;
     }
-    final index = await loadIndex();
-    await _saveIndex(
-      index.copyWith(
-        notes: [for (final item in index.notes) if (!ids.contains(item.id)) item],
-      ),
-    );
+    final db = await _openDatabase();
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.delete('notes', where: 'id = ?', whereArgs: [id]);
+      }
+    });
   }
 
   @override
@@ -354,32 +324,50 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     if (ids.isEmpty) {
       return;
     }
-    await _updateNotes(
-      (item) => ids.contains(item.id)
-          ? item.copyWith(
-              notebookId: notebookId,
-              clearNotebook: notebookId == null,
-              updatedAt: DateTime.now(),
-            )
-          : item,
-    );
+    final db = await _openDatabase();
+    await db.transaction((txn) async {
+      final validNotebookId = await _validNotebookId(txn, notebookId);
+      for (final noteId in ids) {
+        await txn.update(
+          'notes',
+          {
+            'notebook_id': validNotebookId,
+            'updated_at': _timestamp(DateTime.now()),
+          },
+          where: 'id = ?',
+          whereArgs: [noteId],
+        );
+      }
+    });
   }
 
   @override
   Future<void> addTagsToNotes(List<String> noteIds, List<String> tagIds) async {
     final ids = noteIds.toSet();
-    final tags = tagIds.toSet();
-    if (ids.isEmpty || tags.isEmpty) {
+    if (ids.isEmpty || tagIds.isEmpty) {
       return;
     }
-    await _updateNotes(
-      (item) => ids.contains(item.id)
-          ? item.copyWith(
-              tagIds: {...item.tagIds, ...tags}.toList(),
-              updatedAt: DateTime.now(),
-            )
-          : item,
-    );
+    final db = await _openDatabase();
+    await db.transaction((txn) async {
+      final validTagIds = await _validTagIds(txn, tagIds);
+      if (validTagIds.isEmpty) {
+        return;
+      }
+      for (final noteId in ids) {
+        for (final tagId in validTagIds) {
+          await txn.insert('note_tags', {
+            'note_id': noteId,
+            'tag_id': tagId,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+        await txn.update(
+          'notes',
+          {'updated_at': _timestamp(DateTime.now())},
+          where: 'id = ?',
+          whereArgs: [noteId],
+        );
+      }
+    });
   }
 
   @override
@@ -388,17 +376,41 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     if (ids.isEmpty) {
       return;
     }
-    await _updateNotes(
-      (item) => ids.contains(item.id)
-          ? item.copyWith(
-              tagIds: [
-                for (final id in item.tagIds)
-                  if (id != tagId) id,
-              ],
-              updatedAt: DateTime.now(),
-            )
-          : item,
-    );
+    final db = await _openDatabase();
+    await db.transaction((txn) async {
+      for (final noteId in ids) {
+        await txn.delete(
+          'note_tags',
+          where: 'note_id = ? AND tag_id = ?',
+          whereArgs: [noteId, tagId],
+        );
+        await txn.update(
+          'notes',
+          {'updated_at': _timestamp(DateTime.now())},
+          where: 'id = ?',
+          whereArgs: [noteId],
+        );
+      }
+    });
+  }
+
+  @override
+  Future<void> setNoteTags(String noteId, List<String> tagIds) async {
+    await ensureNote(noteId);
+    final db = await _openDatabase();
+    await db.transaction((txn) async {
+      final validTagIds = await _validTagIds(txn, tagIds);
+      await txn.delete('note_tags', where: 'note_id = ?', whereArgs: [noteId]);
+      for (final tagId in validTagIds) {
+        await txn.insert('note_tags', {'note_id': noteId, 'tag_id': tagId});
+      }
+      await txn.update(
+        'notes',
+        {'updated_at': _timestamp(DateTime.now())},
+        where: 'id = ?',
+        whereArgs: [noteId],
+      );
+    });
   }
 
   @override
@@ -407,40 +419,33 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     if (trimmed.isEmpty) {
       return;
     }
-    final index = await loadIndex();
-    await _saveIndex(
-      index.copyWith(
-        notebooks: [
-          for (final notebook in index.notebooks)
-            notebook.id == notebookId
-                ? LibraryNotebook(
-                    id: notebook.id,
-                    name: trimmed,
-                    coverColor: notebook.coverColor,
-                  )
-                : notebook,
-        ],
-      ),
+    final db = await _openDatabase();
+    await db.update(
+      'notebooks',
+      {'name': trimmed, 'updated_at': _timestamp(DateTime.now())},
+      where: 'id = ?',
+      whereArgs: [notebookId],
+    );
+  }
+
+  @override
+  Future<void> recolorNotebook(String notebookId, Color color) async {
+    final db = await _openDatabase();
+    await db.update(
+      'notebooks',
+      {
+        'cover_color': color.toARGB32(),
+        'updated_at': _timestamp(DateTime.now()),
+      },
+      where: 'id = ?',
+      whereArgs: [notebookId],
     );
   }
 
   @override
   Future<void> deleteNotebook(String notebookId) async {
-    final index = await loadIndex();
-    await _saveIndex(
-      index.copyWith(
-        notebooks: [
-          for (final notebook in index.notebooks)
-            if (notebook.id != notebookId) notebook,
-        ],
-        notes: [
-          for (final note in index.notes)
-            note.notebookId == notebookId
-                ? note.copyWith(clearNotebook: true, updatedAt: DateTime.now())
-                : note,
-        ],
-      ),
-    );
+    final db = await _openDatabase();
+    await db.delete('notebooks', where: 'id = ?', whereArgs: [notebookId]);
   }
 
   @override
@@ -449,70 +454,87 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
     if (trimmed.isEmpty) {
       return;
     }
-    final index = await loadIndex();
-    await _saveIndex(
-      index.copyWith(
-        tags: [
-          for (final tag in index.tags)
-            tag.id == tagId
-                ? LibraryTag(id: tag.id, name: trimmed, coverColor: tag.coverColor)
-                : tag,
-        ],
-      ),
+    final db = await _openDatabase();
+    await db.update(
+      'tags',
+      {'name': trimmed, 'updated_at': _timestamp(DateTime.now())},
+      where: 'id = ?',
+      whereArgs: [tagId],
+    );
+  }
+
+  @override
+  Future<void> recolorTag(String tagId, Color color) async {
+    final db = await _openDatabase();
+    await db.update(
+      'tags',
+      {
+        'cover_color': color.toARGB32(),
+        'updated_at': _timestamp(DateTime.now()),
+      },
+      where: 'id = ?',
+      whereArgs: [tagId],
     );
   }
 
   @override
   Future<void> deleteTag(String tagId) async {
-    final index = await loadIndex();
-    await _saveIndex(
-      index.copyWith(
-        tags: [
-          for (final tag in index.tags)
-            if (tag.id != tagId) tag,
-        ],
-        notes: [
-          for (final note in index.notes)
-            note.tagIds.contains(tagId)
-                ? note.copyWith(
-                    tagIds: [
-                      for (final id in note.tagIds)
-                        if (id != tagId) id,
-                    ],
-                    updatedAt: DateTime.now(),
-                  )
-                : note,
-        ],
-      ),
-    );
+    final db = await _openDatabase();
+    await db.delete('tags', where: 'id = ?', whereArgs: [tagId]);
   }
 
-  Future<void> _updateNote(
-    String noteId,
-    NoteItem Function(NoteItem item) update,
+  Future<void> _updateNotes(
+    List<String> noteIds,
+    Map<String, Object?> values,
   ) async {
-    await ensureNote(noteId);
-    final index = await loadIndex();
-    await _saveIndex(
-      index.copyWith(
-        notes: [
-          for (final item in index.notes)
-            if (item.id == noteId) update(item) else item,
-        ],
-      ),
-    );
+    final ids = noteIds.toSet();
+    if (ids.isEmpty) {
+      return;
+    }
+    final db = await _openDatabase();
+    await db.transaction((txn) async {
+      for (final id in ids) {
+        await txn.update('notes', values, where: 'id = ?', whereArgs: [id]);
+      }
+    });
   }
 
-  Future<void> _updateNotes(NoteItem Function(NoteItem item) update) async {
-    final index = await loadIndex();
-    await _saveIndex(
-      index.copyWith(notes: [for (final item in index.notes) update(item)]),
+  Future<String?> _validNotebookId(Transaction txn, String? notebookId) async {
+    if (notebookId == null) {
+      return null;
+    }
+    final existing = await txn.query(
+      'notebooks',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [notebookId],
+      limit: 1,
     );
+    return existing.isEmpty ? null : notebookId;
   }
 
-  Future<void> _saveIndex(LibraryIndex index) async {
-    final preferences = await _preferences();
-    await preferences.setString(_key, jsonEncode(index.toJson()));
+  Future<List<String>> _validTagIds(
+    Transaction txn,
+    List<String> tagIds,
+  ) async {
+    final unique = tagIds.toSet();
+    if (unique.isEmpty) {
+      return const [];
+    }
+    final result = <String>[];
+    for (final tagId in unique) {
+      final existing = await txn.query(
+        'tags',
+        columns: ['id'],
+        where: 'id = ?',
+        whereArgs: [tagId],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        result.add(tagId);
+      }
+    }
+    return result;
   }
 }
 
@@ -526,30 +548,51 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
   }
 
   Future<NoteItem> createNote({
+    LibraryFilter kind = LibraryFilter.notes,
     NoteType noteType = NoteType.unbounded,
     PageTemplate pageTemplate = PageTemplate.blank,
     String? title,
+    String? subtitle,
     String? notebookId,
     List<String> tagIds = const [],
   }) async {
+    debugPrint('[FlowMuseCreateNote] LibraryIndexNotifier.createNote start');
     final note = await _repository.createNote(
+      kind: kind,
       noteType: noteType,
       pageTemplate: pageTemplate,
       title: title,
+      subtitle: subtitle,
       notebookId: notebookId,
       tagIds: tagIds,
     );
     await refresh();
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryIndexNotifier.createNote refreshed '
+      'noteId=${note.id} stateHasError=${state.hasError}',
+    );
     return note;
   }
 
   Future<void> ensureNote(String noteId) async {
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryIndexNotifier.ensureNote start $noteId',
+    );
     await _repository.ensureNote(noteId);
     await refresh();
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryIndexNotifier.ensureNote refreshed '
+      '$noteId stateHasError=${state.hasError}',
+    );
   }
 
   Future<void> renameNote(String noteId, String title) async {
     await _repository.renameNote(noteId, title);
+    await refresh();
+  }
+
+  Future<void> renameSubtitle(String noteId, String? subtitle) async {
+    await _repository.renameSubtitle(noteId, subtitle);
     await refresh();
   }
 
@@ -601,8 +644,18 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     await refresh();
   }
 
+  Future<void> setNoteTags(String noteId, List<String> tagIds) async {
+    await _repository.setNoteTags(noteId, tagIds);
+    await refresh();
+  }
+
   Future<void> renameNotebook(String notebookId, String name) async {
     await _repository.renameNotebook(notebookId, name);
+    await refresh();
+  }
+
+  Future<void> recolorNotebook(String notebookId, Color color) async {
+    await _repository.recolorNotebook(notebookId, color);
     await refresh();
   }
 
@@ -616,19 +669,30 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     await refresh();
   }
 
+  Future<void> recolorTag(String tagId, Color color) async {
+    await _repository.recolorTag(tagId, color);
+    await refresh();
+  }
+
   Future<void> deleteTag(String tagId) async {
     await _repository.deleteTag(tagId);
     await refresh();
   }
 
   Future<void> refresh() async {
+    debugPrint('[FlowMuseCreateNote] LibraryIndexNotifier.refresh start');
     state = const AsyncLoading<LibraryIndex>();
     state = await AsyncValue.guard(_repository.loadIndex);
+    debugPrint(
+      '[FlowMuseCreateNote] LibraryIndexNotifier.refresh done '
+      'hasValue=${state.hasValue} hasError=${state.hasError} '
+      'error=${state.error}',
+    );
   }
 }
 
 final libraryRepositoryProvider = Provider<LibraryRepository>((ref) {
-  return SharedPreferencesLibraryRepository(SharedPreferences.getInstance);
+  return SqliteLibraryRepository(LocalDatabase.open);
 });
 
 final libraryIndexProvider =
@@ -636,47 +700,94 @@ final libraryIndexProvider =
       LibraryIndexNotifier.new,
     );
 
-Map<String, Object?> _noteToJson(NoteItem item) {
+Map<String, Object?> _noteToRow(NoteItem item) {
   return {
     'id': item.id,
     'title': item.title,
-    'updatedAt': item.updatedAt.toIso8601String(),
+    'updated_at': _timestamp(item.updatedAt),
     'kind': item.kind.name,
-    'coverColor': item.coverColor.toARGB32(),
-    'noteType': item.noteType.name,
-    'pageTemplate': item.pageTemplate.name,
-    'notebookId': item.notebookId,
-    'tagIds': item.tagIds,
+    'cover_color': item.coverColor.toARGB32(),
+    'note_type': item.noteType.name,
+    'page_template': item.pageTemplate.name,
+    'notebook_id': item.notebookId,
     'subtitle': item.subtitle,
-    'deletedAt': item.deletedAt?.toIso8601String(),
+    'deleted_at': item.deletedAt == null ? null : _timestamp(item.deletedAt!),
   };
 }
 
-NoteItem _noteFromJson(Map<String, Object?> json) {
+NoteItem _noteFromRow(Map<String, Object?> row, List<String> tagIds) {
   return NoteItem(
-    id: json['id']! as String,
-    title: json['title']! as String,
-    updatedAt: DateTime.parse(json['updatedAt']! as String),
-    kind: LibraryFilter.values.byName(json['kind']! as String),
-    coverColor: Color(json['coverColor']! as int),
+    id: row['id']! as String,
+    title: row['title']! as String,
+    updatedAt: _date(row['updated_at']! as int),
+    kind: LibraryFilter.values.byName(row['kind']! as String),
+    coverColor: Color(row['cover_color']! as int),
     noteType: _enumByName(
       NoteType.values,
-      json['noteType'],
+      row['note_type'],
       NoteType.unbounded,
     ),
     pageTemplate: _enumByName(
       PageTemplate.values,
-      json['pageTemplate'],
+      row['page_template'],
       PageTemplate.blank,
     ),
-    notebookId: json['notebookId'] as String?,
-    tagIds: (json['tagIds'] as List? ?? const []).whereType<String>().toList(),
-    subtitle: json['subtitle'] as String?,
-    deletedAt: json['deletedAt'] is String
-        ? DateTime.parse(json['deletedAt']! as String)
+    notebookId: row['notebook_id'] as String?,
+    tagIds: tagIds,
+    subtitle: row['subtitle'] as String?,
+    deletedAt: row['deleted_at'] is int
+        ? _date(row['deleted_at']! as int)
         : null,
   );
 }
+
+Map<String, Object?> _notebookToRow(LibraryNotebook notebook) {
+  return {
+    'id': notebook.id,
+    'name': notebook.name,
+    'cover_color': notebook.coverColor.toARGB32(),
+    'created_at': _timestamp(notebook.createdAt),
+    'updated_at': _timestamp(notebook.updatedAt),
+    'sort_order': notebook.sortOrder,
+  };
+}
+
+LibraryNotebook _notebookFromRow(Map<String, Object?> row) {
+  return LibraryNotebook(
+    id: row['id']! as String,
+    name: row['name']! as String,
+    coverColor: Color(row['cover_color']! as int),
+    createdAt: _date(row['created_at']! as int),
+    updatedAt: _date(row['updated_at']! as int),
+    sortOrder: row['sort_order']! as int,
+  );
+}
+
+Map<String, Object?> _tagToRow(LibraryTag tag) {
+  return {
+    'id': tag.id,
+    'name': tag.name,
+    'cover_color': tag.coverColor.toARGB32(),
+    'created_at': _timestamp(tag.createdAt),
+    'updated_at': _timestamp(tag.updatedAt),
+    'sort_order': tag.sortOrder,
+  };
+}
+
+LibraryTag _tagFromRow(Map<String, Object?> row) {
+  return LibraryTag(
+    id: row['id']! as String,
+    name: row['name']! as String,
+    coverColor: Color(row['cover_color']! as int),
+    createdAt: _date(row['created_at']! as int),
+    updatedAt: _date(row['updated_at']! as int),
+    sortOrder: row['sort_order']! as int,
+  );
+}
+
+int _timestamp(DateTime date) => date.millisecondsSinceEpoch;
+
+DateTime _date(int timestamp) => DateTime.fromMillisecondsSinceEpoch(timestamp);
 
 T _enumByName<T extends Enum>(List<T> values, Object? raw, T fallback) {
   if (raw is String) {

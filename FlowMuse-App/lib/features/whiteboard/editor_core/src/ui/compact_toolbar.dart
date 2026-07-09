@@ -14,6 +14,7 @@ class CompactToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final activeType = controller.editorState.activeToolType;
+    final showPressureSlider = activeType == ToolType.freedraw;
     return FocusTraversalGroup(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -81,6 +82,13 @@ class CompactToolbar extends StatelessWidget {
                     onPressed: () => controller.switchTool(type),
                     isActive: activeType == type,
                   ),
+              // 压感灵敏度滑块：仅在手写(freedraw)工具激活时显示
+              if (showPressureSlider) ...[
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: _CompactPressureSlider(controller: controller),
+                ),
+              ],
             ],
           ),
         ),
@@ -123,6 +131,93 @@ class CompactToolbar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Compact 布局的压感灵敏度弹出式滑块。
+class _CompactPressureSlider extends StatelessWidget {
+  final MarkdrawController controller;
+  const _CompactPressureSlider({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        return GestureDetector(
+          onTap: () => _showSliderPopup(context),
+          child: Container(
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.line_weight,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '压感',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSliderPopup(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) {
+        return ListenableBuilder(
+          listenable: controller,
+          builder: (ctx, _) {
+            final value = controller.pressureSensitivity;
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('压感强度', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text('均匀', style: TextStyle(fontSize: 12)),
+                      Expanded(
+                        child: Slider(
+                          value: value,
+                          min: 0.0,
+                          max: 1.0,
+                          onChanged: (v) {
+                            controller.pressureSensitivity = v;
+                          },
+                        ),
+                      ),
+                      const Text('极强', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

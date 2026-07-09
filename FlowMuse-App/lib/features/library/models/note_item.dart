@@ -4,7 +4,7 @@ enum LibraryFilter { all, notes, pdf }
 
 enum LibraryViewMode { grid, list }
 
-enum NoteType { bounded, unbounded }
+enum NoteType { paged, unbounded }
 
 enum PageTemplate { blank, narrowLine, wideLine, grid, dotGrid }
 

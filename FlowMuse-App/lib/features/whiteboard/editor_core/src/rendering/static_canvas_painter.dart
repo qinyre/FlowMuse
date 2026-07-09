@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 
 import '../core/elements/elements.dart' as core show TextElement;
 import '../core/elements/elements.dart' hide TextElement;
+import '../core/layout/layout.dart';
 import '../core/scene/scene_exports.dart';
 import '../editor/bindings/arrow_label_utils.dart';
 import 'element_renderer.dart';
@@ -25,6 +26,7 @@ class StaticCanvasPainter extends CustomPainter {
   final Scene scene;
   final RoughAdapter adapter;
   final ViewportState viewport;
+  final CanvasLayout? layout;
   final Element? previewElement;
 
   /// When set, the text element with this ID is not rendered — the editing
@@ -47,6 +49,7 @@ class StaticCanvasPainter extends CustomPainter {
     required this.scene,
     required this.adapter,
     required this.viewport,
+    this.layout,
     this.previewElement,
     this.editingElementId,
     this.resolvedImages,
@@ -68,8 +71,15 @@ class StaticCanvasPainter extends CustomPainter {
       _renderGrid(canvas, size, gridSize!);
     }
 
+    if (layout?.isPaged ?? false) {
+      _renderPages(canvas);
+    }
+
     final visible = cullElements(scene.orderedElements, viewport, size);
     for (final element in visible) {
+      if (element.isCanvasPage) {
+        continue;
+      }
       // Skip standalone text that is being edited
       if (editingElementId != null &&
           element.id == editingElementId &&
@@ -302,11 +312,72 @@ class StaticCanvasPainter extends CustomPainter {
     }
   }
 
+  void _renderPages(Canvas canvas) {
+    final pages = layout?.pages ?? const <CanvasPage>[];
+    final shadowPaint = Paint()
+      ..color = const Color(0x1F000000)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    final paperPaint = Paint()..color = const Color(0xFFFFFCF4);
+    final borderPaint = Paint()
+      ..color = const Color(0xFFE4DDD1)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1 / viewport.zoom;
+
+    for (final page in pages) {
+      final rect = page.bounds;
+      canvas.drawRect(rect.shift(const Offset(0, 4)), shadowPaint);
+      canvas.drawRect(rect, paperPaint);
+      _renderPageTemplate(canvas, page);
+      canvas.drawRect(rect, borderPaint);
+    }
+  }
+
+  void _renderPageTemplate(Canvas canvas, CanvasPage page) {
+    final rect = page.bounds.deflate(32);
+    final paint = Paint()
+      ..color = const Color(0xFFD6DED9)
+      ..strokeWidth = 1 / viewport.zoom;
+    switch (page.template) {
+      case CanvasPageTemplate.blank:
+        return;
+      case CanvasPageTemplate.narrowLine:
+        for (var y = rect.top + 18; y < rect.bottom; y += 24) {
+          canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
+        }
+      case CanvasPageTemplate.wideLine:
+        for (var y = rect.top + 24; y < rect.bottom; y += 36) {
+          canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
+        }
+      case CanvasPageTemplate.grid:
+        for (var x = rect.left; x < rect.right; x += 32) {
+          canvas.drawLine(
+            Offset(x, page.bounds.top),
+            Offset(x, page.bounds.bottom),
+            paint,
+          );
+        }
+        for (var y = rect.top; y < rect.bottom; y += 32) {
+          canvas.drawLine(
+            Offset(page.bounds.left, y),
+            Offset(page.bounds.right, y),
+            paint,
+          );
+        }
+      case CanvasPageTemplate.dotGrid:
+        for (var x = rect.left; x < rect.right; x += 32) {
+          for (var y = rect.top; y < rect.bottom; y += 32) {
+            canvas.drawCircle(Offset(x, y), 1.5 / viewport.zoom, paint);
+          }
+        }
+    }
+  }
+
   @override
   bool shouldRepaint(covariant StaticCanvasPainter oldDelegate) {
     return !identical(scene, oldDelegate.scene) ||
         !identical(adapter, oldDelegate.adapter) ||
         viewport != oldDelegate.viewport ||
+        !identical(layout, oldDelegate.layout) ||
         !identical(previewElement, oldDelegate.previewElement) ||
         !identical(pendingElements, oldDelegate.pendingElements) ||
         !identical(resolvedImages, oldDelegate.resolvedImages) ||

@@ -74,13 +74,12 @@ class NotebooksViewModel extends Notifier<NotebooksState> {
               NotebookCollectionItem(
                 id: notebook.id,
                 name: notebook.name,
-                count: index.notes
-                    .where((item) => item.notebookId == notebook.id)
-                    .length,
+                count: index.countNotesInNotebook(notebook.id),
                 coverColor: notebook.coverColor,
                 noteIds: [
                   for (final note in index.notes)
-                    if (note.notebookId == notebook.id) note.id,
+                    if (!note.isDeleted && note.notebookId == notebook.id)
+                      note.id,
                 ],
               ),
           ];
@@ -121,7 +120,9 @@ class NotebooksViewModel extends Notifier<NotebooksState> {
   }
 
   Future<void> renameNotebook(String notebookId, String name) {
-    return ref.read(libraryIndexProvider.notifier).renameNotebook(notebookId, name);
+    return ref
+        .read(libraryIndexProvider.notifier)
+        .renameNotebook(notebookId, name);
   }
 
   Future<void> deleteNotebook(String notebookId) {

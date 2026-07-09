@@ -1,12 +1,16 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../whiteboard/pdf_note_import/pdf_note_import_payload.dart';
+import '../../whiteboard/pdf_note_import/pdf_note_import_service.dart';
 import '../../whiteboard/collaboration/models/excalidraw_scene.dart';
 import '../../whiteboard/repositories/whiteboard_scene_repository.dart';
 import '../models/note_item.dart';
@@ -20,10 +24,8 @@ class CreateNotePage extends ConsumerStatefulWidget {
 }
 
 class _CreateNotePageState extends ConsumerState<CreateNotePage> {
-  static const _primary = Color(0xFF4F8F84);
-
   String _title = '';
-  NoteType _noteType = NoteType.unbounded;
+  NoteType _noteType = NoteType.paged;
   PageTemplate _pageTemplate = PageTemplate.blank;
   bool _creating = false;
   final TextEditingController _titleController = TextEditingController();
@@ -40,18 +42,30 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     if (_creating) {
       return;
     }
+    debugPrint(
+      '[FlowMuseCreateNote] CreateNotePage.create pressed '
+      'title="$_title" noteType=${_noteType.name} '
+      'pageTemplate=${_pageTemplate.name}',
+    );
     setState(() => _creating = true);
     try {
       FocusManager.instance.primaryFocus?.unfocus();
-      final note = await ref.read(libraryRepositoryProvider).createNote(
-        noteType: _noteType,
-        pageTemplate: _pageTemplate,
-        title: _title,
+      final note = await ref
+          .read(libraryRepositoryProvider)
+          .createNote(
+            noteType: _noteType,
+            pageTemplate: _pageTemplate,
+            title: _title,
+          );
+      await defaultWhiteboardSceneRepository.saveScene(
+        note.id,
+        emptyExcalidrawSceneContent,
       );
-      await SharedPreferencesWhiteboardSceneRepository(
-        SharedPreferences.getInstance,
-      ).saveScene(note.id, emptyExcalidrawSceneContent);
       ref.invalidate(libraryIndexProvider);
+      debugPrint(
+        '[FlowMuseCreateNote] CreateNotePage.create success '
+        'noteId=${note.id}',
+      );
       if (!mounted) {
         return;
       }
@@ -61,11 +75,15 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
         }
       });
     } catch (error, stackTrace) {
-      debugPrint('Create note failed: $error\n$stackTrace');
+      debugPrint('[FlowMuseCreateNote] CreateNotePage.create failed: $error');
+      debugPrintStack(
+        label: '[FlowMuseCreateNote] CreateNotePage.create stack',
+        stackTrace: stackTrace,
+      );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('创建失败：$error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('创建失败：$error')));
       }
     } finally {
       if (mounted) {
@@ -74,10 +92,64 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     }
   }
 
-  void _showImportHint() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('请先创建笔记后，在白板页使用打开文件导入。')),
+  Future<void> _importPdf() async {
+    if (_creating) {
+      return;
+    }
+    debugPrint(
+      '[FlowMuseCreateNote] CreateNotePage.importPdf pressed '
+      'noteType=${_noteType.name} pageTemplate=${_pageTemplate.name}',
     );
+    setState(() => _creating = true);
+    try {
+      final note = await ref
+          .read(pdfNoteImportServiceProvider)
+          .pickAndStageImport(
+            ref.read,
+            noteType: _noteType,
+            pageTemplate: _pageTemplate,
+            picker: () async {
+              final result = await FilePicker.platform.pickFiles(
+                type: FileType.custom,
+                allowedExtensions: const ['pdf'],
+                withData: true,
+              );
+              final file = result?.files.single;
+              final bytes = file?.bytes;
+              if (file == null || bytes == null) {
+                return null;
+              }
+              return PdfNoteImportPayload(bytes: bytes, name: file.name);
+            },
+          );
+      if (!mounted || note == null) {
+        debugPrint('[FlowMuseCreateNote] CreateNotePage.importPdf canceled');
+        return;
+      }
+      debugPrint(
+        '[FlowMuseCreateNote] CreateNotePage.importPdf success '
+        'noteId=${note.id}',
+      );
+      context.push(AppRoutes.whiteboardPath(noteId: note.id));
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[FlowMuseCreateNote] CreateNotePage.importPdf failed: $error',
+      );
+      debugPrintStack(
+        label: '[FlowMuseCreateNote] CreateNotePage.importPdf stack',
+        stackTrace: stackTrace,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导入失败：$error')));
+      }
+      rethrow;
+    } finally {
+      if (mounted) {
+        setState(() => _creating = false);
+      }
+    }
   }
 
   @override
@@ -112,7 +184,9 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
                               onNoteTypeChanged: (value) {
                                 setState(() => _noteType = value);
                               },
-                              onImport: _showImportHint,
+                              onImport: () {
+                                unawaited(_importPdf());
+                              },
                               onSubmitted: _createNote,
                             ),
                           ],
@@ -303,8 +377,8 @@ class _NoteSetupPanel extends StatelessWidget {
                   showSelectedIcon: false,
                   segments: const [
                     ButtonSegment(
-                      value: NoteType.bounded,
-                      label: Text('有界'),
+                      value: NoteType.paged,
+                      label: Text('分页'),
                       icon: Icon(LucideIcons.fileText),
                     ),
                     ButtonSegment(
@@ -504,7 +578,7 @@ class _TemplateCard extends StatelessWidget {
                       size: 20,
                     )
                   : null,
-              ),
+            ),
           ],
         ),
       ),
