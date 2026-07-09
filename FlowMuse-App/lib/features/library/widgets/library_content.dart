@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../models/library_special_view.dart';
 import '../models/note_item.dart';
@@ -126,59 +127,100 @@ class _LibraryContentState extends State<LibraryContent> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: AppSpacing.pagePadding(compact: widget.compact),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _LibraryHeader(
-            compact: widget.compact,
-            title: widget.title,
-            viewMode: widget.state.viewMode,
-            sortAscending: widget.state.sortAscending,
-            selectionMode: widget.state.selectionMode,
-            onViewModeChanged: widget.onViewModeChanged,
-            onSortDirectionChanged: widget.onSortDirectionChanged,
-            onSelectionModeChanged: widget.onSelectionModeChanged,
-          ),
-          const SizedBox(height: AppSpacing.headerToContent),
-          if (widget.specialView == LibrarySpecialView.none) ...[
-            _FilterTabs(
-              selected: widget.state.selectedFilter,
-              onFilterChanged: _onFilterChanged,
-              pageController: _pageController,
-            ),
-            const SizedBox(height: AppSpacing.sectionGap),
-          ],
-          if (widget.state.selectionMode)
-            _BulkActionBar(
-              trash: widget.specialView == LibrarySpecialView.trash,
-              selectedCount: widget.state.selectedNoteIds.length,
-              libraryIndex: widget.libraryIndex,
-              onClearSelection: widget.onClearSelection,
-              onDeleteSelected: widget.onDeleteSelected,
-              onRestoreSelected: widget.onRestoreSelected,
-              onDeleteSelectedForever: widget.onDeleteSelectedForever,
-              onMoveSelectedToNotebook: widget.onMoveSelectedToNotebook,
-              onAddTagsToSelected: widget.onAddTagsToSelected,
-            ),
-          if (widget.state.selectionMode)
-            const SizedBox(height: AppSpacing.sectionGap),
-          Expanded(
-            child: _LibraryItems(
-              state: widget.state,
-              notes: widget.notes,
-              specialView: widget.specialView,
-              compact: widget.compact,
-              pageController: _pageController,
-              onPageChanged: _onPageChanged,
-              onSelectionChanged: widget.onSelectionChanged,
-              onCreate: widget.onCreate,
-              onJoinRoom: widget.onJoinRoom,
-              onOpenNote: widget.onOpenNote,
+    return RightPageScaffold(
+      title: widget.title,
+      actions: [
+        Builder(
+          builder: (context) => IconButton(
+            tooltip: widget.state.viewMode == LibraryViewMode.grid
+                ? '网格视图'
+                : '列表视图',
+            onPressed: () async {
+              final selected = await showAnchoredPopupMenu<LibraryViewMode>(
+                context: context,
+                items: const [
+                  PopupMenuItem<LibraryViewMode>(
+                    value: LibraryViewMode.grid,
+                    child: ListTile(
+                      leading: Icon(LucideIcons.layoutGrid),
+                      title: Text('网格视图'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  PopupMenuItem<LibraryViewMode>(
+                    value: LibraryViewMode.list,
+                    child: ListTile(
+                      leading: Icon(LucideIcons.list),
+                      title: Text('列表视图'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              );
+              if (selected == null || !context.mounted) {
+                return;
+              }
+              runAfterUiTeardown(() => widget.onViewModeChanged(selected));
+            },
+            icon: Icon(
+              widget.state.viewMode == LibraryViewMode.grid
+                  ? LucideIcons.layoutGrid
+                  : LucideIcons.list,
             ),
           ),
+        ),
+        IconButton(
+          tooltip: widget.state.sortAscending ? '按日期升序' : '按日期降序',
+          onPressed: widget.onSortDirectionChanged,
+          icon: Icon(
+            widget.state.sortAscending
+                ? LucideIcons.arrowUpNarrowWide
+                : LucideIcons.arrowDownWideNarrow,
+          ),
+        ),
+        IconButton(
+          tooltip: widget.state.selectionMode ? '退出多选' : '多选',
+          isSelected: widget.state.selectionMode,
+          onPressed: widget.onSelectionModeChanged,
+          icon: const Icon(LucideIcons.squareCheck),
+          selectedIcon: const Icon(LucideIcons.checkSquare),
+        ),
+      ],
+      topContent: [
+        if (widget.specialView == LibrarySpecialView.none) ...[
+          _FilterTabs(
+            selected: widget.state.selectedFilter,
+            onFilterChanged: _onFilterChanged,
+            pageController: _pageController,
+          ),
+          const SizedBox(height: AppSpacing.sectionGap),
         ],
+        if (widget.state.selectionMode) ...[
+          _BulkActionBar(
+            trash: widget.specialView == LibrarySpecialView.trash,
+            selectedCount: widget.state.selectedNoteIds.length,
+            libraryIndex: widget.libraryIndex,
+            onClearSelection: widget.onClearSelection,
+            onDeleteSelected: widget.onDeleteSelected,
+            onRestoreSelected: widget.onRestoreSelected,
+            onDeleteSelectedForever: widget.onDeleteSelectedForever,
+            onMoveSelectedToNotebook: widget.onMoveSelectedToNotebook,
+            onAddTagsToSelected: widget.onAddTagsToSelected,
+          ),
+          const SizedBox(height: AppSpacing.sectionGap),
+        ],
+      ],
+      body: _LibraryItems(
+        state: widget.state,
+        notes: widget.notes,
+        specialView: widget.specialView,
+        compact: widget.compact,
+        pageController: _pageController,
+        onPageChanged: _onPageChanged,
+        onSelectionChanged: widget.onSelectionChanged,
+        onCreate: widget.onCreate,
+        onJoinRoom: widget.onJoinRoom,
+        onOpenNote: widget.onOpenNote,
       ),
     );
   }
@@ -560,99 +602,6 @@ class _NoteTile extends StatelessWidget {
               ),
         onTap: onTap,
       ),
-    );
-  }
-}
-
-class _LibraryHeader extends StatelessWidget {
-  const _LibraryHeader({
-    required this.compact,
-    required this.title,
-    required this.viewMode,
-    required this.sortAscending,
-    required this.selectionMode,
-    required this.onViewModeChanged,
-    required this.onSortDirectionChanged,
-    required this.onSelectionModeChanged,
-  });
-
-  final bool compact;
-  final String title;
-  final LibraryViewMode viewMode;
-  final bool sortAscending;
-  final bool selectionMode;
-  final ValueChanged<LibraryViewMode> onViewModeChanged;
-  final VoidCallback onSortDirectionChanged;
-  final VoidCallback onSelectionModeChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFF1F2624),
-          ),
-        ),
-        const Spacer(),
-        Builder(
-          builder: (context) => IconButton(
-            tooltip: viewMode == LibraryViewMode.grid ? '网格视图' : '列表视图',
-            onPressed: () async {
-              final selected = await showAnchoredPopupMenu<LibraryViewMode>(
-                context: context,
-                items: const [
-                  PopupMenuItem<LibraryViewMode>(
-                    value: LibraryViewMode.grid,
-                    child: ListTile(
-                      leading: Icon(LucideIcons.layoutGrid),
-                      title: Text('网格视图'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                  PopupMenuItem<LibraryViewMode>(
-                    value: LibraryViewMode.list,
-                    child: ListTile(
-                      leading: Icon(LucideIcons.list),
-                      title: Text('列表视图'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                ],
-              );
-              if (selected == null || !context.mounted) {
-                return;
-              }
-              runAfterUiTeardown(() => onViewModeChanged(selected));
-            },
-            icon: Icon(
-              viewMode == LibraryViewMode.grid
-                  ? LucideIcons.layoutGrid
-                  : LucideIcons.list,
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.controlGap),
-        IconButton(
-          tooltip: sortAscending ? '按日期升序' : '按日期降序',
-          onPressed: onSortDirectionChanged,
-          icon: Icon(
-            sortAscending
-                ? LucideIcons.arrowUpNarrowWide
-                : LucideIcons.arrowDownWideNarrow,
-          ),
-        ),
-        const SizedBox(width: AppSpacing.controlGap),
-        IconButton(
-          tooltip: selectionMode ? '退出多选' : '多选',
-          isSelected: selectionMode,
-          onPressed: onSelectionModeChanged,
-          icon: const Icon(LucideIcons.squareCheck),
-          selectedIcon: const Icon(LucideIcons.checkSquare),
-        ),
-      ],
     );
   }
 }

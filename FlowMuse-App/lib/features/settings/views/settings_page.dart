@@ -13,6 +13,7 @@ import '../../../app/app_theme_preset.dart';
 import '../../../app/view_models/theme_view_model.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/widgets/right_page.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
 import '../../account/view_models/account_view_model.dart';
 import '../../library/repositories/library_repository.dart';
@@ -199,39 +200,18 @@ class _SettingsContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final selectedColor = Theme.of(context).colorScheme.primary;
 
     return ColoredBox(
       color: selectedColor.withValues(alpha: 0.035),
-      child: Column(
-        children: [
-          Container(
-            height: 88,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.72),
-                ),
-              ),
-            ),
-            child: Text(
-              section.label,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: colorScheme.onSurface,
-              ),
-            ),
-          ),
-          Expanded(
-            child: _SettingsSectionBody(
-              section: section,
-              selectedPreset: selectedPreset,
-              onPresetChanged: onPresetChanged,
-            ),
-          ),
-        ],
+      child: RightPageScaffold(
+        title: section.label,
+        forceCenterTitle: true,
+        body: _SettingsSectionBody(
+          section: section,
+          selectedPreset: selectedPreset,
+          onPresetChanged: onPresetChanged,
+        ),
       ),
     );
   }
@@ -262,7 +242,7 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pageInset,
-        AppSpacing.pageTopInset,
+        0,
         AppSpacing.pageInset,
         0,
       ),

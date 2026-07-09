@@ -11,9 +11,10 @@ import '../repositories/library_repository.dart';
 import '../../tags/view_models/tags_view_model.dart';
 
 class LibrarySidebar extends ConsumerStatefulWidget {
-  const LibrarySidebar({super.key, required this.section});
+  const LibrarySidebar({super.key, required this.section, this.onCollapse});
 
   final ShellSection section;
+  final VoidCallback? onCollapse;
 
   @override
   ConsumerState<LibrarySidebar> createState() => _LibrarySidebarState();
@@ -34,6 +35,11 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
 
     return SharedSidebar(
       header: SharedSidebarHeader(
+        leading: SharedSidebarIconButton(
+          tooltip: '收起侧边栏',
+          onPressed: widget.onCollapse,
+          icon: const Icon(LucideIcons.panelLeftClose),
+        ),
         trailing: [
           SharedSidebarIconButton(
             tooltip: '设置',

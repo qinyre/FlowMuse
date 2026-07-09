@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
@@ -472,110 +473,15 @@ class _TagPageFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 820;
-        return Padding(
-          padding: AppSpacing.pagePadding(compact: compact),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _TagHeader(
-                title: title,
-                viewMode: viewMode,
-                sortAscending: sortAscending,
-                selectionMode: selectionMode,
-                onCreate: onCreate,
-                onViewModeChanged: onViewModeChanged,
-                onSortDirectionChanged: onSortDirectionChanged,
-                onSelectionModeChanged: onSelectionModeChanged,
-              ),
-              const SizedBox(height: AppSpacing.headerToContent),
-              if (bulkBar != null) ...[
-                bulkBar!,
-                const SizedBox(height: AppSpacing.sectionGap),
-              ],
-              Expanded(child: child),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _TagBulkActionBar extends StatelessWidget {
-  const _TagBulkActionBar({
-    required this.selectedCount,
-    required this.onClearSelection,
-    required this.onDeleteSelected,
-  });
-
-  final int selectedCount;
-  final VoidCallback onClearSelection;
-  final Future<void> Function() onDeleteSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card.outlined(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Text('已选 $selectedCount 项'),
-            const Spacer(),
-            TextButton(onPressed: onClearSelection, child: const Text('取消')),
-            TextButton(
-              onPressed: selectedCount == 0 ? null : onDeleteSelected,
-              child: const Text('删除'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TagHeader extends StatelessWidget {
-  const _TagHeader({
-    required this.title,
-    required this.viewMode,
-    required this.sortAscending,
-    required this.selectionMode,
-    required this.onCreate,
-    required this.onViewModeChanged,
-    required this.onSortDirectionChanged,
-    required this.onSelectionModeChanged,
-  });
-
-  final String title;
-  final LibraryViewMode viewMode;
-  final bool sortAscending;
-  final bool selectionMode;
-  final VoidCallback onCreate;
-  final ValueChanged<LibraryViewMode>? onViewModeChanged;
-  final VoidCallback? onSortDirectionChanged;
-  final VoidCallback? onSelectionModeChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: const Color(0xFF1F2624),
-          ),
-        ),
-        const Spacer(),
+    return RightPageScaffold(
+      title: title,
+      actions: [
         IconButton(
           tooltip: '新建标签',
           onPressed: onCreate,
           icon: const Icon(LucideIcons.tag),
         ),
-        if (onViewModeChanged != null) ...[
-          const SizedBox(width: AppSpacing.controlGap),
+        if (onViewModeChanged != null)
           Builder(
             builder: (context) => IconButton(
               tooltip: viewMode == LibraryViewMode.grid ? '网格视图' : '列表视图',
@@ -613,9 +519,7 @@ class _TagHeader extends StatelessWidget {
               ),
             ),
           ),
-        ],
-        if (onSortDirectionChanged != null) ...[
-          const SizedBox(width: AppSpacing.controlGap),
+        if (onSortDirectionChanged != null)
           IconButton(
             tooltip: sortAscending ? '按名称升序' : '按名称降序',
             onPressed: onSortDirectionChanged,
@@ -625,9 +529,7 @@ class _TagHeader extends StatelessWidget {
                   : LucideIcons.arrowDownWideNarrow,
             ),
           ),
-        ],
-        if (onSelectionModeChanged != null) ...[
-          const SizedBox(width: AppSpacing.controlGap),
+        if (onSelectionModeChanged != null)
           IconButton(
             tooltip: selectionMode ? '退出多选' : '多选',
             isSelected: selectionMode,
@@ -635,8 +537,46 @@ class _TagHeader extends StatelessWidget {
             icon: const Icon(LucideIcons.squareCheck),
             selectedIcon: const Icon(LucideIcons.checkSquare),
           ),
+      ],
+      topContent: [
+        if (bulkBar != null) ...[
+          bulkBar!,
+          const SizedBox(height: AppSpacing.sectionGap),
         ],
       ],
+      body: child,
+    );
+  }
+}
+
+class _TagBulkActionBar extends StatelessWidget {
+  const _TagBulkActionBar({
+    required this.selectedCount,
+    required this.onClearSelection,
+    required this.onDeleteSelected,
+  });
+
+  final int selectedCount;
+  final VoidCallback onClearSelection;
+  final Future<void> Function() onDeleteSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card.outlined(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Text('已选 $selectedCount 项'),
+            const Spacer(),
+            TextButton(onPressed: onClearSelection, child: const Text('取消')),
+            TextButton(
+              onPressed: selectedCount == 0 ? null : onDeleteSelected,
+              child: const Text('删除'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -6,6 +6,7 @@ class AppSpacing {
   static const compactPageInset = 20.0;
   static const pageInset = 32.0;
   static const pageTopInset = 32.0;
+  static const shellHeaderHeight = 60.0;
   static const headerToContent = 32.0;
   static const sectionGap = 24.0;
   static const listGap = 12.0;

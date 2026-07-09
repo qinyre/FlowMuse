@@ -72,22 +72,25 @@ class SharedSidebarHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final actions = trailing ?? const [];
 
-    return Padding(
-      padding: padding,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          leading ?? const SharedSidebarAvatar(),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var index = 0; index < actions.length; index++) ...[
-                if (index > 0) const SizedBox(width: 0),
-                actions[index],
+    return SizedBox(
+      height: AppSpacing.shellHeaderHeight,
+      child: Padding(
+        padding: padding,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            leading ?? const SharedSidebarAvatar(),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var index = 0; index < actions.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 0),
+                  actions[index],
+                ],
               ],
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -293,11 +296,12 @@ class SharedSidebarItem extends StatelessWidget {
                             child: Text(
                               value,
                               textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                                fontSize: 11,
-                                height: 1.0,
-                              ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontSize: 11,
+                                    height: 1.0,
+                                  ),
                             ),
                           ),
                         ),
@@ -379,7 +383,11 @@ class SharedSidebarActionButton extends StatelessWidget {
         constraints: const BoxConstraints.tightFor(width: 28, height: 28),
         padding: EdgeInsets.zero,
         onPressed: onPressed,
-        icon: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 15),
+        icon: Icon(
+          icon,
+          color: Theme.of(context).colorScheme.primary,
+          size: 15,
+        ),
       ),
     );
   }
