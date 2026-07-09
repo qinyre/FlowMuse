@@ -674,9 +674,11 @@ class MarkdrawController extends ChangeNotifier {
     if (result == null) return;
 
     final constrained = _constrainPdfViewport(result);
+    final bound = _constrainElementBounds(constrained);
+    if (bound == null) return; // PDF 模式下元素完全在范围外，丢弃
     final styled = isCreationTool
-        ? _applyDefaultStyleToResult(constrained)
-        : constrained;
+        ? _applyDefaultStyleToResult(bound)
+        : bound;
 
     _syncToSystemClipboard(styled);
 
@@ -710,8 +712,38 @@ class MarkdrawController extends ChangeNotifier {
     if (result is! UpdateViewportResult) return result;
     if (_canvasSize.width <= 0 || _canvasSize.height <= 0) return result;
     return UpdateViewportResult(
-      clampViewportToBounds(result.viewport, _contentBounds, _canvasSize),
+      clampViewportToBounds(result.viewport, _contentBounds, _canvasSize, padding: 0),
     );
+  }
+
+  /// Clips new elements to [contentBounds] so nothing renders outside PDF area.
+  /// Elements fully outside bounds are dropped (returns null).
+  ToolResult? _constrainElementBounds(ToolResult result) {
+    final bounds = _contentBounds;
+    if (bounds == null) return result; // 普通白板，不约束
+
+    if (result is AddElementResult) {
+      final elem = result.element;
+      final elemBounds = Bounds.fromLTWH(elem.x, elem.y, elem.width, elem.height);
+      final clipped = bounds.clipInnerBounds(elemBounds);
+      if (clipped == null) return null; // 完全在外面 → 丢掉
+      if (clipped == elemBounds) return result;
+      return AddElementResult(elem.copyWith(
+        x: clipped.left,
+        y: clipped.top,
+        width: clipped.size.width,
+        height: clipped.size.height,
+      ));
+    }
+    if (result is CompoundResult) {
+      final clipped = result.results
+          .map(_constrainElementBounds)
+          .whereType<ToolResult>()
+          .toList();
+      if (clipped.isEmpty) return null;
+      return CompoundResult(clipped);
+    }
+    return result;
   }
 
   void _applyContentBoundsClamp() {
@@ -723,6 +755,7 @@ class MarkdrawController extends ChangeNotifier {
       _editorState.viewport,
       bounds,
       _canvasSize,
+      padding: 0,
     );
     if (clamped != _editorState.viewport) {
       _editorState = _editorState.copyWith(viewport: clamped);

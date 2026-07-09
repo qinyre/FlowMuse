@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import '../core/math/math.dart';
@@ -13,8 +14,15 @@ ViewportState clampViewportToBounds(
     return viewport;
   }
 
-  final viewWidth = canvasSize.width / viewport.zoom;
-  final viewHeight = canvasSize.height / viewport.zoom;
+  // Clamp zoom so the viewport never shrinks smaller than the content —
+  // the screen is always fully filled by PDF, zero blank space.
+  final minZoomX = canvasSize.width / bounds.size.width;
+  final minZoomY = canvasSize.height / bounds.size.height;
+  final minZoom = math.max(minZoomX, minZoomY);
+  final zoom = viewport.zoom.clamp(minZoom, double.infinity).toDouble();
+
+  final viewWidth = canvasSize.width / zoom;
+  final viewHeight = canvasSize.height / zoom;
   final contentFitsX = bounds.size.width <= viewWidth;
   final contentFitsY = bounds.size.height <= viewHeight;
   final minX = contentFitsX
@@ -33,6 +41,8 @@ ViewportState clampViewportToBounds(
     viewport.offset.dx.clamp(minX, maxX).toDouble(),
     viewport.offset.dy.clamp(minY, maxY).toDouble(),
   );
-  if ((offset - viewport.offset).distance < 0.001) return viewport;
-  return ViewportState(offset: offset, zoom: viewport.zoom);
+  final offsetChanged = (offset - viewport.offset).distance >= 0.001;
+  final zoomChanged = zoom != viewport.zoom;
+  if (!offsetChanged && !zoomChanged) return viewport;
+  return ViewportState(offset: offset, zoom: zoom);
 }
