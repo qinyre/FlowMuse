@@ -146,9 +146,9 @@ abstract interface class LibraryRepository {
 
   Future<void> touchNote(String noteId);
 
-  Future<LibraryNotebook> createNotebook();
+  Future<LibraryNotebook> createNotebook({String? name, Color? coverColor});
 
-  Future<LibraryTag> createTag();
+  Future<LibraryTag> createTag({String? name, Color? coverColor});
 
   Future<void> deleteNotes(List<String> noteIds);
 
@@ -264,26 +264,41 @@ class SharedPreferencesLibraryRepository implements LibraryRepository {
   }
 
   @override
-  Future<LibraryNotebook> createNotebook() async {
+  Future<LibraryNotebook> createNotebook({
+    String? name,
+    Color? coverColor,
+  }) async {
     final index = await loadIndex();
     final nextIndex = index.notebooks.length + 1;
+    final trimmedName = name?.trim();
     final notebook = LibraryNotebook(
       id: 'notebook-${_uuid.v4()}',
-      name: '新建笔记本 $nextIndex',
-      coverColor: _notebookColors[(nextIndex - 1) % _notebookColors.length],
+      name: trimmedName == null || trimmedName.isEmpty
+          ? '新建笔记本 $nextIndex'
+          : trimmedName,
+      coverColor: coverColor ??
+          libraryNotebookColors[
+              (nextIndex - 1) % libraryNotebookColors.length],
     );
     await _saveIndex(index.copyWith(notebooks: [...index.notebooks, notebook]));
     return notebook;
   }
 
   @override
-  Future<LibraryTag> createTag() async {
+  Future<LibraryTag> createTag({
+    String? name,
+    Color? coverColor,
+  }) async {
     final index = await loadIndex();
     final nextIndex = index.tags.length + 1;
+    final trimmedName = name?.trim();
     final tag = LibraryTag(
       id: 'tag-${_uuid.v4()}',
-      name: '新建标签 $nextIndex',
-      coverColor: _tagColors[(nextIndex - 1) % _tagColors.length],
+      name: trimmedName == null || trimmedName.isEmpty
+          ? '新建标签 $nextIndex'
+          : trimmedName,
+      coverColor: coverColor ??
+          libraryTagColors[(nextIndex - 1) % libraryTagColors.length],
     );
     await _saveIndex(index.copyWith(tags: [...index.tags, tag]));
     return tag;
@@ -543,13 +558,13 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     await refresh();
   }
 
-  Future<void> createNotebook() async {
-    await _repository.createNotebook();
+  Future<void> createNotebook({String? name, Color? coverColor}) async {
+    await _repository.createNotebook(name: name, coverColor: coverColor);
     await refresh();
   }
 
-  Future<void> createTag() async {
-    await _repository.createTag();
+  Future<void> createTag({String? name, Color? coverColor}) async {
+    await _repository.createTag(name: name, coverColor: coverColor);
     await refresh();
   }
 
@@ -684,14 +699,14 @@ const _noteColors = [
   Color(0xFF9CA2E6),
 ];
 
-const _notebookColors = [
+const libraryNotebookColors = [
   Color(0xFF8DB6C9),
   Color(0xFFD9B48F),
   Color(0xFF8CBDB5),
   Color(0xFF9CA2E6),
 ];
 
-const _tagColors = [
+const libraryTagColors = [
   Color(0xFF8CBDB5),
   Color(0xFFE9993F),
   Color(0xFF9CA2E6),

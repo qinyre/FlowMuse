@@ -9,6 +9,7 @@ import '../../../shared/widgets/shared_sidebar.dart';
 import '../../notebooks/view_models/notebooks_view_model.dart';
 import '../repositories/library_repository.dart';
 import '../../tags/view_models/tags_view_model.dart';
+import 'create_collection_dialog.dart';
 
 class LibrarySidebar extends ConsumerStatefulWidget {
   const LibrarySidebar({super.key, required this.section});
@@ -113,8 +114,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                         : LucideIcons.chevronRight)
                   : null,
               onActionTap: () {
-                ref.read(notebooksViewModelProvider.notifier).createNotebook();
-                context.go(AppRoutes.notebooks);
+                _createNotebook(context);
               },
               onTrailingTap: () {
                 setState(() => _notebooksExpanded = !_notebooksExpanded);
@@ -154,8 +154,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                         : LucideIcons.chevronRight)
                   : null,
               onActionTap: () {
-                ref.read(tagsViewModelProvider.notifier).createTag();
-                context.go(AppRoutes.tags);
+                _createTag(context);
               },
               onTrailingTap: () {
                 setState(() => _tagsExpanded = !_tagsExpanded);
@@ -182,5 +181,45 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
         ),
       ],
     );
+  }
+
+  Future<void> _createNotebook(BuildContext context) async {
+    final result = await showCreateCollectionDialog(
+      context: context,
+      title: '新建笔记本',
+      hintText: '请输入标题',
+      icon: LucideIcons.bookOpen,
+      coverColors: libraryNotebookColors,
+    );
+    if (result == null || !context.mounted) {
+      return;
+    }
+    await ref.read(notebooksViewModelProvider.notifier).createNotebook(
+          name: result.name,
+          coverColor: result.coverColor,
+        );
+    if (context.mounted) {
+      context.go(AppRoutes.notebooks);
+    }
+  }
+
+  Future<void> _createTag(BuildContext context) async {
+    final result = await showCreateCollectionDialog(
+      context: context,
+      title: '新建标签',
+      hintText: '请输入标题',
+      icon: LucideIcons.hash,
+      coverColors: libraryTagColors,
+    );
+    if (result == null || !context.mounted) {
+      return;
+    }
+    await ref.read(tagsViewModelProvider.notifier).createTag(
+          name: result.name,
+          coverColor: result.coverColor,
+        );
+    if (context.mounted) {
+      context.go(AppRoutes.tags);
+    }
   }
 }

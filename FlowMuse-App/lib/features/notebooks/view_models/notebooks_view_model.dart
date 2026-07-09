@@ -87,8 +87,10 @@ class NotebooksViewModel extends Notifier<NotebooksState> {
     return NotebooksState(notebooks: notebooks);
   }
 
-  Future<void> createNotebook() {
-    return ref.read(libraryIndexProvider.notifier).createNotebook();
+  Future<void> createNotebook({String? name, Color? coverColor}) {
+    return ref
+        .read(libraryIndexProvider.notifier)
+        .createNotebook(name: name, coverColor: coverColor);
   }
 
   void changeViewMode(LibraryViewMode viewMode) {
