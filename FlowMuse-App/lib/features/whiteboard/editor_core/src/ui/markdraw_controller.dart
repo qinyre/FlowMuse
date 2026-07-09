@@ -1093,6 +1093,14 @@ class MarkdrawController extends ChangeNotifier {
     return Point(scene.dx, scene.dy);
   }
 
+  bool canCreateAt(Point point) {
+    final isPdfLayout =
+        _layout.isPaged && _layout.pages.any((page) => page.source == 'pdf');
+    if (!isPdfLayout) return true;
+    final offset = Offset(point.x, point.y);
+    return _layout.pages.any((page) => page.bounds.contains(offset));
+  }
+
   // --- Pointer handling ---
 
   /// Handles pointer down: commits text edits, dispatches to tool, handles
@@ -1124,6 +1132,10 @@ class MarkdrawController extends ChangeNotifier {
           : Offset(effectiveLocalPosition.x, effectiveLocalPosition.y),
     );
     final effectivePressure = sample?.pressure ?? pressure;
+    if (isCreationTool && !canCreateAt(point)) {
+      _harmonyStylusStrokeSmoother.reset();
+      return;
+    }
 
     // Link-to-element mode: clicking an element sets the link target
     if (_linkToElementMode) {
