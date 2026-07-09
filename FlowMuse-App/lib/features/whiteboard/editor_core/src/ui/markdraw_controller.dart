@@ -19,6 +19,7 @@ import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
+import '../rendering/viewport_clamp.dart';
 
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
@@ -656,7 +657,10 @@ class MarkdrawController extends ChangeNotifier {
   void applyResult(ToolResult? result) {
     if (result == null) return;
 
-    final styled = isCreationTool ? _applyDefaultStyleToResult(result) : result;
+    final constrained = _constrainPdfViewport(result);
+    final styled = isCreationTool
+        ? _applyDefaultStyleToResult(constrained)
+        : constrained;
 
     _syncToSystemClipboard(styled);
 
@@ -681,6 +685,40 @@ class MarkdrawController extends ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  ToolResult _constrainPdfViewport(ToolResult result) {
+    if (result is CompoundResult) {
+      return CompoundResult(result.results.map(_constrainPdfViewport).toList());
+    }
+    if (result is! UpdateViewportResult) return result;
+    final canvasSize = _lastCanvasSize;
+    if (canvasSize == null) return result;
+    return UpdateViewportResult(
+      clampViewportToBounds(result.viewport, _pdfContentBounds, canvasSize),
+    );
+  }
+
+  Bounds? get _pdfContentBounds {
+    if (!_layout.pages.any((page) => page.source == 'pdf')) return null;
+    final pdfPages = _layout.pages;
+    var bounds = Bounds.fromLTWH(
+      pdfPages.first.bounds.left,
+      pdfPages.first.bounds.top,
+      pdfPages.first.bounds.width,
+      pdfPages.first.bounds.height,
+    );
+    for (final page in pdfPages.skip(1)) {
+      bounds = bounds.union(
+        Bounds.fromLTWH(
+          page.bounds.left,
+          page.bounds.top,
+          page.bounds.width,
+          page.bounds.height,
+        ),
+      );
+    }
+    return bounds;
   }
 
   void _syncToSystemClipboard(ToolResult result) {
