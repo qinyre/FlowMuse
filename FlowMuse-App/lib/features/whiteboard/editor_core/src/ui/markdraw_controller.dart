@@ -162,6 +162,8 @@ class MarkdrawController extends ChangeNotifier {
 
   // Canvas size cache (for followLink from pointer events)
   Size? _lastCanvasSize;
+  Bounds? _contentBounds;
+  Size _canvasSize = Size.zero;
   bool _pendingInitialPdfFit = false;
   bool _pdfViewportUpdateScheduled = false;
 
@@ -228,6 +230,10 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Current canvas layout. Paged layout is synchronized through page elements.
   CanvasLayout get layout => _layout;
+
+  Bounds? get contentBounds => _contentBounds;
+
+  Size get canvasSize => _canvasSize;
 
   /// Current scene snapshot.
   Scene get currentScene => _editorState.scene;
@@ -394,6 +400,16 @@ class MarkdrawController extends ChangeNotifier {
     if (sizeChanged) {
       _schedulePdfViewportUpdate();
     }
+  }
+
+  set contentBounds(Bounds? value) {
+    _contentBounds = value;
+    _applyContentBoundsClamp();
+  }
+
+  set canvasSize(Size value) {
+    _canvasSize = value;
+    _applyContentBoundsClamp();
   }
 
   // --- Lifecycle ---
@@ -698,11 +714,26 @@ class MarkdrawController extends ChangeNotifier {
       return CompoundResult(result.results.map(_constrainPdfViewport).toList());
     }
     if (result is! UpdateViewportResult) return result;
-    final canvasSize = _lastCanvasSize;
-    if (canvasSize == null) return result;
+    if (_canvasSize.width <= 0 || _canvasSize.height <= 0) return result;
     return UpdateViewportResult(
-      clampViewportToBounds(result.viewport, _pdfContentBounds, canvasSize),
+      clampViewportToBounds(result.viewport, _contentBounds, _canvasSize),
     );
+  }
+
+  void _applyContentBoundsClamp() {
+    final bounds = _contentBounds;
+    if (bounds == null || _canvasSize.width <= 0 || _canvasSize.height <= 0) {
+      return;
+    }
+    final clamped = clampViewportToBounds(
+      _editorState.viewport,
+      bounds,
+      _canvasSize,
+    );
+    if (clamped != _editorState.viewport) {
+      _editorState = _editorState.copyWith(viewport: clamped);
+      notifyListeners();
+    }
   }
 
   Bounds? get _pdfContentBounds {
