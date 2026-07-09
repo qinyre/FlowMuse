@@ -195,6 +195,7 @@ const _dylibPrefix = {
   OS.iOS: 'lib',
   OS.linux: 'lib',
   OS.macOS: 'lib',
+  OS.ohos: 'lib',
   OS.windows: '',
 };
 
@@ -205,6 +206,7 @@ const _dylibExtension = {
   OS.iOS: 'dylib',
   OS.linux: 'so',
   OS.macOS: 'dylib',
+  OS.ohos: 'so',
   OS.windows: 'dll',
 };
 
@@ -218,6 +220,7 @@ const _staticlibExtension = {
   OS.iOS: 'a',
   OS.linux: 'a',
   OS.macOS: 'a',
+  OS.ohos: 'a',
   OS.windows: 'lib',
 };
 
@@ -228,5 +231,6 @@ const _executableExtension = {
   OS.iOS: '',
   OS.linux: '',
   OS.macOS: '',
+  OS.ohos: '',
   OS.windows: 'exe',
 };
