@@ -593,14 +593,20 @@ class _AccountSettingsSectionState
       );
     }
 
+    final identity = account.collaborationIdentity;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SettingsCard(
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-            leading: const Icon(LucideIcons.userRound),
-            title: Text(account.collaborationIdentity.username),
+            leading: AccountAvatar(
+              label: identity.username,
+              avatarUrl: identity.avatarUrl,
+              radius: 22,
+            ),
+            title: Text(identity.username),
             subtitle: Text(
               account.status == AccountStatus.verificationRequired
                   ? '验证邮件已发送，请验证后登录'
