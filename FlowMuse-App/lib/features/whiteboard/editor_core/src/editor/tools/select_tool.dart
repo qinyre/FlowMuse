@@ -79,6 +79,7 @@ class SelectTool implements Tool {
     Point point,
     ToolContext context, {
     bool shift = false,
+    double? pressure,
   }) {
     _downPoint = point;
     _current = point;
@@ -193,6 +194,7 @@ class SelectTool implements Tool {
     Point point,
     ToolContext context, {
     Offset? screenDelta,
+    double? pressure,
   }) {
     final down = _downPoint;
     if (down == null) return null;
@@ -234,7 +236,7 @@ class SelectTool implements Tool {
   }
 
   @override
-  ToolResult? onPointerUp(Point point, ToolContext context) {
+  ToolResult? onPointerUp(Point point, ToolContext context, {double? pressure}) {
     final down = _downPoint;
     if (down == null) return null;
 

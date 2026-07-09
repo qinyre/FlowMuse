@@ -41,7 +41,7 @@ class LaserTool implements Tool {
   }
 
   @override
-  ToolResult? onPointerDown(Point point, ToolContext context) {
+  ToolResult? onPointerDown(Point point, ToolContext context, {double? pressure}) {
     _isDragging = true;
     _trail.clear();
     _trail.add(LaserPoint(point, DateTime.now().millisecondsSinceEpoch));
@@ -53,6 +53,7 @@ class LaserTool implements Tool {
     Point point,
     ToolContext context, {
     Offset? screenDelta,
+    double? pressure,
   }) {
     if (!_isDragging) return null;
     _trail.add(LaserPoint(point, DateTime.now().millisecondsSinceEpoch));
@@ -60,7 +61,7 @@ class LaserTool implements Tool {
   }
 
   @override
-  ToolResult? onPointerUp(Point point, ToolContext context) {
+  ToolResult? onPointerUp(Point point, ToolContext context, {double? pressure}) {
     _isDragging = false;
     // Trail stays visible and decays over time
     return null;

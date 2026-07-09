@@ -1084,7 +1084,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Handles pointer down: commits text edits, dispatches to tool, handles
   /// link-to-element mode and link icon clicks.
-  void onPointerDown(Offset localPosition) {
+  void onPointerDown(Offset localPosition, {double? pressure}) {
     restoreKeyboardFocusWhenStable();
     if (_editingTextElementId != null) {
       commitTextEditing();
@@ -1137,18 +1137,21 @@ class MarkdrawController extends ChangeNotifier {
         ),
       );
     } else {
-      applyResult(_activeTool.onPointerDown(point, toolContext));
+      applyResult(
+        _activeTool.onPointerDown(point, toolContext, pressure: pressure),
+      );
     }
   }
 
   /// Handles pointer move: dispatches to the active tool.
-  void onPointerMove(Offset localPosition, Offset delta) {
+  void onPointerMove(Offset localPosition, Offset delta, {double? pressure}) {
     final point = toScene(localPosition);
     applyResult(
       _activeTool.onPointerMove(
         point,
         toolContext,
         screenDelta: Offset(delta.dx, delta.dy),
+        pressure: pressure,
       ),
     );
     mousePosition = localPosition;
@@ -1157,7 +1160,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Handles pointer up: dispatches to tool, detects double-click for
   /// text/label editing, and pushes drag history.
-  void onPointerUp(Offset localPosition) {
+  void onPointerUp(Offset localPosition, {double? pressure}) {
     final point = toScene(localPosition);
     final now = DateTime.now();
     final isDoubleClick =
@@ -1182,7 +1185,9 @@ class MarkdrawController extends ChangeNotifier {
         ),
       );
     } else {
-      applyResult(_activeTool.onPointerUp(point, toolContext));
+      applyResult(
+        _activeTool.onPointerUp(point, toolContext, pressure: pressure),
+      );
     }
 
     // Double-click dispatch for text editing, line editing, and frame labels

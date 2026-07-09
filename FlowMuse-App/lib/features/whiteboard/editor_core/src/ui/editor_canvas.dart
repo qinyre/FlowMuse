@@ -6,6 +6,8 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
+import 'pointer_pressure.dart';
+
 /// The main canvas area with pointer/gesture handling.
 class EditorCanvas extends StatefulWidget {
   final MarkdrawController controller;
@@ -117,18 +119,40 @@ class _EditorCanvasState extends State<EditorCanvas> {
                       );
                     },
                     onPointerDown: (event) {
-                      controller.onPointerDown(event.localPosition);
+                      controller.onPointerDown(
+                        event.localPosition,
+                        pressure: reliableStylusPressure(
+                          kind: event.kind,
+                          pressure: event.pressure,
+                          pressureMin: event.pressureMin,
+                          pressureMax: event.pressureMax,
+                        ),
+                      );
                       widget.onPointerPresence?.call(event.localPosition, true);
                     },
                     onPointerMove: (event) {
                       controller.onPointerMove(
                         event.localPosition,
                         event.delta,
+                        pressure: reliableStylusPressure(
+                          kind: event.kind,
+                          pressure: event.pressure,
+                          pressureMin: event.pressureMin,
+                          pressureMax: event.pressureMax,
+                        ),
                       );
                       widget.onPointerPresence?.call(event.localPosition, true);
                     },
                     onPointerUp: (event) {
-                      controller.onPointerUp(event.localPosition);
+                      controller.onPointerUp(
+                        event.localPosition,
+                        pressure: reliableStylusPressure(
+                          kind: event.kind,
+                          pressure: event.pressure,
+                          pressureMin: event.pressureMin,
+                          pressureMax: event.pressureMax,
+                        ),
+                      );
                       widget.onPointerPresence?.call(
                         event.localPosition,
                         false,
