@@ -26,8 +26,11 @@ class SvgExporter {
 
     final buf = StringBuffer();
 
+    buf.write('<?xml version="1.0" encoding="UTF-8"?>');
+
     // SVG header
     buf.write('<svg xmlns="http://www.w3.org/2000/svg" ');
+    buf.write('xmlns:xlink="http://www.w3.org/1999/xlink" ');
     buf.write('viewBox="${_n(bounds.left)} ${_n(bounds.top)} ');
     buf.write('${_n(bounds.size.width)} ${_n(bounds.size.height)}" ');
     buf.write('width="${_n(bounds.size.width)}" ');
@@ -112,6 +115,7 @@ class SvgExporter {
   }
 
   static String _n(double v) {
+    if (v.isNaN || v.isInfinite) return '0';
     if (v == v.roundToDouble()) return v.toInt().toString();
     final s = v.toStringAsFixed(2);
     if (s.contains('.')) {

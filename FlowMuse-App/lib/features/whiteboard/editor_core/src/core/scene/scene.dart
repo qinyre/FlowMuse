@@ -124,7 +124,7 @@ class Scene {
     // Iterate in reverse to find topmost (highest index) first.
     for (var i = ordered.length - 1; i >= 0; i--) {
       final e = ordered[i];
-      if (e.isCanvasPage) continue;
+      if (e.isCanvasPage || e.isPdfBackground) continue;
       // Skip bound text — users interact with the parent shape
       if (e is TextElement && e.containerId != null) continue;
 
