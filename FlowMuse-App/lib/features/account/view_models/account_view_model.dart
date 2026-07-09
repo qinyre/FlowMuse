@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -288,13 +289,12 @@ class AccountViewModel extends Notifier<AccountState> {
 
   Future<String> _loadGuestName() async {
     final settings = defaultLocalSettingsRepository;
-    final existing = await settings.readString('flowmuse.guest.name');
+    final existing = await settings.readString(_guestNameSettingsKey);
     if (existing != null && existing.isNotEmpty) {
       return existing;
     }
-    final suffix = DateTime.now().millisecondsSinceEpoch % 9000 + 1000;
-    final name = '匿名用户 $suffix';
-    await settings.writeString('flowmuse.guest.name', name);
+    final name = _guestNameGenerator.next();
+    await settings.writeString(_guestNameSettingsKey, name);
     return name;
   }
 
@@ -313,3 +313,73 @@ final accountRepositoryProvider = Provider<AccountRepository>((ref) {
 
 final accountViewModelProvider =
     NotifierProvider<AccountViewModel, AccountState>(AccountViewModel.new);
+
+const _guestNameSettingsKey = 'flowmuse.guest.username';
+
+final _guestNameGenerator = _ChineseGuestNameGenerator();
+
+class _ChineseGuestNameGenerator {
+  _ChineseGuestNameGenerator({Random? random}) : _random = random ?? Random();
+
+  final Random _random;
+
+  static const _adjectives = [
+    '活泼',
+    '敏捷',
+    '勇敢',
+    '聪慧',
+    '温柔',
+    '沉稳',
+    '灵巧',
+    '可靠',
+    '明亮',
+    '快乐',
+    '优雅',
+    '好奇',
+    '专注',
+    '自在',
+    '友善',
+    '坚定',
+    '从容',
+    '机敏',
+    '灿烂',
+    '安静',
+    '热忱',
+    '清醒',
+    '坦率',
+    '轻快',
+  ];
+
+  static const _animals = [
+    '海豚',
+    '熊猫',
+    '松鼠',
+    '白鹭',
+    '鲸鱼',
+    '狐狸',
+    '猎豹',
+    '天鹅',
+    '企鹅',
+    '海豹',
+    '小鹿',
+    '云雀',
+    '锦鲤',
+    '骆驼',
+    '海鸥',
+    '鹦鹉',
+    '水獭',
+    '袋鼠',
+    '猫头鹰',
+    '信天翁',
+    '蜂鸟',
+    '长颈鹿',
+    '犀牛',
+    '蝴蝶',
+  ];
+
+  String next() {
+    final adjective = _adjectives[_random.nextInt(_adjectives.length)];
+    final animal = _animals[_random.nextInt(_animals.length)];
+    return '$adjective$animal';
+  }
+}
