@@ -1,6 +1,6 @@
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 
 import 'local_database_path.dart';
 

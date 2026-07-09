@@ -1,4 +1,4 @@
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 
 Future<DatabaseFactory> createPlatformLocalDatabaseFactory() {
   throw UnsupportedError('当前平台不支持 FlowMuse 本地数据库');

@@ -1,4 +1,4 @@
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../shared/storage/local_database.dart';
