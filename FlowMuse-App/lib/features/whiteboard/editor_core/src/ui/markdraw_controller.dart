@@ -818,14 +818,22 @@ class MarkdrawController extends ChangeNotifier {
     var maxY = double.negativeInfinity;
     for (final stroke in strokes) {
       final points = <InkRecognitionPoint>[];
-      for (final point in stroke.points) {
+      final pointTimes = _recognitionPointTimes(stroke);
+      for (var i = 0; i < stroke.points.length; i++) {
+        final point = stroke.points[i];
         final x = stroke.x + point.x;
         final y = stroke.y + point.y;
         minX = math.min(minX, x);
         minY = math.min(minY, y);
         maxX = math.max(maxX, x);
         maxY = math.max(maxY, y);
-        points.add(InkRecognitionPoint(x: x, y: y));
+        points.add(
+          InkRecognitionPoint(
+            x: x,
+            y: y,
+            t: i < pointTimes.length ? pointTimes[i] : null,
+          ),
+        );
       }
       if (points.length >= 2) {
         absoluteStrokes.add(
@@ -838,7 +846,6 @@ class MarkdrawController extends ChangeNotifier {
     }
     return InkRecognitionRequest(
       sessionId: sessionId,
-      hint: 'math',
       strokes: absoluteStrokes,
       bounds: InkRecognitionBounds(
         x: minX,
@@ -847,6 +854,17 @@ class MarkdrawController extends ChangeNotifier {
         height: math.max(maxY - minY, 1.0),
       ),
     );
+  }
+
+  List<int> _recognitionPointTimes(FreedrawElement stroke) {
+    final raw = stroke.customData?[recognitionStrokePointTimesKey];
+    if (raw is! List<Object?>) {
+      return const [];
+    }
+    return [
+      for (final item in raw)
+        if (item is num) item.toInt(),
+    ];
   }
 
   List<FreedrawElement> _pendingInkStrokes(String sessionId) {

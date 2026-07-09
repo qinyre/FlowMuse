@@ -10,9 +10,11 @@ import 'tool.dart';
 const String recognitionStrokeSessionKey = 'flowmuse.recognition.sessionId';
 const String recognitionStrokePendingKey = 'flowmuse.recognition.pending';
 const String recognitionStrokeStartedAtKey = 'flowmuse.recognition.startedAt';
+const String recognitionStrokePointTimesKey = 'flowmuse.recognition.pointTimes';
 
 class RecognitionPenTool implements Tool {
   final List<Point> _points = [];
+  final List<int> _pointTimes = [];
   bool _isDrawing = false;
   String? _sessionId;
   int? _startedAt;
@@ -25,6 +27,7 @@ class RecognitionPenTool implements Tool {
     _isDrawing = true;
     _sessionId ??= ElementId.generate().value;
     _startedAt ??= DateTime.now().millisecondsSinceEpoch;
+    _pointTimes.add(DateTime.now().millisecondsSinceEpoch);
     _points.add(point);
     return null;
   }
@@ -36,6 +39,7 @@ class RecognitionPenTool implements Tool {
     Offset? screenDelta,
   }) {
     if (!_isDrawing) return null;
+    _pointTimes.add(DateTime.now().millisecondsSinceEpoch);
     _points.add(point);
     return null;
   }
@@ -46,6 +50,7 @@ class RecognitionPenTool implements Tool {
       reset();
       return null;
     }
+    _pointTimes.add(DateTime.now().millisecondsSinceEpoch);
     _points.add(point);
     final minX = _points.map((p) => p.x).reduce(math.min);
     final minY = _points.map((p) => p.y).reduce(math.min);
@@ -66,9 +71,11 @@ class RecognitionPenTool implements Tool {
         recognitionStrokeSessionKey: _sessionId,
         recognitionStrokePendingKey: true,
         recognitionStrokeStartedAtKey: _startedAt,
+        recognitionStrokePointTimesKey: List<int>.unmodifiable(_pointTimes),
       },
     );
     _points.clear();
+    _pointTimes.clear();
     _isDrawing = false;
     return CompoundResult([
       AddElementResult(element),
@@ -101,6 +108,7 @@ class RecognitionPenTool implements Tool {
   @override
   void reset() {
     _points.clear();
+    _pointTimes.clear();
     _isDrawing = false;
     _sessionId = null;
     _startedAt = null;
