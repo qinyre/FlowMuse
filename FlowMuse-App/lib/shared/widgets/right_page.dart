@@ -11,6 +11,7 @@ class RightPageScaffold extends StatelessWidget {
     super.key,
     this.title,
     this.header,
+    this.leadingActions = const [],
     this.actions = const [],
     this.topContent = const [],
     this.forceCenterTitle = false,
@@ -19,6 +20,7 @@ class RightPageScaffold extends StatelessWidget {
 
   final String? title;
   final Widget? header;
+  final List<Widget> leadingActions;
   final List<Widget> actions;
   final List<Widget> topContent;
   final bool forceCenterTitle;
@@ -43,6 +45,7 @@ class RightPageScaffold extends StatelessWidget {
               RightPageHeader(
                 title: title,
                 header: header,
+                leadingActions: leadingActions,
                 actions: actions,
                 forceCenterTitle: forceCenterTitle,
               ),
@@ -61,12 +64,14 @@ class RightPageHeader extends StatelessWidget {
     super.key,
     this.title,
     this.header,
+    this.leadingActions = const [],
     this.actions = const [],
     this.forceCenterTitle = false,
   }) : assert(title != null || header != null);
 
   final String? title;
   final Widget? header;
+  final List<Widget> leadingActions;
   final List<Widget> actions;
   final bool forceCenterTitle;
 
@@ -78,9 +83,10 @@ class RightPageHeader extends StatelessWidget {
     final chrome = AppShellScope.maybeOf(context);
     final showSidebarControls = chrome?.showSidebarControls ?? false;
     final centerTitle = forceCenterTitle || (chrome?.contentFullWidth ?? false);
-    final leading = showSidebarControls
+    final sidebarLeading = showSidebarControls
         ? _RightPageSidebarControls(onOpenSidebar: chrome?.openSidebar)
         : null;
+    final leading = _RightPageActions(actions: leadingActions);
     final trailing = _RightPageActions(actions: actions);
 
     if (header != null) {
@@ -88,8 +94,12 @@ class RightPageHeader extends StatelessWidget {
         height: AppSpacing.shellHeaderHeight,
         child: Row(
           children: [
-            if (leading != null) ...[
-              SizedBox(width: _controlWidth, child: leading),
+            if (sidebarLeading != null) ...[
+              SizedBox(width: _controlWidth, child: sidebarLeading),
+              const SizedBox(width: AppSpacing.controlGap),
+            ],
+            if (leadingActions.isNotEmpty) ...[
+              leading,
               const SizedBox(width: AppSpacing.controlGap),
             ],
             Expanded(
@@ -105,7 +115,9 @@ class RightPageHeader extends StatelessWidget {
     }
 
     if (centerTitle) {
-      final leftReserve = showSidebarControls ? _controlWidth : 0.0;
+      final leftReserve =
+          (showSidebarControls ? _controlWidth : 0.0) +
+          _actionsWidth(leadingActions.length);
       final rightReserve = _actionsWidth(actions.length);
       final horizontalReserve =
           (leftReserve > rightReserve ? leftReserve : rightReserve) +
@@ -116,10 +128,17 @@ class RightPageHeader extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            if (leading != null)
+            if (sidebarLeading != null)
               Positioned(
                 left: 0,
-                child: SizedBox(width: _controlWidth, child: leading),
+                child: SizedBox(width: _controlWidth, child: sidebarLeading),
+              ),
+            if (leadingActions.isNotEmpty)
+              Positioned(
+                left: showSidebarControls
+                    ? _controlWidth + AppSpacing.controlGap
+                    : 0,
+                child: leading,
               ),
             Center(
               child: Padding(
@@ -140,8 +159,12 @@ class RightPageHeader extends StatelessWidget {
       height: AppSpacing.shellHeaderHeight,
       child: Row(
         children: [
-          if (leading != null) ...[
-            SizedBox(width: _controlWidth, child: leading),
+          if (sidebarLeading != null) ...[
+            SizedBox(width: _controlWidth, child: sidebarLeading),
+            const SizedBox(width: AppSpacing.controlGap),
+          ],
+          if (leadingActions.isNotEmpty) ...[
+            leading,
             const SizedBox(width: AppSpacing.controlGap),
           ],
           Expanded(child: _RightPageTitle(title: title!)),
@@ -238,7 +261,7 @@ class _RightPageSidebarControls extends StatelessWidget {
           const SizedBox(width: AppSpacing.controlGap),
           IconButton(
             tooltip: '设置',
-            onPressed: () => context.go(AppRoutes.settings),
+            onPressed: () => context.push(AppRoutes.settings),
             icon: const Icon(LucideIcons.settings),
           ),
         ],

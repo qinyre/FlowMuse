@@ -64,7 +64,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SettingsSidebar(
             selected: _section,
             onSelected: (section) => setState(() => _section = section),
-            onBack: () => context.go(AppRoutes.library),
+            onBack: () {
+              if (context.canPop()) {
+                context.pop();
+                return;
+              }
+              context.go(AppRoutes.library);
+            },
           ),
           Expanded(
             child: _SettingsContent(

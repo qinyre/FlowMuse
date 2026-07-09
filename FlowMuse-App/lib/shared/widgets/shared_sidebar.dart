@@ -106,7 +106,7 @@ class SharedSidebarAvatar extends ConsumerWidget {
     return Tooltip(
       message: identity.isGuest ? '匿名协作身份' : '账户与协作',
       child: InkWell(
-        onTap: () => context.go(AppRoutes.accountSettings),
+        onTap: () => context.push(AppRoutes.accountSettings),
         customBorder: const CircleBorder(),
         child: account.status == AccountStatus.loading
             ? const SizedBox(

@@ -43,7 +43,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
           ),
           SharedSidebarIconButton(
             tooltip: '设置',
-            onPressed: () => context.go(AppRoutes.settings),
+            onPressed: () => context.push(AppRoutes.settings),
             icon: const Icon(LucideIcons.settings),
           ),
         ],
@@ -144,7 +144,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                       count: notebook.count.toString(),
                       level: 1,
                       onTap: () =>
-                          context.go(AppRoutes.notebookPath(notebook.id)),
+                          context.push(AppRoutes.notebookPath(notebook.id)),
                     ),
                 ],
               ),
@@ -184,7 +184,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                       label: tag.name,
                       count: tag.count.toString(),
                       level: 1,
-                      onTap: () => context.go(AppRoutes.tagPath(tag.id)),
+                      onTap: () => context.push(AppRoutes.tagPath(tag.id)),
                     ),
                 ],
               ),

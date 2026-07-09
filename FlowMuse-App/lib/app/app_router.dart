@@ -110,7 +110,7 @@ GoRouter createAppRouter() {
             path: AppRoutes.notebookDetail,
             pageBuilder: (context, state) {
               final notebookId = state.pathParameters['notebookId'] ?? '';
-              return _contentPage(
+              return _detailPage(
                 state,
                 NotebookDetailPage(notebookId: notebookId),
               );
@@ -126,20 +126,28 @@ GoRouter createAppRouter() {
             path: AppRoutes.tagDetail,
             pageBuilder: (context, state) {
               final tagId = state.pathParameters['tagId'] ?? '';
-              return _contentPage(state, TagDetailPage(tagId: tagId));
+              return _detailPage(state, TagDetailPage(tagId: tagId));
             },
           ),
         ],
       ),
       GoRoute(
         path: AppRoutes.createNote,
-        builder: (context, state) => const CreateNotePage(),
+        pageBuilder: (context, state) {
+          return _modalPage(state, const CreateNotePage());
+        },
       ),
       GoRoute(
         path: AppRoutes.settings,
-        builder: (context, state) => SettingsPage(
-          showAccountFirst: state.uri.queryParameters['section'] == 'account',
-        ),
+        pageBuilder: (context, state) {
+          return _modalPage(
+            state,
+            SettingsPage(
+              showAccountFirst:
+                  state.uri.queryParameters['section'] == 'account',
+            ),
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.verifyEmail,
@@ -201,4 +209,56 @@ ShellSection _sectionForPath(String path) {
 
 Page<void> _contentPage(GoRouterState state, Widget child) {
   return NoTransitionPage<void>(key: state.pageKey, child: child);
+}
+
+Page<void> _detailPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 220),
+    reverseTransitionDuration: const Duration(milliseconds: 180),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.035, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+Page<void> _modalPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 240),
+    reverseTransitionDuration: const Duration(milliseconds: 200),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.025),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
 }

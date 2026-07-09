@@ -68,6 +68,7 @@ class TagDetailPage extends ConsumerWidget {
 
     return _TagPageFrame(
       title: tag?.name ?? '标签',
+      onBack: () => _popOrGo(context, AppRoutes.tags),
       viewMode: LibraryViewMode.grid,
       sortAscending: false,
       selectionMode: false,
@@ -139,7 +140,7 @@ class _TagItems extends StatelessWidget {
               onSubmitted: (name) => onRename(tag.id, name),
             ),
             onDelete: () => onDelete(tag.id),
-            onTap: () => context.go(AppRoutes.tagPath(tag.id)),
+            onTap: () => context.push(AppRoutes.tagPath(tag.id)),
           );
         },
       );
@@ -177,7 +178,7 @@ class _TagItems extends StatelessWidget {
                       onSubmitted: (name) => onRename(tag.id, name),
                     ),
                     onDelete: () => onDelete(tag.id),
-                    onTap: () => context.go(AppRoutes.tagPath(tag.id)),
+                    onTap: () => context.push(AppRoutes.tagPath(tag.id)),
                   ),
                 ),
                 if (state.selectionMode)
@@ -449,6 +450,7 @@ class _CreateTagTile extends StatelessWidget {
 class _TagPageFrame extends StatelessWidget {
   const _TagPageFrame({
     required this.title,
+    this.onBack,
     required this.viewMode,
     required this.sortAscending,
     required this.selectionMode,
@@ -461,6 +463,7 @@ class _TagPageFrame extends StatelessWidget {
   });
 
   final String title;
+  final VoidCallback? onBack;
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
@@ -475,6 +478,14 @@ class _TagPageFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     return RightPageScaffold(
       title: title,
+      leadingActions: [
+        if (onBack != null)
+          IconButton(
+            tooltip: '返回标签',
+            onPressed: onBack,
+            icon: const Icon(LucideIcons.chevronLeft),
+          ),
+      ],
       actions: [
         IconButton(
           tooltip: '新建标签',
@@ -547,6 +558,14 @@ class _TagPageFrame extends StatelessWidget {
       body: child,
     );
   }
+}
+
+void _popOrGo(BuildContext context, String location) {
+  if (context.canPop()) {
+    context.pop();
+    return;
+  }
+  context.go(location);
 }
 
 class _TagBulkActionBar extends StatelessWidget {
