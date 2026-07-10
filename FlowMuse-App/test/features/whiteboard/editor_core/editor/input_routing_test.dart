@@ -19,41 +19,49 @@ void main() {
       controller.switchTool(ToolType.freedraw);
 
       // 指针 1 按下，获取 active pointer 所有权
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(0, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: Duration.zero,
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(0, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: Duration.zero,
+        ),
+      );
 
       // 非活动指针 2 的 move —— 应被忽略
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 2,
-        position: _local(50, 50),
-        delta: const Offset(50, 50),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 2,
+          position: _local(50, 50),
+          delta: const Offset(50, 50),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
 
       // 活动指针 1 正常移动
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 1,
-        position: _local(10, 0),
-        delta: const Offset(10, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 32),
-      ));
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          position: _local(10, 0),
+          delta: const Offset(10, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 32),
+        ),
+      );
 
       // 活动指针 1 抬起，提交笔画
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 1,
-        position: _local(20, 0),
-        kind: PointerDeviceKind.stylus,
-        timeStamp: const Duration(milliseconds: 48),
-      ));
+      controller.onPointerUp(
+        PointerUpEvent(
+          pointer: 1,
+          position: _local(20, 0),
+          kind: PointerDeviceKind.stylus,
+          timeStamp: const Duration(milliseconds: 48),
+        ),
+      );
 
       final elements = controller.editorState.scene.elements;
       expect(elements.length, 1);
@@ -70,41 +78,49 @@ void main() {
       controller.canvasSize = const Size(400, 600);
       controller.switchTool(ToolType.freedraw);
 
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(0, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: Duration.zero,
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(0, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: Duration.zero,
+        ),
+      );
 
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 1,
-        position: _local(10, 0),
-        delta: const Offset(10, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          position: _local(10, 0),
+          delta: const Offset(10, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
 
       // 非活动指针 2 的 up —— 不应提交笔画
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 2,
-        position: _local(50, 50),
-        kind: PointerDeviceKind.stylus,
-        timeStamp: const Duration(milliseconds: 32),
-      ));
+      controller.onPointerUp(
+        PointerUpEvent(
+          pointer: 2,
+          position: _local(50, 50),
+          kind: PointerDeviceKind.stylus,
+          timeStamp: const Duration(milliseconds: 32),
+        ),
+      );
 
       // 场景应仍为空（笔画尚未提交）
       expect(controller.editorState.scene.elements, isEmpty);
 
       // 活动指针 1 抬起，正式提交
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 1,
-        position: _local(20, 0),
-        kind: PointerDeviceKind.stylus,
-        timeStamp: const Duration(milliseconds: 48),
-      ));
+      controller.onPointerUp(
+        PointerUpEvent(
+          pointer: 1,
+          position: _local(20, 0),
+          kind: PointerDeviceKind.stylus,
+          timeStamp: const Duration(milliseconds: 48),
+        ),
+      );
 
       expect(controller.editorState.scene.elements.length, 1);
     });
@@ -116,34 +132,42 @@ void main() {
       controller.switchTool(ToolType.freedraw);
 
       // 第一笔：指针 1
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(0, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: Duration.zero,
-      ));
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 1,
-        position: _local(10, 0),
-        kind: PointerDeviceKind.stylus,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(0, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: Duration.zero,
+        ),
+      );
+      controller.onPointerUp(
+        PointerUpEvent(
+          pointer: 1,
+          position: _local(10, 0),
+          kind: PointerDeviceKind.stylus,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
 
       // 第二笔：指针 2 —— 确认所有权已释放，新指针可获取
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 2,
-        position: _local(50, 50),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 32),
-      ));
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 2,
-        position: _local(60, 50),
-        kind: PointerDeviceKind.stylus,
-        timeStamp: const Duration(milliseconds: 48),
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 2,
+          position: _local(50, 50),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 32),
+        ),
+      );
+      controller.onPointerUp(
+        PointerUpEvent(
+          pointer: 2,
+          position: _local(60, 50),
+          kind: PointerDeviceKind.stylus,
+          timeStamp: const Duration(milliseconds: 48),
+        ),
+      );
 
       expect(controller.editorState.scene.elements.length, 2);
     });
@@ -155,14 +179,16 @@ void main() {
       controller.switchTool(ToolType.freedraw);
 
       // 没有按下就开始移动（非活动指针）
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 1,
-        position: _local(10, 10),
-        delta: const Offset(10, 10),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          position: _local(10, 10),
+          delta: const Offset(10, 10),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
 
       // 场景应仍为空
       expect(controller.editorState.scene.elements, isEmpty);
@@ -179,29 +205,35 @@ void main() {
       controller.canvasSize = const Size(400, 600);
       controller.switchTool(ToolType.freedraw);
 
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(0, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: Duration.zero,
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(0, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: Duration.zero,
+        ),
+      );
 
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 1,
-        position: _local(10, 0),
-        delta: const Offset(10, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          position: _local(10, 0),
+          delta: const Offset(10, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
 
-      controller.onPointerCancel(PointerCancelEvent(
-        pointer: 1,
-        position: _local(10, 0),
-        kind: PointerDeviceKind.stylus,
-        timeStamp: const Duration(milliseconds: 32),
-      ));
+      controller.onPointerCancel(
+        PointerCancelEvent(
+          pointer: 1,
+          position: _local(10, 0),
+          kind: PointerDeviceKind.stylus,
+          timeStamp: const Duration(milliseconds: 32),
+        ),
+      );
 
       // cancel 后场景应为空——不提交元素
       expect(controller.editorState.scene.elements, isEmpty);
@@ -214,52 +246,64 @@ void main() {
       controller.switchTool(ToolType.freedraw);
 
       // 第一笔 → 被 cancel
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(0, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: Duration.zero,
-      ));
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 1,
-        position: _local(10, 0),
-        delta: const Offset(10, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
-      controller.onPointerCancel(PointerCancelEvent(
-        pointer: 1,
-        position: _local(10, 0),
-        kind: PointerDeviceKind.stylus,
-        timeStamp: const Duration(milliseconds: 32),
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(0, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: Duration.zero,
+        ),
+      );
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          position: _local(10, 0),
+          delta: const Offset(10, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
+      controller.onPointerCancel(
+        PointerCancelEvent(
+          pointer: 1,
+          position: _local(10, 0),
+          kind: PointerDeviceKind.stylus,
+          timeStamp: const Duration(milliseconds: 32),
+        ),
+      );
 
       expect(controller.editorState.scene.elements, isEmpty);
 
       // 第二笔应正常
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 2,
-        position: _local(50, 50),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 48),
-      ));
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 2,
-        position: _local(60, 50),
-        delta: const Offset(10, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 64),
-      ));
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 2,
-        position: _local(70, 50),
-        kind: PointerDeviceKind.stylus,
-        timeStamp: const Duration(milliseconds: 80),
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 2,
+          position: _local(50, 50),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 48),
+        ),
+      );
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 2,
+          position: _local(60, 50),
+          delta: const Offset(10, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 64),
+        ),
+      );
+      controller.onPointerUp(
+        PointerUpEvent(
+          pointer: 2,
+          position: _local(70, 50),
+          kind: PointerDeviceKind.stylus,
+          timeStamp: const Duration(milliseconds: 80),
+        ),
+      );
 
       expect(controller.editorState.scene.elements.length, 1);
     });
@@ -270,29 +314,35 @@ void main() {
       controller.canvasSize = const Size(400, 600);
       controller.switchTool(ToolType.rectangle);
 
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(10, 10),
-        kind: PointerDeviceKind.mouse,
-        timeStamp: Duration.zero,
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(10, 10),
+          kind: PointerDeviceKind.mouse,
+          timeStamp: Duration.zero,
+        ),
+      );
 
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 1,
-        position: _local(50, 50),
-        delta: const Offset(40, 40),
-        kind: PointerDeviceKind.mouse,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          position: _local(50, 50),
+          delta: const Offset(40, 40),
+          kind: PointerDeviceKind.mouse,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
 
       // cancel 应安全重置，不崩溃
       expect(
-        () => controller.onPointerCancel(PointerCancelEvent(
-          pointer: 1,
-          position: _local(50, 50),
-          kind: PointerDeviceKind.mouse,
-          timeStamp: const Duration(milliseconds: 32),
-        )),
+        () => controller.onPointerCancel(
+          PointerCancelEvent(
+            pointer: 1,
+            position: _local(50, 50),
+            kind: PointerDeviceKind.mouse,
+            timeStamp: const Duration(milliseconds: 32),
+          ),
+        ),
         returnsNormally,
       );
 
@@ -306,35 +356,38 @@ void main() {
       controller.canvasSize = const Size(400, 600);
       controller.switchTool(ToolType.freedraw);
 
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(0, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: Duration.zero,
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(0, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: Duration.zero,
+        ),
+      );
 
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 1,
-        position: _local(10, 0),
-        delta: const Offset(10, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          position: _local(10, 0),
+          delta: const Offset(10, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
 
-      controller.onPointerCancel(PointerCancelEvent(
-        pointer: 1,
-        position: _local(10, 0),
-        kind: PointerDeviceKind.stylus,
-        timeStamp: const Duration(milliseconds: 32),
-      ));
+      controller.onPointerCancel(
+        PointerCancelEvent(
+          pointer: 1,
+          position: _local(10, 0),
+          kind: PointerDeviceKind.stylus,
+          timeStamp: const Duration(milliseconds: 32),
+        ),
+      );
 
       // undo 栈应为空（cancel 不推历史）
-      expect(
-        () => controller.undo(),
-        returnsNormally,
-      );
+      expect(() => controller.undo(), returnsNormally);
     });
   });
 
@@ -349,23 +402,24 @@ void main() {
       controller.switchTool(ToolType.select);
 
       // select 工具走 legacy 路径，不创建 modeler
-      expect(
-        () {
-          controller.onPointerDown(PointerDownEvent(
+      expect(() {
+        controller.onPointerDown(
+          PointerDownEvent(
             pointer: 1,
             position: _local(50, 50),
             kind: PointerDeviceKind.mouse,
             timeStamp: Duration.zero,
-          ));
-          controller.onPointerUp(PointerUpEvent(
+          ),
+        );
+        controller.onPointerUp(
+          PointerUpEvent(
             pointer: 1,
             position: _local(50, 50),
             kind: PointerDeviceKind.mouse,
             timeStamp: const Duration(milliseconds: 16),
-          ));
-        },
-        returnsNormally,
-      );
+          ),
+        );
+      }, returnsNormally);
     });
 
     test('rectangle tool creation bypasses modeler', () {
@@ -374,27 +428,33 @@ void main() {
       controller.canvasSize = const Size(400, 600);
       controller.switchTool(ToolType.rectangle);
 
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(10, 10),
-        kind: PointerDeviceKind.mouse,
-        timeStamp: Duration.zero,
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(10, 10),
+          kind: PointerDeviceKind.mouse,
+          timeStamp: Duration.zero,
+        ),
+      );
 
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 1,
-        position: _local(100, 100),
-        delta: const Offset(90, 90),
-        kind: PointerDeviceKind.mouse,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          position: _local(100, 100),
+          delta: const Offset(90, 90),
+          kind: PointerDeviceKind.mouse,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
 
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 1,
-        position: _local(100, 100),
-        kind: PointerDeviceKind.mouse,
-        timeStamp: const Duration(milliseconds: 32),
-      ));
+      controller.onPointerUp(
+        PointerUpEvent(
+          pointer: 1,
+          position: _local(100, 100),
+          kind: PointerDeviceKind.mouse,
+          timeStamp: const Duration(milliseconds: 32),
+        ),
+      );
 
       final elements = controller.editorState.scene.elements;
       expect(elements.length, 1);
@@ -407,23 +467,24 @@ void main() {
       controller.canvasSize = const Size(400, 600);
       controller.switchTool(ToolType.eraser);
 
-      expect(
-        () {
-          controller.onPointerDown(PointerDownEvent(
+      expect(() {
+        controller.onPointerDown(
+          PointerDownEvent(
             pointer: 1,
             position: _local(50, 50),
             kind: PointerDeviceKind.mouse,
             timeStamp: Duration.zero,
-          ));
-          controller.onPointerUp(PointerUpEvent(
+          ),
+        );
+        controller.onPointerUp(
+          PointerUpEvent(
             pointer: 1,
             position: _local(50, 50),
             kind: PointerDeviceKind.mouse,
             timeStamp: const Duration(milliseconds: 16),
-          ));
-        },
-        returnsNormally,
-      );
+          ),
+        );
+      }, returnsNormally);
     });
 
     test('line tool multi-point creation bypasses modeler', () {
@@ -432,25 +493,31 @@ void main() {
       controller.canvasSize = const Size(400, 600);
       controller.switchTool(ToolType.line);
 
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(10, 10),
-        kind: PointerDeviceKind.mouse,
-        timeStamp: Duration.zero,
-      ));
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 1,
-        position: _local(100, 100),
-        delta: const Offset(90, 90),
-        kind: PointerDeviceKind.mouse,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 1,
-        position: _local(100, 100),
-        kind: PointerDeviceKind.mouse,
-        timeStamp: const Duration(milliseconds: 32),
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(10, 10),
+          kind: PointerDeviceKind.mouse,
+          timeStamp: Duration.zero,
+        ),
+      );
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          position: _local(100, 100),
+          delta: const Offset(90, 90),
+          kind: PointerDeviceKind.mouse,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
+      controller.onPointerUp(
+        PointerUpEvent(
+          pointer: 1,
+          position: _local(100, 100),
+          kind: PointerDeviceKind.mouse,
+          timeStamp: const Duration(milliseconds: 32),
+        ),
+      );
 
       expect(controller.editorState.scene.elements.length, 1);
     });
@@ -461,30 +528,33 @@ void main() {
       controller.canvasSize = const Size(400, 600);
       controller.switchTool(ToolType.hand);
 
-      expect(
-        () {
-          controller.onPointerDown(PointerDownEvent(
+      expect(() {
+        controller.onPointerDown(
+          PointerDownEvent(
             pointer: 1,
             position: _local(100, 100),
             kind: PointerDeviceKind.mouse,
             timeStamp: Duration.zero,
-          ));
-          controller.onPointerMove(PointerMoveEvent(
+          ),
+        );
+        controller.onPointerMove(
+          PointerMoveEvent(
             pointer: 1,
             position: _local(150, 120),
             delta: const Offset(50, 20),
             kind: PointerDeviceKind.mouse,
             timeStamp: const Duration(milliseconds: 16),
-          ));
-          controller.onPointerUp(PointerUpEvent(
+          ),
+        );
+        controller.onPointerUp(
+          PointerUpEvent(
             pointer: 1,
             position: _local(150, 120),
             kind: PointerDeviceKind.mouse,
             timeStamp: const Duration(milliseconds: 32),
-          ));
-        },
-        returnsNormally,
-      );
+          ),
+        );
+      }, returnsNormally);
     });
   });
 
@@ -492,46 +562,55 @@ void main() {
   // §5 输入路由 — mouse/touch 不误判真实 pressure
   // ---------------------------------------------------------------------------
   group('pressure misidentification', () {
-    test('mouse freedraw produces simulated pressure (useRealPressure: false)', () {
-      final controller = MarkdrawController();
-      addTearDown(controller.dispose);
-      controller.canvasSize = const Size(400, 600);
-      controller.switchTool(ToolType.freedraw);
+    test(
+      'mouse freedraw produces simulated pressure (useRealPressure: false)',
+      () {
+        final controller = MarkdrawController();
+        addTearDown(controller.dispose);
+        controller.canvasSize = const Size(400, 600);
+        controller.switchTool(ToolType.freedraw);
 
-      // mouse 设备：normalizer 返回 pressure=null，policySelector 选 InputPolicy.mouse
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(0, 0),
-        kind: PointerDeviceKind.mouse,
-        pressure: 0.0,
-        timeStamp: Duration.zero,
-      ));
+        // mouse 设备：normalizer 返回 pressure=null，policySelector 选 InputPolicy.mouse
+        controller.onPointerDown(
+          PointerDownEvent(
+            pointer: 1,
+            position: _local(0, 0),
+            kind: PointerDeviceKind.mouse,
+            pressure: 0.0,
+            timeStamp: Duration.zero,
+          ),
+        );
 
-      for (var i = 1; i <= 10; i++) {
-        controller.onPointerMove(PointerMoveEvent(
-          pointer: 1,
-          position: _local(i * 5.0, 0),
-          delta: const Offset(5, 0),
-          kind: PointerDeviceKind.mouse,
-          pressure: 0.0,
-          timeStamp: Duration(milliseconds: i * 16),
-        ));
-      }
+        for (var i = 1; i <= 10; i++) {
+          controller.onPointerMove(
+            PointerMoveEvent(
+              pointer: 1,
+              position: _local(i * 5.0, 0),
+              delta: const Offset(5, 0),
+              kind: PointerDeviceKind.mouse,
+              pressure: 0.0,
+              timeStamp: Duration(milliseconds: i * 16),
+            ),
+          );
+        }
 
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 1,
-        position: _local(55, 0),
-        kind: PointerDeviceKind.mouse,
-        timeStamp: const Duration(milliseconds: 176),
-      ));
+        controller.onPointerUp(
+          PointerUpEvent(
+            pointer: 1,
+            position: _local(55, 0),
+            kind: PointerDeviceKind.mouse,
+            timeStamp: const Duration(milliseconds: 176),
+          ),
+        );
 
-      final elements = controller.editorState.scene.elements;
-      expect(elements.length, 1);
-      final element = elements.first as FreedrawElement;
-      // mouse → simulatePressure = true，无真实压感
-      expect(element.simulatePressure, isTrue);
-      expect(element.pressures, isEmpty);
-    });
+        final elements = controller.editorState.scene.elements;
+        expect(elements.length, 1);
+        final element = elements.first as FreedrawElement;
+        // mouse → simulatePressure = true，无真实压感
+        expect(element.simulatePressure, isTrue);
+        expect(element.pressures, isEmpty);
+      },
+    );
 
     test('touch events are filtered for creation tools', () {
       final controller = MarkdrawController();
@@ -540,13 +619,15 @@ void main() {
       controller.switchTool(ToolType.freedraw);
 
       // touch 事件被 shouldDispatchToCreationTool 阻挡
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(0, 0),
-        kind: PointerDeviceKind.touch,
-        pressure: 0.5,
-        timeStamp: Duration.zero,
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(0, 0),
+          kind: PointerDeviceKind.touch,
+          pressure: 0.5,
+          timeStamp: Duration.zero,
+        ),
+      );
 
       // 不应创建任何元素
       expect(controller.editorState.scene.elements, isEmpty);
@@ -558,31 +639,37 @@ void main() {
       controller.canvasSize = const Size(400, 600);
       controller.switchTool(ToolType.freedraw);
 
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(0, 0),
-        kind: PointerDeviceKind.stylus,
-        pressure: 0.5,
-        timeStamp: Duration.zero,
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(0, 0),
+          kind: PointerDeviceKind.stylus,
+          pressure: 0.5,
+          timeStamp: Duration.zero,
+        ),
+      );
 
       for (var i = 1; i <= 10; i++) {
-        controller.onPointerMove(PointerMoveEvent(
-          pointer: 1,
-          position: _local(i * 3.0, 0),
-          delta: const Offset(3, 0),
-          kind: PointerDeviceKind.stylus,
-          pressure: 0.5 + i * 0.02,
-          timeStamp: Duration(milliseconds: i * 16),
-        ));
+        controller.onPointerMove(
+          PointerMoveEvent(
+            pointer: 1,
+            position: _local(i * 3.0, 0),
+            delta: const Offset(3, 0),
+            kind: PointerDeviceKind.stylus,
+            pressure: 0.5 + i * 0.02,
+            timeStamp: Duration(milliseconds: i * 16),
+          ),
+        );
       }
 
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 1,
-        position: _local(33, 0),
-        kind: PointerDeviceKind.stylus,
-        timeStamp: const Duration(milliseconds: 176),
-      ));
+      controller.onPointerUp(
+        PointerUpEvent(
+          pointer: 1,
+          position: _local(33, 0),
+          kind: PointerDeviceKind.stylus,
+          timeStamp: const Duration(milliseconds: 176),
+        ),
+      );
 
       final elements = controller.editorState.scene.elements;
       expect(elements.length, 1);
@@ -599,29 +686,35 @@ void main() {
       controller.canvasSize = const Size(400, 600);
       controller.switchTool(ToolType.freedraw);
 
-      controller.onPointerDown(PointerDownEvent(
-        pointer: 1,
-        position: _local(0, 0),
-        kind: PointerDeviceKind.unknown,
-        pressure: 0.5,
-        timeStamp: Duration.zero,
-      ));
+      controller.onPointerDown(
+        PointerDownEvent(
+          pointer: 1,
+          position: _local(0, 0),
+          kind: PointerDeviceKind.unknown,
+          pressure: 0.5,
+          timeStamp: Duration.zero,
+        ),
+      );
 
-      controller.onPointerMove(PointerMoveEvent(
-        pointer: 1,
-        position: _local(10, 0),
-        delta: const Offset(10, 0),
-        kind: PointerDeviceKind.unknown,
-        pressure: 0.5,
-        timeStamp: const Duration(milliseconds: 16),
-      ));
+      controller.onPointerMove(
+        PointerMoveEvent(
+          pointer: 1,
+          position: _local(10, 0),
+          delta: const Offset(10, 0),
+          kind: PointerDeviceKind.unknown,
+          pressure: 0.5,
+          timeStamp: const Duration(milliseconds: 16),
+        ),
+      );
 
-      controller.onPointerUp(PointerUpEvent(
-        pointer: 1,
-        position: _local(20, 0),
-        kind: PointerDeviceKind.unknown,
-        timeStamp: const Duration(milliseconds: 32),
-      ));
+      controller.onPointerUp(
+        PointerUpEvent(
+          pointer: 1,
+          position: _local(20, 0),
+          kind: PointerDeviceKind.unknown,
+          timeStamp: const Duration(milliseconds: 32),
+        ),
+      );
 
       final elements = controller.editorState.scene.elements;
       expect(elements.length, 1);

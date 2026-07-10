@@ -106,6 +106,8 @@ class MarkdrawController extends ChangeNotifier {
   StrokeInputModeler? _modeler;
   final _policySelector = const InputPolicySelector();
   int? _activeDrawPointerId;
+  int? _temporaryTouchPanPointerId;
+  int? _activeStylusPointerId;
   final bool _useUnifiedModeler = true;
 
   // debug/test 录制器：null 时不录制（release 默认关闭）
@@ -211,6 +213,8 @@ class MarkdrawController extends ChangeNotifier {
   // Pinch-to-zoom state
   double _pinchStartZoom = 1.0;
   Offset _pinchStartOffset = Offset.zero;
+  Offset _pinchStartFocalPoint = Offset.zero;
+  bool _isViewportGesture = false;
 
   /// Callback invoked when the user toggles the theme. Set by [MarkdrawEditor].
   VoidCallback? onThemeToggle;
@@ -1540,9 +1544,27 @@ class MarkdrawController extends ChangeNotifier {
 
   // --- Pointer handling ---
 
+  bool _isStylus(PointerDeviceKind kind) {
+    return kind == PointerDeviceKind.stylus ||
+        kind == PointerDeviceKind.invertedStylus;
+  }
+
+  bool get _usesTemporaryTouchPan =>
+      _editorState.activeToolType != ToolType.hand;
+
   /// Handles pointer down: commits text edits, dispatches to tool, handles
   /// link-to-element mode and link icon clicks.
   void onPointerDown(PointerEvent event) {
+    if (_isViewportGesture) return;
+    if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
+      if (_activeStylusPointerId == null) {
+        _temporaryTouchPanPointerId ??= event.pointer;
+      }
+      return;
+    }
+    if (_isStylus(event.kind)) {
+      _activeStylusPointerId = event.pointer;
+    }
     if (isCreationTool && !shouldDispatchToCreationTool(event.kind)) return;
     restoreKeyboardFocusWhenStable();
     if (_editingTextElementId != null) {
@@ -1639,7 +1661,17 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Handles pointer move: dispatches to the active tool.
   void onPointerMove(PointerEvent event) {
-    if (_useUnifiedModeler && _activeTool is FreedrawTool && _activeDrawPointerId != null) {
+    if (_isViewportGesture) return;
+    if (event.pointer == _temporaryTouchPanPointerId) {
+      applyResult(UpdateViewportResult(_editorState.viewport.pan(event.delta)));
+      return;
+    }
+    if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
+      return;
+    }
+    if (_useUnifiedModeler &&
+        _activeTool is FreedrawTool &&
+        _activeDrawPointerId != null) {
       // --- Unified modeler path for freedraw ---
       if (event.pointer != _activeDrawPointerId) return;
       final sample = _normalizer.normalize(event, phase: StrokePhase.move);
@@ -1682,7 +1714,20 @@ class MarkdrawController extends ChangeNotifier {
   /// Handles pointer up: dispatches to tool, detects double-click for
   /// text/label editing, and pushes drag history.
   void onPointerUp(PointerEvent event) {
-    if (_useUnifiedModeler && _activeTool is FreedrawTool && _activeDrawPointerId != null) {
+    if (_isViewportGesture) return;
+    if (event.pointer == _temporaryTouchPanPointerId) {
+      _temporaryTouchPanPointerId = null;
+      return;
+    }
+    if (_isStylus(event.kind) && event.pointer == _activeStylusPointerId) {
+      _activeStylusPointerId = null;
+    }
+    if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
+      return;
+    }
+    if (_useUnifiedModeler &&
+        _activeTool is FreedrawTool &&
+        _activeDrawPointerId != null) {
       // --- Unified modeler path for freedraw ---
       if (event.pointer != _activeDrawPointerId) return;
       final sample = _normalizer.normalize(event, phase: StrokePhase.up);
@@ -1781,6 +1826,17 @@ class MarkdrawController extends ChangeNotifier {
   /// Handles pointer cancel: discards uncommitted stroke for modeler path,
   /// resets the active tool without committing.
   void onPointerCancel(PointerEvent event) {
+    if (_isViewportGesture) return;
+    if (event.pointer == _temporaryTouchPanPointerId) {
+      _temporaryTouchPanPointerId = null;
+      return;
+    }
+    if (_isStylus(event.kind) && event.pointer == _activeStylusPointerId) {
+      _activeStylusPointerId = null;
+    }
+    if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
+      return;
+    }
     _modeler?.reset(reason: 'cancel');
     _modeler = null;
     _activeDrawPointerId = null;
@@ -1814,23 +1870,53 @@ class MarkdrawController extends ChangeNotifier {
   void onScaleStart(ScaleStartDetails details) {
     _pinchStartZoom = _editorState.viewport.zoom;
     _pinchStartOffset = _editorState.viewport.offset;
+    _pinchStartFocalPoint = details.localFocalPoint;
   }
 
   /// Applies pinch-to-zoom and pan during a scale gesture.
   void onScaleUpdate(ScaleUpdateDetails details) {
     if (details.pointerCount < 2) return;
-    var newViewport = ViewportState(
-      offset: _pinchStartOffset,
-      zoom: _pinchStartZoom,
+    if (!_isViewportGesture) {
+      _isViewportGesture = true;
+      _cancelActiveInteractionForViewportGesture();
+    }
+    final newZoom = (_pinchStartZoom * details.scale)
+        .clamp(_config.minZoom, _config.maxZoom)
+        .toDouble();
+
+    // Both `scale` and the focal point are cumulative from the start of the
+    // gesture. Keep the scene point under the initial focal point anchored
+    // beneath the current focal point so pan and zoom stay continuous.
+    final anchoredScenePoint = Offset(
+      _pinchStartOffset.dx + _pinchStartFocalPoint.dx / _pinchStartZoom,
+      _pinchStartOffset.dy + _pinchStartFocalPoint.dy / _pinchStartZoom,
     );
-    newViewport = newViewport.zoomAt(
-      details.scale,
-      details.localFocalPoint,
-      minZoom: _config.minZoom,
-      maxZoom: _config.maxZoom,
+    final newViewport = ViewportState(
+      offset: Offset(
+        anchoredScenePoint.dx - details.localFocalPoint.dx / newZoom,
+        anchoredScenePoint.dy - details.localFocalPoint.dy / newZoom,
+      ),
+      zoom: newZoom,
     );
-    newViewport = newViewport.pan(details.focalPointDelta);
     applyResult(UpdateViewportResult(newViewport));
+  }
+
+  /// Releases any tool interaction once a two-finger viewport gesture wins.
+  /// This keeps raw pointer events from applying a second pan or mutating a
+  /// shape while [GestureDetector] owns the viewport transform.
+  void _cancelActiveInteractionForViewportGesture() {
+    _modeler?.reset(reason: 'viewport gesture');
+    _modeler = null;
+    _activeDrawPointerId = null;
+    _temporaryTouchPanPointerId = null;
+    _activeStylusPointerId = null;
+    _activeTool.reset();
+    _sceneBeforeDrag = null;
+  }
+
+  /// Marks the end of a two-finger viewport gesture.
+  void onScaleEnd(ScaleEndDetails details) {
+    _isViewportGesture = false;
   }
 
   // --- Style changes ---

@@ -21,7 +21,9 @@ void main() {
         t += const Duration(milliseconds: 16);
         final out = f.filter(base + n, t);
         maxInSwing = maxInSwing > n.abs() ? maxInSwing : n.abs();
-        maxOutSwing = maxOutSwing > (out - base).abs() ? maxOutSwing : (out - base).abs();
+        maxOutSwing = maxOutSwing > (out - base).abs()
+            ? maxOutSwing
+            : (out - base).abs();
         lastOut = out;
       }
       expect(maxOutSwing, lessThan(maxInSwing));
@@ -50,6 +52,19 @@ void main() {
       expect(out, 20.0);
     });
 
+    test('bypasses and reseeds after a long sampling gap', () {
+      final f = OneEuroFilter();
+      f.filter(10.0, const Duration(seconds: 1));
+
+      final out = f.filter(30.0, const Duration(seconds: 2));
+
+      expect(out, 30.0);
+      expect(
+        f.filter(31.0, const Duration(seconds: 2, milliseconds: 16)),
+        lessThan(31.0),
+      );
+    });
+
     test('higher cutoff follows the same input more closely', () {
       // One Euro 的关键单调性：高 cutoff = 弱滤波，不能被 alpha 公式写反。
       final low = OneEuroFilter(minCutoff: 1.0, beta: 0.0);
@@ -71,34 +86,41 @@ void main() {
       expect(f.filter(30.0, const Duration(seconds: 2)), 30.0);
     });
 
-    test('filterWithCutoff reuses state across override (no jump after boost)', () {
-      // 关键：转角保护用 overrideCutoff，结束后回到正常 filter 不应跳跃。
-      final f = OneEuroFilter(minCutoff: 1.0, beta: 0.007);
-      var t = const Duration(seconds: 1);
-      f.filter(0.0, t);
-      // 正常帧
-      for (var i = 0; i < 5; i++) {
+    test(
+      'filterWithCutoff reuses state across override (no jump after boost)',
+      () {
+        // 关键：转角保护用 overrideCutoff，结束后回到正常 filter 不应跳跃。
+        final f = OneEuroFilter(minCutoff: 1.0, beta: 0.007);
+        var t = const Duration(seconds: 1);
+        f.filter(0.0, t);
+        // 正常帧
+        for (var i = 0; i < 5; i++) {
+          t += const Duration(milliseconds: 16);
+          f.filter(i.toDouble(), t);
+        }
+        final prevBeforeBoost = t;
+        final outBeforeBoost = f.filter(5.0, prevBeforeBoost);
+        // 转角帧：overrideCutoff（高 cutoff = 弱滤波）
         t += const Duration(milliseconds: 16);
-        f.filter(i.toDouble(), t);
-      }
-      final prevBeforeBoost = t;
-      final outBeforeBoost = f.filter(5.0, prevBeforeBoost);
-      // 转角帧：overrideCutoff（高 cutoff = 弱滤波）
-      t += const Duration(milliseconds: 16);
-      final outBoost = f.filterWithCutoff(20.0, t, overrideCutoff: 8.0);
-      expect(outBoost, greaterThan(outBeforeBoost)); // boost 帧更贴近原始值（弱滤波）
-      // 回到正常 filter：状态连续，输出应介于 boost 原始值与之前之间，无 NaN/Infinity
-      t += const Duration(milliseconds: 16);
-      final outAfter = f.filter(21.0, t);
-      expect(outAfter.isFinite, isTrue);
-      expect(outAfter, greaterThan(outBoost - 5.0));
-    });
+        final outBoost = f.filterWithCutoff(20.0, t, overrideCutoff: 8.0);
+        expect(outBoost, greaterThan(outBeforeBoost)); // boost 帧更贴近原始值（弱滤波）
+        // 回到正常 filter：状态连续，输出应介于 boost 原始值与之前之间，无 NaN/Infinity
+        t += const Duration(milliseconds: 16);
+        final outAfter = f.filter(21.0, t);
+        expect(outAfter.isFinite, isTrue);
+        expect(outAfter, greaterThan(outBoost - 5.0));
+      },
+    );
 
     test('filterWithCutoff(null override) behaves like filter', () {
       final f = OneEuroFilter(minCutoff: 1.0, beta: 0.007);
       final t = const Duration(seconds: 1);
       f.filter(10.0, t);
-      final a = f.filterWithCutoff(20.0, t + const Duration(milliseconds: 16), overrideCutoff: null);
+      final a = f.filterWithCutoff(
+        20.0,
+        t + const Duration(milliseconds: 16),
+        overrideCutoff: null,
+      );
       // 与另一新实例的 filter 输出一致
       final f2 = OneEuroFilter(minCutoff: 1.0, beta: 0.007);
       f2.filter(10.0, t);
@@ -107,4 +129,5 @@ void main() {
     });
   });
 }
+
 double max(double a, double b) => a > b ? a : b;

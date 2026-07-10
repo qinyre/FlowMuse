@@ -8,13 +8,21 @@
 
 **Tech Stack:** Flutter (Dart, sdk ^3.11.1)、`perfect_freehand: ^2.5.0`、One Euro Filter（自研纯 Dart，零依赖）、`flutter_test`、`flutter_lints: ^6.0.0`。
 
+## 实施审计状态（2026-07-10）
+
+- 阶段 0–3、5 的核心源码与自动化测试已存在；本次审计补齐了 active pointer 所有权（非活动 pointer 的 `down` 或 `cancel` 不得重置活动自由笔画）及超长采样间隔（>200 ms）旁路/重新播种。
+- 阶段 1 的 Path 单元测试已覆盖闭合与有限值，但**尚无**录制样本的 raster golden 或真机 polygon/quadratic A/B 证据；不能仅凭单测宣称视觉锯齿已改善。
+- 阶段 4 尚未完成：未发现参数网格脚本、真机录制样本或已选定的设备分策略参数。本阶段必须在目标设备上执行，不能由 CI 替代。
+- 阶段 6 是可选真机 spike，当前没有 go/no-go 文档，不阻塞阶段 0–5 的代码完成。
+- `StrokeReplayRunner` 现在通过显式 `metricsProducer` 收集并转发真实渲染指标；阶段 4 的参数脚本必须传入 `FreedrawRenderer.measureStroke`，否则 `perPointMetrics` 为空，不能用于性能结论。
+
 ## Global Constraints
 
 > 摘自 spec §2.2/§3/§4，所有任务隐含遵守。
 
 - 只有 freedraw 工具经过 `StrokeInputModeler`；选择/擦除/平移走原始坐标，完全不受影响。
 - 单活动绘制 pointer：pointer-down 获取绘制所有权，其他 pointer 不进入该笔。本轮不扩展多 pointer 同绘。
-- 滤波坐标系固定为 **EditorCanvas local logical pixels**；先在 local 空间建模，再 `screenToScene` 转 scene 坐标。
+- 滤波坐标系固定为 **EditorCanvas local logical pixels**；先在 local 空间建模，freedraw 再以不取整的 `screenToScenePrecise` 转为浮点 scene 坐标，避免重新引入坐标量化噪声。
 - 预测点只进湿墨层，永不进持久化/协同；数据流预留 `StrokeSampleSource.predicted`。
 - 协同/持久化只发**建模后的稳定干墨 points/pressures**；接收端不重跑滤波器。
 - 运行时开关：`OutlineRenderMode { polygon, quadratic }`（debug/test 全局模式，活动笔画期间禁止切换）；滤波用 feature flag 可回退固定 EMA。

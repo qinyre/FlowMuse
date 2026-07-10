@@ -81,14 +81,14 @@ class FreedrawRenderer {
   ///   (including outline[0]) serves as a control point, with the midpoint of
   ///   adjacent vertices as endpoints. The last-to-first seam is handled via
   ///   modulo wrapping so no control segment is missed.
-  static Path buildOutlinePath(List<PointVector> outline, OutlineRenderMode mode) {
+  static Path buildOutlinePath(
+    List<PointVector> outline,
+    OutlineRenderMode mode,
+  ) {
     if (outline.isEmpty) return Path();
     if (mode == OutlineRenderMode.polygon || outline.length < 3) {
       return Path()
-        ..addPolygon(
-          [for (final p in outline) Offset(p.x, p.y)],
-          true,
-        );
+        ..addPolygon([for (final p in outline) Offset(p.x, p.y)], true);
     }
     // quadratic: classic midpoint method for a fully-smooth closed path.
     // Start at (P0+P1)/2 so every segment has a distinct control point ≠ its
@@ -108,6 +108,35 @@ class FreedrawRenderer {
     }
     path.close();
     return path;
+  }
+
+  /// Measures the same outline and Path construction used by [draw], without
+  /// submitting paint commands. Intended for debug/test replay parameter sweeps.
+  static StrokeRenderMetrics measureStroke(
+    List<Point> points, {
+    required double strokeWidth,
+    List<double>? pressures,
+    double pressureSensitivity = 0.7,
+    bool isComplete = true,
+    required OutlineRenderMode outlineRenderMode,
+  }) {
+    final outlineWatch = Stopwatch()..start();
+    final outline = buildOutline(
+      points,
+      strokeWidth: strokeWidth,
+      pressures: pressures,
+      pressureSensitivity: pressureSensitivity,
+      isComplete: isComplete,
+    );
+    final getStrokeDuration = (outlineWatch..stop()).elapsed;
+    final pathWatch = Stopwatch()..start();
+    buildOutlinePath(_asPointVectors(outline), outlineRenderMode);
+    final pathBuildDuration = (pathWatch..stop()).elapsed;
+    return StrokeRenderMetrics(
+      outlinePointCount: outline.length,
+      getStrokeDuration: getStrokeDuration,
+      pathBuildDuration: pathBuildDuration,
+    );
   }
 
   /// Draws a freehand path on [canvas] with the given [style].
@@ -131,6 +160,10 @@ class FreedrawRenderer {
     // 是期望的笔迹宽度。直接用 strokeWidth 作为 size 基准。
     final size = dm.max(style.strokeWidth, 1.0);
 
+    Stopwatch? outlineWatch;
+    if (metricsSink != null) {
+      outlineWatch = Stopwatch()..start();
+    }
     final outline = buildOutline(
       points,
       strokeWidth: size,
@@ -138,6 +171,9 @@ class FreedrawRenderer {
       pressureSensitivity: pressureSensitivity,
       isComplete: isComplete,
     );
+    final getStrokeDuration = outlineWatch != null
+        ? (outlineWatch..stop()).elapsed
+        : Duration.zero;
 
     // 单点(点击):outline 为空,画圆点
     if (outline.isEmpty) {
@@ -148,9 +184,7 @@ class FreedrawRenderer {
     }
 
     // outline 是闭合多边形顶点,用 fill 绘制
-    final outlineVectors = [
-      for (final o in outline) PointVector(o.dx, o.dy, 0),
-    ];
+    final outlineVectors = _asPointVectors(outline);
     Stopwatch? sw;
     if (metricsSink != null) {
       sw = Stopwatch()..start();
@@ -162,11 +196,15 @@ class FreedrawRenderer {
     metricsSink?.onMetrics(
       StrokeRenderMetrics(
         outlinePointCount: outlineVectors.length,
-        getStrokeDuration: Duration.zero,
+        getStrokeDuration: getStrokeDuration,
         pathBuildDuration: pathBuildDuration,
       ),
     );
   }
+
+  static List<PointVector> _asPointVectors(List<Offset> outline) => [
+    for (final o in outline) PointVector(o.dx, o.dy, 0),
+  ];
 
   /// Builds a smooth cubic Bezier path through 3+ points using
   /// Catmull-Rom to cubic Bezier conversion (等粗退化路径用)。

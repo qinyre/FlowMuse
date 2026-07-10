@@ -108,7 +108,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 GestureDetector(
                   onScaleStart: (details) => controller.onScaleStart(details),
                   onScaleUpdate: (details) => controller.onScaleUpdate(details),
-                  onScaleEnd: (_) {},
+                  onScaleEnd: controller.onScaleEnd,
                   child: Listener(
                     onPointerHover: (event) {
                       controller.onPointerHover(event.localPosition);

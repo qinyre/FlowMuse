@@ -5,11 +5,17 @@ import 'dart:math' as math;
 /// 低速强滤波抑制手抖，高速弱滤波减少延迟。单轴；位置 X/Y 各用一实例。
 /// 参考: https://doi.org/10.1145/2207676.2208639
 class OneEuroFilter {
-  OneEuroFilter({this.minCutoff = 1.0, this.beta = 0.007, this.dCutoff = 1.0});
+  OneEuroFilter({
+    this.minCutoff = 1.0,
+    this.beta = 0.007,
+    this.dCutoff = 1.0,
+    this.maxGap = const Duration(milliseconds: 200),
+  });
 
   final double minCutoff;
   final double beta;
   final double dCutoff;
+  final Duration maxGap;
 
   double _prevValue = 0;
   double _prevDeriv = 0;
@@ -25,7 +31,11 @@ class OneEuroFilter {
   /// 用于转角保护：复用本实例的状态（_prevValue/_prevDeriv/_prevTime 正常更新），
   /// 仅本帧用 overrideCutoff 代替 `minCutoff + beta*|deriv|`。传 null 等价于 [filter]。
   /// 这样转角帧结束后回到 [filter] 不会因状态断裂产生跳跃。
-  double filterWithCutoff(double value, Duration now, {required double? overrideCutoff}) {
+  double filterWithCutoff(
+    double value,
+    Duration now, {
+    required double? overrideCutoff,
+  }) {
     final prev = _prevTime;
     if (prev == null) {
       _prevValue = value;
@@ -34,13 +44,15 @@ class OneEuroFilter {
       return value;
     }
 
-    final dt = (now - prev).inMicroseconds / 1e6;
-    if (dt <= 0) {
-      // 时间非单调或零间隔：旁路，直接返回原始值并同步状态。
+    final elapsedUs = (now - prev).inMicroseconds;
+    if (elapsedUs <= 0 || elapsedUs > maxGap.inMicroseconds) {
+      // 时间非单调、零间隔或超长间隔：旁路并重新播种，避免使用过期状态。
       _prevValue = value;
+      _prevDeriv = 0;
       _prevTime = now;
       return value;
     }
+    final dt = elapsedUs / 1e6;
 
     final deriv = (value - _prevValue) / dt;
     final dAlpha = _alpha(dCutoff, dt);

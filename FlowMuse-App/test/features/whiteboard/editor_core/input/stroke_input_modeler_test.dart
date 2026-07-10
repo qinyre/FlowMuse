@@ -4,10 +4,21 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/input_policy.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input_modeler.dart';
 
-StrokeInputSample s(double x, double y, int ms,
-    {double? p, StrokePhase phase = StrokePhase.move}) => StrokeInputSample(
-  pointerId: 1, x: x, y: y, time: Duration(milliseconds: ms),
-  pressure: p, kind: StrokeInputKind.stylus, phase: phase,
+StrokeInputSample s(
+  double x,
+  double y,
+  int ms, {
+  int pointerId = 1,
+  double? p,
+  StrokePhase phase = StrokePhase.move,
+}) => StrokeInputSample(
+  pointerId: pointerId,
+  x: x,
+  y: y,
+  time: Duration(milliseconds: ms),
+  pressure: p,
+  kind: StrokeInputKind.stylus,
+  phase: phase,
   source: StrokeSampleSource.actual,
 );
 
@@ -27,17 +38,20 @@ void main() {
       expect(r.decision, StrokeModelDecision.dropped);
     });
 
-    test('up emits the real endpoint (flush), not a low-passed approximation', () {
-      final m = StrokeInputModeler(InputPolicy.stylus);
-      m.process(s(0, 0, 0, phase: StrokePhase.down));
-      for (var i = 1; i <= 20; i++) {
-        m.process(s(i * 1.0, 0, i * 16)); // 快速直线
-      }
-      final r = m.process(s(21.0, 0, 21 * 16, phase: StrokePhase.up));
-      expect(r.decision, StrokeModelDecision.emitted);
-      // flush: 终点应等于真实抬笔点，而非滤波滞后点
-      expect(r.point!.x, closeTo(21.0, 0.5));
-    });
+    test(
+      'up emits the real endpoint (flush), not a low-passed approximation',
+      () {
+        final m = StrokeInputModeler(InputPolicy.stylus);
+        m.process(s(0, 0, 0, phase: StrokePhase.down));
+        for (var i = 1; i <= 20; i++) {
+          m.process(s(i * 1.0, 0, i * 16)); // 快速直线
+        }
+        final r = m.process(s(21.0, 0, 21 * 16, phase: StrokePhase.up));
+        expect(r.decision, StrokeModelDecision.emitted);
+        // flush: 终点应等于真实抬笔点，而非滤波滞后点
+        expect(r.point!.x, closeTo(21.0, 0.5));
+      },
+    );
 
     test('slow noisy signal is dampened', () {
       final m = StrokeInputModeler(InputPolicy.stylus);
@@ -62,6 +76,25 @@ void main() {
       expect(r.decision, StrokeModelDecision.reset);
     });
 
+    test('different pointer cannot replace or cancel an active stroke', () {
+      final m = StrokeInputModeler(InputPolicy.stylus);
+      m.process(s(0, 0, 0, phase: StrokePhase.down));
+
+      expect(
+        m
+            .process(s(10, 10, 16, pointerId: 2, phase: StrokePhase.down))
+            .decision,
+        StrokeModelDecision.dropped,
+      );
+      expect(
+        m
+            .process(s(10, 10, 32, pointerId: 2, phase: StrokePhase.cancel))
+            .decision,
+        StrokeModelDecision.dropped,
+      );
+      expect(m.process(s(10, 0, 48)).decision, StrokeModelDecision.emitted);
+    });
+
     test('non-monotonic time bypasses filter (emits raw)', () {
       final m = StrokeInputModeler(InputPolicy.stylus);
       m.process(s(0, 0, 100, phase: StrokePhase.down));
@@ -70,18 +103,39 @@ void main() {
       expect(r.point, const Point(10, 10));
     });
 
-    test('pressures count == emitted points count (simulated mode: null pressure)', () {
-      final m = StrokeInputModeler(InputPolicy.touch); // touch = 模拟压感, pressure null
-      int emitted = 0, nonNullP = 0;
-      final r0 = m.process(s(0, 0, 0, p: null, phase: StrokePhase.down));
-      if (r0.point != null) { emitted++; if (r0.pressure != null) nonNullP++; }
-      for (var i = 1; i <= 10; i++) {
-        final r = m.process(s(i * 1.0, 0, i * 16, p: null));
-        if (r.point != null) { emitted++; if (r.pressure != null) nonNullP++; }
-      }
-      expect(nonNullP, 0); // 模拟模式 pressure 始终 null
-      expect(emitted, greaterThan(1));
+    test('long sampling gap bypasses the distance gate and emits raw', () {
+      final m = StrokeInputModeler(InputPolicy.stylus);
+      m.process(s(0, 0, 0, phase: StrokePhase.down));
+
+      final r = m.process(s(0.1, 0, 1000));
+
+      expect(r.decision, StrokeModelDecision.emitted);
+      expect(r.point, const Point(0.1, 0));
     });
+
+    test(
+      'pressures count == emitted points count (simulated mode: null pressure)',
+      () {
+        final m = StrokeInputModeler(
+          InputPolicy.touch,
+        ); // touch = 模拟压感, pressure null
+        int emitted = 0, nonNullP = 0;
+        final r0 = m.process(s(0, 0, 0, p: null, phase: StrokePhase.down));
+        if (r0.point != null) {
+          emitted++;
+          if (r0.pressure != null) nonNullP++;
+        }
+        for (var i = 1; i <= 10; i++) {
+          final r = m.process(s(i * 1.0, 0, i * 16, p: null));
+          if (r.point != null) {
+            emitted++;
+            if (r.pressure != null) nonNullP++;
+          }
+        }
+        expect(nonNullP, 0); // 模拟模式 pressure 始终 null
+        expect(emitted, greaterThan(1));
+      },
+    );
 
     test('pressure mode locks to real on down', () {
       final m = StrokeInputModeler(InputPolicy.stylus);
@@ -90,13 +144,16 @@ void main() {
       expect(r.pressure, isNotNull); // 不切到模拟
     });
 
-    test('pressure mode locks to simulated (touch) even if a non-null arrives', () {
-      // 防御性：模拟模式下，即便上游误传非 null pressure，modeler 仍输出 null。
-      final m = StrokeInputModeler(InputPolicy.touch);
-      m.process(s(0, 0, 0, p: null, phase: StrokePhase.down));
-      final r = m.process(s(1, 0, 16, p: 0.9)); // 上游误传
-      expect(r.pressure, isNull); // 锁定模拟，不切真实
-    });
+    test(
+      'pressure mode locks to simulated (touch) even if a non-null arrives',
+      () {
+        // 防御性：模拟模式下，即便上游误传非 null pressure，modeler 仍输出 null。
+        final m = StrokeInputModeler(InputPolicy.touch);
+        m.process(s(0, 0, 0, p: null, phase: StrokePhase.down));
+        final r = m.process(s(1, 0, 16, p: 0.9)); // 上游误传
+        expect(r.pressure, isNull); // 锁定模拟，不切真实
+      },
+    );
   });
 
   group('StrokeInputModeler corner protection', () {
@@ -115,34 +172,40 @@ void main() {
       }
     });
 
-    test('abrupt direction change does not cause a jump (state continuity)', () {
-      // 沿 +x 走一段，然后急转向 +y（接近 90°，超过 cornerProtectAngleRad ~51°）。
-      // 关键断言：转向后第一帧输出不跳到原始值（避免拉尖），且无 NaN/Infinity。
-      final m = StrokeInputModeler(InputPolicy.stylus);
-      m.process(s(0, 0, 0, phase: StrokePhase.down));
-      for (var i = 1; i <= 8; i++) {
-        m.process(s(i * 3.0, 0, i * 16)); // +x
-      }
-      // 急转 +y
-      final r = m.process(s(24, 8, 9 * 16));
-      expect(r.point, isNotNull);
-      expect(r.point!.x.isFinite, isTrue);
-      expect(r.point!.y.isFinite, isTrue);
-      // 转向后连续几帧无跳跃
-      for (var i = 10; i <= 14; i++) {
-        final rr = m.process(s(24, 8 + (i - 9) * 3.0, i * 16));
-        if (rr.point != null) {
-          expect(rr.point!.y.isFinite, isTrue);
-          expect(rr.point!.y.isNaN, isFalse);
+    test(
+      'abrupt direction change does not cause a jump (state continuity)',
+      () {
+        // 沿 +x 走一段，然后急转向 +y（接近 90°，超过 cornerProtectAngleRad ~51°）。
+        // 关键断言：转向后第一帧输出不跳到原始值（避免拉尖），且无 NaN/Infinity。
+        final m = StrokeInputModeler(InputPolicy.stylus);
+        m.process(s(0, 0, 0, phase: StrokePhase.down));
+        for (var i = 1; i <= 8; i++) {
+          m.process(s(i * 3.0, 0, i * 16)); // +x
         }
-      }
-    });
+        // 急转 +y
+        final r = m.process(s(24, 8, 9 * 16));
+        expect(r.point, isNotNull);
+        expect(r.point!.x.isFinite, isTrue);
+        expect(r.point!.y.isFinite, isTrue);
+        // 转向后连续几帧无跳跃
+        for (var i = 10; i <= 14; i++) {
+          final rr = m.process(s(24, 8 + (i - 9) * 3.0, i * 16));
+          if (rr.point != null) {
+            expect(rr.point!.y.isFinite, isTrue);
+            expect(rr.point!.y.isNaN, isFalse);
+          }
+        }
+      },
+    );
 
-    test('movement below minDistance does not emit (no corner detection trigger)', () {
-      final m = StrokeInputModeler(InputPolicy.stylus);
-      m.process(s(0, 0, 0, phase: StrokePhase.down));
-      final r = m.process(s(0.1, 0.1, 16)); // < minDistance(0.6)
-      expect(r.decision, StrokeModelDecision.dropped);
-    });
+    test(
+      'movement below minDistance does not emit (no corner detection trigger)',
+      () {
+        final m = StrokeInputModeler(InputPolicy.stylus);
+        m.process(s(0, 0, 0, phase: StrokePhase.down));
+        final r = m.process(s(0.1, 0.1, 16)); // < minDistance(0.6)
+        expect(r.decision, StrokeModelDecision.dropped);
+      },
+    );
   });
 }

@@ -23,6 +23,7 @@ class StrokeReplayRunner {
   ReplayResult run(
     StrokeRecording recording, {
     required StrokeInputModeler modeler,
+    StrokeReplayMetricsProducer? metricsProducer,
     StrokeRenderMetricsSink? metricsSink,
   }) {
     final points = <Point>[];
@@ -34,6 +35,11 @@ class StrokeReplayRunner {
       if (r.decision == StrokeModelDecision.emitted && r.point != null) {
         points.add(r.point!);
         pressures.add(r.pressure);
+        if (metricsProducer != null) {
+          final metric = metricsProducer(points, pressures);
+          metrics.add(metric);
+          metricsSink?.onMetrics(metric);
+        }
       }
     }
     return ReplayResult(
