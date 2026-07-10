@@ -4,6 +4,7 @@ import { GeneratedPluginRegistrant } from '../plugins/GeneratedPluginRegistrant'
 import { FilePickerChannel } from '../file/FilePickerChannel';
 import { FileSaveChannel } from '../file/FileSaveChannel';
 import { PdfImportChannel } from '../pdf/PdfImportChannel';
+import { HttpChannel } from '../channels/HttpChannel';
 
 export default class EntryAbility extends FlutterAbility {
   configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -12,5 +13,6 @@ export default class EntryAbility extends FlutterAbility {
     new PdfImportChannel(this.context).register(flutterEngine)
     new FileSaveChannel(this.context).register(flutterEngine)
     new FilePickerChannel(this.context).register(flutterEngine)
+    new HttpChannel().register(flutterEngine)
   }
 }
