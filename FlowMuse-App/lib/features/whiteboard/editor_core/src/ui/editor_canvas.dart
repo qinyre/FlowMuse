@@ -31,8 +31,8 @@ class EditorCanvas extends StatefulWidget {
 
 class _EditorCanvasState extends State<EditorCanvas>
     with SingleTickerProviderStateMixin {
-  static const double _appendPageReleaseThreshold = 96;
-  static const double _appendPageMaxOverscroll = 156;
+  static const double _appendPageReleaseThreshold = 140;
+  static const double _appendPageMaxOverscroll = 228;
 
   MarkdrawController get controller => widget.controller;
   Size? _lastReportedSize;
@@ -180,6 +180,7 @@ class _EditorCanvasState extends State<EditorCanvas>
     return PagedAppendPageHint(
       overscrollPx: _appendPageOverscroll,
       readyToRelease: _appendPageReady,
+      releaseThresholdPx: _appendPageReleaseThreshold,
     );
   }
 
@@ -439,19 +440,50 @@ bool _isDark(String hexColor) {
   return c.computeLuminance() < 0.5;
 }
 
-class _PagedProgressIndicator extends StatelessWidget {
+class _PagedProgressIndicator extends StatefulWidget {
   final MarkdrawController controller;
   const _PagedProgressIndicator({required this.controller});
 
   @override
+  State<_PagedProgressIndicator> createState() =>
+      _PagedProgressIndicatorState();
+}
+
+class _PagedProgressIndicatorState extends State<_PagedProgressIndicator> {
+  static const double _trackHeight = 168;
+  static const double _contentHeight = _trackHeight * 5;
+
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _syncScrollbar(double progress) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+      final position = _scrollController.position;
+      final target = position.maxScrollExtent * progress;
+      if ((position.pixels - target).abs() < 0.5) {
+        return;
+      }
+      _scrollController.jumpTo(target);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final metrics = controller.pagedViewportMetrics;
+    final metrics = widget.controller.pagedViewportMetrics;
     if (metrics == null) {
       return const SizedBox.shrink();
     }
+    _syncScrollbar(metrics.progress);
 
     final cs = Theme.of(context).colorScheme;
-    const trackHeight = 168.0;
 
     return Positioned(
       right: 10,
@@ -459,18 +491,30 @@ class _PagedProgressIndicator extends StatelessWidget {
       bottom: 0,
       child: IgnorePointer(
         child: Center(
-          child: SizedBox(
-            width: 18,
-            height: trackHeight,
-            child: RotatedBox(
-              quarterTurns: 1,
-              child: LinearProgressIndicator(
-                value: metrics.progress,
-                minHeight: 4,
-                borderRadius: BorderRadius.circular(999),
-                backgroundColor: cs.outlineVariant.withValues(alpha: 0.42),
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  cs.primary.withValues(alpha: 0.86),
+          child: ScrollbarTheme(
+            data: ScrollbarThemeData(
+              thumbColor: WidgetStatePropertyAll(
+                cs.primary.withValues(alpha: 0.72),
+              ),
+              trackColor: WidgetStatePropertyAll(
+                cs.outlineVariant.withValues(alpha: 0.38),
+              ),
+              trackBorderColor: WidgetStatePropertyAll(Colors.transparent),
+              thickness: const WidgetStatePropertyAll(4),
+              radius: const Radius.circular(999),
+            ),
+            child: SizedBox(
+              width: 18,
+              height: _trackHeight,
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                trackVisibility: true,
+                interactive: false,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  child: const SizedBox(width: 1, height: _contentHeight),
                 ),
               ),
             ),
