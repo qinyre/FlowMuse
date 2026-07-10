@@ -158,6 +158,11 @@ class MarkdrawController extends ChangeNotifier {
   double _pressureSensitivity = 0.7;
   BrushType _activeBrushType = BrushType.fountainPen;
   bool _inkRecognitionMode = false;
+
+  /// 每种笔形独立的状态缓存（参考 Saber 设计）。
+  /// 切换笔形时自动保存/恢复颜色、粗细和压感灵敏度。
+  final Map<BrushType, BrushState> _brushStates =
+      Map<BrushType, BrushState>.from(BrushState.defaults);
   String? _documentName;
 
   // Link editor state
@@ -300,6 +305,9 @@ class MarkdrawController extends ChangeNotifier {
   set pressureSensitivity(double value) {
     _pressureSensitivity = value.clamp(0.0, 1.0);
     _adapter.pressureSensitivity = _pressureSensitivity;
+    // 保存到当前笔形状态（参考 Saber 独立笔状态）
+    _brushStates[_activeBrushType] = _brushStates[_activeBrushType]!
+        .copyWith(pressureSensitivity: _pressureSensitivity);
     notifyListeners();
   }
 
@@ -312,9 +320,49 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   BrushType get activeBrushType => _activeBrushType;
+
+  /// 当前笔形的完整状态（颜色、粗细范围、压感灵敏度等）。
+  /// UI 可据此渲染动态粗细滑块。
+  BrushState get currentBrushState => _brushStates[_activeBrushType]!;
+
   set activeBrushType(BrushType value) {
     if (_activeBrushType == value) return;
+    // 保存当前笔形状态（参考 Saber 独立笔状态设计）
+    _brushStates[_activeBrushType] = BrushState(
+      strokeColor: _defaultStyle.strokeColor,
+      strokeWidth: _defaultStyle.strokeWidth,
+      pressureSensitivity: _pressureSensitivity,
+    );
     _activeBrushType = value;
+    // 恢复新笔形的上次状态
+    final saved = _brushStates[value]!;
+    if (saved.strokeColor != null || saved.strokeWidth != null) {
+      _defaultStyle = _defaultStyle.copyWith(
+        strokeColor: saved.strokeColor,
+      );
+      if (saved.strokeWidth != null) {
+        _defaultStyle = ElementStyle(
+          strokeColor: _defaultStyle.strokeColor,
+          strokeWidth: saved.strokeWidth,
+          strokeStyle: _defaultStyle.strokeStyle,
+          fillStyle: _defaultStyle.fillStyle,
+          roughness: _defaultStyle.roughness,
+          opacity: _defaultStyle.opacity,
+          roundness: _defaultStyle.roundness,
+          fontSize: _defaultStyle.fontSize,
+          fontFamily: _defaultStyle.fontFamily,
+          textAlign: _defaultStyle.textAlign,
+          verticalAlign: _defaultStyle.verticalAlign,
+          arrowType: _defaultStyle.arrowType,
+          startArrowhead: _defaultStyle.startArrowhead,
+          startArrowheadNone: _defaultStyle.startArrowheadNone,
+          endArrowhead: _defaultStyle.endArrowhead,
+          endArrowheadNone: _defaultStyle.endArrowheadNone,
+        );
+      }
+    }
+    _pressureSensitivity = saved.pressureSensitivity;
+    _adapter.pressureSensitivity = _pressureSensitivity;
     notifyListeners();
   }
 

@@ -54,7 +54,10 @@ class FreedrawRenderer {
     if (points.isEmpty) return const [];
 
     final brush = _configFor(brushType);
-    final hasPressure = pressures != null && pressures.length == points.length;
+    final hasRawPressure =
+        pressures != null && pressures.length == points.length;
+    // 当笔形关闭压感时，丢弃真实压感数据，始终走模拟（参考 Saber pressureEnabled）。
+    final hasPressure = hasRawPressure && brush.pressureEnabled;
     final inputPoints = <PointVector>[
       for (var i = 0; i < points.length; i++)
         PointVector(
@@ -64,6 +67,8 @@ class FreedrawRenderer {
         ),
     ];
     final sensitivity = pressureSensitivity.clamp(0.0, 1.0);
+    final simulatePressure =
+        !hasPressure || brush.forceSimulatePressure;
     final options = StrokeOptions(
       size: dm.max(strokeWidth * brush.sizeScale, 1.0),
       thinning: hasPressure
@@ -76,8 +81,21 @@ class FreedrawRenderer {
           : brush.simulatedThinning,
       smoothing: brush.smoothing,
       streamline: brush.streamline,
-      simulatePressure: !hasPressure || brush.forceSimulatePressure,
+      simulatePressure: simulatePressure,
       isComplete: isComplete,
+      // 笔锋效果（参考 Saber pencil taper）
+      start: brush.taperEnabled
+          ? StrokeEndOptions.start(
+              taperEnabled: true,
+              customTaper: brush.customTaper,
+            )
+          : null,
+      end: brush.taperEnabled
+          ? StrokeEndOptions.end(
+              taperEnabled: true,
+              customTaper: brush.customTaper,
+            )
+          : null,
     );
 
     return getStroke(inputPoints, options: options);
@@ -229,34 +247,45 @@ class FreedrawRenderer {
 
   static _BrushConfig _configFor(BrushType brushType) {
     return switch (brushType) {
+      // 铅笔：半透明 + 笔锋 + 低延迟跟手(参考 Saber pencil:
+      // streamline=0.1, smoothing=0)
       BrushType.pencil => const _BrushConfig(
         sizeScale: 0.82,
         opacityScale: 0.68,
         thinning: 0.45,
         simulatedThinning: 0.32,
-        smoothing: 0.45,
-        streamline: 0.28,
+        smoothing: 0.2,
+        streamline: 0.15,
+        taperEnabled: true,
+        customTaper: 1.0,
       ),
+      // 圆珠笔：极细均匀，关闭压感(参考 Saber ballpointPen)
       BrushType.ballpoint => const _BrushConfig(
         sizeScale: 0.72,
         thinning: 0.08,
         simulatedThinning: 0.02,
         smoothing: 0.62,
         streamline: 0.52,
+        pressureEnabled: false,
       ),
+      // 钢笔：标准压感，无笔锋(默认笔形)
       BrushType.fountainPen => _BrushConfig(
         thinning: 0.9,
         simulatedThinning: StrokeOptions.defaultThinning,
         smoothing: StrokeOptions.defaultSmoothing,
         streamline: StrokeOptions.defaultStreamline,
       ),
+      // 毛笔：粗笔 + 强压感 + 微笔锋(参考 Saber taper 设计)
       BrushType.brushPen => const _BrushConfig(
         sizeScale: 1.15,
         thinning: 1.0,
         simulatedThinning: 0.82,
         smoothing: 0.58,
         streamline: 0.42,
+        taperEnabled: true,
+        customTaper: 0.5,
       ),
+      // 荧光笔：特粗半透明，关闭压感(参考 Saber highlighter)
       BrushType.highlighter => const _BrushConfig(
         sizeScale: 4.2,
         opacityScale: 0.32,
@@ -265,6 +294,7 @@ class FreedrawRenderer {
         smoothing: 0.72,
         streamline: 0.58,
         forceSimulatePressure: true,
+        pressureEnabled: false,
       ),
     };
   }
@@ -301,6 +331,9 @@ class _BrushConfig {
     required this.smoothing,
     required this.streamline,
     this.forceSimulatePressure = false,
+    this.pressureEnabled = true,
+    this.taperEnabled = false,
+    this.customTaper = 0.0,
   });
 
   final double sizeScale;
@@ -310,4 +343,14 @@ class _BrushConfig {
   final double smoothing;
   final double streamline;
   final bool forceSimulatePressure;
+
+  /// 是否启用真实压感。关闭后始终使用模拟压感（参考 Saber 设计）。
+  final bool pressureEnabled;
+
+  /// 是否启用笔锋（起笔/收笔变细效果）。
+  final bool taperEnabled;
+
+  /// 笔锋缩放比例，仅 [taperEnabled] 为 true 时生效。
+  /// 值越大笔锋越短，1.0 为 Saber 铅笔同款效果。
+  final double customTaper;
 }
