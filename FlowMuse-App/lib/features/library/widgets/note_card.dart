@@ -74,6 +74,31 @@ class NoteCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final thumbnailBytes = item.coverThumbnailBytes;
+    if (thumbnailBytes != null && thumbnailBytes.isNotEmpty) {
+      return DecoratedBox(
+        decoration: BoxDecoration(color: item.coverColor),
+        child: Image.memory(
+          thumbnailBytes,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (context, error, stackTrace) {
+            return _StaticNoteCover(item: item);
+          },
+        ),
+      );
+    }
+    return _StaticNoteCover(item: item);
+  }
+}
+
+class _StaticNoteCover extends StatelessWidget {
+  const _StaticNoteCover({required this.item});
+
+  final NoteItem item;
+
+  @override
+  Widget build(BuildContext context) {
     final isPdf = item.kind == LibraryFilter.pdf;
     final foreground =
         ThemeData.estimateBrightnessForColor(item.coverColor) == Brightness.dark

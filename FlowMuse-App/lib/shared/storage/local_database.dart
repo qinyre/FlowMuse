@@ -8,7 +8,7 @@ class LocalDatabase {
   LocalDatabase._();
 
   static const databaseName = 'flowmuse_local.db';
-  static const databaseVersion = 1;
+  static const databaseVersion = 2;
 
   static Database? _database;
 
@@ -34,6 +34,14 @@ class LocalDatabase {
           debugPrint(
             '[FlowMuseCreateNote] LocalDatabase.onCreate version=$version',
           );
+          await _createSchema(db);
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          debugPrint(
+            '[FlowMuseCreateNote] LocalDatabase.onUpgrade '
+            'oldVersion=$oldVersion newVersion=$newVersion',
+          );
+          await _dropSchema(db);
           await _createSchema(db);
         },
       ),
@@ -80,6 +88,7 @@ class LocalDatabase {
         page_template TEXT NOT NULL,
         notebook_id TEXT,
         subtitle TEXT,
+        cover_thumbnail BLOB,
         deleted_at INTEGER,
         FOREIGN KEY(notebook_id) REFERENCES notebooks(id)
           ON DELETE SET NULL
@@ -121,5 +130,14 @@ class LocalDatabase {
     await db.execute(
       'CREATE INDEX note_scenes_updated_at_index ON note_scenes(updated_at)',
     );
+  }
+
+  static Future<void> _dropSchema(Database db) async {
+    await db.execute('DROP TABLE IF EXISTS local_settings');
+    await db.execute('DROP TABLE IF EXISTS note_scenes');
+    await db.execute('DROP TABLE IF EXISTS note_tags');
+    await db.execute('DROP TABLE IF EXISTS notes');
+    await db.execute('DROP TABLE IF EXISTS tags');
+    await db.execute('DROP TABLE IF EXISTS notebooks');
   }
 }

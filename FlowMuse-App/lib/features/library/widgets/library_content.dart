@@ -103,10 +103,16 @@ class _LibraryContentState extends State<LibraryContent> {
     if (widget.specialView == LibrarySpecialView.none &&
         _pageController.hasClients) {
       _animatingFilterIndex = filterIndex;
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _pageController.jumpToPage(filterIndex);
+        _animatingFilterIndex = null;
+        widget.onFilterChanged(filter);
+        return;
+      }
       _pageController
           .animateToPage(
             filterIndex,
-            duration: const Duration(milliseconds: 500),
+            duration: const Duration(milliseconds: 240),
             curve: Curves.easeOutCubic,
           )
           .whenComplete(() {

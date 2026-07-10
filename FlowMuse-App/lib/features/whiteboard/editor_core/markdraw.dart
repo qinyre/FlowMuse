@@ -26,4 +26,5 @@ export 'src/rendering/text_bounds_validator.dart';
 export 'src/rendering/text_renderer.dart';
 export 'src/rendering/viewport_culling.dart';
 export 'src/rendering/viewport_state.dart';
+export 'src/recognition/ink_recognition.dart';
 export 'src/ui/ui.dart';

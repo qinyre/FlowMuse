@@ -9,6 +9,7 @@ import 'hand_tool.dart';
 import 'laser_tool.dart';
 import 'line_tool.dart';
 import 'rectangle_tool.dart';
+import 'recognition_pen_tool.dart';
 import 'select_tool.dart';
 import 'text_tool.dart';
 import 'tool.dart';
@@ -23,6 +24,7 @@ Tool createTool(ToolType type) {
     ToolType.line => LineTool(),
     ToolType.arrow => ArrowTool(),
     ToolType.freedraw => FreedrawTool(),
+    ToolType.recognitionPen => RecognitionPenTool(),
     ToolType.text => TextTool(),
     ToolType.hand => HandTool(),
     ToolType.frame => FrameTool(),

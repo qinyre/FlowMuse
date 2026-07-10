@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common/sqlite_api.dart';
@@ -31,7 +33,11 @@ abstract interface class LibraryRepository {
 
   Future<void> renameSubtitle(String noteId, String? subtitle);
 
-  Future<void> touchNote(String noteId);
+  Future<void> touchNote(
+    String noteId, {
+    Uint8List? coverThumbnailBytes,
+    bool clearCoverThumbnail = false,
+  });
 
   Future<LibraryNotebook> createNotebook();
 
@@ -221,12 +227,21 @@ class SqliteLibraryRepository implements LibraryRepository {
   }
 
   @override
-  Future<void> touchNote(String noteId) async {
+  Future<void> touchNote(
+    String noteId, {
+    Uint8List? coverThumbnailBytes,
+    bool clearCoverThumbnail = false,
+  }) async {
     await ensureNote(noteId);
     final db = await _openDatabase();
     await db.update(
       'notes',
-      {'updated_at': _timestamp(DateTime.now())},
+      {
+        'updated_at': _timestamp(DateTime.now()),
+        if (clearCoverThumbnail) 'cover_thumbnail': null,
+        if (!clearCoverThumbnail && coverThumbnailBytes != null)
+          'cover_thumbnail': coverThumbnailBytes,
+      },
       where: 'id = ?',
       whereArgs: [noteId],
     );
@@ -581,8 +596,16 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     await refresh();
   }
 
-  Future<void> touchNote(String noteId) async {
-    await _repository.touchNote(noteId);
+  Future<void> touchNote(
+    String noteId, {
+    Uint8List? coverThumbnailBytes,
+    bool clearCoverThumbnail = false,
+  }) async {
+    await _repository.touchNote(
+      noteId,
+      coverThumbnailBytes: coverThumbnailBytes,
+      clearCoverThumbnail: clearCoverThumbnail,
+    );
     await refresh();
   }
 
@@ -696,11 +719,13 @@ Map<String, Object?> _noteToRow(NoteItem item) {
     'page_template': item.pageTemplate.name,
     'notebook_id': item.notebookId,
     'subtitle': item.subtitle,
+    'cover_thumbnail': item.coverThumbnailBytes,
     'deleted_at': item.deletedAt == null ? null : _timestamp(item.deletedAt!),
   };
 }
 
 NoteItem _noteFromRow(Map<String, Object?> row, List<String> tagIds) {
+  final coverThumbnail = row['cover_thumbnail'];
   return NoteItem(
     id: row['id']! as String,
     title: row['title']! as String,
@@ -723,6 +748,7 @@ NoteItem _noteFromRow(Map<String, Object?> row, List<String> tagIds) {
     deletedAt: row['deleted_at'] is int
         ? _date(row['deleted_at']! as int)
         : null,
+    coverThumbnailBytes: coverThumbnail is Uint8List ? coverThumbnail : null,
   );
 }
 

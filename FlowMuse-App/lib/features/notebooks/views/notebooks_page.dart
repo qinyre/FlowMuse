@@ -70,6 +70,7 @@ class NotebookDetailPage extends ConsumerWidget {
 
     return _CollectionPage(
       title: notebook?.name ?? '笔记本',
+      onBack: () => _popOrGo(context, AppRoutes.notebooks),
       viewMode: LibraryViewMode.grid,
       sortAscending: false,
       selectionMode: false,
@@ -148,7 +149,7 @@ class _NotebookCollectionItems extends StatelessWidget {
               onSubmitted: (name) => onRename(notebook.id, name),
             ),
             onDelete: () => onDelete(notebook.id),
-            onTap: () => context.go(AppRoutes.notebookPath(notebook.id)),
+            onTap: () => context.push(AppRoutes.notebookPath(notebook.id)),
           );
         },
       );
@@ -194,7 +195,7 @@ class _NotebookCollectionItems extends StatelessWidget {
                     ),
                     onDelete: () => onDelete(notebook.id),
                     onTap: () =>
-                        context.go(AppRoutes.notebookPath(notebook.id)),
+                        context.push(AppRoutes.notebookPath(notebook.id)),
                   ),
                 ),
                 if (state.selectionMode)
@@ -491,6 +492,7 @@ class _CreateCollectionTile extends StatelessWidget {
 class _CollectionPage extends StatelessWidget {
   const _CollectionPage({
     required this.title,
+    this.onBack,
     required this.viewMode,
     required this.sortAscending,
     required this.selectionMode,
@@ -505,6 +507,7 @@ class _CollectionPage extends StatelessWidget {
   });
 
   final String title;
+  final VoidCallback? onBack;
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
@@ -521,6 +524,14 @@ class _CollectionPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return RightPageScaffold(
       title: title,
+      leadingActions: [
+        if (onBack != null)
+          IconButton(
+            tooltip: '返回笔记本',
+            onPressed: onBack,
+            icon: const Icon(LucideIcons.chevronLeft),
+          ),
+      ],
       actions: [
         IconButton(
           tooltip: createTooltip,
@@ -593,6 +604,14 @@ class _CollectionPage extends StatelessWidget {
       body: child,
     );
   }
+}
+
+void _popOrGo(BuildContext context, String location) {
+  if (context.canPop()) {
+    context.pop();
+    return;
+  }
+  context.go(location);
 }
 
 class _CollectionBulkActionBar extends StatelessWidget {

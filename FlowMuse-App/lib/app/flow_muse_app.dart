@@ -14,9 +14,10 @@ class FlowMuseApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themePreset = ref.watch(themeViewModelProvider);
-    final darkThemePreset = themePreset.id == AppThemeId.system
-        ? systemDarkThemePreset
-        : themePreset;
+    final darkThemePreset = effectiveAppThemePreset(
+      themePreset,
+      Brightness.dark,
+    );
 
     return MaterialApp.router(
       title: 'FlowMuse',

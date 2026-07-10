@@ -1,5 +1,6 @@
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -177,6 +178,13 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Called whenever the scene changes (element add/update/remove).
   void Function(Scene)? onSceneChanged;
+
+  /// Called after recognition-pen strokes settle and should be recognized.
+  Future<InkRecognitionResult> Function(InkRecognitionRequest)? onRecognizeInk;
+
+  Timer? _inkRecognitionTimer;
+  String? _pendingInkSessionId;
+  bool _recognizingInk = false;
 
   // --- Public getters ---
 
@@ -412,6 +420,7 @@ class MarkdrawController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _inkRecognitionTimer?.cancel();
     _imageCache.dispose();
     keyboardFocusNode.dispose();
     textEditingController.dispose();
@@ -636,8 +645,21 @@ class MarkdrawController extends ChangeNotifier {
       return element;
     }
     return element.copyWith(
-      customData: CanvasLayout.elementCustomData(page.id),
+      customData: _mergeCurrentPageCustomData(element.customData, page.id),
     );
+  }
+
+  Map<String, Object?> _mergeCurrentPageCustomData(
+    Map<String, Object?>? customData,
+    String pageId,
+  ) {
+    final next = {...?customData};
+    final existingFlowMuse = next['flowMuse'];
+    next['flowMuse'] = {
+      if (existingFlowMuse is Map<String, Object?>) ...existingFlowMuse,
+      'pageId': pageId,
+    };
+    return next;
   }
 
   Scene _sceneWithLayoutPages(Scene scene) {
@@ -698,6 +720,7 @@ class MarkdrawController extends ChangeNotifier {
 
     if (isSceneChangingResult(styled)) {
       onSceneChanged?.call(_editorState.scene);
+      _scheduleInkRecognitionFromResult(styled);
     }
 
     notifyListeners();
@@ -769,6 +792,297 @@ class MarkdrawController extends ChangeNotifier {
       return result.results.any(_containsSelectionChange);
     }
     return false;
+  }
+
+  void _scheduleInkRecognitionFromResult(ToolResult result) {
+    final sessionId = _pendingRecognitionSessionId(result);
+    if (sessionId == null || onRecognizeInk == null) {
+      return;
+    }
+    _pendingInkSessionId = sessionId;
+    _inkRecognitionTimer?.cancel();
+    _inkRecognitionTimer = Timer(const Duration(seconds: 1), () {
+      final pending = _pendingInkSessionId;
+      if (pending != null) {
+        unawaited(_recognizePendingInkSession(pending));
+      }
+    });
+  }
+
+  String? _pendingRecognitionSessionId(ToolResult result) {
+    if (result is AddElementResult) {
+      final element = result.element;
+      if (element is FreedrawElement &&
+          element.customData?[recognitionStrokePendingKey] == true) {
+        final sessionId = element.customData?[recognitionStrokeSessionKey];
+        return sessionId is String ? sessionId : null;
+      }
+    }
+    if (result is CompoundResult) {
+      for (final child in result.results.reversed) {
+        final sessionId = _pendingRecognitionSessionId(child);
+        if (sessionId != null) {
+          return sessionId;
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<void> _recognizePendingInkSession(String sessionId) async {
+    if (_recognizingInk || onRecognizeInk == null || _disposed) {
+      return;
+    }
+    final request = _buildInkRecognitionRequest(sessionId);
+    if (request == null) {
+      return;
+    }
+    _recognizingInk = true;
+    if (_activeTool is RecognitionPenTool) {
+      (_activeTool as RecognitionPenTool).startNewSession();
+    }
+    try {
+      final result = await onRecognizeInk!(request);
+      if (_disposed) {
+        return;
+      }
+      final pendingStrokes = _pendingInkStrokes(sessionId);
+      if (pendingStrokes.isEmpty) {
+        return;
+      }
+      final elements = result.elements
+          .map(_elementFromRecognizedInk)
+          .whereType<Element>()
+          .toList();
+      if (elements.isEmpty) {
+        _clearPendingInkSession(sessionId);
+        return;
+      }
+      pushHistory();
+      applyResult(
+        CompoundResult([
+          for (final stroke in pendingStrokes) RemoveElementResult(stroke.id),
+          for (final element in elements) AddElementResult(element),
+          SetSelectionResult({for (final element in elements) element.id}),
+        ]),
+      );
+      if (_pendingInkSessionId == sessionId) {
+        _pendingInkSessionId = null;
+      }
+    } catch (_) {
+      if (!_disposed) {
+        _clearPendingInkSession(sessionId);
+      }
+    } finally {
+      _recognizingInk = false;
+      final pending = _pendingInkSessionId;
+      if (!_disposed && pending != null && pending != sessionId) {
+        _inkRecognitionTimer?.cancel();
+        _inkRecognitionTimer = Timer(const Duration(seconds: 1), () {
+          final next = _pendingInkSessionId;
+          if (next != null) {
+            unawaited(_recognizePendingInkSession(next));
+          }
+        });
+      }
+    }
+  }
+
+  InkRecognitionRequest? _buildInkRecognitionRequest(String sessionId) {
+    final strokes = _pendingInkStrokes(sessionId);
+    if (strokes.isEmpty) {
+      return null;
+    }
+    final absoluteStrokes = <InkRecognitionStroke>[];
+    var minX = double.infinity;
+    var minY = double.infinity;
+    var maxX = double.negativeInfinity;
+    var maxY = double.negativeInfinity;
+    for (final stroke in strokes) {
+      final points = <InkRecognitionPoint>[];
+      final pointTimes = _recognitionPointTimes(stroke);
+      for (var i = 0; i < stroke.points.length; i++) {
+        final point = stroke.points[i];
+        final x = stroke.x + point.x;
+        final y = stroke.y + point.y;
+        minX = math.min(minX, x);
+        minY = math.min(minY, y);
+        maxX = math.max(maxX, x);
+        maxY = math.max(maxY, y);
+        points.add(
+          InkRecognitionPoint(
+            x: x,
+            y: y,
+            t: i < pointTimes.length ? pointTimes[i] : null,
+          ),
+        );
+      }
+      if (points.length >= 2) {
+        absoluteStrokes.add(
+          InkRecognitionStroke(id: stroke.id.value, points: points),
+        );
+      }
+    }
+    if (absoluteStrokes.isEmpty) {
+      return null;
+    }
+    return InkRecognitionRequest(
+      sessionId: sessionId,
+      strokes: absoluteStrokes,
+      bounds: InkRecognitionBounds(
+        x: minX,
+        y: minY,
+        width: math.max(maxX - minX, 1.0),
+        height: math.max(maxY - minY, 1.0),
+      ),
+    );
+  }
+
+  List<int> _recognitionPointTimes(FreedrawElement stroke) {
+    final raw = stroke.customData?[recognitionStrokePointTimesKey];
+    if (raw is! List<Object?>) {
+      return const [];
+    }
+    return [
+      for (final item in raw)
+        if (item is num) item.toInt(),
+    ];
+  }
+
+  List<FreedrawElement> _pendingInkStrokes(String sessionId) {
+    return [
+      for (final element in _editorState.scene.elements)
+        if (element is FreedrawElement &&
+            !element.isDeleted &&
+            element.customData?[recognitionStrokeSessionKey] == sessionId &&
+            element.customData?[recognitionStrokePendingKey] == true)
+          element,
+    ];
+  }
+
+  Element? _elementFromRecognizedInk(InkRecognizedElement recognized) {
+    final x = recognized.x;
+    final y = recognized.y;
+    final width = math.max(recognized.width, 1.0);
+    final height = math.max(recognized.height, 1.0);
+    switch (recognized.type) {
+      case 'text':
+        final text = recognized.text?.trim();
+        if (text == null || text.isEmpty) {
+          return null;
+        }
+        return _measuredTextElement(text, x, y, width, height);
+      case 'math':
+        final text = (recognized.latex ?? recognized.text)?.trim();
+        if (text == null || text.isEmpty) {
+          return null;
+        }
+        return _measuredTextElement(text, x, y, width, height);
+      case 'rectangle':
+        return RectangleElement(
+          id: ElementId.generate(),
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+        );
+      case 'ellipse':
+        return EllipseElement(
+          id: ElementId.generate(),
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+        );
+      case 'diamond':
+        return DiamondElement(
+          id: ElementId.generate(),
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+        );
+      case 'line':
+        return LineElement(
+          id: ElementId.generate(),
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+          points: _recognizedLinePoints(recognized, x, y, width, height),
+        );
+      case 'arrow':
+        return ArrowElement(
+          id: ElementId.generate(),
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+          points: _recognizedLinePoints(recognized, x, y, width, height),
+        );
+    }
+    return null;
+  }
+
+  TextElement _measuredTextElement(
+    String text,
+    double x,
+    double y,
+    double width,
+    double height,
+  ) {
+    final element = TextElement(
+      id: ElementId.generate(),
+      x: x,
+      y: y,
+      width: math.max(width, 1.0),
+      height: math.max(height, 1.0),
+      text: text,
+    );
+    final styled = applyDefaultStyleToElement(element) as TextElement;
+    final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
+    return styled.copyWith(
+      width: math.max(measuredWidth, styled.width),
+      height: math.max(measuredHeight, styled.height),
+    );
+  }
+
+  List<Point> _recognizedLinePoints(
+    InkRecognizedElement recognized,
+    double x,
+    double y,
+    double width,
+    double height,
+  ) {
+    if (recognized.points.length >= 2) {
+      return [
+        for (final point in recognized.points) Point(point.x - x, point.y - y),
+      ];
+    }
+    return [Point.zero, Point(width, height)];
+  }
+
+  void _clearPendingInkSession(String sessionId) {
+    final strokes = _pendingInkStrokes(sessionId);
+    if (strokes.isEmpty) {
+      return;
+    }
+    applyResult(
+      CompoundResult([
+        for (final stroke in strokes)
+          UpdateElementResult(
+            stroke.copyWith(
+              customData: {
+                ...?stroke.customData,
+                recognitionStrokePendingKey: false,
+              },
+            ),
+          ),
+      ]),
+    );
+    if (_pendingInkSessionId == sessionId) {
+      _pendingInkSessionId = null;
+    }
   }
 
   // --- Text editing ---
@@ -2357,6 +2671,83 @@ class MarkdrawController extends ChangeNotifier {
     );
     picture.dispose();
     return image;
+  }
+
+  /// Exports a card-sized cover thumbnail for the current note.
+  ///
+  /// Paged notes render the first page. Unbounded notes render the current
+  /// content bounds. Returns null for empty unbounded notes.
+  Future<Uint8List?> exportCoverThumbnail({
+    Size outputSize = const Size(308, 408),
+  }) async {
+    final sourceRect = _coverThumbnailSourceRect();
+    if (sourceRect == null || outputSize.width <= 0 || outputSize.height <= 0) {
+      return null;
+    }
+
+    const padding = 10.0;
+    final drawableWidth = math.max(1.0, outputSize.width - padding * 2);
+    final drawableHeight = math.max(1.0, outputSize.height - padding * 2);
+    final sourceWidth = math.max(1.0, sourceRect.width);
+    final sourceHeight = math.max(1.0, sourceRect.height);
+    final zoom = math.min(
+      drawableWidth / sourceWidth,
+      drawableHeight / sourceHeight,
+    );
+    final renderedWidth = sourceWidth * zoom;
+    final renderedHeight = sourceHeight * zoom;
+    final horizontalInset = (outputSize.width - renderedWidth) / 2;
+    final verticalInset = (outputSize.height - renderedHeight) / 2;
+    final viewport = ViewportState(
+      offset: Offset(
+        sourceRect.left - horizontalInset / zoom,
+        sourceRect.top - verticalInset / zoom,
+      ),
+      zoom: zoom,
+    );
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+      Offset.zero & outputSize,
+      Paint()..color = parseColor(_canvasBackgroundColor),
+    );
+    StaticCanvasPainter(
+      scene: _editorState.scene,
+      adapter: _adapter,
+      viewport: viewport,
+      layout: _layout,
+      resolvedImages: resolveImages(),
+      gridSize: _gridSize,
+      contentBounds: _contentBounds,
+    ).paint(canvas, outputSize);
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(
+      outputSize.width.ceil(),
+      outputSize.height.ceil(),
+    );
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    picture.dispose();
+    return byteData?.buffer.asUint8List();
+  }
+
+  Rect? _coverThumbnailSourceRect() {
+    if (_layout.isPaged) {
+      final layoutWithPage = _layout.ensurePage();
+      return layoutWithPage.pages.first.bounds;
+    }
+    final bounds = ExportBounds.compute(_editorState.scene, padding: 40);
+    if (bounds == null) {
+      return null;
+    }
+    return Rect.fromLTWH(
+      bounds.left,
+      bounds.top,
+      bounds.size.width,
+      bounds.size.height,
+    );
   }
 
   /// Reads the pixel color at [screenPosition] from a pre-rendered [image].

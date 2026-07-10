@@ -100,11 +100,29 @@ const appThemePresets = <AppThemePreset>[
 AppThemePreset get defaultThemePreset => appThemePresets[0];
 AppThemePreset get systemDarkThemePreset => appThemePresets[1];
 
+AppThemePreset effectiveAppThemePreset(
+  AppThemePreset preset,
+  Brightness platformBrightness,
+) {
+  if (preset.id == AppThemeId.system && platformBrightness == Brightness.dark) {
+    return systemDarkThemePreset;
+  }
+  return preset;
+}
+
 AppThemePreset appThemePresetById(AppThemeId id) {
   return appThemePresets.firstWhere(
     (preset) => preset.id == id,
     orElse: () => defaultThemePreset,
   );
+}
+
+AppThemePreset appThemePresetByThemeMode(ThemeMode mode) {
+  return switch (mode) {
+    ThemeMode.light => appThemePresetById(AppThemeId.day),
+    ThemeMode.dark => appThemePresetById(AppThemeId.night),
+    ThemeMode.system => appThemePresetById(AppThemeId.system),
+  };
 }
 
 AppThemePreset appThemePresetByName(String name) {
