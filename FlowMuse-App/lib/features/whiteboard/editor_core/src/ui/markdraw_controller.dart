@@ -2676,14 +2676,14 @@ class MarkdrawController extends ChangeNotifier {
   /// Exports a card-sized cover thumbnail for the current note.
   ///
   /// Paged notes render the first page. Unbounded notes render the current
-  /// content bounds. Returns null for empty unbounded notes.
+  /// content bounds, or a stable blank canvas frame when the scene is empty.
   Future<Uint8List?> exportCoverThumbnail({
     Size outputSize = const Size(308, 408),
   }) async {
-    final sourceRect = _coverThumbnailSourceRect();
-    if (sourceRect == null || outputSize.width <= 0 || outputSize.height <= 0) {
+    if (outputSize.width <= 0 || outputSize.height <= 0) {
       return null;
     }
+    final sourceRect = _coverThumbnailSourceRect(outputSize);
 
     const padding = 10.0;
     final drawableWidth = math.max(1.0, outputSize.width - padding * 2);
@@ -2734,14 +2734,14 @@ class MarkdrawController extends ChangeNotifier {
     return byteData?.buffer.asUint8List();
   }
 
-  Rect? _coverThumbnailSourceRect() {
+  Rect _coverThumbnailSourceRect(Size outputSize) {
     if (_layout.isPaged) {
       final layoutWithPage = _layout.ensurePage();
       return layoutWithPage.pages.first.bounds;
     }
     final bounds = ExportBounds.compute(_editorState.scene, padding: 40);
     if (bounds == null) {
-      return null;
+      return _emptyUnboundedThumbnailRect(outputSize);
     }
     return Rect.fromLTWH(
       bounds.left,
@@ -2749,6 +2749,13 @@ class MarkdrawController extends ChangeNotifier {
       bounds.size.width,
       bounds.size.height,
     );
+  }
+
+  Rect _emptyUnboundedThumbnailRect(Size outputSize) {
+    final aspectRatio = outputSize.width / outputSize.height;
+    const height = CanvasLayout.pageHeight;
+    final width = height * aspectRatio;
+    return Rect.fromCenter(center: Offset.zero, width: width, height: height);
   }
 
   /// Reads the pixel color at [screenPosition] from a pre-rendered [image].

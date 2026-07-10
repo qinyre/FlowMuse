@@ -214,8 +214,8 @@ Page<void> _detailPage(GoRouterState state, Widget child) {
   return _motionPage(
     state,
     child,
-    enterDuration: const Duration(milliseconds: 220),
-    exitDuration: const Duration(milliseconds: 180),
+    enterDuration: const Duration(milliseconds: 360),
+    exitDuration: const Duration(milliseconds: 280),
     offset: const Offset(0.035, 0),
   );
 }
@@ -224,8 +224,8 @@ Page<void> _modalPage(GoRouterState state, Widget child) {
   return _motionPage(
     state,
     child,
-    enterDuration: const Duration(milliseconds: 240),
-    exitDuration: const Duration(milliseconds: 180),
+    enterDuration: const Duration(milliseconds: 380),
+    exitDuration: const Duration(milliseconds: 300),
     offset: const Offset(0.035, 0),
   );
 }
@@ -234,8 +234,8 @@ Page<void> _workspacePage(GoRouterState state, {required Widget child}) {
   return _motionPage(
     state,
     child,
-    enterDuration: const Duration(milliseconds: 180),
-    exitDuration: const Duration(milliseconds: 140),
+    enterDuration: const Duration(milliseconds: 300),
+    exitDuration: const Duration(milliseconds: 240),
     offset: Offset.zero,
   );
 }
@@ -244,8 +244,8 @@ Page<void> _standalonePage(GoRouterState state, Widget child) {
   return _motionPage(
     state,
     child,
-    enterDuration: const Duration(milliseconds: 180),
-    exitDuration: const Duration(milliseconds: 140),
+    enterDuration: const Duration(milliseconds: 320),
+    exitDuration: const Duration(milliseconds: 260),
     offset: const Offset(0.035, 0),
   );
 }

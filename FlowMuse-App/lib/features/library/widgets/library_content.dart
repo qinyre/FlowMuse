@@ -112,7 +112,7 @@ class _LibraryContentState extends State<LibraryContent> {
       _pageController
           .animateToPage(
             filterIndex,
-            duration: const Duration(milliseconds: 240),
+            duration: const Duration(milliseconds: 360),
             curve: Curves.easeOutCubic,
           )
           .whenComplete(() {
@@ -311,7 +311,7 @@ class _FilterTabsState extends State<_FilterTabs> {
                     width: _FilterTabs._buttonWidth,
                     child: Center(
                       child: TweenAnimationBuilder<Color?>(
-                        duration: const Duration(milliseconds: 200),
+                        duration: const Duration(milliseconds: 300),
                         curve: Curves.easeOutCubic,
                         tween: ColorTween(
                           end: widget.selected == filter
