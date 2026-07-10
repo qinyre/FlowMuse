@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
 
 import '../../core/math/math.dart';
+import '../../input/outline_render_mode.dart';
 import 'draw_style.dart';
 
 /// Renders freehand drawing paths.
@@ -69,6 +70,38 @@ class FreedrawRenderer {
     );
 
     return getStroke(inputPoints, options: options);
+  }
+
+  /// Constructs a closed [Path] from a perfect_freehand outline.
+  ///
+  /// - [polygon]: straight-line segments (baseline/control).
+  /// - [quadratic]: official quadratic midpoint method -- each outline point
+  ///   (including outline[0]) serves as a control point, with the midpoint of
+  ///   adjacent vertices as endpoints. The last-to-first seam is handled via
+  ///   modulo wrapping so no control segment is missed.
+  static Path buildOutlinePath(List<PointVector> outline, OutlineRenderMode mode) {
+    if (outline.isEmpty) return Path();
+    if (mode == OutlineRenderMode.polygon || outline.length < 3) {
+      return Path()
+        ..addPolygon(
+          [for (final p in outline) Offset(p.x, p.y)],
+          true,
+        );
+    }
+    // quadratic: midpoint method. Each vertex (including [0]) is a control
+    // point exactly once; the last vertex connects to the first midpoint.
+    final path = Path();
+    final first = outline.first;
+    path.moveTo(first.x, first.y);
+    for (var i = 0; i < outline.length; i++) {
+      final cur = outline[i];
+      final next = outline[(i + 1) % outline.length];
+      final midX = (cur.x + next.x) / 2;
+      final midY = (cur.y + next.y) / 2;
+      path.quadraticBezierTo(cur.x, cur.y, midX, midY);
+    }
+    path.close();
+    return path;
   }
 
   /// Draws a freehand path on [canvas] with the given [style].
