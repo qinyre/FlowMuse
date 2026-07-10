@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -125,10 +126,7 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 	}
 	user := h.socketUsers[socketID]
 	if user.SocketID == "" {
-		user = roomUserFromSocket(client, auth.Identity{
-			DisplayName: auth.GuestName(socketID),
-			IsGuest:     true,
-		})
+		user = roomUserFromSocket(client, h.identityFromSocket(client))
 		h.socketUsers[socketID] = user
 	}
 	users[socketID] = user
@@ -459,10 +457,7 @@ func (h *Hub) identityFromSocket(client *socket.Socket) auth.Identity {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			if !h.userStore.SessionActive(ctx, sessionID, userID) {
-				return auth.Identity{
-					DisplayName: auth.GuestName(string(client.Id()) + remoteAddress(client)),
-					IsGuest:     true,
-				}
+				return guestIdentityFromSocket(client)
 			}
 			if user, err := h.userStore.Load(ctx, userID); err == nil {
 				return auth.Identity{
@@ -475,8 +470,17 @@ func (h *Hub) identityFromSocket(client *socket.Socket) auth.Identity {
 			}
 		}
 	}
+	return guestIdentityFromSocket(client)
+}
+
+func guestIdentityFromSocket(client *socket.Socket) auth.Identity {
+	displayName := strings.TrimSpace(requestQuery(client, "guestName"))
+	if displayName == "" {
+		displayName = auth.GuestName(string(client.Id()) + remoteAddress(client))
+	}
 	return auth.Identity{
-		DisplayName: auth.GuestName(string(client.Id()) + remoteAddress(client)),
+		DisplayName: displayName,
+		AvatarURL:   strings.TrimSpace(requestQuery(client, "guestAvatarUrl")),
 		IsGuest:     true,
 	}
 }
@@ -505,6 +509,13 @@ func requestHeader(client *socket.Socket, key string) string {
 		return ""
 	}
 	return client.Request().Request().Header.Get(key)
+}
+
+func requestQuery(client *socket.Socket, key string) string {
+	if client == nil || client.Request() == nil || client.Request().Request() == nil {
+		return ""
+	}
+	return client.Request().Request().URL.Query().Get(key)
 }
 
 func remoteAddress(client *socket.Socket) string {

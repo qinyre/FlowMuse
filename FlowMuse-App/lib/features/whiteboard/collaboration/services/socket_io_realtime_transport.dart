@@ -100,6 +100,11 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
     if (token != null && token.isNotEmpty) {
       options.setExtraHeaders({'Authorization': 'Bearer $token'});
       options.setAuth({'token': token});
+    } else if (identity.isGuest) {
+      options.setQuery({
+        'guestName': identity.username,
+        'guestAvatarUrl': identity.avatarUrl,
+      });
     }
     final socket = io.io(serverUrl, options.build());
     _socket = socket;

@@ -292,6 +292,8 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
         final selectedElementIds = message.payload['selectedElementIds'];
         collaborators[socketId] = current.copyWith(
           username: message.payload['username'] as String?,
+          userId: message.payload['userId'] as String?,
+          avatarUrl: message.payload['avatarUrl'] as String?,
           pointer: pointer is Map ? Map<String, Object?>.from(pointer) : null,
           button: message.payload['button'] as String?,
           selectedElementIds: selectedElementIds is Map
@@ -302,12 +304,16 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
       case CollaborationMessageType.idleStatus:
         collaborators[socketId] = current.copyWith(
           username: message.payload['username'] as String?,
+          userId: message.payload['userId'] as String?,
+          avatarUrl: message.payload['avatarUrl'] as String?,
           idleState: _idleStateFromWire(message.payload['userState']),
         );
       case CollaborationMessageType.userVisibleSceneBounds:
         final sceneBounds = message.payload['sceneBounds'];
         collaborators[socketId] = current.copyWith(
           username: message.payload['username'] as String?,
+          userId: message.payload['userId'] as String?,
+          avatarUrl: message.payload['avatarUrl'] as String?,
           sceneBounds: sceneBounds is Map
               ? Map<String, Object?>.from(sceneBounds)
               : null,
@@ -333,7 +339,12 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
     for (final entry in collaboratorsBySocketId.entries) {
       final user = entry.value;
       collaborators[entry.key] =
-          collaborators[entry.key]?.copyWith(username: user.username) ??
+          collaborators[entry.key]?.copyWith(
+            username: user.username,
+            userId: user.userId,
+            avatarUrl: user.avatarUrl,
+            isGuest: user.isGuest,
+          ) ??
           CollaboratorPresence(
             socketId: entry.key,
             username: user.username,

@@ -76,7 +76,12 @@ class SharedSidebarHeader extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              leading ?? const SharedSidebarAvatar(),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: leading ?? const SharedSidebarAvatar(),
+                ),
+              ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -101,27 +106,55 @@ class SharedSidebarAvatar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final account = ref.watch(accountViewModelProvider);
     final identity = account.collaborationIdentity;
-    final label = identity.isGuest ? identity.username : identity.username;
+    final label = identity.username;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Tooltip(
       message: identity.isGuest ? '匿名协作身份' : '账户与协作',
       child: InkWell(
         onTap: () => context.push(AppRoutes.accountSettings),
-        customBorder: const CircleBorder(),
+        borderRadius: BorderRadius.circular(AppSpacing.radius),
         child: account.status == AccountStatus.loading
             ? const SizedBox(
-                width: 38,
-                height: 38,
-                child: Padding(
-                  padding: EdgeInsets.all(11),
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                height: AppSpacing.shellHeaderIconButtonSize,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: AppSpacing.shellHeaderIconSize,
+                      height: AppSpacing.shellHeaderIconSize,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ],
                 ),
               )
-            : AccountAvatar(
-                label: label,
-                user: account.user,
-                avatarUrl: identity.avatarUrl,
-                radius: 19,
+            : SizedBox(
+                height: AppSpacing.shellHeaderIconButtonSize,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AccountAvatar(
+                      label: label,
+                      user: account.user,
+                      avatarUrl: identity.avatarUrl,
+                      radius: AppSpacing.shellHeaderIconSize / 2,
+                    ),
+                    const SizedBox(width: AppSpacing.controlGap),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                          fontSize: 13,
+                          height: 1.0,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
       ),
     );
