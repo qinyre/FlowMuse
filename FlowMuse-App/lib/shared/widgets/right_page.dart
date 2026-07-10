@@ -65,7 +65,13 @@ class RightPageScaffold extends StatelessWidget {
                 forceCenterTitle: forceCenterTitle,
               ),
               for (final child in topContent) child,
-              Expanded(child: body),
+              Expanded(
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeTop: true,
+                  child: body,
+                ),
+              ),
             ],
           ),
         );

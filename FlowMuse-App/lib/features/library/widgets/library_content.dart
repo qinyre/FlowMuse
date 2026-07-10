@@ -199,7 +199,7 @@ class _LibraryContentState extends State<LibraryContent> {
             onFilterChanged: _onFilterChanged,
             pageController: _pageController,
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          const SizedBox(height: AppSpacing.controlGap),
         ],
         if (widget.state.selectionMode) ...[
           _BulkActionBar(
@@ -213,7 +213,7 @@ class _LibraryContentState extends State<LibraryContent> {
             onMoveSelectedToNotebook: widget.onMoveSelectedToNotebook,
             onAddTagsToSelected: widget.onAddTagsToSelected,
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          const SizedBox(height: AppSpacing.controlGap),
         ],
       ],
       body: _LibraryItems(
@@ -297,7 +297,7 @@ class _FilterTabsState extends State<_FilterTabs> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return SizedBox(
-      height: 52,
+      height: 40,
       child: Stack(
         children: [
           Row(

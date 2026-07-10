@@ -101,7 +101,7 @@ class SearchPage extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
+        const SizedBox(height: AppSpacing.controlGap),
       ],
       body: _SearchResults(
         query: state.query,
