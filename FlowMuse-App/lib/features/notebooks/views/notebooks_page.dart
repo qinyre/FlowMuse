@@ -161,14 +161,14 @@ class _NotebookCollectionItems extends StatelessWidget {
         return GridView.builder(
           itemCount: state.visibleNotebooks.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 218,
-            mainAxisExtent: 276,
+            maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
+            mainAxisExtent: NoteCard.gridMainAxisExtent,
             crossAxisSpacing: compact
-                ? AppSpacing.compactGridCrossGap
-                : AppSpacing.gridCrossGap,
+                ? NoteCard.compactGridCrossGap
+                : NoteCard.gridCrossGap,
             mainAxisSpacing: compact
-                ? AppSpacing.compactGridMainGap
-                : AppSpacing.gridMainGap,
+                ? NoteCard.compactGridMainGap
+                : NoteCard.gridMainGap,
           ),
           itemBuilder: (context, index) {
             if (index == 0) {
@@ -235,14 +235,14 @@ class _NoteItems extends StatelessWidget {
         return GridView.builder(
           itemCount: notes.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 218,
-            mainAxisExtent: 276,
+            maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
+            mainAxisExtent: NoteCard.gridMainAxisExtent,
             crossAxisSpacing: compact
-                ? AppSpacing.compactGridCrossGap
-                : AppSpacing.gridCrossGap,
+                ? NoteCard.compactGridCrossGap
+                : NoteCard.gridCrossGap,
             mainAxisSpacing: compact
-                ? AppSpacing.compactGridMainGap
-                : AppSpacing.gridMainGap,
+                ? NoteCard.compactGridMainGap
+                : NoteCard.gridMainGap,
           ),
           itemBuilder: (context, index) {
             if (index == 0) {
@@ -284,12 +284,11 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
           width: NoteCard.coverWidth,
           height: NoteCard.coverHeight,
           child: Card(
-            elevation: 5,
-            shadowColor: const Color(0x165A625F),
+            margin: EdgeInsets.zero,
+            elevation: 1,
+            shadowColor: const Color(0x0F5A625F),
             clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: const RoundedRectangleBorder(),
             child: InkWell(
               key: ValueKey('notebook-card-${notebook.id}'),
               onTap: onTap,
@@ -297,7 +296,7 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _CoverTitle(
           title: notebook.name,
           onRename: onRename,
@@ -440,10 +439,9 @@ class _CreateCollectionCard extends StatelessWidget {
           width: NoteCard.coverWidth,
           height: NoteCard.coverHeight,
           child: Card.outlined(
+            margin: EdgeInsets.zero,
             clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: const RoundedRectangleBorder(),
             child: InkWell(
               onTap: onTap,
               child: Center(
@@ -456,7 +454,7 @@ class _CreateCollectionCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _CoverTitle(title: label),
       ],
     );

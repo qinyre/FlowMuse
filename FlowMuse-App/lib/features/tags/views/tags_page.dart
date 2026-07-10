@@ -152,14 +152,14 @@ class _TagItems extends StatelessWidget {
         return GridView.builder(
           itemCount: state.visibleTags.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 218,
-            mainAxisExtent: 276,
+            maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
+            mainAxisExtent: NoteCard.gridMainAxisExtent,
             crossAxisSpacing: compact
-                ? AppSpacing.compactGridCrossGap
-                : AppSpacing.gridCrossGap,
+                ? NoteCard.compactGridCrossGap
+                : NoteCard.gridCrossGap,
             mainAxisSpacing: compact
-                ? AppSpacing.compactGridMainGap
-                : AppSpacing.gridMainGap,
+                ? NoteCard.compactGridMainGap
+                : NoteCard.gridMainGap,
           ),
           itemBuilder: (context, index) {
             if (index == 0) {
@@ -218,14 +218,14 @@ class _NoteItems extends StatelessWidget {
         return GridView.builder(
           itemCount: notes.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 218,
-            mainAxisExtent: 276,
+            maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
+            mainAxisExtent: NoteCard.gridMainAxisExtent,
             crossAxisSpacing: compact
-                ? AppSpacing.compactGridCrossGap
-                : AppSpacing.gridCrossGap,
+                ? NoteCard.compactGridCrossGap
+                : NoteCard.gridCrossGap,
             mainAxisSpacing: compact
-                ? AppSpacing.compactGridMainGap
-                : AppSpacing.gridMainGap,
+                ? NoteCard.compactGridMainGap
+                : NoteCard.gridMainGap,
           ),
           itemBuilder: (context, index) {
             if (index == 0) {
@@ -261,12 +261,11 @@ class _TagCoverCard extends StatelessWidget {
           width: NoteCard.coverWidth,
           height: NoteCard.coverHeight,
           child: Card(
-            elevation: 5,
-            shadowColor: const Color(0x165A625F),
+            margin: EdgeInsets.zero,
+            elevation: 1,
+            shadowColor: const Color(0x0F5A625F),
             clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: const RoundedRectangleBorder(),
             child: InkWell(
               key: ValueKey('tag-card-${tag.id}'),
               onTap: onTap,
@@ -274,7 +273,7 @@ class _TagCoverCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _CoverTitle(title: tag.name, onRename: onRename, onDelete: onDelete),
         const SizedBox(height: 6),
         _CoverSubtitle(text: '${tag.count} 个笔记'),
@@ -406,10 +405,9 @@ class _CreateTagCard extends StatelessWidget {
           width: NoteCard.coverWidth,
           height: NoteCard.coverHeight,
           child: Card.outlined(
+            margin: EdgeInsets.zero,
             clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: const RoundedRectangleBorder(),
             child: InkWell(
               onTap: onTap,
               child: Center(
@@ -422,7 +420,7 @@ class _CreateTagCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _CoverTitle(title: '新建标签'),
       ],
     );

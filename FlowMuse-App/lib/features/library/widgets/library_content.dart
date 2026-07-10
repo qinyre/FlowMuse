@@ -485,14 +485,14 @@ class _LibraryItemsContent extends StatelessWidget {
       itemCount:
           notes.length + (specialView == LibrarySpecialView.none ? 2 : 0),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 218,
-        mainAxisExtent: 276,
+        maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
+        mainAxisExtent: NoteCard.gridMainAxisExtent,
         crossAxisSpacing: compact
-            ? AppSpacing.compactGridCrossGap
-            : AppSpacing.gridCrossGap,
+            ? NoteCard.compactGridCrossGap
+            : NoteCard.gridCrossGap,
         mainAxisSpacing: compact
-            ? AppSpacing.compactGridMainGap
-            : AppSpacing.gridMainGap,
+            ? NoteCard.compactGridMainGap
+            : NoteCard.gridMainGap,
       ),
       itemBuilder: (context, index) {
         if (specialView == LibrarySpecialView.none && index == 0) {

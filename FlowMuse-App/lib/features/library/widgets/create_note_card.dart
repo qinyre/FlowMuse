@@ -33,38 +33,44 @@ class CreateNoteCard extends StatelessWidget {
           width: NoteCard.coverWidth,
           height: NoteCard.coverHeight,
           child: Card.outlined(
+            margin: EdgeInsets.zero,
             clipBehavior: Clip.antiAlias,
             color: colorScheme.primary.withValues(alpha: 0.035),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: const RoundedRectangleBorder(),
             child: InkWell(
               key: _tapKey,
               onTap: onTap,
-              child: Center(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withValues(alpha: 0.10),
-                    shape: BoxShape.circle,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Center(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(13),
+                        child: Icon(icon, size: 28, color: colorScheme.primary),
+                      ),
+                    ),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Icon(icon, size: 34, color: colorScheme.primary),
-                  ),
-                ),
+                  const PageFoldIndicator(),
+                ],
               ),
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         Text(
           title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             color: colorScheme.primary,
             fontWeight: FontWeight.w700,
+            fontSize: 14,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(
           subtitle,
           textAlign: TextAlign.center,

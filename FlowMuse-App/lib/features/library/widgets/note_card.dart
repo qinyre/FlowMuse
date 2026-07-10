@@ -6,8 +6,14 @@ import '../models/note_item.dart';
 class NoteCard extends StatelessWidget {
   const NoteCard({super.key, required this.item, required this.onTap});
 
-  static const coverWidth = 154.0;
-  static const coverHeight = 204.0;
+  static const coverWidth = 132.0;
+  static const coverHeight = 176.0;
+  static const gridMaxCrossAxisExtent = 166.0;
+  static const gridMainAxisExtent = 226.0;
+  static const compactGridCrossGap = 12.0;
+  static const gridCrossGap = 16.0;
+  static const compactGridMainGap = 16.0;
+  static const gridMainGap = 20.0;
 
   final NoteItem item;
   final VoidCallback onTap;
@@ -20,20 +26,25 @@ class NoteCard extends StatelessWidget {
           width: coverWidth,
           height: coverHeight,
           child: Card(
-            elevation: 5,
-            shadowColor: const Color(0x165A625F),
+            margin: EdgeInsets.zero,
+            elevation: 1,
+            shadowColor: const Color(0x0F5A625F),
             clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: const RoundedRectangleBorder(),
             child: InkWell(
               key: ValueKey('note-card-${item.id}'),
               onTap: onTap,
-              child: NoteCover(item: item),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  NoteCover(item: item),
+                  const PageFoldIndicator(),
+                ],
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -44,18 +55,19 @@ class NoteCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: const Color(0xFF222725),
                   fontWeight: FontWeight.w600,
+                  fontSize: 14,
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
             const Icon(
               LucideIcons.chevronDown,
               color: Color(0xFF555C59),
-              size: 18,
+              size: 16,
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 3),
         Text(
           item.date,
           style: Theme.of(
@@ -89,5 +101,57 @@ class NoteCover extends StatelessWidget {
       );
     }
     return const SizedBox.expand();
+  }
+}
+
+class PageFoldIndicator extends StatelessWidget {
+  const PageFoldIndicator({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topRight,
+      child: CustomPaint(
+        size: const Size(22, 22),
+        painter: _PageFoldIndicatorPainter(
+          borderColor: Theme.of(context).colorScheme.outlineVariant,
+          fillColor: Theme.of(context).colorScheme.surface,
+        ),
+      ),
+    );
+  }
+}
+
+class _PageFoldIndicatorPainter extends CustomPainter {
+  const _PageFoldIndicatorPainter({
+    required this.borderColor,
+    required this.fillColor,
+  });
+
+  final Color borderColor;
+  final Color fillColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fold = Path()
+      ..moveTo(size.width, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, 0)
+      ..close();
+
+    canvas.drawPath(fold, Paint()..color = fillColor.withValues(alpha: 0.84));
+    canvas.drawLine(
+      Offset(0, 0),
+      Offset(size.width, size.height),
+      Paint()
+        ..color = borderColor.withValues(alpha: 0.70)
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PageFoldIndicatorPainter oldDelegate) {
+    return borderColor != oldDelegate.borderColor ||
+        fillColor != oldDelegate.fillColor;
   }
 }
