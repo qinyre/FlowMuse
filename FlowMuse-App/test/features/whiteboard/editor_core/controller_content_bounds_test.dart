@@ -29,6 +29,29 @@ void main() {
     expect(controller.editorState.viewport.offset.dy, lessThan(-4000));
   });
 
+  test(
+    'freedraw preview keeps scene-space points without per-frame rebasing',
+    () {
+      final controller = MarkdrawController();
+      addTearDown(controller.dispose);
+      controller.switchTool(ToolType.freedraw);
+      const points = [Point(120, 80), Point(124, 83)];
+
+      final preview =
+          controller.buildPreviewElement(
+                const ToolOverlay(
+                  creationPoints: points,
+                  creationPressures: [0.4, 0.5],
+                ),
+              )
+              as FreedrawElement;
+
+      expect(preview.x, 0);
+      expect(preview.y, 0);
+      expect(preview.points, points);
+    },
+  );
+
   test('setting content bounds immediately reclamps the viewport', () {
     final controller = MarkdrawController();
     addTearDown(controller.dispose);

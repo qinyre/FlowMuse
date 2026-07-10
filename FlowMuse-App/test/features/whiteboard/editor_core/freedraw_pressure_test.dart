@@ -51,6 +51,15 @@ void main() {
 
     expect(result, isA<AddElementResult>());
   });
+
+  test('does not request a raw polyline overlay while drawing', () {
+    final tool = FreedrawTool();
+
+    tool.onPointerDown(const Point(0, 0), context, pressure: 0.3);
+    tool.onPointerMove(const Point(2, 2), context, pressure: 0.4);
+
+    expect(tool.overlay!.showCreationPreviewLine, isFalse);
+  });
 }
 
 FreedrawElement _createdElement(ToolResult? result) {
