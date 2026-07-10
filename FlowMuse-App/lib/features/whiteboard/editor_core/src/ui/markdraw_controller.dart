@@ -25,6 +25,7 @@ import '../input/stroke_input_normalizer.dart';
 import '../input/stroke_input_modeler.dart';
 import '../input/stroke_input_sample.dart';
 import '../input/input_policy.dart';
+import '../input/stroke_recorder.dart';
 
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
@@ -106,6 +107,34 @@ class MarkdrawController extends ChangeNotifier {
   final _policySelector = const InputPolicySelector();
   int? _activeDrawPointerId;
   final bool _useUnifiedModeler = true;
+
+  // debug/test 录制器：null 时不录制（release 默认关闭）
+  StrokeRecorder? _recorder;
+  bool get isRecording => _recorder != null;
+
+  /// 开始录制当前 freedraw stroke 的规范化样本。仅 debug/test 使用。
+  void startRecording() {
+    _recorder = StrokeRecorder();
+  }
+
+  /// 结束录制，返回 JSON 字符串。录制内容可保存为文件供离线回放。
+  String stopRecording() {
+    final r = _recorder;
+    _recorder = null;
+    if (r == null) return '{}';
+    final recording = r.finish(
+      buildVersion: 'dev',
+      deviceInfo: 'manual-record',
+    );
+    return const JsonEncoder.withIndent('  ').convert(recording.toJson());
+  }
+
+  /// viewport 仿射变换 [a,b,c,d,e,f]，scene = a*localX + c*localY + e, ...
+  List<double> get _viewportTransform {
+    final v = _editorState.viewport;
+    final iz = 1.0 / v.zoom;
+    return [iz, 0, 0, iz, v.offset.dx, v.offset.dy];
+  }
 
   // UI state
   List<LibraryItem> _libraryItems = [];
@@ -1525,6 +1554,7 @@ class MarkdrawController extends ChangeNotifier {
     if (_useUnifiedModeler && _activeTool is FreedrawTool) {
       // --- Unified modeler path for freedraw ---
       final sample = _normalizer.normalize(event, phase: StrokePhase.down);
+      _recorder?.record(sample, viewportZoom: _editorState.viewport.zoom, viewportTransform: _viewportTransform);
       _activeDrawPointerId = sample.pointerId;
       _modeler = StrokeInputModeler(_policySelector.select(sample.kind));
       final r = _modeler!.process(sample);
@@ -1613,6 +1643,7 @@ class MarkdrawController extends ChangeNotifier {
       // --- Unified modeler path for freedraw ---
       if (event.pointer != _activeDrawPointerId) return;
       final sample = _normalizer.normalize(event, phase: StrokePhase.move);
+      _recorder?.record(sample, viewportZoom: _editorState.viewport.zoom, viewportTransform: _viewportTransform);
       final r = _modeler!.process(sample);
       if (r.point == null) return; // dropped by modeler
       final sceneOffset = _editorState.viewport.screenToScenePrecise(
@@ -1655,6 +1686,7 @@ class MarkdrawController extends ChangeNotifier {
       // --- Unified modeler path for freedraw ---
       if (event.pointer != _activeDrawPointerId) return;
       final sample = _normalizer.normalize(event, phase: StrokePhase.up);
+      _recorder?.record(sample, viewportZoom: _editorState.viewport.zoom, viewportTransform: _viewportTransform);
       final r = _modeler!.process(sample); // flushes real endpoint
 
       if (r.point != null) {
