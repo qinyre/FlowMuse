@@ -157,14 +157,14 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSpacing.radius),
       ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 16, 22, 24),
+          padding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -196,7 +196,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 8),
               Stack(
                 alignment: Alignment.center,
                 clipBehavior: Clip.none,
@@ -213,7 +213,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 4),
               Wrap(
                 spacing: 14,
                 children: [
@@ -228,24 +228,24 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
                     ),
                 ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 6),
               // 选择更多封面按钮
               Center(
                 child: OutlinedButton.icon(
                   onPressed: _showCoverPicker,
-                  icon: const Icon(LucideIcons.images, size: 18),
-                  label: const Text('选择更多封面'),
+                  icon: const Icon(LucideIcons.images, size: 16),
+                  label: const Text('选择更多封面', style: TextStyle(fontSize: 13)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF4F8F84),
                     side: const BorderSide(color: Color(0xFF4F8F84)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppSpacing.radius),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   ),
                 ),
               ),
-              const SizedBox(height: 26),
+              const SizedBox(height: 2),
               Align(
                 alignment: Alignment.centerRight,
                 child: Text(
@@ -255,7 +255,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 2),
               TextField(
                 controller: _controller,
                 focusNode: _focusNode,
@@ -263,7 +263,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
                 keyboardType: TextInputType.text,
                 maxLength: _maxTitleLength,
                 maxLines: 1,
-                cursorHeight: 18,
+                cursorHeight: 16,
                 inputFormatters: [
                   LengthLimitingTextInputFormatter(_maxTitleLength),
                 ],
@@ -290,7 +290,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
                   fillColor: Colors.white,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
-                    vertical: 14,
+                    vertical: 6,
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppSpacing.radius),
@@ -331,8 +331,8 @@ class _CoverPreview extends StatelessWidget {
         : const Color(0xFF202523);
 
     return SizedBox(
-      width: 108,
-      height: 136,
+      width: 64,
+      height: 80,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppSpacing.radius),
         child: coverImage != null
@@ -340,9 +340,8 @@ class _CoverPreview extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   Image.asset(coverImage!, fit: BoxFit.cover),
-                  // 保留图标覆盖层
                   Center(
-                    child: Icon(icon, size: 34, color: Colors.white.withValues(alpha: 0.7)),
+                    child: Icon(icon, size: 22, color: Colors.white.withValues(alpha: 0.7)),
                   ),
                 ],
               )
@@ -367,7 +366,7 @@ class _CoverPreview extends StatelessWidget {
                   ],
                 ),
                 child: Center(
-                  child: Icon(icon, size: 34, color: foreground.withValues(alpha: 0.8)),
+                  child: Icon(icon, size: 22, color: foreground.withValues(alpha: 0.8)),
                 ),
               ),
       ),
