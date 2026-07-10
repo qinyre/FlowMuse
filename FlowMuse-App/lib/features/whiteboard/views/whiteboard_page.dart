@@ -23,6 +23,7 @@ import '../collaboration/services/collaboration_debug_log.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
+import '../ink_recognition/ink_recognition_repository.dart';
 import '../pdf_note_import/pdf_note_consumer.dart';
 import '../view_models/whiteboard_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
@@ -1204,6 +1205,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             onDocumentRenamed: () {
               unawaited(_renameAndSaveDocument());
             },
+            onRecognizeInk: (request) =>
+                ref.read(inkRecognitionRepositoryProvider).recognize(request),
             onSceneChanged: (_) {
               unawaited(_saveMarkdrawScene());
             },

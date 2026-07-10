@@ -9,6 +9,7 @@ import (
 	"flowmuse/server/internal/auth"
 	"flowmuse/server/internal/collab"
 	"flowmuse/server/internal/config"
+	"flowmuse/server/internal/recognition"
 	"flowmuse/server/internal/storage"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -93,6 +94,13 @@ func main() {
 	mux.Handle("/socket.io/", io.ServeHandler(nil))
 	authAPI.Register(mux)
 	collab.NewHTTPAPI(sceneStore, fileStore, roomStore, authAPI, cfg.RequestTimeout).Register(mux)
+	recognizer := recognition.NewMyScriptRecognizer(recognition.MyScriptConfig{
+		AppKey:   cfg.MyScriptAppKey,
+		HMACKey:  cfg.MyScriptHMACKey,
+		Endpoint: cfg.MyScriptEndpoint,
+		Timeout:  cfg.RecognitionTimeout,
+	})
+	recognition.NewHTTPAPI(recognizer, cfg.RecognitionTimeout).Register(mux)
 
 	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)
 	if err := http.ListenAndServe(cfg.Addr, mux); err != nil {

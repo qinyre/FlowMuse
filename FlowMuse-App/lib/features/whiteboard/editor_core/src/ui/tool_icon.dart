@@ -39,6 +39,7 @@ IconData iconFor(ToolType type, {bool isActive = false}) {
     ToolType.line => Icons.show_chart,
     ToolType.arrow => Icons.arrow_forward,
     ToolType.freedraw => Icons.draw,
+    ToolType.recognitionPen => Icons.auto_fix_high,
     ToolType.text => Icons.text_fields,
     ToolType.hand => Icons.pan_tool_outlined,
     ToolType.frame => Icons.crop_free,

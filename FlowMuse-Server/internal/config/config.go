@@ -9,25 +9,29 @@ import (
 )
 
 type Config struct {
-	Addr              string
-	DatabaseURL       string
-	S3Endpoint        string
-	S3AccessKeyID     string
-	S3SecretAccessKey string
-	S3Bucket          string
-	S3UseSSL          bool
-	AllowedOrigins    []string
-	RequestTimeout    time.Duration
-	AuthSecret        string
-	AuthTokenTTL      time.Duration
-	PublicAppURL      string
-	EmailVerifyTTL    time.Duration
-	PasswordResetTTL  time.Duration
-	SMTPHost          string
-	SMTPPort          int
-	SMTPUsername      string
-	SMTPPassword      string
-	SMTPFrom          string
+	Addr               string
+	DatabaseURL        string
+	S3Endpoint         string
+	S3AccessKeyID      string
+	S3SecretAccessKey  string
+	S3Bucket           string
+	S3UseSSL           bool
+	AllowedOrigins     []string
+	RequestTimeout     time.Duration
+	AuthSecret         string
+	AuthTokenTTL       time.Duration
+	PublicAppURL       string
+	EmailVerifyTTL     time.Duration
+	PasswordResetTTL   time.Duration
+	SMTPHost           string
+	SMTPPort           int
+	SMTPUsername       string
+	SMTPPassword       string
+	SMTPFrom           string
+	MyScriptAppKey     string
+	MyScriptHMACKey    string
+	MyScriptEndpoint   string
+	RecognitionTimeout time.Duration
 }
 
 func Load() (Config, error) {
@@ -47,11 +51,18 @@ func Load() (Config, error) {
 			"FLOWMUSE_PASSWORD_RESET_TTL",
 			30*time.Minute,
 		),
-		SMTPHost:     os.Getenv("FLOWMUSE_SMTP_HOST"),
-		SMTPPort:     envInt("FLOWMUSE_SMTP_PORT", 1025),
-		SMTPUsername: os.Getenv("FLOWMUSE_SMTP_USERNAME"),
-		SMTPPassword: os.Getenv("FLOWMUSE_SMTP_PASSWORD"),
-		SMTPFrom:     env("FLOWMUSE_SMTP_FROM", "FlowMuse <noreply@flowmuse.local>"),
+		SMTPHost:         os.Getenv("FLOWMUSE_SMTP_HOST"),
+		SMTPPort:         envInt("FLOWMUSE_SMTP_PORT", 1025),
+		SMTPUsername:     os.Getenv("FLOWMUSE_SMTP_USERNAME"),
+		SMTPPassword:     os.Getenv("FLOWMUSE_SMTP_PASSWORD"),
+		SMTPFrom:         env("FLOWMUSE_SMTP_FROM", "FlowMuse <noreply@flowmuse.local>"),
+		MyScriptAppKey:   os.Getenv("FLOWMUSE_MYSCRIPT_APP_KEY"),
+		MyScriptHMACKey:  os.Getenv("FLOWMUSE_MYSCRIPT_HMAC_KEY"),
+		MyScriptEndpoint: env("FLOWMUSE_MYSCRIPT_ENDPOINT", "https://cloud.myscript.com/api/v4.0/iink/batch"),
+		RecognitionTimeout: envDuration(
+			"FLOWMUSE_RECOGNITION_TIMEOUT",
+			20*time.Second,
+		),
 	}
 	cfg.S3AccessKeyID = os.Getenv("FLOWMUSE_S3_ACCESS_KEY_ID")
 	cfg.S3SecretAccessKey = os.Getenv("FLOWMUSE_S3_SECRET_ACCESS_KEY")
