@@ -25,7 +25,6 @@ migrate_working_dir/
 #.vscode/
 
 # Flutter/Dart/Pub related
-FlowMuse-Server/.env
 **/doc/api/
 **/ios/Flutter/.last_build_id
 **/.dart_tool/
@@ -47,5 +46,13 @@ app.*.map.json
 **/android/app/release
 **/android/.kotlin/
 
-# Local secrets
-FlowMuse-Server/.env
+# Flutter auto-generated plugin registrants
+**/linux/flutter/generated_plugin_registrant.*
+**/linux/flutter/generated_plugins.cmake
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/windows/flutter/generated_plugin_registrant.*
+**/windows/flutter/generated_plugins.cmake
+
+# HarmonyOS build profile (local signing config)
+**/ohos/build-profile.json5
+**/tool/vendor/**/build-profile.json5
