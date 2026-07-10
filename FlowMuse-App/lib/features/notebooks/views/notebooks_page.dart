@@ -59,13 +59,15 @@ Future<void> _createNotebook(
   BuildContext context,
   NotebooksViewModel viewModel,
 ) async {
-  final result = await showCreateCollectionDialog(
-    context: context,
-    title: '新建笔记本',
-    hintText: '请输入标题',
-    icon: LucideIcons.bookOpen,
-    coverColors: libraryNotebookColors,
-    coverCategory: 'notebooks',
+  final result = await context.push<CreateCollectionResult>(
+    AppRoutes.createCollection,
+    extra: const CreateCollectionParams(
+      title: '新建笔记本',
+      hintText: '请输入标题',
+      icon: LucideIcons.bookOpen,
+      coverColors: libraryNotebookColors,
+      coverCategory: 'notebooks',
+    ),
   );
   if (result == null || !context.mounted) {
     return;

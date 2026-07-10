@@ -2,8 +2,29 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/app_spacing.dart';
+
+// ---------------------------------------------------------------------------
+// 路由参数
+// ---------------------------------------------------------------------------
+
+class CreateCollectionParams {
+  const CreateCollectionParams({
+    required this.title,
+    required this.hintText,
+    required this.icon,
+    required this.coverColors,
+    required this.coverCategory,
+  });
+
+  final String title;
+  final String hintText;
+  final IconData icon;
+  final List<Color> coverColors;
+  final String coverCategory;
+}
 
 // ---------------------------------------------------------------------------
 // 封面数据
@@ -50,51 +71,20 @@ class CreateCollectionResult {
   final String? coverImage;
 }
 
-Future<CreateCollectionResult?> showCreateCollectionDialog({
-  required BuildContext context,
-  required String title,
-  required String hintText,
-  required IconData icon,
-  required List<Color> coverColors,
-  required String coverCategory,
-}) {
-  return showDialog<CreateCollectionResult>(
-    context: context,
-    builder: (context) => CreateCollectionDialog(
-      title: title,
-      hintText: hintText,
-      icon: icon,
-      coverColors: coverColors,
-      coverCategory: coverCategory,
-    ),
-  );
-}
-
 // ---------------------------------------------------------------------------
-// 新建笔记本/标签对话框
+// 新建笔记本/标签页面
 // ---------------------------------------------------------------------------
 
-class CreateCollectionDialog extends StatefulWidget {
-  const CreateCollectionDialog({
-    super.key,
-    required this.title,
-    required this.hintText,
-    required this.icon,
-    required this.coverColors,
-    required this.coverCategory,
-  });
+class CreateCollectionPage extends StatefulWidget {
+  const CreateCollectionPage({super.key, required this.params});
 
-  final String title;
-  final String hintText;
-  final IconData icon;
-  final List<Color> coverColors;
-  final String coverCategory;
+  final CreateCollectionParams params;
 
   @override
-  State<CreateCollectionDialog> createState() => _CreateCollectionDialogState();
+  State<CreateCollectionPage> createState() => _CreateCollectionPageState();
 }
 
-class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
+class _CreateCollectionPageState extends State<CreateCollectionPage> {
   static const _maxTitleLength = 60;
 
   late final TextEditingController _controller;
@@ -107,9 +97,6 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
   List<CoverItem> _covers = const [];
   bool _loading = true;
   late List<String> _themes;
-  final ScrollController _scrollController = ScrollController();
-  final List<GlobalKey> _sectionKeys = [];
-  int _selectedTab = 0;
 
   String get _name => _controller.text.trim();
 
@@ -118,7 +105,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
     super.initState();
     _controller = TextEditingController()..addListener(_onTitleChanged);
     _focusNode = FocusNode();
-    _selectedColor = widget.coverColors.first;
+    _selectedColor = widget.params.coverColors.first;
     _loadCovers();
   }
 
@@ -128,7 +115,6 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
       ..removeListener(_onTitleChanged)
       ..dispose();
     _focusNode.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -146,7 +132,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
       });
       return;
     }
-    Navigator.of(context).pop(
+    context.pop(
       CreateCollectionResult(
         name: _name,
         coverColor: _selectedColor,
@@ -156,32 +142,18 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
   }
 
   Future<void> _loadCovers() async {
-    final covers = await fetchCovers(widget.coverCategory);
+    final covers = await fetchCovers(widget.params.coverCategory);
     if (mounted) {
-      final themes = covers.map((c) => c.theme).where((t) => t.isNotEmpty).toSet().toList();
+      final themes = covers
+          .map((c) => c.theme)
+          .where((t) => t.isNotEmpty)
+          .toSet()
+          .toList();
       setState(() {
         _covers = covers;
         _themes = themes;
-        _sectionKeys.clear();
-        for (var i = 0; i < themes.length; i++) {
-          _sectionKeys.add(GlobalKey());
-        }
         _loading = false;
       });
-    }
-  }
-
-  void _scrollToSection(int index) {
-    setState(() => _selectedTab = index);
-    final key = _sectionKeys[index];
-    final context = key.currentContext;
-    if (context != null) {
-      Scrollable.ensureVisible(
-        context,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        alignment: 0.0,
-      );
     }
   }
 
@@ -189,297 +161,361 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Dialog(
-      insetPadding: EdgeInsets.zero,
-      shape: const RoundedRectangleBorder(),
-      child: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: SystemUiOverlayStyle.dark.copyWith(
-          statusBarColor: Colors.transparent,
-          systemNavigationBarColor: Colors.white,
+    return Scaffold(
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: false,
+      body: Padding(
+        padding: EdgeInsets.only(
+          top: MediaQuery.of(context).padding.top,
+          left: AppSpacing.pageInset,
+          right: AppSpacing.pageInset,
+          bottom: AppSpacing.pageInset,
         ),
-        child: Scaffold(
-          backgroundColor: Colors.white,
-          resizeToAvoidBottomInset: false,
-          appBar: AppBar(
-            backgroundColor: Colors.white,
-            elevation: 0,
-            leading: TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消', style: TextStyle(color: Color(0xFF8A908D))),
-            ),
-            title: Text(
-              widget.title,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF202523),
+          child: Column(
+            children: [
+              // 顶部栏
+              _TopBar(
+                title: widget.params.title,
+                onCancel: () => context.pop(),
+                onCreate: _create,
               ),
-            ),
-            centerTitle: true,
-            actions: [
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: TextButton(
-                  onPressed: _create,
-                  style: TextButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  ),
-                  child: const Text('创建', style: TextStyle(fontSize: 14)),
-                ),
-              ),
-            ],
-          ),
-          body: SafeArea(
-            child: Column(
-              children: [
-                // 顶部内容区：封面预览 + 标题输入
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 24),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // 封面预览
-                      Stack(
-                        alignment: Alignment.center,
-                        clipBehavior: Clip.none,
-                        children: [
-                          _CoverPreview(
-                            color: _selectedColor,
-                            icon: widget.icon,
-                            coverImage: _selectedCoverImage,
-                          ),
-                          AnimatedOpacity(
-                            opacity: _showEmptyTitleTip ? 1 : 0,
-                            duration: const Duration(milliseconds: 120),
-                            child: const _InlineTip(text: '标题不能为空'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 20),
-                      // 标题输入框
-                      SizedBox(
-                        width: 200,
-                        child: TextField(
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          autofocus: true,
-                          keyboardType: TextInputType.text,
-                          maxLength: _maxTitleLength,
-                          maxLines: 1,
-                          cursorHeight: 16,
-                          inputFormatters: [
-                            LengthLimitingTextInputFormatter(_maxTitleLength),
+              const SizedBox(height: 24),
+              // 主要内容
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 左侧区域：预览 + 颜色选择（固定）
+                    Expanded(
+                      flex: 2,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // 封面预览
+                            Center(
+                              child: Stack(
+                                alignment: Alignment.center,
+                                clipBehavior: Clip.none,
+                                children: [
+                                  _CoverPreview(
+                                    color: _selectedColor,
+                                    icon: widget.params.icon,
+                                    coverImage: _selectedCoverImage,
+                                  ),
+                                  AnimatedOpacity(
+                                    opacity: _showEmptyTitleTip ? 1 : 0,
+                                    duration: const Duration(milliseconds: 120),
+                                    child: const _InlineTip(text: '标题不能为空'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            // 颜色选择
+                            Center(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    '封面模板',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF202523),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  ...widget.params.coverColors.map(
+                                    (color) => _ColorChoice(
+                                      color: color,
+                                      selected:
+                                          color == _selectedColor &&
+                                          _selectedCoverImage == null,
+                                      onTap: () => setState(() {
+                                        _selectedColor = color;
+                                        _selectedCoverImage = null;
+                                      }),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _create(),
-                          textAlignVertical: TextAlignVertical.center,
-                          decoration: InputDecoration(
-                            counterText: '',
-                            hintText: widget.hintText,
-                            filled: true,
-                            fillColor: const Color(0xFFF5F7F6),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(AppSpacing.radius),
-                              borderSide: BorderSide.none,
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(AppSpacing.radius),
-                              borderSide: BorderSide.none,
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(AppSpacing.radius),
-                              borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
-                            ),
-                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1, color: Color(0xFFE9EEEB)),
-                // 封面模板 + 颜色选择
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        '封面模板',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF202523),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      ...widget.coverColors.map((color) => _ColorChoice(
-                            color: color,
-                            selected: color == _selectedColor && _selectedCoverImage == null,
-                            onTap: () => setState(() {
-                              _selectedColor = color;
-                              _selectedCoverImage = null;
-                            }),
-                          )),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1, color: Color(0xFFE9EEEB)),
-                // Tab 栏 + 内容区域
-                if (_loading)
-                  const Expanded(
-                    child: Center(child: CircularProgressIndicator(color: Color(0xFF4F8F84))),
-                  )
-                else if (_themes.isEmpty)
-                  const Expanded(
-                    child: Center(
-                      child: Text(
-                        '暂无更多封面',
-                        style: TextStyle(color: Color(0xFF8A908D), fontSize: 15),
                       ),
                     ),
-                  )
-                else
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Container(
-                          height: 44,
-                          margin: const EdgeInsets.symmetric(horizontal: 20),
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _themes.length,
-                            separatorBuilder: (_, _) => const SizedBox(width: 24),
-                            itemBuilder: (context, index) {
-                              final isSelected = _selectedTab == index;
-                              return GestureDetector(
-                                onTap: () => _scrollToSection(index),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      _themes[index],
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                                        color: isSelected
-                                            ? const Color(0xFF4F8F84)
-                                            : const Color(0xFF8A908D),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Container(
-                                      height: 2,
-                                      width: 20,
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? const Color(0xFF4F8F84)
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(1),
-                                      ),
-                                    ),
-                                  ],
+                    // 分割线
+                    const VerticalDivider(
+                      width: 1,
+                      color: Color(0xFFE9EEEB),
+                    ),
+                    // 右侧区域：输入框 + 封面选择
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        children: [
+                          // 标题输入
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: TextField(
+                              controller: _controller,
+                              focusNode: _focusNode,
+                              autofocus: true,
+                              keyboardType: TextInputType.text,
+                              maxLength: _maxTitleLength,
+                              maxLines: 1,
+                              cursorHeight: 16,
+                              inputFormatters: [
+                                LengthLimitingTextInputFormatter(
+                                  _maxTitleLength,
                                 ),
-                              );
-                            },
+                              ],
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _create(),
+                              textAlignVertical: TextAlignVertical.center,
+                              decoration: InputDecoration(
+                                counterText: '',
+                                hintText: widget.params.hintText,
+                                filled: true,
+                                fillColor: const Color(0xFFF5F7F6),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radius,
+                                  ),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radius,
+                                  ),
+                                  borderSide: BorderSide.none,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radius,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: colorScheme.primary,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        // 内容区域 - 单页滚动，每个主题一行
-                        Expanded(
-                          child: ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.only(bottom: 20),
-                            itemCount: _themes.length,
-                            itemBuilder: (context, index) {
-                              final theme = _themes[index];
-                              final themeCovers = _covers.where((c) => c.theme == theme).toList();
-                              return Padding(
-                                key: _sectionKeys[index],
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                                      child: Text(
-                                        theme,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF202523),
-                                        ),
-                                      ),
+                          // 封面选择列表
+                          Expanded(
+                            child: _loading
+                                ? const Center(
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF4F8F84),
                                     ),
-                                    const SizedBox(height: 8),
-                                    SizedBox(
-                                      height: 140,
-                                      child: ListView.separated(
-                                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                                        scrollDirection: Axis.horizontal,
-                                        itemCount: themeCovers.length,
-                                        separatorBuilder: (_, _) => const SizedBox(width: 12),
+                                  )
+                                : _themes.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          '暂无更多封面',
+                                          style: TextStyle(
+                                            color: Color(0xFF8A908D),
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                      )
+                                    : ListView.builder(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                        ),
+                                        itemCount: _themes.length,
                                         itemBuilder: (context, index) {
-                                          final item = themeCovers[index];
-                                          final isSelected = _selectedCoverImage == item.assetPath;
-                                          return GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                _selectedCoverImage = item.assetPath;
-                                              });
-                                            },
-                                            child: Container(
-                                              width: 90,
-                                              decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(AppSpacing.radius),
-                                                border: Border.all(
-                                                  color: isSelected
-                                                      ? colorScheme.primary
-                                                      : const Color(0xFFE3E8E5),
-                                                  width: isSelected ? 2 : 1,
-                                                ),
-                                              ),
-                                              child: ClipRRect(
-                                                borderRadius: BorderRadius.circular(AppSpacing.radius),
-                                                child: Image.asset(
-                                                  item.assetPath,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder: (_, _, _) => const Center(
-                                                    child: Icon(
-                                                      Icons.image_outlined,
-                                                      color: Color(0xFF8A908D),
-                                                    ),
+                                          final theme = _themes[index];
+                                          final themeCovers = _covers
+                                              .where((c) => c.theme == theme)
+                                              .toList();
+                                          return Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 16,
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  theme,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Color(0xFF202523),
                                                   ),
                                                 ),
-                                              ),
+                                                const SizedBox(height: 8),
+                                                SizedBox(
+                                                  height: 120,
+                                                  child: ListView.separated(
+                                                    scrollDirection:
+                                                        Axis.horizontal,
+                                                    itemCount:
+                                                        themeCovers.length,
+                                                    separatorBuilder: (_, _) =>
+                                                        const SizedBox(
+                                                      width: 12,
+                                                    ),
+                                                    itemBuilder:
+                                                        (context, index) {
+                                                      final item =
+                                                          themeCovers[index];
+                                                      final isSelected =
+                                                          _selectedCoverImage ==
+                                                              item.assetPath;
+                                                      return GestureDetector(
+                                                        onTap: () {
+                                                          setState(() {
+                                                            _selectedCoverImage =
+                                                                item.assetPath;
+                                                          });
+                                                        },
+                                                        child: Container(
+                                                          width: 80,
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              AppSpacing.radius,
+                                                            ),
+                                                            border: Border.all(
+                                                              color: isSelected
+                                                                  ? colorScheme
+                                                                      .primary
+                                                                  : const Color(
+                                                                      0xFFE3E8E5,
+                                                                    ),
+                                                              width: isSelected
+                                                                  ? 2
+                                                                  : 1,
+                                                            ),
+                                                          ),
+                                                          child: ClipRRect(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              AppSpacing.radius,
+                                                            ),
+                                                            child:
+                                                                Image.asset(
+                                                              item.assetPath,
+                                                              fit: BoxFit.cover,
+                                                              errorBuilder:
+                                                                  (_, _, _) =>
+                                                                      const Center(
+                                                                child: Icon(
+                                                                  Icons
+                                                                      .image_outlined,
+                                                                  color: Color(
+                                                                    0xFF8A908D,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           );
                                         },
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-              ],
-            ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 顶部栏组件
+// ---------------------------------------------------------------------------
+
+class _TopBar extends StatelessWidget {
+  const _TopBar({
+    required this.title,
+    required this.onCancel,
+    required this.onCreate,
+  });
+
+  final String title;
+  final VoidCallback onCancel;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Row(
+          children: [
+            TextButton(
+              onPressed: onCancel,
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF4F8F84),
+                textStyle: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radius),
+                ),
+              ),
+              child: const Text('取消'),
+            ),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: () {
+                FocusManager.instance.primaryFocus?.unfocus();
+                onCreate();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F8F84),
+                foregroundColor: Colors.white,
+                textStyle: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radius),
+                ),
+              ),
+              child: const Text('创建'),
+            ),
+          ],
+        ),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: const Color(0xFF1F2624),
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      ],
     );
   }
 }
@@ -503,12 +539,12 @@ class _CoverPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final foreground =
         ThemeData.estimateBrightnessForColor(color) == Brightness.dark
-        ? Colors.white
-        : const Color(0xFF202523);
+            ? Colors.white
+            : const Color(0xFF202523);
 
     return SizedBox(
-      width: 90,
-      height: 120,
+      width: 140,
+      height: 180,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppSpacing.radius),
         child: coverImage != null
@@ -520,9 +556,15 @@ class _CoverPreview extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Color.alphaBlend(Colors.white.withValues(alpha: 0.14), color),
+                      Color.alphaBlend(
+                        Colors.white.withValues(alpha: 0.14),
+                        color,
+                      ),
                       color,
-                      Color.alphaBlend(Colors.black.withValues(alpha: 0.08), color),
+                      Color.alphaBlend(
+                        Colors.black.withValues(alpha: 0.08),
+                        color,
+                      ),
                     ],
                   ),
                   boxShadow: const [
@@ -534,7 +576,11 @@ class _CoverPreview extends StatelessWidget {
                   ],
                 ),
                 child: Center(
-                  child: Icon(icon, size: 28, color: foreground.withValues(alpha: 0.8)),
+                  child: Icon(
+                    icon,
+                    size: 28,
+                    color: foreground.withValues(alpha: 0.8),
+                  ),
                 ),
               ),
       ),
@@ -570,9 +616,9 @@ class _InlineTip extends StatelessWidget {
         child: Text(
           text,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
         ),
       ),
     );

@@ -54,13 +54,15 @@ class TagsPage extends ConsumerWidget {
 }
 
 Future<void> _createTag(BuildContext context, TagsViewModel viewModel) async {
-  final result = await showCreateCollectionDialog(
-    context: context,
-    title: '新建标签',
-    hintText: '请输入标题',
-    icon: LucideIcons.hash,
-    coverColors: libraryTagColors,
-    coverCategory: 'tags',
+  final result = await context.push<CreateCollectionResult>(
+    AppRoutes.createCollection,
+    extra: const CreateCollectionParams(
+      title: '新建标签',
+      hintText: '请输入标题',
+      icon: LucideIcons.hash,
+      coverColors: libraryTagColors,
+      coverCategory: 'tags',
+    ),
   );
   if (result == null || !context.mounted) {
     return;
