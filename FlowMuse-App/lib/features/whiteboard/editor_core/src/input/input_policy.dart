@@ -26,7 +26,7 @@ class InputPolicy {
   static const stylus = InputPolicy(
     useRealPressure: true,
     minCutoff: 1.0, beta: 0.007,
-    pressureCutoff: 1.0,
+    pressureCutoff: 50.0, // 50 Hz：保留压感变化，仅滤除高频噪声（1 Hz 会把压感抹平）
     minDistance: 0.6,
     cornerProtectAngleRad: 0.9, // ~51°
   );
