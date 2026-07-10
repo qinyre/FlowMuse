@@ -8,7 +8,7 @@ class LocalDatabase {
   LocalDatabase._();
 
   static const databaseName = 'flowmuse_local.db';
-  static const databaseVersion = 3;
+  static const databaseVersion = 4;
 
   static Database? _database;
 
@@ -47,6 +47,11 @@ class LocalDatabase {
             );
             await db.execute(
               'ALTER TABLE tags ADD COLUMN cover_image TEXT',
+            );
+          }
+          if (oldVersion < 4) {
+            await db.execute(
+              'ALTER TABLE notes ADD COLUMN cover_thumbnail BLOB',
             );
           }
           await _ensureSchema(db);
