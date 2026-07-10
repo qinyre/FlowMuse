@@ -17,6 +17,22 @@ class AddElementResult extends ToolResult {
   AddElementResult(this.element);
 }
 
+/// Completes a geometric element creation without changing the active tool.
+///
+/// Geometric tools use this shared policy so users can create consecutive
+/// shapes. The selection is cleared explicitly: [AddElementResult] alone
+/// would otherwise retain any selection from before the creation gesture.
+ToolResult completeGeometricElementCreation(
+  Element element, {
+  List<ToolResult> additionalResults = const [],
+}) {
+  return CompoundResult([
+    AddElementResult(element),
+    ...additionalResults,
+    SetSelectionResult({}),
+  ]);
+}
+
 /// Update an existing element in the scene.
 class UpdateElementResult extends ToolResult {
   final Element element;

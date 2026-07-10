@@ -90,13 +90,17 @@ class FreedrawRenderer {
           true,
         );
     }
-    // quadratic: midpoint method. Each vertex (including [0]) is a control
-    // point exactly once; the last vertex connects to the first midpoint.
+    // quadratic: classic midpoint method for a fully-smooth closed path.
+    // Start at (P0+P1)/2 so every segment has a distinct control point ≠ its
+    // start — no flat edges. Each vertex serves as control exactly once,
+    // including outline[0] as the final control before close.
     final path = Path();
     final first = outline.first;
-    path.moveTo(first.x, first.y);
-    for (var i = 0; i < outline.length; i++) {
-      final cur = outline[i];
+    final startX = (first.x + outline[1].x) / 2;
+    final startY = (first.y + outline[1].y) / 2;
+    path.moveTo(startX, startY);
+    for (var i = 1; i <= outline.length; i++) {
+      final cur = outline[i % outline.length];
       final next = outline[(i + 1) % outline.length];
       final midX = (cur.x + next.x) / 2;
       final midY = (cur.y + next.y) / 2;
