@@ -1,7 +1,5 @@
 library;
 
-import 'dart:async';
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 
@@ -33,34 +31,32 @@ class EditorCanvas extends StatefulWidget {
 
 class _EditorCanvasState extends State<EditorCanvas>
     with SingleTickerProviderStateMixin {
-  static const double _lastPagePromptRevealDistance = 56;
-  static const double _lastPageCreateDistance = 112;
+  static const double _appendPageReleaseThreshold = 96;
+  static const double _appendPageMaxOverscroll = 156;
 
   MarkdrawController get controller => widget.controller;
   Size? _lastReportedSize;
   final Set<int> _activeTouchPointers = {};
   int? _pagedScrollPointer;
-  double _lastPagePullDistance = 0;
-  bool _lastPagePromptArmed = false;
-  bool _gestureStartedWithPromptArmed = false;
-  bool _createdPageDuringGesture = false;
-  Timer? _lastPagePromptResetTimer;
-  late final AnimationController _lastPagePromptController;
+  double _appendPageOverscroll = 0;
+  bool _appendPageReady = false;
+  late final AnimationController _appendPageOverscrollController;
 
   @override
   void initState() {
     super.initState();
-    _lastPagePromptController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-      reverseDuration: const Duration(milliseconds: 160),
-    );
+    _appendPageOverscrollController = AnimationController.unbounded(vsync: this)
+      ..addListener(() {
+        _setAppendPageOverscroll(
+          _appendPageOverscrollController.value,
+          updateController: false,
+        );
+      });
   }
 
   @override
   void dispose() {
-    _lastPagePromptResetTimer?.cancel();
-    _lastPagePromptController.dispose();
+    _appendPageOverscrollController.dispose();
     super.dispose();
   }
 
@@ -75,12 +71,10 @@ class _EditorCanvasState extends State<EditorCanvas>
     _activeTouchPointers.add(event.pointer);
     if (_activeTouchPointers.length == 1) {
       _pagedScrollPointer = event.pointer;
-      _lastPagePullDistance = 0;
-      _gestureStartedWithPromptArmed = _lastPagePromptArmed;
-      _createdPageDuringGesture = false;
+      _appendPageOverscrollController.stop();
     } else {
       _pagedScrollPointer = null;
-      _lastPagePullDistance = 0;
+      _snapBackAppendPageOverscroll();
     }
   }
 
@@ -95,35 +89,23 @@ class _EditorCanvasState extends State<EditorCanvas>
       return;
     }
 
-    controller.scrollPagedViewportBy(scrollDeltaY);
-    widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
+    if (_appendPageOverscroll > 0 && scrollDeltaY < 0) {
+      _setAppendPageOverscroll(_appendPageOverscroll + scrollDeltaY);
+      widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
+      return;
+    }
 
     final metrics = controller.pagedViewportMetrics;
-    if (metrics == null || !metrics.atEnd || scrollDeltaY <= 0) {
-      if (!_lastPagePromptArmed) {
-        _setLastPagePromptProgress(0);
-      }
+    if (metrics != null && metrics.atEnd && scrollDeltaY > 0) {
+      _setAppendPageOverscroll(
+        _appendPageOverscroll + scrollDeltaY * _elasticFactor,
+      );
+      widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
       return;
     }
 
-    _lastPagePullDistance += scrollDeltaY;
-    if (_gestureStartedWithPromptArmed &&
-        !_createdPageDuringGesture &&
-        _lastPagePullDistance >= _lastPageCreateDistance) {
-      _createdPageDuringGesture = true;
-      controller.appendPageAfterLastAndScroll();
-      _clearLastPagePrompt();
-      return;
-    }
-
-    final progress = (_lastPagePullDistance / _lastPagePromptRevealDistance)
-        .clamp(0.0, 1.0)
-        .toDouble();
-    _setLastPagePromptProgress(progress);
-    if (progress >= 1) {
-      _setLastPagePromptArmed(true);
-      _lastPagePromptController.forward();
-    }
+    controller.scrollPagedViewportBy(scrollDeltaY);
+    widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
   }
 
   void _endPagedTouch(PointerEvent event) {
@@ -132,52 +114,73 @@ class _EditorCanvasState extends State<EditorCanvas>
       return;
     }
     _pagedScrollPointer = null;
-    if (_createdPageDuringGesture) {
-      _lastPagePullDistance = 0;
+    if (_appendPageReady) {
+      controller.appendPageAfterLastAndScroll();
+      _setAppendPageOverscroll(0);
       return;
     }
-    if (_lastPagePromptArmed) {
-      _lastPagePromptController.forward();
-      _lastPagePromptResetTimer?.cancel();
-      _lastPagePromptResetTimer = Timer(const Duration(milliseconds: 1800), () {
-        if (mounted && _activeTouchPointers.isEmpty) {
-          _clearLastPagePrompt();
-        }
-      });
-    } else {
-      _clearLastPagePrompt();
-    }
-    _lastPagePullDistance = 0;
+    _snapBackAppendPageOverscroll();
   }
 
-  void _setLastPagePromptProgress(double value) {
-    _lastPagePromptResetTimer?.cancel();
-    final nextValue = value.clamp(0.0, 1.0).toDouble();
-    if ((_lastPagePromptController.value - nextValue).abs() < 0.01) {
-      return;
+  void _cancelPagedTouch(PointerEvent event) {
+    _activeTouchPointers.remove(event.pointer);
+    if (_pagedScrollPointer == event.pointer) {
+      _pagedScrollPointer = null;
+      _snapBackAppendPageOverscroll();
     }
-    _lastPagePromptController.value = nextValue;
   }
 
-  void _setLastPagePromptArmed(bool value) {
-    if (_lastPagePromptArmed == value) {
-      return;
-    }
-    if (!mounted) {
-      _lastPagePromptArmed = value;
+  double get _elasticFactor {
+    final resistance = _appendPageOverscroll / _appendPageMaxOverscroll;
+    return (0.62 - resistance * 0.34).clamp(0.24, 0.62).toDouble();
+  }
+
+  void _setAppendPageOverscroll(double value, {bool updateController = true}) {
+    final next = value.clamp(0.0, _appendPageMaxOverscroll).toDouble();
+    final ready = next >= _appendPageReleaseThreshold;
+    if ((_appendPageOverscroll - next).abs() < 0.1 &&
+        _appendPageReady == ready) {
       return;
     }
     setState(() {
-      _lastPagePromptArmed = value;
+      _appendPageOverscroll = next;
+      _appendPageReady = ready;
     });
+    if (updateController) {
+      _appendPageOverscrollController.value = next;
+    }
   }
 
-  void _clearLastPagePrompt() {
-    _lastPagePromptResetTimer?.cancel();
-    _setLastPagePromptArmed(false);
-    _gestureStartedWithPromptArmed = false;
-    _lastPagePullDistance = 0;
-    _lastPagePromptController.reverse();
+  void _snapBackAppendPageOverscroll() {
+    _appendPageOverscrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  ViewportState _paintViewport() {
+    final viewport = controller.editorState.viewport;
+    if (_appendPageOverscroll <= 0) {
+      return viewport;
+    }
+    return ViewportState(
+      offset: Offset(
+        viewport.offset.dx,
+        viewport.offset.dy + _appendPageOverscroll / viewport.zoom,
+      ),
+      zoom: viewport.zoom,
+    );
+  }
+
+  PagedAppendPageHint? _appendPageHint() {
+    if (_appendPageOverscroll <= 0) {
+      return null;
+    }
+    return PagedAppendPageHint(
+      overscrollPx: _appendPageOverscroll,
+      readyToRelease: _appendPageReady,
+    );
   }
 
   List<LinkIconInfo>? _buildLinkIcons() {
@@ -251,6 +254,8 @@ class _EditorCanvasState extends State<EditorCanvas>
               }
             });
           }
+          final paintViewport = _paintViewport();
+          final appendPageHint = _appendPageHint();
           return MouseRegion(
             cursor: controller.cursorForTool,
             child: Stack(
@@ -338,7 +343,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                     },
                     onPointerCancel: (event) {
                       if (_shouldHandlePagedTouch(event)) {
-                        _endPagedTouch(event);
+                        _cancelPagedTouch(event);
                       }
                     },
                     onPointerSignal: (event) {
@@ -349,7 +354,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       painter: StaticCanvasPainter(
                         scene: controller.editorState.scene,
                         adapter: controller.adapter,
-                        viewport: controller.editorState.viewport,
+                        viewport: paintViewport,
                         layout: controller.layout,
                         previewElement: controller.buildPreviewElement(
                           toolOverlay,
@@ -364,9 +369,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                           controller.canvasBackgroundColor,
                         ),
                         contentBounds: controller.contentBounds,
+                        appendPageHint: appendPageHint,
                       ),
                       foregroundPainter: InteractiveCanvasPainter(
-                        viewport: controller.editorState.viewport,
+                        viewport: paintViewport,
                         interactionMode: controller.interactionMode,
                         selection: controller.isDraggingPointHandle()
                             ? null
@@ -418,10 +424,6 @@ class _EditorCanvasState extends State<EditorCanvas>
                     child: _CompactPropertyButton(controller: controller),
                   ),
                 _PagedProgressIndicator(controller: controller),
-                _LastPagePullPrompt(
-                  controller: _lastPagePromptController,
-                  armed: _lastPagePromptArmed,
-                ),
               ],
             ),
           );
@@ -450,9 +452,6 @@ class _PagedProgressIndicator extends StatelessWidget {
 
     final cs = Theme.of(context).colorScheme;
     const trackHeight = 168.0;
-    const trackWidth = 4.0;
-    const thumbHeight = 34.0;
-    final thumbTop = (trackHeight - thumbHeight) * metrics.progress;
 
     return Positioned(
       right: 10,
@@ -463,114 +462,16 @@ class _PagedProgressIndicator extends StatelessWidget {
           child: SizedBox(
             width: 18,
             height: trackHeight,
-            child: Stack(
-              alignment: Alignment.topCenter,
-              children: [
-                Positioned.fill(
-                  left: 7,
-                  right: 7,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: cs.outlineVariant.withValues(alpha: 0.42),
-                      borderRadius: BorderRadius.circular(trackWidth / 2),
-                    ),
-                  ),
+            child: RotatedBox(
+              quarterTurns: 1,
+              child: LinearProgressIndicator(
+                value: metrics.progress,
+                minHeight: 4,
+                borderRadius: BorderRadius.circular(999),
+                backgroundColor: cs.outlineVariant.withValues(alpha: 0.42),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  cs.primary.withValues(alpha: 0.86),
                 ),
-                Positioned(
-                  top: thumbTop,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.86),
-                      borderRadius: BorderRadius.circular(trackWidth / 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: cs.primary.withValues(alpha: 0.24),
-                          blurRadius: 8,
-                        ),
-                      ],
-                    ),
-                    child: const SizedBox(
-                      width: trackWidth,
-                      height: thumbHeight,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LastPagePullPrompt extends StatelessWidget {
-  final Animation<double> controller;
-  final bool armed;
-
-  const _LastPagePullPrompt({required this.controller, required this.armed});
-
-  @override
-  Widget build(BuildContext context) {
-    final reduceMotion =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    final cs = Theme.of(context).colorScheme;
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 28,
-      child: IgnorePointer(
-        child: AnimatedBuilder(
-          animation: controller,
-          builder: (context, child) {
-            final value = controller.value;
-            if (value <= 0) {
-              return const SizedBox.shrink();
-            }
-            final content = Opacity(
-              opacity: value,
-              child: Transform.translate(
-                offset: reduceMotion
-                    ? Offset.zero
-                    : Offset(0, 18 * (1 - value)),
-                child: child,
-              ),
-            );
-            return Center(child: content);
-          },
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: cs.surface.withValues(alpha: 0.94),
-              border: Border.all(color: cs.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.10),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    armed ? Icons.add_box_outlined : Icons.post_add_outlined,
-                    size: 20,
-                    color: cs.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    armed ? '再次下拉，新建一页' : '继续下拉，准备新建页面',
-                    style: TextStyle(
-                      color: cs.onSurface,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
               ),
             ),
           ),

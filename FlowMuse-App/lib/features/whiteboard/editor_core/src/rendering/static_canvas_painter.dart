@@ -14,6 +14,16 @@ import 'text_renderer.dart';
 import 'viewport_culling.dart';
 import 'viewport_state.dart';
 
+class PagedAppendPageHint {
+  const PagedAppendPageHint({
+    required this.overscrollPx,
+    required this.readyToRelease,
+  });
+
+  final double overscrollPx;
+  final bool readyToRelease;
+}
+
 /// A [CustomPainter] that renders all active scene elements with a
 /// hand-drawn aesthetic via [RoughAdapter].
 ///
@@ -51,6 +61,7 @@ class StaticCanvasPainter extends CustomPainter {
   final Bounds? contentBounds;
 
   final bool renderPageShadows;
+  final PagedAppendPageHint? appendPageHint;
 
   const StaticCanvasPainter({
     required this.scene,
@@ -65,6 +76,7 @@ class StaticCanvasPainter extends CustomPainter {
     this.isDarkBackground = false,
     this.contentBounds,
     this.renderPageShadows = true,
+    this.appendPageHint,
   });
 
   @override
@@ -78,6 +90,9 @@ class StaticCanvasPainter extends CustomPainter {
     // Render pages BEFORE clip — so page shadows extend freely on all sides.
     if (layout?.isPaged ?? false) {
       _renderPages(canvas);
+      if (appendPageHint != null) {
+        _renderAppendPageHint(canvas, appendPageHint!);
+      }
     }
 
     // Clip rendering to PDF content bounds — elements cannot draw outside.
@@ -358,6 +373,74 @@ class StaticCanvasPainter extends CustomPainter {
     }
   }
 
+  void _renderAppendPageHint(Canvas canvas, PagedAppendPageHint hint) {
+    final pages = layout?.pages ?? const <CanvasPage>[];
+    if (pages.isEmpty || hint.overscrollPx <= 0) {
+      return;
+    }
+
+    final lastPage = pages.last;
+    final progress = (hint.overscrollPx / 96).clamp(0.0, 1.0).toDouble();
+    final label = hint.readyToRelease ? '松开添加新页面' : '拉动添加新页面';
+    final center = Offset(
+      lastPage.bounds.center.dx,
+      lastPage.bounds.bottom + 48 / viewport.zoom,
+    );
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: TextStyle(
+          color: Color.lerp(
+            const Color(0xFF6F786F),
+            const Color(0xFF2F6F61),
+            progress,
+          ),
+          fontSize: 14 / viewport.zoom,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final horizontalPadding = 18 / viewport.zoom;
+    final verticalPadding = 9 / viewport.zoom;
+    final rect = Rect.fromCenter(
+      center: center,
+      width: textPainter.width + horizontalPadding * 2,
+      height: textPainter.height + verticalPadding * 2,
+    );
+    final radius = Radius.circular(8 / viewport.zoom);
+    final roundedRect = RRect.fromRectAndRadius(rect, radius);
+
+    canvas.drawRRect(
+      roundedRect,
+      Paint()
+        ..color = Color.lerp(
+          const Color(0x00FFFCF4),
+          const Color(0xF2FFFCF4),
+          progress,
+        )!,
+    );
+    canvas.drawRRect(
+      roundedRect,
+      Paint()
+        ..color = Color.lerp(
+          const Color(0x00DCD3C4),
+          const Color(0xFFDCD3C4),
+          progress,
+        )!
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1 / viewport.zoom,
+    );
+    textPainter.paint(
+      canvas,
+      Offset(
+        rect.left + horizontalPadding,
+        rect.top + (rect.height - textPainter.height) / 2,
+      ),
+    );
+    textPainter.dispose();
+  }
+
   void _renderPageTemplate(Canvas canvas, CanvasPage page) {
     final rect = page.bounds.deflate(32);
     final paint = Paint()
@@ -410,6 +493,7 @@ class StaticCanvasPainter extends CustomPainter {
         editingElementId != oldDelegate.editingElementId ||
         gridSize != oldDelegate.gridSize ||
         isDarkBackground != oldDelegate.isDarkBackground ||
-        renderPageShadows != oldDelegate.renderPageShadows;
+        renderPageShadows != oldDelegate.renderPageShadows ||
+        appendPageHint != oldDelegate.appendPageHint;
   }
 }
