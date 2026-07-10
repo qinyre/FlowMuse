@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/storage/recent_covers_repository.dart';
 import '../../../shared/widgets/app_spacing.dart';
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,10 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
   bool _loading = true;
   late List<String> _themes;
 
+  // 最近使用的封面
+  List<RecentCoverItem> _recentCovers = [];
+  bool _loadingRecent = true;
+
   String get _name => _controller.text.trim();
 
   @override
@@ -107,6 +112,7 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
     _focusNode = FocusNode();
     _selectedColor = widget.params.coverColors.first;
     _loadCovers();
+    _loadRecentCovers();
   }
 
   @override
@@ -132,6 +138,14 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
       });
       return;
     }
+
+    // 保存最近使用的封面
+    if (_selectedCoverImage != null) {
+      defaultRecentCoversRepository.addRecentCover(widget.params.coverCategory, 'image', _selectedCoverImage!);
+    } else {
+      defaultRecentCoversRepository.addRecentCover(widget.params.coverCategory, 'color', _selectedColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2));
+    }
+
     context.pop(
       CreateCollectionResult(
         name: _name,
@@ -153,6 +167,25 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
         _covers = covers;
         _themes = themes;
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadRecentCovers() async {
+    final recent = await defaultRecentCoversRepository.getRecentCovers(widget.params.coverCategory);
+    if (mounted) {
+      setState(() {
+        _recentCovers = recent;
+        _loadingRecent = false;
+      });
+    }
+  }
+
+  Future<void> _clearRecentCovers() async {
+    await defaultRecentCoversRepository.clearRecentCovers(widget.params.coverCategory);
+    if (mounted) {
+      setState(() {
+        _recentCovers = [];
       });
     }
   }
@@ -242,6 +275,79 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                                 ],
                               ),
                             ),
+                            const SizedBox(height: 20),
+                            // 最近使用
+                            if (!_loadingRecent) ...[
+                              Row(
+                                children: [
+                                  const Text(
+                                    '最近使用',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF8A908D),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  if (_recentCovers.isNotEmpty)
+                                    GestureDetector(
+                                      onTap: _clearRecentCovers,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF5F7F6),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          '清除',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: Color(0xFF6B736D),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              if (_recentCovers.isEmpty)
+                                const Text(
+                                  '新建成功后，此处会显示最近使用过的封面',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFFB0B5B2),
+                                  ),
+                                )
+                              else
+                                SizedBox(
+                                  height: 64,
+                                  child: ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _recentCovers.length,
+                                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                                    itemBuilder: (context, index) {
+                                      final item = _recentCovers[index];
+                                      return _RecentCoverChip(
+                                        item: item,
+                                        onTap: () {
+                                          setState(() {
+                                            if (item.type == 'color') {
+                                              _selectedColor = Color(int.parse('0xFF${item.value}', radix: 16));
+                                              _selectedCoverImage = null;
+                                            } else {
+                                              _selectedCoverImage = item.value;
+                                            }
+                                          });
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                            ],
                           ],
                         ),
                       ),
@@ -308,6 +414,22 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                               ),
                             ),
                           ),
+                          // 更多封面提示
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '更多封面',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF8A908D),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                           // 封面选择列表
                           Expanded(
                             child: _loading
@@ -353,58 +475,48 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                                                   ),
                                                 ),
                                                 const SizedBox(height: 8),
-                                                SizedBox(
-                                                  height: 120,
-                                                  child: ListView.separated(
-                                                    scrollDirection:
-                                                        Axis.horizontal,
-                                                    itemCount:
-                                                        themeCovers.length,
-                                                    separatorBuilder: (_, _) =>
-                                                        const SizedBox(
-                                                      width: 12,
-                                                    ),
-                                                    itemBuilder:
-                                                        (context, index) {
-                                                      final item =
-                                                          themeCovers[index];
-                                                      final isSelected =
-                                                          _selectedCoverImage ==
+                                                Wrap(
+                                                  spacing: 12,
+                                                  runSpacing: 12,
+                                                  children: themeCovers.map((item) {
+                                                    final isSelected =
+                                                        _selectedCoverImage ==
+                                                            item.assetPath;
+                                                    return GestureDetector(
+                                                      onTap: () {
+                                                        setState(() {
+                                                          _selectedCoverImage =
                                                               item.assetPath;
-                                                      return GestureDetector(
-                                                        onTap: () {
-                                                          setState(() {
-                                                            _selectedCoverImage =
-                                                                item.assetPath;
-                                                          });
-                                                        },
-                                                        child: Container(
-                                                          width: 80,
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                              AppSpacing.radius,
-                                                            ),
-                                                            border: Border.all(
-                                                              color: isSelected
-                                                                  ? colorScheme
-                                                                      .primary
-                                                                  : const Color(
-                                                                      0xFFE3E8E5,
-                                                                    ),
-                                                              width: isSelected
-                                                                  ? 2
-                                                                  : 1,
-                                                            ),
+                                                        });
+                                                      },
+                                                      child: Container(
+                                                        width: 100,
+                                                        height: 130,
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                            AppSpacing.radius,
                                                           ),
-                                                          child: ClipRRect(
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                              AppSpacing.radius,
-                                                            ),
+                                                          border: Border.all(
+                                                            color: isSelected
+                                                                ? colorScheme
+                                                                    .primary
+                                                                : const Color(
+                                                                    0xFFE3E8E5,
+                                                                  ),
+                                                            width: isSelected
+                                                                ? 2
+                                                                : 1,
+                                                          ),
+                                                        ),
+                                                        child: ClipRRect(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                            AppSpacing.radius,
+                                                          ),
                                                             child:
                                                                 Image.asset(
                                                               item.assetPath,
@@ -424,9 +536,8 @@ class _CreateCollectionPageState extends State<CreateCollectionPage> {
                                                           ),
                                                         ),
                                                       );
-                                                    },
+                                                    }).toList(),
                                                   ),
-                                                ),
                                               ],
                                             ),
                                           );
@@ -543,8 +654,8 @@ class _CoverPreview extends StatelessWidget {
             : const Color(0xFF202523);
 
     return SizedBox(
-      width: 140,
-      height: 180,
+      width: 180,
+      height: 240,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppSpacing.radius),
         child: coverImage != null
@@ -660,6 +771,59 @@ class _ColorChoice extends StatelessWidget {
         ),
         child: DecoratedBox(
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 最近使用封面组件
+// ---------------------------------------------------------------------------
+
+class _RecentCoverChip extends StatelessWidget {
+  const _RecentCoverChip({
+    required this.item,
+    required this.onTap,
+  });
+
+  final RecentCoverItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isColor = item.type == 'color';
+    final color = isColor ? Color(int.parse('0xFF${item.value}', radix: 16)) : null;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 58,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: const Color(0xFFE3E8E5),
+            width: 1,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: isColor
+              ? DecoratedBox(
+                  decoration: BoxDecoration(color: color),
+                )
+              : Image.asset(
+                  item.value,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const Center(
+                    child: Icon(
+                      Icons.image_outlined,
+                      color: Color(0xFF8A908D),
+                      size: 20,
+                    ),
+                  ),
+                ),
         ),
       ),
     );
