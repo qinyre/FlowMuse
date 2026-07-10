@@ -306,8 +306,9 @@ class MarkdrawController extends ChangeNotifier {
     _pressureSensitivity = value.clamp(0.0, 1.0);
     _adapter.pressureSensitivity = _pressureSensitivity;
     // 保存到当前笔形状态（参考 Saber 独立笔状态）
-    _brushStates[_activeBrushType] = _brushStates[_activeBrushType]!
-        .copyWith(pressureSensitivity: _pressureSensitivity);
+    _brushStates[_activeBrushType] = _brushStates[_activeBrushType]!.copyWith(
+      pressureSensitivity: _pressureSensitivity,
+    );
     notifyListeners();
   }
 
@@ -337,9 +338,7 @@ class MarkdrawController extends ChangeNotifier {
     // 恢复新笔形的上次状态
     final saved = _brushStates[value]!;
     if (saved.strokeColor != null || saved.strokeWidth != null) {
-      _defaultStyle = _defaultStyle.copyWith(
-        strokeColor: saved.strokeColor,
-      );
+      _defaultStyle = _defaultStyle.copyWith(strokeColor: saved.strokeColor);
       if (saved.strokeWidth != null) {
         _defaultStyle = ElementStyle(
           strokeColor: _defaultStyle.strokeColor,
@@ -2289,11 +2288,26 @@ class MarkdrawController extends ChangeNotifier {
         overlay.creationPoints != null &&
         overlay.creationPoints!.length >= 2) {
       final pts = overlay.creationPoints!;
-      final minX = pts.map((p) => p.x).reduce(math.min);
-      final minY = pts.map((p) => p.y).reduce(math.min);
-      final maxX = pts.map((p) => p.x).reduce(math.max);
-      final maxY = pts.map((p) => p.y).reduce(math.max);
-      final relPts = pts.map((p) => Point(p.x - minX, p.y - minY)).toList();
+      final isFreedrawPreview = toolType == ToolType.freedraw;
+      // A live freedraw preview is rendered unconditionally, so it does not
+      // need culling bounds or a per-frame conversion to relative points.
+      // Keep the input list in scene coordinates until pointer-up creates the
+      // final persisted element.
+      final minX = isFreedrawPreview
+          ? 0.0
+          : pts.map((p) => p.x).reduce(math.min);
+      final minY = isFreedrawPreview
+          ? 0.0
+          : pts.map((p) => p.y).reduce(math.min);
+      final maxX = isFreedrawPreview
+          ? 0.0
+          : pts.map((p) => p.x).reduce(math.max);
+      final maxY = isFreedrawPreview
+          ? 0.0
+          : pts.map((p) => p.y).reduce(math.max);
+      final relPts = isFreedrawPreview
+          ? pts
+          : pts.map((p) => Point(p.x - minX, p.y - minY)).toList();
 
       element = switch (toolType) {
         ToolType.line => LineElement(

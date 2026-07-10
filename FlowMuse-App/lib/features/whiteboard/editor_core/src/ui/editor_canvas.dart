@@ -180,7 +180,12 @@ class _EditorCanvasState extends State<EditorCanvas> {
                         segmentMidpoints: controller.isDraggingPointHandle()
                             ? null
                             : controller.buildSegmentMidpoints(),
-                        creationPoints: toolOverlay?.creationPoints,
+                        creationPoints:
+                            toolOverlay?.showCreationPreviewLine ?? false
+                            ? toolOverlay?.creationPoints
+                            : null,
+                        showCreationPreviewLine:
+                            toolOverlay?.showCreationPreviewLine ?? false,
                         creationBounds: toolOverlay?.creationBounds,
                         laserTrail: controller.activeTool is LaserTool
                             ? (controller.activeTool as LaserTool).activeTrail

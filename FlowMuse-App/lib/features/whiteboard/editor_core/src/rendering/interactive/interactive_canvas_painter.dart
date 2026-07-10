@@ -60,6 +60,7 @@ class InteractiveCanvasPainter extends CustomPainter {
   final List<SnapLine> snapLines;
   final Rect? marqueeRect;
   final List<Point>? creationPoints;
+  final bool showCreationPreviewLine;
   final Bounds? creationBounds;
   final List<Point>? pointHandles;
   final List<Point>? midpointHandles;
@@ -79,6 +80,7 @@ class InteractiveCanvasPainter extends CustomPainter {
     this.snapLines = const [],
     this.marqueeRect,
     this.creationPoints,
+    this.showCreationPreviewLine = true,
     this.creationBounds,
     this.pointHandles,
     this.midpointHandles,
@@ -212,7 +214,9 @@ class InteractiveCanvasPainter extends CustomPainter {
     }
 
     // Creation preview line
-    if (creationPoints != null && creationPoints!.length >= 2) {
+    if (showCreationPreviewLine &&
+        creationPoints != null &&
+        creationPoints!.length >= 2) {
       SelectionRenderer.drawCreationPreviewLine(canvas, creationPoints!);
     }
 
@@ -407,6 +411,7 @@ class InteractiveCanvasPainter extends CustomPainter {
         bindTargetAngle != oldDelegate.bindTargetAngle ||
         closeIndicatorCenter != oldDelegate.closeIndicatorCenter ||
         !listEquals(snapLines, oldDelegate.snapLines) ||
+        showCreationPreviewLine != oldDelegate.showCreationPreviewLine ||
         !listEquals(creationPoints, oldDelegate.creationPoints) ||
         !listEquals(pointHandles, oldDelegate.pointHandles) ||
         !listEquals(midpointHandles, oldDelegate.midpointHandles) ||

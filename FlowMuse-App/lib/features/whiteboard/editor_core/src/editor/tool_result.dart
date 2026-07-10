@@ -137,6 +137,10 @@ class ToolOverlay {
   /// Default false — preview overlays represent in-progress "wet ink".
   final bool creationIsComplete;
 
+  /// Whether the interaction layer should add its thin raw polyline preview.
+  /// Freehand ink renders its own filled outline and must opt out.
+  final bool showCreationPreviewLine;
+
   /// Element IDs that the eraser tool will delete on pointer-up.
   /// Non-null during an eraser drag to allow the UI to dim these elements.
   final Set<ElementId>? eraserElementIds;
@@ -157,6 +161,7 @@ class ToolOverlay {
     this.bindTargetAngle = 0.0,
     this.creationClosed = false,
     this.creationIsComplete = false,
+    this.showCreationPreviewLine = true,
     this.eraserElementIds,
     this.closeIndicatorCenter,
     this.snapLines = const [],

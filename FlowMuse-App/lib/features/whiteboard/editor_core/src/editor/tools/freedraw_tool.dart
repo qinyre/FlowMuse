@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -20,6 +21,8 @@ const String recognitionStrokePointTimesKey = 'flowmuse.recognition.pointTimes';
 class FreedrawTool implements Tool {
   final List<Point> _points = [];
   final List<double> _pressures = [];
+  late final List<Point> _previewPoints = UnmodifiableListView(_points);
+  late final List<double> _previewPressures = UnmodifiableListView(_pressures);
   final List<int> _pointTimes = [];
   bool _hasRealPressure = false;
   bool _isDrawing = false;
@@ -160,9 +163,10 @@ class FreedrawTool implements Tool {
   ToolOverlay? get overlay {
     if (_points.isEmpty) return null;
     return ToolOverlay(
-      creationPoints: List.unmodifiable(_points),
-      creationPressures: _hasRealPressure ? List.unmodifiable(_pressures) : const [],
+      creationPoints: _previewPoints,
+      creationPressures: _hasRealPressure ? _previewPressures : const [],
       creationIsComplete: false,
+      showCreationPreviewLine: false,
     );
   }
 

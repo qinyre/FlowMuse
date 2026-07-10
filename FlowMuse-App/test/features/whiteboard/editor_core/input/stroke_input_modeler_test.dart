@@ -68,6 +68,19 @@ void main() {
       expect(maxSwing, lessThan(2.0)); // 输出抖动 < 输入抖动峰值
     });
 
+    test('stylus keeps in-progress lag below four logical pixels', () {
+      final m = StrokeInputModeler(InputPolicy.stylus);
+      m.process(s(0, 0, 0, phase: StrokePhase.down));
+
+      StrokeModelResult? latest;
+      for (var i = 1; i <= 20; i++) {
+        latest = m.process(s(i * 2.0, 0, i * 16));
+      }
+
+      expect(latest!.point, isNotNull);
+      expect(40 - latest.point!.x, lessThanOrEqualTo(4.0));
+    });
+
     test('cancel resets and drops the stroke', () {
       final m = StrokeInputModeler(InputPolicy.stylus);
       m.process(s(0, 0, 0, phase: StrokePhase.down));
@@ -142,6 +155,15 @@ void main() {
       m.process(s(0, 0, 0, p: 0.5, phase: StrokePhase.down));
       final r = m.process(s(1, 0, 16, p: null)); // 偶发缺失：沿用最后有效值
       expect(r.pressure, isNotNull); // 不切到模拟
+    });
+
+    test('stylus suppresses a single-sample pressure spike', () {
+      final m = StrokeInputModeler(InputPolicy.stylus);
+      m.process(s(0, 0, 0, p: 0.5, phase: StrokePhase.down));
+      final spike = m.process(s(1, 0, 16, p: 1.0));
+
+      expect(spike.pressure, isNotNull);
+      expect(spike.pressure!, lessThanOrEqualTo(0.85));
     });
 
     test(
