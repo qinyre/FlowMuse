@@ -8,6 +8,7 @@ import '../../core/elements/brush_type.dart';
 import '../../input/outline_render_mode.dart';
 import '../../input/stroke_render_metrics.dart';
 import 'draw_style.dart';
+import 'pencil_shader.dart';
 
 /// Renders freehand drawing paths.
 ///
@@ -231,6 +232,19 @@ class FreedrawRenderer {
       ..color = basePaint.color.withValues(
         alpha: basePaint.color.a * brush.opacityScale,
       );
+
+    // 铅笔纹理：如果平台支持 shader，用 FragmentShader 叠加纸张纹理（参考 Saber）
+    if (brushType == BrushType.pencil && PencilShader.isAvailable) {
+      final shader = PencilShader.create()!;
+      final c = paint.color;
+      shader
+        ..setFloat(0, c.r)
+        ..setFloat(1, c.g)
+        ..setFloat(2, c.b);
+      paint.shader = shader;
+      paint.color = const Color(0xFFFFFFFF); // shader 负责着色
+    }
+
     canvas.drawPath(path, paint);
     metricsSink?.onMetrics(
       StrokeRenderMetrics(
