@@ -296,7 +296,7 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 13),
         _CoverTitle(
           title: notebook.name,
           onRename: onRename,
@@ -454,7 +454,7 @@ class _CreateCollectionCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 13),
         _CoverTitle(title: label),
       ],
     );

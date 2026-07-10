@@ -273,7 +273,7 @@ class _TagCoverCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 13),
         _CoverTitle(title: tag.name, onRename: onRename, onDelete: onDelete),
         const SizedBox(height: 6),
         _CoverSubtitle(text: '${tag.count} 个笔记'),
@@ -420,7 +420,7 @@ class _CreateTagCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 13),
         _CoverTitle(title: '新建标签'),
       ],
     );

@@ -8,12 +8,12 @@ class NoteCard extends StatelessWidget {
 
   static const coverWidth = 132.0;
   static const coverHeight = 176.0;
-  static const gridMaxCrossAxisExtent = 166.0;
-  static const gridMainAxisExtent = 226.0;
-  static const compactGridCrossGap = 12.0;
-  static const gridCrossGap = 16.0;
-  static const compactGridMainGap = 16.0;
-  static const gridMainGap = 20.0;
+  static const gridMaxCrossAxisExtent = 192.0;
+  static const gridMainAxisExtent = 251.0;
+  static const compactGridCrossGap = 16.0;
+  static const gridCrossGap = 22.0;
+  static const compactGridMainGap = 20.0;
+  static const gridMainGap = 26.0;
 
   final NoteItem item;
   final VoidCallback onTap;
@@ -34,17 +34,11 @@ class NoteCard extends StatelessWidget {
             child: InkWell(
               key: ValueKey('note-card-${item.id}'),
               onTap: onTap,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  NoteCover(item: item),
-                  const PageFoldIndicator(),
-                ],
-              ),
+              child: NoteCover(item: item),
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 13),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -67,7 +61,7 @@ class NoteCard extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 3),
+        const SizedBox(height: 5),
         Text(
           item.date,
           style: Theme.of(
@@ -101,57 +95,5 @@ class NoteCover extends StatelessWidget {
       );
     }
     return const SizedBox.expand();
-  }
-}
-
-class PageFoldIndicator extends StatelessWidget {
-  const PageFoldIndicator({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.topRight,
-      child: CustomPaint(
-        size: const Size(22, 22),
-        painter: _PageFoldIndicatorPainter(
-          borderColor: Theme.of(context).colorScheme.outlineVariant,
-          fillColor: Theme.of(context).colorScheme.surface,
-        ),
-      ),
-    );
-  }
-}
-
-class _PageFoldIndicatorPainter extends CustomPainter {
-  const _PageFoldIndicatorPainter({
-    required this.borderColor,
-    required this.fillColor,
-  });
-
-  final Color borderColor;
-  final Color fillColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final fold = Path()
-      ..moveTo(size.width, 0)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, 0)
-      ..close();
-
-    canvas.drawPath(fold, Paint()..color = fillColor.withValues(alpha: 0.84));
-    canvas.drawLine(
-      Offset(0, 0),
-      Offset(size.width, size.height),
-      Paint()
-        ..color = borderColor.withValues(alpha: 0.70)
-        ..strokeWidth = 1,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _PageFoldIndicatorPainter oldDelegate) {
-    return borderColor != oldDelegate.borderColor ||
-        fillColor != oldDelegate.fillColor;
   }
 }

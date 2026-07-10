@@ -40,28 +40,22 @@ class CreateNoteCard extends StatelessWidget {
             child: InkWell(
               key: _tapKey,
               onTap: onTap,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Center(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary.withValues(alpha: 0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(13),
-                        child: Icon(icon, size: 28, color: colorScheme.primary),
-                      ),
-                    ),
+              child: Center(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withValues(alpha: 0.08),
+                    shape: BoxShape.circle,
                   ),
-                  const PageFoldIndicator(),
-                ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(13),
+                    child: Icon(icon, size: 28, color: colorScheme.primary),
+                  ),
+                ),
               ),
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 13),
         Text(
           title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -70,7 +64,7 @@ class CreateNoteCard extends StatelessWidget {
             fontSize: 14,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           subtitle,
           textAlign: TextAlign.center,
