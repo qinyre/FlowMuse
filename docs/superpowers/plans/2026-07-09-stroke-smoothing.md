@@ -35,9 +35,9 @@
 | `Point` 类：immutable，含 `+ - * distanceTo`，`const Point(x,y)` | `lib/features/whiteboard/editor_core/src/core/math/point.dart` |
 | `EditorCanvas` 的 `Listener` 是原始 PointerEvent 入口，回调在 `:114-170`（含 hover/down/move/up/signal，无 cancel） | `lib/features/whiteboard/editor_core/src/ui/editor_canvas.dart:114` |
 | `screenToScene` 会 `roundToDouble()` 两轴（亚像素量化天花板） | `lib/features/whiteboard/editor_core/src/rendering/viewport_state.dart:33-36` |
-| `MarkdrawController` pointer 路由 `onPointerDown/Move/Up` 在 `:1177/1263/1296` | `lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart` |
-| smoother 单实例 `:97`，调用点 down`:1190` move`:1270` up`:1302` | 同上 |
-| `_pressureSensitivity` 字段 + setter 同步到 adapter：`:116,245-249` | 同上（`outlineRenderMode` 照此模式新增） |
+| `MarkdrawController` pointer 路由 `onPointerDown/Move/Up` 在 `:1491/1577/1610` | `lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart` |
+| smoother 单实例 `:98`，调用点 down`:1504` move`:1584` up`:1616` | 同上 |
+| `_pressureSensitivity` 字段 + setter 同步到 adapter：`:117,253-256` | 同上（`outlineRenderMode` 照此模式新增） |
 | `FreedrawTool`：`_points/_pressures/_hasRealPressure/_isDrawing`，commit 在 `onPointerUp` | `lib/features/whiteboard/editor_core/src/editor/tools/freedraw_tool.dart` |
 | `FreedrawTool.overlay` **不带 pressures**（实时预览无压感）`:117` | 同上 |
 | `Tool` 抽象接口 `onPointerDown/Move/Up + overlay + reset` | `lib/features/whiteboard/editor_core/src/editor/tools/tool.dart` |
@@ -1645,7 +1645,7 @@ git commit -m "feat(stroke): add runtime isComplete to FreedrawElement and rende
 **Files:**
 - Modify: `lib/features/whiteboard/editor_core/src/editor/tool_result.dart`（`ToolOverlay` `:101-137` 增加 `List<double>? creationPressures` 与 `bool creationIsComplete`）
 - Modify: `lib/features/whiteboard/editor_core/src/editor/tools/freedraw_tool.dart`（`overlay` getter `:102` 带 pressures + isComplete=false）
-- Modify: `lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart`（`buildPreviewElement` `:1674-1760` 用 overlay 的 pressures 与 isComplete=false）
+- Modify: `lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart`（`buildPreviewElement` `:1988-2070` 用 overlay 的 pressures 与 isComplete=false）
 - Test: `test/features/whiteboard/editor_core/editor/freedraw_overlay_pressure_test.dart`
 
 - [ ] **Step 1: Write the failing test**
@@ -1944,7 +1944,7 @@ git commit -m "feat(stroke): add StrokeInputNormalizer (PointerEvent -> sample)"
 ### Task 3.2: 接入 modeler 到 controller + 移除旧 smoother 路由
 
 **Files:**
-- Modify: `lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart`（`onPointerDown/Move/Up` `:1177/1263/1296`：freedraw 经 modeler；移除 `_harmonyStylusStrokeSmoother` 调用 `:1190/1270/1302`；处理 up 终点 flush；feature flag 回退）
+- Modify: `lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart`（`onPointerDown/Move/Up` `:1491/1577/1610`：freedraw 经 modeler；移除 `_harmonyStylusStrokeSmoother` 调用 `:1504/1584/1616`；处理 up 终点 flush；feature flag 回退）
 - Modify: `lib/features/whiteboard/editor_core/src/ui/editor_canvas.dart`（`:123` Listener：插入 normalizer + cancel + pointer 所有权）
 - Test: `test/features/whiteboard/editor_core/editor/stroke_modeler_integration_test.dart`
 
@@ -2053,7 +2053,7 @@ void main() {
 在 `markdraw_controller.dart`：
 1. **改签名**：`onPointerDown/Move/Up` 从 `(Offset localPosition, {pressure, kind})` 改为 `(PointerEvent event)`。新增 `onPointerCancel(PointerEvent event)`。
 2. 新增字段：`final _normalizer = StrokeInputNormalizer();`、`StrokeInputModeler? _modeler;`、`final _policySelector = const InputPolicySelector();`、`int? _activeDrawPointerId;`、`bool _useUnifiedModeler = true;`（feature flag）。
-3. 改 `onPointerDown`（`:1177`）：
+3. 改 `onPointerDown`（`:1491`）：
    - 从 `event.localPosition`/`event.kind` 提取；touch+创作工具的旧抑制逻辑（`:1132`）保留，用 `event.kind`。
    - 若 `_useUnifiedModeler && _activeTool is FreedrawTool`：
      - `final sample = _normalizer.normalize(event, phase: StrokePhase.down)`；
@@ -2061,14 +2061,14 @@ void main() {
      - `_modeler = StrokeInputModeler(_policySelector.select(sample.kind))`；
      - `final r = _modeler!.process(sample)`；若 `r.point != null`，`toScene(localPosition)` 转 scene 坐标后调 `_activeTool.onPointerDown(scenePoint, ctx, pressure: r.pressure)`。
    - 否则（非 freedraw 或 feature flag 关）：走旧路径，用 `event.localPosition` 经 `toScene` 后直接派发，不经 modeler。
-4. 同理改 `onPointerMove`（`:1263`）：仅当 `event.pointer == _activeDrawPointerId` 才经 modeler；否则（非活动 pointer）忽略，防多指污染。
-5. 改 `onPointerUp`（`:1296`）：
+4. 同理改 `onPointerMove`（`:1577`）：仅当 `event.pointer == _activeDrawPointerId` 才经 modeler；否则（非活动 pointer）忽略，防多指污染。
+5. 改 `onPointerUp`（`:1610`）：
    - 经 modeler，`up()` 返回真实终点（flush）。
    - **仅当终点尚未进入 tool 点列**（距离判断）才补发一次 `onPointerMove` 给 tool，再调 `onPointerUp` 提交。
    - **旧"up 补发 move"quirk 已在新代码中移除**（原 `:1271-1281` 不存在），无需额外删除。
    - 清除 `_activeDrawPointerId`、`_modeler.reset()`。
 6. `onPointerCancel`：调 `_modeler?.reset(reason:'cancel')` 与 `_activeTool.reset()`，丢弃未提交笔画，清除 `_activeDrawPointerId`。
-7. **移除** `_harmonyStylusStrokeSmoother.down/move/up` 调用（`:1190/1270/1302`）。保留 `_harmonyStylusStrokeSmoother` 字段以备 debug 对照，但不再路由。
+7. **移除** `_harmonyStylusStrokeSmoother.down/move/up` 调用（`:1504/1584/1616`）。保留 `_harmonyStylusStrokeSmoother` 字段以备 debug 对照，但不再路由。
 8. 更新所有 controller 内部读取 pressure 的地方：从 `event.pressure` 取（但 normalizer 已负责把 mouse/不可靠 touch pressure 归 null，modeler 内部 InputPolicy 决定是否用真实压感）。
 
 > **注意既有调用点**：controller 的 `onPointer*` 由 `EditorCanvas`（`editor_canvas.dart:122-165`）和测试调用。本步同步更新 EditorCanvas（见 Step 4）。其他既有测试（如 `element_creation_bounds_test.dart:56-66` 用旧 `Offset+kind` 形式）需同步改为构造 `PointerEvent`——在 Step 6 全量回归时一并修正。

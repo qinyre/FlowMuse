@@ -25,7 +25,7 @@
 - `FreedrawTool`（`freedraw_tool.dart`）只接收 `Point + pressure`，没有时间戳、没有设备类型——它已经是输入的下游，所以平滑只能加在它的上游（pointer 路由处）。
 - 新代码已将 `getStroke` 逻辑提取为独立纯函数 `FreedrawRenderer.buildOutline()`（`:43-72`），`draw()` 委托它获取 outline 后仍用 `addPolygon`（`:107`）渲染。这为阶段 1 的 `OutlinePathBuilder` 改造提供了更干净的基础。
 - 新代码新增 `pointer_pressure.dart`：`reliableStylusPressure()` 使用 `pressureMin/Max` 归一化压感，`shouldDispatchToCreationTool()` 替代旧 `_isStylusDown` 防误触。阶段 3 的 `StrokeInputNormalizer` 需吸收/替换这些逻辑以避免重复。
-- 旧 controller 中"up 后补发 move"的 quirk（原 `:1271-1281`）已在新代码中移除，阶段 3 无需额外处理。
+- 旧 controller 中"up 后补发 move"的 quirk 已在新代码中移除，阶段 3 无需额外处理。
 
 ### 1.2 目标
 
