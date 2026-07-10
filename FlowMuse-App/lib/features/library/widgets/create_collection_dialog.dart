@@ -11,11 +11,17 @@ import '../../../shared/widgets/app_spacing.dart';
 // ---------------------------------------------------------------------------
 
 class CoverItem {
-  const CoverItem({required this.id, required this.assetPath, this.name = ''});
+  const CoverItem({
+    required this.id,
+    required this.assetPath,
+    this.name = '',
+    this.theme = '',
+  });
 
   final String id;
   final String assetPath;
   final String name;
+  final String theme;
 }
 
 Future<List<CoverItem>> fetchCovers(String category) async {
@@ -28,6 +34,7 @@ Future<List<CoverItem>> fetchCovers(String category) async {
         id: item['id'] as String,
         assetPath: 'assets/covers/$category/${item['file']}',
         name: (item['name'] as String?) ?? '',
+        theme: (item['theme'] as String?) ?? '',
       ),
   ];
 }
@@ -336,15 +343,7 @@ class _CoverPreview extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppSpacing.radius),
         child: coverImage != null
-            ? Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.asset(coverImage!, fit: BoxFit.cover),
-                  Center(
-                    child: Icon(icon, size: 22, color: Colors.white.withValues(alpha: 0.7)),
-                  ),
-                ],
-              )
+            ? Image.asset(coverImage!, fit: BoxFit.cover)
             : DecoratedBox(
                 decoration: BoxDecoration(
                   color: color,
@@ -460,7 +459,10 @@ class _CoverPickerSheet extends StatefulWidget {
 class _CoverPickerSheetState extends State<_CoverPickerSheet> {
   List<CoverItem> _covers = const [];
   bool _loading = true;
-  CoverItem? _selected;
+  late List<String> _themes;
+  final ScrollController _scrollController = ScrollController();
+  final List<GlobalKey> _sectionKeys = [];
+  int _selectedTab = 0;
 
   @override
   void initState() {
@@ -468,22 +470,48 @@ class _CoverPickerSheetState extends State<_CoverPickerSheet> {
     _loadCovers();
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadCovers() async {
     final covers = await fetchCovers(widget.category);
     if (mounted) {
+      final themes = covers.map((c) => c.theme).where((t) => t.isNotEmpty).toSet().toList();
       setState(() {
         _covers = covers;
+        _themes = themes;
+        _sectionKeys.clear();
+        for (var i = 0; i < themes.length; i++) {
+          _sectionKeys.add(GlobalKey());
+        }
         _loading = false;
       });
+    }
+  }
+
+  void _scrollToSection(int index) {
+    setState(() => _selectedTab = index);
+    final key = _sectionKeys[index];
+    final context = key.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        alignment: 0.0,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.55,
-      minChildSize: 0.3,
-      maxChildSize: 0.85,
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.92,
       expand: false,
       builder: (context, scrollController) {
         return Column(
@@ -520,68 +548,141 @@ class _CoverPickerSheetState extends State<_CoverPickerSheet> {
                       ),
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(_selected),
-                    child: const Text('确定', style: TextStyle(color: Color(0xFF4F8F84))),
-                  ),
+                  const SizedBox(width: 48), // 平衡布局
                 ],
               ),
             ),
             const Divider(height: 1, color: Color(0xFFE9EEEB)),
-            // 内容区域
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF4F8F84)))
-                  : _covers.isEmpty
-                      ? const Center(
-                          child: Text(
-                            '暂无更多封面',
-                            style: TextStyle(color: Color(0xFF8A908D), fontSize: 15),
+            // Tab 栏
+            if (_loading)
+              const Expanded(
+                child: Center(child: CircularProgressIndicator(color: Color(0xFF4F8F84))),
+              )
+            else if (_themes.isEmpty)
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    '暂无更多封面',
+                    style: TextStyle(color: Color(0xFF8A908D), fontSize: 15),
+                  ),
+                ),
+              )
+            else ...[
+              // Tab 导航栏
+              Container(
+                height: 40,
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _themes.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 24),
+                  itemBuilder: (context, index) {
+                    final isSelected = _selectedTab == index;
+                    return GestureDetector(
+                      onTap: () => _scrollToSection(index),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _themes[index],
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                              color: isSelected
+                                  ? const Color(0xFF4F8F84)
+                                  : const Color(0xFF8A908D),
+                            ),
                           ),
-                        )
-                      : GridView.builder(
-                          controller: scrollController,
-                          padding: const EdgeInsets.all(20),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 14,
-                            childAspectRatio: 0.75,
+                          const SizedBox(height: 4),
+                          Container(
+                            height: 2,
+                            width: 20,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFF4F8F84)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(1),
+                            ),
                           ),
-                          itemCount: _covers.length,
-                          itemBuilder: (context, index) {
-                            final cover = _covers[index];
-                            final isSelected = _selected?.id == cover.id;
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() => _selected = cover);
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(AppSpacing.radius),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? const Color(0xFF4F8F84)
-                                        : const Color(0xFFE3E8E5),
-                                    width: isSelected ? 2 : 1,
-                                  ),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(AppSpacing.radius),
-                                  child: Image.asset(
-                                    cover.assetPath,
-                                    fit: BoxFit.cover,
-                                    // ignore: unnecessary_underscores
-                                    errorBuilder: (_, __, ___) => const Center(
-                                      child: Icon(LucideIcons.imageOff, color: Color(0xFF8A908D)),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              // 内容区域 - 单页滚动，每个主题一行
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.only(bottom: 20),
+                  itemCount: _themes.length,
+                  itemBuilder: (context, index) {
+                    final theme = _themes[index];
+                    final themeCovers = _covers.where((c) => c.theme == theme).toList();
+                    return Padding(
+                      key: _sectionKeys[index],
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Text(
+                              theme,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF202523),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 160,
+                            child: ListView.separated(
+                              padding: const EdgeInsets.symmetric(horizontal: 20),
+                              scrollDirection: Axis.horizontal,
+                              itemCount: themeCovers.length,
+                              separatorBuilder: (_, _) => const SizedBox(width: 12),
+                              itemBuilder: (context, index) {
+                                final item = themeCovers[index];
+                                return GestureDetector(
+                                  onTap: () => Navigator.of(context).pop(item),
+                                  child: Container(
+                                    width: 100,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(AppSpacing.radius),
+                                      border: Border.all(
+                                        color: const Color(0xFFE3E8E5),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(AppSpacing.radius),
+                                      child: Image.asset(
+                                        item.assetPath,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => const Center(
+                                          child: Icon(
+                                            LucideIcons.imageOff,
+                                            color: Color(0xFF8A908D),
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-            ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ],
         );
       },
