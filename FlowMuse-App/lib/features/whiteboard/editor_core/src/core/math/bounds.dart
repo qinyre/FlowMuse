@@ -48,6 +48,25 @@ class Bounds {
     return Bounds.fromLTWH(minX, minY, maxX - minX, maxY - minY);
   }
 
+  /// Clamp a point so it stays within these bounds.
+  Point clampPoint(Point point) {
+    return Point(
+      point.x.clamp(left, right),
+      point.y.clamp(top, bottom),
+    );
+  }
+
+  /// Returns the intersection of [inner] with these bounds.
+  /// Returns null if there is no overlap (inner is fully outside).
+  Bounds? clipInnerBounds(Bounds inner) {
+    final ix = math.max(inner.left, left);
+    final iy = math.max(inner.top, top);
+    final ir = math.min(inner.right, right);
+    final ib = math.min(inner.bottom, bottom);
+    if (ix >= ir || iy >= ib) return null;
+    return Bounds.fromLTWH(ix, iy, ir - ix, ib - iy);
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

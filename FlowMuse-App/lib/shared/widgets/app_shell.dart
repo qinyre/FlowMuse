@@ -106,11 +106,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     final sidebarCollapsed = ref.watch(shellLayoutViewModelProvider);
     final layoutViewModel = ref.read(shellLayoutViewModelProvider.notifier);
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
-    final effectivePreset =
-        themePreset.id == AppThemeId.system &&
-            platformBrightness == Brightness.dark
-        ? systemDarkThemePreset
-        : themePreset;
+    final effectivePreset = effectiveAppThemePreset(
+      themePreset,
+      platformBrightness,
+    );
 
     return Scaffold(
       key: _scaffoldKey,
@@ -152,11 +151,49 @@ class _AppShellState extends ConsumerState<AppShell> {
                 chrome: chrome,
                 child: Row(
                   children: [
-                    if (showDockedSidebar)
-                      LibrarySidebar(
-                        section: widget.section,
-                        onCollapse: layoutViewModel.collapseSidebar,
-                      ),
+                    AnimatedSwitcher(
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 340),
+                      reverseDuration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 280),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) {
+                        final curved = CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                          reverseCurve: Curves.easeInCubic,
+                        );
+                        return ClipRect(
+                          child: SizeTransition(
+                            axis: Axis.horizontal,
+                            axisAlignment: -1,
+                            sizeFactor: curved,
+                            child: FadeTransition(
+                              opacity: curved,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(-0.04, 0),
+                                  end: Offset.zero,
+                                ).animate(curved),
+                                child: child,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      child: showDockedSidebar
+                          ? LibrarySidebar(
+                              key: const ValueKey('docked-sidebar'),
+                              section: widget.section,
+                              onCollapse: layoutViewModel.collapseSidebar,
+                            )
+                          : const SizedBox.shrink(
+                              key: ValueKey('docked-sidebar-hidden'),
+                            ),
+                    ),
                     Expanded(child: widget.child),
                   ],
                 ),

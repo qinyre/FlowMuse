@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,7 +43,10 @@ class AccountState {
     if (currentUser != null && currentToken != null) {
       return CollaborationIdentity.fromUser(currentUser, currentToken);
     }
-    return CollaborationIdentity.guest(guestName);
+    return CollaborationIdentity.guest(
+      guestName,
+      avatarUrl: _guestNameGenerator.avatarUrlFor(guestName),
+    );
   }
 
   AccountState copyWith({
@@ -288,13 +292,12 @@ class AccountViewModel extends Notifier<AccountState> {
 
   Future<String> _loadGuestName() async {
     final settings = defaultLocalSettingsRepository;
-    final existing = await settings.readString('flowmuse.guest.name');
+    final existing = await settings.readString(_guestNameSettingsKey);
     if (existing != null && existing.isNotEmpty) {
       return existing;
     }
-    final suffix = DateTime.now().millisecondsSinceEpoch % 9000 + 1000;
-    final name = '匿名用户 $suffix';
-    await settings.writeString('flowmuse.guest.name', name);
+    final name = _guestNameGenerator.next();
+    await settings.writeString(_guestNameSettingsKey, name);
     return name;
   }
 
@@ -313,3 +316,100 @@ final accountRepositoryProvider = Provider<AccountRepository>((ref) {
 
 final accountViewModelProvider =
     NotifierProvider<AccountViewModel, AccountState>(AccountViewModel.new);
+
+const _guestNameSettingsKey = 'flowmuse.guest.username';
+
+final _guestNameGenerator = _ChineseGuestNameGenerator();
+
+class _ChineseGuestNameGenerator {
+  _ChineseGuestNameGenerator({Random? random}) : _random = random ?? Random();
+
+  final Random _random;
+
+  static const _openMojiCdn = 'https://openmoji.org/data/color/svg';
+
+  static const _adjectives = [
+    '活泼',
+    '敏捷',
+    '勇敢',
+    '聪慧',
+    '温柔',
+    '沉稳',
+    '灵巧',
+    '可靠',
+    '明亮',
+    '快乐',
+    '优雅',
+    '好奇',
+    '专注',
+    '自在',
+    '友善',
+    '坚定',
+    '从容',
+    '机敏',
+    '灿烂',
+    '安静',
+    '热忱',
+    '清醒',
+    '坦率',
+    '轻快',
+  ];
+
+  static const _animals = [
+    _GuestAnimal('猫', '1F408'),
+    _GuestAnimal('狗', '1F415'),
+    _GuestAnimal('狐狸', '1F98A'),
+    _GuestAnimal('熊猫', '1F43C'),
+    _GuestAnimal('狮子', '1F981'),
+    _GuestAnimal('老虎', '1F405'),
+    _GuestAnimal('狼', '1F43A'),
+    _GuestAnimal('小鹿', '1F98C'),
+    _GuestAnimal('骏马', '1F40E'),
+    _GuestAnimal('独角兽', '1F984'),
+    _GuestAnimal('斑马', '1F993'),
+    _GuestAnimal('长颈鹿', '1F992'),
+    _GuestAnimal('大象', '1F418'),
+    _GuestAnimal('犀牛', '1F98F'),
+    _GuestAnimal('河马', '1F99B'),
+    _GuestAnimal('袋鼠', '1F998'),
+    _GuestAnimal('考拉', '1F428'),
+    _GuestAnimal('兔子', '1F407'),
+    _GuestAnimal('仓鼠', '1F439'),
+    _GuestAnimal('海豚', '1F42C'),
+    _GuestAnimal('鲸鱼', '1F40B'),
+    _GuestAnimal('海豹', '1F9AD'),
+    _GuestAnimal('企鹅', '1F427'),
+    _GuestAnimal('鸭子', '1F986'),
+    _GuestAnimal('天鹅', '1F9A2'),
+    _GuestAnimal('鹦鹉', '1F99C'),
+    _GuestAnimal('猫头鹰', '1F989'),
+    _GuestAnimal('蝴蝶', '1F98B'),
+    _GuestAnimal('蜜蜂', '1F41D'),
+    _GuestAnimal('章鱼', '1F419'),
+    _GuestAnimal('乌龟', '1F422'),
+    _GuestAnimal('螃蟹', '1F980'),
+    _GuestAnimal('龙虾', '1F99E'),
+  ];
+
+  String next() {
+    final adjective = _adjectives[_random.nextInt(_adjectives.length)];
+    final animal = _animals[_random.nextInt(_animals.length)];
+    return '$adjective${animal.name}';
+  }
+
+  String avatarUrlFor(String username) {
+    for (final animal in _animals) {
+      if (username.endsWith(animal.name)) {
+        return '$_openMojiCdn/${animal.openMojiCodepoint}.svg';
+      }
+    }
+    return '';
+  }
+}
+
+class _GuestAnimal {
+  const _GuestAnimal(this.name, this.openMojiCodepoint);
+
+  final String name;
+  final String openMojiCodepoint;
+}

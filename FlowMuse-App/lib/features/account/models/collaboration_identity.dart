@@ -25,7 +25,11 @@ class CollaborationIdentity {
     );
   }
 
-  static CollaborationIdentity guest(String username) {
-    return CollaborationIdentity(username: username, isGuest: true);
+  static CollaborationIdentity guest(String username, {String avatarUrl = ''}) {
+    return CollaborationIdentity(
+      username: username,
+      isGuest: true,
+      avatarUrl: avatarUrl,
+    );
   }
 }

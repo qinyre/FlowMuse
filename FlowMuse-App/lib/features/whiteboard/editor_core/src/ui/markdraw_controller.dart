@@ -1,5 +1,6 @@
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -114,6 +115,8 @@ class MarkdrawController extends ChangeNotifier {
   int? _gridSize;
   bool _objectsSnapMode = false;
   double _pressureSensitivity = 0.7;
+  BrushType _activeBrushType = BrushType.fountainPen;
+  bool _inkRecognitionMode = false;
   String? _documentName;
 
   // Link editor state
@@ -162,6 +165,8 @@ class MarkdrawController extends ChangeNotifier {
 
   // Canvas size cache (for followLink from pointer events)
   Size? _lastCanvasSize;
+  Bounds? _contentBounds;
+  Size _canvasSize = Size.zero;
 
   /// Current mouse position in screen coordinates; used for eraser cursor.
   Offset? mousePosition;
@@ -175,6 +180,14 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Called whenever the scene changes (element add/update/remove).
   void Function(Scene)? onSceneChanged;
+
+  /// Called after recognition-pen strokes settle and should be recognized.
+  Future<InkRecognitionResult> Function(InkRecognitionRequest)? onRecognizeInk;
+  void Function(bool enabled)? onInkRecognitionModeChanged;
+
+  Timer? _inkRecognitionTimer;
+  String? _pendingInkSessionId;
+  bool _recognizingInk = false;
 
   // --- Public getters ---
 
@@ -227,6 +240,10 @@ class MarkdrawController extends ChangeNotifier {
   /// Current canvas layout. Paged layout is synchronized through page elements.
   CanvasLayout get layout => _layout;
 
+  Bounds? get contentBounds => _contentBounds;
+
+  Size get canvasSize => _canvasSize;
+
   /// Current scene snapshot.
   Scene get currentScene => _editorState.scene;
 
@@ -240,6 +257,21 @@ class MarkdrawController extends ChangeNotifier {
   set pressureSensitivity(double value) {
     _pressureSensitivity = value.clamp(0.0, 1.0);
     _adapter.pressureSensitivity = _pressureSensitivity;
+    notifyListeners();
+  }
+
+  BrushType get activeBrushType => _activeBrushType;
+  set activeBrushType(BrushType value) {
+    if (_activeBrushType == value) return;
+    _activeBrushType = value;
+    notifyListeners();
+  }
+
+  bool get inkRecognitionMode => _inkRecognitionMode;
+  set inkRecognitionMode(bool value) {
+    if (_inkRecognitionMode == value) return;
+    _inkRecognitionMode = value;
+    onInkRecognitionModeChanged?.call(value);
     notifyListeners();
   }
 
@@ -323,6 +355,8 @@ class MarkdrawController extends ChangeNotifier {
     isEditingLinear: _isEditingLinear,
     gridSize: _gridSize,
     objectsSnapMode: _objectsSnapMode,
+    brushType: _activeBrushType,
+    inkRecognitionMode: _inkRecognitionMode,
   );
 
   /// The currently selected elements resolved from their IDs.
@@ -390,12 +424,23 @@ class MarkdrawController extends ChangeNotifier {
     _lastCanvasSize = value;
   }
 
+  set contentBounds(Bounds? value) {
+    _contentBounds = value;
+    _applyContentBoundsClamp();
+  }
+
+  set canvasSize(Size value) {
+    _canvasSize = value;
+    _applyContentBoundsClamp();
+  }
+
   // --- Lifecycle ---
 
   /// Releases all resources: image cache, focus nodes, text controller.
   @override
   void dispose() {
     _disposed = true;
+    _inkRecognitionTimer?.cancel();
     _imageCache.dispose();
     keyboardFocusNode.dispose();
     textEditingController.dispose();
@@ -620,8 +665,21 @@ class MarkdrawController extends ChangeNotifier {
       return element;
     }
     return element.copyWith(
-      customData: CanvasLayout.elementCustomData(page.id),
+      customData: _mergeCurrentPageCustomData(element.customData, page.id),
     );
+  }
+
+  Map<String, Object?> _mergeCurrentPageCustomData(
+    Map<String, Object?>? customData,
+    String pageId,
+  ) {
+    final next = {...?customData};
+    final existingFlowMuse = next['flowMuse'];
+    next['flowMuse'] = {
+      if (existingFlowMuse is Map<String, Object?>) ...existingFlowMuse,
+      'pageId': pageId,
+    };
+    return next;
   }
 
   Scene _sceneWithLayoutPages(Scene scene) {
@@ -682,6 +740,7 @@ class MarkdrawController extends ChangeNotifier {
 
     if (isSceneChangingResult(styled)) {
       onSceneChanged?.call(_editorState.scene);
+      _scheduleInkRecognitionFromResult(styled);
     }
 
     notifyListeners();
@@ -692,11 +751,26 @@ class MarkdrawController extends ChangeNotifier {
       return CompoundResult(result.results.map(_constrainPdfViewport).toList());
     }
     if (result is! UpdateViewportResult) return result;
-    final canvasSize = _lastCanvasSize;
-    if (canvasSize == null) return result;
+    if (_canvasSize.width <= 0 || _canvasSize.height <= 0) return result;
     return UpdateViewportResult(
-      clampViewportToBounds(result.viewport, _pdfContentBounds, canvasSize),
+      clampViewportToBounds(result.viewport, _contentBounds, _canvasSize),
     );
+  }
+
+  void _applyContentBoundsClamp() {
+    final bounds = _contentBounds;
+    if (bounds == null || _canvasSize.width <= 0 || _canvasSize.height <= 0) {
+      return;
+    }
+    final clamped = clampViewportToBounds(
+      _editorState.viewport,
+      bounds,
+      _canvasSize,
+    );
+    if (clamped != _editorState.viewport) {
+      _editorState = _editorState.copyWith(viewport: clamped);
+      notifyListeners();
+    }
   }
 
   Bounds? get _pdfContentBounds {
@@ -738,6 +812,303 @@ class MarkdrawController extends ChangeNotifier {
       return result.results.any(_containsSelectionChange);
     }
     return false;
+  }
+
+  void _scheduleInkRecognitionFromResult(ToolResult result) {
+    final sessionId = _pendingRecognitionSessionId(result);
+    if (sessionId == null || onRecognizeInk == null) {
+      return;
+    }
+    _pendingInkSessionId = sessionId;
+    _inkRecognitionTimer?.cancel();
+    _inkRecognitionTimer = Timer(const Duration(seconds: 1), () {
+      final pending = _pendingInkSessionId;
+      if (pending != null) {
+        unawaited(_recognizePendingInkSession(pending));
+      }
+    });
+  }
+
+  String? _pendingRecognitionSessionId(ToolResult result) {
+    if (result is AddElementResult) {
+      final element = result.element;
+      if (element is FreedrawElement &&
+          element.customData?[recognitionStrokePendingKey] == true) {
+        final sessionId = element.customData?[recognitionStrokeSessionKey];
+        return sessionId is String ? sessionId : null;
+      }
+    }
+    if (result is CompoundResult) {
+      for (final child in result.results.reversed) {
+        final sessionId = _pendingRecognitionSessionId(child);
+        if (sessionId != null) {
+          return sessionId;
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<void> _recognizePendingInkSession(String sessionId) async {
+    if (_recognizingInk || onRecognizeInk == null || _disposed) {
+      return;
+    }
+    final request = _buildInkRecognitionRequest(
+      sessionId,
+      _pendingInkStrokes(sessionId),
+    );
+    if (request == null) {
+      return;
+    }
+    _recognizingInk = true;
+    if (_activeTool is FreedrawTool) {
+      (_activeTool as FreedrawTool).startNewSession();
+    }
+    try {
+      final result = await onRecognizeInk!(request);
+      if (_disposed) {
+        return;
+      }
+      final pendingStrokes = _pendingInkStrokes(sessionId);
+      if (pendingStrokes.isEmpty) {
+        return;
+      }
+      final elements = result.elements
+          .map(_elementFromRecognizedInk)
+          .whereType<Element>()
+          .toList();
+      if (elements.isEmpty) {
+        _clearPendingInkSession(sessionId);
+        return;
+      }
+      pushHistory();
+      applyResult(
+        CompoundResult([
+          for (final stroke in pendingStrokes) RemoveElementResult(stroke.id),
+          for (final element in elements) AddElementResult(element),
+          SetSelectionResult({for (final element in elements) element.id}),
+        ]),
+      );
+      if (_pendingInkSessionId == sessionId) {
+        _pendingInkSessionId = null;
+      }
+    } catch (_) {
+      if (!_disposed) {
+        _clearPendingInkSession(sessionId);
+      }
+    } finally {
+      _recognizingInk = false;
+      final pending = _pendingInkSessionId;
+      if (!_disposed && pending != null && pending != sessionId) {
+        _inkRecognitionTimer?.cancel();
+        _inkRecognitionTimer = Timer(const Duration(seconds: 1), () {
+          final next = _pendingInkSessionId;
+          if (next != null) {
+            unawaited(_recognizePendingInkSession(next));
+          }
+        });
+      }
+    }
+  }
+
+  InkRecognitionRequest? _buildInkRecognitionRequest(
+    String sessionId,
+    List<FreedrawElement> strokes,
+  ) {
+    if (strokes.isEmpty) {
+      return null;
+    }
+    final absoluteStrokes = <InkRecognitionStroke>[];
+    var minX = double.infinity;
+    var minY = double.infinity;
+    var maxX = double.negativeInfinity;
+    var maxY = double.negativeInfinity;
+    for (final stroke in strokes) {
+      final points = <InkRecognitionPoint>[];
+      final pointTimes = _recognitionPointTimes(stroke);
+      for (var i = 0; i < stroke.points.length; i++) {
+        final point = stroke.points[i];
+        final x = stroke.x + point.x;
+        final y = stroke.y + point.y;
+        minX = math.min(minX, x);
+        minY = math.min(minY, y);
+        maxX = math.max(maxX, x);
+        maxY = math.max(maxY, y);
+        points.add(
+          InkRecognitionPoint(
+            x: x,
+            y: y,
+            t: i < pointTimes.length ? pointTimes[i] : null,
+          ),
+        );
+      }
+      if (points.length >= 2) {
+        absoluteStrokes.add(
+          InkRecognitionStroke(id: stroke.id.value, points: points),
+        );
+      }
+    }
+    if (absoluteStrokes.isEmpty) {
+      return null;
+    }
+    return InkRecognitionRequest(
+      sessionId: sessionId,
+      strokes: absoluteStrokes,
+      bounds: InkRecognitionBounds(
+        x: minX,
+        y: minY,
+        width: math.max(maxX - minX, 1.0),
+        height: math.max(maxY - minY, 1.0),
+      ),
+      hint: 'text',
+    );
+  }
+
+  List<int> _recognitionPointTimes(FreedrawElement stroke) {
+    final raw = stroke.customData?[recognitionStrokePointTimesKey];
+    if (raw is! List<Object?>) {
+      return const [];
+    }
+    return [
+      for (final item in raw)
+        if (item is num) item.toInt(),
+    ];
+  }
+
+  List<FreedrawElement> _pendingInkStrokes(String sessionId) {
+    return [
+      for (final element in _editorState.scene.elements)
+        if (element is FreedrawElement &&
+            !element.isDeleted &&
+            element.customData?[recognitionStrokeSessionKey] == sessionId &&
+            element.customData?[recognitionStrokePendingKey] == true)
+          element,
+    ];
+  }
+
+  Element? _elementFromRecognizedInk(InkRecognizedElement recognized) {
+    final x = recognized.x;
+    final y = recognized.y;
+    final width = math.max(recognized.width, 1.0);
+    final height = math.max(recognized.height, 1.0);
+    switch (recognized.type) {
+      case 'text':
+        final text = recognized.text?.trim();
+        if (text == null || text.isEmpty) {
+          return null;
+        }
+        return _measuredTextElement(text, x, y, width, height);
+      case 'math':
+        final text = (recognized.latex ?? recognized.text)?.trim();
+        if (text == null || text.isEmpty) {
+          return null;
+        }
+        return _measuredTextElement(text, x, y, width, height);
+      case 'rectangle':
+        return RectangleElement(
+          id: ElementId.generate(),
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+        );
+      case 'ellipse':
+        return EllipseElement(
+          id: ElementId.generate(),
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+        );
+      case 'diamond':
+        return DiamondElement(
+          id: ElementId.generate(),
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+        );
+      case 'line':
+        return LineElement(
+          id: ElementId.generate(),
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+          points: _recognizedLinePoints(recognized, x, y, width, height),
+        );
+      case 'arrow':
+        return ArrowElement(
+          id: ElementId.generate(),
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+          points: _recognizedLinePoints(recognized, x, y, width, height),
+        );
+    }
+    return null;
+  }
+
+  TextElement _measuredTextElement(
+    String text,
+    double x,
+    double y,
+    double width,
+    double height,
+  ) {
+    final element = TextElement(
+      id: ElementId.generate(),
+      x: x,
+      y: y,
+      width: math.max(width, 1.0),
+      height: math.max(height, 1.0),
+      text: text,
+    );
+    final styled = applyDefaultStyleToElement(element) as TextElement;
+    final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
+    return styled.copyWith(
+      width: math.max(measuredWidth, styled.width),
+      height: math.max(measuredHeight, styled.height),
+    );
+  }
+
+  List<Point> _recognizedLinePoints(
+    InkRecognizedElement recognized,
+    double x,
+    double y,
+    double width,
+    double height,
+  ) {
+    if (recognized.points.length >= 2) {
+      return [
+        for (final point in recognized.points) Point(point.x - x, point.y - y),
+      ];
+    }
+    return [Point.zero, Point(width, height)];
+  }
+
+  void _clearPendingInkSession(String sessionId) {
+    final strokes = _pendingInkStrokes(sessionId);
+    if (strokes.isEmpty) {
+      return;
+    }
+    applyResult(
+      CompoundResult([
+        for (final stroke in strokes)
+          UpdateElementResult(
+            stroke.copyWith(
+              customData: {
+                ...?stroke.customData,
+                recognitionStrokePendingKey: false,
+              },
+            ),
+          ),
+      ]),
+    );
+    if (_pendingInkSessionId == sessionId) {
+      _pendingInkSessionId = null;
+    }
   }
 
   // --- Text editing ---
@@ -1856,6 +2227,54 @@ class MarkdrawController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleInkRecognitionMode() {
+    inkRecognitionMode = !_inkRecognitionMode;
+  }
+
+  bool get canConvertSelectionToText {
+    final elements = selectedElements;
+    return elements.isNotEmpty &&
+        elements.every((element) => element is FreedrawElement);
+  }
+
+  Future<void> convertSelectedInkToText() async {
+    if (_recognizingInk ||
+        onRecognizeInk == null ||
+        !canConvertSelectionToText) {
+      return;
+    }
+    final strokes = selectedElements.whereType<FreedrawElement>().toList();
+    final sessionId = ElementId.generate().value;
+    final request = _buildInkRecognitionRequest(sessionId, strokes);
+    if (request == null) {
+      return;
+    }
+    _recognizingInk = true;
+    try {
+      final result = await onRecognizeInk!(request);
+      if (_disposed) {
+        return;
+      }
+      final elements = result.elements
+          .map(_elementFromRecognizedInk)
+          .whereType<Element>()
+          .toList();
+      if (elements.isEmpty) {
+        return;
+      }
+      pushHistory();
+      applyResult(
+        CompoundResult([
+          for (final stroke in strokes) RemoveElementResult(stroke.id),
+          for (final element in elements) AddElementResult(element),
+          SetSelectionResult({for (final element in elements) element.id}),
+        ]),
+      );
+    } finally {
+      _recognizingInk = false;
+    }
+  }
+
   /// Toggles tool lock mode (tool stays active after use).
   void toggleToolLocked() {
     _toolLocked = !_toolLocked;
@@ -2328,6 +2747,91 @@ class MarkdrawController extends ChangeNotifier {
     return image;
   }
 
+  /// Exports a card-sized cover thumbnail for the current note.
+  ///
+  /// Paged notes render the first page. Unbounded notes render the current
+  /// content bounds, or a stable blank canvas frame when the scene is empty.
+  Future<Uint8List?> exportCoverThumbnail({
+    Size outputSize = const Size(308, 408),
+  }) async {
+    if (outputSize.width <= 0 || outputSize.height <= 0) {
+      return null;
+    }
+    final sourceRect = _coverThumbnailSourceRect(outputSize);
+
+    const padding = 10.0;
+    final drawableWidth = math.max(1.0, outputSize.width - padding * 2);
+    final drawableHeight = math.max(1.0, outputSize.height - padding * 2);
+    final sourceWidth = math.max(1.0, sourceRect.width);
+    final sourceHeight = math.max(1.0, sourceRect.height);
+    final zoom = math.min(
+      drawableWidth / sourceWidth,
+      drawableHeight / sourceHeight,
+    );
+    final renderedWidth = sourceWidth * zoom;
+    final renderedHeight = sourceHeight * zoom;
+    final horizontalInset = (outputSize.width - renderedWidth) / 2;
+    final verticalInset = (outputSize.height - renderedHeight) / 2;
+    final viewport = ViewportState(
+      offset: Offset(
+        sourceRect.left - horizontalInset / zoom,
+        sourceRect.top - verticalInset / zoom,
+      ),
+      zoom: zoom,
+    );
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+      Offset.zero & outputSize,
+      Paint()..color = parseColor(_canvasBackgroundColor),
+    );
+    StaticCanvasPainter(
+      scene: _editorState.scene,
+      adapter: _adapter,
+      viewport: viewport,
+      layout: _layout,
+      resolvedImages: resolveImages(),
+      gridSize: _gridSize,
+      contentBounds: _contentBounds,
+      renderPageShadows: false,
+    ).paint(canvas, outputSize);
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(
+      outputSize.width.ceil(),
+      outputSize.height.ceil(),
+    );
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    picture.dispose();
+    return byteData?.buffer.asUint8List();
+  }
+
+  Rect _coverThumbnailSourceRect(Size outputSize) {
+    if (_layout.isPaged) {
+      final layoutWithPage = _layout.ensurePage();
+      return layoutWithPage.pages.first.bounds;
+    }
+    final bounds = ExportBounds.compute(_editorState.scene, padding: 40);
+    if (bounds == null) {
+      return _emptyUnboundedThumbnailRect(outputSize);
+    }
+    return Rect.fromLTWH(
+      bounds.left,
+      bounds.top,
+      bounds.size.width,
+      bounds.size.height,
+    );
+  }
+
+  Rect _emptyUnboundedThumbnailRect(Size outputSize) {
+    final aspectRatio = outputSize.width / outputSize.height;
+    const height = CanvasLayout.pageHeight;
+    final width = height * aspectRatio;
+    return Rect.fromCenter(center: Offset.zero, width: width, height: height);
+  }
+
   /// Reads the pixel color at [screenPosition] from a pre-rendered [image].
   ///
   /// Returns a hex color string like '#ff0000', or null if out of bounds.
@@ -2693,6 +3197,10 @@ class MarkdrawController extends ChangeNotifier {
       closeTransientUiForSceneReplace();
       _historyManager.clear();
       _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
+      _layout = CanvasLayout(
+        type: CanvasLayoutType.paged,
+        template: _layout.template,
+      );
     }
 
     final results = <ToolResult>[];
@@ -2766,10 +3274,17 @@ class MarkdrawController extends ChangeNotifier {
     }
     pushHistory();
     applyResult(CompoundResult([...results, SetSelectionResult({})]));
+    final effectiveCanvasSize = _canvasSize.width > 0 && _canvasSize.height > 0
+        ? _canvasSize
+        : canvasSize;
+    if (asBackground) {
+      this.canvasSize = effectiveCanvasSize;
+      contentBounds = _pdfContentBounds;
+    }
     setViewport(
       _fitRectViewport(
         Rect.fromLTWH(0, 0, pages.first.width, pages.first.height),
-        canvasSize,
+        effectiveCanvasSize,
       ),
     );
   }
@@ -2781,7 +3296,7 @@ class MarkdrawController extends ChangeNotifier {
     final widthZoom = rect.width <= 0 ? 1.0 : canvasSize.width / rect.width;
     final heightZoom = rect.height <= 0 ? 1.0 : canvasSize.height / rect.height;
     final zoom = math
-        .min(widthZoom, heightZoom)
+        .max(widthZoom, heightZoom)
         .clamp(_config.minZoom, _config.maxZoom);
     return ViewportState(offset: rect.topLeft, zoom: zoom);
   }

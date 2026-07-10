@@ -44,7 +44,7 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
           ),
           SharedSidebarIconButton(
             tooltip: '设置',
-            onPressed: () => context.go(AppRoutes.settings),
+            onPressed: () => context.push(AppRoutes.settings),
             icon: const Icon(LucideIcons.settings),
           ),
         ],
@@ -70,32 +70,26 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
               },
               onTap: () => context.go(AppRoutes.library),
             ),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 160),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeOutCubic,
-              child: _allNotesExpanded
-                  ? Column(
-                      key: ValueKey('all-notes-children'),
-                      children: [
-                        SharedSidebarItem(
-                          icon: LucideIcons.bookX,
-                          label: '未归入笔记本',
-                          count: (libraryIndex?.unnotebookedCount ?? 0)
-                              .toString(),
-                          level: 1,
-                          onTap: () => context.go(AppRoutes.unnotebooked),
-                        ),
-                        SharedSidebarItem(
-                          icon: LucideIcons.tags,
-                          label: '未标签',
-                          count: (libraryIndex?.untaggedCount ?? 0).toString(),
-                          level: 1,
-                          onTap: () => context.go(AppRoutes.untagged),
-                        ),
-                      ],
-                    )
-                  : const SizedBox.shrink(key: ValueKey('empty-children')),
+            SharedSidebarChildren(
+              expanded: _allNotesExpanded,
+              emptyKey: 'empty-all-notes',
+              childrenKey: 'all-notes-children',
+              children: [
+                SharedSidebarItem(
+                  icon: LucideIcons.bookX,
+                  label: '未归入笔记本',
+                  count: (libraryIndex?.unnotebookedCount ?? 0).toString(),
+                  level: 1,
+                  onTap: () => context.go(AppRoutes.unnotebooked),
+                ),
+                SharedSidebarItem(
+                  icon: LucideIcons.tags,
+                  label: '未标签',
+                  count: (libraryIndex?.untaggedCount ?? 0).toString(),
+                  level: 1,
+                  onTap: () => context.go(AppRoutes.untagged),
+                ),
+              ],
             ),
           ],
         ),
@@ -143,8 +137,11 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                       label: notebook.name,
                       count: notebook.count.toString(),
                       level: 1,
-                      onTap: () =>
-                          context.go(AppRoutes.notebookPath(notebook.id)),
+                      onTap: () => _openPeerDetail(
+                        context,
+                        basePath: AppRoutes.notebooks,
+                        targetPath: AppRoutes.notebookPath(notebook.id),
+                      ),
                     ),
                 ],
               ),
@@ -183,7 +180,11 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
                       label: tag.name,
                       count: tag.count.toString(),
                       level: 1,
-                      onTap: () => context.go(AppRoutes.tagPath(tag.id)),
+                      onTap: () => _openPeerDetail(
+                        context,
+                        basePath: AppRoutes.tags,
+                        targetPath: AppRoutes.tagPath(tag.id),
+                      ),
                     ),
                 ],
               ),
@@ -257,4 +258,17 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
       SnackBar(content: Text('\u521b\u5efa\u5931\u8d25\uff1a$error')),
     );
   }
+}
+
+void _openPeerDetail(
+  BuildContext context, {
+  required String basePath,
+  required String targetPath,
+}) {
+  final currentPath = GoRouterState.of(context).uri.path;
+  if (currentPath.startsWith('$basePath/')) {
+    context.go(targetPath);
+    return;
+  }
+  context.push(targetPath);
 }

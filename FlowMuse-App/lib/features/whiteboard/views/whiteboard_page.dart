@@ -7,10 +7,13 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide Element, SelectionOverlay, TextAlign;
 
 import '../../../app/app_router.dart';
+import '../../../app/app_theme_preset.dart';
+import '../../../app/view_models/theme_view_model.dart';
 import '../../account/models/collaboration_identity.dart';
 import '../../account/view_models/account_view_model.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
+import '../../../shared/storage/local_settings_repository.dart';
 import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
 import '../collaboration/models/collaborator_presence.dart';
@@ -21,6 +24,7 @@ import '../collaboration/services/collaboration_debug_log.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
+import '../ink_recognition/ink_recognition_repository.dart';
 import '../pdf_note_import/pdf_note_consumer.dart';
 import '../view_models/whiteboard_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
@@ -79,6 +83,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   void initState() {
     super.initState();
     _markdrawController = MarkdrawController();
+    _markdrawController.onInkRecognitionModeChanged =
+        _saveInkRecognitionPreference;
     _fileHandler = MarkdrawFileHandler(controller: _markdrawController);
     _collaborationAdapter = WhiteboardCollaborationAdapter(_markdrawController);
     _collaborationRepository = ref.read(collaborationRepositoryProvider);
@@ -125,6 +131,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         emptyExcalidrawSceneContent,
         'collaboration.excalidraw',
       );
+      _markdrawController.inkRecognitionMode = false;
       _loadingScene = false;
       final room = widget.initialRoom;
       if (room != null) {
@@ -179,6 +186,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _loadingScene = true;
     _markdrawController.closeTransientUiForSceneReplace();
     _markdrawController.loadFromContent(content, '$noteId.excalidraw');
+    await _restoreInkRecognitionPreference(noteId);
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote controller loaded '
       'layout=${_markdrawController.layout.type.name} '
@@ -193,6 +201,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
           noteId: noteId,
           canvasSize: const Size(1000, 800),
         );
+    if (note?.kind == LibraryFilter.pdf && !consumedPdf) {
+      _restorePdfViewportBounds();
+    } else if (note?.kind != LibraryFilter.pdf) {
+      _markdrawController.contentBounds = null;
+    }
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote pdfConsumed=$consumedPdf',
     );
@@ -201,6 +214,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         format: DocumentFormat.excalidraw,
       );
       await repository.saveScene(noteId, updatedContent);
+      await _touchNoteWithCurrentCover(noteId);
       await _broadcastCurrentScene(serializedScene: updatedContent);
     }
     _loadingScene = false;
@@ -209,6 +223,49 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (room != null) {
       unawaited(_joinCollaboration(room));
     }
+  }
+
+  String _inkRecognitionPreferenceKey(String noteId) {
+    return 'whiteboard.inkRecognitionMode.$noteId';
+  }
+
+  Future<void> _restoreInkRecognitionPreference(String noteId) async {
+    final enabled = await defaultLocalSettingsRepository.readBool(
+      _inkRecognitionPreferenceKey(noteId),
+    );
+    if (!mounted || noteId != widget.noteId) {
+      return;
+    }
+    _markdrawController.inkRecognitionMode = enabled ?? false;
+  }
+
+  void _saveInkRecognitionPreference(bool enabled) {
+    if (widget.temporaryCollaboration) {
+      return;
+    }
+    unawaited(
+      defaultLocalSettingsRepository.writeBool(
+        _inkRecognitionPreferenceKey(widget.noteId),
+        enabled,
+      ),
+    );
+  }
+
+  void _restorePdfViewportBounds() {
+    final controller = _markdrawController;
+    final bounds = PdfNoteConsumer.pdfBackgroundBounds(controller.currentScene);
+    controller.contentBounds = bounds;
+    if (bounds == null) {
+      return;
+    }
+    final canvasSize =
+        controller.canvasSize.width > 0 && controller.canvasSize.height > 0
+        ? controller.canvasSize
+        : const Size(1000, 800);
+    controller.canvasSize = canvasSize;
+    controller.setViewport(
+      PdfNoteConsumer.fitFirstPageViewport(controller.currentScene, canvasSize),
+    );
   }
 
   Future<void> _saveMarkdrawScene() async {
@@ -233,7 +290,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       format: DocumentFormat.excalidraw,
     );
     await repository.saveScene(widget.noteId, content);
-    await ref.read(libraryIndexProvider.notifier).touchNote(widget.noteId);
+    await _touchNoteWithCurrentCover(widget.noteId);
     await _broadcastCurrentScene();
     if (!mounted) {
       return;
@@ -579,7 +636,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     await ref
         .read(whiteboardSceneRepositoryProvider)
         .saveScene(note.id, content);
-    await ref.read(libraryIndexProvider.notifier).touchNote(note.id);
+    await _touchNoteWithCurrentCover(note.id);
     _temporarySaved = true;
   }
 
@@ -599,7 +656,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     await ref
         .read(whiteboardSceneRepositoryProvider)
         .saveScene(note.id, content);
-    await ref.read(libraryIndexProvider.notifier).touchNote(note.id);
+    await _touchNoteWithCurrentCover(note.id);
     if (mounted) {
       runWhenUiStable(() {
         if (mounted) {
@@ -956,10 +1013,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
     final repository = ref.read(whiteboardSceneRepositoryProvider);
     await repository.saveScene(widget.noteId, nextContent);
-    await ref.read(libraryIndexProvider.notifier).touchNote(widget.noteId);
+    await _touchNoteWithCurrentCover(widget.noteId);
     if (_canMutateWhiteboard) {
       ref.read(whiteboardViewModelProvider.notifier).markSaved();
     }
+  }
+
+  Future<void> _touchNoteWithCurrentCover(String noteId) async {
+    final coverThumbnailBytes = await _markdrawController
+        .exportCoverThumbnail();
+    await ref
+        .read(libraryIndexProvider.notifier)
+        .touchNote(
+          noteId,
+          coverThumbnailBytes: coverThumbnailBytes,
+          clearCoverThumbnail: coverThumbnailBytes == null,
+        );
   }
 
   bool get _canMutateWhiteboard => mounted && !_disposingOrLeaving;
@@ -1088,6 +1157,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(whiteboardViewModelProvider);
+    final themePreset = ref.watch(themeViewModelProvider);
+    final effectivePreset = effectiveAppThemePreset(
+      themePreset,
+      MediaQuery.platformBrightnessOf(context),
+    );
 
     return PopScope(
       canPop: !widget.temporaryCollaboration || _temporarySaved,
@@ -1098,11 +1172,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         unawaited(_leaveCollaboration());
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFFDFDFB),
+        backgroundColor: effectivePreset.backgroundEnd,
         body: SafeArea(
           child: MarkdrawEditor(
             controller: _markdrawController,
-            config: const MarkdrawEditorConfig(initialBackground: '#fdfdfb'),
+            config: MarkdrawEditorConfig(
+              initialBackground: _hexColor(effectivePreset.backgroundEnd),
+            ),
+            currentThemeMode: themePreset.themeMode,
+            onThemeModeChanged: _changeThemeMode,
             saveStatusLabel: _saveStatusLabel(state.saveStatus),
             collaborating: state.collaborating,
             collaborationConnecting:
@@ -1158,6 +1236,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             onDocumentRenamed: () {
               unawaited(_renameAndSaveDocument());
             },
+            onRecognizeInk: (request) =>
+                ref.read(inkRecognitionRepositoryProvider).recognize(request),
             onSceneChanged: (_) {
               unawaited(_saveMarkdrawScene());
             },
@@ -1165,6 +1245,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _changeThemeMode(ThemeMode mode) {
+    return ref
+        .read(themeViewModelProvider.notifier)
+        .changePreset(appThemePresetByThemeMode(mode));
+  }
+
+  String _hexColor(Color color) {
+    return '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
   }
 
   String _saveStatusLabel(WhiteboardSaveStatus status) {

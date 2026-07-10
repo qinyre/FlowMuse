@@ -20,9 +20,7 @@ import '../../library/repositories/library_repository.dart';
 import '../repositories/local_backup_repository.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
-  const SettingsPage({super.key, this.showAccountFirst});
-
-  final bool? showAccountFirst;
+  const SettingsPage({super.key});
 
   @override
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
@@ -34,21 +32,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    _section = _initialSectionFor(widget.showAccountFirst);
-  }
-
-  @override
-  void didUpdateWidget(covariant SettingsPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.showAccountFirst != widget.showAccountFirst) {
-      _section = _initialSectionFor(widget.showAccountFirst);
-    }
-  }
-
-  _SettingsSection _initialSectionFor(bool? showAccountFirst) {
-    return showAccountFirst == true
-        ? _SettingsSection.account
-        : _SettingsSection.localBackup;
+    _section = _SettingsSection.account;
   }
 
   @override
@@ -64,7 +48,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SettingsSidebar(
             selected: _section,
             onSelected: (section) => setState(() => _section = section),
-            onBack: () => context.go(AppRoutes.library),
+            onBack: () {
+              if (context.canPop()) {
+                context.pop();
+                return;
+              }
+              context.go(AppRoutes.library);
+            },
           ),
           Expanded(
             child: _SettingsContent(
@@ -333,6 +323,7 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
       if (!mounted) {
         return;
       }
+      await ref.read(themeViewModelProvider.notifier).restoreSavedPreset();
       ref.invalidate(libraryIndexProvider);
       setState(() {
         _backupMessage = '备份已导入';
@@ -586,14 +577,20 @@ class _AccountSettingsSectionState
       );
     }
 
+    final identity = account.collaborationIdentity;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SettingsCard(
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-            leading: const Icon(LucideIcons.userRound),
-            title: Text(account.collaborationIdentity.username),
+            leading: AccountAvatar(
+              label: identity.username,
+              avatarUrl: identity.avatarUrl,
+              radius: 22,
+            ),
+            title: Text(identity.username),
             subtitle: Text(
               account.status == AccountStatus.verificationRequired
                   ? '验证邮件已发送，请验证后登录'

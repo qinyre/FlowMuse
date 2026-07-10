@@ -106,6 +106,7 @@ class NotebookDetailPage extends ConsumerWidget {
 
     return _CollectionPage(
       title: notebook?.name ?? '笔记本',
+      onBack: () => _popOrGo(context, AppRoutes.notebooks),
       viewMode: LibraryViewMode.grid,
       sortAscending: false,
       selectionMode: false,
@@ -184,7 +185,7 @@ class _NotebookCollectionItems extends StatelessWidget {
               onSubmitted: (name) => onRename(notebook.id, name),
             ),
             onDelete: () => onDelete(notebook.id),
-            onTap: () => context.go(AppRoutes.notebookPath(notebook.id)),
+            onTap: () => context.push(AppRoutes.notebookPath(notebook.id)),
           );
         },
       );
@@ -196,14 +197,14 @@ class _NotebookCollectionItems extends StatelessWidget {
         return GridView.builder(
           itemCount: state.visibleNotebooks.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 218,
-            mainAxisExtent: 276,
+            maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
+            mainAxisExtent: NoteCard.gridMainAxisExtent,
             crossAxisSpacing: compact
-                ? AppSpacing.compactGridCrossGap
-                : AppSpacing.gridCrossGap,
+                ? NoteCard.compactGridCrossGap
+                : NoteCard.gridCrossGap,
             mainAxisSpacing: compact
-                ? AppSpacing.compactGridMainGap
-                : AppSpacing.gridMainGap,
+                ? NoteCard.compactGridMainGap
+                : NoteCard.gridMainGap,
           ),
           itemBuilder: (context, index) {
             if (index == 0) {
@@ -230,7 +231,7 @@ class _NotebookCollectionItems extends StatelessWidget {
                     ),
                     onDelete: () => onDelete(notebook.id),
                     onTap: () =>
-                        context.go(AppRoutes.notebookPath(notebook.id)),
+                        context.push(AppRoutes.notebookPath(notebook.id)),
                   ),
                 ),
                 if (state.selectionMode)
@@ -270,14 +271,14 @@ class _NoteItems extends StatelessWidget {
         return GridView.builder(
           itemCount: notes.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 218,
-            mainAxisExtent: 276,
+            maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
+            mainAxisExtent: NoteCard.gridMainAxisExtent,
             crossAxisSpacing: compact
-                ? AppSpacing.compactGridCrossGap
-                : AppSpacing.gridCrossGap,
+                ? NoteCard.compactGridCrossGap
+                : NoteCard.gridCrossGap,
             mainAxisSpacing: compact
-                ? AppSpacing.compactGridMainGap
-                : AppSpacing.gridMainGap,
+                ? NoteCard.compactGridMainGap
+                : NoteCard.gridMainGap,
           ),
           itemBuilder: (context, index) {
             if (index == 0) {
@@ -319,12 +320,11 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
           width: NoteCard.coverWidth,
           height: NoteCard.coverHeight,
           child: Card(
-            elevation: 5,
-            shadowColor: const Color(0x165A625F),
+            margin: EdgeInsets.zero,
+            elevation: 1,
+            shadowColor: const Color(0x0F5A625F),
             clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: const RoundedRectangleBorder(),
             child: InkWell(
               key: ValueKey('notebook-card-${notebook.id}'),
               onTap: onTap,
@@ -332,7 +332,7 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 13),
         _CoverTitle(
           title: notebook.name,
           onRename: onRename,
@@ -479,10 +479,9 @@ class _CreateCollectionCard extends StatelessWidget {
           width: NoteCard.coverWidth,
           height: NoteCard.coverHeight,
           child: Card.outlined(
+            margin: EdgeInsets.zero,
             clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: const RoundedRectangleBorder(),
             child: InkWell(
               onTap: onTap,
               child: Center(
@@ -495,7 +494,7 @@ class _CreateCollectionCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 13),
         _CoverTitle(title: label),
       ],
     );
@@ -531,6 +530,7 @@ class _CreateCollectionTile extends StatelessWidget {
 class _CollectionPage extends StatelessWidget {
   const _CollectionPage({
     required this.title,
+    this.onBack,
     required this.viewMode,
     required this.sortAscending,
     required this.selectionMode,
@@ -545,6 +545,7 @@ class _CollectionPage extends StatelessWidget {
   });
 
   final String title;
+  final VoidCallback? onBack;
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
@@ -561,6 +562,14 @@ class _CollectionPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return RightPageScaffold(
       title: title,
+      leadingActions: [
+        if (onBack != null)
+          IconButton(
+            tooltip: '返回笔记本',
+            onPressed: onBack,
+            icon: const Icon(LucideIcons.chevronLeft),
+          ),
+      ],
       actions: [
         IconButton(
           tooltip: createTooltip,
@@ -633,6 +642,14 @@ class _CollectionPage extends StatelessWidget {
       body: child,
     );
   }
+}
+
+void _popOrGo(BuildContext context, String location) {
+  if (context.canPop()) {
+    context.pop();
+    return;
+  }
+  context.go(location);
 }
 
 class _CollectionBulkActionBar extends StatelessWidget {

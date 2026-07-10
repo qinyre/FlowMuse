@@ -719,6 +719,7 @@ class RoughCanvasAdapter implements RoughAdapter {
     List<Point> points,
     List<double> pressures,
     bool simulatePressure,
+    BrushType brushType,
     DrawStyle style,
   ) {
     // 仅当非 simulatePressure 且 pressures 非空时传给 renderer 做变粗渲染;
@@ -730,6 +731,7 @@ class RoughCanvasAdapter implements RoughAdapter {
       style,
       pressures: usePressure ? pressures : null,
       pressureSensitivity: pressureSensitivity,
+      brushType: brushType,
     );
   }
 

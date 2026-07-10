@@ -1,6 +1,6 @@
 FROM golang:1.25-alpine AS builder
 
-ENV GOPROXY=https://goproxy.cn,direct \
+ENV GOPROXY=https://goproxy.cn|https://proxy.golang.org|direct \
     GOSUMDB=sum.golang.google.cn
 
 WORKDIR /src

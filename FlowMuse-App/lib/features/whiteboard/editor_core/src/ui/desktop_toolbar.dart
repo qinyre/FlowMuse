@@ -9,13 +9,11 @@ import '../../markdraw.dart' hide TextAlign;
 class DesktopToolbar extends StatelessWidget {
   final MarkdrawController controller;
   final VoidCallback? onImportImage;
-  final bool showMarkdownButton;
 
   const DesktopToolbar({
     super.key,
     required this.controller,
     this.onImportImage,
-    this.showMarkdownButton = true,
   });
 
   @override
@@ -88,57 +86,28 @@ class DesktopToolbar extends StatelessWidget {
                       tooltip: '导入图片 (9)',
                       onPressed: onImportImage!,
                     ),
-                  _toolbarButton(
-                    cs: cs,
-                    iconWidget: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        iconWidgetFor(
-                          type,
-                          color: activeType == type
-                              ? cs.primary
-                              : cs.onSurfaceVariant,
-                          size: 20,
-                          isActive: activeType == type,
-                        ),
-                        if (shortcutForToolType(type) != null)
-                          Positioned(
-                            right: -6,
-                            bottom: -3,
-                            child: Text(
-                              shortcutForToolType(type)!,
-                              style: TextStyle(
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold,
-                                color: activeType == type
-                                    ? cs.primary
-                                    : cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    tooltip:
-                        '${labelForToolType(type)} (${shortcutForToolType(type)})',
+                  _ToolButton(
+                    type: type,
+                    activeType: activeType,
+                    colorScheme: cs,
                     onPressed: () => controller.switchTool(type),
-                    isActive: activeType == type,
                   ),
                 ],
               // 压感灵敏度滑块：仅在手写(freedraw)工具激活时显示
               if (showPressureSlider) ...[
                 _toolbarDivider(context),
+                _BrushSelector(controller: controller),
+                _toolbarDivider(context),
                 _PressureSensitivitySlider(controller: controller),
               ],
-              if (showMarkdownButton) ...[
-                _toolbarDivider(context),
-                _toolbarButton(
-                  cs: cs,
-                  icon: Symbols.markdown,
-                  tooltip: 'Markdown 面板',
-                  onPressed: controller.toggleMarkdownPanel,
-                  isActive: controller.showMarkdownPanel,
-                ),
-              ],
+              _toolbarDivider(context),
+              _toolbarButton(
+                cs: cs,
+                icon: Icons.text_fields,
+                tooltip: '文字识别模式',
+                onPressed: controller.toggleInkRecognitionMode,
+                isActive: controller.inkRecognitionMode,
+              ),
             ],
           ),
         ),
@@ -195,6 +164,49 @@ class DesktopToolbar extends StatelessWidget {
           color: Theme.of(context).dividerColor,
         ),
       ),
+    );
+  }
+}
+
+class _BrushSelector extends StatelessWidget {
+  const _BrushSelector({required this.controller});
+
+  final MarkdrawController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final brushType in BrushType.values)
+          Tooltip(
+            message: _labelForBrush(brushType),
+            child: Material(
+              color: controller.activeBrushType == brushType
+                  ? cs.primaryContainer
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => controller.activeBrushType = brushType,
+                child: SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: Center(
+                    child: Icon(
+                      _iconForBrush(brushType),
+                      size: 19,
+                      color: controller.activeBrushType == brushType
+                          ? cs.primary
+                          : cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -268,4 +280,95 @@ class _PressureSensitivitySlider extends StatelessWidget {
     if (value <= 0.85) return '强';
     return '极强';
   }
+}
+
+class _ToolButton extends StatelessWidget {
+  const _ToolButton({
+    required this.type,
+    required this.activeType,
+    required this.colorScheme,
+    required this.onPressed,
+  });
+
+  final ToolType type;
+  final ToolType activeType;
+  final ColorScheme colorScheme;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final shortcut = shortcutForToolType(type);
+    final label = labelForToolType(type);
+    final active = activeType == type;
+    final tooltip = shortcut == null ? label : '$label ($shortcut)';
+    return Semantics(
+      label: tooltip,
+      button: true,
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: active ? colorScheme.primaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: onPressed,
+            child: SizedBox(
+              width: 32,
+              height: 32,
+              child: Center(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    iconWidgetFor(
+                      type,
+                      color: active
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
+                      size: 20,
+                      isActive: active,
+                    ),
+                    if (shortcut != null)
+                      Positioned(
+                        right: -6,
+                        bottom: -3,
+                        child: Text(
+                          shortcut,
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: active
+                                ? colorScheme.primary
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _labelForBrush(BrushType brushType) {
+  return switch (brushType) {
+    BrushType.pencil => '铅笔',
+    BrushType.ballpoint => '圆珠笔',
+    BrushType.fountainPen => '钢笔',
+    BrushType.brushPen => '毛笔',
+    BrushType.highlighter => '荧光笔',
+  };
+}
+
+IconData _iconForBrush(BrushType brushType) {
+  return switch (brushType) {
+    BrushType.pencil => Icons.edit_outlined,
+    BrushType.ballpoint => Icons.mode_edit_outline,
+    BrushType.fountainPen => Icons.draw,
+    BrushType.brushPen => Icons.brush,
+    BrushType.highlighter => Symbols.ink_highlighter,
+  };
 }

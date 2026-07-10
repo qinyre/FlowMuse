@@ -106,7 +106,7 @@ class SharedSidebarAvatar extends ConsumerWidget {
     return Tooltip(
       message: identity.isGuest ? '匿名协作身份' : '账户与协作',
       child: InkWell(
-        onTap: () => context.go(AppRoutes.accountSettings),
+        onTap: () => context.push(AppRoutes.accountSettings),
         customBorder: const CircleBorder(),
         child: account.status == AccountStatus.loading
             ? const SizedBox(
@@ -117,7 +117,12 @@ class SharedSidebarAvatar extends ConsumerWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               )
-            : AccountAvatar(label: label, user: account.user, radius: 19),
+            : AccountAvatar(
+                label: label,
+                user: account.user,
+                avatarUrl: identity.avatarUrl,
+                radius: 19,
+              ),
       ),
     );
   }
@@ -303,10 +308,30 @@ class SharedSidebarItem extends StatelessWidget {
                         ),
                         padding: EdgeInsets.zero,
                         onPressed: onTrailingTap,
-                        icon: Icon(
-                          icon,
-                          color: colorScheme.onSurfaceVariant,
-                          size: 16,
+                        icon: AnimatedSwitcher(
+                          duration: MediaQuery.disableAnimationsOf(context)
+                              ? Duration.zero
+                              : const Duration(milliseconds: 220),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(
+                                  begin: 0.88,
+                                  end: 1,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: Icon(
+                            icon,
+                            key: ValueKey(icon),
+                            color: colorScheme.onSurfaceVariant,
+                            size: 16,
+                          ),
                         ),
                       ),
                       _ => const SizedBox.shrink(),
@@ -338,13 +363,43 @@ class SharedSidebarChildren extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 160),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeOutCubic,
-      child: expanded
-          ? Column(key: ValueKey(childrenKey), children: children)
-          : SizedBox.shrink(key: ValueKey(emptyKey)),
+    final animationsDisabled = MediaQuery.disableAnimationsOf(context);
+    final duration = animationsDisabled
+        ? Duration.zero
+        : const Duration(milliseconds: 300);
+
+    return ClipRect(
+      child: AnimatedSize(
+        duration: duration,
+        reverseDuration: animationsDisabled
+            ? Duration.zero
+            : const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        alignment: Alignment.topCenter,
+        child: AnimatedSwitcher(
+          duration: duration,
+          reverseDuration: animationsDisabled
+              ? Duration.zero
+              : const Duration(milliseconds: 240),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, -0.04),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            );
+          },
+          child: expanded
+              ? Column(key: ValueKey(childrenKey), children: children)
+              : SizedBox.shrink(key: ValueKey(emptyKey)),
+        ),
+      ),
     );
   }
 }

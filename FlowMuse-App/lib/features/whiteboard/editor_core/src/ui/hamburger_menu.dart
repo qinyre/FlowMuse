@@ -2,6 +2,7 @@ library;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../../markdraw.dart' hide TextAlign;
@@ -144,6 +145,8 @@ class HamburgerMenu extends StatelessWidget {
                 onExportSvg?.call();
               case 'library':
                 controller.showLibraryPanel = !controller.showLibraryPanel;
+              case 'markdown':
+                controller.toggleMarkdownPanel();
               case 'import_image':
                 onImportImage?.call();
               case 'toggle_grid':
@@ -203,6 +206,24 @@ class HamburgerMenu extends StatelessWidget {
                 const SizedBox(width: 12),
                 const Expanded(child: Text('素材库')),
                 if (controller.showLibraryPanel)
+                  Icon(Icons.check, size: 16, color: cs.primary),
+              ],
+            ),
+          ),
+          PopupMenuItem<String>(
+            value: 'markdown',
+            child: Row(
+              children: [
+                Icon(
+                  Symbols.markdown,
+                  size: 18,
+                  color: controller.showMarkdownPanel
+                      ? cs.primary
+                      : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 12),
+                const Expanded(child: Text('Markdown 面板')),
+                if (controller.showMarkdownPanel)
                   Icon(Icons.check, size: 16, color: cs.primary),
               ],
             ),

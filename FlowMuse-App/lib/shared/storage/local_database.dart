@@ -101,6 +101,7 @@ class LocalDatabase {
         page_template TEXT NOT NULL,
         notebook_id TEXT,
         subtitle TEXT,
+        cover_thumbnail BLOB,
         deleted_at INTEGER,
         FOREIGN KEY(notebook_id) REFERENCES notebooks(id)
           ON DELETE SET NULL
@@ -145,4 +146,5 @@ class LocalDatabase {
       'ON note_scenes(updated_at)',
     );
   }
+
 }

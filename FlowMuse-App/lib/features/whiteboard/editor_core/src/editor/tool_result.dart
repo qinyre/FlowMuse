@@ -83,6 +83,8 @@ class ToolContext {
   final bool isEditingLinear;
   final int? gridSize;
   final bool objectsSnapMode;
+  final BrushType brushType;
+  final bool inkRecognitionMode;
 
   ToolContext({
     required this.scene,
@@ -93,6 +95,8 @@ class ToolContext {
     this.isEditingLinear = false,
     this.gridSize,
     this.objectsSnapMode = false,
+    this.brushType = BrushType.fountainPen,
+    this.inkRecognitionMode = false,
   }) : selectedIds = Set.unmodifiable(selectedIds);
 }
 

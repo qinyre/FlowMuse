@@ -345,18 +345,30 @@ class SvgElementRenderer {
 
   static void _renderFreedraw(StringBuffer buf, FreedrawElement element) {
     final absPoints = _absolutePoints(element.points, element.x, element.y);
+    final brushType = brushTypeFromCustomData(element.customData);
+    final (widthScale, opacityScale) = switch (brushType) {
+      BrushType.pencil => (0.82, 0.68),
+      BrushType.ballpoint => (0.72, 1.0),
+      BrushType.fountainPen => (1.0, 1.0),
+      BrushType.brushPen => (1.15, 1.0),
+      BrushType.highlighter => (4.2, 0.32),
+    };
     final d = SvgPathConverter.freedrawToPathData(
       absPoints,
-      element.strokeWidth,
+      element.strokeWidth * widthScale,
     );
     if (d.isEmpty) return;
 
     buf.write('<path d="$d" ');
     buf.write('stroke="${element.strokeColor}" ');
-    buf.write('stroke-width="${_n(element.strokeWidth)}" ');
+    buf.write('stroke-width="${_n(element.strokeWidth * widthScale)}" ');
     buf.write('fill="none" ');
     buf.write('stroke-linecap="round" ');
     buf.write('stroke-linejoin="round"');
+    final opacity = element.opacity * opacityScale;
+    if (opacity < 1.0) {
+      buf.write(' opacity="${_n(opacity)}"');
+    }
     buf.write('/>');
   }
 

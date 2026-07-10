@@ -28,9 +28,20 @@ class PdfNoteConsumer {
         canvasSize,
         asBackground: true,
       );
-      final pageCount = controller.currentScene.activeElements
-          .where((element) => element.isPdfBackground)
-          .length;
+      final effectiveCanvasSize =
+          controller.canvasSize.width > 0 && controller.canvasSize.height > 0
+          ? controller.canvasSize
+          : canvasSize;
+      controller.canvasSize = effectiveCanvasSize;
+      final bounds = pdfBackgroundBounds(controller.currentScene);
+      if (bounds == null) {
+        throw StateError('PDF import produced no background pages');
+      }
+      controller.contentBounds = bounds;
+      controller.setViewport(
+        fitFirstPageViewport(controller.currentScene, effectiveCanvasSize),
+      );
+      final pageCount = pdfBackgroundPages(controller.currentScene).length;
       await ref
           .read(libraryIndexProvider.notifier)
           .renameSubtitle(noteId, '$pageCount 页 · ${payload.name}');
@@ -39,6 +50,41 @@ class PdfNoteConsumer {
       await ref.read(libraryIndexProvider.notifier).deleteNotes([noteId]);
       return false;
     }
+  }
+
+  static List<ImageElement> pdfBackgroundPages(Scene scene) {
+    final pages = scene.activeElements
+        .whereType<ImageElement>()
+        .where((element) => element.isPdfBackground)
+        .toList();
+    pages.sort((a, b) {
+      final y = a.y.compareTo(b.y);
+      return y != 0 ? y : a.x.compareTo(b.x);
+    });
+    return pages;
+  }
+
+  static Bounds? pdfBackgroundBounds(Scene scene) {
+    Bounds? result;
+    for (final page in pdfBackgroundPages(scene)) {
+      final bounds = Bounds.fromLTWH(page.x, page.y, page.width, page.height);
+      result = result == null ? bounds : result.union(bounds);
+    }
+    return result;
+  }
+
+  static ViewportState fitFirstPageViewport(Scene scene, Size canvasSize) {
+    final pages = pdfBackgroundPages(scene);
+    if (pages.isEmpty || canvasSize.width <= 0 || canvasSize.height <= 0) {
+      return const ViewportState();
+    }
+    final first = pages.first;
+    final widthZoom = first.width <= 0 ? 1.0 : canvasSize.width / first.width;
+    final heightZoom = first.height <= 0
+        ? 1.0
+        : canvasSize.height / first.height;
+    final zoom = widthZoom > heightZoom ? widthZoom : heightZoom;
+    return ViewportState(offset: Offset(first.x, first.y), zoom: zoom);
   }
 }
 
