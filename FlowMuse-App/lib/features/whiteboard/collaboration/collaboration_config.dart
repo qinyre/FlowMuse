@@ -20,7 +20,7 @@ class CollaborationConfig {
     return CollaborationConfig(
       serverUrl: dartDefinedServerUrl.isNotEmpty
           ? dartDefinedServerUrl
-          : dotenvServerUrl ?? 'http://127.0.0.1:3000',
+          : dotenvServerUrl ?? 'http://8.133.4.116:48931',
       shareOrigin: dartDefinedShareOrigin.isNotEmpty
           ? dartDefinedShareOrigin
           : dotenvShareOrigin ?? defaultShareOrigin,

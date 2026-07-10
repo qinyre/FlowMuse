@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
@@ -26,6 +27,8 @@ import '../input/stroke_input_modeler.dart';
 import '../input/stroke_input_sample.dart';
 import '../input/input_policy.dart';
 import '../input/stroke_recorder.dart';
+
+const String _logTag = 'InkRecognition';
 
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
@@ -890,6 +893,7 @@ class MarkdrawController extends ChangeNotifier {
     if (sessionId == null || onRecognizeInk == null) {
       return;
     }
+    debugPrint('[$_logTag] ⏳ 调度识别 | sessionId: $sessionId | 1秒后触发');
     _pendingInkSessionId = sessionId;
     _inkRecognitionTimer?.cancel();
     _inkRecognitionTimer = Timer(const Duration(seconds: 1), () {
@@ -929,8 +933,13 @@ class MarkdrawController extends ChangeNotifier {
       _pendingInkStrokes(sessionId),
     );
     if (request == null) {
+      debugPrint('[$_logTag] ⏭️ 跳过识别 | sessionId: $sessionId | 无待处理笔画');
       return;
     }
+    debugPrint(
+      '[$_logTag] 🚀 开始识别 | sessionId: $sessionId | '
+      '笔画数: ${request.strokes.length} | hint: ${request.hint}',
+    );
     _recognizingInk = true;
     if (_activeTool is FreedrawTool) {
       (_activeTool as FreedrawTool).startNewSession();
@@ -948,6 +957,10 @@ class MarkdrawController extends ChangeNotifier {
           .map(_elementFromRecognizedInk)
           .whereType<Element>()
           .toList();
+      debugPrint(
+        '[$_logTag] 📥 自动识别结果 | sessionId: $sessionId | '
+        '服务端返回: ${result.elements.length} 个元素 | 成功转换: ${elements.length} 个元素',
+      );
       if (elements.isEmpty) {
         _clearPendingInkSession(sessionId);
         return;
@@ -964,6 +977,7 @@ class MarkdrawController extends ChangeNotifier {
         _pendingInkSessionId = null;
       }
     } catch (_) {
+      debugPrint('[$_logTag] 🔄 识别失败，回退 | sessionId: $sessionId');
       if (!_disposed) {
         _clearPendingInkSession(sessionId);
       }
@@ -2472,6 +2486,10 @@ class MarkdrawController extends ChangeNotifier {
     if (request == null) {
       return;
     }
+    debugPrint(
+      '[$_logTag] 🎯 手动转换选中笔迹 | sessionId: $sessionId | '
+      '选中笔画数: ${strokes.length} | 请求笔画数: ${request.strokes.length}',
+    );
     _recognizingInk = true;
     try {
       final result = await onRecognizeInk!(request);
@@ -2482,6 +2500,10 @@ class MarkdrawController extends ChangeNotifier {
           .map(_elementFromRecognizedInk)
           .whereType<Element>()
           .toList();
+      debugPrint(
+        '[$_logTag] 📥 手动转换结果 | sessionId: $sessionId | '
+        '服务端返回: ${result.elements.length} 个元素 | 成功转换: ${elements.length} 个元素',
+      );
       if (elements.isEmpty) {
         return;
       }
