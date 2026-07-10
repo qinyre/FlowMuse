@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -94,6 +93,28 @@ func BearerToken(header string) string {
 
 func GuestName(seed string) string {
 	sum := sha256.Sum256([]byte(seed))
-	value := int(sum[0])<<8 | int(sum[1])
-	return "匿名用户 " + strconv.Itoa(value%9000+1000)
+	adjectives := []string{
+		"活泼", "敏捷", "勇敢", "聪慧", "温柔", "沉稳",
+		"灵巧", "可靠", "明亮", "快乐", "优雅", "好奇",
+		"专注", "自在", "友善", "坚定", "从容", "机敏",
+		"灿烂", "安静", "热忱", "清醒", "坦率", "轻快",
+	}
+	nouns := []string{
+		"猫", "狗", "狐狸", "熊猫", "狮子", "老虎",
+		"狼", "小鹿", "骏马", "独角兽", "斑马", "长颈鹿",
+		"大象", "犀牛", "河马", "袋鼠", "考拉", "兔子",
+		"仓鼠", "海豚", "鲸鱼", "海豹", "企鹅", "鸭子",
+		"天鹅", "鹦鹉", "猫头鹰", "蝴蝶", "蜜蜂", "章鱼",
+		"乌龟", "螃蟹", "龙虾",
+	}
+	alphabet := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	adjective := adjectives[int(sum[0])%len(adjectives)]
+	noun := nouns[int(sum[1])%len(nouns)]
+	seq := []byte{
+		alphabet[int(sum[2])%len(alphabet)],
+		alphabet[int(sum[3])%len(alphabet)],
+		alphabet[int(sum[4])%len(alphabet)],
+		alphabet[int(sum[5])%len(alphabet)],
+	}
+	return adjective + noun + "#" + string(seq)
 }

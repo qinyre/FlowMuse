@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 bool shouldDispatchToCreationTool(PointerDeviceKind kind) {
-  return kind != PointerDeviceKind.touch;
+  return true;
 }
 
 double? reliableStylusPressure({

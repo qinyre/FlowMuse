@@ -5,6 +5,8 @@ import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
 
 import '../../core/math/math.dart';
 import '../../core/elements/brush_type.dart';
+import '../../input/outline_render_mode.dart';
+import '../../input/stroke_render_metrics.dart';
 import 'draw_style.dart';
 
 /// Renders freehand drawing paths.
@@ -46,6 +48,7 @@ class FreedrawRenderer {
     required double strokeWidth,
     List<double>? pressures,
     double pressureSensitivity = 0.7,
+    bool isComplete = true,
     BrushType brushType = BrushType.fountainPen,
   }) {
     if (points.isEmpty) return const [];
@@ -60,30 +63,105 @@ class FreedrawRenderer {
           hasPressure ? pressures[i] : null,
         ),
     ];
+    final sensitivity = pressureSensitivity.clamp(0.0, 1.0);
     final options = StrokeOptions(
       size: dm.max(strokeWidth * brush.sizeScale, 1.0),
       thinning: hasPressure
-          ? brush.thinning * pressureSensitivity.clamp(0.0, 1.0)
+          ? switch (brushType) {
+              // Keep the established fountain-pen response: a small base
+              // pressure term remains even at the lowest sensitivity.
+              BrushType.fountainPen => 0.05 + sensitivity * 0.9,
+              _ => brush.thinning * sensitivity,
+            }
           : brush.simulatedThinning,
       smoothing: brush.smoothing,
       streamline: brush.streamline,
       simulatePressure: !hasPressure || brush.forceSimulatePressure,
-      isComplete: true,
+      isComplete: isComplete,
     );
 
     return getStroke(inputPoints, options: options);
+  }
+
+  /// Constructs a closed [Path] from a perfect_freehand outline.
+  ///
+  /// - [polygon]: straight-line segments (baseline/control).
+  /// - [quadratic]: official quadratic midpoint method -- each outline point
+  ///   (including outline[0]) serves as a control point, with the midpoint of
+  ///   adjacent vertices as endpoints. The last-to-first seam is handled via
+  ///   modulo wrapping so no control segment is missed.
+  static Path buildOutlinePath(
+    List<PointVector> outline,
+    OutlineRenderMode mode,
+  ) {
+    if (outline.isEmpty) return Path();
+    if (mode == OutlineRenderMode.polygon || outline.length < 3) {
+      return Path()
+        ..addPolygon([for (final p in outline) Offset(p.x, p.y)], true);
+    }
+    // quadratic: classic midpoint method for a fully-smooth closed path.
+    // Start at (P0+P1)/2 so every segment has a distinct control point ≠ its
+    // start — no flat edges. Each vertex serves as control exactly once,
+    // including outline[0] as the final control before close.
+    final path = Path();
+    final first = outline.first;
+    final startX = (first.x + outline[1].x) / 2;
+    final startY = (first.y + outline[1].y) / 2;
+    path.moveTo(startX, startY);
+    for (var i = 1; i <= outline.length; i++) {
+      final cur = outline[i % outline.length];
+      final next = outline[(i + 1) % outline.length];
+      final midX = (cur.x + next.x) / 2;
+      final midY = (cur.y + next.y) / 2;
+      path.quadraticBezierTo(cur.x, cur.y, midX, midY);
+    }
+    path.close();
+    return path;
+  }
+
+  /// Measures the same outline and Path construction used by [draw], without
+  /// submitting paint commands. Intended for debug/test replay parameter sweeps.
+  static StrokeRenderMetrics measureStroke(
+    List<Point> points, {
+    required double strokeWidth,
+    List<double>? pressures,
+    double pressureSensitivity = 0.7,
+    bool isComplete = true,
+    required OutlineRenderMode outlineRenderMode,
+  }) {
+    final outlineWatch = Stopwatch()..start();
+    final outline = buildOutline(
+      points,
+      strokeWidth: strokeWidth,
+      pressures: pressures,
+      pressureSensitivity: pressureSensitivity,
+      isComplete: isComplete,
+    );
+    final getStrokeDuration = (outlineWatch..stop()).elapsed;
+    final pathWatch = Stopwatch()..start();
+    buildOutlinePath(_asPointVectors(outline), outlineRenderMode);
+    final pathBuildDuration = (pathWatch..stop()).elapsed;
+    return StrokeRenderMetrics(
+      outlinePointCount: outline.length,
+      getStrokeDuration: getStrokeDuration,
+      pathBuildDuration: pathBuildDuration,
+    );
   }
 
   /// Draws a freehand path on [canvas] with the given [style].
   ///
   /// 优先用 perfect_freehand 的 outline-stroke 算法渲染(平滑+变粗);
   /// pressures 数量与 points 不匹配时退回等粗 Bezier(容错)。
+  /// [outlineRenderMode] 控制轮廓路径构建方式: polygon(直线段)或 quadratic(二次贝塞尔平滑)。
   static void draw(
     Canvas canvas,
     List<Point> points,
     DrawStyle style, {
     List<double>? pressures,
     double pressureSensitivity = 0.7,
+    bool isComplete = true,
+    required OutlineRenderMode outlineRenderMode,
+    StrokeRenderMetricsSink? metricsSink,
     BrushType brushType = BrushType.fountainPen,
   }) {
     if (points.isEmpty) return;
@@ -93,13 +171,21 @@ class FreedrawRenderer {
     // 是期望的笔迹宽度。直接用 strokeWidth 作为 size 基准。
     final size = dm.max(style.strokeWidth * brush.sizeScale, 1.0);
 
+    Stopwatch? outlineWatch;
+    if (metricsSink != null) {
+      outlineWatch = Stopwatch()..start();
+    }
     final outline = buildOutline(
       points,
       strokeWidth: style.strokeWidth,
       pressures: pressures,
       pressureSensitivity: pressureSensitivity,
+      isComplete: isComplete,
       brushType: brushType,
     );
+    final getStrokeDuration = outlineWatch != null
+        ? (outlineWatch..stop()).elapsed
+        : Duration.zero;
 
     // 单点(点击):outline 为空,画圆点
     if (outline.isEmpty) {
@@ -114,7 +200,13 @@ class FreedrawRenderer {
     }
 
     // outline 是闭合多边形顶点,用 fill 绘制
-    final path = Path()..addPolygon(outline, true);
+    final outlineVectors = _asPointVectors(outline);
+    Stopwatch? sw;
+    if (metricsSink != null) {
+      sw = Stopwatch()..start();
+    }
+    final path = buildOutlinePath(outlineVectors, outlineRenderMode);
+    final pathBuildDuration = sw != null ? (sw..stop()).elapsed : Duration.zero;
     final basePaint = style.toStrokePaint();
     final paint = basePaint
       ..style = PaintingStyle.fill
@@ -122,7 +214,18 @@ class FreedrawRenderer {
         alpha: basePaint.color.a * brush.opacityScale,
       );
     canvas.drawPath(path, paint);
+    metricsSink?.onMetrics(
+      StrokeRenderMetrics(
+        outlinePointCount: outlineVectors.length,
+        getStrokeDuration: getStrokeDuration,
+        pathBuildDuration: pathBuildDuration,
+      ),
+    );
   }
+
+  static List<PointVector> _asPointVectors(List<Offset> outline) => [
+    for (final o in outline) PointVector(o.dx, o.dy, 0),
+  ];
 
   static _BrushConfig _configFor(BrushType brushType) {
     return switch (brushType) {

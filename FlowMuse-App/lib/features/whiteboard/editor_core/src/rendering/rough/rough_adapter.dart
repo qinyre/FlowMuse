@@ -89,6 +89,7 @@ abstract class RoughAdapter {
     List<double> pressures,
     bool simulatePressure,
     BrushType brushType,
-    DrawStyle style,
-  );
+    DrawStyle style, {
+    bool isComplete = true,
+  });
 }

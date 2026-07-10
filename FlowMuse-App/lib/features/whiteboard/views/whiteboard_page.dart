@@ -1162,6 +1162,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       themePreset,
       MediaQuery.platformBrightnessOf(context),
     );
+    final identity = ref.watch(accountViewModelProvider).collaborationIdentity;
+    final participants = state.collaborating
+        ? _collaborationParticipantBadges(state, identity)
+        : const <CollaborationParticipantBadge>[];
 
     return PopScope(
       canPop: !widget.temporaryCollaboration || _temporarySaved,
@@ -1191,8 +1195,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             roomLink: state.roomLink,
             roomValue: state.roomValue,
             shareOriginConfigured: state.shareOriginConfigured,
-            collaboratorCount: state.collaborators.length,
+            collaboratorCount: participants.isEmpty
+                ? state.collaborators.length
+                : participants.length,
             collaborators: _remoteCollaboratorOverlays(state),
+            collaborationParticipants: participants,
             isCollaborationOwner: state.isRoomOwner,
             onSave: () {
               unawaited(_saveMarkdrawScene());
@@ -1294,6 +1301,25 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
               .where((entry) => entry.value)
               .map((entry) => entry.key)
               .toSet(),
+          idle: presence.idleState != CollaboratorIdleState.active,
+        ),
+    ];
+  }
+
+  List<CollaborationParticipantBadge> _collaborationParticipantBadges(
+    WhiteboardState state,
+    CollaborationIdentity identity,
+  ) {
+    return [
+      CollaborationParticipantBadge(
+        username: identity.username,
+        avatarUrl: identity.avatarUrl,
+        isCurrentUser: true,
+      ),
+      for (final presence in state.collaborators.values)
+        CollaborationParticipantBadge(
+          username: presence.username,
+          avatarUrl: presence.avatarUrl,
           idle: presence.idleState != CollaboratorIdleState.active,
         ),
     ];

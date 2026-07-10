@@ -317,7 +317,7 @@ final accountRepositoryProvider = Provider<AccountRepository>((ref) {
 final accountViewModelProvider =
     NotifierProvider<AccountViewModel, AccountState>(AccountViewModel.new);
 
-const _guestNameSettingsKey = 'flowmuse.guest.username';
+const _guestNameSettingsKey = 'flowmuse.guest.username.v3';
 
 final _guestNameGenerator = _ChineseGuestNameGenerator();
 
@@ -327,6 +327,7 @@ class _ChineseGuestNameGenerator {
   final Random _random;
 
   static const _openMojiCdn = 'https://openmoji.org/data/color/svg';
+  static const _seqAlphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
   static const _adjectives = [
     '活泼',
@@ -394,12 +395,19 @@ class _ChineseGuestNameGenerator {
   String next() {
     final adjective = _adjectives[_random.nextInt(_adjectives.length)];
     final animal = _animals[_random.nextInt(_animals.length)];
-    return '$adjective${animal.name}';
+    final seqId = String.fromCharCodes(
+      List.generate(
+        4,
+        (_) => _seqAlphabet.codeUnitAt(_random.nextInt(_seqAlphabet.length)),
+      ),
+    );
+    return '$adjective${animal.name}#$seqId';
   }
 
   String avatarUrlFor(String username) {
+    final normalizedName = username.replaceFirst(RegExp(r'#[A-Z0-9]{4}$'), '');
     for (final animal in _animals) {
-      if (username.endsWith(animal.name)) {
+      if (normalizedName.endsWith(animal.name)) {
         return '$_openMojiCdn/${animal.openMojiCodepoint}.svg';
       }
     }

@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
 
+import 'package:flow_muse/features/account/widgets/account_avatar.dart';
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
@@ -40,6 +41,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.shareOriginConfigured = true,
     this.collaboratorCount = 0,
     this.collaborators = const [],
+    this.collaborationParticipants = const [],
     this.isCollaborationOwner = false,
     this.onStartCollaboration,
     this.onJoinCollaboration,
@@ -86,6 +88,7 @@ class MarkdrawEditor extends StatefulWidget {
   final bool shareOriginConfigured;
   final int collaboratorCount;
   final List<RemoteCollaboratorOverlay> collaborators;
+  final List<CollaborationParticipantBadge> collaborationParticipants;
   final bool isCollaborationOwner;
   final Future<void> Function()? onStartCollaboration;
   final Future<void> Function()? onJoinCollaboration;
@@ -100,6 +103,20 @@ class MarkdrawEditor extends StatefulWidget {
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
+}
+
+class CollaborationParticipantBadge {
+  const CollaborationParticipantBadge({
+    required this.username,
+    this.avatarUrl = '',
+    this.isCurrentUser = false,
+    this.idle = false,
+  });
+
+  final String username;
+  final String avatarUrl;
+  final bool isCurrentUser;
+  final bool idle;
 }
 
 class _MarkdrawEditorState extends State<MarkdrawEditor> {
@@ -323,6 +340,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
               roomValue: widget.roomValue,
               shareOriginConfigured: widget.shareOriginConfigured,
               collaboratorCount: widget.collaboratorCount,
+              collaborationParticipants: widget.collaborationParticipants,
               isCollaborationOwner: widget.isCollaborationOwner,
               onStartCollaboration: widget.onStartCollaboration,
               onJoinCollaboration: widget.onJoinCollaboration,
@@ -538,6 +556,7 @@ class _RightChrome extends StatelessWidget {
     required this.roomValue,
     required this.shareOriginConfigured,
     required this.collaboratorCount,
+    required this.collaborationParticipants,
     required this.isCollaborationOwner,
     required this.onStartCollaboration,
     required this.onJoinCollaboration,
@@ -558,6 +577,7 @@ class _RightChrome extends StatelessWidget {
   final String? roomValue;
   final bool shareOriginConfigured;
   final int collaboratorCount;
+  final List<CollaborationParticipantBadge> collaborationParticipants;
   final bool isCollaborationOwner;
   final Future<void> Function()? onStartCollaboration;
   final Future<void> Function()? onJoinCollaboration;
@@ -586,6 +606,10 @@ class _RightChrome extends StatelessWidget {
             _StatusPill(label: saveStatusLabel!),
           if (!compact && saveStatusLabel != null && canCollaborate)
             const SizedBox(width: 8),
+          if (collaborating && collaborationParticipants.isNotEmpty) ...[
+            _ParticipantAvatarStack(participants: collaborationParticipants),
+            const SizedBox(width: 8),
+          ],
           if (canCollaborate)
             _CollaborationChip(
               compact: compact,
@@ -637,6 +661,135 @@ class _ChromeIconButton extends StatelessWidget {
         icon: Icon(icon, size: 20),
         constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         onPressed: onPressed,
+      ),
+    );
+  }
+}
+
+class _ParticipantAvatarStack extends StatelessWidget {
+  const _ParticipantAvatarStack({required this.participants});
+
+  static const _avatarSize = 26.0;
+  static const _avatarRadius = 11.0;
+  static const _overlapStep = 18.0;
+  static const _maxVisible = 5;
+
+  final List<CollaborationParticipantBadge> participants;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = participants.take(_maxVisible).toList();
+    final hiddenCount = participants.length - visible.length;
+    final itemCount = visible.length + (hiddenCount > 0 ? 1 : 0);
+    final width = itemCount <= 1
+        ? _avatarSize
+        : _avatarSize + (itemCount - 1) * _overlapStep;
+
+    return Tooltip(
+      message: participants
+          .map((participant) {
+            final name = participant.username.isEmpty
+                ? '匿名协作者'
+                : participant.username;
+            return participant.isCurrentUser ? '$name（我）' : name;
+          })
+          .join('、'),
+      child: SizedBox(
+        width: width,
+        height: 44,
+        child: Stack(
+          alignment: Alignment.centerLeft,
+          children: [
+            for (var index = 0; index < visible.length; index++)
+              Positioned(
+                left: index * _overlapStep,
+                child: _ParticipantAvatar(participant: visible[index]),
+              ),
+            if (hiddenCount > 0)
+              Positioned(
+                left: visible.length * _overlapStep,
+                child: _ParticipantOverflowAvatar(count: hiddenCount),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ParticipantAvatar extends StatelessWidget {
+  const _ParticipantAvatar({required this.participant});
+
+  final CollaborationParticipantBadge participant;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final borderColor = participant.isCurrentUser
+        ? cs.primary
+        : cs.surfaceContainerHighest;
+    final label = participant.username.isEmpty ? '协' : participant.username;
+
+    return Opacity(
+      opacity: participant.idle ? 0.56 : 1,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: cs.surface,
+          border: Border.all(color: borderColor, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.14),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(1),
+          child: AccountAvatar(
+            label: label,
+            avatarUrl: participant.avatarUrl,
+            radius: _ParticipantAvatarStack._avatarRadius,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ParticipantOverflowAvatar extends StatelessWidget {
+  const _ParticipantOverflowAvatar({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: _ParticipantAvatarStack._avatarSize,
+      height: _ParticipantAvatarStack._avatarSize,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: cs.surface,
+        border: Border.all(color: cs.surfaceContainerHighest, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Text(
+        '+$count',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: cs.onSurfaceVariant,
+          fontSize: 10,
+          height: 1,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

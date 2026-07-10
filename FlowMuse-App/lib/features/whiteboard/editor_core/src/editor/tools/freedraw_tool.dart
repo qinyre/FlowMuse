@@ -159,7 +159,11 @@ class FreedrawTool implements Tool {
   @override
   ToolOverlay? get overlay {
     if (_points.isEmpty) return null;
-    return ToolOverlay(creationPoints: List.unmodifiable(_points));
+    return ToolOverlay(
+      creationPoints: List.unmodifiable(_points),
+      creationPressures: _hasRealPressure ? List.unmodifiable(_pressures) : const [],
+      creationIsComplete: false,
+    );
   }
 
   @override

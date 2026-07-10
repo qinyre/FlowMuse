@@ -589,7 +589,7 @@ class _TagPageFrame extends StatelessWidget {
       topContent: [
         if (bulkBar != null) ...[
           bulkBar!,
-          const SizedBox(height: AppSpacing.sectionGap),
+          const SizedBox(height: AppSpacing.controlGap),
         ],
       ],
       body: child,

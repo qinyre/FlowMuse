@@ -1,12 +1,11 @@
 library;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
-
-import 'pointer_pressure.dart';
 
 /// The main canvas area with pointer/gesture handling.
 class EditorCanvas extends StatefulWidget {
@@ -28,9 +27,160 @@ class EditorCanvas extends StatefulWidget {
   State<EditorCanvas> createState() => _EditorCanvasState();
 }
 
-class _EditorCanvasState extends State<EditorCanvas> {
+class _EditorCanvasState extends State<EditorCanvas>
+    with SingleTickerProviderStateMixin {
+  static const double _appendPageReleaseThreshold = 140;
+  static const double _appendPageMaxOverscroll = 228;
+
   MarkdrawController get controller => widget.controller;
   Size? _lastReportedSize;
+  final Set<int> _activeTouchPointers = {};
+  int? _pagedScrollPointer;
+  double _appendPageOverscroll = 0;
+  bool _appendPageReady = false;
+  late final AnimationController _appendPageOverscrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _appendPageOverscrollController = AnimationController.unbounded(vsync: this)
+      ..addListener(() {
+        _setAppendPageOverscroll(
+          _appendPageOverscrollController.value,
+          updateController: false,
+        );
+      });
+  }
+
+  @override
+  void dispose() {
+    _appendPageOverscrollController.dispose();
+    super.dispose();
+  }
+
+  bool _shouldHandlePagedTouch(PointerEvent event) {
+    return controller.isPagedViewport &&
+        event.kind == PointerDeviceKind.touch &&
+        (controller.viewMode ||
+            controller.editorState.activeToolType == ToolType.hand);
+  }
+
+  void _startPagedTouch(PointerDownEvent event) {
+    _activeTouchPointers.add(event.pointer);
+    if (_activeTouchPointers.length == 1) {
+      _pagedScrollPointer = event.pointer;
+      _appendPageOverscrollController.stop();
+    } else {
+      _pagedScrollPointer = null;
+      _snapBackAppendPageOverscroll();
+    }
+  }
+
+  void _updatePagedTouch(PointerMoveEvent event) {
+    if (_pagedScrollPointer != event.pointer ||
+        _activeTouchPointers.length != 1) {
+      return;
+    }
+
+    final scrollDeltaY = -event.delta.dy;
+    if (scrollDeltaY == 0) {
+      return;
+    }
+
+    if (_appendPageOverscroll > 0 && scrollDeltaY < 0) {
+      _setAppendPageOverscroll(_appendPageOverscroll + scrollDeltaY);
+      widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
+      return;
+    }
+
+    final metrics = controller.pagedViewportMetrics;
+    if (metrics != null && metrics.atEnd && scrollDeltaY > 0) {
+      _setAppendPageOverscroll(
+        _appendPageOverscroll + scrollDeltaY * _elasticFactor,
+      );
+      widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
+      return;
+    }
+
+    controller.scrollPagedViewportBy(scrollDeltaY);
+    widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
+  }
+
+  void _endPagedTouch(PointerEvent event) {
+    _activeTouchPointers.remove(event.pointer);
+    if (_pagedScrollPointer != event.pointer) {
+      return;
+    }
+    _pagedScrollPointer = null;
+    if (_appendPageReady) {
+      controller.appendPageAfterLastAndScroll();
+      _setAppendPageOverscroll(0);
+      return;
+    }
+    _snapBackAppendPageOverscroll();
+  }
+
+  void _cancelPagedTouch(PointerEvent event) {
+    _activeTouchPointers.remove(event.pointer);
+    if (_pagedScrollPointer == event.pointer) {
+      _pagedScrollPointer = null;
+      _snapBackAppendPageOverscroll();
+    }
+  }
+
+  double get _elasticFactor {
+    final resistance = _appendPageOverscroll / _appendPageMaxOverscroll;
+    return (0.62 - resistance * 0.34).clamp(0.24, 0.62).toDouble();
+  }
+
+  void _setAppendPageOverscroll(double value, {bool updateController = true}) {
+    final next = value.clamp(0.0, _appendPageMaxOverscroll).toDouble();
+    final ready = next >= _appendPageReleaseThreshold;
+    if ((_appendPageOverscroll - next).abs() < 0.1 &&
+        _appendPageReady == ready) {
+      return;
+    }
+    setState(() {
+      _appendPageOverscroll = next;
+      _appendPageReady = ready;
+    });
+    if (updateController) {
+      _appendPageOverscrollController.value = next;
+    }
+  }
+
+  void _snapBackAppendPageOverscroll() {
+    _appendPageOverscrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  ViewportState _paintViewport() {
+    final viewport = controller.editorState.viewport;
+    if (_appendPageOverscroll <= 0) {
+      return viewport;
+    }
+    return ViewportState(
+      offset: Offset(
+        viewport.offset.dx,
+        viewport.offset.dy + _appendPageOverscroll / viewport.zoom,
+      ),
+      zoom: viewport.zoom,
+    );
+  }
+
+  PagedAppendPageHint? _appendPageHint() {
+    if (_appendPageOverscroll <= 0) {
+      return null;
+    }
+    return PagedAppendPageHint(
+      overscrollPx: _appendPageOverscroll,
+      readyToRelease: _appendPageReady,
+      releaseThresholdPx: _appendPageReleaseThreshold,
+    );
+  }
 
   List<LinkIconInfo>? _buildLinkIcons() {
     final selectedIds = controller.editorState.selectedIds;
@@ -103,6 +253,8 @@ class _EditorCanvasState extends State<EditorCanvas> {
               }
             });
           }
+          final paintViewport = _paintViewport();
+          final appendPageHint = _appendPageHint();
           return MouseRegion(
             cursor: controller.cursorForTool,
             child: Stack(
@@ -110,7 +262,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                 GestureDetector(
                   onScaleStart: (details) => controller.onScaleStart(details),
                   onScaleUpdate: (details) => controller.onScaleUpdate(details),
-                  onScaleEnd: (_) {},
+                  onScaleEnd: controller.onScaleEnd,
                   child: Listener(
                     onPointerHover: (event) {
                       controller.onPointerHover(event.localPosition);
@@ -120,48 +272,56 @@ class _EditorCanvasState extends State<EditorCanvas> {
                       );
                     },
                     onPointerDown: (event) {
-                      controller.onPointerDown(
-                        event.localPosition,
-                        kind: event.kind,
-                        pressure: reliableStylusPressure(
-                          kind: event.kind,
-                          pressure: event.pressure,
-                          pressureMin: event.pressureMin,
-                          pressureMax: event.pressureMax,
-                        ),
-                      );
+                      if (_shouldHandlePagedTouch(event)) {
+                        _startPagedTouch(event);
+                        widget.onPointerPresence?.call(
+                          event.localPosition,
+                          true,
+                        );
+                        return;
+                      }
+                      controller.onPointerDown(event);
                       widget.onPointerPresence?.call(event.localPosition, true);
                     },
                     onPointerMove: (event) {
-                      controller.onPointerMove(
-                        event.localPosition,
-                        event.delta,
-                        kind: event.kind,
-                        pressure: reliableStylusPressure(
-                          kind: event.kind,
-                          pressure: event.pressure,
-                          pressureMin: event.pressureMin,
-                          pressureMax: event.pressureMax,
-                        ),
-                      );
+                      if (_shouldHandlePagedTouch(event)) {
+                        _updatePagedTouch(event);
+                        widget.onPointerPresence?.call(
+                          event.localPosition,
+                          true,
+                        );
+                        return;
+                      }
+                      controller.onPointerMove(event);
                       widget.onPointerPresence?.call(event.localPosition, true);
                     },
                     onPointerUp: (event) {
-                      controller.onPointerUp(
-                        event.localPosition,
-                        kind: event.kind,
-                        pressure: reliableStylusPressure(
-                          kind: event.kind,
-                          pressure: event.pressure,
-                          pressureMin: event.pressureMin,
-                          pressureMax: event.pressureMax,
-                        ),
-                      );
+                      if (_shouldHandlePagedTouch(event)) {
+                        _endPagedTouch(event);
+                        widget.onPointerPresence?.call(
+                          event.localPosition,
+                          false,
+                        );
+                        widget.onVisibleSceneBoundsChanged?.call(canvasSize);
+                        return;
+                      }
+                      controller.onPointerUp(event);
                       widget.onPointerPresence?.call(
                         event.localPosition,
                         false,
                       );
                       widget.onVisibleSceneBoundsChanged?.call(canvasSize);
+                    },
+                    onPointerCancel: (event) {
+                      if (_shouldHandlePagedTouch(event)) {
+                        _cancelPagedTouch(event);
+                      } else {
+                        controller.onPointerCancel(event);
+                      }
+                      widget.onPointerPresence?.call(
+                        event.localPosition,
+                        false,
+                      );
                     },
                     onPointerSignal: (event) {
                       controller.onPointerSignal(event);
@@ -171,7 +331,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                       painter: StaticCanvasPainter(
                         scene: controller.editorState.scene,
                         adapter: controller.adapter,
-                        viewport: controller.editorState.viewport,
+                        viewport: paintViewport,
                         layout: controller.layout,
                         previewElement: controller.buildPreviewElement(
                           toolOverlay,
@@ -186,9 +346,10 @@ class _EditorCanvasState extends State<EditorCanvas> {
                           controller.canvasBackgroundColor,
                         ),
                         contentBounds: controller.contentBounds,
+                        appendPageHint: appendPageHint,
                       ),
                       foregroundPainter: InteractiveCanvasPainter(
-                        viewport: controller.editorState.viewport,
+                        viewport: paintViewport,
                         interactionMode: controller.interactionMode,
                         selection: controller.isDraggingPointHandle()
                             ? null
@@ -239,6 +400,7 @@ class _EditorCanvasState extends State<EditorCanvas> {
                     right: 12,
                     child: _CompactPropertyButton(controller: controller),
                   ),
+                _PagedProgressIndicator(controller: controller),
               ],
             ),
           );
@@ -252,6 +414,91 @@ class _EditorCanvasState extends State<EditorCanvas> {
 bool _isDark(String hexColor) {
   final c = parseColor(hexColor);
   return c.computeLuminance() < 0.5;
+}
+
+class _PagedProgressIndicator extends StatefulWidget {
+  final MarkdrawController controller;
+  const _PagedProgressIndicator({required this.controller});
+
+  @override
+  State<_PagedProgressIndicator> createState() =>
+      _PagedProgressIndicatorState();
+}
+
+class _PagedProgressIndicatorState extends State<_PagedProgressIndicator> {
+  static const double _trackHeight = 168;
+  static const double _contentHeight = _trackHeight * 5;
+
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _syncScrollbar(double progress) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+      final position = _scrollController.position;
+      final target = position.maxScrollExtent * progress;
+      if ((position.pixels - target).abs() < 0.5) {
+        return;
+      }
+      _scrollController.jumpTo(target);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = widget.controller.pagedViewportMetrics;
+    if (metrics == null) {
+      return const SizedBox.shrink();
+    }
+    _syncScrollbar(metrics.progress);
+
+    final cs = Theme.of(context).colorScheme;
+
+    return Positioned(
+      right: 10,
+      top: 0,
+      bottom: 0,
+      child: IgnorePointer(
+        child: Center(
+          child: ScrollbarTheme(
+            data: ScrollbarThemeData(
+              thumbColor: WidgetStatePropertyAll(
+                cs.primary.withValues(alpha: 0.72),
+              ),
+              trackColor: WidgetStatePropertyAll(
+                cs.outlineVariant.withValues(alpha: 0.38),
+              ),
+              trackBorderColor: WidgetStatePropertyAll(Colors.transparent),
+              thickness: const WidgetStatePropertyAll(4),
+              radius: const Radius.circular(999),
+            ),
+            child: SizedBox(
+              width: 18,
+              height: _trackHeight,
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                trackVisibility: true,
+                interactive: false,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  child: const SizedBox(width: 1, height: _contentHeight),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Inline text field overlay for editing a frame's label on the canvas.

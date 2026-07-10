@@ -65,11 +65,7 @@ class RectangleTool implements Tool {
     );
 
     reset();
-    return CompoundResult([
-      AddElementResult(element),
-      SetSelectionResult({element.id}),
-      SwitchToolResult(ToolType.select),
-    ]);
+    return completeGeometricElementCreation(element);
   }
 
   @override
