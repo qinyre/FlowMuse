@@ -317,7 +317,7 @@ final accountRepositoryProvider = Provider<AccountRepository>((ref) {
 final accountViewModelProvider =
     NotifierProvider<AccountViewModel, AccountState>(AccountViewModel.new);
 
-const _guestNameSettingsKey = 'flowmuse.guest.username.v2';
+const _guestNameSettingsKey = 'flowmuse.guest.username.v3';
 
 final _guestNameGenerator = _ChineseGuestNameGenerator();
 
@@ -401,11 +401,11 @@ class _ChineseGuestNameGenerator {
         (_) => _seqAlphabet.codeUnitAt(_random.nextInt(_seqAlphabet.length)),
       ),
     );
-    return '$adjective的${animal.name}$seqId';
+    return '$adjective${animal.name}#$seqId';
   }
 
   String avatarUrlFor(String username) {
-    final normalizedName = username.replaceFirst(RegExp(r'[A-Z0-9]{4}$'), '');
+    final normalizedName = username.replaceFirst(RegExp(r'#[A-Z0-9]{4}$'), '');
     for (final animal in _animals) {
       if (normalizedName.endsWith(animal.name)) {
         return '$_openMojiCdn/${animal.openMojiCodepoint}.svg';

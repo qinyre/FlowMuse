@@ -116,5 +116,5 @@ func GuestName(seed string) string {
 		alphabet[int(sum[4])%len(alphabet)],
 		alphabet[int(sum[5])%len(alphabet)],
 	}
-	return adjective + "的" + noun + string(seq)
+	return adjective + noun + "#" + string(seq)
 }
