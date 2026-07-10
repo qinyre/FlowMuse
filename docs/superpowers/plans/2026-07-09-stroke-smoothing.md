@@ -34,7 +34,7 @@
 | --- | --- |
 | `Point` 类：immutable，含 `+ - * distanceTo`，`const Point(x,y)` | `lib/features/whiteboard/editor_core/src/core/math/point.dart` |
 | `EditorCanvas` 的 `Listener` 是原始 PointerEvent 入口，回调在 `:114-170`（含 hover/down/move/up/signal，无 cancel） | `lib/features/whiteboard/editor_core/src/ui/editor_canvas.dart:114` |
-| `screenToScene` 会 `roundToDouble()` 两轴（亚像素量化天花板） | `lib/features/whiteboard/editor_core/src/rendering/viewport_state.dart:33-36` |
+| `screenToScene` 会 `roundToDouble()` 两轴；freedraw 必须新增并使用不取整的变换，其他工具可保留整数对齐 | `lib/features/whiteboard/editor_core/src/rendering/viewport_state.dart:33-36` |
 | `MarkdrawController` pointer 路由 `onPointerDown/Move/Up` 在 `:1491/1577/1610` | `lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart` |
 | smoother 单实例 `:98`，调用点 down`:1504` move`:1584` up`:1616` | 同上 |
 | `_pressureSensitivity` 字段 + setter 同步到 adapter：`:117,253-256` | 同上（`outlineRenderMode` 照此模式新增） |
@@ -311,6 +311,20 @@ void main() {
       expect(out, 20.0);
     });
 
+    test('higher cutoff follows the same input more closely', () {
+      // One Euro 的关键单调性：高 cutoff = 弱滤波，不能被 alpha 公式写反。
+      final low = OneEuroFilter(minCutoff: 1.0, beta: 0.0);
+      final high = OneEuroFilter(minCutoff: 8.0, beta: 0.0);
+      const t0 = Duration(seconds: 1);
+      const t1 = Duration(seconds: 1, milliseconds: 16);
+      low.filter(0, t0);
+      high.filter(0, t0);
+      final lowOut = low.filter(100, t1);
+      final highOut = high.filter(100, t1);
+      expect(highOut, greaterThan(lowOut));
+      expect(highOut, lessThan(100));
+    });
+
     test('reset clears state', () {
       final f = OneEuroFilter();
       f.filter(10.0, const Duration(seconds: 1));
@@ -433,10 +447,12 @@ class OneEuroFilter {
   // 低通系数 alpha，来自一阶低通的离散形式。
   static double _alpha(double cutoff, double dt) {
     final tau = 1.0 / (2 * math.pi * cutoff);
-    return tau / (tau + dt);
+    return dt / (tau + dt);
   }
 }
 ```
+
+> **公式不变量（必须保留为测试）**：相同 `dt` 下，cutoff 越高，`alpha` 越大、输出越接近原始值；相同 cutoff 下，`dt` 越小，`alpha` 越小、平滑越强。不要写成 `tau / (tau + dt)`，那会将两个单调关系完全反转。
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1418,29 +1434,24 @@ static Path buildOutlinePath(List<PointVector> outline, OutlineRenderMode mode) 
       true,
     );
   }
-  // quadratic: 中点法
+  // quadratic: 官方中点法。每个顶点（包括第 0 个）恰好作为一次控制点，
+  // 最后一个顶点连接到 first 的中点，避免闭合接缝遗漏第 0 个控制段。
   final path = Path();
-  // 从第 0、1 点的中点起笔
-  final first = outline[0];
-  final second = outline[1];
-  path.moveTo((first.x + second.x) / 2, (first.y + second.y) / 2);
-  // i 从 1 到 n-2：以 outline[i] 为控制点，到 outline[i]/outline[i+1] 中点
-  for (var i = 1; i < outline.length - 1; i++) {
+  final first = outline.first;
+  path.moveTo(first.x, first.y);
+  for (var i = 0; i < outline.length; i++) {
     final cur = outline[i];
-    final next = outline[i + 1];
+    final next = outline[(i + 1) % outline.length];
     final midX = (cur.x + next.x) / 2;
     final midY = (cur.y + next.y) / 2;
     path.quadraticBezierTo(cur.x, cur.y, midX, midY);
   }
-  // 接缝：以最后一个 outline 点为控制点，回到起笔点（与第一段中点重合），闭合
-  final last = outline[outline.length - 1];
-  final startMidX = (first.x + second.x) / 2;
-  final startMidY = (first.y + second.y) / 2;
-  path.quadraticBezierTo(last.x, last.y, startMidX, startMidY);
   path.close();
   return path;
 }
 ```
+
+> 上述路径从首点到首尾中点后闭合；它不是从首两个点的中点起笔并跳过 `outline[0]`。除 `Path.getBounds()` 外，Task 1.1 还须增加 raster golden 或真机 A/B，专门覆盖闭合缝、端帽和尖角，避免“有限且不抛异常”的测试掩盖几何缺陷。
 
 文件顶部 import：
 ```dart
@@ -1946,6 +1957,7 @@ git commit -m "feat(stroke): add StrokeInputNormalizer (PointerEvent -> sample)"
 **Files:**
 - Modify: `lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart`（`onPointerDown/Move/Up` `:1491/1577/1610`：freedraw 经 modeler；移除 `_harmonyStylusStrokeSmoother` 调用 `:1504/1584/1616`；处理 up 终点 flush；feature flag 回退）
 - Modify: `lib/features/whiteboard/editor_core/src/ui/editor_canvas.dart`（`:123` Listener：插入 normalizer + cancel + pointer 所有权）
+- Modify: `lib/features/whiteboard/editor_core/src/rendering/viewport_state.dart`（新增不取整的 screen→scene 变换，仅供 freedraw 使用）
 - Test: `test/features/whiteboard/editor_core/editor/stroke_modeler_integration_test.dart`
 
 > 这是本计划最复杂的改动。分小步验证。
@@ -1966,6 +1978,7 @@ import 'dart:ui';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/viewport_state.dart';
 
 // 方案 A：controller 收 PointerEvent。测试构造 PointerDownEvent/MoveEvent/UpEvent。
 // 用真实 controller 驱动（参考 element_creation_bounds_test.dart:50-72 的模式），
@@ -2042,6 +2055,28 @@ void main() {
       kind: PointerDeviceKind.mouse, timeStamp: const Duration(milliseconds: 16),
     )), returnsNormally);
   });
+
+  test('freedraw preserves subpixel scene coordinates', () {
+    final controller = MarkdrawController();
+    controller.canvasSize = const Size(400, 600);
+    controller.switchTool(ToolType.freedraw);
+    controller.setViewport(const ViewportState(
+      offset: Offset(0.25, 0.5), zoom: 1.5,
+    ));
+    controller.onPointerDown(PointerDownEvent(
+      pointer: 1, position: _local(1, 1), localPosition: _local(1, 1),
+      kind: PointerDeviceKind.stylus, pressure: 0.5, timeStamp: Duration.zero,
+    ));
+    controller.onPointerUp(PointerUpEvent(
+      pointer: 1, position: _local(10, 10), localPosition: _local(10, 10),
+      kind: PointerDeviceKind.stylus, pressure: 0.5,
+      timeStamp: const Duration(milliseconds: 16),
+    ));
+    final points = (controller.editorState.scene.elements.single as dynamic).points as List;
+    // (10 / 1.5 + 0.25, 10 / 1.5 + 0.5)，而不是 (7, 7)。
+    expect((points.last as dynamic).x, closeTo(6.9166666667, 1e-6));
+    expect((points.last as dynamic).y, closeTo(7.1666666667, 1e-6));
+  });
 }
 ```
 > 实施注记：本测试驱动真实 `MarkdrawController`（既有测试模式，见 `element_creation_bounds_test.dart:50-72`）。`editorState.scene.elements` 为 controller 公开 API（见 `element_creation_bounds_test.dart:71`）。`PointerDownEvent/MoveEvent/UpEvent/CancelEvent` 为 Flutter 标准类型，构造方式见上。
@@ -2059,8 +2094,8 @@ void main() {
      - `final sample = _normalizer.normalize(event, phase: StrokePhase.down)`；
      - `_activeDrawPointerId = sample.pointerId`（获取绘制所有权）；
      - `_modeler = StrokeInputModeler(_policySelector.select(sample.kind))`；
-     - `final r = _modeler!.process(sample)`；若 `r.point != null`，`toScene(localPosition)` 转 scene 坐标后调 `_activeTool.onPointerDown(scenePoint, ctx, pressure: r.pressure)`。
-   - 否则（非 freedraw 或 feature flag 关）：走旧路径，用 `event.localPosition` 经 `toScene` 后直接派发，不经 modeler。
+     - `final r = _modeler!.process(sample)`；若 `r.point != null`，用新增的**不取整** `screenToScenePrecise(localPosition)` 转为浮点 scene 坐标后调 `_activeTool.onPointerDown(scenePoint, ctx, pressure: r.pressure)`。
+   - 否则（非 freedraw 或 feature flag 关）：非 freedraw 走旧的整数对齐 `toScene`；freedraw 的 feature-flag 回退也必须走 `screenToScenePrecise`，以免 A/B 混入坐标量化差异。
 4. 同理改 `onPointerMove`（`:1577`）：仅当 `event.pointer == _activeDrawPointerId` 才经 modeler；否则（非活动 pointer）忽略，防多指污染。
 5. 改 `onPointerUp`（`:1610`）：
    - 经 modeler，`up()` 返回真实终点（flush）。
@@ -2070,6 +2105,7 @@ void main() {
 6. `onPointerCancel`：调 `_modeler?.reset(reason:'cancel')` 与 `_activeTool.reset()`，丢弃未提交笔画，清除 `_activeDrawPointerId`。
 7. **移除** `_harmonyStylusStrokeSmoother.down/move/up` 调用（`:1504/1584/1616`）。保留 `_harmonyStylusStrokeSmoother` 字段以备 debug 对照，但不再路由。
 8. 更新所有 controller 内部读取 pressure 的地方：从 `event.pressure` 取（但 normalizer 已负责把 mouse/不可靠 touch pressure 归 null，modeler 内部 InputPolicy 决定是否用真实压感）。
+9. 在 `viewport_state.dart` 新增 `screenToScenePrecise(Offset)`：公式与现有 `screenToScene` 相同，但**不调用** `roundToDouble()`；只在 freedraw 的点采集/提交路径使用。为其增加单测：非整数 zoom、offset 与 localPosition 下输出保留小数；并由本任务的 integration test 断言最终 `FreedrawElement.points` 保留小数坐标。
 
 > **注意既有调用点**：controller 的 `onPointer*` 由 `EditorCanvas`（`editor_canvas.dart:122-165`）和测试调用。本步同步更新 EditorCanvas（见 Step 4）。其他既有测试（如 `element_creation_bounds_test.dart:56-66` 用旧 `Offset+kind` 形式）需同步改为构造 `PointerEvent`——在 Step 6 全量回归时一并修正。
 
