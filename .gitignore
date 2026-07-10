@@ -56,3 +56,8 @@ app.*.map.json
 # HarmonyOS build profile (local signing config)
 **/ohos/build-profile.json5
 **/tool/vendor/**/build-profile.json5
+
+# HarmonyOS auto-generated
+ohos/entry/src/main/ets/plugins/GeneratedPluginRegistrant.ets
+tool/vendor/path_provider_ohos/ohos/BuildProfile.ets
+tool/vendor/path_provider_ohos/ohos/oh-package-lock.json5
