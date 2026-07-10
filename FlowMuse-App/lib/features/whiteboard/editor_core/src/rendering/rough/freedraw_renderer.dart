@@ -63,10 +63,16 @@ class FreedrawRenderer {
           hasPressure ? pressures[i] : null,
         ),
     ];
+    final sensitivity = pressureSensitivity.clamp(0.0, 1.0);
     final options = StrokeOptions(
       size: dm.max(strokeWidth * brush.sizeScale, 1.0),
       thinning: hasPressure
-          ? brush.thinning * pressureSensitivity.clamp(0.0, 1.0)
+          ? switch (brushType) {
+              // Keep the established fountain-pen response: a small base
+              // pressure term remains even at the lowest sensitivity.
+              BrushType.fountainPen => 0.05 + sensitivity * 0.9,
+              _ => brush.thinning * sensitivity,
+            }
           : brush.simulatedThinning,
       smoothing: brush.smoothing,
       streamline: brush.streamline,

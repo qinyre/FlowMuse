@@ -1,7 +1,9 @@
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/brush_type.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/outline_render_mode.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/freedraw_renderer.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
 
 void main() {
   test('measures outline and Path construction for replay metrics', () {
@@ -56,5 +58,32 @@ void main() {
     );
 
     expect(high, isNot(equals(low)));
+  });
+
+  test('fountain pen uses the pre-merge real-pressure curve', () {
+    const pressures = [0.2, 0.4, 0.7, 1.0];
+    final actual = FreedrawRenderer.buildOutline(
+      points,
+      strokeWidth: 4,
+      pressures: pressures,
+      pressureSensitivity: 0.7,
+      brushType: BrushType.fountainPen,
+    );
+    final expected = getStroke(
+      [
+        for (var i = 0; i < points.length; i++)
+          PointVector(points[i].x, points[i].y, pressures[i]),
+      ],
+      options: StrokeOptions(
+        size: 4,
+        thinning: 0.05 + 0.7 * 0.9,
+        smoothing: StrokeOptions.defaultSmoothing,
+        streamline: StrokeOptions.defaultStreamline,
+        simulatePressure: false,
+        isComplete: true,
+      ),
+    );
+
+    expect(actual, equals(expected));
   });
 }
