@@ -6,6 +6,21 @@ import '../../app/app_router.dart';
 import 'app_shell.dart';
 import 'app_spacing.dart';
 
+const _headerEnterDuration = Duration(milliseconds: 340);
+const _headerExitDuration = Duration(milliseconds: 260);
+
+Duration _headerMotionDuration(BuildContext context) {
+  return MediaQuery.disableAnimationsOf(context)
+      ? Duration.zero
+      : _headerEnterDuration;
+}
+
+Duration _headerReverseDuration(BuildContext context) {
+  return MediaQuery.disableAnimationsOf(context)
+      ? Duration.zero
+      : _headerExitDuration;
+}
+
 class RightPageScaffold extends StatelessWidget {
   const RightPageScaffold({
     super.key,
@@ -94,10 +109,11 @@ class RightPageHeader extends StatelessWidget {
         height: AppSpacing.shellHeaderHeight,
         child: Row(
           children: [
-            if (sidebarLeading != null) ...[
-              SizedBox(width: _controlWidth, child: sidebarLeading),
-              const SizedBox(width: AppSpacing.controlGap),
-            ],
+            _AnimatedHeaderSlot(
+              visible: sidebarLeading != null,
+              width: _controlWidth + AppSpacing.controlGap,
+              child: SizedBox(width: _controlWidth, child: sidebarLeading),
+            ),
             if (leadingActions.isNotEmpty) ...[
               leading,
               const SizedBox(width: AppSpacing.controlGap),
@@ -114,64 +130,62 @@ class RightPageHeader extends StatelessWidget {
       );
     }
 
-    if (centerTitle) {
-      final leftReserve =
-          (showSidebarControls ? _controlWidth : 0.0) +
-          _actionsWidth(leadingActions.length);
-      final rightReserve = _actionsWidth(actions.length);
-      final horizontalReserve =
-          (leftReserve > rightReserve ? leftReserve : rightReserve) +
-          AppSpacing.controlGap;
-
-      return SizedBox(
-        height: AppSpacing.shellHeaderHeight,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            if (sidebarLeading != null)
-              Positioned(
-                left: 0,
-                child: SizedBox(width: _controlWidth, child: sidebarLeading),
-              ),
-            if (leadingActions.isNotEmpty)
-              Positioned(
-                left: showSidebarControls
-                    ? _controlWidth + AppSpacing.controlGap
-                    : 0,
-                child: leading,
-              ),
-            Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: horizontalReserve),
-                child: _RightPageTitle(
-                  title: title!,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-            if (actions.isNotEmpty) Positioned(right: 0, child: trailing),
-          ],
-        ),
-      );
-    }
+    final sidebarReserve = showSidebarControls
+        ? _controlWidth + AppSpacing.controlGap
+        : 0.0;
+    final leadingReserve = leadingActions.isEmpty
+        ? 0.0
+        : _actionsWidth(leadingActions.length) + AppSpacing.controlGap;
+    final trailingReserve = actions.isEmpty
+        ? 0.0
+        : _actionsWidth(actions.length) + AppSpacing.controlGap;
+    final leftReserve = sidebarReserve + leadingReserve;
+    final symmetricReserve = leftReserve > trailingReserve
+        ? leftReserve
+        : trailingReserve;
+    final titlePadding = EdgeInsets.only(
+      left: centerTitle ? symmetricReserve : leftReserve,
+      right: centerTitle ? symmetricReserve : trailingReserve,
+    );
 
     return SizedBox(
       height: AppSpacing.shellHeaderHeight,
-      child: Row(
+      child: Stack(
         children: [
-          if (sidebarLeading != null) ...[
-            SizedBox(width: _controlWidth, child: sidebarLeading),
-            const SizedBox(width: AppSpacing.controlGap),
-          ],
-          if (leadingActions.isNotEmpty) ...[
-            leading,
-            const SizedBox(width: AppSpacing.controlGap),
-          ],
-          Expanded(child: _RightPageTitle(title: title!)),
-          if (actions.isNotEmpty) ...[
-            const SizedBox(width: AppSpacing.controlGap),
-            trailing,
-          ],
+          Positioned.fill(
+            child: Row(
+              children: [
+                _AnimatedHeaderSlot(
+                  visible: sidebarLeading != null,
+                  width: _controlWidth + AppSpacing.controlGap,
+                  child: SizedBox(width: _controlWidth, child: sidebarLeading),
+                ),
+                if (leadingActions.isNotEmpty) leading,
+              ],
+            ),
+          ),
+          Positioned.fill(
+            child: AnimatedPadding(
+              duration: _headerMotionDuration(context),
+              curve: Curves.easeOutCubic,
+              padding: titlePadding,
+              child: AnimatedAlign(
+                duration: _headerMotionDuration(context),
+                curve: Curves.easeOutCubic,
+                alignment: centerTitle
+                    ? Alignment.center
+                    : Alignment.centerLeft,
+                child: _AnimatedRightPageTitle(
+                  title: title!,
+                  textAlign: centerTitle ? TextAlign.center : null,
+                ),
+              ),
+            ),
+          ),
+          if (actions.isNotEmpty)
+            Positioned.fill(
+              child: Align(alignment: Alignment.centerRight, child: trailing),
+            ),
         ],
       ),
     );
@@ -221,8 +235,99 @@ class _RightPageIconButtonTheme extends StatelessWidget {
   }
 }
 
+class _AnimatedHeaderSlot extends StatelessWidget {
+  const _AnimatedHeaderSlot({
+    required this.visible,
+    required this.width,
+    required this.child,
+  });
+
+  final bool visible;
+  final double width;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRect(
+      child: AnimatedContainer(
+        width: visible ? width : 0,
+        duration: _headerMotionDuration(context),
+        curve: Curves.easeOutCubic,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: AnimatedSwitcher(
+            duration: _headerMotionDuration(context),
+            reverseDuration: _headerReverseDuration(context),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              final curved = CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+                reverseCurve: Curves.easeInCubic,
+              );
+              return FadeTransition(
+                opacity: curved,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(-0.08, 0),
+                    end: Offset.zero,
+                  ).animate(curved),
+                  child: child,
+                ),
+              );
+            },
+            child: visible
+                ? KeyedSubtree(key: const ValueKey('visible'), child: child)
+                : SizedBox(key: const ValueKey('hidden'), width: width),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedRightPageTitle extends StatelessWidget {
+  const _AnimatedRightPageTitle({required this.title, this.textAlign});
+
+  final String title;
+  final TextAlign? textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: _headerMotionDuration(context),
+      reverseDuration: _headerReverseDuration(context),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.02, 0),
+              end: Offset.zero,
+            ).animate(curved),
+            child: child,
+          ),
+        );
+      },
+      child: _RightPageTitle(
+        key: ValueKey(title),
+        title: title,
+        textAlign: textAlign,
+      ),
+    );
+  }
+}
+
 class _RightPageTitle extends StatelessWidget {
-  const _RightPageTitle({required this.title, this.textAlign});
+  const _RightPageTitle({super.key, required this.title, this.textAlign});
 
   final String title;
   final TextAlign? textAlign;
