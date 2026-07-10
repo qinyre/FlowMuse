@@ -154,10 +154,10 @@ class _AppShellState extends ConsumerState<AppShell> {
                     AnimatedSwitcher(
                       duration: MediaQuery.disableAnimationsOf(context)
                           ? Duration.zero
-                          : const Duration(milliseconds: 220),
+                          : const Duration(milliseconds: 340),
                       reverseDuration: MediaQuery.disableAnimationsOf(context)
                           ? Duration.zero
-                          : const Duration(milliseconds: 180),
+                          : const Duration(milliseconds: 280),
                       switchInCurve: Curves.easeOutCubic,
                       switchOutCurve: Curves.easeInCubic,
                       transitionBuilder: (child, animation) {

@@ -1,2 +1,3 @@
-import PathProviderOhosPlugin from './src/main/ets/PathProviderOhosPlugin';
-export default PathProviderOhosPlugin;
+import PathProviderPlugin from './src/main/ets/io/flutter/plugins/pathprovider/PathProviderPlugin'
+
+export default PathProviderPlugin

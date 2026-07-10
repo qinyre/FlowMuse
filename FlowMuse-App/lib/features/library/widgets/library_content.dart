@@ -112,7 +112,7 @@ class _LibraryContentState extends State<LibraryContent> {
       _pageController
           .animateToPage(
             filterIndex,
-            duration: const Duration(milliseconds: 240),
+            duration: const Duration(milliseconds: 360),
             curve: Curves.easeOutCubic,
           )
           .whenComplete(() {
@@ -311,7 +311,7 @@ class _FilterTabsState extends State<_FilterTabs> {
                     width: _FilterTabs._buttonWidth,
                     child: Center(
                       child: TweenAnimationBuilder<Color?>(
-                        duration: const Duration(milliseconds: 200),
+                        duration: const Duration(milliseconds: 300),
                         curve: Curves.easeOutCubic,
                         tween: ColorTween(
                           end: widget.selected == filter
@@ -473,7 +473,7 @@ class _LibraryItemsContent extends StatelessWidget {
       );
     }
 
-    if (notes.isEmpty) {
+    if (notes.isEmpty && specialView != LibrarySpecialView.none) {
       return _EmptyLibrary(
         specialView: specialView,
         onCreate: onCreate,
@@ -485,14 +485,14 @@ class _LibraryItemsContent extends StatelessWidget {
       itemCount:
           notes.length + (specialView == LibrarySpecialView.none ? 2 : 0),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 218,
-        mainAxisExtent: 276,
+        maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
+        mainAxisExtent: NoteCard.gridMainAxisExtent,
         crossAxisSpacing: compact
-            ? AppSpacing.compactGridCrossGap
-            : AppSpacing.gridCrossGap,
+            ? NoteCard.compactGridCrossGap
+            : NoteCard.gridCrossGap,
         mainAxisSpacing: compact
-            ? AppSpacing.compactGridMainGap
-            : AppSpacing.gridMainGap,
+            ? NoteCard.compactGridMainGap
+            : NoteCard.gridMainGap,
       ),
       itemBuilder: (context, index) {
         if (specialView == LibrarySpecialView.none && index == 0) {
@@ -547,7 +547,7 @@ class _CreateNoteTile extends StatelessWidget {
       child: ListTile(
         key: const ValueKey('create-note-list-tile'),
         leading: const Icon(LucideIcons.plus),
-        title: const Text('新建'),
+        title: const Text('新建笔记'),
         subtitle: const Text('创建快捷笔记'),
         onTap: onTap,
       ),

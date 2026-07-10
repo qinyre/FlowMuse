@@ -313,6 +313,10 @@ class SketchLineSerializer {
     if (!element.simulatePressure) {
       parts.add('no-simulate-pressure');
     }
+    final brushType = brushTypeFromCustomData(element.customData);
+    if (brushType != BrushType.fountainPen) {
+      parts.add('brush=${brushType.wireName}');
+    }
     _addCommonProperties(parts, element);
     return parts.join(' ');
   }

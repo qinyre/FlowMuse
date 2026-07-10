@@ -50,6 +50,8 @@ class StaticCanvasPainter extends CustomPainter {
   /// nothing is drawn outside these bounds (elements, preview, grid, etc.).
   final Bounds? contentBounds;
 
+  final bool renderPageShadows;
+
   const StaticCanvasPainter({
     required this.scene,
     required this.adapter,
@@ -62,6 +64,7 @@ class StaticCanvasPainter extends CustomPainter {
     this.gridSize,
     this.isDarkBackground = false,
     this.contentBounds,
+    this.renderPageShadows = true,
   });
 
   @override
@@ -79,12 +82,14 @@ class StaticCanvasPainter extends CustomPainter {
 
     // Clip rendering to PDF content bounds — elements cannot draw outside.
     if (contentBounds != null) {
-      canvas.clipRect(Rect.fromLTWH(
-        contentBounds!.left,
-        contentBounds!.top,
-        contentBounds!.size.width,
-        contentBounds!.size.height,
-      ));
+      canvas.clipRect(
+        Rect.fromLTWH(
+          contentBounds!.left,
+          contentBounds!.top,
+          contentBounds!.size.width,
+          contentBounds!.size.height,
+        ),
+      );
     }
 
     // Render grid behind elements
@@ -342,12 +347,11 @@ class StaticCanvasPainter extends CustomPainter {
 
     for (final page in pages) {
       final rect = page.bounds;
-      // 底部阴影
-      canvas.drawRect(rect.shift(const Offset(0, 4)), shadowPaint);
-      // 左侧阴影
-      canvas.drawRect(rect.shift(const Offset(-4, 0)), shadowPaint);
-      // 右侧阴影
-      canvas.drawRect(rect.shift(const Offset(4, 0)), shadowPaint);
+      if (renderPageShadows) {
+        canvas.drawRect(rect.shift(const Offset(0, 4)), shadowPaint);
+        canvas.drawRect(rect.shift(const Offset(-4, 0)), shadowPaint);
+        canvas.drawRect(rect.shift(const Offset(4, 0)), shadowPaint);
+      }
       canvas.drawRect(rect, paperPaint);
       _renderPageTemplate(canvas, page);
       canvas.drawRect(rect, borderPaint);
@@ -405,6 +409,7 @@ class StaticCanvasPainter extends CustomPainter {
         !identical(resolvedImages, oldDelegate.resolvedImages) ||
         editingElementId != oldDelegate.editingElementId ||
         gridSize != oldDelegate.gridSize ||
-        isDarkBackground != oldDelegate.isDarkBackground;
+        isDarkBackground != oldDelegate.isDarkBackground ||
+        renderPageShadows != oldDelegate.renderPageShadows;
   }
 }

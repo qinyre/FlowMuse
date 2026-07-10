@@ -669,3 +669,4 @@ String _templateLabel(PageTemplate template) {
     PageTemplate.dotGrid => '点阵',
   };
 }
+

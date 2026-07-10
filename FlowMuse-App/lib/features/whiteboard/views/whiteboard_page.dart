@@ -13,6 +13,7 @@ import '../../account/models/collaboration_identity.dart';
 import '../../account/view_models/account_view_model.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
+import '../../../shared/storage/local_settings_repository.dart';
 import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
 import '../collaboration/models/collaborator_presence.dart';
@@ -82,6 +83,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   void initState() {
     super.initState();
     _markdrawController = MarkdrawController();
+    _markdrawController.onInkRecognitionModeChanged =
+        _saveInkRecognitionPreference;
     _fileHandler = MarkdrawFileHandler(controller: _markdrawController);
     _collaborationAdapter = WhiteboardCollaborationAdapter(_markdrawController);
     _collaborationRepository = ref.read(collaborationRepositoryProvider);
@@ -128,6 +131,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         emptyExcalidrawSceneContent,
         'collaboration.excalidraw',
       );
+      _markdrawController.inkRecognitionMode = false;
       _loadingScene = false;
       final room = widget.initialRoom;
       if (room != null) {
@@ -182,6 +186,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     _loadingScene = true;
     _markdrawController.closeTransientUiForSceneReplace();
     _markdrawController.loadFromContent(content, '$noteId.excalidraw');
+    await _restoreInkRecognitionPreference(noteId);
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote controller loaded '
       'layout=${_markdrawController.layout.type.name} '
@@ -218,6 +223,32 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     if (room != null) {
       unawaited(_joinCollaboration(room));
     }
+  }
+
+  String _inkRecognitionPreferenceKey(String noteId) {
+    return 'whiteboard.inkRecognitionMode.$noteId';
+  }
+
+  Future<void> _restoreInkRecognitionPreference(String noteId) async {
+    final enabled = await defaultLocalSettingsRepository.readBool(
+      _inkRecognitionPreferenceKey(noteId),
+    );
+    if (!mounted || noteId != widget.noteId) {
+      return;
+    }
+    _markdrawController.inkRecognitionMode = enabled ?? false;
+  }
+
+  void _saveInkRecognitionPreference(bool enabled) {
+    if (widget.temporaryCollaboration) {
+      return;
+    }
+    unawaited(
+      defaultLocalSettingsRepository.writeBool(
+        _inkRecognitionPreferenceKey(widget.noteId),
+        enabled,
+      ),
+    );
   }
 
   void _restorePdfViewportBounds() {

@@ -311,7 +311,7 @@ class SharedSidebarItem extends StatelessWidget {
                         icon: AnimatedSwitcher(
                           duration: MediaQuery.disableAnimationsOf(context)
                               ? Duration.zero
-                              : const Duration(milliseconds: 140),
+                              : const Duration(milliseconds: 220),
                           switchInCurve: Curves.easeOutCubic,
                           switchOutCurve: Curves.easeInCubic,
                           transitionBuilder: (child, animation) {
@@ -366,21 +366,21 @@ class SharedSidebarChildren extends StatelessWidget {
     final animationsDisabled = MediaQuery.disableAnimationsOf(context);
     final duration = animationsDisabled
         ? Duration.zero
-        : const Duration(milliseconds: 180);
+        : const Duration(milliseconds: 300);
 
     return ClipRect(
       child: AnimatedSize(
         duration: duration,
         reverseDuration: animationsDisabled
             ? Duration.zero
-            : const Duration(milliseconds: 140),
+            : const Duration(milliseconds: 240),
         curve: Curves.easeOutCubic,
         alignment: Alignment.topCenter,
         child: AnimatedSwitcher(
           duration: duration,
           reverseDuration: animationsDisabled
               ? Duration.zero
-              : const Duration(milliseconds: 140),
+              : const Duration(milliseconds: 240),
           switchInCurve: Curves.easeOutCubic,
           switchOutCurve: Curves.easeInCubic,
           transitionBuilder: (child, animation) {

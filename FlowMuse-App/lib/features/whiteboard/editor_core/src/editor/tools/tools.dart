@@ -8,7 +8,6 @@ export 'hand_tool.dart';
 export 'laser_tool.dart';
 export 'line_tool.dart';
 export 'rectangle_tool.dart';
-export 'recognition_pen_tool.dart';
 export 'select_tool.dart';
 export 'text_tool.dart';
 export 'tool.dart';

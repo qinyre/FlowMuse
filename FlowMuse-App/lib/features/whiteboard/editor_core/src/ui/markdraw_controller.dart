@@ -156,6 +156,8 @@ class MarkdrawController extends ChangeNotifier {
   int? _gridSize;
   bool _objectsSnapMode = false;
   double _pressureSensitivity = 0.7;
+  BrushType _activeBrushType = BrushType.fountainPen;
+  bool _inkRecognitionMode = false;
   String? _documentName;
 
   // Link editor state
@@ -224,6 +226,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Called after recognition-pen strokes settle and should be recognized.
   Future<InkRecognitionResult> Function(InkRecognitionRequest)? onRecognizeInk;
+  void Function(bool enabled)? onInkRecognitionModeChanged;
 
   Timer? _inkRecognitionTimer;
   String? _pendingInkSessionId;
@@ -308,6 +311,21 @@ class MarkdrawController extends ChangeNotifier {
     notifyListeners();
   }
 
+  BrushType get activeBrushType => _activeBrushType;
+  set activeBrushType(BrushType value) {
+    if (_activeBrushType == value) return;
+    _activeBrushType = value;
+    notifyListeners();
+  }
+
+  bool get inkRecognitionMode => _inkRecognitionMode;
+  set inkRecognitionMode(bool value) {
+    if (_inkRecognitionMode == value) return;
+    _inkRecognitionMode = value;
+    onInkRecognitionModeChanged?.call(value);
+    notifyListeners();
+  }
+
   /// The user-assigned document name, or null.
   String? get documentName => _documentName;
 
@@ -388,6 +406,8 @@ class MarkdrawController extends ChangeNotifier {
     isEditingLinear: _isEditingLinear,
     gridSize: _gridSize,
     objectsSnapMode: _objectsSnapMode,
+    brushType: _activeBrushType,
+    inkRecognitionMode: _inkRecognitionMode,
   );
 
   /// The currently selected elements resolved from their IDs.
@@ -884,13 +904,16 @@ class MarkdrawController extends ChangeNotifier {
     if (_recognizingInk || onRecognizeInk == null || _disposed) {
       return;
     }
-    final request = _buildInkRecognitionRequest(sessionId);
+    final request = _buildInkRecognitionRequest(
+      sessionId,
+      _pendingInkStrokes(sessionId),
+    );
     if (request == null) {
       return;
     }
     _recognizingInk = true;
-    if (_activeTool is RecognitionPenTool) {
-      (_activeTool as RecognitionPenTool).startNewSession();
+    if (_activeTool is FreedrawTool) {
+      (_activeTool as FreedrawTool).startNewSession();
     }
     try {
       final result = await onRecognizeInk!(request);
@@ -939,8 +962,10 @@ class MarkdrawController extends ChangeNotifier {
     }
   }
 
-  InkRecognitionRequest? _buildInkRecognitionRequest(String sessionId) {
-    final strokes = _pendingInkStrokes(sessionId);
+  InkRecognitionRequest? _buildInkRecognitionRequest(
+    String sessionId,
+    List<FreedrawElement> strokes,
+  ) {
     if (strokes.isEmpty) {
       return null;
     }
@@ -986,6 +1011,7 @@ class MarkdrawController extends ChangeNotifier {
         width: math.max(maxX - minX, 1.0),
         height: math.max(maxY - minY, 1.0),
       ),
+      hint: 'text',
     );
   }
 
@@ -1576,7 +1602,11 @@ class MarkdrawController extends ChangeNotifier {
     if (_useUnifiedModeler && _activeTool is FreedrawTool) {
       // --- Unified modeler path for freedraw ---
       final sample = _normalizer.normalize(event, phase: StrokePhase.down);
-      _recorder?.record(sample, viewportZoom: _editorState.viewport.zoom, viewportTransform: _viewportTransform);
+      _recorder?.record(
+        sample,
+        viewportZoom: _editorState.viewport.zoom,
+        viewportTransform: _viewportTransform,
+      );
       _activeDrawPointerId = sample.pointerId;
       _modeler = StrokeInputModeler(_policySelector.select(sample.kind));
       final r = _modeler!.process(sample);
@@ -1653,9 +1683,7 @@ class MarkdrawController extends ChangeNotifier {
         ),
       );
     } else {
-      applyResult(
-        _activeTool.onPointerDown(point, toolContext),
-      );
+      applyResult(_activeTool.onPointerDown(point, toolContext));
     }
   }
 
@@ -1675,7 +1703,11 @@ class MarkdrawController extends ChangeNotifier {
       // --- Unified modeler path for freedraw ---
       if (event.pointer != _activeDrawPointerId) return;
       final sample = _normalizer.normalize(event, phase: StrokePhase.move);
-      _recorder?.record(sample, viewportZoom: _editorState.viewport.zoom, viewportTransform: _viewportTransform);
+      _recorder?.record(
+        sample,
+        viewportZoom: _editorState.viewport.zoom,
+        viewportTransform: _viewportTransform,
+      );
       final r = _modeler!.process(sample);
       if (r.point == null) return; // dropped by modeler
       final sceneOffset = _editorState.viewport.screenToScenePrecise(
@@ -1701,11 +1733,7 @@ class MarkdrawController extends ChangeNotifier {
         ? toScenePrecise(event.localPosition)
         : toScene(event.localPosition);
     applyResult(
-      _activeTool.onPointerMove(
-        point,
-        toolContext,
-        screenDelta: event.delta,
-      ),
+      _activeTool.onPointerMove(point, toolContext, screenDelta: event.delta),
     );
     mousePosition = event.localPosition;
     notifyListeners();
@@ -1731,7 +1759,11 @@ class MarkdrawController extends ChangeNotifier {
       // --- Unified modeler path for freedraw ---
       if (event.pointer != _activeDrawPointerId) return;
       final sample = _normalizer.normalize(event, phase: StrokePhase.up);
-      _recorder?.record(sample, viewportZoom: _editorState.viewport.zoom, viewportTransform: _viewportTransform);
+      _recorder?.record(
+        sample,
+        viewportZoom: _editorState.viewport.zoom,
+        viewportTransform: _viewportTransform,
+      );
       final r = _modeler!.process(sample); // flushes real endpoint
 
       if (r.point != null) {
@@ -1786,9 +1818,7 @@ class MarkdrawController extends ChangeNotifier {
         ),
       );
     } else {
-      applyResult(
-        _activeTool.onPointerUp(point, toolContext),
-      );
+      applyResult(_activeTool.onPointerUp(point, toolContext));
     }
 
     // Double-click dispatch for text editing, line editing, and frame labels
@@ -2245,8 +2275,7 @@ class MarkdrawController extends ChangeNotifier {
           width: maxX - minX,
           height: maxY - minY,
           points: relPts,
-          pressures:
-              overlay.creationPressures ?? const [],
+          pressures: overlay.creationPressures ?? const [],
           simulatePressure:
               overlay.creationPressures == null ||
               overlay.creationPressures!.isEmpty,
@@ -2388,6 +2417,54 @@ class MarkdrawController extends ChangeNotifier {
   void toggleMarkdownPanel() {
     _showMarkdownPanel = !_showMarkdownPanel;
     notifyListeners();
+  }
+
+  void toggleInkRecognitionMode() {
+    inkRecognitionMode = !_inkRecognitionMode;
+  }
+
+  bool get canConvertSelectionToText {
+    final elements = selectedElements;
+    return elements.isNotEmpty &&
+        elements.every((element) => element is FreedrawElement);
+  }
+
+  Future<void> convertSelectedInkToText() async {
+    if (_recognizingInk ||
+        onRecognizeInk == null ||
+        !canConvertSelectionToText) {
+      return;
+    }
+    final strokes = selectedElements.whereType<FreedrawElement>().toList();
+    final sessionId = ElementId.generate().value;
+    final request = _buildInkRecognitionRequest(sessionId, strokes);
+    if (request == null) {
+      return;
+    }
+    _recognizingInk = true;
+    try {
+      final result = await onRecognizeInk!(request);
+      if (_disposed) {
+        return;
+      }
+      final elements = result.elements
+          .map(_elementFromRecognizedInk)
+          .whereType<Element>()
+          .toList();
+      if (elements.isEmpty) {
+        return;
+      }
+      pushHistory();
+      applyResult(
+        CompoundResult([
+          for (final stroke in strokes) RemoveElementResult(stroke.id),
+          for (final element in elements) AddElementResult(element),
+          SetSelectionResult({for (final element in elements) element.id}),
+        ]),
+      );
+    } finally {
+      _recognizingInk = false;
+    }
   }
 
   /// Toggles tool lock mode (tool stays active after use).
@@ -2865,14 +2942,14 @@ class MarkdrawController extends ChangeNotifier {
   /// Exports a card-sized cover thumbnail for the current note.
   ///
   /// Paged notes render the first page. Unbounded notes render the current
-  /// content bounds. Returns null for empty unbounded notes.
+  /// content bounds, or a stable blank canvas frame when the scene is empty.
   Future<Uint8List?> exportCoverThumbnail({
     Size outputSize = const Size(308, 408),
   }) async {
-    final sourceRect = _coverThumbnailSourceRect();
-    if (sourceRect == null || outputSize.width <= 0 || outputSize.height <= 0) {
+    if (outputSize.width <= 0 || outputSize.height <= 0) {
       return null;
     }
+    final sourceRect = _coverThumbnailSourceRect(outputSize);
 
     const padding = 10.0;
     final drawableWidth = math.max(1.0, outputSize.width - padding * 2);
@@ -2909,6 +2986,7 @@ class MarkdrawController extends ChangeNotifier {
       resolvedImages: resolveImages(),
       gridSize: _gridSize,
       contentBounds: _contentBounds,
+      renderPageShadows: false,
     ).paint(canvas, outputSize);
 
     final picture = recorder.endRecording();
@@ -2922,14 +3000,14 @@ class MarkdrawController extends ChangeNotifier {
     return byteData?.buffer.asUint8List();
   }
 
-  Rect? _coverThumbnailSourceRect() {
+  Rect _coverThumbnailSourceRect(Size outputSize) {
     if (_layout.isPaged) {
       final layoutWithPage = _layout.ensurePage();
       return layoutWithPage.pages.first.bounds;
     }
     final bounds = ExportBounds.compute(_editorState.scene, padding: 40);
     if (bounds == null) {
-      return null;
+      return _emptyUnboundedThumbnailRect(outputSize);
     }
     return Rect.fromLTWH(
       bounds.left,
@@ -2937,6 +3015,13 @@ class MarkdrawController extends ChangeNotifier {
       bounds.size.width,
       bounds.size.height,
     );
+  }
+
+  Rect _emptyUnboundedThumbnailRect(Size outputSize) {
+    final aspectRatio = outputSize.width / outputSize.height;
+    const height = CanvasLayout.pageHeight;
+    final width = height * aspectRatio;
+    return Rect.fromCenter(center: Offset.zero, width: width, height: height);
   }
 
   /// Reads the pixel color at [screenPosition] from a pre-rendered [image].

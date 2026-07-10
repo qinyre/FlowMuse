@@ -2,15 +2,40 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/services.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'messages.g.dart' as messages;
 
-/// The Ohos implementation of [PathProviderPlatform].
-///
-/// This class implements the `package:path_provider` functionality for Ohos.
+messages.StorageDirectory _convertStorageDirectory(
+    StorageDirectory? directory) {
+  switch (directory) {
+    case null:
+      return messages.StorageDirectory.root;
+    case StorageDirectory.music:
+      return messages.StorageDirectory.music;
+    case StorageDirectory.podcasts:
+      return messages.StorageDirectory.podcasts;
+    case StorageDirectory.ringtones:
+      return messages.StorageDirectory.ringtones;
+    case StorageDirectory.alarms:
+      return messages.StorageDirectory.alarms;
+    case StorageDirectory.notifications:
+      return messages.StorageDirectory.notifications;
+    case StorageDirectory.pictures:
+      return messages.StorageDirectory.pictures;
+    case StorageDirectory.movies:
+      return messages.StorageDirectory.movies;
+    case StorageDirectory.downloads:
+      return messages.StorageDirectory.downloads;
+    case StorageDirectory.dcim:
+      return messages.StorageDirectory.dcim;
+    case StorageDirectory.documents:
+      return messages.StorageDirectory.documents;
+  }
+}
+
+/// The OHOS implementation of [PathProviderPlatform].
 class PathProviderOhos extends PathProviderPlatform {
-  /// The method channel used to interact with the native platform.
-  final MethodChannel _channel = const MethodChannel('plugins.flutter.io/path_provider');
+  final messages.PathProviderApi _api = messages.PathProviderApi();
 
   /// Registers this class as the default instance of [PathProviderPlatform].
   static void registerWith() {
@@ -18,52 +43,58 @@ class PathProviderOhos extends PathProviderPlatform {
   }
 
   @override
-  Future<String?> getTemporaryPath() async {
-    final String? path = await _channel.invokeMethod<String>('getTemporaryDirectory');
-    return path;
+  Future<String?> getTemporaryPath() {
+    return _api.getTemporaryPath();
   }
 
   @override
-  Future<String?> getApplicationSupportPath() async {
-    final String? path = await _channel.invokeMethod<String>('getApplicationSupportDirectory');
-    return path;
+  Future<String?> getApplicationSupportPath() {
+    return _api.getApplicationSupportPath();
   }
 
   @override
-  Future<String?> getApplicationDocumentsPath() async {
-    final String? path = await _channel.invokeMethod<String>('getApplicationDocumentsDirectory');
-    return path;
+  Future<String?> getLibraryPath() {
+    throw UnsupportedError('getLibraryPath is not supported on OHOS');
   }
 
   @override
-  Future<String?> getApplicationCachePath() async {
-    final String? path = await _channel.invokeMethod<String>('getApplicationCacheDirectory');
-    return path;
+  Future<String?> getApplicationDocumentsPath() {
+    return _api.getApplicationDocumentsPath();
   }
 
   @override
-  Future<String?> getLibraryPath() async {
-    final String? path = await _channel.invokeMethod<String>('getLibraryDirectory');
-    return path;
+  Future<String?> getApplicationCachePath() {
+    return _api.getApplicationCachePath();
   }
 
   @override
   Future<String?> getExternalStoragePath() {
-    throw UnsupportedError('Functionality not available on HarmonyOS');
+    return _api.getExternalStoragePath();
   }
 
   @override
-  Future<List<String>?> getExternalCachePaths() {
-    throw UnsupportedError('Functionality not available on HarmonyOS');
+  Future<List<String>?> getExternalCachePaths() async {
+    return (await _api.getExternalCachePaths()).cast<String>();
   }
 
   @override
-  Future<List<String>?> getExternalStoragePaths({StorageDirectory? type}) {
-    throw UnsupportedError('Functionality not available on HarmonyOS');
+  Future<List<String>?> getExternalStoragePaths({
+    StorageDirectory? type,
+  }) async {
+    return _getExternalStoragePaths(type: type);
   }
 
   @override
-  Future<String?> getDownloadsPath() {
-    throw UnsupportedError('Functionality not available on HarmonyOS');
+  Future<String?> getDownloadsPath() async {
+    final List<String> paths =
+    await _getExternalStoragePaths(type: StorageDirectory.downloads);
+    return paths.isEmpty ? null : paths.first;
+  }
+
+  Future<List<String>> _getExternalStoragePaths({
+    StorageDirectory? type,
+  }) async {
+    return (await _api.getExternalStoragePaths(_convertStorageDirectory(type)))
+        .cast<String>();
   }
 }

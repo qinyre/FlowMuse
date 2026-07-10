@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
 
 import '../../core/math/math.dart';
+import '../../core/elements/brush_type.dart';
 import '../../input/outline_render_mode.dart';
 import '../../input/stroke_render_metrics.dart';
 import 'draw_style.dart';
@@ -48,9 +49,11 @@ class FreedrawRenderer {
     List<double>? pressures,
     double pressureSensitivity = 0.7,
     bool isComplete = true,
+    BrushType brushType = BrushType.fountainPen,
   }) {
     if (points.isEmpty) return const [];
 
+    final brush = _configFor(brushType);
     final hasPressure = pressures != null && pressures.length == points.length;
     final inputPoints = <PointVector>[
       for (var i = 0; i < points.length; i++)
@@ -61,13 +64,13 @@ class FreedrawRenderer {
         ),
     ];
     final options = StrokeOptions(
-      size: dm.max(strokeWidth, 1.0),
+      size: dm.max(strokeWidth * brush.sizeScale, 1.0),
       thinning: hasPressure
-          ? 0.05 + pressureSensitivity.clamp(0.0, 1.0) * 0.9
-          : StrokeOptions.defaultThinning,
-      smoothing: StrokeOptions.defaultSmoothing,
-      streamline: StrokeOptions.defaultStreamline,
-      simulatePressure: !hasPressure,
+          ? brush.thinning * pressureSensitivity.clamp(0.0, 1.0)
+          : brush.simulatedThinning,
+      smoothing: brush.smoothing,
+      streamline: brush.streamline,
+      simulatePressure: !hasPressure || brush.forceSimulatePressure,
       isComplete: isComplete,
     );
 
@@ -153,12 +156,14 @@ class FreedrawRenderer {
     bool isComplete = true,
     required OutlineRenderMode outlineRenderMode,
     StrokeRenderMetricsSink? metricsSink,
+    BrushType brushType = BrushType.fountainPen,
   }) {
     if (points.isEmpty) return;
 
+    final brush = _configFor(brushType);
     // perfect_freehand 的 size 是直径,而 DrawStyle.strokeWidth 在 freedraw 语境下
     // 是期望的笔迹宽度。直接用 strokeWidth 作为 size 基准。
-    final size = dm.max(style.strokeWidth, 1.0);
+    final size = dm.max(style.strokeWidth * brush.sizeScale, 1.0);
 
     Stopwatch? outlineWatch;
     if (metricsSink != null) {
@@ -166,10 +171,11 @@ class FreedrawRenderer {
     }
     final outline = buildOutline(
       points,
-      strokeWidth: size,
+      strokeWidth: style.strokeWidth,
       pressures: pressures,
       pressureSensitivity: pressureSensitivity,
       isComplete: isComplete,
+      brushType: brushType,
     );
     final getStrokeDuration = outlineWatch != null
         ? (outlineWatch..stop()).elapsed
@@ -178,7 +184,11 @@ class FreedrawRenderer {
     // 单点(点击):outline 为空,画圆点
     if (outline.isEmpty) {
       final p = points[0];
-      final paint = style.toStrokePaint()..style = PaintingStyle.fill;
+      final paint = style.toStrokePaint()
+        ..style = PaintingStyle.fill
+        ..color = style.toStrokePaint().color.withValues(
+          alpha: style.toStrokePaint().color.a * brush.opacityScale,
+        );
       canvas.drawCircle(Offset(p.x, p.y), size / 2, paint);
       return;
     }
@@ -191,7 +201,12 @@ class FreedrawRenderer {
     }
     final path = buildOutlinePath(outlineVectors, outlineRenderMode);
     final pathBuildDuration = sw != null ? (sw..stop()).elapsed : Duration.zero;
-    final paint = style.toStrokePaint()..style = PaintingStyle.fill;
+    final basePaint = style.toStrokePaint();
+    final paint = basePaint
+      ..style = PaintingStyle.fill
+      ..color = basePaint.color.withValues(
+        alpha: basePaint.color.a * brush.opacityScale,
+      );
     canvas.drawPath(path, paint);
     metricsSink?.onMetrics(
       StrokeRenderMetrics(
@@ -205,6 +220,48 @@ class FreedrawRenderer {
   static List<PointVector> _asPointVectors(List<Offset> outline) => [
     for (final o in outline) PointVector(o.dx, o.dy, 0),
   ];
+
+  static _BrushConfig _configFor(BrushType brushType) {
+    return switch (brushType) {
+      BrushType.pencil => const _BrushConfig(
+        sizeScale: 0.82,
+        opacityScale: 0.68,
+        thinning: 0.45,
+        simulatedThinning: 0.32,
+        smoothing: 0.45,
+        streamline: 0.28,
+      ),
+      BrushType.ballpoint => const _BrushConfig(
+        sizeScale: 0.72,
+        thinning: 0.08,
+        simulatedThinning: 0.02,
+        smoothing: 0.62,
+        streamline: 0.52,
+      ),
+      BrushType.fountainPen => _BrushConfig(
+        thinning: 0.9,
+        simulatedThinning: StrokeOptions.defaultThinning,
+        smoothing: StrokeOptions.defaultSmoothing,
+        streamline: StrokeOptions.defaultStreamline,
+      ),
+      BrushType.brushPen => const _BrushConfig(
+        sizeScale: 1.15,
+        thinning: 1.0,
+        simulatedThinning: 0.82,
+        smoothing: 0.58,
+        streamline: 0.42,
+      ),
+      BrushType.highlighter => const _BrushConfig(
+        sizeScale: 4.2,
+        opacityScale: 0.32,
+        thinning: 0.05,
+        simulatedThinning: 0.02,
+        smoothing: 0.72,
+        streamline: 0.58,
+        forceSimulatePressure: true,
+      ),
+    };
+  }
 
   /// Builds a smooth cubic Bezier path through 3+ points using
   /// Catmull-Rom to cubic Bezier conversion (等粗退化路径用)。
@@ -227,4 +284,24 @@ class FreedrawRenderer {
 
     return path;
   }
+}
+
+class _BrushConfig {
+  const _BrushConfig({
+    this.sizeScale = 1.0,
+    this.opacityScale = 1.0,
+    required this.thinning,
+    required this.simulatedThinning,
+    required this.smoothing,
+    required this.streamline,
+    this.forceSimulatePressure = false,
+  });
+
+  final double sizeScale;
+  final double opacityScale;
+  final double thinning;
+  final double simulatedThinning;
+  final double smoothing;
+  final double streamline;
+  final bool forceSimulatePressure;
 }

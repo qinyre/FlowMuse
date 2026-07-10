@@ -7,6 +7,11 @@ import '../tool_result.dart';
 import '../tool_type.dart';
 import 'tool.dart';
 
+const String recognitionStrokeSessionKey = 'flowmuse.recognition.sessionId';
+const String recognitionStrokePendingKey = 'flowmuse.recognition.pending';
+const String recognitionStrokeStartedAtKey = 'flowmuse.recognition.startedAt';
+const String recognitionStrokePointTimesKey = 'flowmuse.recognition.pointTimes';
+
 /// Tool for creating freehand drawing elements by continuous path recording.
 ///
 /// 当 pressure 参数可用(手写笔)时,收集真实压感并存入 FreedrawElement.pressures,
@@ -15,8 +20,11 @@ import 'tool.dart';
 class FreedrawTool implements Tool {
   final List<Point> _points = [];
   final List<double> _pressures = [];
+  final List<int> _pointTimes = [];
   bool _hasRealPressure = false;
   bool _isDrawing = false;
+  String? _sessionId;
+  int? _startedAt;
 
   @override
   ToolType get type => ToolType.freedraw;
@@ -28,6 +36,11 @@ class FreedrawTool implements Tool {
     double? pressure,
   }) {
     _isDrawing = true;
+    if (context.inkRecognitionMode && context.brushType.canAutoRecognize) {
+      _sessionId ??= ElementId.generate().value;
+      _startedAt ??= DateTime.now().millisecondsSinceEpoch;
+      _pointTimes.add(DateTime.now().millisecondsSinceEpoch);
+    }
     _points.add(point);
     _recordPressure(pressure);
     return null;
@@ -41,6 +54,9 @@ class FreedrawTool implements Tool {
     double? pressure,
   }) {
     if (!_isDrawing) return null;
+    if (_sessionId != null) {
+      _pointTimes.add(DateTime.now().millisecondsSinceEpoch);
+    }
     _points.add(point);
     _recordPressure(pressure);
     return null;
@@ -58,6 +74,9 @@ class FreedrawTool implements Tool {
     }
 
     if (_points.last != point) {
+      if (_sessionId != null) {
+        _pointTimes.add(DateTime.now().millisecondsSinceEpoch);
+      }
       _points.add(point);
       _recordPressure(pressure);
     } else if (_hasRealPressure && pressure != null) {
@@ -73,19 +92,43 @@ class FreedrawTool implements Tool {
         .map((p) => Point(p.x - minX, p.y - minY))
         .toList();
 
+    var customData = customDataWithBrushType(null, context.brushType);
+    if (_sessionId != null) {
+      customData = {
+        ...customData,
+        recognitionStrokeSessionKey: _sessionId,
+        recognitionStrokePendingKey: true,
+        recognitionStrokeStartedAtKey: _startedAt,
+        recognitionStrokePointTimesKey: List<int>.unmodifiable(_pointTimes),
+      };
+    }
+
     final element = FreedrawElement(
       id: ElementId.generate(),
       x: minX,
       y: minY,
-      width: maxX - minX,
-      height: maxY - minY,
+      width: math.max(maxX - minX, 1.0),
+      height: math.max(maxY - minY, 1.0),
       points: relativePoints,
       pressures: _hasRealPressure ? List.unmodifiable(_pressures) : const [],
       simulatePressure: !_hasRealPressure,
+      customData: customData,
     );
 
-    reset();
+    final shouldSelect = _sessionId != null;
+    _clearStrokeState();
+    if (shouldSelect) {
+      return CompoundResult([
+        AddElementResult(element),
+        SetSelectionResult({element.id}),
+      ]);
+    }
     return AddElementResult(element);
+  }
+
+  void startNewSession() {
+    _sessionId = ElementId.generate().value;
+    _startedAt = DateTime.now().millisecondsSinceEpoch;
   }
 
   /// 记录压感。首点收到非 null pressure 即判定本次笔画为真压感,
@@ -125,9 +168,18 @@ class FreedrawTool implements Tool {
 
   @override
   void reset() {
+    _clearStrokeState(clearSession: true);
+  }
+
+  void _clearStrokeState({bool clearSession = false}) {
     _points.clear();
     _pressures.clear();
+    _pointTimes.clear();
     _hasRealPressure = false;
     _isDrawing = false;
+    if (clearSession) {
+      _sessionId = null;
+      _startedAt = null;
+    }
   }
 }

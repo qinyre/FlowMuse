@@ -724,6 +724,7 @@ class RoughCanvasAdapter implements RoughAdapter {
     List<Point> points,
     List<double> pressures,
     bool simulatePressure,
+    BrushType brushType,
     DrawStyle style, {
     bool isComplete = true,
   }) {
@@ -738,6 +739,7 @@ class RoughCanvasAdapter implements RoughAdapter {
       pressureSensitivity: pressureSensitivity,
       isComplete: isComplete,
       outlineRenderMode: outlineRenderMode,
+      brushType: brushType,
     );
   }
 
