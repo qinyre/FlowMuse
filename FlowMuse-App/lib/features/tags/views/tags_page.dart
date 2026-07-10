@@ -9,6 +9,7 @@ import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
+import '../../library/widgets/create_collection_dialog.dart';
 import '../../library/widgets/create_note_card.dart';
 import '../../library/widgets/note_card.dart';
 import '../view_models/tags_view_model.dart';
@@ -26,7 +27,9 @@ class TagsPage extends ConsumerWidget {
       viewMode: state.viewMode,
       sortAscending: state.sortAscending,
       selectionMode: state.selectionMode,
-      onCreate: viewModel.createTag,
+      onCreate: () {
+        _createTag(context, viewModel);
+      },
       onViewModeChanged: viewModel.changeViewMode,
       onSortDirectionChanged: viewModel.toggleSortDirection,
       onSelectionModeChanged: viewModel.toggleSelectionMode,
@@ -39,11 +42,36 @@ class TagsPage extends ConsumerWidget {
           : null,
       child: _TagItems(
         state: state,
-        onCreate: viewModel.createTag,
+        onCreate: () {
+          _createTag(context, viewModel);
+        },
         onSelectionChanged: viewModel.toggleTagSelection,
         onRename: viewModel.renameTag,
         onDelete: viewModel.deleteTag,
       ),
+    );
+  }
+}
+
+Future<void> _createTag(BuildContext context, TagsViewModel viewModel) async {
+  final result = await showCreateCollectionDialog(
+    context: context,
+    title: '新建标签',
+    hintText: '请输入标题',
+    icon: LucideIcons.hash,
+    coverColors: libraryTagColors,
+  );
+  if (result == null || !context.mounted) {
+    return;
+  }
+  try {
+    await viewModel.createTag(name: result.name, coverColor: result.coverColor);
+  } catch (error) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('\u521b\u5efa\u5931\u8d25\uff1a$error')),
     );
   }
 }

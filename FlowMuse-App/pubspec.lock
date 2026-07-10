@@ -602,11 +602,10 @@ packages:
   path_provider:
     dependency: "direct main"
     description:
-      name: path_provider
-      sha256: a7f4874f987173da295a61c181b8ee71dab59b332a486b391babf26a1b884825
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "2.1.6"
+      path: "tool/vendor/path_provider"
+      relative: true
+    source: path
+    version: "2.1.0"
   path_provider_android:
     dependency: transitive
     description:
@@ -637,7 +636,7 @@ packages:
       path: "tool/vendor/path_provider_ohos"
       relative: true
     source: path
-    version: "1.0.0"
+    version: "2.2.1"
   path_provider_platform_interface:
     dependency: transitive
     description:

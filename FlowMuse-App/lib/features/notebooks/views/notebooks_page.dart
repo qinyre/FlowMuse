@@ -9,6 +9,7 @@ import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
+import '../../library/widgets/create_collection_dialog.dart';
 import '../../library/widgets/create_note_card.dart';
 import '../../library/widgets/note_card.dart';
 import '../view_models/notebooks_view_model.dart';
@@ -28,7 +29,9 @@ class NotebooksPage extends ConsumerWidget {
       selectionMode: state.selectionMode,
       createTooltip: '新建笔记本',
       createIcon: LucideIcons.bookPlus,
-      onCreate: viewModel.createNotebook,
+      onCreate: () {
+        _createNotebook(context, viewModel);
+      },
       onViewModeChanged: viewModel.changeViewMode,
       onSortDirectionChanged: viewModel.toggleSortDirection,
       onSelectionModeChanged: viewModel.toggleSelectionMode,
@@ -41,11 +44,42 @@ class NotebooksPage extends ConsumerWidget {
           : null,
       child: _NotebookCollectionItems(
         state: state,
-        onCreate: viewModel.createNotebook,
+        onCreate: () {
+          _createNotebook(context, viewModel);
+        },
         onSelectionChanged: viewModel.toggleNotebookSelection,
         onRename: viewModel.renameNotebook,
         onDelete: viewModel.deleteNotebook,
       ),
+    );
+  }
+}
+
+Future<void> _createNotebook(
+  BuildContext context,
+  NotebooksViewModel viewModel,
+) async {
+  final result = await showCreateCollectionDialog(
+    context: context,
+    title: '新建笔记本',
+    hintText: '请输入标题',
+    icon: LucideIcons.bookOpen,
+    coverColors: libraryNotebookColors,
+  );
+  if (result == null || !context.mounted) {
+    return;
+  }
+  try {
+    await viewModel.createNotebook(
+      name: result.name,
+      coverColor: result.coverColor,
+    );
+  } catch (error) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('\u521b\u5efa\u5931\u8d25\uff1a$error')),
     );
   }
 }

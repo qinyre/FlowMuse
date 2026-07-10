@@ -87,6 +87,12 @@ dev_dependencies:
 dependency_overrides:
   code_assets:
     path: tool/vendor/code_assets
+  # 鸿蒙适配：覆盖为含 ohos 支持的社区版，其他平台也兼容
+  # 后续官方更新时，手动同步 tool/vendor/path_provider 即可
+  path_provider:
+    path: tool/vendor/path_provider
+  path_provider_ohos:
+    path: tool/vendor/path_provider_ohos
 
 hooks:
   user_defines:
@@ -94,6 +100,7 @@ hooks:
       source: system
       name_windows: winsqlite3
       name: sqlite3
+      name_ohos: harmony_sqlite.z
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
