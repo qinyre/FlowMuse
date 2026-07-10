@@ -47,6 +47,7 @@ class FreedrawRenderer {
     required double strokeWidth,
     List<double>? pressures,
     double pressureSensitivity = 0.7,
+    bool isComplete = true,
   }) {
     if (points.isEmpty) return const [];
 
@@ -67,7 +68,7 @@ class FreedrawRenderer {
       smoothing: StrokeOptions.defaultSmoothing,
       streamline: StrokeOptions.defaultStreamline,
       simulatePressure: !hasPressure,
-      isComplete: true,
+      isComplete: isComplete,
     );
 
     return getStroke(inputPoints, options: options);
@@ -116,6 +117,7 @@ class FreedrawRenderer {
     DrawStyle style, {
     List<double>? pressures,
     double pressureSensitivity = 0.7,
+    bool isComplete = true,
     required OutlineRenderMode outlineRenderMode,
     StrokeRenderMetricsSink? metricsSink,
   }) {
@@ -130,6 +132,7 @@ class FreedrawRenderer {
       strokeWidth: size,
       pressures: pressures,
       pressureSensitivity: pressureSensitivity,
+      isComplete: isComplete,
     );
 
     // 单点(点击):outline 为空,画圆点

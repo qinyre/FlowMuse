@@ -162,6 +162,7 @@ class ElementRenderer {
             element.pressures,
             element.simulatePressure,
             style,
+            isComplete: element.isComplete,
           );
         }
       case 'text':
