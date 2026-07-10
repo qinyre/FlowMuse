@@ -101,6 +101,7 @@ class ToolContext {
 class ToolOverlay {
   final Bounds? creationBounds;
   final List<Point>? creationPoints;
+  final List<double>? creationPressures;
   final Bounds? marqueeRect;
   final Bounds? bindTargetBounds;
 
@@ -111,6 +112,10 @@ class ToolOverlay {
   /// True when the line tool detects proximity to the start point,
   /// indicating the line will close into a polygon on finalization.
   final bool creationClosed;
+
+  /// Whether the creation stroke is complete (user finished drawing).
+  /// Default false — preview overlays represent in-progress "wet ink".
+  final bool creationIsComplete;
 
   /// Element IDs that the eraser tool will delete on pointer-up.
   /// Non-null during an eraser drag to allow the UI to dim these elements.
@@ -126,10 +131,12 @@ class ToolOverlay {
   const ToolOverlay({
     this.creationBounds,
     this.creationPoints,
+    this.creationPressures,
     this.marqueeRect,
     this.bindTargetBounds,
     this.bindTargetAngle = 0.0,
     this.creationClosed = false,
+    this.creationIsComplete = false,
     this.eraserElementIds,
     this.closeIndicatorCenter,
     this.snapLines = const [],

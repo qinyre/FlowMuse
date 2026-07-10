@@ -2071,6 +2071,12 @@ class MarkdrawController extends ChangeNotifier {
           width: maxX - minX,
           height: maxY - minY,
           points: relPts,
+          pressures:
+              overlay.creationPressures ?? const [],
+          simulatePressure:
+              overlay.creationPressures == null ||
+              overlay.creationPressures!.isEmpty,
+          isComplete: false,
           seed: previewSeed,
         ),
         _ => null,
