@@ -114,6 +114,9 @@ flutter:
 
   assets:
     - .env
+    - assets/covers/manifest.json
+    - assets/covers/notebooks/
+    - assets/covers/tags/
 
   fonts:
     - family: Excalifont

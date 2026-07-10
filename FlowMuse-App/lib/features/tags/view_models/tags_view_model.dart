@@ -11,6 +11,7 @@ class TagItem {
     required this.name,
     required this.count,
     required this.coverColor,
+    this.coverImage,
     this.noteIds = const [],
   });
 
@@ -18,6 +19,7 @@ class TagItem {
   final String name;
   final int count;
   final Color coverColor;
+  final String? coverImage;
   final List<String> noteIds;
 }
 
@@ -76,6 +78,7 @@ class TagsViewModel extends Notifier<TagsState> {
                 name: tag.name,
                 count: index.countNotesWithTag(tag.id),
                 coverColor: tag.coverColor,
+                coverImage: tag.coverImage,
                 noteIds: [
                   for (final note in index.notes)
                     if (!note.isDeleted && note.tagIds.contains(tag.id))
@@ -86,10 +89,14 @@ class TagsViewModel extends Notifier<TagsState> {
     return TagsState(tags: tags);
   }
 
-  Future<LibraryTag> createTag({String? name, Color? coverColor}) {
+  Future<LibraryTag> createTag({
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  }) {
     return ref
         .read(libraryIndexProvider.notifier)
-        .createTag(name: name, coverColor: coverColor);
+        .createTag(name: name, coverColor: coverColor, coverImage: coverImage);
   }
 
   void changeViewMode(LibraryViewMode viewMode) {

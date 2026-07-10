@@ -1,0 +1,11 @@
+{
+  "notebooks": [
+    { "id": "nb-2-1", "file": "2_1.png", "name": "自然 1" },
+    { "id": "nb-2-2", "file": "2_2.png", "name": "自然 2" },
+    { "id": "nb-2-3", "file": "2_3.png", "name": "自然 3" },
+    { "id": "nb-3-1", "file": "3_1.png", "name": "风景 1" },
+    { "id": "nb-3-2", "file": "3_2.png", "name": "风景 2" },
+    { "id": "nb-3-3", "file": "3_3.png", "name": "风景 3" }
+  ],
+  "tags": []
+}

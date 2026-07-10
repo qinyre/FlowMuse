@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -9,24 +11,37 @@ import '../../../shared/widgets/app_spacing.dart';
 // ---------------------------------------------------------------------------
 
 class CoverItem {
-  const CoverItem({required this.id, required this.imageUrl, this.name = ''});
+  const CoverItem({required this.id, required this.assetPath, this.name = ''});
 
   final String id;
-  final String imageUrl;
+  final String assetPath;
   final String name;
 }
 
-/// 占位实现，后续替换为真实 API
-Future<List<CoverItem>> fetchCovers() async => const [];
+Future<List<CoverItem>> fetchCovers(String category) async {
+  final raw = await rootBundle.loadString('assets/covers/manifest.json');
+  final map = json.decode(raw) as Map<String, dynamic>;
+  final items = (map[category] as List?) ?? [];
+  return [
+    for (final item in items)
+      CoverItem(
+        id: item['id'] as String,
+        assetPath: 'assets/covers/$category/${item['file']}',
+        name: (item['name'] as String?) ?? '',
+      ),
+  ];
+}
 
 class CreateCollectionResult {
   const CreateCollectionResult({
     required this.name,
     required this.coverColor,
+    this.coverImage,
   });
 
   final String name;
   final Color coverColor;
+  final String? coverImage;
 }
 
 Future<CreateCollectionResult?> showCreateCollectionDialog({
@@ -35,6 +50,7 @@ Future<CreateCollectionResult?> showCreateCollectionDialog({
   required String hintText,
   required IconData icon,
   required List<Color> coverColors,
+  required String coverCategory,
 }) {
   return showDialog<CreateCollectionResult>(
     context: context,
@@ -43,6 +59,7 @@ Future<CreateCollectionResult?> showCreateCollectionDialog({
       hintText: hintText,
       icon: icon,
       coverColors: coverColors,
+      coverCategory: coverCategory,
     ),
   );
 }
@@ -54,12 +71,14 @@ class CreateCollectionDialog extends StatefulWidget {
     required this.hintText,
     required this.icon,
     required this.coverColors,
+    required this.coverCategory,
   });
 
   final String title;
   final String hintText;
   final IconData icon;
   final List<Color> coverColors;
+  final String coverCategory;
 
   @override
   State<CreateCollectionDialog> createState() => _CreateCollectionDialogState();
@@ -71,6 +90,7 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
   late Color _selectedColor;
+  String? _selectedCoverImage;
   bool _showEmptyTitleTip = false;
 
   String get _name => _controller.text.trim();
@@ -107,7 +127,11 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
       return;
     }
     Navigator.of(context).pop(
-      CreateCollectionResult(name: _name, coverColor: _selectedColor),
+      CreateCollectionResult(
+        name: _name,
+        coverColor: _selectedColor,
+        coverImage: _selectedCoverImage,
+      ),
     );
   }
 
@@ -119,11 +143,12 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (context) => const _CoverPickerSheet(),
+      builder: (context) => _CoverPickerSheet(category: widget.coverCategory),
     );
     if (selected != null && mounted) {
-      // 后续处理选中的封面图片
-      debugPrint('Selected cover: ${selected.id} - ${selected.imageUrl}');
+      setState(() {
+        _selectedCoverImage = selected.assetPath;
+      });
     }
   }
 
@@ -176,7 +201,11 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
                 alignment: Alignment.center,
                 clipBehavior: Clip.none,
                 children: [
-                  _CoverPreview(color: _selectedColor, icon: widget.icon),
+                  _CoverPreview(
+                    color: _selectedColor,
+                    icon: widget.icon,
+                    coverImage: _selectedCoverImage,
+                  ),
                   AnimatedOpacity(
                     opacity: _showEmptyTitleTip ? 1 : 0,
                     duration: const Duration(milliseconds: 120),
@@ -191,8 +220,11 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
                   for (final color in widget.coverColors)
                     _ColorChoice(
                       color: color,
-                      selected: color == _selectedColor,
-                      onTap: () => setState(() => _selectedColor = color),
+                      selected: color == _selectedColor && _selectedCoverImage == null,
+                      onTap: () => setState(() {
+                        _selectedColor = color;
+                        _selectedCoverImage = null;
+                      }),
                     ),
                 ],
               ),
@@ -281,10 +313,15 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
 }
 
 class _CoverPreview extends StatelessWidget {
-  const _CoverPreview({required this.color, required this.icon});
+  const _CoverPreview({
+    required this.color,
+    required this.icon,
+    this.coverImage,
+  });
 
   final Color color;
   final IconData icon;
+  final String? coverImage;
 
   @override
   Widget build(BuildContext context) {
@@ -296,30 +333,43 @@ class _CoverPreview extends StatelessWidget {
     return SizedBox(
       width: 108,
       height: 136,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(AppSpacing.radius),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color.alphaBlend(Colors.white.withValues(alpha: 0.14), color),
-              color,
-              Color.alphaBlend(Colors.black.withValues(alpha: 0.08), color),
-            ],
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x185A625F),
-              blurRadius: 14,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Center(
-          child: Icon(icon, size: 34, color: foreground.withValues(alpha: 0.8)),
-        ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppSpacing.radius),
+        child: coverImage != null
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(coverImage!, fit: BoxFit.cover),
+                  // 保留图标覆盖层
+                  Center(
+                    child: Icon(icon, size: 34, color: Colors.white.withValues(alpha: 0.7)),
+                  ),
+                ],
+              )
+            : DecoratedBox(
+                decoration: BoxDecoration(
+                  color: color,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.alphaBlend(Colors.white.withValues(alpha: 0.14), color),
+                      color,
+                      Color.alphaBlend(Colors.black.withValues(alpha: 0.08), color),
+                    ],
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x185A625F),
+                      blurRadius: 14,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Icon(icon, size: 34, color: foreground.withValues(alpha: 0.8)),
+                ),
+              ),
       ),
     );
   }
@@ -400,7 +450,9 @@ class _ColorChoice extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _CoverPickerSheet extends StatefulWidget {
-  const _CoverPickerSheet();
+  const _CoverPickerSheet({required this.category});
+
+  final String category;
 
   @override
   State<_CoverPickerSheet> createState() => _CoverPickerSheetState();
@@ -418,7 +470,7 @@ class _CoverPickerSheetState extends State<_CoverPickerSheet> {
   }
 
   Future<void> _loadCovers() async {
-    final covers = await fetchCovers();
+    final covers = await fetchCovers(widget.category);
     if (mounted) {
       setState(() {
         _covers = covers;
@@ -517,9 +569,10 @@ class _CoverPickerSheetState extends State<_CoverPickerSheet> {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(AppSpacing.radius),
-                                  child: Image.network(
-                                    cover.imageUrl,
+                                  child: Image.asset(
+                                    cover.assetPath,
                                     fit: BoxFit.cover,
+                                    // ignore: unnecessary_underscores
                                     errorBuilder: (_, __, ___) => const Center(
                                       child: Icon(LucideIcons.imageOff, color: Color(0xFF8A908D)),
                                     ),

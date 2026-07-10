@@ -6,6 +6,7 @@ class LibraryNotebook {
     required this.id,
     required this.name,
     required this.coverColor,
+    this.coverImage,
     required this.createdAt,
     required this.updatedAt,
     required this.sortOrder,
@@ -14,6 +15,7 @@ class LibraryNotebook {
   final String id;
   final String name;
   final Color coverColor;
+  final String? coverImage;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int sortOrder;
@@ -22,6 +24,7 @@ class LibraryNotebook {
     String? id,
     String? name,
     Color? coverColor,
+    String? coverImage,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? sortOrder,
@@ -30,6 +33,7 @@ class LibraryNotebook {
       id: id ?? this.id,
       name: name ?? this.name,
       coverColor: coverColor ?? this.coverColor,
+      coverImage: coverImage ?? this.coverImage,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       sortOrder: sortOrder ?? this.sortOrder,
@@ -43,6 +47,7 @@ class LibraryTag {
     required this.id,
     required this.name,
     required this.coverColor,
+    this.coverImage,
     required this.createdAt,
     required this.updatedAt,
     required this.sortOrder,
@@ -51,6 +56,7 @@ class LibraryTag {
   final String id;
   final String name;
   final Color coverColor;
+  final String? coverImage;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int sortOrder;
@@ -59,6 +65,7 @@ class LibraryTag {
     String? id,
     String? name,
     Color? coverColor,
+    String? coverImage,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? sortOrder,
@@ -67,6 +74,7 @@ class LibraryTag {
       id: id ?? this.id,
       name: name ?? this.name,
       coverColor: coverColor ?? this.coverColor,
+      coverImage: coverImage ?? this.coverImage,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       sortOrder: sortOrder ?? this.sortOrder,
