@@ -65,7 +65,10 @@ class _EditorCanvasState extends State<EditorCanvas>
   }
 
   bool _shouldHandlePagedTouch(PointerEvent event) {
-    return controller.isPagedViewport && event.kind == PointerDeviceKind.touch;
+    return controller.isPagedViewport &&
+        event.kind == PointerDeviceKind.touch &&
+        (controller.viewMode ||
+            controller.editorState.activeToolType == ToolType.hand);
   }
 
   void _startPagedTouch(PointerDownEvent event) {
