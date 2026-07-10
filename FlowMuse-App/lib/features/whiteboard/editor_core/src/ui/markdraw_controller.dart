@@ -244,6 +244,14 @@ class MarkdrawController extends ChangeNotifier {
 
   Size get canvasSize => _canvasSize;
 
+  bool get isPagedViewport => _layout.isPaged && _layout.pages.isNotEmpty;
+
+  PagedViewportMetrics? get pagedViewportMetrics => computePagedViewportMetrics(
+    layout: _layout,
+    viewport: _editorState.viewport,
+    canvasSize: _canvasSize,
+  );
+
   /// Current scene snapshot.
   Scene get currentScene => _editorState.scene;
 
@@ -426,12 +434,12 @@ class MarkdrawController extends ChangeNotifier {
 
   set contentBounds(Bounds? value) {
     _contentBounds = value;
-    _applyContentBoundsClamp();
+    _applyViewportConstraints();
   }
 
   set canvasSize(Size value) {
     _canvasSize = value;
-    _applyContentBoundsClamp();
+    _applyViewportConstraints();
   }
 
   // --- Lifecycle ---
@@ -715,7 +723,7 @@ class MarkdrawController extends ChangeNotifier {
   void applyResult(ToolResult? result) {
     if (result == null) return;
 
-    final constrained = _constrainPdfViewport(result);
+    final constrained = _constrainViewport(result);
     final styled = isCreationTool
         ? _applyDefaultStyleToResult(constrained)
         : constrained;
@@ -746,27 +754,39 @@ class MarkdrawController extends ChangeNotifier {
     notifyListeners();
   }
 
-  ToolResult _constrainPdfViewport(ToolResult result) {
+  ToolResult _constrainViewport(ToolResult result) {
     if (result is CompoundResult) {
-      return CompoundResult(result.results.map(_constrainPdfViewport).toList());
+      return CompoundResult(result.results.map(_constrainViewport).toList());
     }
     if (result is! UpdateViewportResult) return result;
     if (_canvasSize.width <= 0 || _canvasSize.height <= 0) return result;
-    return UpdateViewportResult(
-      clampViewportToBounds(result.viewport, _contentBounds, _canvasSize),
-    );
+    return UpdateViewportResult(_constrainedViewport(result.viewport));
   }
 
-  void _applyContentBoundsClamp() {
-    final bounds = _contentBounds;
-    if (bounds == null || _canvasSize.width <= 0 || _canvasSize.height <= 0) {
+  ViewportState _constrainedViewport(ViewportState viewport) {
+    var constrained = viewport;
+    if (isPagedViewport) {
+      constrained = clampPagedViewport(
+        layout: _layout,
+        viewport: constrained,
+        canvasSize: _canvasSize,
+      );
+    }
+    if (!isPagedViewport && _contentBounds != null) {
+      constrained = clampViewportToBounds(
+        constrained,
+        _contentBounds,
+        _canvasSize,
+      );
+    }
+    return constrained;
+  }
+
+  void _applyViewportConstraints() {
+    if (_canvasSize.width <= 0 || _canvasSize.height <= 0) {
       return;
     }
-    final clamped = clampViewportToBounds(
-      _editorState.viewport,
-      bounds,
-      _canvasSize,
-    );
+    final clamped = _constrainedViewport(_editorState.viewport);
     if (clamped != _editorState.viewport) {
       _editorState = _editorState.copyWith(viewport: clamped);
       notifyListeners();
@@ -1728,6 +1748,13 @@ class MarkdrawController extends ChangeNotifier {
   /// Handles scroll-wheel zoom.
   void onPointerSignal(PointerSignalEvent event) {
     if (event is PointerScrollEvent) {
+      final ctrl =
+          HardwareKeyboard.instance.isControlPressed ||
+          HardwareKeyboard.instance.isMetaPressed;
+      if (isPagedViewport && !ctrl) {
+        scrollPagedViewportBy(event.scrollDelta.dy);
+        return;
+      }
       final factor = event.scrollDelta.dy < 0 ? 1.1 : 0.9;
       final newViewport = _editorState.viewport.zoomAt(
         factor,
@@ -2135,6 +2162,7 @@ class MarkdrawController extends ChangeNotifier {
     _editorState = _editorState.copyWith(
       scene: _sceneWithLayoutPages(validated),
     );
+    _applyViewportConstraints();
     if (background != null) {
       _canvasBackgroundColor = background;
     }
@@ -2154,6 +2182,7 @@ class MarkdrawController extends ChangeNotifier {
     _editorState = _editorState.copyWith(
       scene: _sceneWithLayoutPages(validated),
     );
+    _applyViewportConstraints();
     if (background != null) {
       _canvasBackgroundColor = background;
     }
@@ -2173,6 +2202,7 @@ class MarkdrawController extends ChangeNotifier {
     _editorState = _editorState.copyWith(
       scene: _sceneWithLayoutPages(validated),
     );
+    _applyViewportConstraints();
     if (background != null) {
       _canvasBackgroundColor = background;
     }
@@ -2194,6 +2224,7 @@ class MarkdrawController extends ChangeNotifier {
     _editorState = _editorState.copyWith(
       scene: _sceneWithLayoutPages(validated),
     );
+    _applyViewportConstraints();
     if (background != null) {
       _canvasBackgroundColor = background;
     }
@@ -2306,6 +2337,45 @@ class MarkdrawController extends ChangeNotifier {
       zoom: viewport.zoom,
     );
     applyResult(UpdateViewportResult(newViewport));
+  }
+
+  void scrollPagedViewportBy(double screenDeltaY) {
+    if (!isPagedViewport) {
+      return;
+    }
+    final viewport = _editorState.viewport;
+    final newViewport = ViewportState(
+      offset: Offset(
+        viewport.offset.dx,
+        viewport.offset.dy + screenDeltaY / viewport.zoom,
+      ),
+      zoom: viewport.zoom,
+    );
+    applyResult(UpdateViewportResult(newViewport));
+  }
+
+  void scrollToPage(int pageIndex) {
+    if (!isPagedViewport || _canvasSize.width <= 0 || _canvasSize.height <= 0) {
+      return;
+    }
+    final pages = _layout.pages;
+    final index = pageIndex.clamp(0, pages.length - 1);
+    final page = pages[index];
+    setViewport(
+      ViewportState(
+        offset: Offset(_editorState.viewport.offset.dx, page.bounds.top),
+        zoom: _editorState.viewport.zoom,
+      ),
+    );
+  }
+
+  void appendPageAfterLastAndScroll() {
+    if (!isPagedViewport) {
+      return;
+    }
+    final nextIndex = _layout.pages.length;
+    insertBlankPage(afterIndex: nextIndex - 1);
+    scrollToPage(nextIndex);
   }
 
   /// Cycles font size through presets [16, 20, 28, 36].

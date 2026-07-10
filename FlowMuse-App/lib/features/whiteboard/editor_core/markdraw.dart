@@ -24,6 +24,7 @@ export 'src/rendering/rough/rough.dart';
 export 'src/rendering/static_canvas_painter.dart';
 export 'src/rendering/text_bounds_validator.dart';
 export 'src/rendering/text_renderer.dart';
+export 'src/rendering/paged_viewport_metrics.dart';
 export 'src/rendering/viewport_culling.dart';
 export 'src/rendering/viewport_state.dart';
 export 'src/recognition/ink_recognition.dart';
