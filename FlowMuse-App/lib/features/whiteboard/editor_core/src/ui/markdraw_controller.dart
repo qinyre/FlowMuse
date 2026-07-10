@@ -21,6 +21,7 @@ import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
 import '../rendering/viewport_clamp.dart';
+import '../input/outline_render_mode.dart';
 
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
@@ -254,6 +255,14 @@ class MarkdrawController extends ChangeNotifier {
   set pressureSensitivity(double value) {
     _pressureSensitivity = value.clamp(0.0, 1.0);
     _adapter.pressureSensitivity = _pressureSensitivity;
+    notifyListeners();
+  }
+
+  /// 轮廓渲染模式：polygon(直线段)或 quadratic(二次贝塞尔平滑)。
+  /// 由 [RoughCanvasAdapter.outlineRenderMode] 同步。
+  OutlineRenderMode get outlineRenderMode => _adapter.outlineRenderMode;
+  set outlineRenderMode(OutlineRenderMode mode) {
+    _adapter.outlineRenderMode = mode;
     notifyListeners();
   }
 

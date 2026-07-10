@@ -6,6 +6,7 @@ import 'package:rough_flutter/rough_flutter.dart';
 import '../../core/elements/elements.dart' as core show StrokeStyle;
 import '../../core/elements/elements.dart' hide StrokeStyle;
 import '../../core/math/math.dart';
+import '../../input/outline_render_mode.dart';
 import 'arrowhead_renderer.dart';
 import 'draw_style.dart';
 import 'freedraw_renderer.dart';
@@ -713,6 +714,10 @@ class RoughCanvasAdapter implements RoughAdapter {
   /// 由 [MarkdrawController.pressureSensitivity] 同步。
   double pressureSensitivity = 0.7;
 
+  /// 轮廓渲染模式：polygon(直线段)或 quadratic(二次贝塞尔平滑)。
+  /// 由 [MarkdrawController.outlineRenderMode] 同步。
+  OutlineRenderMode outlineRenderMode = OutlineRenderMode.quadratic;
+
   @override
   void drawFreedraw(
     Canvas canvas,
@@ -730,6 +735,7 @@ class RoughCanvasAdapter implements RoughAdapter {
       style,
       pressures: usePressure ? pressures : null,
       pressureSensitivity: pressureSensitivity,
+      outlineRenderMode: outlineRenderMode,
     );
   }
 

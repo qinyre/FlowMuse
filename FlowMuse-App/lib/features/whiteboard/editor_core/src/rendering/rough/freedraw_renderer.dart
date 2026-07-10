@@ -5,6 +5,7 @@ import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
 
 import '../../core/math/math.dart';
 import '../../input/outline_render_mode.dart';
+import '../../input/stroke_render_metrics.dart';
 import 'draw_style.dart';
 
 /// Renders freehand drawing paths.
@@ -108,12 +109,15 @@ class FreedrawRenderer {
   ///
   /// 优先用 perfect_freehand 的 outline-stroke 算法渲染(平滑+变粗);
   /// pressures 数量与 points 不匹配时退回等粗 Bezier(容错)。
+  /// [outlineRenderMode] 控制轮廓路径构建方式: polygon(直线段)或 quadratic(二次贝塞尔平滑)。
   static void draw(
     Canvas canvas,
     List<Point> points,
     DrawStyle style, {
     List<double>? pressures,
     double pressureSensitivity = 0.7,
+    required OutlineRenderMode outlineRenderMode,
+    StrokeRenderMetricsSink? metricsSink,
   }) {
     if (points.isEmpty) return;
 
@@ -137,9 +141,24 @@ class FreedrawRenderer {
     }
 
     // outline 是闭合多边形顶点,用 fill 绘制
-    final path = Path()..addPolygon(outline, true);
+    final outlineVectors = [
+      for (final o in outline) PointVector(o.dx, o.dy, 0),
+    ];
+    Stopwatch? sw;
+    if (metricsSink != null) {
+      sw = Stopwatch()..start();
+    }
+    final path = buildOutlinePath(outlineVectors, outlineRenderMode);
+    final pathBuildDuration = sw != null ? (sw..stop()).elapsed : Duration.zero;
     final paint = style.toStrokePaint()..style = PaintingStyle.fill;
     canvas.drawPath(path, paint);
+    metricsSink?.onMetrics(
+      StrokeRenderMetrics(
+        outlinePointCount: outlineVectors.length,
+        getStrokeDuration: Duration.zero,
+        pathBuildDuration: pathBuildDuration,
+      ),
+    );
   }
 
   /// Builds a smooth cubic Bezier path through 3+ points using
