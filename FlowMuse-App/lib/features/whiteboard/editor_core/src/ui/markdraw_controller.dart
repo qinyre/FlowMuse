@@ -2720,6 +2720,7 @@ class MarkdrawController extends ChangeNotifier {
       resolvedImages: resolveImages(),
       gridSize: _gridSize,
       contentBounds: _contentBounds,
+      renderPageShadows: false,
     ).paint(canvas, outputSize);
 
     final picture = recorder.endRecording();

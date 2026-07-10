@@ -8,7 +8,7 @@ class CreateNoteCard extends StatelessWidget {
     super.key,
     required this.onTap,
     this.icon = LucideIcons.plus,
-    this.title = '新建',
+    this.title = '新建笔记',
     this.subtitle = '轻点两下，创建快捷笔记',
   });
 
@@ -18,9 +18,9 @@ class CreateNoteCard extends StatelessWidget {
   final String subtitle;
 
   Key get _tapKey {
-    return title == '新建'
-        ? const ValueKey('create-notebook-card')
-        : const ValueKey('join-room-card');
+    return title == '加入房间'
+        ? const ValueKey('join-room-card')
+        : const ValueKey('create-notebook-card');
   }
 
   @override

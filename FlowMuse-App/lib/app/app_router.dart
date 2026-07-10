@@ -140,13 +140,7 @@ GoRouter createAppRouter() {
       GoRoute(
         path: AppRoutes.settings,
         pageBuilder: (context, state) {
-          return _modalPage(
-            state,
-            SettingsPage(
-              showAccountFirst:
-                  state.uri.queryParameters['section'] == 'account',
-            ),
-          );
+          return _modalPage(state, const SettingsPage());
         },
       ),
       GoRoute(
@@ -232,7 +226,7 @@ Page<void> _modalPage(GoRouterState state, Widget child) {
     child,
     enterDuration: const Duration(milliseconds: 240),
     exitDuration: const Duration(milliseconds: 180),
-    offset: const Offset(0, 0.025),
+    offset: const Offset(0.035, 0),
   );
 }
 
@@ -252,7 +246,7 @@ Page<void> _standalonePage(GoRouterState state, Widget child) {
     child,
     enterDuration: const Duration(milliseconds: 180),
     exitDuration: const Duration(milliseconds: 140),
-    offset: const Offset(0, 0.015),
+    offset: const Offset(0.035, 0),
   );
 }
 

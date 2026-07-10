@@ -473,7 +473,7 @@ class _LibraryItemsContent extends StatelessWidget {
       );
     }
 
-    if (notes.isEmpty) {
+    if (notes.isEmpty && specialView != LibrarySpecialView.none) {
       return _EmptyLibrary(
         specialView: specialView,
         onCreate: onCreate,
@@ -547,7 +547,7 @@ class _CreateNoteTile extends StatelessWidget {
       child: ListTile(
         key: const ValueKey('create-note-list-tile'),
         leading: const Icon(LucideIcons.plus),
-        title: const Text('新建'),
+        title: const Text('新建笔记'),
         subtitle: const Text('创建快捷笔记'),
         onTap: onTap,
       ),
