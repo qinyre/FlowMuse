@@ -115,6 +115,8 @@ class MarkdrawController extends ChangeNotifier {
   int? _gridSize;
   bool _objectsSnapMode = false;
   double _pressureSensitivity = 0.7;
+  BrushType _activeBrushType = BrushType.fountainPen;
+  bool _inkRecognitionMode = false;
   String? _documentName;
 
   // Link editor state
@@ -181,6 +183,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Called after recognition-pen strokes settle and should be recognized.
   Future<InkRecognitionResult> Function(InkRecognitionRequest)? onRecognizeInk;
+  void Function(bool enabled)? onInkRecognitionModeChanged;
 
   Timer? _inkRecognitionTimer;
   String? _pendingInkSessionId;
@@ -254,6 +257,21 @@ class MarkdrawController extends ChangeNotifier {
   set pressureSensitivity(double value) {
     _pressureSensitivity = value.clamp(0.0, 1.0);
     _adapter.pressureSensitivity = _pressureSensitivity;
+    notifyListeners();
+  }
+
+  BrushType get activeBrushType => _activeBrushType;
+  set activeBrushType(BrushType value) {
+    if (_activeBrushType == value) return;
+    _activeBrushType = value;
+    notifyListeners();
+  }
+
+  bool get inkRecognitionMode => _inkRecognitionMode;
+  set inkRecognitionMode(bool value) {
+    if (_inkRecognitionMode == value) return;
+    _inkRecognitionMode = value;
+    onInkRecognitionModeChanged?.call(value);
     notifyListeners();
   }
 
@@ -337,6 +355,8 @@ class MarkdrawController extends ChangeNotifier {
     isEditingLinear: _isEditingLinear,
     gridSize: _gridSize,
     objectsSnapMode: _objectsSnapMode,
+    brushType: _activeBrushType,
+    inkRecognitionMode: _inkRecognitionMode,
   );
 
   /// The currently selected elements resolved from their IDs.
@@ -833,13 +853,16 @@ class MarkdrawController extends ChangeNotifier {
     if (_recognizingInk || onRecognizeInk == null || _disposed) {
       return;
     }
-    final request = _buildInkRecognitionRequest(sessionId);
+    final request = _buildInkRecognitionRequest(
+      sessionId,
+      _pendingInkStrokes(sessionId),
+    );
     if (request == null) {
       return;
     }
     _recognizingInk = true;
-    if (_activeTool is RecognitionPenTool) {
-      (_activeTool as RecognitionPenTool).startNewSession();
+    if (_activeTool is FreedrawTool) {
+      (_activeTool as FreedrawTool).startNewSession();
     }
     try {
       final result = await onRecognizeInk!(request);
@@ -888,8 +911,10 @@ class MarkdrawController extends ChangeNotifier {
     }
   }
 
-  InkRecognitionRequest? _buildInkRecognitionRequest(String sessionId) {
-    final strokes = _pendingInkStrokes(sessionId);
+  InkRecognitionRequest? _buildInkRecognitionRequest(
+    String sessionId,
+    List<FreedrawElement> strokes,
+  ) {
     if (strokes.isEmpty) {
       return null;
     }
@@ -935,6 +960,7 @@ class MarkdrawController extends ChangeNotifier {
         width: math.max(maxX - minX, 1.0),
         height: math.max(maxY - minY, 1.0),
       ),
+      hint: 'text',
     );
   }
 
@@ -2199,6 +2225,54 @@ class MarkdrawController extends ChangeNotifier {
   void toggleMarkdownPanel() {
     _showMarkdownPanel = !_showMarkdownPanel;
     notifyListeners();
+  }
+
+  void toggleInkRecognitionMode() {
+    inkRecognitionMode = !_inkRecognitionMode;
+  }
+
+  bool get canConvertSelectionToText {
+    final elements = selectedElements;
+    return elements.isNotEmpty &&
+        elements.every((element) => element is FreedrawElement);
+  }
+
+  Future<void> convertSelectedInkToText() async {
+    if (_recognizingInk ||
+        onRecognizeInk == null ||
+        !canConvertSelectionToText) {
+      return;
+    }
+    final strokes = selectedElements.whereType<FreedrawElement>().toList();
+    final sessionId = ElementId.generate().value;
+    final request = _buildInkRecognitionRequest(sessionId, strokes);
+    if (request == null) {
+      return;
+    }
+    _recognizingInk = true;
+    try {
+      final result = await onRecognizeInk!(request);
+      if (_disposed) {
+        return;
+      }
+      final elements = result.elements
+          .map(_elementFromRecognizedInk)
+          .whereType<Element>()
+          .toList();
+      if (elements.isEmpty) {
+        return;
+      }
+      pushHistory();
+      applyResult(
+        CompoundResult([
+          for (final stroke in strokes) RemoveElementResult(stroke.id),
+          for (final element in elements) AddElementResult(element),
+          SetSelectionResult({for (final element in elements) element.id}),
+        ]),
+      );
+    } finally {
+      _recognizingInk = false;
+    }
   }
 
   /// Toggles tool lock mode (tool stays active after use).

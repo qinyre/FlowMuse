@@ -570,6 +570,7 @@ class SketchLineParser {
     final id = props.id;
     final points = props.points;
     final pressures = props.pressures;
+    final brushType = BrushType.fromWireName(props.namedString('brush'));
     // Default true; legacy 'simulate-pressure' flag also accepted
     final simulatePressure = !props.hasFlag('no-simulate-pressure');
     final common = props.commonProperties;
@@ -601,6 +602,7 @@ class SketchLineParser {
       frameId: common.frameId,
       groupIds: common.groupIds,
       link: common.link,
+      customData: customDataWithBrushType(null, brushType),
     );
 
     return ParseResult(value: element);

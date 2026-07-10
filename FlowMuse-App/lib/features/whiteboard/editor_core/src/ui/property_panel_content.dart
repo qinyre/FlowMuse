@@ -1,5 +1,7 @@
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart' hide Element;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
@@ -769,6 +771,9 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   Widget _buildActionsRow(BuildContext context) {
     final hasGroup = elements.any((e) => e.groupIds.isNotEmpty);
     final isSingle = elements.length == 1;
+    final canConvertInk =
+        elements.isNotEmpty &&
+        elements.every((element) => element is FreedrawElement);
 
     return Wrap(
       spacing: 6,
@@ -812,6 +817,15 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             },
             tooltip: elements.first is ArrowElement ? '编辑箭头' : '编辑直线',
             child: const Icon(Icons.timeline, size: 18),
+          ),
+        if (canConvertInk)
+          IconToggleChip(
+            isSelected: false,
+            onTap: () {
+              unawaited(controller.convertSelectedInkToText());
+            },
+            tooltip: '转为文字',
+            child: const Icon(Icons.text_fields, size: 18),
           ),
         IconToggleChip(
           isSelected: false,

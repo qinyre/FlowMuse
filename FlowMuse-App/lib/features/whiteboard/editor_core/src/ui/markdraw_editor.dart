@@ -271,7 +271,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                 child: DesktopToolbar(
                   controller: _controller,
                   onImportImage: widget.onImportImage,
-                  showMarkdownButton: widget.config.showMarkdownButton,
                 ),
               ),
             ),

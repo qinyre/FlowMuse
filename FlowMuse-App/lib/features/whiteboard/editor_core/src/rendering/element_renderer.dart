@@ -161,6 +161,7 @@ class ElementRenderer {
             absPoints,
             element.pressures,
             element.simulatePressure,
+            brushTypeFromCustomData(element.customData),
             style,
           );
         }

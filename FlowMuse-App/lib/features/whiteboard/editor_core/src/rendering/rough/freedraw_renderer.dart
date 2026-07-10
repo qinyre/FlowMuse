@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
 
 import '../../core/math/math.dart';
+import '../../core/elements/brush_type.dart';
 import 'draw_style.dart';
 
 /// Renders freehand drawing paths.
@@ -45,9 +46,11 @@ class FreedrawRenderer {
     required double strokeWidth,
     List<double>? pressures,
     double pressureSensitivity = 0.7,
+    BrushType brushType = BrushType.fountainPen,
   }) {
     if (points.isEmpty) return const [];
 
+    final brush = _configFor(brushType);
     final hasPressure = pressures != null && pressures.length == points.length;
     final inputPoints = <PointVector>[
       for (var i = 0; i < points.length; i++)
@@ -58,13 +61,13 @@ class FreedrawRenderer {
         ),
     ];
     final options = StrokeOptions(
-      size: dm.max(strokeWidth, 1.0),
+      size: dm.max(strokeWidth * brush.sizeScale, 1.0),
       thinning: hasPressure
-          ? 0.05 + pressureSensitivity.clamp(0.0, 1.0) * 0.9
-          : StrokeOptions.defaultThinning,
-      smoothing: StrokeOptions.defaultSmoothing,
-      streamline: StrokeOptions.defaultStreamline,
-      simulatePressure: !hasPressure,
+          ? brush.thinning * pressureSensitivity.clamp(0.0, 1.0)
+          : brush.simulatedThinning,
+      smoothing: brush.smoothing,
+      streamline: brush.streamline,
+      simulatePressure: !hasPressure || brush.forceSimulatePressure,
       isComplete: true,
     );
 
@@ -81,32 +84,86 @@ class FreedrawRenderer {
     DrawStyle style, {
     List<double>? pressures,
     double pressureSensitivity = 0.7,
+    BrushType brushType = BrushType.fountainPen,
   }) {
     if (points.isEmpty) return;
 
+    final brush = _configFor(brushType);
     // perfect_freehand 的 size 是直径,而 DrawStyle.strokeWidth 在 freedraw 语境下
     // 是期望的笔迹宽度。直接用 strokeWidth 作为 size 基准。
-    final size = dm.max(style.strokeWidth, 1.0);
+    final size = dm.max(style.strokeWidth * brush.sizeScale, 1.0);
 
     final outline = buildOutline(
       points,
-      strokeWidth: size,
+      strokeWidth: style.strokeWidth,
       pressures: pressures,
       pressureSensitivity: pressureSensitivity,
+      brushType: brushType,
     );
 
     // 单点(点击):outline 为空,画圆点
     if (outline.isEmpty) {
       final p = points[0];
-      final paint = style.toStrokePaint()..style = PaintingStyle.fill;
+      final paint = style.toStrokePaint()
+        ..style = PaintingStyle.fill
+        ..color = style.toStrokePaint().color.withValues(
+          alpha: style.toStrokePaint().color.a * brush.opacityScale,
+        );
       canvas.drawCircle(Offset(p.x, p.y), size / 2, paint);
       return;
     }
 
     // outline 是闭合多边形顶点,用 fill 绘制
     final path = Path()..addPolygon(outline, true);
-    final paint = style.toStrokePaint()..style = PaintingStyle.fill;
+    final basePaint = style.toStrokePaint();
+    final paint = basePaint
+      ..style = PaintingStyle.fill
+      ..color = basePaint.color.withValues(
+        alpha: basePaint.color.a * brush.opacityScale,
+      );
     canvas.drawPath(path, paint);
+  }
+
+  static _BrushConfig _configFor(BrushType brushType) {
+    return switch (brushType) {
+      BrushType.pencil => const _BrushConfig(
+        sizeScale: 0.82,
+        opacityScale: 0.68,
+        thinning: 0.45,
+        simulatedThinning: 0.32,
+        smoothing: 0.45,
+        streamline: 0.28,
+      ),
+      BrushType.ballpoint => const _BrushConfig(
+        sizeScale: 0.72,
+        thinning: 0.08,
+        simulatedThinning: 0.02,
+        smoothing: 0.62,
+        streamline: 0.52,
+      ),
+      BrushType.fountainPen => _BrushConfig(
+        thinning: 0.9,
+        simulatedThinning: StrokeOptions.defaultThinning,
+        smoothing: StrokeOptions.defaultSmoothing,
+        streamline: StrokeOptions.defaultStreamline,
+      ),
+      BrushType.brushPen => const _BrushConfig(
+        sizeScale: 1.15,
+        thinning: 1.0,
+        simulatedThinning: 0.82,
+        smoothing: 0.58,
+        streamline: 0.42,
+      ),
+      BrushType.highlighter => const _BrushConfig(
+        sizeScale: 4.2,
+        opacityScale: 0.32,
+        thinning: 0.05,
+        simulatedThinning: 0.02,
+        smoothing: 0.72,
+        streamline: 0.58,
+        forceSimulatePressure: true,
+      ),
+    };
   }
 
   /// Builds a smooth cubic Bezier path through 3+ points using
@@ -130,4 +187,24 @@ class FreedrawRenderer {
 
     return path;
   }
+}
+
+class _BrushConfig {
+  const _BrushConfig({
+    this.sizeScale = 1.0,
+    this.opacityScale = 1.0,
+    required this.thinning,
+    required this.simulatedThinning,
+    required this.smoothing,
+    required this.streamline,
+    this.forceSimulatePressure = false,
+  });
+
+  final double sizeScale;
+  final double opacityScale;
+  final double thinning;
+  final double simulatedThinning;
+  final double smoothing;
+  final double streamline;
+  final bool forceSimulatePressure;
 }

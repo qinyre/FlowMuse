@@ -11,7 +11,6 @@ enum ToolType {
   arrow,
   line,
   freedraw,
-  recognitionPen,
   text,
   frame,
   eraser,

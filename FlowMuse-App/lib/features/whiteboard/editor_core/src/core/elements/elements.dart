@@ -1,5 +1,6 @@
 export 'arrow_element.dart';
 export 'arrow_type.dart';
+export 'brush_type.dart';
 export 'diamond_element.dart';
 export 'element.dart';
 export 'element_id.dart';

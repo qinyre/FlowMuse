@@ -1,6 +1,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../markdraw.dart' hide TextAlign;
 
@@ -86,9 +87,20 @@ class CompactToolbar extends StatelessWidget {
               if (showPressureSlider) ...[
                 Padding(
                   padding: const EdgeInsets.only(left: 8),
+                  child: _CompactBrushSelector(controller: controller),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
                   child: _CompactPressureSlider(controller: controller),
                 ),
               ],
+              _compactButton(
+                cs: cs,
+                icon: Icons.text_fields,
+                tooltip: '文字识别模式',
+                onPressed: controller.toggleInkRecognitionMode,
+                isActive: controller.inkRecognitionMode,
+              ),
             ],
           ),
         ),
@@ -131,6 +143,66 @@ class CompactToolbar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _CompactBrushSelector extends StatelessWidget {
+  const _CompactBrushSelector({required this.controller});
+
+  final MarkdrawController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _showBrushSheet(context),
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: Icon(
+          _iconForBrush(controller.activeBrushType),
+          size: 19,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  void _showBrushSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) {
+        return ListenableBuilder(
+          listenable: controller,
+          builder: (ctx, _) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final brushType in BrushType.values)
+                    ChoiceChip(
+                      selected: controller.activeBrushType == brushType,
+                      avatar: Icon(_iconForBrush(brushType), size: 18),
+                      label: Text(_labelForBrush(brushType)),
+                      onSelected: (_) {
+                        controller.activeBrushType = brushType;
+                        Navigator.of(ctx).pop();
+                      },
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -220,4 +292,24 @@ class _CompactPressureSlider extends StatelessWidget {
       },
     );
   }
+}
+
+String _labelForBrush(BrushType brushType) {
+  return switch (brushType) {
+    BrushType.pencil => '铅笔',
+    BrushType.ballpoint => '圆珠笔',
+    BrushType.fountainPen => '钢笔',
+    BrushType.brushPen => '毛笔',
+    BrushType.highlighter => '荧光笔',
+  };
+}
+
+IconData _iconForBrush(BrushType brushType) {
+  return switch (brushType) {
+    BrushType.pencil => Icons.edit_outlined,
+    BrushType.ballpoint => Icons.mode_edit_outline,
+    BrushType.fountainPen => Icons.draw,
+    BrushType.brushPen => Icons.brush,
+    BrushType.highlighter => Symbols.ink_highlighter,
+  };
 }
