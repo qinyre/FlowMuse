@@ -163,6 +163,7 @@ class ElementRenderer {
             element.simulatePressure,
             brushTypeFromCustomData(element.customData),
             style,
+            isComplete: element.isComplete,
           );
         }
       case 'text':

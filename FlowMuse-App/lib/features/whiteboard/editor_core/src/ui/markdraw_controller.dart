@@ -6,7 +6,6 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
@@ -21,6 +20,12 @@ import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
 import '../rendering/viewport_clamp.dart';
+import '../input/outline_render_mode.dart';
+import '../input/stroke_input_normalizer.dart';
+import '../input/stroke_input_modeler.dart';
+import '../input/stroke_input_sample.dart';
+import '../input/input_policy.dart';
+import '../input/stroke_recorder.dart';
 
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
@@ -95,7 +100,43 @@ class MarkdrawController extends ChangeNotifier {
   final _imageCache = ImageElementCache();
   final _flowchartCreator = FlowchartCreator();
   final _flowchartNavigator = FlowchartNavigator();
+  // ignore: unused_field — retained for debug comparison with modeler output
   final _harmonyStylusStrokeSmoother = HarmonyStylusStrokeSmoother();
+  final _normalizer = StrokeInputNormalizer();
+  StrokeInputModeler? _modeler;
+  final _policySelector = const InputPolicySelector();
+  int? _activeDrawPointerId;
+  int? _temporaryTouchPanPointerId;
+  int? _activeStylusPointerId;
+  final bool _useUnifiedModeler = true;
+
+  // debug/test 录制器：null 时不录制（release 默认关闭）
+  StrokeRecorder? _recorder;
+  bool get isRecording => _recorder != null;
+
+  /// 开始录制当前 freedraw stroke 的规范化样本。仅 debug/test 使用。
+  void startRecording() {
+    _recorder = StrokeRecorder();
+  }
+
+  /// 结束录制，返回 JSON 字符串。录制内容可保存为文件供离线回放。
+  String stopRecording() {
+    final r = _recorder;
+    _recorder = null;
+    if (r == null) return '{}';
+    final recording = r.finish(
+      buildVersion: 'dev',
+      deviceInfo: 'manual-record',
+    );
+    return const JsonEncoder.withIndent('  ').convert(recording.toJson());
+  }
+
+  /// viewport 仿射变换 [a,b,c,d,e,f]，scene = a*localX + c*localY + e, ...
+  List<double> get _viewportTransform {
+    final v = _editorState.viewport;
+    final iz = 1.0 / v.zoom;
+    return [iz, 0, 0, iz, v.offset.dx, v.offset.dy];
+  }
 
   // UI state
   List<LibraryItem> _libraryItems = [];
@@ -174,6 +215,8 @@ class MarkdrawController extends ChangeNotifier {
   // Pinch-to-zoom state
   double _pinchStartZoom = 1.0;
   Offset _pinchStartOffset = Offset.zero;
+  Offset _pinchStartFocalPoint = Offset.zero;
+  bool _isViewportGesture = false;
 
   /// Callback invoked when the user toggles the theme. Set by [MarkdrawEditor].
   VoidCallback? onThemeToggle;
@@ -265,6 +308,14 @@ class MarkdrawController extends ChangeNotifier {
   set pressureSensitivity(double value) {
     _pressureSensitivity = value.clamp(0.0, 1.0);
     _adapter.pressureSensitivity = _pressureSensitivity;
+    notifyListeners();
+  }
+
+  /// 轮廓渲染模式：polygon(直线段)或 quadratic(二次贝塞尔平滑)。
+  /// 由 [RoughCanvasAdapter.outlineRenderMode] 同步。
+  OutlineRenderMode get outlineRenderMode => _adapter.outlineRenderMode;
+  set outlineRenderMode(OutlineRenderMode mode) {
+    _adapter.outlineRenderMode = mode;
     notifyListeners();
   }
 
@@ -1522,6 +1573,13 @@ class MarkdrawController extends ChangeNotifier {
     return Point(scene.dx, scene.dy);
   }
 
+  /// Converts a screen-space offset to a scene-space point WITHOUT rounding.
+  /// Used exclusively by freedraw to avoid 1 scene-pixel quantization noise.
+  Point toScenePrecise(Offset screenPos) {
+    final scene = _editorState.viewport.screenToScenePrecise(screenPos);
+    return Point(scene.dx, scene.dy);
+  }
+
   bool canCreateAt(Point point) {
     final isPdfLayout =
         _layout.isPaged && _layout.pages.any((page) => page.source == 'pdf');
@@ -1532,14 +1590,28 @@ class MarkdrawController extends ChangeNotifier {
 
   // --- Pointer handling ---
 
+  bool _isStylus(PointerDeviceKind kind) {
+    return kind == PointerDeviceKind.stylus ||
+        kind == PointerDeviceKind.invertedStylus;
+  }
+
+  bool get _usesTemporaryTouchPan =>
+      _editorState.activeToolType != ToolType.hand;
+
   /// Handles pointer down: commits text edits, dispatches to tool, handles
   /// link-to-element mode and link icon clicks.
-  void onPointerDown(
-    Offset localPosition, {
-    double? pressure,
-    PointerDeviceKind kind = PointerDeviceKind.mouse,
-  }) {
-    if (isCreationTool && !shouldDispatchToCreationTool(kind)) return;
+  void onPointerDown(PointerEvent event) {
+    if (_isViewportGesture) return;
+    if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
+      if (_activeStylusPointerId == null) {
+        _temporaryTouchPanPointerId ??= event.pointer;
+      }
+      return;
+    }
+    if (_isStylus(event.kind)) {
+      _activeStylusPointerId = event.pointer;
+    }
+    if (isCreationTool && !shouldDispatchToCreationTool(event.kind)) return;
     restoreKeyboardFocusWhenStable();
     if (_editingTextElementId != null) {
       commitTextEditing();
@@ -1547,22 +1619,44 @@ class MarkdrawController extends ChangeNotifier {
     // Frame label editing is committed by the overlay itself on submit/blur.
     // We don't force-commit here since the TextField handles its own focus.
 
-    final sample = _harmonyStylusStrokeSmoother.down(
-      point: Point(localPosition.dx, localPosition.dy),
-      pressure: pressure,
-      platform: defaultTargetPlatform,
-      kind: kind,
-      activeToolType: editorState.activeToolType,
-    );
-    final effectiveLocalPosition = sample?.point;
-    final point = toScene(
-      effectiveLocalPosition == null
-          ? localPosition
-          : Offset(effectiveLocalPosition.x, effectiveLocalPosition.y),
-    );
-    final effectivePressure = sample?.pressure ?? pressure;
+    if (_useUnifiedModeler && _activeTool is FreedrawTool) {
+      // --- Unified modeler path for freedraw ---
+      final sample = _normalizer.normalize(event, phase: StrokePhase.down);
+      _recorder?.record(
+        sample,
+        viewportZoom: _editorState.viewport.zoom,
+        viewportTransform: _viewportTransform,
+      );
+      _activeDrawPointerId = sample.pointerId;
+      _modeler = StrokeInputModeler(_policySelector.select(sample.kind));
+      final r = _modeler!.process(sample);
+      if (r.point == null) return;
+
+      final sceneOffset = _editorState.viewport.screenToScenePrecise(
+        Offset(r.point!.x, r.point!.y),
+      );
+      final point = Point(sceneOffset.dx, sceneOffset.dy);
+
+      if (isCreationTool && !canCreateAt(point)) {
+        _modeler = null;
+        _activeDrawPointerId = null;
+        return;
+      }
+
+      _sceneBeforeDrag = _editorState.scene;
+      applyResult(
+        _activeTool.onPointerDown(point, toolContext, pressure: r.pressure),
+      );
+      return;
+    }
+
+    // --- Legacy path (non-freedraw tools or feature flag off) ---
+    final effectiveLocalPosition = event.localPosition;
+    final point = _activeTool is FreedrawTool
+        ? toScenePrecise(effectiveLocalPosition)
+        : toScene(effectiveLocalPosition);
+
     if (isCreationTool && !canCreateAt(point)) {
-      _harmonyStylusStrokeSmoother.reset();
       return;
     }
 
@@ -1609,70 +1703,118 @@ class MarkdrawController extends ChangeNotifier {
         ),
       );
     } else {
-      applyResult(
-        _activeTool.onPointerDown(
-          point,
-          toolContext,
-          pressure: effectivePressure,
-        ),
-      );
+      applyResult(_activeTool.onPointerDown(point, toolContext));
     }
   }
 
   /// Handles pointer move: dispatches to the active tool.
-  void onPointerMove(
-    Offset localPosition,
-    Offset delta, {
-    double? pressure,
-    PointerDeviceKind kind = PointerDeviceKind.mouse,
-  }) {
-    if (isCreationTool && !shouldDispatchToCreationTool(kind)) return;
-    final sample = _harmonyStylusStrokeSmoother.move(
-      point: Point(localPosition.dx, localPosition.dy),
-      pressure: pressure,
-      platform: defaultTargetPlatform,
-      kind: kind,
-      activeToolType: editorState.activeToolType,
-    );
-    if (sample == null) {
-      mousePosition = localPosition;
+  void onPointerMove(PointerEvent event) {
+    if (_isViewportGesture) return;
+    if (event.pointer == _temporaryTouchPanPointerId) {
+      applyResult(UpdateViewportResult(_editorState.viewport.pan(event.delta)));
       return;
     }
-    final point = toScene(Offset(sample.point.x, sample.point.y));
+    if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
+      return;
+    }
+    if (_useUnifiedModeler &&
+        _activeTool is FreedrawTool &&
+        _activeDrawPointerId != null) {
+      // --- Unified modeler path for freedraw ---
+      if (event.pointer != _activeDrawPointerId) return;
+      final sample = _normalizer.normalize(event, phase: StrokePhase.move);
+      _recorder?.record(
+        sample,
+        viewportZoom: _editorState.viewport.zoom,
+        viewportTransform: _viewportTransform,
+      );
+      final r = _modeler!.process(sample);
+      if (r.point == null) return; // dropped by modeler
+      final sceneOffset = _editorState.viewport.screenToScenePrecise(
+        Offset(r.point!.x, r.point!.y),
+      );
+      final point = Point(sceneOffset.dx, sceneOffset.dy);
+      applyResult(
+        _activeTool.onPointerMove(
+          point,
+          toolContext,
+          screenDelta: event.delta,
+          pressure: r.pressure,
+        ),
+      );
+      mousePosition = event.localPosition;
+      notifyListeners();
+      return;
+    }
+
+    // --- Legacy path (non-freedraw tools or feature flag off) ---
+    if (isCreationTool && !shouldDispatchToCreationTool(event.kind)) return;
+    final point = _activeTool is FreedrawTool
+        ? toScenePrecise(event.localPosition)
+        : toScene(event.localPosition);
     applyResult(
-      _activeTool.onPointerMove(
-        point,
-        toolContext,
-        screenDelta: Offset(delta.dx, delta.dy),
-        pressure: sample.pressure ?? pressure,
-      ),
+      _activeTool.onPointerMove(point, toolContext, screenDelta: event.delta),
     );
-    mousePosition = localPosition;
+    mousePosition = event.localPosition;
     notifyListeners();
   }
 
   /// Handles pointer up: dispatches to tool, detects double-click for
   /// text/label editing, and pushes drag history.
-  void onPointerUp(
-    Offset localPosition, {
-    double? pressure,
-    PointerDeviceKind kind = PointerDeviceKind.mouse,
-  }) {
-    if (isCreationTool && !shouldDispatchToCreationTool(kind)) return;
-    final sample = _harmonyStylusStrokeSmoother.up(
-      point: Point(localPosition.dx, localPosition.dy),
-      pressure: pressure,
-      platform: defaultTargetPlatform,
-      kind: kind,
-      activeToolType: editorState.activeToolType,
-    );
-    final effectiveLocalPosition = sample?.point;
-    final point = toScene(
-      effectiveLocalPosition == null
-          ? localPosition
-          : Offset(effectiveLocalPosition.x, effectiveLocalPosition.y),
-    );
-    final effectivePressure = sample?.pressure ?? pressure;
+  void onPointerUp(PointerEvent event) {
+    if (_isViewportGesture) return;
+    if (event.pointer == _temporaryTouchPanPointerId) {
+      _temporaryTouchPanPointerId = null;
+      return;
+    }
+    if (_isStylus(event.kind) && event.pointer == _activeStylusPointerId) {
+      _activeStylusPointerId = null;
+    }
+    if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
+      return;
+    }
+    if (_useUnifiedModeler &&
+        _activeTool is FreedrawTool &&
+        _activeDrawPointerId != null) {
+      // --- Unified modeler path for freedraw ---
+      if (event.pointer != _activeDrawPointerId) return;
+      final sample = _normalizer.normalize(event, phase: StrokePhase.up);
+      _recorder?.record(
+        sample,
+        viewportZoom: _editorState.viewport.zoom,
+        viewportTransform: _viewportTransform,
+      );
+      final r = _modeler!.process(sample); // flushes real endpoint
+
+      if (r.point != null) {
+        final sceneOffset = _editorState.viewport.screenToScenePrecise(
+          Offset(r.point!.x, r.point!.y),
+        );
+        final point = Point(sceneOffset.dx, sceneOffset.dy);
+        applyResult(
+          _activeTool.onPointerMove(point, toolContext, pressure: r.pressure),
+        );
+        applyResult(
+          _activeTool.onPointerUp(point, toolContext, pressure: r.pressure),
+        );
+      }
+
+      _modeler = null;
+      _activeDrawPointerId = null;
+
+      if (_sceneBeforeDrag != null &&
+          !identical(_editorState.scene, _sceneBeforeDrag)) {
+        _historyManager.push(_sceneBeforeDrag!);
+      }
+      _sceneBeforeDrag = null;
+      return;
+    }
+
+    // --- Legacy path (non-freedraw tools or feature flag off) ---
+    if (isCreationTool && !shouldDispatchToCreationTool(event.kind)) return;
+    final point = _activeTool is FreedrawTool
+        ? toScenePrecise(event.localPosition)
+        : toScene(event.localPosition);
     final now = DateTime.now();
     final isDoubleClick =
         _lastPointerUpTime != null &&
@@ -1696,13 +1838,7 @@ class MarkdrawController extends ChangeNotifier {
         ),
       );
     } else {
-      applyResult(
-        _activeTool.onPointerUp(
-          point,
-          toolContext,
-          pressure: effectivePressure,
-        ),
-      );
+      applyResult(_activeTool.onPointerUp(point, toolContext));
     }
 
     // Double-click dispatch for text editing, line editing, and frame labels
@@ -1734,6 +1870,27 @@ class MarkdrawController extends ChangeNotifier {
         !identical(_editorState.scene, _sceneBeforeDrag)) {
       _historyManager.push(_sceneBeforeDrag!);
     }
+    _sceneBeforeDrag = null;
+  }
+
+  /// Handles pointer cancel: discards uncommitted stroke for modeler path,
+  /// resets the active tool without committing.
+  void onPointerCancel(PointerEvent event) {
+    if (_isViewportGesture) return;
+    if (event.pointer == _temporaryTouchPanPointerId) {
+      _temporaryTouchPanPointerId = null;
+      return;
+    }
+    if (_isStylus(event.kind) && event.pointer == _activeStylusPointerId) {
+      _activeStylusPointerId = null;
+    }
+    if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
+      return;
+    }
+    _modeler?.reset(reason: 'cancel');
+    _modeler = null;
+    _activeDrawPointerId = null;
+    _activeTool.reset();
     _sceneBeforeDrag = null;
   }
 
@@ -1770,23 +1927,53 @@ class MarkdrawController extends ChangeNotifier {
   void onScaleStart(ScaleStartDetails details) {
     _pinchStartZoom = _editorState.viewport.zoom;
     _pinchStartOffset = _editorState.viewport.offset;
+    _pinchStartFocalPoint = details.localFocalPoint;
   }
 
   /// Applies pinch-to-zoom and pan during a scale gesture.
   void onScaleUpdate(ScaleUpdateDetails details) {
     if (details.pointerCount < 2) return;
-    var newViewport = ViewportState(
-      offset: _pinchStartOffset,
-      zoom: _pinchStartZoom,
+    if (!_isViewportGesture) {
+      _isViewportGesture = true;
+      _cancelActiveInteractionForViewportGesture();
+    }
+    final newZoom = (_pinchStartZoom * details.scale)
+        .clamp(_config.minZoom, _config.maxZoom)
+        .toDouble();
+
+    // Both `scale` and the focal point are cumulative from the start of the
+    // gesture. Keep the scene point under the initial focal point anchored
+    // beneath the current focal point so pan and zoom stay continuous.
+    final anchoredScenePoint = Offset(
+      _pinchStartOffset.dx + _pinchStartFocalPoint.dx / _pinchStartZoom,
+      _pinchStartOffset.dy + _pinchStartFocalPoint.dy / _pinchStartZoom,
     );
-    newViewport = newViewport.zoomAt(
-      details.scale,
-      details.localFocalPoint,
-      minZoom: _config.minZoom,
-      maxZoom: _config.maxZoom,
+    final newViewport = ViewportState(
+      offset: Offset(
+        anchoredScenePoint.dx - details.localFocalPoint.dx / newZoom,
+        anchoredScenePoint.dy - details.localFocalPoint.dy / newZoom,
+      ),
+      zoom: newZoom,
     );
-    newViewport = newViewport.pan(details.focalPointDelta);
     applyResult(UpdateViewportResult(newViewport));
+  }
+
+  /// Releases any tool interaction once a two-finger viewport gesture wins.
+  /// This keeps raw pointer events from applying a second pan or mutating a
+  /// shape while [GestureDetector] owns the viewport transform.
+  void _cancelActiveInteractionForViewportGesture() {
+    _modeler?.reset(reason: 'viewport gesture');
+    _modeler = null;
+    _activeDrawPointerId = null;
+    _temporaryTouchPanPointerId = null;
+    _activeStylusPointerId = null;
+    _activeTool.reset();
+    _sceneBeforeDrag = null;
+  }
+
+  /// Marks the end of a two-finger viewport gesture.
+  void onScaleEnd(ScaleEndDetails details) {
+    _isViewportGesture = false;
   }
 
   // --- Style changes ---
@@ -2115,6 +2302,11 @@ class MarkdrawController extends ChangeNotifier {
           width: maxX - minX,
           height: maxY - minY,
           points: relPts,
+          pressures: overlay.creationPressures ?? const [],
+          simulatePressure:
+              overlay.creationPressures == null ||
+              overlay.creationPressures!.isEmpty,
+          isComplete: false,
           seed: previewSeed,
         ),
         _ => null,

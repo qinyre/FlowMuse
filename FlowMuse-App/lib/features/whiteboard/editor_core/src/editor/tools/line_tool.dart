@@ -122,21 +122,13 @@ class LineTool implements Tool {
   ToolResult _finalize() {
     final element = _createElement(_points);
     reset();
-    return CompoundResult([
-      AddElementResult(element),
-      SetSelectionResult({element.id}),
-      SwitchToolResult(ToolType.select),
-    ]);
+    return completeGeometricElementCreation(element);
   }
 
   ToolResult _finalizeAsClosed() {
     final element = _createElement(_points, closed: true);
     reset();
-    return CompoundResult([
-      AddElementResult(element),
-      SetSelectionResult({element.id}),
-      SwitchToolResult(ToolType.select),
-    ]);
+    return completeGeometricElementCreation(element);
   }
 
   /// Creates the line element. Override in subclasses for different element types.

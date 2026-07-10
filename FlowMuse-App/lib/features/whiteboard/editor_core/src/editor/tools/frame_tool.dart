@@ -85,12 +85,10 @@ class FrameTool implements Tool {
     }
 
     reset();
-    return CompoundResult([
-      AddElementResult(element),
-      ...assignResults,
-      SetSelectionResult({element.id}),
-      SwitchToolResult(ToolType.select),
-    ]);
+    return completeGeometricElementCreation(
+      element,
+      additionalResults: assignResults,
+    );
   }
 
   @override

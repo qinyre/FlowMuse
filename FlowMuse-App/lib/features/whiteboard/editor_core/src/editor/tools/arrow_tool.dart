@@ -168,11 +168,7 @@ class ArrowTool implements Tool {
   ToolResult _finalize() {
     final element = _createArrow(_points);
     reset();
-    return CompoundResult([
-      AddElementResult(element),
-      SetSelectionResult({element.id}),
-      SwitchToolResult(ToolType.select),
-    ]);
+    return completeGeometricElementCreation(element);
   }
 
   ArrowElement _createArrow(List<Point> points) {

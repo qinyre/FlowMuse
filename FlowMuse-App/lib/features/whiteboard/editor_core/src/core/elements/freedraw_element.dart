@@ -11,6 +11,12 @@ class FreedrawElement extends Element {
   final List<double> pressures;
   final bool simulatePressure;
 
+  /// Whether the freedraw stroke is complete (user finished drawing).
+  ///
+  /// Runtime-only field — NOT serialized to JSON. When false, the renderer
+  /// may apply different visual treatment (e.g. thinner/transient tail).
+  final bool isComplete;
+
   FreedrawElement({
     required super.id,
     required super.x,
@@ -20,6 +26,7 @@ class FreedrawElement extends Element {
     required this.points,
     this.pressures = const [],
     this.simulatePressure = false,
+    this.isComplete = true,
     super.angle,
     super.strokeColor,
     super.backgroundColor,
@@ -48,6 +55,7 @@ class FreedrawElement extends Element {
     List<Point>? points,
     List<double>? pressures,
     bool? simulatePressure,
+    bool? isComplete,
   }) {
     return FreedrawElement(
       id: id,
@@ -58,6 +66,7 @@ class FreedrawElement extends Element {
       points: points ?? this.points,
       pressures: pressures ?? this.pressures,
       simulatePressure: simulatePressure ?? this.simulatePressure,
+      isComplete: isComplete ?? this.isComplete,
       angle: angle,
       strokeColor: strokeColor,
       backgroundColor: backgroundColor,
@@ -116,6 +125,7 @@ class FreedrawElement extends Element {
     bool clearIndex = false,
     Map<String, Object?>? customData,
     bool clearCustomData = false,
+    bool? isComplete,
   }) {
     return FreedrawElement(
       id: id ?? this.id,
@@ -123,9 +133,10 @@ class FreedrawElement extends Element {
       y: y ?? this.y,
       width: width ?? this.width,
       height: height ?? this.height,
-      points: points,
-      pressures: pressures,
-      simulatePressure: simulatePressure,
+      points: points ?? this.points,
+      pressures: pressures ?? this.pressures,
+      simulatePressure: simulatePressure ?? this.simulatePressure,
+      isComplete: isComplete ?? this.isComplete,
       angle: angle ?? this.angle,
       strokeColor: strokeColor ?? this.strokeColor,
       backgroundColor: backgroundColor ?? this.backgroundColor,

@@ -37,6 +37,18 @@ class ViewportState {
     );
   }
 
+  /// Converts a screen-space pixel position to scene coordinates WITHOUT
+  /// rounding to whole numbers. Used exclusively by freedraw to avoid
+  /// reintroducing 1 scene-pixel quantization noise from [screenToScene].
+  ///
+  /// Formula is identical to [screenToScene] but omits [roundToDouble].
+  Offset screenToScenePrecise(Offset screenPoint) {
+    return Offset(
+      screenPoint.dx / zoom + offset.dx,
+      screenPoint.dy / zoom + offset.dy,
+    );
+  }
+
   /// Converts a scene coordinate to screen-space pixel position.
   Offset sceneToScreen(Offset scenePoint) {
     return Offset(
