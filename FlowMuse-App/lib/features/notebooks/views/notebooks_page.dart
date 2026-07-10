@@ -359,63 +359,7 @@ class _NotebookCollectionCover extends StatelessWidget {
         : const Color(0xFF202523);
 
     if (notebook.coverImage != null) {
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.asset(notebook.coverImage!, fit: BoxFit.cover),
-          // 文字覆盖层
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  LucideIcons.bookOpen,
-                  color: Colors.white.withValues(alpha: 0.86),
-                  size: 28,
-                ),
-                const SizedBox(height: 34),
-                Text(
-                  notebook.name,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    height: 1.25,
-                    fontWeight: FontWeight.w700,
-                    shadows: [
-                      Shadow(
-                        color: Color(0x80000000),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                Align(
-                  alignment: Alignment.bottomRight,
-                  child: Text(
-                    notebook.count.toString().padLeft(2, '0'),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontSize: 48,
-                      height: 1,
-                      fontWeight: FontWeight.w700,
-                      shadows: const [
-                        Shadow(
-                          color: Color(0x80000000),
-                          blurRadius: 4,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
+      return Image.asset(notebook.coverImage!, fit: BoxFit.cover);
     }
 
     return DecoratedBox(
