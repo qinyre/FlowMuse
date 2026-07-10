@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/gestures.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -44,19 +45,25 @@ void main() {
     addTearDown(controller.dispose);
     controller.switchTool(ToolType.rectangle);
 
-    controller.onPointerDown(
-      const Offset(1000, 1000),
+    controller.onPointerDown(PointerDownEvent(
+      pointer: 1,
+      position: const Offset(1000, 1000),
       kind: PointerDeviceKind.mouse,
-    );
-    controller.onPointerMove(
-      const Offset(1050, 1050),
-      const Offset(50, 50),
+      timeStamp: Duration.zero,
+    ));
+    controller.onPointerMove(PointerMoveEvent(
+      pointer: 1,
+      position: const Offset(1050, 1050),
+      delta: const Offset(50, 50),
       kind: PointerDeviceKind.mouse,
-    );
-    controller.onPointerUp(
-      const Offset(1050, 1050),
+      timeStamp: const Duration(milliseconds: 16),
+    ));
+    controller.onPointerUp(PointerUpEvent(
+      pointer: 1,
+      position: const Offset(1050, 1050),
       kind: PointerDeviceKind.mouse,
-    );
+      timeStamp: const Duration(milliseconds: 32),
+    ));
 
     expect(
       controller.editorState.scene.activeElements.where(

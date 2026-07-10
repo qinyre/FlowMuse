@@ -16,12 +16,21 @@ void main() {
     controller.canvasSize = const Size(400, 600);
     controller.switchTool(ToolType.freedraw);
 
-    // 阶段 2（旧签名）：
-    controller.onPointerDown(const Offset(0, 0), kind: PointerDeviceKind.stylus, pressure: 0.5);
-    controller.onPointerMove(const Offset(10, 0), const Offset(10, 0), kind: PointerDeviceKind.stylus, pressure: 0.6);
-    // 阶段 3 迁移后改为：
-    // controller.onPointerDown(PointerDownEvent(pointer:1, position: Offset(0,0), localPosition: Offset(0,0), kind: PointerDeviceKind.stylus, pressure: 0.5, timeStamp: Duration.zero));
-    // controller.onPointerMove(PointerMoveEvent(pointer:1, position: Offset(10,0), localPosition: Offset(10,0), delta: Offset(10,0), kind: PointerDeviceKind.stylus, pressure: 0.6, timeStamp: const Duration(milliseconds:16)));
+    controller.onPointerDown(PointerDownEvent(
+      pointer: 1,
+      position: const Offset(0, 0),
+      kind: PointerDeviceKind.stylus,
+      pressure: 0.5,
+      timeStamp: Duration.zero,
+    ));
+    controller.onPointerMove(PointerMoveEvent(
+      pointer: 1,
+      position: const Offset(10, 0),
+      delta: const Offset(10, 0),
+      kind: PointerDeviceKind.stylus,
+      pressure: 0.6,
+      timeStamp: const Duration(milliseconds: 16),
+    ));
 
     // 进行中：controller 暴露的预览 overlay 应带 pressure 且 isComplete=false。
     final overlay = controller.activeTool.overlay;

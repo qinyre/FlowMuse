@@ -5,7 +5,7 @@ import 'stroke_input_sample.dart';
 /// 位于 EditorCanvas 的 Listener 边界：PointerEvent → StrokeInputSample。
 /// 在 local logical-pixel 坐标完成（screenToScene 由 controller 在 modeler 之后做）。
 class StrokeInputNormalizer {
-  StrokeInputSample? normalize(PointerEvent e, {required StrokePhase phase}) {
+  StrokeInputSample normalize(PointerEvent e, {required StrokePhase phase}) {
     return StrokeInputSample(
       pointerId: e.pointer,
       x: e.localPosition.dx,
