@@ -170,7 +170,22 @@ lib/
 
 项目统一用 `debugPrint`，带 `[FlowMuseCreateNote]` 前缀。新增日志遵循此格式，便于过滤。**不要用 `print`**。
 
-### 4.4 提交信息约定
+### 4.4 错误处理模式
+
+| 场景 | 做法 | 示例 |
+|------|------|------|
+| Platform Channel 调用 | catch `PlatformException` + `MissingPluginException`，返回 `null` 或默认值 | `try { ... } on PlatformException { return null; }` |
+| 数据库操作 | 让异常向上抛到 ViewModel 层，由 UI 展示 SnackBar | `catch (error) { _showCreateError(context, error); }` |
+| 非关键初始化（如 shader） | try-catch + 静默降级，**不能阻塞启动** | `try { await init(); } catch (_) { /* 降级 */ }` |
+| 网络请求 | catch 后区分超时/连接拒绝/其他，分别给用户可理解的提示 | 见 `ink_recognition_repository.dart` |
+| 用户操作失败 | 用 `ScaffoldMessenger.showSnackBar` 提示，**不要用 dialog 打断用户** | 见 `library_sidebar.dart` 的 `_showCreateError` |
+| 不可恢复的致命错误 | 在 `main()` 初始化阶段才允许崩溃，其余位置必须兜底 | — |
+
+**禁止**：
+- 空 catch 块（`catch (_) {}` 不带日志或恢复逻辑）
+- 在 UI 层直接用 `try-catch` 包装大段 Widget build（应在 ViewModel/Repository 层处理）
+
+### 4.5 提交信息约定
 
 观察既有提交，团队用**中文描述**为主，部分带类型前缀：
 - 常见前缀：`fix:`、`refactor:`、`merge:`（如 `fix:修复二次创建笔记失败的bug`、`refactor:重构创建集合页面布局`）
@@ -201,11 +216,27 @@ lib/
 ### 5.3 改鸿蒙端时的额外注意
 
 - 鸿蒙相关代码在 `FlowMuse-App/ohos/`（ArkTS）与 `tool/vendor/`（fork 包）。
-- `.gitignore` 已忽略鸿蒙自动生成文件（`build-profile.json5`、`GeneratedPluginRegistrant.ets`、`oh-package-lock.json5` 等），**不要手动提交这些**。
+- **自动生成文件**（`GeneratedPluginRegistrant.ets`）已在 `.gitignore` 忽略，**不要提交**。
+- **vendor fork 包的必要构建文件**（如 `BuildProfile.ets`、`oh-package-lock.json5`）**必须强制追踪**（上游包的 `.gitignore` 会误忽略它们）：`git add -f <file>`。如果 clone 后缺失这些文件，鸿蒙构建会失败。
 - 改 `tool/vendor/` 下的 fork 包时，在 pubspec.yaml 注释里记录"为什么 fork"（已有范例），方便后续上游同步。
 - 鸿蒙网络安全：`network_config.json` 显式允许 cleartext HTTP（协作服务是 HTTP）。
+- **涉及鸿蒙 API / 原生能力时，先查 `harmonyos-guides/` 目录里的官方文档或联网搜索**，确认有对应的 API 和用法后再写代码，不要凭经验猜测鸿蒙侧的实现。**（harmonyos-guides 目录在项目仓库外，和项目于同级目录下，本地可用）**
 
-### 5.4 改动前的跨端自检
+### 5.4 鸿蒙 Platform Channel 开发规范
+
+当需要调用鸿蒙原生 API 时（如文件选择、HTTP 请求），遵循以下模式：
+
+1. **Dart 侧**：新建 `_channel_ohos.dart` 文件，通过 `MethodChannel('flow_muse/<channel_name>')` 封装调用接口，返回纯 Dart 类型（`List`/`Map`/`String`），**不泄露平台类型**。
+2. **ArkTS 侧**：在 `ohos/entry/src/main/ets/channels/` 下新建对应的 `.ets` 文件，实现 Channel 处理逻辑。
+3. **注册**：在 `EntryAbility.ets` 的 `configureFlutterEngine()` 中注册新 Channel。
+4. **容错**：Dart 侧所有 Channel 调用必须 catch `PlatformException` 或 `MissingPluginException`，返回 `null` 或默认值，**绝不能因 Channel 未注册而崩溃**。
+5. **权限**：如果原生 API 需要权限，在 `module.json5` 的 `requestPermissions` 中声明，并在 ArkTS 侧做权限检查。
+
+已有参考实现：
+- 文件选择：`file_picker_channel_ohos.dart` + `FilePickerChannel.ets`
+- HTTP 通道：`native_http_client.dart` + `HttpChannel.ets`
+
+### 5.5 改动前的跨端自检
 
 改完任何共享代码后自问：
 - 这个改动在 Android 上行为变了吗？（要变，且是预期的）
@@ -224,10 +255,21 @@ lib/
 2. **依赖解析**：改了 pubspec 要跑 `flutter pub get` 确认无冲突。
 3. **测试**：`flutter test`——已有测试不能挂。如果改了被测试覆盖的模块，**先跑相关测试**。
 4. **受影响功能回归**：手动或在脑中过一遍改动影响的用户流程，确认没破坏。例如改了 `libraryIndexProvider`，要确认笔记列表、笔记本页、标签页、搜索页都正常。
-5. **跨端影响**：按 5.4 自检。
+5. **跨端影响**：按 5.5 自检。
 6. **数据库迁移**：如果改了 schema（见第 7 节），必须同时验证"全新安装"（onCreate）和"旧版本升级"（onUpgrade）两条路径。
 
 > 测试目录在 `FlowMuse-App/test/`，遵循 `test/` 镜像 `lib/` 结构的约定。新增功能尽量补测试。
+
+### 6.1 测试编写规范
+
+| 规则 | 说明 |
+|------|------|
+| 目录结构 | `test/` 镜像 `lib/` 目录结构：`lib/features/library/repositories/foo.dart` → `test/features/library/repositories/foo_test.dart` |
+| 命名 | 测试文件 `*_test.dart`；测试描述用中文；关键场景用 Given-When-Then 注释分段 |
+| 覆盖率 | 不要求 100%，但 **Repository 层和工具函数必须有测试**；UI widget 测试覆盖关键交互路径即可 |
+| 独立运行 | 每个 `test()` 用例不依赖其他用例的执行结果，**不得共享可变状态** |
+| Mock 隔离 | 数据库/网络/Platform Channel 用 mock 隔离，单元测试**不访问真实的文件系统或网络** |
+| 运行 | 提交前跑全量 `flutter test`；开发中可用 `flutter test --name="关键词"` 只跑相关测试 |
 
 ---
 
@@ -279,7 +321,23 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 - feature 分支完成后合并到 main，合并提交用中文描述（如 `merge:合并feature/xxx到主分支`）。
 - 合并前确认与 main 最新（先 rebase 或 merge main 进 feature 分支解决冲突）。
 
-### 8.3 提交粒度
+### 8.3 Merge Request（MR）规范
+
+1. **MR 标题**：中文简述做了什么（如 `feat: 笔记本/标签封面图片选择`），与提交风格一致。
+2. **MR 描述**必须包含：
+   - **做了什么**（变更摘要）
+   - **影响范围**（改了哪些模块/文件）
+   - **跨端影响**（是否涉及平台特定代码、是否已在对应端验证）
+   - **数据库变更**（如果有 schema 改动，写清楚升级路径）
+   - **截图/录屏**（UI 改动必须附）
+3. **Review 重点**：
+   - 是否遵循"复用优先"（有没有重复造轮子）
+   - 共享代码中是否有平台判断（违反铁律）
+   - 数据库迁移是否幂等（`_safeAddColumn`）
+   - 自动生成文件是否误提交
+4. **合并前**：本地确认 `flutter analyze` 通过 + `flutter test` 通过 + 与最新 main 无冲突。
+
+### 8.4 提交粒度
 
 - 一个提交做一件事，描述清晰。
 - 提交前确认没有把自动生成文件（build/、.dart_tool/、ohos 生成文件）误加进来。
@@ -295,10 +353,28 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 
 ---
 
-## 10. 当你不确定时
+## 10. 文档同步要求
+
+代码改动后，**相关文档必须同步更新**，否则他人无法理解你的改动：
+
+| 改动类型 | 需更新的文档 |
+|----------|-------------|
+| 新增功能/用户可见变更 | `REQUIREMENTS.md`（更新功能清单） |
+| 架构变更/新模块 | `FlowMuse-App/docs/architecture.md` |
+| 新 API 端点/协议变更 | `FlowMuse-App/docs/api.md` |
+| 数据模型/表结构变更 | `FlowMuse-App/docs/data-model.md` |
+| 新增 Platform Channel | 在本 `AGENTS.md` 5.4 节补充引用 |
+| 项目级流程/规范调整 | 本 `AGENTS.md` |
+| 重大实现决策 | `docs/superpowers/plans/` 新建计划文档 |
+
+**原则**：改了代码就要能找到对应的文档说明。文档不在多，在**准确反映现状**。过期文档比没有文档更危险。
+
+---
+
+## 11. 当你不确定时
 
 - **不确定是否有现成实现** → 先 grep / 用 Explore agent 搜，再决定新建。
-- **不确定改动是否影响其他端** → 按 5.4 自检，拿不准就在计划里标注"需跨端验证"并提示用户。
+- **不确定改动是否影响其他端** → 按 5.5 自检，拿不准就在计划里标注"需跨端验证"并提示用户。
 - **不确定需求边界** → 回看 `REQUIREMENTS.md` 和 `docs/architecture_constraints.md`。
 - **不确定架构是否合适** → 查 `docs/superpowers/plans/` 是否有同类先例，或参考 `FlowMuse-App/docs/architecture.md`。
 - **遇到 3 次修复都失败** → 停下来，这大概率是架构问题而非 bug，向用户说明并讨论方案，不要继续盲目打补丁。
@@ -316,11 +392,13 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
   ↓
 （大任务）写计划文档 → （小任务）直接动手
   ↓
-遵循代码规范（第 4 节）+ 跨端约束（第 5 节）
+遵循代码规范（第 4 节）+ 跨端约束（第 5 节）+ 错误处理模式（第 4.4 节）
   ↓
-验证清单全过（第 6 节）
+验证清单全过（第 6 节）+ 测试规范（第 6.1 节）
   ↓
 flutter analyze 无 error + flutter test 通过
   ↓
-提交（中文描述，第 4.4 节）
+同步对应文档（第 10 节）
+  ↓
+提交（中文描述，第 4.5 节）
 ```

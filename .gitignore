@@ -59,5 +59,3 @@ app.*.map.json
 
 # HarmonyOS auto-generated
 ohos/entry/src/main/ets/plugins/GeneratedPluginRegistrant.ets
-tool/vendor/path_provider_ohos/ohos/BuildProfile.ets
-tool/vendor/path_provider_ohos/ohos/oh-package-lock.json5
