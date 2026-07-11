@@ -26,6 +26,10 @@
 ```
 2024-se-17/                       # 仓库根
 ├── AGENTS.md                     # ← 你正在读
+├── .agent/                       # Agent 知识库（详细规范，按需深读）
+│   ├── conventions.md            #   编码与协作约定（怎么做）
+│   ├── architecture.md           #   架构速览（项目长什么样）
+│   └── decisions.md              #   架构决策记录 ADR（为什么这样选）
 ├── REQUIREMENTS.md               # 产品需求（先读这个理解"做什么"）
 ├── README.md
 ├── docs/                         # 设计文档、计划、研究记录
@@ -75,6 +79,9 @@ lib/
 
 | 文档 | 用途 |
 |------|------|
+| `.agent/conventions.md` | **编码与协作约定**（命名、目录、Riverpod、持久化、Git、测试） |
+| `.agent/architecture.md` | **架构速览**（系统全景、分层、数据流、跨端边界） |
+| `.agent/decisions.md` | **架构决策记录 ADR**（为什么这样选,含白屏事故等教训） |
 | `REQUIREMENTS.md` | 产品要做什么（功能需求清单） |
 | `docs/architecture_constraints.md` | 架构硬约束（Excalidraw 对齐原则） |
 | `FlowMuse-App/docs/architecture.md` | 前端架构设计（分层、模块、跨平台策略） |
@@ -85,6 +92,20 @@ lib/
 ---
 
 ## 2. 动手前：勘察清单
+
+### 2.0 指令优先级与阅读路由
+
+规则冲突时，按以下顺序执行：用户当次明确要求 → 本 `AGENTS.md` → 与任务直接相关的 `.agent/` 文档 → 设计/计划文档 → 代码与实际配置。文档描述与代码、配置不一致时，**以已验证的代码和配置为准**，并在同一变更中修正文档。
+
+完成本文件的勘察清单后，按任务读取 `.agent/`：
+
+| 任务类型 | 必读文档 |
+|---|---|
+| 任意代码改动 | `.agent/conventions.md` |
+| 跨 feature、存储、协作或平台改动 | `.agent/architecture.md` |
+| 数据库、Excalidraw、鸿蒙适配、协作加密或编辑器状态改动 | `.agent/decisions.md` 中对应 ADR |
+
+`.agent/` 是项目知识库，不替代代码审查；不要只按概述推断文件位置、版本或现有行为。
 
 **接到任何任务后，写第一行代码之前，先完成以下勘察**（按需取用，但第 1-3 项每次必做）：
 
@@ -221,6 +242,7 @@ lib/
 - 改 `tool/vendor/` 下的 fork 包时，在 pubspec.yaml 注释里记录"为什么 fork"（已有范例），方便后续上游同步。
 - 鸿蒙网络安全：`network_config.json` 显式允许 cleartext HTTP（协作服务是 HTTP）。
 - **涉及鸿蒙 API / 原生能力时，先查 `harmonyos-guides/` 目录里的官方文档或联网搜索**，确认有对应的 API 和用法后再写代码，不要凭经验猜测鸿蒙侧的实现。**（harmonyos-guides 目录在项目仓库外，和项目于同级目录下，本地可用）**
+- 涉及 `ohos/`、`tool/vendor/`、Platform Channel 或插件注册的改动，提交前必须运行 `cd FlowMuse-App && flutter build hap`；构建通过不等同于真机行为通过，真机验收范围须在提交/MR 中如实记录。
 
 ### 5.4 鸿蒙 Platform Channel 开发规范
 
@@ -254,6 +276,8 @@ lib/
 1. **静态检查**：`cd FlowMuse-App && flutter analyze`——不得新增 error。
 2. **依赖解析**：改了 pubspec 要跑 `flutter pub get` 确认无冲突。
 3. **测试**：`flutter test`——已有测试不能挂。如果改了被测试覆盖的模块，**先跑相关测试**。
+   - 涉及 `FlowMuse-Server/` 时，额外运行 `cd FlowMuse-Server && go test ./...` 与 `go vet ./...`。
+   - 涉及 Flutter 与服务端共同使用的 HTTP/Socket.IO/协作消息格式时，补充前后端字段兼容性验证；不能只验证其中一端。
 4. **受影响功能回归**：手动或在脑中过一遍改动影响的用户流程，确认没破坏。例如改了 `libraryIndexProvider`，要确认笔记列表、笔记本页、标签页、搜索页都正常。
 5. **跨端影响**：按 5.5 自检。
 6. **数据库迁移**：如果改了 schema（见第 7 节），必须同时验证"全新安装"（onCreate）和"旧版本升级"（onUpgrade）两条路径。
@@ -348,6 +372,7 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 
 - **端到端加密**：协作的实时消息与快照全程 AES-GCM-128 加密，服务端只见密文。改协作层时**不得**让明文落库或明文传输。
 - **token 安全**：账户 token 存 `flutter_secure_storage`（key `flowmuse.auth.token`），**不要**存到 `local_settings` 表或明文文件。
+- **日志与测试脱敏**：不得向 `debugPrint`、异常消息、测试失败输出、截图或提交记录写入 token、ownerKey、roomKey、AES 密钥、白板明文或可还原的协作密文。排障日志只记录脱敏后的标识、长度、状态码或哈希前缀。
 - **乐观锁**：协作快照用 `baseSceneVersion/baseSceneHash`，冲突返回 409 时走 reconcile 重试，不要直接覆盖。
 - **软删除优先**：笔记删除默认软删除（置 `deleted_at`），可恢复；物理删除才级联。
 
@@ -355,7 +380,7 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 
 ## 10. 文档同步要求
 
-代码改动后，**相关文档必须同步更新**，否则他人无法理解你的改动：
+代码改动后，**改变了对外行为、架构边界、数据格式或开发约束时**，相关文档必须同步更新；纯局部实现修复不为凑文档而重复描述。文档以准确反映现状为目标，不能复制过期实现细节：
 
 | 改动类型 | 需更新的文档 |
 |----------|-------------|
