@@ -2434,7 +2434,22 @@ class MarkdrawController extends ChangeNotifier {
     if (background != null) {
       _canvasBackgroundColor = background;
     }
+    _prewarmImageCache();
     notifyListeners();
+  }
+
+  /// 串行预解码场景中的图片,避免渲染时 resolveImages 对所有图片
+  /// 并发触发 instantiateImageCodec 导致内存压力/解码失败。
+  /// 对齐 importPdfPages 的逐页 await 串行策略。
+  Future<void> _prewarmImageCache() async {
+    final files = _editorState.scene.files;
+    if (files.isEmpty) return;
+    for (final entry in files.entries) {
+      if (!_imageCache.contains(entry.key)) {
+        await _imageCache.decodeAndWait(entry.key, entry.value);
+      }
+    }
+    if (!_disposed) notifyListeners();
   }
 
   /// Replaces the scene while preserving undo/redo history.
