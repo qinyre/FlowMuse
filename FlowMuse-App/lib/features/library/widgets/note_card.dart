@@ -63,14 +63,12 @@ class NoteCard extends StatelessWidget {
               ),
             ),
             if (onActionsTap != null)
-              Builder(
-                builder: (buttonContext) => GestureDetector(
-                  onTap: () => onActionsTap!(buttonContext),
-                  child: const Icon(
-                    LucideIcons.chevronDown,
-                    color: Color(0xFF555C59),
-                    size: 16,
-                  ),
+              GestureDetector(
+                onTap: () => onActionsTap!(context),
+                child: const Icon(
+                  LucideIcons.chevronDown,
+                  color: Color(0xFF555C59),
+                  size: 16,
                 ),
               ),
           ],

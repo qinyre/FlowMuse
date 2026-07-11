@@ -436,13 +436,15 @@ class _NoteItems extends StatelessWidget {
 }
 
 class _TagCoverCard extends StatelessWidget {
-  const _TagCoverCard({
+  _TagCoverCard({
     required this.tag,
     required this.onRename,
     required this.onEdit,
     required this.onDelete,
     required this.onTap,
   });
+
+  final GlobalKey _arrowKey = GlobalKey();
 
   final TagItem tag;
   final VoidCallback onRename;
@@ -452,8 +454,6 @@ class _TagCoverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    void showActions() =>
-        _showCollectionActions(context, onRename: onRename, onEdit: onEdit, onDelete: onDelete);
     return Column(
       children: [
         SizedBox(
@@ -468,13 +468,22 @@ class _TagCoverCard extends StatelessWidget {
             child: InkWell(
               key: ValueKey('tag-card-${tag.id}'),
               onTap: onTap,
-              onLongPress: showActions,
+              onLongPress: () {
+                final arrowCtx = _arrowKey.currentContext;
+                if (arrowCtx != null) {
+                  _showCollectionActions(arrowCtx, onRename: onRename, onEdit: onEdit, onDelete: onDelete);
+                }
+              },
               child: _TagCover(tag: tag),
             ),
           ),
         ),
         const SizedBox(height: 13),
-        _CoverTitle(title: tag.name, onActionsTap: showActions),
+        _CoverTitle(
+          title: tag.name,
+          arrowKey: _arrowKey,
+          onActionsTap: (ctx) => _showCollectionActions(ctx, onRename: onRename, onEdit: onEdit, onDelete: onDelete),
+        ),
         const SizedBox(height: 6),
         _CoverSubtitle(text: '${tag.count} 个笔记'),
       ],
@@ -805,10 +814,11 @@ class _TagBulkActionBar extends StatelessWidget {
 }
 
 class _CoverTitle extends StatelessWidget {
-  const _CoverTitle({required this.title, this.onActionsTap});
+  const _CoverTitle({required this.title, this.arrowKey, this.onActionsTap});
 
   final String title;
-  final VoidCallback? onActionsTap;
+  final Key? arrowKey;
+  final void Function(BuildContext context)? onActionsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -829,13 +839,16 @@ class _CoverTitle extends StatelessWidget {
           const SizedBox(width: 8),
           Tooltip(
             message: '更多操作',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: onActionsTap,
-              child: const SizedBox(
-                width: 24,
-                height: 24,
-                child: Icon(LucideIcons.chevronDown, size: 18),
+            child: Builder(
+              builder: (arrowCtx) => InkWell(
+                key: arrowKey,
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => onActionsTap!(arrowCtx),
+                child: const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Icon(LucideIcons.chevronDown, size: 18),
+                ),
               ),
             ),
           ),

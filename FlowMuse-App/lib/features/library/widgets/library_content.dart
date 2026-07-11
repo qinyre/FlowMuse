@@ -490,11 +490,15 @@ class _LibraryItemsContent extends StatelessWidget {
         button.size.bottomRight(Offset.zero),
         ancestor: overlay,
       );
+      // Arrow is in the title row: cover(176) + gap(13) + title(~20) ≈ 209px from top.
+      // Card bottom is ~230px. Offset up from card bottom to arrow row.
+      const arrowOffsetFromBottom = 38.0;
+      final arrowY = bottomRight.dy - arrowOffsetFromBottom;
       position = RelativeRect.fromLTRB(
         bottomRight.dx - 8,
-        bottomRight.dy + 4,
+        arrowY + 4,
         overlay.size.width - bottomRight.dx,
-        overlay.size.height - bottomRight.dy - 4,
+        overlay.size.height - arrowY - 4,
       );
     } else {
       final size = MediaQuery.of(context).size;

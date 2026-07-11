@@ -456,7 +456,7 @@ class _NoteItems extends StatelessWidget {
 }
 
 class _NotebookCollectionCoverCard extends StatelessWidget {
-  const _NotebookCollectionCoverCard({
+  _NotebookCollectionCoverCard({
     required this.notebook,
     required this.selectionMode,
     required this.selected,
@@ -466,6 +466,8 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
     required this.onDelete,
     required this.onTap,
   });
+
+  final GlobalKey _arrowKey = GlobalKey();
 
   final NotebookCollectionItem notebook;
   final bool selectionMode;
@@ -478,8 +480,6 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    void showActions() =>
-        _showCollectionActions(context, onRename: onRename, onEdit: onEdit, onDelete: onDelete);
     return Column(
       children: [
         SizedBox(
@@ -494,13 +494,22 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
             child: InkWell(
               key: ValueKey('notebook-card-${notebook.id}'),
               onTap: onTap,
-              onLongPress: showActions,
+              onLongPress: () {
+                final arrowCtx = _arrowKey.currentContext;
+                if (arrowCtx != null) {
+                  _showCollectionActions(arrowCtx, onRename: onRename, onEdit: onEdit, onDelete: onDelete);
+                }
+              },
               child: _NotebookCollectionCover(notebook: notebook),
             ),
           ),
         ),
         const SizedBox(height: 13),
-        _CoverTitle(title: notebook.name, onActionsTap: showActions),
+        _CoverTitle(
+          title: notebook.name,
+          arrowKey: _arrowKey,
+          onActionsTap: (ctx) => _showCollectionActions(ctx, onRename: onRename, onEdit: onEdit, onDelete: onDelete),
+        ),
         const SizedBox(height: 6),
         _CoverSubtitle(text: '${notebook.count} 个笔记'),
       ],
@@ -850,10 +859,11 @@ class _CollectionBulkActionBar extends StatelessWidget {
 }
 
 class _CoverTitle extends StatelessWidget {
-  const _CoverTitle({required this.title, this.onActionsTap});
+  const _CoverTitle({required this.title, this.arrowKey, this.onActionsTap});
 
   final String title;
-  final VoidCallback? onActionsTap;
+  final Key? arrowKey;
+  final void Function(BuildContext context)? onActionsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -874,13 +884,16 @@ class _CoverTitle extends StatelessWidget {
           const SizedBox(width: 8),
           Tooltip(
             message: '更多操作',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: onActionsTap,
-              child: const SizedBox(
-                width: 24,
-                height: 24,
-                child: Icon(LucideIcons.chevronDown, size: 18),
+            child: Builder(
+              builder: (arrowCtx) => InkWell(
+                key: arrowKey,
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => onActionsTap!(arrowCtx),
+                child: const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Icon(LucideIcons.chevronDown, size: 18),
+                ),
               ),
             ),
           ),
