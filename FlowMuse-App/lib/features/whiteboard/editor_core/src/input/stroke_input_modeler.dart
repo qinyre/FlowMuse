@@ -220,7 +220,10 @@ class StrokeInputModeler {
   double? _pressureOut(double? raw) {
     if (!policy.useRealPressure) return null; // 模拟模式：始终 null，交 perfect_freehand
     if (raw != null) {
-      _lastPressure = _pressureFilter!.filter(raw, _lastTime ?? Duration.zero);
+      final filtered = _pressureFilter!.filter(raw, _lastTime ?? Duration.zero);
+      _lastPressure =
+          policy.pressureFloor +
+          filtered * (policy.pressureCeiling - policy.pressureFloor);
     }
     return _lastPressure; // 偶发缺失沿用最后有效值
   }
