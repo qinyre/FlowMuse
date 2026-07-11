@@ -1,4 +1,4 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_secure_storage_ohos/flutter_secure_storage_ohos.dart';
 
 class CollaborationOwnerKeyStore {
   CollaborationOwnerKeyStore({FlutterSecureStorage? storage})

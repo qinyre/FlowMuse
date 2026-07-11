@@ -41,19 +41,12 @@ class LocalDatabase {
             '[FlowMuseCreateNote] LocalDatabase.onUpgrade '
             'oldVersion=$oldVersion newVersion=$newVersion',
           );
+          // v2→v3: 笔记本和标签表新增封面图片列
           if (oldVersion < 3) {
-            await db.execute(
-              'ALTER TABLE notebooks ADD COLUMN cover_image TEXT',
-            );
-            await db.execute(
-              'ALTER TABLE tags ADD COLUMN cover_image TEXT',
-            );
+            await _safeAddColumn(db, 'notebooks', 'cover_image', 'TEXT');
+            await _safeAddColumn(db, 'tags', 'cover_image', 'TEXT');
           }
-          if (oldVersion < 4) {
-            await db.execute(
-              'ALTER TABLE notes ADD COLUMN cover_thumbnail BLOB',
-            );
-          }
+          // 注意：cover_thumbnail 在 v2 的 notes 表中已存在，无需迁移
           await _ensureSchema(db);
         },
         onOpen: (db) async {
@@ -70,6 +63,22 @@ class LocalDatabase {
     );
     _database = database;
     return database;
+  }
+
+  /// 安全添加列：列已存在时静默跳过，避免迁移崩溃
+  static Future<void> _safeAddColumn(
+    DatabaseExecutor db,
+    String table,
+    String column,
+    String type,
+  ) async {
+    try {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $type');
+    } catch (_) {
+      debugPrint(
+        '[FlowMuseCreateNote] _safeAddColumn: skip $table.$column (already exists)',
+      );
+    }
   }
 
   static Future<void> _ensureSchema(DatabaseExecutor db) async {
