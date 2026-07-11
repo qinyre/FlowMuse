@@ -1,0 +1,20 @@
+{
+  "UniformDataTypeDeclarations": [
+    {
+      "TypeId": "com.example.flowmuse.markdraw",
+      "BelongingToTypes": ["general.plain-text"],
+      "FilenameExtensions": [".markdraw"],
+      "MIMETypes": ["application/x-markdraw"],
+      "Description": "FlowMuse markdraw drawing document.",
+      "ReferenceURL": ""
+    },
+    {
+      "TypeId": "com.example.flowmuse.excalidraw",
+      "BelongingToTypes": ["general.json"],
+      "FilenameExtensions": [".excalidraw"],
+      "MIMETypes": ["application/vnd.excalidraw+json"],
+      "Description": "Excalidraw-compatible scene document.",
+      "ReferenceURL": ""
+    }
+  ]
+}

@@ -18,6 +18,7 @@ class CompactMenuButton extends StatelessWidget {
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onShare;
   final VoidCallback? onImportImage;
   final VoidCallback? onShowLibrary;
   final VoidCallback? onDocumentRenamed;
@@ -32,6 +33,7 @@ class CompactMenuButton extends StatelessWidget {
     this.onSaveAs,
     this.onExportPng,
     this.onExportSvg,
+    this.onShare,
     this.onImportImage,
     this.onShowLibrary,
     this.onDocumentRenamed,
@@ -100,6 +102,10 @@ class CompactMenuButton extends StatelessWidget {
             if (onExportSvg != null)
               _compactMenuItem(Icons.code, '导出 SVG', () {
                 closeThen(onExportSvg!);
+              }),
+            if (onShare != null)
+              _compactMenuItem(Icons.share, '分享', () {
+                closeThen(onShare!);
               }),
             if (onExportPng != null || onExportSvg != null) const Divider(),
             if (onImportImage != null)
