@@ -11,8 +11,12 @@ import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
 import '../../library/widgets/create_collection_dialog.dart';
 import '../../library/widgets/create_note_card.dart';
+import '../../library/widgets/edit_collection_page.dart';
+import '../../library/widgets/note_actions.dart';
 import '../../library/widgets/note_card.dart';
 import '../view_models/notebooks_view_model.dart';
+
+enum _NoteAction { rename, moveToNotebook, selectTags, delete }
 
 class NotebooksPage extends ConsumerWidget {
   const NotebooksPage({super.key});
@@ -49,6 +53,7 @@ class NotebooksPage extends ConsumerWidget {
         },
         onSelectionChanged: viewModel.toggleNotebookSelection,
         onRename: viewModel.renameNotebook,
+        onEdit: (notebookId) => _editNotebook(context, state, viewModel.editNotebook, notebookId),
         onDelete: viewModel.deleteNotebook,
       ),
     );
@@ -84,6 +89,48 @@ Future<void> _createNotebook(
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('\u521b\u5efa\u5931\u8d25\uff1a$error')),
+    );
+  }
+}
+
+Future<void> _editNotebook(
+  BuildContext context,
+  NotebooksState state,
+  Future<void> Function({required String notebookId, String? name, Color? coverColor, String? coverImage}) onEdit,
+  String notebookId,
+) async {
+  final notebook = _findNotebook(state.notebooks, notebookId);
+  if (notebook == null) return;
+
+  final result = await context.push<EditCollectionResult>(
+    AppRoutes.editCollection,
+    extra: EditCollectionParams(
+      id: notebook.id,
+      name: notebook.name,
+      coverColor: notebook.coverColor,
+      coverImage: notebook.coverImage,
+      title: '\u7f16\u8f91\u7b14\u8bb0\u672c',
+      icon: LucideIcons.bookOpen,
+      coverColors: libraryNotebookColors,
+      coverCategory: 'notebooks',
+    ),
+  );
+  if (result == null || !context.mounted) {
+    return;
+  }
+  try {
+    await onEdit(
+      notebookId: notebookId,
+      name: result.name,
+      coverColor: result.coverColor,
+      coverImage: result.coverImage,
+    );
+  } catch (error) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('\u7f16\u8f91\u5931\u8d25\uff1a$error')),
     );
   }
 }
@@ -138,6 +185,14 @@ class NotebookDetailPage extends ConsumerWidget {
         onOpenNote: (item) {
           _openWhiteboard(context, noteId: item.id);
         },
+        onRenameNote: (noteId, newName) =>
+            ref.read(libraryIndexProvider.notifier).renameNote(noteId, newName),
+        onMoveNoteToNotebook: (noteId, notebookId) =>
+            ref.read(libraryIndexProvider.notifier).moveNotesToNotebook([noteId], notebookId),
+        onSetNoteTags: (noteId, tagIds) =>
+            ref.read(libraryIndexProvider.notifier).setNoteTags(noteId, tagIds),
+        onDeleteNote: (noteId) =>
+            ref.read(libraryIndexProvider.notifier).deleteNotes([noteId]),
       ),
     );
   }
@@ -149,6 +204,7 @@ class _NotebookCollectionItems extends StatelessWidget {
     required this.onCreate,
     required this.onSelectionChanged,
     required this.onRename,
+    required this.onEdit,
     required this.onDelete,
   });
 
@@ -156,6 +212,7 @@ class _NotebookCollectionItems extends StatelessWidget {
   final VoidCallback onCreate;
   final ValueChanged<String> onSelectionChanged;
   final Future<void> Function(String notebookId, String name) onRename;
+  final Future<void> Function(String notebookId) onEdit;
   final Future<void> Function(String notebookId) onDelete;
 
   @override
@@ -186,6 +243,7 @@ class _NotebookCollectionItems extends StatelessWidget {
               initialValue: notebook.name,
               onSubmitted: (name) => onRename(notebook.id, name),
             ),
+            onEdit: () => onEdit(notebook.id),
             onDelete: () => onDelete(notebook.id),
             onTap: () => context.push(AppRoutes.notebookPath(notebook.id)),
           );
@@ -231,6 +289,7 @@ class _NotebookCollectionItems extends StatelessWidget {
                       initialValue: notebook.name,
                       onSubmitted: (name) => onRename(notebook.id, name),
                     ),
+                    onEdit: () => onEdit(notebook.id),
                     onDelete: () => onDelete(notebook.id),
                     onTap: () =>
                         context.push(AppRoutes.notebookPath(notebook.id)),
@@ -259,11 +318,19 @@ class _NoteItems extends StatelessWidget {
     required this.notes,
     required this.onCreate,
     required this.onOpenNote,
+    this.onRenameNote,
+    this.onMoveNoteToNotebook,
+    this.onSetNoteTags,
+    this.onDeleteNote,
   });
 
   final List<NoteItem> notes;
   final VoidCallback onCreate;
   final ValueChanged<NoteItem> onOpenNote;
+  final Future<void> Function(String noteId, String newName)? onRenameNote;
+  final Future<void> Function(String noteId, String? notebookId)? onMoveNoteToNotebook;
+  final Future<void> Function(String noteId, List<String> tagIds)? onSetNoteTags;
+  final Future<void> Function(String noteId)? onDeleteNote;
 
   @override
   Widget build(BuildContext context) {
@@ -287,11 +354,101 @@ class _NoteItems extends StatelessWidget {
               return CreateNoteCard(onTap: onCreate);
             }
             final item = notes[index - 1];
-            return NoteCard(item: item, onTap: () => onOpenNote(item));
+            return NoteCard(
+              item: item,
+              onTap: () => onOpenNote(item),
+              onActionsTap: onRenameNote != null
+                  ? () => _showNoteActions(context, item)
+                  : null,
+            );
           },
         );
       },
     );
+  }
+
+  void _showNoteActions(BuildContext context, NoteItem item) async {
+    final RenderBox? button = context.findRenderObject() as RenderBox?;
+    final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+
+    if (button == null || overlay == null) return;
+
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    final selected = await showMenu<_NoteAction>(
+      context: context,
+      position: position,
+      items: const [
+        PopupMenuItem(
+          value: _NoteAction.rename,
+          child: ListTile(
+            leading: Icon(LucideIcons.penLine),
+            title: Text('重命名'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        PopupMenuItem(
+          value: _NoteAction.moveToNotebook,
+          child: ListTile(
+            leading: Icon(LucideIcons.bookOpen),
+            title: Text('移动至'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        PopupMenuItem(
+          value: _NoteAction.selectTags,
+          child: ListTile(
+            leading: Icon(LucideIcons.tag),
+            title: Text('选择标签'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        PopupMenuItem(
+          value: _NoteAction.delete,
+          child: ListTile(
+            leading: Icon(LucideIcons.trash2),
+            title: Text('删除'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      ],
+    );
+    if (selected == null || !context.mounted) return;
+
+    switch (selected) {
+      case _NoteAction.rename:
+        final name = await showDialog<String>(
+          context: context,
+          builder: (context) => _NoteRenameDialog(initialValue: item.title),
+        );
+        if (name != null && context.mounted) {
+          await onRenameNote!(item.id, name);
+        }
+      case _NoteAction.moveToNotebook:
+        final result = await showDialog<MoveToNotebookResult>(
+          context: context,
+          builder: (context) => MoveToNotebookDialog(currentNotebookId: item.notebookId),
+        );
+        if (result != null && context.mounted) {
+          await onMoveNoteToNotebook!(item.id, result.notebookId);
+        }
+      case _NoteAction.selectTags:
+        final tagIds = await showDialog<List<String>>(
+          context: context,
+          builder: (context) => SelectTagsDialog(currentTagIds: item.tagIds),
+        );
+        if (tagIds != null && context.mounted) {
+          await onSetNoteTags!(item.id, tagIds);
+        }
+      case _NoteAction.delete:
+        await onDeleteNote!(item.id);
+    }
   }
 }
 
@@ -302,6 +459,7 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
     required this.selected,
     required this.onSelectionChanged,
     required this.onRename,
+    required this.onEdit,
     required this.onDelete,
     required this.onTap,
   });
@@ -311,6 +469,7 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
   final bool selected;
   final VoidCallback onSelectionChanged;
   final VoidCallback onRename;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onTap;
 
@@ -338,6 +497,7 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
         _CoverTitle(
           title: notebook.name,
           onRename: onRename,
+          onEdit: onEdit,
           onDelete: onDelete,
         ),
         const SizedBox(height: 6),
@@ -432,6 +592,7 @@ class _NotebookCollectionTile extends StatelessWidget {
     required this.selected,
     required this.onSelectionChanged,
     required this.onRename,
+    required this.onEdit,
     required this.onDelete,
     required this.onTap,
   });
@@ -441,6 +602,7 @@ class _NotebookCollectionTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onSelectionChanged;
   final VoidCallback onRename;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onTap;
 
@@ -453,7 +615,7 @@ class _NotebookCollectionTile extends StatelessWidget {
         subtitle: Text('${notebook.count} 个笔记'),
         trailing: selectionMode
             ? Checkbox(value: selected, onChanged: (_) => onSelectionChanged())
-            : _CollectionActions(onRename: onRename, onDelete: onDelete),
+            : _CollectionActions(onRename: onRename, onEdit: onEdit, onDelete: onDelete),
         onTap: onTap,
       ),
     );
@@ -687,10 +849,11 @@ class _CollectionBulkActionBar extends StatelessWidget {
 }
 
 class _CoverTitle extends StatelessWidget {
-  const _CoverTitle({required this.title, this.onRename, this.onDelete});
+  const _CoverTitle({required this.title, this.onRename, this.onEdit, this.onDelete});
 
   final String title;
   final VoidCallback? onRename;
+  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
   @override
@@ -709,16 +872,17 @@ class _CoverTitle extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        _CollectionActions(onRename: onRename, onDelete: onDelete),
+        _CollectionActions(onRename: onRename, onEdit: onEdit, onDelete: onDelete),
       ],
     );
   }
 }
 
 class _CollectionActions extends StatelessWidget {
-  const _CollectionActions({this.onRename, this.onDelete});
+  const _CollectionActions({this.onRename, this.onEdit, this.onDelete});
 
   final VoidCallback? onRename;
+  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
   @override
@@ -738,8 +902,8 @@ class _CollectionActions extends StatelessWidget {
           onTap: () async {
             final selected = await showAnchoredPopupMenu<_CollectionAction>(
               context: context,
-              items: const [
-                PopupMenuItem<_CollectionAction>(
+              items: [
+                const PopupMenuItem<_CollectionAction>(
                   value: _CollectionAction.rename,
                   child: ListTile(
                     leading: Icon(LucideIcons.penLine),
@@ -747,7 +911,16 @@ class _CollectionActions extends StatelessWidget {
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
-                PopupMenuItem<_CollectionAction>(
+                if (onEdit != null)
+                  const PopupMenuItem<_CollectionAction>(
+                    value: _CollectionAction.edit,
+                    child: ListTile(
+                      leading: Icon(LucideIcons.settings),
+                      title: Text('编辑'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                const PopupMenuItem<_CollectionAction>(
                   value: _CollectionAction.delete,
                   child: ListTile(
                     leading: Icon(LucideIcons.trash2),
@@ -763,6 +936,8 @@ class _CollectionActions extends StatelessWidget {
             switch (selected) {
               case _CollectionAction.rename:
                 runAfterUiTeardown(onRename!);
+              case _CollectionAction.edit:
+                runAfterUiTeardown(onEdit!);
               case _CollectionAction.delete:
                 runAfterUiTeardown(onDelete!);
             }
@@ -778,7 +953,7 @@ class _CollectionActions extends StatelessWidget {
   }
 }
 
-enum _CollectionAction { rename, delete }
+enum _CollectionAction { rename, edit, delete }
 
 class _CoverSubtitle extends StatelessWidget {
   const _CoverSubtitle({required this.text});
@@ -856,6 +1031,60 @@ class _NameDialogState extends State<_NameDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        onSubmitted: _submit,
+        decoration: const InputDecoration(border: OutlineInputBorder()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('保存')),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 笔记重命名对话框
+// ---------------------------------------------------------------------------
+
+class _NoteRenameDialog extends StatefulWidget {
+  const _NoteRenameDialog({required this.initialValue});
+
+  final String initialValue;
+
+  @override
+  State<_NoteRenameDialog> createState() => _NoteRenameDialogState();
+}
+
+class _NoteRenameDialogState extends State<_NoteRenameDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    Navigator.of(context).pop(value ?? _controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('重命名笔记'),
       content: TextField(
         controller: _controller,
         autofocus: true,

@@ -69,11 +69,25 @@ abstract interface class LibraryRepository {
 
   Future<void> recolorNotebook(String notebookId, Color color);
 
+  Future<void> updateNotebook(
+    String notebookId, {
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  });
+
   Future<void> deleteNotebook(String notebookId);
 
   Future<void> renameTag(String tagId, String name);
 
   Future<void> recolorTag(String tagId, Color color);
+
+  Future<void> updateTag(
+    String tagId, {
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  });
 
   Future<void> deleteTag(String tagId);
 }
@@ -475,6 +489,28 @@ class SqliteLibraryRepository implements LibraryRepository {
   }
 
   @override
+  Future<void> updateNotebook(
+    String notebookId, {
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  }) async {
+    final trimmed = name?.trim();
+    final db = await _openDatabase();
+    await db.update(
+      'notebooks',
+      {
+        if (trimmed != null && trimmed.isNotEmpty) 'name': trimmed,
+        if (coverColor != null) 'cover_color': coverColor.toARGB32(),
+        'cover_image': coverImage,
+        'updated_at': _timestamp(DateTime.now()),
+      },
+      where: 'id = ?',
+      whereArgs: [notebookId],
+    );
+  }
+
+  @override
   Future<void> deleteNotebook(String notebookId) async {
     final db = await _openDatabase();
     await db.delete('notebooks', where: 'id = ?', whereArgs: [notebookId]);
@@ -502,6 +538,28 @@ class SqliteLibraryRepository implements LibraryRepository {
       'tags',
       {
         'cover_color': color.toARGB32(),
+        'updated_at': _timestamp(DateTime.now()),
+      },
+      where: 'id = ?',
+      whereArgs: [tagId],
+    );
+  }
+
+  @override
+  Future<void> updateTag(
+    String tagId, {
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  }) async {
+    final trimmed = name?.trim();
+    final db = await _openDatabase();
+    await db.update(
+      'tags',
+      {
+        if (trimmed != null && trimmed.isNotEmpty) 'name': trimmed,
+        if (coverColor != null) 'cover_color': coverColor.toARGB32(),
+        'cover_image': coverImage,
         'updated_at': _timestamp(DateTime.now()),
       },
       where: 'id = ?',
@@ -730,6 +788,21 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     await refresh();
   }
 
+  Future<void> updateNotebook(
+    String notebookId, {
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  }) async {
+    await _repository.updateNotebook(
+      notebookId,
+      name: name,
+      coverColor: coverColor,
+      coverImage: coverImage,
+    );
+    await refresh();
+  }
+
   Future<void> deleteNotebook(String notebookId) async {
     await _repository.deleteNotebook(notebookId);
     await refresh();
@@ -742,6 +815,21 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
 
   Future<void> recolorTag(String tagId, Color color) async {
     await _repository.recolorTag(tagId, color);
+    await refresh();
+  }
+
+  Future<void> updateTag(
+    String tagId, {
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  }) async {
+    await _repository.updateTag(
+      tagId,
+      name: name,
+      coverColor: coverColor,
+      coverImage: coverImage,
+    );
     await refresh();
   }
 

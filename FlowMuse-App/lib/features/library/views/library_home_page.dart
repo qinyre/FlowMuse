@@ -80,6 +80,14 @@ class LibraryHomePage extends ConsumerWidget {
               : (NoteItem item) {
                   _openWhiteboard(context, noteId: item.id);
                 },
+          onRenameNote: (noteId, newName) =>
+              ref.read(libraryIndexProvider.notifier).renameNote(noteId, newName),
+          onMoveNoteToNotebook: (noteId, notebookId) =>
+              ref.read(libraryIndexProvider.notifier).moveNotesToNotebook([noteId], notebookId),
+          onSetNoteTags: (noteId, tagIds) =>
+              ref.read(libraryIndexProvider.notifier).setNoteTags(noteId, tagIds),
+          onDeleteNote: (noteId) =>
+              ref.read(libraryIndexProvider.notifier).deleteNotes([noteId]),
         );
       },
     );
