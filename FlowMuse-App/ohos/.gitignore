@@ -18,3 +18,6 @@
 **/libs/**/libapp.so
 **/libs/**/libflutter.so
 **/libs/**/libvmservice_snapshot.so
+
+# Signing config - local only
+/build-profile.json5
