@@ -108,7 +108,7 @@ class WhiteboardState {
 }
 
 class WhiteboardViewModel extends Notifier<WhiteboardState> {
-  late final CollaborationRepository _repository;
+  late CollaborationRepository _repository;
 
   @override
   WhiteboardState build() {
