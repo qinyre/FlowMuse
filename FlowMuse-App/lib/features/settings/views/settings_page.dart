@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -17,6 +20,7 @@ import '../../../shared/widgets/shared_sidebar.dart';
 import '../../account/view_models/account_view_model.dart';
 import '../../account/widgets/account_avatar.dart';
 import '../../library/repositories/library_repository.dart';
+import '../../whiteboard/editor_core/src/ui/file_picker_channel_ohos.dart';
 import '../repositories/local_backup_repository.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -301,20 +305,34 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
       _backupMessage = null;
     });
     try {
-      final result = await FilePicker.platform.pickFiles(
-        dialogTitle: '导入 FlowMuse 备份',
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) {
-        if (mounted) {
-          setState(() => _backupMessage = '已取消导入');
+      Uint8List? bytes;
+      if (defaultTargetPlatform == TargetPlatform.ohos) {
+        try {
+          final files = await pickFilesViaOhosChannel(
+            suffixFilters: const ['JSON文件(.json)|.json'],
+          );
+          bytes = files.first.bytes;
+        } on PlatformException {
+          if (mounted) {
+            setState(() => _backupMessage = '已取消导入');
+          }
+          return;
         }
-        return;
+      } else {
+        final result = await FilePicker.platform.pickFiles(
+          dialogTitle: '导入 FlowMuse 备份',
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+          withData: true,
+        );
+        if (result == null || result.files.isEmpty) {
+          if (mounted) {
+            setState(() => _backupMessage = '已取消导入');
+          }
+          return;
+        }
+        bytes = result.files.single.bytes;
       }
-      final file = result.files.single;
-      final bytes = file.bytes;
       if (bytes == null) {
         throw StateError('未读取到备份文件内容');
       }
@@ -734,17 +752,35 @@ class _AccountSettingsSectionState
   Future<void> _pickAvatar() async {
     setState(() => _busy = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
-        dialogTitle: '选择头像',
-        type: FileType.custom,
-        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) {
-        return;
+      Uint8List? bytes;
+      String? extension;
+      if (defaultTargetPlatform == TargetPlatform.ohos) {
+        try {
+          final files = await pickFilesViaOhosChannel(
+            suffixFilters: const [
+              '图片(.png,.jpg,.jpeg,.webp,.gif)|.png,.jpg,.jpeg,.webp,.gif',
+            ],
+          );
+          final picked = files.first;
+          bytes = picked.bytes;
+          extension = picked.name.split('.').last;
+        } on PlatformException {
+          return;
+        }
+      } else {
+        final result = await FilePicker.platform.pickFiles(
+          dialogTitle: '选择头像',
+          type: FileType.custom,
+          allowedExtensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+          withData: true,
+        );
+        if (result == null || result.files.isEmpty) {
+          return;
+        }
+        final file = result.files.single;
+        bytes = file.bytes;
+        extension = file.extension;
       }
-      final file = result.files.single;
-      final bytes = file.bytes;
       if (bytes == null) {
         throw StateError('未读取到头像文件内容');
       }
@@ -752,7 +788,7 @@ class _AccountSettingsSectionState
           .read(accountViewModelProvider.notifier)
           .uploadAvatar(
             bytes: bytes,
-            mimeType: _mimeTypeForAvatar(file.extension ?? ''),
+            mimeType: _mimeTypeForAvatar(extension ?? ''),
           );
     } finally {
       if (mounted) {

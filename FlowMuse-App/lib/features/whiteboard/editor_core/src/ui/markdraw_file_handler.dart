@@ -200,6 +200,24 @@ class MarkdrawFileHandler {
 
   /// Shows a file picker and imports a library file.
   Future<void> importLibrary() async {
+    if (defaultTargetPlatform == TargetPlatform.ohos) {
+      try {
+        final files = await pickFilesViaOhosChannel(
+          suffixFilters: const [
+            '素材库(.excalidrawlib,.markdrawlib)|.excalidrawlib,.markdrawlib',
+          ],
+        );
+        final picked = files.first;
+        controller.importLibraryFromContent(
+          utf8.decode(picked.bytes),
+          picked.name,
+        );
+      } on PlatformException {
+        return;
+      }
+      return;
+    }
+
     final result = await FilePicker.platform.pickFiles(
       dialogTitle: '导入素材库',
       type: FileType.custom,
@@ -226,6 +244,11 @@ class MarkdrawFileHandler {
 
     if (kIsWeb) {
       downloadFile('library.excalidrawlib', content);
+    } else if (defaultTargetPlatform == TargetPlatform.ohos) {
+      await saveFileViaOhosChannel(
+        'library.excalidrawlib',
+        Uint8List.fromList(utf8.encode(content)),
+      );
     } else {
       final path = await FilePicker.platform.saveFile(
         dialogTitle: '导出素材库',
