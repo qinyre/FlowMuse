@@ -40,6 +40,9 @@ class NoteCard extends StatelessWidget {
             child: InkWell(
               key: ValueKey('note-card-${item.id}'),
               onTap: onTap,
+              onLongPress: onActionsTap != null
+                  ? () => onActionsTap!(context)
+                  : null,
               child: NoteCover(item: item),
             ),
           ),

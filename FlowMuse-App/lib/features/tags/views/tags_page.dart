@@ -452,6 +452,8 @@ class _TagCoverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    void showActions() =>
+        _showCollectionActions(context, onRename: onRename, onEdit: onEdit, onDelete: onDelete);
     return Column(
       children: [
         SizedBox(
@@ -466,12 +468,13 @@ class _TagCoverCard extends StatelessWidget {
             child: InkWell(
               key: ValueKey('tag-card-${tag.id}'),
               onTap: onTap,
+              onLongPress: showActions,
               child: _TagCover(tag: tag),
             ),
           ),
         ),
         const SizedBox(height: 13),
-        _CoverTitle(title: tag.name, onRename: onRename, onEdit: onEdit, onDelete: onDelete),
+        _CoverTitle(title: tag.name, onActionsTap: showActions),
         const SizedBox(height: 6),
         _CoverSubtitle(text: '${tag.count} 个笔记'),
       ],
@@ -802,12 +805,10 @@ class _TagBulkActionBar extends StatelessWidget {
 }
 
 class _CoverTitle extends StatelessWidget {
-  const _CoverTitle({required this.title, this.onRename, this.onEdit, this.onDelete});
+  const _CoverTitle({required this.title, this.onActionsTap});
 
   final String title;
-  final VoidCallback? onRename;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
+  final VoidCallback? onActionsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -824,8 +825,21 @@ class _CoverTitle extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 8),
-        _CollectionActions(onRename: onRename, onEdit: onEdit, onDelete: onDelete),
+        if (onActionsTap != null) ...[
+          const SizedBox(width: 8),
+          Tooltip(
+            message: '更多操作',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: onActionsTap,
+              child: const SizedBox(
+                width: 24,
+                height: 24,
+                child: Icon(LucideIcons.chevronDown, size: 18),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -852,49 +866,7 @@ class _CollectionActions extends StatelessWidget {
         message: '更多操作',
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () async {
-            final selected = await showAnchoredPopupMenu<_CollectionAction>(
-              context: context,
-              items: [
-                const PopupMenuItem<_CollectionAction>(
-                  value: _CollectionAction.rename,
-                  child: ListTile(
-                    leading: Icon(LucideIcons.penLine),
-                    title: Text('重命名'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                if (onEdit != null)
-                  const PopupMenuItem<_CollectionAction>(
-                    value: _CollectionAction.edit,
-                    child: ListTile(
-                      leading: Icon(LucideIcons.settings),
-                      title: Text('编辑'),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                const PopupMenuItem<_CollectionAction>(
-                  value: _CollectionAction.delete,
-                  child: ListTile(
-                    leading: Icon(LucideIcons.trash2),
-                    title: Text('删除'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
-            );
-            if (selected == null || !context.mounted) {
-              return;
-            }
-            switch (selected) {
-              case _CollectionAction.rename:
-                runAfterUiTeardown(onRename!);
-              case _CollectionAction.edit:
-                runAfterUiTeardown(onEdit!);
-              case _CollectionAction.delete:
-                runAfterUiTeardown(onDelete!);
-            }
-          },
+          onTap: () => _showCollectionActions(context, onRename: onRename!, onEdit: onEdit, onDelete: onDelete!),
           child: const SizedBox(
             width: 24,
             height: 24,
@@ -907,6 +879,62 @@ class _CollectionActions extends StatelessWidget {
 }
 
 enum _CollectionAction { rename, edit, delete }
+
+Future<void> _showCollectionActions(
+  BuildContext context, {
+  required VoidCallback onRename,
+  VoidCallback? onEdit,
+  required VoidCallback onDelete,
+}) async {
+  final RenderBox? button = context.findRenderObject() as RenderBox?;
+  final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+
+  RelativeRect position;
+  if (button != null && overlay != null) {
+    final bottomRight = button.localToGlobal(
+      button.size.bottomRight(Offset.zero),
+      ancestor: overlay,
+    );
+    position = RelativeRect.fromLTRB(
+      bottomRight.dx - 8,
+      bottomRight.dy + 4,
+      overlay.size.width - bottomRight.dx,
+      overlay.size.height - bottomRight.dy - 4,
+    );
+  } else {
+    final size = MediaQuery.of(context).size;
+    position = RelativeRect.fromLTRB(size.width / 2, size.height / 2, size.width / 2, size.height / 2);
+  }
+
+  final selected = await showMenu<_CollectionAction>(
+    context: context,
+    position: position,
+    items: [
+      const PopupMenuItem<_CollectionAction>(
+        value: _CollectionAction.rename,
+        child: ListTile(leading: Icon(LucideIcons.penLine), title: Text('重命名'), contentPadding: EdgeInsets.zero),
+      ),
+      if (onEdit != null)
+        const PopupMenuItem<_CollectionAction>(
+          value: _CollectionAction.edit,
+          child: ListTile(leading: Icon(LucideIcons.settings), title: Text('编辑'), contentPadding: EdgeInsets.zero),
+        ),
+      const PopupMenuItem<_CollectionAction>(
+        value: _CollectionAction.delete,
+        child: ListTile(leading: Icon(LucideIcons.trash2), title: Text('删除'), contentPadding: EdgeInsets.zero),
+      ),
+    ],
+  );
+  if (selected == null || !context.mounted) return;
+  switch (selected) {
+    case _CollectionAction.rename:
+      runAfterUiTeardown(onRename);
+    case _CollectionAction.edit:
+      if (onEdit != null) runAfterUiTeardown(onEdit);
+    case _CollectionAction.delete:
+      runAfterUiTeardown(onDelete);
+  }
+}
 
 class _CoverSubtitle extends StatelessWidget {
   const _CoverSubtitle({required this.text});
