@@ -39,9 +39,17 @@ abstract interface class LibraryRepository {
     bool clearCoverThumbnail = false,
   });
 
-  Future<LibraryNotebook> createNotebook({String? name, Color? coverColor});
+  Future<LibraryNotebook> createNotebook({
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  });
 
-  Future<LibraryTag> createTag({String? name, Color? coverColor});
+  Future<LibraryTag> createTag({
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  });
 
   Future<void> deleteNotes(List<String> noteIds);
 
@@ -251,6 +259,7 @@ class SqliteLibraryRepository implements LibraryRepository {
   Future<LibraryNotebook> createNotebook({
     String? name,
     Color? coverColor,
+    String? coverImage,
   }) async {
     final createdAt = DateTime.now();
     final normalizedName = name?.trim();
@@ -267,6 +276,7 @@ class SqliteLibraryRepository implements LibraryRepository {
         coverColor:
             coverColor ??
             libraryNotebookColors[nextSortOrder % libraryNotebookColors.length],
+        coverImage: coverImage,
         createdAt: createdAt,
         updatedAt: createdAt,
         sortOrder: nextSortOrder,
@@ -277,7 +287,11 @@ class SqliteLibraryRepository implements LibraryRepository {
   }
 
   @override
-  Future<LibraryTag> createTag({String? name, Color? coverColor}) async {
+  Future<LibraryTag> createTag({
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  }) async {
     final createdAt = DateTime.now();
     final normalizedName = name?.trim();
     final database = await _openDatabase();
@@ -293,6 +307,7 @@ class SqliteLibraryRepository implements LibraryRepository {
         coverColor:
             coverColor ??
             libraryTagColors[nextSortOrder % libraryTagColors.length],
+        coverImage: coverImage,
         createdAt: createdAt,
         updatedAt: createdAt,
         sortOrder: nextSortOrder,
@@ -636,10 +651,12 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
   Future<LibraryNotebook> createNotebook({
     String? name,
     Color? coverColor,
+    String? coverImage,
   }) async {
     final notebook = await _repository.createNotebook(
       name: name,
       coverColor: coverColor,
+      coverImage: coverImage,
     );
     await refresh();
     if (state.hasError) {
@@ -648,8 +665,16 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     return notebook;
   }
 
-  Future<LibraryTag> createTag({String? name, Color? coverColor}) async {
-    final tag = await _repository.createTag(name: name, coverColor: coverColor);
+  Future<LibraryTag> createTag({
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  }) async {
+    final tag = await _repository.createTag(
+      name: name,
+      coverColor: coverColor,
+      coverImage: coverImage,
+    );
     await refresh();
     if (state.hasError) {
       throw state.error ?? StateError('Failed to refresh tags');
@@ -795,6 +820,7 @@ Map<String, Object?> _notebookToRow(LibraryNotebook notebook) {
     'id': notebook.id,
     'name': notebook.name,
     'cover_color': notebook.coverColor.toARGB32(),
+    'cover_image': notebook.coverImage,
     'created_at': _timestamp(notebook.createdAt),
     'updated_at': _timestamp(notebook.updatedAt),
     'sort_order': notebook.sortOrder,
@@ -806,6 +832,7 @@ LibraryNotebook _notebookFromRow(Map<String, Object?> row) {
     id: row['id']! as String,
     name: row['name']! as String,
     coverColor: Color(row['cover_color']! as int),
+    coverImage: row['cover_image'] as String?,
     createdAt: _date(row['created_at']! as int),
     updatedAt: _date(row['updated_at']! as int),
     sortOrder: row['sort_order']! as int,
@@ -817,6 +844,7 @@ Map<String, Object?> _tagToRow(LibraryTag tag) {
     'id': tag.id,
     'name': tag.name,
     'cover_color': tag.coverColor.toARGB32(),
+    'cover_image': tag.coverImage,
     'created_at': _timestamp(tag.createdAt),
     'updated_at': _timestamp(tag.updatedAt),
     'sort_order': tag.sortOrder,
@@ -828,6 +856,7 @@ LibraryTag _tagFromRow(Map<String, Object?> row) {
     id: row['id']! as String,
     name: row['name']! as String,
     coverColor: Color(row['cover_color']! as int),
+    coverImage: row['cover_image'] as String?,
     createdAt: _date(row['created_at']! as int),
     updatedAt: _date(row['updated_at']! as int),
     sortOrder: row['sort_order']! as int,

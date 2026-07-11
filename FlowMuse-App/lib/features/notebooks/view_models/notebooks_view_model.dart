@@ -11,6 +11,7 @@ class NotebookCollectionItem {
     required this.name,
     required this.count,
     required this.coverColor,
+    this.coverImage,
     this.noteIds = const [],
   });
 
@@ -18,6 +19,7 @@ class NotebookCollectionItem {
   final String name;
   final int count;
   final Color coverColor;
+  final String? coverImage;
   final List<String> noteIds;
 }
 
@@ -76,6 +78,7 @@ class NotebooksViewModel extends Notifier<NotebooksState> {
                 name: notebook.name,
                 count: index.countNotesInNotebook(notebook.id),
                 coverColor: notebook.coverColor,
+                coverImage: notebook.coverImage,
                 noteIds: [
                   for (final note in index.notes)
                     if (!note.isDeleted && note.notebookId == notebook.id)
@@ -86,10 +89,14 @@ class NotebooksViewModel extends Notifier<NotebooksState> {
     return NotebooksState(notebooks: notebooks);
   }
 
-  Future<LibraryNotebook> createNotebook({String? name, Color? coverColor}) {
+  Future<LibraryNotebook> createNotebook({
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  }) {
     return ref
         .read(libraryIndexProvider.notifier)
-        .createNotebook(name: name, coverColor: coverColor);
+        .createNotebook(name: name, coverColor: coverColor, coverImage: coverImage);
   }
 
   void changeViewMode(LibraryViewMode viewMode) {
