@@ -1,6 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +12,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../whiteboard/editor_core/src/ui/file_picker_channel_ohos.dart';
 import '../../whiteboard/pdf_note_import/pdf_note_import_payload.dart';
 import '../../whiteboard/pdf_note_import/pdf_note_import_service.dart';
 import '../../whiteboard/collaboration/models/excalidraw_scene.dart';
@@ -109,6 +113,22 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
             noteType: _noteType,
             pageTemplate: _pageTemplate,
             picker: () async {
+              if (defaultTargetPlatform == TargetPlatform.ohos) {
+                try {
+                  final files = await pickFilesViaOhosChannel(
+                    suffixFilters: const [
+                      'PDF文件(.pdf)|.pdf',
+                    ],
+                  );
+                  final picked = files.first;
+                  return PdfNoteImportPayload(
+                    bytes: picked.bytes,
+                    name: picked.name,
+                  );
+                } on PlatformException {
+                  return null;
+                }
+              }
               final result = await FilePicker.platform.pickFiles(
                 type: FileType.custom,
                 allowedExtensions: const ['pdf'],
