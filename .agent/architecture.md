@@ -138,6 +138,7 @@ editor_core/src/
 | SQLite | `shared/storage/local_database_path*.dart` | 条件导入:移动端原生 sqflite,鸿蒙/桌面 FFI |
 | HTTP | `features/whiteboard/ink_recognition/native_http_client.dart` | 鸿蒙走 Platform Channel,其他走 http |
 | 手写笔压感 | `editor_core/src/input/` | `InputPolicySelector` 按设备分策略 |
+| 敏感数据存储 | `flutter_secure_storage_ohos` facade + `flutter_secure_storage` 平台实现 | 鸿蒙 facade 负责识别 `ohos`；标准包继续为其他端注册实现 |
 | 文件/PDF | service 层抽象接口 | 鸿蒙 Platform Channel,其他 pdfx/file_picker |
 | shader | `PencilShader` | 不支持的平台静默降级 |
 | fork 包 | `tool/vendor/` + `dependency_overrides` | code_assets 加 ohos 枚举,path_provider 含 ohos 支持 |

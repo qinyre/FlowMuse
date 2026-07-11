@@ -367,6 +367,34 @@ try {
 - 不要删除 try-catch:未来新平台可能再次触发此问题。
 - 改为可等待的 Future 后不要再移除保护逻辑。
 
+---
+
+## ADR-012:鸿蒙安全存储必须使用支持 OHOS 的 Dart facade
+
+- **状态**:已采纳
+- **日期**:2026-07-11
+- **关联文件**:`lib/features/whiteboard/collaboration/repositories/collaboration_owner_key_store.dart`
+
+### 背景
+
+鸿蒙端创建协作房间时，服务端房间和初始场景已创建成功，但保存房主密钥时抛出 `Unsupported operation: unsupported_platform`。项目虽已注册 `flutter_secure_storage_ohos` 原生插件，协作代码却导入标准 `flutter_secure_storage` Dart facade；该 facade 不识别 `Platform.operatingSystem == 'ohos'`。
+
+### 决策
+
+对需要在鸿蒙运行的安全存储调用，使用 `flutter_secure_storage_ohos` 的 Dart facade。保留标准 `flutter_secure_storage` 依赖，使 Android、iOS、桌面和 Web 的既有插件注册与实现不变。
+
+### 理由
+
+- 原生插件已注册不代表 Dart 侧会选择该实现；facade 的平台分发同样是运行链路的一部分。
+- OHOS facade 保持同一安全存储平台接口，并增加 `ohos` 选项分支，改动可收敛到实际调用点。
+- 不全局替换或移除标准包，避免影响账户 token 和其他端的既有安全存储路径。
+
+### 遗留约束
+
+1. 新增需要在鸿蒙执行的 token、密钥或其他安全存储读写前，必须确认导入的 Dart facade 支持 `ohos`。
+2. 不得仅因已添加/注册 OHOS 插件就假定安全存储可用；必须验证一次读写。
+3. 调整安全存储依赖或 facade 时，验证 Android/桌面已有读写路径及鸿蒙创建房间后重进仍具房主权限。
+
 做出重要技术决策(选型、架构变更、约束确立)时,追加一条:
 
 ```markdown

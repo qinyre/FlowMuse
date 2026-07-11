@@ -312,6 +312,7 @@ import 'local_database_path_stub.dart'
 | SQLite FFI | `shared/storage/local_database_path_io.dart`(预加载 `libharmony_sqlite.z.so`) |
 | HTTP | `features/whiteboard/ink_recognition/native_http_client.dart`(Platform Channel → @ohos.net.http) |
 | 手写笔 | `editor_core/src/ui/harmony_stylus_stroke_smoother.dart` + `editor_core/src/input/` |
+| 安全存储 | 直接使用安全存储 API 时导入 `flutter_secure_storage_ohos` facade；保留 `flutter_secure_storage` 依赖以注册其他平台实现 |
 | 文件选择/保存 | Platform Channel → DocumentViewPicker |
 | PDF 渲染 | Platform Channel → PDFKit |
 | fork 包 | `tool/vendor/`(改了要在 pubspec 注释说明原因) |
