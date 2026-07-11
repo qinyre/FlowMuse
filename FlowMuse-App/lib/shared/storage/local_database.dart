@@ -8,7 +8,7 @@ class LocalDatabase {
   LocalDatabase._();
 
   static const databaseName = 'flowmuse_local.db';
-  static const databaseVersion = 2;
+  static const databaseVersion = 4;
 
   static Database? _database;
 
@@ -41,6 +41,19 @@ class LocalDatabase {
             '[FlowMuseCreateNote] LocalDatabase.onUpgrade '
             'oldVersion=$oldVersion newVersion=$newVersion',
           );
+          if (oldVersion < 3) {
+            await db.execute(
+              'ALTER TABLE notebooks ADD COLUMN cover_image TEXT',
+            );
+            await db.execute(
+              'ALTER TABLE tags ADD COLUMN cover_image TEXT',
+            );
+          }
+          if (oldVersion < 4) {
+            await db.execute(
+              'ALTER TABLE notes ADD COLUMN cover_thumbnail BLOB',
+            );
+          }
           await _ensureSchema(db);
         },
         onOpen: (db) async {
@@ -65,6 +78,7 @@ class LocalDatabase {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         cover_color INTEGER NOT NULL,
+        cover_image TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         sort_order INTEGER NOT NULL
@@ -75,6 +89,7 @@ class LocalDatabase {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         cover_color INTEGER NOT NULL,
+        cover_image TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         sort_order INTEGER NOT NULL

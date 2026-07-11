@@ -195,12 +195,15 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
   }
 
   Future<void> _createNotebook(BuildContext context) async {
-    final result = await showCreateCollectionDialog(
-      context: context,
-      title: '新建笔记本',
-      hintText: '请输入标题',
-      icon: LucideIcons.bookOpen,
-      coverColors: libraryNotebookColors,
+    final result = await context.push<CreateCollectionResult>(
+      AppRoutes.createCollection,
+      extra: const CreateCollectionParams(
+        title: '新建笔记本',
+        hintText: '请输入标题',
+        icon: LucideIcons.bookOpen,
+        coverColors: libraryNotebookColors,
+        coverCategory: 'notebooks',
+      ),
     );
     if (result == null || !context.mounted) {
       return;
@@ -208,22 +211,29 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
     try {
       await ref
           .read(notebooksViewModelProvider.notifier)
-          .createNotebook(name: result.name, coverColor: result.coverColor);
+          .createNotebook(
+            name: result.name,
+            coverColor: result.coverColor,
+            coverImage: result.coverImage,
+          );
       if (context.mounted) {
         context.go(AppRoutes.notebooks);
       }
     } catch (error) {
-      _showCreateError(context, error);
+      if (context.mounted) _showCreateError(context, error);
     }
   }
 
   Future<void> _createTag(BuildContext context) async {
-    final result = await showCreateCollectionDialog(
-      context: context,
-      title: '新建标签',
-      hintText: '请输入标题',
-      icon: LucideIcons.hash,
-      coverColors: libraryTagColors,
+    final result = await context.push<CreateCollectionResult>(
+      AppRoutes.createCollection,
+      extra: const CreateCollectionParams(
+        title: '新建标签',
+        hintText: '请输入标题',
+        icon: LucideIcons.hash,
+        coverColors: libraryTagColors,
+        coverCategory: 'tags',
+      ),
     );
     if (result == null || !context.mounted) {
       return;
@@ -231,12 +241,16 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
     try {
       await ref
           .read(tagsViewModelProvider.notifier)
-          .createTag(name: result.name, coverColor: result.coverColor);
+          .createTag(
+            name: result.name,
+            coverColor: result.coverColor,
+            coverImage: result.coverImage,
+          );
       if (context.mounted) {
         context.go(AppRoutes.tags);
       }
     } catch (error) {
-      _showCreateError(context, error);
+      if (context.mounted) _showCreateError(context, error);
     }
   }
 

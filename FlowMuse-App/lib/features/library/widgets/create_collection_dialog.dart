@@ -1,77 +1,107 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../shared/storage/recent_covers_repository.dart';
 import '../../../shared/widgets/app_spacing.dart';
 
 // ---------------------------------------------------------------------------
-// 封面数据
+// 路由参数
 // ---------------------------------------------------------------------------
 
-class CoverItem {
-  const CoverItem({required this.id, required this.imageUrl, this.name = ''});
-
-  final String id;
-  final String imageUrl;
-  final String name;
-}
-
-/// 占位实现，后续替换为真实 API
-Future<List<CoverItem>> fetchCovers() async => const [];
-
-class CreateCollectionResult {
-  const CreateCollectionResult({
-    required this.name,
-    required this.coverColor,
-  });
-
-  final String name;
-  final Color coverColor;
-}
-
-Future<CreateCollectionResult?> showCreateCollectionDialog({
-  required BuildContext context,
-  required String title,
-  required String hintText,
-  required IconData icon,
-  required List<Color> coverColors,
-}) {
-  return showDialog<CreateCollectionResult>(
-    context: context,
-    builder: (context) => CreateCollectionDialog(
-      title: title,
-      hintText: hintText,
-      icon: icon,
-      coverColors: coverColors,
-    ),
-  );
-}
-
-class CreateCollectionDialog extends StatefulWidget {
-  const CreateCollectionDialog({
-    super.key,
+class CreateCollectionParams {
+  const CreateCollectionParams({
     required this.title,
     required this.hintText,
     required this.icon,
     required this.coverColors,
+    required this.coverCategory,
   });
 
   final String title;
   final String hintText;
   final IconData icon;
   final List<Color> coverColors;
-
-  @override
-  State<CreateCollectionDialog> createState() => _CreateCollectionDialogState();
+  final String coverCategory;
 }
 
-class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
+// ---------------------------------------------------------------------------
+// 封面数据
+// ---------------------------------------------------------------------------
+
+class CoverItem {
+  const CoverItem({
+    required this.id,
+    required this.assetPath,
+    this.name = '',
+    this.theme = '',
+  });
+
+  final String id;
+  final String assetPath;
+  final String name;
+  final String theme;
+}
+
+Future<List<CoverItem>> fetchCovers(String category) async {
+  final raw = await rootBundle.loadString('assets/covers/manifest.json');
+  final map = json.decode(raw) as Map<String, dynamic>;
+  final items = (map[category] as List?) ?? [];
+  return [
+    for (final item in items)
+      CoverItem(
+        id: item['id'] as String,
+        assetPath: 'assets/covers/$category/${item['file']}',
+        name: (item['name'] as String?) ?? '',
+        theme: (item['theme'] as String?) ?? '',
+      ),
+  ];
+}
+
+class CreateCollectionResult {
+  const CreateCollectionResult({
+    required this.name,
+    required this.coverColor,
+    this.coverImage,
+  });
+
+  final String name;
+  final Color coverColor;
+  final String? coverImage;
+}
+
+// ---------------------------------------------------------------------------
+// 新建笔记本/标签页面
+// ---------------------------------------------------------------------------
+
+class CreateCollectionPage extends StatefulWidget {
+  const CreateCollectionPage({super.key, required this.params});
+
+  final CreateCollectionParams params;
+
+  @override
+  State<CreateCollectionPage> createState() => _CreateCollectionPageState();
+}
+
+class _CreateCollectionPageState extends State<CreateCollectionPage> {
   static const _maxTitleLength = 60;
 
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
   late Color _selectedColor;
+  String? _selectedCoverImage;
   bool _showEmptyTitleTip = false;
+
+  // 封面数据
+  List<CoverItem> _covers = const [];
+  bool _loading = true;
+  late List<String> _themes;
+
+  // 最近使用的封面
+  List<RecentCoverItem> _recentCovers = [];
+  bool _loadingRecent = true;
 
   String get _name => _controller.text.trim();
 
@@ -80,7 +110,9 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
     super.initState();
     _controller = TextEditingController()..addListener(_onTitleChanged);
     _focusNode = FocusNode();
-    _selectedColor = widget.coverColors.first;
+    _selectedColor = widget.params.coverColors.first;
+    _loadCovers();
+    _loadRecentCovers();
   }
 
   @override
@@ -106,24 +138,55 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
       });
       return;
     }
-    Navigator.of(context).pop(
-      CreateCollectionResult(name: _name, coverColor: _selectedColor),
+
+    // 保存最近使用的封面
+    if (_selectedCoverImage != null) {
+      defaultRecentCoversRepository.addRecentCover(widget.params.coverCategory, 'image', _selectedCoverImage!);
+    } else {
+      defaultRecentCoversRepository.addRecentCover(widget.params.coverCategory, 'color', _selectedColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2));
+    }
+
+    context.pop(
+      CreateCollectionResult(
+        name: _name,
+        coverColor: _selectedColor,
+        coverImage: _selectedCoverImage,
+      ),
     );
   }
 
-  Future<void> _showCoverPicker() async {
-    final selected = await showModalBottomSheet<CoverItem>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (context) => const _CoverPickerSheet(),
-    );
-    if (selected != null && mounted) {
-      // 后续处理选中的封面图片
-      debugPrint('Selected cover: ${selected.id} - ${selected.imageUrl}');
+  Future<void> _loadCovers() async {
+    final covers = await fetchCovers(widget.params.coverCategory);
+    if (mounted) {
+      final themes = covers
+          .map((c) => c.theme)
+          .where((t) => t.isNotEmpty)
+          .toSet()
+          .toList();
+      setState(() {
+        _covers = covers;
+        _themes = themes;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadRecentCovers() async {
+    final recent = await defaultRecentCoversRepository.getRecentCovers(widget.params.coverCategory);
+    if (mounted) {
+      setState(() {
+        _recentCovers = recent;
+        _loadingRecent = false;
+      });
+    }
+  }
+
+  Future<void> _clearRecentCovers() async {
+    await defaultRecentCoversRepository.clearRecentCovers(widget.params.coverCategory);
+    if (mounted) {
+      setState(() {
+        _recentCovers = [];
+      });
     }
   }
 
@@ -131,199 +194,514 @@ class _CreateCollectionDialogState extends State<CreateCollectionDialog> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSpacing.radius),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 16, 22, 24),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: false,
+      body: Padding(
+        padding: EdgeInsets.only(
+          top: MediaQuery.of(context).padding.top,
+          left: AppSpacing.pageInset,
+          right: AppSpacing.pageInset,
+          bottom: AppSpacing.pageInset,
+        ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF8A908D),
-                    ),
-                    child: const Text('取消'),
-                  ),
-                  Expanded(
-                    child: Text(
-                      widget.title,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF202523),
+              // 顶部栏
+              _TopBar(
+                title: widget.params.title,
+                onCancel: () => context.pop(),
+                onCreate: _create,
+              ),
+              const SizedBox(height: 24),
+              // 主要内容
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 左侧区域：预览 + 颜色选择（固定）
+                    Expanded(
+                      flex: 2,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // 封面预览
+                            Center(
+                              child: Stack(
+                                alignment: Alignment.center,
+                                clipBehavior: Clip.none,
+                                children: [
+                                  _CoverPreview(
+                                    color: _selectedColor,
+                                    icon: widget.params.icon,
+                                    coverImage: _selectedCoverImage,
+                                  ),
+                                  AnimatedOpacity(
+                                    opacity: _showEmptyTitleTip ? 1 : 0,
+                                    duration: const Duration(milliseconds: 120),
+                                    child: const _InlineTip(text: '标题不能为空'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            // 颜色选择
+                            Center(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    '封面模板',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF202523),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  ...widget.params.coverColors.map(
+                                    (color) => _ColorChoice(
+                                      color: color,
+                                      selected:
+                                          color == _selectedColor &&
+                                          _selectedCoverImage == null,
+                                      onTap: () => setState(() {
+                                        _selectedColor = color;
+                                        _selectedCoverImage = null;
+                                      }),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            // 最近使用
+                            if (!_loadingRecent) ...[
+                              Row(
+                                children: [
+                                  const Text(
+                                    '最近使用',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF8A908D),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  if (_recentCovers.isNotEmpty)
+                                    GestureDetector(
+                                      onTap: _clearRecentCovers,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF5F7F6),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          '清除',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: Color(0xFF6B736D),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              if (_recentCovers.isEmpty)
+                                const Text(
+                                  '新建成功后，此处会显示最近使用过的封面',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFFB0B5B2),
+                                  ),
+                                )
+                              else
+                                SizedBox(
+                                  height: 64,
+                                  child: ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _recentCovers.length,
+                                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                                    itemBuilder: (context, index) {
+                                      final item = _recentCovers[index];
+                                      return _RecentCoverChip(
+                                        item: item,
+                                        onTap: () {
+                                          setState(() {
+                                            if (item.type == 'color') {
+                                              _selectedColor = Color(int.parse('0xFF${item.value}', radix: 16));
+                                              _selectedCoverImage = null;
+                                            } else {
+                                              _selectedCoverImage = item.value;
+                                            }
+                                          });
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  TextButton(
-                    onPressed: _create,
-                    style: TextButton.styleFrom(
-                      foregroundColor: colorScheme.primary,
+                    // 分割线
+                    const VerticalDivider(
+                      width: 1,
+                      color: Color(0xFFE9EEEB),
                     ),
-                    child: const Text('创建'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 30),
-              Stack(
-                alignment: Alignment.center,
-                clipBehavior: Clip.none,
-                children: [
-                  _CoverPreview(color: _selectedColor, icon: widget.icon),
-                  AnimatedOpacity(
-                    opacity: _showEmptyTitleTip ? 1 : 0,
-                    duration: const Duration(milliseconds: 120),
-                    child: const _InlineTip(text: '标题不能为空'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 14,
-                children: [
-                  for (final color in widget.coverColors)
-                    _ColorChoice(
-                      color: color,
-                      selected: color == _selectedColor,
-                      onTap: () => setState(() => _selectedColor = color),
+                    // 右侧区域：输入框 + 封面选择
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        children: [
+                          // 标题输入
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: TextField(
+                              controller: _controller,
+                              focusNode: _focusNode,
+                              autofocus: true,
+                              keyboardType: TextInputType.text,
+                              maxLength: _maxTitleLength,
+                              maxLines: 1,
+                              cursorHeight: 16,
+                              inputFormatters: [
+                                LengthLimitingTextInputFormatter(
+                                  _maxTitleLength,
+                                ),
+                              ],
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => _create(),
+                              textAlignVertical: TextAlignVertical.center,
+                              decoration: InputDecoration(
+                                counterText: '',
+                                hintText: widget.params.hintText,
+                                filled: true,
+                                fillColor: const Color(0xFFF5F7F6),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radius,
+                                  ),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radius,
+                                  ),
+                                  borderSide: BorderSide.none,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.radius,
+                                  ),
+                                  borderSide: BorderSide(
+                                    color: colorScheme.primary,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          // 更多封面提示
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                '更多封面',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF8A908D),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // 封面选择列表
+                          Expanded(
+                            child: _loading
+                                ? const Center(
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF4F8F84),
+                                    ),
+                                  )
+                                : _themes.isEmpty
+                                    ? const Center(
+                                        child: Text(
+                                          '暂无更多封面',
+                                          style: TextStyle(
+                                            color: Color(0xFF8A908D),
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                      )
+                                    : ListView.builder(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                        ),
+                                        itemCount: _themes.length,
+                                        itemBuilder: (context, index) {
+                                          final theme = _themes[index];
+                                          final themeCovers = _covers
+                                              .where((c) => c.theme == theme)
+                                              .toList();
+                                          return Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 16,
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  theme,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Color(0xFF202523),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Wrap(
+                                                  spacing: 12,
+                                                  runSpacing: 12,
+                                                  children: themeCovers.map((item) {
+                                                    final isSelected =
+                                                        _selectedCoverImage ==
+                                                            item.assetPath;
+                                                    return GestureDetector(
+                                                      onTap: () {
+                                                        setState(() {
+                                                          _selectedCoverImage =
+                                                              item.assetPath;
+                                                        });
+                                                      },
+                                                      child: Container(
+                                                        width: 100,
+                                                        height: 130,
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                            AppSpacing.radius,
+                                                          ),
+                                                          border: Border.all(
+                                                            color: isSelected
+                                                                ? colorScheme
+                                                                    .primary
+                                                                : const Color(
+                                                                    0xFFE3E8E5,
+                                                                  ),
+                                                            width: isSelected
+                                                                ? 2
+                                                                : 1,
+                                                          ),
+                                                        ),
+                                                        child: ClipRRect(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                            AppSpacing.radius,
+                                                          ),
+                                                            child:
+                                                                Image.asset(
+                                                              item.assetPath,
+                                                              fit: BoxFit.cover,
+                                                              errorBuilder:
+                                                                  (_, _, _) =>
+                                                                      const Center(
+                                                                child: Icon(
+                                                                  Icons
+                                                                      .image_outlined,
+                                                                  color: Color(
+                                                                    0xFF8A908D,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }).toList(),
+                                                  ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                          ),
+                        ],
+                      ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              // 选择更多封面按钮
-              Center(
-                child: OutlinedButton.icon(
-                  onPressed: _showCoverPicker,
-                  icon: const Icon(LucideIcons.images, size: 18),
-                  label: const Text('选择更多封面'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF4F8F84),
-                    side: const BorderSide(color: Color(0xFF4F8F84)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppSpacing.radius),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 26),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  '${_controller.text.length} / $_maxTitleLength',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF6C746F),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                autofocus: true,
-                keyboardType: TextInputType.text,
-                maxLength: _maxTitleLength,
-                maxLines: 1,
-                cursorHeight: 18,
-                inputFormatters: [
-                  LengthLimitingTextInputFormatter(_maxTitleLength),
-                ],
-                textInputAction: TextInputAction.done,
-                onTapAlwaysCalled: true,
-                onTap: () {
-                  if (!_focusNode.hasFocus) {
-                    FocusScope.of(context).requestFocus(_focusNode);
-                    return;
-                  }
-                  _focusNode.unfocus();
-                  Future<void>.delayed(const Duration(milliseconds: 50), () {
-                    if (context.mounted) {
-                      FocusScope.of(context).requestFocus(_focusNode);
-                    }
-                  });
-                },
-                onSubmitted: (_) => _create(),
-                textAlignVertical: TextAlignVertical.center,
-                decoration: InputDecoration(
-                  counterText: '',
-                  hintText: widget.hintText,
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.radius),
-                    borderSide: BorderSide(
-                      color: colorScheme.primary.withValues(alpha: 0.72),
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.radius),
-                    borderSide: BorderSide(color: colorScheme.primary, width: 2),
-                  ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
-      ),
     );
   }
 }
 
+// ---------------------------------------------------------------------------
+// 顶部栏组件
+// ---------------------------------------------------------------------------
+
+class _TopBar extends StatelessWidget {
+  const _TopBar({
+    required this.title,
+    required this.onCancel,
+    required this.onCreate,
+  });
+
+  final String title;
+  final VoidCallback onCancel;
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Row(
+          children: [
+            TextButton(
+              onPressed: onCancel,
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF4F8F84),
+                textStyle: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radius),
+                ),
+              ),
+              child: const Text('取消'),
+            ),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: () {
+                FocusManager.instance.primaryFocus?.unfocus();
+                onCreate();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F8F84),
+                foregroundColor: Colors.white,
+                textStyle: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radius),
+                ),
+              ),
+              child: const Text('创建'),
+            ),
+          ],
+        ),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: const Color(0xFF1F2624),
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 封面预览组件
+// ---------------------------------------------------------------------------
+
 class _CoverPreview extends StatelessWidget {
-  const _CoverPreview({required this.color, required this.icon});
+  const _CoverPreview({
+    required this.color,
+    required this.icon,
+    this.coverImage,
+  });
 
   final Color color;
   final IconData icon;
+  final String? coverImage;
 
   @override
   Widget build(BuildContext context) {
     final foreground =
         ThemeData.estimateBrightnessForColor(color) == Brightness.dark
-        ? Colors.white
-        : const Color(0xFF202523);
+            ? Colors.white
+            : const Color(0xFF202523);
 
     return SizedBox(
-      width: 108,
-      height: 136,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(AppSpacing.radius),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color.alphaBlend(Colors.white.withValues(alpha: 0.14), color),
-              color,
-              Color.alphaBlend(Colors.black.withValues(alpha: 0.08), color),
-            ],
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x185A625F),
-              blurRadius: 14,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Center(
-          child: Icon(icon, size: 34, color: foreground.withValues(alpha: 0.8)),
-        ),
+      width: 180,
+      height: 240,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppSpacing.radius),
+        child: coverImage != null
+            ? Image.asset(coverImage!, fit: BoxFit.cover)
+            : DecoratedBox(
+                decoration: BoxDecoration(
+                  color: color,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.alphaBlend(
+                        Colors.white.withValues(alpha: 0.14),
+                        color,
+                      ),
+                      color,
+                      Color.alphaBlend(
+                        Colors.black.withValues(alpha: 0.08),
+                        color,
+                      ),
+                    ],
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x185A625F),
+                      blurRadius: 14,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Icon(
+                    icon,
+                    size: 28,
+                    color: foreground.withValues(alpha: 0.8),
+                  ),
+                ),
+              ),
       ),
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// 内联提示组件
+// ---------------------------------------------------------------------------
 
 class _InlineTip extends StatelessWidget {
   const _InlineTip({required this.text});
@@ -349,14 +727,18 @@ class _InlineTip extends StatelessWidget {
         child: Text(
           text,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
         ),
       ),
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// 颜色选择组件
+// ---------------------------------------------------------------------------
 
 class _ColorChoice extends StatelessWidget {
   const _ColorChoice({
@@ -396,143 +778,54 @@ class _ColorChoice extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// 封面选择弹窗
+// 最近使用封面组件
 // ---------------------------------------------------------------------------
 
-class _CoverPickerSheet extends StatefulWidget {
-  const _CoverPickerSheet();
+class _RecentCoverChip extends StatelessWidget {
+  const _RecentCoverChip({
+    required this.item,
+    required this.onTap,
+  });
 
-  @override
-  State<_CoverPickerSheet> createState() => _CoverPickerSheetState();
-}
-
-class _CoverPickerSheetState extends State<_CoverPickerSheet> {
-  List<CoverItem> _covers = const [];
-  bool _loading = true;
-  CoverItem? _selected;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCovers();
-  }
-
-  Future<void> _loadCovers() async {
-    final covers = await fetchCovers();
-    if (mounted) {
-      setState(() {
-        _covers = covers;
-        _loading = false;
-      });
-    }
-  }
+  final RecentCoverItem item;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.55,
-      minChildSize: 0.3,
-      maxChildSize: 0.85,
-      expand: false,
-      builder: (context, scrollController) {
-        return Column(
-          children: [
-            // 顶部拖拽指示条
-            Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 8),
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD0D5D2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            // 标题栏
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Row(
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('取消', style: TextStyle(color: Color(0xFF4F8F84))),
-                  ),
-                  const Expanded(
-                    child: Text(
-                      '选择封面',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1F2624),
-                      ),
+    final isColor = item.type == 'color';
+    final color = isColor ? Color(int.parse('0xFF${item.value}', radix: 16)) : null;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 58,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: const Color(0xFFE3E8E5),
+            width: 1,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: isColor
+              ? DecoratedBox(
+                  decoration: BoxDecoration(color: color),
+                )
+              : Image.asset(
+                  item.value,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const Center(
+                    child: Icon(
+                      Icons.image_outlined,
+                      color: Color(0xFF8A908D),
+                      size: 20,
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(_selected),
-                    child: const Text('确定', style: TextStyle(color: Color(0xFF4F8F84))),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1, color: Color(0xFFE9EEEB)),
-            // 内容区域
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF4F8F84)))
-                  : _covers.isEmpty
-                      ? const Center(
-                          child: Text(
-                            '暂无更多封面',
-                            style: TextStyle(color: Color(0xFF8A908D), fontSize: 15),
-                          ),
-                        )
-                      : GridView.builder(
-                          controller: scrollController,
-                          padding: const EdgeInsets.all(20),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 14,
-                            childAspectRatio: 0.75,
-                          ),
-                          itemCount: _covers.length,
-                          itemBuilder: (context, index) {
-                            final cover = _covers[index];
-                            final isSelected = _selected?.id == cover.id;
-                            return GestureDetector(
-                              onTap: () {
-                                setState(() => _selected = cover);
-                              },
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(AppSpacing.radius),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? const Color(0xFF4F8F84)
-                                        : const Color(0xFFE3E8E5),
-                                    width: isSelected ? 2 : 1,
-                                  ),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(AppSpacing.radius),
-                                  child: Image.network(
-                                    cover.imageUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Center(
-                                      child: Icon(LucideIcons.imageOff, color: Color(0xFF8A908D)),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-            ),
-          ],
-        );
-      },
+                ),
+        ),
+      ),
     );
   }
 }

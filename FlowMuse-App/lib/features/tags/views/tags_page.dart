@@ -54,18 +54,25 @@ class TagsPage extends ConsumerWidget {
 }
 
 Future<void> _createTag(BuildContext context, TagsViewModel viewModel) async {
-  final result = await showCreateCollectionDialog(
-    context: context,
-    title: '新建标签',
-    hintText: '请输入标题',
-    icon: LucideIcons.hash,
-    coverColors: libraryTagColors,
+  final result = await context.push<CreateCollectionResult>(
+    AppRoutes.createCollection,
+    extra: const CreateCollectionParams(
+      title: '新建标签',
+      hintText: '请输入标题',
+      icon: LucideIcons.hash,
+      coverColors: libraryTagColors,
+      coverCategory: 'tags',
+    ),
   );
   if (result == null || !context.mounted) {
     return;
   }
   try {
-    await viewModel.createTag(name: result.name, coverColor: result.coverColor);
+    await viewModel.createTag(
+      name: result.name,
+      coverColor: result.coverColor,
+      coverImage: result.coverImage,
+    );
   } catch (error) {
     if (!context.mounted) {
       return;
@@ -321,6 +328,10 @@ class _TagCover extends StatelessWidget {
         ThemeData.estimateBrightnessForColor(tag.coverColor) == Brightness.dark
         ? Colors.white
         : const Color(0xFF202523);
+
+    if (tag.coverImage != null) {
+      return Image.asset(tag.coverImage!, fit: BoxFit.cover);
+    }
 
     return DecoratedBox(
       decoration: BoxDecoration(

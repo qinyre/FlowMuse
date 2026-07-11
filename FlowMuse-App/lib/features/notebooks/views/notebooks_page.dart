@@ -59,12 +59,15 @@ Future<void> _createNotebook(
   BuildContext context,
   NotebooksViewModel viewModel,
 ) async {
-  final result = await showCreateCollectionDialog(
-    context: context,
-    title: '新建笔记本',
-    hintText: '请输入标题',
-    icon: LucideIcons.bookOpen,
-    coverColors: libraryNotebookColors,
+  final result = await context.push<CreateCollectionResult>(
+    AppRoutes.createCollection,
+    extra: const CreateCollectionParams(
+      title: '新建笔记本',
+      hintText: '请输入标题',
+      icon: LucideIcons.bookOpen,
+      coverColors: libraryNotebookColors,
+      coverCategory: 'notebooks',
+    ),
   );
   if (result == null || !context.mounted) {
     return;
@@ -73,6 +76,7 @@ Future<void> _createNotebook(
     await viewModel.createNotebook(
       name: result.name,
       coverColor: result.coverColor,
+      coverImage: result.coverImage,
     );
   } catch (error) {
     if (!context.mounted) {
@@ -355,6 +359,10 @@ class _NotebookCollectionCover extends StatelessWidget {
             Brightness.dark
         ? Colors.white
         : const Color(0xFF202523);
+
+    if (notebook.coverImage != null) {
+      return Image.asset(notebook.coverImage!, fit: BoxFit.cover);
+    }
 
     return DecoratedBox(
       decoration: BoxDecoration(
