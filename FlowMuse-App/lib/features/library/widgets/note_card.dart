@@ -22,7 +22,7 @@ class NoteCard extends StatelessWidget {
 
   final NoteItem item;
   final VoidCallback onTap;
-  final VoidCallback? onActionsTap;
+  final void Function(BuildContext context)? onActionsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -31,50 +31,17 @@ class NoteCard extends StatelessWidget {
         SizedBox(
           width: coverWidth,
           height: coverHeight,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  elevation: 1,
-                  shadowColor: const Color(0x0F5A625F),
-                  clipBehavior: Clip.antiAlias,
-                  shape: const RoundedRectangleBorder(),
-                  child: InkWell(
-                    key: ValueKey('note-card-${item.id}'),
-                    onTap: onTap,
-                    child: NoteCover(item: item),
-                  ),
-                ),
-              ),
-              if (onActionsTap != null)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.88),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: IconButton(
-                      key: ValueKey('note-card-actions-${item.id}'),
-                      onPressed: onActionsTap,
-                      iconSize: 16,
-                      splashRadius: 18,
-                      padding: const EdgeInsets.all(8),
-                      constraints: const BoxConstraints.tightFor(
-                        width: 32,
-                        height: 32,
-                      ),
-                      icon: const Icon(
-                        LucideIcons.chevronDown,
-                        color: Color(0xFF555C59),
-                        size: 16,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+          child: Card(
+            margin: EdgeInsets.zero,
+            elevation: 1,
+            shadowColor: const Color(0x0F5A625F),
+            clipBehavior: Clip.antiAlias,
+            shape: const RoundedRectangleBorder(),
+            child: InkWell(
+              key: ValueKey('note-card-${item.id}'),
+              onTap: onTap,
+              child: NoteCover(item: item),
+            ),
           ),
         ),
         const SizedBox(height: 13),
@@ -92,6 +59,17 @@ class NoteCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (onActionsTap != null)
+              Builder(
+                builder: (buttonContext) => GestureDetector(
+                  onTap: () => onActionsTap!(buttonContext),
+                  child: const Icon(
+                    LucideIcons.chevronDown,
+                    color: Color(0xFF555C59),
+                    size: 16,
+                  ),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 5),

@@ -23,7 +23,7 @@ void main() {
               child: NoteCard(
                 item: _noteItem(),
                 onTap: () {},
-                onActionsTap: () => tapped++,
+                onActionsTap: (_) => tapped++,
               ),
             ),
           ),

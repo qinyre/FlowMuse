@@ -338,7 +338,7 @@ class _NoteItems extends StatelessWidget {
               item: item,
               onTap: () => onOpenNote(item),
               onActionsTap: onRenameNote != null
-                  ? () => _showNoteActions(context, item)
+                  ? (BuildContext buttonContext) => _showNoteActions(buttonContext, item)
                   : null,
             );
           },

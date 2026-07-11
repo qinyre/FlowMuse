@@ -601,7 +601,7 @@ class _LibraryItemsContent extends StatelessWidget {
                 ? () => onSelectionChanged(item.id)
                 : () => onOpenNote(item),
             onActionsTap: onRenameNote != null
-                ? () => _showNoteActions(context, item)
+                ? (BuildContext buttonContext) => _showNoteActions(buttonContext, item)
                 : null,
           );
         },
@@ -654,7 +654,7 @@ class _LibraryItemsContent extends StatelessWidget {
                     ? () => onSelectionChanged(item.id)
                     : () => onOpenNote(item),
                 onActionsTap: onRenameNote != null
-                    ? () => _showNoteActions(context, item)
+                    ? (BuildContext buttonContext) => _showNoteActions(buttonContext, item)
                     : null,
               ),
             ),
@@ -727,7 +727,7 @@ class _NoteTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onSelectionChanged;
   final VoidCallback onTap;
-  final VoidCallback? onActionsTap;
+  final void Function(BuildContext context)? onActionsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -742,9 +742,11 @@ class _NoteTile extends StatelessWidget {
         trailing: selectionMode
             ? Checkbox(value: selected, onChanged: (_) => onSelectionChanged())
             : onActionsTap != null
-                ? IconButton(
-                    icon: const Icon(LucideIcons.chevronDown, size: 18),
-                    onPressed: onActionsTap,
+                ? Builder(
+                    builder: (buttonContext) => IconButton(
+                      icon: const Icon(LucideIcons.chevronDown, size: 18),
+                      onPressed: () => onActionsTap!(buttonContext),
+                    ),
                   )
                 : Icon(
                     item.kind == LibraryFilter.pdf
