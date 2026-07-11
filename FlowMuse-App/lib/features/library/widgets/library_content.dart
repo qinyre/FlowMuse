@@ -486,12 +486,15 @@ class _LibraryItemsContent extends StatelessWidget {
 
     RelativeRect position;
     if (button != null && overlay != null) {
-      position = RelativeRect.fromRect(
-        Rect.fromPoints(
-          button.localToGlobal(Offset.zero, ancestor: overlay),
-          button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
-        ),
-        Offset.zero & overlay.size,
+      final bottomRight = button.localToGlobal(
+        button.size.bottomRight(Offset.zero),
+        ancestor: overlay,
+      );
+      position = RelativeRect.fromLTRB(
+        bottomRight.dx - 8,
+        bottomRight.dy + 4,
+        overlay.size.width - bottomRight.dx,
+        overlay.size.height - bottomRight.dy - 4,
       );
     } else {
       final size = MediaQuery.of(context).size;
