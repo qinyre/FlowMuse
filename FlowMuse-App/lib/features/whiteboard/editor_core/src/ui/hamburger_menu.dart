@@ -86,6 +86,7 @@ class HamburgerMenu extends StatelessWidget {
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onShare;
   final VoidCallback? onImportImage;
   final VoidCallback? onDocumentRenamed;
 
@@ -99,6 +100,7 @@ class HamburgerMenu extends StatelessWidget {
     this.onSaveAs,
     this.onExportPng,
     this.onExportSvg,
+    this.onShare,
     this.onImportImage,
     this.onDocumentRenamed,
   });
@@ -143,6 +145,8 @@ class HamburgerMenu extends StatelessWidget {
                 onExportPng?.call();
               case 'export_svg':
                 onExportSvg?.call();
+              case 'share':
+                onShare?.call();
               case 'library':
                 controller.showLibraryPanel = !controller.showLibraryPanel;
               case 'markdown':
@@ -190,6 +194,8 @@ class HamburgerMenu extends StatelessWidget {
             ),
           if (onExportSvg != null)
             _menuItem(context, 'export_svg', Icons.code, '导出 SVG', null),
+          if (onShare != null)
+            _menuItem(context, 'share', Icons.share, '分享', null),
           if (onExportPng != null || onExportSvg != null)
             const PopupMenuDivider(),
           PopupMenuItem<String>(

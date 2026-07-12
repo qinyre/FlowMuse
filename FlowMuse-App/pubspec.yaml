@@ -47,6 +47,7 @@ dependencies:
   re_highlight: ^0.0.3
   rough_flutter: ^0.1.2
   shared_preferences: ^2.5.5
+  share_plus: ^12.0.2
   shared_preferences_ohos:
     path: tool/vendor/shared_preferences_ohos
   super_clipboard: ^0.9.0

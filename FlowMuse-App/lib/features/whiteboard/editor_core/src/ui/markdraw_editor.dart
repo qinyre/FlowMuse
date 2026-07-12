@@ -24,6 +24,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onOpen,
     this.onExportPng,
     this.onExportSvg,
+    this.onShare,
     this.onImportImage,
     this.onImportLibrary,
     this.onExportLibrary,
@@ -65,6 +66,7 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onOpen;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onShare;
   final VoidCallback? onImportImage;
   final VoidCallback? onImportLibrary;
   final VoidCallback? onExportLibrary;
@@ -318,6 +320,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
               onSaveAs: widget.onSaveAs,
               onExportPng: widget.onExportPng,
               onExportSvg: widget.onExportSvg,
+              onShare: widget.onShare,
               onImportImage: widget.onImportImage,
               onImportLibrary: widget.onImportLibrary,
               onExportLibrary: widget.onExportLibrary,
@@ -425,6 +428,7 @@ class _LeftChrome extends StatelessWidget {
     required this.onSaveAs,
     required this.onExportPng,
     required this.onExportSvg,
+    required this.onShare,
     required this.onImportImage,
     required this.onImportLibrary,
     required this.onExportLibrary,
@@ -442,6 +446,7 @@ class _LeftChrome extends StatelessWidget {
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onShare;
   final VoidCallback? onImportImage;
   final VoidCallback? onImportLibrary;
   final VoidCallback? onExportLibrary;
@@ -476,6 +481,7 @@ class _LeftChrome extends StatelessWidget {
                   onSaveAs: onSaveAs,
                   onExportPng: onExportPng,
                   onExportSvg: onExportSvg,
+                  onShare: onShare,
                   onImportImage: onImportImage,
                   onShowLibrary: () => showCompactLibrary(
                     context,
@@ -494,6 +500,7 @@ class _LeftChrome extends StatelessWidget {
                   onSaveAs: onSaveAs,
                   onExportPng: onExportPng,
                   onExportSvg: onExportSvg,
+                  onShare: onShare,
                   onImportImage: onImportImage,
                   onThemeModeChanged: onThemeModeChanged,
                   currentThemeMode: currentThemeMode,
