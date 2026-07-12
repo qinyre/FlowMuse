@@ -694,13 +694,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             ),
             ListTile(
               leading: const Icon(Icons.draw_outlined),
-              title: const Text('分享 .markdraw 文件'),
+              title: const Text('分享 .markdraw 文件（仅手写和图形）'),
               onTap: () =>
                   Navigator.pop(sheetContext, _ShareSelection.markdraw),
             ),
             ListTile(
               leading: const Icon(Icons.edit_note_outlined),
-              title: const Text('分享 .excalidraw 文件'),
+              title: const Text('分享 .excalidraw 文件（完整保留分页模板）'),
               onTap: () =>
                   Navigator.pop(sheetContext, _ShareSelection.excalidraw),
             ),
