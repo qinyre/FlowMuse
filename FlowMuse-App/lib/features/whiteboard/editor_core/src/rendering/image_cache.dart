@@ -42,6 +42,16 @@ class ImageElementCache {
     await _decode(fileId, file);
   }
 
+  /// 同步批量标记 fileId 为"解码中",阻止 getImage 并发启动 _decode。
+  /// 供 loadScene 在 notifyListeners 前占位使用,随后用 decodeAndWait 串行解码。
+  void markDecoding(Iterable<String> fileIds) {
+    for (final id in fileIds) {
+      if (!_cache.containsKey(id) && !_failed.contains(id)) {
+        _decoding.add(id);
+      }
+    }
+  }
+
   ui.Image? peek(String fileId) => _cache[fileId];
 
   /// Whether [fileId] has a decoded image in the cache.

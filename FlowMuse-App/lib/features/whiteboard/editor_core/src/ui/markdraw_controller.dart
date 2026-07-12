@@ -2444,8 +2444,12 @@ class MarkdrawController extends ChangeNotifier {
   Future<void> _prewarmImageCache() async {
     final files = _editorState.scene.files;
     if (files.isEmpty) return;
+    // 同步先把所有 fileId 占位为"解码中",这样 loadScene 的 notifyListeners
+    // 触发首次渲染时,resolveImages → getImage 不会并发启动 _decode,
+    // 而是全部返回 null,等预热串行解码完后逐张 notifyListeners 显示。
+    _imageCache.markDecoding(files.keys);
     for (final entry in files.entries) {
-      if (!_imageCache.contains(entry.key)) {
+      if (!_disposed) {
         await _imageCache.decodeAndWait(entry.key, entry.value);
       }
     }
