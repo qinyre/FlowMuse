@@ -2,6 +2,7 @@ import 'package:sqflite_common/sqlite_api.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../shared/storage/local_database.dart';
+import '../../../shared/storage/scene_content_store.dart';
 import '../collaboration/models/excalidraw_scene.dart';
 
 abstract interface class WhiteboardSceneRepository {
@@ -25,9 +26,15 @@ class InMemoryWhiteboardSceneRepository implements WhiteboardSceneRepository {
 }
 
 class SqliteWhiteboardSceneRepository implements WhiteboardSceneRepository {
-  SqliteWhiteboardSceneRepository(this._openDatabase);
+  SqliteWhiteboardSceneRepository(
+    this._openDatabase, {
+    SceneContentStore? sceneContentStore,
+  }) : _sceneContentStore = sceneContentStore ?? SceneContentStore();
+
+  static const _inlineContentLimit = 1024 * 1024;
 
   final Future<Database> Function() _openDatabase;
+  final SceneContentStore _sceneContentStore;
 
   @override
   Future<String> loadScene(String noteId) async {
@@ -49,11 +56,17 @@ class SqliteWhiteboardSceneRepository implements WhiteboardSceneRepository {
       );
       return emptyExcalidrawSceneContent;
     }
+    final content = _sceneContentStore.isReference(raw)
+        ? await _sceneContentStore.read(raw)
+        : raw;
+    if (content == null) {
+      throw StateError('场景文件不存在: $noteId');
+    }
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardSceneRepository.loadScene hit '
-      '$noteId length=${raw.length}',
+      '$noteId length=${content.length}',
     );
-    return raw;
+    return content;
   }
 
   @override
@@ -62,10 +75,13 @@ class SqliteWhiteboardSceneRepository implements WhiteboardSceneRepository {
       '[FlowMuseCreateNote] WhiteboardSceneRepository.saveScene '
       '$noteId length=${content.length}',
     );
+    final storedContent = content.length > _inlineContentLimit
+        ? await _sceneContentStore.write(noteId, content)
+        : content;
     final db = await _openDatabase();
     await db.insert('note_scenes', {
       'note_id': noteId,
-      'content': content,
+      'content': storedContent,
       'updated_at': DateTime.now().millisecondsSinceEpoch,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
