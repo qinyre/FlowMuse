@@ -26,11 +26,16 @@ class FreedrawTool implements Tool {
   final List<int> _pointTimes = [];
   bool _hasRealPressure = false;
   bool _isDrawing = false;
+  ElementId? _liveElementId;
+  int _liveVersion = 0;
+  FreedrawElement? _liveElement;
   String? _sessionId;
   int? _startedAt;
 
   @override
   ToolType get type => ToolType.freedraw;
+
+  FreedrawElement? get liveElement => _liveElement;
 
   @override
   ToolResult? onPointerDown(
@@ -62,6 +67,7 @@ class FreedrawTool implements Tool {
     }
     _points.add(point);
     _recordPressure(pressure);
+    _liveElement = _buildElement(context, isComplete: false);
     return null;
   }
 
@@ -86,37 +92,7 @@ class FreedrawTool implements Tool {
       _pressures[_pressures.length - 1] = pressure;
     }
 
-    final minX = _points.map((p) => p.x).reduce(math.min);
-    final minY = _points.map((p) => p.y).reduce(math.min);
-    final maxX = _points.map((p) => p.x).reduce(math.max);
-    final maxY = _points.map((p) => p.y).reduce(math.max);
-
-    final relativePoints = _points
-        .map((p) => Point(p.x - minX, p.y - minY))
-        .toList();
-
-    var customData = customDataWithBrushType(null, context.brushType);
-    if (_sessionId != null) {
-      customData = {
-        ...customData,
-        recognitionStrokeSessionKey: _sessionId,
-        recognitionStrokePendingKey: true,
-        recognitionStrokeStartedAtKey: _startedAt,
-        recognitionStrokePointTimesKey: List<int>.unmodifiable(_pointTimes),
-      };
-    }
-
-    final element = FreedrawElement(
-      id: ElementId.generate(),
-      x: minX,
-      y: minY,
-      width: math.max(maxX - minX, 1.0),
-      height: math.max(maxY - minY, 1.0),
-      points: relativePoints,
-      pressures: _hasRealPressure ? List.unmodifiable(_pressures) : const [],
-      simulatePressure: !_hasRealPressure,
-      customData: customData,
-    );
+    final element = _buildElement(context, isComplete: true);
 
     final shouldSelect = _sessionId != null;
     _clearStrokeState();
@@ -127,6 +103,18 @@ class FreedrawTool implements Tool {
       ]);
     }
     return AddElementResult(element);
+  }
+
+  /// Builds a tombstone for peers when Flutter cancels an in-progress stroke.
+  FreedrawElement? cancelStroke() {
+    final live = _liveElement;
+    if (live == null) {
+      reset();
+      return null;
+    }
+    final tombstone = live.copyWith(isDeleted: true, version: ++_liveVersion);
+    _clearStrokeState(clearSession: true);
+    return tombstone;
   }
 
   void startNewSession() {
@@ -181,9 +169,47 @@ class FreedrawTool implements Tool {
     _pointTimes.clear();
     _hasRealPressure = false;
     _isDrawing = false;
+    _liveElementId = null;
+    _liveVersion = 0;
+    _liveElement = null;
     if (clearSession) {
       _sessionId = null;
       _startedAt = null;
     }
+  }
+
+  FreedrawElement _buildElement(
+    ToolContext context, {
+    required bool isComplete,
+  }) {
+    final id = _liveElementId ??= ElementId.generate();
+    final minX = _points.map((p) => p.x).reduce(math.min);
+    final minY = _points.map((p) => p.y).reduce(math.min);
+    final maxX = _points.map((p) => p.x).reduce(math.max);
+    final maxY = _points.map((p) => p.y).reduce(math.max);
+    var customData = customDataWithBrushType(null, context.brushType);
+    if (_sessionId != null) {
+      customData = {
+        ...customData,
+        recognitionStrokeSessionKey: _sessionId,
+        recognitionStrokePendingKey: true,
+        recognitionStrokeStartedAtKey: _startedAt,
+        recognitionStrokePointTimesKey: List<int>.unmodifiable(_pointTimes),
+      };
+    }
+    final element = FreedrawElement(
+      id: id,
+      x: minX,
+      y: minY,
+      width: math.max(maxX - minX, 1.0),
+      height: math.max(maxY - minY, 1.0),
+      points: _points.map((p) => Point(p.x - minX, p.y - minY)).toList(),
+      pressures: _hasRealPressure ? List.unmodifiable(_pressures) : const [],
+      simulatePressure: !_hasRealPressure,
+      isComplete: isComplete,
+      version: ++_liveVersion,
+      customData: customData,
+    );
+    return element;
   }
 }

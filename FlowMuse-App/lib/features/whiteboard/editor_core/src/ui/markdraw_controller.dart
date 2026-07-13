@@ -233,6 +233,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Called whenever the scene changes (element add/update/remove).
   void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
+  void Function(FreedrawElement element)? onLiveFreedrawChanged;
 
   List<Element>? _lastChangedElements;
 
@@ -637,7 +638,7 @@ class MarkdrawController extends ChangeNotifier {
   void switchTool(ToolType type) {
     // In view mode, only the hand tool is allowed
     if (_viewMode && type != ToolType.hand) return;
-    _activeTool.reset();
+    _cancelActiveToolInteraction();
     _activeTool = createTool(type);
     _editorState = _editorState.copyWith(
       activeToolType: type,
@@ -1024,9 +1025,14 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   String? _pendingRecognitionSessionId(ToolResult result) {
-    if (result is AddElementResult) {
-      final element = result.element;
+    final element = switch (result) {
+      AddElementResult(:final element) ||
+      UpdateElementResult(:final element) => element,
+      _ => null,
+    };
+    if (element != null) {
       if (element is FreedrawElement &&
+          element.isComplete &&
           element.customData?[recognitionStrokePendingKey] == true) {
         final sessionId = element.customData?[recognitionStrokeSessionKey];
         return sessionId is String ? sessionId : null;
@@ -1907,6 +1913,7 @@ class MarkdrawController extends ChangeNotifier {
           pressure: r.pressure,
         ),
       );
+      _emitLiveFreedraw();
       mousePosition = event.localPosition;
       notifyListeners();
       return;
@@ -1920,6 +1927,7 @@ class MarkdrawController extends ChangeNotifier {
     applyResult(
       _activeTool.onPointerMove(point, toolContext, screenDelta: event.delta),
     );
+    _emitLiveFreedraw();
     mousePosition = event.localPosition;
     notifyListeners();
   }
@@ -2055,7 +2063,7 @@ class MarkdrawController extends ChangeNotifier {
     _modeler?.reset(reason: 'cancel');
     _modeler = null;
     _activeDrawPointerId = null;
-    _activeTool.reset();
+    _cancelActiveToolInteraction();
     _sceneBeforeDrag = null;
   }
 
@@ -2132,8 +2140,28 @@ class MarkdrawController extends ChangeNotifier {
     _activeDrawPointerId = null;
     _temporaryTouchPanPointerId = null;
     _activeStylusPointerId = null;
-    _activeTool.reset();
+    _cancelActiveToolInteraction();
     _sceneBeforeDrag = null;
+  }
+
+  void _cancelActiveToolInteraction() {
+    if (_activeTool is FreedrawTool) {
+      _emitLiveFreedraw((_activeTool as FreedrawTool).cancelStroke());
+    } else {
+      _activeTool.reset();
+    }
+  }
+
+  void _emitLiveFreedraw([FreedrawElement? element]) {
+    final live =
+        element ??
+        (_activeTool is FreedrawTool
+            ? (_activeTool as FreedrawTool).liveElement
+            : null);
+    if (live == null) return;
+    onLiveFreedrawChanged?.call(
+      applyDefaultStyleToElement(live) as FreedrawElement,
+    );
   }
 
   /// Marks the end of a two-finger viewport gesture.
@@ -2293,6 +2321,10 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Dispatches a key event to the active tool (for programmatic shortcuts).
   void dispatchKey(String key, {bool shift = false, bool ctrl = false}) {
+    if (key == 'Escape' && _activeTool is FreedrawTool) {
+      _cancelActiveToolInteraction();
+      return;
+    }
     final result = _activeTool.onKeyEvent(
       key,
       shift: shift,

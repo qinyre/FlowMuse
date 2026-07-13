@@ -21,7 +21,8 @@ void main() {
     final tool = FreedrawTool();
 
     tool.onPointerDown(const Point(0, 0), context, pressure: 0.2);
-    tool.onPointerMove(const Point(5, 2), context, pressure: 0.6);
+    final live = tool.onPointerMove(const Point(5, 2), context, pressure: 0.6);
+    expect(live, isNull);
     final result = tool.onPointerUp(const Point(10, 4), context, pressure: 0.8);
 
     final element = _createdElement(result);
@@ -34,7 +35,8 @@ void main() {
     final tool = FreedrawTool();
 
     tool.onPointerDown(const Point(0, 0), context);
-    tool.onPointerMove(const Point(5, 2), context);
+    final live = tool.onPointerMove(const Point(5, 2), context);
+    expect(live, isNull);
     final result = tool.onPointerUp(const Point(10, 4), context);
 
     final element = _createdElement(result);
@@ -52,6 +54,40 @@ void main() {
     expect(result, isA<AddElementResult>());
   });
 
+  test('绘制期间生成递增版本的实时笔画，并在抬笔时完成它', () {
+    final tool = FreedrawTool();
+
+    tool.onPointerDown(const Point(0, 0), context);
+    tool.onPointerMove(const Point(4, 0), context);
+    final live = tool.liveElement!;
+    expect(live.isComplete, isFalse);
+
+    tool.onPointerMove(const Point(8, 0), context);
+    final update = tool.liveElement!;
+    expect(update.id, live.id);
+    expect(update.version, greaterThan(live.version));
+
+    final completed = _createdElement(
+      tool.onPointerUp(const Point(8, 0), context),
+    );
+    expect(completed.id, live.id);
+    expect(completed.version, greaterThan(update.version));
+    expect(completed.isComplete, isTrue);
+  });
+
+  test('取消绘制会生成实时笔画的删除墓碑', () {
+    final tool = FreedrawTool();
+
+    tool.onPointerDown(const Point(0, 0), context);
+    tool.onPointerMove(const Point(4, 0), context);
+    final live = tool.liveElement!;
+    final cancel = tool.cancelStroke();
+
+    expect(cancel, isNotNull);
+    expect(cancel!.id, live.id);
+    expect(cancel.isDeleted, isTrue);
+  });
+
   test('does not request a raw polyline overlay while drawing', () {
     final tool = FreedrawTool();
 
@@ -63,11 +99,18 @@ void main() {
 }
 
 FreedrawElement _createdElement(ToolResult? result) {
-  final addResult = switch (result) {
-    AddElementResult() => result,
+  final mutation = switch (result) {
     CompoundResult(:final results) =>
-      results.whereType<AddElementResult>().single,
+      results
+          .where(
+            (result) =>
+                result is AddElementResult || result is UpdateElementResult,
+          )
+          .single,
+    _ => result,
+  };
+  return switch (mutation) {
+    AddElementResult(:final element) => element as FreedrawElement,
     _ => throw StateError('Expected a freedraw element result'),
   };
-  return addResult.element as FreedrawElement;
 }

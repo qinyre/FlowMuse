@@ -35,6 +35,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onThemeModeChanged,
     this.currentThemeMode,
     this.onSceneChanged,
+    this.onLiveFreedrawChanged,
     this.onBack,
     this.saveStatusLabel,
     this.collaborating = false,
@@ -85,6 +86,7 @@ class MarkdrawEditor extends StatefulWidget {
 
   /// Called when the scene changes (for auto-save, etc.).
   final void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
+  final void Function(FreedrawElement element)? onLiveFreedrawChanged;
 
   /// FlowMuse host chrome callbacks and state.
   final VoidCallback? onBack;
@@ -144,6 +146,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     super.initState();
     _controller.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
+    _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
     _controller.onRecognizeInk = widget.onRecognizeInk;
     _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
     _controller.restoreKeyboardFocusWhenStable();
@@ -156,10 +159,14 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       oldWidget.controller?.removeListener(_onControllerChanged);
       _controller.addListener(_onControllerChanged);
       _controller.onSceneChanged = widget.onSceneChanged;
+      _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
       _controller.onRecognizeInk = widget.onRecognizeInk;
       _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
     } else if (widget.onRecognizeInk != oldWidget.onRecognizeInk) {
       _controller.onRecognizeInk = widget.onRecognizeInk;
+    }
+    if (widget.onLiveFreedrawChanged != oldWidget.onLiveFreedrawChanged) {
+      _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
     }
     if (widget.onSmartLayoutInk != oldWidget.onSmartLayoutInk) {
       _controller.onSmartLayoutInk = widget.onSmartLayoutInk;

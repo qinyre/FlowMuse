@@ -94,6 +94,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   Timer? _localDraftTimer;
   bool _localDraftDirty = false;
   static const Duration _localDraftDebounce = Duration(milliseconds: 500);
+  Timer? _liveStrokeBroadcastTimer;
+  final Map<String, editor_core.FreedrawElement> _pendingLiveStrokes = {};
+  static const Duration _liveStrokeBroadcastInterval = Duration(
+    milliseconds: 80,
+  );
 
   Scene? _previousEditorScene;
 
@@ -123,6 +128,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     WidgetsBinding.instance.removeObserver(this);
     _flushLocalDraftOnExit();
     _remoteMergeTimer?.cancel();
+    _liveStrokeBroadcastTimer?.cancel();
     _remoteMergeBuffer.clear();
     _pointerTrailingTimer?.cancel();
     _disposingOrLeaving = true;
@@ -1136,6 +1142,36 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
   }
 
+  void _broadcastLiveFreedraw(editor_core.FreedrawElement element) {
+    if (!ref.read(whiteboardViewModelProvider).collaborating) return;
+    if (element.isDeleted) {
+      _pendingLiveStrokes.remove(element.id.value);
+      unawaited(_broadcastChangedElements([element]));
+      return;
+    }
+    _pendingLiveStrokes[element.id.value] = element;
+    _liveStrokeBroadcastTimer ??= Timer(
+      _liveStrokeBroadcastInterval,
+      _flushLiveStrokeBroadcast,
+    );
+  }
+
+  void _flushLiveStrokeBroadcast() {
+    _liveStrokeBroadcastTimer = null;
+    if (_pendingLiveStrokes.isEmpty) return;
+    final elements = _pendingLiveStrokes.values.toList();
+    _pendingLiveStrokes.clear();
+    unawaited(_broadcastChangedElements(elements));
+  }
+
+  void _discardPendingLiveStrokes(Iterable<editor_core.Element> elements) {
+    for (final element in elements) {
+      if (element is editor_core.FreedrawElement && element.isComplete) {
+        _pendingLiveStrokes.remove(element.id.value);
+      }
+    }
+  }
+
   Future<void> _handleCollaborationMessage(CollaborationMessage message) async {
     if (!_canMutateWhiteboard) {
       CollaborationDebugLog.write('scene', 'message_skipped', {
@@ -1604,6 +1640,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                 ref.read(inkRecognitionRepositoryProvider).recognize(request),
             onSmartLayoutInk: (request) =>
                 ref.read(inkRecognitionRepositoryProvider).smartLayout(request),
+            onLiveFreedrawChanged: _broadcastLiveFreedraw,
             onSceneChanged: (editorScene, SceneChangeSource source) {
               switch (source) {
                 case SceneChangeSource.undo:
@@ -1628,6 +1665,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   if (changedElements == null) {
                     unawaited(_saveMarkdrawScene());
                   } else {
+                    _discardPendingLiveStrokes(changedElements);
                     unawaited(_broadcastChangedElements(changedElements));
                     _scheduleLocalDraft();
                   }
