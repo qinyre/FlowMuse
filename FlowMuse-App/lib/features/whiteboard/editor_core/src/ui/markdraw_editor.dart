@@ -76,7 +76,7 @@ class MarkdrawEditor extends StatefulWidget {
   final ThemeMode? currentThemeMode;
 
   /// Called when the scene changes (for auto-save, etc.).
-  final void Function(Scene)? onSceneChanged;
+  final void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
 
   /// FlowMuse host chrome callbacks and state.
   final VoidCallback? onBack;

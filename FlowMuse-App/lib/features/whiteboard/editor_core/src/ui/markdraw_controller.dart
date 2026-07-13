@@ -68,6 +68,8 @@ Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
 ///
 /// Can be created internally by the widget or provided externally
 /// (like [TextEditingController]).
+enum SceneChangeSource { userEdit, undo, redo, remoteApply, restore }
+
 class MarkdrawController extends ChangeNotifier {
   MarkdrawController({
     MarkdrawEditorConfig config = const MarkdrawEditorConfig(),
@@ -230,7 +232,7 @@ class MarkdrawController extends ChangeNotifier {
   VoidCallback? onThemeToggle;
 
   /// Called whenever the scene changes (element add/update/remove).
-  void Function(Scene)? onSceneChanged;
+  void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
 
   /// Called after recognition-pen strokes settle and should be recognized.
   Future<InkRecognitionResult> Function(InkRecognitionRequest)? onRecognizeInk;
@@ -626,7 +628,7 @@ class MarkdrawController extends ChangeNotifier {
     final undone = _historyManager.undo(_editorState.scene);
     if (undone != null) {
       _editorState = _editorState.copyWith(scene: undone);
-      onSceneChanged?.call(_editorState.scene);
+      onSceneChanged?.call(_editorState.scene, SceneChangeSource.undo);
       notifyListeners();
     }
   }
@@ -636,7 +638,7 @@ class MarkdrawController extends ChangeNotifier {
     final redone = _historyManager.redo(_editorState.scene);
     if (redone != null) {
       _editorState = _editorState.copyWith(scene: redone);
-      onSceneChanged?.call(_editorState.scene);
+      onSceneChanged?.call(_editorState.scene, SceneChangeSource.redo);
       notifyListeners();
     }
   }
@@ -848,7 +850,7 @@ class MarkdrawController extends ChangeNotifier {
     _editorState = newState;
 
     if (isSceneChangingResult(styled)) {
-      onSceneChanged?.call(_editorState.scene);
+      onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
       _scheduleInkRecognitionFromResult(styled);
     }
 
@@ -1422,7 +1424,7 @@ class MarkdrawController extends ChangeNotifier {
     _isEditingExisting = false;
     _originalText = null;
     textEditingController.clear();
-    onSceneChanged?.call(_editorState.scene);
+    onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
     // Request focus after the frame rebuilds — the TextEditingOverlay removal
     // detaches _textFocusNode, which triggers Scaffold's FocusScope.unfocus().
@@ -1556,7 +1558,7 @@ class MarkdrawController extends ChangeNotifier {
       );
       _editorState = _editorState.applyResult(UpdateElementResult(updated));
     }
-    onSceneChanged?.call(_editorState.scene);
+    onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
   }
 
@@ -2515,6 +2517,7 @@ class MarkdrawController extends ChangeNotifier {
     if (background != null) {
       _canvasBackgroundColor = background;
     }
+    onSceneChanged?.call(_editorState.scene, SceneChangeSource.remoteApply);
     notifyListeners();
   }
 
@@ -2794,7 +2797,7 @@ class MarkdrawController extends ChangeNotifier {
     _historyManager.push(_editorState.scene);
     _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
     _documentName = null;
-    onSceneChanged?.call(_editorState.scene);
+    onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
   }
 

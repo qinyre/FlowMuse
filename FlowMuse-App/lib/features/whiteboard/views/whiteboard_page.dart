@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -90,6 +92,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   Timer? _localDraftTimer;
   bool _localDraftDirty = false;
   static const Duration _localDraftDebounce = Duration(milliseconds: 500);
+
+  ExcalidrawScene? _previousScene;
 
   @override
   void initState() {
@@ -322,6 +326,88 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         state == AppLifecycleState.inactive) {
       _flushLocalDraftOnExit();
     }
+  }
+
+  Future<void> _broadcastUndoRedoScene(
+    ExcalidrawScene? previousScene,
+    ExcalidrawScene currentScene,
+  ) async {
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room == null) return;
+
+    final rng = Random();
+    final bumpedElements = <Map<String, Object?>>[];
+
+    final previousById = <String, Map<String, Object?>>{};
+    if (previousScene != null) {
+      for (final e in previousScene.elements) {
+        previousById[e['id'] as String] = e;
+      }
+    }
+
+    if (previousById.isEmpty) {
+      for (final element in currentScene.elements) {
+        bumpedElements.add({
+          ...element,
+          'version': ((element['version'] as num).toInt() + 1),
+          'versionNonce': rng.nextInt(1 << 31),
+          'updated': DateTime.now().millisecondsSinceEpoch,
+        });
+      }
+    } else {
+      final currentIds = <String>{};
+      for (final element in currentScene.elements) {
+        final id = element['id'] as String;
+        currentIds.add(id);
+        final prev = previousById[id];
+        if (prev == null ||
+            (element['version'] as num).toInt() != (prev['version'] as num).toInt() ||
+            (element['versionNonce'] as num).toInt() != (prev['versionNonce'] as num).toInt() ||
+            element['isDeleted'] != prev['isDeleted']) {
+          bumpedElements.add({
+            ...element,
+            'version': max(
+              (element['version'] as num).toInt(),
+              (prev?['version'] as num?)?.toInt() ?? 0,
+            ) + 1,
+            'versionNonce': rng.nextInt(1 << 31),
+            'updated': DateTime.now().millisecondsSinceEpoch,
+          });
+        } else {
+          bumpedElements.add(element);
+        }
+      }
+
+      for (final entry in previousById.entries) {
+        if (currentIds.contains(entry.key)) continue;
+        final prev = entry.value;
+        if (prev['isDeleted'] == true) continue;
+        bumpedElements.add({
+          ...prev,
+          'version': ((prev['version'] as num).toInt() + 1),
+          'versionNonce': rng.nextInt(1 << 31),
+          'isDeleted': true,
+          'updated': DateTime.now().millisecondsSinceEpoch,
+        });
+      }
+    }
+
+    if (bumpedElements.isEmpty) return;
+
+    final bumpedScene = currentScene.copyWith(elements: bumpedElements);
+
+    _applyingRemoteScene = true;
+    try {
+      _collaborationAdapter.applyRemoteScene(bumpedScene, closeTransientUi: false);
+    } finally {
+      _applyingRemoteScene = false;
+    }
+
+    await _collaborationRepository.broadcastScene(
+      room: room,
+      scene: bumpedScene,
+      syncAll: true,
+    );
   }
 
   Future<void> _saveMarkdrawScene() async {
@@ -1406,8 +1492,25 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             },
             onRecognizeInk: (request) =>
                 ref.read(inkRecognitionRepositoryProvider).recognize(request),
-            onSceneChanged: (_) {
-              unawaited(_saveMarkdrawScene());
+            onSceneChanged: (_, SceneChangeSource source) {
+              final currentScene = _collaborationAdapter.currentScene();
+              final previousScene = _previousScene;
+
+              switch (source) {
+                case SceneChangeSource.undo:
+                case SceneChangeSource.redo:
+                  unawaited(_broadcastUndoRedoScene(previousScene, currentScene));
+                  _scheduleLocalDraft();
+                  _previousScene = currentScene;
+                  break;
+                case SceneChangeSource.remoteApply:
+                  _scheduleLocalDraft();
+                  break;
+                case SceneChangeSource.userEdit:
+                case SceneChangeSource.restore:
+                  unawaited(_saveMarkdrawScene());
+                  _previousScene = currentScene;
+              }
             },
           ),
         ),

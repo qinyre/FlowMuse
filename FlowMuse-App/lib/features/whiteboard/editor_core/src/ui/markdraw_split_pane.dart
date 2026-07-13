@@ -92,7 +92,7 @@ class _MarkdrawSplitPaneState extends State<MarkdrawSplitPane>
   }
 
   // Store the previous callback so we can chain it.
-  void Function(Scene)? _previousOnSceneChanged;
+  void Function(Scene scene, SceneChangeSource source)? _previousOnSceneChanged;
 
   // Track last-synced name so we can detect renames.
   String? _lastSyncedName;
@@ -139,8 +139,8 @@ class _MarkdrawSplitPaneState extends State<MarkdrawSplitPane>
     }
   }
 
-  void _onSceneChanged(Scene scene) {
-    _previousOnSceneChanged?.call(scene);
+  void _onSceneChanged(Scene scene, SceneChangeSource source) {
+    _previousOnSceneChanged?.call(scene, source);
     if (!mounted || _isSyncing) return;
     _hasPushedForSession = false;
     _syncCanvasToText();
