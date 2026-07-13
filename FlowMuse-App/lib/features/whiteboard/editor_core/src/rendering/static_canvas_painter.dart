@@ -505,7 +505,90 @@ class StaticCanvasPainter extends CustomPainter {
             );
           }
         }
+      case CanvasPageTemplate.ancientBook:
+        _renderAncientBookTemplate(canvas, rect);
     }
+  }
+
+  void _renderAncientBookTemplate(Canvas canvas, Rect rect) {
+    final framePaint = Paint()
+      ..color = const Color(0xFF343A34)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6 / viewport.zoom;
+    final columnPaint = Paint()
+      ..color = const Color(0xFF9D9883)
+      ..strokeWidth = 1 / viewport.zoom;
+    final markPaint = Paint()
+      ..color = const Color(0xFF343A34)
+      ..style = PaintingStyle.fill;
+
+    final frame = Rect.fromLTRB(
+      rect.left + 12,
+      rect.top + 36,
+      rect.right - 12,
+      rect.bottom - 36,
+    );
+    canvas.drawRect(frame, framePaint);
+
+    final centerX = frame.center.dx;
+    final gutterWidth = 28.0;
+    final gutterLeft = centerX - gutterWidth / 2;
+    final gutterRight = centerX + gutterWidth / 2;
+    canvas.drawLine(
+      Offset(gutterLeft, frame.top),
+      Offset(gutterLeft, frame.bottom),
+      framePaint,
+    );
+    canvas.drawLine(
+      Offset(gutterRight, frame.top),
+      Offset(gutterRight, frame.bottom),
+      framePaint,
+    );
+    canvas.drawLine(
+      Offset(centerX, frame.top),
+      Offset(centerX, frame.bottom),
+      columnPaint,
+    );
+
+    _renderAncientBookColumns(
+      canvas,
+      Rect.fromLTRB(frame.left, frame.top, gutterLeft, frame.bottom),
+      columnPaint,
+    );
+    _renderAncientBookColumns(
+      canvas,
+      Rect.fromLTRB(gutterRight, frame.top, frame.right, frame.bottom),
+      columnPaint,
+    );
+    _renderAncientBookFishTail(
+      canvas,
+      Offset(centerX, frame.top + frame.height * 0.32),
+      markPaint,
+    );
+    _renderAncientBookFishTail(
+      canvas,
+      Offset(centerX, frame.top + frame.height * 0.68),
+      markPaint,
+    );
+  }
+
+  void _renderAncientBookColumns(Canvas canvas, Rect rect, Paint paint) {
+    const columnWidth = 24.0;
+    for (var x = rect.left + columnWidth; x < rect.right; x += columnWidth) {
+      canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
+    }
+  }
+
+  void _renderAncientBookFishTail(Canvas canvas, Offset center, Paint paint) {
+    final width = 8.0 / viewport.zoom;
+    final height = 14.0 / viewport.zoom;
+    final path = Path()
+      ..moveTo(center.dx, center.dy - height / 2)
+      ..lineTo(center.dx + width / 2, center.dy)
+      ..lineTo(center.dx, center.dy + height / 2)
+      ..lineTo(center.dx - width / 2, center.dy)
+      ..close();
+    canvas.drawPath(path, paint);
   }
 
   void _renderPracticeGrid(

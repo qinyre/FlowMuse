@@ -692,7 +692,82 @@ class _TemplatePreviewPainter extends CustomPainter {
             );
           }
         }
+      case PageTemplate.ancientBook:
+        _drawAncientBookPreview(canvas, size);
     }
+  }
+
+  void _drawAncientBookPreview(Canvas canvas, Size size) {
+    final framePaint = Paint()
+      ..color = const Color(0xFF394039)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    final linePaint = Paint()
+      ..color = const Color(0xFF9F9A82)
+      ..strokeWidth = 0.8;
+    final markPaint = Paint()
+      ..color = const Color(0xFF394039)
+      ..style = PaintingStyle.fill;
+
+    final rect = Rect.fromLTWH(8, 14, size.width - 16, size.height - 28);
+    canvas.drawRect(rect, framePaint);
+
+    final centerX = rect.center.dx;
+    canvas.drawLine(
+      Offset(centerX, rect.top),
+      Offset(centerX, rect.bottom),
+      framePaint,
+    );
+
+    final gutter = 4.0;
+    _drawPreviewColumns(
+      canvas,
+      Rect.fromLTRB(
+        rect.left + gutter,
+        rect.top,
+        centerX - gutter,
+        rect.bottom,
+      ),
+      linePaint,
+    );
+    _drawPreviewColumns(
+      canvas,
+      Rect.fromLTRB(
+        centerX + gutter,
+        rect.top,
+        rect.right - gutter,
+        rect.bottom,
+      ),
+      linePaint,
+    );
+
+    _drawPreviewFishTail(
+      canvas,
+      Offset(centerX, rect.top + rect.height * 0.32),
+      markPaint,
+    );
+    _drawPreviewFishTail(
+      canvas,
+      Offset(centerX, rect.top + rect.height * 0.68),
+      markPaint,
+    );
+  }
+
+  void _drawPreviewColumns(Canvas canvas, Rect rect, Paint paint) {
+    const columnGap = 7.0;
+    for (var x = rect.left + columnGap; x < rect.right; x += columnGap) {
+      canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
+    }
+  }
+
+  void _drawPreviewFishTail(Canvas canvas, Offset center, Paint paint) {
+    final path = Path()
+      ..moveTo(center.dx, center.dy - 4)
+      ..lineTo(center.dx + 3, center.dy)
+      ..lineTo(center.dx, center.dy + 4)
+      ..lineTo(center.dx - 3, center.dy)
+      ..close();
+    canvas.drawPath(path, paint);
   }
 
   void _drawPracticeGrid(
@@ -744,5 +819,6 @@ String _templateLabel(PageTemplate template) {
     PageTemplate.narrowVerticalLine => '窄竖线',
     PageTemplate.wideVerticalLine => '宽竖线',
     PageTemplate.fourLineGrid => '四线三格',
+    PageTemplate.ancientBook => '古籍版式',
   };
 }

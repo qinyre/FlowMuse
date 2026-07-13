@@ -19,6 +19,7 @@ enum PageTemplate {
   narrowVerticalLine,
   wideVerticalLine,
   fourLineGrid,
+  ancientBook,
 }
 
 class NoteItem {

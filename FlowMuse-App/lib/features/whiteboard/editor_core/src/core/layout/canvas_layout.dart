@@ -15,6 +15,7 @@ enum CanvasPageTemplate {
   narrowVerticalLine,
   wideVerticalLine,
   fourLineGrid,
+  ancientBook,
 }
 
 class CanvasPage {
