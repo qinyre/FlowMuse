@@ -283,7 +283,14 @@ class CollaborationRepository {
     // _rememberBroadcasted has completed, preventing duplicate sends.
     _sendQueue = _sendQueue
         .then((_) => _doAccumulatorFlush(elements, isInitial))
-        .catchError((_) {}); // errors logged inside _doAccumulatorFlush
+        .catchError((Object error, StackTrace stack) {
+          CollaborationDebugLog.write('repo', 'send_queue_failed', {
+            'error': error.toString(),
+          });
+          if (!_repositoryErrors.isClosed) {
+            _repositoryErrors.add('协作发送失败：$error');
+          }
+        });
     return _sendQueue;
   }
 
