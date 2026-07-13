@@ -120,6 +120,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _flushLocalDraftOnExit();
+    _remoteMergeTimer?.cancel();
+    _remoteMergeBuffer.clear();
     _disposingOrLeaving = true;
     unawaited(_collaborationSubscription?.cancel());
     unawaited(_fileStatusSceneSubscription?.cancel());
@@ -1102,16 +1104,49 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
   }
 
+  final Map<String, Map<String, Object?>> _remoteMergeBuffer = {};
+  Timer? _remoteMergeTimer;
+  static const Duration _remoteMergeWindow = Duration(milliseconds: 33);
+
   void _enqueueRemoteElements(List<Map<String, Object?>> remoteElements) {
     CollaborationDebugLog.write('scene', 'remote_elements_queued', {
       'elements': remoteElements.length,
       'summary': CollaborationDebugLog.elementSummary(remoteElements),
     });
+
+    for (final element in remoteElements) {
+      final id = element['id'] as String;
+      final existing = _remoteMergeBuffer[id];
+      if (existing == null) {
+        _remoteMergeBuffer[id] = Map<String, Object?>.from(element);
+      } else {
+        final existingVersion = (existing['version'] as num).toInt();
+        final incomingVersion = (element['version'] as num).toInt();
+        if (incomingVersion > existingVersion ||
+            (incomingVersion == existingVersion &&
+             (element['versionNonce'] as num).toInt() <
+                 (existing['versionNonce'] as num).toInt())) {
+          _remoteMergeBuffer[id] = Map<String, Object?>.from(element);
+        }
+      }
+    }
+
+    _remoteMergeTimer?.cancel();
+    _remoteMergeTimer = Timer(_remoteMergeWindow, _flushRemoteMerge);
+  }
+
+  Future<void> _flushRemoteMerge() async {
+    _remoteMergeTimer = null;
+    if (_remoteMergeBuffer.isEmpty) return;
+
+    final merged = _remoteMergeBuffer.values.toList();
+    _remoteMergeBuffer.clear();
+
     final pending = _remoteSceneQueue.catchError(_ignoreRemoteSceneError);
     _remoteSceneQueue = pending
         .then<void>((_) async {
           await _runAfterStableFrameAsync(() async {
-            await _applyRemoteElements(remoteElements);
+            await _applyRemoteElements(merged);
           });
         })
         .catchError(_reportRemoteSceneFutureError);
@@ -1601,15 +1636,47 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     return Point(x.toDouble(), y.toDouble());
   }
 
+  DateTime _lastPointerBroadcast = DateTime.now();
+  static const Duration _pointerThrottle = Duration(milliseconds: 33);
+  Timer? _pointerTrailingTimer;
+  Offset? _lastPointerPosition;
+  bool _lastPointerDown = false;
+
   void _broadcastPointerPresence(Offset localPosition, bool pointerDown) {
     if (!_canMutateWhiteboard) {
       return;
     }
     _markUserActive();
+
+    _lastPointerPosition = localPosition;
+    _lastPointerDown = pointerDown;
+
+    final sinceLast = DateTime.now().difference(_lastPointerBroadcast);
+    if (sinceLast >= _pointerThrottle) {
+      _doBroadcastPointerPresence(localPosition, pointerDown);
+      _pointerTrailingTimer?.cancel();
+      _pointerTrailingTimer = null;
+    } else {
+      _pointerTrailingTimer ??= Timer(
+        _pointerThrottle - sinceLast,
+        _flushTrailingPointer,
+      );
+    }
+  }
+
+  void _flushTrailingPointer() {
+    _pointerTrailingTimer = null;
+    if (_lastPointerPosition != null) {
+      _doBroadcastPointerPresence(_lastPointerPosition!, _lastPointerDown);
+    }
+  }
+
+  void _doBroadcastPointerPresence(Offset localPosition, bool pointerDown) {
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
       return;
     }
+    _lastPointerBroadcast = DateTime.now();
     final identity = _collaborationIdentity;
     unawaited(
       _collaborationRepository.broadcastMouseLocation(
