@@ -1265,11 +1265,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final nextContent = nextScene.toContent();
 
     _applyingRemoteScene = true;
+    final sw = Stopwatch()..start();
     try {
       _collaborationAdapter.applyRemoteScene(
         nextScene,
         closeTransientUi: false,
       );
+      sw.stop();
+      CollaborationDebugLog.write('metrics', 'remote_apply_latency_ms', {
+        'ms': sw.elapsedMilliseconds,
+        'elements': remoteScene.elements.length,
+      });
       CollaborationDebugLog.write('scene', 'remote_scene_applied', {
         'remote': remoteScene.elements.length,
         'localBefore': localScene.elements.length,
@@ -1283,18 +1289,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _applyingRemoteScene = false;
     }
 
+    // Phase 0: 远端应用不直接写 SQLite — 由 onSceneChanged remoteApply 分支的
+    // _scheduleLocalDraft() 统一管理，500ms debounce 后通过 _flushLocalDraft 批量持久化。
     if (widget.temporaryCollaboration) {
       if (_canMutateWhiteboard) {
         ref.read(whiteboardViewModelProvider.notifier).markSaved();
       }
       return;
-    }
-
-    final repository = ref.read(whiteboardSceneRepositoryProvider);
-    await repository.saveScene(widget.noteId, nextContent);
-    await _touchNoteWithCurrentCover(widget.noteId);
-    if (_canMutateWhiteboard) {
-      ref.read(whiteboardViewModelProvider.notifier).markSaved();
     }
   }
 

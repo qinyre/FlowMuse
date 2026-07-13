@@ -72,6 +72,18 @@ class CollaborationRepository {
   static const Duration _snapshotIdle = Duration(seconds: 2);
   static const Duration _snapshotMaxInterval = Duration(seconds: 30);
   DateTime _lastSnapshotTime = DateTime.now();
+
+  // Phase 0 诊断开关和指标
+  static bool fullSceneSyncEnabled = true;
+  int _fullSceneSyncCount = 0;
+  int _batchSendCount = 0;
+  int _batchElementTotal = 0;
+  int _batchEncryptedBytesTotal = 0;
+  final Stopwatch _batchSendStopwatch = Stopwatch();
+  int _snapshotDurationAccumMs = 0;
+  int _snapshotCount = 0;
+  int _snapshot409Count = 0;
+  DateTime _lastMetricsReport = DateTime.now();
   StreamSubscription<EncryptedPayload>? _transportMessageSubscription;
   StreamSubscription<String>? _newUserSubscription;
   Future<void> _messageDecodeQueue = Future<void>.value();
@@ -286,9 +298,38 @@ class CollaborationRepository {
         ? CollaborationMessage.sceneInit(elements: changed)
         : CollaborationMessage.sceneUpdate(elements: changed);
 
-    await _send(room: room, message: message);
+    final sentBytes = await _send(room: room, message: message);
     _rememberBroadcasted(changed);
     _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
+
+    _batchSendCount++;
+    _batchElementTotal += changed.length;
+    _batchEncryptedBytesTotal += sentBytes;
+    if (!_batchSendStopwatch.isRunning) {
+      _batchSendStopwatch.start();
+    }
+
+    final now = DateTime.now();
+    if (now.difference(_lastMetricsReport).inSeconds >= 60) {
+      final snapshotAvgMs = _snapshotCount > 0
+          ? _snapshotDurationAccumMs ~/ _snapshotCount
+          : 0;
+      CollaborationDebugLog.write('metrics', 'phase0_summary', {
+        'batchSendCount': _batchSendCount,
+        'batchElementTotal': _batchElementTotal,
+        'batchEncryptedBytesTotal': _batchEncryptedBytesTotal,
+        'batchAvgBytes': _batchSendCount > 0
+            ? _batchEncryptedBytesTotal ~/ _batchSendCount : 0,
+        'batchElapsedMs': _batchSendStopwatch.elapsedMilliseconds,
+        'fullSyncCount': _fullSceneSyncCount,
+        'snapshotCount': _snapshotCount,
+        'snapshotAvgMs': snapshotAvgMs,
+        'snapshot409Count': _snapshot409Count,
+        'snapshotDirty': _snapshotDirty,
+        'snapshotSaving': _snapshotSaving,
+      });
+      _lastMetricsReport = now;
+    }
 
     _scheduleSnapshot();
   }
@@ -510,7 +551,7 @@ class CollaborationRepository {
     }
   }
 
-  Future<void> _send({
+  Future<int> _send({
     required CollaborationRoom room,
     required CollaborationMessage message,
     bool volatile = false,
@@ -529,6 +570,7 @@ class CollaborationRepository {
       'summary': CollaborationDebugLog.elementSummary(message.elements),
     });
     await _transport.send(encrypted, volatile: volatile);
+    return encrypted.encryptedBuffer.length + encrypted.iv.length;
   }
 
   void _scheduleFileUpload(CollaborationRoom room) {
@@ -585,6 +627,7 @@ class CollaborationRepository {
       );
       return scene;
     } on StaleSceneSnapshotException {
+      _snapshot409Count++;
       final storedScene = await _sceneStore.loadScene(room);
       if (storedScene == null) {
         rethrow;
@@ -626,6 +669,7 @@ class CollaborationRepository {
 
     _snapshotSaving = true;
     _snapshotDirty = false;
+    final sw = Stopwatch()..start();
     try {
       final scene = _latestScene;
       await _saveSceneResolvingConflict(
@@ -639,6 +683,9 @@ class CollaborationRepository {
       }
       _snapshotDirty = true;
     } finally {
+      sw.stop();
+      _snapshotDurationAccumMs += sw.elapsedMilliseconds;
+      _snapshotCount++;
       _snapshotSaving = false;
       if (_snapshotDirty) {
         _scheduleSnapshot();
@@ -646,12 +693,17 @@ class CollaborationRepository {
     }
   }
 
-  // Task 4 简化版，Task 6 step 3 升级为含在途等待循环的完整版
   Future<void> forceFlushSnapshot() async {
     _snapshotTimer?.cancel();
     _snapshotTimer = null;
+    while (_snapshotSaving) {
+      await Future.delayed(const Duration(milliseconds: 10));
+    }
     if (_snapshotDirty) {
       await _flushSnapshot();
+    }
+    while (_snapshotSaving) {
+      await Future.delayed(const Duration(milliseconds: 10));
     }
   }
 
@@ -778,11 +830,18 @@ class CollaborationRepository {
 
   void _startFullSceneSync() {
     _fullSceneSyncTimer?.cancel();
-    _fullSceneSyncTimer = Timer.periodic(fullSceneSyncInterval, (_) {
+    _fullSceneSyncTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       final room = _activeRoom;
-      if (room == null || _latestScene.elements.isEmpty) {
-        return;
-      }
+      if (room == null || _latestScene.elements.isEmpty) return;
+      if (!fullSceneSyncEnabled) return;
+      if (_snapshotSaving) return;
+
+      _fullSceneSyncCount++;
+      CollaborationDebugLog.write('scene', 'full_sync_triggered', {
+        'room': _shortRoomId(room.roomId),
+        'count': _fullSceneSyncCount,
+        'elements': _latestScene.elements.length,
+      });
       unawaited(broadcastScene(room: room, scene: _latestScene, syncAll: true));
     });
   }
