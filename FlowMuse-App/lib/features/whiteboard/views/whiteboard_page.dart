@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide Element, SelectionOverlay, TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart'
+    as editor_core;
 
 import '../../../app/app_router.dart';
 import '../../../app/app_theme_preset.dart';
@@ -93,7 +95,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _localDraftDirty = false;
   static const Duration _localDraftDebounce = Duration(milliseconds: 500);
 
-  ExcalidrawScene? _previousScene;
+  Scene? _previousEditorScene;
 
   @override
   void initState() {
@@ -332,7 +334,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _broadcastUndoRedoScene(
-    ExcalidrawScene? previousScene,
+    Scene? previousEditorScene,
     ExcalidrawScene currentScene,
   ) async {
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
@@ -340,10 +342,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
     final rng = Random();
     final bumpedElements = <Map<String, Object?>>[];
+    final previousElements = previousEditorScene == null
+        ? null
+        : _collaborationAdapter.serializeElements(previousEditorScene.elements);
 
     final previousById = <String, Map<String, Object?>>{};
-    if (previousScene != null) {
-      for (final e in previousScene.elements) {
+    if (previousElements != null) {
+      for (final e in previousElements) {
         previousById[e['id'] as String] = e;
       }
     }
@@ -364,15 +369,19 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         currentIds.add(id);
         final prev = previousById[id];
         if (prev == null ||
-            (element['version'] as num).toInt() != (prev['version'] as num).toInt() ||
-            (element['versionNonce'] as num).toInt() != (prev['versionNonce'] as num).toInt() ||
+            (element['version'] as num).toInt() !=
+                (prev['version'] as num).toInt() ||
+            (element['versionNonce'] as num).toInt() !=
+                (prev['versionNonce'] as num).toInt() ||
             element['isDeleted'] != prev['isDeleted']) {
           bumpedElements.add({
             ...element,
-            'version': max(
-              (element['version'] as num).toInt(),
-              (prev?['version'] as num?)?.toInt() ?? 0,
-            ) + 1,
+            'version':
+                max(
+                  (element['version'] as num).toInt(),
+                  (prev?['version'] as num?)?.toInt() ?? 0,
+                ) +
+                1,
             'versionNonce': rng.nextInt(1 << 31),
             'updated': DateTime.now().millisecondsSinceEpoch,
           });
@@ -401,7 +410,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
     _applyingRemoteScene = true;
     try {
-      _collaborationAdapter.applyRemoteScene(bumpedScene, closeTransientUi: false);
+      _collaborationAdapter.applyRemoteScene(
+        bumpedScene,
+        closeTransientUi: false,
+      );
     } finally {
       _applyingRemoteScene = false;
     }
@@ -1075,6 +1087,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
   }
 
+  Future<void> _broadcastChangedElements(
+    Iterable<editor_core.Element> elements,
+  ) async {
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room == null) return;
+    await _collaborationRepository.broadcastElements(
+      room: room,
+      elements: _collaborationAdapter.serializeElements(elements),
+    );
+  }
+
   Future<void> _handleCollaborationMessage(CollaborationMessage message) async {
     if (!_canMutateWhiteboard) {
       CollaborationDebugLog.write('scene', 'message_skipped', {
@@ -1125,8 +1148,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         final incomingVersion = (element['version'] as num).toInt();
         if (incomingVersion > existingVersion ||
             (incomingVersion == existingVersion &&
-             (element['versionNonce'] as num).toInt() <
-                 (existing['versionNonce'] as num).toInt())) {
+                (element['versionNonce'] as num).toInt() <
+                    (existing['versionNonce'] as num).toInt())) {
           _remoteMergeBuffer[id] = Map<String, Object?>.from(element);
         }
       }
@@ -1224,7 +1247,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       'protected': protectedElementIds.length,
       'summary': CollaborationDebugLog.elementSummary(reconciledScene.elements),
     });
-    await _applyRemoteScene(reconciledScene);
+    await _applyRemoteScene(reconciledScene, reconcile: false);
     _scheduleLoadImageFiles();
   }
 
@@ -1238,12 +1261,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       });
       return;
     }
-    final localScene = _collaborationAdapter.currentScene();
-    final protectedElementIds = _collaborationAdapter.protectedElementIds();
+    final localScene = reconcile ? _collaborationAdapter.currentScene() : null;
+    final protectedElementIds = reconcile
+        ? _collaborationAdapter.protectedElementIds()
+        : const <String>{};
     final reconciledScene = reconcile
         ? _collaborationRepository
               .reconcileRemoteScene(
-                localScene: localScene,
+                localScene: localScene!,
                 remoteElements: remoteScene.elements,
                 protectedElementIds: protectedElementIds,
               )
@@ -1260,7 +1285,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
     final nextScene = reconciledScene.copyWith(
       files: reconcile
-          ? {...localScene.files, ...reconciledScene.files}
+          ? {...localScene!.files, ...reconciledScene.files}
           : reconciledScene.files,
     );
 
@@ -1278,7 +1303,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       });
       CollaborationDebugLog.write('scene', 'remote_scene_applied', {
         'remote': remoteScene.elements.length,
-        'localBefore': localScene.elements.length,
+        'localBefore': localScene?.elements.length ?? 0,
         'localAfter': nextScene.elements.length,
         'protected': protectedElementIds.length,
         'filesLoaded': 0,
@@ -1528,24 +1553,34 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             },
             onRecognizeInk: (request) =>
                 ref.read(inkRecognitionRepositoryProvider).recognize(request),
-            onSceneChanged: (_, SceneChangeSource source) {
-              final currentScene = _collaborationAdapter.currentScene();
-              final previousScene = _previousScene;
-
+            onSceneChanged: (editorScene, SceneChangeSource source) {
               switch (source) {
                 case SceneChangeSource.undo:
                 case SceneChangeSource.redo:
-                  unawaited(_broadcastUndoRedoScene(previousScene, currentScene));
+                  unawaited(
+                    _broadcastUndoRedoScene(
+                      _previousEditorScene,
+                      _collaborationAdapter.currentScene(),
+                    ),
+                  );
                   _scheduleLocalDraft();
-                  _previousScene = currentScene;
+                  _previousEditorScene = editorScene;
                   break;
                 case SceneChangeSource.remoteApply:
                   _scheduleLocalDraft();
+                  _previousEditorScene = editorScene;
                   break;
                 case SceneChangeSource.userEdit:
                 case SceneChangeSource.restore:
-                  unawaited(_saveMarkdrawScene());
-                  _previousScene = currentScene;
+                  final changedElements =
+                      _markdrawController.lastChangedElements;
+                  if (changedElements == null) {
+                    unawaited(_saveMarkdrawScene());
+                  } else {
+                    unawaited(_broadcastChangedElements(changedElements));
+                    _scheduleLocalDraft();
+                  }
+                  _previousEditorScene = editorScene;
               }
             },
           ),

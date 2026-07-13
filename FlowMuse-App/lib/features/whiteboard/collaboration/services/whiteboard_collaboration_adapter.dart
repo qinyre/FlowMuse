@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide Element, SelectionOverlay, TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart'
+    as editor_core;
 
 import '../models/excalidraw_scene.dart';
 
@@ -14,6 +16,15 @@ class WhiteboardCollaborationAdapter {
     return ExcalidrawScene.fromJson(
       controller.serializeExcalidrawSceneJson(includeDeleted: includeDeleted),
     );
+  }
+
+  List<Map<String, Object?>> serializeElements(
+    Iterable<editor_core.Element> elements,
+  ) {
+    return [
+      for (final element in elements)
+        Map<String, Object?>.from(ExcalidrawJsonCodec.elementToJson(element)),
+    ];
   }
 
   void applyRemoteScene(ExcalidrawScene scene, {bool closeTransientUi = true}) {

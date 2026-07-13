@@ -275,6 +275,27 @@ class CollaborationRepository {
     );
   }
 
+  Future<void> broadcastElements({
+    required CollaborationRoom room,
+    required List<Map<String, Object?>> elements,
+  }) async {
+    if (_activeRoom?.roomId != room.roomId) return;
+    if (elements.isEmpty) return;
+    final syncable = _reconciler.getSyncableElements(elements);
+    if (syncable.isEmpty) return;
+
+    final updates = {for (final element in syncable) _id(element): element};
+    final merged = <Map<String, Object?>>[
+      for (final element in _latestScene.elements)
+        updates.remove(_id(element)) ?? element,
+      ...updates.values,
+    ];
+    _latestScene = _latestScene.copyWith(
+      elements: _reconciler.getSyncableElements(merged),
+    );
+    _accumulator.scheduleElements(syncable);
+  }
+
   Future<void> _onAccumulatorFlush(
     List<Map<String, Object?>> elements,
     bool isInitial,
@@ -330,7 +351,8 @@ class CollaborationRepository {
         'batchElementTotal': _batchElementTotal,
         'batchEncryptedBytesTotal': _batchEncryptedBytesTotal,
         'batchAvgBytes': _batchSendCount > 0
-            ? _batchEncryptedBytesTotal ~/ _batchSendCount : 0,
+            ? _batchEncryptedBytesTotal ~/ _batchSendCount
+            : 0,
         'batchElapsedMs': _batchSendStopwatch.elapsedMilliseconds,
         'fullSyncCount': _fullSceneSyncCount,
         'snapshotCount': _snapshotCount,
@@ -414,6 +436,18 @@ class CollaborationRepository {
     required List<Map<String, Object?>> remoteElements,
     Set<String> protectedElementIds = const {},
   }) {
+    final localById = {
+      for (final element in localScene.elements) _id(element): element,
+    };
+    final remoteWinners = [
+      for (final remote in remoteElements)
+        if (_remoteWins(
+          localById[_id(remote)],
+          remote,
+          protectedElementIds.contains(_id(remote)),
+        ))
+          remote,
+    ];
     final reconciled = _reconciler.reconcile(
       localElements: localScene.elements,
       remoteElements: remoteElements,
@@ -423,8 +457,22 @@ class CollaborationRepository {
       elements: _reconciler.getSyncableElements(reconciled),
     );
     _latestScene = nextScene;
-    _rememberBroadcasted(nextScene.elements);
+    _rememberBroadcasted(remoteWinners);
     return nextScene.copyWith(elements: reconciled);
+  }
+
+  bool _remoteWins(
+    Map<String, Object?>? local,
+    Map<String, Object?> remote,
+    bool isProtected,
+  ) {
+    if (local == null) return true;
+    if (isProtected) return false;
+    final localVersion = (local['version'] as num).toInt();
+    final remoteVersion = (remote['version'] as num).toInt();
+    if (remoteVersion != localVersion) return remoteVersion > localVersion;
+    return (remote['versionNonce'] as num).toInt() <
+        (local['versionNonce'] as num).toInt();
   }
 
   Future<CollaborationLoadedFilesResult> loadMissingFiles({

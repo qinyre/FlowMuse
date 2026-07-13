@@ -234,6 +234,14 @@ class MarkdrawController extends ChangeNotifier {
   /// Called whenever the scene changes (element add/update/remove).
   void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
 
+  List<Element>? _lastChangedElements;
+
+  /// Elements changed by the latest local tool result.
+  ///
+  /// `null` means callers must fall back to a full-scene sync (for example
+  /// undo/redo, file changes, or complete scene replacement).
+  List<Element>? get lastChangedElements => _lastChangedElements;
+
   /// Called after recognition-pen strokes settle and should be recognized.
   Future<InkRecognitionResult> Function(InkRecognitionRequest)? onRecognizeInk;
   void Function(bool enabled)? onInkRecognitionModeChanged;
@@ -628,6 +636,7 @@ class MarkdrawController extends ChangeNotifier {
     final undone = _historyManager.undo(_editorState.scene);
     if (undone != null) {
       _editorState = _editorState.copyWith(scene: undone);
+      _lastChangedElements = null;
       onSceneChanged?.call(_editorState.scene, SceneChangeSource.undo);
       notifyListeners();
     }
@@ -638,6 +647,7 @@ class MarkdrawController extends ChangeNotifier {
     final redone = _historyManager.redo(_editorState.scene);
     if (redone != null) {
       _editorState = _editorState.copyWith(scene: redone);
+      _lastChangedElements = null;
       onSceneChanged?.call(_editorState.scene, SceneChangeSource.redo);
       notifyListeners();
     }
@@ -850,11 +860,49 @@ class MarkdrawController extends ChangeNotifier {
     _editorState = newState;
 
     if (isSceneChangingResult(styled)) {
+      _lastChangedElements = _changedElementsFromResult(
+        styled,
+        _editorState.scene,
+      );
       onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
       _scheduleInkRecognitionFromResult(styled);
     }
 
     notifyListeners();
+  }
+
+  List<Element>? _changedElementsFromResult(ToolResult result, Scene scene) {
+    final ids = <ElementId>{};
+    var requiresFullScene = false;
+
+    void collect(ToolResult item) {
+      switch (item) {
+        case AddElementResult(:final element):
+        case UpdateElementResult(:final element):
+          ids.add(element.id);
+        case RemoveElementResult(:final id):
+          ids.add(id);
+        case AddFileResult():
+        case RemoveFileResult():
+          requiresFullScene = true;
+        case CompoundResult(:final results):
+          for (final child in results) {
+            collect(child);
+          }
+        case SetSelectionResult():
+        case UpdateViewportResult():
+        case SwitchToolResult():
+        case SetClipboardResult():
+          break;
+      }
+    }
+
+    collect(result);
+    if (requiresFullScene) return null;
+    return [
+      for (final element in scene.elements)
+        if (ids.contains(element.id)) element,
+    ];
   }
 
   ToolResult _constrainViewport(ToolResult result) {
@@ -1424,6 +1472,7 @@ class MarkdrawController extends ChangeNotifier {
     _isEditingExisting = false;
     _originalText = null;
     textEditingController.clear();
+    _lastChangedElements = null;
     onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
     // Request focus after the frame rebuilds — the TextEditingOverlay removal
@@ -1558,6 +1607,9 @@ class MarkdrawController extends ChangeNotifier {
       );
       _editorState = _editorState.applyResult(UpdateElementResult(updated));
     }
+    _lastChangedElements = [
+      if (_editorState.scene.getElementById(id) case final changed?) changed,
+    ];
     onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
   }
@@ -2517,6 +2569,7 @@ class MarkdrawController extends ChangeNotifier {
     if (background != null) {
       _canvasBackgroundColor = background;
     }
+    _lastChangedElements = null;
     onSceneChanged?.call(_editorState.scene, SceneChangeSource.remoteApply);
     notifyListeners();
   }
@@ -2797,6 +2850,7 @@ class MarkdrawController extends ChangeNotifier {
     _historyManager.push(_editorState.scene);
     _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
     _documentName = null;
+    _lastChangedElements = null;
     onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
   }
