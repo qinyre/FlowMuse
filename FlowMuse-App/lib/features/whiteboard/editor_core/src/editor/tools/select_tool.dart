@@ -10,6 +10,7 @@ import '../../core/layout/layout.dart';
 import '../../core/math/math.dart';
 import '../../core/scene/scene_exports.dart';
 import '../../rendering/interactive/interactive.dart';
+import '../../rendering/rough/saber_stroke_geometry.dart';
 import '../bindings/bindings.dart';
 import '../grid_snap.dart';
 import '../object_snap.dart';
@@ -508,6 +509,8 @@ class SelectTool implements Tool {
     final maxX = math.max(down.x, up.x);
     final maxY = math.max(down.y, up.y);
     final marquee = Bounds.fromLTWH(minX, minY, maxX - minX, maxY - minY);
+    final marqueePath = Path()
+      ..addRect(Rect.fromLTWH(minX, minY, maxX - minX, maxY - minY));
 
     final selected = <ElementId>{};
     for (final e in context.scene.activeElements) {
@@ -515,8 +518,16 @@ class SelectTool implements Tool {
       // Skip bound text — users interact with the parent shape
       if (e is TextElement && e.containerId != null) continue;
       final eBounds = Bounds.fromLTWH(e.x, e.y, e.width, e.height);
-      if (marquee.containsPoint(eBounds.origin) &&
-          marquee.containsPoint(Point(eBounds.right, eBounds.bottom))) {
+      final inside = e is FreedrawElement
+          ? SaberStrokeGeometry.percentInsideSelection(
+                marqueePath,
+                e,
+                pressureSensitivity: context.pressureSensitivity,
+              ) >=
+              0.5
+          : marquee.containsPoint(eBounds.origin) &&
+              marquee.containsPoint(Point(eBounds.right, eBounds.bottom));
+      if (inside) {
         selected.add(e.id);
       }
     }

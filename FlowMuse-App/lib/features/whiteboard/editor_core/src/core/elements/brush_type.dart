@@ -2,21 +2,23 @@ enum BrushType {
   pencil('pencil'),
   ballpoint('ballpoint'),
   fountainPen('fountain-pen'),
-  brushPen('brush-pen'),
+  shapePen('shape-pen'),
   highlighter('highlighter');
 
   const BrushType(this.wireName);
 
   final String wireName;
 
-  bool get canAutoRecognize => this != BrushType.highlighter;
+  bool get canAutoRecognize =>
+      this != BrushType.highlighter && this != BrushType.shapePen;
 
   static BrushType fromWireName(String? value) {
     return switch (value) {
       'pencil' => BrushType.pencil,
       'ballpoint' => BrushType.ballpoint,
       'fountain-pen' || 'fountainPen' => BrushType.fountainPen,
-      'brush-pen' || 'brushPen' => BrushType.brushPen,
+      'shape-pen' || 'shapePen' => BrushType.shapePen,
+      'brush-pen' || 'brushPen' => BrushType.fountainPen,
       'highlighter' => BrushType.highlighter,
       _ => BrushType.fountainPen,
     };
@@ -93,10 +95,10 @@ class BrushState {
       strokeColor: '#1e1e1e',
       strokeWidth: 2,
     ),
-    BrushType.brushPen: BrushState(
+    BrushType.shapePen: BrushState(
       strokeColor: '#1e1e1e',
       strokeWidth: 2,
-      pressureSensitivity: 0.85,
+      pressureSensitivity: 0,
     ),
     BrushType.highlighter: BrushState(
       strokeColor: '#ffff00',

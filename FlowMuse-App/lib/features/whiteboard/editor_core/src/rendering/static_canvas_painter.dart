@@ -117,69 +117,41 @@ class StaticCanvasPainter extends CustomPainter {
 
     final visible = cullElements(scene.orderedElements, viewport, size);
     for (final element in visible) {
-      if (element.isCanvasPage) {
-        continue;
-      }
-      // Skip standalone text that is being edited
-      if (editingElementId != null &&
-          element.id == editingElementId &&
-          element is core.TextElement) {
-        continue;
-      }
+      if (_isHighlighterFreedraw(element)) continue;
+      _renderSceneElement(canvas, element);
+    }
 
-      // Clip children of frames to frame bounds
-      final parentFrame = element.frameId != null
-          ? _findFrameElement(element.frameId!)
-          : null;
-      if (parentFrame != null) {
-        canvas.save();
-        canvas.clipRect(
-          Rect.fromLTWH(
-            parentFrame.x,
-            parentFrame.y,
-            parentFrame.width,
-            parentFrame.height,
-          ),
-        );
+    final highlighters = [
+      for (final element in visible)
+        if (_isHighlighterFreedraw(element)) element,
+    ];
+    if (highlighters.isNotEmpty) {
+      canvas.saveLayer(null, Paint()..blendMode = ui.BlendMode.multiply);
+      for (final element in highlighters) {
+        _renderSceneElement(canvas, element);
       }
-
-      // For arrows with bound text, wrap in a saveLayer so we can
-      // punch a clear hole behind the label (matching Excalidraw).
-      // Keep the layer active during editing so the arrow line stays
-      // cleared behind the editing overlay.
-      final arrowLabel = element is ArrowElement
-          ? scene.findBoundText(element.id)
-          : null;
-      final hasArrowLabel = arrowLabel != null && arrowLabel.text.isNotEmpty;
-      if (hasArrowLabel) {
-        canvas.saveLayer(null, Paint());
-      }
-
-      ElementRenderer.render(
-        canvas,
-        element,
-        adapter,
-        resolvedImages: resolvedImages,
-      );
-      _renderBoundText(canvas, element);
-
-      if (hasArrowLabel) {
-        canvas.restore();
-      }
-
-      if (parentFrame != null) {
-        canvas.restore();
-      }
+      canvas.restore();
     }
 
     // Render live creation preview on top
     if (previewElement != null) {
-      ElementRenderer.render(
-        canvas,
-        previewElement!,
-        adapter,
-        resolvedImages: resolvedImages,
-      );
+      if (_isHighlighterFreedraw(previewElement!)) {
+        canvas.saveLayer(null, Paint()..blendMode = ui.BlendMode.multiply);
+        ElementRenderer.render(
+          canvas,
+          previewElement!,
+          adapter,
+          resolvedImages: resolvedImages,
+        );
+        canvas.restore();
+      } else {
+        ElementRenderer.render(
+          canvas,
+          previewElement!,
+          adapter,
+          resolvedImages: resolvedImages,
+        );
+      }
     }
 
     // Render pending flowchart elements at 50% opacity
@@ -203,6 +175,61 @@ class StaticCanvasPainter extends CustomPainter {
   FrameElement? _findFrameElement(String frameId) {
     final el = scene.getElementById(ElementId(frameId));
     return el is FrameElement ? el : null;
+  }
+
+  bool _isHighlighterFreedraw(Element element) {
+    return element is FreedrawElement &&
+        brushTypeFromCustomData(element.customData) == BrushType.highlighter;
+  }
+
+  void _renderSceneElement(Canvas canvas, Element element) {
+    if (element.isCanvasPage) {
+      return;
+    }
+    if (editingElementId != null &&
+        element.id == editingElementId &&
+        element is core.TextElement) {
+      return;
+    }
+
+    final parentFrame = element.frameId != null
+        ? _findFrameElement(element.frameId!)
+        : null;
+    if (parentFrame != null) {
+      canvas.save();
+      canvas.clipRect(
+        Rect.fromLTWH(
+          parentFrame.x,
+          parentFrame.y,
+          parentFrame.width,
+          parentFrame.height,
+        ),
+      );
+    }
+
+    final arrowLabel = element is ArrowElement
+        ? scene.findBoundText(element.id)
+        : null;
+    final hasArrowLabel = arrowLabel != null && arrowLabel.text.isNotEmpty;
+    if (hasArrowLabel) {
+      canvas.saveLayer(null, Paint());
+    }
+
+    ElementRenderer.render(
+      canvas,
+      element,
+      adapter,
+      resolvedImages: resolvedImages,
+    );
+    _renderBoundText(canvas, element);
+
+    if (hasArrowLabel) {
+      canvas.restore();
+    }
+
+    if (parentFrame != null) {
+      canvas.restore();
+    }
   }
 
   /// Renders bound text inside a container shape or at an arrow's midpoint.

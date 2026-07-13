@@ -30,13 +30,20 @@ class LaserRenderer {
       final p1 = viewport.sceneToScreen(ui.Offset(prev.point.x, prev.point.y));
       final p2 = viewport.sceneToScreen(ui.Offset(curr.point.x, curr.point.y));
 
-      final paint = ui.Paint()
-        ..color = ui.Color.fromRGBO(255, 0, 0, opacity)
+      final outerPaint = ui.Paint()
+        ..color = ui.Color.fromRGBO(255, 0, 0, opacity * 0.82)
+        ..strokeWidth = 9.0
+        ..strokeCap = ui.StrokeCap.round
+        ..style = ui.PaintingStyle.stroke
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 2);
+      final innerPaint = ui.Paint()
+        ..color = ui.Color.fromRGBO(255, 255, 255, opacity * 0.9)
         ..strokeWidth = 3.0
         ..strokeCap = ui.StrokeCap.round
         ..style = ui.PaintingStyle.stroke;
 
-      canvas.drawLine(p1, p2, paint);
+      canvas.drawLine(p1, p2, outerPaint);
+      canvas.drawLine(p1, p2, innerPaint);
     }
   }
 }

@@ -107,6 +107,7 @@ class ToolContext {
   final bool objectsSnapMode;
   final BrushType brushType;
   final bool inkRecognitionMode;
+  final double pressureSensitivity;
 
   ToolContext({
     required this.scene,
@@ -119,6 +120,7 @@ class ToolContext {
     this.objectsSnapMode = false,
     this.brushType = BrushType.fountainPen,
     this.inkRecognitionMode = false,
+    this.pressureSensitivity = 0.7,
   }) : selectedIds = Set.unmodifiable(selectedIds);
 }
 

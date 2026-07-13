@@ -485,6 +485,7 @@ class MarkdrawController extends ChangeNotifier {
     objectsSnapMode: _objectsSnapMode,
     brushType: _activeBrushType,
     inkRecognitionMode: _inkRecognitionMode,
+    pressureSensitivity: _pressureSensitivity,
   );
 
   /// The currently selected elements resolved from their IDs.

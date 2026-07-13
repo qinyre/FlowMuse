@@ -1,7 +1,5 @@
-import 'dart:math' as dm;
+import 'dart:math' as math;
 import 'dart:ui';
-
-import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
 
 import '../../core/math/math.dart';
 import '../../core/elements/brush_type.dart';
@@ -9,6 +7,7 @@ import '../../input/outline_render_mode.dart';
 import '../../input/stroke_render_metrics.dart';
 import 'draw_style.dart';
 import 'pencil_shader.dart';
+import 'saber_stroke_geometry.dart';
 
 /// Renders freehand drawing paths.
 ///
@@ -52,54 +51,14 @@ class FreedrawRenderer {
     bool isComplete = true,
     BrushType brushType = BrushType.fountainPen,
   }) {
-    if (points.isEmpty) return const [];
-
-    final brush = _configFor(brushType);
-    final hasRawPressure =
-        pressures != null && pressures.length == points.length;
-    // 当笔形关闭压感时，丢弃真实压感数据，始终走模拟（参考 Saber pressureEnabled）。
-    final hasPressure = hasRawPressure && brush.pressureEnabled;
-    final inputPoints = <PointVector>[
-      for (var i = 0; i < points.length; i++)
-        PointVector(
-          points[i].x,
-          points[i].y,
-          hasPressure ? pressures[i] : null,
-        ),
-    ];
-    final sensitivity = pressureSensitivity.clamp(0.0, 1.0);
-    final simulatePressure =
-        !hasPressure || brush.forceSimulatePressure;
-    final options = StrokeOptions(
-      size: dm.max(strokeWidth * brush.sizeScale, 1.0),
-      thinning: hasPressure
-          ? switch (brushType) {
-              // Keep the established fountain-pen response: a small base
-              // pressure term remains even at the lowest sensitivity.
-              BrushType.fountainPen => 0.05 + sensitivity * 0.9,
-              _ => brush.thinning * sensitivity,
-            }
-          : brush.simulatedThinning,
-      smoothing: brush.smoothing,
-      streamline: brush.streamline,
-      simulatePressure: simulatePressure,
+    return SaberStrokeGeometry.outline(
+      points,
+      strokeWidth: strokeWidth,
+      pressures: pressures,
+      brushType: brushType,
+      pressureSensitivity: pressureSensitivity,
       isComplete: isComplete,
-      // 笔锋效果（参考 Saber pencil taper）
-      start: brush.taperEnabled
-          ? StrokeEndOptions.start(
-              taperEnabled: true,
-              customTaper: brush.customTaper,
-            )
-          : null,
-      end: brush.taperEnabled
-          ? StrokeEndOptions.end(
-              taperEnabled: true,
-              customTaper: brush.customTaper,
-            )
-          : null,
     );
-
-    return getStroke(inputPoints, options: options);
   }
 
   /// Constructs a closed [Path] from a perfect_freehand outline.
@@ -110,32 +69,14 @@ class FreedrawRenderer {
   ///   adjacent vertices as endpoints. The last-to-first seam is handled via
   ///   modulo wrapping so no control segment is missed.
   static Path buildOutlinePath(
-    List<PointVector> outline,
+    List<Offset> outline,
     OutlineRenderMode mode,
   ) {
-    if (outline.isEmpty) return Path();
-    if (mode == OutlineRenderMode.polygon || outline.length < 3) {
-      return Path()
-        ..addPolygon([for (final p in outline) Offset(p.x, p.y)], true);
-    }
-    // quadratic: classic midpoint method for a fully-smooth closed path.
-    // Start at (P0+P1)/2 so every segment has a distinct control point ≠ its
-    // start — no flat edges. Each vertex serves as control exactly once,
-    // including outline[0] as the final control before close.
-    final path = Path();
-    final first = outline.first;
-    final startX = (first.x + outline[1].x) / 2;
-    final startY = (first.y + outline[1].y) / 2;
-    path.moveTo(startX, startY);
-    for (var i = 1; i <= outline.length; i++) {
-      final cur = outline[i % outline.length];
-      final next = outline[(i + 1) % outline.length];
-      final midX = (cur.x + next.x) / 2;
-      final midY = (cur.y + next.y) / 2;
-      path.quadraticBezierTo(cur.x, cur.y, midX, midY);
-    }
-    path.close();
-    return path;
+    return SaberStrokeGeometry.pathFromOutline(
+      outline,
+      mode,
+      isComplete: true,
+    );
   }
 
   /// Measures the same outline and Path construction used by [draw], without
@@ -158,7 +99,7 @@ class FreedrawRenderer {
     );
     final getStrokeDuration = (outlineWatch..stop()).elapsed;
     final pathWatch = Stopwatch()..start();
-    buildOutlinePath(_asPointVectors(outline), outlineRenderMode);
+    buildOutlinePath(outline, outlineRenderMode);
     final pathBuildDuration = (pathWatch..stop()).elapsed;
     return StrokeRenderMetrics(
       outlinePointCount: outline.length,
@@ -185,10 +126,10 @@ class FreedrawRenderer {
   }) {
     if (points.isEmpty) return;
 
-    final brush = _configFor(brushType);
+    final brush = SaberBrushConfig.forType(brushType);
     // perfect_freehand 的 size 是直径,而 DrawStyle.strokeWidth 在 freedraw 语境下
     // 是期望的笔迹宽度。直接用 strokeWidth 作为 size 基准。
-    final size = dm.max(style.strokeWidth * brush.sizeScale, 1.0);
+    final size = math.max(style.strokeWidth * brush.sizeScale, 1.0);
 
     Stopwatch? outlineWatch;
     if (metricsSink != null) {
@@ -219,12 +160,15 @@ class FreedrawRenderer {
     }
 
     // outline 是闭合多边形顶点,用 fill 绘制
-    final outlineVectors = _asPointVectors(outline);
     Stopwatch? sw;
     if (metricsSink != null) {
       sw = Stopwatch()..start();
     }
-    final path = buildOutlinePath(outlineVectors, outlineRenderMode);
+    final path = SaberStrokeGeometry.pathFromOutline(
+      outline,
+      outlineRenderMode,
+      isComplete: isComplete,
+    );
     final pathBuildDuration = sw != null ? (sw..stop()).elapsed : Duration.zero;
     final basePaint = style.toStrokePaint();
     final paint = basePaint
@@ -248,69 +192,11 @@ class FreedrawRenderer {
     canvas.drawPath(path, paint);
     metricsSink?.onMetrics(
       StrokeRenderMetrics(
-        outlinePointCount: outlineVectors.length,
+        outlinePointCount: outline.length,
         getStrokeDuration: getStrokeDuration,
         pathBuildDuration: pathBuildDuration,
       ),
     );
-  }
-
-  static List<PointVector> _asPointVectors(List<Offset> outline) => [
-    for (final o in outline) PointVector(o.dx, o.dy, 0),
-  ];
-
-  static _BrushConfig _configFor(BrushType brushType) {
-    return switch (brushType) {
-      // 铅笔：半透明 + 笔锋 + 低延迟跟手(参考 Saber pencil:
-      // streamline=0.1, smoothing=0)
-      BrushType.pencil => const _BrushConfig(
-        sizeScale: 0.82,
-        opacityScale: 0.68,
-        thinning: 0.45,
-        simulatedThinning: 0.32,
-        smoothing: 0.2,
-        streamline: 0.15,
-        taperEnabled: true,
-        customTaper: 1.0,
-      ),
-      // 圆珠笔：极细均匀，关闭压感(参考 Saber ballpointPen)
-      BrushType.ballpoint => const _BrushConfig(
-        sizeScale: 0.72,
-        thinning: 0.08,
-        simulatedThinning: 0.02,
-        smoothing: 0.62,
-        streamline: 0.52,
-        pressureEnabled: false,
-      ),
-      // 钢笔：标准压感，无笔锋(默认笔形)
-      BrushType.fountainPen => _BrushConfig(
-        thinning: 0.9,
-        simulatedThinning: StrokeOptions.defaultThinning,
-        smoothing: StrokeOptions.defaultSmoothing,
-        streamline: StrokeOptions.defaultStreamline,
-      ),
-      // 毛笔：粗笔 + 强压感 + 微笔锋(参考 Saber taper 设计)
-      BrushType.brushPen => const _BrushConfig(
-        sizeScale: 1.15,
-        thinning: 1.0,
-        simulatedThinning: 0.82,
-        smoothing: 0.58,
-        streamline: 0.42,
-        taperEnabled: true,
-        customTaper: 0.5,
-      ),
-      // 荧光笔：特粗半透明，关闭压感(参考 Saber highlighter)
-      BrushType.highlighter => const _BrushConfig(
-        sizeScale: 4.2,
-        opacityScale: 0.32,
-        thinning: 0.05,
-        simulatedThinning: 0.02,
-        smoothing: 0.72,
-        streamline: 0.58,
-        forceSimulatePressure: true,
-        pressureEnabled: false,
-      ),
-    };
   }
 
   /// Builds a smooth cubic Bezier path through 3+ points using
@@ -334,37 +220,4 @@ class FreedrawRenderer {
 
     return path;
   }
-}
-
-class _BrushConfig {
-  const _BrushConfig({
-    this.sizeScale = 1.0,
-    this.opacityScale = 1.0,
-    required this.thinning,
-    required this.simulatedThinning,
-    required this.smoothing,
-    required this.streamline,
-    this.forceSimulatePressure = false,
-    this.pressureEnabled = true,
-    this.taperEnabled = false,
-    this.customTaper = 0.0,
-  });
-
-  final double sizeScale;
-  final double opacityScale;
-  final double thinning;
-  final double simulatedThinning;
-  final double smoothing;
-  final double streamline;
-  final bool forceSimulatePressure;
-
-  /// 是否启用真实压感。关闭后始终使用模拟压感（参考 Saber 设计）。
-  final bool pressureEnabled;
-
-  /// 是否启用笔锋（起笔/收笔变细效果）。
-  final bool taperEnabled;
-
-  /// 笔锋缩放比例，仅 [taperEnabled] 为 true 时生效。
-  /// 值越大笔锋越短，1.0 为 Saber 铅笔同款效果。
-  final double customTaper;
 }

@@ -2,8 +2,11 @@ import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:one_dollar_unistroke_recognizer/one_dollar_unistroke_recognizer.dart';
+
 import '../../core/elements/elements.dart';
 import '../../core/math/math.dart';
+import '../../rendering/rough/saber_stroke_geometry.dart';
 import '../tool_result.dart';
 import '../tool_type.dart';
 import 'tool.dart';
@@ -119,14 +122,113 @@ class FreedrawTool implements Tool {
     );
 
     final shouldSelect = _sessionId != null;
+    final resultElement = context.brushType == BrushType.shapePen
+        ? _buildShapePenElement(
+            rawElement: element,
+            absolutePoints: List<Point>.unmodifiable(_points),
+          )
+        : element;
     _clearStrokeState();
     if (shouldSelect) {
       return CompoundResult([
-        AddElementResult(element),
-        SetSelectionResult({element.id}),
+        AddElementResult(resultElement),
+        SetSelectionResult({resultElement.id}),
       ]);
     }
-    return AddElementResult(element);
+    return AddElementResult(resultElement);
+  }
+
+  Element _buildShapePenElement({
+    required FreedrawElement rawElement,
+    required List<Point> absolutePoints,
+  }) {
+    final recognized = SaberStrokeGeometry.recognizeShape(absolutePoints);
+    if (recognized == null || recognized.score < 0.7) {
+      return rawElement;
+    }
+
+    return switch (recognized.name) {
+      DefaultUnistrokeNames.line => _shapePenLine(rawElement, absolutePoints),
+      DefaultUnistrokeNames.rectangle => RectangleElement(
+        id: rawElement.id,
+        x: rawElement.x,
+        y: rawElement.y,
+        width: rawElement.width,
+        height: rawElement.height,
+        customData: rawElement.customData,
+      ),
+      DefaultUnistrokeNames.circle => EllipseElement(
+        id: rawElement.id,
+        x: rawElement.x,
+        y: rawElement.y,
+        width: rawElement.width,
+        height: rawElement.height,
+        customData: rawElement.customData,
+      ),
+      DefaultUnistrokeNames.triangle => _shapePenTriangle(rawElement),
+      DefaultUnistrokeNames.star => DiamondElement(
+        id: rawElement.id,
+        x: rawElement.x,
+        y: rawElement.y,
+        width: rawElement.width,
+        height: rawElement.height,
+        customData: rawElement.customData,
+      ),
+      _ => rawElement,
+    };
+  }
+
+  LineElement _shapePenLine(
+    FreedrawElement rawElement,
+    List<Point> absolutePoints,
+  ) {
+    var first = absolutePoints.first;
+    var last = absolutePoints.last;
+    final dx = (last.x - first.x).abs();
+    final dy = (last.y - first.y).abs();
+    final angle = math.atan2(dy, dx);
+    const snapAngle = 5 * math.pi / 180;
+    if (angle < snapAngle) {
+      last = Point(last.x, first.y);
+    } else if (angle > math.pi / 2 - snapAngle) {
+      last = Point(first.x, last.y);
+    }
+
+    final minX = math.min(first.x, last.x);
+    final minY = math.min(first.y, last.y);
+    final maxX = math.max(first.x, last.x);
+    final maxY = math.max(first.y, last.y);
+    return LineElement(
+      id: rawElement.id,
+      x: minX,
+      y: minY,
+      width: math.max(maxX - minX, 1.0),
+      height: math.max(maxY - minY, 1.0),
+      points: [
+        Point(first.x - minX, first.y - minY),
+        Point(last.x - minX, last.y - minY),
+      ],
+      customData: rawElement.customData,
+    );
+  }
+
+  LineElement _shapePenTriangle(FreedrawElement rawElement) {
+    final w = rawElement.width;
+    final h = rawElement.height;
+    return LineElement(
+      id: rawElement.id,
+      x: rawElement.x,
+      y: rawElement.y,
+      width: w,
+      height: h,
+      closed: true,
+      points: [
+        Point(w / 2, 0),
+        Point(w, h),
+        Point(0, h),
+      ],
+      customData: rawElement.customData,
+    );
   }
 
   void startNewSession() {

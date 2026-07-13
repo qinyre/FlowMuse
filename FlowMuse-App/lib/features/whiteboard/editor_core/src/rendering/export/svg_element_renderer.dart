@@ -350,7 +350,7 @@ class SvgElementRenderer {
       BrushType.pencil => (0.82, 0.68),
       BrushType.ballpoint => (0.72, 1.0),
       BrushType.fountainPen => (1.0, 1.0),
-      BrushType.brushPen => (1.15, 1.0),
+      BrushType.shapePen => (1.0, 1.0),
       BrushType.highlighter => (4.2, 0.32),
     };
     final d = SvgPathConverter.freedrawToPathData(

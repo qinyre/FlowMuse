@@ -575,6 +575,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "9.4.1"
+  one_dollar_unistroke_recognizer:
+    dependency: "direct main"
+    description:
+      name: one_dollar_unistroke_recognizer
+      sha256: "599a074c6cec9c1517e382368e5ea470abbd04a82fe3700472a7b042de882384"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.3.4"
   package_config:
     dependency: transitive
     description:

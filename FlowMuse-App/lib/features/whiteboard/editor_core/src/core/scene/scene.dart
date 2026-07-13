@@ -4,6 +4,7 @@ import '../elements/elements.dart';
 import '../layout/layout.dart';
 import '../math/math.dart';
 import '../smart_layout/smart_layout_document.dart';
+import '../../rendering/rough/saber_stroke_geometry.dart';
 
 /// An immutable collection of drawing elements with CRUD operations.
 class Scene {
@@ -137,7 +138,16 @@ class Scene {
       // Skip bound text — users interact with the parent shape
       if (e is TextElement && e.containerId != null) continue;
 
-      if (e is LineElement) {
+      if (e is FreedrawElement) {
+        if (SaberStrokeGeometry.hitTestFreedraw(
+          point,
+          e,
+          pressureSensitivity: 0.7,
+          eraserSize: _lineHitThreshold,
+        )) {
+          return e;
+        }
+      } else if (e is LineElement) {
         if (_isPointNearLine(point, e, _lineHitThreshold)) return e;
       } else {
         final bounds = Bounds.fromLTWH(e.x, e.y, e.width, e.height);

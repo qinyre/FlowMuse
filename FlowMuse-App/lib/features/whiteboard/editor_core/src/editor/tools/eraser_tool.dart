@@ -2,7 +2,9 @@ import 'dart:ui';
 
 import '../../core/elements/elements.dart';
 import '../../core/groups/groups.dart';
+import '../../core/layout/layout.dart';
 import '../../core/math/math.dart';
+import '../../rendering/rough/saber_stroke_geometry.dart';
 import '../bindings/bindings.dart';
 import '../tool_result.dart';
 import '../tool_type.dart';
@@ -82,7 +84,7 @@ class EraserTool implements Tool {
 
   /// Hit-test at [point], skip locked elements, expand groups.
   void _hitTestAndExpand(Point point, ToolContext context) {
-    final hit = context.scene.getElementAtPoint(point);
+    final hit = _getElementAtEraserPoint(point, context);
     if (hit == null || hit.locked) return;
 
     // Expand to outermost group
@@ -95,6 +97,31 @@ class EraserTool implements Tool {
     } else {
       _hitIds.add(hit.id);
     }
+  }
+
+  Element? _getElementAtEraserPoint(Point point, ToolContext context) {
+    final ordered = context.scene.orderedElements
+        .where((e) => !e.isDeleted)
+        .toList();
+    for (var i = ordered.length - 1; i >= 0; i--) {
+      final element = ordered[i];
+      if (element.isCanvasPage || element.isPdfBackground) continue;
+      if (element is TextElement && element.containerId != null) continue;
+      if (element is FreedrawElement) {
+        if (SaberStrokeGeometry.hitTestFreedraw(
+          point,
+          element,
+          pressureSensitivity: context.pressureSensitivity,
+          eraserSize: 14,
+        )) {
+          return element;
+        }
+        continue;
+      }
+      final hit = context.scene.getElementAtPoint(point);
+      if (hit == element) return element;
+    }
+    return null;
   }
 
   /// Build cascading delete results matching SelectTool's Delete behavior.

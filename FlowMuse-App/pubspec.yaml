@@ -65,6 +65,7 @@ dependencies:
     path: tool/vendor/path_provider_ohos
   pdfx: ^2.9.2
   perfect_freehand: ^2.5.0
+  one_dollar_unistroke_recognizer: ^1.1.1
   sqflite: ^2.4.2+1
   sqflite_common: ^2.5.8
   sqflite_common_ffi: ^2.3.6

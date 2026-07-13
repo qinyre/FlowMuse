@@ -381,7 +381,7 @@ String _labelForBrush(BrushType brushType) {
     BrushType.pencil => '铅笔',
     BrushType.ballpoint => '圆珠笔',
     BrushType.fountainPen => '钢笔',
-    BrushType.brushPen => '毛笔',
+    BrushType.shapePen => '形状笔',
     BrushType.highlighter => '荧光笔',
   };
 }
@@ -391,7 +391,7 @@ IconData _iconForBrush(BrushType brushType) {
     BrushType.pencil => Icons.edit_outlined,
     BrushType.ballpoint => Icons.mode_edit_outline,
     BrushType.fountainPen => Icons.draw,
-    BrushType.brushPen => Icons.brush,
+    BrushType.shapePen => Icons.gesture,
     BrushType.highlighter => Symbols.ink_highlighter,
   };
 }
