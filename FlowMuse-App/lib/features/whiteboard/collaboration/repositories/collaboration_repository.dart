@@ -88,6 +88,8 @@ class CollaborationRepository {
   StreamSubscription<String>? _newUserSubscription;
   Future<void> _messageDecodeQueue = Future<void>.value();
   Future<void> _sendQueue = Future<void>.value();
+  bool _stopping = false;
+  int _roomSession = 0;
   CollaborationRoom? _activeRoom;
   ExcalidrawScene _latestScene = ExcalidrawScene.empty();
 
@@ -264,6 +266,7 @@ class CollaborationRepository {
     bool initial = false,
     bool syncAll = false,
   }) async {
+    if (_stopping) return;
     final syncableElements = _reconciler.getSyncableElements(scene.elements);
     final syncableScene = scene.copyWith(elements: syncableElements);
     _latestScene = syncableScene;
@@ -279,6 +282,7 @@ class CollaborationRepository {
     required CollaborationRoom room,
     required List<Map<String, Object?>> elements,
   }) async {
+    if (_stopping) return;
     if (_activeRoom?.roomId != room.roomId) return;
     if (elements.isEmpty) return;
     final syncable = _reconciler.getSyncableElements(elements);
@@ -300,6 +304,7 @@ class CollaborationRepository {
     List<Map<String, Object?>> elements,
     bool isInitial,
   ) {
+    if (_stopping) return Future<void>.value();
     // Serialize sends: chain onto queue so the next flush can't start until
     // _rememberBroadcasted has completed, preventing duplicate sends.
     _sendQueue = _sendQueue
@@ -319,6 +324,7 @@ class CollaborationRepository {
     List<Map<String, Object?>> elements,
     bool isInitial,
   ) async {
+    if (_stopping) return;
     final room = _activeRoom;
     if (room == null) return;
 
@@ -509,6 +515,8 @@ class CollaborationRepository {
   }
 
   void _startRoomSession(CollaborationRoom room) {
+    _roomSession++;
+    _stopping = false;
     _stopRoomSession();
     _accumulator.dispose();
     _accumulator.onFlush = _onAccumulatorFlush;
@@ -894,7 +902,15 @@ class CollaborationRepository {
       fileId.length > 8 ? fileId.substring(0, 8) : fileId;
 
   Future<void> stop() async {
+    final session = _roomSession;
+    _stopping = true;
+    _fullSceneSyncTimer?.cancel();
+    _fullSceneSyncTimer = null;
+    _fileUploadTimer?.cancel();
+    _fileUploadTimer = null;
+    _accumulator.dispose();
     await forceFlushSnapshot();
+    if (_roomSession != session) return;
     _resetLocalState();
     await _transport.disconnect();
   }

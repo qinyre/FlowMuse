@@ -1130,6 +1130,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   final Map<String, Map<String, Object?>> _remoteMergeBuffer = {};
   Timer? _remoteMergeTimer;
+  bool _remoteElementApplyQueued = false;
   static const Duration _remoteMergeWindow = Duration(milliseconds: 33);
 
   void _enqueueRemoteElements(List<Map<String, Object?>> remoteElements) {
@@ -1161,10 +1162,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _flushRemoteMerge() async {
     _remoteMergeTimer = null;
-    if (_remoteMergeBuffer.isEmpty) return;
+    if (_remoteMergeBuffer.isEmpty || _remoteElementApplyQueued) return;
 
     final merged = _remoteMergeBuffer.values.toList();
     _remoteMergeBuffer.clear();
+    _remoteElementApplyQueued = true;
 
     final pending = _remoteSceneQueue.catchError(_ignoreRemoteSceneError);
     _remoteSceneQueue = pending
@@ -1173,7 +1175,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             await _applyRemoteElements(merged);
           });
         })
-        .catchError(_reportRemoteSceneFutureError);
+        .catchError(_reportRemoteSceneFutureError)
+        .whenComplete(() {
+          _remoteElementApplyQueued = false;
+          if (_remoteMergeBuffer.isNotEmpty && mounted) {
+            _remoteMergeTimer?.cancel();
+            _remoteMergeTimer = Timer(Duration.zero, _flushRemoteMerge);
+          }
+        });
     unawaited(_remoteSceneQueue);
   }
 
@@ -1473,7 +1482,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         : const <CollaborationParticipantBadge>[];
 
     return PopScope(
-      canPop: !widget.temporaryCollaboration || _temporarySaved,
+      canPop:
+          !widget.temporaryCollaboration ||
+          _temporarySaved ||
+          _disposingOrLeaving,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop || !widget.temporaryCollaboration) {
           return;
