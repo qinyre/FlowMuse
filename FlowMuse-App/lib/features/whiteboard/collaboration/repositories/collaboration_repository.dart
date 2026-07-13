@@ -66,6 +66,12 @@ class CollaborationRepository {
 
   Timer? _fullSceneSyncTimer;
   Timer? _fileUploadTimer;
+  Timer? _snapshotTimer;
+  bool _snapshotSaving = false;
+  bool _snapshotDirty = false;
+  static const Duration _snapshotIdle = Duration(seconds: 2);
+  static const Duration _snapshotMaxInterval = Duration(seconds: 30);
+  DateTime _lastSnapshotTime = DateTime.now();
   StreamSubscription<EncryptedPayload>? _transportMessageSubscription;
   StreamSubscription<String>? _newUserSubscription;
   Future<void> _messageDecodeQueue = Future<void>.value();
@@ -284,7 +290,7 @@ class CollaborationRepository {
     _rememberBroadcasted(changed);
     _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
 
-    unawaited(_saveSceneSnapshot(room: room, scene: _latestScene));
+    _scheduleSnapshot();
   }
 
   Future<void> broadcastMouseLocation({
@@ -598,6 +604,57 @@ class CollaborationRepository {
     }
   }
 
+  void _scheduleSnapshot() {
+    _snapshotDirty = true;
+    _snapshotTimer?.cancel();
+
+    final sinceLast = DateTime.now().difference(_lastSnapshotTime);
+    final delay = sinceLast >= _snapshotMaxInterval
+        ? Duration.zero
+        : _snapshotIdle;
+
+    _snapshotTimer = Timer(delay, _flushSnapshot);
+  }
+
+  Future<void> _flushSnapshot() async {
+    _snapshotTimer = null;
+    if (!_snapshotDirty) return;
+    if (_snapshotSaving) return; // single-flight
+
+    final room = _activeRoom;
+    if (room == null) return;
+
+    _snapshotSaving = true;
+    _snapshotDirty = false;
+    try {
+      final scene = _latestScene;
+      await _saveSceneResolvingConflict(
+        room: room,
+        scene: scene.copyWith(files: const {}),
+      );
+      _lastSnapshotTime = DateTime.now();
+    } catch (error) {
+      if (!_repositoryErrors.isClosed) {
+        _repositoryErrors.add('协作快照保存失败：$error');
+      }
+      _snapshotDirty = true;
+    } finally {
+      _snapshotSaving = false;
+      if (_snapshotDirty) {
+        _scheduleSnapshot();
+      }
+    }
+  }
+
+  // Task 4 简化版，Task 6 step 3 升级为含在途等待循环的完整版
+  Future<void> forceFlushSnapshot() async {
+    _snapshotTimer?.cancel();
+    _snapshotTimer = null;
+    if (_snapshotDirty) {
+      await _flushSnapshot();
+    }
+  }
+
   Future<void> _saveSceneSnapshot({
     required CollaborationRoom room,
     required ExcalidrawScene scene,
@@ -742,6 +799,7 @@ class CollaborationRepository {
       fileId.length > 8 ? fileId.substring(0, 8) : fileId;
 
   Future<void> stop() async {
+    await forceFlushSnapshot();
     _resetLocalState();
     await _transport.disconnect();
   }
@@ -751,6 +809,10 @@ class CollaborationRepository {
     _fullSceneSyncTimer = null;
     _fileUploadTimer?.cancel();
     _fileUploadTimer = null;
+    _snapshotTimer?.cancel();
+    _snapshotTimer = null;
+    _snapshotSaving = false;
+    _snapshotDirty = false;
     _stopRoomSession();
     _activeRoom = null;
     _latestScene = ExcalidrawScene.empty();
