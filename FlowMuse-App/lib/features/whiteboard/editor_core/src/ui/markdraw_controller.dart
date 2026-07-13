@@ -2734,11 +2734,25 @@ class MarkdrawController extends ChangeNotifier {
   List<Element> _elementsFromSmartLayout(SmartLayoutDocument document) {
     final blocks = [...document.blocks]
       ..sort((a, b) => a.order.compareTo(b.order));
-    return [
-      for (final block in blocks)
-        if (block.text.trim().isNotEmpty && !_duplicatesExistingText(block))
-          _textElementFromSmartLayoutBlock(block),
-    ];
+    final elements = <Element>[];
+    final occupied = <Bounds>[];
+    var layoutIndex = 0;
+    for (final block in blocks) {
+      if (block.text.trim().isEmpty || _duplicatesExistingText(block)) {
+        continue;
+      }
+      final element = _textElementFromSmartLayoutBlock(
+        block,
+        layoutIndex,
+        occupied,
+      );
+      elements.add(element);
+      occupied.add(
+        Bounds.fromLTWH(element.x, element.y, element.width, element.height),
+      );
+      layoutIndex++;
+    }
+    return elements;
   }
 
   bool _duplicatesExistingText(SmartLayoutBlock block) {
@@ -2764,18 +2778,23 @@ class MarkdrawController extends ChangeNotifier {
     return null;
   }
 
-  TextElement _textElementFromSmartLayoutBlock(SmartLayoutBlock block) {
-    final bounds = block.bounds ?? Bounds.fromLTWH(0, 0, 240, 32);
+  TextElement _textElementFromSmartLayoutBlock(
+    SmartLayoutBlock block,
+    int layoutIndex,
+    List<Bounds> occupied,
+  ) {
+    final initialBounds =
+        block.bounds ?? _fallbackSmartLayoutBounds(block, layoutIndex);
     final vertical = block.writingMode == 'vertical';
     final text = block.type == 'math' && block.latex?.trim().isNotEmpty == true
         ? block.latex!.trim()
         : block.text.trim();
     final element = TextElement(
       id: ElementId.generate(),
-      x: bounds.left,
-      y: bounds.top,
-      width: math.max(bounds.size.width, vertical ? 28 : 80),
-      height: math.max(bounds.size.height, 28),
+      x: initialBounds.left,
+      y: initialBounds.top,
+      width: math.max(initialBounds.size.width, vertical ? 28 : 80),
+      height: math.max(initialBounds.size.height, 28),
       text: text,
       fontSize: block.type == 'heading' ? 28 : 20,
       fontFamily: _defaultStyle.fontFamily ?? 'Excalifont',
@@ -2791,10 +2810,118 @@ class MarkdrawController extends ChangeNotifier {
     );
     final styled = applyDefaultStyleToElement(element) as TextElement;
     final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
-    return styled.copyWith(
+    final measured = styled.copyWith(
       width: math.max(styled.width, measuredWidth),
       height: math.max(styled.height, measuredHeight),
     );
+    final placedBounds = _nonOverlappingSmartLayoutBounds(
+      Bounds.fromLTWH(measured.x, measured.y, measured.width, measured.height),
+      block,
+      layoutIndex,
+      occupied,
+      vertical,
+    );
+    return measured.copyWith(x: placedBounds.left, y: placedBounds.top);
+  }
+
+  Bounds _fallbackSmartLayoutBounds(SmartLayoutBlock block, int layoutIndex) {
+    final page = _smartLayoutPageForBlock(block);
+    if (page == null) {
+      return Bounds.fromLTWH(0, layoutIndex * 40.0, 240, 32);
+    }
+    final geometry = TemplateAnchorResolver.resolve(page);
+    final content = geometry.contentRect;
+    if (block.writingMode == 'vertical') {
+      return Bounds.fromLTWH(
+        content.right - 36 - layoutIndex * 44.0,
+        content.top,
+        36,
+        math.min(240, content.height),
+      );
+    }
+    return Bounds.fromLTWH(
+      content.left,
+      content.top + layoutIndex * 40.0,
+      math.min(320, content.width),
+      32,
+    );
+  }
+
+  Bounds _nonOverlappingSmartLayoutBounds(
+    Bounds candidate,
+    SmartLayoutBlock block,
+    int layoutIndex,
+    List<Bounds> occupied,
+    bool vertical,
+  ) {
+    var placed = candidate;
+    if (occupied.isEmpty) {
+      return placed;
+    }
+    final page = _smartLayoutPageForBlock(block);
+    final contentRect = page == null
+        ? null
+        : TemplateAnchorResolver.resolve(page).contentRect;
+    for (var attempts = 0; attempts < occupied.length + 8; attempts++) {
+      final collision = occupied
+          .where((bounds) => placed.intersects(bounds))
+          .fold<Bounds?>(null, (merged, bounds) {
+            return merged == null ? bounds : merged.union(bounds);
+          });
+      if (collision == null) {
+        return placed;
+      }
+      if (vertical) {
+        final nextLeft = collision.left - placed.size.width - 12;
+        placed = Bounds.fromLTWH(
+          contentRect == null ? nextLeft : math.max(contentRect.left, nextLeft),
+          contentRect?.top ?? candidate.top,
+          placed.size.width,
+          placed.size.height,
+        );
+      } else {
+        final nextTop = collision.bottom + 12;
+        placed = Bounds.fromLTWH(
+          contentRect?.left ?? candidate.left,
+          contentRect == null ? nextTop : math.min(nextTop, contentRect.bottom),
+          placed.size.width,
+          placed.size.height,
+        );
+      }
+    }
+    if (vertical) {
+      return Bounds.fromLTWH(
+        candidate.left - layoutIndex * (candidate.size.width + 12),
+        candidate.top,
+        candidate.size.width,
+        candidate.size.height,
+      );
+    }
+    return Bounds.fromLTWH(
+      candidate.left,
+      candidate.top + layoutIndex * (candidate.size.height + 12),
+      candidate.size.width,
+      candidate.size.height,
+    );
+  }
+
+  CanvasPage? _smartLayoutPageForBlock(SmartLayoutBlock block) {
+    if (!_layout.isPaged) return null;
+    final pages = _layout.ensurePage().pages;
+    if (pages.isEmpty) return null;
+    final pageId = block.pageId;
+    if (pageId != null) {
+      for (final page in pages) {
+        if (page.id == pageId) {
+          return page;
+        }
+      }
+    }
+    final bounds = block.bounds;
+    if (bounds != null) {
+      return _layout.pageAt(Offset(bounds.center.x, bounds.center.y));
+    }
+    return pages.first;
   }
 
   bool get canConvertSelectionToText {
