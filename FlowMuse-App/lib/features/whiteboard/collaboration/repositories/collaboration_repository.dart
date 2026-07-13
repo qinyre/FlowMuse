@@ -16,6 +16,12 @@ import '../services/encrypted_scene_store.dart';
 import '../services/realtime_transport.dart';
 import '../services/scene_reconciler.dart';
 
+class _VersionRecord {
+  const _VersionRecord(this.version, this.versionNonce);
+  final int version;
+  final int versionNonce;
+}
+
 class CollaborationRepository {
   CollaborationRepository({
     RealtimeTransport? transport,
@@ -42,7 +48,7 @@ class CollaborationRepository {
   final SceneReconciler _reconciler;
   final CollaborationFileManager _fileManager = CollaborationFileManager();
   final math.Random _random = math.Random();
-  final Map<String, int> _broadcastedElementVersions = {};
+  final Map<String, _VersionRecord> _broadcastedElementVersions = {};
   final StreamController<String> _repositoryErrors =
       StreamController<String>.broadcast();
   final StreamController<CollaborationMessage> _messages =
@@ -360,7 +366,7 @@ class CollaborationRepository {
       elements: _reconciler.getSyncableElements(reconciled),
     );
     _latestScene = nextScene;
-    _rememberBroadcasted(remoteElements);
+    _rememberBroadcasted(nextScene.elements);
     _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
       nextScene.elements,
     );
@@ -689,14 +695,26 @@ class CollaborationRepository {
     return [
       for (final element in elements)
         if (!_broadcastedElementVersions.containsKey(_id(element)) ||
-            _version(element) > _broadcastedElementVersions[_id(element)]!)
+            _isNewerThanBroadcasted(element))
           element,
     ];
   }
 
+  bool _isNewerThanBroadcasted(Map<String, Object?> element) {
+    final record = _broadcastedElementVersions[_id(element)]!;
+    final v = (element['version'] as num).toInt();
+    final n = (element['versionNonce'] as num).toInt();
+    if (v > record.version) return true;
+    if (v < record.version) return false;
+    return n < record.versionNonce; // 同版本 nonce 小者胜（对齐 _shouldKeepLocal）
+  }
+
   void _rememberBroadcasted(List<Map<String, Object?>> elements) {
     for (final element in elements) {
-      _broadcastedElementVersions[_id(element)] = _version(element);
+      _broadcastedElementVersions[_id(element)] = _VersionRecord(
+        (element['version'] as num).toInt(),
+        (element['versionNonce'] as num).toInt(),
+      );
     }
   }
 
