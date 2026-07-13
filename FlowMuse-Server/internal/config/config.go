@@ -32,6 +32,10 @@ type Config struct {
 	MyScriptHMACKey    string
 	MyScriptEndpoint   string
 	RecognitionTimeout time.Duration
+	AIBaseURL          string
+	AIAPIKey           string
+	AIModel            string
+	AITimeout          time.Duration
 }
 
 func Load() (Config, error) {
@@ -63,6 +67,10 @@ func Load() (Config, error) {
 			"FLOWMUSE_RECOGNITION_TIMEOUT",
 			20*time.Second,
 		),
+		AIBaseURL: os.Getenv("FLOWMUSE_AI_BASE_URL"),
+		AIAPIKey:  os.Getenv("FLOWMUSE_AI_API_KEY"),
+		AIModel:   os.Getenv("FLOWMUSE_AI_MODEL"),
+		AITimeout: envDuration("FLOWMUSE_AI_TIMEOUT", 60*time.Second),
 	}
 	cfg.S3AccessKeyID = os.Getenv("FLOWMUSE_S3_ACCESS_KEY_ID")
 	cfg.S3SecretAccessKey = os.Getenv("FLOWMUSE_S3_SECRET_ACCESS_KEY")

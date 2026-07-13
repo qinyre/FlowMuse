@@ -14,6 +14,7 @@ class PdfNoteImportService {
     required Future<PdfNoteImportPayload?> Function() picker,
     required NoteType noteType,
     required PageTemplate pageTemplate,
+    required PageFlow pageFlow,
   }) async {
     final payload = await picker();
     if (payload == null) {
@@ -24,6 +25,7 @@ class PdfNoteImportService {
       kind: LibraryFilter.pdf,
       noteType: noteType,
       pageTemplate: pageTemplate,
+      pageFlow: pageFlow,
       title: _titleFromFileName(payload.name),
       subtitle: payload.name,
     );

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
@@ -386,31 +387,42 @@ class StaticCanvasPainter extends CustomPainter {
         .clamp(0.0, 1.0)
         .toDouble();
     final label = hint.readyToRelease ? '松开添加新页面' : '拉动添加新页面';
-    final center = Offset(
-      lastPage.bounds.center.dx,
-      lastPage.bounds.bottom + 48 / viewport.zoom,
+    final center = layout?.isRightToLeft ?? false
+        ? Offset(
+            lastPage.bounds.left - 48 / viewport.zoom,
+            lastPage.bounds.center.dy,
+          )
+        : Offset(
+            lastPage.bounds.center.dx,
+            lastPage.bounds.bottom + 48 / viewport.zoom,
+          );
+    final textStyle = TextStyle(
+      color: Color.lerp(
+        const Color(0xFF6F786F),
+        const Color(0xFF2F6F61),
+        progress,
+      ),
+      fontSize: 14 / viewport.zoom,
+      fontWeight: FontWeight.w600,
     );
     final textPainter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: TextStyle(
-          color: Color.lerp(
-            const Color(0xFF6F786F),
-            const Color(0xFF2F6F61),
-            progress,
-          ),
-          fontSize: 14 / viewport.zoom,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      text: TextSpan(text: label, style: textStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     final horizontalPadding = 18 / viewport.zoom;
     final verticalPadding = 9 / viewport.zoom;
+    final verticalText = layout?.isRightToLeft ?? false;
+    final verticalLabelMetrics = verticalText
+        ? _measureVerticalLabel(label, textStyle)
+        : null;
     final rect = Rect.fromCenter(
       center: center,
-      width: textPainter.width + horizontalPadding * 2,
-      height: textPainter.height + verticalPadding * 2,
+      width:
+          (verticalLabelMetrics?.width ?? textPainter.width) +
+          horizontalPadding * 2,
+      height:
+          (verticalLabelMetrics?.height ?? textPainter.height) +
+          verticalPadding * 2,
     );
     final radius = Radius.circular(8 / viewport.zoom);
     final roundedRect = RRect.fromRectAndRadius(rect, radius);
@@ -435,18 +447,69 @@ class StaticCanvasPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1 / viewport.zoom,
     );
-    textPainter.paint(
-      canvas,
-      Offset(
-        rect.left + horizontalPadding,
-        rect.top + (rect.height - textPainter.height) / 2,
-      ),
-    );
+    if (verticalText) {
+      final metrics = verticalLabelMetrics!;
+      _paintVerticalLabel(
+        canvas,
+        label,
+        textStyle,
+        metrics.width,
+        Offset(
+          rect.left + (rect.width - metrics.width) / 2,
+          rect.top + verticalPadding,
+        ),
+      );
+    } else {
+      textPainter.paint(
+        canvas,
+        Offset(
+          rect.left + horizontalPadding,
+          rect.top + (rect.height - textPainter.height) / 2,
+        ),
+      );
+    }
     textPainter.dispose();
   }
 
+  Size _measureVerticalLabel(String label, TextStyle style) {
+    var width = 0.0;
+    var height = 0.0;
+    for (final rune in label.runes) {
+      final painter = TextPainter(
+        text: TextSpan(text: String.fromCharCode(rune), style: style),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      width = math.max(width, painter.width);
+      height += painter.height;
+      painter.dispose();
+    }
+    return Size(width, height);
+  }
+
+  void _paintVerticalLabel(
+    Canvas canvas,
+    String label,
+    TextStyle style,
+    double columnWidth,
+    Offset offset,
+  ) {
+    var dy = offset.dy;
+    for (final rune in label.runes) {
+      final painter = TextPainter(
+        text: TextSpan(text: String.fromCharCode(rune), style: style),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      painter.paint(
+        canvas,
+        Offset(offset.dx + (columnWidth - painter.width) / 2, dy),
+      );
+      dy += painter.height;
+      painter.dispose();
+    }
+  }
+
   void _renderPageTemplate(Canvas canvas, CanvasPage page) {
-    final rect = page.bounds.deflate(32);
+    final rect = page.bounds.deflate(TemplateGeometry.pageTemplateMargin);
     final paint = Paint()
       ..color = const Color(0xFFD6DED9)
       ..strokeWidth = 1 / viewport.zoom;
@@ -463,18 +526,10 @@ class StaticCanvasPainter extends CustomPainter {
         }
       case CanvasPageTemplate.grid:
         for (var x = rect.left; x < rect.right; x += 32) {
-          canvas.drawLine(
-            Offset(x, page.bounds.top),
-            Offset(x, page.bounds.bottom),
-            paint,
-          );
+          canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
         }
         for (var y = rect.top; y < rect.bottom; y += 32) {
-          canvas.drawLine(
-            Offset(page.bounds.left, y),
-            Offset(page.bounds.right, y),
-            paint,
-          );
+          canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
         }
       case CanvasPageTemplate.dotGrid:
         for (var x = rect.left; x < rect.right; x += 32) {
@@ -482,6 +537,161 @@ class StaticCanvasPainter extends CustomPainter {
             canvas.drawCircle(Offset(x, y), 1.5 / viewport.zoom, paint);
           }
         }
+      case CanvasPageTemplate.tianGrid:
+        _renderPracticeGrid(canvas, rect, paint, diagonal: false);
+      case CanvasPageTemplate.miGrid:
+        _renderPracticeGrid(canvas, rect, paint, diagonal: true);
+      case CanvasPageTemplate.narrowVerticalLine:
+        for (var x = rect.left + 18; x < rect.right; x += 24) {
+          canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
+        }
+      case CanvasPageTemplate.wideVerticalLine:
+        for (var x = rect.left + 24; x < rect.right; x += 36) {
+          canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
+        }
+      case CanvasPageTemplate.fourLineGrid:
+        for (var y = rect.top + 18; y + 24 < rect.bottom; y += 56) {
+          for (var i = 0; i < 4; i++) {
+            final lineY = y + i * 8;
+            canvas.drawLine(
+              Offset(rect.left, lineY),
+              Offset(rect.right, lineY),
+              paint,
+            );
+          }
+        }
+      case CanvasPageTemplate.ancientBook:
+        _renderAncientBookTemplate(canvas, rect);
+    }
+  }
+
+  void _renderAncientBookTemplate(Canvas canvas, Rect rect) {
+    final framePaint = Paint()
+      ..color = const Color(0xFF343A34)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6 / viewport.zoom;
+    final columnPaint = Paint()
+      ..color = const Color(0xFF9D9883)
+      ..strokeWidth = 1 / viewport.zoom;
+
+    final frame = rect;
+    canvas.drawRect(frame, framePaint);
+
+    final centerX = frame.center.dx;
+    const gutterWidth = TemplateGeometry.ancientBookGutterWidth;
+    final gutterLeft = centerX - gutterWidth / 2;
+    final gutterRight = centerX + gutterWidth / 2;
+    canvas.drawLine(
+      Offset(gutterLeft, frame.top),
+      Offset(gutterLeft, frame.bottom),
+      framePaint,
+    );
+    canvas.drawLine(
+      Offset(gutterRight, frame.top),
+      Offset(gutterRight, frame.bottom),
+      framePaint,
+    );
+    _renderAncientBookGutter(canvas, frame, centerX, gutterWidth, columnPaint);
+
+    _renderAncientBookColumns(
+      canvas,
+      Rect.fromLTRB(frame.left, frame.top, gutterLeft, frame.bottom),
+      columnPaint,
+    );
+    _renderAncientBookColumns(
+      canvas,
+      Rect.fromLTRB(gutterRight, frame.top, frame.right, frame.bottom),
+      columnPaint,
+    );
+  }
+
+  void _renderAncientBookColumns(Canvas canvas, Rect rect, Paint paint) {
+    const columnWidth = TemplateGeometry.ancientBookColumnWidth;
+    for (var x = rect.left + columnWidth; x < rect.right; x += columnWidth) {
+      canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
+    }
+  }
+
+  void _renderAncientBookGutter(
+    Canvas canvas,
+    Rect frame,
+    double centerX,
+    double gutterWidth,
+    Paint paint,
+  ) {
+    final seamPaint = Paint.from(paint)..strokeWidth = 0.8 / viewport.zoom;
+    final markPaint = Paint()
+      ..color = const Color(0xFF343A34)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawLine(
+      Offset(centerX, frame.top),
+      Offset(centerX, frame.bottom),
+      seamPaint,
+    );
+    final fishTailWidth = gutterWidth * 0.42;
+    _renderAncientBookFishTail(
+      canvas,
+      Offset(centerX, frame.top + frame.height * 0.34),
+      fishTailWidth,
+      markPaint,
+    );
+    _renderAncientBookFishTail(
+      canvas,
+      Offset(centerX, frame.top + frame.height * 0.66),
+      fishTailWidth,
+      markPaint,
+    );
+  }
+
+  void _renderAncientBookFishTail(
+    Canvas canvas,
+    Offset center,
+    double width,
+    Paint paint,
+  ) {
+    const height = 22.0;
+    final path = Path()
+      ..moveTo(center.dx, center.dy - height / 2)
+      ..lineTo(center.dx + width / 2, center.dy - height / 2)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(center.dx + width / 2, center.dy + height / 2)
+      ..lineTo(center.dx, center.dy + height / 2)
+      ..lineTo(center.dx - width / 2, center.dy + height / 2)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(center.dx - width / 2, center.dy - height / 2)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  void _renderPracticeGrid(
+    Canvas canvas,
+    Rect rect,
+    Paint paint, {
+    required bool diagonal,
+  }) {
+    final strokePaint = Paint.from(paint)..style = PaintingStyle.stroke;
+    const cell = TemplateGeometry.practiceCell;
+    const gap = TemplateGeometry.practiceGap;
+    for (var left = rect.left; left + cell <= rect.right; left += cell + gap) {
+      for (var top = rect.top; top + cell <= rect.bottom; top += cell + gap) {
+        final cellRect = Rect.fromLTWH(left, top, cell, cell);
+        canvas.drawRect(cellRect, strokePaint);
+        canvas.drawLine(
+          Offset(cellRect.left + cellRect.width / 2, cellRect.top),
+          Offset(cellRect.left + cellRect.width / 2, cellRect.bottom),
+          strokePaint,
+        );
+        canvas.drawLine(
+          Offset(cellRect.left, cellRect.top + cellRect.height / 2),
+          Offset(cellRect.right, cellRect.top + cellRect.height / 2),
+          strokePaint,
+        );
+        if (diagonal) {
+          canvas.drawLine(cellRect.topLeft, cellRect.bottomRight, strokePaint);
+          canvas.drawLine(cellRect.topRight, cellRect.bottomLeft, strokePaint);
+        }
+      }
     }
   }
 

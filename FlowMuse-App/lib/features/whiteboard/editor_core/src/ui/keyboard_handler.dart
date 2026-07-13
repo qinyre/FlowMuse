@@ -3,7 +3,8 @@ library;
 import 'package:flutter/material.dart' hide Element;
 import 'package:flutter/services.dart';
 
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' hide TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    hide TextAlign;
 
 /// Builds shortcut bindings for system-level shortcuts (Cmd+S, Cmd+O, etc.)
 /// that macOS intercepts before KeyEvent reaches Flutter.
@@ -160,6 +161,13 @@ bool handleKeyEvent({
   if (key == LogicalKeyboardKey.pageDown || key == LogicalKeyboardKey.pageUp) {
     final size = getCanvasSize();
     final down = key == LogicalKeyboardKey.pageDown;
+    if (controller.isPagedViewport && !shift) {
+      final mainAxisExtent = controller.layout.isRightToLeft
+          ? size.width
+          : size.height;
+      controller.scrollPagedViewportBy(down ? mainAxisExtent : -mainAxisExtent);
+      return true;
+    }
     if (shift) {
       controller.panViewport(
         down

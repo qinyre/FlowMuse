@@ -3,17 +3,26 @@ import 'dart:math' as math;
 import '../elements/elements.dart';
 import '../layout/layout.dart';
 import '../math/math.dart';
+import '../smart_layout/smart_layout_document.dart';
 
 /// An immutable collection of drawing elements with CRUD operations.
 class Scene {
   final List<Element> _elements;
   final Map<String, ImageFile> files;
+  final SmartLayoutDocument? smartLayout;
 
-  Scene() : _elements = const [], files = const {};
+  Scene() : _elements = const [], files = const {}, smartLayout = null;
 
-  Scene._(List<Element> elements, [Map<String, ImageFile>? files])
-    : _elements = List.unmodifiable(elements),
-      files = files != null ? Map.unmodifiable(files) : const {};
+  Scene._(
+    List<Element> elements, [
+    Map<String, ImageFile>? files,
+    this.smartLayout,
+  ]) : _elements = List.unmodifiable(elements),
+       files = files != null ? Map.unmodifiable(files) : const {};
+
+  Scene withSmartLayout(SmartLayoutDocument? document) {
+    return Scene._(_elements.toList(), files, document);
+  }
 
   /// All elements in the scene (including soft-deleted).
   List<Element> get elements => _elements;
@@ -36,14 +45,14 @@ class Scene {
 
   /// Returns a new scene with the element added.
   Scene addElement(Element element) {
-    return Scene._([..._elements, element], files);
+    return Scene._([..._elements, element], files, smartLayout);
   }
 
   /// Returns a new scene with the element removed by [id].
   Scene removeElement(ElementId id) {
     final filtered = _elements.where((e) => e.id != id).toList();
     if (filtered.length == _elements.length) return this;
-    return Scene._(filtered, files);
+    return Scene._(filtered, files, smartLayout);
   }
 
   /// Returns a new scene with the element replaced.
@@ -55,7 +64,7 @@ class Scene {
       }
       return e;
     }).toList();
-    return Scene._(updated, files);
+    return Scene._(updated, files, smartLayout);
   }
 
   /// Finds an element by [id], or returns null.
@@ -72,18 +81,18 @@ class Scene {
       if (e.id == id) return e.softDelete();
       return e;
     }).toList();
-    return Scene._(updated, files);
+    return Scene._(updated, files, smartLayout);
   }
 
   /// Returns a new scene with the file added to the store.
   Scene addFile(String fileId, ImageFile file) {
-    return Scene._(_elements.toList(), {...files, fileId: file});
+    return Scene._(_elements.toList(), {...files, fileId: file}, smartLayout);
   }
 
   /// Returns a new scene with the file removed from the store.
   Scene removeFile(String fileId) {
     final newFiles = Map<String, ImageFile>.of(files)..remove(fileId);
-    return Scene._(_elements.toList(), newFiles);
+    return Scene._(_elements.toList(), newFiles, smartLayout);
   }
 
   /// Returns the bound text element whose [containerId] matches [parentId],

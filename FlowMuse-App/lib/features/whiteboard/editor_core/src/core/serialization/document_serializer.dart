@@ -52,6 +52,14 @@ class DocumentSerializer {
       _serializeFiles(buffer, doc);
     }
 
+    if (doc.smartLayout != null) {
+      if (buffer.isNotEmpty) {
+        buffer.writeln();
+        buffer.writeln();
+      }
+      _serializeSmartLayout(buffer, doc);
+    }
+
     return buffer.toString();
   }
 
@@ -124,6 +132,14 @@ class DocumentSerializer {
       final b64 = base64Encode(entry.value.bytes);
       buffer.writeln('${entry.key} ${entry.value.mimeType} $b64');
     }
+    buffer.write('```');
+  }
+
+  static void _serializeSmartLayout(StringBuffer buffer, MarkdrawDocument doc) {
+    buffer.writeln('```flowmuse-smart-layout');
+    buffer.writeln(
+      const JsonEncoder.withIndent('  ').convert(doc.smartLayout!.toJson()),
+    );
     buffer.write('```');
   }
 }

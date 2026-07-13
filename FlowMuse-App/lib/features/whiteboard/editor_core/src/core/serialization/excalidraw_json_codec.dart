@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../elements/elements.dart';
 import '../math/math.dart';
+import '../smart_layout/smart_layout_document.dart';
 import 'canvas_settings.dart';
 import 'document_section.dart';
 import 'markdraw_document.dart';
@@ -82,6 +83,8 @@ class ExcalidrawJsonCodec {
       'appState': <String, dynamic>{
         'viewBackgroundColor': doc.settings.background,
         if (doc.settings.name != null) 'name': doc.settings.name,
+        if (doc.smartLayout != null)
+          'flowMuse': {'smartLayout': doc.smartLayout!.toJson()},
       },
       'files': filesJson,
     };
@@ -290,12 +293,22 @@ class ExcalidrawJsonCodec {
     final name = (appState is Map<String, dynamic>)
         ? appState['name'] as String?
         : null;
+    SmartLayoutDocument? smartLayout;
+    if (appState is Map<String, dynamic>) {
+      final flowMuse = appState['flowMuse'];
+      if (flowMuse is Map && flowMuse['smartLayout'] is Map) {
+        smartLayout = SmartLayoutDocument.fromJson(
+          Map<String, Object?>.from(flowMuse['smartLayout'] as Map),
+        );
+      }
+    }
 
     return ParseResult(
       value: MarkdrawDocument(
         sections: [SketchSection(elements)],
         files: files,
         settings: CanvasSettings(background: viewBg, name: name),
+        smartLayout: smartLayout,
       ),
       warnings: warnings,
     );

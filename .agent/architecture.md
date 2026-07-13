@@ -10,24 +10,12 @@
 
 FlowMuse 是跨平台协同白板应用,三层架构:
 
-```
-┌──────────────────────────────────────────────────────────┐
-│              FlowMuse-App (Flutter 前端)                  │
-│  6 端:Android / iOS / macOS / Windows / Web / 鸿蒙         │
-│  本地 SQLite 离线优先 + 自研编辑器内核 + E2E 加密协作客户端  │
-└───────────────┬──────────────────────┬───────────────────┘
-                │ HTTP (REST)           │ Socket.IO (WebSocket)
-                ▼                       ▼
-┌──────────────────────────────────────────────────────────┐
-│              FlowMuse-Server (Go 后端)                    │
-│  协作房间中转 + 账户认证 + 手写识别代理 + 加密快照存储       │
-│  (服务端只见密文,不解密)                                   │
-└──────┬──────────────┬───────────────┬────────────────────┘
-       │              │               │
-       ▼              ▼               ▼
-  PostgreSQL 17    MinIO         Mailpit
-  (用户/房间元数据) (加密快照/图片) (注册邮件,开发用)
-```
+| 层级 | 组件 | 职责 |
+|------|------|------|
+| 客户端 | `FlowMuse-App`(Flutter 前端) | 面向 Android / iOS / macOS / Windows / Web / 鸿蒙 6 端;提供本地 SQLite 离线优先、自研编辑器内核、E2E 加密协作客户端 |
+| 通信 | HTTP REST + Socket.IO(WebSocket) | HTTP 承载账户、识别、快照等请求;Socket.IO 承载实时协作消息 |
+| 服务端 | `FlowMuse-Server`(Go 后端) | 协作房间中转、账户认证、手写识别代理、加密快照存储;服务端只见密文,不解密 |
+| 基础设施 | PostgreSQL 17 / MinIO / Mailpit | PostgreSQL 存用户与房间元数据;MinIO 存加密快照与图片;Mailpit 用于开发环境注册邮件 |
 
 ### 关键架构特征
 
@@ -40,26 +28,15 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 
 ## 2. 前端分层架构
 
-```
-┌─ 展示层 ─────────────────────────────────────────────────┐
-│  views/widgets (ConsumerWidget)  +  shared/widgets(AppShell)│
-└───────────▲────────────────────────────▲──────────────────┘
-            │ ref.watch/read              │
-┌───────────┴──────────┐    ┌────────────┴───────────────┐
-│  view_models (Riverpod)│   │  app/(路由/主题/根组件)      │
-│  Notifier/AsyncNotifier│   │  flow_muse_app, app_router  │
-└───────────▲──────────┘    └────────────────────────────┘
-            │ 依赖注入(Provider 装配 Repository)
-┌───────────┴─────────────────────────────────────────────┐
-│  领域层 models(不可变值对象) + editor_core(编辑器内核)    │
-└───────────▲─────────────────────────────────────────────┘
-            │
-┌───────────┴─────────────────────────────────────────────┐
-│  数据层 repositories + shared/storage(SQLite/secure store)│
-└───────┬───────────────┬───────────────┬─────────────────┘
-        ▼               ▼               ▼
-   本地 SQLite      后端 HTTP       Socket.IO
-```
+| 层级 | 主要目录/组件 | 说明 |
+|------|---------------|------|
+| 展示层 | `views/`、`widgets/`、`shared/widgets/AppShell` | 页面与组件以 `ConsumerWidget` 为主,通过 `ref.watch/read` 读取状态与触发动作 |
+| 状态层 | `view_models/` | Riverpod `Notifier` / `AsyncNotifier`,承接页面状态、命令入口和派生视图状态 |
+| 应用层 | `app/` | 路由、主题、根组件,核心入口包括 `flow_muse_app` 与 `app_router` |
+| 领域层 | `models/`、`editor_core/` | 不可变值对象与编辑器内核,承载核心业务语义 |
+| 数据层 | `repositories/`、`shared/storage/` | Repository 统一访问 SQLite、secure store、后端 HTTP 和 Socket.IO |
+
+依赖方向固定为:展示层读取状态层,状态层通过 Provider 注入 Repository,Repository 再访问本地或远端数据源。
 
 ### Feature 切分
 
@@ -88,17 +65,14 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 
 资料库的核心设计是 **`libraryIndexProvider` 作为 SSOT**:
 
-```
-SQLite (flowmuse_local.db)
-   │ loadIndex() 一次性加载
-   ▼
-libraryIndexProvider (AsyncNotifier<LibraryIndex>)  ← SSOT
-   │ ref.watch
-   ├──► libraryHomeViewModelProvider  (首页笔记列表)
-   ├──► notebooksViewModelProvider    (笔记本页)
-   ├──► tagsViewModelProvider         (标签页)
-   └──► search_page                   (搜索,直接读 index 内存过滤)
-```
+| 步骤 | 数据节点 | 职责 |
+|------|----------|------|
+| 1 | SQLite(`flowmuse_local.db`) | Repository 通过 `loadIndex()` 一次性加载资料库索引 |
+| 2 | `libraryIndexProvider`(`AsyncNotifier<LibraryIndex>`) | 作为资料库唯一事实源(SSOT) |
+| 3 | `libraryHomeViewModelProvider` | 首页笔记列表通过 `ref.watch` 派生 |
+| 4 | `notebooksViewModelProvider` | 笔记本页通过 `ref.watch` 派生 |
+| 5 | `tagsViewModelProvider` | 标签页通过 `ref.watch` 派生 |
+| 6 | `search_page` | 直接读取 index 做内存过滤,不额外查 SQL |
 
 - 所有写操作走 `LibraryIndexNotifier` 的方法(内部调 repository + `refresh()` 重载)。
 - 派生 ViewModel 只 watch `libraryIndexProvider`,不直接查数据库。
@@ -108,19 +82,18 @@ libraryIndexProvider (AsyncNotifier<LibraryIndex>)  ← SSOT
 
 ## 4. 编辑器内核(editor_core / markdraw)骨架
 
-```
-editor_core/src/
-├── core/           领域模型
-│   ├── elements/   元素类型体系(rectangle/text/freedraw/image/...)
-│   ├── scene/      Scene(不可变元素集合 + 命中检测)
-│   ├── history/    HistoryManager(双栈快照,undo/redo)
-│   ├── serialization/  .markdraw 与 .excalidraw 双格式
-│   └── pdf/        PDF 渲染与导入
-├── editor/         EditorState + Tool 体系(Tool → ToolResult → 状态折叠)
-├── input/          手写笔输入管线(OneEuro 滤波 + 压感 + 转角保护)
-├── rendering/      StaticCanvasPainter + 交互层 + rough 手绘风格
-└── ui/             MarkdrawController(对外控制器,3679 行)
-```
+| 目录 | 职责 |
+|------|------|
+| `editor_core/src/core/` | 领域模型总入口 |
+| `editor_core/src/core/elements/` | 元素类型体系,包括 rectangle / text / freedraw / image 等 |
+| `editor_core/src/core/scene/` | `Scene`,负责不可变元素集合与命中检测 |
+| `editor_core/src/core/history/` | `HistoryManager`,负责双栈快照、undo 和 redo |
+| `editor_core/src/core/serialization/` | `.markdraw` 与 `.excalidraw` 双格式序列化 |
+| `editor_core/src/core/pdf/` | PDF 渲染与导入 |
+| `editor_core/src/editor/` | `EditorState` + Tool 体系,按 Tool、ToolResult、状态折叠组织 |
+| `editor_core/src/input/` | 手写笔输入管线,包括 OneEuro 滤波、压感、转角保护 |
+| `editor_core/src/rendering/` | `StaticCanvasPainter`、交互层、rough 手绘风格 |
+| `editor_core/src/ui/` | `MarkdrawController` 对外控制器 |
 
 ### 关键设计模式
 
@@ -151,16 +124,14 @@ editor_core/src/
 
 ## 6. 后端架构(FlowMuse-Server)
 
-```
-FlowMuse-Server/
-├── cmd/flowmuse-collab-server/main.go   # 入口
-└── internal/
-    ├── config/    # 配置(环境变量)
-    ├── auth/      # 账户认证(HTTP API / token / 邮件 / user_store)
-    ├── collab/    # 协作房间(hub / events / http_api)
-    ├── recognition/  # 手写识别代理(myscript)
-    └── storage/   # 持久化(room_store / scene_store / file_store)
-```
+| 路径 | 职责 |
+|------|------|
+| `FlowMuse-Server/cmd/flowmuse-collab-server/main.go` | 服务端入口 |
+| `FlowMuse-Server/internal/config/` | 环境变量与配置 |
+| `FlowMuse-Server/internal/auth/` | 账户认证,包括 HTTP API、token、邮件、user_store |
+| `FlowMuse-Server/internal/collab/` | 协作房间,包括 hub、events、http_api |
+| `FlowMuse-Server/internal/recognition/` | 手写识别代理,对接 MyScript |
+| `FlowMuse-Server/internal/storage/` | 持久化,包括 room_store、scene_store、file_store |
 
 | 组件 | 技术 |
 |------|------|
@@ -185,22 +156,15 @@ FlowMuse-Server/
 
 ## 7. 启动流程
 
-```
-main()
- ├─ WidgetsFlutterBinding.ensureInitialized()
- ├─ dotenv.load(isOptional: true)        # .env 配置
- ├─ PencilShader.init()                  # shader(鸿蒙等静默降级)
- ├─ loadSavedThemePreset()               # 从 SQLite 读主题
- └─ runApp(ProviderScope(
-        overrides: [initialThemePresetProvider.overrideWithValue(...)],
-        child: FlowMuseApp()))
-              │
-              ▼  MaterialApp.router
-        GoRouter (initialLocation: /library)
-              │
-              ▼  ShellRoute + AppShell
-        LibraryHomePage → ref.watch(libraryIndexProvider) → loadIndex()
-```
+1. `main()` 调用 `WidgetsFlutterBinding.ensureInitialized()`。
+2. `dotenv.load(isOptional: true)` 加载可选 `.env` 配置。
+3. `PencilShader.init()` 初始化 shader,鸿蒙等不支持平台需要静默降级。
+4. `loadSavedThemePreset()` 从 SQLite 读取已保存主题。
+5. `runApp()` 启动 `ProviderScope`,并通过 `initialThemePresetProvider.overrideWithValue(...)` 注入初始主题。
+6. `FlowMuseApp` 构建 `MaterialApp.router`。
+7. `GoRouter` 以 `/library` 作为初始路由。
+8. `ShellRoute` 挂载 `AppShell`。
+9. `LibraryHomePage` 通过 `ref.watch(libraryIndexProvider)` 触发 `loadIndex()`。
 
 启动卡顿/白屏排查优先级:
 1. **数据库迁移是否崩溃**(onUpgrade 抛异常 → openDatabase 失败)—— 见 `decisions.md` ADR-001

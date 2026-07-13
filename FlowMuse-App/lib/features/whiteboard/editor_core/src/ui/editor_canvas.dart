@@ -29,7 +29,7 @@ class EditorCanvas extends StatefulWidget {
 
 class _EditorCanvasState extends State<EditorCanvas>
     with SingleTickerProviderStateMixin {
-  static const double _appendPageReleaseThreshold = 140;
+  static const double _appendPageReleaseThreshold = 196;
   static const double _appendPageMaxOverscroll = 228;
 
   MarkdrawController get controller => widget.controller;
@@ -82,27 +82,29 @@ class _EditorCanvasState extends State<EditorCanvas>
       return;
     }
 
-    final scrollDeltaY = -event.delta.dy;
-    if (scrollDeltaY == 0) {
+    final scrollDelta = controller.layout.isRightToLeft
+        ? event.delta.dx
+        : -event.delta.dy;
+    if (scrollDelta == 0) {
       return;
     }
 
-    if (_appendPageOverscroll > 0 && scrollDeltaY < 0) {
-      _setAppendPageOverscroll(_appendPageOverscroll + scrollDeltaY);
+    if (_appendPageOverscroll > 0 && scrollDelta < 0) {
+      _setAppendPageOverscroll(_appendPageOverscroll + scrollDelta);
       widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
       return;
     }
 
     final metrics = controller.pagedViewportMetrics;
-    if (metrics != null && metrics.atEnd && scrollDeltaY > 0) {
+    if (metrics != null && metrics.atEnd && scrollDelta > 0) {
       _setAppendPageOverscroll(
-        _appendPageOverscroll + scrollDeltaY * _elasticFactor,
+        _appendPageOverscroll + scrollDelta * _elasticFactor,
       );
       widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
       return;
     }
 
-    controller.scrollPagedViewportBy(scrollDeltaY);
+    controller.scrollPagedViewportBy(scrollDelta);
     widget.onVisibleSceneBoundsChanged?.call(controller.canvasSize);
   }
 
@@ -162,11 +164,11 @@ class _EditorCanvasState extends State<EditorCanvas>
     if (_appendPageOverscroll <= 0) {
       return viewport;
     }
+    final sceneOverscroll = _appendPageOverscroll / viewport.zoom;
     return ViewportState(
-      offset: Offset(
-        viewport.offset.dx,
-        viewport.offset.dy + _appendPageOverscroll / viewport.zoom,
-      ),
+      offset: controller.layout.isRightToLeft
+          ? Offset(viewport.offset.dx - sceneOverscroll, viewport.offset.dy)
+          : Offset(viewport.offset.dx, viewport.offset.dy + sceneOverscroll),
       zoom: viewport.zoom,
     );
   }
@@ -466,25 +468,34 @@ class _PagedProgressIndicatorState extends State<_PagedProgressIndicator> {
 
     final cs = Theme.of(context).colorScheme;
 
-    return Positioned(
-      right: 10,
-      top: 0,
-      bottom: 0,
-      child: IgnorePointer(
-        child: Center(
-          child: ScrollbarTheme(
-            data: ScrollbarThemeData(
-              thumbColor: WidgetStatePropertyAll(
-                cs.primary.withValues(alpha: 0.72),
+    final theme = ScrollbarTheme(
+      data: ScrollbarThemeData(
+        thumbColor: WidgetStatePropertyAll(cs.primary.withValues(alpha: 0.72)),
+        trackColor: WidgetStatePropertyAll(
+          cs.outlineVariant.withValues(alpha: 0.38),
+        ),
+        trackBorderColor: const WidgetStatePropertyAll(Colors.transparent),
+        thickness: const WidgetStatePropertyAll(4),
+        radius: const Radius.circular(999),
+      ),
+      child: widget.controller.layout.isRightToLeft
+          ? SizedBox(
+              width: _trackHeight,
+              height: 18,
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                trackVisibility: true,
+                interactive: false,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  scrollDirection: Axis.horizontal,
+                  physics: const NeverScrollableScrollPhysics(),
+                  child: const SizedBox(width: _contentHeight, height: 1),
+                ),
               ),
-              trackColor: WidgetStatePropertyAll(
-                cs.outlineVariant.withValues(alpha: 0.38),
-              ),
-              trackBorderColor: WidgetStatePropertyAll(Colors.transparent),
-              thickness: const WidgetStatePropertyAll(4),
-              radius: const Radius.circular(999),
-            ),
-            child: SizedBox(
+            )
+          : SizedBox(
               width: 18,
               height: _trackHeight,
               child: Scrollbar(
@@ -499,9 +510,21 @@ class _PagedProgressIndicatorState extends State<_PagedProgressIndicator> {
                 ),
               ),
             ),
-          ),
-        ),
-      ),
+    );
+
+    if (widget.controller.layout.isRightToLeft) {
+      return Positioned(
+        left: 0,
+        right: 0,
+        bottom: 10,
+        child: IgnorePointer(child: Center(child: theme)),
+      );
+    }
+    return Positioned(
+      right: 10,
+      top: 0,
+      bottom: 0,
+      child: IgnorePointer(child: Center(child: theme)),
     );
   }
 }

@@ -59,3 +59,4 @@ app.*.map.json
 
 # HarmonyOS auto-generated
 ohos/entry/src/main/ets/plugins/GeneratedPluginRegistrant.ets
+FlowMuse-Server/.env

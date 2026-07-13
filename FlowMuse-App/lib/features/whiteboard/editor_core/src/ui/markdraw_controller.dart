@@ -6,7 +6,6 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
@@ -163,6 +162,7 @@ class MarkdrawController extends ChangeNotifier {
   double _pressureSensitivity = 0.7;
   BrushType _activeBrushType = BrushType.fountainPen;
   bool _inkRecognitionMode = false;
+  bool _smartInkLayoutMode = false;
 
   /// 每种笔形独立的状态缓存（参考 Saber 设计）。
   /// 切换笔形时自动保存/恢复颜色、粗细和压感灵敏度。
@@ -244,6 +244,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Called after recognition-pen strokes settle and should be recognized.
   Future<InkRecognitionResult> Function(InkRecognitionRequest)? onRecognizeInk;
+  Future<SmartLayoutResponse> Function(SmartLayoutRequest)? onSmartLayoutInk;
   void Function(bool enabled)? onInkRecognitionModeChanged;
 
   Timer? _inkRecognitionTimer;
@@ -390,9 +391,27 @@ class MarkdrawController extends ChangeNotifier {
   set inkRecognitionMode(bool value) {
     if (_inkRecognitionMode == value) return;
     _inkRecognitionMode = value;
+    if (!value) {
+      _smartInkLayoutMode = false;
+    }
     onInkRecognitionModeChanged?.call(value);
     notifyListeners();
   }
+
+  bool get smartInkLayoutMode => _smartInkLayoutMode;
+  set smartInkLayoutMode(bool value) {
+    if (_smartInkLayoutMode == value) return;
+    _smartInkLayoutMode = value;
+    if (value && !_inkRecognitionMode) {
+      _inkRecognitionMode = true;
+      onInkRecognitionModeChanged?.call(true);
+    }
+    notifyListeners();
+  }
+
+  bool get canExportSmartLayout =>
+      _editorState.scene.smartLayout != null &&
+      !_editorState.scene.smartLayout!.isEmpty;
 
   /// The user-assigned document name, or null.
   String? get documentName => _documentName;
@@ -810,11 +829,13 @@ class MarkdrawController extends ChangeNotifier {
   void _syncLayoutFromScene({
     CanvasLayoutType? fallbackType,
     CanvasPageTemplate? fallbackTemplate,
+    CanvasPageFlow? fallbackPageFlow,
   }) {
     _layout = CanvasLayout.fromScene(
       _editorState.scene.elements,
       fallbackType: fallbackType ?? _layout.type,
       fallbackTemplate: fallbackTemplate ?? _layout.template,
+      fallbackPageFlow: fallbackPageFlow ?? _layout.pageFlow,
     );
   }
 
@@ -884,6 +905,7 @@ class MarkdrawController extends ChangeNotifier {
           ids.add(id);
         case AddFileResult():
         case RemoveFileResult():
+        case SetSmartLayoutResult():
           requiresFullScene = true;
         case CompoundResult(:final results):
           for (final child in results) {
@@ -1239,13 +1261,34 @@ class MarkdrawController extends ChangeNotifier {
     double width,
     double height,
   ) {
+    final anchor = _smartInkLayoutMode
+        ? _nearestTemplateAnchor(Rect.fromLTWH(x, y, width, height))
+        : null;
+    final vertical = anchor?.writingMode == TemplateWritingMode.vertical;
+    final flowMuseData = anchor == null
+        ? null
+        : <String, Object?>{
+            'pageId': anchor.pageId,
+            'smartLayout': true,
+            if (vertical) 'writingMode': 'vertical',
+          };
     final element = TextElement(
       id: ElementId.generate(),
-      x: x,
-      y: y,
-      width: math.max(width, 1.0),
-      height: math.max(height, 1.0),
+      x: anchor?.position.dx ?? x,
+      y: anchor?.position.dy ?? y,
+      width: vertical
+          ? math.max(anchor!.fontSize * 1.2, width)
+          : math.max(width, 1.0),
+      height: vertical
+          ? math.max(
+              text.runes.length * anchor!.fontSize * anchor.lineHeight,
+              height,
+            )
+          : math.max(height, 1.0),
       text: text,
+      fontSize: anchor?.fontSize ?? 20.0,
+      lineHeight: anchor?.lineHeight ?? 1.25,
+      customData: flowMuseData == null ? null : {'flowMuse': flowMuseData},
     );
     final styled = applyDefaultStyleToElement(element) as TextElement;
     final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
@@ -1253,6 +1296,13 @@ class MarkdrawController extends ChangeNotifier {
       width: math.max(measuredWidth, styled.width),
       height: math.max(measuredHeight, styled.height),
     );
+  }
+
+  TemplateAnchor? _nearestTemplateAnchor(Rect bounds) {
+    if (!_layout.isPaged) return null;
+    final page = _layout.pageAt(bounds.center);
+    if (page == null) return null;
+    return TemplateAnchorResolver.resolve(page).nearestAnchor(bounds);
   }
 
   List<Point> _recognizedLinePoints(
@@ -2605,6 +2655,332 @@ class MarkdrawController extends ChangeNotifier {
     inkRecognitionMode = !_inkRecognitionMode;
   }
 
+  void toggleSmartInkLayoutMode() {
+    smartInkLayoutMode = !_smartInkLayoutMode;
+  }
+
+  Future<bool> runGlobalSmartLayout() async {
+    final callback = onSmartLayoutInk;
+    if (callback == null) return false;
+    final request = _buildSmartLayoutRequest();
+    if (request.ink.isEmpty && request.text.isEmpty) return false;
+    SmartLayoutResponse response;
+    try {
+      response = await callback(request);
+    } catch (_) {
+      return false;
+    }
+    if (_disposed || response.document.isEmpty) return false;
+    final replacement = _elementsFromSmartLayout(response.document);
+    if (replacement.isEmpty) return false;
+    final removableInk = _smartLayoutInkElements();
+    final removableSmartText = _smartLayoutGeneratedTextElements();
+    pushHistory();
+    applyResult(
+      CompoundResult([
+        for (final stroke in removableInk) RemoveElementResult(stroke.id),
+        for (final text in removableSmartText) RemoveElementResult(text.id),
+        for (final element in replacement) AddElementResult(element),
+        SetSmartLayoutResult(response.document),
+        SetSelectionResult({for (final element in replacement) element.id}),
+      ]),
+    );
+    return true;
+  }
+
+  String exportSmartLayout(SmartLayoutExportFormat format) {
+    final document = _editorState.scene.smartLayout;
+    if (document == null || document.isEmpty) return '';
+    return SmartLayoutExporter.export(document, format);
+  }
+
+  SmartLayoutRequest _buildSmartLayoutRequest() {
+    final pages = _layout.ensurePage().pages.map((page) {
+      final geometry = TemplateAnchorResolver.resolve(page);
+      return SmartLayoutPageRequest(
+        id: page.id,
+        index: page.index,
+        bounds: Bounds.fromLTWH(
+          page.bounds.left,
+          page.bounds.top,
+          page.bounds.width,
+          page.bounds.height,
+        ),
+        template: page.template,
+        anchors: [
+          for (final anchor in geometry.anchors)
+            {
+              'x': anchor.position.dx,
+              'y': anchor.position.dy,
+              'crossAxis': anchor.crossAxis,
+              'mainAxis': anchor.mainAxis,
+              'fontSize': anchor.fontSize,
+              'lineHeight': anchor.lineHeight,
+              'writingMode': anchor.writingMode.name,
+              'pageId': anchor.pageId,
+            },
+        ],
+      );
+    }).toList();
+    return SmartLayoutRequest(
+      pages: pages,
+      ink: [
+        for (final element in _smartLayoutInkElements())
+          _smartElementRequest(element)!,
+      ],
+      text: [
+        for (final element
+            in _editorState.scene.activeElements.whereType<TextElement>())
+          _smartElementRequest(element)!,
+      ],
+      context: [
+        for (final element in _editorState.scene.activeElements)
+          if (element is! FreedrawElement &&
+              element is! TextElement &&
+              !element.isCanvasPage)
+            _smartElementRequest(element)!,
+      ],
+    );
+  }
+
+  List<FreedrawElement> _smartLayoutInkElements() {
+    return [
+      for (final element in _editorState.scene.activeElements)
+        if (element is FreedrawElement &&
+            brushTypeFromCustomData(element.customData) !=
+                BrushType.highlighter)
+          element,
+    ];
+  }
+
+  List<TextElement> _smartLayoutGeneratedTextElements() {
+    return [
+      for (final element in _editorState.scene.activeElements)
+        if (element is TextElement &&
+            _flowMuseData(element)?['smartLayout'] == true)
+          element,
+    ];
+  }
+
+  SmartLayoutElementRequest? _smartElementRequest(Element element) {
+    final bounds = Bounds.fromLTWH(
+      element.x,
+      element.y,
+      element.width,
+      element.height,
+    );
+    if (element is FreedrawElement) {
+      return SmartLayoutElementRequest(
+        id: element.id.value,
+        type: element.type,
+        bounds: bounds,
+        points: [
+          for (final point in element.points)
+            InkRecognitionPoint(x: element.x + point.x, y: element.y + point.y),
+        ],
+      );
+    }
+    return SmartLayoutElementRequest(
+      id: element.id.value,
+      type: element.type,
+      bounds: bounds,
+      text: element is TextElement ? element.text : null,
+    );
+  }
+
+  List<Element> _elementsFromSmartLayout(SmartLayoutDocument document) {
+    final blocks = [...document.blocks]
+      ..sort((a, b) => a.order.compareTo(b.order));
+    final elements = <Element>[];
+    final occupied = <Bounds>[];
+    var layoutIndex = 0;
+    for (final block in blocks) {
+      if (block.text.trim().isEmpty || _duplicatesExistingText(block)) {
+        continue;
+      }
+      final element = _textElementFromSmartLayoutBlock(
+        block,
+        layoutIndex,
+        occupied,
+      );
+      elements.add(element);
+      occupied.add(
+        Bounds.fromLTWH(element.x, element.y, element.width, element.height),
+      );
+      layoutIndex++;
+    }
+    return elements;
+  }
+
+  bool _duplicatesExistingText(SmartLayoutBlock block) {
+    final text = block.text.trim();
+    if (text.isEmpty) return true;
+    final bounds = block.bounds;
+    for (final element
+        in _editorState.scene.activeElements.whereType<TextElement>()) {
+      if (_flowMuseData(element)?['smartLayout'] == true) continue;
+      if (element.text.trim() != text) continue;
+      if (bounds == null) return true;
+      final dx = (element.x - bounds.left).abs();
+      final dy = (element.y - bounds.top).abs();
+      if (dx < 8 && dy < 8) return true;
+    }
+    return false;
+  }
+
+  Map<String, Object?>? _flowMuseData(Element element) {
+    final raw = element.customData?['flowMuse'];
+    if (raw is Map<String, Object?>) return raw;
+    if (raw is Map) return Map<String, Object?>.from(raw);
+    return null;
+  }
+
+  TextElement _textElementFromSmartLayoutBlock(
+    SmartLayoutBlock block,
+    int layoutIndex,
+    List<Bounds> occupied,
+  ) {
+    final initialBounds =
+        block.bounds ?? _fallbackSmartLayoutBounds(block, layoutIndex);
+    final vertical = block.writingMode == 'vertical';
+    final text = block.type == 'math' && block.latex?.trim().isNotEmpty == true
+        ? block.latex!.trim()
+        : block.text.trim();
+    final element = TextElement(
+      id: ElementId.generate(),
+      x: initialBounds.left,
+      y: initialBounds.top,
+      width: math.max(initialBounds.size.width, vertical ? 28 : 80),
+      height: math.max(initialBounds.size.height, 28),
+      text: text,
+      fontSize: block.type == 'heading' ? 28 : 20,
+      fontFamily: _defaultStyle.fontFamily ?? 'Excalifont',
+      lineHeight: 1.25,
+      customData: {
+        'flowMuse': {
+          if (block.pageId != null) 'pageId': block.pageId,
+          'smartLayout': true,
+          'blockId': block.id,
+          if (vertical) 'writingMode': 'vertical',
+        },
+      },
+    );
+    final styled = applyDefaultStyleToElement(element) as TextElement;
+    final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
+    final measured = styled.copyWith(
+      width: math.max(styled.width, measuredWidth),
+      height: math.max(styled.height, measuredHeight),
+    );
+    final placedBounds = _nonOverlappingSmartLayoutBounds(
+      Bounds.fromLTWH(measured.x, measured.y, measured.width, measured.height),
+      block,
+      layoutIndex,
+      occupied,
+      vertical,
+    );
+    return measured.copyWith(x: placedBounds.left, y: placedBounds.top);
+  }
+
+  Bounds _fallbackSmartLayoutBounds(SmartLayoutBlock block, int layoutIndex) {
+    final page = _smartLayoutPageForBlock(block);
+    if (page == null) {
+      return Bounds.fromLTWH(0, layoutIndex * 40.0, 240, 32);
+    }
+    final geometry = TemplateAnchorResolver.resolve(page);
+    final content = geometry.contentRect;
+    if (block.writingMode == 'vertical') {
+      return Bounds.fromLTWH(
+        content.right - 36 - layoutIndex * 44.0,
+        content.top,
+        36,
+        math.min(240, content.height),
+      );
+    }
+    return Bounds.fromLTWH(
+      content.left,
+      content.top + layoutIndex * 40.0,
+      math.min(320, content.width),
+      32,
+    );
+  }
+
+  Bounds _nonOverlappingSmartLayoutBounds(
+    Bounds candidate,
+    SmartLayoutBlock block,
+    int layoutIndex,
+    List<Bounds> occupied,
+    bool vertical,
+  ) {
+    var placed = candidate;
+    if (occupied.isEmpty) {
+      return placed;
+    }
+    final page = _smartLayoutPageForBlock(block);
+    final contentRect = page == null
+        ? null
+        : TemplateAnchorResolver.resolve(page).contentRect;
+    for (var attempts = 0; attempts < occupied.length + 8; attempts++) {
+      final collision = occupied
+          .where((bounds) => placed.intersects(bounds))
+          .fold<Bounds?>(null, (merged, bounds) {
+            return merged == null ? bounds : merged.union(bounds);
+          });
+      if (collision == null) {
+        return placed;
+      }
+      if (vertical) {
+        final nextLeft = collision.left - placed.size.width - 12;
+        placed = Bounds.fromLTWH(
+          contentRect == null ? nextLeft : math.max(contentRect.left, nextLeft),
+          contentRect?.top ?? candidate.top,
+          placed.size.width,
+          placed.size.height,
+        );
+      } else {
+        final nextTop = collision.bottom + 12;
+        placed = Bounds.fromLTWH(
+          contentRect?.left ?? candidate.left,
+          contentRect == null ? nextTop : math.min(nextTop, contentRect.bottom),
+          placed.size.width,
+          placed.size.height,
+        );
+      }
+    }
+    if (vertical) {
+      return Bounds.fromLTWH(
+        candidate.left - layoutIndex * (candidate.size.width + 12),
+        candidate.top,
+        candidate.size.width,
+        candidate.size.height,
+      );
+    }
+    return Bounds.fromLTWH(
+      candidate.left,
+      candidate.top + layoutIndex * (candidate.size.height + 12),
+      candidate.size.width,
+      candidate.size.height,
+    );
+  }
+
+  CanvasPage? _smartLayoutPageForBlock(SmartLayoutBlock block) {
+    if (!_layout.isPaged) return null;
+    final pages = _layout.ensurePage().pages;
+    if (pages.isEmpty) return null;
+    final pageId = block.pageId;
+    if (pageId != null) {
+      for (final page in pages) {
+        if (page.id == pageId) {
+          return page;
+        }
+      }
+    }
+    final bounds = block.bounds;
+    if (bounds != null) {
+      return _layout.pageAt(Offset(bounds.center.x, bounds.center.y));
+    }
+    return pages.first;
+  }
+
   bool get canConvertSelectionToText {
     final elements = selectedElements;
     return elements.isNotEmpty &&
@@ -2690,16 +3066,16 @@ class MarkdrawController extends ChangeNotifier {
     applyResult(UpdateViewportResult(newViewport));
   }
 
-  void scrollPagedViewportBy(double screenDeltaY) {
+  void scrollPagedViewportBy(double screenDelta) {
     if (!isPagedViewport) {
       return;
     }
     final viewport = _editorState.viewport;
+    final sceneDelta = screenDelta / viewport.zoom;
     final newViewport = ViewportState(
-      offset: Offset(
-        viewport.offset.dx,
-        viewport.offset.dy + screenDeltaY / viewport.zoom,
-      ),
+      offset: _layout.isRightToLeft
+          ? Offset(viewport.offset.dx - sceneDelta, viewport.offset.dy)
+          : Offset(viewport.offset.dx, viewport.offset.dy + sceneDelta),
       zoom: viewport.zoom,
     );
     applyResult(UpdateViewportResult(newViewport));
@@ -2712,12 +3088,25 @@ class MarkdrawController extends ChangeNotifier {
     final pages = _layout.pages;
     final index = pageIndex.clamp(0, pages.length - 1);
     final page = pages[index];
-    setViewport(
-      ViewportState(
-        offset: Offset(_editorState.viewport.offset.dx, page.bounds.top),
-        zoom: _editorState.viewport.zoom,
-      ),
-    );
+    final viewport = _editorState.viewport;
+    final targetOffset = _layout.isRightToLeft
+        ? Offset(
+            _rightToLeftPageViewportX(page, viewport.zoom),
+            viewport.offset.dy,
+          )
+        : Offset(viewport.offset.dx, page.bounds.top);
+    setViewport(ViewportState(offset: targetOffset, zoom: viewport.zoom));
+  }
+
+  double _rightToLeftPageViewportX(CanvasPage page, double zoom) {
+    if (_canvasSize.width <= 0) {
+      return page.bounds.left;
+    }
+    final visibleWidth = _canvasSize.width / math.max(zoom, 0.0001);
+    if (visibleWidth >= page.bounds.width) {
+      return page.bounds.center.dx - visibleWidth / 2;
+    }
+    return page.bounds.right - visibleWidth;
   }
 
   void appendPageAfterLastAndScroll() {
@@ -3466,16 +3855,17 @@ class MarkdrawController extends ChangeNotifier {
       pages.length,
     );
     final pageId = 'page-${ElementId.generate().value}';
+    final pageSize = CanvasLayout.pageSizeForTemplate(_layout.template);
     final newPage = CanvasPage(
       id: pageId,
       index: insertIndex,
-      bounds: Rect.fromLTWH(
-        0,
-        insertIndex * (CanvasLayout.pageHeight + CanvasLayout.pageGap),
-        CanvasLayout.pageWidth,
-        CanvasLayout.pageHeight,
+      bounds: CanvasLayout.pageBoundsForIndex(
+        index: insertIndex,
+        pageSize: pageSize,
+        pageFlow: _layout.pageFlow,
       ),
       template: _layout.template,
+      pageFlow: _layout.pageFlow,
     );
     pages.insert(insertIndex, newPage);
     _applyPageOrder(pages);
@@ -3528,26 +3918,27 @@ class MarkdrawController extends ChangeNotifier {
   List<ToolResult> _pageReorderResults(List<CanvasPage> pages) {
     final oldPagesById = {for (final page in _layout.pages) page.id: page};
     final nextPages = <CanvasPage>[];
-    final topDeltaByPageId = <String, double>{};
+    final deltaByPageId = <String, Offset>{};
 
     for (var i = 0; i < pages.length; i++) {
       final page = pages[i];
-      final nextTop = i * (page.bounds.height + CanvasLayout.pageGap);
+      final pageFlow = page.pageFlow;
       final next = CanvasPage(
         id: page.id,
         index: i,
-        bounds: Rect.fromLTWH(
-          page.bounds.left,
-          nextTop,
-          page.bounds.width,
-          page.bounds.height,
+        bounds: CanvasLayout.pageBoundsForIndex(
+          index: i,
+          pageSize: page.bounds.size,
+          pageFlow: pageFlow,
         ),
         template: page.template,
+        pageFlow: pageFlow,
         source: page.source,
       );
       nextPages.add(next);
-      topDeltaByPageId[page.id] =
-          next.bounds.top - (oldPagesById[page.id]?.bounds.top ?? nextTop);
+      deltaByPageId[page.id] =
+          next.bounds.topLeft -
+          (oldPagesById[page.id]?.bounds.topLeft ?? next.bounds.topLeft);
     }
 
     _layout = _layout.copyWith(pages: nextPages);
@@ -3596,11 +3987,15 @@ class MarkdrawController extends ChangeNotifier {
         continue;
       }
       final pageId = element.pageId;
-      final delta = pageId == null ? null : topDeltaByPageId[pageId];
-      if (delta == null || delta == 0) {
+      final delta = pageId == null ? null : deltaByPageId[pageId];
+      if (delta == null || delta == Offset.zero) {
         continue;
       }
-      results.add(UpdateElementResult(element.copyWith(y: element.y + delta)));
+      results.add(
+        UpdateElementResult(
+          element.copyWith(x: element.x + delta.dx, y: element.y + delta.dy),
+        ),
+      );
     }
     return results;
   }
@@ -3622,23 +4017,30 @@ class MarkdrawController extends ChangeNotifier {
       _layout = CanvasLayout(
         type: CanvasLayoutType.paged,
         template: _layout.template,
+        pageFlow: _layout.pageFlow,
       );
     }
 
     final results = <ToolResult>[];
     final nextPages = <CanvasPage>[];
-    var cursorY = 0.0;
+    var cursor = Offset.zero;
 
     for (var i = 0; i < pages.length; i++) {
       final page = pages[i];
       final pageId = 'page-${page.pageNumber}';
-      final pageBounds = Rect.fromLTWH(0, cursorY, page.width, page.height);
+      final pageBounds = Rect.fromLTWH(
+        cursor.dx,
+        cursor.dy,
+        page.width,
+        page.height,
+      );
       if (_layout.isPaged) {
         final canvasPage = CanvasPage(
           id: pageId,
           index: i,
           bounds: pageBounds,
           template: _layout.template,
+          pageFlow: _layout.pageFlow,
           source: 'pdf',
         );
         nextPages.add(canvasPage);
@@ -3669,8 +4071,8 @@ class MarkdrawController extends ChangeNotifier {
 
       final element = ImageElement(
         id: ElementId.generate(),
-        x: 0,
-        y: cursorY,
+        x: pageBounds.left,
+        y: pageBounds.top,
         width: page.width,
         height: page.height,
         fileId: fileId,
@@ -3685,7 +4087,9 @@ class MarkdrawController extends ChangeNotifier {
         ..add(AddFileResult(fileId: fileId, file: imageFile))
         ..add(AddElementResult(element));
 
-      cursorY += page.height + CanvasLayout.pageGap;
+      cursor = _layout.isRightToLeft
+          ? Offset(cursor.dx - page.width - CanvasLayout.pageGap, 0)
+          : Offset(0, cursor.dy + page.height + CanvasLayout.pageGap);
     }
 
     if (_layout.isPaged) {
