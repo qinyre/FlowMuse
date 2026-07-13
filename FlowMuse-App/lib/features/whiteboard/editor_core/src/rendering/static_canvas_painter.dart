@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
@@ -395,27 +396,33 @@ class StaticCanvasPainter extends CustomPainter {
             lastPage.bounds.center.dx,
             lastPage.bounds.bottom + 48 / viewport.zoom,
           );
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: TextStyle(
-          color: Color.lerp(
-            const Color(0xFF6F786F),
-            const Color(0xFF2F6F61),
-            progress,
-          ),
-          fontSize: 14 / viewport.zoom,
-          fontWeight: FontWeight.w600,
-        ),
+    final textStyle = TextStyle(
+      color: Color.lerp(
+        const Color(0xFF6F786F),
+        const Color(0xFF2F6F61),
+        progress,
       ),
+      fontSize: 14 / viewport.zoom,
+      fontWeight: FontWeight.w600,
+    );
+    final textPainter = TextPainter(
+      text: TextSpan(text: label, style: textStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     final horizontalPadding = 18 / viewport.zoom;
     final verticalPadding = 9 / viewport.zoom;
+    final verticalText = layout?.isRightToLeft ?? false;
+    final verticalLabelMetrics = verticalText
+        ? _measureVerticalLabel(label, textStyle)
+        : null;
     final rect = Rect.fromCenter(
       center: center,
-      width: textPainter.width + horizontalPadding * 2,
-      height: textPainter.height + verticalPadding * 2,
+      width:
+          (verticalLabelMetrics?.width ?? textPainter.width) +
+          horizontalPadding * 2,
+      height:
+          (verticalLabelMetrics?.height ?? textPainter.height) +
+          verticalPadding * 2,
     );
     final radius = Radius.circular(8 / viewport.zoom);
     final roundedRect = RRect.fromRectAndRadius(rect, radius);
@@ -440,14 +447,65 @@ class StaticCanvasPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1 / viewport.zoom,
     );
-    textPainter.paint(
-      canvas,
-      Offset(
-        rect.left + horizontalPadding,
-        rect.top + (rect.height - textPainter.height) / 2,
-      ),
-    );
+    if (verticalText) {
+      final metrics = verticalLabelMetrics!;
+      _paintVerticalLabel(
+        canvas,
+        label,
+        textStyle,
+        metrics.width,
+        Offset(
+          rect.left + (rect.width - metrics.width) / 2,
+          rect.top + verticalPadding,
+        ),
+      );
+    } else {
+      textPainter.paint(
+        canvas,
+        Offset(
+          rect.left + horizontalPadding,
+          rect.top + (rect.height - textPainter.height) / 2,
+        ),
+      );
+    }
     textPainter.dispose();
+  }
+
+  Size _measureVerticalLabel(String label, TextStyle style) {
+    var width = 0.0;
+    var height = 0.0;
+    for (final rune in label.runes) {
+      final painter = TextPainter(
+        text: TextSpan(text: String.fromCharCode(rune), style: style),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      width = math.max(width, painter.width);
+      height += painter.height;
+      painter.dispose();
+    }
+    return Size(width, height);
+  }
+
+  void _paintVerticalLabel(
+    Canvas canvas,
+    String label,
+    TextStyle style,
+    double columnWidth,
+    Offset offset,
+  ) {
+    var dy = offset.dy;
+    for (final rune in label.runes) {
+      final painter = TextPainter(
+        text: TextSpan(text: String.fromCharCode(rune), style: style),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      painter.paint(
+        canvas,
+        Offset(offset.dx + (columnWidth - painter.width) / 2, dy),
+      );
+      dy += painter.height;
+      painter.dispose();
+    }
   }
 
   void _renderPageTemplate(Canvas canvas, CanvasPage page) {

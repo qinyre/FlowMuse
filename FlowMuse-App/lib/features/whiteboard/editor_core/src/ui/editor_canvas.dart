@@ -83,7 +83,7 @@ class _EditorCanvasState extends State<EditorCanvas>
     }
 
     final scrollDelta = controller.layout.isRightToLeft
-        ? -event.delta.dx
+        ? event.delta.dx
         : -event.delta.dy;
     if (scrollDelta == 0) {
       return;
