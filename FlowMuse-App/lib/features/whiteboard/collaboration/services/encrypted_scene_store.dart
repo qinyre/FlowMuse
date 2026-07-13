@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -256,25 +255,19 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       plainBytes: utf8.encode(scene.toCollaborationContent()),
     );
     await _createRoomMetadata(room.roomId, ownerKeyHash: ownerKeyHash);
-    final response = await _postWithRetry(
-      _roomSceneUri(room.roomId),
-      body: jsonEncode({
-        'sceneVersion': _reconciler.getSceneVersion(scene.elements),
-        'sceneHash': scene.collaborationHash(),
-        'ownerKeyHash': ownerKeyHash,
-        'encryptedBuffer': base64Encode(payload.encryptedBuffer),
-        'iv': base64Encode(payload.iv),
-      }),
-    );
-    if (response.statusCode == 409) {
-      // The first request may have created the snapshot before its response
-      // timed out. Room ids are random, so a conflict here is that same room.
-      _snapshotMetaByRoom[room.roomId] = _SceneSnapshotMeta(
-        sceneVersion: _reconciler.getSceneVersion(scene.elements),
-        sceneHash: scene.collaborationHash(),
-      );
-      return;
-    }
+    final response = await _client
+        .post(
+          _roomSceneUri(room.roomId),
+          headers: _headers(),
+          body: jsonEncode({
+            'sceneVersion': _reconciler.getSceneVersion(scene.elements),
+            'sceneHash': scene.collaborationHash(),
+            'ownerKeyHash': ownerKeyHash,
+            'encryptedBuffer': base64Encode(payload.encryptedBuffer),
+            'iv': base64Encode(payload.iv),
+          }),
+        )
+        .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('创建协作房间失败：HTTP ${response.statusCode}');
     }
@@ -312,10 +305,13 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
     String roomId, {
     required String ownerKeyHash,
   }) async {
-    final response = await _postWithRetry(
-      _serverUri.replace(path: _joinPath(_serverUri.path, '/api/rooms')),
-      body: jsonEncode({'roomId': roomId, 'ownerKeyHash': ownerKeyHash}),
-    );
+    final response = await _client
+        .post(
+          _serverUri.replace(path: _joinPath(_serverUri.path, '/api/rooms')),
+          headers: _headers(),
+          body: jsonEncode({'roomId': roomId, 'ownerKeyHash': ownerKeyHash}),
+        )
+        .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('创建协作房间元数据失败：HTTP ${response.statusCode}');
     }
@@ -327,27 +323,6 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       if (_authToken != null && _authToken.isNotEmpty)
         'Authorization': 'Bearer $_authToken',
     };
-  }
-
-  Future<http.Response> _postWithRetry(Uri uri, {required String body}) async {
-    Future<http.Response> request({bool closeConnection = false}) {
-      return _client
-          .post(
-            uri,
-            headers: {
-              ..._headers(),
-              if (closeConnection) 'Connection': 'close',
-            },
-            body: body,
-          )
-          .timeout(_requestTimeout);
-    }
-
-    try {
-      return await request();
-    } on TimeoutException {
-      return request(closeConnection: true);
-    }
   }
 
   String _joinPath(String basePath, String suffix) {
