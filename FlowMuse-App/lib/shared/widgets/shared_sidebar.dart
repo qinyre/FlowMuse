@@ -18,11 +18,13 @@ class SharedSidebar extends ConsumerWidget {
     required this.children,
     this.header,
     this.footer,
+    this.showWallpaper = true,
   });
 
   final Widget? header;
   final List<Widget> children;
   final Widget? footer;
+  final bool showWallpaper;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -31,11 +33,12 @@ class SharedSidebar extends ConsumerWidget {
       ref.watch(themeViewModelProvider),
       MediaQuery.platformBrightnessOf(context),
     );
+    final hasSidebarWallpaper = showWallpaper && preset.hasWallpaper;
 
     return Container(
       width: sharedSidebarWidth,
       decoration: BoxDecoration(
-        gradient: preset.hasWallpaper
+        gradient: hasSidebarWallpaper
             ? null
             : LinearGradient(
                 begin: Alignment.topCenter,
@@ -57,12 +60,17 @@ class SharedSidebar extends ConsumerWidget {
               children: [
                 header ?? const SharedSidebarHeader(),
                 Expanded(
-                  child: ListView(padding: EdgeInsets.zero, children: children),
+                  child: ListView(
+                    padding: EdgeInsets.only(
+                      bottom: hasSidebarWallpaper ? _wallpaperHeight : 0,
+                    ),
+                    children: children,
+                  ),
                 ),
                 ?footer,
               ],
             ),
-            if (preset.hasWallpaper)
+            if (hasSidebarWallpaper)
               Positioned(
                 left: 0,
                 right: 0,

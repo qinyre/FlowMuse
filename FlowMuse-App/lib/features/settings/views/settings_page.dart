@@ -110,6 +110,7 @@ class _SettingsSidebar extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return SharedSidebar(
+      showWallpaper: false,
       header: SharedSidebarHeader(
         leading: SharedSidebarIconButton(
           tooltip: '返回',
