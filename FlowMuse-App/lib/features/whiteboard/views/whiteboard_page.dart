@@ -122,6 +122,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _flushLocalDraftOnExit();
     _remoteMergeTimer?.cancel();
     _remoteMergeBuffer.clear();
+    _pointerTrailingTimer?.cancel();
     _disposingOrLeaving = true;
     unawaited(_collaborationSubscription?.cancel());
     unawaited(_fileStatusSceneSubscription?.cancel());

@@ -87,9 +87,9 @@ class CollaborationRepository {
   StreamSubscription<EncryptedPayload>? _transportMessageSubscription;
   StreamSubscription<String>? _newUserSubscription;
   Future<void> _messageDecodeQueue = Future<void>.value();
+  Future<void> _sendQueue = Future<void>.value();
   CollaborationRoom? _activeRoom;
   ExcalidrawScene _latestScene = ExcalidrawScene.empty();
-  int _lastBroadcastedOrReceivedSceneVersion = 0;
 
   String get socketId => _transport.socketId ?? 'local-client';
 
@@ -158,9 +158,6 @@ class CollaborationRepository {
     _activeRoom = room;
     _latestScene = syncableScene;
     _rememberBroadcasted(syncableScene.elements);
-    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
-      syncableScene.elements,
-    );
     CollaborationDebugLog.write('repo', 'start_room', {
       'room': _shortRoomId(room.roomId),
       'elements': syncableScene.elements.length,
@@ -201,9 +198,6 @@ class CollaborationRepository {
     );
     _latestScene = nextScene;
     _rememberBroadcasted(nextScene.elements);
-    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
-      nextScene.elements,
-    );
     _activeRoom = room;
     CollaborationDebugLog.write('repo', 'join_room', {
       'room': _shortRoomId(room.roomId),
@@ -284,6 +278,18 @@ class CollaborationRepository {
   Future<void> _onAccumulatorFlush(
     List<Map<String, Object?>> elements,
     bool isInitial,
+  ) {
+    // Serialize sends: chain onto queue so the next flush can't start until
+    // _rememberBroadcasted has completed, preventing duplicate sends.
+    _sendQueue = _sendQueue
+        .then((_) => _doAccumulatorFlush(elements, isInitial))
+        .catchError((_) {}); // errors logged inside _doAccumulatorFlush
+    return _sendQueue;
+  }
+
+  Future<void> _doAccumulatorFlush(
+    List<Map<String, Object?>> elements,
+    bool isInitial,
   ) async {
     final room = _activeRoom;
     if (room == null) return;
@@ -291,16 +297,14 @@ class CollaborationRepository {
     final changed = isInitial ? elements : _changedElements(elements);
     if (changed.isEmpty && !isInitial) return;
 
-    final sceneVersion = _reconciler.getSceneVersion(
-      isInitial ? elements : _latestScene.elements,
-    );
     final message = isInitial
         ? CollaborationMessage.sceneInit(elements: changed)
         : CollaborationMessage.sceneUpdate(elements: changed);
 
     final sentBytes = await _send(room: room, message: message);
     _rememberBroadcasted(changed);
-    _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
+
+    _scheduleFileUpload(room);
 
     _batchSendCount++;
     _batchElementTotal += changed.length;
@@ -413,9 +417,6 @@ class CollaborationRepository {
     );
     _latestScene = nextScene;
     _rememberBroadcasted(nextScene.elements);
-    _lastBroadcastedOrReceivedSceneVersion = _reconciler.getSceneVersion(
-      nextScene.elements,
-    );
     return nextScene.copyWith(elements: reconciled);
   }
 
@@ -707,23 +708,6 @@ class CollaborationRepository {
     }
   }
 
-  Future<void> _saveSceneSnapshot({
-    required CollaborationRoom room,
-    required ExcalidrawScene scene,
-  }) async {
-    try {
-      final savedScene = await _saveSceneResolvingConflict(
-        room: room,
-        scene: scene,
-      );
-      _latestScene = savedScene;
-    } catch (error) {
-      if (!_repositoryErrors.isClosed) {
-        _repositoryErrors.add('协作快照保存失败，实时协作会继续尝试同步：$error');
-      }
-    }
-  }
-
   ExcalidrawScene _markSavedImagesPending(ExcalidrawScene scene) {
     var changed = false;
     final elements = <Map<String, Object?>>[];
@@ -848,9 +832,6 @@ class CollaborationRepository {
 
   String _id(Map<String, Object?> element) => element['id']! as String;
 
-  int _version(Map<String, Object?> element) =>
-      (element['version']! as num).toInt();
-
   String _shortRoomId(String roomId) =>
       roomId.length > 8 ? roomId.substring(0, 8) : roomId;
 
@@ -876,9 +857,9 @@ class CollaborationRepository {
     _activeRoom = null;
     _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();
-    _lastBroadcastedOrReceivedSceneVersion = 0;
     _fileManager.reset();
     _accumulator.dispose();
+    _sendQueue = Future<void>.value();
   }
 }
 
