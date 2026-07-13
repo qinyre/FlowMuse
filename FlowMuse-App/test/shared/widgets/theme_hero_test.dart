@@ -21,6 +21,10 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('theme-hero-wallpaper')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const ValueKey('theme-hero-wallpaper'))).height,
+      180,
+    );
   });
 
   testWidgets('theme hero hides for a base preset', (tester) async {

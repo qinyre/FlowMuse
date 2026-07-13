@@ -26,7 +26,7 @@ class ThemeHero extends ConsumerWidget {
       image: true,
       child: Container(
         key: const ValueKey('theme-hero-wallpaper'),
-        height: 132,
+        height: 180,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppSpacing.radius),
           image: DecorationImage(
