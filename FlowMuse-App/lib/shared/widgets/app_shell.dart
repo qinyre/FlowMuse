@@ -126,7 +126,17 @@ class _AppShellState extends ConsumerState<AppShell> {
           : null,
       body: SafeArea(
         child: DecoratedBox(
-          decoration: BoxDecoration(color: effectivePreset.backgroundEnd),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                effectivePreset.backgroundStart,
+                effectivePreset.backgroundMiddle,
+                effectivePreset.backgroundEnd,
+              ],
+            ),
+          ),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < shellCompactBreakpoint;

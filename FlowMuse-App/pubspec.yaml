@@ -119,6 +119,7 @@ flutter:
     - assets/covers/manifest.json
     - assets/covers/notebooks/
     - assets/covers/tags/
+    - assets/themes/
     - shaders/
 
   fonts:

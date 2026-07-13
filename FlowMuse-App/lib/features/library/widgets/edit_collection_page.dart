@@ -183,7 +183,7 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       resizeToAvoidBottomInset: false,
       body: Padding(
         padding: EdgeInsets.only(
@@ -239,12 +239,12 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Text(
+                                Text(
                                   '封面模板',
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: Color(0xFF202523),
+                                    color: Theme.of(context).colorScheme.onSurface,
                                   ),
                                 ),
                                 const SizedBox(width: 16),
@@ -268,12 +268,12 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                           if (!_loadingRecent) ...[
                             Row(
                               children: [
-                                const Text(
+                                Text(
                                   '最近使用',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: Color(0xFF8A908D),
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                                 const Spacer(),
@@ -286,15 +286,15 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFF5F7F6),
+                                        color: Theme.of(context).colorScheme.surfaceContainer,
                                         borderRadius: BorderRadius.circular(4),
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         '清除',
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w500,
-                                          color: Color(0xFF6B736D),
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                                         ),
                                       ),
                                     ),
@@ -303,11 +303,11 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                             ),
                             const SizedBox(height: 8),
                             if (_recentCovers.isEmpty)
-                              const Text(
+                              Text(
                                 '新建成功后，此处会显示最近使用过的封面',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Color(0xFFB0B5B2),
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                               )
                             else
@@ -347,9 +347,9 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                     ),
                   ),
                   // 分割线
-                  const VerticalDivider(
+                  VerticalDivider(
                     width: 1,
-                    color: Color(0xFFE9EEEB),
+                    color: Theme.of(context).colorScheme.outlineVariant,
                   ),
                   // 右侧区域：输入框 + 封面选择
                   Expanded(
@@ -377,7 +377,7 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                               counterText: '',
                               hintText: widget.params.name,
                               filled: true,
-                              fillColor: const Color(0xFFF5F7F6),
+                              fillColor: Theme.of(context).colorScheme.surfaceContainer,
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 12,
@@ -407,7 +407,7 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                           ),
                         ),
                         // 更多封面提示
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.symmetric(horizontal: 16),
                           child: Align(
                             alignment: Alignment.centerLeft,
@@ -416,7 +416,7 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF8A908D),
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -425,17 +425,17 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                         // 封面选择列表
                         Expanded(
                           child: _loading
-                              ? const Center(
+                              ? Center(
                                   child: CircularProgressIndicator(
-                                    color: Color(0xFF4F8F84),
+                                    color: Theme.of(context).colorScheme.primary,
                                   ),
                                 )
                               : _themes.isEmpty
-                                  ? const Center(
+                                  ? Center(
                                       child: Text(
                                         '暂无更多封面',
                                         style: TextStyle(
-                                          color: Color(0xFF8A908D),
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                                           fontSize: 15,
                                         ),
                                       ),
@@ -460,10 +460,10 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                                             children: [
                                               Text(
                                                 theme,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.w600,
-                                                  color: Color(0xFF202523),
+                                                  color: Theme.of(context).colorScheme.onSurface,
                                                 ),
                                               ),
                                               const SizedBox(height: 8),
@@ -493,9 +493,7 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                                                           color: isSelected
                                                               ? colorScheme
                                                                   .primary
-                                                              : const Color(
-                                                                  0xFFE3E8E5,
-                                                                ),
+                                                              : colorScheme.outlineVariant,
                                                           width:
                                                               isSelected ? 2 : 1,
                                                         ),
@@ -510,13 +508,11 @@ class _EditCollectionPageState extends State<EditCollectionPage> {
                                                           fit: BoxFit.cover,
                                                           errorBuilder:
                                                               (_, _, _) =>
-                                                                  const Center(
+                                                                  Center(
                                                             child: Icon(
                                                               Icons
                                                                   .image_outlined,
-                                                              color: Color(
-                                                                0xFF8A908D,
-                                                              ),
+                                                              color: colorScheme.onSurfaceVariant,
                                                             ),
                                                           ),
                                                         ),
@@ -569,7 +565,7 @@ class _TopBar extends StatelessWidget {
             TextButton(
               onPressed: onCancel,
               style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF4F8F84),
+                foregroundColor: Theme.of(context).colorScheme.primary,
                 textStyle: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
@@ -587,8 +583,8 @@ class _TopBar extends StatelessWidget {
                 onSave();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4F8F84),
-                foregroundColor: Colors.white,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 textStyle: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
@@ -609,7 +605,7 @@ class _TopBar extends StatelessWidget {
         Text(
           title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: const Color(0xFF1F2624),
+                color: Theme.of(context).colorScheme.onSurface,
                 fontWeight: FontWeight.w700,
               ),
         ),

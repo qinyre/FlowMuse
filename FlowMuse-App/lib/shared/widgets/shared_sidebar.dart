@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_router.dart';
+import '../../app/app_theme_preset.dart';
+import '../../app/view_models/theme_view_model.dart';
 import '../../features/account/view_models/account_view_model.dart';
 import '../../features/account/widgets/account_avatar.dart';
 import 'app_spacing.dart';
 import 'app_shell.dart';
 
-class SharedSidebar extends StatelessWidget {
+class SharedSidebar extends ConsumerWidget {
   const SharedSidebar({
     super.key,
     required this.children,
@@ -21,32 +23,53 @@ class SharedSidebar extends StatelessWidget {
   final Widget? footer;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
+    final preset = effectiveAppThemePreset(
+      ref.watch(themeViewModelProvider),
+      MediaQuery.platformBrightnessOf(context),
+    );
 
     return Container(
       width: sharedSidebarWidth,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            colorScheme.primary.withValues(alpha: 0.035),
-            colorScheme.primary.withValues(alpha: 0.11),
-          ],
-        ),
+        gradient: preset.hasWallpaper
+            ? null
+            : LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  colorScheme.primary.withValues(alpha: 0.035),
+                  colorScheme.primary.withValues(alpha: 0.11),
+                ],
+              ),
+        image: preset.hasWallpaper
+            ? DecorationImage(
+                image: AssetImage(preset.wallpaperAsset!),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  preset.sidebarOverlay,
+                  BlendMode.srcOver,
+                ),
+              )
+            : null,
         border: Border(
           right: BorderSide(color: colorScheme.primary.withValues(alpha: 0.14)),
         ),
       ),
-      child: Column(
-        children: [
-          header ?? const SharedSidebarHeader(),
-          Expanded(
-            child: ListView(padding: EdgeInsets.zero, children: children),
-          ),
-          ?footer,
-        ],
+      child: Material(
+        color: preset.hasWallpaper
+            ? colorScheme.surfaceContainer.withValues(alpha: 0.82)
+            : colorScheme.surfaceContainer,
+        child: Column(
+          children: [
+            header ?? const SharedSidebarHeader(),
+            Expanded(
+              child: ListView(padding: EdgeInsets.zero, children: children),
+            ),
+            ?footer,
+          ],
+        ),
       ),
     );
   }

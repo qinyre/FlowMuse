@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/right_page.dart';
+import '../../../shared/widgets/theme_hero.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../models/library_special_view.dart';
 import '../models/note_item.dart';
@@ -206,6 +207,8 @@ class _LibraryContentState extends State<LibraryContent> {
         ),
       ],
       topContent: [
+        const ThemeHero(semanticLabel: '当前主题背景'),
+        const SizedBox(height: AppSpacing.controlGap),
         if (widget.specialView == LibrarySpecialView.none) ...[
           _FilterTabs(
             selected: widget.state.selectedFilter,
@@ -825,7 +828,7 @@ class _EmptyLibrary extends StatelessWidget {
                 LibrarySpecialView.trash => '回收站为空',
               },
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: const Color(0xFF1F2624),
+                color: Theme.of(context).colorScheme.onSurface,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -840,7 +843,9 @@ class _EmptyLibrary extends StatelessWidget {
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF8F9B96)),
+              ).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 22),
             if (specialView == LibrarySpecialView.none)

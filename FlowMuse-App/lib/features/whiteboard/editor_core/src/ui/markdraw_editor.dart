@@ -550,7 +550,7 @@ class _LeftChrome extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
+                      color: cs.shadow.withValues(alpha: 0.08),
                       blurRadius: 3,
                     ),
                   ],
@@ -681,8 +681,8 @@ class _ChromeIconButton extends StatelessWidget {
         color: cs.surface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.17), blurRadius: 1),
-          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 3),
+          BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
+          BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
         ],
       ),
       child: IconButton(
@@ -768,7 +768,7 @@ class _ParticipantAvatar extends StatelessWidget {
           border: Border.all(color: borderColor, width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.14),
+              color: cs.shadow.withValues(alpha: 0.14),
               blurRadius: 2,
               offset: const Offset(0, 1),
             ),
@@ -805,7 +805,7 @@ class _ParticipantOverflowAvatar extends StatelessWidget {
         border: Border.all(color: cs.surfaceContainerHighest, width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.14),
+            color: cs.shadow.withValues(alpha: 0.14),
             blurRadius: 2,
             offset: const Offset(0, 1),
           ),
@@ -839,7 +839,10 @@ class _StatusPill extends StatelessWidget {
         color: theme.colorScheme.surface.withValues(alpha: 0.94),
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 3),
+          BoxShadow(
+            color: theme.colorScheme.shadow.withValues(alpha: 0.08),
+            blurRadius: 3,
+          ),
         ],
       ),
       child: Text(

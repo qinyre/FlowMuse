@@ -17,6 +17,7 @@ import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
+import '../../../shared/widgets/theme_hero.dart';
 import '../../account/view_models/account_view_model.dart';
 import '../../account/widgets/account_avatar.dart';
 import '../../library/repositories/library_repository.dart';
@@ -202,6 +203,12 @@ class _SettingsContent extends StatelessWidget {
       child: RightPageScaffold(
         title: section.label,
         forceCenterTitle: true,
+        topContent: [
+          if (section == _SettingsSection.theme) ...[
+            const ThemeHero(semanticLabel: '当前主题背景'),
+            const SizedBox(height: AppSpacing.controlGap),
+          ],
+        ],
         body: _SettingsSectionBody(
           section: section,
           selectedPreset: selectedPreset,
@@ -1077,34 +1084,43 @@ class _ThemePresetChip extends StatelessWidget {
 
     return Tooltip(
       message: preset.description,
-      child: InkWell(
-        onTap: onSelected,
-        borderRadius: BorderRadius.circular(AppSpacing.radius),
-        child: Container(
-          width: 116,
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppSpacing.radius),
-            border: Border.all(color: borderColor, width: selected ? 1.5 : 1),
-            color: selected
-                ? preset.seedColor.withValues(alpha: 0.10)
-                : Theme.of(context).cardTheme.color,
-          ),
-          child: Row(
-            children: [
-              _ThemeSwatch(preset: preset),
-              const SizedBox(width: AppSpacing.controlGap),
-              Expanded(
-                child: Text(
-                  preset.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: '${preset.label} ${preset.isDark ? '深色' : '浅色'}',
+        child: InkWell(
+          onTap: onSelected,
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          child: Container(
+            width: 116,
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppSpacing.radius),
+              border: Border.all(color: borderColor, width: selected ? 1.5 : 1),
+              color: selected
+                  ? preset.seedColor.withValues(alpha: 0.10)
+                  : Theme.of(context).cardTheme.color,
+            ),
+            child: Row(
+              children: [
+                _ThemeSwatch(preset: preset),
+                const SizedBox(width: AppSpacing.controlGap),
+                Expanded(
+                  child: Text(
+                    preset.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-            ],
+                Icon(
+                  preset.isDark ? LucideIcons.moon : LucideIcons.sun,
+                  size: 14,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1122,15 +1138,23 @@ class _ThemeSwatch extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            preset.backgroundStart,
-            preset.seedColor,
-            preset.backgroundEnd,
-          ],
-        ),
+        gradient: preset.hasWallpaper
+            ? null
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  preset.backgroundStart,
+                  preset.seedColor,
+                  preset.backgroundEnd,
+                ],
+              ),
+        image: preset.hasWallpaper
+            ? DecorationImage(
+                image: AssetImage(preset.wallpaperAsset!),
+                fit: BoxFit.cover,
+              )
+            : null,
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: const SizedBox(width: 22, height: 22),

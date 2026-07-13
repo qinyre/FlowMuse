@@ -177,7 +177,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.pageInset),
@@ -267,7 +267,7 @@ class _TopBar extends StatelessWidget {
             TextButton(
               onPressed: () => context.pop(),
               style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF4F8F84),
+                foregroundColor: Theme.of(context).colorScheme.primary,
                 textStyle: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
@@ -287,8 +287,8 @@ class _TopBar extends StatelessWidget {
                       onCreate();
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4F8F84),
-                foregroundColor: Colors.white,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 textStyle: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
@@ -309,7 +309,7 @@ class _TopBar extends StatelessWidget {
         Text(
           '新建笔记',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: const Color(0xFF1F2624),
+            color: Theme.of(context).colorScheme.onSurface,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -327,9 +327,9 @@ class _LargePaperPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0x144F8F84),
+        color: Theme.of(context).colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF4F8F84)),
+        border: Border.all(color: Theme.of(context).colorScheme.primary),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
@@ -345,7 +345,7 @@ class _LargePaperPreview extends StatelessWidget {
             Text(
               _templateLabel(template),
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: const Color(0xFF4F8F84),
+                color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -385,9 +385,9 @@ class _NoteSetupPanel extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 430, minWidth: 360),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFFFAFBFA),
+          color: Theme.of(context).colorScheme.surfaceContainer,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE9EEEB)),
+          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         ),
         child: Padding(
           padding: const EdgeInsets.all(18),
@@ -509,18 +509,18 @@ class _TitleInput extends StatelessWidget {
         decoration: InputDecoration(
           hintText: '输入笔记标题',
           filled: true,
-          fillColor: const Color(0xFFF1F2F1),
+          fillColor: Theme.of(context).colorScheme.surfaceContainer,
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radius),
-            borderSide: const BorderSide(color: Color(0xFF4F8F84)),
+            borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radius),
-            borderSide: const BorderSide(color: Color(0xFF4F8F84), width: 1.5),
+            borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5),
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radius),
-            borderSide: const BorderSide(color: Color(0xFF4F8F84)),
+            borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
           ),
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(
@@ -546,7 +546,7 @@ class _PanelRow extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            color: const Color(0xFF1F2624),
+            color: Theme.of(context).colorScheme.onSurface,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -567,7 +567,7 @@ class _SectionTitle extends StatelessWidget {
     return Text(
       text,
       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-        color: const Color(0xFF1F2624),
+        color: Theme.of(context).colorScheme.onSurface,
         fontWeight: FontWeight.w700,
       ),
     );
@@ -600,12 +600,14 @@ class _TemplateCard extends StatelessWidget {
               height: 150,
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: selected ? const Color(0x144F8F84) : Colors.white,
+                color: selected
+                    ? Theme.of(context).colorScheme.primaryContainer
+                    : Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(AppSpacing.radius),
                 border: Border.all(
                   color: selected
-                      ? const Color(0xFF4F8F84)
-                      : const Color(0xFFE3E8E5),
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.outlineVariant,
                   width: selected ? 1.5 : 1,
                 ),
               ),
@@ -618,8 +620,8 @@ class _TemplateCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: selected
-                    ? const Color(0xFF4F8F84)
-                    : const Color(0xFF555C59),
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               ),
             ),
@@ -627,9 +629,9 @@ class _TemplateCard extends StatelessWidget {
             SizedBox(
               height: 20,
               child: selected
-                  ? const Icon(
+                  ? Icon(
                       LucideIcons.circleCheck,
-                      color: Color(0xFF4F8F84),
+                      color: Theme.of(context).colorScheme.primary,
                       size: 20,
                     )
                   : null,

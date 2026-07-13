@@ -1302,9 +1302,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
         body: SafeArea(
           child: MarkdrawEditor(
             controller: _markdrawController,
-            config: MarkdrawEditorConfig(
-              initialBackground: _hexColor(effectivePreset.backgroundEnd),
-            ),
+            config: const MarkdrawEditorConfig(),
             currentThemeMode: themePreset.themeMode,
             onThemeModeChanged: _changeThemeMode,
             saveStatusLabel: _saveStatusLabel(state.saveStatus),
@@ -1397,10 +1395,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     return ref
         .read(themeViewModelProvider.notifier)
         .changePreset(appThemePresetByThemeMode(mode));
-  }
-
-  String _hexColor(Color color) {
-    return '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
   }
 
   String _saveStatusLabel(WhiteboardSaveStatus status) {

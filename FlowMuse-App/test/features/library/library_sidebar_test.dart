@@ -1,3 +1,5 @@
+import 'package:flow_muse/app/app_theme_preset.dart';
+import 'package:flow_muse/app/view_models/theme_view_model.dart';
 import 'package:flow_muse/features/library/widgets/library_sidebar.dart';
 import 'package:flow_muse/shared/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
@@ -5,8 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-Widget _testSidebar() {
+Widget _testSidebar({AppThemePreset? initialPreset}) {
   return ProviderScope(
+    overrides: [
+      if (initialPreset != null)
+        initialThemePresetProvider.overrideWithValue(initialPreset),
+    ],
     child: MaterialApp.router(
       routerConfig: GoRouter(
         initialLocation: '/library',
@@ -88,5 +94,23 @@ void main() {
     await tester.tap(find.byTooltip('标签展开收起'));
     await tester.pumpAndSettle();
     expect(find.text('新建标签 1'), findsNothing);
+  });
+
+  testWidgets('renders the featured wallpaper behind sidebar content', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _testSidebar(initialPreset: appThemePresetById(AppThemeId.starryBlue)),
+    );
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is DecoratedBox &&
+            widget.decoration is BoxDecoration &&
+            ((widget.decoration as BoxDecoration).image?.image is AssetImage),
+      ),
+      findsOneWidget,
+    );
   });
 }

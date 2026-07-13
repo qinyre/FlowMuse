@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/right_page.dart';
+import '../../../shared/widgets/theme_hero.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
@@ -28,6 +29,7 @@ class NotebooksPage extends ConsumerWidget {
 
     return _CollectionPage(
       title: '笔记本',
+      showThemeHero: true,
       viewMode: state.viewMode,
       sortAscending: state.sortAscending,
       selectionMode: state.selectionMode,
@@ -728,6 +730,7 @@ class _CollectionPage extends StatelessWidget {
   const _CollectionPage({
     required this.title,
     this.onBack,
+    this.showThemeHero = false,
     required this.viewMode,
     required this.sortAscending,
     required this.selectionMode,
@@ -743,6 +746,7 @@ class _CollectionPage extends StatelessWidget {
 
   final String title;
   final VoidCallback? onBack;
+  final bool showThemeHero;
   final LibraryViewMode viewMode;
   final bool sortAscending;
   final bool selectionMode;
@@ -831,6 +835,10 @@ class _CollectionPage extends StatelessWidget {
           ),
       ],
       topContent: [
+        if (showThemeHero) ...[
+          const ThemeHero(semanticLabel: '当前主题背景'),
+          const SizedBox(height: AppSpacing.controlGap),
+        ],
         if (bulkBar != null) ...[
           bulkBar!,
           const SizedBox(height: AppSpacing.controlGap),
@@ -898,7 +906,7 @@ class _CoverTitle extends StatelessWidget {
             title,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: const Color(0xFF222725),
+              color: Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -936,9 +944,9 @@ class _CollectionActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (onRename == null || onDelete == null) {
-      return const Icon(
+      return Icon(
         LucideIcons.chevronDown,
-        color: Color(0xFF555C59),
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
         size: 18,
       );
     }
@@ -1029,7 +1037,9 @@ class _CoverSubtitle extends StatelessWidget {
       text,
       style: Theme.of(
         context,
-      ).textTheme.bodySmall?.copyWith(color: const Color(0xFFA3AAA6)),
+      ).textTheme.bodySmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
     );
   }
 }

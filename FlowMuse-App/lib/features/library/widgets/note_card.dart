@@ -26,6 +26,7 @@ class NoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final actionsKey = GlobalKey();
 
     void showActions() {
@@ -43,7 +44,7 @@ class NoteCard extends StatelessWidget {
           child: Card(
             margin: EdgeInsets.zero,
             elevation: 1,
-            shadowColor: const Color(0x0F5A625F),
+            shadowColor: colorScheme.shadow.withValues(alpha: 0.06),
             clipBehavior: Clip.antiAlias,
             shape: const RoundedRectangleBorder(),
             child: InkWell(
@@ -63,7 +64,7 @@ class NoteCard extends StatelessWidget {
                 item.title,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: const Color(0xFF222725),
+                  color: colorScheme.onSurface,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
@@ -80,7 +81,7 @@ class NoteCard extends StatelessWidget {
                   child: Center(
                     child: Icon(
                       LucideIcons.chevronDown,
-                      color: Color(0xFF555C59),
+                      color: colorScheme.onSurfaceVariant,
                       size: 16,
                     ),
                   ),
@@ -93,7 +94,7 @@ class NoteCard extends StatelessWidget {
           item.date,
           style: Theme.of(
             context,
-          ).textTheme.bodySmall?.copyWith(color: const Color(0xFFA3AAA6)),
+          ).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
       ],
     );

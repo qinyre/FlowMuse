@@ -17,6 +17,7 @@ class SearchPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
     final state = ref.watch(searchViewModelProvider);
     final viewModel = ref.read(searchViewModelProvider.notifier);
     final libraryIndex =
@@ -60,7 +61,7 @@ class SearchPage extends ConsumerWidget {
           '搜索范围',
           style: Theme.of(
             context,
-          ).textTheme.titleMedium?.copyWith(color: const Color(0xFF8F9B96)),
+          ).textTheme.titleMedium?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 16),
         Wrap(
@@ -91,11 +92,11 @@ class SearchPage extends ConsumerWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(LucideIcons.fileSearch, color: Color(0xFF8F9B96)),
+                Icon(LucideIcons.fileSearch, color: colorScheme.onSurfaceVariant),
                 const SizedBox(width: AppSpacing.controlGap),
                 Text(
                   state.query.isEmpty ? '已选搜索范围' : '搜索：${state.query}',
-                  style: const TextStyle(color: Color(0xFF8F9B96)),
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -125,9 +126,12 @@ class _LocalSearchChip extends StatelessWidget {
         color: Theme.of(context).colorScheme.primary,
         borderRadius: BorderRadius.circular(18),
       ),
-      child: const Text(
+      child: Text(
         '本地标题',
-        style: TextStyle(color: Color(0xFFFAFCFA), fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onPrimary,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -261,17 +265,20 @@ class _SearchEmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 38, color: const Color(0xFF8F9B96)),
+          Icon(icon, size: 38, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(height: 14),
           Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: const Color(0xFF1F2624),
+              color: Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 6),
-          Text(message, style: const TextStyle(color: Color(0xFF8F9B96))),
+          Text(
+            message,
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
         ],
       ),
     );

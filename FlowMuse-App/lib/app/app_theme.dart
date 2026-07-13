@@ -6,25 +6,67 @@ class AppTheme {
   const AppTheme._();
 
   static ThemeData fromPreset(AppThemePreset preset) {
-    final colorScheme = ColorScheme.fromSeed(
+    final seededScheme = ColorScheme.fromSeed(
       seedColor: preset.seedColor,
       brightness: preset.brightness,
     );
-    final surface = preset.isDark ? const Color(0xFF111514) : Colors.white;
-    final scaffold = preset.isDark
-        ? const Color(0xFF090C0B)
-        : const Color(0xFFFAFCFA);
+    final colorScheme = seededScheme.copyWith(
+      secondary: preset.secondaryColor,
+      tertiary: preset.tertiaryColor,
+    );
 
     return ThemeData(
       useMaterial3: true,
       brightness: preset.brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: scaffold,
+      scaffoldBackgroundColor: colorScheme.surface,
       fontFamily: 'serif',
       cardTheme: CardThemeData(
         elevation: 0,
-        color: surface,
+        color: colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: colorScheme.surface,
+        titleTextStyle: TextStyle(color: colorScheme.onSurface),
+        contentTextStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(
+            colorScheme.surfaceContainerHighest,
+          ),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colorScheme.surfaceContainerHighest,
+        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+        hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+        enabledBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: colorScheme.primary),
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: colorScheme.primary,
+          foregroundColor: colorScheme.onPrimary,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: colorScheme.primary,
+          side: BorderSide(color: colorScheme.outlineVariant),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+        contentTextStyle: TextStyle(color: colorScheme.onSurface),
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
@@ -32,7 +74,7 @@ class AppTheme {
         ),
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: colorScheme.primary.withValues(alpha: 0.08),
+        backgroundColor: colorScheme.surfaceContainerHighest,
         indicatorColor: colorScheme.primaryContainer,
         selectedIconTheme: IconThemeData(color: colorScheme.primary),
         selectedLabelTextStyle: TextStyle(
@@ -42,9 +84,7 @@ class AppTheme {
       ),
       searchBarTheme: SearchBarThemeData(
         elevation: const WidgetStatePropertyAll(0),
-        backgroundColor: WidgetStatePropertyAll(
-          colorScheme.primary.withValues(alpha: 0.045),
-        ),
+        backgroundColor: WidgetStatePropertyAll(colorScheme.surfaceContainerHighest),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
