@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/point.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input_sample.dart';
@@ -23,6 +24,14 @@ StrokeInputSample s(
 );
 
 void main() {
+  test('Android 手写笔仅对接近回折启用转角保护', () {
+    const android = InputPolicySelector(platform: TargetPlatform.android);
+    const ohos = InputPolicySelector(platform: TargetPlatform.ohos);
+
+    expect(android.select(StrokeInputKind.stylus).cornerProtectAngleRad, 2.1);
+    expect(ohos.select(StrokeInputKind.stylus).cornerProtectAngleRad, 0.9);
+  });
+
   group('StrokeInputModeler', () {
     test('down emits the first point', () {
       final m = StrokeInputModeler(InputPolicy.stylus);
