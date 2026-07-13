@@ -354,12 +354,18 @@ class _NoteItems extends StatelessWidget {
               return CreateNoteCard(onTap: onCreate);
             }
             final item = notes[index - 1];
-            return NoteCard(
-              item: item,
-              onTap: () => onOpenNote(item),
-              onActionsTap: onRenameNote != null
-                  ? (BuildContext buttonContext) => _showNoteActions(buttonContext, item)
-                  : null,
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: NoteCard(
+                    item: item,
+                    onTap: () => onOpenNote(item),
+                    onActionsTap: onRenameNote != null
+                        ? (BuildContext buttonContext) => _showNoteActions(buttonContext, item)
+                        : null,
+                  ),
+                ),
+              ],
             );
           },
         );
@@ -371,18 +377,23 @@ class _NoteItems extends StatelessWidget {
     final RenderBox? button = context.findRenderObject() as RenderBox?;
     final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
 
-    if (button == null || overlay == null) return;
-
-    final bottomRight = button.localToGlobal(
-      button.size.bottomRight(Offset.zero),
-      ancestor: overlay,
-    );
-    final position = RelativeRect.fromLTRB(
-      bottomRight.dx - 8,
-      bottomRight.dy + 4,
-      overlay.size.width - bottomRight.dx,
-      overlay.size.height - bottomRight.dy - 4,
-    );
+    RelativeRect position;
+    if (button != null && overlay != null) {
+      final bottomRight = button.localToGlobal(
+        button.size.bottomRight(Offset.zero),
+        ancestor: overlay,
+      );
+      final arrowY = bottomRight.dy;
+      position = RelativeRect.fromLTRB(
+        bottomRight.dx - 8,
+        arrowY + 4,
+        overlay.size.width - bottomRight.dx,
+        overlay.size.height - arrowY - 4,
+      );
+    } else {
+      final size = MediaQuery.of(context).size;
+      position = RelativeRect.fromLTRB(size.width / 2, size.height / 2, size.width / 2, size.height / 2);
+    }
 
     final selected = await showMenu<_NoteAction>(
       context: context,
