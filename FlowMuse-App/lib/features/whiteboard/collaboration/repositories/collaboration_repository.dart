@@ -14,6 +14,7 @@ import '../services/collaboration_file_manager.dart';
 import '../services/collaboration_file_store.dart';
 import '../services/encrypted_scene_store.dart';
 import '../services/realtime_transport.dart';
+import '../services/change_accumulator.dart';
 import '../services/scene_reconciler.dart';
 
 class _VersionRecord {
@@ -35,7 +36,12 @@ class CollaborationRepository {
        _fileStore = fileStore,
        _ownerKeyStore = ownerKeyStore ?? CollaborationOwnerKeyStore(),
        _crypto = crypto ?? CollaborationCrypto(),
-       _reconciler = reconciler ?? SceneReconciler();
+       _reconciler = reconciler ?? SceneReconciler(),
+       _accumulator = ChangeAccumulator(
+         reconciler: reconciler ?? SceneReconciler(),
+       ) {
+    _accumulator.onFlush = _onAccumulatorFlush;
+  }
 
   static const Duration fullSceneSyncInterval = Duration(seconds: 20);
   static const Duration fileUploadTimeout = Duration(milliseconds: 300);
@@ -46,6 +52,7 @@ class CollaborationRepository {
   final CollaborationOwnerKeyStore _ownerKeyStore;
   final CollaborationCrypto _crypto;
   final SceneReconciler _reconciler;
+  final ChangeAccumulator _accumulator;
   final CollaborationFileManager _fileManager = CollaborationFileManager();
   final math.Random _random = math.Random();
   final Map<String, _VersionRecord> _broadcastedElementVersions = {};
@@ -248,44 +255,36 @@ class CollaborationRepository {
     final syncableElements = _reconciler.getSyncableElements(scene.elements);
     final syncableScene = scene.copyWith(elements: syncableElements);
     _latestScene = syncableScene;
-    final sceneVersion = _reconciler.getSceneVersion(syncableElements);
-    if (!initial &&
-        !syncAll &&
-        sceneVersion <= _lastBroadcastedOrReceivedSceneVersion) {
-      CollaborationDebugLog.write('scene', 'broadcast_gate_skipped', {
-        'room': _shortRoomId(room.roomId),
-        'sceneVersion': sceneVersion,
-        'lastVersion': _lastBroadcastedOrReceivedSceneVersion,
-      });
-      _scheduleFileUpload(room);
-      return;
-    }
 
-    final elementsToBroadcast = initial || syncAll
-        ? syncableElements
-        : _changedElements(syncableElements);
-    CollaborationDebugLog.write('scene', 'broadcast_prepare', {
-      'room': _shortRoomId(room.roomId),
-      'initial': initial,
-      'syncAll': syncAll,
-      'syncable': syncableElements.length,
-      'changed': elementsToBroadcast.length,
-      'sceneVersion': sceneVersion,
-      'summary': CollaborationDebugLog.elementSummary(elementsToBroadcast),
-    });
-    _scheduleFileUpload(room);
-    if (elementsToBroadcast.isEmpty && !initial) {
-      return;
-    }
+    _accumulator.schedule(
+      syncableScene,
+      bypass: initial || syncAll,
+      isInitial: initial,
+    );
+  }
 
-    final message = initial
-        ? CollaborationMessage.sceneInit(elements: elementsToBroadcast)
-        : CollaborationMessage.sceneUpdate(elements: elementsToBroadcast);
+  Future<void> _onAccumulatorFlush(
+    List<Map<String, Object?>> elements,
+    bool isInitial,
+  ) async {
+    final room = _activeRoom;
+    if (room == null) return;
+
+    final changed = isInitial ? elements : _changedElements(elements);
+    if (changed.isEmpty && !isInitial) return;
+
+    final sceneVersion = _reconciler.getSceneVersion(
+      isInitial ? elements : _latestScene.elements,
+    );
+    final message = isInitial
+        ? CollaborationMessage.sceneInit(elements: changed)
+        : CollaborationMessage.sceneUpdate(elements: changed);
+
     await _send(room: room, message: message);
-    _rememberBroadcasted(elementsToBroadcast);
+    _rememberBroadcasted(changed);
     _lastBroadcastedOrReceivedSceneVersion = sceneVersion;
-    _latestScene = syncableScene;
-    unawaited(_saveSceneSnapshot(room: room, scene: syncableScene));
+
+    unawaited(_saveSceneSnapshot(room: room, scene: _latestScene));
   }
 
   Future<void> broadcastMouseLocation({
@@ -408,6 +407,8 @@ class CollaborationRepository {
 
   void _startRoomSession(CollaborationRoom room) {
     _stopRoomSession();
+    _accumulator.dispose();
+    _accumulator.onFlush = _onAccumulatorFlush;
     _messageBacklog.clear();
     _messageDecodeQueue = Future<void>.value();
     _transportMessageSubscription = _transport.messages.listen(
@@ -756,6 +757,7 @@ class CollaborationRepository {
     _broadcastedElementVersions.clear();
     _lastBroadcastedOrReceivedSceneVersion = 0;
     _fileManager.reset();
+    _accumulator.dispose();
   }
 }
 
