@@ -721,31 +721,31 @@ class _TemplatePreviewPainter extends CustomPainter {
     canvas.drawRect(rect, framePaint);
 
     final centerX = rect.center.dx;
+    final gutter = 8.0;
+    canvas.drawLine(
+      Offset(centerX - gutter, rect.top),
+      Offset(centerX - gutter, rect.bottom),
+      framePaint,
+    );
+    canvas.drawLine(
+      Offset(centerX + gutter, rect.top),
+      Offset(centerX + gutter, rect.bottom),
+      framePaint,
+    );
     canvas.drawLine(
       Offset(centerX, rect.top),
       Offset(centerX, rect.bottom),
-      framePaint,
+      linePaint,
     );
 
-    final gutter = 4.0;
     _drawPreviewColumns(
       canvas,
-      Rect.fromLTRB(
-        rect.left + gutter,
-        rect.top,
-        centerX - gutter,
-        rect.bottom,
-      ),
+      Rect.fromLTRB(rect.left, rect.top, centerX - gutter, rect.bottom),
       linePaint,
     );
     _drawPreviewColumns(
       canvas,
-      Rect.fromLTRB(
-        centerX + gutter,
-        rect.top,
-        rect.right - gutter,
-        rect.bottom,
-      ),
+      Rect.fromLTRB(centerX + gutter, rect.top, rect.right, rect.bottom),
       linePaint,
     );
 
@@ -762,18 +762,24 @@ class _TemplatePreviewPainter extends CustomPainter {
   }
 
   void _drawPreviewColumns(Canvas canvas, Rect rect, Paint paint) {
-    const columnGap = 7.0;
+    const columnGap = 11.0;
     for (var x = rect.left + columnGap; x < rect.right; x += columnGap) {
       canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
     }
   }
 
   void _drawPreviewFishTail(Canvas canvas, Offset center, Paint paint) {
+    const width = 8.0;
+    const height = 9.0;
     final path = Path()
-      ..moveTo(center.dx, center.dy - 4)
-      ..lineTo(center.dx + 3, center.dy)
-      ..lineTo(center.dx, center.dy + 4)
-      ..lineTo(center.dx - 3, center.dy)
+      ..moveTo(center.dx, center.dy - height / 2)
+      ..lineTo(center.dx + width / 2, center.dy - height / 2)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(center.dx + width / 2, center.dy + height / 2)
+      ..lineTo(center.dx, center.dy + height / 2)
+      ..lineTo(center.dx - width / 2, center.dy + height / 2)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(center.dx - width / 2, center.dy - height / 2)
       ..close();
     canvas.drawPath(path, paint);
   }

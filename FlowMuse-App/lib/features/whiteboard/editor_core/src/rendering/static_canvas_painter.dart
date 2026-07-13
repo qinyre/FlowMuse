@@ -512,15 +512,12 @@ class StaticCanvasPainter extends CustomPainter {
     final columnPaint = Paint()
       ..color = const Color(0xFF9D9883)
       ..strokeWidth = 1 / viewport.zoom;
-    final markPaint = Paint()
-      ..color = const Color(0xFF343A34)
-      ..style = PaintingStyle.fill;
 
     final frame = rect;
     canvas.drawRect(frame, framePaint);
 
     final centerX = frame.center.dx;
-    final gutterWidth = 28.0;
+    final gutterWidth = 56.0;
     final gutterLeft = centerX - gutterWidth / 2;
     final gutterRight = centerX + gutterWidth / 2;
     canvas.drawLine(
@@ -533,11 +530,7 @@ class StaticCanvasPainter extends CustomPainter {
       Offset(gutterRight, frame.bottom),
       framePaint,
     );
-    canvas.drawLine(
-      Offset(centerX, frame.top),
-      Offset(centerX, frame.bottom),
-      columnPaint,
-    );
+    _renderAncientBookGutter(canvas, frame, centerX, gutterWidth, columnPaint);
 
     _renderAncientBookColumns(
       canvas,
@@ -549,33 +542,63 @@ class StaticCanvasPainter extends CustomPainter {
       Rect.fromLTRB(gutterRight, frame.top, frame.right, frame.bottom),
       columnPaint,
     );
-    _renderAncientBookFishTail(
-      canvas,
-      Offset(centerX, frame.top + frame.height * 0.32),
-      markPaint,
-    );
-    _renderAncientBookFishTail(
-      canvas,
-      Offset(centerX, frame.top + frame.height * 0.68),
-      markPaint,
-    );
   }
 
   void _renderAncientBookColumns(Canvas canvas, Rect rect, Paint paint) {
-    const columnWidth = 24.0;
+    const columnWidth = 44.0;
     for (var x = rect.left + columnWidth; x < rect.right; x += columnWidth) {
       canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
     }
   }
 
-  void _renderAncientBookFishTail(Canvas canvas, Offset center, Paint paint) {
-    final width = 8.0 / viewport.zoom;
-    final height = 14.0 / viewport.zoom;
+  void _renderAncientBookGutter(
+    Canvas canvas,
+    Rect frame,
+    double centerX,
+    double gutterWidth,
+    Paint paint,
+  ) {
+    final seamPaint = Paint.from(paint)..strokeWidth = 0.8 / viewport.zoom;
+    final markPaint = Paint()
+      ..color = const Color(0xFF343A34)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawLine(
+      Offset(centerX, frame.top),
+      Offset(centerX, frame.bottom),
+      seamPaint,
+    );
+    final fishTailWidth = gutterWidth * 0.42;
+    _renderAncientBookFishTail(
+      canvas,
+      Offset(centerX, frame.top + frame.height * 0.34),
+      fishTailWidth,
+      markPaint,
+    );
+    _renderAncientBookFishTail(
+      canvas,
+      Offset(centerX, frame.top + frame.height * 0.66),
+      fishTailWidth,
+      markPaint,
+    );
+  }
+
+  void _renderAncientBookFishTail(
+    Canvas canvas,
+    Offset center,
+    double width,
+    Paint paint,
+  ) {
+    const height = 22.0;
     final path = Path()
       ..moveTo(center.dx, center.dy - height / 2)
-      ..lineTo(center.dx + width / 2, center.dy)
+      ..lineTo(center.dx + width / 2, center.dy - height / 2)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(center.dx + width / 2, center.dy + height / 2)
       ..lineTo(center.dx, center.dy + height / 2)
-      ..lineTo(center.dx - width / 2, center.dy)
+      ..lineTo(center.dx - width / 2, center.dy + height / 2)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(center.dx - width / 2, center.dy - height / 2)
       ..close();
     canvas.drawPath(path, paint);
   }
