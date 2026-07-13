@@ -30,6 +30,9 @@ class MarkdrawFileHandler {
   /// The native file path of the currently-open file (null on web).
   String? currentFilePath;
 
+  /// The source filename of the most recently opened drawing.
+  String? lastOpenedFileName;
+
   /// Saves to [currentFilePath], or falls through to [saveAs].
   Future<void> save() async {
     if (!kIsWeb && currentFilePath != null) {
@@ -74,6 +77,7 @@ class MarkdrawFileHandler {
         );
         final picked = files.first;
         controller.loadFromContent(utf8.decode(picked.bytes), picked.name);
+        lastOpenedFileName = picked.name;
       } on PlatformException {
         return;
       }
@@ -99,6 +103,7 @@ class MarkdrawFileHandler {
     if (content == null) return;
 
     controller.loadFromContent(content, file.name);
+    lastOpenedFileName = file.name;
     currentFilePath = kIsWeb ? null : file.path;
   }
 

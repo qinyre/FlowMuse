@@ -26,6 +26,10 @@ import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
 import '../ink_recognition/ink_recognition_repository.dart';
 import '../pdf_note_import/pdf_note_consumer.dart';
+import '../share/models/share_payload.dart';
+import '../share/models/share_result.dart';
+import '../share/services/share_export_coordinator.dart';
+import '../share/services/share_service_selector.dart';
 import '../view_models/whiteboard_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 
@@ -54,6 +58,8 @@ class WhiteboardPage extends ConsumerStatefulWidget {
 }
 
 enum _OwnerExitAction { cancel, leave, end }
+
+enum _ShareSelection { png, markdraw, excalidraw, invitation }
 
 class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   late final MarkdrawController _markdrawController;
@@ -647,8 +653,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     }
     final note = await ref.read(libraryIndexProvider.notifier).createNote();
     final title = _markdrawController.documentName?.trim();
-    if (title != null && title.isNotEmpty) {
-      await ref.read(libraryIndexProvider.notifier).renameNote(note.id, title);
+    final sourceName = _fileHandler.lastOpenedFileName;
+    final fallbackTitle = sourceName?.replaceFirst(
+      RegExp(r'\.(markdraw|excalidraw)$', caseSensitive: false),
+      '',
+    );
+    final noteTitle = title?.isNotEmpty == true ? title : fallbackTitle;
+    if (noteTitle != null && noteTitle.trim().isNotEmpty) {
+      await ref
+          .read(libraryIndexProvider.notifier)
+          .renameNote(note.id, noteTitle.trim());
     }
     final content = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
@@ -663,6 +677,114 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
           context.go(AppRoutes.whiteboardPath(noteId: note.id));
         }
       });
+    }
+  }
+
+  Future<void> _shareCurrentWhiteboard() async {
+    final selection = await showModalBottomSheet<_ShareSelection>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('分享 PNG 图片'),
+              onTap: () => Navigator.pop(sheetContext, _ShareSelection.png),
+            ),
+            ListTile(
+              leading: const Icon(Icons.draw_outlined),
+              title: const Text('分享 .markdraw 文件（仅手写和图形）'),
+              onTap: () =>
+                  Navigator.pop(sheetContext, _ShareSelection.markdraw),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_note_outlined),
+              title: const Text('分享 .excalidraw 文件（完整保留分页模板）'),
+              onTap: () =>
+                  Navigator.pop(sheetContext, _ShareSelection.excalidraw),
+            ),
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: const Text('分享协作邀请链接'),
+              onTap: () =>
+                  Navigator.pop(sheetContext, _ShareSelection.invitation),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selection == null || !mounted) return;
+
+    try {
+      final payload = await _buildSharePayload(selection);
+      if (payload == null || !mounted) return;
+      final result = await createShareService().share(payload);
+      if (!mounted || result == ShareResult.dismissed) return;
+      final message = switch (result) {
+        ShareResult.completed => '已打开系统分享面板',
+        ShareResult.unavailable =>
+          payload is ShareFilePayload ? '文件已导出' : '链接已复制',
+        ShareResult.failed => '分享失败，请稍后重试',
+        ShareResult.dismissed => '',
+      };
+      if (message.isNotEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('分享失败，请稍后重试')));
+      }
+    }
+  }
+
+  Future<SharePayload?> _buildSharePayload(_ShareSelection selection) async {
+    final exporter = ShareExportCoordinator();
+    switch (selection) {
+      case _ShareSelection.png:
+        return exporter.preparePng(_markdrawController);
+      case _ShareSelection.markdraw:
+        return exporter.prepareDocument(
+          _markdrawController,
+          DocumentFormat.markdraw,
+        );
+      case _ShareSelection.excalidraw:
+        return exporter.prepareDocument(
+          _markdrawController,
+          DocumentFormat.excalidraw,
+        );
+      case _ShareSelection.invitation:
+        final link = ref.read(whiteboardViewModelProvider).roomLink;
+        if (link == null) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('当前没有可分享的协作邀请链接')));
+          return null;
+        }
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('分享协作邀请'),
+            content: const Text('持有该链接的人可以加入当前协作房间。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('继续分享'),
+              ),
+            ],
+          ),
+        );
+        return confirmed == true
+            ? ShareTextPayload(title: 'FlowMuse 协作邀请', text: link)
+            : null;
     }
   }
 
@@ -1214,6 +1336,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
                   },
             onExportPng: () {
               unawaited(_fileHandler.exportPng());
+            },
+            onShare: () {
+              unawaited(_shareCurrentWhiteboard());
             },
             onExportSvg: () {
               unawaited(_fileHandler.exportSvg());

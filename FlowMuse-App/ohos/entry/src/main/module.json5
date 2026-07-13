@@ -31,6 +31,46 @@
             "actions": [
               "action.system.home"
             ]
+          },
+          {
+            "actions": ["ohos.want.action.sendData"],
+            "uris": [
+              {
+                "scheme": "file",
+                "utd": "com.example.flowmuse.markdraw",
+                "maxFileSupported": 1
+              },
+              {
+                "scheme": "file",
+                "utd": "com.example.flowmuse.excalidraw",
+                "maxFileSupported": 1
+              }
+            ]
+          },
+          {
+            "actions": ["ohos.want.action.viewData"],
+            "uris": [
+              {
+                "scheme": "file",
+                "type": "com.example.flowmuse.markdraw",
+                "linkFeature": "FileOpen"
+              },
+              {
+                "scheme": "file",
+                "type": "com.example.flowmuse.excalidraw",
+                "linkFeature": "FileOpen"
+              },
+              {
+                "scheme": "file",
+                "type": "general.plain-text",
+                "linkFeature": "FileOpen"
+              },
+              {
+                "scheme": "file",
+                "type": "general.json",
+                "linkFeature": "FileOpen"
+              }
+            ]
           }
         ]
       }

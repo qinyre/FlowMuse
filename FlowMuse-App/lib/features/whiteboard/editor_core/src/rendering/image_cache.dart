@@ -10,6 +10,7 @@ class ImageElementCache {
   final int maxSize;
   final Map<String, ui.Image> _cache = {};
   final Set<String> _decoding = {};
+  final Set<String> _failed = {};
   final List<String> _lruOrder = [];
 
   ImageElementCache({this.maxSize = 50});
@@ -25,8 +26,8 @@ class ImageElementCache {
       return cached;
     }
 
-    // Start async decode if not already in progress
-    if (!_decoding.contains(fileId)) {
+    // Start async decode if not already in progress or previously failed
+    if (!_decoding.contains(fileId) && !_failed.contains(fileId)) {
       _decoding.add(fileId);
       _decode(fileId, file);
     }
@@ -34,7 +35,23 @@ class ImageElementCache {
     return null;
   }
 
-  /// Returns the cached image if available, without triggering a decode.
+  /// 串行解码单张图片并等待完成。供 loadScene 预热缓存使用,
+  /// 避免 resolveImages 并发触发多张图片同时解码。
+  Future<void> decodeAndWait(String fileId, ImageFile file) async {
+    if (_cache.containsKey(fileId) || _failed.contains(fileId)) return;
+    await _decode(fileId, file);
+  }
+
+  /// 同步批量标记 fileId 为"解码中",阻止 getImage 并发启动 _decode。
+  /// 供 loadScene 在 notifyListeners 前占位使用,随后用 decodeAndWait 串行解码。
+  void markDecoding(Iterable<String> fileIds) {
+    for (final id in fileIds) {
+      if (!_cache.containsKey(id) && !_failed.contains(id)) {
+        _decoding.add(id);
+      }
+    }
+  }
+
   ui.Image? peek(String fileId) => _cache[fileId];
 
   /// Whether [fileId] has a decoded image in the cache.
@@ -67,6 +84,11 @@ class ImageElementCache {
       _lruOrder.add(fileId);
       _evictIfNeeded();
       onImageDecoded?.call();
+    } catch (_) {
+      // 解码失败(如并发内存压力):标记为失败避免无限重试,
+      // 仍通知一次以便已成功的图片能渲染。
+      _failed.add(fileId);
+      onImageDecoded?.call();
     } finally {
       _decoding.remove(fileId);
     }
@@ -93,5 +115,6 @@ class ImageElementCache {
     _cache.clear();
     _lruOrder.clear();
     _decoding.clear();
+    _failed.clear();
   }
 }
