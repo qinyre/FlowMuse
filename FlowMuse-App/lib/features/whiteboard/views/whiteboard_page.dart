@@ -61,7 +61,8 @@ enum _OwnerExitAction { cancel, leave, end }
 
 enum _ShareSelection { png, markdraw, excalidraw, invitation }
 
-class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
+class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
+    with WidgetsBindingObserver {
   late final MarkdrawController _markdrawController;
   late final MarkdrawFileHandler _fileHandler;
   late final WhiteboardCollaborationAdapter _collaborationAdapter;
@@ -85,9 +86,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
   bool _disposingOrLeaving = false;
   Future<void> _remoteSceneQueue = Future<void>.value();
 
+  // LocalDraftScheduler — 500ms debounce
+  Timer? _localDraftTimer;
+  bool _localDraftDirty = false;
+  static const Duration _localDraftDebounce = Duration(milliseconds: 500);
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _markdrawController = MarkdrawController();
     _markdrawController.onInkRecognitionModeChanged =
         _saveInkRecognitionPreference;
@@ -107,6 +114,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _flushLocalDraftOnExit();
     _disposingOrLeaving = true;
     unawaited(_collaborationSubscription?.cancel());
     unawaited(_fileStatusSceneSubscription?.cancel());
@@ -274,6 +283,47 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
     );
   }
 
+  void _scheduleLocalDraft() {
+    _localDraftDirty = true;
+    _localDraftTimer?.cancel();
+    _localDraftTimer = Timer(_localDraftDebounce, _flushLocalDraft);
+  }
+
+  Future<void> _flushLocalDraft() async {
+    _localDraftTimer = null;
+    if (!_localDraftDirty || !mounted) return;
+    _localDraftDirty = false;
+
+    if (widget.temporaryCollaboration) return;
+
+    final viewModel = ref.read(whiteboardViewModelProvider.notifier);
+    final repository = ref.read(whiteboardSceneRepositoryProvider);
+    final content = _markdrawController.serializeScene(
+      format: DocumentFormat.excalidraw,
+    );
+    await repository.saveScene(widget.noteId, content);
+    await _touchNoteWithCurrentCover(widget.noteId);
+    if (mounted) {
+      viewModel.markSaved();
+    }
+  }
+
+  void _flushLocalDraftOnExit() {
+    _localDraftTimer?.cancel();
+    _localDraftTimer = null;
+    if (_localDraftDirty) {
+      _flushLocalDraft();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _flushLocalDraftOnExit();
+    }
+  }
+
   Future<void> _saveMarkdrawScene() async {
     if (_loadingScene || _applyingRemoteScene) {
       CollaborationDebugLog.write('scene', 'local_change_skipped', {
@@ -282,26 +332,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       });
       return;
     }
-    if (widget.temporaryCollaboration) {
-      await _broadcastCurrentScene();
-      if (mounted) {
-        ref.read(whiteboardViewModelProvider.notifier).markSaved();
-      }
-      return;
-    }
-    final viewModel = ref.read(whiteboardViewModelProvider.notifier);
-    viewModel.markSaving();
-    final repository = ref.read(whiteboardSceneRepositoryProvider);
-    final content = _markdrawController.serializeScene(
-      format: DocumentFormat.excalidraw,
-    );
-    await repository.saveScene(widget.noteId, content);
-    await _touchNoteWithCurrentCover(widget.noteId);
+
+    // 协作增量 — accumulator（Task 2 已处理）
     await _broadcastCurrentScene();
-    if (!mounted) {
-      return;
-    }
-    viewModel.markSaved();
+
+    // 本地草稿 — 500ms debounce（封面由 _flushLocalDraft 处理）
+    _scheduleLocalDraft();
   }
 
   Future<void> _renameAndSaveDocument() async {
