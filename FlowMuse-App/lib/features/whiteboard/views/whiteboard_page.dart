@@ -1579,6 +1579,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       PageTemplate.wideLine => CanvasPageTemplate.wideLine,
       PageTemplate.grid => CanvasPageTemplate.grid,
       PageTemplate.dotGrid => CanvasPageTemplate.dotGrid,
+      PageTemplate.tianGrid => CanvasPageTemplate.tianGrid,
+      PageTemplate.miGrid => CanvasPageTemplate.miGrid,
+      PageTemplate.narrowVerticalLine => CanvasPageTemplate.narrowVerticalLine,
+      PageTemplate.wideVerticalLine => CanvasPageTemplate.wideVerticalLine,
+      PageTemplate.fourLineGrid => CanvasPageTemplate.fourLineGrid,
       PageTemplate.blank || null => CanvasPageTemplate.blank,
     };
   }

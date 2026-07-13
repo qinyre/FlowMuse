@@ -116,9 +116,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
               if (defaultTargetPlatform == TargetPlatform.ohos) {
                 try {
                   final files = await pickFilesViaOhosChannel(
-                    suffixFilters: const [
-                      'PDF文件(.pdf)|.pdf',
-                    ],
+                    suffixFilters: const ['PDF文件(.pdf)|.pdf'],
                   );
                   final picked = files.first;
                   return PdfNoteImportPayload(
@@ -671,6 +669,60 @@ class _TemplatePreviewPainter extends CustomPainter {
             canvas.drawCircle(Offset(x, y), 1, paint);
           }
         }
+      case PageTemplate.tianGrid:
+        _drawPracticeGrid(canvas, size, paint, diagonal: false);
+      case PageTemplate.miGrid:
+        _drawPracticeGrid(canvas, size, paint, diagonal: true);
+      case PageTemplate.narrowVerticalLine:
+        for (var x = 12.0; x < size.width; x += 10) {
+          canvas.drawLine(Offset(x, 8), Offset(x, size.height - 8), paint);
+        }
+      case PageTemplate.wideVerticalLine:
+        for (var x = 14.0; x < size.width; x += 16) {
+          canvas.drawLine(Offset(x, 8), Offset(x, size.height - 8), paint);
+        }
+      case PageTemplate.fourLineGrid:
+        for (var y = 12.0; y < size.height - 8; y += 24) {
+          for (var i = 0; i < 4; i++) {
+            final lineY = y + i * 4;
+            canvas.drawLine(
+              Offset(10, lineY),
+              Offset(size.width - 10, lineY),
+              paint,
+            );
+          }
+        }
+    }
+  }
+
+  void _drawPracticeGrid(
+    Canvas canvas,
+    Size size,
+    Paint paint, {
+    required bool diagonal,
+  }) {
+    final strokePaint = Paint.from(paint)..style = PaintingStyle.stroke;
+    const inset = 7.0;
+    const cell = 18.0;
+    for (var left = inset; left + cell <= size.width - inset; left += cell) {
+      for (var top = inset; top + cell <= size.height - inset; top += cell) {
+        final rect = Rect.fromLTWH(left, top, cell, cell);
+        canvas.drawRect(rect, strokePaint);
+        canvas.drawLine(
+          Offset(rect.left + rect.width / 2, rect.top),
+          Offset(rect.left + rect.width / 2, rect.bottom),
+          strokePaint,
+        );
+        canvas.drawLine(
+          Offset(rect.left, rect.top + rect.height / 2),
+          Offset(rect.right, rect.top + rect.height / 2),
+          strokePaint,
+        );
+        if (diagonal) {
+          canvas.drawLine(rect.topLeft, rect.bottomRight, strokePaint);
+          canvas.drawLine(rect.topRight, rect.bottomLeft, strokePaint);
+        }
+      }
     }
   }
 
@@ -687,6 +739,10 @@ String _templateLabel(PageTemplate template) {
     PageTemplate.wideLine => '宽横线',
     PageTemplate.grid => '格纹',
     PageTemplate.dotGrid => '点阵',
+    PageTemplate.tianGrid => '田字格',
+    PageTemplate.miGrid => '米字格',
+    PageTemplate.narrowVerticalLine => '窄竖线',
+    PageTemplate.wideVerticalLine => '宽竖线',
+    PageTemplate.fourLineGrid => '四线三格',
   };
 }
-

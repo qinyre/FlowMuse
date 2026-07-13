@@ -4,7 +4,18 @@ import '../elements/elements.dart' as flow;
 
 enum CanvasLayoutType { paged, unbounded }
 
-enum CanvasPageTemplate { blank, narrowLine, wideLine, grid, dotGrid }
+enum CanvasPageTemplate {
+  blank,
+  narrowLine,
+  wideLine,
+  grid,
+  dotGrid,
+  tianGrid,
+  miGrid,
+  narrowVerticalLine,
+  wideVerticalLine,
+  fourLineGrid,
+}
 
 class CanvasPage {
   const CanvasPage({

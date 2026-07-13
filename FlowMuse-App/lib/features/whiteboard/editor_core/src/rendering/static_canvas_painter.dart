@@ -482,6 +482,59 @@ class StaticCanvasPainter extends CustomPainter {
             canvas.drawCircle(Offset(x, y), 1.5 / viewport.zoom, paint);
           }
         }
+      case CanvasPageTemplate.tianGrid:
+        _renderPracticeGrid(canvas, rect, paint, diagonal: false);
+      case CanvasPageTemplate.miGrid:
+        _renderPracticeGrid(canvas, rect, paint, diagonal: true);
+      case CanvasPageTemplate.narrowVerticalLine:
+        for (var x = rect.left + 18; x < rect.right; x += 24) {
+          canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
+        }
+      case CanvasPageTemplate.wideVerticalLine:
+        for (var x = rect.left + 24; x < rect.right; x += 36) {
+          canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
+        }
+      case CanvasPageTemplate.fourLineGrid:
+        for (var y = rect.top + 18; y + 24 < rect.bottom; y += 56) {
+          for (var i = 0; i < 4; i++) {
+            final lineY = y + i * 8;
+            canvas.drawLine(
+              Offset(rect.left, lineY),
+              Offset(rect.right, lineY),
+              paint,
+            );
+          }
+        }
+    }
+  }
+
+  void _renderPracticeGrid(
+    Canvas canvas,
+    Rect rect,
+    Paint paint, {
+    required bool diagonal,
+  }) {
+    final strokePaint = Paint.from(paint)..style = PaintingStyle.stroke;
+    const cell = 64.0;
+    for (var left = rect.left; left + cell <= rect.right; left += cell) {
+      for (var top = rect.top; top + cell <= rect.bottom; top += cell) {
+        final cellRect = Rect.fromLTWH(left, top, cell, cell);
+        canvas.drawRect(cellRect, strokePaint);
+        canvas.drawLine(
+          Offset(cellRect.left + cellRect.width / 2, cellRect.top),
+          Offset(cellRect.left + cellRect.width / 2, cellRect.bottom),
+          strokePaint,
+        );
+        canvas.drawLine(
+          Offset(cellRect.left, cellRect.top + cellRect.height / 2),
+          Offset(cellRect.right, cellRect.top + cellRect.height / 2),
+          strokePaint,
+        );
+        if (diagonal) {
+          canvas.drawLine(cellRect.topLeft, cellRect.bottomRight, strokePaint);
+          canvas.drawLine(cellRect.topRight, cellRect.bottomLeft, strokePaint);
+        }
+      }
     }
   }
 

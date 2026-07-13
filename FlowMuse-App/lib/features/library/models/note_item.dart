@@ -8,7 +8,18 @@ enum LibraryViewMode { grid, list }
 
 enum NoteType { paged, unbounded }
 
-enum PageTemplate { blank, narrowLine, wideLine, grid, dotGrid }
+enum PageTemplate {
+  blank,
+  narrowLine,
+  wideLine,
+  grid,
+  dotGrid,
+  tianGrid,
+  miGrid,
+  narrowVerticalLine,
+  wideVerticalLine,
+  fourLineGrid,
+}
 
 class NoteItem {
   const NoteItem({
