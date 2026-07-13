@@ -388,10 +388,15 @@ class StaticCanvasPainter extends CustomPainter {
         .clamp(0.0, 1.0)
         .toDouble();
     final label = hint.readyToRelease ? '松开添加新页面' : '拉动添加新页面';
-    final center = Offset(
-      lastPage.bounds.center.dx,
-      lastPage.bounds.bottom + 48 / viewport.zoom,
-    );
+    final center = layout?.isRightToLeft ?? false
+        ? Offset(
+            lastPage.bounds.left - 48 / viewport.zoom,
+            lastPage.bounds.center.dy,
+          )
+        : Offset(
+            lastPage.bounds.center.dx,
+            lastPage.bounds.bottom + 48 / viewport.zoom,
+          );
     final textPainter = TextPainter(
       text: TextSpan(
         text: label,

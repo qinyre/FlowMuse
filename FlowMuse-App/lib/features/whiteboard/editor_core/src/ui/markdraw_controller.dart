@@ -797,11 +797,13 @@ class MarkdrawController extends ChangeNotifier {
   void _syncLayoutFromScene({
     CanvasLayoutType? fallbackType,
     CanvasPageTemplate? fallbackTemplate,
+    CanvasPageFlow? fallbackPageFlow,
   }) {
     _layout = CanvasLayout.fromScene(
       _editorState.scene.elements,
       fallbackType: fallbackType ?? _layout.type,
       fallbackTemplate: fallbackTemplate ?? _layout.template,
+      fallbackPageFlow: fallbackPageFlow ?? _layout.pageFlow,
     );
   }
 
@@ -2633,16 +2635,16 @@ class MarkdrawController extends ChangeNotifier {
     applyResult(UpdateViewportResult(newViewport));
   }
 
-  void scrollPagedViewportBy(double screenDeltaY) {
+  void scrollPagedViewportBy(double screenDelta) {
     if (!isPagedViewport) {
       return;
     }
     final viewport = _editorState.viewport;
+    final sceneDelta = screenDelta / viewport.zoom;
     final newViewport = ViewportState(
-      offset: Offset(
-        viewport.offset.dx,
-        viewport.offset.dy + screenDeltaY / viewport.zoom,
-      ),
+      offset: _layout.isRightToLeft
+          ? Offset(viewport.offset.dx - sceneDelta, viewport.offset.dy)
+          : Offset(viewport.offset.dx, viewport.offset.dy + sceneDelta),
       zoom: viewport.zoom,
     );
     applyResult(UpdateViewportResult(newViewport));
@@ -2655,12 +2657,25 @@ class MarkdrawController extends ChangeNotifier {
     final pages = _layout.pages;
     final index = pageIndex.clamp(0, pages.length - 1);
     final page = pages[index];
-    setViewport(
-      ViewportState(
-        offset: Offset(_editorState.viewport.offset.dx, page.bounds.top),
-        zoom: _editorState.viewport.zoom,
-      ),
-    );
+    final viewport = _editorState.viewport;
+    final targetOffset = _layout.isRightToLeft
+        ? Offset(
+            _rightToLeftPageViewportX(page, viewport.zoom),
+            viewport.offset.dy,
+          )
+        : Offset(viewport.offset.dx, page.bounds.top);
+    setViewport(ViewportState(offset: targetOffset, zoom: viewport.zoom));
+  }
+
+  double _rightToLeftPageViewportX(CanvasPage page, double zoom) {
+    if (_canvasSize.width <= 0) {
+      return page.bounds.left;
+    }
+    final visibleWidth = _canvasSize.width / math.max(zoom, 0.0001);
+    if (visibleWidth >= page.bounds.width) {
+      return page.bounds.center.dx - visibleWidth / 2;
+    }
+    return page.bounds.right - visibleWidth;
   }
 
   void appendPageAfterLastAndScroll() {
@@ -3412,13 +3427,13 @@ class MarkdrawController extends ChangeNotifier {
     final newPage = CanvasPage(
       id: pageId,
       index: insertIndex,
-      bounds: Rect.fromLTWH(
-        0,
-        insertIndex * (pageSize.height + CanvasLayout.pageGap),
-        pageSize.width,
-        pageSize.height,
+      bounds: CanvasLayout.pageBoundsForIndex(
+        index: insertIndex,
+        pageSize: pageSize,
+        pageFlow: _layout.pageFlow,
       ),
       template: _layout.template,
+      pageFlow: _layout.pageFlow,
     );
     pages.insert(insertIndex, newPage);
     _applyPageOrder(pages);
@@ -3471,26 +3486,27 @@ class MarkdrawController extends ChangeNotifier {
   List<ToolResult> _pageReorderResults(List<CanvasPage> pages) {
     final oldPagesById = {for (final page in _layout.pages) page.id: page};
     final nextPages = <CanvasPage>[];
-    final topDeltaByPageId = <String, double>{};
+    final deltaByPageId = <String, Offset>{};
 
     for (var i = 0; i < pages.length; i++) {
       final page = pages[i];
-      final nextTop = i * (page.bounds.height + CanvasLayout.pageGap);
+      final pageFlow = page.pageFlow;
       final next = CanvasPage(
         id: page.id,
         index: i,
-        bounds: Rect.fromLTWH(
-          page.bounds.left,
-          nextTop,
-          page.bounds.width,
-          page.bounds.height,
+        bounds: CanvasLayout.pageBoundsForIndex(
+          index: i,
+          pageSize: page.bounds.size,
+          pageFlow: pageFlow,
         ),
         template: page.template,
+        pageFlow: pageFlow,
         source: page.source,
       );
       nextPages.add(next);
-      topDeltaByPageId[page.id] =
-          next.bounds.top - (oldPagesById[page.id]?.bounds.top ?? nextTop);
+      deltaByPageId[page.id] =
+          next.bounds.topLeft -
+          (oldPagesById[page.id]?.bounds.topLeft ?? next.bounds.topLeft);
     }
 
     _layout = _layout.copyWith(pages: nextPages);
@@ -3539,11 +3555,15 @@ class MarkdrawController extends ChangeNotifier {
         continue;
       }
       final pageId = element.pageId;
-      final delta = pageId == null ? null : topDeltaByPageId[pageId];
-      if (delta == null || delta == 0) {
+      final delta = pageId == null ? null : deltaByPageId[pageId];
+      if (delta == null || delta == Offset.zero) {
         continue;
       }
-      results.add(UpdateElementResult(element.copyWith(y: element.y + delta)));
+      results.add(
+        UpdateElementResult(
+          element.copyWith(x: element.x + delta.dx, y: element.y + delta.dy),
+        ),
+      );
     }
     return results;
   }
@@ -3565,23 +3585,30 @@ class MarkdrawController extends ChangeNotifier {
       _layout = CanvasLayout(
         type: CanvasLayoutType.paged,
         template: _layout.template,
+        pageFlow: _layout.pageFlow,
       );
     }
 
     final results = <ToolResult>[];
     final nextPages = <CanvasPage>[];
-    var cursorY = 0.0;
+    var cursor = Offset.zero;
 
     for (var i = 0; i < pages.length; i++) {
       final page = pages[i];
       final pageId = 'page-${page.pageNumber}';
-      final pageBounds = Rect.fromLTWH(0, cursorY, page.width, page.height);
+      final pageBounds = Rect.fromLTWH(
+        cursor.dx,
+        cursor.dy,
+        page.width,
+        page.height,
+      );
       if (_layout.isPaged) {
         final canvasPage = CanvasPage(
           id: pageId,
           index: i,
           bounds: pageBounds,
           template: _layout.template,
+          pageFlow: _layout.pageFlow,
           source: 'pdf',
         );
         nextPages.add(canvasPage);
@@ -3612,8 +3639,8 @@ class MarkdrawController extends ChangeNotifier {
 
       final element = ImageElement(
         id: ElementId.generate(),
-        x: 0,
-        y: cursorY,
+        x: pageBounds.left,
+        y: pageBounds.top,
         width: page.width,
         height: page.height,
         fileId: fileId,
@@ -3628,7 +3655,9 @@ class MarkdrawController extends ChangeNotifier {
         ..add(AddFileResult(fileId: fileId, file: imageFile))
         ..add(AddElementResult(element));
 
-      cursorY += page.height + CanvasLayout.pageGap;
+      cursor = _layout.isRightToLeft
+          ? Offset(cursor.dx - page.width - CanvasLayout.pageGap, 0)
+          : Offset(0, cursor.dy + page.height + CanvasLayout.pageGap);
     }
 
     if (_layout.isPaged) {

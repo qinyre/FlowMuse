@@ -21,6 +21,7 @@ abstract interface class LibraryRepository {
     LibraryFilter kind = LibraryFilter.notes,
     NoteType noteType = NoteType.unbounded,
     PageTemplate pageTemplate = PageTemplate.blank,
+    PageFlow pageFlow = PageFlow.topToBottom,
     String? title,
     String? subtitle,
     String? notebookId,
@@ -122,6 +123,7 @@ class SqliteLibraryRepository implements LibraryRepository {
     LibraryFilter kind = LibraryFilter.notes,
     NoteType noteType = NoteType.unbounded,
     PageTemplate pageTemplate = PageTemplate.blank,
+    PageFlow pageFlow = PageFlow.topToBottom,
     String? title,
     String? subtitle,
     String? notebookId,
@@ -130,7 +132,7 @@ class SqliteLibraryRepository implements LibraryRepository {
     debugPrint(
       '[FlowMuseCreateNote] LibraryRepository.createNote start '
       'kind=${kind.name} noteType=${noteType.name} '
-      'pageTemplate=${pageTemplate.name} title="$title" '
+      'pageTemplate=${pageTemplate.name} pageFlow=${pageFlow.name} title="$title" '
       'notebookId=$notebookId tagIds=${tagIds.join(',')}',
     );
     final now = DateTime.now();
@@ -151,6 +153,7 @@ class SqliteLibraryRepository implements LibraryRepository {
             _noteColors[now.millisecondsSinceEpoch % _noteColors.length],
         noteType: noteType,
         pageTemplate: pageTemplate,
+        pageFlow: pageFlow,
         subtitle: subtitle,
         notebookId: validNotebookId,
         tagIds: validTagIds,
@@ -163,7 +166,8 @@ class SqliteLibraryRepository implements LibraryRepository {
     debugPrint(
       '[FlowMuseCreateNote] LibraryRepository.createNote inserted '
       'noteId=${note.id} title="${note.title}" '
-      'noteType=${note.noteType.name} pageTemplate=${note.pageTemplate.name}',
+      'noteType=${note.noteType.name} pageTemplate=${note.pageTemplate.name} '
+      'pageFlow=${note.pageFlow.name}',
     );
     return note;
   }
@@ -590,6 +594,7 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
     LibraryFilter kind = LibraryFilter.notes,
     NoteType noteType = NoteType.unbounded,
     PageTemplate pageTemplate = PageTemplate.blank,
+    PageFlow pageFlow = PageFlow.topToBottom,
     String? title,
     String? subtitle,
     String? notebookId,
@@ -600,6 +605,7 @@ class LibraryIndexNotifier extends AsyncNotifier<LibraryIndex> {
       kind: kind,
       noteType: noteType,
       pageTemplate: pageTemplate,
+      pageFlow: pageFlow,
       title: title,
       subtitle: subtitle,
       notebookId: notebookId,
@@ -780,6 +786,7 @@ Map<String, Object?> _noteToRow(NoteItem item) {
     'cover_color': item.coverColor.toARGB32(),
     'note_type': item.noteType.name,
     'page_template': item.pageTemplate.name,
+    'page_flow': item.pageFlow.name,
     'notebook_id': item.notebookId,
     'subtitle': item.subtitle,
     'cover_thumbnail': item.coverThumbnailBytes,
@@ -804,6 +811,11 @@ NoteItem _noteFromRow(Map<String, Object?> row, List<String> tagIds) {
       PageTemplate.values,
       row['page_template'],
       PageTemplate.blank,
+    ),
+    pageFlow: _enumByName(
+      PageFlow.values,
+      row['page_flow'],
+      PageFlow.topToBottom,
     ),
     notebookId: row['notebook_id'] as String?,
     tagIds: tagIds,

@@ -1,6 +1,6 @@
 # 数据模型
 
-本地数据库 `flowmuse_local.db`,schema 版本 4,开 `PRAGMA foreign_keys = ON`。时间字段都是毫秒时间戳,枚举存 `.name` 字符串,颜色存 ARGB32 整数。
+本地数据库 `flowmuse_local.db`,schema 版本 5,开 `PRAGMA foreign_keys = ON`。时间字段都是毫秒时间戳,枚举存 `.name` 字符串,颜色存 ARGB32 整数。
 
 ## 表结构
 
@@ -16,7 +16,8 @@
 | kind | TEXT NOT NULL | `notes` / `pdf` |
 | cover_color | INTEGER NOT NULL | ARGB32 |
 | note_type | TEXT NOT NULL | `paged` / `unbounded` |
-| page_template | TEXT NOT NULL | `blank` / `narrowLine` / `wideLine` / `grid` / `dotGrid` |
+| page_template | TEXT NOT NULL | `blank` / `narrowLine` / `wideLine` / `grid` / `dotGrid` / `tianGrid` / `miGrid` / `narrowVerticalLine` / `wideVerticalLine` / `fourLineGrid` / `ancientBook` |
+| page_flow | TEXT NOT NULL | `topToBottom` / `rightToLeft` |
 | notebook_id | TEXT | FK → notebooks(id),ON DELETE SET NULL |
 | subtitle | TEXT | |
 | cover_thumbnail | BLOB | 封面缩略图 |

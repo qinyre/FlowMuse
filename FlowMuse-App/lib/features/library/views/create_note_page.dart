@@ -31,6 +31,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
   String _title = '';
   NoteType _noteType = NoteType.paged;
   PageTemplate _pageTemplate = PageTemplate.blank;
+  PageFlow _pageFlow = PageFlow.topToBottom;
   bool _creating = false;
   final TextEditingController _titleController = TextEditingController();
   final FocusNode _titleFocusNode = FocusNode();
@@ -49,7 +50,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     debugPrint(
       '[FlowMuseCreateNote] CreateNotePage.create pressed '
       'title="$_title" noteType=${_noteType.name} '
-      'pageTemplate=${_pageTemplate.name}',
+      'pageTemplate=${_pageTemplate.name} pageFlow=${_pageFlow.name}',
     );
     setState(() => _creating = true);
     try {
@@ -59,6 +60,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
           .createNote(
             noteType: _noteType,
             pageTemplate: _pageTemplate,
+            pageFlow: _pageFlow,
             title: _title,
           );
       await defaultWhiteboardSceneRepository.saveScene(
@@ -102,7 +104,8 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     }
     debugPrint(
       '[FlowMuseCreateNote] CreateNotePage.importPdf pressed '
-      'noteType=${_noteType.name} pageTemplate=${_pageTemplate.name}',
+      'noteType=${_noteType.name} pageTemplate=${_pageTemplate.name} '
+      'pageFlow=${_pageFlow.name}',
     );
     setState(() => _creating = true);
     try {
@@ -112,6 +115,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
             ref.read,
             noteType: _noteType,
             pageTemplate: _pageTemplate,
+            pageFlow: _pageFlow,
             picker: () async {
               if (defaultTargetPlatform == TargetPlatform.ohos) {
                 try {
@@ -201,6 +205,10 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
                               noteType: _noteType,
                               onNoteTypeChanged: (value) {
                                 setState(() => _noteType = value);
+                              },
+                              pageFlow: _pageFlow,
+                              onPageFlowChanged: (value) {
+                                setState(() => _pageFlow = value);
                               },
                               onImport: () {
                                 unawaited(_importPdf());
@@ -355,6 +363,8 @@ class _NoteSetupPanel extends StatelessWidget {
     required this.titleChanged,
     required this.noteType,
     required this.onNoteTypeChanged,
+    required this.pageFlow,
+    required this.onPageFlowChanged,
     required this.onImport,
     required this.onSubmitted,
   });
@@ -364,6 +374,8 @@ class _NoteSetupPanel extends StatelessWidget {
   final ValueChanged<String> titleChanged;
   final NoteType noteType;
   final ValueChanged<NoteType> onNoteTypeChanged;
+  final PageFlow pageFlow;
+  final ValueChanged<PageFlow> onPageFlowChanged;
   final VoidCallback onImport;
   final VoidCallback onSubmitted;
 
@@ -409,6 +421,31 @@ class _NoteSetupPanel extends StatelessWidget {
                   onSelectionChanged: (value) {
                     onNoteTypeChanged(value.first);
                   },
+                ),
+              ),
+              const SizedBox(height: 10),
+              _PanelRow(
+                label: '排列',
+                child: SegmentedButton<PageFlow>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: PageFlow.topToBottom,
+                      label: Text('上下'),
+                      icon: Icon(LucideIcons.arrowDown),
+                    ),
+                    ButtonSegment(
+                      value: PageFlow.rightToLeft,
+                      label: Text('右左'),
+                      icon: Icon(LucideIcons.arrowLeft),
+                    ),
+                  ],
+                  selected: {pageFlow},
+                  onSelectionChanged: noteType == NoteType.paged
+                      ? (value) {
+                          onPageFlowChanged(value.first);
+                        }
+                      : null,
                 ),
               ),
               const SizedBox(height: 10),

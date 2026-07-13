@@ -8,6 +8,8 @@ enum LibraryViewMode { grid, list }
 
 enum NoteType { paged, unbounded }
 
+enum PageFlow { topToBottom, rightToLeft }
+
 enum PageTemplate {
   blank,
   narrowLine,
@@ -31,6 +33,7 @@ class NoteItem {
     required this.coverColor,
     this.noteType = NoteType.unbounded,
     this.pageTemplate = PageTemplate.blank,
+    this.pageFlow = PageFlow.topToBottom,
     this.notebookId,
     this.tagIds = const [],
     this.subtitle,
@@ -45,6 +48,7 @@ class NoteItem {
   final Color coverColor;
   final NoteType noteType;
   final PageTemplate pageTemplate;
+  final PageFlow pageFlow;
   final String? notebookId;
   final List<String> tagIds;
   final String? subtitle;
@@ -68,6 +72,7 @@ class NoteItem {
     Color? coverColor,
     NoteType? noteType,
     PageTemplate? pageTemplate,
+    PageFlow? pageFlow,
     String? notebookId,
     List<String>? tagIds,
     String? subtitle,
@@ -85,6 +90,7 @@ class NoteItem {
       coverColor: coverColor ?? this.coverColor,
       noteType: noteType ?? this.noteType,
       pageTemplate: pageTemplate ?? this.pageTemplate,
+      pageFlow: pageFlow ?? this.pageFlow,
       notebookId: clearNotebook ? null : notebookId ?? this.notebookId,
       tagIds: tagIds ?? this.tagIds,
       subtitle: subtitle ?? this.subtitle,

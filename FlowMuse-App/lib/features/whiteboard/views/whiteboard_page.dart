@@ -1570,6 +1570,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
           ? CanvasLayoutType.unbounded
           : CanvasLayoutType.paged,
       template: template,
+      pageFlow: _pageFlowForNote(note?.pageFlow),
     );
   }
 
@@ -1586,6 +1587,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       PageTemplate.fourLineGrid => CanvasPageTemplate.fourLineGrid,
       PageTemplate.ancientBook => CanvasPageTemplate.ancientBook,
       PageTemplate.blank || null => CanvasPageTemplate.blank,
+    };
+  }
+
+  CanvasPageFlow _pageFlowForNote(PageFlow? pageFlow) {
+    return switch (pageFlow) {
+      PageFlow.rightToLeft => CanvasPageFlow.rightToLeft,
+      PageFlow.topToBottom || null => CanvasPageFlow.topToBottom,
     };
   }
 }

@@ -58,6 +58,8 @@ class PdfNoteConsumer {
         .where((element) => element.isPdfBackground)
         .toList();
     pages.sort((a, b) {
+      final pageOrder = _pageOrder(a).compareTo(_pageOrder(b));
+      if (pageOrder != 0) return pageOrder;
       final y = a.y.compareTo(b.y);
       return y != 0 ? y : a.x.compareTo(b.x);
     });
@@ -85,6 +87,18 @@ class PdfNoteConsumer {
         : canvasSize.height / first.height;
     final zoom = widthZoom > heightZoom ? widthZoom : heightZoom;
     return ViewportState(offset: Offset(first.x, first.y), zoom: zoom);
+  }
+
+  static int _pageOrder(ImageElement element) {
+    final pageId = element.pageId;
+    if (pageId == null) {
+      return 1 << 30;
+    }
+    final match = RegExp(r'^page-(\d+)$').firstMatch(pageId);
+    if (match == null) {
+      return 1 << 30;
+    }
+    return int.tryParse(match.group(1)!) ?? 1 << 30;
   }
 }
 
