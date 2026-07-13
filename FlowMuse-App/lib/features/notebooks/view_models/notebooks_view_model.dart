@@ -132,13 +132,40 @@ class NotebooksViewModel extends Notifier<NotebooksState> {
         .renameNotebook(notebookId, name);
   }
 
-  Future<void> deleteNotebook(String notebookId) {
+  Future<void> editNotebook({
+    required String notebookId,
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  }) {
+    return ref.read(libraryIndexProvider.notifier).updateNotebook(
+          notebookId,
+          name: name,
+          coverColor: coverColor,
+          coverImage: coverImage,
+        );
+  }
+
+  Future<void> deleteNotebook(String notebookId) async {
+    // 先将该笔记本下的笔记移回"未归入笔记本"
+    final index = ref.read(libraryIndexProvider).asData?.value;
+    if (index != null) {
+      final notesToMove = index.notes
+          .where((note) => !note.isDeleted && note.notebookId == notebookId)
+          .map((note) => note.id)
+          .toList();
+      if (notesToMove.isNotEmpty) {
+        await ref
+            .read(libraryIndexProvider.notifier)
+            .moveNotesToNotebook(notesToMove, null);
+      }
+    }
     return ref.read(libraryIndexProvider.notifier).deleteNotebook(notebookId);
   }
 
   Future<void> deleteSelectedNotebooks() async {
     for (final id in state.selectedNotebookIds) {
-      await ref.read(libraryIndexProvider.notifier).deleteNotebook(id);
+      await deleteNotebook(id);
     }
     clearSelection();
   }

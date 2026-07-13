@@ -4,7 +4,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models/note_item.dart';
 
 class NoteCard extends StatelessWidget {
-  const NoteCard({super.key, required this.item, required this.onTap});
+  const NoteCard({
+    super.key,
+    required this.item,
+    required this.onTap,
+    this.onActionsTap,
+  });
 
   static const coverWidth = 132.0;
   static const coverHeight = 176.0;
@@ -17,9 +22,19 @@ class NoteCard extends StatelessWidget {
 
   final NoteItem item;
   final VoidCallback onTap;
+  final void Function(BuildContext context)? onActionsTap;
 
   @override
   Widget build(BuildContext context) {
+    final actionsKey = GlobalKey();
+
+    void showActions() {
+      final actionsContext = actionsKey.currentContext;
+      if (actionsContext != null) {
+        onActionsTap!(actionsContext);
+      }
+    }
+
     return Column(
       children: [
         SizedBox(
@@ -34,6 +49,7 @@ class NoteCard extends StatelessWidget {
             child: InkWell(
               key: ValueKey('note-card-${item.id}'),
               onTap: onTap,
+              onLongPress: onActionsTap != null ? showActions : null,
               child: NoteCover(item: item),
             ),
           ),
@@ -53,12 +69,23 @@ class NoteCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 4),
-            const Icon(
-              LucideIcons.chevronDown,
-              color: Color(0xFF555C59),
-              size: 16,
-            ),
+            if (onActionsTap != null)
+              GestureDetector(
+                key: actionsKey,
+                onTap: showActions,
+                child: SizedBox(
+                  key: ValueKey('note-card-actions-${item.id}'),
+                  width: 24,
+                  height: 24,
+                  child: Center(
+                    child: Icon(
+                      LucideIcons.chevronDown,
+                      color: Color(0xFF555C59),
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 5),

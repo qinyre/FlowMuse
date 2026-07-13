@@ -128,13 +128,40 @@ class TagsViewModel extends Notifier<TagsState> {
     return ref.read(libraryIndexProvider.notifier).renameTag(tagId, name);
   }
 
-  Future<void> deleteTag(String tagId) {
+  Future<void> editTag({
+    required String tagId,
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  }) {
+    return ref.read(libraryIndexProvider.notifier).updateTag(
+          tagId,
+          name: name,
+          coverColor: coverColor,
+          coverImage: coverImage,
+        );
+  }
+
+  Future<void> deleteTag(String tagId) async {
+    // 先将该标签从所有笔记中移除
+    final index = ref.read(libraryIndexProvider).asData?.value;
+    if (index != null) {
+      final notesWithTag = index.notes
+          .where((note) => !note.isDeleted && note.tagIds.contains(tagId))
+          .map((note) => note.id)
+          .toList();
+      if (notesWithTag.isNotEmpty) {
+        await ref
+            .read(libraryIndexProvider.notifier)
+            .removeTagFromNotes(notesWithTag, tagId);
+      }
+    }
     return ref.read(libraryIndexProvider.notifier).deleteTag(tagId);
   }
 
   Future<void> deleteSelectedTags() async {
     for (final id in state.selectedTagIds) {
-      await ref.read(libraryIndexProvider.notifier).deleteTag(id);
+      await deleteTag(id);
     }
     clearSelection();
   }

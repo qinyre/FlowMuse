@@ -7,6 +7,7 @@ import '../features/library/models/library_special_view.dart';
 import '../features/library/views/create_note_page.dart';
 import '../features/library/views/library_home_page.dart';
 import '../features/library/widgets/create_collection_dialog.dart';
+import '../features/library/widgets/edit_collection_page.dart';
 import '../features/search/views/search_page.dart';
 import '../features/settings/views/settings_page.dart';
 import '../features/notebooks/views/notebooks_page.dart';
@@ -21,6 +22,7 @@ class AppRoutes {
   static const library = '/library';
   static const createNote = '/create-note';
   static const createCollection = '/create-collection';
+  static const editCollection = '/edit-collection';
   static const search = '/search';
   static const notebooks = '/notebooks';
   static const notebookDetail = '/notebooks/:notebookId';
@@ -144,6 +146,13 @@ GoRouter createAppRouter() {
         pageBuilder: (context, state) {
           final params = state.extra! as CreateCollectionParams;
           return _modalPage(state, CreateCollectionPage(params: params));
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.editCollection,
+        pageBuilder: (context, state) {
+          final params = state.extra! as EditCollectionParams;
+          return _modalPage(state, EditCollectionPage(params: params));
         },
       ),
       GoRoute(

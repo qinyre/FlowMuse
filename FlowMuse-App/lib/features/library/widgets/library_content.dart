@@ -9,7 +9,10 @@ import '../models/note_item.dart';
 import '../repositories/library_repository.dart';
 import '../view_models/library_home_view_model.dart';
 import 'create_note_card.dart';
+import 'note_actions.dart';
 import 'note_card.dart';
+
+enum _NoteAction { rename, moveToNotebook, selectTags, delete, restore }
 
 class LibraryContent extends StatefulWidget {
   const LibraryContent({
@@ -28,12 +31,17 @@ class LibraryContent extends StatefulWidget {
     required this.onClearSelection,
     required this.onDeleteSelected,
     required this.onRestoreSelected,
+    required this.onRestoreNote,
     required this.onDeleteSelectedForever,
     required this.onMoveSelectedToNotebook,
     required this.onAddTagsToSelected,
     required this.onCreate,
     required this.onJoinRoom,
     required this.onOpenNote,
+    this.onRenameNote,
+    this.onMoveNoteToNotebook,
+    this.onSetNoteTags,
+    this.onDeleteNote,
   });
 
   final bool compact;
@@ -50,12 +58,17 @@ class LibraryContent extends StatefulWidget {
   final VoidCallback onClearSelection;
   final Future<void> Function() onDeleteSelected;
   final Future<void> Function() onRestoreSelected;
+  final Future<void> Function(String noteId) onRestoreNote;
   final Future<void> Function() onDeleteSelectedForever;
   final Future<void> Function(String? notebookId) onMoveSelectedToNotebook;
   final Future<void> Function(List<String> tagIds) onAddTagsToSelected;
   final VoidCallback onCreate;
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
+  final Future<void> Function(String noteId, String newName)? onRenameNote;
+  final Future<void> Function(String noteId, String? notebookId)? onMoveNoteToNotebook;
+  final Future<void> Function(String noteId, List<String> tagIds)? onSetNoteTags;
+  final Future<void> Function(String noteId)? onDeleteNote;
 
   @override
   State<LibraryContent> createState() => _LibraryContentState();
@@ -227,6 +240,11 @@ class _LibraryContentState extends State<LibraryContent> {
         onCreate: widget.onCreate,
         onJoinRoom: widget.onJoinRoom,
         onOpenNote: widget.onOpenNote,
+        onRestoreNote: widget.onRestoreNote,
+        onRenameNote: widget.onRenameNote,
+        onMoveNoteToNotebook: widget.onMoveNoteToNotebook,
+        onSetNoteTags: widget.onSetNoteTags,
+        onDeleteNote: widget.onDeleteNote,
       ),
     );
   }
@@ -361,6 +379,11 @@ class _LibraryItems extends StatelessWidget {
     required this.onCreate,
     required this.onJoinRoom,
     required this.onOpenNote,
+    required this.onRestoreNote,
+    this.onRenameNote,
+    this.onMoveNoteToNotebook,
+    this.onSetNoteTags,
+    this.onDeleteNote,
   });
 
   final LibraryHomeState state;
@@ -373,6 +396,11 @@ class _LibraryItems extends StatelessWidget {
   final VoidCallback onCreate;
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
+  final Future<void> Function(String noteId) onRestoreNote;
+  final Future<void> Function(String noteId, String newName)? onRenameNote;
+  final Future<void> Function(String noteId, String? notebookId)? onMoveNoteToNotebook;
+  final Future<void> Function(String noteId, List<String> tagIds)? onSetNoteTags;
+  final Future<void> Function(String noteId)? onDeleteNote;
 
   @override
   Widget build(BuildContext context) {
@@ -386,6 +414,11 @@ class _LibraryItems extends StatelessWidget {
         onCreate: onCreate,
         onJoinRoom: onJoinRoom,
         onOpenNote: onOpenNote,
+        onRestoreNote: onRestoreNote,
+        onRenameNote: onRenameNote,
+        onMoveNoteToNotebook: onMoveNoteToNotebook,
+        onSetNoteTags: onSetNoteTags,
+        onDeleteNote: onDeleteNote,
       );
     }
 
@@ -403,6 +436,11 @@ class _LibraryItems extends StatelessWidget {
             onCreate: onCreate,
             onJoinRoom: onJoinRoom,
             onOpenNote: onOpenNote,
+            onRestoreNote: onRestoreNote,
+            onRenameNote: onRenameNote,
+            onMoveNoteToNotebook: onMoveNoteToNotebook,
+            onSetNoteTags: onSetNoteTags,
+            onDeleteNote: onDeleteNote,
           ),
       ],
     );
@@ -430,6 +468,11 @@ class _LibraryItemsContent extends StatelessWidget {
     required this.onCreate,
     required this.onJoinRoom,
     required this.onOpenNote,
+    required this.onRestoreNote,
+    this.onRenameNote,
+    this.onMoveNoteToNotebook,
+    this.onSetNoteTags,
+    this.onDeleteNote,
   });
 
   final LibraryHomeState state;
@@ -440,6 +483,126 @@ class _LibraryItemsContent extends StatelessWidget {
   final VoidCallback onCreate;
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
+  final Future<void> Function(String noteId) onRestoreNote;
+  final Future<void> Function(String noteId, String newName)? onRenameNote;
+  final Future<void> Function(String noteId, String? notebookId)? onMoveNoteToNotebook;
+  final Future<void> Function(String noteId, List<String> tagIds)? onSetNoteTags;
+  final Future<void> Function(String noteId)? onDeleteNote;
+
+  void _showNoteActions(BuildContext context, NoteItem item) async {
+    final RenderBox? button = context.findRenderObject() as RenderBox?;
+    final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final actionContext = Navigator.of(context).context;
+
+    RelativeRect position;
+    if (button != null && overlay != null) {
+      final bottomRight = button.localToGlobal(
+        button.size.bottomRight(Offset.zero),
+        ancestor: overlay,
+      );
+      final arrowY = bottomRight.dy;
+      final menuLeft = bottomRight.dx - 8;
+      position = RelativeRect.fromLTRB(
+        menuLeft,
+        arrowY + 4,
+        menuLeft,
+        overlay.size.height - arrowY - 4,
+      );
+    } else {
+      final size = MediaQuery.of(context).size;
+      position = RelativeRect.fromLTRB(size.width / 2, size.height / 2, size.width / 2, size.height / 2);
+    }
+
+    final menuItems = specialView == LibrarySpecialView.trash
+        ? const [
+            PopupMenuItem<_NoteAction>(
+              value: _NoteAction.restore,
+              child: ListTile(
+                leading: Icon(LucideIcons.rotateCcw),
+                title: Text('恢复'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ]
+        : const [
+            PopupMenuItem<_NoteAction>(
+              value: _NoteAction.rename,
+              child: ListTile(
+                leading: Icon(LucideIcons.penLine),
+                title: Text('重命名'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem<_NoteAction>(
+              value: _NoteAction.moveToNotebook,
+              child: ListTile(
+                leading: Icon(LucideIcons.bookOpen),
+                title: Text('移动至'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem<_NoteAction>(
+              value: _NoteAction.selectTags,
+              child: ListTile(
+                leading: Icon(LucideIcons.tag),
+                title: Text('选择标签'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem<_NoteAction>(
+              value: _NoteAction.delete,
+              child: ListTile(
+                leading: Icon(LucideIcons.trash2),
+                title: Text('删除'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ];
+    final selected = await showMenu<_NoteAction>(
+      context: context,
+      position: position,
+      items: menuItems,
+    );
+    if (selected == null || !actionContext.mounted) {
+      return;
+    }
+    await runAfterContextTeardownAsync(actionContext, () async {
+      switch (selected) {
+        case _NoteAction.rename:
+          final name = await showDialog<String>(
+            context: actionContext,
+            builder: (context) => _NoteRenameDialog(initialValue: item.title),
+          );
+          if (name != null && actionContext.mounted) {
+            await onRenameNote!(item.id, name);
+          }
+        case _NoteAction.moveToNotebook:
+          final result = await showDialog<MoveToNotebookResult>(
+            context: actionContext,
+            builder: (context) => MoveToNotebookDialog(
+              currentNotebookId: item.notebookId,
+            ),
+          );
+          if (result != null && actionContext.mounted) {
+            await onMoveNoteToNotebook!(item.id, result.notebookId);
+          }
+        case _NoteAction.selectTags:
+          final tagIds = await showDialog<List<String>>(
+            context: actionContext,
+            builder: (context) => SelectTagsDialog(
+              currentTagIds: item.tagIds,
+            ),
+          );
+          if (tagIds != null && actionContext.mounted) {
+            await onSetNoteTags!(item.id, tagIds);
+          }
+        case _NoteAction.delete:
+          await onDeleteNote!(item.id);
+        case _NoteAction.restore:
+          await onRestoreNote(item.id);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -468,6 +631,9 @@ class _LibraryItemsContent extends StatelessWidget {
             onTap: state.selectionMode
                 ? () => onSelectionChanged(item.id)
                 : () => onOpenNote(item),
+            onActionsTap: specialView == LibrarySpecialView.trash || onRenameNote != null
+                ? (BuildContext buttonContext) => _showNoteActions(buttonContext, item)
+                : null,
           );
         },
       );
@@ -518,6 +684,9 @@ class _LibraryItemsContent extends StatelessWidget {
                 onTap: state.selectionMode
                     ? () => onSelectionChanged(item.id)
                     : () => onOpenNote(item),
+                onActionsTap: specialView == LibrarySpecialView.trash || onRenameNote != null
+                    ? (BuildContext buttonContext) => _showNoteActions(buttonContext, item)
+                    : null,
               ),
             ),
             if (state.selectionMode)
@@ -581,6 +750,7 @@ class _NoteTile extends StatelessWidget {
     required this.selected,
     required this.onSelectionChanged,
     required this.onTap,
+    this.onActionsTap,
   });
 
   final NoteItem item;
@@ -588,6 +758,7 @@ class _NoteTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onSelectionChanged;
   final VoidCallback onTap;
+  final void Function(BuildContext context)? onActionsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -601,11 +772,18 @@ class _NoteTile extends StatelessWidget {
         subtitle: Text(item.date),
         trailing: selectionMode
             ? Checkbox(value: selected, onChanged: (_) => onSelectionChanged())
-            : Icon(
-                item.kind == LibraryFilter.pdf
-                    ? LucideIcons.fileText
-                    : LucideIcons.bookOpen,
-              ),
+            : onActionsTap != null
+                ? Builder(
+                    builder: (buttonContext) => IconButton(
+                      icon: const Icon(LucideIcons.chevronDown, size: 18),
+                      onPressed: () => onActionsTap!(buttonContext),
+                    ),
+                  )
+                : Icon(
+                    item.kind == LibraryFilter.pdf
+                        ? LucideIcons.fileText
+                        : LucideIcons.bookOpen,
+                  ),
         onTap: onTap,
       ),
     );
@@ -843,6 +1021,60 @@ class _LibraryPopupMenuButton<T extends Object> extends StatelessWidget {
               },
         child: Text(label),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 笔记重命名对话框
+// ---------------------------------------------------------------------------
+
+class _NoteRenameDialog extends StatefulWidget {
+  const _NoteRenameDialog({required this.initialValue});
+
+  final String initialValue;
+
+  @override
+  State<_NoteRenameDialog> createState() => _NoteRenameDialogState();
+}
+
+class _NoteRenameDialogState extends State<_NoteRenameDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    Navigator.of(context).pop(value ?? _controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('重命名笔记'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        onSubmitted: _submit,
+        decoration: const InputDecoration(border: OutlineInputBorder()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('保存')),
+      ],
     );
   }
 }
