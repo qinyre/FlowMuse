@@ -67,7 +67,6 @@ class FreedrawTool implements Tool {
     }
     _points.add(point);
     _recordPressure(pressure);
-    _liveElement = _buildElement(context, isComplete: false);
     return null;
   }
 
@@ -115,6 +114,18 @@ class FreedrawTool implements Tool {
     final tombstone = live.copyWith(isDeleted: true, version: ++_liveVersion);
     _clearStrokeState(clearSession: true);
     return tombstone;
+  }
+
+  /// Builds a collaboration-only snapshot on demand.
+  ///
+  /// Pointer moves intentionally do not call this: constructing a complete
+  /// element copies every point in the active stroke, so callers must throttle
+  /// snapshots outside the input hot path.
+  FreedrawElement? buildLiveElement(ToolContext context) {
+    if (!_isDrawing || _points.isEmpty) {
+      return null;
+    }
+    return _liveElement = _buildElement(context, isComplete: false);
   }
 
   void startNewSession() {

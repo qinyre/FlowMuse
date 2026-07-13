@@ -234,6 +234,10 @@ class MarkdrawController extends ChangeNotifier {
   /// Called whenever the scene changes (element add/update/remove).
   void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
   void Function(FreedrawElement element)? onLiveFreedrawChanged;
+  Timer? _liveFreedrawTimer;
+  static const Duration _liveFreedrawBroadcastInterval = Duration(
+    milliseconds: 80,
+  );
 
   List<Element>? _lastChangedElements;
 
@@ -580,6 +584,7 @@ class MarkdrawController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _inkRecognitionTimer?.cancel();
+    _liveFreedrawTimer?.cancel();
     _imageCache.dispose();
     keyboardFocusNode.dispose();
     textEditingController.dispose();
@@ -1913,7 +1918,7 @@ class MarkdrawController extends ChangeNotifier {
           pressure: r.pressure,
         ),
       );
-      _emitLiveFreedraw();
+      _scheduleLiveFreedraw();
       mousePosition = event.localPosition;
       notifyListeners();
       return;
@@ -1927,7 +1932,7 @@ class MarkdrawController extends ChangeNotifier {
     applyResult(
       _activeTool.onPointerMove(point, toolContext, screenDelta: event.delta),
     );
-    _emitLiveFreedraw();
+    _scheduleLiveFreedraw();
     mousePosition = event.localPosition;
     notifyListeners();
   }
@@ -1951,6 +1956,7 @@ class MarkdrawController extends ChangeNotifier {
         _activeDrawPointerId != null) {
       // --- Unified modeler path for freedraw ---
       if (event.pointer != _activeDrawPointerId) return;
+      _cancelPendingLiveFreedraw();
       final sample = _normalizer.normalize(event, phase: StrokePhase.up);
       _recorder?.record(
         sample,
@@ -2146,6 +2152,7 @@ class MarkdrawController extends ChangeNotifier {
 
   void _cancelActiveToolInteraction() {
     if (_activeTool is FreedrawTool) {
+      _cancelPendingLiveFreedraw();
       _emitLiveFreedraw((_activeTool as FreedrawTool).cancelStroke());
     } else {
       _activeTool.reset();
@@ -2153,15 +2160,30 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   void _emitLiveFreedraw([FreedrawElement? element]) {
+    final callback = onLiveFreedrawChanged;
+    if (callback == null) return;
     final live =
         element ??
         (_activeTool is FreedrawTool
-            ? (_activeTool as FreedrawTool).liveElement
+            ? (_activeTool as FreedrawTool).buildLiveElement(toolContext)
             : null);
     if (live == null) return;
-    onLiveFreedrawChanged?.call(
-      applyDefaultStyleToElement(live) as FreedrawElement,
-    );
+    callback(applyDefaultStyleToElement(live) as FreedrawElement);
+  }
+
+  void _scheduleLiveFreedraw() {
+    if (onLiveFreedrawChanged == null || _liveFreedrawTimer != null) {
+      return;
+    }
+    _liveFreedrawTimer = Timer(_liveFreedrawBroadcastInterval, () {
+      _liveFreedrawTimer = null;
+      _emitLiveFreedraw();
+    });
+  }
+
+  void _cancelPendingLiveFreedraw() {
+    _liveFreedrawTimer?.cancel();
+    _liveFreedrawTimer = null;
   }
 
   /// Marks the end of a two-finger viewport gesture.

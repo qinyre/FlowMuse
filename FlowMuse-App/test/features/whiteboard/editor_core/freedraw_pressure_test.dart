@@ -3,10 +3,14 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dar
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/scene/scene.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/editor/tool_result.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/editor/tools/freedraw_tool.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/editor/tool_type.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/viewport_state.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/ui/markdraw_controller.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late ToolContext context;
 
   setUp(() {
@@ -59,11 +63,13 @@ void main() {
 
     tool.onPointerDown(const Point(0, 0), context);
     tool.onPointerMove(const Point(4, 0), context);
-    final live = tool.liveElement!;
+    expect(tool.liveElement, isNull);
+    final live = tool.buildLiveElement(context)!;
     expect(live.isComplete, isFalse);
 
     tool.onPointerMove(const Point(8, 0), context);
-    final update = tool.liveElement!;
+    expect(tool.liveElement, same(live));
+    final update = tool.buildLiveElement(context)!;
     expect(update.id, live.id);
     expect(update.version, greaterThan(live.version));
 
@@ -80,7 +86,7 @@ void main() {
 
     tool.onPointerDown(const Point(0, 0), context);
     tool.onPointerMove(const Point(4, 0), context);
-    final live = tool.liveElement!;
+    final live = tool.buildLiveElement(context)!;
     final cancel = tool.cancelStroke();
 
     expect(cancel, isNotNull);
@@ -96,6 +102,39 @@ void main() {
 
     expect(tool.overlay!.showCreationPreviewLine, isFalse);
   });
+
+  test(
+    'controller throttles collaboration snapshots outside PointerMove',
+    () async {
+      final controller = MarkdrawController();
+      addTearDown(controller.dispose);
+      controller.switchTool(ToolType.freedraw);
+      final emitted = <FreedrawElement>[];
+      controller.onLiveFreedrawChanged = emitted.add;
+
+      controller.onPointerDown(
+        const PointerDownEvent(
+          pointer: 1,
+          kind: PointerDeviceKind.stylus,
+          position: Offset.zero,
+          timeStamp: Duration.zero,
+        ),
+      );
+      controller.onPointerMove(
+        const PointerMoveEvent(
+          pointer: 1,
+          kind: PointerDeviceKind.stylus,
+          position: Offset(12, 0),
+          timeStamp: Duration(milliseconds: 16),
+        ),
+      );
+
+      expect(emitted, isEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(emitted, hasLength(1));
+      expect(emitted.single.isComplete, isFalse);
+    },
+  );
 }
 
 FreedrawElement _createdElement(ToolResult? result) {
