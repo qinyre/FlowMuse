@@ -36,6 +36,8 @@ class PagedAppendPageHint {
 ///
 /// An optional [previewElement] is rendered last, for live creation preview.
 class StaticCanvasPainter extends CustomPainter {
+  static const _pageTemplateMargin = 48.0;
+
   final Scene scene;
   final RoughAdapter adapter;
   final ViewportState viewport;
@@ -446,7 +448,7 @@ class StaticCanvasPainter extends CustomPainter {
   }
 
   void _renderPageTemplate(Canvas canvas, CanvasPage page) {
-    final rect = page.bounds.deflate(32);
+    final rect = page.bounds.deflate(_pageTemplateMargin);
     final paint = Paint()
       ..color = const Color(0xFFD6DED9)
       ..strokeWidth = 1 / viewport.zoom;
@@ -463,18 +465,10 @@ class StaticCanvasPainter extends CustomPainter {
         }
       case CanvasPageTemplate.grid:
         for (var x = rect.left; x < rect.right; x += 32) {
-          canvas.drawLine(
-            Offset(x, page.bounds.top),
-            Offset(x, page.bounds.bottom),
-            paint,
-          );
+          canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
         }
         for (var y = rect.top; y < rect.bottom; y += 32) {
-          canvas.drawLine(
-            Offset(page.bounds.left, y),
-            Offset(page.bounds.right, y),
-            paint,
-          );
+          canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
         }
       case CanvasPageTemplate.dotGrid:
         for (var x = rect.left; x < rect.right; x += 32) {
@@ -522,12 +516,7 @@ class StaticCanvasPainter extends CustomPainter {
       ..color = const Color(0xFF343A34)
       ..style = PaintingStyle.fill;
 
-    final frame = Rect.fromLTRB(
-      rect.left + 12,
-      rect.top + 36,
-      rect.right - 12,
-      rect.bottom - 36,
-    );
+    final frame = rect;
     canvas.drawRect(frame, framePaint);
 
     final centerX = frame.center.dx;
@@ -598,9 +587,10 @@ class StaticCanvasPainter extends CustomPainter {
     required bool diagonal,
   }) {
     final strokePaint = Paint.from(paint)..style = PaintingStyle.stroke;
-    const cell = 64.0;
-    for (var left = rect.left; left + cell <= rect.right; left += cell) {
-      for (var top = rect.top; top + cell <= rect.bottom; top += cell) {
+    const cell = 56.0;
+    const gap = 8.0;
+    for (var left = rect.left; left + cell <= rect.right; left += cell + gap) {
+      for (var top = rect.top; top + cell <= rect.bottom; top += cell + gap) {
         final cellRect = Rect.fromLTWH(left, top, cell, cell);
         canvas.drawRect(cellRect, strokePaint);
         canvas.drawLine(

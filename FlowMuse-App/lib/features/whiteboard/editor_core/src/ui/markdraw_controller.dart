@@ -6,7 +6,6 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
@@ -3409,14 +3408,15 @@ class MarkdrawController extends ChangeNotifier {
       pages.length,
     );
     final pageId = 'page-${ElementId.generate().value}';
+    final pageSize = CanvasLayout.pageSizeForTemplate(_layout.template);
     final newPage = CanvasPage(
       id: pageId,
       index: insertIndex,
       bounds: Rect.fromLTWH(
         0,
-        insertIndex * (CanvasLayout.pageHeight + CanvasLayout.pageGap),
-        CanvasLayout.pageWidth,
-        CanvasLayout.pageHeight,
+        insertIndex * (pageSize.height + CanvasLayout.pageGap),
+        pageSize.width,
+        pageSize.height,
       ),
       template: _layout.template,
     );

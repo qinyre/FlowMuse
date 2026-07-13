@@ -709,7 +709,15 @@ class _TemplatePreviewPainter extends CustomPainter {
       ..color = const Color(0xFF394039)
       ..style = PaintingStyle.fill;
 
-    final rect = Rect.fromLTWH(8, 14, size.width - 16, size.height - 28);
+    final availableWidth = size.width - 12;
+    final availableHeight = size.height - 12;
+    final width = availableWidth;
+    final height = (width * 0.58).clamp(0.0, availableHeight).toDouble();
+    final rect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: width,
+      height: height,
+    );
     canvas.drawRect(rect, framePaint);
 
     final centerX = rect.center.dx;
@@ -778,9 +786,18 @@ class _TemplatePreviewPainter extends CustomPainter {
   }) {
     final strokePaint = Paint.from(paint)..style = PaintingStyle.stroke;
     const inset = 7.0;
-    const cell = 18.0;
-    for (var left = inset; left + cell <= size.width - inset; left += cell) {
-      for (var top = inset; top + cell <= size.height - inset; top += cell) {
+    const cell = 16.0;
+    const gap = 3.0;
+    for (
+      var left = inset;
+      left + cell <= size.width - inset;
+      left += cell + gap
+    ) {
+      for (
+        var top = inset;
+        top + cell <= size.height - inset;
+        top += cell + gap
+      ) {
         final rect = Rect.fromLTWH(left, top, cell, cell);
         canvas.drawRect(rect, strokePaint);
         canvas.drawLine(

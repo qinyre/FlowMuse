@@ -43,6 +43,8 @@ class CanvasLayout {
 
   static const pageWidth = 794.0;
   static const pageHeight = 1123.0;
+  static const landscapePageWidth = pageHeight;
+  static const landscapePageHeight = pageWidth;
   static const pageGap = 48.0;
 
   final CanvasLayoutType type;
@@ -51,16 +53,27 @@ class CanvasLayout {
 
   bool get isPaged => type == CanvasLayoutType.paged;
 
+  static Size pageSizeForTemplate(CanvasPageTemplate template) {
+    return switch (template) {
+      CanvasPageTemplate.ancientBook => const Size(
+        landscapePageWidth,
+        landscapePageHeight,
+      ),
+      _ => const Size(pageWidth, pageHeight),
+    };
+  }
+
   CanvasLayout ensurePage() {
     if (!isPaged || pages.isNotEmpty) {
       return this;
     }
+    final pageSize = pageSizeForTemplate(template);
     return copyWith(
       pages: [
         CanvasPage(
           id: 'page-1',
           index: 0,
-          bounds: const Rect.fromLTWH(0, 0, pageWidth, pageHeight),
+          bounds: Rect.fromLTWH(0, 0, pageSize.width, pageSize.height),
           template: template,
         ),
       ],
