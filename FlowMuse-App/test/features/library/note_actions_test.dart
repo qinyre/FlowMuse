@@ -41,6 +41,40 @@ void main() {
     expect(tapped, 1);
   });
 
+  testWidgets('long press uses the actions button as its menu anchor', (
+    WidgetTester tester,
+  ) async {
+    BuildContext? menuAnchor;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: NoteCard.coverWidth,
+              child: NoteCard(
+                item: _noteItem(),
+                onTap: () {},
+                onActionsTap: (context) => menuAnchor = context,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.longPress(find.byKey(const ValueKey('note-card-note-1')));
+    await tester.pump();
+
+    final anchorBox = menuAnchor!.findRenderObject()! as RenderBox;
+    final actionBox = tester.renderObject<RenderBox>(
+      find.byKey(const ValueKey('note-card-actions-note-1')),
+    );
+    expect(
+      anchorBox.localToGlobal(anchorBox.size.center(Offset.zero)),
+      actionBox.localToGlobal(actionBox.size.center(Offset.zero)),
+    );
+  });
+
   testWidgets('selecting a tag clears untagged automatically', (
     WidgetTester tester,
   ) async {
