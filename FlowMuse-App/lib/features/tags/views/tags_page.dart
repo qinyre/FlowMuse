@@ -351,18 +351,29 @@ class _NoteItems extends StatelessWidget {
     final RenderBox? button = context.findRenderObject() as RenderBox?;
     final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
 
-    if (button == null || overlay == null) return;
-
-    final bottomRight = button.localToGlobal(
-      button.size.bottomRight(Offset.zero),
-      ancestor: overlay,
-    );
-    final position = RelativeRect.fromLTRB(
-      bottomRight.dx - 8,
-      bottomRight.dy + 4,
-      overlay.size.width - bottomRight.dx,
-      overlay.size.height - bottomRight.dy - 4,
-    );
+    RelativeRect position;
+    if (button != null && overlay != null) {
+      final bottomRight = button.localToGlobal(
+        button.size.bottomRight(Offset.zero),
+        ancestor: overlay,
+      );
+      final arrowY = bottomRight.dy;
+      final menuLeft = bottomRight.dx - 8;
+      position = RelativeRect.fromLTRB(
+        menuLeft,
+        arrowY + 4,
+        menuLeft,
+        overlay.size.height - arrowY - 4,
+      );
+    } else {
+      final size = MediaQuery.of(context).size;
+      position = RelativeRect.fromLTRB(
+        size.width / 2,
+        size.height / 2,
+        size.width / 2,
+        size.height / 2,
+      );
+    }
 
     final selected = await showMenu<_NoteAction>(
       context: context,
@@ -465,16 +476,24 @@ class _TagCoverCard extends StatelessWidget {
             shadowColor: const Color(0x0F5A625F),
             clipBehavior: Clip.antiAlias,
             shape: const RoundedRectangleBorder(),
-            child: InkWell(
-              key: ValueKey('tag-card-${tag.id}'),
-              onTap: onTap,
-              onLongPress: () {
-                final arrowCtx = _arrowKey.currentContext;
-                if (arrowCtx != null) {
-                  _showCollectionActions(arrowCtx, onRename: onRename, onEdit: onEdit, onDelete: onDelete);
-                }
-              },
-              child: _TagCover(tag: tag),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _TagCover(tag: tag),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    key: ValueKey('tag-card-${tag.id}'),
+                    onTap: onTap,
+                    onLongPress: () {
+                      final arrowCtx = _arrowKey.currentContext;
+                      if (arrowCtx != null) {
+                        _showCollectionActions(arrowCtx, onRename: onRename, onEdit: onEdit, onDelete: onDelete);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -908,10 +927,11 @@ Future<void> _showCollectionActions(
       button.size.bottomRight(Offset.zero),
       ancestor: overlay,
     );
+    final menuLeft = bottomRight.dx - 8;
     position = RelativeRect.fromLTRB(
-      bottomRight.dx - 8,
+      menuLeft,
       bottomRight.dy + 4,
-      overlay.size.width - bottomRight.dx,
+      menuLeft,
       overlay.size.height - bottomRight.dy - 4,
     );
   } else {

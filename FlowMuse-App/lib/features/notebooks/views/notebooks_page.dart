@@ -384,10 +384,11 @@ class _NoteItems extends StatelessWidget {
         ancestor: overlay,
       );
       final arrowY = bottomRight.dy;
+      final menuLeft = bottomRight.dx - 8;
       position = RelativeRect.fromLTRB(
-        bottomRight.dx - 8,
+        menuLeft,
         arrowY + 4,
-        overlay.size.width - bottomRight.dx,
+        menuLeft,
         overlay.size.height - arrowY - 4,
       );
     } else {
@@ -502,16 +503,24 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
             shadowColor: const Color(0x0F5A625F),
             clipBehavior: Clip.antiAlias,
             shape: const RoundedRectangleBorder(),
-            child: InkWell(
-              key: ValueKey('notebook-card-${notebook.id}'),
-              onTap: onTap,
-              onLongPress: () {
-                final arrowCtx = _arrowKey.currentContext;
-                if (arrowCtx != null) {
-                  _showCollectionActions(arrowCtx, onRename: onRename, onEdit: onEdit, onDelete: onDelete);
-                }
-              },
-              child: _NotebookCollectionCover(notebook: notebook),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _NotebookCollectionCover(notebook: notebook),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    key: ValueKey('notebook-card-${notebook.id}'),
+                    onTap: onTap,
+                    onLongPress: () {
+                      final arrowCtx = _arrowKey.currentContext;
+                      if (arrowCtx != null) {
+                        _showCollectionActions(arrowCtx, onRename: onRename, onEdit: onEdit, onDelete: onDelete);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -964,10 +973,11 @@ Future<void> _showCollectionActions(
       button.size.bottomRight(Offset.zero),
       ancestor: overlay,
     );
+    final menuLeft = bottomRight.dx - 8;
     position = RelativeRect.fromLTRB(
-      bottomRight.dx - 8,
+      menuLeft,
       bottomRight.dy + 4,
-      overlay.size.width - bottomRight.dx,
+      menuLeft,
       overlay.size.height - bottomRight.dy - 4,
     );
   } else {

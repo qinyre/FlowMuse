@@ -26,6 +26,15 @@ class NoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final actionsKey = GlobalKey();
+
+    void showActions() {
+      final actionsContext = actionsKey.currentContext;
+      if (actionsContext != null) {
+        onActionsTap!(actionsContext);
+      }
+    }
+
     return Column(
       children: [
         SizedBox(
@@ -40,9 +49,7 @@ class NoteCard extends StatelessWidget {
             child: InkWell(
               key: ValueKey('note-card-${item.id}'),
               onTap: onTap,
-              onLongPress: onActionsTap != null
-                  ? () => onActionsTap!(context)
-                  : null,
+              onLongPress: onActionsTap != null ? showActions : null,
               child: NoteCover(item: item),
             ),
           ),
@@ -64,11 +71,19 @@ class NoteCard extends StatelessWidget {
             ),
             if (onActionsTap != null)
               GestureDetector(
-                onTap: () => onActionsTap!(context),
-                child: const Icon(
-                  LucideIcons.chevronDown,
-                  color: Color(0xFF555C59),
-                  size: 16,
+                key: actionsKey,
+                onTap: showActions,
+                child: SizedBox(
+                  key: ValueKey('note-card-actions-${item.id}'),
+                  width: 24,
+                  height: 24,
+                  child: Center(
+                    child: Icon(
+                      LucideIcons.chevronDown,
+                      color: Color(0xFF555C59),
+                      size: 16,
+                    ),
+                  ),
                 ),
               ),
           ],
