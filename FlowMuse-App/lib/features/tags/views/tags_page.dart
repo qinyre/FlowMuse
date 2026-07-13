@@ -350,6 +350,7 @@ class _NoteItems extends StatelessWidget {
   void _showNoteActions(BuildContext context, NoteItem item) async {
     final RenderBox? button = context.findRenderObject() as RenderBox?;
     final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final actionContext = Navigator.of(context).context;
 
     RelativeRect position;
     if (button != null && overlay != null) {
@@ -413,36 +414,38 @@ class _NoteItems extends StatelessWidget {
         ),
       ],
     );
-    if (selected == null || !context.mounted) return;
+    if (selected == null || !actionContext.mounted) return;
 
-    switch (selected) {
-      case _NoteAction.rename:
-        final name = await showDialog<String>(
-          context: context,
-          builder: (context) => _NoteRenameDialog(initialValue: item.title),
-        );
-        if (name != null && context.mounted) {
-          await onRenameNote!(item.id, name);
-        }
-      case _NoteAction.moveToNotebook:
-        final result = await showDialog<MoveToNotebookResult>(
-          context: context,
-          builder: (context) => MoveToNotebookDialog(currentNotebookId: item.notebookId),
-        );
-        if (result != null && context.mounted) {
-          await onMoveNoteToNotebook!(item.id, result.notebookId);
-        }
-      case _NoteAction.selectTags:
-        final tagIds = await showDialog<List<String>>(
-          context: context,
-          builder: (context) => SelectTagsDialog(currentTagIds: item.tagIds),
-        );
-        if (tagIds != null && context.mounted) {
-          await onSetNoteTags!(item.id, tagIds);
-        }
-      case _NoteAction.delete:
-        await onDeleteNote!(item.id);
-    }
+    await runAfterContextTeardownAsync(actionContext, () async {
+      switch (selected) {
+        case _NoteAction.rename:
+          final name = await showDialog<String>(
+            context: actionContext,
+            builder: (context) => _NoteRenameDialog(initialValue: item.title),
+          );
+          if (name != null && actionContext.mounted) {
+            await onRenameNote!(item.id, name);
+          }
+        case _NoteAction.moveToNotebook:
+          final result = await showDialog<MoveToNotebookResult>(
+            context: actionContext,
+            builder: (context) => MoveToNotebookDialog(currentNotebookId: item.notebookId),
+          );
+          if (result != null && actionContext.mounted) {
+            await onMoveNoteToNotebook!(item.id, result.notebookId);
+          }
+        case _NoteAction.selectTags:
+          final tagIds = await showDialog<List<String>>(
+            context: actionContext,
+            builder: (context) => SelectTagsDialog(currentTagIds: item.tagIds),
+          );
+          if (tagIds != null && actionContext.mounted) {
+            await onSetNoteTags!(item.id, tagIds);
+          }
+        case _NoteAction.delete:
+          await onDeleteNote!(item.id);
+      }
+    });
   }
 }
 
