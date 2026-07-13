@@ -29,7 +29,7 @@ class EditorCanvas extends StatefulWidget {
 
 class _EditorCanvasState extends State<EditorCanvas>
     with SingleTickerProviderStateMixin {
-  static const double _appendPageReleaseThreshold = 140;
+  static const double _appendPageReleaseThreshold = 196;
   static const double _appendPageMaxOverscroll = 228;
 
   MarkdrawController get controller => widget.controller;
