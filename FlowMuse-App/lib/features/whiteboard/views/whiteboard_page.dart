@@ -1262,7 +1262,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           ? {...localScene.files, ...reconciledScene.files}
           : reconciledScene.files,
     );
-    final nextContent = nextScene.toContent();
 
     _applyingRemoteScene = true;
     final sw = Stopwatch()..start();
