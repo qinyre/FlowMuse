@@ -559,6 +559,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           ),
           FilledButton.icon(
             onPressed: () async {
+              await _shareCollaborationInvitation();
+            },
+            icon: const Icon(Icons.ios_share),
+            label: const Text('系统分享'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
               await Clipboard.setData(ClipboardData(text: shareText));
               if (!context.mounted) {
                 return;
@@ -573,6 +580,37 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             label: Text(roomLink == null ? '复制房间码' : '复制链接'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _shareCollaborationInvitation() async {
+    final state = ref.read(whiteboardViewModelProvider);
+    final shareText = state.roomLink ?? state.roomValue;
+    if (shareText == null) {
+      return;
+    }
+    final result = await createShareService().share(
+      ShareTextPayload(title: 'FlowMuse 协作邀请', text: shareText),
+    );
+    if (!mounted || result == ShareResult.dismissed) {
+      return;
+    }
+    if (result == ShareResult.unavailable) {
+      await Clipboard.setData(ClipboardData(text: shareText));
+    }
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result == ShareResult.unavailable
+              ? '系统分享不可用，邀请信息已复制'
+              : result == ShareResult.completed
+              ? '已打开系统分享面板'
+              : '分享失败，请稍后重试',
+        ),
       ),
     );
   }
@@ -1556,6 +1594,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             onJoinCollaboration: _promptJoinCollaboration,
             onLeaveCollaboration: _leaveCollaboration,
             onEndCollaboration: _endCollaboration,
+            onShareCollaboration: _shareCollaborationInvitation,
             onPointerPresence: _broadcastPointerPresence,
             onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
             onDocumentRenamed: () {

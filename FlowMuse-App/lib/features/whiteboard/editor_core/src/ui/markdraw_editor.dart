@@ -1,5 +1,7 @@
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
 
@@ -50,6 +52,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onJoinCollaboration,
     this.onLeaveCollaboration,
     this.onEndCollaboration,
+    this.onShareCollaboration,
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
     this.onDocumentRenamed,
@@ -101,6 +104,7 @@ class MarkdrawEditor extends StatefulWidget {
   final Future<void> Function()? onJoinCollaboration;
   final Future<void> Function()? onLeaveCollaboration;
   final Future<void> Function()? onEndCollaboration;
+  final Future<void> Function()? onShareCollaboration;
   final void Function(Offset localPosition, bool pointerDown)?
   onPointerPresence;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
@@ -363,6 +367,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
               onJoinCollaboration: widget.onJoinCollaboration,
               onLeaveCollaboration: widget.onLeaveCollaboration,
               onEndCollaboration: widget.onEndCollaboration,
+              onShareCollaboration: widget.onShareCollaboration,
               viewMode: _controller.viewMode,
               zenMode: _controller.zenMode,
               onExitViewMode: _controller.toggleViewMode,
@@ -591,6 +596,7 @@ class _RightChrome extends StatelessWidget {
     required this.onJoinCollaboration,
     required this.onLeaveCollaboration,
     required this.onEndCollaboration,
+    required this.onShareCollaboration,
     required this.viewMode,
     required this.zenMode,
     required this.onExitViewMode,
@@ -612,6 +618,7 @@ class _RightChrome extends StatelessWidget {
   final Future<void> Function()? onJoinCollaboration;
   final Future<void> Function()? onLeaveCollaboration;
   final Future<void> Function()? onEndCollaboration;
+  final Future<void> Function()? onShareCollaboration;
   final bool viewMode;
   final bool zenMode;
   final VoidCallback onExitViewMode;
@@ -655,6 +662,7 @@ class _RightChrome extends StatelessWidget {
               onJoin: onJoinCollaboration,
               onLeave: onLeaveCollaboration!,
               onEnd: onEndCollaboration,
+              onShare: onShareCollaboration,
             ),
         ],
       ],
@@ -881,6 +889,7 @@ class _CollaborationChip extends StatefulWidget {
     required this.onJoin,
     required this.onLeave,
     required this.onEnd,
+    required this.onShare,
   });
 
   final bool compact;
@@ -897,6 +906,7 @@ class _CollaborationChip extends StatefulWidget {
   final Future<void> Function()? onJoin;
   final Future<void> Function() onLeave;
   final Future<void> Function()? onEnd;
+  final Future<void> Function()? onShare;
 
   @override
   State<_CollaborationChip> createState() => _CollaborationChipState();
@@ -965,6 +975,16 @@ class _CollaborationChipState extends State<_CollaborationChip> {
               contentPadding: EdgeInsets.zero,
             ),
           ),
+        if ((widget.roomLink != null || widget.roomValue != null) &&
+            widget.onShare != null)
+          const PopupMenuItem<_CollaborationAction>(
+            value: _CollaborationAction.share,
+            child: ListTile(
+              leading: Icon(Icons.ios_share),
+              title: Text('分享房间码'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
         PopupMenuItem<_CollaborationAction>(
           enabled: !widget.connecting,
           value: widget.collaborating
@@ -1022,6 +1042,11 @@ class _CollaborationChipState extends State<_CollaborationChip> {
             content: Text(widget.roomLink == null ? '房间码已复制' : '房间链接已复制'),
           ),
         );
+      case _CollaborationAction.share:
+        final onShare = widget.onShare;
+        if (onShare != null) {
+          unawaited(runAfterUiTeardownAsync(onShare));
+        }
       case _CollaborationAction.start:
         runAfterUiTeardown(widget.onStart);
       case _CollaborationAction.join:
@@ -1040,7 +1065,7 @@ class _CollaborationChipState extends State<_CollaborationChip> {
   }
 }
 
-enum _CollaborationAction { copy, start, join, leave, end }
+enum _CollaborationAction { copy, share, start, join, leave, end }
 
 class _CollaborationMenuHeader extends StatelessWidget {
   const _CollaborationMenuHeader({
