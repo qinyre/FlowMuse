@@ -11,6 +11,8 @@ import 'app_spacing.dart';
 import 'app_shell.dart';
 
 class SharedSidebar extends ConsumerWidget {
+  static const _wallpaperHeight = 180.0;
+
   const SharedSidebar({
     super.key,
     required this.children,
@@ -43,31 +45,54 @@ class SharedSidebar extends ConsumerWidget {
                   colorScheme.primary.withValues(alpha: 0.11),
                 ],
               ),
-        image: preset.hasWallpaper
-            ? DecorationImage(
-                image: AssetImage(preset.wallpaperAsset!),
-                fit: BoxFit.cover,
-                colorFilter: ColorFilter.mode(
-                  preset.sidebarOverlay,
-                  BlendMode.srcOver,
-                ),
-              )
-            : null,
         border: Border(
           right: BorderSide(color: colorScheme.primary.withValues(alpha: 0.14)),
         ),
       ),
       child: Material(
-        color: preset.hasWallpaper
-            ? colorScheme.surfaceContainer.withValues(alpha: 0.82)
-            : colorScheme.surfaceContainer,
-        child: Column(
+        color: colorScheme.surfaceContainer,
+        child: Stack(
           children: [
-            header ?? const SharedSidebarHeader(),
-            Expanded(
-              child: ListView(padding: EdgeInsets.zero, children: children),
+            Column(
+              children: [
+                header ?? const SharedSidebarHeader(),
+                Expanded(
+                  child: ListView(padding: EdgeInsets.zero, children: children),
+                ),
+                ?footer,
+              ],
             ),
-            ?footer,
+            if (preset.hasWallpaper)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: _wallpaperHeight,
+                child: IgnorePointer(
+                  child: Container(
+                    key: const ValueKey('sidebar-bottom-wallpaper'),
+                    decoration: BoxDecoration(
+                      image: DecorationImage(
+                        image: AssetImage(preset.wallpaperAsset!),
+                        fit: BoxFit.cover,
+                        alignment: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            colorScheme.surfaceContainer,
+                            colorScheme.surfaceContainer.withValues(alpha: 0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

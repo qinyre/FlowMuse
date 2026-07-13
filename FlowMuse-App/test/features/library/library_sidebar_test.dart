@@ -96,21 +96,42 @@ void main() {
     expect(find.text('新建标签 1'), findsNothing);
   });
 
-  testWidgets('renders the featured wallpaper behind sidebar content', (
+  testWidgets('overlays featured wallpaper at the sidebar bottom', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
       _testSidebar(initialPreset: appThemePresetById(AppThemeId.starryBlue)),
     );
 
+    final wallpaper = find.byKey(const ValueKey('sidebar-bottom-wallpaper'));
+    expect(wallpaper, findsOneWidget);
     expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is DecoratedBox &&
-            widget.decoration is BoxDecoration &&
-            ((widget.decoration as BoxDecoration).image?.image is AssetImage),
+      find.ancestor(
+        of: wallpaper,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is IgnorePointer && widget.ignoring,
+        ),
       ),
       findsOneWidget,
+    );
+
+    final image =
+        (tester.widget<Container>(wallpaper).decoration as BoxDecoration)
+            .image!;
+    expect(image.fit, BoxFit.cover);
+    expect(image.alignment, Alignment.bottomRight);
+  });
+
+  testWidgets('does not overlay wallpaper for a base theme', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _testSidebar(initialPreset: appThemePresetById(AppThemeId.day)),
+    );
+
+    expect(
+      find.byKey(const ValueKey('sidebar-bottom-wallpaper')),
+      findsNothing,
     );
   });
 }

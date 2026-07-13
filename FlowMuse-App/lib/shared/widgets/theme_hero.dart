@@ -32,7 +32,10 @@ class ThemeHero extends ConsumerWidget {
           image: DecorationImage(
             image: AssetImage(preset.wallpaperAsset!),
             fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(preset.heroOverlay, BlendMode.srcOver),
+            colorFilter: ColorFilter.mode(
+              preset.heroOverlay,
+              BlendMode.srcOver,
+            ),
           ),
         ),
       ),

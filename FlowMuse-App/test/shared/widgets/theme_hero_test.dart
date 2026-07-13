@@ -16,7 +16,9 @@ Widget _testApp(AppThemePreset preset) {
 
 void main() {
   testWidgets('theme hero renders only for a featured preset', (tester) async {
-    await tester.pumpWidget(_testApp(appThemePresetById(AppThemeId.starryBlue)));
+    await tester.pumpWidget(
+      _testApp(appThemePresetById(AppThemeId.starryBlue)),
+    );
 
     expect(find.byKey(const ValueKey('theme-hero-wallpaper')), findsOneWidget);
   });
