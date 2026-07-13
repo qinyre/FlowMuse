@@ -228,7 +228,7 @@ class _AutocompleteDropdown extends StatelessWidget
             border: Border.all(color: theme.dividerColor),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withAlpha(30),
+                color: theme.colorScheme.shadow.withAlpha(30),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),

@@ -3,50 +3,106 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/app_router.dart';
+import '../../app/app_theme_preset.dart';
+import '../../app/view_models/theme_view_model.dart';
 import '../../features/account/view_models/account_view_model.dart';
 import '../../features/account/widgets/account_avatar.dart';
 import 'app_spacing.dart';
 import 'app_shell.dart';
 
-class SharedSidebar extends StatelessWidget {
+class SharedSidebar extends ConsumerWidget {
+  static const _wallpaperHeight = 180.0;
+
   const SharedSidebar({
     super.key,
     required this.children,
     this.header,
     this.footer,
+    this.showWallpaper = true,
   });
 
   final Widget? header;
   final List<Widget> children;
   final Widget? footer;
+  final bool showWallpaper;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
+    final preset = effectiveAppThemePreset(
+      ref.watch(themeViewModelProvider),
+      MediaQuery.platformBrightnessOf(context),
+    );
+    final hasSidebarWallpaper = showWallpaper && preset.hasWallpaper;
 
     return Container(
       width: sharedSidebarWidth,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            colorScheme.primary.withValues(alpha: 0.035),
-            colorScheme.primary.withValues(alpha: 0.11),
-          ],
-        ),
+        gradient: hasSidebarWallpaper
+            ? null
+            : LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  colorScheme.primary.withValues(alpha: 0.035),
+                  colorScheme.primary.withValues(alpha: 0.11),
+                ],
+              ),
         border: Border(
           right: BorderSide(color: colorScheme.primary.withValues(alpha: 0.14)),
         ),
       ),
-      child: Column(
-        children: [
-          header ?? const SharedSidebarHeader(),
-          Expanded(
-            child: ListView(padding: EdgeInsets.zero, children: children),
-          ),
-          ?footer,
-        ],
+      child: Material(
+        color: colorScheme.surfaceContainer,
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                header ?? const SharedSidebarHeader(),
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.only(
+                      bottom: hasSidebarWallpaper ? _wallpaperHeight : 0,
+                    ),
+                    children: children,
+                  ),
+                ),
+                ?footer,
+              ],
+            ),
+            if (hasSidebarWallpaper)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: _wallpaperHeight,
+                child: IgnorePointer(
+                  child: Container(
+                    key: const ValueKey('sidebar-bottom-wallpaper'),
+                    decoration: BoxDecoration(
+                      image: DecorationImage(
+                        image: AssetImage(preset.wallpaperAsset!),
+                        fit: BoxFit.cover,
+                        alignment: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            colorScheme.surfaceContainer,
+                            colorScheme.surfaceContainer.withValues(alpha: 0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

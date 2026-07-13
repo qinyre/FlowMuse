@@ -70,7 +70,7 @@ class CreateNoteCard extends StatelessWidget {
           textAlign: TextAlign.center,
           style: Theme.of(
             context,
-          ).textTheme.bodySmall?.copyWith(color: const Color(0xFF9BA5A1)),
+          ).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
       ],
     );

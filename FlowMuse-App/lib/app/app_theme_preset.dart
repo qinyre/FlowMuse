@@ -13,6 +13,11 @@ class AppThemePreset {
     required this.backgroundStart,
     required this.backgroundMiddle,
     required this.backgroundEnd,
+    required this.wallpaperAsset,
+    required this.wallpaperOverlay,
+    required this.heroOverlay,
+    required this.secondaryColor,
+    required this.tertiaryColor,
   });
 
   final AppThemeId id;
@@ -24,8 +29,14 @@ class AppThemePreset {
   final Color backgroundStart;
   final Color backgroundMiddle;
   final Color backgroundEnd;
+  final String? wallpaperAsset;
+  final Color wallpaperOverlay;
+  final Color heroOverlay;
+  final Color secondaryColor;
+  final Color tertiaryColor;
 
   bool get isDark => brightness == Brightness.dark;
+  bool get hasWallpaper => wallpaperAsset != null;
 }
 
 const appThemePresets = <AppThemePreset>[
@@ -39,6 +50,11 @@ const appThemePresets = <AppThemePreset>[
     backgroundStart: Color(0xFFFFFFFF),
     backgroundMiddle: Color(0xFFF7FAF8),
     backgroundEnd: Color(0xFFFDFEFD),
+    wallpaperAsset: null,
+    wallpaperOverlay: Color(0x00000000),
+    heroOverlay: Color(0x00000000),
+    secondaryColor: Color(0xFF5D91B8),
+    tertiaryColor: Color(0xFFA56F4E),
   ),
   AppThemePreset(
     id: AppThemeId.night,
@@ -50,6 +66,11 @@ const appThemePresets = <AppThemePreset>[
     backgroundStart: Color(0xFF0D1110),
     backgroundMiddle: Color(0xFF141918),
     backgroundEnd: Color(0xFF090C0B),
+    wallpaperAsset: null,
+    wallpaperOverlay: Color(0x00000000),
+    heroOverlay: Color(0x00000000),
+    secondaryColor: Color(0xFF80CBC4),
+    tertiaryColor: Color(0xFFE0B070),
   ),
   AppThemePreset(
     id: AppThemeId.system,
@@ -61,6 +82,11 @@ const appThemePresets = <AppThemePreset>[
     backgroundStart: Color(0xFFFFFFFF),
     backgroundMiddle: Color(0xFFF7FAF8),
     backgroundEnd: Color(0xFFFDFEFD),
+    wallpaperAsset: null,
+    wallpaperOverlay: Color(0x00000000),
+    heroOverlay: Color(0x00000000),
+    secondaryColor: Color(0xFF5D91B8),
+    tertiaryColor: Color(0xFFA56F4E),
   ),
   AppThemePreset(
     id: AppThemeId.starryBlue,
@@ -72,6 +98,11 @@ const appThemePresets = <AppThemePreset>[
     backgroundStart: Color(0xFF07111F),
     backgroundMiddle: Color(0xFF10223A),
     backgroundEnd: Color(0xFF060A12),
+    wallpaperAsset: 'assets/themes/starry-blue.png',
+    wallpaperOverlay: Color(0x8A07111F),
+    heroOverlay: Color(0x6607111F),
+    secondaryColor: Color(0xFF74C7EC),
+    tertiaryColor: Color(0xFFCBA6F7),
   ),
   AppThemePreset(
     id: AppThemeId.mistBlue,
@@ -83,6 +114,11 @@ const appThemePresets = <AppThemePreset>[
     backgroundStart: Color(0xFFEFF7FB),
     backgroundMiddle: Color(0xFFDDEDF6),
     backgroundEnd: Color(0xFFFAFCFD),
+    wallpaperAsset: 'assets/themes/mist-blue.png',
+    wallpaperOverlay: Color(0x4DEFF7FB),
+    heroOverlay: Color(0x33EFF7FB),
+    secondaryColor: Color(0xFF4E9E9A),
+    tertiaryColor: Color(0xFF86789C),
   ),
   AppThemePreset(
     id: AppThemeId.auroraGreen,
@@ -94,6 +130,11 @@ const appThemePresets = <AppThemePreset>[
     backgroundStart: Color(0xFFF4FBF2),
     backgroundMiddle: Color(0xFFDFF2EA),
     backgroundEnd: Color(0xFFFFFCF6),
+    wallpaperAsset: 'assets/themes/aurora-green.png',
+    wallpaperOverlay: Color(0x4DF4FBF2),
+    heroOverlay: Color(0x33F4FBF2),
+    secondaryColor: Color(0xFF5E9E6F),
+    tertiaryColor: Color(0xFFC18B5D),
   ),
 ];
 

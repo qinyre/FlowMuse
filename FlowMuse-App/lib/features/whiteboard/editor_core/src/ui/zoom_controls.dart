@@ -24,10 +24,10 @@ class ZoomControls extends StatelessWidget {
         color: cs.surface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.17), blurRadius: 1),
-          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 3),
+          BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
+          BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: cs.shadow.withValues(alpha: 0.05),
             blurRadius: 14,
             offset: const Offset(0, 7),
           ),

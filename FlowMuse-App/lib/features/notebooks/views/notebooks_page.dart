@@ -53,7 +53,8 @@ class NotebooksPage extends ConsumerWidget {
         },
         onSelectionChanged: viewModel.toggleNotebookSelection,
         onRename: viewModel.renameNotebook,
-        onEdit: (notebookId) => _editNotebook(context, state, viewModel.editNotebook, notebookId),
+        onEdit: (notebookId) =>
+            _editNotebook(context, state, viewModel.editNotebook, notebookId),
         onDelete: viewModel.deleteNotebook,
       ),
     );
@@ -96,7 +97,13 @@ Future<void> _createNotebook(
 Future<void> _editNotebook(
   BuildContext context,
   NotebooksState state,
-  Future<void> Function({required String notebookId, String? name, Color? coverColor, String? coverImage}) onEdit,
+  Future<void> Function({
+    required String notebookId,
+    String? name,
+    Color? coverColor,
+    String? coverImage,
+  })
+  onEdit,
   String notebookId,
 ) async {
   final notebook = _findNotebook(state.notebooks, notebookId);
@@ -187,8 +194,9 @@ class NotebookDetailPage extends ConsumerWidget {
         },
         onRenameNote: (noteId, newName) =>
             ref.read(libraryIndexProvider.notifier).renameNote(noteId, newName),
-        onMoveNoteToNotebook: (noteId, notebookId) =>
-            ref.read(libraryIndexProvider.notifier).moveNotesToNotebook([noteId], notebookId),
+        onMoveNoteToNotebook: (noteId, notebookId) => ref
+            .read(libraryIndexProvider.notifier)
+            .moveNotesToNotebook([noteId], notebookId),
         onSetNoteTags: (noteId, tagIds) =>
             ref.read(libraryIndexProvider.notifier).setNoteTags(noteId, tagIds),
         onDeleteNote: (noteId) =>
@@ -328,8 +336,10 @@ class _NoteItems extends StatelessWidget {
   final VoidCallback onCreate;
   final ValueChanged<NoteItem> onOpenNote;
   final Future<void> Function(String noteId, String newName)? onRenameNote;
-  final Future<void> Function(String noteId, String? notebookId)? onMoveNoteToNotebook;
-  final Future<void> Function(String noteId, List<String> tagIds)? onSetNoteTags;
+  final Future<void> Function(String noteId, String? notebookId)?
+  onMoveNoteToNotebook;
+  final Future<void> Function(String noteId, List<String> tagIds)?
+  onSetNoteTags;
   final Future<void> Function(String noteId)? onDeleteNote;
 
   @override
@@ -361,7 +371,8 @@ class _NoteItems extends StatelessWidget {
                     item: item,
                     onTap: () => onOpenNote(item),
                     onActionsTap: onRenameNote != null
-                        ? (BuildContext buttonContext) => _showNoteActions(buttonContext, item)
+                        ? (BuildContext buttonContext) =>
+                              _showNoteActions(buttonContext, item)
                         : null,
                   ),
                 ),
@@ -375,7 +386,8 @@ class _NoteItems extends StatelessWidget {
 
   void _showNoteActions(BuildContext context, NoteItem item) async {
     final RenderBox? button = context.findRenderObject() as RenderBox?;
-    final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final RenderBox? overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
     final actionContext = Navigator.of(context).context;
 
     RelativeRect position;
@@ -394,7 +406,12 @@ class _NoteItems extends StatelessWidget {
       );
     } else {
       final size = MediaQuery.of(context).size;
-      position = RelativeRect.fromLTRB(size.width / 2, size.height / 2, size.width / 2, size.height / 2);
+      position = RelativeRect.fromLTRB(
+        size.width / 2,
+        size.height / 2,
+        size.width / 2,
+        size.height / 2,
+      );
     }
 
     final selected = await showMenu<_NoteAction>(
@@ -450,7 +467,8 @@ class _NoteItems extends StatelessWidget {
         case _NoteAction.moveToNotebook:
           final result = await showDialog<MoveToNotebookResult>(
             context: actionContext,
-            builder: (context) => MoveToNotebookDialog(currentNotebookId: item.notebookId),
+            builder: (context) =>
+                MoveToNotebookDialog(currentNotebookId: item.notebookId),
           );
           if (result != null && actionContext.mounted) {
             await onMoveNoteToNotebook!(item.id, result.notebookId);
@@ -518,7 +536,12 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
                     onLongPress: () {
                       final arrowCtx = _arrowKey.currentContext;
                       if (arrowCtx != null) {
-                        _showCollectionActions(arrowCtx, onRename: onRename, onEdit: onEdit, onDelete: onDelete);
+                        _showCollectionActions(
+                          arrowCtx,
+                          onRename: onRename,
+                          onEdit: onEdit,
+                          onDelete: onDelete,
+                        );
                       }
                     },
                   ),
@@ -531,7 +554,12 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
         _CoverTitle(
           title: notebook.name,
           arrowKey: _arrowKey,
-          onActionsTap: (ctx) => _showCollectionActions(ctx, onRename: onRename, onEdit: onEdit, onDelete: onDelete),
+          onActionsTap: (ctx) => _showCollectionActions(
+            ctx,
+            onRename: onRename,
+            onEdit: onEdit,
+            onDelete: onDelete,
+          ),
         ),
         const SizedBox(height: 6),
         _CoverSubtitle(text: '${notebook.count} 个笔记'),
@@ -648,7 +676,11 @@ class _NotebookCollectionTile extends StatelessWidget {
         subtitle: Text('${notebook.count} 个笔记'),
         trailing: selectionMode
             ? Checkbox(value: selected, onChanged: (_) => onSelectionChanged())
-            : _CollectionActions(onRename: onRename, onEdit: onEdit, onDelete: onDelete),
+            : _CollectionActions(
+                onRename: onRename,
+                onEdit: onEdit,
+                onDelete: onDelete,
+              ),
         onTap: onTap,
       ),
     );
@@ -898,7 +930,7 @@ class _CoverTitle extends StatelessWidget {
             title,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: const Color(0xFF222725),
+              color: Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -936,9 +968,9 @@ class _CollectionActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (onRename == null || onDelete == null) {
-      return const Icon(
+      return Icon(
         LucideIcons.chevronDown,
-        color: Color(0xFF555C59),
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
         size: 18,
       );
     }
@@ -947,7 +979,12 @@ class _CollectionActions extends StatelessWidget {
         message: '更多操作',
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => _showCollectionActions(context, onRename: onRename!, onEdit: onEdit, onDelete: onDelete!),
+          onTap: () => _showCollectionActions(
+            context,
+            onRename: onRename!,
+            onEdit: onEdit,
+            onDelete: onDelete!,
+          ),
           child: const SizedBox(
             width: 24,
             height: 24,
@@ -968,7 +1005,8 @@ Future<void> _showCollectionActions(
   required VoidCallback onDelete,
 }) async {
   final RenderBox? button = context.findRenderObject() as RenderBox?;
-  final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+  final RenderBox? overlay =
+      Overlay.of(context).context.findRenderObject() as RenderBox?;
 
   RelativeRect position;
   if (button != null && overlay != null) {
@@ -985,7 +1023,12 @@ Future<void> _showCollectionActions(
     );
   } else {
     final size = MediaQuery.of(context).size;
-    position = RelativeRect.fromLTRB(size.width / 2, size.height / 2, size.width / 2, size.height / 2);
+    position = RelativeRect.fromLTRB(
+      size.width / 2,
+      size.height / 2,
+      size.width / 2,
+      size.height / 2,
+    );
   }
 
   final selected = await showMenu<_CollectionAction>(
@@ -994,16 +1037,28 @@ Future<void> _showCollectionActions(
     items: [
       const PopupMenuItem<_CollectionAction>(
         value: _CollectionAction.rename,
-        child: ListTile(leading: Icon(LucideIcons.penLine), title: Text('重命名'), contentPadding: EdgeInsets.zero),
+        child: ListTile(
+          leading: Icon(LucideIcons.penLine),
+          title: Text('重命名'),
+          contentPadding: EdgeInsets.zero,
+        ),
       ),
       if (onEdit != null)
         const PopupMenuItem<_CollectionAction>(
           value: _CollectionAction.edit,
-          child: ListTile(leading: Icon(LucideIcons.settings), title: Text('编辑'), contentPadding: EdgeInsets.zero),
+          child: ListTile(
+            leading: Icon(LucideIcons.settings),
+            title: Text('编辑'),
+            contentPadding: EdgeInsets.zero,
+          ),
         ),
       const PopupMenuItem<_CollectionAction>(
         value: _CollectionAction.delete,
-        child: ListTile(leading: Icon(LucideIcons.trash2), title: Text('删除'), contentPadding: EdgeInsets.zero),
+        child: ListTile(
+          leading: Icon(LucideIcons.trash2),
+          title: Text('删除'),
+          contentPadding: EdgeInsets.zero,
+        ),
       ),
     ],
   );
@@ -1027,9 +1082,9 @@ class _CoverSubtitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: Theme.of(
-        context,
-      ).textTheme.bodySmall?.copyWith(color: const Color(0xFFA3AAA6)),
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
     );
   }
 }

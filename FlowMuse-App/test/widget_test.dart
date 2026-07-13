@@ -3,9 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:flow_muse/app/flow_muse_app.dart';
+import 'package:flow_muse/app/app_theme.dart';
+import 'package:flow_muse/app/app_theme_preset.dart';
+import 'package:flow_muse/app/view_models/theme_view_model.dart';
 
-Widget _testApp() {
-  return ProviderScope(child: FlowMuseApp());
+Widget _testApp({AppThemePreset? initialPreset}) {
+  return ProviderScope(
+    overrides: [
+      initialThemePresetProvider.overrideWithValue(
+        initialPreset ?? defaultThemePreset,
+      ),
+    ],
+    child: FlowMuseApp(),
+  );
 }
 
 void main() {
@@ -55,13 +65,21 @@ void main() {
   testWidgets('opens an existing notebook with its stable id', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(_testApp());
+    await tester.pumpWidget(
+      _testApp(initialPreset: appThemePresetById(AppThemeId.night)),
+    );
 
     await tester.tap(find.byKey(const ValueKey('notebook-card-whiteboard-os')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('whiteboard-os')), findsOneWidget);
     expect(find.text('操作系统'), findsOneWidget);
+    final editor = find.byKey(const ValueKey('flowmuse-markdraw-editor'));
+    expect(editor, findsOneWidget);
+    expect(
+      Theme.of(tester.element(editor)).scaffoldBackgroundColor,
+      isNot(AppTheme.fromPreset(defaultThemePreset).scaffoldBackgroundColor),
+    );
   });
 
   testWidgets('opens search, folders, and settings pages from navigation', (
@@ -70,7 +88,9 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(_testApp());
+    await tester.pumpWidget(
+      _testApp(initialPreset: appThemePresetById(AppThemeId.starryBlue)),
+    );
 
     await tester.tap(find.text('搜索').first);
     await tester.pumpAndSettle();
@@ -88,5 +108,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('本地备份'), findsWidgets);
     expect(find.text('主题设置'), findsWidgets);
+
+    await tester.tap(find.text('主题设置').first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('theme-hero-wallpaper')), findsOneWidget);
   });
 }

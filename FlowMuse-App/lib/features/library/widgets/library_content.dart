@@ -66,8 +66,10 @@ class LibraryContent extends StatefulWidget {
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
   final Future<void> Function(String noteId, String newName)? onRenameNote;
-  final Future<void> Function(String noteId, String? notebookId)? onMoveNoteToNotebook;
-  final Future<void> Function(String noteId, List<String> tagIds)? onSetNoteTags;
+  final Future<void> Function(String noteId, String? notebookId)?
+  onMoveNoteToNotebook;
+  final Future<void> Function(String noteId, List<String> tagIds)?
+  onSetNoteTags;
   final Future<void> Function(String noteId)? onDeleteNote;
 
   @override
@@ -398,8 +400,10 @@ class _LibraryItems extends StatelessWidget {
   final ValueChanged<NoteItem> onOpenNote;
   final Future<void> Function(String noteId) onRestoreNote;
   final Future<void> Function(String noteId, String newName)? onRenameNote;
-  final Future<void> Function(String noteId, String? notebookId)? onMoveNoteToNotebook;
-  final Future<void> Function(String noteId, List<String> tagIds)? onSetNoteTags;
+  final Future<void> Function(String noteId, String? notebookId)?
+  onMoveNoteToNotebook;
+  final Future<void> Function(String noteId, List<String> tagIds)?
+  onSetNoteTags;
   final Future<void> Function(String noteId)? onDeleteNote;
 
   @override
@@ -485,13 +489,16 @@ class _LibraryItemsContent extends StatelessWidget {
   final ValueChanged<NoteItem> onOpenNote;
   final Future<void> Function(String noteId) onRestoreNote;
   final Future<void> Function(String noteId, String newName)? onRenameNote;
-  final Future<void> Function(String noteId, String? notebookId)? onMoveNoteToNotebook;
-  final Future<void> Function(String noteId, List<String> tagIds)? onSetNoteTags;
+  final Future<void> Function(String noteId, String? notebookId)?
+  onMoveNoteToNotebook;
+  final Future<void> Function(String noteId, List<String> tagIds)?
+  onSetNoteTags;
   final Future<void> Function(String noteId)? onDeleteNote;
 
   void _showNoteActions(BuildContext context, NoteItem item) async {
     final RenderBox? button = context.findRenderObject() as RenderBox?;
-    final RenderBox? overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final RenderBox? overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
     final actionContext = Navigator.of(context).context;
 
     RelativeRect position;
@@ -510,7 +517,12 @@ class _LibraryItemsContent extends StatelessWidget {
       );
     } else {
       final size = MediaQuery.of(context).size;
-      position = RelativeRect.fromLTRB(size.width / 2, size.height / 2, size.width / 2, size.height / 2);
+      position = RelativeRect.fromLTRB(
+        size.width / 2,
+        size.height / 2,
+        size.width / 2,
+        size.height / 2,
+      );
     }
 
     final menuItems = specialView == LibrarySpecialView.trash
@@ -579,9 +591,8 @@ class _LibraryItemsContent extends StatelessWidget {
         case _NoteAction.moveToNotebook:
           final result = await showDialog<MoveToNotebookResult>(
             context: actionContext,
-            builder: (context) => MoveToNotebookDialog(
-              currentNotebookId: item.notebookId,
-            ),
+            builder: (context) =>
+                MoveToNotebookDialog(currentNotebookId: item.notebookId),
           );
           if (result != null && actionContext.mounted) {
             await onMoveNoteToNotebook!(item.id, result.notebookId);
@@ -589,9 +600,7 @@ class _LibraryItemsContent extends StatelessWidget {
         case _NoteAction.selectTags:
           final tagIds = await showDialog<List<String>>(
             context: actionContext,
-            builder: (context) => SelectTagsDialog(
-              currentTagIds: item.tagIds,
-            ),
+            builder: (context) => SelectTagsDialog(currentTagIds: item.tagIds),
           );
           if (tagIds != null && actionContext.mounted) {
             await onSetNoteTags!(item.id, tagIds);
@@ -631,8 +640,10 @@ class _LibraryItemsContent extends StatelessWidget {
             onTap: state.selectionMode
                 ? () => onSelectionChanged(item.id)
                 : () => onOpenNote(item),
-            onActionsTap: specialView == LibrarySpecialView.trash || onRenameNote != null
-                ? (BuildContext buttonContext) => _showNoteActions(buttonContext, item)
+            onActionsTap:
+                specialView == LibrarySpecialView.trash || onRenameNote != null
+                ? (BuildContext buttonContext) =>
+                      _showNoteActions(buttonContext, item)
                 : null,
           );
         },
@@ -684,8 +695,11 @@ class _LibraryItemsContent extends StatelessWidget {
                 onTap: state.selectionMode
                     ? () => onSelectionChanged(item.id)
                     : () => onOpenNote(item),
-                onActionsTap: specialView == LibrarySpecialView.trash || onRenameNote != null
-                    ? (BuildContext buttonContext) => _showNoteActions(buttonContext, item)
+                onActionsTap:
+                    specialView == LibrarySpecialView.trash ||
+                        onRenameNote != null
+                    ? (BuildContext buttonContext) =>
+                          _showNoteActions(buttonContext, item)
                     : null,
               ),
             ),
@@ -773,17 +787,17 @@ class _NoteTile extends StatelessWidget {
         trailing: selectionMode
             ? Checkbox(value: selected, onChanged: (_) => onSelectionChanged())
             : onActionsTap != null
-                ? Builder(
-                    builder: (buttonContext) => IconButton(
-                      icon: const Icon(LucideIcons.chevronDown, size: 18),
-                      onPressed: () => onActionsTap!(buttonContext),
-                    ),
-                  )
-                : Icon(
-                    item.kind == LibraryFilter.pdf
-                        ? LucideIcons.fileText
-                        : LucideIcons.bookOpen,
-                  ),
+            ? Builder(
+                builder: (buttonContext) => IconButton(
+                  icon: const Icon(LucideIcons.chevronDown, size: 18),
+                  onPressed: () => onActionsTap!(buttonContext),
+                ),
+              )
+            : Icon(
+                item.kind == LibraryFilter.pdf
+                    ? LucideIcons.fileText
+                    : LucideIcons.bookOpen,
+              ),
         onTap: onTap,
       ),
     );
@@ -825,7 +839,7 @@ class _EmptyLibrary extends StatelessWidget {
                 LibrarySpecialView.trash => '回收站为空',
               },
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: const Color(0xFF1F2624),
+                color: Theme.of(context).colorScheme.onSurface,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -838,9 +852,9 @@ class _EmptyLibrary extends StatelessWidget {
                 LibrarySpecialView.trash => '删除的笔记会先进入这里。',
               },
               textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF8F9B96)),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 22),
             if (specialView == LibrarySpecialView.none)

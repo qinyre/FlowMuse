@@ -1,3 +1,5 @@
+import 'package:flow_muse/app/app_theme_preset.dart';
+import 'package:flow_muse/app/view_models/theme_view_model.dart';
 import 'package:flow_muse/features/library/widgets/library_sidebar.dart';
 import 'package:flow_muse/shared/widgets/app_shell.dart';
 import 'package:flutter/material.dart';
@@ -5,8 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
-Widget _testSidebar() {
+Widget _testSidebar({AppThemePreset? initialPreset}) {
   return ProviderScope(
+    overrides: [
+      if (initialPreset != null)
+        initialThemePresetProvider.overrideWithValue(initialPreset),
+    ],
     child: MaterialApp.router(
       routerConfig: GoRouter(
         initialLocation: '/library',
@@ -88,5 +94,44 @@ void main() {
     await tester.tap(find.byTooltip('标签展开收起'));
     await tester.pumpAndSettle();
     expect(find.text('新建标签 1'), findsNothing);
+  });
+
+  testWidgets('overlays featured wallpaper at the sidebar bottom', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _testSidebar(initialPreset: appThemePresetById(AppThemeId.starryBlue)),
+    );
+
+    final wallpaper = find.byKey(const ValueKey('sidebar-bottom-wallpaper'));
+    expect(wallpaper, findsOneWidget);
+    expect(
+      find.ancestor(
+        of: wallpaper,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is IgnorePointer && widget.ignoring,
+        ),
+      ),
+      findsOneWidget,
+    );
+
+    final image =
+        (tester.widget<Container>(wallpaper).decoration as BoxDecoration)
+            .image!;
+    expect(image.fit, BoxFit.cover);
+    expect(image.alignment, Alignment.bottomRight);
+  });
+
+  testWidgets('does not overlay wallpaper for a base theme', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _testSidebar(initialPreset: appThemePresetById(AppThemeId.day)),
+    );
+
+    expect(
+      find.byKey(const ValueKey('sidebar-bottom-wallpaper')),
+      findsNothing,
+    );
   });
 }

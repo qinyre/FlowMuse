@@ -347,7 +347,7 @@ class _RightPageTitle extends StatelessWidget {
       textAlign: textAlign,
       style: Theme.of(context).textTheme.titleLarge?.copyWith(
         fontWeight: FontWeight.w700,
-        color: const Color(0xFF1F2624),
+        color: Theme.of(context).colorScheme.onSurface,
       ),
     );
   }
