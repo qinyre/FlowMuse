@@ -66,6 +66,8 @@ class LibraryHomePage extends ConsumerWidget {
           onClearSelection: viewModel.clearSelection,
           onDeleteSelected: viewModel.deleteSelectedNotes,
           onRestoreSelected: viewModel.restoreSelectedNotes,
+          onRestoreNote: (noteId) =>
+              ref.read(libraryIndexProvider.notifier).restoreNotes([noteId]),
           onDeleteSelectedForever: viewModel.deleteSelectedNotesForever,
           onMoveSelectedToNotebook: viewModel.moveSelectedNotesToNotebook,
           onAddTagsToSelected: viewModel.addTagsToSelectedNotes,
