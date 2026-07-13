@@ -36,8 +36,6 @@ class PagedAppendPageHint {
 ///
 /// An optional [previewElement] is rendered last, for live creation preview.
 class StaticCanvasPainter extends CustomPainter {
-  static const _pageTemplateMargin = 48.0;
-
   final Scene scene;
   final RoughAdapter adapter;
   final ViewportState viewport;
@@ -453,7 +451,7 @@ class StaticCanvasPainter extends CustomPainter {
   }
 
   void _renderPageTemplate(Canvas canvas, CanvasPage page) {
-    final rect = page.bounds.deflate(_pageTemplateMargin);
+    final rect = page.bounds.deflate(TemplateGeometry.pageTemplateMargin);
     final paint = Paint()
       ..color = const Color(0xFFD6DED9)
       ..strokeWidth = 1 / viewport.zoom;
@@ -522,7 +520,7 @@ class StaticCanvasPainter extends CustomPainter {
     canvas.drawRect(frame, framePaint);
 
     final centerX = frame.center.dx;
-    final gutterWidth = 56.0;
+    const gutterWidth = TemplateGeometry.ancientBookGutterWidth;
     final gutterLeft = centerX - gutterWidth / 2;
     final gutterRight = centerX + gutterWidth / 2;
     canvas.drawLine(
@@ -550,7 +548,7 @@ class StaticCanvasPainter extends CustomPainter {
   }
 
   void _renderAncientBookColumns(Canvas canvas, Rect rect, Paint paint) {
-    const columnWidth = 44.0;
+    const columnWidth = TemplateGeometry.ancientBookColumnWidth;
     for (var x = rect.left + columnWidth; x < rect.right; x += columnWidth) {
       canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
     }
@@ -615,8 +613,8 @@ class StaticCanvasPainter extends CustomPainter {
     required bool diagonal,
   }) {
     final strokePaint = Paint.from(paint)..style = PaintingStyle.stroke;
-    const cell = 56.0;
-    const gap = 8.0;
+    const cell = TemplateGeometry.practiceCell;
+    const gap = TemplateGeometry.practiceGap;
     for (var left = rect.left; left + cell <= rect.right; left += cell + gap) {
       for (var top = rect.top; top + cell <= rect.bottom; top += cell + gap) {
         final cellRect = Rect.fromLTWH(left, top, cell, cell);

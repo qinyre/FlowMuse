@@ -24,6 +24,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.onOpen,
     this.onExportPng,
     this.onExportSvg,
+    this.onExportSmartMarkdown,
+    this.onExportSmartLatex,
     this.onShare,
     this.onImportImage,
     this.onImportLibrary,
@@ -52,6 +54,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onVisibleSceneBoundsChanged,
     this.onDocumentRenamed,
     this.onRecognizeInk,
+    this.onSmartLayoutInk,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -66,6 +69,8 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onOpen;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onExportSmartMarkdown;
+  final VoidCallback? onExportSmartLatex;
   final VoidCallback? onShare;
   final VoidCallback? onImportImage;
   final VoidCallback? onImportLibrary;
@@ -102,6 +107,8 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onDocumentRenamed;
   final Future<InkRecognitionResult> Function(InkRecognitionRequest)?
   onRecognizeInk;
+  final Future<SmartLayoutResponse> Function(SmartLayoutRequest)?
+  onSmartLayoutInk;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -134,6 +141,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     _controller.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
     _controller.onRecognizeInk = widget.onRecognizeInk;
+    _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
     _controller.restoreKeyboardFocusWhenStable();
   }
 
@@ -145,8 +153,12 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       _controller.addListener(_onControllerChanged);
       _controller.onSceneChanged = widget.onSceneChanged;
       _controller.onRecognizeInk = widget.onRecognizeInk;
+      _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
     } else if (widget.onRecognizeInk != oldWidget.onRecognizeInk) {
       _controller.onRecognizeInk = widget.onRecognizeInk;
+    }
+    if (widget.onSmartLayoutInk != oldWidget.onSmartLayoutInk) {
+      _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
     }
   }
 
@@ -320,6 +332,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
               onSaveAs: widget.onSaveAs,
               onExportPng: widget.onExportPng,
               onExportSvg: widget.onExportSvg,
+              onExportSmartMarkdown: widget.onExportSmartMarkdown,
+              onExportSmartLatex: widget.onExportSmartLatex,
               onShare: widget.onShare,
               onImportImage: widget.onImportImage,
               onImportLibrary: widget.onImportLibrary,
@@ -428,6 +442,8 @@ class _LeftChrome extends StatelessWidget {
     required this.onSaveAs,
     required this.onExportPng,
     required this.onExportSvg,
+    required this.onExportSmartMarkdown,
+    required this.onExportSmartLatex,
     required this.onShare,
     required this.onImportImage,
     required this.onImportLibrary,
@@ -446,6 +462,8 @@ class _LeftChrome extends StatelessWidget {
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onExportSmartMarkdown;
+  final VoidCallback? onExportSmartLatex;
   final VoidCallback? onShare;
   final VoidCallback? onImportImage;
   final VoidCallback? onImportLibrary;
@@ -481,6 +499,8 @@ class _LeftChrome extends StatelessWidget {
                   onSaveAs: onSaveAs,
                   onExportPng: onExportPng,
                   onExportSvg: onExportSvg,
+                  onExportSmartMarkdown: onExportSmartMarkdown,
+                  onExportSmartLatex: onExportSmartLatex,
                   onShare: onShare,
                   onImportImage: onImportImage,
                   onShowLibrary: () => showCompactLibrary(
@@ -500,6 +520,8 @@ class _LeftChrome extends StatelessWidget {
                   onSaveAs: onSaveAs,
                   onExportPng: onExportPng,
                   onExportSvg: onExportSvg,
+                  onExportSmartMarkdown: onExportSmartMarkdown,
+                  onExportSmartLatex: onExportSmartLatex,
                   onShare: onShare,
                   onImportImage: onImportImage,
                   onThemeModeChanged: onThemeModeChanged,

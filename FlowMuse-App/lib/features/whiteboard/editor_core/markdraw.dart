@@ -14,6 +14,7 @@ export 'src/core/math/math.dart';
 export 'src/core/pdf/pdf.dart';
 export 'src/core/scene/scene_exports.dart';
 export 'src/core/serialization/serialization.dart';
+export 'src/core/smart_layout/smart_layout.dart';
 export 'src/editor/editor.dart';
 export 'src/rendering/element_renderer.dart';
 export 'src/rendering/export/export.dart';

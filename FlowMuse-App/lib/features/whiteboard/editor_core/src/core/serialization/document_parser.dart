@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../elements/elements.dart';
+import '../smart_layout/smart_layout_document.dart';
 import 'color_names.dart';
 import 'document_section.dart';
 import 'frontmatter_parser.dart';
@@ -64,6 +65,7 @@ class DocumentParser {
     var i = 0;
     var proseBuffer = StringBuffer();
     final files = <String, ImageFile>{};
+    SmartLayoutDocument? smartLayout;
     String? sketchName;
 
     while (i < lines.length) {
@@ -128,6 +130,30 @@ class DocumentParser {
           i++;
         }
         if (i < lines.length) i++; // skip closing ```
+      } else if (lines[i].trim() == '```flowmuse-smart-layout') {
+        _flushProse(proseBuffer, sections);
+        proseBuffer = StringBuffer();
+
+        i++;
+        final jsonBuffer = StringBuffer();
+        while (i < lines.length && lines[i].trim() != '```') {
+          if (jsonBuffer.isNotEmpty) jsonBuffer.writeln();
+          jsonBuffer.write(lines[i]);
+          i++;
+        }
+        if (i < lines.length) i++;
+        try {
+          final decoded = jsonDecode(jsonBuffer.toString());
+          if (decoded is Map) {
+            smartLayout = SmartLayoutDocument.fromJson(
+              Map<String, Object?>.from(decoded),
+            );
+          }
+        } catch (_) {
+          allWarnings.add(
+            ParseWarning(line: i + 1, message: 'Invalid smart layout JSON'),
+          );
+        }
       } else {
         if (proseBuffer.isNotEmpty) proseBuffer.write('\n');
         proseBuffer.write(lines[i]);
@@ -181,6 +207,7 @@ class DocumentParser {
         sections: sections,
         aliases: Map.from(parser.aliases),
         files: files,
+        smartLayout: smartLayout,
       ),
       warnings: allWarnings,
     );

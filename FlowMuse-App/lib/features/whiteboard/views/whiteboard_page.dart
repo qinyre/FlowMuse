@@ -1343,6 +1343,18 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             onExportSvg: () {
               unawaited(_fileHandler.exportSvg());
             },
+            onExportSmartMarkdown: () {
+              unawaited(
+                _fileHandler.exportSmartLayout(
+                  SmartLayoutExportFormat.markdown,
+                ),
+              );
+            },
+            onExportSmartLatex: () {
+              unawaited(
+                _fileHandler.exportSmartLayout(SmartLayoutExportFormat.latex),
+              );
+            },
             onImportImage: () {
               unawaited(_fileHandler.importImage(context));
             },
@@ -1370,6 +1382,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             },
             onRecognizeInk: (request) =>
                 ref.read(inkRecognitionRepositoryProvider).recognize(request),
+            onSmartLayoutInk: (request) =>
+                ref.read(inkRecognitionRepositoryProvider).smartLayout(request),
             onSceneChanged: (_) {
               unawaited(_saveMarkdrawScene());
             },

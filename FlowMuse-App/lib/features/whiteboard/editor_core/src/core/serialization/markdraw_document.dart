@@ -1,4 +1,5 @@
 import '../elements/elements.dart';
+import '../smart_layout/smart_layout_document.dart';
 import 'canvas_settings.dart';
 import 'document_section.dart';
 
@@ -8,12 +9,14 @@ class MarkdrawDocument {
   final List<DocumentSection> sections;
   final Map<String, String> aliases;
   final Map<String, ImageFile> files;
+  final SmartLayoutDocument? smartLayout;
 
   MarkdrawDocument({
     CanvasSettings? settings,
     List<DocumentSection> sections = const [],
     Map<String, String> aliases = const {},
     Map<String, ImageFile> files = const {},
+    this.smartLayout,
   }) : settings = settings ?? const CanvasSettings(),
        sections = List.unmodifiable(sections),
        aliases = Map.unmodifiable(aliases),
@@ -46,12 +49,15 @@ class MarkdrawDocument {
     List<DocumentSection>? sections,
     Map<String, String>? aliases,
     Map<String, ImageFile>? files,
+    SmartLayoutDocument? smartLayout,
+    bool clearSmartLayout = false,
   }) {
     return MarkdrawDocument(
       settings: settings ?? this.settings,
       sections: sections ?? this.sections,
       aliases: aliases ?? this.aliases,
       files: files ?? this.files,
+      smartLayout: clearSmartLayout ? null : (smartLayout ?? this.smartLayout),
     );
   }
 }

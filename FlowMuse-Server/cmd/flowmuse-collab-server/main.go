@@ -100,7 +100,15 @@ func main() {
 		Endpoint: cfg.MyScriptEndpoint,
 		Timeout:  cfg.RecognitionTimeout,
 	})
-	recognition.NewHTTPAPI(recognizer, cfg.RecognitionTimeout).Register(mux)
+	smartLayouter := recognition.NewOpenAICompatibleSmartLayouter(
+		recognition.OpenAICompatibleConfig{
+			BaseURL: cfg.AIBaseURL,
+			APIKey:  cfg.AIAPIKey,
+			Model:   cfg.AIModel,
+			Timeout: cfg.AITimeout,
+		},
+	)
+	recognition.NewHTTPAPI(recognizer, cfg.AITimeout, smartLayouter).Register(mux)
 
 	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)
 	if err := http.ListenAndServe(cfg.Addr, mux); err != nil {
