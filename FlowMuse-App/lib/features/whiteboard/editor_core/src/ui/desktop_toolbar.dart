@@ -108,6 +108,21 @@ class DesktopToolbar extends StatelessWidget {
                 onPressed: controller.toggleInkRecognitionMode,
                 isActive: controller.inkRecognitionMode,
               ),
+              _toolbarButton(
+                cs: cs,
+                icon: Icons.auto_fix_high,
+                tooltip: '智能排布模式',
+                onPressed: controller.toggleSmartInkLayoutMode,
+                isActive: controller.smartInkLayoutMode,
+              ),
+              _toolbarButton(
+                cs: cs,
+                icon: Icons.document_scanner_outlined,
+                tooltip: '全局识别排版',
+                onPressed: () {
+                  _runGlobalSmartLayout(context);
+                },
+              ),
             ],
           ),
         ),
@@ -164,6 +179,14 @@ class DesktopToolbar extends StatelessWidget {
           color: Theme.of(context).dividerColor,
         ),
       ),
+    );
+  }
+
+  Future<void> _runGlobalSmartLayout(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final changed = await controller.runGlobalSmartLayout();
+    messenger.showSnackBar(
+      SnackBar(content: Text(changed ? '智能排版已应用' : '智能排版失败，场景未修改')),
     );
   }
 }

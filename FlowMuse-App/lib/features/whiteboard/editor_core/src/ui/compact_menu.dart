@@ -18,6 +18,8 @@ class CompactMenuButton extends StatelessWidget {
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onExportSmartMarkdown;
+  final VoidCallback? onExportSmartLatex;
   final VoidCallback? onShare;
   final VoidCallback? onImportImage;
   final VoidCallback? onShowLibrary;
@@ -33,6 +35,8 @@ class CompactMenuButton extends StatelessWidget {
     this.onSaveAs,
     this.onExportPng,
     this.onExportSvg,
+    this.onExportSmartMarkdown,
+    this.onExportSmartLatex,
     this.onShare,
     this.onImportImage,
     this.onShowLibrary,
@@ -103,6 +107,24 @@ class CompactMenuButton extends StatelessWidget {
               _compactMenuItem(Icons.code, '导出 SVG', () {
                 closeThen(onExportSvg!);
               }),
+            if (onExportSmartMarkdown != null)
+              _compactMenuItem(
+                Icons.description_outlined,
+                '导出智能排版 Markdown',
+                () {
+                  closeThen(onExportSmartMarkdown!);
+                },
+                enabled: controller.canExportSmartLayout,
+              ),
+            if (onExportSmartLatex != null)
+              _compactMenuItem(
+                Icons.functions,
+                '导出智能排版 LaTeX',
+                () {
+                  closeThen(onExportSmartLatex!);
+                },
+                enabled: controller.canExportSmartLayout,
+              ),
             if (onShare != null)
               _compactMenuItem(Icons.share, '分享', () {
                 closeThen(onShare!);
@@ -232,11 +254,17 @@ class CompactMenuButton extends StatelessWidget {
     );
   }
 
-  ListTile _compactMenuItem(IconData icon, String label, VoidCallback onTap) {
+  ListTile _compactMenuItem(
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    bool enabled = true,
+  }) {
     return ListTile(
       leading: Icon(icon, size: 22),
       title: Text(label),
-      onTap: onTap,
+      enabled: enabled,
+      onTap: enabled ? onTap : null,
     );
   }
 }

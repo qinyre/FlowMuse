@@ -36,6 +36,10 @@ class TextRenderer {
   /// [VerticalAlign] to position text within the element bounds.
   static void draw(ui.Canvas canvas, core.TextElement element) {
     if (element.text.isEmpty) return;
+    if (_isVerticalText(element)) {
+      _drawVertical(canvas, element);
+      return;
+    }
 
     final painter = buildTextPainter(element);
     painter.layout(maxWidth: element.width);
@@ -50,6 +54,26 @@ class TextRenderer {
 
     painter.paint(canvas, Offset(element.x, element.y + dy));
     painter.dispose();
+  }
+
+  static void _drawVertical(ui.Canvas canvas, core.TextElement element) {
+    final chars = element.text.runes
+        .map((rune) => String.fromCharCode(rune))
+        .where((char) => char.trim().isNotEmpty)
+        .toList();
+    if (chars.isEmpty) return;
+    final step = element.fontSize * element.lineHeight;
+    var y = element.y;
+    for (final char in chars) {
+      final painter = buildTextPainter(element.copyWithText(text: char));
+      painter.layout(maxWidth: element.width);
+      painter.paint(
+        canvas,
+        Offset(element.x + (element.width - painter.width) / 2, y),
+      );
+      y += step;
+      painter.dispose();
+    }
   }
 
   /// Builds a [TextPainter] configured from the given [element].
@@ -109,6 +133,17 @@ class TextRenderer {
       core.TextAlign.center => TextAlign.center,
       core.TextAlign.right => TextAlign.right,
     };
+  }
+
+  static bool _isVerticalText(core.TextElement element) {
+    final flowMuse = element.customData?['flowMuse'];
+    if (flowMuse is Map<String, Object?>) {
+      return flowMuse['writingMode'] == 'vertical';
+    }
+    if (flowMuse is Map) {
+      return flowMuse['writingMode'] == 'vertical';
+    }
+    return false;
   }
 
   static Color _parseColor(String colorStr) {

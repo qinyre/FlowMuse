@@ -55,6 +55,9 @@ class EditorState {
       RemoveFileResult(:final fileId) => copyWith(
         scene: scene.removeFile(fileId),
       ),
+      SetSmartLayoutResult(:final document) => copyWith(
+        scene: scene.withSmartLayout(document),
+      ),
       CompoundResult(:final results) => results.fold(
         this,
         (state, r) => state.applyResult(r),

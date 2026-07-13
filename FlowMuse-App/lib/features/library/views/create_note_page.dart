@@ -31,6 +31,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
   String _title = '';
   NoteType _noteType = NoteType.paged;
   PageTemplate _pageTemplate = PageTemplate.blank;
+  PageFlow _pageFlow = PageFlow.topToBottom;
   bool _creating = false;
   final TextEditingController _titleController = TextEditingController();
   final FocusNode _titleFocusNode = FocusNode();
@@ -49,7 +50,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     debugPrint(
       '[FlowMuseCreateNote] CreateNotePage.create pressed '
       'title="$_title" noteType=${_noteType.name} '
-      'pageTemplate=${_pageTemplate.name}',
+      'pageTemplate=${_pageTemplate.name} pageFlow=${_pageFlow.name}',
     );
     setState(() => _creating = true);
     try {
@@ -59,6 +60,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
           .createNote(
             noteType: _noteType,
             pageTemplate: _pageTemplate,
+            pageFlow: _pageFlow,
             title: _title,
           );
       await defaultWhiteboardSceneRepository.saveScene(
@@ -102,7 +104,8 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     }
     debugPrint(
       '[FlowMuseCreateNote] CreateNotePage.importPdf pressed '
-      'noteType=${_noteType.name} pageTemplate=${_pageTemplate.name}',
+      'noteType=${_noteType.name} pageTemplate=${_pageTemplate.name} '
+      'pageFlow=${_pageFlow.name}',
     );
     setState(() => _creating = true);
     try {
@@ -112,13 +115,12 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
             ref.read,
             noteType: _noteType,
             pageTemplate: _pageTemplate,
+            pageFlow: _pageFlow,
             picker: () async {
               if (defaultTargetPlatform == TargetPlatform.ohos) {
                 try {
                   final files = await pickFilesViaOhosChannel(
-                    suffixFilters: const [
-                      'PDF文件(.pdf)|.pdf',
-                    ],
+                    suffixFilters: const ['PDF文件(.pdf)|.pdf'],
                   );
                   final picked = files.first;
                   return PdfNoteImportPayload(
@@ -203,6 +205,10 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
                               noteType: _noteType,
                               onNoteTypeChanged: (value) {
                                 setState(() => _noteType = value);
+                              },
+                              pageFlow: _pageFlow,
+                              onPageFlowChanged: (value) {
+                                setState(() => _pageFlow = value);
                               },
                               onImport: () {
                                 unawaited(_importPdf());
@@ -357,6 +363,8 @@ class _NoteSetupPanel extends StatelessWidget {
     required this.titleChanged,
     required this.noteType,
     required this.onNoteTypeChanged,
+    required this.pageFlow,
+    required this.onPageFlowChanged,
     required this.onImport,
     required this.onSubmitted,
   });
@@ -366,6 +374,8 @@ class _NoteSetupPanel extends StatelessWidget {
   final ValueChanged<String> titleChanged;
   final NoteType noteType;
   final ValueChanged<NoteType> onNoteTypeChanged;
+  final PageFlow pageFlow;
+  final ValueChanged<PageFlow> onPageFlowChanged;
   final VoidCallback onImport;
   final VoidCallback onSubmitted;
 
@@ -411,6 +421,31 @@ class _NoteSetupPanel extends StatelessWidget {
                   onSelectionChanged: (value) {
                     onNoteTypeChanged(value.first);
                   },
+                ),
+              ),
+              const SizedBox(height: 10),
+              _PanelRow(
+                label: '排列',
+                child: SegmentedButton<PageFlow>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: PageFlow.topToBottom,
+                      label: Text('上下'),
+                      icon: Icon(LucideIcons.arrowDown),
+                    ),
+                    ButtonSegment(
+                      value: PageFlow.rightToLeft,
+                      label: Text('右左'),
+                      icon: Icon(LucideIcons.arrowLeft),
+                    ),
+                  ],
+                  selected: {pageFlow},
+                  onSelectionChanged: noteType == NoteType.paged
+                      ? (value) {
+                          onPageFlowChanged(value.first);
+                        }
+                      : null,
                 ),
               ),
               const SizedBox(height: 10),
@@ -671,6 +706,158 @@ class _TemplatePreviewPainter extends CustomPainter {
             canvas.drawCircle(Offset(x, y), 1, paint);
           }
         }
+      case PageTemplate.tianGrid:
+        _drawPracticeGrid(canvas, size, paint, diagonal: false);
+      case PageTemplate.miGrid:
+        _drawPracticeGrid(canvas, size, paint, diagonal: true);
+      case PageTemplate.narrowVerticalLine:
+        for (var x = 12.0; x < size.width; x += 10) {
+          canvas.drawLine(Offset(x, 8), Offset(x, size.height - 8), paint);
+        }
+      case PageTemplate.wideVerticalLine:
+        for (var x = 14.0; x < size.width; x += 16) {
+          canvas.drawLine(Offset(x, 8), Offset(x, size.height - 8), paint);
+        }
+      case PageTemplate.fourLineGrid:
+        for (var y = 12.0; y < size.height - 8; y += 24) {
+          for (var i = 0; i < 4; i++) {
+            final lineY = y + i * 4;
+            canvas.drawLine(
+              Offset(10, lineY),
+              Offset(size.width - 10, lineY),
+              paint,
+            );
+          }
+        }
+      case PageTemplate.ancientBook:
+        _drawAncientBookPreview(canvas, size);
+    }
+  }
+
+  void _drawAncientBookPreview(Canvas canvas, Size size) {
+    final framePaint = Paint()
+      ..color = const Color(0xFF394039)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    final linePaint = Paint()
+      ..color = const Color(0xFF9F9A82)
+      ..strokeWidth = 0.8;
+    final markPaint = Paint()
+      ..color = const Color(0xFF394039)
+      ..style = PaintingStyle.fill;
+
+    final availableWidth = size.width - 12;
+    final availableHeight = size.height - 12;
+    final width = availableWidth;
+    final height = (width * 0.58).clamp(0.0, availableHeight).toDouble();
+    final rect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: width,
+      height: height,
+    );
+    canvas.drawRect(rect, framePaint);
+
+    final centerX = rect.center.dx;
+    final gutter = 8.0;
+    canvas.drawLine(
+      Offset(centerX - gutter, rect.top),
+      Offset(centerX - gutter, rect.bottom),
+      framePaint,
+    );
+    canvas.drawLine(
+      Offset(centerX + gutter, rect.top),
+      Offset(centerX + gutter, rect.bottom),
+      framePaint,
+    );
+    canvas.drawLine(
+      Offset(centerX, rect.top),
+      Offset(centerX, rect.bottom),
+      linePaint,
+    );
+
+    _drawPreviewColumns(
+      canvas,
+      Rect.fromLTRB(rect.left, rect.top, centerX - gutter, rect.bottom),
+      linePaint,
+    );
+    _drawPreviewColumns(
+      canvas,
+      Rect.fromLTRB(centerX + gutter, rect.top, rect.right, rect.bottom),
+      linePaint,
+    );
+
+    _drawPreviewFishTail(
+      canvas,
+      Offset(centerX, rect.top + rect.height * 0.32),
+      markPaint,
+    );
+    _drawPreviewFishTail(
+      canvas,
+      Offset(centerX, rect.top + rect.height * 0.68),
+      markPaint,
+    );
+  }
+
+  void _drawPreviewColumns(Canvas canvas, Rect rect, Paint paint) {
+    const columnGap = 11.0;
+    for (var x = rect.left + columnGap; x < rect.right; x += columnGap) {
+      canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
+    }
+  }
+
+  void _drawPreviewFishTail(Canvas canvas, Offset center, Paint paint) {
+    const width = 8.0;
+    const height = 9.0;
+    final path = Path()
+      ..moveTo(center.dx, center.dy - height / 2)
+      ..lineTo(center.dx + width / 2, center.dy - height / 2)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(center.dx + width / 2, center.dy + height / 2)
+      ..lineTo(center.dx, center.dy + height / 2)
+      ..lineTo(center.dx - width / 2, center.dy + height / 2)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(center.dx - width / 2, center.dy - height / 2)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawPracticeGrid(
+    Canvas canvas,
+    Size size,
+    Paint paint, {
+    required bool diagonal,
+  }) {
+    final strokePaint = Paint.from(paint)..style = PaintingStyle.stroke;
+    const inset = 7.0;
+    const cell = 16.0;
+    const gap = 3.0;
+    for (
+      var left = inset;
+      left + cell <= size.width - inset;
+      left += cell + gap
+    ) {
+      for (
+        var top = inset;
+        top + cell <= size.height - inset;
+        top += cell + gap
+      ) {
+        final rect = Rect.fromLTWH(left, top, cell, cell);
+        canvas.drawRect(rect, strokePaint);
+        canvas.drawLine(
+          Offset(rect.left + rect.width / 2, rect.top),
+          Offset(rect.left + rect.width / 2, rect.bottom),
+          strokePaint,
+        );
+        canvas.drawLine(
+          Offset(rect.left, rect.top + rect.height / 2),
+          Offset(rect.right, rect.top + rect.height / 2),
+          strokePaint,
+        );
+        if (diagonal) {
+          canvas.drawLine(rect.topLeft, rect.bottomRight, strokePaint);
+          canvas.drawLine(rect.topRight, rect.bottomLeft, strokePaint);
+        }
+      }
     }
   }
 
@@ -687,6 +874,11 @@ String _templateLabel(PageTemplate template) {
     PageTemplate.wideLine => '宽横线',
     PageTemplate.grid => '格纹',
     PageTemplate.dotGrid => '点阵',
+    PageTemplate.tianGrid => '田字格',
+    PageTemplate.miGrid => '米字格',
+    PageTemplate.narrowVerticalLine => '窄竖线',
+    PageTemplate.wideVerticalLine => '宽竖线',
+    PageTemplate.fourLineGrid => '四线三格',
+    PageTemplate.ancientBook => '古籍版式',
   };
 }
-

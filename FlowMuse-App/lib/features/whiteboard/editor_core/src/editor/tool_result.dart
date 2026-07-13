@@ -1,6 +1,7 @@
 import '../core/elements/elements.dart';
 import '../core/math/math.dart';
 import '../core/scene/scene_exports.dart';
+import '../core/smart_layout/smart_layout_document.dart';
 import '../rendering/interactive/interaction_mode.dart';
 import '../rendering/interactive/snap_line.dart';
 import '../rendering/viewport_state.dart';
@@ -86,6 +87,11 @@ class AddFileResult extends ToolResult {
 class RemoveFileResult extends ToolResult {
   final String fileId;
   RemoveFileResult(this.fileId);
+}
+
+class SetSmartLayoutResult extends ToolResult {
+  final SmartLayoutDocument? document;
+  SetSmartLayoutResult(this.document);
 }
 
 /// A read-only snapshot of the editor state, provided to tools for
@@ -178,6 +184,7 @@ bool isSceneChangingResult(ToolResult? result) {
     RemoveElementResult() => true,
     AddFileResult() => true,
     RemoveFileResult() => true,
+    SetSmartLayoutResult() => true,
     CompoundResult(:final results) => results.any(isSceneChangingResult),
     SetSelectionResult() => false,
     UpdateViewportResult() => false,

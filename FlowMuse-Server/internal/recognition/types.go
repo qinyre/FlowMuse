@@ -40,3 +40,47 @@ type RecognizedElement struct {
 type RecognizeResponse struct {
 	Elements []RecognizedElement `json:"elements"`
 }
+
+type SmartLayoutRequest struct {
+	Pages   []SmartLayoutPage    `json:"pages"`
+	Ink     []SmartLayoutElement `json:"ink"`
+	Text    []SmartLayoutElement `json:"text"`
+	Context []SmartLayoutElement `json:"context"`
+}
+
+type SmartLayoutPage struct {
+	ID       string           `json:"id"`
+	Index    int              `json:"index"`
+	Bounds   InkBounds        `json:"bounds"`
+	Template string           `json:"template"`
+	Anchors  []map[string]any `json:"anchors"`
+}
+
+type SmartLayoutElement struct {
+	ID     string     `json:"id"`
+	Type   string     `json:"type"`
+	Bounds InkBounds  `json:"bounds"`
+	Text   string     `json:"text,omitempty"`
+	Points []InkPoint `json:"points,omitempty"`
+}
+
+type SmartLayoutBlock struct {
+	ID          string     `json:"id"`
+	Type        string     `json:"type"`
+	Text        string     `json:"text"`
+	LaTeX       string     `json:"latex,omitempty"`
+	PageID      string     `json:"pageId,omitempty"`
+	Bounds      *InkBounds `json:"bounds,omitempty"`
+	Order       int        `json:"order"`
+	WritingMode string     `json:"writingMode"`
+}
+
+type SmartLayoutDocument struct {
+	Version     int                `json:"version"`
+	GeneratedAt int64              `json:"generatedAt"`
+	Blocks      []SmartLayoutBlock `json:"blocks"`
+}
+
+type SmartLayoutResponse struct {
+	Document SmartLayoutDocument `json:"document"`
+}

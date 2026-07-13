@@ -148,6 +148,34 @@ class MarkdrawFileHandler {
     }
   }
 
+  Future<void> exportSmartLayout(SmartLayoutExportFormat format) async {
+    if (!controller.canExportSmartLayout) return;
+    final content = controller.exportSmartLayout(format);
+    if (content.isEmpty) return;
+    final extension = switch (format) {
+      SmartLayoutExportFormat.markdown => 'md',
+      SmartLayoutExportFormat.latex => 'tex',
+    };
+    final fileName = 'smart-layout.$extension';
+
+    if (kIsWeb) {
+      downloadFile(fileName, content);
+    } else if (defaultTargetPlatform == TargetPlatform.ohos) {
+      await saveFileViaOhosChannel(
+        fileName,
+        Uint8List.fromList(utf8.encode(content)),
+      );
+    } else {
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: '导出智能排版',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: [extension],
+      );
+      if (path != null) await writeStringToFile(path, content);
+    }
+  }
+
   /// Shows an image picker and imports the selected image.
   ///
   /// [context] is used to determine screen size for centering.

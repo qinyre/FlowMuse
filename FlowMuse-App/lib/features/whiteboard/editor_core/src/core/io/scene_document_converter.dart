@@ -31,6 +31,7 @@ class SceneDocumentConverter {
       files: scene.files,
       aliases: aliases,
       settings: settings,
+      smartLayout: scene.smartLayout,
     );
   }
 
@@ -91,6 +92,7 @@ class SceneDocumentConverter {
     for (final entry in doc.files.entries) {
       scene = scene.addFile(entry.key, entry.value);
     }
+    scene = scene.withSmartLayout(doc.smartLayout);
 
     // Resolve bound arrow endpoints now that all targets are in the scene.
     for (final element in scene.activeElements) {

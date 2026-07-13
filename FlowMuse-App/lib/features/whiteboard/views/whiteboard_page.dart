@@ -1343,6 +1343,18 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             onExportSvg: () {
               unawaited(_fileHandler.exportSvg());
             },
+            onExportSmartMarkdown: () {
+              unawaited(
+                _fileHandler.exportSmartLayout(
+                  SmartLayoutExportFormat.markdown,
+                ),
+              );
+            },
+            onExportSmartLatex: () {
+              unawaited(
+                _fileHandler.exportSmartLayout(SmartLayoutExportFormat.latex),
+              );
+            },
             onImportImage: () {
               unawaited(_fileHandler.importImage(context));
             },
@@ -1370,6 +1382,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
             },
             onRecognizeInk: (request) =>
                 ref.read(inkRecognitionRepositoryProvider).recognize(request),
+            onSmartLayoutInk: (request) =>
+                ref.read(inkRecognitionRepositoryProvider).smartLayout(request),
             onSceneChanged: (_) {
               unawaited(_saveMarkdrawScene());
             },
@@ -1570,6 +1584,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
           ? CanvasLayoutType.unbounded
           : CanvasLayoutType.paged,
       template: template,
+      pageFlow: _pageFlowForNote(note?.pageFlow),
     );
   }
 
@@ -1579,7 +1594,20 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage> {
       PageTemplate.wideLine => CanvasPageTemplate.wideLine,
       PageTemplate.grid => CanvasPageTemplate.grid,
       PageTemplate.dotGrid => CanvasPageTemplate.dotGrid,
+      PageTemplate.tianGrid => CanvasPageTemplate.tianGrid,
+      PageTemplate.miGrid => CanvasPageTemplate.miGrid,
+      PageTemplate.narrowVerticalLine => CanvasPageTemplate.narrowVerticalLine,
+      PageTemplate.wideVerticalLine => CanvasPageTemplate.wideVerticalLine,
+      PageTemplate.fourLineGrid => CanvasPageTemplate.fourLineGrid,
+      PageTemplate.ancientBook => CanvasPageTemplate.ancientBook,
       PageTemplate.blank || null => CanvasPageTemplate.blank,
+    };
+  }
+
+  CanvasPageFlow _pageFlowForNote(PageFlow? pageFlow) {
+    return switch (pageFlow) {
+      PageFlow.rightToLeft => CanvasPageFlow.rightToLeft,
+      PageFlow.topToBottom || null => CanvasPageFlow.topToBottom,
     };
   }
 }

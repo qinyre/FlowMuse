@@ -373,6 +373,10 @@ class SvgElementRenderer {
   }
 
   static void _renderText(StringBuffer buf, TextElement element) {
+    if (_isVerticalText(element)) {
+      _renderVerticalText(buf, element);
+      return;
+    }
     final textAnchor = switch (element.textAlign) {
       TextAlign.left => 'start',
       TextAlign.center => 'middle',
@@ -395,6 +399,40 @@ class SvgElementRenderer {
     buf.write('>');
     buf.write(_escapeXml(element.text));
     buf.write('</text>');
+  }
+
+  static void _renderVerticalText(StringBuffer buf, TextElement element) {
+    final x = element.x + element.width / 2;
+    final step = element.fontSize * element.lineHeight;
+    buf.write('<text ');
+    buf.write('x="${_n(x)}" ');
+    buf.write('y="${_n(element.y + element.fontSize)}" ');
+    buf.write('font-size="${_n(element.fontSize)}" ');
+    buf.write('font-family="${element.fontFamily}" ');
+    buf.write('fill="${element.strokeColor}" ');
+    buf.write('text-anchor="middle"');
+    buf.write('>');
+    var index = 0;
+    for (final rune in element.text.runes) {
+      final char = String.fromCharCode(rune);
+      if (char.trim().isEmpty) continue;
+      buf.write(
+        '<tspan x="${_n(x)}" y="${_n(element.y + element.fontSize + index * step)}">${_escapeXml(char)}</tspan>',
+      );
+      index++;
+    }
+    buf.write('</text>');
+  }
+
+  static bool _isVerticalText(TextElement element) {
+    final flowMuse = element.customData?['flowMuse'];
+    if (flowMuse is Map<String, Object?>) {
+      return flowMuse['writingMode'] == 'vertical';
+    }
+    if (flowMuse is Map) {
+      return flowMuse['writingMode'] == 'vertical';
+    }
+    return false;
   }
 
   static void _renderFrame(StringBuffer buf, FrameElement element) {

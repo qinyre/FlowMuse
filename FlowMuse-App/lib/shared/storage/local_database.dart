@@ -8,7 +8,7 @@ class LocalDatabase {
   LocalDatabase._();
 
   static const databaseName = 'flowmuse_local.db';
-  static const databaseVersion = 4;
+  static const databaseVersion = 5;
 
   static Database? _database;
 
@@ -45,6 +45,15 @@ class LocalDatabase {
           if (oldVersion < 3) {
             await _safeAddColumn(db, 'notebooks', 'cover_image', 'TEXT');
             await _safeAddColumn(db, 'tags', 'cover_image', 'TEXT');
+          }
+          // v4→v5: 分页笔记新增页面流向
+          if (oldVersion < 5) {
+            await _safeAddColumn(
+              db,
+              'notes',
+              'page_flow',
+              "TEXT NOT NULL DEFAULT 'topToBottom'",
+            );
           }
           // 注意：cover_thumbnail 在 v2 的 notes 表中已存在，无需迁移
           await _ensureSchema(db);
@@ -113,6 +122,7 @@ class LocalDatabase {
         cover_color INTEGER NOT NULL,
         note_type TEXT NOT NULL,
         page_template TEXT NOT NULL,
+        page_flow TEXT NOT NULL DEFAULT 'topToBottom',
         notebook_id TEXT,
         subtitle TEXT,
         cover_thumbnail BLOB,
@@ -160,5 +170,4 @@ class LocalDatabase {
       'ON note_scenes(updated_at)',
     );
   }
-
 }

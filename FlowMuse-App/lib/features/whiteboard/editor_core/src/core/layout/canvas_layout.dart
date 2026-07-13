@@ -4,7 +4,21 @@ import '../elements/elements.dart' as flow;
 
 enum CanvasLayoutType { paged, unbounded }
 
-enum CanvasPageTemplate { blank, narrowLine, wideLine, grid, dotGrid }
+enum CanvasPageFlow { topToBottom, rightToLeft }
+
+enum CanvasPageTemplate {
+  blank,
+  narrowLine,
+  wideLine,
+  grid,
+  dotGrid,
+  tianGrid,
+  miGrid,
+  narrowVerticalLine,
+  wideVerticalLine,
+  fourLineGrid,
+  ancientBook,
+}
 
 class CanvasPage {
   const CanvasPage({
@@ -12,6 +26,7 @@ class CanvasPage {
     required this.index,
     required this.bounds,
     required this.template,
+    this.pageFlow = CanvasPageFlow.topToBottom,
     this.source = 'blank',
   });
 
@@ -19,6 +34,7 @@ class CanvasPage {
   final int index;
   final Rect bounds;
   final CanvasPageTemplate template;
+  final CanvasPageFlow pageFlow;
   final String source;
 }
 
@@ -26,30 +42,72 @@ class CanvasLayout {
   const CanvasLayout({
     required this.type,
     this.template = CanvasPageTemplate.blank,
+    this.pageFlow = CanvasPageFlow.topToBottom,
     this.pages = const [],
   });
 
   static const pageWidth = 794.0;
   static const pageHeight = 1123.0;
+  static const landscapePageWidth = pageHeight;
+  static const landscapePageHeight = pageWidth;
   static const pageGap = 48.0;
 
   final CanvasLayoutType type;
   final CanvasPageTemplate template;
+  final CanvasPageFlow pageFlow;
   final List<CanvasPage> pages;
 
   bool get isPaged => type == CanvasLayoutType.paged;
+  bool get isRightToLeft => pageFlow == CanvasPageFlow.rightToLeft;
+
+  static Size pageSizeForTemplate(CanvasPageTemplate template) {
+    return switch (template) {
+      CanvasPageTemplate.ancientBook => const Size(
+        landscapePageWidth,
+        landscapePageHeight,
+      ),
+      _ => const Size(pageWidth, pageHeight),
+    };
+  }
+
+  static Rect pageBoundsForIndex({
+    required int index,
+    required Size pageSize,
+    required CanvasPageFlow pageFlow,
+  }) {
+    return switch (pageFlow) {
+      CanvasPageFlow.topToBottom => Rect.fromLTWH(
+        0,
+        index * (pageSize.height + pageGap),
+        pageSize.width,
+        pageSize.height,
+      ),
+      CanvasPageFlow.rightToLeft => Rect.fromLTWH(
+        -index * (pageSize.width + pageGap),
+        0,
+        pageSize.width,
+        pageSize.height,
+      ),
+    };
+  }
 
   CanvasLayout ensurePage() {
     if (!isPaged || pages.isNotEmpty) {
       return this;
     }
+    final pageSize = pageSizeForTemplate(template);
     return copyWith(
       pages: [
         CanvasPage(
           id: 'page-1',
           index: 0,
-          bounds: const Rect.fromLTWH(0, 0, pageWidth, pageHeight),
+          bounds: pageBoundsForIndex(
+            index: 0,
+            pageSize: pageSize,
+            pageFlow: pageFlow,
+          ),
           template: template,
+          pageFlow: pageFlow,
         ),
       ],
     );
@@ -67,11 +125,13 @@ class CanvasLayout {
   CanvasLayout copyWith({
     CanvasLayoutType? type,
     CanvasPageTemplate? template,
+    CanvasPageFlow? pageFlow,
     List<CanvasPage>? pages,
   }) {
     return CanvasLayout(
       type: type ?? this.type,
       template: template ?? this.template,
+      pageFlow: pageFlow ?? this.pageFlow,
       pages: pages ?? this.pages,
     );
   }
@@ -80,13 +140,17 @@ class CanvasLayout {
     List<flow.Element> elements, {
     CanvasLayoutType fallbackType = CanvasLayoutType.unbounded,
     CanvasPageTemplate fallbackTemplate = CanvasPageTemplate.blank,
+    CanvasPageFlow fallbackPageFlow = CanvasPageFlow.topToBottom,
   }) {
     final pages = <CanvasPage>[];
+    var pageFlow = fallbackPageFlow;
     for (final element in elements) {
       final flowMuse = flowMuseData(element.customData);
       if (flowMuse?['role'] != 'page') {
         continue;
       }
+      pageFlow =
+          _pageFlowFromName(flowMuse?['pageFlow'] as String?) ?? pageFlow;
       final id = flowMuse?['pageId'] as String? ?? element.id.value;
       final index = (flowMuse?['pageIndex'] as num?)?.toInt() ?? pages.length;
       pages.add(
@@ -102,6 +166,7 @@ class CanvasLayout {
           template:
               _templateFromName(flowMuse?['template'] as String?) ??
               fallbackTemplate,
+          pageFlow: pageFlow,
           source: flowMuse?['source'] as String? ?? 'blank',
         ),
       );
@@ -111,12 +176,14 @@ class CanvasLayout {
       return CanvasLayout(
         type: CanvasLayoutType.paged,
         template: fallbackTemplate,
+        pageFlow: pageFlow,
         pages: pages,
       );
     }
     return CanvasLayout(
       type: fallbackType,
       template: fallbackTemplate,
+      pageFlow: fallbackPageFlow,
     ).ensurePage();
   }
 
@@ -127,6 +194,7 @@ class CanvasLayout {
         'pageId': page.id,
         'pageIndex': page.index,
         'template': page.template.name,
+        'pageFlow': page.pageFlow.name,
         'source': page.source,
       },
     };
@@ -162,6 +230,18 @@ class CanvasLayout {
     for (final template in CanvasPageTemplate.values) {
       if (template.name == name) {
         return template;
+      }
+    }
+    return null;
+  }
+
+  static CanvasPageFlow? _pageFlowFromName(String? name) {
+    if (name == null) {
+      return null;
+    }
+    for (final pageFlow in CanvasPageFlow.values) {
+      if (pageFlow.name == name) {
+        return pageFlow;
       }
     }
     return null;

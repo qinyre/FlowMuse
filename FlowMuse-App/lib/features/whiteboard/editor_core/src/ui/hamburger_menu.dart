@@ -86,6 +86,8 @@ class HamburgerMenu extends StatelessWidget {
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
+  final VoidCallback? onExportSmartMarkdown;
+  final VoidCallback? onExportSmartLatex;
   final VoidCallback? onShare;
   final VoidCallback? onImportImage;
   final VoidCallback? onDocumentRenamed;
@@ -100,6 +102,8 @@ class HamburgerMenu extends StatelessWidget {
     this.onSaveAs,
     this.onExportPng,
     this.onExportSvg,
+    this.onExportSmartMarkdown,
+    this.onExportSmartLatex,
     this.onShare,
     this.onImportImage,
     this.onDocumentRenamed,
@@ -145,6 +149,10 @@ class HamburgerMenu extends StatelessWidget {
                 onExportPng?.call();
               case 'export_svg':
                 onExportSvg?.call();
+              case 'export_smart_md':
+                onExportSmartMarkdown?.call();
+              case 'export_smart_tex':
+                onExportSmartLatex?.call();
               case 'share':
                 onShare?.call();
               case 'library':
@@ -194,6 +202,24 @@ class HamburgerMenu extends StatelessWidget {
             ),
           if (onExportSvg != null)
             _menuItem(context, 'export_svg', Icons.code, '导出 SVG', null),
+          if (onExportSmartMarkdown != null)
+            _menuItem(
+              context,
+              'export_smart_md',
+              Symbols.markdown,
+              '导出智能排版 Markdown',
+              null,
+              enabled: controller.canExportSmartLayout,
+            ),
+          if (onExportSmartLatex != null)
+            _menuItem(
+              context,
+              'export_smart_tex',
+              Icons.functions,
+              '导出智能排版 LaTeX',
+              null,
+              enabled: controller.canExportSmartLayout,
+            ),
           if (onShare != null)
             _menuItem(context, 'share', Icons.share, '分享', null),
           if (onExportPng != null || onExportSvg != null)
@@ -378,14 +404,22 @@ class HamburgerMenu extends StatelessWidget {
     String value,
     IconData icon,
     String label,
-    String? shortcut,
-  ) {
+    String? shortcut, {
+    bool enabled = true,
+  }) {
     final cs = Theme.of(context).colorScheme;
     return PopupMenuItem<String>(
       value: value,
+      enabled: enabled,
       child: Row(
         children: [
-          Icon(icon, size: 18, color: cs.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 18,
+            color: enabled
+                ? cs.onSurfaceVariant
+                : cs.onSurfaceVariant.withValues(alpha: 0.45),
+          ),
           const SizedBox(width: 12),
           Expanded(child: Text(label)),
           if (shortcut != null)
