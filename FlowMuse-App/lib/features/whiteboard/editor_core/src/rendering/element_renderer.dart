@@ -6,6 +6,7 @@ import '../core/math/math.dart';
 import 'rough/draw_style.dart';
 import 'rough/rough_adapter.dart';
 import 'rough/rough_canvas_adapter.dart';
+import 'math_text_utils.dart';
 import 'text_renderer.dart';
 
 /// Dispatches element rendering to the appropriate adapter method.
@@ -23,6 +24,7 @@ class ElementRenderer {
     core.Element element,
     RoughAdapter adapter, {
     Map<String, Image>? resolvedImages,
+    bool skipMathText = false,
   }) {
     final hasRotation = element.angle != 0.0;
 
@@ -40,7 +42,7 @@ class ElementRenderer {
       adapter.setCurrentElement(element.id.value, element.hashCode);
     }
 
-    _dispatch(canvas, element, adapter, resolvedImages);
+    _dispatch(canvas, element, adapter, resolvedImages, skipMathText);
 
     if (adapter is RoughCanvasAdapter) {
       adapter.setCurrentElement(null, null);
@@ -56,6 +58,7 @@ class ElementRenderer {
     core.Element element,
     RoughAdapter adapter,
     Map<String, Image>? resolvedImages,
+    bool skipMathText,
   ) {
     final style = DrawStyle.fromElement(element);
     final bounds = Bounds.fromLTWH(
@@ -168,6 +171,9 @@ class ElementRenderer {
         }
       case 'text':
         if (element is core.TextElement) {
+          if (skipMathText && MathTextUtils.isMathText(element)) {
+            break;
+          }
           TextRenderer.draw(canvas, element);
         }
       default:

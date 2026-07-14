@@ -1276,7 +1276,7 @@ class MarkdrawController extends ChangeNotifier {
         if (text == null || text.isEmpty) {
           return null;
         }
-        return _measuredTextElement(text, x, y, width, height);
+        return _measuredTextElement(text, x, y, width, height, isMath: true);
       case 'rectangle':
         return RectangleElement(
           id: ElementId.generate(),
@@ -1328,17 +1328,19 @@ class MarkdrawController extends ChangeNotifier {
     double x,
     double y,
     double width,
-    double height,
-  ) {
+    double height, {
+    bool isMath = false,
+  }) {
     final anchor = _smartInkLayoutMode
         ? _nearestTemplateAnchor(Rect.fromLTWH(x, y, width, height))
         : null;
     final vertical = anchor?.writingMode == TemplateWritingMode.vertical;
-    final flowMuseData = anchor == null
+    final flowMuseData = anchor == null && !isMath
         ? null
         : <String, Object?>{
-            'pageId': anchor.pageId,
+            if (anchor != null) 'pageId': anchor.pageId,
             'smartLayout': true,
+            if (isMath) 'smartLayoutType': 'math',
             if (vertical) 'writingMode': 'vertical',
           };
     final element = TextElement(
@@ -3134,6 +3136,7 @@ class MarkdrawController extends ChangeNotifier {
           if (block.pageId != null) 'pageId': block.pageId,
           'smartLayout': true,
           'blockId': block.id,
+          if (block.type == 'formula') 'smartLayoutType': 'math',
         },
       },
     );
@@ -3178,6 +3181,7 @@ class MarkdrawController extends ChangeNotifier {
           if (block.pageId != null) 'pageId': block.pageId,
           'smartLayout': true,
           'blockId': block.id,
+          if (block.type == 'math') 'smartLayoutType': 'math',
           if (vertical) 'writingMode': 'vertical',
         },
       },

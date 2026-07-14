@@ -65,6 +65,7 @@ class StaticCanvasPainter extends CustomPainter {
 
   final bool renderPageShadows;
   final PagedAppendPageHint? appendPageHint;
+  final bool skipMathText;
 
   const StaticCanvasPainter({
     required this.scene,
@@ -80,6 +81,7 @@ class StaticCanvasPainter extends CustomPainter {
     this.contentBounds,
     this.renderPageShadows = true,
     this.appendPageHint,
+    this.skipMathText = false,
   });
 
   @override
@@ -160,6 +162,7 @@ class StaticCanvasPainter extends CustomPainter {
         element,
         adapter,
         resolvedImages: resolvedImages,
+        skipMathText: skipMathText,
       );
       _renderBoundText(canvas, element);
 
@@ -179,6 +182,7 @@ class StaticCanvasPainter extends CustomPainter {
         previewElement!,
         adapter,
         resolvedImages: resolvedImages,
+        skipMathText: skipMathText,
       );
     }
 
@@ -191,6 +195,7 @@ class StaticCanvasPainter extends CustomPainter {
           element,
           adapter,
           resolvedImages: resolvedImages,
+          skipMathText: skipMathText,
         );
       }
       canvas.restore();
@@ -708,6 +713,7 @@ class StaticCanvasPainter extends CustomPainter {
         gridSize != oldDelegate.gridSize ||
         isDarkBackground != oldDelegate.isDarkBackground ||
         renderPageShadows != oldDelegate.renderPageShadows ||
+        skipMathText != oldDelegate.skipMathText ||
         appendPageHint != oldDelegate.appendPageHint;
   }
 }

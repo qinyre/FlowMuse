@@ -2,10 +2,13 @@ library;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
+import 'package:flutter_math_fork/flutter_math.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+
+import '../rendering/math_text_utils.dart';
 
 /// The main canvas area with pointer/gesture handling.
 class EditorCanvas extends StatefulWidget {
@@ -351,6 +354,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                         ),
                         contentBounds: controller.contentBounds,
                         appendPageHint: appendPageHint,
+                        skipMathText: true,
                       ),
                       foregroundPainter: InteractiveCanvasPainter(
                         viewport: paintViewport,
@@ -399,6 +403,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                   ),
                 if (controller.editingTextElementId != null)
                   TextEditingOverlay(controller: controller),
+                _MathTextOverlay(
+                  controller: controller,
+                  viewport: paintViewport,
+                ),
                 if (controller.editingFrameLabelId != null)
                   _FrameLabelEditingOverlay(controller: controller),
                 // Compact property panel trigger
@@ -414,6 +422,88 @@ class _EditorCanvasState extends State<EditorCanvas>
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _MathTextOverlay extends StatelessWidget {
+  const _MathTextOverlay({required this.controller, required this.viewport});
+
+  final MarkdrawController controller;
+  final ViewportState viewport;
+
+  @override
+  Widget build(BuildContext context) {
+    final elements = [
+      for (final element in controller.editorState.scene.activeElements)
+        if (element is TextElement &&
+            MathTextUtils.isMathText(element) &&
+            element.id != controller.editingTextElementId)
+          element,
+    ];
+    if (elements.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return IgnorePointer(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (final element in elements)
+            _PositionedMathText(element: element, viewport: viewport),
+        ],
+      ),
+    );
+  }
+}
+
+class _PositionedMathText extends StatelessWidget {
+  const _PositionedMathText({required this.element, required this.viewport});
+
+  final TextElement element;
+  final ViewportState viewport;
+
+  @override
+  Widget build(BuildContext context) {
+    final zoom = viewport.zoom;
+    final left = (element.x - viewport.offset.dx) * zoom;
+    final top = (element.y - viewport.offset.dy) * zoom;
+    final width = element.width * zoom;
+    final height = element.height * zoom;
+    final color = parseColor(
+      element.strokeColor,
+    ).withValues(alpha: element.opacity);
+
+    final child = Align(
+      alignment: Alignment.topLeft,
+      child: Math.tex(
+        element.text,
+        mathStyle: MathStyle.display,
+        textStyle: TextStyle(color: color, fontSize: element.fontSize * zoom),
+        onErrorFallback: (_) => Text(
+          element.text,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: color,
+            fontSize: element.fontSize * zoom,
+            height: element.lineHeight,
+            fontFamily: element.fontFamily,
+          ),
+        ),
+      ),
+    );
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      child: Transform.rotate(
+        angle: element.angle,
+        alignment: Alignment.center,
+        child: ClipRect(child: child),
       ),
     );
   }
