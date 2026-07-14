@@ -14,6 +14,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_router.dart';
 import '../../../app/app_theme_preset.dart';
 import '../../../app/view_models/theme_view_model.dart';
+import '../../../shared/storage/local_database_path.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/right_page.dart';
@@ -26,9 +27,14 @@ import '../../whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import '../../whiteboard/models/editor_preferences.dart';
 import '../../whiteboard/view_models/editor_preferences_view_model.dart';
 import '../repositories/local_backup_repository.dart';
+import '../services/cache_cleaner.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.initialSection});
+
+  /// Optional initial section id (the enum [name]) to open directly, e.g.
+  /// passed from the `/settings?section=theme` route query parameter.
+  final String? initialSection;
 
   @override
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
@@ -40,7 +46,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    _section = _SettingsSection.account;
+    _section = _SettingsSection.fromName(widget.initialSection);
   }
 
   @override
@@ -87,14 +93,25 @@ enum _SettingsSection {
   stylus(LucideIcons.penLine, '手写笔设置', '压感曲线与防误触'),
   gestures(LucideIcons.hand, '手势设置', '缩放和平移手势'),
   lab(LucideIcons.wandSparkles, 'StarNote 实验室', 'Beta AI'),
-  privacy(LucideIcons.shield, '隐私设置', '本地数据与权限预留'),
-  other(LucideIcons.ellipsis, '其他设置', '通用设置预留');
+  privacy(LucideIcons.shield, '隐私设置', '查看本地数据存储位置与权限说明'),
+  other(LucideIcons.ellipsis, '其他设置', '关于应用、版本信息与缓存清理');
 
   const _SettingsSection(this.icon, this.label, this.description);
 
   final IconData icon;
   final String label;
   final String description;
+
+  /// Resolves a section by its Dart enum [name], falling back to [account]
+  /// when [value] is null or does not match any section.  Used to honour the
+  /// `/settings?section=xxx` route query parameter.
+  static _SettingsSection fromName(String? value) {
+    if (value == null) return _SettingsSection.account;
+    for (final section in _SettingsSection.values) {
+      if (section.name == value) return section;
+    }
+    return _SettingsSection.account;
+  }
 }
 
 class _SettingsSidebar extends StatelessWidget {
@@ -137,7 +154,7 @@ class _SettingsSidebar extends StatelessWidget {
             SharedSidebarItem(
               icon: LucideIcons.circleHelp,
               label: '帮助与反馈',
-              onTap: () {},
+              onTap: () => onSelected(_SettingsSection.other),
             ),
           ],
         ),
@@ -273,6 +290,8 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
           _SettingsSection.tools => const _ToolsSettingsSection(),
           _SettingsSection.stylus => const _StylusSettingsSection(),
           _SettingsSection.gestures => const _GestureSettingsSection(),
+          _SettingsSection.privacy => const _PrivacySettingsSection(),
+          _SettingsSection.other => const _OtherSettingsSection(),
           _ => _PlaceholderSettingsSection(section: widget.section),
         },
       ],
@@ -908,6 +927,323 @@ class _AccountMessage extends StatelessWidget {
             ? Theme.of(context).colorScheme.error
             : Theme.of(context).colorScheme.primary,
       ),
+    );
+  }
+}
+
+/// Application version metadata.  Kept as constants rather than read at runtime
+/// via `package_info_plus` to avoid an extra dependency; bump these together
+/// with `pubspec.yaml`'s `version:` field when releasing.
+class _AppVersion {
+  static const String version = '1.0.0';
+  static const String buildNumber = '1';
+  static const String displayName = 'FlowMuse';
+}
+
+/// "Other settings" — about, version info, licenses, and cache cleanup.
+class _OtherSettingsSection extends StatefulWidget {
+  const _OtherSettingsSection();
+
+  @override
+  State<_OtherSettingsSection> createState() => _OtherSettingsSectionState();
+}
+
+class _OtherSettingsSectionState extends State<_OtherSettingsSection> {
+  bool _clearing = false;
+
+  Future<void> _clearCache() async {
+    if (_clearing) return;
+    setState(() => _clearing = true);
+    try {
+      final result = await clearRebuildableCache();
+      if (!mounted) return;
+      final message = result.filesRemoved > 0
+          ? '已清除 ${result.formattedBytes}（${result.filesRemoved} 个文件）'
+          : '缓存已是最新';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('清除缓存失败，请稍后重试')));
+    } finally {
+      if (mounted) setState(() => _clearing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SettingsCard(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    LucideIcons.penLine,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _AppVersion.displayName,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '版本 ${_AppVersion.version}（构建 ${_AppVersion.buildNumber}）',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.listGap),
+        _SettingsCard(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(LucideIcons.globe),
+                title: const Text('官方网站'),
+                subtitle: const Text('即将上线'),
+              ),
+              ListTile(
+                leading: const Icon(LucideIcons.scrollText),
+                title: const Text('开源许可'),
+                trailing: const Icon(LucideIcons.chevronRight, size: 18),
+                onTap: () {
+                  showLicensePage(
+                    context: context,
+                    applicationName: _AppVersion.displayName,
+                    applicationVersion: _AppVersion.version,
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(LucideIcons.mail),
+                title: const Text('帮助与反馈'),
+                subtitle: const Text('即将上线'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.listGap),
+        _SettingsCard(
+          child: ListTile(
+            leading: _clearing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(LucideIcons.trash2),
+            title: const Text('清除缓存'),
+            subtitle: Text(
+              '清理分享与导出的临时文件，不影响你的笔记和白板',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: muted),
+            ),
+            trailing: const Icon(LucideIcons.chevronRight, size: 18),
+            onTap: _clearing ? null : _clearCache,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Privacy settings" — data-storage explanation, storage location, permission
+/// notes (static), and a privacy-policy link.
+class _PrivacySettingsSection extends StatefulWidget {
+  const _PrivacySettingsSection();
+
+  @override
+  State<_PrivacySettingsSection> createState() =>
+      _PrivacySettingsSectionState();
+}
+
+class _PrivacySettingsSectionState extends State<_PrivacySettingsSection> {
+  String? _dbPath;
+  bool _loadingPath = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDbPath();
+  }
+
+  Future<void> _loadDbPath() async {
+    try {
+      final path = await localDatabaseDirectory();
+      if (mounted) {
+        setState(() {
+          _dbPath = path;
+          _loadingPath = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingPath = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SettingsCard(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(LucideIcons.database, size: 18, color: muted),
+                    const SizedBox(width: 8),
+                    Text(
+                      '数据存储',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '你的白板内容、笔记本、标签与主题设置均保存在本机 SQLite 数据库，默认不会上传服务器。参与协作时，场景数据会通过加密通道在协作者之间同步。',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: muted, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.listGap),
+        _SettingsCard(
+          child: ListTile(
+            leading: const Icon(LucideIcons.folderOpen),
+            title: const Text('数据存储位置'),
+            subtitle: Text(
+              _loadingPath ? '正在读取…' : (_dbPath ?? '无法获取路径'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: muted,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.listGap),
+        _SettingsCard(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(LucideIcons.shieldCheck, size: 18, color: muted),
+                    const SizedBox(width: 8),
+                    Text(
+                      '权限说明',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                _PermissionRow(
+                  icon: LucideIcons.wifi,
+                  name: '网络访问（INTERNET）',
+                  purpose: '用于账号登录与实时协作同步',
+                ),
+                const SizedBox(height: 8),
+                _PermissionRow(
+                  icon: LucideIcons.activity,
+                  name: '网络状态（GET_NETWORK_INFO）',
+                  purpose: '用于检测当前网络连接状态（鸿蒙端）',
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.listGap),
+        _SettingsCard(
+          child: ListTile(
+            leading: const Icon(LucideIcons.fileText),
+            title: const Text('隐私政策'),
+            trailing: const Icon(LucideIcons.chevronRight, size: 18),
+            onTap: () => context.push(AppRoutes.privacyPolicy),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PermissionRow extends StatelessWidget {
+  const _PermissionRow({
+    required this.icon,
+    required this.name,
+    required this.purpose,
+  });
+
+  final IconData icon;
+  final String name;
+  final String purpose;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: muted),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 2),
+              Text(
+                purpose,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: muted),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
