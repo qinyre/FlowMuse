@@ -2729,8 +2729,9 @@ class MarkdrawController extends ChangeNotifier {
     SmartLayoutResponse response;
     try {
       response = await layoutCallback(request);
-    } catch (_) {
-      return false;
+    } catch (error, stackTrace) {
+      debugPrint('[$_logTag] 智能排版请求失败: $error');
+      Error.throwWithStackTrace(error, stackTrace);
     }
     if (_disposed || response.document.isEmpty) return false;
     final replacement = _elementsFromSmartLayout(response.document);
