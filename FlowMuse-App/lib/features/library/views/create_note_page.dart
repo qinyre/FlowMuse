@@ -27,7 +27,9 @@ import '../../whiteboard/editor_core/src/ui/file_picker_channel_ohos.dart';
 import '../../whiteboard/pdf_note_import/pdf_note_import_payload.dart';
 import '../../whiteboard/pdf_note_import/pdf_note_import_service.dart';
 import '../../whiteboard/collaboration/models/excalidraw_scene.dart';
+import '../../whiteboard/models/editor_preferences.dart';
 import '../../whiteboard/repositories/whiteboard_scene_repository.dart';
+import '../../whiteboard/view_models/editor_preferences_view_model.dart';
 import '../models/note_item.dart';
 import '../repositories/library_repository.dart';
 
@@ -40,9 +42,9 @@ class CreateNotePage extends ConsumerStatefulWidget {
 
 class _CreateNotePageState extends ConsumerState<CreateNotePage> {
   String _title = '';
-  NoteType _noteType = NoteType.paged;
-  PageTemplate _pageTemplate = PageTemplate.blank;
-  PageFlow _pageFlow = PageFlow.topToBottom;
+  NoteType? _noteType;
+  PageTemplate? _pageTemplate;
+  PageFlow? _pageFlow;
   bool _creating = false;
   final TextEditingController _titleController = TextEditingController();
   final FocusNode _titleFocusNode = FocusNode();
@@ -58,10 +60,13 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     if (_creating) {
       return;
     }
+    final noteType = _resolvedNoteType;
+    final pageTemplate = _resolvedPageTemplate;
+    final pageFlow = _resolvedPageFlow;
     debugPrint(
       '[FlowMuseCreateNote] CreateNotePage.create pressed '
-      'title="$_title" noteType=${_noteType.name} '
-      'pageTemplate=${_pageTemplate.name} pageFlow=${_pageFlow.name}',
+      'title="$_title" noteType=${noteType.name} '
+      'pageTemplate=${pageTemplate.name} pageFlow=${pageFlow.name}',
     );
     setState(() => _creating = true);
     try {
@@ -69,9 +74,9 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
       final note = await ref
           .read(libraryRepositoryProvider)
           .createNote(
-            noteType: _noteType,
-            pageTemplate: _pageTemplate,
-            pageFlow: _pageFlow,
+            noteType: noteType,
+            pageTemplate: pageTemplate,
+            pageFlow: pageFlow,
             title: _title,
           );
       await defaultWhiteboardSceneRepository.saveScene(
@@ -113,10 +118,13 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     if (_creating) {
       return;
     }
+    final noteType = _resolvedNoteType;
+    final pageTemplate = _resolvedPageTemplate;
+    final pageFlow = _resolvedPageFlow;
     debugPrint(
       '[FlowMuseCreateNote] CreateNotePage.importPdf pressed '
-      'noteType=${_noteType.name} pageTemplate=${_pageTemplate.name} '
-      'pageFlow=${_pageFlow.name}',
+      'noteType=${noteType.name} pageTemplate=${pageTemplate.name} '
+      'pageFlow=${pageFlow.name}',
     );
     setState(() => _creating = true);
     try {
@@ -124,9 +132,9 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
           .read(pdfNoteImportServiceProvider)
           .pickAndStageImport(
             ref.read,
-            noteType: _noteType,
-            pageTemplate: _pageTemplate,
-            pageFlow: _pageFlow,
+            noteType: noteType,
+            pageTemplate: pageTemplate,
+            pageFlow: pageFlow,
             picker: () async {
               if (defaultTargetPlatform == TargetPlatform.ohos) {
                 try {
@@ -187,6 +195,12 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
 
   @override
   Widget build(BuildContext context) {
+    final preferences =
+        ref.watch(editorPreferencesProvider).value ?? EditorPreferences();
+    final noteType = _noteType ?? _noteTypeFor(preferences.defaultLayoutType);
+    final pageTemplate =
+        _pageTemplate ?? _pageTemplateFor(preferences.defaultPageTemplate);
+    final pageFlow = _pageFlow ?? _pageFlowFor(preferences.defaultPageFlow);
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
@@ -208,16 +222,16 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
                           spacing: 28,
                           runSpacing: 18,
                           children: [
-                            _LargePaperPreview(template: _pageTemplate),
+                            _LargePaperPreview(template: pageTemplate),
                             _NoteSetupPanel(
                               titleController: _titleController,
                               titleFocusNode: _titleFocusNode,
                               titleChanged: (value) => _title = value,
-                              noteType: _noteType,
+                              noteType: noteType,
                               onNoteTypeChanged: (value) {
                                 setState(() => _noteType = value);
                               },
-                              pageFlow: _pageFlow,
+                              pageFlow: pageFlow,
                               onPageFlowChanged: (value) {
                                 setState(() => _pageFlow = value);
                               },
@@ -239,7 +253,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
                             for (final template in PageTemplate.values) ...[
                               _TemplateCard(
                                 template: template,
-                                selected: _pageTemplate == template,
+                                selected: pageTemplate == template,
                                 onTap: () {
                                   setState(() => _pageTemplate = template);
                                 },
@@ -260,7 +274,35 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
       ),
     );
   }
+
+  EditorPreferences get _preferences =>
+      ref.read(editorPreferencesProvider).value ?? EditorPreferences();
+
+  NoteType get _resolvedNoteType =>
+      _noteType ?? _noteTypeFor(_preferences.defaultLayoutType);
+
+  PageTemplate get _resolvedPageTemplate =>
+      _pageTemplate ?? _pageTemplateFor(_preferences.defaultPageTemplate);
+
+  PageFlow get _resolvedPageFlow =>
+      _pageFlow ?? _pageFlowFor(_preferences.defaultPageFlow);
 }
+
+NoteType _noteTypeFor(CanvasLayoutType type) => NoteType.values.firstWhere(
+  (value) => value.name == type.name,
+  orElse: () => NoteType.paged,
+);
+
+PageTemplate _pageTemplateFor(CanvasPageTemplate template) =>
+    PageTemplate.values.firstWhere(
+      (value) => value.name == template.name,
+      orElse: () => PageTemplate.blank,
+    );
+
+PageFlow _pageFlowFor(CanvasPageFlow flow) => PageFlow.values.firstWhere(
+  (value) => value.name == flow.name,
+  orElse: () => PageFlow.topToBottom,
+);
 
 class _TopBar extends StatelessWidget {
   const _TopBar({required this.creating, required this.onCreate});

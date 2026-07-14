@@ -52,6 +52,18 @@ class EditorPreferencesViewModel extends AsyncNotifier<EditorPreferences> {
   Future<void> setSingleFingerPanEnabled(bool value) =>
       _save(_current.copyWith(singleFingerPanEnabled: value));
 
+  Future<void> setAutosaveInterval(AutosaveInterval value) =>
+      _save(_current.copyWith(autosaveInterval: value));
+
+  Future<void> setDefaultLayoutType(CanvasLayoutType value) =>
+      _save(_current.copyWith(defaultLayoutType: value));
+
+  Future<void> setDefaultPageTemplate(CanvasPageTemplate value) =>
+      _save(_current.copyWith(defaultPageTemplate: value));
+
+  Future<void> setDefaultPageFlow(CanvasPageFlow value) =>
+      _save(_current.copyWith(defaultPageFlow: value));
+
   EditorPreferences get _current => state.value ?? EditorPreferences();
 
   Future<void> _save(EditorPreferences value) async {
