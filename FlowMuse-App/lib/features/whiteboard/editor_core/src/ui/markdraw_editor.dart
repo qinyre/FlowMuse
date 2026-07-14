@@ -477,12 +477,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                                   currentThemeMode: widget.currentThemeMode,
                                   onDocumentRenamed: widget.onDocumentRenamed,
                                 ),
-                              if (showNavigationTools &&
-                                  _toolbarDock == ToolbarDock.top &&
-                                  _toolbarCollapsed) ...[
-                                const SizedBox(width: 8),
-                                _buildToolbarExpandButton(),
-                              ],
                               if (!isCompact &&
                                   widget.saveStatusLabel != null) ...[
                                 const SizedBox(width: 8),
@@ -525,6 +519,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                                 zenMode: _controller.zenMode,
                                 onExitViewMode: _controller.toggleViewMode,
                                 onExitZenMode: _controller.toggleZenMode,
+                                toolbarExpandButton: showNavigationTools &&
+                                        _toolbarDock == ToolbarDock.top &&
+                                        _toolbarCollapsed
+                                    ? _buildToolbarExpandButton()
+                                    : null,
                               ),
                               if (!isCompact &&
                                   widget.config.showHelpButton) ...[
@@ -850,6 +849,7 @@ class _RightChrome extends StatelessWidget {
     required this.zenMode,
     required this.onExitViewMode,
     required this.onExitZenMode,
+    this.toolbarExpandButton,
   });
 
   final String? saveStatusLabel;
@@ -873,6 +873,7 @@ class _RightChrome extends StatelessWidget {
   final bool zenMode;
   final VoidCallback onExitViewMode;
   final VoidCallback onExitZenMode;
+  final Widget? toolbarExpandButton;
 
   @override
   Widget build(BuildContext context) {
@@ -897,6 +898,10 @@ class _RightChrome extends StatelessWidget {
             const SizedBox(width: 8),
           if (collaborating && collaborationParticipants.isNotEmpty) ...[
             _ParticipantAvatarStack(participants: collaborationParticipants),
+            const SizedBox(width: 8),
+          ],
+          if (toolbarExpandButton != null) ...[
+            toolbarExpandButton!,
             const SizedBox(width: 8),
           ],
           if (canCollaborate)
