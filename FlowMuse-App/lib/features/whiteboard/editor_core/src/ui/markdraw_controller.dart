@@ -112,6 +112,12 @@ class MarkdrawController extends ChangeNotifier {
   int? _activeDrawPointerId;
   int? _temporaryTouchPanPointerId;
   int? _activeStylusPointerId;
+  final Set<int> _rejectedTouchPointers = {};
+  bool _pressureEnabled = true;
+  double _pressureExponent = 1.0;
+  bool _palmRejectionEnabled = true;
+  bool _twoFingerZoomEnabled = true;
+  bool _singleFingerPanEnabled = true;
   final bool _useUnifiedModeler = true;
 
   // debug/test 录制器：null 时不录制（release 默认关闭）
@@ -313,7 +319,9 @@ class MarkdrawController extends ChangeNotifier {
 
   bool get isPagedViewport => _layout.isPaged && _layout.pages.isNotEmpty;
 
-  bool get canPanPagedViewportWithTouch => _activeStylusPointerId == null;
+  bool get canPanPagedViewportWithTouch =>
+      _singleFingerPanEnabled &&
+      (!_palmRejectionEnabled || _activeStylusPointerId == null);
 
   PagedViewportMetrics? get pagedViewportMetrics => computePagedViewportMetrics(
     layout: _layout,
@@ -338,6 +346,10 @@ class MarkdrawController extends ChangeNotifier {
     _brushStates[_activeBrushType] = _brushStates[_activeBrushType]!.copyWith(
       pressureSensitivity: _pressureSensitivity,
     );
+    onBrushStateChanged?.call(
+      _activeBrushType,
+      _brushStates[_activeBrushType]!,
+    );
     notifyListeners();
   }
 
@@ -355,16 +367,56 @@ class MarkdrawController extends ChangeNotifier {
   /// UI 可据此渲染动态粗细滑块。
   BrushState get currentBrushState => _brushStates[_activeBrushType]!;
 
+  void Function(BrushType type, BrushState state)? onBrushStateChanged;
+
+  void applyEditorPreferences({
+    required ToolType defaultTool,
+    required BrushType defaultBrush,
+    required Map<BrushType, BrushState> brushStates,
+    required bool pressureEnabled,
+    required double pressureExponent,
+    required bool palmRejectionEnabled,
+    required bool twoFingerZoomEnabled,
+    required bool singleFingerPanEnabled,
+  }) {
+    _brushStates.addAll(brushStates);
+    _activeBrushType = defaultBrush;
+    _restoreBrushState(defaultBrush);
+    _pressureEnabled = pressureEnabled;
+    _pressureExponent = pressureExponent.clamp(0.25, 4.0);
+    _palmRejectionEnabled = palmRejectionEnabled;
+    if (!palmRejectionEnabled) _rejectedTouchPointers.clear();
+    _twoFingerZoomEnabled = twoFingerZoomEnabled;
+    _singleFingerPanEnabled = singleFingerPanEnabled;
+    if (_editorState.activeToolType == defaultTool) {
+      notifyListeners();
+    } else {
+      switchTool(defaultTool);
+    }
+  }
+
   set activeBrushType(BrushType value) {
     if (_activeBrushType == value) return;
-    // 保存当前笔形状态（参考 Saber 独立笔状态设计）
-    _brushStates[_activeBrushType] = BrushState(
+    final previousType = _activeBrushType;
+    final previousState = _rememberCurrentBrushState(notify: false);
+    _activeBrushType = value;
+    _restoreBrushState(value);
+    notifyListeners();
+    onBrushStateChanged?.call(previousType, previousState);
+  }
+
+  BrushState _rememberCurrentBrushState({bool notify = true}) {
+    final state = _brushStates[_activeBrushType]!.copyWith(
       strokeColor: _defaultStyle.strokeColor,
       strokeWidth: _defaultStyle.strokeWidth,
       pressureSensitivity: _pressureSensitivity,
     );
-    _activeBrushType = value;
-    // 恢复新笔形的上次状态
+    _brushStates[_activeBrushType] = state;
+    if (notify) onBrushStateChanged?.call(_activeBrushType, state);
+    return state;
+  }
+
+  void _restoreBrushState(BrushType value) {
     final saved = _brushStates[value]!;
     if (saved.strokeColor != null || saved.strokeWidth != null) {
       _defaultStyle = _defaultStyle.copyWith(strokeColor: saved.strokeColor);
@@ -391,7 +443,6 @@ class MarkdrawController extends ChangeNotifier {
     }
     _pressureSensitivity = saved.pressureSensitivity;
     _adapter.pressureSensitivity = _pressureSensitivity;
-    notifyListeners();
   }
 
   bool get inkRecognitionMode => _inkRecognitionMode;
@@ -1773,20 +1824,33 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   bool get _usesTemporaryTouchPan =>
-      _editorState.activeToolType != ToolType.hand;
+      _singleFingerPanEnabled && _editorState.activeToolType != ToolType.hand;
 
   /// Handles pointer down: commits text edits, dispatches to tool, handles
   /// link-to-element mode and link icon clicks.
   void onPointerDown(PointerEvent event) {
     if (_isViewportGesture) return;
+    if (event.kind == PointerDeviceKind.touch &&
+        _palmRejectionEnabled &&
+        _activeStylusPointerId != null) {
+      _rejectedTouchPointers.add(event.pointer);
+      return;
+    }
     if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
-      if (_activeStylusPointerId == null) {
+      if (!_palmRejectionEnabled || _activeStylusPointerId == null) {
         _temporaryTouchPanPointerId ??= event.pointer;
       }
       return;
     }
     if (_isStylus(event.kind)) {
       _activeStylusPointerId = event.pointer;
+      if (_palmRejectionEnabled) {
+        final touchPointer = _temporaryTouchPanPointerId;
+        if (touchPointer != null) {
+          _rejectedTouchPointers.add(touchPointer);
+        }
+        _temporaryTouchPanPointerId = null;
+      }
     }
     if (isCreationTool && !shouldDispatchToCreationTool(event.kind)) return;
     restoreKeyboardFocusWhenStable();
@@ -1805,7 +1869,11 @@ class MarkdrawController extends ChangeNotifier {
         viewportTransform: _viewportTransform,
       );
       _activeDrawPointerId = sample.pointerId;
-      _modeler = StrokeInputModeler(_policySelector.select(sample.kind));
+      _modeler = StrokeInputModeler(
+        _policySelector.select(sample.kind),
+        useRealPressure: _pressureEnabled,
+        pressureExponent: _pressureExponent,
+      );
       final r = _modeler!.process(sample);
       if (r.point == null) return;
 
@@ -1887,6 +1955,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Handles pointer move: dispatches to the active tool.
   void onPointerMove(PointerEvent event) {
     if (_isViewportGesture) return;
+    if (_rejectedTouchPointers.contains(event.pointer)) return;
     if (event.pointer == _temporaryTouchPanPointerId) {
       applyResult(UpdateViewportResult(_editorState.viewport.pan(event.delta)));
       return;
@@ -1942,6 +2011,7 @@ class MarkdrawController extends ChangeNotifier {
   /// text/label editing, and pushes drag history.
   void onPointerUp(PointerEvent event) {
     if (_isViewportGesture) return;
+    if (_rejectedTouchPointers.remove(event.pointer)) return;
     if (event.pointer == _temporaryTouchPanPointerId) {
       _temporaryTouchPanPointerId = null;
       return;
@@ -2057,6 +2127,7 @@ class MarkdrawController extends ChangeNotifier {
   /// resets the active tool without committing.
   void onPointerCancel(PointerEvent event) {
     if (_isViewportGesture) return;
+    if (_rejectedTouchPointers.remove(event.pointer)) return;
     if (event.pointer == _temporaryTouchPanPointerId) {
       _temporaryTouchPanPointerId = null;
       return;
@@ -2105,6 +2176,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Records the starting zoom and offset for a pinch gesture.
   void onScaleStart(ScaleStartDetails details) {
+    if (!_twoFingerZoomEnabled) return;
     _pinchStartZoom = _editorState.viewport.zoom;
     _pinchStartOffset = _editorState.viewport.offset;
     _pinchStartFocalPoint = details.localFocalPoint;
@@ -2112,6 +2184,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Applies pinch-to-zoom and pan during a scale gesture.
   void onScaleUpdate(ScaleUpdateDetails details) {
+    if (!_twoFingerZoomEnabled) return;
     if (details.pointerCount < 2) return;
     if (!_isViewportGesture) {
       _isViewportGesture = true;
@@ -2232,6 +2305,9 @@ class MarkdrawController extends ChangeNotifier {
           style.roundness ??
           (style.hasRoundness ? null : _defaultStyle.roundness),
     );
+    if (_editorState.activeToolType == ToolType.freedraw) {
+      _rememberCurrentBrushState();
+    }
 
     final elements = selectedElements;
     if (elements.isEmpty) {

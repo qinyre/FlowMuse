@@ -42,13 +42,13 @@ void main() {
     }
   });
 
-  test('routes stylus and mouse creation input but reserves touch for pan', () {
+  test('允许各类指针进入工具，触摸平移由控制器开关决定', () {
     expect(shouldDispatchToCreationTool(PointerDeviceKind.stylus), isTrue);
     expect(
       shouldDispatchToCreationTool(PointerDeviceKind.invertedStylus),
       isTrue,
     );
     expect(shouldDispatchToCreationTool(PointerDeviceKind.mouse), isTrue);
-    expect(shouldDispatchToCreationTool(PointerDeviceKind.touch), isFalse);
+    expect(shouldDispatchToCreationTool(PointerDeviceKind.touch), isTrue);
   });
 }
