@@ -1,4 +1,5 @@
 import { fileIo, picker } from '@kit.CoreFileKit';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { FlutterEngine, MethodCall, MethodChannel, MethodResult } from '@ohos/flutter_ohos';
 
@@ -9,12 +10,16 @@ interface PickedFile {
 }
 
 /**
- * HarmonyOS file picker channel using CoreFileKit's DocumentViewPicker.
+ * HarmonyOS file picker channel using CoreFileKit's pickers.
  *
  * Unlike the standard `file_picker` Flutter plugin (which is not auto-registered
- * on OHOS), this channel directly invokes the native `DocumentViewPicker.select()`
- * API.  It supports filtering by file suffix and returns the name + raw bytes of
- * each selected file.
+ * on OHOS), this channel directly invokes the native picker APIs and returns the
+ * name + raw bytes of each selected file.  Two methods are exposed:
+ *
+ * - `pickFiles`  → `DocumentViewPicker` (full file manager; lets the user pick
+ *   from either the file manager or the gallery).  Used for general file import.
+ * - `pickImage`  → `photoAccessHelper.PhotoViewPicker` (gallery only; opens the
+ *   album directly with no source-selection prompt).  Used for toolbar "import image".
  */
 export class FilePickerChannel {
   private readonly context: Context;
@@ -23,22 +28,30 @@ export class FilePickerChannel {
     this.context = context;
   }
 
-  register(flutterEngine: FlutterEngine): void {
+    register(flutterEngine: FlutterEngine): void {
     const channel = new MethodChannel(
       flutterEngine.getDartExecutor().getBinaryMessenger(),
       'flow_muse/file_picker'
     );
     channel.setMethodCallHandler({
       onMethodCall: (call: MethodCall, result: MethodResult): void => {
-        if (call.method !== 'pickFiles') {
-          result.notImplemented();
+        if (call.method === 'pickFiles') {
+          this.pickFiles(call.args as PickFilesArgs)
+            .then((files: PickedFile[]) => result.success(files))
+            .catch((error: BusinessError) => {
+              result.error('FILE_PICK_FAILED', error.message ?? `${error}`, error);
+            });
           return;
         }
-        this.pickFiles(call.args as PickFilesArgs)
-          .then((files: PickedFile[]) => result.success(files))
-          .catch((error: BusinessError) => {
-            result.error('FILE_PICK_FAILED', error.message ?? `${error}`, error);
-          });
+        if (call.method === 'pickImage') {
+          this.pickImage(call.args as PickFilesArgs)
+            .then((files: PickedFile[]) => result.success(files))
+            .catch((error: BusinessError) => {
+              result.error('FILE_PICK_FAILED', error.message ?? `${error}`, error);
+            });
+          return;
+        }
+        result.notImplemented();
       }
     });
   }
@@ -72,7 +85,46 @@ export class FilePickerChannel {
       });
     });
 
-    // Read bytes from each selected URI.
+    return this.readFilesFromUris(uris);
+  }
+
+  /**
+   * Picks images directly from the system gallery (album) via
+   * `photoAccessHelper.PhotoViewPicker`.  Unlike `pickFiles` (which uses
+   * `DocumentViewPicker` and therefore prompts the user to choose between the
+   * file manager and the gallery), this method opens the gallery immediately —
+   * no source-selection dialog.
+   *
+   * Only image MIME types are offered.  The `suffixFilters` argument is
+   * accepted for API parity with `pickFiles` but ignored, since the gallery
+   * exposes media by MIME type rather than file extension.
+   *
+   * NOTE: per the Media Library Kit guidance, a media URI cannot be opened via
+   * `fileIo.openSync` inside the picker's own callback.  `select` is awaited
+   * here so the read happens after the picker resolves.
+   */
+  private async pickImage(args: PickFilesArgs): Promise<PickedFile[]> {
+    const maxSelectNumber = (args.get('maxSelectNumber') as number | undefined) ?? 1;
+
+    const photoSelectOptions = new photoAccessHelper.PhotoSelectOptions();
+    photoSelectOptions.maxSelectNumber = maxSelectNumber;
+    photoSelectOptions.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+
+    const photoViewPicker = new photoAccessHelper.PhotoViewPicker();
+    const photoSelectResult: photoAccessHelper.PhotoSelectResult =
+      await photoViewPicker.select(photoSelectOptions);
+    if (!photoSelectResult || !photoSelectResult.photoUris || photoSelectResult.photoUris.length === 0) {
+      throw new Error('User cancelled selection');
+    }
+
+    return this.readFilesFromUris(photoSelectResult.photoUris);
+  }
+
+  /**
+   * Reads name + bytes from each file URI returned by a picker.  Gallery URIs
+   * sometimes omit a filename; in that case a generic `image` name is used.
+   */
+  private readFilesFromUris(uris: string[]): PickedFile[] {
     const files: PickedFile[] = [];
     for (const uri of uris) {
       try {
@@ -83,14 +135,16 @@ export class FilePickerChannel {
         fileIo.closeSync(file.fd);
 
         // URI paths percent-encode non-ASCII filenames.
-        let name = 'unknown';
+        let name = 'image';
         const lastSlash = uri.lastIndexOf('/');
         if (lastSlash >= 0) {
           const encodedName = uri.substring(lastSlash + 1);
-          try {
-            name = decodeURIComponent(encodedName);
-          } catch (_) {
-            name = encodedName;
+          if (encodedName.length > 0) {
+            try {
+              name = decodeURIComponent(encodedName);
+            } catch (_) {
+              name = encodedName;
+            }
           }
         }
 

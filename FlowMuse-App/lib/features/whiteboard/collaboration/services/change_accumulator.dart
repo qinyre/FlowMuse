@@ -8,7 +8,7 @@ typedef ChangeBatchCallback =
 
 class ChangeAccumulator {
   ChangeAccumulator({
-    Duration batchWindow = const Duration(milliseconds: 50),
+    Duration batchWindow = const Duration(milliseconds: 16),
     SceneReconciler? reconciler,
   }) : _batchWindow = batchWindow,
        _reconciler = reconciler ?? SceneReconciler();

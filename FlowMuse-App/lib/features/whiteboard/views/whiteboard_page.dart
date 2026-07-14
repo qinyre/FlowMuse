@@ -1213,19 +1213,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _broadcastChangedElements(
-    Iterable<editor_core.Element> elements,
-  ) async {
+    Iterable<editor_core.Element> elements, {
+    bool latestOnly = false,
+  }) async {
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) return;
     await _collaborationRepository.broadcastElements(
       room: room,
       elements: _collaborationAdapter.serializeElements(elements),
+      latestOnly: latestOnly,
     );
   }
 
   void _broadcastLiveFreedraw(editor_core.FreedrawElement element) {
     if (!ref.read(whiteboardViewModelProvider).collaborating) return;
-    unawaited(_broadcastChangedElements([element]));
+    unawaited(_broadcastChangedElements([element], latestOnly: true));
   }
 
   Future<void> _handleCollaborationMessage(CollaborationMessage message) async {
@@ -1260,7 +1262,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   final Map<String, Map<String, Object?>> _remoteMergeBuffer = {};
   Timer? _remoteMergeTimer;
-  static const Duration _remoteMergeWindow = Duration(milliseconds: 33);
+  static const Duration _remoteMergeWindow = Duration(milliseconds: 16);
 
   void _enqueueRemoteElements(List<Map<String, Object?>> remoteElements) {
     CollaborationDebugLog.write('scene', 'remote_elements_queued', {
@@ -1363,21 +1365,30 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       });
       return;
     }
-    final localScene = _collaborationAdapter.currentScene();
     final protectedElementIds = _collaborationAdapter.protectedElementIds();
-    final reconciledScene = _collaborationRepository.reconcileRemoteScene(
-      localScene: localScene,
+    final changedElements = _collaborationRepository.reconcileRemoteElements(
       remoteElements: remoteElements,
       protectedElementIds: protectedElementIds,
     );
     CollaborationDebugLog.write('scene', 'remote_elements_reconciled', {
       'remote': remoteElements.length,
-      'localBefore': localScene.elements.length,
-      'localAfter': reconciledScene.elements.length,
+      'changed': changedElements.length,
       'protected': protectedElementIds.length,
-      'summary': CollaborationDebugLog.elementSummary(reconciledScene.elements),
+      'summary': CollaborationDebugLog.elementSummary(changedElements),
     });
-    await _applyRemoteScene(reconciledScene, reconcile: false);
+    if (!_canMutateWhiteboard) return;
+    _applyingRemoteScene = true;
+    final sw = Stopwatch()..start();
+    try {
+      _collaborationAdapter.applyRemoteElements(changedElements);
+      sw.stop();
+      CollaborationDebugLog.write('metrics', 'remote_apply_latency_ms', {
+        'ms': sw.elapsedMilliseconds,
+        'elements': changedElements.length,
+      });
+    } finally {
+      _applyingRemoteScene = false;
+    }
     _scheduleLoadImageFiles();
   }
 

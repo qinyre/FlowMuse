@@ -61,9 +61,11 @@ class _EditorCanvasState extends State<EditorCanvas>
   bool _shouldHandlePagedTouch(PointerEvent event) {
     return controller.isPagedViewport &&
         event.kind == PointerDeviceKind.touch &&
-        (controller.viewMode ||
-            controller.editorState.activeToolType == ToolType.hand);
+        controller.canPanPagedViewportWithTouch;
   }
+
+  bool _isPagedTouchPointer(PointerEvent event) =>
+      _activeTouchPointers.contains(event.pointer);
 
   void _startPagedTouch(PointerDownEvent event) {
     _activeTouchPointers.add(event.pointer);
@@ -286,7 +288,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       widget.onPointerPresence?.call(event.localPosition, true);
                     },
                     onPointerMove: (event) {
-                      if (_shouldHandlePagedTouch(event)) {
+                      if (_isPagedTouchPointer(event)) {
                         _updatePagedTouch(event);
                         widget.onPointerPresence?.call(
                           event.localPosition,
@@ -298,7 +300,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       widget.onPointerPresence?.call(event.localPosition, true);
                     },
                     onPointerUp: (event) {
-                      if (_shouldHandlePagedTouch(event)) {
+                      if (_isPagedTouchPointer(event)) {
                         _endPagedTouch(event);
                         widget.onPointerPresence?.call(
                           event.localPosition,
@@ -315,7 +317,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       widget.onVisibleSceneBoundsChanged?.call(canvasSize);
                     },
                     onPointerCancel: (event) {
-                      if (_shouldHandlePagedTouch(event)) {
+                      if (_isPagedTouchPointer(event)) {
                         _cancelPagedTouch(event);
                       } else {
                         controller.onPointerCancel(event);

@@ -176,19 +176,19 @@ class MarkdrawFileHandler {
     }
   }
 
-  /// Shows an image picker and imports the selected image.
+  /// Opens the system gallery (album) and imports the selected image.
+  ///
+  /// On Android and HarmonyOS this opens the gallery directly via the native
+  /// photo picker — no "file manager / gallery" source-selection prompt.  On
+  /// other platforms it falls back to [FilePicker] with `FileType.image`.
   ///
   /// [context] is used to determine screen size for centering.
   Future<void> importImage(BuildContext context) async {
-    if (defaultTargetPlatform == TargetPlatform.ohos) {
+    if (defaultTargetPlatform == TargetPlatform.ohos ||
+        defaultTargetPlatform == TargetPlatform.android) {
       try {
-        final files = await pickFilesViaOhosChannel(
-          suffixFilters: const [
-            '图片(.png,.jpg,.jpeg,.webp,.bmp)|.png,.jpg,.jpeg,.webp,.bmp',
-          ],
-        );
-        if (!context.mounted) return;
-        final picked = files.first;
+        final picked = await pickImageFromGallery();
+        if (picked == null || !context.mounted) return;
         final renderBox = context.findRenderObject() as RenderBox?;
         await controller.importImage(
           picked.bytes,
