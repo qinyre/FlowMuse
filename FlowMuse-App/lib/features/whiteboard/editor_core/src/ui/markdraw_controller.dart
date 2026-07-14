@@ -1349,14 +1349,11 @@ class MarkdrawController extends ChangeNotifier {
           ? math.max(anchor!.fontSize * 1.2, width)
           : math.max(width, 1.0),
       height: vertical
-          ? math.max(
-              text.runes.length * anchor!.fontSize * anchor.lineHeight,
-              height,
-            )
+          ? math.max(text.runes.length * anchor!.lineHeight, height)
           : math.max(height, 1.0),
       text: text,
       fontSize: anchor?.fontSize ?? 20.0,
-      lineHeight: anchor?.lineHeight ?? 1.25,
+      lineHeight: _textLineHeightForTemplateAnchor(anchor),
       customData: flowMuseData == null ? null : {'flowMuse': flowMuseData},
     );
     final styled = applyDefaultStyleToElement(element) as TextElement;
@@ -1372,6 +1369,11 @@ class MarkdrawController extends ChangeNotifier {
     final page = _layout.pageAt(bounds.center);
     if (page == null) return null;
     return TemplateAnchorResolver.resolve(page).nearestAnchor(bounds);
+  }
+
+  double _textLineHeightForTemplateAnchor(TemplateAnchor? anchor) {
+    if (anchor == null || anchor.fontSize <= 0) return 1.25;
+    return anchor.lineHeight / anchor.fontSize;
   }
 
   List<Point> _recognizedLinePoints(
@@ -3149,10 +3151,15 @@ class MarkdrawController extends ChangeNotifier {
     List<Bounds> occupied, {
     bool useTemplateAnchors = false,
   }) {
-    final initialBounds = useTemplateAnchors
-        ? _fallbackSmartLayoutBounds(block, layoutIndex)
-        : (block.bounds ?? _fallbackSmartLayoutBounds(block, layoutIndex));
-    final vertical = block.writingMode == 'vertical';
+    final anchor = useTemplateAnchors
+        ? _templateAnchorForSmartLayoutBlock(block, layoutIndex)
+        : null;
+    final initialBounds = anchor == null
+        ? (block.bounds ?? _fallbackSmartLayoutBounds(block, layoutIndex))
+        : _smartLayoutBoundsForTemplateAnchor(anchor, block, layoutIndex);
+    final vertical =
+        anchor?.writingMode == TemplateWritingMode.vertical ||
+        block.writingMode == 'vertical';
     final text = block.type == 'math' && block.latex?.trim().isNotEmpty == true
         ? block.latex!.trim()
         : block.text.trim();
@@ -3163,9 +3170,9 @@ class MarkdrawController extends ChangeNotifier {
       width: math.max(initialBounds.size.width, vertical ? 28 : 80),
       height: math.max(initialBounds.size.height, 28),
       text: text,
-      fontSize: block.type == 'heading' ? 28 : 20,
+      fontSize: anchor?.fontSize ?? (block.type == 'heading' ? 28 : 20),
       fontFamily: _defaultStyle.fontFamily ?? 'Excalifont',
-      lineHeight: 1.25,
+      lineHeight: _textLineHeightForTemplateAnchor(anchor),
       customData: {
         'flowMuse': {
           if (block.pageId != null) 'pageId': block.pageId,
@@ -3189,6 +3196,46 @@ class MarkdrawController extends ChangeNotifier {
       vertical,
     );
     return measured.copyWith(x: placedBounds.left, y: placedBounds.top);
+  }
+
+  TemplateAnchor? _templateAnchorForSmartLayoutBlock(
+    SmartLayoutBlock block,
+    int layoutIndex,
+  ) {
+    final page = _smartLayoutPageForBlock(block);
+    if (page == null) return null;
+    final anchors = TemplateAnchorResolver.resolve(page).anchors;
+    if (anchors.isEmpty) return null;
+    return anchors[math.min(layoutIndex, anchors.length - 1)];
+  }
+
+  Bounds _smartLayoutBoundsForTemplateAnchor(
+    TemplateAnchor anchor,
+    SmartLayoutBlock block,
+    int layoutIndex,
+  ) {
+    final page = _smartLayoutPageForBlock(block);
+    final content = page == null
+        ? null
+        : TemplateAnchorResolver.resolve(page).contentRect;
+    if (anchor.writingMode == TemplateWritingMode.vertical) {
+      return Bounds.fromLTWH(
+        anchor.position.dx,
+        anchor.position.dy,
+        math.max(anchor.fontSize * 1.2, 28),
+        content == null
+            ? math.max(block.bounds?.size.height ?? 240, anchor.lineHeight)
+            : math.max(content.bottom - anchor.position.dy, anchor.lineHeight),
+      );
+    }
+    return Bounds.fromLTWH(
+      anchor.position.dx,
+      anchor.position.dy,
+      content == null
+          ? math.max(block.bounds?.size.width ?? 320, anchor.lineHeight)
+          : math.max(content.right - anchor.position.dx, anchor.lineHeight),
+      anchor.lineHeight,
+    );
   }
 
   Bounds _fallbackSmartLayoutBounds(SmartLayoutBlock block, int layoutIndex) {
