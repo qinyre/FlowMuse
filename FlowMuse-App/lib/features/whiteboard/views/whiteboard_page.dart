@@ -1674,12 +1674,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         systemNavigationBarContrastEnforced: false,
       ),
       child: PopScope(
-        canPop: !widget.temporaryCollaboration || _temporarySaved,
+        canPop: widget.temporaryCollaboration && _temporarySaved,
         onPopInvokedWithResult: (didPop, result) {
-          if (didPop || !widget.temporaryCollaboration) {
+          if (didPop) {
             return;
           }
-          unawaited(_leaveCollaboration());
+          if (widget.temporaryCollaboration) {
+            unawaited(_leaveCollaboration());
+          } else {
+            unawaited(_handleBack());
+          }
         },
         child: Scaffold(
           backgroundColor: effectivePreset.backgroundEnd,
