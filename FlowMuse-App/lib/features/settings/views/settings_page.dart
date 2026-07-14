@@ -1938,7 +1938,8 @@ class _ThemeSwatch extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: preset.hasWallpaper
+        color: preset.usesMonochromeBackground ? preset.backgroundEnd : null,
+        gradient: preset.hasWallpaper || preset.usesMonochromeBackground
             ? null
             : LinearGradient(
                 begin: Alignment.topLeft,

@@ -35,7 +35,7 @@ class CreateNoteCard extends StatelessWidget {
           child: Card.outlined(
             margin: EdgeInsets.zero,
             clipBehavior: Clip.antiAlias,
-            color: colorScheme.primary.withValues(alpha: 0.035),
+            color: colorScheme.surfaceContainerLow,
             shape: const RoundedRectangleBorder(),
             child: InkWell(
               key: _tapKey,
@@ -43,12 +43,16 @@ class CreateNoteCard extends StatelessWidget {
               child: Center(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: colorScheme.primary.withValues(alpha: 0.08),
+                    color: colorScheme.primary.withValues(alpha: 0.06),
                     shape: BoxShape.circle,
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(13),
-                    child: Icon(icon, size: 28, color: colorScheme.primary),
+                    child: Icon(
+                      icon,
+                      size: 28,
+                      color: colorScheme.primary.withValues(alpha: 0.72),
+                    ),
                   ),
                 ),
               ),
@@ -59,7 +63,7 @@ class CreateNoteCard extends StatelessWidget {
         Text(
           title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: colorScheme.primary,
+            color: colorScheme.onSurface,
             fontWeight: FontWeight.w700,
             fontSize: 14,
           ),

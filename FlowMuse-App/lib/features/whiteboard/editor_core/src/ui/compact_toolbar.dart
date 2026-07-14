@@ -14,6 +14,7 @@ class CompactToolbar extends StatelessWidget {
   final VoidCallback? onCollapse;
   final Size Function() getCanvasSize;
   final bool showZoomControls;
+  final bool useFlatBackground;
 
   const CompactToolbar({
     super.key,
@@ -23,6 +24,7 @@ class CompactToolbar extends StatelessWidget {
     this.onCollapse,
     required this.getCanvasSize,
     this.showZoomControls = true,
+    this.useFlatBackground = false,
   });
 
   @override
@@ -36,7 +38,8 @@ class CompactToolbar extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 8),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+          color: useFlatBackground ? cs.surfaceContainerLow : null,
+          gradient: useFlatBackground ? null : LinearGradient(
             colors: [cs.surfaceContainerLow, cs.surface],
           ),
           borderRadius: BorderRadius.circular(12),
@@ -192,6 +195,7 @@ class CompactToolbar extends StatelessWidget {
       onPressed: () => controller.switchTool(type),
       isActive: active,
       isEmphasized: active,
+      useFlatBackground: useFlatBackground,
     );
   }
 
@@ -261,6 +265,7 @@ class CompactToolbar extends StatelessWidget {
     required VoidCallback onPressed,
     bool isActive = false,
     bool isEmphasized = false,
+    bool useFlatBackground = false,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -268,6 +273,7 @@ class CompactToolbar extends StatelessWidget {
         tooltip: tooltip,
         selected: isActive,
         emphasized: isEmphasized,
+        useFlatBackground: useFlatBackground,
         size: dock == ToolbarDock.top ? 44 : 36,
         onPressed: onPressed,
         child:

@@ -68,6 +68,7 @@ dependencies:
   sqflite: ^2.4.2+1
   sqflite_common: ^2.5.8
   sqflite_common_ffi: ^2.3.6
+  sqflite_common_ffi_web: ^1.1.1
   flutter_svg: ^2.3.0
   flutter_math_fork: ^0.7.4
 

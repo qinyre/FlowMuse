@@ -38,7 +38,8 @@ class SharedSidebar extends ConsumerWidget {
     return Container(
       width: sharedSidebarWidth,
       decoration: BoxDecoration(
-        gradient: hasSidebarWallpaper
+        color: preset.usesMonochromeBackground ? colorScheme.surfaceContainer : null,
+        gradient: hasSidebarWallpaper || preset.usesMonochromeBackground
             ? null
             : LinearGradient(
                 begin: Alignment.topCenter,
@@ -49,7 +50,7 @@ class SharedSidebar extends ConsumerWidget {
                 ],
               ),
         border: Border(
-          right: BorderSide(color: colorScheme.primary.withValues(alpha: 0.14)),
+          right: BorderSide(color: colorScheme.outlineVariant),
         ),
       ),
       child: Material(
