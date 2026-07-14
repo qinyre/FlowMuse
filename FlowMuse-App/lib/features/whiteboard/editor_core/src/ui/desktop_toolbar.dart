@@ -43,11 +43,16 @@ class DesktopToolbar extends StatelessWidget {
             ),
           ],
         ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: constraints.maxWidth),
+              child: Align(
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
               _toolbarButton(
                 cs: cs,
                 icon: controller.toolLocked ? Icons.lock : Icons.lock_open,
@@ -123,7 +128,10 @@ class DesktopToolbar extends StatelessWidget {
                   _runGlobalSmartLayout(context);
                 },
               ),
-            ],
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -144,7 +152,9 @@ class DesktopToolbar extends StatelessWidget {
       child: Tooltip(
         message: tooltip,
         child: Material(
-          color: isActive ? cs.primaryContainer : Colors.transparent,
+          color: isActive
+              ? cs.primaryContainer
+              : cs.surface.withValues(alpha: 0),
           borderRadius: BorderRadius.circular(6),
           child: InkWell(
             borderRadius: BorderRadius.circular(6),
@@ -176,7 +186,7 @@ class DesktopToolbar extends StatelessWidget {
         child: VerticalDivider(
           width: 1,
           thickness: 1,
-          color: Theme.of(context).dividerColor,
+          color: Theme.of(context).colorScheme.outlineVariant,
         ),
       ),
     );
@@ -208,7 +218,7 @@ class _BrushSelector extends StatelessWidget {
             child: Material(
               color: controller.activeBrushType == brushType
                   ? cs.primaryContainer
-                  : Colors.transparent,
+                  : cs.surface.withValues(alpha: 0),
               borderRadius: BorderRadius.circular(6),
               child: InkWell(
                 borderRadius: BorderRadius.circular(6),
@@ -330,7 +340,9 @@ class _ToolButton extends StatelessWidget {
       child: Tooltip(
         message: tooltip,
         child: Material(
-          color: active ? colorScheme.primaryContainer : Colors.transparent,
+          color: active
+              ? colorScheme.primaryContainer
+              : colorScheme.surface.withValues(alpha: 0),
           borderRadius: BorderRadius.circular(6),
           child: InkWell(
             borderRadius: BorderRadius.circular(6),

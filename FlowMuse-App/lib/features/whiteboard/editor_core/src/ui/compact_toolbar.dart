@@ -8,8 +8,9 @@ import '../../markdraw.dart' hide TextAlign;
 /// Compact bottom toolbar for mobile layout.
 class CompactToolbar extends StatelessWidget {
   final MarkdrawController controller;
+  final bool showHistory;
 
-  const CompactToolbar({super.key, required this.controller});
+  const CompactToolbar({super.key, required this.controller, this.showHistory = true});
 
   @override
   Widget build(BuildContext context) {
@@ -44,29 +45,31 @@ class CompactToolbar extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _compactButton(
-                cs: cs,
-                icon: Icons.undo,
-                tooltip: '撤销',
-                onPressed: controller.undo,
-              ),
-              _compactButton(
-                cs: cs,
-                icon: Icons.redo,
-                tooltip: '重做',
-                onPressed: controller.redo,
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: SizedBox(
-                  height: 20,
-                  child: VerticalDivider(
-                    width: 1,
-                    thickness: 1,
-                    color: Theme.of(context).dividerColor,
+              if (showHistory) ...[
+                _compactButton(
+                  cs: cs,
+                  icon: Icons.undo,
+                  tooltip: '撤销',
+                  onPressed: controller.undo,
+                ),
+                _compactButton(
+                  cs: cs,
+                  icon: Icons.redo,
+                  tooltip: '重做',
+                  onPressed: controller.redo,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: SizedBox(
+                    height: 20,
+                    child: VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      color: cs.outlineVariant,
+                    ),
                   ),
                 ),
-              ),
+              ],
               for (final type in ToolType.values)
                 if (type != ToolType.frame)
                   _compactButton(
@@ -137,7 +140,9 @@ class CompactToolbar extends StatelessWidget {
       child: Tooltip(
         message: tooltip,
         child: Material(
-          color: isActive ? cs.primaryContainer : Colors.transparent,
+          color: isActive
+              ? cs.primaryContainer
+              : cs.surface.withValues(alpha: 0),
           borderRadius: BorderRadius.circular(8),
           child: InkWell(
             borderRadius: BorderRadius.circular(8),
