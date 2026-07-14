@@ -62,6 +62,7 @@ class FrontmatterParser {
     final warnings = <ParseWarning>[];
     int? formatVersion;
     String? background;
+    bool? backgroundFollowsTheme;
     int? grid;
 
     for (var i = 1; i < closingIndex; i++) {
@@ -84,6 +85,8 @@ class FrontmatterParser {
           formatVersion = int.tryParse(value);
         case 'background':
           background = value;
+        case 'followTheme':
+          backgroundFollowsTheme = value == 'true';
         case 'grid':
           grid = int.tryParse(value);
         default:
@@ -109,6 +112,9 @@ class FrontmatterParser {
         settings: CanvasSettings(
           formatVersion: formatVersion ?? 1,
           background: background ?? '#ffffff',
+          backgroundFollowsTheme:
+              backgroundFollowsTheme ??
+              (background == null || background.toLowerCase() == '#ffffff'),
           grid: grid,
         ),
         remaining: trimmedRemaining,

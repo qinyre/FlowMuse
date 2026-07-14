@@ -320,7 +320,7 @@ class _TopBar extends StatelessWidget {
             TextButton(
               onPressed: () => context.pop(),
               style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
                 textStyle: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
@@ -380,9 +380,11 @@ class _LargePaperPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Theme.of(context).colorScheme.primary),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
@@ -398,7 +400,7 @@ class _LargePaperPreview extends StatelessWidget {
             Text(
               template.displayName,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: Theme.of(context).colorScheme.primary,
+                color: Theme.of(context).colorScheme.onSurface,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -434,6 +436,19 @@ class _NoteSetupPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final segmentedStyle = ButtonStyle(
+      backgroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? colorScheme.surfaceContainerLow
+            : colorScheme.surface,
+      ),
+      foregroundColor: WidgetStatePropertyAll(colorScheme.onSurface),
+      side: WidgetStatePropertyAll(
+        BorderSide(color: colorScheme.outlineVariant),
+      ),
+    );
+
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 430, minWidth: 360),
       child: DecoratedBox(
@@ -460,6 +475,7 @@ class _NoteSetupPanel extends StatelessWidget {
                 label: '类型',
                 child: SegmentedButton<NoteType>(
                   showSelectedIcon: false,
+                  style: segmentedStyle,
                   segments: const [
                     ButtonSegment(
                       value: NoteType.paged,
@@ -483,6 +499,7 @@ class _NoteSetupPanel extends StatelessWidget {
                 label: '排列',
                 child: SegmentedButton<PageFlow>(
                   showSelectedIcon: false,
+                  style: segmentedStyle,
                   segments: const [
                     ButtonSegment(
                       value: PageFlow.topToBottom,
@@ -509,6 +526,10 @@ class _NoteSetupPanel extends StatelessWidget {
                 child: IconButton.outlined(
                   tooltip: '导入文件',
                   onPressed: onImport,
+                  style: IconButton.styleFrom(
+                    foregroundColor: colorScheme.onSurfaceVariant,
+                    side: BorderSide(color: colorScheme.outlineVariant),
+                  ),
                   icon: const Icon(LucideIcons.upload),
                 ),
               ),
@@ -663,7 +684,7 @@ class _TemplateCard extends StatelessWidget {
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: selected
-                    ? Theme.of(context).colorScheme.primaryContainer
+                    ? Theme.of(context).colorScheme.surfaceContainerLow
                     : Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(AppSpacing.radius),
                 border: Border.all(
@@ -682,7 +703,7 @@ class _TemplateCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: selected
-                    ? Theme.of(context).colorScheme.primary
+                    ? Theme.of(context).colorScheme.onSurface
                     : Theme.of(context).colorScheme.onSurfaceVariant,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               ),

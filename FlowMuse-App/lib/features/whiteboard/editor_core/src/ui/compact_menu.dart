@@ -236,6 +236,19 @@ class CompactMenuButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
+          IconButton(
+            tooltip: '跟随主题',
+            onPressed: () {
+              Navigator.pop(ctx);
+              runAfterUiTeardown(controller.followThemeCanvasBackground);
+            },
+            icon: Icon(
+              Icons.auto_awesome,
+              color: controller.canvasBackgroundFollowsTheme
+                  ? cs.primary
+                  : cs.onSurfaceVariant,
+            ),
+          ),
           Text('背景', style: TextStyle(fontSize: 16, color: cs.onSurface)),
           const Spacer(),
           for (final c in canvasBackgroundPresets)

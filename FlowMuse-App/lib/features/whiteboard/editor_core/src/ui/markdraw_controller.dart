@@ -163,6 +163,8 @@ class MarkdrawController extends ChangeNotifier {
   ColorPickerTarget? _pendingColorPicker;
   ElementStyle _defaultStyle = const ElementStyle();
   String _canvasBackgroundColor = '#ffffff';
+  String _themeCanvasBackgroundColor = '#ffffff';
+  bool _canvasBackgroundFollowsTheme = true;
   late CanvasLayout _layout;
   int? _gridSize;
   bool _objectsSnapMode = false;
@@ -314,6 +316,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// The canvas background color as a hex string.
   String get canvasBackgroundColor => _canvasBackgroundColor;
+  bool get canvasBackgroundFollowsTheme => _canvasBackgroundFollowsTheme;
 
   /// Current canvas layout. Paged layout is synchronized through page elements.
   CanvasLayout get layout => _layout;
@@ -609,6 +612,21 @@ class MarkdrawController extends ChangeNotifier {
   /// Sets the canvas background color (hex string).
   set canvasBackgroundColor(String value) {
     _canvasBackgroundColor = value;
+    _canvasBackgroundFollowsTheme = false;
+    notifyListeners();
+  }
+
+  void setThemeCanvasBackground(String value) {
+    _themeCanvasBackgroundColor = value;
+    if (_canvasBackgroundFollowsTheme) {
+      _canvasBackgroundColor = value;
+      notifyListeners();
+    }
+  }
+
+  void followThemeCanvasBackground() {
+    _canvasBackgroundFollowsTheme = true;
+    _canvasBackgroundColor = _themeCanvasBackgroundColor;
     notifyListeners();
   }
 
@@ -3990,6 +4008,7 @@ class MarkdrawController extends ChangeNotifier {
       _editorState.scene,
       settings: CanvasSettings(
         background: _canvasBackgroundColor,
+        backgroundFollowsTheme: _canvasBackgroundFollowsTheme,
         grid: _gridSize,
         name: _documentName,
       ),
@@ -4026,6 +4045,11 @@ class MarkdrawController extends ChangeNotifier {
       ),
     };
     _canvasBackgroundColor = parseResult.value.settings.background;
+    _canvasBackgroundFollowsTheme =
+        parseResult.value.settings.backgroundFollowsTheme;
+    if (_canvasBackgroundFollowsTheme) {
+      _canvasBackgroundColor = _themeCanvasBackgroundColor;
+    }
     _gridSize = parseResult.value.settings.grid;
     _documentName = parseResult.value.settings.name;
     loadScene(SceneDocumentConverter.documentToScene(parseResult.value));
@@ -4035,6 +4059,11 @@ class MarkdrawController extends ChangeNotifier {
   void applyRemoteContent(String content, {bool closeTransientUi = true}) {
     final parseResult = ExcalidrawJsonCodec.parse(content);
     _canvasBackgroundColor = parseResult.value.settings.background;
+    _canvasBackgroundFollowsTheme =
+        parseResult.value.settings.backgroundFollowsTheme;
+    if (_canvasBackgroundFollowsTheme) {
+      _canvasBackgroundColor = _themeCanvasBackgroundColor;
+    }
     _gridSize = parseResult.value.settings.grid;
     _documentName = parseResult.value.settings.name;
     applyRemoteScene(

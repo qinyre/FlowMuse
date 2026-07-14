@@ -11,6 +11,7 @@ class StudioRailIconButton extends StatelessWidget {
     this.selected = false,
     this.emphasized = false,
     this.size = 32,
+    this.useFlatBackground = false,
   });
 
   final String tooltip;
@@ -19,6 +20,7 @@ class StudioRailIconButton extends StatelessWidget {
   final bool selected;
   final bool emphasized;
   final double size;
+  final bool useFlatBackground;
 
   @override
   Widget build(BuildContext context) {
@@ -35,11 +37,11 @@ class StudioRailIconButton extends StatelessWidget {
           child: Ink(
             decoration: BoxDecoration(
               color: emphasized
-                  ? null
+                  ? (useFlatBackground ? colors.primaryContainer : null)
                   : selected
                   ? colors.primaryContainer
                   : Colors.transparent,
-              gradient: emphasized
+              gradient: emphasized && !useFlatBackground
                   ? LinearGradient(
                       colors: [
                         colors.primaryContainer,
