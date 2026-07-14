@@ -7,6 +7,7 @@ import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
 
 import 'package:flow_muse/features/account/widgets/account_avatar.dart';
+import 'package:flow_muse/shared/storage/local_settings_repository.dart';
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
@@ -138,7 +139,11 @@ class CollaborationParticipantBadge {
 }
 
 class _MarkdrawEditorState extends State<MarkdrawEditor> {
+  static const _toolbarDockKey = 'whiteboard.toolbarDock.v1';
+
   MarkdrawController? _ownController;
+  ToolbarDock _toolbarDock = ToolbarDock.top;
+  bool _toolbarCollapsed = false;
 
   MarkdrawController get _controller =>
       widget.controller ??
@@ -153,6 +158,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     _controller.onRecognizeInk = widget.onRecognizeInk;
     _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
     _controller.restoreKeyboardFocusWhenStable();
+    unawaited(_restoreToolbarDock());
   }
 
   @override
@@ -193,6 +199,67 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
   Size _getCanvasSize() => context.size ?? const Size(800, 600);
 
   void _noop() {}
+
+  Future<void> _restoreToolbarDock() async {
+    final storedValue = await defaultLocalSettingsRepository.readString(
+      _toolbarDockKey,
+    );
+    final dock = ToolbarDock.values.where((item) => item.name == storedValue);
+    if (!mounted || dock.isEmpty) {
+      return;
+    }
+    setState(() => _toolbarDock = dock.first);
+  }
+
+  void _setToolbarDock(ToolbarDock dock) {
+    if (_toolbarDock == dock) {
+      return;
+    }
+    setState(() {
+      _toolbarDock = dock;
+      _toolbarCollapsed = false;
+    });
+    unawaited(
+      defaultLocalSettingsRepository.writeString(_toolbarDockKey, dock.name),
+    );
+  }
+
+  void _setToolbarCollapsed(bool collapsed) {
+    setState(() => _toolbarCollapsed = collapsed);
+  }
+
+  Widget _buildToolbar({required bool compact}) {
+    if (compact) {
+      return CompactToolbar(
+        controller: _controller,
+        showHistory: false,
+        dock: _toolbarDock,
+        onDockChanged: _setToolbarDock,
+        onCollapse: () => _setToolbarCollapsed(true),
+      );
+    }
+    return DesktopToolbar(
+      controller: _controller,
+      onImportImage: widget.onImportImage,
+      dock: _toolbarDock,
+      onDockChanged: _setToolbarDock,
+      onCollapse: () => _setToolbarCollapsed(true),
+    );
+  }
+
+  Widget _buildToolbarExpandButton() {
+    final icon = switch (_toolbarDock) {
+      ToolbarDock.top => Icons.keyboard_arrow_down,
+      ToolbarDock.left => Icons.keyboard_arrow_right,
+      ToolbarDock.right => Icons.keyboard_arrow_left,
+    };
+    return StudioRailIconButton(
+      tooltip: '展开工具栏',
+      size: 40,
+      onPressed: () => _setToolbarCollapsed(false),
+      child: Icon(icon, size: 24),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -263,6 +330,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     final showChrome = !_controller.zenMode;
     final showEditChrome = showChrome && !_controller.viewMode;
     final showNavigationTools = showEditChrome && widget.config.showToolbar;
+    final showTopToolbar =
+        showNavigationTools &&
+        _toolbarDock == ToolbarDock.top &&
+        !_toolbarCollapsed;
     final safeArea = MediaQuery.paddingOf(context);
     const desktopToolbarSideInset = 152.0;
     final canvasTopInset = showChrome
@@ -442,16 +513,15 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                     _GlassNavigationBar(
                       child: Stack(
                         children: [
-                          Positioned.fill(
-                            left: desktopToolbarSideInset,
-                            right: desktopToolbarSideInset,
-                            child: Center(
-                              child: DesktopToolbar(
-                                controller: _controller,
-                                onImportImage: widget.onImportImage,
-                              ),
+                          if (showTopToolbar)
+                            Positioned.fill(
+                              left: desktopToolbarSideInset,
+                              right: desktopToolbarSideInset,
+                              child: Center(child: _buildToolbar(compact: false)),
                             ),
-                          ),
+                          if (_toolbarDock == ToolbarDock.top &&
+                              _toolbarCollapsed)
+                            Center(child: _buildToolbarExpandButton()),
                           Align(
                             alignment: Alignment.centerLeft,
                             child: UndoRedoControls(controller: _controller),
@@ -483,10 +553,12 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                   children: [
                     UndoRedoControls(controller: _controller),
                     Expanded(
-                      child: CompactToolbar(
-                        controller: _controller,
-                        showHistory: false,
-                      ),
+                      child: showTopToolbar
+                          ? _buildToolbar(compact: true)
+                          : _toolbarDock == ToolbarDock.top &&
+                          _toolbarCollapsed
+                          ? Center(child: _buildToolbarExpandButton())
+                          : const SizedBox.shrink(),
                     ),
                     if (widget.config.showZoomControls)
                       ZoomControls(
@@ -497,6 +569,21 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                 ),
               ),
             ),
+          ),
+        if (showNavigationTools && _toolbarDock != ToolbarDock.top)
+          Positioned(
+            top: safeArea.top + 64,
+            bottom: safeArea.bottom + (isCompact ? 68 : 12),
+            left: _toolbarDock == ToolbarDock.left ? 8 : null,
+            right: _toolbarDock == ToolbarDock.right ? 8 : null,
+            child: _toolbarCollapsed
+                ? Align(
+                    alignment: _toolbarDock == ToolbarDock.left
+                        ? Alignment.topLeft
+                        : Alignment.topRight,
+                    child: _buildToolbarExpandButton(),
+                  )
+                : _buildToolbar(compact: isCompact),
           ),
         // Floating property panel — desktop left side
         if (showEditChrome &&

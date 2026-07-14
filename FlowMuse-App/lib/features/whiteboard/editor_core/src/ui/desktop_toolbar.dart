@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../../markdraw.dart' hide TextAlign;
 import 'studio_rail_icon_button.dart';
 
@@ -10,11 +11,17 @@ import 'studio_rail_icon_button.dart';
 class DesktopToolbar extends StatelessWidget {
   final MarkdrawController controller;
   final VoidCallback? onImportImage;
+  final ToolbarDock dock;
+  final ValueChanged<ToolbarDock>? onDockChanged;
+  final VoidCallback? onCollapse;
 
   const DesktopToolbar({
     super.key,
     required this.controller,
     this.onImportImage,
+    this.dock = ToolbarDock.top,
+    this.onDockChanged,
+    this.onCollapse,
   });
 
   @override
@@ -22,6 +29,7 @@ class DesktopToolbar extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final activeType = controller.editorState.activeToolType;
     final showPressureSlider = activeType == ToolType.freedraw;
+    final vertical = dock != ToolbarDock.top;
     return FocusTraversalGroup(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -41,16 +49,12 @@ class DesktopToolbar extends StatelessWidget {
             ),
           ],
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-              child: Align(
-                alignment: Alignment.center,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+        child: SingleChildScrollView(
+          scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
+          child: Flex(
+            direction: vertical ? Axis.vertical : Axis.horizontal,
+            mainAxisSize: MainAxisSize.min,
+            children: [
                     _toolbarButton(
                       cs: cs,
                       icon: controller.toolLocked
@@ -60,52 +64,62 @@ class DesktopToolbar extends StatelessWidget {
                       onPressed: controller.toggleToolLocked,
                       isActive: controller.toolLocked,
                     ),
-                    _toolbarDivider(context),
-                    for (final type in ToolType.values)
-                      if (type != ToolType.frame) ...[
-                        if (type == ToolType.eraser && onImportImage != null)
-                          _toolbarButton(
-                            cs: cs,
-                            iconWidget: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                Icon(
-                                  Icons.add_photo_alternate,
-                                  size: 20,
-                                  color: cs.onSurfaceVariant,
-                                ),
-                                Positioned(
-                                  right: -6,
-                                  bottom: -3,
-                                  child: Text(
-                                    '9',
-                                    style: TextStyle(
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold,
-                                      color: cs.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            tooltip: '导入图片 (9)',
-                            onPressed: onImportImage!,
-                          ),
-                        _ToolButton(
-                          type: type,
-                          activeType: activeType,
-                          colorScheme: cs,
-                          onPressed: () => controller.switchTool(type),
-                        ),
-                      ],
+                    _toolbarDivider(context, vertical),
+                    _ToolButton(
+                      type: ToolType.hand,
+                      activeType: activeType,
+                      colorScheme: cs,
+                      onPressed: () => controller.switchTool(ToolType.hand),
+                    ),
+                    _ToolButton(
+                      type: ToolType.select,
+                      activeType: activeType,
+                      colorScheme: cs,
+                      onPressed: () => controller.switchTool(ToolType.select),
+                    ),
+                    _BrushMenuButton(controller: controller),
+                    _ShapeMenuButton(
+                      controller: controller,
+                      activeType: activeType,
+                      colorScheme: cs,
+                    ),
+                    _ToolButton(
+                      type: ToolType.freedraw,
+                      activeType: activeType,
+                      colorScheme: cs,
+                      onPressed: () => controller.switchTool(ToolType.freedraw),
+                    ),
+                    _ToolButton(
+                      type: ToolType.text,
+                      activeType: activeType,
+                      colorScheme: cs,
+                      onPressed: () => controller.switchTool(ToolType.text),
+                    ),
+                    if (onImportImage != null)
+                      _toolbarButton(
+                        cs: cs,
+                        icon: Icons.add_photo_alternate,
+                        tooltip: '导入图片 (9)',
+                        onPressed: onImportImage!,
+                      ),
+                    _ToolButton(
+                      type: ToolType.eraser,
+                      activeType: activeType,
+                      colorScheme: cs,
+                      onPressed: () => controller.switchTool(ToolType.eraser),
+                    ),
+                    _ToolButton(
+                      type: ToolType.laser,
+                      activeType: activeType,
+                      colorScheme: cs,
+                      onPressed: () => controller.switchTool(ToolType.laser),
+                    ),
                     // 压感灵敏度滑块：仅在手写(freedraw)工具激活时显示
                     if (showPressureSlider) ...[
-                      _toolbarDivider(context),
-                      _BrushSelector(controller: controller),
-                      _toolbarDivider(context),
+                      _toolbarDivider(context, vertical),
                       _PressureSensitivitySlider(controller: controller),
                     ],
-                    _toolbarDivider(context),
+                    _toolbarDivider(context, vertical),
                     _toolbarButton(
                       cs: cs,
                       icon: Icons.text_fields,
@@ -128,10 +142,23 @@ class DesktopToolbar extends StatelessWidget {
                         _runGlobalSmartLayout(context);
                       },
                     ),
-                  ],
-                ),
-              ),
-            ),
+                    _toolbarDivider(context, vertical),
+                    _DockMenuButton(
+                      dock: dock,
+                      onDockChanged: onDockChanged,
+                    ),
+                    if (onCollapse != null)
+                      _toolbarButton(
+                        cs: cs,
+                        icon: switch (dock) {
+                          ToolbarDock.top => Icons.keyboard_arrow_up,
+                          ToolbarDock.left => Icons.keyboard_arrow_left,
+                          ToolbarDock.right => Icons.keyboard_arrow_right,
+                        },
+                        tooltip: '收起工具栏',
+                        onPressed: onCollapse!,
+                      ),
+            ],
           ),
         ),
       ),
@@ -157,12 +184,14 @@ class DesktopToolbar extends StatelessWidget {
     );
   }
 
-  Widget _toolbarDivider(BuildContext context) {
+  Widget _toolbarDivider(BuildContext context, bool vertical) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: vertical
+          ? const EdgeInsets.symmetric(vertical: 6)
+          : const EdgeInsets.symmetric(horizontal: 6),
       child: Container(
-        width: 2,
-        height: 20,
+        width: vertical ? 20 : 2,
+        height: vertical ? 2 : 20,
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.outlineVariant,
           borderRadius: BorderRadius.circular(99),
@@ -207,30 +236,158 @@ class DesktopToolbar extends StatelessWidget {
   }
 }
 
-class _BrushSelector extends StatelessWidget {
-  const _BrushSelector({required this.controller});
+class _BrushMenuButton extends StatelessWidget {
+  const _BrushMenuButton({required this.controller});
 
   final MarkdrawController controller;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final brushType in BrushType.values)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: StudioRailIconButton(
-              tooltip: _labelForBrush(brushType),
-              selected: controller.activeBrushType == brushType,
-              onPressed: () => controller.activeBrushType = brushType,
-              child: Icon(_iconForBrush(brushType), size: 19),
-            ),
-          ),
-      ],
+    return StudioRailIconButton(
+      tooltip: _labelForBrush(controller.activeBrushType),
+      selected: controller.editorState.activeToolType == ToolType.freedraw,
+      onPressed: () async {
+        final selected = await showAnchoredPopupMenu<BrushType>(
+          context: context,
+          items: [
+            for (final brushType in BrushType.values)
+              PopupMenuItem(
+                value: brushType,
+                child: Row(
+                  children: [
+                    Icon(_iconForBrush(brushType), size: 18),
+                    const SizedBox(width: 10),
+                    Text(_labelForBrush(brushType)),
+                  ],
+                ),
+              ),
+          ],
+        );
+        if (selected != null) {
+          controller.activeBrushType = selected;
+        }
+      },
+      child: Icon(_iconForBrush(controller.activeBrushType), size: 19),
     );
   }
+}
+
+class _ShapeMenuButton extends StatelessWidget {
+  const _ShapeMenuButton({
+    required this.controller,
+    required this.activeType,
+    required this.colorScheme,
+  });
+
+  static const _shapeTools = [
+    ToolType.rectangle,
+    ToolType.diamond,
+    ToolType.ellipse,
+    ToolType.arrow,
+    ToolType.line,
+  ];
+
+  final MarkdrawController controller;
+  final ToolType activeType;
+  final ColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _shapeTools.contains(activeType);
+    final iconType = active ? activeType : ToolType.rectangle;
+    return StudioRailIconButton(
+      tooltip: '绘制图形',
+      selected: active,
+      emphasized: active,
+      onPressed: () async {
+        final selected = await showAnchoredPopupMenu<ToolType>(
+          context: context,
+          items: [
+            for (final type in _shapeTools)
+              PopupMenuItem(
+                value: type,
+                child: Row(
+                  children: [
+                    iconWidgetFor(
+                      type,
+                      color: colorScheme.onSurfaceVariant,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(labelForToolType(type)),
+                  ],
+                ),
+              ),
+          ],
+        );
+        if (selected != null) {
+          controller.switchTool(selected);
+        }
+      },
+      child: iconWidgetFor(
+        iconType,
+        color: active ? colorScheme.primary : colorScheme.onSurfaceVariant,
+        size: 20,
+        isActive: active,
+      ),
+    );
+  }
+}
+
+class _DockMenuButton extends StatelessWidget {
+  const _DockMenuButton({required this.dock, required this.onDockChanged});
+
+  final ToolbarDock dock;
+  final ValueChanged<ToolbarDock>? onDockChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = switch (dock) {
+      ToolbarDock.top => const Icon(Icons.vertical_align_top, size: 20),
+      ToolbarDock.left => const Icon(Icons.vertical_align_center, size: 20),
+      ToolbarDock.right => Transform.flip(
+        flipX: true,
+        child: const Icon(Icons.vertical_align_center, size: 20),
+      ),
+    };
+    return StudioRailIconButton(
+      tooltip: '工具栏位置',
+      onPressed: () async {
+        final selected = await showAnchoredPopupMenu<ToolbarDock>(
+          context: context,
+          items: [
+            for (final option in ToolbarDock.values)
+              PopupMenuItem(
+                value: option,
+                child: Row(
+                  children: [
+                    Icon(_dockIcon(option), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(_dockLabel(option))),
+                    if (option == dock) const Icon(Icons.check, size: 18),
+                  ],
+                ),
+              ),
+          ],
+        );
+        if (selected != null) {
+          onDockChanged?.call(selected);
+        }
+      },
+      child: icon,
+    );
+  }
+
+  IconData _dockIcon(ToolbarDock option) => switch (option) {
+    ToolbarDock.top => Icons.vertical_align_top,
+    ToolbarDock.left || ToolbarDock.right => Icons.vertical_align_center,
+  };
+
+  String _dockLabel(ToolbarDock option) => switch (option) {
+    ToolbarDock.top => '顶部',
+    ToolbarDock.left => '靠左',
+    ToolbarDock.right => '靠右',
+  };
 }
 
 /// 压感灵敏度滑块：仅在手写工具激活时显示。
