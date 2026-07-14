@@ -232,10 +232,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     if (compact) {
       return CompactToolbar(
         controller: _controller,
-        showHistory: false,
         dock: _toolbarDock,
         onDockChanged: _setToolbarDock,
         onCollapse: () => _setToolbarCollapsed(true),
+        getCanvasSize: _getCanvasSize,
+        showZoomControls: widget.config.showZoomControls,
       );
     }
     return DesktopToolbar(
@@ -244,6 +245,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       dock: _toolbarDock,
       onDockChanged: _setToolbarDock,
       onCollapse: () => _setToolbarCollapsed(true),
+      getCanvasSize: _getCanvasSize,
+      showZoomControls: widget.config.showZoomControls,
     );
   }
 
@@ -335,14 +338,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
         _toolbarDock == ToolbarDock.top &&
         !_toolbarCollapsed;
     final safeArea = MediaQuery.paddingOf(context);
-    const desktopToolbarSideInset = 152.0;
-    final canvasTopInset = showChrome
-        ? safeArea.top + (isCompact || !showNavigationTools ? 56 : 112)
-        : 0.0;
-    final topChromeOffset =
-        safeArea.top + (isCompact || !showNavigationTools ? 56 : 112) + 12;
-    final bottomChromeOffset =
-        safeArea.bottom + (isCompact && showNavigationTools ? 68 : 12);
+    final chromeHeight = showTopToolbar ? 112.0 : 56.0;
+    final canvasTopInset = showChrome ? safeArea.top + chromeHeight : 0.0;
+    final topChromeOffset = safeArea.top + chromeHeight + 12;
+    final bottomChromeOffset = safeArea.bottom + 12;
     Widget body = Stack(
       children: [
         // Full-bleed canvas + desktop library panel
@@ -450,6 +449,12 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                                   currentThemeMode: widget.currentThemeMode,
                                   onDocumentRenamed: widget.onDocumentRenamed,
                                 ),
+                              if (showNavigationTools &&
+                                  _toolbarDock == ToolbarDock.top &&
+                                  _toolbarCollapsed) ...[
+                                const SizedBox(width: 8),
+                                _buildToolbarExpandButton(),
+                              ],
                               if (!isCompact &&
                                   widget.saveStatusLabel != null) ...[
                                 const SizedBox(width: 8),
@@ -509,71 +514,21 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                       ],
                     ),
                   ),
-                  if (showNavigationTools && !isCompact)
-                    _GlassNavigationBar(
-                      child: Stack(
-                        children: [
-                          if (showTopToolbar)
-                            Positioned.fill(
-                              left: desktopToolbarSideInset,
-                              right: desktopToolbarSideInset,
-                              child: Center(child: _buildToolbar(compact: false)),
-                            ),
-                          if (_toolbarDock == ToolbarDock.top &&
-                              _toolbarCollapsed)
-                            Center(child: _buildToolbarExpandButton()),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: UndoRedoControls(controller: _controller),
-                          ),
-                          if (widget.config.showZoomControls)
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: ZoomControls(
-                                controller: _controller,
-                                getCanvasSize: _getCanvasSize,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
                 ],
               ),
             ),
           ),
-        if (showNavigationTools && isCompact)
+        if (showNavigationTools && showTopToolbar)
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: _GlassNavigationBar(
-                child: Row(
-                  children: [
-                    UndoRedoControls(controller: _controller),
-                    Expanded(
-                      child: showTopToolbar
-                          ? _buildToolbar(compact: true)
-                          : _toolbarDock == ToolbarDock.top &&
-                          _toolbarCollapsed
-                          ? Center(child: _buildToolbarExpandButton())
-                          : const SizedBox.shrink(),
-                    ),
-                    if (widget.config.showZoomControls)
-                      ZoomControls(
-                        controller: _controller,
-                        getCanvasSize: _getCanvasSize,
-                      ),
-                  ],
-                ),
-              ),
-            ),
+            top: safeArea.top + 60,
+            left: 8,
+            right: 8,
+            child: Center(child: _buildToolbar(compact: isCompact)),
           ),
         if (showNavigationTools && _toolbarDock != ToolbarDock.top)
           Positioned(
             top: safeArea.top + 64,
-            bottom: safeArea.bottom + (isCompact ? 68 : 12),
+            bottom: safeArea.bottom + 12,
             left: _toolbarDock == ToolbarDock.left ? 8 : null,
             right: _toolbarDock == ToolbarDock.right ? 8 : null,
             child: _toolbarCollapsed
