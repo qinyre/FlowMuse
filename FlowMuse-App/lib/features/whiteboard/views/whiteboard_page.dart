@@ -1173,7 +1173,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   final Map<String, Map<String, Object?>> _remoteMergeBuffer = {};
   Timer? _remoteMergeTimer;
-  static const Duration _remoteMergeWindow = Duration(milliseconds: 33);
+  static const Duration _remoteMergeWindow = Duration(milliseconds: 16);
 
   void _enqueueRemoteElements(List<Map<String, Object?>> remoteElements) {
     CollaborationDebugLog.write('scene', 'remote_elements_queued', {

@@ -236,7 +236,7 @@ class MarkdrawController extends ChangeNotifier {
   void Function(FreedrawElement element)? onLiveFreedrawChanged;
   Timer? _liveFreedrawTimer;
   static const Duration _liveFreedrawBroadcastInterval = Duration(
-    milliseconds: 80,
+    milliseconds: 50,
   );
 
   List<Element>? _lastChangedElements;
