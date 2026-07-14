@@ -1471,130 +1471,147 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final participants = state.collaborating
         ? _collaborationParticipantBadges(state, identity)
         : const <CollaborationParticipantBadge>[];
+    final statusBarBrightness = ThemeData.estimateBrightnessForColor(
+      effectivePreset.backgroundEnd,
+    );
 
-    return PopScope(
-      canPop: !widget.temporaryCollaboration || _temporarySaved,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop || !widget.temporaryCollaboration) {
-          return;
-        }
-        unawaited(_leaveCollaboration());
-      },
-      child: Scaffold(
-        backgroundColor: effectivePreset.backgroundEnd,
-        body: SafeArea(
-          child: MarkdrawEditor(
-            controller: _markdrawController,
-            config: const MarkdrawEditorConfig(),
-            currentThemeMode: themePreset.themeMode,
-            onThemeModeChanged: _changeThemeMode,
-            saveStatusLabel: _saveStatusLabel(state.saveStatus),
-            collaborating: state.collaborating,
-            collaborationConnecting:
-                state.collaborationStatus ==
-                WhiteboardCollaborationStatus.connecting,
-            collaborationError: state.collaborationError,
-            collaborationStatusLabel: _collaborationStatusLabel(state),
-            roomLink: state.roomLink,
-            roomValue: state.roomValue,
-            shareOriginConfigured: state.shareOriginConfigured,
-            collaboratorCount: participants.isEmpty
-                ? state.collaborators.length
-                : participants.length,
-            collaborators: _remoteCollaboratorOverlays(state),
-            collaborationParticipants: participants,
-            isCollaborationOwner: state.isRoomOwner,
-            onSave: () {
-              unawaited(_saveMarkdrawScene());
-            },
-            onSaveAs: () {
-              unawaited(_fileHandler.saveAs());
-            },
-            onOpen: widget.temporaryCollaboration
-                ? null
-                : () {
-                    unawaited(_openExternalSceneAsLocalNote());
-                  },
-            onExportPng: () {
-              unawaited(_fileHandler.exportPng());
-            },
-            onShare: () {
-              unawaited(_shareCurrentWhiteboard());
-            },
-            onExportSvg: () {
-              unawaited(_fileHandler.exportSvg());
-            },
-            onExportSmartMarkdown: () {
-              unawaited(
-                _fileHandler.exportSmartLayout(
-                  SmartLayoutExportFormat.markdown,
-                ),
-              );
-            },
-            onExportSmartLatex: () {
-              unawaited(
-                _fileHandler.exportSmartLayout(SmartLayoutExportFormat.latex),
-              );
-            },
-            onImportImage: () {
-              unawaited(_fileHandler.importImage(context));
-            },
-            onImportLibrary: () {
-              unawaited(_fileHandler.importLibrary());
-            },
-            onExportLibrary: () {
-              unawaited(_fileHandler.exportLibrary());
-            },
-            onBack: widget.temporaryCollaboration
-                ? () {
-                    unawaited(_leaveCollaboration());
-                  }
-                : () {
-                    unawaited(_handleBack());
-                  },
-            onStartCollaboration: _startCollaboration,
-            onJoinCollaboration: _promptJoinCollaboration,
-            onLeaveCollaboration: _leaveCollaboration,
-            onEndCollaboration: _endCollaboration,
-            onPointerPresence: _broadcastPointerPresence,
-            onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
-            onDocumentRenamed: () {
-              unawaited(_renameAndSaveDocument());
-            },
-            onRecognizeInk: (request) =>
-                ref.read(inkRecognitionRepositoryProvider).recognize(request),
-            onSmartLayoutInk: (request) =>
-                ref.read(inkRecognitionRepositoryProvider).smartLayout(request),
-            onSceneChanged: (editorScene, SceneChangeSource source) {
-              switch (source) {
-                case SceneChangeSource.undo:
-                case SceneChangeSource.redo:
-                  unawaited(
-                    _broadcastUndoRedoScene(
-                      _previousEditorScene,
-                      _collaborationAdapter.currentScene(),
-                    ),
-                  );
-                  _scheduleLocalDraft();
-                  _previousEditorScene = editorScene;
-                  break;
-                case SceneChangeSource.remoteApply:
-                  _scheduleLocalDraft();
-                  _previousEditorScene = editorScene;
-                  break;
-                case SceneChangeSource.userEdit:
-                case SceneChangeSource.restore:
-                  final changedElements =
-                      _markdrawController.lastChangedElements;
-                  if (changedElements == null) {
-                    unawaited(_saveMarkdrawScene());
-                  } else {
-                    unawaited(_broadcastChangedElements(changedElements));
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: effectivePreset.backgroundEnd,
+        statusBarBrightness: statusBarBrightness,
+        statusBarIconBrightness: statusBarBrightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarContrastEnforced: false,
+      ),
+      child: PopScope(
+        canPop: !widget.temporaryCollaboration || _temporarySaved,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop || !widget.temporaryCollaboration) {
+            return;
+          }
+          unawaited(_leaveCollaboration());
+        },
+        child: Scaffold(
+          backgroundColor: effectivePreset.backgroundEnd,
+          body: SafeArea(
+            bottom: false,
+            child: MarkdrawEditor(
+              controller: _markdrawController,
+              config: const MarkdrawEditorConfig(),
+              currentThemeMode: themePreset.themeMode,
+              onThemeModeChanged: _changeThemeMode,
+              saveStatusLabel: _saveStatusLabel(state.saveStatus),
+              collaborating: state.collaborating,
+              collaborationConnecting:
+                  state.collaborationStatus ==
+                  WhiteboardCollaborationStatus.connecting,
+              collaborationError: state.collaborationError,
+              collaborationStatusLabel: _collaborationStatusLabel(state),
+              roomLink: state.roomLink,
+              roomValue: state.roomValue,
+              shareOriginConfigured: state.shareOriginConfigured,
+              collaboratorCount: participants.isEmpty
+                  ? state.collaborators.length
+                  : participants.length,
+              collaborators: _remoteCollaboratorOverlays(state),
+              collaborationParticipants: participants,
+              isCollaborationOwner: state.isRoomOwner,
+              onSave: () {
+                unawaited(_saveMarkdrawScene());
+              },
+              onSaveAs: () {
+                unawaited(_fileHandler.saveAs());
+              },
+              onOpen: widget.temporaryCollaboration
+                  ? null
+                  : () {
+                      unawaited(_openExternalSceneAsLocalNote());
+                    },
+              onExportPng: () {
+                unawaited(_fileHandler.exportPng());
+              },
+              onShare: () {
+                unawaited(_shareCurrentWhiteboard());
+              },
+              onExportSvg: () {
+                unawaited(_fileHandler.exportSvg());
+              },
+              onExportSmartMarkdown: () {
+                unawaited(
+                  _fileHandler.exportSmartLayout(
+                    SmartLayoutExportFormat.markdown,
+                  ),
+                );
+              },
+              onExportSmartLatex: () {
+                unawaited(
+                  _fileHandler.exportSmartLayout(SmartLayoutExportFormat.latex),
+                );
+              },
+              onImportImage: () {
+                unawaited(_fileHandler.importImage(context));
+              },
+              onImportLibrary: () {
+                unawaited(_fileHandler.importLibrary());
+              },
+              onExportLibrary: () {
+                unawaited(_fileHandler.exportLibrary());
+              },
+              onBack: widget.temporaryCollaboration
+                  ? () {
+                      unawaited(_leaveCollaboration());
+                    }
+                  : () {
+                      unawaited(_handleBack());
+                    },
+              onStartCollaboration: _startCollaboration,
+              onJoinCollaboration: _promptJoinCollaboration,
+              onLeaveCollaboration: _leaveCollaboration,
+              onEndCollaboration: _endCollaboration,
+              onPointerPresence: _broadcastPointerPresence,
+              onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
+              onDocumentRenamed: () {
+                unawaited(_renameAndSaveDocument());
+              },
+              onRecognizeInk: (request) =>
+                  ref.read(inkRecognitionRepositoryProvider).recognize(request),
+              onSmartLayoutInk: (request) => ref
+                  .read(inkRecognitionRepositoryProvider)
+                  .smartLayout(request),
+              onSceneChanged: (editorScene, SceneChangeSource source) {
+                switch (source) {
+                  case SceneChangeSource.undo:
+                  case SceneChangeSource.redo:
+                    unawaited(
+                      _broadcastUndoRedoScene(
+                        _previousEditorScene,
+                        _collaborationAdapter.currentScene(),
+                      ),
+                    );
                     _scheduleLocalDraft();
-                  }
-                  _previousEditorScene = editorScene;
-              }
-            },
+                    _previousEditorScene = editorScene;
+                    break;
+                  case SceneChangeSource.remoteApply:
+                    _scheduleLocalDraft();
+                    _previousEditorScene = editorScene;
+                    break;
+                  case SceneChangeSource.userEdit:
+                  case SceneChangeSource.restore:
+                    final changedElements =
+                        _markdrawController.lastChangedElements;
+                    if (changedElements == null) {
+                      unawaited(_saveMarkdrawScene());
+                    } else {
+                      unawaited(_broadcastChangedElements(changedElements));
+                      _scheduleLocalDraft();
+                    }
+                    _previousEditorScene = editorScene;
+                }
+              },
+            ),
           ),
         ),
       ),

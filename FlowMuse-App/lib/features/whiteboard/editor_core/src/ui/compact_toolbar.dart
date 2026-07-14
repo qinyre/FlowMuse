@@ -136,13 +136,16 @@ class CompactToolbar extends StatelessWidget {
     bool isActive = false,
     bool isEmphasized = false,
   }) {
-    return StudioRailIconButton(
-      tooltip: tooltip,
-      selected: isActive,
-      emphasized: isEmphasized,
-      size: 44,
-      onPressed: onPressed,
-      child: iconWidget ?? Icon(icon, size: 22),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: StudioRailIconButton(
+        tooltip: tooltip,
+        selected: isActive,
+        emphasized: isEmphasized,
+        size: 44,
+        onPressed: onPressed,
+        child: iconWidget ?? Icon(icon, size: 22),
+      ),
     );
   }
 

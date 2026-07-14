@@ -144,11 +144,14 @@ class DesktopToolbar extends StatelessWidget {
     required VoidCallback onPressed,
     bool isActive = false,
   }) {
-    return StudioRailIconButton(
-      tooltip: tooltip,
-      selected: isActive,
-      onPressed: onPressed,
-      child: iconWidget ?? Icon(icon, size: 20),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: StudioRailIconButton(
+        tooltip: tooltip,
+        selected: isActive,
+        onPressed: onPressed,
+        child: iconWidget ?? Icon(icon, size: 20),
+      ),
     );
   }
 
@@ -187,11 +190,14 @@ class _BrushSelector extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final brushType in BrushType.values)
-          StudioRailIconButton(
-            tooltip: _labelForBrush(brushType),
-            selected: controller.activeBrushType == brushType,
-            onPressed: () => controller.activeBrushType = brushType,
-            child: Icon(_iconForBrush(brushType), size: 19),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: StudioRailIconButton(
+              tooltip: _labelForBrush(brushType),
+              selected: controller.activeBrushType == brushType,
+              onPressed: () => controller.activeBrushType = brushType,
+              child: Icon(_iconForBrush(brushType), size: 19),
+            ),
           ),
       ],
     );
@@ -288,36 +294,41 @@ class _ToolButton extends StatelessWidget {
     final label = labelForToolType(type);
     final active = activeType == type;
     final tooltip = shortcut == null ? label : '$label ($shortcut)';
-    return StudioRailIconButton(
-      tooltip: tooltip,
-      selected: active,
-      emphasized: active,
-      onPressed: onPressed,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          iconWidgetFor(
-            type,
-            color: active ? colorScheme.primary : colorScheme.onSurfaceVariant,
-            size: 20,
-            isActive: active,
-          ),
-          if (shortcut != null)
-            Positioned(
-              right: -6,
-              bottom: -3,
-              child: Text(
-                shortcut,
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  color: active
-                      ? colorScheme.primary
-                      : colorScheme.onSurfaceVariant,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: StudioRailIconButton(
+        tooltip: tooltip,
+        selected: active,
+        emphasized: active,
+        onPressed: onPressed,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            iconWidgetFor(
+              type,
+              color: active
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant,
+              size: 20,
+              isActive: active,
+            ),
+            if (shortcut != null)
+              Positioned(
+                right: -6,
+                bottom: -3,
+                child: Text(
+                  shortcut,
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: active
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
