@@ -248,10 +248,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
   }
 
   String _propertyPanelContextKey() {
-    final selectedIds = _controller.selectedElements
-        .map((element) => element.id)
-        .toList()
-      ..sort();
+    final selectedIds =
+        _controller.selectedElements.map((element) => element.id.value).toList()
+          ..sort();
     return '${_controller.editorState.activeToolType.name}:${selectedIds.join(',')}';
   }
 
@@ -514,12 +513,14 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                                 onLeaveCollaboration:
                                     widget.onLeaveCollaboration,
                                 onEndCollaboration: widget.onEndCollaboration,
-                                onShareCollaboration: widget.onShareCollaboration,
+                                onShareCollaboration:
+                                    widget.onShareCollaboration,
                                 viewMode: _controller.viewMode,
                                 zenMode: _controller.zenMode,
                                 onExitViewMode: _controller.toggleViewMode,
                                 onExitZenMode: _controller.toggleZenMode,
-                                toolbarExpandButton: showNavigationTools &&
+                                toolbarExpandButton:
+                                    showNavigationTools &&
                                         _toolbarDock == ToolbarDock.top &&
                                         _toolbarCollapsed
                                     ? _buildToolbarExpandButton()
