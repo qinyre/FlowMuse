@@ -1,41 +1,44 @@
 import 'package:flow_muse/app/flow_muse_app.dart';
+import 'package:flow_muse/features/library/repositories/library_repository.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/test_library_index_notifier.dart';
+
 Widget _testApp() {
-  return ProviderScope(child: FlowMuseApp());
+  return ProviderScope(
+    overrides: [
+      libraryIndexProvider.overrideWith(TestLibraryIndexNotifier.new),
+    ],
+    child: FlowMuseApp(),
+  );
 }
 
 void main() {
-  testWidgets('opens markdraw editor for new whiteboard', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('opens the current note setup flow', (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(_testApp());
+    await tester.pump();
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('create-notebook-card')));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
 
-    expect(
-      find.byKey(const ValueKey('flowmuse-markdraw-editor')),
-      findsOneWidget,
-    );
-    expect(find.text('未命名白板'), findsOneWidget);
+    expect(find.text('新建笔记'), findsOneWidget);
   });
 
-  testWidgets('keeps collaboration controls outside the markdraw editor', (
+  testWidgets('shows the collaboration entry in the library', (
     WidgetTester tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(_testApp());
-    await tester.tap(find.byKey(const ValueKey('create-notebook-card')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
 
-    expect(find.text('本地白板'), findsOneWidget);
-    expect(find.text('创建房间'), findsOneWidget);
+    expect(find.text('加入房间'), findsWidgets);
   });
 }

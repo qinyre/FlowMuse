@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -45,17 +46,23 @@ void main() {
     controller.switchTool(ToolType.rectangle);
 
     controller.onPointerDown(
-      const Offset(1000, 1000),
-      kind: PointerDeviceKind.mouse,
+      const PointerDownEvent(
+        position: Offset(1000, 1000),
+        kind: PointerDeviceKind.mouse,
+      ),
     );
     controller.onPointerMove(
-      const Offset(1050, 1050),
-      const Offset(50, 50),
-      kind: PointerDeviceKind.mouse,
+      const PointerMoveEvent(
+        position: Offset(1050, 1050),
+        delta: Offset(50, 50),
+        kind: PointerDeviceKind.mouse,
+      ),
     );
     controller.onPointerUp(
-      const Offset(1050, 1050),
-      kind: PointerDeviceKind.mouse,
+      const PointerUpEvent(
+        position: Offset(1050, 1050),
+        kind: PointerDeviceKind.mouse,
+      ),
     );
 
     expect(

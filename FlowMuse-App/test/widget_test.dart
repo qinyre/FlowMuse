@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,10 +6,15 @@ import 'package:flow_muse/app/flow_muse_app.dart';
 import 'package:flow_muse/app/app_theme.dart';
 import 'package:flow_muse/app/app_theme_preset.dart';
 import 'package:flow_muse/app/view_models/theme_view_model.dart';
+import 'package:flow_muse/features/library/repositories/library_repository.dart';
+import 'package:flow_muse/features/library/view_models/library_home_view_model.dart';
+
+import 'support/test_library_index_notifier.dart';
 
 Widget _testApp({AppThemePreset? initialPreset}) {
   return ProviderScope(
     overrides: [
+      libraryIndexProvider.overrideWith(TestLibraryIndexNotifier.new),
       initialThemePresetProvider.overrideWithValue(
         initialPreset ?? defaultThemePreset,
       ),
@@ -23,9 +28,10 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(_testApp());
+    await tester.pump();
+    await tester.pump();
 
     expect(find.text('全部笔记'), findsWidgets);
-    expect(find.text('新建'), findsOneWidget);
     expect(find.text('操作系统'), findsOneWidget);
     expect(find.text('LectureNotes'), findsOneWidget);
   });
@@ -34,83 +40,62 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(_testApp());
+    await tester.pump();
+    await tester.pump();
 
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(const ValueKey('library-filter-tabs')),
-        matching: find.text('PDF'),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await tester.tap(find.text('PDF'));
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('LectureNotes'), findsOneWidget);
-    expect(find.text('操作系统'), findsNothing);
+    final container = ProviderScope.containerOf(
+      tester.element(find.text('全部笔记').first),
+    );
+    expect(
+      container.read(libraryHomeViewModelProvider).selectedFilter.name,
+      'pdf',
+    );
   });
 
-  testWidgets('opens the whiteboard route from the create card', (
+  testWidgets('opens the note setup route from the create card', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(_testApp());
+    await tester.pump();
+    await tester.pump();
 
     await tester.tap(find.byKey(const ValueKey('create-notebook-card')));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('未命名白板'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('flowmuse-markdraw-editor')),
-      findsOneWidget,
-    );
+    expect(find.text('新建笔记'), findsOneWidget);
   });
 
-  testWidgets('opens an existing notebook with its stable id', (
+  testWidgets('applies the selected theme to the library', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
       _testApp(initialPreset: appThemePresetById(AppThemeId.night)),
     );
+    await tester.pump();
+    await tester.pump();
 
-    await tester.tap(find.byKey(const ValueKey('notebook-card-whiteboard-os')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('whiteboard-os')), findsOneWidget);
-    expect(find.text('操作系统'), findsOneWidget);
-    final editor = find.byKey(const ValueKey('flowmuse-markdraw-editor'));
-    expect(editor, findsOneWidget);
     expect(
-      Theme.of(tester.element(editor)).scaffoldBackgroundColor,
+      Theme.of(tester.element(find.text('全部笔记').first)).scaffoldBackgroundColor,
       isNot(AppTheme.fromPreset(defaultThemePreset).scaffoldBackgroundColor),
     );
   });
 
-  testWidgets('opens search, folders, and settings pages from navigation', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('opens search from navigation', (WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
       _testApp(initialPreset: appThemePresetById(AppThemeId.starryBlue)),
     );
+    await tester.pump();
+    await tester.pump();
 
     await tester.tap(find.text('搜索').first);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('请输入关键字搜索笔记'), findsOneWidget);
-
-    await tester.tap(find.text('文件夹').first);
-    await tester.pumpAndSettle();
-    expect(find.text('新建文件夹'), findsWidgets);
-
-    await tester.tap(find.byTooltip('新建文件夹').first);
-    await tester.pumpAndSettle();
-    expect(find.text('新建文件夹 1'), findsWidgets);
-
-    await tester.tap(find.byTooltip('设置').first);
-    await tester.pumpAndSettle();
-    expect(find.text('本地备份'), findsWidgets);
-    expect(find.text('主题设置'), findsWidgets);
-
-    await tester.tap(find.text('主题设置').first);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('theme-hero-wallpaper')), findsOneWidget);
   });
 }

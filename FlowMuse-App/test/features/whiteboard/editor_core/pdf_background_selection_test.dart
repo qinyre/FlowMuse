@@ -1,4 +1,5 @@
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -23,8 +24,18 @@ void main() {
       ),
     );
 
-    controller.onPointerDown(const Offset(200, 300));
-    controller.onPointerUp(const Offset(200, 300));
+    controller.onPointerDown(
+      const PointerDownEvent(
+        position: Offset(200, 300),
+        kind: PointerDeviceKind.mouse,
+      ),
+    );
+    controller.onPointerUp(
+      const PointerUpEvent(
+        position: Offset(200, 300),
+        kind: PointerDeviceKind.mouse,
+      ),
+    );
 
     expect(controller.editorState.selectedIds, isEmpty);
   });
@@ -58,9 +69,25 @@ void main() {
           ),
     );
 
-    controller.onPointerDown(const Offset(-10, -10));
-    controller.onPointerMove(const Offset(500, 700), const Offset(510, 710));
-    controller.onPointerUp(const Offset(500, 700));
+    controller.onPointerDown(
+      const PointerDownEvent(
+        position: Offset(-10, -10),
+        kind: PointerDeviceKind.mouse,
+      ),
+    );
+    controller.onPointerMove(
+      const PointerMoveEvent(
+        position: Offset(500, 700),
+        delta: Offset(510, 710),
+        kind: PointerDeviceKind.mouse,
+      ),
+    );
+    controller.onPointerUp(
+      const PointerUpEvent(
+        position: Offset(500, 700),
+        kind: PointerDeviceKind.mouse,
+      ),
+    );
 
     expect(controller.editorState.selectedIds, {ElementId('annotation')});
   });

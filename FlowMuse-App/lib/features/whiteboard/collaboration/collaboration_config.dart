@@ -15,8 +15,12 @@ class CollaborationConfig {
     const dartDefinedShareOrigin = String.fromEnvironment(
       'FLOWMUSE_SHARE_ORIGIN',
     );
-    final dotenvServerUrl = dotenv.maybeGet('FLOWMUSE_COLLAB_SERVER_URL');
-    final dotenvShareOrigin = dotenv.maybeGet('FLOWMUSE_SHARE_ORIGIN');
+    final dotenvServerUrl = dotenv.isInitialized
+        ? dotenv.maybeGet('FLOWMUSE_COLLAB_SERVER_URL')
+        : null;
+    final dotenvShareOrigin = dotenv.isInitialized
+        ? dotenv.maybeGet('FLOWMUSE_SHARE_ORIGIN')
+        : null;
     return CollaborationConfig(
       serverUrl: dartDefinedServerUrl.isNotEmpty
           ? dartDefinedServerUrl

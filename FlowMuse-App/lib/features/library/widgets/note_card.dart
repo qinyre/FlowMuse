@@ -73,6 +73,7 @@ class NoteCard extends StatelessWidget {
             if (onActionsTap != null)
               GestureDetector(
                 key: actionsKey,
+                behavior: HitTestBehavior.opaque,
                 onTap: showActions,
                 child: SizedBox(
                   key: ValueKey('note-card-actions-${item.id}'),

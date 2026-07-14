@@ -1,5 +1,3 @@
-import 'package:flow_muse/features/library/models/library_collection.dart';
-import 'package:flow_muse/features/library/models/library_index.dart';
 import 'package:flow_muse/features/library/models/note_item.dart';
 import 'package:flow_muse/features/library/repositories/library_repository.dart';
 import 'package:flow_muse/features/library/widgets/note_actions.dart';
@@ -7,7 +5,6 @@ import 'package:flow_muse/features/library/widgets/note_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 void main() {
   testWidgets('note card actions button stays tappable in grid card', (

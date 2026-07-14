@@ -4,6 +4,8 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   final bounds = Bounds.fromLTWH(0, 0, 400, 1600);
 
   test('controller clamps pan within explicit content bounds', () {
