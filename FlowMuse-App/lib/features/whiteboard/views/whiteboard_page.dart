@@ -35,6 +35,8 @@ import '../share/models/share_result.dart';
 import '../share/services/share_export_coordinator.dart';
 import '../share/services/share_service_selector.dart';
 import '../view_models/whiteboard_view_model.dart';
+import '../models/editor_preferences.dart';
+import '../view_models/editor_preferences_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
@@ -95,6 +97,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   RealtimeConnectionStatus? _lastRealtimeStatus;
   bool _disposingOrLeaving = false;
   bool _handlingBack = false;
+  bool _editorPreferencesApplied = false;
   Future<void> _remoteSceneQueue = Future<void>.value();
 
   // LocalDraftScheduler — 500ms debounce
@@ -109,12 +112,42 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _markdrawController = MarkdrawController();
+    _markdrawController.onBrushStateChanged = (type, state) {
+      unawaited(
+        ref
+            .read(editorPreferencesProvider.notifier)
+            .updateBrushState(type, state),
+      );
+    };
+    ref.listenManual(editorPreferencesProvider, (_, next) {
+      next.whenData(_applyEditorPreferences);
+    }, fireImmediately: true);
     _markdrawController.onInkRecognitionModeChanged =
         _saveInkRecognitionPreference;
     _fileHandler = MarkdrawFileHandler(controller: _markdrawController);
     _collaborationAdapter = WhiteboardCollaborationAdapter(_markdrawController);
     _collaborationRepository = ref.read(collaborationRepositoryProvider);
     Future.microtask(_openNote);
+  }
+
+  void _applyEditorPreferences(EditorPreferences preferences) {
+    final tool = _editorPreferencesApplied
+        ? _markdrawController.editorState.activeToolType
+        : preferences.defaultTool;
+    final brush = _editorPreferencesApplied
+        ? _markdrawController.activeBrushType
+        : preferences.defaultBrush;
+    _markdrawController.applyEditorPreferences(
+      defaultTool: tool,
+      defaultBrush: brush,
+      brushStates: preferences.brushStates,
+      pressureEnabled: preferences.pressureEnabled,
+      pressureExponent: preferences.pressureCurve.exponent,
+      palmRejectionEnabled: preferences.palmRejectionEnabled,
+      twoFingerZoomEnabled: preferences.twoFingerZoomEnabled,
+      singleFingerPanEnabled: preferences.singleFingerPanEnabled,
+    );
+    _editorPreferencesApplied = true;
   }
 
   @override
