@@ -11,7 +11,7 @@ import (
 )
 
 const maxInkBodyBytes = 512 * 1024
-const maxSmartLayoutBodyBytes = 4 * 1024 * 1024
+const maxSmartLayoutBodyBytes = 32 * 1024 * 1024
 
 type Recognizer interface {
 	Recognize(context.Context, RecognizeRequest) (RecognizeResponse, error)
@@ -123,11 +123,19 @@ func validateSmartLayoutRequest(request SmartLayoutRequest) error {
 	if len(request.Pages) > 256 {
 		return errors.New("too many pages")
 	}
-	if len(request.Ink) == 0 && len(request.Text) == 0 {
-		return errors.New("ink or text is required")
+	if len(request.Blocks) == 0 {
+		return errors.New("blocks are required")
 	}
-	if len(request.Ink) > 4096 || len(request.Text) > 4096 || len(request.Context) > 4096 {
-		return errors.New("too many elements")
+	if len(request.Blocks) > 512 {
+		return errors.New("too many blocks")
+	}
+	for _, block := range request.Blocks {
+		if strings.TrimSpace(block.ID) == "" {
+			return errors.New("block id is required")
+		}
+		if strings.TrimSpace(block.ImageBase64) == "" {
+			return errors.New("block image is required")
+		}
 	}
 	return nil
 }

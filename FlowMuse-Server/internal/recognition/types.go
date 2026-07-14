@@ -42,10 +42,8 @@ type RecognizeResponse struct {
 }
 
 type SmartLayoutRequest struct {
-	Pages   []SmartLayoutPage    `json:"pages"`
-	Ink     []SmartLayoutElement `json:"ink"`
-	Text    []SmartLayoutElement `json:"text"`
-	Context []SmartLayoutElement `json:"context"`
+	Pages  []SmartLayoutPage     `json:"pages"`
+	Blocks []SmartLayoutInkBlock `json:"blocks"`
 }
 
 type SmartLayoutPage struct {
@@ -64,6 +62,32 @@ type SmartLayoutElement struct {
 	Points []InkPoint `json:"points,omitempty"`
 }
 
+type SmartLayoutInkBlock struct {
+	ID          string    `json:"id"`
+	PageID      string    `json:"pageId,omitempty"`
+	Bounds      InkBounds `json:"bounds"`
+	StartedAt   int64     `json:"startedAt,omitempty"`
+	ImageMime   string    `json:"imageMime"`
+	ImageBase64 string    `json:"imageBase64"`
+}
+
+type SmartLayoutRecognizedBlock struct {
+	ID        string    `json:"id"`
+	PageID    string    `json:"pageId,omitempty"`
+	Type      string    `json:"type"`
+	Text      string    `json:"text,omitempty"`
+	LaTeX     string    `json:"latex,omitempty"`
+	Bounds    InkBounds `json:"bounds"`
+	StartedAt int64     `json:"startedAt,omitempty"`
+	Error     string    `json:"error,omitempty"`
+}
+
+type SmartLayoutPageDecision struct {
+	PageID     string     `json:"pageId"`
+	Mode       string     `json:"mode"`
+	Paragraphs [][]string `json:"paragraphs,omitempty"`
+}
+
 type SmartLayoutBlock struct {
 	ID          string     `json:"id"`
 	Type        string     `json:"type"`
@@ -73,6 +97,7 @@ type SmartLayoutBlock struct {
 	Bounds      *InkBounds `json:"bounds,omitempty"`
 	Order       int        `json:"order"`
 	WritingMode string     `json:"writingMode"`
+	SourceIDs   []string   `json:"sourceIds,omitempty"`
 }
 
 type SmartLayoutDocument struct {
@@ -82,5 +107,7 @@ type SmartLayoutDocument struct {
 }
 
 type SmartLayoutResponse struct {
-	Document SmartLayoutDocument `json:"document"`
+	Document SmartLayoutDocument          `json:"document"`
+	Blocks   []SmartLayoutRecognizedBlock `json:"blocks"`
+	Pages    []SmartLayoutPageDecision    `json:"pages"`
 }
