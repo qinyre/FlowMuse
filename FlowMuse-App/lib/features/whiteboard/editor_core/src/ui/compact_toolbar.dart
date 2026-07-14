@@ -4,13 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../markdraw.dart' hide TextAlign;
+import 'studio_rail_icon_button.dart';
 
 /// Compact bottom toolbar for mobile layout.
 class CompactToolbar extends StatelessWidget {
   final MarkdrawController controller;
   final bool showHistory;
 
-  const CompactToolbar({super.key, required this.controller, this.showHistory = true});
+  const CompactToolbar({
+    super.key,
+    required this.controller,
+    this.showHistory = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -25,14 +30,8 @@ class CompactToolbar extends StatelessWidget {
           color: cs.surface,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
-            BoxShadow(
-              color: cs.shadow.withValues(alpha: 0.17),
-              blurRadius: 1,
-            ),
-            BoxShadow(
-              color: cs.shadow.withValues(alpha: 0.08),
-              blurRadius: 3,
-            ),
+            BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
+            BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
             BoxShadow(
               color: cs.shadow.withValues(alpha: 0.05),
               blurRadius: 14,
@@ -134,35 +133,12 @@ class CompactToolbar extends StatelessWidget {
     required VoidCallback onPressed,
     bool isActive = false,
   }) {
-    return Semantics(
-      label: tooltip,
-      button: true,
-      child: Tooltip(
-        message: tooltip,
-        child: Material(
-          color: isActive
-              ? cs.primaryContainer
-              : cs.surface.withValues(alpha: 0),
-          borderRadius: BorderRadius.circular(8),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: onPressed,
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: Center(
-                child:
-                    iconWidget ??
-                    Icon(
-                      icon,
-                      size: 22,
-                      color: isActive ? cs.primary : cs.onSurfaceVariant,
-                    ),
-              ),
-            ),
-          ),
-        ),
-      ),
+    return StudioRailIconButton(
+      tooltip: tooltip,
+      selected: isActive,
+      size: 44,
+      onPressed: onPressed,
+      child: iconWidget ?? Icon(icon, size: 22),
     );
   }
 
@@ -182,23 +158,11 @@ class _CompactBrushSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _showBrushSheet(context),
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-        ),
-        child: Icon(
-          _iconForBrush(controller.activeBrushType),
-          size: 19,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
+    return StudioRailIconButton(
+      tooltip: _labelForBrush(controller.activeBrushType),
+      size: 44,
+      onPressed: () => _showBrushSheet(context),
+      child: Icon(_iconForBrush(controller.activeBrushType), size: 19),
     );
   }
 
@@ -251,7 +215,7 @@ class _CompactPressureSlider extends StatelessWidget {
             height: 44,
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: Theme.of(context).colorScheme.outlineVariant,
               ),

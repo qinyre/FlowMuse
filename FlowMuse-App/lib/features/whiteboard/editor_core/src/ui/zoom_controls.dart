@@ -23,6 +23,13 @@ class UndoRedoControls extends StatelessWidget {
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           iconSize: 16,
           padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            hoverColor: cs.surfaceContainerHighest,
+            focusColor: cs.surfaceContainerHighest,
+          ),
         ),
         IconButton(
           icon: const Icon(Icons.redo, size: 16),
@@ -31,6 +38,13 @@ class UndoRedoControls extends StatelessWidget {
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           iconSize: 16,
           padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            hoverColor: cs.surfaceContainerHighest,
+            focusColor: cs.surfaceContainerHighest,
+          ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -65,17 +79,8 @@ class ZoomControls extends StatelessWidget {
     final zoomPercent = (controller.editorState.viewport.zoom * 100).round();
     return Container(
       decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
-          BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
-          BoxShadow(
-            color: cs.shadow.withValues(alpha: 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 7),
-          ),
-        ],
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -87,13 +92,22 @@ class ZoomControls extends StatelessWidget {
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             iconSize: 16,
             padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hoverColor: cs.surfaceContainerHighest,
+              focusColor: cs.surfaceContainerHighest,
+            ),
           ),
           Semantics(
             label: '缩放 $zoomPercent%，点击重置',
             button: true,
             child: InkWell(
               onTap: () => controller.resetZoom(),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(12),
+              hoverColor: cs.surfaceContainerHighest,
+              focusColor: cs.surfaceContainerHighest,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Text(
@@ -110,6 +124,13 @@ class ZoomControls extends StatelessWidget {
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             iconSize: 16,
             padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hoverColor: cs.surfaceContainerHighest,
+              focusColor: cs.surfaceContainerHighest,
+            ),
           ),
         ],
       ),

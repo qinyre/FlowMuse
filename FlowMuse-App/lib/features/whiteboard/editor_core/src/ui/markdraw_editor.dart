@@ -10,6 +10,8 @@ import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 
+import 'studio_rail_icon_button.dart';
+
 /// A full-featured drawing editor widget.
 ///
 /// Composes canvas, toolbar, property panel, zoom controls, help button,
@@ -253,8 +255,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     final showNavigationTools = showEditChrome && widget.config.showToolbar;
     final safeArea = MediaQuery.paddingOf(context);
     const desktopToolbarSideInset = 152.0;
-    final topChromeOffset = safeArea.top + (isCompact || !showNavigationTools ? 56 : 112) + 12;
-    final bottomChromeOffset = safeArea.bottom + (isCompact && showNavigationTools ? 68 : 12);
+    final topChromeOffset =
+        safeArea.top + (isCompact || !showNavigationTools ? 56 : 112) + 12;
+    final bottomChromeOffset =
+        safeArea.bottom + (isCompact && showNavigationTools ? 68 : 12);
     Widget body = Stack(
       children: [
         // Full-bleed canvas + desktop library panel
@@ -313,8 +317,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                               final titleInset = isCompact
                                   ? constraints.maxWidth / 3
                                   : 320.0;
-                              if (constraints.maxWidth <=
-                                  titleInset * 2 + 32) {
+                              if (constraints.maxWidth <= titleInset * 2 + 32) {
                                 return const SizedBox.shrink();
                               }
                               return Padding(
@@ -324,8 +327,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                                 child: Center(
                                   child: _DocumentTitle(
                                     controller: _controller,
-                                    onDocumentRenamed:
-                                        widget.onDocumentRenamed,
+                                    onDocumentRenamed: widget.onDocumentRenamed,
                                     maxWidth: isCompact ? 160 : 260,
                                   ),
                                 ),
@@ -350,7 +352,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                                   onSaveAs: widget.onSaveAs,
                                   onExportPng: widget.onExportPng,
                                   onExportSvg: widget.onExportSvg,
-                                  onExportSmartMarkdown: widget.onExportSmartMarkdown,
+                                  onExportSmartMarkdown:
+                                      widget.onExportSmartMarkdown,
                                   onExportSmartLatex: widget.onExportSmartLatex,
                                   onShare: widget.onShare,
                                   onImportImage: widget.onImportImage,
@@ -360,7 +363,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                                   currentThemeMode: widget.currentThemeMode,
                                   onDocumentRenamed: widget.onDocumentRenamed,
                                 ),
-                              if (!isCompact && widget.saveStatusLabel != null) ...[
+                              if (!isCompact &&
+                                  widget.saveStatusLabel != null) ...[
                                 const SizedBox(width: 8),
                                 _StatusPill(label: widget.saveStatusLabel!),
                               ],
@@ -376,27 +380,39 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                                 saveStatusLabel: widget.saveStatusLabel,
                                 showSaveStatus: false,
                                 collaborating: widget.collaborating,
-                                collaborationConnecting: widget.collaborationConnecting,
+                                collaborationConnecting:
+                                    widget.collaborationConnecting,
                                 collaborationError: widget.collaborationError,
-                                collaborationStatusLabel: widget.collaborationStatusLabel,
+                                collaborationStatusLabel:
+                                    widget.collaborationStatusLabel,
                                 roomLink: widget.roomLink,
                                 roomValue: widget.roomValue,
-                                shareOriginConfigured: widget.shareOriginConfigured,
+                                shareOriginConfigured:
+                                    widget.shareOriginConfigured,
                                 collaboratorCount: widget.collaboratorCount,
-                                collaborationParticipants: widget.collaborationParticipants,
-                                isCollaborationOwner: widget.isCollaborationOwner,
-                                onStartCollaboration: widget.onStartCollaboration,
+                                collaborationParticipants:
+                                    widget.collaborationParticipants,
+                                isCollaborationOwner:
+                                    widget.isCollaborationOwner,
+                                onStartCollaboration:
+                                    widget.onStartCollaboration,
                                 onJoinCollaboration: widget.onJoinCollaboration,
-                                onLeaveCollaboration: widget.onLeaveCollaboration,
+                                onLeaveCollaboration:
+                                    widget.onLeaveCollaboration,
                                 onEndCollaboration: widget.onEndCollaboration,
                                 viewMode: _controller.viewMode,
                                 zenMode: _controller.zenMode,
                                 onExitViewMode: _controller.toggleViewMode,
                                 onExitZenMode: _controller.toggleZenMode,
                               ),
-                              if (!isCompact && widget.config.showHelpButton) ...[
+                              if (!isCompact &&
+                                  widget.config.showHelpButton) ...[
                                 const SizedBox(width: 8),
-                                VerticalDivider(color: Theme.of(context).colorScheme.outlineVariant),
+                                VerticalDivider(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.outlineVariant,
+                                ),
                                 const HelpButton(),
                               ],
                             ],
@@ -680,17 +696,14 @@ class _DocumentTitle extends StatelessWidget {
       message: '重命名',
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: () => showRenameDocumentDialog(
-          context,
-          controller,
-          onDocumentRenamed,
-        ),
+        onTap: () =>
+            showRenameDocumentDialog(context, controller, onDocumentRenamed),
         child: Container(
           constraints: BoxConstraints(maxWidth: maxWidth),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
             color: cs.surface.withValues(alpha: 0.76),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: cs.outlineVariant),
           ),
           child: Text(
@@ -770,7 +783,10 @@ class _RightChrome extends StatelessWidget {
         else ...[
           if (!compact && showSaveStatus && saveStatusLabel != null)
             _StatusPill(label: saveStatusLabel!),
-          if (!compact && showSaveStatus && saveStatusLabel != null && canCollaborate)
+          if (!compact &&
+              showSaveStatus &&
+              saveStatusLabel != null &&
+              canCollaborate)
             const SizedBox(width: 8),
           if (collaborating && collaborationParticipants.isNotEmpty) ...[
             _ParticipantAvatarStack(participants: collaborationParticipants),
@@ -812,22 +828,11 @@ class _ChromeIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
-          BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
-        ],
-      ),
-      child: IconButton(
-        tooltip: tooltip,
-        icon: Icon(icon, size: 20),
-        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-        onPressed: onPressed,
-      ),
+    return StudioRailIconButton(
+      tooltip: tooltip,
+      size: 44,
+      onPressed: onPressed,
+      child: Icon(icon, size: 20),
     );
   }
 }
@@ -974,13 +979,7 @@ class _StatusPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.08),
-            blurRadius: 3,
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         label,
@@ -995,7 +994,7 @@ class _StatusPill extends StatelessWidget {
       return pill;
     }
     return InkWell(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: pill,
     );
@@ -1065,7 +1064,7 @@ class _CollaborationChipState extends State<_CollaborationChip> {
         padding: widget.compact
             ? EdgeInsets.zero
             : const EdgeInsets.symmetric(horizontal: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
