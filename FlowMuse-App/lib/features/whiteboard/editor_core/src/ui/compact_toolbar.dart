@@ -27,15 +27,16 @@ class CompactToolbar extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 8),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
-          color: cs.surface,
+          gradient: LinearGradient(
+            colors: [cs.surfaceContainerLow, cs.surface],
+          ),
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant),
           boxShadow: [
-            BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
-            BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
             BoxShadow(
-              color: cs.shadow.withValues(alpha: 0.05),
-              blurRadius: 14,
-              offset: const Offset(0, 7),
+              color: cs.primary.withValues(alpha: 0.12),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -58,13 +59,13 @@ class CompactToolbar extends StatelessWidget {
                   onPressed: controller.redo,
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: SizedBox(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Container(
+                    width: 2,
                     height: 20,
-                    child: VerticalDivider(
-                      width: 1,
-                      thickness: 1,
+                    decoration: BoxDecoration(
                       color: cs.outlineVariant,
+                      borderRadius: BorderRadius.circular(99),
                     ),
                   ),
                 ),
@@ -84,6 +85,7 @@ class CompactToolbar extends StatelessWidget {
                     tooltip: labelForToolType(type),
                     onPressed: () => controller.switchTool(type),
                     isActive: activeType == type,
+                    isEmphasized: activeType == type,
                   ),
               // 压感灵敏度滑块：仅在手写(freedraw)工具激活时显示
               if (showPressureSlider) ...[
@@ -132,10 +134,12 @@ class CompactToolbar extends StatelessWidget {
     required String tooltip,
     required VoidCallback onPressed,
     bool isActive = false,
+    bool isEmphasized = false,
   }) {
     return StudioRailIconButton(
       tooltip: tooltip,
       selected: isActive,
+      emphasized: isEmphasized,
       size: 44,
       onPressed: onPressed,
       child: iconWidget ?? Icon(icon, size: 22),

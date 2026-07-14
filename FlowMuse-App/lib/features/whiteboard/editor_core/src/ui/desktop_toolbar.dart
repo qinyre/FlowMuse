@@ -26,15 +26,16 @@ class DesktopToolbar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: BorderRadius.circular(8),
+          gradient: LinearGradient(
+            colors: [cs.surfaceContainerLow, cs.surface],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant),
           boxShadow: [
-            BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
-            BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
             BoxShadow(
-              color: cs.shadow.withValues(alpha: 0.05),
-              blurRadius: 14,
-              offset: const Offset(0, 7),
+              color: cs.primary.withValues(alpha: 0.12),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -153,13 +154,13 @@ class DesktopToolbar extends StatelessWidget {
 
   Widget _toolbarDivider(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: SizedBox(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Container(
+        width: 2,
         height: 20,
-        child: VerticalDivider(
-          width: 1,
-          thickness: 1,
+        decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.outlineVariant,
+          borderRadius: BorderRadius.circular(99),
         ),
       ),
     );
@@ -290,6 +291,7 @@ class _ToolButton extends StatelessWidget {
     return StudioRailIconButton(
       tooltip: tooltip,
       selected: active,
+      emphasized: active,
       onPressed: onPressed,
       child: Stack(
         clipBehavior: Clip.none,
