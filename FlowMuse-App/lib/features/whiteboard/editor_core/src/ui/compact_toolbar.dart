@@ -1,28 +1,46 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
-
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../../markdraw.dart' hide TextAlign;
+import 'studio_rail_icon_button.dart';
+import 'toolbar_palette_buttons.dart';
 
 /// Compact bottom toolbar for mobile layout.
 class CompactToolbar extends StatelessWidget {
   final MarkdrawController controller;
+  final ToolbarDock dock;
+  final ValueChanged<ToolbarDock>? onDockChanged;
+  final VoidCallback? onCollapse;
+  final Size Function() getCanvasSize;
+  final bool showZoomControls;
 
-  const CompactToolbar({super.key, required this.controller});
+  const CompactToolbar({
+    super.key,
+    required this.controller,
+    this.dock = ToolbarDock.top,
+    this.onDockChanged,
+    this.onCollapse,
+    required this.getCanvasSize,
+    this.showZoomControls = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final activeType = controller.editorState.activeToolType;
-    final showPressureSlider = activeType == ToolType.freedraw;
+    final vertical = dock != ToolbarDock.top;
+    final buttonSize = vertical ? 36.0 : 44.0;
     return FocusTraversalGroup(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 8),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
-          color: cs.surface,
+          gradient: LinearGradient(
+            colors: [cs.surfaceContainerLow, cs.surface],
+          ),
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant),
           boxShadow: [
             BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
             BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
@@ -34,14 +52,15 @@ class CompactToolbar extends StatelessWidget {
           ],
         ),
         child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
+          scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
+          child: Flex(
+            direction: vertical ? Axis.vertical : Axis.horizontal,
             mainAxisSize: MainAxisSize.min,
             children: [
               _compactButton(
                 cs: cs,
                 icon: Icons.undo,
-                tooltip: '撤销',
+                tooltip: '撤回',
                 onPressed: controller.undo,
               ),
               _compactButton(
@@ -50,44 +69,42 @@ class CompactToolbar extends StatelessWidget {
                 tooltip: '重做',
                 onPressed: controller.redo,
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: SizedBox(
-                  height: 20,
-                  child: VerticalDivider(
-                    width: 1,
-                    thickness: 1,
-                    color: Theme.of(context).dividerColor,
-                  ),
-                ),
+              _toolbarDivider(cs, vertical),
+              _compactToolButton(
+                cs: cs,
+                type: ToolType.hand,
+                activeType: activeType,
               ),
-              for (final type in ToolType.values)
-                if (type != ToolType.frame)
-                  _compactButton(
-                    cs: cs,
-                    iconWidget: iconWidgetFor(
-                      type,
-                      color: activeType == type
-                          ? cs.primary
-                          : cs.onSurfaceVariant,
-                      size: 22,
-                      isActive: activeType == type,
-                    ),
-                    tooltip: labelForToolType(type),
-                    onPressed: () => controller.switchTool(type),
-                    isActive: activeType == type,
-                  ),
-              // 压感灵敏度滑块：仅在手写(freedraw)工具激活时显示
-              if (showPressureSlider) ...[
-                Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: _CompactBrushSelector(controller: controller),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: _CompactPressureSlider(controller: controller),
-                ),
-              ],
+              _compactToolButton(
+                cs: cs,
+                type: ToolType.select,
+                activeType: activeType,
+              ),
+              BrushPaletteButton(
+                controller: controller,
+                dock: dock,
+                size: buttonSize,
+              ),
+              ShapePaletteButton(
+                controller: controller,
+                dock: dock,
+                size: buttonSize,
+              ),
+              _compactToolButton(
+                cs: cs,
+                type: ToolType.text,
+                activeType: activeType,
+              ),
+              _compactToolButton(
+                cs: cs,
+                type: ToolType.eraser,
+                activeType: activeType,
+              ),
+              _compactToolButton(
+                cs: cs,
+                type: ToolType.laser,
+                activeType: activeType,
+              ),
               _compactButton(
                 cs: cs,
                 icon: Icons.text_fields,
@@ -110,11 +127,130 @@ class CompactToolbar extends StatelessWidget {
                   _runGlobalSmartLayout(context);
                 },
               ),
+              if (showZoomControls) ...[
+                _compactButton(
+                  cs: cs,
+                  icon: Icons.remove,
+                  tooltip: '缩小',
+                  onPressed: () => controller.zoomOut(getCanvasSize()),
+                ),
+                _compactButton(
+                  cs: cs,
+                  iconWidget: Text(
+                    '${(controller.editorState.viewport.zoom * 100).round()}%',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  tooltip: '重置缩放',
+                  onPressed: controller.resetZoom,
+                ),
+                _compactButton(
+                  cs: cs,
+                  icon: Icons.add,
+                  tooltip: '放大',
+                  onPressed: () => controller.zoomIn(getCanvasSize()),
+                ),
+              ],
+              _compactButton(
+                cs: cs,
+                iconWidget: _dockIcon(dock),
+                tooltip: '工具栏位置',
+                onPressed: () => _showDockMenu(context),
+              ),
+              if (onCollapse != null)
+                _compactButton(
+                  cs: cs,
+                  icon: switch (dock) {
+                    ToolbarDock.top => Icons.keyboard_arrow_up,
+                    ToolbarDock.left => Icons.keyboard_arrow_left,
+                    ToolbarDock.right => Icons.keyboard_arrow_right,
+                  },
+                  tooltip: '收起工具栏',
+                  onPressed: onCollapse!,
+                ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _compactToolButton({
+    required ColorScheme cs,
+    required ToolType type,
+    required ToolType activeType,
+  }) {
+    final active = activeType == type;
+    return _compactButton(
+      cs: cs,
+      iconWidget: iconWidgetFor(
+        type,
+        color: active ? cs.primary : cs.onSurfaceVariant,
+        size: 22,
+        isActive: active,
+      ),
+      tooltip: labelForToolType(type),
+      onPressed: () => controller.switchTool(type),
+      isActive: active,
+      isEmphasized: active,
+    );
+  }
+
+  Widget _toolbarDivider(ColorScheme cs, bool vertical) {
+    return Padding(
+      padding: vertical
+          ? const EdgeInsets.symmetric(vertical: 3)
+          : const EdgeInsets.symmetric(horizontal: 6),
+      child: Container(
+        width: vertical ? 16 : 2,
+        height: vertical ? 1 : 20,
+        decoration: BoxDecoration(
+          color: cs.outlineVariant,
+          borderRadius: BorderRadius.circular(99),
+        ),
+      ),
+    );
+  }
+
+  Widget _dockIcon(ToolbarDock value) => switch (value) {
+    ToolbarDock.top => const Icon(Icons.vertical_align_top, size: 22),
+    ToolbarDock.left => const Icon(Icons.arrow_left, size: 26),
+    ToolbarDock.right => const Icon(Icons.arrow_right, size: 26),
+  };
+
+  Future<void> _showDockMenu(BuildContext context) async {
+    final selected = await showAnchoredPopupMenu<ToolbarDock>(
+      context: context,
+      items: [
+        for (final option in ToolbarDock.values)
+          PopupMenuItem(
+            value: option,
+            child: Row(
+              children: [
+                Icon(
+                  option == ToolbarDock.top
+                      ? Icons.vertical_align_top
+                      : option == ToolbarDock.left
+                      ? Icons.arrow_left
+                      : Icons.arrow_right,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(switch (option) {
+                    ToolbarDock.top => '顶部',
+                    ToolbarDock.left => '靠左',
+                    ToolbarDock.right => '靠右',
+                  }),
+                ),
+                if (option == dock) const Icon(Icons.check, size: 18),
+              ],
+            ),
+          ),
+      ],
+    );
+    if (selected != null) {
+      onDockChanged?.call(selected);
+    }
   }
 
   Widget _compactButton({
@@ -124,33 +260,18 @@ class CompactToolbar extends StatelessWidget {
     required String tooltip,
     required VoidCallback onPressed,
     bool isActive = false,
+    bool isEmphasized = false,
   }) {
-    return Semantics(
-      label: tooltip,
-      button: true,
-      child: Tooltip(
-        message: tooltip,
-        child: Material(
-          color: isActive ? cs.primaryContainer : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: onPressed,
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: Center(
-                child:
-                    iconWidget ??
-                    Icon(
-                      icon,
-                      size: 22,
-                      color: isActive ? cs.primary : cs.onSurfaceVariant,
-                    ),
-              ),
-            ),
-          ),
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: StudioRailIconButton(
+        tooltip: tooltip,
+        selected: isActive,
+        emphasized: isEmphasized,
+        size: dock == ToolbarDock.top ? 44 : 36,
+        onPressed: onPressed,
+        child:
+            iconWidget ?? Icon(icon, size: dock == ToolbarDock.top ? 22 : 20),
       ),
     );
   }
@@ -160,17 +281,46 @@ class CompactToolbar extends StatelessWidget {
     bool changed;
     Object? error;
     try {
-      changed = await controller.runGlobalSmartLayout();
+      changed = await controller.runGlobalSmartLayout(
+        onProgress: (completed, total) {
+          if (!context.mounted) return;
+          _showSmartLayoutProgress(messenger, completed, total);
+        },
+      );
     } catch (caught) {
       changed = false;
       error = caught;
     }
+    messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
         content: Text(
           _smartLayoutMessage(changed: changed, error: error),
           maxLines: 5,
           overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  void _showSmartLayoutProgress(
+    ScaffoldMessengerState messenger,
+    int completed,
+    int total,
+  ) {
+    final progress = total <= 0 ? null : completed / total;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(days: 1),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('识别中 $completed/$total'),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: progress),
+          ],
         ),
       ),
     );
@@ -189,171 +339,4 @@ class CompactToolbar extends StatelessWidget {
         .replaceFirst(RegExp(r'^Exception:\s*'), '')
         .trim();
   }
-}
-
-class _CompactBrushSelector extends StatelessWidget {
-  const _CompactBrushSelector({required this.controller});
-
-  final MarkdrawController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _showBrushSheet(context),
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-        ),
-        child: Icon(
-          _iconForBrush(controller.activeBrushType),
-          size: 19,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-
-  void _showBrushSheet(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (ctx) {
-        return ListenableBuilder(
-          listenable: controller,
-          builder: (ctx, _) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final brushType in BrushType.values)
-                    ChoiceChip(
-                      selected: controller.activeBrushType == brushType,
-                      avatar: Icon(_iconForBrush(brushType), size: 18),
-                      label: Text(_labelForBrush(brushType)),
-                      onSelected: (_) {
-                        controller.activeBrushType = brushType;
-                        Navigator.of(ctx).pop();
-                      },
-                    ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-/// Compact 布局的压感灵敏度弹出式滑块。
-class _CompactPressureSlider extends StatelessWidget {
-  final MarkdrawController controller;
-  const _CompactPressureSlider({required this.controller});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
-        return GestureDetector(
-          onTap: () => _showSliderPopup(context),
-          child: Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.line_weight,
-                  size: 18,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '压感',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _showSliderPopup(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (ctx) {
-        return ListenableBuilder(
-          listenable: controller,
-          builder: (ctx, _) {
-            final value = controller.pressureSensitivity;
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('压感强度', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text('均匀', style: TextStyle(fontSize: 12)),
-                      Expanded(
-                        child: Slider(
-                          value: value,
-                          min: 0.0,
-                          max: 1.0,
-                          onChanged: (v) {
-                            controller.pressureSensitivity = v;
-                          },
-                        ),
-                      ),
-                      const Text('极强', style: TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-String _labelForBrush(BrushType brushType) {
-  return switch (brushType) {
-    BrushType.pencil => '铅笔',
-    BrushType.ballpoint => '圆珠笔',
-    BrushType.fountainPen => '钢笔',
-    BrushType.brushPen => '毛笔',
-    BrushType.highlighter => '荧光笔',
-  };
-}
-
-IconData _iconForBrush(BrushType brushType) {
-  return switch (brushType) {
-    BrushType.pencil => Icons.edit_outlined,
-    BrushType.ballpoint => Icons.mode_edit_outline,
-    BrushType.fountainPen => Icons.draw,
-    BrushType.brushPen => Icons.brush,
-    BrushType.highlighter => Symbols.ink_highlighter,
-  };
 }

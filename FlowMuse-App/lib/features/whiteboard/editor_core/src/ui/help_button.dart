@@ -13,17 +13,8 @@ class HelpButton extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
-          BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
-          BoxShadow(
-            color: cs.shadow.withValues(alpha: 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 7),
-          ),
-        ],
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: IconButton(
         icon: const Icon(Icons.help_outline, size: 18),
@@ -32,6 +23,13 @@ class HelpButton extends StatelessWidget {
         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         iconSize: 18,
         padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          hoverColor: cs.surfaceContainerHighest,
+          focusColor: cs.surfaceContainerHighest,
+        ),
       ),
     );
   }

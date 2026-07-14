@@ -50,6 +50,7 @@ class SmartLayoutBlock {
     this.bounds,
     this.order = 0,
     this.writingMode = 'horizontal',
+    this.sourceIds = const [],
   });
 
   final String id;
@@ -60,6 +61,7 @@ class SmartLayoutBlock {
   final Bounds? bounds;
   final int order;
   final String writingMode;
+  final List<String> sourceIds;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -76,6 +78,7 @@ class SmartLayoutBlock {
       },
     'order': order,
     'writingMode': writingMode,
+    if (sourceIds.isNotEmpty) 'sourceIds': sourceIds,
   };
 
   factory SmartLayoutBlock.fromJson(Map<String, Object?> json) {
@@ -99,6 +102,10 @@ class SmartLayoutBlock {
       bounds: bounds,
       order: (json['order'] as num?)?.toInt() ?? 0,
       writingMode: json['writingMode'] as String? ?? 'horizontal',
+      sourceIds: [
+        for (final item in json['sourceIds'] as List<Object?>? ?? const [])
+          if (item is String) item,
+      ],
     );
   }
 }
@@ -162,38 +169,187 @@ class SmartLayoutElementRequest {
   };
 }
 
-class SmartLayoutRequest {
-  const SmartLayoutRequest({
-    required this.pages,
-    required this.ink,
-    required this.text,
-    required this.context,
+class SmartLayoutInkBlockRequest {
+  const SmartLayoutInkBlockRequest({
+    required this.id,
+    required this.bounds,
+    required this.imageBase64,
+    this.pageId,
+    this.startedAt,
+    this.imageMime = 'image/png',
   });
 
-  final List<SmartLayoutPageRequest> pages;
-  final List<SmartLayoutElementRequest> ink;
-  final List<SmartLayoutElementRequest> text;
-  final List<SmartLayoutElementRequest> context;
+  final String id;
+  final String? pageId;
+  final Bounds bounds;
+  final int? startedAt;
+  final String imageMime;
+  final String imageBase64;
 
   Map<String, Object?> toJson() => {
-    'pages': pages.map((page) => page.toJson()).toList(),
-    'ink': ink.map((element) => element.toJson()).toList(),
-    'text': text.map((element) => element.toJson()).toList(),
-    'context': context.map((element) => element.toJson()).toList(),
+    'id': id,
+    if (pageId != null) 'pageId': pageId,
+    'bounds': {
+      'x': bounds.left,
+      'y': bounds.top,
+      'width': bounds.size.width,
+      'height': bounds.size.height,
+    },
+    if (startedAt != null) 'startedAt': startedAt,
+    'imageMime': imageMime,
+    'imageBase64': imageBase64,
   };
 }
 
+class SmartLayoutRequest {
+  const SmartLayoutRequest({required this.pages, required this.blocks});
+
+  final List<SmartLayoutPageRequest> pages;
+  final List<SmartLayoutInkBlockRequest> blocks;
+
+  Map<String, Object?> toJson() => {
+    'pages': pages.map((page) => page.toJson()).toList(),
+    'blocks': blocks.map((block) => block.toJson()).toList(),
+  };
+}
+
+class SmartLayoutRecognizedBlock {
+  const SmartLayoutRecognizedBlock({
+    required this.id,
+    required this.type,
+    required this.bounds,
+    this.pageId,
+    this.text,
+    this.latex,
+    this.startedAt,
+    this.error,
+  });
+
+  final String id;
+  final String? pageId;
+  final String type;
+  final String? text;
+  final String? latex;
+  final Bounds bounds;
+  final int? startedAt;
+  final String? error;
+
+  bool get isSuccess => error == null || error!.isEmpty;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    if (pageId != null) 'pageId': pageId,
+    'type': type,
+    if (text != null) 'text': text,
+    if (latex != null) 'latex': latex,
+    'bounds': {
+      'x': bounds.left,
+      'y': bounds.top,
+      'width': bounds.size.width,
+      'height': bounds.size.height,
+    },
+    if (startedAt != null) 'startedAt': startedAt,
+    if (error != null && error!.isNotEmpty) 'error': error,
+  };
+
+  factory SmartLayoutRecognizedBlock.fromJson(Map<String, Object?> json) {
+    final rawBounds = json['bounds'];
+    Bounds bounds = Bounds.fromLTWH(0, 0, 1, 1);
+    if (rawBounds is Map) {
+      final map = Map<String, Object?>.from(rawBounds);
+      bounds = Bounds.fromLTWH(
+        (map['x'] as num?)?.toDouble() ?? 0,
+        (map['y'] as num?)?.toDouble() ?? 0,
+        (map['width'] as num?)?.toDouble() ?? 1,
+        (map['height'] as num?)?.toDouble() ?? 1,
+      );
+    }
+    return SmartLayoutRecognizedBlock(
+      id: json['id'] as String? ?? ElementId.generate().value,
+      pageId: json['pageId'] as String?,
+      type: json['type'] as String? ?? 'text',
+      text: json['text'] as String?,
+      latex: json['latex'] as String?,
+      bounds: bounds,
+      startedAt: (json['startedAt'] as num?)?.toInt(),
+      error: json['error'] as String?,
+    );
+  }
+}
+
+class SmartLayoutComposeRequest {
+  const SmartLayoutComposeRequest({required this.pages, required this.blocks});
+
+  final List<SmartLayoutPageRequest> pages;
+  final List<SmartLayoutRecognizedBlock> blocks;
+
+  Map<String, Object?> toJson() => {
+    'pages': pages.map((page) => page.toJson()).toList(),
+    'blocks': blocks.map((block) => block.toJson()).toList(),
+  };
+}
+
+class SmartLayoutPageDecision {
+  const SmartLayoutPageDecision({
+    required this.pageId,
+    required this.mode,
+    this.paragraphs = const [],
+  });
+
+  final String pageId;
+  final String mode;
+  final List<List<String>> paragraphs;
+
+  bool get isArticle => mode == 'article';
+
+  factory SmartLayoutPageDecision.fromJson(Map<String, Object?> json) {
+    final rawParagraphs = json['paragraphs'] as List<Object?>? ?? const [];
+    return SmartLayoutPageDecision(
+      pageId: json['pageId'] as String? ?? '',
+      mode: json['mode'] as String? ?? 'in_place',
+      paragraphs: [
+        for (final paragraph in rawParagraphs)
+          if (paragraph is List)
+            [
+              for (final item in paragraph)
+                if (item is String) item,
+            ],
+      ],
+    );
+  }
+}
+
 class SmartLayoutResponse {
-  const SmartLayoutResponse({required this.document});
+  const SmartLayoutResponse({
+    required this.document,
+    this.blocks = const [],
+    this.pages = const [],
+  });
 
   final SmartLayoutDocument document;
+  final List<SmartLayoutRecognizedBlock> blocks;
+  final List<SmartLayoutPageDecision> pages;
 
   factory SmartLayoutResponse.fromJson(Map<String, Object?> json) {
     final rawDocument = json['document'];
+    final rawBlocks = json['blocks'] as List<Object?>? ?? const [];
+    final rawPages = json['pages'] as List<Object?>? ?? const [];
     return SmartLayoutResponse(
       document: rawDocument is Map
           ? SmartLayoutDocument.fromJson(Map<String, Object?>.from(rawDocument))
           : SmartLayoutDocument.fromJson(json),
+      blocks: [
+        for (final item in rawBlocks)
+          if (item is Map)
+            SmartLayoutRecognizedBlock.fromJson(
+              Map<String, Object?>.from(item),
+            ),
+      ],
+      pages: [
+        for (final item in rawPages)
+          if (item is Map)
+            SmartLayoutPageDecision.fromJson(Map<String, Object?>.from(item)),
+      ],
     );
   }
 }

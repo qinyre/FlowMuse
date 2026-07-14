@@ -5,6 +5,8 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 
 import 'color_utils.dart' as color_utils;
 
+enum ToolbarDock { top, left, right }
+
 /// Immutable configuration for [MarkdrawEditor] appearance and behavior.
 class MarkdrawEditorConfig {
   const MarkdrawEditorConfig({

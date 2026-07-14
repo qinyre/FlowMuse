@@ -12,6 +12,7 @@ const String recognitionStrokeSessionKey = 'flowmuse.recognition.sessionId';
 const String recognitionStrokePendingKey = 'flowmuse.recognition.pending';
 const String recognitionStrokeStartedAtKey = 'flowmuse.recognition.startedAt';
 const String recognitionStrokePointTimesKey = 'flowmuse.recognition.pointTimes';
+const Duration recognitionStrokeSessionTimeout = Duration(seconds: 5);
 
 /// Tool for creating freehand drawing elements by continuous path recording.
 ///
@@ -31,6 +32,7 @@ class FreedrawTool implements Tool {
   FreedrawElement? _liveElement;
   String? _sessionId;
   int? _startedAt;
+  int? _lastStrokeEndedAt;
 
   @override
   ToolType get type => ToolType.freedraw;
@@ -44,10 +46,16 @@ class FreedrawTool implements Tool {
     double? pressure,
   }) {
     _isDrawing = true;
-    if (context.inkRecognitionMode && context.brushType.canAutoRecognize) {
-      _sessionId ??= ElementId.generate().value;
-      _startedAt ??= DateTime.now().millisecondsSinceEpoch;
-      _pointTimes.add(DateTime.now().millisecondsSinceEpoch);
+    if (context.brushType.canAutoRecognize) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (_sessionId == null ||
+          (_lastStrokeEndedAt != null &&
+              now - _lastStrokeEndedAt! >
+                  recognitionStrokeSessionTimeout.inMilliseconds)) {
+        _sessionId = ElementId.generate().value;
+        _startedAt = now;
+      }
+      _pointTimes.add(now);
     }
     _points.add(point);
     _recordPressure(pressure);
@@ -92,6 +100,7 @@ class FreedrawTool implements Tool {
     }
 
     final element = _buildElement(context, isComplete: true);
+    _lastStrokeEndedAt = DateTime.now().millisecondsSinceEpoch;
 
     _clearStrokeState();
     return AddElementResult(element);
@@ -124,6 +133,7 @@ class FreedrawTool implements Tool {
   void startNewSession() {
     _sessionId = ElementId.generate().value;
     _startedAt = DateTime.now().millisecondsSinceEpoch;
+    _lastStrokeEndedAt = null;
   }
 
   /// 记录压感。首点收到非 null pressure 即判定本次笔画为真压感,
@@ -179,6 +189,7 @@ class FreedrawTool implements Tool {
     if (clearSession) {
       _sessionId = null;
       _startedAt = null;
+      _lastStrokeEndedAt = null;
     }
   }
 
@@ -196,7 +207,7 @@ class FreedrawTool implements Tool {
       customData = {
         ...customData,
         recognitionStrokeSessionKey: _sessionId,
-        recognitionStrokePendingKey: true,
+        recognitionStrokePendingKey: context.inkRecognitionMode,
         recognitionStrokeStartedAtKey: _startedAt,
         recognitionStrokePointTimesKey: List<int>.unmodifiable(_pointTimes),
       };
