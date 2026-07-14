@@ -10,6 +10,7 @@ import '../features/library/widgets/create_collection_dialog.dart';
 import '../features/library/widgets/edit_collection_page.dart';
 import '../features/search/views/search_page.dart';
 import '../features/settings/views/settings_page.dart';
+import '../features/settings/views/privacy_policy_page.dart';
 import '../features/notebooks/views/notebooks_page.dart';
 import '../features/tags/views/tags_page.dart';
 import '../features/whiteboard/collaboration/models/collaboration_room.dart';
@@ -30,6 +31,7 @@ class AppRoutes {
   static const tagDetail = '/tags/:tagId';
   static const settings = '/settings';
   static const accountSettings = '/settings?section=account';
+  static const privacyPolicy = '/settings/privacy-policy';
   static const verifyEmail = '/auth/verify-email';
   static const resetPassword = '/auth/reset-password';
   static const unnotebooked = '/library/unnotebooked';
@@ -165,7 +167,18 @@ GoRouter createAppRouter() {
       GoRoute(
         path: AppRoutes.settings,
         pageBuilder: (context, state) {
-          return _modalPage(state, const SettingsPage());
+          return _modalPage(
+            state,
+            SettingsPage(
+              initialSection: state.uri.queryParameters['section'],
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.privacyPolicy,
+        pageBuilder: (context, state) {
+          return _standalonePage(state, const PrivacyPolicyPage());
         },
       ),
       GoRoute(

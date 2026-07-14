@@ -166,6 +166,31 @@ void main() {
       expect(r.pressure, isNotNull); // 不切到模拟
     });
 
+    test('关闭压感后手写笔输出模拟压力', () {
+      final m = StrokeInputModeler(InputPolicy.stylus, useRealPressure: false);
+
+      final r = m.process(s(0, 0, 0, p: 0.8, phase: StrokePhase.down));
+
+      expect(r.pressure, isNull);
+    });
+
+    test('明显曲线降低轻压输入以扩大粗细变化', () {
+      final standard = StrokeInputModeler(InputPolicy.stylus);
+      final firm = StrokeInputModeler(
+        InputPolicy.stylus,
+        pressureExponent: 1.35,
+      );
+
+      final standardResult = standard.process(
+        s(0, 0, 0, p: 0.25, phase: StrokePhase.down),
+      );
+      final firmResult = firm.process(
+        s(0, 0, 0, p: 0.25, phase: StrokePhase.down),
+      );
+
+      expect(firmResult.pressure!, lessThan(standardResult.pressure!));
+    });
+
     test('stylus suppresses a single-sample pressure spike', () {
       final m = StrokeInputModeler(InputPolicy.stylus);
       m.process(s(0, 0, 0, p: 0.5, phase: StrokePhase.down));

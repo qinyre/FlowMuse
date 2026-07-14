@@ -39,11 +39,17 @@ class StrokeModelResult {
 ///
 /// 单个活动 stroke：down 获取 pointer 所有权，up/cancel 释放。无 Flutter 依赖。
 class StrokeInputModeler {
-  StrokeInputModeler(this.policy);
+  StrokeInputModeler(
+    this.policy, {
+    bool? useRealPressure,
+    this.pressureExponent = 1.0,
+  }) : useRealPressure = useRealPressure ?? policy.useRealPressure;
 
   static const _maxSamplingGap = Duration(milliseconds: 200);
 
   final InputPolicy policy;
+  final bool useRealPressure;
+  final double pressureExponent;
 
   OneEuroFilter? _xFilter;
   OneEuroFilter? _yFilter;
@@ -101,7 +107,7 @@ class StrokeInputModeler {
       beta: 0.0,
     );
     _lastEmitted = Point(s.x, s.y);
-    _lastPressure = policy.useRealPressure ? s.pressure : null;
+    _lastPressure = useRealPressure ? s.pressure : null;
     _lastTime = s.time;
     _lastDir = null;
     // 种子滤波器：第一个 move 到达时已有状态，避免绕过滤波直出原始值。
@@ -218,12 +224,13 @@ class StrokeInputModeler {
   }
 
   double? _pressureOut(double? raw) {
-    if (!policy.useRealPressure) return null; // 模拟模式：始终 null，交 perfect_freehand
+    if (!useRealPressure) return null; // 模拟模式：始终 null，交 perfect_freehand
     if (raw != null) {
       final filtered = _pressureFilter!.filter(raw, _lastTime ?? Duration.zero);
+      final curved = math.pow(filtered.clamp(0.0, 1.0), pressureExponent);
       _lastPressure =
           policy.pressureFloor +
-          filtered * (policy.pressureCeiling - policy.pressureFloor);
+          curved * (policy.pressureCeiling - policy.pressureFloor);
     }
     return _lastPressure; // 偶发缺失沿用最后有效值
   }
