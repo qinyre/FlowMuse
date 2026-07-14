@@ -52,6 +52,8 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   bool get isEditingText => widget.isEditingText;
   bool get textOnly => widget.textOnly;
   Size? get canvasSize => widget.canvasSize;
+  bool get isFreedrawTool =>
+      controller.editorState.activeToolType == ToolType.freedraw;
 
   @override
   void dispose() {
@@ -131,7 +133,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionLabel(context, '描边'),
+        _buildSectionLabel(context, isFreedrawTool ? '颜色' : '描边'),
         _buildColorPickerRow(
           context,
           selected: style.strokeColor,
@@ -141,32 +143,40 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           target: ColorPickerTarget.stroke,
         ),
         if (!textOnly) ...[
-          const SizedBox(height: 8),
-          _buildSectionLabel(context, '背景'),
-          _buildColorPickerRow(
-            context,
-            selected: style.backgroundColor,
-            onSelect: (c) =>
-                controller.applyStyleChange(ElementStyle(backgroundColor: c)),
-            quickPicks: backgroundQuickPicks,
-            target: ColorPickerTarget.background,
-          ),
-          const SizedBox(height: 8),
-          _buildSectionLabel(context, '填充样式'),
-          _buildFillStyleRow(context, style.fillStyle),
-          const SizedBox(height: 8),
-          _buildSectionLabel(context, '描边宽度'),
-          _buildStrokeWidthRow(context, style.strokeWidth),
-          const SizedBox(height: 8),
-          _buildSectionLabel(context, '描边样式'),
-          _buildStrokeStyleRow(context, style.strokeStyle),
-          const SizedBox(height: 8),
-          _buildSectionLabel(context, '手绘感'),
-          _buildRoughnessRow(context, style.roughness),
-          if (style.hasRoundness || style.canBreakPolygon) ...[
+          if (!isFreedrawTool) ...[
             const SizedBox(height: 8),
-            _buildSectionLabel(context, '边角'),
-            _buildEdgesRow(context, style),
+            _buildSectionLabel(context, '背景'),
+            _buildColorPickerRow(
+              context,
+              selected: style.backgroundColor,
+              onSelect: (c) => controller.applyStyleChange(
+                ElementStyle(backgroundColor: c),
+              ),
+              quickPicks: backgroundQuickPicks,
+              target: ColorPickerTarget.background,
+            ),
+            const SizedBox(height: 8),
+            _buildSectionLabel(context, '填充样式'),
+            _buildFillStyleRow(context, style.fillStyle),
+          ],
+          const SizedBox(height: 8),
+          _buildSectionLabel(
+            context,
+            isFreedrawTool ? '笔迹粗细' : '描边宽度',
+          ),
+          _buildStrokeWidthRow(context, style.strokeWidth),
+          if (!isFreedrawTool) ...[
+            const SizedBox(height: 8),
+            _buildSectionLabel(context, '描边样式'),
+            _buildStrokeStyleRow(context, style.strokeStyle),
+            const SizedBox(height: 8),
+            _buildSectionLabel(context, '手绘感'),
+            _buildRoughnessRow(context, style.roughness),
+            if (style.hasRoundness || style.canBreakPolygon) ...[
+              const SizedBox(height: 8),
+              _buildSectionLabel(context, '边角'),
+              _buildEdgesRow(context, style),
+            ],
           ],
         ],
         if (style.hasArrows) ...[

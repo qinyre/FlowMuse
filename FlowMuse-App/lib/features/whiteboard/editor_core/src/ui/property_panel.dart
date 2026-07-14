@@ -111,14 +111,25 @@ class PropertyPanel extends StatelessWidget {
               if (onCollapse != null)
                 Align(
                   alignment: Alignment.centerRight,
-                  child: IconButton(
-                    icon: Icon(
-                      dockOnRight
-                          ? Icons.keyboard_arrow_right
-                          : Icons.keyboard_arrow_left,
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 28,
+                        height: 28,
+                      ),
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        dockOnRight
+                            ? Icons.keyboard_arrow_right
+                            : Icons.keyboard_arrow_left,
+                      ),
+                      tooltip: '收起属性面板',
+                      onPressed: onCollapse,
                     ),
-                    tooltip: '收起属性面板',
-                    onPressed: onCollapse,
                   ),
                 ),
               PropertyPanelContent(
