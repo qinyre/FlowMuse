@@ -63,6 +63,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.onDocumentRenamed,
     this.onRecognizeInk,
     this.onSmartLayoutInk,
+    this.onRecognizeSmartLayoutBlock,
+    this.onComposeSmartLayout,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -119,6 +121,10 @@ class MarkdrawEditor extends StatefulWidget {
   onRecognizeInk;
   final Future<SmartLayoutResponse> Function(SmartLayoutRequest)?
   onSmartLayoutInk;
+  final Future<SmartLayoutRecognizedBlock> Function(SmartLayoutInkBlockRequest)?
+  onRecognizeSmartLayoutBlock;
+  final Future<SmartLayoutResponse> Function(SmartLayoutComposeRequest)?
+  onComposeSmartLayout;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -159,6 +165,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
     _controller.onRecognizeInk = widget.onRecognizeInk;
     _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
+    _controller.onRecognizeSmartLayoutBlock =
+        widget.onRecognizeSmartLayoutBlock;
+    _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
     _controller.restoreKeyboardFocusWhenStable();
     unawaited(_restoreToolbarDock());
   }
@@ -173,6 +182,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
       _controller.onRecognizeInk = widget.onRecognizeInk;
       _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
+      _controller.onRecognizeSmartLayoutBlock =
+          widget.onRecognizeSmartLayoutBlock;
+      _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
     } else if (widget.onRecognizeInk != oldWidget.onRecognizeInk) {
       _controller.onRecognizeInk = widget.onRecognizeInk;
     }
@@ -181,6 +193,14 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     }
     if (widget.onSmartLayoutInk != oldWidget.onSmartLayoutInk) {
       _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
+    }
+    if (widget.onRecognizeSmartLayoutBlock !=
+        oldWidget.onRecognizeSmartLayoutBlock) {
+      _controller.onRecognizeSmartLayoutBlock =
+          widget.onRecognizeSmartLayoutBlock;
+    }
+    if (widget.onComposeSmartLayout != oldWidget.onComposeSmartLayout) {
+      _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
     }
   }
 

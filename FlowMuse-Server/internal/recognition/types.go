@@ -46,6 +46,15 @@ type SmartLayoutRequest struct {
 	Blocks []SmartLayoutInkBlock `json:"blocks"`
 }
 
+type SmartLayoutBlockRequest struct {
+	Block SmartLayoutInkBlock `json:"block"`
+}
+
+type SmartLayoutComposeRequest struct {
+	Pages  []SmartLayoutPage            `json:"pages"`
+	Blocks []SmartLayoutRecognizedBlock `json:"blocks"`
+}
+
 type SmartLayoutPage struct {
 	ID       string           `json:"id"`
 	Index    int              `json:"index"`

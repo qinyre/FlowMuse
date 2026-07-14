@@ -1759,8 +1759,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               },
               onRecognizeInk: (request) =>
                   ref.read(inkRecognitionRepositoryProvider).recognize(request),
-              onSmartLayoutInk: (request) =>
-                  ref.read(inkRecognitionRepositoryProvider).smartLayout(request),
+              onSmartLayoutInk: (request) => ref
+                  .read(inkRecognitionRepositoryProvider)
+                  .smartLayout(request),
+              onRecognizeSmartLayoutBlock: (block) => ref
+                  .read(inkRecognitionRepositoryProvider)
+                  .recognizeSmartLayoutBlock(block),
+              onComposeSmartLayout: (request) => ref
+                  .read(inkRecognitionRepositoryProvider)
+                  .composeSmartLayout(request),
               onLiveFreedrawChanged: state.collaborating
                   ? _broadcastLiveFreedraw
                   : null,

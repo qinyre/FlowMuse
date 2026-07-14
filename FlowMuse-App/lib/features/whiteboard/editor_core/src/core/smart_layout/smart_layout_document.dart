@@ -236,6 +236,22 @@ class SmartLayoutRecognizedBlock {
 
   bool get isSuccess => error == null || error!.isEmpty;
 
+  Map<String, Object?> toJson() => {
+    'id': id,
+    if (pageId != null) 'pageId': pageId,
+    'type': type,
+    if (text != null) 'text': text,
+    if (latex != null) 'latex': latex,
+    'bounds': {
+      'x': bounds.left,
+      'y': bounds.top,
+      'width': bounds.size.width,
+      'height': bounds.size.height,
+    },
+    if (startedAt != null) 'startedAt': startedAt,
+    if (error != null && error!.isNotEmpty) 'error': error,
+  };
+
   factory SmartLayoutRecognizedBlock.fromJson(Map<String, Object?> json) {
     final rawBounds = json['bounds'];
     Bounds bounds = Bounds.fromLTWH(0, 0, 1, 1);
@@ -259,6 +275,18 @@ class SmartLayoutRecognizedBlock {
       error: json['error'] as String?,
     );
   }
+}
+
+class SmartLayoutComposeRequest {
+  const SmartLayoutComposeRequest({required this.pages, required this.blocks});
+
+  final List<SmartLayoutPageRequest> pages;
+  final List<SmartLayoutRecognizedBlock> blocks;
+
+  Map<String, Object?> toJson() => {
+    'pages': pages.map((page) => page.toJson()).toList(),
+    'blocks': blocks.map((block) => block.toJson()).toList(),
+  };
 }
 
 class SmartLayoutPageDecision {

@@ -257,6 +257,10 @@ class MarkdrawController extends ChangeNotifier {
   /// Called after recognition-pen strokes settle and should be recognized.
   Future<InkRecognitionResult> Function(InkRecognitionRequest)? onRecognizeInk;
   Future<SmartLayoutResponse> Function(SmartLayoutRequest)? onSmartLayoutInk;
+  Future<SmartLayoutRecognizedBlock> Function(SmartLayoutInkBlockRequest)?
+  onRecognizeSmartLayoutBlock;
+  Future<SmartLayoutResponse> Function(SmartLayoutComposeRequest)?
+  onComposeSmartLayout;
   void Function(bool enabled)? onInkRecognitionModeChanged;
 
   Timer? _inkRecognitionTimer;
@@ -2813,44 +2817,72 @@ class MarkdrawController extends ChangeNotifier {
     smartInkLayoutMode = !_smartInkLayoutMode;
   }
 
-  Future<bool> runGlobalSmartLayout() async {
+  Future<bool> runGlobalSmartLayout({
+    void Function(int completed, int total)? onProgress,
+  }) async {
     final layoutCallback = onSmartLayoutInk;
-    if (layoutCallback == null || _recognizingInk) return false;
-    final inkGroups = _smartLayoutInkGroups();
-    if (inkGroups.isEmpty) return false;
-    if (_disposed) return false;
-    final request = await _buildSmartLayoutRequest(inkGroups);
-    if (_disposed || request.blocks.isEmpty) return false;
-    SmartLayoutResponse response;
-    try {
-      response = await layoutCallback(request);
-    } catch (error, stackTrace) {
-      debugPrint('[$_logTag] 智能排版请求失败: $error');
-      Error.throwWithStackTrace(error, stackTrace);
+    final blockCallback = onRecognizeSmartLayoutBlock;
+    final composeCallback = onComposeSmartLayout;
+    if ((layoutCallback == null &&
+            (blockCallback == null || composeCallback == null)) ||
+        _recognizingInk) {
+      return false;
     }
-    if (_disposed) return false;
-    final replacement = _elementsFromSmartLayoutResponse(response);
-    if (replacement.isEmpty) return false;
-    final successBlockIds = {
-      for (final block in response.blocks)
-        if (block.isSuccess) block.id,
-    };
-    final removableInk = [
-      for (final entry in inkGroups.entries)
-        if (successBlockIds.contains(entry.key)) ...entry.value,
-    ];
-    final removableSmartText = _smartLayoutGeneratedTextElements();
-    pushHistory();
-    applyResult(
-      CompoundResult([
-        for (final stroke in removableInk) RemoveElementResult(stroke.id),
-        for (final text in removableSmartText) RemoveElementResult(text.id),
-        for (final element in replacement) AddElementResult(element),
-        SetSmartLayoutResult(response.document),
-        SetSelectionResult({for (final element in replacement) element.id}),
-      ]),
-    );
-    return true;
+    _recognizingInk = true;
+    try {
+      final inkGroups = _smartLayoutInkGroups();
+      if (inkGroups.isEmpty) return false;
+      if (_disposed) return false;
+      final request = await _buildSmartLayoutRequest(inkGroups);
+      if (_disposed || request.blocks.isEmpty) return false;
+      SmartLayoutResponse response;
+      try {
+        if (blockCallback != null && composeCallback != null) {
+          final recognized = <SmartLayoutRecognizedBlock>[];
+          onProgress?.call(0, request.blocks.length);
+          for (final block in request.blocks) {
+            if (_disposed) return false;
+            recognized.add(await blockCallback(block));
+            onProgress?.call(recognized.length, request.blocks.length);
+          }
+          if (_disposed) return false;
+          response = await composeCallback(
+            SmartLayoutComposeRequest(pages: request.pages, blocks: recognized),
+          );
+        } else {
+          response = await layoutCallback!(request);
+          onProgress?.call(request.blocks.length, request.blocks.length);
+        }
+      } catch (error, stackTrace) {
+        debugPrint('[$_logTag] 智能排版请求失败: $error');
+        Error.throwWithStackTrace(error, stackTrace);
+      }
+      if (_disposed) return false;
+      final replacement = _elementsFromSmartLayoutResponse(response);
+      if (replacement.isEmpty) return false;
+      final successBlockIds = {
+        for (final block in response.blocks)
+          if (block.isSuccess) block.id,
+      };
+      final removableInk = [
+        for (final entry in inkGroups.entries)
+          if (successBlockIds.contains(entry.key)) ...entry.value,
+      ];
+      final removableSmartText = _smartLayoutGeneratedTextElements();
+      pushHistory();
+      applyResult(
+        CompoundResult([
+          for (final stroke in removableInk) RemoveElementResult(stroke.id),
+          for (final text in removableSmartText) RemoveElementResult(text.id),
+          for (final element in replacement) AddElementResult(element),
+          SetSmartLayoutResult(response.document),
+          SetSelectionResult({for (final element in replacement) element.id}),
+        ]),
+      );
+      return true;
+    } finally {
+      _recognizingInk = false;
+    }
   }
 
   String exportSmartLayout(SmartLayoutExportFormat format) {

@@ -236,13 +236,11 @@ class CompactToolbar extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    switch (option) {
-                      ToolbarDock.top => '顶部',
-                      ToolbarDock.left => '靠左',
-                      ToolbarDock.right => '靠右',
-                    },
-                  ),
+                  child: Text(switch (option) {
+                    ToolbarDock.top => '顶部',
+                    ToolbarDock.left => '靠左',
+                    ToolbarDock.right => '靠右',
+                  }),
                 ),
                 if (option == dock) const Icon(Icons.check, size: 18),
               ],
@@ -272,8 +270,8 @@ class CompactToolbar extends StatelessWidget {
         emphasized: isEmphasized,
         size: dock == ToolbarDock.top ? 44 : 36,
         onPressed: onPressed,
-        child: iconWidget ??
-            Icon(icon, size: dock == ToolbarDock.top ? 22 : 20),
+        child:
+            iconWidget ?? Icon(icon, size: dock == ToolbarDock.top ? 22 : 20),
       ),
     );
   }
@@ -283,17 +281,46 @@ class CompactToolbar extends StatelessWidget {
     bool changed;
     Object? error;
     try {
-      changed = await controller.runGlobalSmartLayout();
+      changed = await controller.runGlobalSmartLayout(
+        onProgress: (completed, total) {
+          if (!context.mounted) return;
+          _showSmartLayoutProgress(messenger, completed, total);
+        },
+      );
     } catch (caught) {
       changed = false;
       error = caught;
     }
+    messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
         content: Text(
           _smartLayoutMessage(changed: changed, error: error),
           maxLines: 5,
           overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  void _showSmartLayoutProgress(
+    ScaffoldMessengerState messenger,
+    int completed,
+    int total,
+  ) {
+    final progress = total <= 0 ? null : completed / total;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(days: 1),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('识别中 $completed/$total'),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: progress),
+          ],
         ),
       ),
     );

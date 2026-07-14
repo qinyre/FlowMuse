@@ -18,6 +18,8 @@ const smartLayoutOCRConcurrency = 3
 
 type SmartLayouter interface {
 	Layout(context.Context, SmartLayoutRequest) (SmartLayoutResponse, error)
+	RecognizeBlock(context.Context, SmartLayoutInkBlock) (SmartLayoutRecognizedBlock, error)
+	Compose(context.Context, SmartLayoutComposeRequest) (SmartLayoutResponse, error)
 }
 
 type OpenAICompatibleConfig struct {
@@ -50,9 +52,20 @@ func (l *OpenAICompatibleSmartLayouter) Layout(ctx context.Context, request Smar
 		return SmartLayoutResponse{}, errors.New("AI smart layout is not configured")
 	}
 	recognized := l.recognizeBlocks(ctx, request.Blocks)
-	pages := l.decidePages(ctx, request.Pages, recognized)
-	document := buildSmartLayoutDocument(recognized, pages)
-	return SmartLayoutResponse{Document: document, Blocks: recognized, Pages: pages}, nil
+	return l.Compose(ctx, SmartLayoutComposeRequest{
+		Pages:  request.Pages,
+		Blocks: recognized,
+	})
+}
+
+func (l *OpenAICompatibleSmartLayouter) RecognizeBlock(ctx context.Context, block SmartLayoutInkBlock) (SmartLayoutRecognizedBlock, error) {
+	return l.recognizeBlock(ctx, block)
+}
+
+func (l *OpenAICompatibleSmartLayouter) Compose(ctx context.Context, request SmartLayoutComposeRequest) (SmartLayoutResponse, error) {
+	pages := l.decidePages(ctx, request.Pages, request.Blocks)
+	document := buildSmartLayoutDocument(request.Blocks, pages)
+	return SmartLayoutResponse{Document: document, Blocks: request.Blocks, Pages: pages}, nil
 }
 
 func (l *OpenAICompatibleSmartLayouter) recognizeBlocks(ctx context.Context, blocks []SmartLayoutInkBlock) []SmartLayoutRecognizedBlock {
