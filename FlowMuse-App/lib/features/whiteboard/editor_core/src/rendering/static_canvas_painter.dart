@@ -570,12 +570,17 @@ class StaticCanvasPainter extends CustomPainter {
       ..color = const Color(0xFF343A34)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6 / viewport.zoom;
+    final innerFramePaint = Paint()
+      ..color = const Color(0xFF6F6B5B)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8 / viewport.zoom;
     final columnPaint = Paint()
-      ..color = const Color(0xFF9D9883)
+      ..color = const Color(0xFFB0AA93)
       ..strokeWidth = 1 / viewport.zoom;
 
     final frame = rect;
     canvas.drawRect(frame, framePaint);
+    canvas.drawRect(frame.deflate(5), innerFramePaint);
 
     final centerX = frame.center.dx;
     const gutterWidth = TemplateGeometry.ancientBookGutterWidth;
@@ -591,7 +596,7 @@ class StaticCanvasPainter extends CustomPainter {
       Offset(gutterRight, frame.bottom),
       framePaint,
     );
-    _renderAncientBookGutter(canvas, frame, centerX, gutterWidth, columnPaint);
+    _renderAncientBookGutter(canvas, frame, centerX, gutterWidth);
 
     _renderAncientBookColumns(
       canvas,
@@ -617,30 +622,61 @@ class StaticCanvasPainter extends CustomPainter {
     Rect frame,
     double centerX,
     double gutterWidth,
-    Paint paint,
   ) {
-    final seamPaint = Paint.from(paint)..strokeWidth = 0.8 / viewport.zoom;
+    final seamPaint = Paint()
+      ..color = const Color(0xFF343A34)
+      ..strokeWidth = 0.9 / viewport.zoom;
+    final foldGuidePaint = Paint()
+      ..color = const Color(0xFFB0AA93)
+      ..strokeWidth = 0.65 / viewport.zoom;
     final markPaint = Paint()
       ..color = const Color(0xFF343A34)
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.miter
+      ..strokeWidth = 1.5 / viewport.zoom;
+    final fillPaint = Paint()
+      ..color = const Color(0xFFFFFCF4)
       ..style = PaintingStyle.fill;
 
+    final upperCenter = Offset(centerX, frame.top + frame.height * 0.27);
+    final lowerCenter = Offset(centerX, frame.top + frame.height * 0.73);
+    final tailHeight = 28.0;
+    final gap = tailHeight * 0.76;
+
     canvas.drawLine(
-      Offset(centerX, frame.top),
-      Offset(centerX, frame.bottom),
+      Offset(centerX, frame.top + 8),
+      Offset(centerX, upperCenter.dy - gap),
       seamPaint,
     );
-    final fishTailWidth = gutterWidth * 0.42;
+    canvas.drawLine(
+      Offset(centerX, upperCenter.dy + gap),
+      Offset(centerX, lowerCenter.dy - gap),
+      foldGuidePaint,
+    );
+    canvas.drawLine(
+      Offset(centerX, lowerCenter.dy + gap),
+      Offset(centerX, frame.bottom - 8),
+      seamPaint,
+    );
+
+    final fishTailWidth = gutterWidth * 0.54;
     _renderAncientBookFishTail(
       canvas,
-      Offset(centerX, frame.top + frame.height * 0.34),
+      upperCenter,
       fishTailWidth,
+      tailHeight,
+      fillPaint,
       markPaint,
+      pointsDown: true,
     );
     _renderAncientBookFishTail(
       canvas,
-      Offset(centerX, frame.top + frame.height * 0.66),
+      lowerCenter,
       fishTailWidth,
+      tailHeight,
+      fillPaint,
       markPaint,
+      pointsDown: false,
     );
   }
 
@@ -648,20 +684,32 @@ class StaticCanvasPainter extends CustomPainter {
     Canvas canvas,
     Offset center,
     double width,
-    Paint paint,
-  ) {
-    const height = 22.0;
+    double height,
+    Paint fillPaint,
+    Paint strokePaint, {
+    required bool pointsDown,
+  }) {
+    final halfWidth = width / 2;
+    final halfHeight = height / 2;
+    final notchDepth = height * 0.42;
+    final notchY = pointsDown
+        ? center.dy - halfHeight + notchDepth
+        : center.dy + halfHeight - notchDepth;
     final path = Path()
-      ..moveTo(center.dx, center.dy - height / 2)
-      ..lineTo(center.dx + width / 2, center.dy - height / 2)
-      ..lineTo(center.dx, center.dy)
-      ..lineTo(center.dx + width / 2, center.dy + height / 2)
-      ..lineTo(center.dx, center.dy + height / 2)
-      ..lineTo(center.dx - width / 2, center.dy + height / 2)
-      ..lineTo(center.dx, center.dy)
-      ..lineTo(center.dx - width / 2, center.dy - height / 2)
+      ..moveTo(center.dx - halfWidth, center.dy - halfHeight)
+      ..lineTo(center.dx + halfWidth, center.dy - halfHeight)
+      ..lineTo(center.dx, notchY)
+      ..lineTo(center.dx + halfWidth, center.dy + halfHeight)
+      ..lineTo(center.dx - halfWidth, center.dy + halfHeight)
+      ..lineTo(center.dx, notchY)
       ..close();
-    canvas.drawPath(path, paint);
+    canvas.drawPath(path, fillPaint);
+    canvas.drawPath(path, strokePaint);
+    canvas.drawLine(
+      Offset(center.dx - halfWidth * 0.58, center.dy),
+      Offset(center.dx + halfWidth * 0.58, center.dy),
+      strokePaint,
+    );
   }
 
   void _renderPracticeGrid(
