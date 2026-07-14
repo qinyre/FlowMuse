@@ -95,6 +95,8 @@ dependency_overrides:
     path: tool/vendor/path_provider
   path_provider_ohos:
     path: tool/vendor/path_provider_ohos
+  flutter_math_fork:
+    path: tool/vendor/flutter_math_fork
 
 hooks:
   user_defines:
