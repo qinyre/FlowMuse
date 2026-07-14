@@ -219,6 +219,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _loadingScene = true;
     _markdrawController.closeTransientUiForSceneReplace();
     _markdrawController.loadFromContent(content, '$noteId.excalidraw');
+    final hasUserContent = _markdrawController.currentScene.activeElements.any(
+      (element) => !element.isCanvasPage,
+    );
+    if (!hasUserContent) {
+      _markdrawController.setViewport(const ViewportState(zoom: 0.5));
+    }
     _syncDocumentTitle(note);
     await _restoreInkRecognitionPreference(noteId);
     debugPrint(
