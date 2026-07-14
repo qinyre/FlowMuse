@@ -210,8 +210,10 @@ class DesktopToolbar extends StatelessWidget {
       child: StudioRailIconButton(
         tooltip: tooltip,
         selected: isActive,
+        size: dock == ToolbarDock.top ? 32 : 28,
         onPressed: onPressed,
-        child: iconWidget ?? Icon(icon, size: 20),
+        child: iconWidget ??
+            Icon(icon, size: dock == ToolbarDock.top ? 20 : 18),
       ),
     );
   }
@@ -219,11 +221,11 @@ class DesktopToolbar extends StatelessWidget {
   Widget _toolbarDivider(BuildContext context, bool vertical) {
     return Padding(
       padding: vertical
-          ? const EdgeInsets.symmetric(vertical: 6)
+          ? const EdgeInsets.symmetric(vertical: 3)
           : const EdgeInsets.symmetric(horizontal: 6),
       child: Container(
-        width: vertical ? 20 : 2,
-        height: vertical ? 2 : 20,
+        width: vertical ? 16 : 2,
+        height: vertical ? 1 : 20,
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.outlineVariant,
           borderRadius: BorderRadius.circular(99),

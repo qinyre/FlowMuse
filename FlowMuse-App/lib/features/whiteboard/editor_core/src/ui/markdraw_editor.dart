@@ -554,8 +554,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
           ),
         if (showNavigationTools && _toolbarDock != ToolbarDock.top)
           Positioned(
-            top: safeArea.top + 64,
-            bottom: safeArea.bottom + 12,
+            top: safeArea.top + 56,
+            bottom: safeArea.bottom + 4,
             left: _toolbarDock == ToolbarDock.left ? 8 : null,
             right: _toolbarDock == ToolbarDock.right ? 8 : null,
             child: _toolbarCollapsed

@@ -30,6 +30,7 @@ class CompactToolbar extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final activeType = controller.editorState.activeToolType;
     final vertical = dock != ToolbarDock.top;
+    final buttonSize = vertical ? 36.0 : 44.0;
     return FocusTraversalGroup(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -82,12 +83,12 @@ class CompactToolbar extends StatelessWidget {
               BrushPaletteButton(
                 controller: controller,
                 dock: dock,
-                size: 44,
+                size: buttonSize,
               ),
               ShapePaletteButton(
                 controller: controller,
                 dock: dock,
-                size: 44,
+                size: buttonSize,
               ),
               _compactToolButton(
                 cs: cs,
@@ -197,11 +198,11 @@ class CompactToolbar extends StatelessWidget {
   Widget _toolbarDivider(ColorScheme cs, bool vertical) {
     return Padding(
       padding: vertical
-          ? const EdgeInsets.symmetric(vertical: 6)
+          ? const EdgeInsets.symmetric(vertical: 3)
           : const EdgeInsets.symmetric(horizontal: 6),
       child: Container(
-        width: vertical ? 20 : 2,
-        height: vertical ? 2 : 20,
+        width: vertical ? 16 : 2,
+        height: vertical ? 1 : 20,
         decoration: BoxDecoration(
           color: cs.outlineVariant,
           borderRadius: BorderRadius.circular(99),
@@ -269,9 +270,10 @@ class CompactToolbar extends StatelessWidget {
         tooltip: tooltip,
         selected: isActive,
         emphasized: isEmphasized,
-        size: 44,
+        size: dock == ToolbarDock.top ? 44 : 36,
         onPressed: onPressed,
-        child: iconWidget ?? Icon(icon, size: 22),
+        child: iconWidget ??
+            Icon(icon, size: dock == ToolbarDock.top ? 22 : 20),
       ),
     );
   }
