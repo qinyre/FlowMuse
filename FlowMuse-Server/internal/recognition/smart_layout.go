@@ -66,7 +66,8 @@ func (l *OpenAICompatibleSmartLayouter) Layout(ctx context.Context, request Smar
 				},
 			},
 		},
-		"temperature": 0,
+		"temperature":      0,
+		"reasoning_effort": "minimal",
 	})
 	if err != nil {
 		return SmartLayoutResponse{}, err
