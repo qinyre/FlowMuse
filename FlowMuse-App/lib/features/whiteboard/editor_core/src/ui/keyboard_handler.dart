@@ -357,7 +357,13 @@ bool handleKeyEvent({
       }
       final toolType = toolTypeForKey(label.toLowerCase());
       if (toolType != null) {
-        controller.switchTool(toolType);
+        if (toolType == ToolType.freedraw) {
+          if (controller.activateBrush()) {
+            controller.requestBrushPalette();
+          }
+        } else {
+          controller.switchTool(toolType);
+        }
         return true;
       }
     }

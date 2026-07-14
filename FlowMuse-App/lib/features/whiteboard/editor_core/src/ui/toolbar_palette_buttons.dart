@@ -5,7 +5,7 @@ import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../../markdraw.dart' hide TextAlign;
 import 'studio_rail_icon_button.dart';
 
-class BrushPaletteButton extends StatelessWidget {
+class BrushPaletteButton extends StatefulWidget {
   const BrushPaletteButton({
     super.key,
     required this.controller,
@@ -18,28 +18,82 @@ class BrushPaletteButton extends StatelessWidget {
   final double size;
 
   @override
+  State<BrushPaletteButton> createState() => _BrushPaletteButtonState();
+}
+
+class _BrushPaletteButtonState extends State<BrushPaletteButton> {
+  bool _paletteOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onControllerChanged);
+    _onControllerChanged();
+  }
+
+  @override
+  void didUpdateWidget(BrushPaletteButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onControllerChanged);
+      widget.controller.addListener(_onControllerChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    if (!widget.controller.takeBrushPaletteRequest()) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _showPalette(context);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StudioRailIconButton(
       tooltip: '笔型与压感',
-      selected: controller.editorState.activeToolType == ToolType.freedraw,
-      size: size,
-      onPressed: () => _showPalette(context),
-      child: Icon(_iconForBrush(controller.activeBrushType), size: 20),
+      selected:
+          widget.controller.editorState.activeToolType == ToolType.freedraw,
+      size: widget.size,
+      onPressed: () {
+        if (widget.controller.activateBrush()) {
+          _showPalette(context);
+        }
+      },
+      child: Icon(
+        _iconForBrush(widget.controller.activeBrushType),
+        size: 20,
+      ),
     );
   }
 
   Future<void> _showPalette(BuildContext context) async {
-    await showAnchoredPopupMenu<Object>(
-      context: context,
-      placement: _placementForDock(dock),
-      items: [
-        PopupMenuItem<Object>(
-          enabled: false,
-          padding: EdgeInsets.zero,
-          child: _BrushPalette(controller: controller),
-        ),
-      ],
-    );
+    if (_paletteOpen) return;
+    _paletteOpen = true;
+    try {
+      await showAnchoredPopupMenu<Object>(
+        context: context,
+        placement: _placementForDock(widget.dock),
+        items: [
+          PopupMenuItem<Object>(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _BrushPalette(controller: widget.controller),
+          ),
+        ],
+      );
+    } finally {
+      _paletteOpen = false;
+    }
   }
 }
 
@@ -147,8 +201,7 @@ class _BrushPalette extends StatelessWidget {
                       selected: controller.activeBrushType == brushType,
                       size: 44,
                       onPressed: () {
-                        controller.activeBrushType = brushType;
-                        controller.switchTool(ToolType.freedraw);
+                        controller.selectBrush(brushType);
                         Navigator.of(context).pop();
                       },
                       child: Icon(_iconForBrush(brushType), size: 20),

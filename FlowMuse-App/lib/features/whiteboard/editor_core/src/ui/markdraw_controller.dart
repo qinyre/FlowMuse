@@ -170,6 +170,8 @@ class MarkdrawController extends ChangeNotifier {
   bool _objectsSnapMode = false;
   double _pressureSensitivity = 0.7;
   BrushType _activeBrushType = BrushType.fountainPen;
+  bool _hasSelectedBrush = false;
+  bool _brushPaletteRequested = false;
   bool _inkRecognitionMode = false;
   bool _smartInkLayoutMode = false;
 
@@ -728,6 +730,37 @@ class MarkdrawController extends ChangeNotifier {
     cancelTextEditing();
     restoreKeyboardFocusWhenStable();
     notifyListeners();
+  }
+
+  /// Activates the last selected brush, or requests brush selection.
+  bool activateBrush() {
+    if (_editorState.activeToolType == ToolType.freedraw ||
+        !_hasSelectedBrush) {
+      return true;
+    }
+    _restoreBrushState(_activeBrushType);
+    switchTool(ToolType.freedraw);
+    return false;
+  }
+
+  void selectBrush(BrushType type) {
+    activeBrushType = type;
+    _hasSelectedBrush = true;
+    _restoreBrushState(type);
+    switchTool(ToolType.freedraw);
+  }
+
+  void requestBrushPalette() {
+    _brushPaletteRequested = true;
+    notifyListeners();
+  }
+
+  bool takeBrushPaletteRequest() {
+    if (!_brushPaletteRequested) {
+      return false;
+    }
+    _brushPaletteRequested = false;
+    return true;
   }
 
   // --- Undo/Redo ---
