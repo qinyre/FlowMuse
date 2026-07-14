@@ -1247,17 +1247,18 @@ class _CollaborationChipState extends State<_CollaborationChip> {
               contentPadding: EdgeInsets.zero,
             ),
           ),
-        PopupMenuItem<_CollaborationAction>(
-          enabled: !widget.connecting,
-          value: widget.collaborating
-              ? _CollaborationAction.leave
-              : _CollaborationAction.start,
-          child: ListTile(
-            leading: Icon(widget.collaborating ? Icons.logout : Icons.link),
-            title: Text(widget.collaborating ? '退出房间' : '创建房间'),
-            contentPadding: EdgeInsets.zero,
+        if (!widget.collaborating || !widget.isOwner)
+          PopupMenuItem<_CollaborationAction>(
+            enabled: !widget.connecting,
+            value: widget.collaborating
+                ? _CollaborationAction.leave
+                : _CollaborationAction.start,
+            child: ListTile(
+              leading: Icon(widget.collaborating ? Icons.logout : Icons.link),
+              title: Text(widget.collaborating ? '退出房间' : '创建房间'),
+              contentPadding: EdgeInsets.zero,
+            ),
           ),
-        ),
         if (!widget.collaborating && widget.onJoin != null)
           PopupMenuItem<_CollaborationAction>(
             enabled: !widget.connecting,

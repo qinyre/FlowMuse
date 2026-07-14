@@ -69,8 +69,6 @@ class WhiteboardPage extends ConsumerStatefulWidget {
   ConsumerState<WhiteboardPage> createState() => _WhiteboardPageState();
 }
 
-enum _OwnerExitAction { cancel, leave, end }
-
 enum _ShareSelection { png, markdraw, excalidraw, invitation }
 
 class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
@@ -759,14 +757,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   Future<void> _leaveCollaboration() async {
     final state = ref.read(whiteboardViewModelProvider);
     if (state.isRoomOwner && state.collaborating) {
-      final action = await _confirmOwnerCollaborationExit();
-      if (action == _OwnerExitAction.cancel || !mounted) {
-        return;
-      }
-      if (action == _OwnerExitAction.end) {
-        await _endCollaboration();
-        return;
-      }
+      // 房主不能单独退出，只能结束整个协作房间。
+      await _endCollaboration();
+      return;
     } else if (widget.temporaryCollaboration && mounted && !_temporarySaved) {
       final save = await _confirmMemberRoomExit();
       if (save == null) {
@@ -857,34 +850,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _loadImagesTimer = null;
     _lastIdleState = null;
     _lastRealtimeStatus = null;
-  }
-
-  Future<_OwnerExitAction> _confirmOwnerCollaborationExit() async {
-    return await showDialog<_OwnerExitAction>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('退出协作房间'),
-            content: const Text('你是房主。可以只让自己离开，或结束整个协作房间。'),
-            actions: [
-              TextButton(
-                onPressed: () =>
-                    Navigator.of(context).pop(_OwnerExitAction.cancel),
-                child: const Text('取消'),
-              ),
-              TextButton(
-                onPressed: () =>
-                    Navigator.of(context).pop(_OwnerExitAction.leave),
-                child: const Text('仅自己退出'),
-              ),
-              FilledButton(
-                onPressed: () =>
-                    Navigator.of(context).pop(_OwnerExitAction.end),
-                child: const Text('结束协作'),
-              ),
-            ],
-          ),
-        ) ??
-        _OwnerExitAction.cancel;
   }
 
   Future<bool?> _confirmEndCollaborationRoom() {
