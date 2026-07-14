@@ -92,10 +92,10 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
   }
 
   /// 从文件名提取笔记标题:去掉扩展名,空则回退默认。
-  String _titleFromFileName(String fileName) {
+  String? _titleFromFileName(String fileName) {
     final dot = fileName.lastIndexOf('.');
     final base = dot > 0 ? fileName.substring(0, dot) : fileName;
-    return base.trim().isEmpty ? '未命名笔记' : base.trim();
+    return base.trim().isEmpty ? null : base.trim();
   }
 
   @override

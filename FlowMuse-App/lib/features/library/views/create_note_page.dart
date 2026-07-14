@@ -343,7 +343,7 @@ class _LargePaperPreview extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              _templateLabel(template),
+              template.displayName,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w700,
@@ -387,7 +387,9 @@ class _NoteSetupPanel extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surfaceContainer,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
         ),
         child: Padding(
           padding: const EdgeInsets.all(18),
@@ -512,15 +514,22 @@ class _TitleInput extends StatelessWidget {
           fillColor: Theme.of(context).colorScheme.surfaceContainer,
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radius),
-            borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+            borderSide: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radius),
-            borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 1.5),
+            borderSide: BorderSide(
+              color: Theme.of(context).colorScheme.primary,
+              width: 1.5,
+            ),
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radius),
-            borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+            borderSide: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
           ),
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(
@@ -615,7 +624,7 @@ class _TemplateCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              _templateLabel(template),
+              template.displayName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -867,20 +876,4 @@ class _TemplatePreviewPainter extends CustomPainter {
   bool shouldRepaint(covariant _TemplatePreviewPainter oldDelegate) {
     return oldDelegate.template != template;
   }
-}
-
-String _templateLabel(PageTemplate template) {
-  return switch (template) {
-    PageTemplate.blank => '空白',
-    PageTemplate.narrowLine => '窄横线',
-    PageTemplate.wideLine => '宽横线',
-    PageTemplate.grid => '格纹',
-    PageTemplate.dotGrid => '点阵',
-    PageTemplate.tianGrid => '田字格',
-    PageTemplate.miGrid => '米字格',
-    PageTemplate.narrowVerticalLine => '窄竖线',
-    PageTemplate.wideVerticalLine => '宽竖线',
-    PageTemplate.fourLineGrid => '四线三格',
-    PageTemplate.ancientBook => '古籍版式',
-  };
 }
