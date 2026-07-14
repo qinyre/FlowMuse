@@ -57,12 +57,16 @@ func (l *OpenAICompatibleSmartLayouter) Layout(ctx context.Context, request Smar
 				"content": "You convert whiteboard ink/text into a structured document. Return strict JSON only.",
 			},
 			{
-				"role":    "user",
-				"content": smartLayoutPrompt(string(payload)),
+				"role": "user",
+				"content": []map[string]any{
+					{
+						"type": "text",
+						"text": smartLayoutPrompt(string(payload)),
+					},
+				},
 			},
 		},
-		"response_format": map[string]any{"type": "json_object"},
-		"temperature":     0,
+		"temperature": 0,
 	})
 	if err != nil {
 		return SmartLayoutResponse{}, err
