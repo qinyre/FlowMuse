@@ -102,6 +102,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _markdrawController = MarkdrawController();
+    _seedDocumentTitleFromCache();
     _markdrawController.onInkRecognitionModeChanged =
         _saveInkRecognitionPreference;
     _fileHandler = MarkdrawFileHandler(controller: _markdrawController);
@@ -114,6 +115,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void didUpdateWidget(covariant WhiteboardPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.noteId != widget.noteId) {
+      _seedDocumentTitleFromCache();
       Future.microtask(_openNote);
     }
   }
@@ -210,6 +212,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _loadingScene = true;
     _markdrawController.closeTransientUiForSceneReplace();
     _markdrawController.loadFromContent(content, '$noteId.excalidraw');
+    _syncDocumentTitle(note);
     await _restoreInkRecognitionPreference(noteId);
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote controller loaded '
@@ -241,6 +244,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       await _touchNoteWithCurrentCover(noteId);
       await _broadcastCurrentScene(serializedScene: updatedContent);
     }
+    final latestIndex = ref.read(libraryIndexProvider).asData?.value;
+    _syncDocumentTitle(
+      latestIndex == null ? null : _noteById(latestIndex.notes, noteId),
+    );
     _loadingScene = false;
     debugPrint('[FlowMuseCreateNote] WhiteboardPage.openNote done $noteId');
     final room = widget.initialRoom;
@@ -453,6 +460,20 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           .renameNote(widget.noteId, title);
     }
     await _saveMarkdrawScene();
+  }
+
+  void _syncDocumentTitle(NoteItem? note) {
+    if (note == null || note.title == _markdrawController.documentName) {
+      return;
+    }
+    _markdrawController.renameDocument(note.title);
+  }
+
+  void _seedDocumentTitleFromCache() {
+    final index = ref.read(libraryIndexProvider).asData?.value;
+    _syncDocumentTitle(
+      index == null ? null : _noteById(index.notes, widget.noteId),
+    );
   }
 
   Future<void> _startCollaboration() async {
@@ -1461,6 +1482,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(libraryIndexProvider, (_, next) {
+      final index = next.asData?.value;
+      _syncDocumentTitle(
+        index == null ? null : _noteById(index.notes, widget.noteId),
+      );
+    });
     final state = ref.watch(whiteboardViewModelProvider);
     final themePreset = ref.watch(themeViewModelProvider);
     final effectivePreset = effectiveAppThemePreset(
