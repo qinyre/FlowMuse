@@ -596,10 +596,8 @@ class _TopBar extends StatelessWidget {
                 onCreate();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest,
-                foregroundColor: Theme.of(context).colorScheme.onSurface,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 textStyle: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
