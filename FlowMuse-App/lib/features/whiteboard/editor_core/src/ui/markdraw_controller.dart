@@ -1668,9 +1668,8 @@ class MarkdrawController extends ChangeNotifier {
       );
       _editorState = _editorState.applyResult(UpdateElementResult(updated));
     }
-    _lastChangedElements = [
-      if (_editorState.scene.getElementById(id) case final changed?) changed,
-    ];
+    final changed = _editorState.scene.getElementById(id);
+    _lastChangedElements = changed == null ? const [] : [changed];
     onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
   }
@@ -2714,13 +2713,22 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   Future<bool> runGlobalSmartLayout() async {
-    final callback = onSmartLayoutInk;
-    if (callback == null) return false;
-    final request = _buildSmartLayoutRequest();
+    final layoutCallback = onSmartLayoutInk;
+    if (layoutCallback == null || _recognizingInk) return false;
+    final ink = _smartLayoutInkElements();
+    final recognizedText = ink.isEmpty
+        ? const <SmartLayoutElementRequest>[]
+        : await _recognizeInkForSmartLayout(ink);
+    if (_disposed) return false;
+    final request = _buildSmartLayoutRequest(
+      recognizedText: recognizedText,
+      includeInk:
+          ink.isNotEmpty && recognizedText.isEmpty && onRecognizeInk == null,
+    );
     if (request.ink.isEmpty && request.text.isEmpty) return false;
     SmartLayoutResponse response;
     try {
-      response = await callback(request);
+      response = await layoutCallback(request);
     } catch (_) {
       return false;
     }
@@ -2742,13 +2750,47 @@ class MarkdrawController extends ChangeNotifier {
     return true;
   }
 
+  Future<List<SmartLayoutElementRequest>> _recognizeInkForSmartLayout(
+    List<FreedrawElement> ink,
+  ) async {
+    final recognizeCallback = onRecognizeInk;
+    if (recognizeCallback == null) return const [];
+    final request = _buildInkRecognitionRequest(
+      ElementId.generate().value,
+      ink,
+    );
+    if (request == null) return const [];
+    _recognizingInk = true;
+    try {
+      final result = await recognizeCallback(request);
+      final elements = <SmartLayoutElementRequest>[];
+      for (final element in result.elements) {
+        if (element.type != 'text' && element.type != 'math') {
+          continue;
+        }
+        final request = _smartLayoutRecognizedElementRequest(element);
+        if (request != null) {
+          elements.add(request);
+        }
+      }
+      return elements;
+    } catch (_) {
+      return const [];
+    } finally {
+      _recognizingInk = false;
+    }
+  }
+
   String exportSmartLayout(SmartLayoutExportFormat format) {
     final document = _editorState.scene.smartLayout;
     if (document == null || document.isEmpty) return '';
     return SmartLayoutExporter.export(document, format);
   }
 
-  SmartLayoutRequest _buildSmartLayoutRequest() {
+  SmartLayoutRequest _buildSmartLayoutRequest({
+    List<SmartLayoutElementRequest> recognizedText = const [],
+    bool includeInk = true,
+  }) {
     final pages = _layout.ensurePage().pages.map((page) {
       final geometry = TemplateAnchorResolver.resolve(page);
       return SmartLayoutPageRequest(
@@ -2778,11 +2820,14 @@ class MarkdrawController extends ChangeNotifier {
     }).toList();
     return SmartLayoutRequest(
       pages: pages,
-      ink: [
-        for (final element in _smartLayoutInkElements())
-          _smartElementRequest(element)!,
-      ],
+      ink: includeInk
+          ? [
+              for (final element in _smartLayoutInkElements())
+                _smartElementRequest(element)!,
+            ]
+          : const [],
       text: [
+        ...recognizedText,
         for (final element
             in _editorState.scene.activeElements.whereType<TextElement>())
           _smartElementRequest(element)!,
@@ -2794,6 +2839,28 @@ class MarkdrawController extends ChangeNotifier {
               !element.isCanvasPage)
             _smartElementRequest(element)!,
       ],
+    );
+  }
+
+  SmartLayoutElementRequest? _smartLayoutRecognizedElementRequest(
+    InkRecognizedElement element,
+  ) {
+    final text = (element.type == 'math' ? element.latex : element.text)
+        ?.trim();
+    final resolvedText = text == null || text.isEmpty
+        ? element.text?.trim()
+        : text;
+    if (resolvedText == null || resolvedText.isEmpty) return null;
+    return SmartLayoutElementRequest(
+      id: ElementId.generate().value,
+      type: element.type,
+      bounds: Bounds.fromLTWH(
+        element.x,
+        element.y,
+        math.max(element.width, 1.0),
+        math.max(element.height, 1.0),
+      ),
+      text: resolvedText,
     );
   }
 
