@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
@@ -12,6 +13,16 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../whiteboard/editor_core/markdraw.dart'
+    show
+        CanvasLayout,
+        CanvasLayoutType,
+        CanvasPageFlow,
+        CanvasPageTemplate,
+        RoughCanvasAdapter,
+        Scene,
+        StaticCanvasPainter,
+        ViewportState;
 import '../../whiteboard/editor_core/src/ui/file_picker_channel_ohos.dart';
 import '../../whiteboard/pdf_note_import/pdf_note_import_payload.dart';
 import '../../whiteboard/pdf_note_import/pdf_note_import_service.dart';
@@ -683,193 +694,55 @@ class _PaperSurface extends StatelessWidget {
 }
 
 class _TemplatePreviewPainter extends CustomPainter {
-  const _TemplatePreviewPainter(this.template);
+  _TemplatePreviewPainter(this.template);
 
   final PageTemplate template;
+  final RoughCanvasAdapter _adapter = RoughCanvasAdapter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFC9D4CF)
-      ..strokeWidth = 1;
+    final pageTemplate = _canvasPageTemplateFor(template);
+    final pageSize = CanvasLayout.pageSizeForTemplate(pageTemplate);
+    final layout = CanvasLayout(
+      type: CanvasLayoutType.paged,
+      template: pageTemplate,
+      pageFlow: CanvasPageFlow.topToBottom,
+    ).ensurePage();
+    final scale = math.min(
+      size.width / pageSize.width,
+      size.height / pageSize.height,
+    );
+    final renderedSize = Size(pageSize.width * scale, pageSize.height * scale);
 
-    switch (template) {
-      case PageTemplate.blank:
-        return;
-      case PageTemplate.narrowLine:
-        for (var y = 10.0; y < size.height; y += 9) {
-          canvas.drawLine(Offset(10, y), Offset(size.width - 10, y), paint);
-        }
-      case PageTemplate.wideLine:
-        for (var y = 14.0; y < size.height; y += 15) {
-          canvas.drawLine(Offset(10, y), Offset(size.width - 10, y), paint);
-        }
-      case PageTemplate.grid:
-        for (var x = 10.0; x < size.width; x += 10) {
-          canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-        }
-        for (var y = 10.0; y < size.height; y += 10) {
-          canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-        }
-      case PageTemplate.dotGrid:
-        for (var x = 10.0; x < size.width; x += 10) {
-          for (var y = 10.0; y < size.height; y += 10) {
-            canvas.drawCircle(Offset(x, y), 1, paint);
-          }
-        }
-      case PageTemplate.tianGrid:
-        _drawPracticeGrid(canvas, size, paint, diagonal: false);
-      case PageTemplate.miGrid:
-        _drawPracticeGrid(canvas, size, paint, diagonal: true);
-      case PageTemplate.narrowVerticalLine:
-        for (var x = 12.0; x < size.width; x += 10) {
-          canvas.drawLine(Offset(x, 8), Offset(x, size.height - 8), paint);
-        }
-      case PageTemplate.wideVerticalLine:
-        for (var x = 14.0; x < size.width; x += 16) {
-          canvas.drawLine(Offset(x, 8), Offset(x, size.height - 8), paint);
-        }
-      case PageTemplate.fourLineGrid:
-        for (var y = 12.0; y < size.height - 8; y += 24) {
-          for (var i = 0; i < 4; i++) {
-            final lineY = y + i * 4;
-            canvas.drawLine(
-              Offset(10, lineY),
-              Offset(size.width - 10, lineY),
-              paint,
-            );
-          }
-        }
-      case PageTemplate.ancientBook:
-        _drawAncientBookPreview(canvas, size);
-    }
+    canvas.save();
+    canvas.translate(
+      (size.width - renderedSize.width) / 2,
+      (size.height - renderedSize.height) / 2,
+    );
+    StaticCanvasPainter(
+      scene: Scene(),
+      adapter: _adapter,
+      viewport: ViewportState(zoom: scale),
+      layout: layout,
+      renderPageShadows: false,
+    ).paint(canvas, renderedSize);
+    canvas.restore();
   }
 
-  void _drawAncientBookPreview(Canvas canvas, Size size) {
-    final framePaint = Paint()
-      ..color = const Color(0xFF394039)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
-    final linePaint = Paint()
-      ..color = const Color(0xFF9F9A82)
-      ..strokeWidth = 0.8;
-    final markPaint = Paint()
-      ..color = const Color(0xFF394039)
-      ..style = PaintingStyle.fill;
-
-    final availableWidth = size.width - 12;
-    final availableHeight = size.height - 12;
-    final width = availableWidth;
-    final height = (width * 0.58).clamp(0.0, availableHeight).toDouble();
-    final rect = Rect.fromCenter(
-      center: Offset(size.width / 2, size.height / 2),
-      width: width,
-      height: height,
-    );
-    canvas.drawRect(rect, framePaint);
-
-    final centerX = rect.center.dx;
-    final gutter = 8.0;
-    canvas.drawLine(
-      Offset(centerX - gutter, rect.top),
-      Offset(centerX - gutter, rect.bottom),
-      framePaint,
-    );
-    canvas.drawLine(
-      Offset(centerX + gutter, rect.top),
-      Offset(centerX + gutter, rect.bottom),
-      framePaint,
-    );
-    canvas.drawLine(
-      Offset(centerX, rect.top),
-      Offset(centerX, rect.bottom),
-      linePaint,
-    );
-
-    _drawPreviewColumns(
-      canvas,
-      Rect.fromLTRB(rect.left, rect.top, centerX - gutter, rect.bottom),
-      linePaint,
-    );
-    _drawPreviewColumns(
-      canvas,
-      Rect.fromLTRB(centerX + gutter, rect.top, rect.right, rect.bottom),
-      linePaint,
-    );
-
-    _drawPreviewFishTail(
-      canvas,
-      Offset(centerX, rect.top + rect.height * 0.32),
-      markPaint,
-    );
-    _drawPreviewFishTail(
-      canvas,
-      Offset(centerX, rect.top + rect.height * 0.68),
-      markPaint,
-    );
-  }
-
-  void _drawPreviewColumns(Canvas canvas, Rect rect, Paint paint) {
-    const columnGap = 11.0;
-    for (var x = rect.left + columnGap; x < rect.right; x += columnGap) {
-      canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
-    }
-  }
-
-  void _drawPreviewFishTail(Canvas canvas, Offset center, Paint paint) {
-    const width = 8.0;
-    const height = 9.0;
-    final path = Path()
-      ..moveTo(center.dx, center.dy - height / 2)
-      ..lineTo(center.dx + width / 2, center.dy - height / 2)
-      ..lineTo(center.dx, center.dy)
-      ..lineTo(center.dx + width / 2, center.dy + height / 2)
-      ..lineTo(center.dx, center.dy + height / 2)
-      ..lineTo(center.dx - width / 2, center.dy + height / 2)
-      ..lineTo(center.dx, center.dy)
-      ..lineTo(center.dx - width / 2, center.dy - height / 2)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  void _drawPracticeGrid(
-    Canvas canvas,
-    Size size,
-    Paint paint, {
-    required bool diagonal,
-  }) {
-    final strokePaint = Paint.from(paint)..style = PaintingStyle.stroke;
-    const inset = 7.0;
-    const cell = 16.0;
-    const gap = 3.0;
-    for (
-      var left = inset;
-      left + cell <= size.width - inset;
-      left += cell + gap
-    ) {
-      for (
-        var top = inset;
-        top + cell <= size.height - inset;
-        top += cell + gap
-      ) {
-        final rect = Rect.fromLTWH(left, top, cell, cell);
-        canvas.drawRect(rect, strokePaint);
-        canvas.drawLine(
-          Offset(rect.left + rect.width / 2, rect.top),
-          Offset(rect.left + rect.width / 2, rect.bottom),
-          strokePaint,
-        );
-        canvas.drawLine(
-          Offset(rect.left, rect.top + rect.height / 2),
-          Offset(rect.right, rect.top + rect.height / 2),
-          strokePaint,
-        );
-        if (diagonal) {
-          canvas.drawLine(rect.topLeft, rect.bottomRight, strokePaint);
-          canvas.drawLine(rect.topRight, rect.bottomLeft, strokePaint);
-        }
-      }
-    }
+  CanvasPageTemplate _canvasPageTemplateFor(PageTemplate template) {
+    return switch (template) {
+      PageTemplate.blank => CanvasPageTemplate.blank,
+      PageTemplate.narrowLine => CanvasPageTemplate.narrowLine,
+      PageTemplate.wideLine => CanvasPageTemplate.wideLine,
+      PageTemplate.grid => CanvasPageTemplate.grid,
+      PageTemplate.dotGrid => CanvasPageTemplate.dotGrid,
+      PageTemplate.tianGrid => CanvasPageTemplate.tianGrid,
+      PageTemplate.miGrid => CanvasPageTemplate.miGrid,
+      PageTemplate.narrowVerticalLine => CanvasPageTemplate.narrowVerticalLine,
+      PageTemplate.wideVerticalLine => CanvasPageTemplate.wideVerticalLine,
+      PageTemplate.fourLineGrid => CanvasPageTemplate.fourLineGrid,
+      PageTemplate.ancientBook => CanvasPageTemplate.ancientBook,
+    };
   }
 
   @override
