@@ -1681,6 +1681,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             child: MarkdrawEditor(
               controller: _markdrawController,
               config: const MarkdrawEditorConfig(),
+              canvasThemeBackground: effectivePreset.canvasBackground,
+              useFlatBackgrounds: effectivePreset.usesMonochromeBackground,
               currentThemeMode: themePreset.themeMode,
               onThemeModeChanged: _changeThemeMode,
               saveStatusLabel: _saveStatusLabel(state.saveStatus),

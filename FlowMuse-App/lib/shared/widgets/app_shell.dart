@@ -127,7 +127,12 @@ class _AppShellState extends ConsumerState<AppShell> {
       body: SafeArea(
         child: DecoratedBox(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
+            color: effectivePreset.usesMonochromeBackground
+                ? effectivePreset.backgroundEnd
+                : null,
+            gradient: effectivePreset.usesMonochromeBackground
+                ? null
+                : LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [

@@ -28,6 +28,16 @@ class CanvasBackgroundPicker extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
         children: [
+          IconButton(
+            tooltip: '跟随主题',
+            onPressed: controller.followThemeCanvasBackground,
+            icon: Icon(
+              Icons.auto_awesome,
+              color: controller.canvasBackgroundFollowsTheme
+                  ? cs.primary
+                  : cs.onSurfaceVariant,
+            ),
+          ),
           Text('背景', style: TextStyle(color: cs.onSurface)),
           const Spacer(),
           for (final c in bgPresets)

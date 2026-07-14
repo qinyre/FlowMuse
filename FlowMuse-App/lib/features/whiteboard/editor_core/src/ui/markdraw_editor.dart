@@ -63,6 +63,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.onDocumentRenamed,
     this.onRecognizeInk,
     this.onSmartLayoutInk,
+    this.canvasThemeBackground = '#ffffff',
+    this.useFlatBackgrounds = false,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -119,6 +121,8 @@ class MarkdrawEditor extends StatefulWidget {
   onRecognizeInk;
   final Future<SmartLayoutResponse> Function(SmartLayoutRequest)?
   onSmartLayoutInk;
+  final String canvasThemeBackground;
+  final bool useFlatBackgrounds;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -159,6 +163,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
     _controller.onRecognizeInk = widget.onRecognizeInk;
     _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
+    _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     _controller.restoreKeyboardFocusWhenStable();
     unawaited(_restoreToolbarDock());
   }
@@ -173,6 +178,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
       _controller.onRecognizeInk = widget.onRecognizeInk;
       _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
+      _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     } else if (widget.onRecognizeInk != oldWidget.onRecognizeInk) {
       _controller.onRecognizeInk = widget.onRecognizeInk;
     }
@@ -181,6 +187,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     }
     if (widget.onSmartLayoutInk != oldWidget.onSmartLayoutInk) {
       _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
+    }
+    if (widget.canvasThemeBackground != oldWidget.canvasThemeBackground) {
+      _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     }
   }
 
@@ -264,6 +273,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
         onCollapse: () => _setToolbarCollapsed(true),
         getCanvasSize: _getCanvasSize,
         showZoomControls: widget.config.showZoomControls,
+        useFlatBackground: widget.useFlatBackgrounds,
       );
     }
     return DesktopToolbar(
@@ -274,6 +284,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       onCollapse: () => _setToolbarCollapsed(true),
       getCanvasSize: _getCanvasSize,
       showZoomControls: widget.config.showZoomControls,
+      useFlatBackground: widget.useFlatBackgrounds,
     );
   }
 

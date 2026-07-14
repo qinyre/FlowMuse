@@ -13,6 +13,24 @@ class AppTheme {
     final colorScheme = seededScheme.copyWith(
       secondary: preset.secondaryColor,
       tertiary: preset.tertiaryColor,
+      surface: preset.usesMonochromeBackground
+          ? (preset.isDark ? Colors.black : Colors.white)
+          : null,
+      surfaceContainerLowest: preset.usesMonochromeBackground
+          ? (preset.isDark ? Colors.black : Colors.white)
+          : null,
+      surfaceContainerLow: preset.usesMonochromeBackground
+          ? (preset.isDark ? const Color(0xFF0D0D0D) : const Color(0xFFF8F8F8))
+          : null,
+      surfaceContainer: preset.usesMonochromeBackground
+          ? (preset.isDark ? const Color(0xFF141414) : const Color(0xFFF2F2F2))
+          : null,
+      surfaceContainerHigh: preset.usesMonochromeBackground
+          ? (preset.isDark ? const Color(0xFF1A1A1A) : const Color(0xFFEBEBEB))
+          : null,
+      surfaceContainerHighest: preset.usesMonochromeBackground
+          ? (preset.isDark ? const Color(0xFF242424) : const Color(0xFFE5E5E5))
+          : null,
     );
 
     return ThemeData(

@@ -578,7 +578,7 @@ class _TopBar extends StatelessWidget {
             TextButton(
               onPressed: onCancel,
               style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
                 textStyle: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
@@ -596,8 +596,10 @@ class _TopBar extends StatelessWidget {
                 onCreate();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest,
+                foregroundColor: Theme.of(context).colorScheme.onSurface,
                 textStyle: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
