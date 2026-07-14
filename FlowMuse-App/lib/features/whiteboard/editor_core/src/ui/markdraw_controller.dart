@@ -2678,6 +2678,28 @@ class MarkdrawController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Applies collaboration element updates without rebuilding the full scene.
+  void applyRemoteElements(Iterable<Element> elements) {
+    final updates = [
+      for (final element in elements)
+        if (element is TextElement && element.containerId == null)
+          TextBoundsValidator.validateElement(element)
+        else
+          element,
+    ];
+    if (updates.isEmpty) return;
+    _editorState = _editorState.copyWith(
+      scene: _editorState.scene.upsertRemoteElements(updates),
+    );
+    if (updates.any((element) => element.isCanvasPage)) {
+      _syncLayoutFromScene();
+      _applyViewportConstraints();
+    }
+    _lastChangedElements = null;
+    onSceneChanged?.call(_editorState.scene, SceneChangeSource.remoteApply);
+    notifyListeners();
+  }
+
   /// Clears the scene and undo history.
   void clear() {
     closeTransientUiForSceneReplace();

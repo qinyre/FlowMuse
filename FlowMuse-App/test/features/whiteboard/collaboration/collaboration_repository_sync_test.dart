@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_message.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_room.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/encrypted_payload.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_crypto.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
@@ -40,10 +43,11 @@ void main() {
 
     final localChanged = _scene([_element('local', 2), _element('remote', 1)]);
     await repository.broadcastScene(room: room, scene: localChanged);
-    repository.reconcileRemoteScene(
-      localScene: localChanged,
+    final remoteChanges = repository.reconcileRemoteElements(
       remoteElements: [_element('remote', 2)],
     );
+    expect(remoteChanges.single['id'], 'remote');
+    expect(remoteChanges.single['version'], 2);
 
     await Future<void>.delayed(const Duration(milliseconds: 150));
 
@@ -107,6 +111,116 @@ void main() {
     await repository.stop();
     await peerTransport.disconnect();
   });
+
+  test('实时笔迹发送阻塞时只保留最新帧且不丢最终帧', () async {
+    final crypto = CollaborationCrypto();
+    final room = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    final initial = _scene([_element('stroke', 1)]);
+    await store.createRoom(room: room, scene: initial, ownerKeyHash: 'test');
+
+    final hub = MemoryRealtimeRoomHub();
+    final repositoryTransport = _GatedMemoryRealtimeTransport(
+      hub: hub,
+      socketId: 'repository',
+    );
+    final peerTransport = MemoryRealtimeTransport(hub: hub, socketId: 'peer');
+    final repository = CollaborationRepository(
+      transport: repositoryTransport,
+      sceneStore: store,
+      crypto: crypto,
+    );
+    await peerTransport.connect(room.roomId);
+    await repository.joinRoom(room: room, localScene: initial);
+
+    final receivedVersions = <int>[];
+    final subscription = peerTransport.messages.listen((payload) async {
+      final bytes = await crypto.decrypt(
+        roomKey: room.roomKey,
+        encryptedPayload: payload,
+      );
+      final message = CollaborationMessage.fromBytes(bytes);
+      if (message.type == CollaborationMessageType.sceneUpdate) {
+        receivedVersions.add(
+          (message.elements.single['version'] as num).toInt(),
+        );
+      }
+    });
+
+    repositoryTransport.blockNextSend();
+    await repository.broadcastElements(
+      room: room,
+      elements: [_element('stroke', 2)],
+      latestOnly: true,
+    );
+    await repositoryTransport.waitForBlockedSend();
+    await repository.broadcastElements(
+      room: room,
+      elements: [_element('stroke', 3)],
+      latestOnly: true,
+    );
+    await repository.broadcastElements(
+      room: room,
+      elements: [_element('stroke', 4)],
+      latestOnly: true,
+    );
+    repositoryTransport.releaseSend();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    repositoryTransport.blockNextSend();
+    await repository.broadcastElements(
+      room: room,
+      elements: [_element('stroke', 5)],
+      latestOnly: true,
+    );
+    await repositoryTransport.waitForBlockedSend();
+    await repository.broadcastElements(
+      room: room,
+      elements: [_element('stroke', 6)],
+      latestOnly: true,
+    );
+    await repository.broadcastElements(
+      room: room,
+      elements: [_element('stroke', 7)],
+    );
+    repositoryTransport.releaseSend();
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    expect(receivedVersions, [2, 4, 5, 7]);
+
+    await subscription.cancel();
+    await repository.stop();
+    await peerTransport.disconnect();
+  });
+}
+
+class _GatedMemoryRealtimeTransport extends MemoryRealtimeTransport {
+  _GatedMemoryRealtimeTransport({required super.hub, required super.socketId});
+
+  Completer<void>? _sendGate;
+  Completer<void>? _sendStarted;
+
+  void blockNextSend() {
+    _sendGate = Completer<void>();
+    _sendStarted = Completer<void>();
+  }
+
+  Future<void> waitForBlockedSend() => _sendStarted!.future;
+
+  void releaseSend() => _sendGate!.complete();
+
+  @override
+  Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {
+    final gate = _sendGate;
+    if (gate != null) {
+      _sendStarted?.complete();
+      await gate.future;
+      if (identical(_sendGate, gate)) {
+        _sendGate = null;
+      }
+    }
+    await super.send(payload, volatile: volatile);
+  }
 }
 
 ExcalidrawScene _scene(List<Map<String, Object?>> elements) {

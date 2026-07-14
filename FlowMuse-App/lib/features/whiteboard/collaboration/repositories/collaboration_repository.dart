@@ -56,6 +56,7 @@ class CollaborationRepository {
   final CollaborationFileManager _fileManager = CollaborationFileManager();
   final math.Random _random = math.Random();
   final Map<String, _VersionRecord> _broadcastedElementVersions = {};
+  final Map<String, Map<String, Object?>> _pendingLatestElements = {};
   final StreamController<String> _repositoryErrors =
       StreamController<String>.broadcast();
   final StreamController<CollaborationMessage> _messages =
@@ -88,6 +89,8 @@ class CollaborationRepository {
   StreamSubscription<String>? _newUserSubscription;
   Future<void> _messageDecodeQueue = Future<void>.value();
   Future<void> _sendQueue = Future<void>.value();
+  bool _latestSendQueued = false;
+  int _sendGeneration = 0;
   CollaborationRoom? _activeRoom;
   ExcalidrawScene _latestScene = ExcalidrawScene.empty();
 
@@ -278,11 +281,23 @@ class CollaborationRepository {
   Future<void> broadcastElements({
     required CollaborationRoom room,
     required List<Map<String, Object?>> elements,
+    bool latestOnly = false,
   }) async {
     if (_activeRoom?.roomId != room.roomId) return;
     if (elements.isEmpty) return;
-    final syncable = _reconciler.getSyncableElements(elements);
+    var syncable = _reconciler.getSyncableElements(elements);
     if (syncable.isEmpty) return;
+
+    if (latestOnly) {
+      final currentById = {
+        for (final element in _latestScene.elements) _id(element): element,
+      };
+      syncable = [
+        for (final element in syncable)
+          if (_isAtLeastAsNew(element, currentById[_id(element)])) element,
+      ];
+      if (syncable.isEmpty) return;
+    }
 
     final updates = {for (final element in syncable) _id(element): element};
     final merged = <Map<String, Object?>>[
@@ -293,7 +308,53 @@ class CollaborationRepository {
     _latestScene = _latestScene.copyWith(
       elements: _reconciler.getSyncableElements(merged),
     );
+
+    if (latestOnly) {
+      for (final element in syncable) {
+        _pendingLatestElements[_id(element)] = element;
+      }
+      _queueLatestElements();
+      return;
+    }
+
+    for (final element in syncable) {
+      _pendingLatestElements.remove(_id(element));
+    }
     _accumulator.scheduleElements(syncable);
+  }
+
+  bool _isAtLeastAsNew(
+    Map<String, Object?> candidate,
+    Map<String, Object?>? current,
+  ) {
+    if (current == null) return true;
+    final candidateVersion = (candidate['version'] as num).toInt();
+    final currentVersion = (current['version'] as num).toInt();
+    if (candidateVersion != currentVersion) {
+      return candidateVersion > currentVersion;
+    }
+    return (candidate['versionNonce'] as num).toInt() <=
+        (current['versionNonce'] as num).toInt();
+  }
+
+  void _queueLatestElements() {
+    if (_latestSendQueued || _pendingLatestElements.isEmpty) return;
+    _latestSendQueued = true;
+    final generation = _sendGeneration;
+    final roomId = _activeRoom?.roomId;
+    _sendQueue = _sendQueue
+        .then<void>((_) async {
+          if (_activeRoom?.roomId != roomId) return;
+          final elements = _pendingLatestElements.values.toList();
+          _pendingLatestElements.clear();
+          await _doAccumulatorFlush(elements, false);
+        })
+        .catchError(_handleSendQueueError)
+        .whenComplete(() {
+          if (_sendGeneration != generation) return;
+          _latestSendQueued = false;
+          _queueLatestElements();
+        });
   }
 
   Future<void> _onAccumulatorFlush(
@@ -304,15 +365,17 @@ class CollaborationRepository {
     // _rememberBroadcasted has completed, preventing duplicate sends.
     _sendQueue = _sendQueue
         .then((_) => _doAccumulatorFlush(elements, isInitial))
-        .catchError((Object error, StackTrace stack) {
-          CollaborationDebugLog.write('repo', 'send_queue_failed', {
-            'error': error.toString(),
-          });
-          if (!_repositoryErrors.isClosed) {
-            _repositoryErrors.add('协作发送失败：$error');
-          }
-        });
+        .catchError(_handleSendQueueError);
     return _sendQueue;
+  }
+
+  void _handleSendQueueError(Object error, StackTrace stack) {
+    CollaborationDebugLog.write('repo', 'send_queue_failed', {
+      'error': error.toString(),
+    });
+    if (!_repositoryErrors.isClosed) {
+      _repositoryErrors.add('协作发送失败：$error');
+    }
   }
 
   Future<void> _doAccumulatorFlush(
@@ -459,6 +522,31 @@ class CollaborationRepository {
     _latestScene = nextScene;
     _rememberBroadcasted(remoteWinners);
     return nextScene.copyWith(elements: reconciled);
+  }
+
+  List<Map<String, Object?>> reconcileRemoteElements({
+    required List<Map<String, Object?>> remoteElements,
+    Set<String> protectedElementIds = const {},
+  }) {
+    final localScene = _latestScene;
+    final localById = {
+      for (final element in localScene.elements) _id(element): element,
+    };
+    final winners = [
+      for (final remote in remoteElements)
+        if (_remoteWins(
+          localById[_id(remote)],
+          remote,
+          protectedElementIds.contains(_id(remote)),
+        ))
+          remote,
+    ];
+    reconcileRemoteScene(
+      localScene: localScene,
+      remoteElements: remoteElements,
+      protectedElementIds: protectedElementIds,
+    );
+    return winners;
   }
 
   bool _remoteWins(
@@ -912,8 +1000,11 @@ class CollaborationRepository {
     _activeRoom = null;
     _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();
+    _pendingLatestElements.clear();
     _fileManager.reset();
     _accumulator.dispose();
+    _sendGeneration++;
+    _latestSendQueued = false;
     _sendQueue = Future<void>.value();
   }
 }
