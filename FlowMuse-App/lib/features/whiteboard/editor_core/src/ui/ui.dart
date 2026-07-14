@@ -26,6 +26,7 @@ export 'markdraw_grammar.dart';
 export 'markdraw_split_pane.dart';
 export 'file_picker_channel_ohos.dart';
 export 'file_save_channel_ohos.dart';
+export 'image_picker_channel.dart';
 export 'markdraw_file_handler.dart';
 export 'platform_io.dart';
 export 'markdraw_editor_config.dart';
