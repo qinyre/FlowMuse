@@ -610,6 +610,27 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
               ),
             ),
           ),
+        if (_controller.zenMode)
+          Positioned(
+            top: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: SizedBox(
+                height: 56,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _StatusPill(
+                      label: '退出专注模式',
+                      onTap: _controller.toggleZenMode,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (showNavigationTools && showTopToolbar)
           Positioned(
             top: safeArea.top + 60,
