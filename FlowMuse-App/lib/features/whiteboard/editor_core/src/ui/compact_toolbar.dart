@@ -12,8 +12,6 @@ class CompactToolbar extends StatelessWidget {
   final ToolbarDock dock;
   final ValueChanged<ToolbarDock>? onDockChanged;
   final VoidCallback? onCollapse;
-  final Size Function() getCanvasSize;
-  final bool showZoomControls;
   final bool useFlatBackground;
 
   const CompactToolbar({
@@ -22,8 +20,6 @@ class CompactToolbar extends StatelessWidget {
     this.dock = ToolbarDock.top,
     this.onDockChanged,
     this.onCollapse,
-    required this.getCanvasSize,
-    this.showZoomControls = true,
     this.useFlatBackground = false,
   });
 
@@ -39,9 +35,9 @@ class CompactToolbar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
           color: useFlatBackground ? cs.surfaceContainerLow : null,
-          gradient: useFlatBackground ? null : LinearGradient(
-            colors: [cs.surfaceContainerLow, cs.surface],
-          ),
+          gradient: useFlatBackground
+              ? null
+              : LinearGradient(colors: [cs.surfaceContainerLow, cs.surface]),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: cs.outlineVariant),
           boxShadow: [
@@ -60,19 +56,6 @@ class CompactToolbar extends StatelessWidget {
             direction: vertical ? Axis.vertical : Axis.horizontal,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _compactButton(
-                cs: cs,
-                icon: Icons.undo,
-                tooltip: '撤回',
-                onPressed: controller.undo,
-              ),
-              _compactButton(
-                cs: cs,
-                icon: Icons.redo,
-                tooltip: '重做',
-                onPressed: controller.redo,
-              ),
-              _toolbarDivider(cs, vertical),
               _compactToolButton(
                 cs: cs,
                 type: ToolType.hand,
@@ -130,29 +113,6 @@ class CompactToolbar extends StatelessWidget {
                   _runGlobalSmartLayout(context);
                 },
               ),
-              if (showZoomControls) ...[
-                _compactButton(
-                  cs: cs,
-                  icon: Icons.remove,
-                  tooltip: '缩小',
-                  onPressed: () => controller.zoomOut(getCanvasSize()),
-                ),
-                _compactButton(
-                  cs: cs,
-                  iconWidget: Text(
-                    '${(controller.editorState.viewport.zoom * 100).round()}%',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  tooltip: '重置缩放',
-                  onPressed: controller.resetZoom,
-                ),
-                _compactButton(
-                  cs: cs,
-                  icon: Icons.add,
-                  tooltip: '放大',
-                  onPressed: () => controller.zoomIn(getCanvasSize()),
-                ),
-              ],
               _compactButton(
                 cs: cs,
                 iconWidget: _dockIcon(dock),

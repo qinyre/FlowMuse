@@ -13,6 +13,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 
 import 'studio_rail_icon_button.dart';
+import 'zoom_controls.dart';
 
 /// A full-featured drawing editor widget.
 ///
@@ -290,8 +291,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
         dock: _toolbarDock,
         onDockChanged: _setToolbarDock,
         onCollapse: () => _setToolbarCollapsed(true),
-        getCanvasSize: _getCanvasSize,
-        showZoomControls: widget.config.showZoomControls,
         useFlatBackground: widget.useFlatBackgrounds,
       );
     }
@@ -301,9 +300,43 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       dock: _toolbarDock,
       onDockChanged: _setToolbarDock,
       onCollapse: () => _setToolbarCollapsed(true),
-      getCanvasSize: _getCanvasSize,
-      showZoomControls: widget.config.showZoomControls,
       useFlatBackground: widget.useFlatBackgrounds,
+    );
+  }
+
+  Widget _buildDetachedControlGroups() {
+    final alignToRight = _toolbarDock == ToolbarDock.left;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: alignToRight
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        if (!_controller.viewMode)
+          _buildControlSurface(UndoRedoControls(controller: _controller)),
+        if (!_controller.viewMode && widget.config.showZoomControls)
+          const SizedBox(height: 8),
+        if (widget.config.showZoomControls)
+          _buildControlSurface(
+            ZoomControls(
+              controller: _controller,
+              getCanvasSize: _getCanvasSize,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildControlSurface(Widget child) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: child,
     );
   }
 
@@ -587,7 +620,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
         if (showNavigationTools && _toolbarDock != ToolbarDock.top)
           Positioned(
             top: safeArea.top + 56,
-            bottom: safeArea.bottom + 4,
             left: _toolbarDock == ToolbarDock.left ? 8 : null,
             right: _toolbarDock == ToolbarDock.right ? 8 : null,
             child: _toolbarCollapsed
@@ -598,6 +630,14 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                     child: _buildToolbarExpandButton(),
                   )
                 : _buildToolbar(compact: isCompact),
+          ),
+        if (showChrome &&
+            (!_controller.viewMode || widget.config.showZoomControls))
+          Positioned(
+            left: _toolbarDock == ToolbarDock.left ? null : 12,
+            right: _toolbarDock == ToolbarDock.left ? 12 : null,
+            bottom: bottomChromeOffset,
+            child: _buildDetachedControlGroups(),
           ),
         // Floating property panel — desktop left side
         if (showEditChrome &&

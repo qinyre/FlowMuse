@@ -13,8 +13,6 @@ class DesktopToolbar extends StatelessWidget {
   final ToolbarDock dock;
   final ValueChanged<ToolbarDock>? onDockChanged;
   final VoidCallback? onCollapse;
-  final Size Function() getCanvasSize;
-  final bool showZoomControls;
   final bool useFlatBackground;
 
   const DesktopToolbar({
@@ -24,8 +22,6 @@ class DesktopToolbar extends StatelessWidget {
     this.dock = ToolbarDock.top,
     this.onDockChanged,
     this.onCollapse,
-    required this.getCanvasSize,
-    this.showZoomControls = true,
     this.useFlatBackground = false,
   });
 
@@ -39,9 +35,9 @@ class DesktopToolbar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: useFlatBackground ? cs.surfaceContainerLow : null,
-          gradient: useFlatBackground ? null : LinearGradient(
-            colors: [cs.surfaceContainerLow, cs.surface],
-          ),
+          gradient: useFlatBackground
+              ? null
+              : LinearGradient(colors: [cs.surfaceContainerLow, cs.surface]),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: cs.outlineVariant),
           boxShadow: [
@@ -60,282 +56,94 @@ class DesktopToolbar extends StatelessWidget {
             direction: vertical ? Axis.vertical : Axis.horizontal,
             mainAxisSize: MainAxisSize.min,
             children: [
-                    _toolbarButton(
-                      cs: cs,
-                      icon: Icons.undo,
-                      tooltip: '撤回 (Ctrl+Z)',
-                      onPressed: controller.undo,
-                    ),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: Icons.redo,
-                      tooltip: '重做 (Ctrl+Shift+Z)',
-                      onPressed: controller.redo,
-                    ),
-                    _toolbarDivider(context, vertical),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: controller.toolLocked
-                          ? Icons.lock
-                          : Icons.lock_open,
-                      tooltip: '保持工具激活 (Q)',
-                      onPressed: controller.toggleToolLocked,
-                      isActive: controller.toolLocked,
-                    ),
-                    _toolbarDivider(context, vertical),
-                    _ToolButton(
-                      type: ToolType.hand,
-                      activeType: activeType,
-                      colorScheme: cs,
-                      useFlatBackground: useFlatBackground,
-                      onPressed: () => controller.switchTool(ToolType.hand),
-                    ),
-                    _ToolButton(
-                      type: ToolType.select,
-                      activeType: activeType,
-                      colorScheme: cs,
-                      useFlatBackground: useFlatBackground,
-                      onPressed: () => controller.switchTool(ToolType.select),
-                    ),
-                    BrushPaletteButton(
-                      controller: controller,
-                      dock: dock,
-                      size: 32,
-                    ),
-                    ShapePaletteButton(
-                      controller: controller,
-                      dock: dock,
-                      size: 32,
-                    ),
-                    _ToolButton(
-                      type: ToolType.text,
-                      activeType: activeType,
-                      colorScheme: cs,
-                      useFlatBackground: useFlatBackground,
-                      onPressed: () => controller.switchTool(ToolType.text),
-                    ),
-                    if (onImportImage != null)
-                      _toolbarButton(
-                        cs: cs,
-                        icon: Icons.add_photo_alternate,
-                        tooltip: '导入图片 (9)',
-                        onPressed: onImportImage!,
-                      ),
-                    _ToolButton(
-                      type: ToolType.eraser,
-                      activeType: activeType,
-                      colorScheme: cs,
-                      useFlatBackground: useFlatBackground,
-                      onPressed: () => controller.switchTool(ToolType.eraser),
-                    ),
-                    _ToolButton(
-                      type: ToolType.laser,
-                      activeType: activeType,
-                      colorScheme: cs,
-                      useFlatBackground: useFlatBackground,
-                      onPressed: () => controller.switchTool(ToolType.laser),
-                    ),
-                    _toolbarDivider(context, vertical),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: Icons.text_fields,
-                      tooltip: '文字识别模式',
-                      onPressed: controller.toggleInkRecognitionMode,
-                      isActive: controller.inkRecognitionMode,
-                    ),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: Icons.auto_fix_high,
-                      tooltip: '智能排布模式',
-                      onPressed: controller.toggleSmartInkLayoutMode,
-                      isActive: controller.smartInkLayoutMode,
-                    ),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: Icons.document_scanner_outlined,
-                      tooltip: '全局识别排版',
-                      onPressed: () {
-                        _runGlobalSmartLayout(context);
-                      },
-                    ),
-                    if (showZoomControls) ...[
-                      _toolbarDivider(context, vertical),
-                      _toolbarButton(
-                        cs: cs,
-                        icon: Icons.remove,
-                        tooltip: '缩小',
-                        onPressed: () => controller.zoomOut(getCanvasSize()),
-                      ),
-                      _toolbarButton(
-                        cs: cs,
-                        iconWidget: Text(
-                          '${(controller.editorState.viewport.zoom * 100).round()}%',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        tooltip: '重置缩放',
-                        onPressed: controller.resetZoom,
-                      ),
-                      _toolbarButton(
-                        cs: cs,
-                        icon: Icons.add,
-                        tooltip: '放大',
-                        onPressed: () => controller.zoomIn(getCanvasSize()),
-                      ),
-                    ],
-                    _toolbarDivider(context, vertical),
-                    _DockMenuButton(
-                      dock: dock,
-                      onDockChanged: onDockChanged,
-                    ),
-                    if (onCollapse != null)
-                      _toolbarButton(
-                        cs: cs,
-                        icon: switch (dock) {
-                          ToolbarDock.top => Icons.keyboard_arrow_up,
-                          ToolbarDock.left => Icons.keyboard_arrow_left,
-                          ToolbarDock.right => Icons.keyboard_arrow_right,
-                        },
-                        tooltip: '收起工具栏',
-                        onPressed: onCollapse!,
-                      ),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: Icons.undo,
-                      tooltip: '撤回 (Ctrl+Z)',
-                      onPressed: controller.undo,
-                    ),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: Icons.redo,
-                      tooltip: '重做 (Ctrl+Shift+Z)',
-                      onPressed: controller.redo,
-                    ),
-                    _toolbarDivider(context, vertical),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: controller.toolLocked
-                          ? Icons.lock
-                          : Icons.lock_open,
-                      tooltip: '保持工具激活 (Q)',
-                      onPressed: controller.toggleToolLocked,
-                      isActive: controller.toolLocked,
-                    ),
-                    _toolbarDivider(context, vertical),
-                    _ToolButton(
-                      type: ToolType.hand,
-                      activeType: activeType,
-                      colorScheme: cs,
-                      useFlatBackground: useFlatBackground,
-                      onPressed: () => controller.switchTool(ToolType.hand),
-                    ),
-                    _ToolButton(
-                      type: ToolType.select,
-                      activeType: activeType,
-                      colorScheme: cs,
-                      useFlatBackground: useFlatBackground,
-                      onPressed: () => controller.switchTool(ToolType.select),
-                    ),
-                    BrushPaletteButton(
-                      controller: controller,
-                      dock: dock,
-                      size: 32,
-                    ),
-                    ShapePaletteButton(
-                      controller: controller,
-                      dock: dock,
-                      size: 32,
-                    ),
-                    _ToolButton(
-                      type: ToolType.text,
-                      activeType: activeType,
-                      colorScheme: cs,
-                      useFlatBackground: useFlatBackground,
-                      onPressed: () => controller.switchTool(ToolType.text),
-                    ),
-                    if (onImportImage != null)
-                      _toolbarButton(
-                        cs: cs,
-                        icon: Icons.add_photo_alternate,
-                        tooltip: '导入图片 (9)',
-                        onPressed: onImportImage!,
-                      ),
-                    _ToolButton(
-                      type: ToolType.eraser,
-                      activeType: activeType,
-                      colorScheme: cs,
-                      useFlatBackground: useFlatBackground,
-                      onPressed: () => controller.switchTool(ToolType.eraser),
-                    ),
-                    _ToolButton(
-                      type: ToolType.laser,
-                      activeType: activeType,
-                      colorScheme: cs,
-                      useFlatBackground: useFlatBackground,
-                      onPressed: () => controller.switchTool(ToolType.laser),
-                    ),
-                    _toolbarDivider(context, vertical),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: Icons.text_fields,
-                      tooltip: '文字识别模式',
-                      onPressed: controller.toggleInkRecognitionMode,
-                      isActive: controller.inkRecognitionMode,
-                    ),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: Icons.auto_fix_high,
-                      tooltip: '智能排布模式',
-                      onPressed: controller.toggleSmartInkLayoutMode,
-                      isActive: controller.smartInkLayoutMode,
-                    ),
-                    _toolbarButton(
-                      cs: cs,
-                      icon: Icons.document_scanner_outlined,
-                      tooltip: '全局识别排版',
-                      onPressed: () {
-                        _runGlobalSmartLayout(context);
-                      },
-                    ),
-                    if (showZoomControls) ...[
-                      _toolbarDivider(context, vertical),
-                      _toolbarButton(
-                        cs: cs,
-                        icon: Icons.remove,
-                        tooltip: '缩小',
-                        onPressed: () => controller.zoomOut(getCanvasSize()),
-                      ),
-                      _toolbarButton(
-                        cs: cs,
-                        iconWidget: Text(
-                          '${(controller.editorState.viewport.zoom * 100).round()}%',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        tooltip: '重置缩放',
-                        onPressed: controller.resetZoom,
-                      ),
-                      _toolbarButton(
-                        cs: cs,
-                        icon: Icons.add,
-                        tooltip: '放大',
-                        onPressed: () => controller.zoomIn(getCanvasSize()),
-                      ),
-                    ],
-                    _toolbarDivider(context, vertical),
-                    _DockMenuButton(
-                      dock: dock,
-                      onDockChanged: onDockChanged,
-                    ),
-                    if (onCollapse != null)
-                      _toolbarButton(
-                        cs: cs,
-                        icon: switch (dock) {
-                          ToolbarDock.top => Icons.keyboard_arrow_up,
-                          ToolbarDock.left => Icons.keyboard_arrow_left,
-                          ToolbarDock.right => Icons.keyboard_arrow_right,
-                        },
-                        tooltip: '收起工具栏',
-                        onPressed: onCollapse!,
-                      ),
+              _toolbarButton(
+                cs: cs,
+                icon: controller.toolLocked ? Icons.lock : Icons.lock_open,
+                tooltip: '保持工具激活 (Q)',
+                onPressed: controller.toggleToolLocked,
+                isActive: controller.toolLocked,
+              ),
+              _toolbarDivider(context, vertical),
+              _ToolButton(
+                type: ToolType.hand,
+                activeType: activeType,
+                colorScheme: cs,
+                useFlatBackground: useFlatBackground,
+                onPressed: () => controller.switchTool(ToolType.hand),
+              ),
+              _ToolButton(
+                type: ToolType.select,
+                activeType: activeType,
+                colorScheme: cs,
+                useFlatBackground: useFlatBackground,
+                onPressed: () => controller.switchTool(ToolType.select),
+              ),
+              BrushPaletteButton(controller: controller, dock: dock, size: 32),
+              ShapePaletteButton(controller: controller, dock: dock, size: 32),
+              _ToolButton(
+                type: ToolType.text,
+                activeType: activeType,
+                colorScheme: cs,
+                useFlatBackground: useFlatBackground,
+                onPressed: () => controller.switchTool(ToolType.text),
+              ),
+              if (onImportImage != null)
+                _toolbarButton(
+                  cs: cs,
+                  icon: Icons.add_photo_alternate,
+                  tooltip: '导入图片 (9)',
+                  onPressed: onImportImage!,
+                ),
+              _ToolButton(
+                type: ToolType.eraser,
+                activeType: activeType,
+                colorScheme: cs,
+                useFlatBackground: useFlatBackground,
+                onPressed: () => controller.switchTool(ToolType.eraser),
+              ),
+              _ToolButton(
+                type: ToolType.laser,
+                activeType: activeType,
+                colorScheme: cs,
+                useFlatBackground: useFlatBackground,
+                onPressed: () => controller.switchTool(ToolType.laser),
+              ),
+              _toolbarDivider(context, vertical),
+              _toolbarButton(
+                cs: cs,
+                icon: Icons.text_fields,
+                tooltip: '文字识别模式',
+                onPressed: controller.toggleInkRecognitionMode,
+                isActive: controller.inkRecognitionMode,
+              ),
+              _toolbarButton(
+                cs: cs,
+                icon: Icons.auto_fix_high,
+                tooltip: '智能排布模式',
+                onPressed: controller.toggleSmartInkLayoutMode,
+                isActive: controller.smartInkLayoutMode,
+              ),
+              _toolbarButton(
+                cs: cs,
+                icon: Icons.document_scanner_outlined,
+                tooltip: '全局识别排版',
+                onPressed: () {
+                  _runGlobalSmartLayout(context);
+                },
+              ),
+              _toolbarDivider(context, vertical),
+              _DockMenuButton(dock: dock, onDockChanged: onDockChanged),
+              if (onCollapse != null)
+                _toolbarButton(
+                  cs: cs,
+                  icon: switch (dock) {
+                    ToolbarDock.top => Icons.keyboard_arrow_up,
+                    ToolbarDock.left => Icons.keyboard_arrow_left,
+                    ToolbarDock.right => Icons.keyboard_arrow_right,
+                  },
+                  tooltip: '收起工具栏',
+                  onPressed: onCollapse!,
+                ),
             ],
           ),
         ),
