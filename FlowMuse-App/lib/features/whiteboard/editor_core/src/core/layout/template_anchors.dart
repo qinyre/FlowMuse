@@ -48,8 +48,8 @@ class TemplateGeometry {
     var bestDistance = double.infinity;
     for (final anchor in anchors) {
       final distance = writingMode == TemplateWritingMode.vertical
-          ? (center.dx - anchor.position.dx).abs()
-          : (center.dy - anchor.position.dy).abs();
+          ? (center.dx - anchor.crossAxis).abs()
+          : (center.dy - anchor.crossAxis).abs();
       if (distance < bestDistance) {
         bestDistance = distance;
         best = anchor;
@@ -195,7 +195,7 @@ class TemplateAnchorResolver {
     double step,
   ) {
     final anchors = <TemplateAnchor>[];
-    for (var x = rect.right - start; x > rect.left; x -= step) {
+    for (var x = rect.left + start; x < rect.right; x += step) {
       final fontSize = step * fontSizeToLineHeightRatio;
       anchors.add(
         TemplateAnchor(
