@@ -56,3 +56,39 @@ Future<List<OhosPickedFile>> pickFilesViaOhosChannel({
   }
   return result.map(OhosPickedFile._fromMap).toList();
 }
+
+/// Picks images directly from the system gallery (album) via the OHOS native
+/// `PhotoViewPicker`.
+///
+/// Unlike [pickFilesViaOhosChannel] (which uses `DocumentViewPicker` and first
+/// asks the user to choose between the file manager and the gallery), this
+/// opens the album immediately — no source-selection dialog.  Use this for
+/// "import image" entry points where the gallery is the expected source.
+///
+/// [maxCount] limits how many images can be selected (default 1).
+///
+/// Returns the list of picked files.  Throws [PlatformException] (or
+/// [MissingPluginException]) on failure, including when the user cancels the
+/// dialog.
+///
+/// This function is OHOS-only.  On other platforms the channel method
+/// `pickImage` is not registered and the call will throw
+/// [MissingPluginException].
+Future<List<OhosPickedFile>> pickImageViaOhosChannel({
+  int maxCount = 1,
+}) async {
+  const channel = MethodChannel('flow_muse/file_picker');
+  final result = await channel.invokeListMethod<Map<Object?, Object?>>(
+    'pickImage',
+    <String, Object?>{
+      'maxSelectNumber': maxCount,
+    },
+  );
+  if (result == null || result.isEmpty) {
+    throw PlatformException(
+      code: 'FILE_PICK_FAILED',
+      message: 'No images selected or user cancelled',
+    );
+  }
+  return result.map(OhosPickedFile._fromMap).toList();
+}

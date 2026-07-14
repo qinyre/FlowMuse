@@ -34,6 +34,22 @@ class WhiteboardCollaborationAdapter {
     );
   }
 
+  void applyRemoteElements(List<Map<String, Object?>> elements) {
+    final warnings = <ParseWarning>[];
+    controller.applyRemoteElements([
+      for (var i = 0; i < elements.length; i++)
+        if (elements[i]['type'] case final String type)
+          if (ExcalidrawJsonCodec.parseElement(
+                Map<String, dynamic>.from(elements[i]),
+                type,
+                i,
+                warnings,
+              )
+              case final editor_core.Element element)
+            element,
+    ]);
+  }
+
   Set<String> selectedElementIds() {
     return controller.editorState.selectedIds.map((id) => id.value).toSet();
   }

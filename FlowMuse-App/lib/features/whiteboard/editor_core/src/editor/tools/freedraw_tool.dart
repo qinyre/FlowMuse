@@ -93,14 +93,7 @@ class FreedrawTool implements Tool {
 
     final element = _buildElement(context, isComplete: true);
 
-    final shouldSelect = _sessionId != null;
     _clearStrokeState();
-    if (shouldSelect) {
-      return CompoundResult([
-        AddElementResult(element),
-        SetSelectionResult({element.id}),
-      ]);
-    }
     return AddElementResult(element);
   }
 

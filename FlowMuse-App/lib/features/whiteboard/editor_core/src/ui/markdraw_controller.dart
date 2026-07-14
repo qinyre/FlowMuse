@@ -236,7 +236,7 @@ class MarkdrawController extends ChangeNotifier {
   void Function(FreedrawElement element)? onLiveFreedrawChanged;
   Timer? _liveFreedrawTimer;
   static const Duration _liveFreedrawBroadcastInterval = Duration(
-    milliseconds: 80,
+    milliseconds: 50,
   );
 
   List<Element>? _lastChangedElements;
@@ -312,6 +312,8 @@ class MarkdrawController extends ChangeNotifier {
   Size get canvasSize => _canvasSize;
 
   bool get isPagedViewport => _layout.isPaged && _layout.pages.isNotEmpty;
+
+  bool get canPanPagedViewportWithTouch => _activeStylusPointerId == null;
 
   PagedViewportMetrics? get pagedViewportMetrics => computePagedViewportMetrics(
     layout: _layout,
@@ -2671,6 +2673,28 @@ class MarkdrawController extends ChangeNotifier {
     _applyViewportConstraints();
     if (background != null) {
       _canvasBackgroundColor = background;
+    }
+    _lastChangedElements = null;
+    onSceneChanged?.call(_editorState.scene, SceneChangeSource.remoteApply);
+    notifyListeners();
+  }
+
+  /// Applies collaboration element updates without rebuilding the full scene.
+  void applyRemoteElements(Iterable<Element> elements) {
+    final updates = [
+      for (final element in elements)
+        if (element is TextElement && element.containerId == null)
+          TextBoundsValidator.validateElement(element)
+        else
+          element,
+    ];
+    if (updates.isEmpty) return;
+    _editorState = _editorState.copyWith(
+      scene: _editorState.scene.upsertRemoteElements(updates),
+    );
+    if (updates.any((element) => element.isCanvasPage)) {
+      _syncLayoutFromScene();
+      _applyViewportConstraints();
     }
     _lastChangedElements = null;
     onSceneChanged?.call(_editorState.scene, SceneChangeSource.remoteApply);

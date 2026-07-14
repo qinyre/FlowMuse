@@ -67,6 +67,20 @@ class Scene {
     return Scene._(updated, files, smartLayout);
   }
 
+  /// Replaces existing elements without changing their collaboration version.
+  Scene upsertRemoteElements(Iterable<Element> elements) {
+    final updates = {for (final element in elements) element.id: element};
+    if (updates.isEmpty) return this;
+    return Scene._(
+      [
+        for (final element in _elements) updates.remove(element.id) ?? element,
+        ...updates.values,
+      ],
+      files,
+      smartLayout,
+    );
+  }
+
   /// Finds an element by [id], or returns null.
   Element? getElementById(ElementId id) {
     for (final e in _elements) {
