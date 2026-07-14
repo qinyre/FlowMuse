@@ -46,11 +46,11 @@ class CanvasLayout {
     this.pages = const [],
   });
 
-  static const pageWidth = 794.0;
-  static const pageHeight = 1123.0;
+  static const pageWidth = 1588.0;
+  static const pageHeight = 2246.0;
   static const landscapePageWidth = pageHeight;
   static const landscapePageHeight = pageWidth;
-  static const pageGap = 48.0;
+  static const pageGap = 96.0;
 
   final CanvasLayoutType type;
   final CanvasPageTemplate template;

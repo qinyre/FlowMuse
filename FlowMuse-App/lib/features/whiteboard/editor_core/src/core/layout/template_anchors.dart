@@ -31,11 +31,11 @@ class TemplateGeometry {
     required this.writingMode,
   });
 
-  static const pageTemplateMargin = 48.0;
-  static const ancientBookGutterWidth = 56.0;
-  static const ancientBookColumnWidth = 44.0;
-  static const practiceCell = 56.0;
-  static const practiceGap = 8.0;
+  static const pageTemplateMargin = 96.0;
+  static const ancientBookGutterWidth = 112.0;
+  static const ancientBookColumnWidth = 88.0;
+  static const practiceCell = 112.0;
+  static const practiceGap = 16.0;
 
   final Rect contentRect;
   final List<TemplateAnchor> anchors;
@@ -66,19 +66,19 @@ class TemplateAnchorResolver {
     final rect = page.bounds.deflate(TemplateGeometry.pageTemplateMargin);
     return switch (page.template) {
       CanvasPageTemplate.blank => _blank(page, rect),
-      CanvasPageTemplate.narrowLine => _horizontalLines(page, rect, 18, 24),
-      CanvasPageTemplate.wideLine => _horizontalLines(page, rect, 24, 36),
-      CanvasPageTemplate.grid => _horizontalLines(page, rect, 16, 32),
-      CanvasPageTemplate.dotGrid => _horizontalLines(page, rect, 16, 32),
+      CanvasPageTemplate.narrowLine => _horizontalLines(page, rect, 36, 48),
+      CanvasPageTemplate.wideLine => _horizontalLines(page, rect, 48, 72),
+      CanvasPageTemplate.grid => _horizontalLines(page, rect, 32, 64),
+      CanvasPageTemplate.dotGrid => _horizontalLines(page, rect, 32, 64),
       CanvasPageTemplate.tianGrid => _practiceGrid(page, rect),
       CanvasPageTemplate.miGrid => _practiceGrid(page, rect),
       CanvasPageTemplate.narrowVerticalLine => _verticalLines(
         page,
         rect,
-        18,
-        24,
+        36,
+        48,
       ),
-      CanvasPageTemplate.wideVerticalLine => _verticalLines(page, rect, 24, 36),
+      CanvasPageTemplate.wideVerticalLine => _verticalLines(page, rect, 48, 72),
       CanvasPageTemplate.fourLineGrid => _fourLineGrid(page, rect),
       CanvasPageTemplate.ancientBook => _ancientBook(page, rect),
     };
@@ -92,7 +92,7 @@ class TemplateAnchorResolver {
           position: rect.topLeft,
           crossAxis: rect.top,
           mainAxis: rect.left,
-          fontSize: 20,
+          fontSize: 40,
           lineHeight: 1.25,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
@@ -115,7 +115,7 @@ class TemplateAnchorResolver {
           position: Offset(rect.left, y - step * 0.72),
           crossAxis: y,
           mainAxis: rect.left,
-          fontSize: (step * 0.62).clamp(14.0, 24.0),
+          fontSize: (step * 0.62).clamp(28.0, 48.0),
           lineHeight: 1.2,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
@@ -138,10 +138,10 @@ class TemplateAnchorResolver {
     ) {
       anchors.add(
         TemplateAnchor(
-          position: Offset(rect.left, top + 4),
+          position: Offset(rect.left, top + 8),
           crossAxis: top + TemplateGeometry.practiceCell / 2,
           mainAxis: rect.left,
-          fontSize: 34,
+          fontSize: 68,
           lineHeight: 1.1,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
@@ -157,13 +157,13 @@ class TemplateAnchorResolver {
 
   static TemplateGeometry _fourLineGrid(CanvasPage page, Rect rect) {
     final anchors = <TemplateAnchor>[];
-    for (var y = rect.top + 18; y + 24 < rect.bottom; y += 56) {
+    for (var y = rect.top + 36; y + 48 < rect.bottom; y += 112) {
       anchors.add(
         TemplateAnchor(
-          position: Offset(rect.left, y - 4),
-          crossAxis: y + 12,
+          position: Offset(rect.left, y - 8),
+          crossAxis: y + 24,
           mainAxis: rect.left,
-          fontSize: 22,
+          fontSize: 44,
           lineHeight: 1.0,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
@@ -190,7 +190,7 @@ class TemplateAnchorResolver {
           position: Offset(x - step * 0.52, rect.top),
           crossAxis: x,
           mainAxis: rect.top,
-          fontSize: (step * 0.62).clamp(14.0, 24.0),
+          fontSize: (step * 0.62).clamp(28.0, 48.0),
           lineHeight: 1.15,
           writingMode: TemplateWritingMode.vertical,
           pageId: page.id,
@@ -217,10 +217,10 @@ class TemplateAnchorResolver {
       ) {
         anchors.add(
           TemplateAnchor(
-            position: Offset(x - 12, area.top + 12),
+            position: Offset(x - 24, area.top + 24),
             crossAxis: x,
             mainAxis: area.top,
-            fontSize: 22,
+            fontSize: 44,
             lineHeight: 1.12,
             writingMode: TemplateWritingMode.vertical,
             pageId: page.id,
