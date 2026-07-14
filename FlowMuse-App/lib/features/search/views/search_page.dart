@@ -59,9 +59,9 @@ class SearchPage extends ConsumerWidget {
       topContent: [
         Text(
           '搜索范围',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 16),
         Wrap(
@@ -92,7 +92,10 @@ class SearchPage extends ConsumerWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(LucideIcons.fileSearch, color: colorScheme.onSurfaceVariant),
+                Icon(
+                  LucideIcons.fileSearch,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 const SizedBox(width: AppSpacing.controlGap),
                 Text(
                   state.query.isEmpty ? '已选搜索范围' : '搜索：${state.query}',
@@ -108,7 +111,12 @@ class SearchPage extends ConsumerWidget {
         query: state.query,
         results: results,
         onOpenNote: (item) {
-          context.push(AppRoutes.whiteboardPath(noteId: item.id));
+          context.push(
+            AppRoutes.whiteboardPath(
+              noteId: item.id,
+              discardIfUnchanged: false,
+            ),
+          );
         },
       ),
     );
@@ -265,7 +273,11 @@ class _SearchEmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 38, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 38,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(height: 14),
           Text(
             title,
@@ -277,7 +289,9 @@ class _SearchEmptyState extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             message,
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

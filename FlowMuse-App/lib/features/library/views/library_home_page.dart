@@ -21,7 +21,9 @@ class LibraryHomePage extends ConsumerWidget {
   final LibrarySpecialView specialView;
 
   void _openWhiteboard(BuildContext context, {required String noteId}) {
-    context.push(AppRoutes.whiteboardPath(noteId: noteId));
+    context.push(
+      AppRoutes.whiteboardPath(noteId: noteId, discardIfUnchanged: false),
+    );
   }
 
   Future<void> _joinRoom(BuildContext context) async {
@@ -82,12 +84,15 @@ class LibraryHomePage extends ConsumerWidget {
               : (NoteItem item) {
                   _openWhiteboard(context, noteId: item.id);
                 },
-          onRenameNote: (noteId, newName) =>
-              ref.read(libraryIndexProvider.notifier).renameNote(noteId, newName),
-          onMoveNoteToNotebook: (noteId, notebookId) =>
-              ref.read(libraryIndexProvider.notifier).moveNotesToNotebook([noteId], notebookId),
-          onSetNoteTags: (noteId, tagIds) =>
-              ref.read(libraryIndexProvider.notifier).setNoteTags(noteId, tagIds),
+          onRenameNote: (noteId, newName) => ref
+              .read(libraryIndexProvider.notifier)
+              .renameNote(noteId, newName),
+          onMoveNoteToNotebook: (noteId, notebookId) => ref
+              .read(libraryIndexProvider.notifier)
+              .moveNotesToNotebook([noteId], notebookId),
+          onSetNoteTags: (noteId, tagIds) => ref
+              .read(libraryIndexProvider.notifier)
+              .setNoteTags(noteId, tagIds),
           onDeleteNote: (noteId) =>
               ref.read(libraryIndexProvider.notifier).deleteNotes([noteId]),
         );

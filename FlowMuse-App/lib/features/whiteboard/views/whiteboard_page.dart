@@ -38,24 +38,30 @@ import '../view_models/whiteboard_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
-  const WhiteboardPage({super.key, required this.noteId})
-    : temporaryCollaboration = false,
-      initialRoom = null;
+  const WhiteboardPage({
+    super.key,
+    required this.noteId,
+    this.discardIfUnchanged = false,
+  }) : temporaryCollaboration = false,
+       initialRoom = null;
 
   const WhiteboardPage.collaboration({super.key})
     : noteId = 'collaboration-room',
       temporaryCollaboration = true,
-      initialRoom = null;
+      initialRoom = null,
+      discardIfUnchanged = false;
 
   const WhiteboardPage.collaborationRoom({
     super.key,
     required CollaborationRoom this.initialRoom,
   }) : noteId = 'collaboration-room',
-       temporaryCollaboration = true;
+       temporaryCollaboration = true,
+       discardIfUnchanged = false;
 
   final String noteId;
   final bool temporaryCollaboration;
   final CollaborationRoom? initialRoom;
+  final bool discardIfUnchanged;
 
   @override
   ConsumerState<WhiteboardPage> createState() => _WhiteboardPageState();
@@ -315,6 +321,43 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (mounted) {
       viewModel.markSaved();
     }
+  }
+
+  Future<void> _finalizeLocalDraftBeforeLeaving() async {
+    if (widget.temporaryCollaboration) {
+      return;
+    }
+    _localDraftTimer?.cancel();
+    _localDraftTimer = null;
+
+    if (widget.discardIfUnchanged && await _shouldDiscardUnchangedDraft()) {
+      _localDraftDirty = false;
+      await ref.read(libraryIndexProvider.notifier).deleteNotesForever([
+        widget.noteId,
+      ]);
+      return;
+    }
+
+    if (_localDraftDirty) {
+      await _flushLocalDraft();
+    }
+  }
+
+  Future<bool> _shouldDiscardUnchangedDraft() async {
+    final scene = _markdrawController.currentScene;
+    final hasUserContent =
+        scene.smartLayout != null ||
+        scene.activeElements.any((element) => !element.isCanvasPage);
+    if (hasUserContent) {
+      return false;
+    }
+
+    final libraryIndex = await ref.read(libraryIndexProvider.future);
+    final note = _noteById(libraryIndex.notes, widget.noteId);
+    if (note == null || note.kind != LibraryFilter.notes) {
+      return false;
+    }
+    return note.title == '未命名${note.pageTemplate.displayName}';
   }
 
   void _flushLocalDraftOnExit() {
@@ -682,6 +725,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       }
       return;
     }
+    await _finalizeLocalDraftBeforeLeaving();
     _disposingOrLeaving = true;
     _markdrawController.closeTransientUiForSceneReplace();
     _popWhenStable();
@@ -849,7 +893,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (mounted) {
       runWhenUiStable(() {
         if (mounted) {
-          context.go(AppRoutes.whiteboardPath(noteId: note.id));
+          context.go(
+            AppRoutes.whiteboardPath(
+              noteId: note.id,
+              discardIfUnchanged: false,
+            ),
+          );
         }
       });
     }

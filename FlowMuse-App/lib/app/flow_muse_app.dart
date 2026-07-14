@@ -82,7 +82,9 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
       await ref
           .read(whiteboardSceneRepositoryProvider)
           .saveScene(note.id, preview.content);
-      widget._router.push(AppRoutes.whiteboardPath(noteId: note.id));
+      widget._router.push(
+        AppRoutes.whiteboardPath(noteId: note.id, discardIfUnchanged: false),
+      );
     } catch (_) {
       ScaffoldMessenger.of(
         // ignore: use_build_context_synchronously
