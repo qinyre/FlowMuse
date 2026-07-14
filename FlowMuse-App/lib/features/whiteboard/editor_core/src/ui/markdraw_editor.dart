@@ -255,6 +255,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     final showNavigationTools = showEditChrome && widget.config.showToolbar;
     final safeArea = MediaQuery.paddingOf(context);
     const desktopToolbarSideInset = 152.0;
+    final canvasTopInset = showChrome
+        ? safeArea.top + (isCompact || !showNavigationTools ? 56 : 112)
+        : 0.0;
     final topChromeOffset =
         safeArea.top + (isCompact || !showNavigationTools ? 56 : 112) + 12;
     final bottomChromeOffset =
@@ -262,38 +265,41 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     Widget body = Stack(
       children: [
         // Full-bleed canvas + desktop library panel
-        Row(
-          children: [
-            Expanded(
-              child: DragTarget<LibraryItem>(
-                onAcceptWithDetails: (details) {
-                  // Convert global drop position to local canvas position
-                  final renderBox = context.findRenderObject() as RenderBox?;
-                  if (renderBox == null) return;
-                  final localPos = renderBox.globalToLocal(details.offset);
-                  _controller.placeLibraryItemAt(details.data, localPos);
-                },
-                builder: (context, candidateData, rejectedData) {
-                  return EditorCanvas(
-                    controller: _controller,
-                    collaborators: widget.collaborators,
-                    onPointerPresence: widget.onPointerPresence,
-                    onVisibleSceneBoundsChanged:
-                        widget.onVisibleSceneBoundsChanged,
-                  );
-                },
+        Padding(
+          padding: EdgeInsets.only(top: canvasTopInset),
+          child: Row(
+            children: [
+              Expanded(
+                child: DragTarget<LibraryItem>(
+                  onAcceptWithDetails: (details) {
+                    // Convert global drop position to local canvas position
+                    final renderBox = context.findRenderObject() as RenderBox?;
+                    if (renderBox == null) return;
+                    final localPos = renderBox.globalToLocal(details.offset);
+                    _controller.placeLibraryItemAt(details.data, localPos);
+                  },
+                  builder: (context, candidateData, rejectedData) {
+                    return EditorCanvas(
+                      controller: _controller,
+                      collaborators: widget.collaborators,
+                      onPointerPresence: widget.onPointerPresence,
+                      onVisibleSceneBoundsChanged:
+                          widget.onVisibleSceneBoundsChanged,
+                    );
+                  },
+                ),
               ),
-            ),
-            if (showChrome &&
-                !isCompact &&
-                _controller.showLibraryPanel &&
-                widget.config.showLibraryPanel)
-              LibraryPanel(
-                controller: _controller,
-                onImportLibrary: widget.onImportLibrary,
-                onExportLibrary: widget.onExportLibrary,
-              ),
-          ],
+              if (showChrome &&
+                  !isCompact &&
+                  _controller.showLibraryPanel &&
+                  widget.config.showLibraryPanel)
+                LibraryPanel(
+                  controller: _controller,
+                  onImportLibrary: widget.onImportLibrary,
+                  onExportLibrary: widget.onExportLibrary,
+                ),
+            ],
+          ),
         ),
         if (showChrome)
           Positioned(
