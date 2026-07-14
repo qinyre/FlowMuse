@@ -74,7 +74,7 @@ func Load() (Config, error) {
 		AIBaseURL: env("FLOWMUSE_AI_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
 		AIAPIKey:  envFirst("FLOWMUSE_AI_API_KEY", "ARK_API_KEY"),
 		AIModel:   env("FLOWMUSE_AI_MODEL", "doubao-seed-2-1-turbo-260628"),
-		AITimeout: envDuration("FLOWMUSE_AI_TIMEOUT", 60*time.Second),
+		AITimeout: envDuration("FLOWMUSE_AI_TIMEOUT", 120*time.Second),
 	}
 	cfg.S3AccessKeyID = os.Getenv("FLOWMUSE_S3_ACCESS_KEY_ID")
 	cfg.S3SecretAccessKey = os.Getenv("FLOWMUSE_S3_SECRET_ACCESS_KEY")

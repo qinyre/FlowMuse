@@ -67,7 +67,7 @@ FLOWMUSE_RECOGNITION_TIMEOUT=20s
 FLOWMUSE_AI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 FLOWMUSE_AI_API_KEY=你的豆包方舟 API Key
 FLOWMUSE_AI_MODEL=doubao-seed-2-1-turbo-260628
-FLOWMUSE_AI_TIMEOUT=60s
+FLOWMUSE_AI_TIMEOUT=120s
 ```
 
 `.env` 已被 `.gitignore` 忽略，不要提交真实密钥。Docker Compose 会通过 `env_file: .env` 注入这些变量；本地直接运行 Go 服务时也会自动读取 `FlowMuse-Server/.env`。

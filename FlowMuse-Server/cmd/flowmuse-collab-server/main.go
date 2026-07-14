@@ -108,7 +108,11 @@ func main() {
 			Timeout: cfg.AITimeout,
 		},
 	)
-	recognition.NewHTTPAPI(recognizer, cfg.AITimeout, smartLayouter).Register(mux)
+	recognition.NewHTTPAPI(
+		recognizer,
+		cfg.AITimeout+10*time.Second,
+		smartLayouter,
+	).Register(mux)
 
 	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)
 	if err := http.ListenAndServe(cfg.Addr, mux); err != nil {
