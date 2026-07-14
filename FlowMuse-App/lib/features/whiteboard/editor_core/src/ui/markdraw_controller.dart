@@ -313,6 +313,8 @@ class MarkdrawController extends ChangeNotifier {
 
   bool get isPagedViewport => _layout.isPaged && _layout.pages.isNotEmpty;
 
+  bool get canPanPagedViewportWithTouch => _activeStylusPointerId == null;
+
   PagedViewportMetrics? get pagedViewportMetrics => computePagedViewportMetrics(
     layout: _layout,
     viewport: _editorState.viewport,
