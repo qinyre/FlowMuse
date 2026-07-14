@@ -144,6 +144,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
   MarkdrawController? _ownController;
   ToolbarDock _toolbarDock = ToolbarDock.top;
   bool _toolbarCollapsed = false;
+  bool _propertyPanelCollapsed = false;
 
   MarkdrawController get _controller =>
       widget.controller ??
@@ -193,7 +194,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     if (!mounted) {
       return;
     }
-    setState(() {});
+    setState(() => _propertyPanelCollapsed = false);
   }
 
   Size _getCanvasSize() => context.size ?? const Size(800, 600);
@@ -226,6 +227,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
 
   void _setToolbarCollapsed(bool collapsed) {
     setState(() => _toolbarCollapsed = collapsed);
+  }
+
+  void _collapsePropertyPanel() {
+    setState(() => _propertyPanelCollapsed = true);
   }
 
   Widget _buildToolbar({required bool compact}) {
@@ -337,6 +342,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
         showNavigationTools &&
         _toolbarDock == ToolbarDock.top &&
         !_toolbarCollapsed;
+    final propertyPanelOnRight = _toolbarDock == ToolbarDock.left;
     final safeArea = MediaQuery.paddingOf(context);
     final chromeHeight = showTopToolbar ? 112.0 : 56.0;
     final canvasTopInset = showChrome ? safeArea.top + chromeHeight : 0.0;
@@ -546,12 +552,20 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
             widget.config.showPropertyPanel &&
             (_controller.selectedElements.isNotEmpty ||
                 _controller.isCreationTool))
-          Positioned(
-            top: topChromeOffset,
-            left: 12,
-            bottom: 12,
-            child: PropertyPanel(controller: _controller),
-          ),
+          if (_propertyPanelCollapsed)
+            const SizedBox.shrink()
+          else
+            Positioned(
+              top: topChromeOffset,
+              left: propertyPanelOnRight ? null : 12,
+              right: propertyPanelOnRight ? 12 : null,
+              bottom: 12,
+              child: PropertyPanel(
+                controller: _controller,
+                onCollapse: _collapsePropertyPanel,
+                dockOnRight: propertyPanelOnRight,
+              ),
+            ),
         // Find overlay
         if (_controller.isFindOpen)
           Positioned(

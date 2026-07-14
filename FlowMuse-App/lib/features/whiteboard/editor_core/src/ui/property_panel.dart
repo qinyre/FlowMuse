@@ -7,8 +7,15 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 /// Desktop floating property panel (left side).
 class PropertyPanel extends StatelessWidget {
   final MarkdrawController controller;
+  final VoidCallback? onCollapse;
+  final bool dockOnRight;
 
-  const PropertyPanel({super.key, required this.controller});
+  const PropertyPanel({
+    super.key,
+    required this.controller,
+    this.onCollapse,
+    this.dockOnRight = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -101,6 +108,19 @@ class PropertyPanel extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(12),
             children: [
+              if (onCollapse != null)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    icon: Icon(
+                      dockOnRight
+                          ? Icons.keyboard_arrow_right
+                          : Icons.keyboard_arrow_left,
+                    ),
+                    tooltip: '收起属性面板',
+                    onPressed: onCollapse,
+                  ),
+                ),
               PropertyPanelContent(
                 controller: controller,
                 style: style,
