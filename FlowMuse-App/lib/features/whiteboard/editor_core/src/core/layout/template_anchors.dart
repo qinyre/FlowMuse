@@ -66,8 +66,8 @@ class TemplateAnchorResolver {
     final rect = page.bounds.deflate(TemplateGeometry.pageTemplateMargin);
     return switch (page.template) {
       CanvasPageTemplate.blank => _blank(page, rect),
-      CanvasPageTemplate.narrowLine => _horizontalLines(page, rect, 36, 48),
-      CanvasPageTemplate.wideLine => _horizontalLines(page, rect, 48, 72),
+      CanvasPageTemplate.narrowLine => _horizontalLines(page, rect, 72, 96),
+      CanvasPageTemplate.wideLine => _horizontalLines(page, rect, 96, 144),
       CanvasPageTemplate.grid => _horizontalLines(page, rect, 32, 64),
       CanvasPageTemplate.dotGrid => _horizontalLines(page, rect, 32, 64),
       CanvasPageTemplate.tianGrid => _practiceGrid(page, rect),
@@ -75,10 +75,15 @@ class TemplateAnchorResolver {
       CanvasPageTemplate.narrowVerticalLine => _verticalLines(
         page,
         rect,
-        36,
-        48,
+        72,
+        96,
       ),
-      CanvasPageTemplate.wideVerticalLine => _verticalLines(page, rect, 48, 72),
+      CanvasPageTemplate.wideVerticalLine => _verticalLines(
+        page,
+        rect,
+        96,
+        144,
+      ),
       CanvasPageTemplate.fourLineGrid => _fourLineGrid(page, rect),
       CanvasPageTemplate.ancientBook => _ancientBook(page, rect),
     };
@@ -115,7 +120,7 @@ class TemplateAnchorResolver {
           position: Offset(rect.left, y - step * 0.72),
           crossAxis: y,
           mainAxis: rect.left,
-          fontSize: (step * 0.62).clamp(28.0, 48.0),
+          fontSize: (step * 0.62).clamp(56.0, 96.0),
           lineHeight: 1.2,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
@@ -157,13 +162,13 @@ class TemplateAnchorResolver {
 
   static TemplateGeometry _fourLineGrid(CanvasPage page, Rect rect) {
     final anchors = <TemplateAnchor>[];
-    for (var y = rect.top + 36; y + 48 < rect.bottom; y += 112) {
+    for (var y = rect.top + 72; y + 96 < rect.bottom; y += 224) {
       anchors.add(
         TemplateAnchor(
-          position: Offset(rect.left, y - 8),
-          crossAxis: y + 24,
+          position: Offset(rect.left, y - 16),
+          crossAxis: y + 48,
           mainAxis: rect.left,
-          fontSize: 44,
+          fontSize: 88,
           lineHeight: 1.0,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
@@ -190,7 +195,7 @@ class TemplateAnchorResolver {
           position: Offset(x - step * 0.52, rect.top),
           crossAxis: x,
           mainAxis: rect.top,
-          fontSize: (step * 0.62).clamp(28.0, 48.0),
+          fontSize: (step * 0.62).clamp(56.0, 96.0),
           lineHeight: 1.15,
           writingMode: TemplateWritingMode.vertical,
           pageId: page.id,

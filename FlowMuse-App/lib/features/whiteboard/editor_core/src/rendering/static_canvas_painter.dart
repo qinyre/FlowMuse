@@ -517,11 +517,11 @@ class StaticCanvasPainter extends CustomPainter {
       case CanvasPageTemplate.blank:
         return;
       case CanvasPageTemplate.narrowLine:
-        for (var y = rect.top + 36; y < rect.bottom; y += 48) {
+        for (var y = rect.top + 72; y < rect.bottom; y += 96) {
           canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
         }
       case CanvasPageTemplate.wideLine:
-        for (var y = rect.top + 48; y < rect.bottom; y += 72) {
+        for (var y = rect.top + 96; y < rect.bottom; y += 144) {
           canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
         }
       case CanvasPageTemplate.grid:
@@ -542,17 +542,17 @@ class StaticCanvasPainter extends CustomPainter {
       case CanvasPageTemplate.miGrid:
         _renderPracticeGrid(canvas, rect, paint, diagonal: true);
       case CanvasPageTemplate.narrowVerticalLine:
-        for (var x = rect.left + 36; x < rect.right; x += 48) {
+        for (var x = rect.left + 72; x < rect.right; x += 96) {
           canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
         }
       case CanvasPageTemplate.wideVerticalLine:
-        for (var x = rect.left + 48; x < rect.right; x += 72) {
+        for (var x = rect.left + 96; x < rect.right; x += 144) {
           canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
         }
       case CanvasPageTemplate.fourLineGrid:
-        for (var y = rect.top + 36; y + 48 < rect.bottom; y += 112) {
+        for (var y = rect.top + 72; y + 96 < rect.bottom; y += 224) {
           for (var i = 0; i < 4; i++) {
-            final lineY = y + i * 16;
+            final lineY = y + i * 32;
             canvas.drawLine(
               Offset(rect.left, lineY),
               Offset(rect.right, lineY),
