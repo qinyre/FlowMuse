@@ -98,9 +98,12 @@ void removeOverlayEntryAfterTeardown(
 /// This intentionally uses [showMenu], which is backed by a popup route and
 /// normal OverlayEntries. It avoids MenuAnchor/OverlayPortal for menus whose
 /// content does not need to inherit live state from the anchor subtree.
+enum AnchoredPopupPlacement { automatic, below, right, left }
+
 Future<T?> showAnchoredPopupMenu<T extends Object>({
   required BuildContext context,
   required List<PopupMenuEntry<T>> items,
+  AnchoredPopupPlacement placement = AnchoredPopupPlacement.automatic,
 }) {
   final anchor = context.findRenderObject();
   final overlay = Navigator.of(context).overlay?.context.findRenderObject();
@@ -112,16 +115,34 @@ Future<T?> showAnchoredPopupMenu<T extends Object>({
     return Future<T?>.value();
   }
 
-  final position = RelativeRect.fromRect(
-    Rect.fromPoints(
-      anchor.localToGlobal(Offset.zero, ancestor: overlay),
-      anchor.localToGlobal(
-        anchor.size.bottomRight(Offset.zero),
-        ancestor: overlay,
-      ),
-    ),
-    Offset.zero & overlay.size,
+  final anchorRect = Rect.fromPoints(
+    anchor.localToGlobal(Offset.zero, ancestor: overlay),
+    anchor.localToGlobal(anchor.size.bottomRight(Offset.zero), ancestor: overlay),
   );
+  final position = switch (placement) {
+    AnchoredPopupPlacement.automatic => RelativeRect.fromRect(
+      anchorRect,
+      Offset.zero & overlay.size,
+    ),
+    AnchoredPopupPlacement.below => RelativeRect.fromLTRB(
+      anchorRect.left,
+      anchorRect.bottom,
+      overlay.size.width - anchorRect.right,
+      overlay.size.height - anchorRect.bottom,
+    ),
+    AnchoredPopupPlacement.right => RelativeRect.fromLTRB(
+      anchorRect.right,
+      anchorRect.top,
+      overlay.size.width - anchorRect.right,
+      overlay.size.height - anchorRect.bottom,
+    ),
+    AnchoredPopupPlacement.left => RelativeRect.fromLTRB(
+      anchorRect.left,
+      anchorRect.top,
+      overlay.size.width - anchorRect.left,
+      overlay.size.height - anchorRect.bottom,
+    ),
+  };
 
   return showMenu<T>(context: context, position: position, items: items);
 }

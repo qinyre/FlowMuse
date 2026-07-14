@@ -48,17 +48,20 @@ class CompactMenuButton extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
-          BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
-        ],
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: IconButton(
         icon: const Icon(Icons.menu, size: 24),
         tooltip: '菜单',
         constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        style: IconButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          hoverColor: cs.surfaceContainerHighest,
+          focusColor: cs.surfaceContainerHighest,
+        ),
         onPressed: () => _showCompactMenu(context),
       ),
     );
