@@ -82,7 +82,9 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
       await ref
           .read(whiteboardSceneRepositoryProvider)
           .saveScene(note.id, preview.content);
-      widget._router.push(AppRoutes.whiteboardPath(noteId: note.id));
+      widget._router.push(
+        AppRoutes.whiteboardPath(noteId: note.id, discardIfUnchanged: false),
+      );
     } catch (_) {
       ScaffoldMessenger.of(
         // ignore: use_build_context_synchronously
@@ -92,10 +94,10 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
   }
 
   /// 从文件名提取笔记标题:去掉扩展名,空则回退默认。
-  String _titleFromFileName(String fileName) {
+  String? _titleFromFileName(String fileName) {
     final dot = fileName.lastIndexOf('.');
     final base = dot > 0 ? fileName.substring(0, dot) : fileName;
-    return base.trim().isEmpty ? '未命名笔记' : base.trim();
+    return base.trim().isEmpty ? null : base.trim();
   }
 
   @override

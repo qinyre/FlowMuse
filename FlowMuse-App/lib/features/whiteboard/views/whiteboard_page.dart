@@ -38,24 +38,30 @@ import '../view_models/whiteboard_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
-  const WhiteboardPage({super.key, required this.noteId})
-    : temporaryCollaboration = false,
-      initialRoom = null;
+  const WhiteboardPage({
+    super.key,
+    required this.noteId,
+    this.discardIfUnchanged = false,
+  }) : temporaryCollaboration = false,
+       initialRoom = null;
 
   const WhiteboardPage.collaboration({super.key})
     : noteId = 'collaboration-room',
       temporaryCollaboration = true,
-      initialRoom = null;
+      initialRoom = null,
+      discardIfUnchanged = false;
 
   const WhiteboardPage.collaborationRoom({
     super.key,
     required CollaborationRoom this.initialRoom,
   }) : noteId = 'collaboration-room',
-       temporaryCollaboration = true;
+       temporaryCollaboration = true,
+       discardIfUnchanged = false;
 
   final String noteId;
   final bool temporaryCollaboration;
   final CollaborationRoom? initialRoom;
+  final bool discardIfUnchanged;
 
   @override
   ConsumerState<WhiteboardPage> createState() => _WhiteboardPageState();
@@ -88,6 +94,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   int _openGeneration = 0;
   RealtimeConnectionStatus? _lastRealtimeStatus;
   bool _disposingOrLeaving = false;
+  bool _handlingBack = false;
   Future<void> _remoteSceneQueue = Future<void>.value();
 
   // LocalDraftScheduler — 500ms debounce
@@ -322,6 +329,43 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (mounted) {
       viewModel.markSaved();
     }
+  }
+
+  Future<void> _finalizeLocalDraftBeforeLeaving() async {
+    if (widget.temporaryCollaboration) {
+      return;
+    }
+    _localDraftTimer?.cancel();
+    _localDraftTimer = null;
+
+    if (widget.discardIfUnchanged && await _shouldDiscardUnchangedDraft()) {
+      _localDraftDirty = false;
+      await ref.read(libraryIndexProvider.notifier).deleteNotesForever([
+        widget.noteId,
+      ]);
+      return;
+    }
+
+    if (_localDraftDirty) {
+      await _flushLocalDraft();
+    }
+  }
+
+  Future<bool> _shouldDiscardUnchangedDraft() async {
+    final scene = _markdrawController.currentScene;
+    final hasUserContent =
+        scene.smartLayout != null ||
+        scene.activeElements.any((element) => !element.isCanvasPage);
+    if (hasUserContent) {
+      return false;
+    }
+
+    final libraryIndex = await ref.read(libraryIndexProvider.future);
+    final note = _noteById(libraryIndex.notes, widget.noteId);
+    if (note == null || note.kind != LibraryFilter.notes) {
+      return false;
+    }
+    return note.title == '未命名${note.pageTemplate.displayName}';
   }
 
   void _flushLocalDraftOnExit() {
@@ -580,6 +624,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           ),
           FilledButton.icon(
             onPressed: () async {
+              await _shareCollaborationInvitation();
+            },
+            icon: const Icon(Icons.ios_share),
+            label: const Text('系统分享'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
               await Clipboard.setData(ClipboardData(text: shareText));
               if (!context.mounted) {
                 return;
@@ -594,6 +645,37 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             label: Text(roomLink == null ? '复制房间码' : '复制链接'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _shareCollaborationInvitation() async {
+    final state = ref.read(whiteboardViewModelProvider);
+    final shareText = state.roomLink ?? state.roomValue;
+    if (shareText == null) {
+      return;
+    }
+    final result = await createShareService().share(
+      ShareTextPayload(title: 'FlowMuse 协作邀请', text: shareText),
+    );
+    if (!mounted || result == ShareResult.dismissed) {
+      return;
+    }
+    if (result == ShareResult.unavailable) {
+      await Clipboard.setData(ClipboardData(text: shareText));
+    }
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result == ShareResult.unavailable
+              ? '系统分享不可用，邀请信息已复制'
+              : result == ShareResult.completed
+              ? '已打开系统分享面板'
+              : '分享失败，请稍后重试',
+        ),
       ),
     );
   }
@@ -657,17 +739,28 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _handleBack() async {
-    final state = ref.read(whiteboardViewModelProvider);
-    if (state.collaborating) {
-      await _leaveCollaboration();
-      if (!widget.temporaryCollaboration && mounted) {
-        _popWhenStable();
-      }
+    if (_handlingBack) {
       return;
     }
-    _disposingOrLeaving = true;
-    _markdrawController.closeTransientUiForSceneReplace();
-    _popWhenStable();
+    _handlingBack = true;
+    final state = ref.read(whiteboardViewModelProvider);
+    try {
+      if (state.collaborating) {
+        await _leaveCollaboration();
+        if (!widget.temporaryCollaboration && mounted) {
+          _popWhenStable();
+        }
+        return;
+      }
+      await _finalizeLocalDraftBeforeLeaving();
+      _disposingOrLeaving = true;
+      _markdrawController.closeTransientUiForSceneReplace();
+      _popWhenStable();
+    } finally {
+      if (mounted && !_disposingOrLeaving) {
+        _handlingBack = false;
+      }
+    }
   }
 
   Future<void> _endCollaboration() async {
@@ -832,7 +925,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (mounted) {
       runWhenUiStable(() {
         if (mounted) {
-          context.go(AppRoutes.whiteboardPath(noteId: note.id));
+          context.go(
+            AppRoutes.whiteboardPath(
+              noteId: note.id,
+              discardIfUnchanged: false,
+            ),
+          );
         }
       });
     }
@@ -1117,6 +1215,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       room: room,
       elements: _collaborationAdapter.serializeElements(elements),
     );
+  }
+
+  void _broadcastLiveFreedraw(editor_core.FreedrawElement element) {
+    if (!ref.read(whiteboardViewModelProvider).collaborating) return;
+    unawaited(_broadcastChangedElements([element]));
   }
 
   Future<void> _handleCollaborationMessage(CollaborationMessage message) async {
@@ -1598,6 +1701,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               onJoinCollaboration: _promptJoinCollaboration,
               onLeaveCollaboration: _leaveCollaboration,
               onEndCollaboration: _endCollaboration,
+              onShareCollaboration: _shareCollaborationInvitation,
               onPointerPresence: _broadcastPointerPresence,
               onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
               onDocumentRenamed: () {
@@ -1605,9 +1709,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               },
               onRecognizeInk: (request) =>
                   ref.read(inkRecognitionRepositoryProvider).recognize(request),
-              onSmartLayoutInk: (request) => ref
-                  .read(inkRecognitionRepositoryProvider)
-                  .smartLayout(request),
+              onSmartLayoutInk: (request) =>
+                  ref.read(inkRecognitionRepositoryProvider).smartLayout(request),
+              onLiveFreedrawChanged: state.collaborating
+                  ? _broadcastLiveFreedraw
+                  : null,
               onSceneChanged: (editorScene, SceneChangeSource source) {
                 switch (source) {
                   case SceneChangeSource.undo:

@@ -11,24 +11,25 @@ import 'tool.dart';
 /// Tool for erasing elements by clicking or dragging across them.
 ///
 /// Click erases the single topmost element under the pointer.
-/// Drag accumulates all elements the pointer passes over and erases them
-/// on pointer-up. Locked elements are skipped. Erasing any group member
+/// Drag erases each element as soon as the pointer reaches it. Locked elements
+/// are skipped. Erasing any group member
 /// erases the entire outermost group. Cascading delete removes bound text,
 /// releases frame children, cleans arrow bindings, and removes orphaned
 /// image files.
 class EraserTool implements Tool {
   bool _isDragging = false;
-  final Set<ElementId> _hitIds = {};
 
   @override
   ToolType get type => ToolType.eraser;
 
   @override
-  ToolResult? onPointerDown(Point point, ToolContext context, {double? pressure}) {
+  ToolResult? onPointerDown(
+    Point point,
+    ToolContext context, {
+    double? pressure,
+  }) {
     _isDragging = true;
-    _hitIds.clear();
-    _hitTestAndExpand(point, context);
-    return null;
+    return _eraseAt(point, context);
   }
 
   @override
@@ -39,19 +40,18 @@ class EraserTool implements Tool {
     double? pressure,
   }) {
     if (!_isDragging) return null;
-    _hitTestAndExpand(point, context);
-    return null;
+    return _eraseAt(point, context);
   }
 
   @override
-  ToolResult? onPointerUp(Point point, ToolContext context, {double? pressure}) {
+  ToolResult? onPointerUp(
+    Point point,
+    ToolContext context, {
+    double? pressure,
+  }) {
     if (!_isDragging) return null;
-    _hitTestAndExpand(point, context);
-    final idsToDelete = Set<ElementId>.from(_hitIds);
     _isDragging = false;
-    _hitIds.clear();
-    if (idsToDelete.isEmpty) return null;
-    return _buildDeleteResults(idsToDelete, context);
+    return _eraseAt(point, context);
   }
 
   @override
@@ -69,32 +69,30 @@ class EraserTool implements Tool {
   }
 
   @override
-  ToolOverlay? get overlay {
-    if (!_isDragging || _hitIds.isEmpty) return null;
-    return ToolOverlay(eraserElementIds: Set.unmodifiable(_hitIds));
-  }
+  ToolOverlay? get overlay => null;
 
   @override
   void reset() {
     _isDragging = false;
-    _hitIds.clear();
   }
 
-  /// Hit-test at [point], skip locked elements, expand groups.
-  void _hitTestAndExpand(Point point, ToolContext context) {
+  /// Deletes the hit element immediately, expanding its outermost group.
+  ToolResult? _eraseAt(Point point, ToolContext context) {
     final hit = context.scene.getElementAtPoint(point);
-    if (hit == null || hit.locked) return;
+    if (hit == null || hit.locked) return null;
 
     // Expand to outermost group
+    final idsToDelete = <ElementId>{};
     final groupId = GroupUtils.outermostGroupId(hit);
     if (groupId != null) {
       final members = GroupUtils.findGroupMembers(context.scene, groupId);
       for (final m in members) {
-        if (!m.locked) _hitIds.add(m.id);
+        if (!m.locked) idsToDelete.add(m.id);
       }
     } else {
-      _hitIds.add(hit.id);
+      idsToDelete.add(hit.id);
     }
+    return _buildDeleteResults(idsToDelete, context);
   }
 
   /// Build cascading delete results matching SelectTool's Delete behavior.

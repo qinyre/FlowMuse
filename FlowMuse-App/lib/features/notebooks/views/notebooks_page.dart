@@ -147,8 +147,17 @@ class NotebookDetailPage extends ConsumerWidget {
 
   final String notebookId;
 
-  void _openWhiteboard(BuildContext context, {required String noteId}) {
-    context.push(AppRoutes.whiteboardPath(noteId: noteId));
+  void _openWhiteboard(
+    BuildContext context, {
+    required String noteId,
+    bool discardIfUnchanged = false,
+  }) {
+    context.push(
+      AppRoutes.whiteboardPath(
+        noteId: noteId,
+        discardIfUnchanged: discardIfUnchanged,
+      ),
+    );
   }
 
   @override
@@ -173,7 +182,7 @@ class NotebookDetailPage extends ConsumerWidget {
             .read(libraryIndexProvider.notifier)
             .createNote(notebookId: notebookId);
         if (context.mounted) {
-          _openWhiteboard(context, noteId: note.id);
+          _openWhiteboard(context, noteId: note.id, discardIfUnchanged: true);
         }
       },
       onViewModeChanged: null,
@@ -186,7 +195,7 @@ class NotebookDetailPage extends ConsumerWidget {
               .read(libraryIndexProvider.notifier)
               .createNote(notebookId: notebookId);
           if (context.mounted) {
-            _openWhiteboard(context, noteId: note.id);
+            _openWhiteboard(context, noteId: note.id, discardIfUnchanged: true);
           }
         },
         onOpenNote: (item) {

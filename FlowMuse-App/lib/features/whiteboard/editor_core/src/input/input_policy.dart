@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'stroke_input_sample.dart';
 
 /// Device-specific sampling policy. Rendering remains platform-neutral; only
@@ -38,6 +40,19 @@ class InputPolicy {
     cornerProtectAngleRad: 0.9,
   );
 
+  /// Android pointer batches can be sparse during small, fast circles.
+  /// Keep the corner bypass for only near-reversal turns on that platform.
+  static const androidStylus = InputPolicy(
+    useRealPressure: true,
+    minCutoff: 8.0,
+    beta: 0.02,
+    pressureCutoff: 50.0,
+    pressureFloor: 0.18,
+    pressureCeiling: 0.82,
+    minDistance: 0.6,
+    cornerProtectAngleRad: 2.1,
+  );
+
   static const touch = InputPolicy(
     useRealPressure: false,
     minCutoff: 1.2,
@@ -58,12 +73,16 @@ class InputPolicy {
 }
 
 class InputPolicySelector {
-  const InputPolicySelector();
+  const InputPolicySelector({TargetPlatform? platform}) : _platform = platform;
+
+  final TargetPlatform? _platform;
 
   InputPolicy select(StrokeInputKind kind) {
     return switch (kind) {
-      StrokeInputKind.stylus ||
-      StrokeInputKind.invertedStylus => InputPolicy.stylus,
+      StrokeInputKind.stylus || StrokeInputKind.invertedStylus =>
+        (_platform ?? defaultTargetPlatform) == TargetPlatform.android
+            ? InputPolicy.androidStylus
+            : InputPolicy.stylus,
       StrokeInputKind.touch => InputPolicy.touch,
       StrokeInputKind.mouse || StrokeInputKind.unknown => InputPolicy.mouse,
     };

@@ -57,12 +57,16 @@ func (l *OpenAICompatibleSmartLayouter) Layout(ctx context.Context, request Smar
 				"content": "You convert whiteboard ink/text into a structured document. Return strict JSON only.",
 			},
 			{
-				"role":    "user",
-				"content": smartLayoutPrompt(string(payload)),
+				"role": "user",
+				"content": []map[string]any{
+					{
+						"type": "text",
+						"text": smartLayoutPrompt(string(payload)),
+					},
+				},
 			},
 		},
-		"response_format": map[string]any{"type": "json_object"},
-		"temperature":     0,
+		"temperature": 0,
 	})
 	if err != nil {
 		return SmartLayoutResponse{}, err
@@ -94,6 +98,7 @@ func (l *OpenAICompatibleSmartLayouter) Layout(ctx context.Context, request Smar
 	if err != nil {
 		return SmartLayoutResponse{}, err
 	}
+	content = smartLayoutJSONContent(content)
 	var result SmartLayoutResponse
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
 		var document SmartLayoutDocument
@@ -118,6 +123,20 @@ Return JSON shaped exactly as:
 Use page anchors to choose bounds. Include existing text in reading order. Do not include highlighter/image/shape context as text unless it is necessary for ordering.
 Input:
 ` + payload
+}
+
+func smartLayoutJSONContent(content string) string {
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "```") {
+		return content
+	}
+	content = strings.TrimPrefix(content, "```")
+	if newline := strings.IndexByte(content, '\n'); newline >= 0 {
+		content = content[newline+1:]
+	}
+	content = strings.TrimSpace(content)
+	content = strings.TrimSuffix(content, "```")
+	return strings.TrimSpace(content)
 }
 
 func openAIMessageContent(body []byte) (string, error) {

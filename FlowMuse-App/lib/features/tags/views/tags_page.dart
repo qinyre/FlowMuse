@@ -141,8 +141,17 @@ class TagDetailPage extends ConsumerWidget {
 
   final String tagId;
 
-  void _openWhiteboard(BuildContext context, {required String noteId}) {
-    context.push(AppRoutes.whiteboardPath(noteId: noteId));
+  void _openWhiteboard(
+    BuildContext context, {
+    required String noteId,
+    bool discardIfUnchanged = false,
+  }) {
+    context.push(
+      AppRoutes.whiteboardPath(
+        noteId: noteId,
+        discardIfUnchanged: discardIfUnchanged,
+      ),
+    );
   }
 
   @override
@@ -165,7 +174,7 @@ class TagDetailPage extends ConsumerWidget {
             .read(libraryIndexProvider.notifier)
             .createNote(tagIds: [tagId]);
         if (context.mounted) {
-          _openWhiteboard(context, noteId: note.id);
+          _openWhiteboard(context, noteId: note.id, discardIfUnchanged: true);
         }
       },
       onViewModeChanged: null,
@@ -178,7 +187,7 @@ class TagDetailPage extends ConsumerWidget {
               .read(libraryIndexProvider.notifier)
               .createNote(tagIds: [tagId]);
           if (context.mounted) {
-            _openWhiteboard(context, noteId: note.id);
+            _openWhiteboard(context, noteId: note.id, discardIfUnchanged: true);
           }
         },
         onOpenNote: (item) {

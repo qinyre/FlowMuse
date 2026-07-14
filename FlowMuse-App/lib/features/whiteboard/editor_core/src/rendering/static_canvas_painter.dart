@@ -517,23 +517,23 @@ class StaticCanvasPainter extends CustomPainter {
       case CanvasPageTemplate.blank:
         return;
       case CanvasPageTemplate.narrowLine:
-        for (var y = rect.top + 18; y < rect.bottom; y += 24) {
+        for (var y = rect.top + 72; y < rect.bottom; y += 96) {
           canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
         }
       case CanvasPageTemplate.wideLine:
-        for (var y = rect.top + 24; y < rect.bottom; y += 36) {
+        for (var y = rect.top + 96; y < rect.bottom; y += 144) {
           canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
         }
       case CanvasPageTemplate.grid:
-        for (var x = rect.left; x < rect.right; x += 32) {
+        for (var x = rect.left; x < rect.right; x += 64) {
           canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
         }
-        for (var y = rect.top; y < rect.bottom; y += 32) {
+        for (var y = rect.top; y < rect.bottom; y += 64) {
           canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
         }
       case CanvasPageTemplate.dotGrid:
-        for (var x = rect.left; x < rect.right; x += 32) {
-          for (var y = rect.top; y < rect.bottom; y += 32) {
+        for (var x = rect.left; x < rect.right; x += 64) {
+          for (var y = rect.top; y < rect.bottom; y += 64) {
             canvas.drawCircle(Offset(x, y), 1.5 / viewport.zoom, paint);
           }
         }
@@ -542,17 +542,17 @@ class StaticCanvasPainter extends CustomPainter {
       case CanvasPageTemplate.miGrid:
         _renderPracticeGrid(canvas, rect, paint, diagonal: true);
       case CanvasPageTemplate.narrowVerticalLine:
-        for (var x = rect.left + 18; x < rect.right; x += 24) {
+        for (var x = rect.left + 72; x < rect.right; x += 96) {
           canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
         }
       case CanvasPageTemplate.wideVerticalLine:
-        for (var x = rect.left + 24; x < rect.right; x += 36) {
+        for (var x = rect.left + 96; x < rect.right; x += 144) {
           canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
         }
       case CanvasPageTemplate.fourLineGrid:
-        for (var y = rect.top + 18; y + 24 < rect.bottom; y += 56) {
+        for (var y = rect.top + 72; y + 96 < rect.bottom; y += 224) {
           for (var i = 0; i < 4; i++) {
-            final lineY = y + i * 8;
+            final lineY = y + i * 32;
             canvas.drawLine(
               Offset(rect.left, lineY),
               Offset(rect.right, lineY),
@@ -650,7 +650,7 @@ class StaticCanvasPainter extends CustomPainter {
     double width,
     Paint paint,
   ) {
-    const height = 22.0;
+    const height = 44.0;
     final path = Path()
       ..moveTo(center.dx, center.dy - height / 2)
       ..lineTo(center.dx + width / 2, center.dy - height / 2)

@@ -233,6 +233,11 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Called whenever the scene changes (element add/update/remove).
   void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
+  void Function(FreedrawElement element)? onLiveFreedrawChanged;
+  Timer? _liveFreedrawTimer;
+  static const Duration _liveFreedrawBroadcastInterval = Duration(
+    milliseconds: 80,
+  );
 
   List<Element>? _lastChangedElements;
 
@@ -579,6 +584,7 @@ class MarkdrawController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _inkRecognitionTimer?.cancel();
+    _liveFreedrawTimer?.cancel();
     _imageCache.dispose();
     keyboardFocusNode.dispose();
     textEditingController.dispose();
@@ -637,7 +643,7 @@ class MarkdrawController extends ChangeNotifier {
   void switchTool(ToolType type) {
     // In view mode, only the hand tool is allowed
     if (_viewMode && type != ToolType.hand) return;
-    _activeTool.reset();
+    _cancelActiveToolInteraction();
     _activeTool = createTool(type);
     _editorState = _editorState.copyWith(
       activeToolType: type,
@@ -1024,9 +1030,14 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   String? _pendingRecognitionSessionId(ToolResult result) {
-    if (result is AddElementResult) {
-      final element = result.element;
+    final element = switch (result) {
+      AddElementResult(:final element) ||
+      UpdateElementResult(:final element) => element,
+      _ => null,
+    };
+    if (element != null) {
       if (element is FreedrawElement &&
+          element.isComplete &&
           element.customData?[recognitionStrokePendingKey] == true) {
         final sessionId = element.customData?[recognitionStrokeSessionKey];
         return sessionId is String ? sessionId : null;
@@ -1657,9 +1668,8 @@ class MarkdrawController extends ChangeNotifier {
       );
       _editorState = _editorState.applyResult(UpdateElementResult(updated));
     }
-    _lastChangedElements = [
-      if (_editorState.scene.getElementById(id) case final changed?) changed,
-    ];
+    final changed = _editorState.scene.getElementById(id);
+    _lastChangedElements = changed == null ? const [] : [changed];
     onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
   }
@@ -1907,6 +1917,7 @@ class MarkdrawController extends ChangeNotifier {
           pressure: r.pressure,
         ),
       );
+      _scheduleLiveFreedraw();
       mousePosition = event.localPosition;
       notifyListeners();
       return;
@@ -1920,6 +1931,7 @@ class MarkdrawController extends ChangeNotifier {
     applyResult(
       _activeTool.onPointerMove(point, toolContext, screenDelta: event.delta),
     );
+    _scheduleLiveFreedraw();
     mousePosition = event.localPosition;
     notifyListeners();
   }
@@ -1943,6 +1955,7 @@ class MarkdrawController extends ChangeNotifier {
         _activeDrawPointerId != null) {
       // --- Unified modeler path for freedraw ---
       if (event.pointer != _activeDrawPointerId) return;
+      _cancelPendingLiveFreedraw();
       final sample = _normalizer.normalize(event, phase: StrokePhase.up);
       _recorder?.record(
         sample,
@@ -2055,7 +2068,7 @@ class MarkdrawController extends ChangeNotifier {
     _modeler?.reset(reason: 'cancel');
     _modeler = null;
     _activeDrawPointerId = null;
-    _activeTool.reset();
+    _cancelActiveToolInteraction();
     _sceneBeforeDrag = null;
   }
 
@@ -2132,8 +2145,44 @@ class MarkdrawController extends ChangeNotifier {
     _activeDrawPointerId = null;
     _temporaryTouchPanPointerId = null;
     _activeStylusPointerId = null;
-    _activeTool.reset();
+    _cancelActiveToolInteraction();
     _sceneBeforeDrag = null;
+  }
+
+  void _cancelActiveToolInteraction() {
+    if (_activeTool is FreedrawTool) {
+      _cancelPendingLiveFreedraw();
+      _emitLiveFreedraw((_activeTool as FreedrawTool).cancelStroke());
+    } else {
+      _activeTool.reset();
+    }
+  }
+
+  void _emitLiveFreedraw([FreedrawElement? element]) {
+    final callback = onLiveFreedrawChanged;
+    if (callback == null) return;
+    final live =
+        element ??
+        (_activeTool is FreedrawTool
+            ? (_activeTool as FreedrawTool).buildLiveElement(toolContext)
+            : null);
+    if (live == null) return;
+    callback(applyDefaultStyleToElement(live) as FreedrawElement);
+  }
+
+  void _scheduleLiveFreedraw() {
+    if (onLiveFreedrawChanged == null || _liveFreedrawTimer != null) {
+      return;
+    }
+    _liveFreedrawTimer = Timer(_liveFreedrawBroadcastInterval, () {
+      _liveFreedrawTimer = null;
+      _emitLiveFreedraw();
+    });
+  }
+
+  void _cancelPendingLiveFreedraw() {
+    _liveFreedrawTimer?.cancel();
+    _liveFreedrawTimer = null;
   }
 
   /// Marks the end of a two-finger viewport gesture.
@@ -2293,6 +2342,10 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Dispatches a key event to the active tool (for programmatic shortcuts).
   void dispatchKey(String key, {bool shift = false, bool ctrl = false}) {
+    if (key == 'Escape' && _activeTool is FreedrawTool) {
+      _cancelActiveToolInteraction();
+      return;
+    }
     final result = _activeTool.onKeyEvent(
       key,
       shift: shift,
@@ -2660,15 +2713,25 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   Future<bool> runGlobalSmartLayout() async {
-    final callback = onSmartLayoutInk;
-    if (callback == null) return false;
-    final request = _buildSmartLayoutRequest();
+    final layoutCallback = onSmartLayoutInk;
+    if (layoutCallback == null || _recognizingInk) return false;
+    final ink = _smartLayoutInkElements();
+    final recognizedText = ink.isEmpty
+        ? const <SmartLayoutElementRequest>[]
+        : await _recognizeInkForSmartLayout(ink);
+    if (_disposed) return false;
+    final request = _buildSmartLayoutRequest(
+      recognizedText: recognizedText,
+      includeInk:
+          ink.isNotEmpty && recognizedText.isEmpty && onRecognizeInk == null,
+    );
     if (request.ink.isEmpty && request.text.isEmpty) return false;
     SmartLayoutResponse response;
     try {
-      response = await callback(request);
-    } catch (_) {
-      return false;
+      response = await layoutCallback(request);
+    } catch (error, stackTrace) {
+      debugPrint('[$_logTag] 智能排版请求失败: $error');
+      Error.throwWithStackTrace(error, stackTrace);
     }
     if (_disposed || response.document.isEmpty) return false;
     final replacement = _elementsFromSmartLayout(response.document);
@@ -2688,13 +2751,47 @@ class MarkdrawController extends ChangeNotifier {
     return true;
   }
 
+  Future<List<SmartLayoutElementRequest>> _recognizeInkForSmartLayout(
+    List<FreedrawElement> ink,
+  ) async {
+    final recognizeCallback = onRecognizeInk;
+    if (recognizeCallback == null) return const [];
+    final request = _buildInkRecognitionRequest(
+      ElementId.generate().value,
+      ink,
+    );
+    if (request == null) return const [];
+    _recognizingInk = true;
+    try {
+      final result = await recognizeCallback(request);
+      final elements = <SmartLayoutElementRequest>[];
+      for (final element in result.elements) {
+        if (element.type != 'text' && element.type != 'math') {
+          continue;
+        }
+        final request = _smartLayoutRecognizedElementRequest(element);
+        if (request != null) {
+          elements.add(request);
+        }
+      }
+      return elements;
+    } catch (_) {
+      return const [];
+    } finally {
+      _recognizingInk = false;
+    }
+  }
+
   String exportSmartLayout(SmartLayoutExportFormat format) {
     final document = _editorState.scene.smartLayout;
     if (document == null || document.isEmpty) return '';
     return SmartLayoutExporter.export(document, format);
   }
 
-  SmartLayoutRequest _buildSmartLayoutRequest() {
+  SmartLayoutRequest _buildSmartLayoutRequest({
+    List<SmartLayoutElementRequest> recognizedText = const [],
+    bool includeInk = true,
+  }) {
     final pages = _layout.ensurePage().pages.map((page) {
       final geometry = TemplateAnchorResolver.resolve(page);
       return SmartLayoutPageRequest(
@@ -2724,11 +2821,14 @@ class MarkdrawController extends ChangeNotifier {
     }).toList();
     return SmartLayoutRequest(
       pages: pages,
-      ink: [
-        for (final element in _smartLayoutInkElements())
-          _smartElementRequest(element)!,
-      ],
+      ink: includeInk
+          ? [
+              for (final element in _smartLayoutInkElements())
+                _smartElementRequest(element)!,
+            ]
+          : const [],
       text: [
+        ...recognizedText,
         for (final element
             in _editorState.scene.activeElements.whereType<TextElement>())
           _smartElementRequest(element)!,
@@ -2740,6 +2840,28 @@ class MarkdrawController extends ChangeNotifier {
               !element.isCanvasPage)
             _smartElementRequest(element)!,
       ],
+    );
+  }
+
+  SmartLayoutElementRequest? _smartLayoutRecognizedElementRequest(
+    InkRecognizedElement element,
+  ) {
+    final text = (element.type == 'math' ? element.latex : element.text)
+        ?.trim();
+    final resolvedText = text == null || text.isEmpty
+        ? element.text?.trim()
+        : text;
+    if (resolvedText == null || resolvedText.isEmpty) return null;
+    return SmartLayoutElementRequest(
+      id: ElementId.generate().value,
+      type: element.type,
+      bounds: Bounds.fromLTWH(
+        element.x,
+        element.y,
+        math.max(element.width, 1.0),
+        math.max(element.height, 1.0),
+      ),
+      text: resolvedText,
     );
   }
 

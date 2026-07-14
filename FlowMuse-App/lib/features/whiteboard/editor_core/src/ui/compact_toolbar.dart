@@ -33,10 +33,12 @@ class CompactToolbar extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: cs.outlineVariant),
           boxShadow: [
+            BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
+            BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
             BoxShadow(
-              color: cs.primary.withValues(alpha: 0.12),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              color: cs.shadow.withValues(alpha: 0.05),
+              blurRadius: 14,
+              offset: const Offset(0, 7),
             ),
           ],
         ),
@@ -151,10 +153,37 @@ class CompactToolbar extends StatelessWidget {
 
   Future<void> _runGlobalSmartLayout(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    final changed = await controller.runGlobalSmartLayout();
+    bool changed;
+    Object? error;
+    try {
+      changed = await controller.runGlobalSmartLayout();
+    } catch (caught) {
+      changed = false;
+      error = caught;
+    }
     messenger.showSnackBar(
-      SnackBar(content: Text(changed ? '智能排版已应用' : '智能排版失败，场景未修改')),
+      SnackBar(
+        content: Text(
+          _smartLayoutMessage(changed: changed, error: error),
+          maxLines: 5,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
     );
+  }
+
+  String _smartLayoutMessage({required bool changed, Object? error}) {
+    if (changed) return '智能排版已应用';
+    if (error == null) return '智能排版失败，场景未修改';
+    return '智能排版失败：${_readableError(error)}';
+  }
+
+  String _readableError(Object error) {
+    final text = error is StateError ? error.message : error.toString();
+    return text
+        .replaceFirst(RegExp(r'^Bad state:\s*'), '')
+        .replaceFirst(RegExp(r'^Exception:\s*'), '')
+        .trim();
   }
 }
 
