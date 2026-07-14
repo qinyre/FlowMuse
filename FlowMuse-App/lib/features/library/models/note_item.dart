@@ -24,6 +24,24 @@ enum PageTemplate {
   ancientBook,
 }
 
+extension PageTemplateLabel on PageTemplate {
+  String get displayName {
+    return switch (this) {
+      PageTemplate.blank => '空白',
+      PageTemplate.narrowLine => '窄线格',
+      PageTemplate.wideLine => '宽线格',
+      PageTemplate.grid => '方格',
+      PageTemplate.dotGrid => '点阵',
+      PageTemplate.tianGrid => '田字格',
+      PageTemplate.miGrid => '米字格',
+      PageTemplate.narrowVerticalLine => '窄竖线格',
+      PageTemplate.wideVerticalLine => '宽竖线格',
+      PageTemplate.fourLineGrid => '四线三格',
+      PageTemplate.ancientBook => '古籍版式',
+    };
+  }
+}
+
 class NoteItem {
   const NoteItem({
     required this.id,

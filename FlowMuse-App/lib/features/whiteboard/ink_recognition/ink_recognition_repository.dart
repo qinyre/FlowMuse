@@ -24,6 +24,7 @@ class InkRecognitionRepository {
   final AuthTokenStore _tokenStore;
   static const int _connectTimeoutMs = 8000;
   static const int _readTimeoutMs = 15000;
+  static const int _smartLayoutReadTimeoutMs = 130000;
 
   Future<InkRecognitionResult> recognize(InkRecognitionRequest request) async {
     final totalPoints = request.strokes.fold<int>(
@@ -172,7 +173,7 @@ class InkRecognitionRepository {
       },
       body: bodyJson,
       connectTimeoutMs: _connectTimeoutMs,
-      readTimeoutMs: 60000,
+      readTimeoutMs: _smartLayoutReadTimeoutMs,
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(

@@ -50,6 +50,28 @@ cd D:\Github\FlowMuse\2024-se-17\FlowMuse-Server
 
 `Dockerfile` 和 `docker-compose.yml` 已放在 `FlowMuse-Server` 目录。
 
+首次部署前复制服务端环境变量模板：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+然后编辑 `FlowMuse-Server/.env`，填入手写识别和智能排版密钥：
+
+```dotenv
+FLOWMUSE_MYSCRIPT_APP_KEY=你的 MyScript App Key
+FLOWMUSE_MYSCRIPT_HMAC_KEY=你的 MyScript HMAC Key
+FLOWMUSE_MYSCRIPT_ENDPOINT=https://cloud.myscript.com/api/v4.0/iink/batch
+FLOWMUSE_RECOGNITION_TIMEOUT=20s
+
+FLOWMUSE_AI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+FLOWMUSE_AI_API_KEY=你的豆包方舟 API Key
+FLOWMUSE_AI_MODEL=doubao-seed-2-1-turbo-260628
+FLOWMUSE_AI_TIMEOUT=120s
+```
+
+`.env` 已被 `.gitignore` 忽略，不要提交真实密钥。Docker Compose 会通过 `env_file: .env` 注入这些变量；本地直接运行 Go 服务时也会自动读取 `FlowMuse-Server/.env`。
+
 一站式启动 PostgreSQL、MinIO 和 FlowMuse Go 协作后端：
 
 ```powershell

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -39,6 +41,8 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	_ = godotenv.Load(".env", "FlowMuse-Server/.env")
+
 	cfg := Config{
 		Addr:           env("FLOWMUSE_ADDR", ":3000"),
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
@@ -67,10 +71,10 @@ func Load() (Config, error) {
 			"FLOWMUSE_RECOGNITION_TIMEOUT",
 			20*time.Second,
 		),
-		AIBaseURL: os.Getenv("FLOWMUSE_AI_BASE_URL"),
-		AIAPIKey:  os.Getenv("FLOWMUSE_AI_API_KEY"),
-		AIModel:   os.Getenv("FLOWMUSE_AI_MODEL"),
-		AITimeout: envDuration("FLOWMUSE_AI_TIMEOUT", 60*time.Second),
+		AIBaseURL: env("FLOWMUSE_AI_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+		AIAPIKey:  envFirst("FLOWMUSE_AI_API_KEY", "ARK_API_KEY"),
+		AIModel:   env("FLOWMUSE_AI_MODEL", "doubao-seed-2-1-turbo-260628"),
+		AITimeout: envDuration("FLOWMUSE_AI_TIMEOUT", 120*time.Second),
 	}
 	cfg.S3AccessKeyID = os.Getenv("FLOWMUSE_S3_ACCESS_KEY_ID")
 	cfg.S3SecretAccessKey = os.Getenv("FLOWMUSE_S3_SECRET_ACCESS_KEY")
@@ -99,6 +103,15 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envFirst(keys ...string) string {
+	for _, key := range keys {
+		if value := os.Getenv(key); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func envBool(key string, fallback bool) bool {

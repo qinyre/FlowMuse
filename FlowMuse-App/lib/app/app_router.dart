@@ -46,8 +46,15 @@ class AppRoutes {
     return '/tags/${Uri.encodeComponent(tagId)}';
   }
 
-  static String whiteboardPath({required String noteId}) {
-    return '/whiteboard/${Uri.encodeComponent(noteId)}';
+  static String whiteboardPath({
+    required String noteId,
+    bool discardIfUnchanged = true,
+  }) {
+    final encodedNoteId = Uri.encodeComponent(noteId);
+    if (!discardIfUnchanged) {
+      return '/whiteboard/$encodedNoteId';
+    }
+    return '/whiteboard/$encodedNoteId?discardIfUnchanged=true';
   }
 }
 
@@ -197,7 +204,14 @@ GoRouter createAppRouter() {
         path: AppRoutes.whiteboard,
         pageBuilder: (context, state) {
           final noteId = state.pathParameters['noteId'] ?? 'note-untitled';
-          return _workspacePage(state, child: WhiteboardPage(noteId: noteId));
+          return _workspacePage(
+            state,
+            child: WhiteboardPage(
+              noteId: noteId,
+              discardIfUnchanged:
+                  state.uri.queryParameters['discardIfUnchanged'] == 'true',
+            ),
+          );
         },
       ),
     ],

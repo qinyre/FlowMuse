@@ -97,7 +97,6 @@ class SqliteLibraryRepository implements LibraryRepository {
   SqliteLibraryRepository(this._openDatabase);
 
   static const _uuid = Uuid();
-  static const _defaultNoteTitle = '未命名笔记';
 
   final Future<Database> Function() _openDatabase;
 
@@ -159,7 +158,7 @@ class SqliteLibraryRepository implements LibraryRepository {
       note = NoteItem(
         id: 'note-${_uuid.v4()}',
         title: trimmedTitle == null || trimmedTitle.isEmpty
-            ? _defaultNoteTitle
+            ? _defaultNoteTitle(pageTemplate)
             : trimmedTitle,
         updatedAt: now,
         kind: kind,
@@ -211,7 +210,7 @@ class SqliteLibraryRepository implements LibraryRepository {
       _noteToRow(
         NoteItem(
           id: noteId,
-          title: _defaultNoteTitle,
+          title: _defaultNoteTitle(PageTemplate.blank),
           updatedAt: now,
           kind: LibraryFilter.notes,
           coverColor:
@@ -976,6 +975,10 @@ T _enumByName<T extends Enum>(List<T> values, Object? raw, T fallback) {
     }
   }
   return fallback;
+}
+
+String _defaultNoteTitle(PageTemplate pageTemplate) {
+  return '未命名${pageTemplate.displayName}';
 }
 
 const _noteColors = [
