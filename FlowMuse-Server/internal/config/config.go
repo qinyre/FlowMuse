@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -39,6 +41,8 @@ type Config struct {
 }
 
 func Load() (Config, error) {
+	_ = godotenv.Load(".env", "FlowMuse-Server/.env")
+
 	cfg := Config{
 		Addr:           env("FLOWMUSE_ADDR", ":3000"),
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
