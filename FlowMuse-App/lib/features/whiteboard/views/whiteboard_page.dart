@@ -94,6 +94,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   int _openGeneration = 0;
   RealtimeConnectionStatus? _lastRealtimeStatus;
   bool _disposingOrLeaving = false;
+  bool _handlingBack = false;
   Future<void> _remoteSceneQueue = Future<void>.value();
 
   // LocalDraftScheduler — 500ms debounce
@@ -717,18 +718,28 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _handleBack() async {
-    final state = ref.read(whiteboardViewModelProvider);
-    if (state.collaborating) {
-      await _leaveCollaboration();
-      if (!widget.temporaryCollaboration && mounted) {
-        _popWhenStable();
-      }
+    if (_handlingBack) {
       return;
     }
-    await _finalizeLocalDraftBeforeLeaving();
-    _disposingOrLeaving = true;
-    _markdrawController.closeTransientUiForSceneReplace();
-    _popWhenStable();
+    _handlingBack = true;
+    final state = ref.read(whiteboardViewModelProvider);
+    try {
+      if (state.collaborating) {
+        await _leaveCollaboration();
+        if (!widget.temporaryCollaboration && mounted) {
+          _popWhenStable();
+        }
+        return;
+      }
+      await _finalizeLocalDraftBeforeLeaving();
+      _disposingOrLeaving = true;
+      _markdrawController.closeTransientUiForSceneReplace();
+      _popWhenStable();
+    } finally {
+      if (mounted && !_disposingOrLeaving) {
+        _handlingBack = false;
+      }
+    }
   }
 
   Future<void> _endCollaboration() async {
@@ -1565,12 +1576,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         : const <CollaborationParticipantBadge>[];
 
     return PopScope(
-      canPop: !widget.temporaryCollaboration || _temporarySaved,
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop || !widget.temporaryCollaboration) {
+        if (didPop) {
           return;
         }
-        unawaited(_leaveCollaboration());
+        if (widget.temporaryCollaboration) {
+          unawaited(_leaveCollaboration());
+        } else {
+          unawaited(_handleBack());
+        }
       },
       child: Scaffold(
         backgroundColor: effectivePreset.backgroundEnd,
