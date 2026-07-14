@@ -92,7 +92,7 @@ class _TextEditingOverlayState extends State<TextEditingOverlay> {
     final zoom = controller.editorState.viewport.zoom;
     final textElem = element is TextElement ? element : null;
     final fontSize = (textElem?.fontSize ?? 20.0) * zoom;
-    final fontFamily = textElem?.fontFamily ?? 'Excalifont';
+    final fontFamily = textElem?.fontFamily ?? TextElement.defaultFontFamily;
     final lineHeight = textElem?.lineHeight ?? 1.25;
     final textColor = parseColor(element.strokeColor);
     final flutterTextAlign = switch (textElem?.textAlign) {

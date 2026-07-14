@@ -115,7 +115,9 @@ class ExcalidrawJsonCodec {
         ...base,
         'text': el.text,
         'fontSize': el.fontSize,
-        'fontFamily': fontFamilyToNumber[el.fontFamily] ?? 5,
+        'fontFamily':
+            fontFamilyToNumber[el.fontFamily] ??
+            fontFamilyToNumber[TextElement.defaultFontFamily]!,
         'textAlign': el.textAlign.name,
         'containerId': el.containerId,
         'lineHeight': el.lineHeight,
@@ -517,16 +519,17 @@ class ExcalidrawJsonCodec {
     List<ParseWarning> warnings,
   ) {
     final num? familyNum = raw['fontFamily'] as num?;
-    if (familyNum == null) return 'Excalifont';
+    if (familyNum == null) return TextElement.defaultFontFamily;
     final name = fontFamilyFromNumber[familyNum.toInt()];
     if (name != null) return name;
     warnings.add(
       ParseWarning(
         line: index,
-        message: 'Unknown font family ${familyNum.toInt()}, using Excalifont',
+        message:
+            'Unknown font family ${familyNum.toInt()}, using ${TextElement.defaultFontFamily}',
       ),
     );
-    return 'Excalifont';
+    return TextElement.defaultFontFamily;
   }
 
   /// Converts an [Arrowhead] enum to its Excalidraw snake_case name.

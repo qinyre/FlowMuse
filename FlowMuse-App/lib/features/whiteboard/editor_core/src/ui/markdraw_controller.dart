@@ -3129,7 +3129,7 @@ class MarkdrawController extends ChangeNotifier {
       height: math.max(block.bounds.size.height, 28),
       text: text,
       fontSize: block.type == 'formula' ? 20 : 20,
-      fontFamily: _defaultStyle.fontFamily ?? 'Excalifont',
+      fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
       lineHeight: 1.25,
       customData: {
         'flowMuse': {
@@ -3174,7 +3174,7 @@ class MarkdrawController extends ChangeNotifier {
       height: math.max(initialBounds.size.height, 28),
       text: text,
       fontSize: anchor?.fontSize ?? (block.type == 'heading' ? 28 : 20),
-      fontFamily: _defaultStyle.fontFamily ?? 'Excalifont',
+      fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
       lineHeight: _textLineHeightForTemplateAnchor(anchor),
       customData: {
         'flowMuse': {

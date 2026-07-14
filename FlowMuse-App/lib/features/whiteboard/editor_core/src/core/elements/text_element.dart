@@ -12,6 +12,8 @@ enum VerticalAlign { top, middle, bottom }
 
 /// A text drawing element.
 class TextElement extends Element {
+  static const defaultFontFamily = 'Nunito';
+
   final String text;
   final double fontSize;
   final String fontFamily;
@@ -29,7 +31,7 @@ class TextElement extends Element {
     required super.height,
     required this.text,
     this.fontSize = 20.0,
-    this.fontFamily = 'Excalifont',
+    this.fontFamily = defaultFontFamily,
     this.textAlign = TextAlign.left,
     this.verticalAlign = VerticalAlign.middle,
     this.containerId,

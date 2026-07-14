@@ -119,7 +119,7 @@ class SketchLineSerializer {
             : 'text-size=${_formatNum(labelElement.fontSize)}',
       );
     }
-    if (labelElement.fontFamily != 'Excalifont') {
+    if (labelElement.fontFamily != TextElement.defaultFontFamily) {
       final fontAlias = _fontToAlias[labelElement.fontFamily];
       parts.add(
         fontAlias != null
@@ -190,7 +190,7 @@ class SketchLineSerializer {
             : 'size=${_formatNum(element.fontSize)}',
       );
     }
-    if (element.fontFamily != 'Excalifont') {
+    if (element.fontFamily != TextElement.defaultFontFamily) {
       final fontAlias = _fontToAlias[element.fontFamily];
       parts.add(
         fontAlias != null
