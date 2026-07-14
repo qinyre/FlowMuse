@@ -3623,26 +3623,20 @@ class MarkdrawController extends ChangeNotifier {
       return null;
     }
     final sourceRect = _coverThumbnailSourceRect(outputSize);
+    final fullPageBytes = await _exportCoverSourceImage(sourceRect);
+    if (fullPageBytes == null) {
+      return null;
+    }
+    return _scaleCoverSourceImage(fullPageBytes, outputSize);
+  }
 
-    const padding = 10.0;
-    final drawableWidth = math.max(1.0, outputSize.width - padding * 2);
-    final drawableHeight = math.max(1.0, outputSize.height - padding * 2);
-    final sourceWidth = math.max(1.0, sourceRect.width);
-    final sourceHeight = math.max(1.0, sourceRect.height);
-    final zoom = math.min(
-      drawableWidth / sourceWidth,
-      drawableHeight / sourceHeight,
-    );
-    final renderedWidth = sourceWidth * zoom;
-    final renderedHeight = sourceHeight * zoom;
-    final horizontalInset = (outputSize.width - renderedWidth) / 2;
-    final verticalInset = (outputSize.height - renderedHeight) / 2;
+  Future<Uint8List?> _exportCoverSourceImage(Rect sourceRect) async {
+    final sourceWidth = math.max(1.0, sourceRect.width).ceil();
+    final sourceHeight = math.max(1.0, sourceRect.height).ceil();
+    final outputSize = Size(sourceWidth.toDouble(), sourceHeight.toDouble());
     final viewport = ViewportState(
-      offset: Offset(
-        sourceRect.left - horizontalInset / zoom,
-        sourceRect.top - verticalInset / zoom,
-      ),
-      zoom: zoom,
+      offset: Offset(sourceRect.left, sourceRect.top),
+      zoom: 1,
     );
 
     final recorder = ui.PictureRecorder();
@@ -3663,14 +3657,63 @@ class MarkdrawController extends ChangeNotifier {
     ).paint(canvas, outputSize);
 
     final picture = recorder.endRecording();
-    final image = await picture.toImage(
-      outputSize.width.ceil(),
-      outputSize.height.ceil(),
-    );
+    final image = await picture.toImage(sourceWidth, sourceHeight);
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
     picture.dispose();
     return byteData?.buffer.asUint8List();
+  }
+
+  Future<Uint8List?> _scaleCoverSourceImage(
+    Uint8List sourceBytes,
+    Size outputSize,
+  ) async {
+    final codec = await ui.instantiateImageCodec(sourceBytes);
+    final frame = await codec.getNextFrame();
+    final sourceImage = frame.image;
+    try {
+      final sourceWidth = sourceImage.width.toDouble();
+      final sourceHeight = sourceImage.height.toDouble();
+      final scale = math.min(
+        outputSize.width / sourceWidth,
+        outputSize.height / sourceHeight,
+      );
+      final renderedWidth = sourceWidth * scale;
+      final renderedHeight = sourceHeight * scale;
+      final destinationRect = Rect.fromLTWH(
+        (outputSize.width - renderedWidth) / 2,
+        (outputSize.height - renderedHeight) / 2,
+        renderedWidth,
+        renderedHeight,
+      );
+
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawRect(
+        Offset.zero & outputSize,
+        Paint()..color = parseColor(_canvasBackgroundColor),
+      );
+      canvas.drawImageRect(
+        sourceImage,
+        Rect.fromLTWH(0, 0, sourceWidth, sourceHeight),
+        destinationRect,
+        Paint()..filterQuality = FilterQuality.high,
+      );
+
+      final picture = recorder.endRecording();
+      final thumbnailImage = await picture.toImage(
+        outputSize.width.ceil(),
+        outputSize.height.ceil(),
+      );
+      final byteData = await thumbnailImage.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      thumbnailImage.dispose();
+      picture.dispose();
+      return byteData?.buffer.asUint8List();
+    } finally {
+      sourceImage.dispose();
+    }
   }
 
   Rect _coverThumbnailSourceRect(Size outputSize) {
