@@ -145,6 +145,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
   ToolbarDock _toolbarDock = ToolbarDock.top;
   bool _toolbarCollapsed = false;
   bool _propertyPanelCollapsed = false;
+  String _propertyPanelContext = '';
 
   MarkdrawController get _controller =>
       widget.controller ??
@@ -194,7 +195,13 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     if (!mounted) {
       return;
     }
-    setState(() => _propertyPanelCollapsed = false);
+    final context = _propertyPanelContextKey();
+    setState(() {
+      if (_propertyPanelContext != context) {
+        _propertyPanelCollapsed = false;
+      }
+      _propertyPanelContext = context;
+    });
   }
 
   Size _getCanvasSize() => context.size ?? const Size(800, 600);
@@ -230,7 +237,22 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
   }
 
   void _collapsePropertyPanel() {
-    setState(() => _propertyPanelCollapsed = true);
+    setState(() {
+      _propertyPanelCollapsed = true;
+      _propertyPanelContext = _propertyPanelContextKey();
+    });
+  }
+
+  void _expandPropertyPanel() {
+    setState(() => _propertyPanelCollapsed = false);
+  }
+
+  String _propertyPanelContextKey() {
+    final selectedIds = _controller.selectedElements
+        .map((element) => element.id)
+        .toList()
+      ..sort();
+    return '${_controller.editorState.activeToolType.name}:${selectedIds.join(',')}';
   }
 
   Widget _buildToolbar({required bool compact}) {
@@ -553,7 +575,17 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
             (_controller.selectedElements.isNotEmpty ||
                 _controller.isCreationTool))
           if (_propertyPanelCollapsed)
-            const SizedBox.shrink()
+            Positioned(
+              top: topChromeOffset,
+              left: propertyPanelOnRight ? null : 0,
+              right: propertyPanelOnRight ? 0 : null,
+              child: StudioRailIconButton(
+                tooltip: '展开属性面板',
+                size: 40,
+                onPressed: _expandPropertyPanel,
+                child: const Icon(Icons.tune, size: 20),
+              ),
+            )
           else
             Positioned(
               top: topChromeOffset,
