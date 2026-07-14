@@ -100,10 +100,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _editorPreferencesApplied = false;
   Future<void> _remoteSceneQueue = Future<void>.value();
 
-  // LocalDraftScheduler — 500ms debounce
+  // LocalDraftScheduler — debounce duration comes from editor preferences.
   Timer? _localDraftTimer;
   bool _localDraftDirty = false;
-  static const Duration _localDraftDebounce = Duration(milliseconds: 500);
 
   Scene? _previousEditorScene;
 
@@ -335,7 +334,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void _scheduleLocalDraft() {
     _localDraftDirty = true;
     _localDraftTimer?.cancel();
-    _localDraftTimer = Timer(_localDraftDebounce, _flushLocalDraft);
+    final interval = ref
+        .read(editorPreferencesProvider)
+        .value
+        ?.autosaveInterval
+        .duration;
+    // null interval = auto-save disabled; the draft is still flushed on exit
+    // and on lifecycle pause via _flushLocalDraftOnExit.
+    if (interval == null) return;
+    _localDraftTimer = Timer(interval, _flushLocalDraft);
   }
 
   Future<void> _flushLocalDraft() async {

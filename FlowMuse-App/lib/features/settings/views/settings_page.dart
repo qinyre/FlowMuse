@@ -22,6 +22,7 @@ import '../../../shared/widgets/shared_sidebar.dart';
 import '../../../shared/widgets/theme_hero.dart';
 import '../../account/view_models/account_view_model.dart';
 import '../../account/widgets/account_avatar.dart';
+import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
 import '../../whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import '../../whiteboard/models/editor_preferences.dart';
@@ -88,7 +89,7 @@ enum _SettingsSection {
   localBackup(LucideIcons.download, '本地备份', '导出和恢复本机库索引、白板场景与主题设置'),
   cloudBackup(LucideIcons.database, '网盘备份', '云端同步入口预留'),
   theme(LucideIcons.palette, '主题设置', '切换当前工作区视觉主题'),
-  document(LucideIcons.fileCog, '文档设置', '默认文档行为预留'),
+  document(LucideIcons.fileCog, '文档设置', '自动保存与新建文档默认值'),
   tools(LucideIcons.wrench, '工具设置', '默认工具与每种笔形的颜色、粗细'),
   stylus(LucideIcons.penLine, '手写笔设置', '压感曲线与防误触'),
   gestures(LucideIcons.hand, '手势设置', '缩放和平移手势'),
@@ -287,6 +288,7 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
             selectedPreset: widget.selectedPreset,
             onPresetChanged: widget.onPresetChanged,
           ),
+          _SettingsSection.document => const _DocumentSettingsSection(),
           _SettingsSection.tools => const _ToolsSettingsSection(),
           _SettingsSection.stylus => const _StylusSettingsSection(),
           _SettingsSection.gestures => const _GestureSettingsSection(),
@@ -1387,6 +1389,149 @@ class _ToolsSettingsSection extends ConsumerWidget {
         ],
       );
     });
+  }
+}
+
+class _DocumentSettingsSection extends ConsumerWidget {
+  const _DocumentSettingsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return _editorPreferencesBody(ref, (preferences, notifier) {
+      return _SettingsCard(
+        child: Column(
+          children: [
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: const Icon(LucideIcons.save),
+              title: const Text('自动保存间隔'),
+              subtitle: Text(
+                preferences.autosaveInterval == AutosaveInterval.off
+                    ? '仅在退出或切换到后台时保存；强制结束应用可能丢失修改'
+                    : '编辑后自动保存草稿的等待时间',
+              ),
+              trailing: DropdownButton<AutosaveInterval>(
+                value: preferences.autosaveInterval,
+                onChanged: (value) {
+                  if (value != null) {
+                    unawaited(notifier.setAutosaveInterval(value));
+                  }
+                },
+                items: AutosaveInterval.values
+                    .map(
+                      (interval) => DropdownMenuItem(
+                        value: interval,
+                        child: Text(_autosaveIntervalLabel(interval)),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: const Icon(LucideIcons.fileText),
+              title: const Text('默认文档类型'),
+              subtitle: const Text('新建笔记时预先选择'),
+              trailing: DropdownButton<CanvasLayoutType>(
+                value: preferences.defaultLayoutType,
+                onChanged: (value) {
+                  if (value != null) {
+                    unawaited(notifier.setDefaultLayoutType(value));
+                  }
+                },
+                items: CanvasLayoutType.values
+                    .map(
+                      (type) => DropdownMenuItem(
+                        value: type,
+                        child: Text(_layoutTypeLabel(type)),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: const Icon(LucideIcons.layoutTemplate),
+              title: const Text('默认页面模板'),
+              subtitle: const Text('仅用于以后新建的文档'),
+              trailing: DropdownButton<CanvasPageTemplate>(
+                value: preferences.defaultPageTemplate,
+                onChanged: (value) {
+                  if (value != null) {
+                    unawaited(notifier.setDefaultPageTemplate(value));
+                  }
+                },
+                items: CanvasPageTemplate.values
+                    .map(
+                      (template) => DropdownMenuItem(
+                        value: template,
+                        child: Text(_pageTemplateLabel(template)),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              leading: const Icon(LucideIcons.rows3),
+              title: const Text('默认页面排列'),
+              subtitle: const Text('分页文档的新页面排列方向'),
+              trailing: DropdownButton<CanvasPageFlow>(
+                value: preferences.defaultPageFlow,
+                onChanged: (value) {
+                  if (value != null) {
+                    unawaited(notifier.setDefaultPageFlow(value));
+                  }
+                },
+                items: CanvasPageFlow.values
+                    .map(
+                      (flow) => DropdownMenuItem(
+                        value: flow,
+                        child: Text(_pageFlowLabel(flow)),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
+String _layoutTypeLabel(CanvasLayoutType type) => switch (type) {
+  CanvasLayoutType.paged => '分页',
+  CanvasLayoutType.unbounded => '无限画布',
+};
+
+String _pageTemplateLabel(CanvasPageTemplate template) => PageTemplate.values
+    .firstWhere(
+      (value) => value.name == template.name,
+      orElse: () => PageTemplate.blank,
+    )
+    .displayName;
+
+String _pageFlowLabel(CanvasPageFlow flow) => switch (flow) {
+  CanvasPageFlow.topToBottom => '上下排列',
+  CanvasPageFlow.rightToLeft => '从右向左',
+};
+
+String _autosaveIntervalLabel(AutosaveInterval interval) {
+  switch (interval) {
+    case AutosaveInterval.halfSecond:
+      return '0.5 秒';
+    case AutosaveInterval.oneSecond:
+      return '1 秒';
+    case AutosaveInterval.threeSeconds:
+      return '3 秒';
+    case AutosaveInterval.fiveSeconds:
+      return '5 秒';
+    case AutosaveInterval.off:
+      return '关闭';
   }
 }
 

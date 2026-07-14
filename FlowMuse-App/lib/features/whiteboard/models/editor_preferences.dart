@@ -12,6 +12,21 @@ enum PressureCurvePreset {
   final double exponent;
 }
 
+/// Auto-save debounce interval for local drafts. `off` disables the
+/// debounce timer — drafts are only flushed on exit/lifecycle pause.
+enum AutosaveInterval {
+  halfSecond(Duration(milliseconds: 500)),
+  oneSecond(Duration(seconds: 1)),
+  threeSeconds(Duration(seconds: 3)),
+  fiveSeconds(Duration(seconds: 5)),
+  off(null);
+
+  const AutosaveInterval(this.duration);
+
+  /// The debounce duration, or null when auto-save is disabled.
+  final Duration? duration;
+}
+
 @immutable
 class EditorPreferences {
   EditorPreferences({
@@ -23,6 +38,10 @@ class EditorPreferences {
     this.palmRejectionEnabled = true,
     this.twoFingerZoomEnabled = true,
     this.singleFingerPanEnabled = true,
+    this.autosaveInterval = AutosaveInterval.halfSecond,
+    this.defaultLayoutType = CanvasLayoutType.paged,
+    this.defaultPageTemplate = CanvasPageTemplate.blank,
+    this.defaultPageFlow = CanvasPageFlow.topToBottom,
   }) : brushStates = Map.unmodifiable({
          ...BrushState.defaults,
          ...?brushStates,
@@ -37,6 +56,12 @@ class EditorPreferences {
   final bool twoFingerZoomEnabled;
   final bool singleFingerPanEnabled;
 
+  /// Local-draft auto-save debounce interval.
+  final AutosaveInterval autosaveInterval;
+  final CanvasLayoutType defaultLayoutType;
+  final CanvasPageTemplate defaultPageTemplate;
+  final CanvasPageFlow defaultPageFlow;
+
   BrushState brushState(BrushType type) =>
       brushStates[type] ?? BrushState.defaults[type]!;
 
@@ -49,6 +74,10 @@ class EditorPreferences {
     bool? palmRejectionEnabled,
     bool? twoFingerZoomEnabled,
     bool? singleFingerPanEnabled,
+    AutosaveInterval? autosaveInterval,
+    CanvasLayoutType? defaultLayoutType,
+    CanvasPageTemplate? defaultPageTemplate,
+    CanvasPageFlow? defaultPageFlow,
   }) {
     return EditorPreferences(
       defaultTool: defaultTool ?? this.defaultTool,
@@ -60,6 +89,10 @@ class EditorPreferences {
       twoFingerZoomEnabled: twoFingerZoomEnabled ?? this.twoFingerZoomEnabled,
       singleFingerPanEnabled:
           singleFingerPanEnabled ?? this.singleFingerPanEnabled,
+      autosaveInterval: autosaveInterval ?? this.autosaveInterval,
+      defaultLayoutType: defaultLayoutType ?? this.defaultLayoutType,
+      defaultPageTemplate: defaultPageTemplate ?? this.defaultPageTemplate,
+      defaultPageFlow: defaultPageFlow ?? this.defaultPageFlow,
     );
   }
 
@@ -79,6 +112,10 @@ class EditorPreferences {
     'palmRejectionEnabled': palmRejectionEnabled,
     'twoFingerZoomEnabled': twoFingerZoomEnabled,
     'singleFingerPanEnabled': singleFingerPanEnabled,
+    'autosaveInterval': autosaveInterval.name,
+    'defaultLayoutType': defaultLayoutType.name,
+    'defaultPageTemplate': defaultPageTemplate.name,
+    'defaultPageFlow': defaultPageFlow.name,
   };
 
   factory EditorPreferences.fromJson(Map<String, Object?> json) {
@@ -122,6 +159,26 @@ class EditorPreferences {
       palmRejectionEnabled: _bool(json['palmRejectionEnabled'], true),
       twoFingerZoomEnabled: _bool(json['twoFingerZoomEnabled'], true),
       singleFingerPanEnabled: _bool(json['singleFingerPanEnabled'], true),
+      autosaveInterval: _enumByName(
+        AutosaveInterval.values,
+        json['autosaveInterval'],
+        AutosaveInterval.halfSecond,
+      ),
+      defaultLayoutType: _enumByName(
+        CanvasLayoutType.values,
+        json['defaultLayoutType'],
+        CanvasLayoutType.paged,
+      ),
+      defaultPageTemplate: _enumByName(
+        CanvasPageTemplate.values,
+        json['defaultPageTemplate'],
+        CanvasPageTemplate.blank,
+      ),
+      defaultPageFlow: _enumByName(
+        CanvasPageFlow.values,
+        json['defaultPageFlow'],
+        CanvasPageFlow.topToBottom,
+      ),
     );
   }
 }
