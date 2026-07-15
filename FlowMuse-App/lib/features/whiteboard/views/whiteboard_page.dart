@@ -1639,12 +1639,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         systemNavigationBarContrastEnforced: false,
       ),
       child: PopScope(
-        canPop: !widget.temporaryCollaboration || _temporarySaved,
+        canPop: widget.temporaryCollaboration && _temporarySaved,
         onPopInvokedWithResult: (didPop, result) {
-          if (didPop || !widget.temporaryCollaboration) {
+          if (didPop) {
             return;
           }
-          unawaited(_leaveCollaboration());
+          if (widget.temporaryCollaboration) {
+            unawaited(_leaveCollaboration());
+          } else {
+            unawaited(_handleBack());
+          }
         },
         child: Scaffold(
           backgroundColor: effectivePreset.backgroundEnd,
@@ -1653,6 +1657,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             child: MarkdrawEditor(
               controller: _markdrawController,
               config: const MarkdrawEditorConfig(),
+              canvasThemeBackground: effectivePreset.canvasBackground,
+              useFlatBackgrounds: effectivePreset.usesMonochromeBackground,
               currentThemeMode: themePreset.themeMode,
               onThemeModeChanged: _changeThemeMode,
               saveStatusLabel: _saveStatusLabel(state.saveStatus),

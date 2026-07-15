@@ -64,7 +64,7 @@ func (l *OpenAICompatibleSmartLayouter) RecognizeBlock(ctx context.Context, bloc
 
 func (l *OpenAICompatibleSmartLayouter) Compose(ctx context.Context, request SmartLayoutComposeRequest) (SmartLayoutResponse, error) {
 	pages := l.decidePages(ctx, request.Pages, request.Blocks)
-	document := buildSmartLayoutDocument(request.Blocks, pages)
+	document := buildSmartLayoutDocument(request.Blocks, pages, request.Pages)
 	return SmartLayoutResponse{Document: document, Blocks: request.Blocks, Pages: pages}, nil
 }
 
@@ -105,7 +105,7 @@ func (l *OpenAICompatibleSmartLayouter) recognizeBlock(ctx context.Context, bloc
 	content := []map[string]any{
 		{
 			"type": "text",
-			"text": "Recognize this handwritten ink block. Return strict JSON only: {\"type\":\"text|formula\",\"text\":\"...\",\"latex\":\"...\"}. Use formula only for mathematical expressions. For formula, put LaTeX in latex and a readable text in text.",
+			"text": "Recognize this handwritten ink block. Return strict JSON only: {\"type\":\"text|formula\",\"text\":\"...\",\"latex\":\"...\"}. Use formula only for mathematical expressions. For formula, put the LaTeX source text in both text and latex.",
 		},
 		{
 			"type": "image_url",
@@ -139,6 +139,9 @@ func (l *OpenAICompatibleSmartLayouter) recognizeBlock(ctx context.Context, bloc
 	latex := strings.TrimSpace(raw.LaTeX)
 	if resultType == "formula" && latex == "" {
 		latex = text
+	}
+	if resultType == "formula" {
+		text = latex
 	}
 	if resultType == "text" && text == "" {
 		return SmartLayoutRecognizedBlock{}, errors.New("AI OCR returned empty text")
@@ -334,12 +337,16 @@ func singleBlockParagraphs(blocks []SmartLayoutRecognizedBlock) [][]string {
 	return paragraphs
 }
 
-func buildSmartLayoutDocument(blocks []SmartLayoutRecognizedBlock, pages []SmartLayoutPageDecision) SmartLayoutDocument {
+func buildSmartLayoutDocument(blocks []SmartLayoutRecognizedBlock, pages []SmartLayoutPageDecision, pageRequests []SmartLayoutPage) SmartLayoutDocument {
 	blockByID := map[string]SmartLayoutRecognizedBlock{}
 	for _, block := range blocks {
 		if block.Error == "" {
 			blockByID[block.ID] = block
 		}
+	}
+	writingModeByPage := map[string]string{}
+	for _, page := range pageRequests {
+		writingModeByPage[page.ID] = smartLayoutWritingModeForTemplate(page.Template)
 	}
 	docBlocks := []SmartLayoutBlock{}
 	order := 0
@@ -350,6 +357,10 @@ func buildSmartLayoutDocument(blocks []SmartLayoutRecognizedBlock, pages []Smart
 			var bounds *InkBounds
 			blockType := "paragraph"
 			latex := ""
+			writingMode := writingModeByPage[page.PageID]
+			if writingMode == "" {
+				writingMode = "horizontal"
+			}
 			for _, id := range paragraph {
 				block, ok := blockByID[id]
 				if !ok {
@@ -387,7 +398,7 @@ func buildSmartLayoutDocument(blocks []SmartLayoutRecognizedBlock, pages []Smart
 				PageID:      page.PageID,
 				Bounds:      bounds,
 				Order:       order,
-				WritingMode: "horizontal",
+				WritingMode: writingMode,
 				SourceIDs:   sourceIDs,
 			})
 			order++
@@ -397,6 +408,15 @@ func buildSmartLayoutDocument(blocks []SmartLayoutRecognizedBlock, pages []Smart
 		Version:     1,
 		GeneratedAt: time.Now().UnixMilli(),
 		Blocks:      docBlocks,
+	}
+}
+
+func smartLayoutWritingModeForTemplate(template string) string {
+	switch strings.ToLower(strings.TrimSpace(template)) {
+	case "narrowverticalline", "wideverticalline", "ancientbook":
+		return "vertical"
+	default:
+		return "horizontal"
 	}
 }
 

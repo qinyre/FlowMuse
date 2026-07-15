@@ -356,7 +356,7 @@ class SketchLineParser {
         props.namedDouble('size') ??
         20.0;
     final fontFamily = _resolveFontAlias(
-      props.namedString('font') ?? 'Excalifont',
+      props.namedString('font') ?? TextElement.defaultFontFamily,
     );
     final alignStr = props.namedString('align');
     final textAlign = _parseTextAlign(alignStr);

@@ -280,7 +280,8 @@ class DocumentParser {
               _parseNamedDouble(line, 'text-size') ??
               20.0;
           final textFontFamily = _resolveFontAlias(
-            _parseNamedString(line, 'text-font') ?? 'Excalifont',
+            _parseNamedString(line, 'text-font') ??
+                TextElement.defaultFontFamily,
           );
           final textAlignStr = _parseNamedString(line, 'text-align');
           final textAlign = switch (textAlignStr) {

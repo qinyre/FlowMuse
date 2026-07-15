@@ -48,8 +48,8 @@ class TemplateGeometry {
     var bestDistance = double.infinity;
     for (final anchor in anchors) {
       final distance = writingMode == TemplateWritingMode.vertical
-          ? (center.dx - anchor.position.dx).abs()
-          : (center.dy - anchor.position.dy).abs();
+          ? (center.dx - anchor.crossAxis).abs()
+          : (center.dy - anchor.crossAxis).abs();
       if (distance < bestDistance) {
         bestDistance = distance;
         best = anchor;
@@ -61,6 +61,8 @@ class TemplateGeometry {
 
 class TemplateAnchorResolver {
   const TemplateAnchorResolver._();
+
+  static const double fontSizeToLineHeightRatio = 0.7;
 
   static TemplateGeometry resolve(CanvasPage page) {
     final rect = page.bounds.deflate(TemplateGeometry.pageTemplateMargin);
@@ -90,6 +92,7 @@ class TemplateAnchorResolver {
   }
 
   static TemplateGeometry _blank(CanvasPage page, Rect rect) {
+    const lineHeight = 56.0;
     return TemplateGeometry(
       contentRect: rect,
       anchors: [
@@ -97,8 +100,8 @@ class TemplateAnchorResolver {
           position: rect.topLeft,
           crossAxis: rect.top,
           mainAxis: rect.left,
-          fontSize: 40,
-          lineHeight: 1.25,
+          fontSize: lineHeight * fontSizeToLineHeightRatio,
+          lineHeight: lineHeight,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
         ),
@@ -115,13 +118,14 @@ class TemplateAnchorResolver {
   ) {
     final anchors = <TemplateAnchor>[];
     for (var y = rect.top + start; y < rect.bottom; y += step) {
+      final fontSize = step * fontSizeToLineHeightRatio;
       anchors.add(
         TemplateAnchor(
-          position: Offset(rect.left, y - step * 0.72),
+          position: Offset(rect.left, y - fontSize),
           crossAxis: y,
           mainAxis: rect.left,
-          fontSize: (step * 0.62).clamp(56.0, 96.0),
-          lineHeight: 1.2,
+          fontSize: fontSize,
+          lineHeight: step,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
         ),
@@ -136,6 +140,7 @@ class TemplateAnchorResolver {
 
   static TemplateGeometry _practiceGrid(CanvasPage page, Rect rect) {
     final anchors = <TemplateAnchor>[];
+    const lineHeight = TemplateGeometry.practiceCell;
     for (
       var top = rect.top;
       top + TemplateGeometry.practiceCell <= rect.bottom;
@@ -146,8 +151,8 @@ class TemplateAnchorResolver {
           position: Offset(rect.left, top + 8),
           crossAxis: top + TemplateGeometry.practiceCell / 2,
           mainAxis: rect.left,
-          fontSize: 68,
-          lineHeight: 1.1,
+          fontSize: lineHeight * fontSizeToLineHeightRatio,
+          lineHeight: lineHeight,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
         ),
@@ -162,14 +167,15 @@ class TemplateAnchorResolver {
 
   static TemplateGeometry _fourLineGrid(CanvasPage page, Rect rect) {
     final anchors = <TemplateAnchor>[];
+    const lineHeight = 96.0;
     for (var y = rect.top + 72; y + 96 < rect.bottom; y += 224) {
       anchors.add(
         TemplateAnchor(
-          position: Offset(rect.left, y - 16),
+          position: Offset(rect.left, y),
           crossAxis: y + 48,
           mainAxis: rect.left,
-          fontSize: 88,
-          lineHeight: 1.0,
+          fontSize: lineHeight * fontSizeToLineHeightRatio,
+          lineHeight: lineHeight,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
         ),
@@ -189,14 +195,15 @@ class TemplateAnchorResolver {
     double step,
   ) {
     final anchors = <TemplateAnchor>[];
-    for (var x = rect.right - start; x > rect.left; x -= step) {
+    for (var x = rect.left + start; x < rect.right; x += step) {
+      final fontSize = step * fontSizeToLineHeightRatio;
       anchors.add(
         TemplateAnchor(
-          position: Offset(x - step * 0.52, rect.top),
+          position: Offset(x - fontSize, rect.top),
           crossAxis: x,
           mainAxis: rect.top,
-          fontSize: (step * 0.62).clamp(56.0, 96.0),
-          lineHeight: 1.15,
+          fontSize: fontSize,
+          lineHeight: step,
           writingMode: TemplateWritingMode.vertical,
           pageId: page.id,
         ),
@@ -215,6 +222,8 @@ class TemplateAnchorResolver {
     final gutterRight = centerX + TemplateGeometry.ancientBookGutterWidth / 2;
     final anchors = <TemplateAnchor>[];
     void addColumns(Rect area) {
+      const lineHeight = TemplateGeometry.ancientBookColumnWidth;
+      const fontSize = lineHeight * fontSizeToLineHeightRatio;
       for (
         var x = area.right - TemplateGeometry.ancientBookColumnWidth / 2;
         x > area.left;
@@ -222,11 +231,11 @@ class TemplateAnchorResolver {
       ) {
         anchors.add(
           TemplateAnchor(
-            position: Offset(x - 24, area.top + 24),
+            position: Offset(x - fontSize / 2, area.top + 24),
             crossAxis: x,
             mainAxis: area.top,
-            fontSize: 44,
-            lineHeight: 1.12,
+            fontSize: fontSize,
+            lineHeight: lineHeight,
             writingMode: TemplateWritingMode.vertical,
             pageId: page.id,
           ),

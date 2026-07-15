@@ -13,8 +13,7 @@ class DesktopToolbar extends StatelessWidget {
   final ToolbarDock dock;
   final ValueChanged<ToolbarDock>? onDockChanged;
   final VoidCallback? onCollapse;
-  final Size Function() getCanvasSize;
-  final bool showZoomControls;
+  final bool useFlatBackground;
 
   const DesktopToolbar({
     super.key,
@@ -23,8 +22,7 @@ class DesktopToolbar extends StatelessWidget {
     this.dock = ToolbarDock.top,
     this.onDockChanged,
     this.onCollapse,
-    required this.getCanvasSize,
-    this.showZoomControls = true,
+    this.useFlatBackground = false,
   });
 
   @override
@@ -36,9 +34,10 @@ class DesktopToolbar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [cs.surfaceContainerLow, cs.surface],
-          ),
+          color: useFlatBackground ? cs.surfaceContainerLow : null,
+          gradient: useFlatBackground
+              ? null
+              : LinearGradient(colors: [cs.surfaceContainerLow, cs.surface]),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: cs.outlineVariant),
           boxShadow: [
@@ -59,19 +58,6 @@ class DesktopToolbar extends StatelessWidget {
             children: [
               _toolbarButton(
                 cs: cs,
-                icon: Icons.undo,
-                tooltip: '撤回 (Ctrl+Z)',
-                onPressed: controller.undo,
-              ),
-              _toolbarButton(
-                cs: cs,
-                icon: Icons.redo,
-                tooltip: '重做 (Ctrl+Shift+Z)',
-                onPressed: controller.redo,
-              ),
-              _toolbarDivider(context, vertical),
-              _toolbarButton(
-                cs: cs,
                 icon: controller.toolLocked ? Icons.lock : Icons.lock_open,
                 tooltip: '保持工具激活 (Q)',
                 onPressed: controller.toggleToolLocked,
@@ -82,12 +68,14 @@ class DesktopToolbar extends StatelessWidget {
                 type: ToolType.hand,
                 activeType: activeType,
                 colorScheme: cs,
+                useFlatBackground: useFlatBackground,
                 onPressed: () => controller.switchTool(ToolType.hand),
               ),
               _ToolButton(
                 type: ToolType.select,
                 activeType: activeType,
                 colorScheme: cs,
+                useFlatBackground: useFlatBackground,
                 onPressed: () => controller.switchTool(ToolType.select),
               ),
               BrushPaletteButton(controller: controller, dock: dock, size: 32),
@@ -96,6 +84,7 @@ class DesktopToolbar extends StatelessWidget {
                 type: ToolType.text,
                 activeType: activeType,
                 colorScheme: cs,
+                useFlatBackground: useFlatBackground,
                 onPressed: () => controller.switchTool(ToolType.text),
               ),
               if (onImportImage != null)
@@ -109,12 +98,14 @@ class DesktopToolbar extends StatelessWidget {
                 type: ToolType.eraser,
                 activeType: activeType,
                 colorScheme: cs,
+                useFlatBackground: useFlatBackground,
                 onPressed: () => controller.switchTool(ToolType.eraser),
               ),
               _ToolButton(
                 type: ToolType.laser,
                 activeType: activeType,
                 colorScheme: cs,
+                useFlatBackground: useFlatBackground,
                 onPressed: () => controller.switchTool(ToolType.laser),
               ),
               _toolbarDivider(context, vertical),
@@ -140,30 +131,6 @@ class DesktopToolbar extends StatelessWidget {
                   _runGlobalSmartLayout(context);
                 },
               ),
-              if (showZoomControls) ...[
-                _toolbarDivider(context, vertical),
-                _toolbarButton(
-                  cs: cs,
-                  icon: Icons.remove,
-                  tooltip: '缩小',
-                  onPressed: () => controller.zoomOut(getCanvasSize()),
-                ),
-                _toolbarButton(
-                  cs: cs,
-                  iconWidget: Text(
-                    '${(controller.editorState.viewport.zoom * 100).round()}%',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  tooltip: '重置缩放',
-                  onPressed: controller.resetZoom,
-                ),
-                _toolbarButton(
-                  cs: cs,
-                  icon: Icons.add,
-                  tooltip: '放大',
-                  onPressed: () => controller.zoomIn(getCanvasSize()),
-                ),
-              ],
               _toolbarDivider(context, vertical),
               _DockMenuButton(dock: dock, onDockChanged: onDockChanged),
               if (onCollapse != null)
@@ -348,12 +315,14 @@ class _ToolButton extends StatelessWidget {
     required this.type,
     required this.activeType,
     required this.colorScheme,
+    required this.useFlatBackground,
     required this.onPressed,
   });
 
   final ToolType type;
   final ToolType activeType;
   final ColorScheme colorScheme;
+  final bool useFlatBackground;
   final VoidCallback onPressed;
 
   @override
@@ -368,6 +337,7 @@ class _ToolButton extends StatelessWidget {
         tooltip: tooltip,
         selected: active,
         emphasized: active,
+        useFlatBackground: useFlatBackground,
         onPressed: onPressed,
         child: Stack(
           clipBehavior: Clip.none,

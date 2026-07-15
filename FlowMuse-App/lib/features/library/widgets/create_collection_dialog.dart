@@ -578,7 +578,7 @@ class _TopBar extends StatelessWidget {
             TextButton(
               onPressed: onCancel,
               style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
                 textStyle: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,

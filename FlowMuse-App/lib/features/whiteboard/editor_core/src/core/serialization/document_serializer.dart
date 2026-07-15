@@ -17,6 +17,9 @@ class DocumentSerializer {
       buffer.writeln('---');
       buffer.writeln('markdraw: ${doc.settings.formatVersion}');
       buffer.writeln('background: "${doc.settings.background}"');
+      if (doc.settings.backgroundFollowsTheme) {
+        buffer.writeln('followTheme: true');
+      }
       if (doc.settings.grid != null) {
         buffer.writeln('grid: ${doc.settings.grid}');
       }

@@ -6,13 +6,50 @@ class AppTheme {
   const AppTheme._();
 
   static ThemeData fromPreset(AppThemePreset preset) {
+    final usesMutedDarkAccents =
+        preset.usesMonochromeBackground && preset.isDark;
     final seededScheme = ColorScheme.fromSeed(
       seedColor: preset.seedColor,
       brightness: preset.brightness,
     );
     final colorScheme = seededScheme.copyWith(
-      secondary: preset.secondaryColor,
+      primary: usesMutedDarkAccents ? const Color(0xFF96ABA7) : null,
+      onPrimary: usesMutedDarkAccents ? const Color(0xFF18211F) : null,
+      primaryContainer: usesMutedDarkAccents
+          ? const Color(0xFF34433F)
+          : null,
+      onPrimaryContainer: usesMutedDarkAccents
+          ? const Color(0xFFC7D7D3)
+          : null,
+      secondary: usesMutedDarkAccents
+          ? const Color(0xFF91A5A1)
+          : preset.secondaryColor,
+      onSecondary: usesMutedDarkAccents ? const Color(0xFF17201E) : null,
+      secondaryContainer: usesMutedDarkAccents
+          ? const Color(0xFF34433F)
+          : null,
+      onSecondaryContainer: usesMutedDarkAccents
+          ? const Color(0xFFC5D6D1)
+          : null,
       tertiary: preset.tertiaryColor,
+      surface: preset.usesMonochromeBackground
+          ? (preset.isDark ? const Color(0xFF121212) : Colors.white)
+          : null,
+      surfaceContainerLowest: preset.usesMonochromeBackground
+          ? (preset.isDark ? const Color(0xFF121212) : Colors.white)
+          : null,
+      surfaceContainerLow: preset.usesMonochromeBackground
+          ? (preset.isDark ? const Color(0xFF191919) : const Color(0xFFF8F8F8))
+          : null,
+      surfaceContainer: preset.usesMonochromeBackground
+          ? (preset.isDark ? const Color(0xFF202020) : const Color(0xFFF2F2F2))
+          : null,
+      surfaceContainerHigh: preset.usesMonochromeBackground
+          ? (preset.isDark ? const Color(0xFF282828) : const Color(0xFFEBEBEB))
+          : null,
+      surfaceContainerHighest: preset.usesMonochromeBackground
+          ? (preset.isDark ? const Color(0xFF303030) : const Color(0xFFE5E5E5))
+          : null,
     );
 
     return ThemeData(

@@ -163,11 +163,15 @@ class MarkdrawController extends ChangeNotifier {
   ColorPickerTarget? _pendingColorPicker;
   ElementStyle _defaultStyle = const ElementStyle();
   String _canvasBackgroundColor = '#ffffff';
+  String _themeCanvasBackgroundColor = '#ffffff';
+  bool _canvasBackgroundFollowsTheme = true;
   late CanvasLayout _layout;
   int? _gridSize;
   bool _objectsSnapMode = false;
   double _pressureSensitivity = 0.7;
   BrushType _activeBrushType = BrushType.fountainPen;
+  bool _hasSelectedBrush = false;
+  bool _brushPaletteRequested = false;
   bool _inkRecognitionMode = false;
   bool _smartInkLayoutMode = false;
 
@@ -314,6 +318,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// The canvas background color as a hex string.
   String get canvasBackgroundColor => _canvasBackgroundColor;
+  bool get canvasBackgroundFollowsTheme => _canvasBackgroundFollowsTheme;
 
   /// Current canvas layout. Paged layout is synchronized through page elements.
   CanvasLayout get layout => _layout;
@@ -609,6 +614,21 @@ class MarkdrawController extends ChangeNotifier {
   /// Sets the canvas background color (hex string).
   set canvasBackgroundColor(String value) {
     _canvasBackgroundColor = value;
+    _canvasBackgroundFollowsTheme = false;
+    notifyListeners();
+  }
+
+  void setThemeCanvasBackground(String value) {
+    _themeCanvasBackgroundColor = value;
+    if (_canvasBackgroundFollowsTheme) {
+      _canvasBackgroundColor = value;
+      notifyListeners();
+    }
+  }
+
+  void followThemeCanvasBackground() {
+    _canvasBackgroundFollowsTheme = true;
+    _canvasBackgroundColor = _themeCanvasBackgroundColor;
     notifyListeners();
   }
 
@@ -710,6 +730,37 @@ class MarkdrawController extends ChangeNotifier {
     cancelTextEditing();
     restoreKeyboardFocusWhenStable();
     notifyListeners();
+  }
+
+  /// Activates the last selected brush, or requests brush selection.
+  bool activateBrush() {
+    if (_editorState.activeToolType == ToolType.freedraw ||
+        !_hasSelectedBrush) {
+      return true;
+    }
+    _restoreBrushState(_activeBrushType);
+    switchTool(ToolType.freedraw);
+    return false;
+  }
+
+  void selectBrush(BrushType type) {
+    activeBrushType = type;
+    _hasSelectedBrush = true;
+    _restoreBrushState(type);
+    switchTool(ToolType.freedraw);
+  }
+
+  void requestBrushPalette() {
+    _brushPaletteRequested = true;
+    notifyListeners();
+  }
+
+  bool takeBrushPaletteRequest() {
+    if (!_brushPaletteRequested) {
+      return false;
+    }
+    _brushPaletteRequested = false;
+    return true;
   }
 
   // --- Undo/Redo ---
@@ -1276,7 +1327,7 @@ class MarkdrawController extends ChangeNotifier {
         if (text == null || text.isEmpty) {
           return null;
         }
-        return _measuredTextElement(text, x, y, width, height);
+        return _measuredTextElement(text, x, y, width, height, isMath: true);
       case 'rectangle':
         return RectangleElement(
           id: ElementId.generate(),
@@ -1328,17 +1379,19 @@ class MarkdrawController extends ChangeNotifier {
     double x,
     double y,
     double width,
-    double height,
-  ) {
+    double height, {
+    bool isMath = false,
+  }) {
     final anchor = _smartInkLayoutMode
         ? _nearestTemplateAnchor(Rect.fromLTWH(x, y, width, height))
         : null;
     final vertical = anchor?.writingMode == TemplateWritingMode.vertical;
-    final flowMuseData = anchor == null
+    final flowMuseData = anchor == null && !isMath
         ? null
         : <String, Object?>{
-            'pageId': anchor.pageId,
+            if (anchor != null) 'pageId': anchor.pageId,
             'smartLayout': true,
+            if (isMath) 'smartLayoutType': 'math',
             if (vertical) 'writingMode': 'vertical',
           };
     final element = TextElement(
@@ -1349,14 +1402,11 @@ class MarkdrawController extends ChangeNotifier {
           ? math.max(anchor!.fontSize * 1.2, width)
           : math.max(width, 1.0),
       height: vertical
-          ? math.max(
-              text.runes.length * anchor!.fontSize * anchor.lineHeight,
-              height,
-            )
+          ? math.max(text.runes.length * anchor!.lineHeight, height)
           : math.max(height, 1.0),
       text: text,
       fontSize: anchor?.fontSize ?? 20.0,
-      lineHeight: anchor?.lineHeight ?? 1.25,
+      lineHeight: _textLineHeightForTemplateAnchor(anchor),
       customData: flowMuseData == null ? null : {'flowMuse': flowMuseData},
     );
     final styled = applyDefaultStyleToElement(element) as TextElement;
@@ -1372,6 +1422,11 @@ class MarkdrawController extends ChangeNotifier {
     final page = _layout.pageAt(bounds.center);
     if (page == null) return null;
     return TemplateAnchorResolver.resolve(page).nearestAnchor(bounds);
+  }
+
+  double _textLineHeightForTemplateAnchor(TemplateAnchor? anchor) {
+    if (anchor == null || anchor.fontSize <= 0) return 1.25;
+    return anchor.lineHeight / anchor.fontSize;
   }
 
   List<Point> _recognizedLinePoints(
@@ -3125,13 +3180,14 @@ class MarkdrawController extends ChangeNotifier {
       height: math.max(block.bounds.size.height, 28),
       text: text,
       fontSize: block.type == 'formula' ? 20 : 20,
-      fontFamily: _defaultStyle.fontFamily ?? 'Excalifont',
+      fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
       lineHeight: 1.25,
       customData: {
         'flowMuse': {
           if (block.pageId != null) 'pageId': block.pageId,
           'smartLayout': true,
           'blockId': block.id,
+          if (block.type == 'formula') 'smartLayoutType': 'math',
         },
       },
     );
@@ -3149,10 +3205,15 @@ class MarkdrawController extends ChangeNotifier {
     List<Bounds> occupied, {
     bool useTemplateAnchors = false,
   }) {
-    final initialBounds = useTemplateAnchors
-        ? _fallbackSmartLayoutBounds(block, layoutIndex)
-        : (block.bounds ?? _fallbackSmartLayoutBounds(block, layoutIndex));
-    final vertical = block.writingMode == 'vertical';
+    final anchor = useTemplateAnchors
+        ? _templateAnchorForSmartLayoutBlock(block, layoutIndex)
+        : null;
+    final initialBounds = anchor == null
+        ? (block.bounds ?? _fallbackSmartLayoutBounds(block, layoutIndex))
+        : _smartLayoutBoundsForTemplateAnchor(anchor, block, layoutIndex);
+    final vertical =
+        anchor?.writingMode == TemplateWritingMode.vertical ||
+        block.writingMode == 'vertical';
     final text = block.type == 'math' && block.latex?.trim().isNotEmpty == true
         ? block.latex!.trim()
         : block.text.trim();
@@ -3163,14 +3224,15 @@ class MarkdrawController extends ChangeNotifier {
       width: math.max(initialBounds.size.width, vertical ? 28 : 80),
       height: math.max(initialBounds.size.height, 28),
       text: text,
-      fontSize: block.type == 'heading' ? 28 : 20,
-      fontFamily: _defaultStyle.fontFamily ?? 'Excalifont',
-      lineHeight: 1.25,
+      fontSize: anchor?.fontSize ?? (block.type == 'heading' ? 28 : 20),
+      fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
+      lineHeight: _textLineHeightForTemplateAnchor(anchor),
       customData: {
         'flowMuse': {
           if (block.pageId != null) 'pageId': block.pageId,
           'smartLayout': true,
           'blockId': block.id,
+          if (block.type == 'math') 'smartLayoutType': 'math',
           if (vertical) 'writingMode': 'vertical',
         },
       },
@@ -3189,6 +3251,46 @@ class MarkdrawController extends ChangeNotifier {
       vertical,
     );
     return measured.copyWith(x: placedBounds.left, y: placedBounds.top);
+  }
+
+  TemplateAnchor? _templateAnchorForSmartLayoutBlock(
+    SmartLayoutBlock block,
+    int layoutIndex,
+  ) {
+    final page = _smartLayoutPageForBlock(block);
+    if (page == null) return null;
+    final anchors = TemplateAnchorResolver.resolve(page).anchors;
+    if (anchors.isEmpty) return null;
+    return anchors[math.min(layoutIndex, anchors.length - 1)];
+  }
+
+  Bounds _smartLayoutBoundsForTemplateAnchor(
+    TemplateAnchor anchor,
+    SmartLayoutBlock block,
+    int layoutIndex,
+  ) {
+    final page = _smartLayoutPageForBlock(block);
+    final content = page == null
+        ? null
+        : TemplateAnchorResolver.resolve(page).contentRect;
+    if (anchor.writingMode == TemplateWritingMode.vertical) {
+      return Bounds.fromLTWH(
+        anchor.position.dx,
+        anchor.position.dy,
+        math.max(anchor.fontSize * 1.2, 28),
+        content == null
+            ? math.max(block.bounds?.size.height ?? 240, anchor.lineHeight)
+            : math.max(content.bottom - anchor.position.dy, anchor.lineHeight),
+      );
+    }
+    return Bounds.fromLTWH(
+      anchor.position.dx,
+      anchor.position.dy,
+      content == null
+          ? math.max(block.bounds?.size.width ?? 320, anchor.lineHeight)
+          : math.max(content.right - anchor.position.dx, anchor.lineHeight),
+      anchor.lineHeight,
+    );
   }
 
   Bounds _fallbackSmartLayoutBounds(SmartLayoutBlock block, int layoutIndex) {
@@ -3990,6 +4092,7 @@ class MarkdrawController extends ChangeNotifier {
       _editorState.scene,
       settings: CanvasSettings(
         background: _canvasBackgroundColor,
+        backgroundFollowsTheme: _canvasBackgroundFollowsTheme,
         grid: _gridSize,
         name: _documentName,
       ),
@@ -4026,6 +4129,11 @@ class MarkdrawController extends ChangeNotifier {
       ),
     };
     _canvasBackgroundColor = parseResult.value.settings.background;
+    _canvasBackgroundFollowsTheme =
+        parseResult.value.settings.backgroundFollowsTheme;
+    if (_canvasBackgroundFollowsTheme) {
+      _canvasBackgroundColor = _themeCanvasBackgroundColor;
+    }
     _gridSize = parseResult.value.settings.grid;
     _documentName = parseResult.value.settings.name;
     loadScene(SceneDocumentConverter.documentToScene(parseResult.value));
@@ -4035,6 +4143,11 @@ class MarkdrawController extends ChangeNotifier {
   void applyRemoteContent(String content, {bool closeTransientUi = true}) {
     final parseResult = ExcalidrawJsonCodec.parse(content);
     _canvasBackgroundColor = parseResult.value.settings.background;
+    _canvasBackgroundFollowsTheme =
+        parseResult.value.settings.backgroundFollowsTheme;
+    if (_canvasBackgroundFollowsTheme) {
+      _canvasBackgroundColor = _themeCanvasBackgroundColor;
+    }
     _gridSize = parseResult.value.settings.grid;
     _documentName = parseResult.value.settings.name;
     applyRemoteScene(

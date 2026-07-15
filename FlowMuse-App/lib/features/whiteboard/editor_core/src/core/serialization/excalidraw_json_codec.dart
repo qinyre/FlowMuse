@@ -83,8 +83,13 @@ class ExcalidrawJsonCodec {
       'appState': <String, dynamic>{
         'viewBackgroundColor': doc.settings.background,
         if (doc.settings.name != null) 'name': doc.settings.name,
-        if (doc.smartLayout != null)
-          'flowMuse': {'smartLayout': doc.smartLayout!.toJson()},
+        if (doc.smartLayout != null ||
+            doc.settings.backgroundFollowsTheme ||
+            doc.settings.background.toLowerCase() == '#ffffff')
+          'flowMuse': {
+            if (doc.smartLayout != null) 'smartLayout': doc.smartLayout!.toJson(),
+            'backgroundFollowsTheme': doc.settings.backgroundFollowsTheme,
+          },
       },
       'files': filesJson,
     };
@@ -115,7 +120,9 @@ class ExcalidrawJsonCodec {
         ...base,
         'text': el.text,
         'fontSize': el.fontSize,
-        'fontFamily': fontFamilyToNumber[el.fontFamily] ?? 5,
+        'fontFamily':
+            fontFamilyToNumber[el.fontFamily] ??
+            fontFamilyToNumber[TextElement.defaultFontFamily]!,
         'textAlign': el.textAlign.name,
         'containerId': el.containerId,
         'lineHeight': el.lineHeight,
@@ -294,12 +301,18 @@ class ExcalidrawJsonCodec {
         ? appState['name'] as String?
         : null;
     SmartLayoutDocument? smartLayout;
+    var backgroundFollowsTheme = viewBg.toLowerCase() == '#ffffff';
     if (appState is Map<String, dynamic>) {
       final flowMuse = appState['flowMuse'];
-      if (flowMuse is Map && flowMuse['smartLayout'] is Map) {
-        smartLayout = SmartLayoutDocument.fromJson(
-          Map<String, Object?>.from(flowMuse['smartLayout'] as Map),
-        );
+      if (flowMuse is Map) {
+        if (flowMuse.containsKey('backgroundFollowsTheme')) {
+          backgroundFollowsTheme = flowMuse['backgroundFollowsTheme'] == true;
+        }
+        if (flowMuse['smartLayout'] is Map) {
+          smartLayout = SmartLayoutDocument.fromJson(
+            Map<String, Object?>.from(flowMuse['smartLayout'] as Map),
+          );
+        }
       }
     }
 
@@ -307,7 +320,11 @@ class ExcalidrawJsonCodec {
       value: MarkdrawDocument(
         sections: [SketchSection(elements)],
         files: files,
-        settings: CanvasSettings(background: viewBg, name: name),
+        settings: CanvasSettings(
+          background: viewBg,
+          backgroundFollowsTheme: backgroundFollowsTheme,
+          name: name,
+        ),
         smartLayout: smartLayout,
       ),
       warnings: warnings,
@@ -517,16 +534,17 @@ class ExcalidrawJsonCodec {
     List<ParseWarning> warnings,
   ) {
     final num? familyNum = raw['fontFamily'] as num?;
-    if (familyNum == null) return 'Excalifont';
+    if (familyNum == null) return TextElement.defaultFontFamily;
     final name = fontFamilyFromNumber[familyNum.toInt()];
     if (name != null) return name;
     warnings.add(
       ParseWarning(
         line: index,
-        message: 'Unknown font family ${familyNum.toInt()}, using Excalifont',
+        message:
+            'Unknown font family ${familyNum.toInt()}, using ${TextElement.defaultFontFamily}',
       ),
     );
-    return 'Excalifont';
+    return TextElement.defaultFontFamily;
   }
 
   /// Converts an [Arrowhead] enum to its Excalidraw snake_case name.

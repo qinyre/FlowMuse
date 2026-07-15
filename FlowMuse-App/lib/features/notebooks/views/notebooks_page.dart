@@ -719,6 +719,7 @@ class _CreateCollectionCard extends StatelessWidget {
           child: Card.outlined(
             margin: EdgeInsets.zero,
             clipBehavior: Clip.antiAlias,
+            color: colorScheme.surfaceContainerLow,
             shape: const RoundedRectangleBorder(),
             child: InkWell(
               onTap: onTap,

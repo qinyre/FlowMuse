@@ -70,6 +70,7 @@ dependencies:
   sqflite_common_ffi: ^2.3.6
   sqflite_common_ffi_web: ^1.1.1
   flutter_svg: ^2.3.0
+  flutter_math_fork: ^0.7.4
 
 dev_dependencies:
   flutter_test:
@@ -95,6 +96,8 @@ dependency_overrides:
     path: tool/vendor/path_provider
   path_provider_ohos:
     path: tool/vendor/path_provider_ohos
+  flutter_math_fork:
+    path: tool/vendor/flutter_math_fork
 
 hooks:
   user_defines:

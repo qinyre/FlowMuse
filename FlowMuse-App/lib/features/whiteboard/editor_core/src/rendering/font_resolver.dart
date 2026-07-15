@@ -1,6 +1,8 @@
 import 'package:flutter/painting.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/elements/text_element.dart';
+
 /// Font category for the quick-access font picker buttons.
 enum FontCategory { handDrawn, normal, code }
 
@@ -14,7 +16,7 @@ enum FontCategory { handDrawn, normal, code }
 ///   fallback
 class FontResolver {
   /// The default font family used for new text elements.
-  static const defaultFontFamily = 'Excalifont';
+  static const defaultFontFamily = TextElement.defaultFontFamily;
 
   /// Bundled font families (declared in pubspec.yaml).
   static const _bundledFonts = {'Excalifont', 'Virgil'};
