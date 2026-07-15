@@ -7,6 +7,8 @@ import '../features/whiteboard/share/models/external_document_request.dart';
 import '../features/whiteboard/share/services/external_document_channel.dart';
 import '../features/whiteboard/share/services/imported_document_coordinator.dart';
 import '../features/whiteboard/view_models/whiteboard_view_model.dart';
+import '../features/whiteboard/service_widget/recent_whiteboard_sync_coordinator.dart';
+import '../features/whiteboard/service_widget/service_widget_channel.dart';
 import 'app_router.dart';
 import 'app_theme.dart';
 import 'app_theme_preset.dart';
@@ -23,6 +25,8 @@ class FlowMuseApp extends ConsumerStatefulWidget {
 
 class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
   bool _consuming = false;
+  bool _consumingServiceWidget = false;
+  final _recentWhiteboardSync = RecentWhiteboardSyncCoordinator();
 
   @override
   void initState() {
@@ -30,7 +34,11 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
     const ExternalDocumentChannelOhos().setEnqueueListener(
       _drainPendingDocuments,
     );
+    const ServiceWidgetChannelOhos().setLaunchListener(
+      _drainPendingServiceWidgetActions,
+    );
     Future.microtask(_drainPendingDocuments);
+    Future.microtask(_drainPendingServiceWidgetActions);
   }
 
   /// 持续消费待处理文档,直到队列清空。重入时跳过,由入队通知或启动触发。
@@ -45,6 +53,23 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
       }
     } finally {
       _consuming = false;
+    }
+  }
+
+  Future<void> _drainPendingServiceWidgetActions() async {
+    if (_consumingServiceWidget) return;
+    _consumingServiceWidget = true;
+    try {
+      while (true) {
+        final libraryIndex = await ref.read(libraryIndexProvider.future);
+        final location = await _recentWhiteboardSync.takePendingResumeLocation(
+          libraryIndex.notes,
+        );
+        if (location == null) break;
+        widget._router.go(location);
+      }
+    } finally {
+      _consumingServiceWidget = false;
     }
   }
 

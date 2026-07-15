@@ -38,6 +38,7 @@ import '../view_models/whiteboard_view_model.dart';
 import '../models/editor_preferences.dart';
 import '../view_models/editor_preferences_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
+import '../service_widget/recent_whiteboard_sync_coordinator.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
   const WhiteboardPage({
@@ -103,6 +104,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _localDraftDirty = false;
 
   Scene? _previousEditorScene;
+  final _recentWhiteboardSync = RecentWhiteboardSyncCoordinator();
 
   @override
   void initState() {
@@ -256,6 +258,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _markdrawController.setViewport(const ViewportState(zoom: 0.5));
     }
     _syncDocumentTitle(note);
+    if (note != null) {
+      unawaited(_recentWhiteboardSync.syncFromNote(note));
+    }
     await _restoreInkRecognitionPreference(noteId);
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote controller loaded '
@@ -370,6 +375,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
     await repository.saveScene(widget.noteId, content);
     await _touchNoteWithCurrentCover(widget.noteId);
+    final latestIndex = await ref.read(libraryIndexProvider.future);
+    final latestNote = _noteById(latestIndex.notes, widget.noteId);
+    if (latestNote != null) {
+      await _recentWhiteboardSync.syncFromNote(latestNote);
+    }
     if (mounted) {
       viewModel.markSaved();
     }
