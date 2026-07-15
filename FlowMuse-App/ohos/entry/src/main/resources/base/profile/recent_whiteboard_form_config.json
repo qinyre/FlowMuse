@@ -1,0 +1,20 @@
+{
+  "forms": [
+    {
+      "name": "recentWhiteboardWidget",
+      "displayName": "$string:widget_display_name",
+      "description": "$string:widget_desc",
+      "src": "./ets/servicewidget/pages/RecentWhiteboardWidgetCard.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 720,
+        "autoDesignWidth": true
+      },
+      "isDefault": true,
+      "updateEnabled": false,
+      "defaultDimension": "2*2",
+      "supportDimensions": ["2*2"],
+      "isDynamic": true
+    }
+  ]
+}

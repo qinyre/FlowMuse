@@ -11,6 +11,22 @@
     {
       "name": "EntryAbility_label",
       "value": "FlowMuse"
+    },
+    {
+      "name": "EntryFormAbility_desc",
+      "value": "最近白板服务卡片"
+    },
+    {
+      "name": "EntryFormAbility_label",
+      "value": "FlowMuse 卡片"
+    },
+    {
+      "name": "widget_display_name",
+      "value": "FlowMuse 最近白板"
+    },
+    {
+      "name": "widget_desc",
+      "value": "显示最近白板并继续创作"
     }
   ]
 }

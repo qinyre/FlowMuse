@@ -9,16 +9,29 @@ import { PdfImportChannel } from '../pdf/PdfImportChannel';
 import { HttpChannel } from '../channels/HttpChannel';
 import { SystemShareChannel } from '../channels/SystemShareChannel';
 import { ExternalDocumentChannel } from '../channels/ExternalDocumentChannel';
+import { ServiceWidgetChannel } from '../channels/ServiceWidgetChannel';
 
 export default class EntryAbility extends FlutterAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onCreate(want, launchParam)
+    if (want?.parameters?.params) {
+      const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
+      if (params.action === 'resumeLastWhiteboard') {
+        ServiceWidgetChannel.enqueueLaunchAction('resumeLastWhiteboard');
+      }
+    }
     ExternalDocumentChannel.enqueueWant(want)
     this.enqueueSharedDocuments(want)
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onNewWant(want, launchParam)
+    if (want?.parameters?.params) {
+      const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
+      if (params.action === 'resumeLastWhiteboard') {
+        ServiceWidgetChannel.enqueueLaunchAction('resumeLastWhiteboard');
+      }
+    }
     ExternalDocumentChannel.enqueueWant(want)
     this.enqueueSharedDocuments(want)
   }
@@ -42,5 +55,6 @@ export default class EntryAbility extends FlutterAbility {
     new HttpChannel().register(flutterEngine)
     new SystemShareChannel(this.context).register(flutterEngine)
     new ExternalDocumentChannel().register(flutterEngine)
+    new ServiceWidgetChannel(this.context).register(flutterEngine)
   }
 }
