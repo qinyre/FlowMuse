@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -61,12 +62,25 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
     _consumingServiceWidget = true;
     try {
       while (true) {
-        final libraryIndex = await ref.read(libraryIndexProvider.future);
-        final location = await _recentWhiteboardSync.takePendingResumeLocation(
-          libraryIndex.notes,
-        );
-        if (location == null) break;
-        widget._router.go(location);
+        try {
+          final libraryIndex = await ref.read(libraryIndexProvider.future);
+          final location =
+              await _recentWhiteboardSync.takePendingResumeLocation(
+            libraryIndex.notes,
+          );
+          if (location == null) break;
+          widget._router.go(location);
+        } on PlatformException catch (e, st) {
+          debugPrint(
+            '[FlowMuseApp] _drainPendingServiceWidgetActions PlatformException: $e\n$st',
+          );
+          break;
+        } on MissingPluginException catch (e, st) {
+          debugPrint(
+            '[FlowMuseApp] _drainPendingServiceWidgetActions MissingPluginException: $e\n$st',
+          );
+          break;
+        }
       }
     } finally {
       _consumingServiceWidget = false;
