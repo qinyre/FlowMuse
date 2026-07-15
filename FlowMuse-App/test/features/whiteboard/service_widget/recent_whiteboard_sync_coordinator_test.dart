@@ -1,3 +1,4 @@
+import 'package:flow_muse/app/app_router.dart';
 import 'package:flow_muse/features/library/models/note_item.dart';
 import 'package:flow_muse/features/whiteboard/service_widget/recent_whiteboard_store.dart';
 import 'package:flow_muse/features/whiteboard/service_widget/recent_whiteboard_sync_coordinator.dart';
@@ -104,7 +105,7 @@ void main() {
 
     final first = await coordinator.takePendingResumeLocation(notes);
     final second = await coordinator.takePendingResumeLocation(notes);
-    expect(first, '/whiteboard/note-123?discardIfUnchanged=true');
+    expect(first, AppRoutes.whiteboardPath(noteId: 'note-123'));
     expect(second, isNull);
   });
 }

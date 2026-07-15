@@ -378,7 +378,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final latestIndex = await ref.read(libraryIndexProvider.future);
     final latestNote = _noteById(latestIndex.notes, widget.noteId);
     if (latestNote != null) {
-      await _recentWhiteboardSync.syncFromNote(latestNote);
+      unawaited(_recentWhiteboardSync.syncFromNote(latestNote));
     }
     if (mounted) {
       viewModel.markSaved();
