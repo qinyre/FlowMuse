@@ -14,6 +14,9 @@ class DesktopToolbar extends StatelessWidget {
   final ValueChanged<ToolbarDock>? onDockChanged;
   final VoidCallback? onCollapse;
   final bool useFlatBackground;
+  final VoidCallback? onSpeechPressed;
+  final bool speechActive;
+  final bool speechAvailable;
 
   const DesktopToolbar({
     super.key,
@@ -23,6 +26,9 @@ class DesktopToolbar extends StatelessWidget {
     this.onDockChanged,
     this.onCollapse,
     this.useFlatBackground = false,
+    this.onSpeechPressed,
+    this.speechActive = false,
+    this.speechAvailable = false,
   });
 
   @override
@@ -108,6 +114,15 @@ class DesktopToolbar extends StatelessWidget {
                 useFlatBackground: useFlatBackground,
                 onPressed: () => controller.switchTool(ToolType.laser),
               ),
+              _toolbarButton(
+                cs: cs,
+                icon: speechActive
+                    ? Icons.stop_circle_outlined
+                    : Icons.mic_none,
+                tooltip: speechAvailable ? '语音转文字' : '当前设备不支持语音转文字',
+                onPressed: speechAvailable ? onSpeechPressed : null,
+                isActive: speechActive,
+              ),
               _toolbarDivider(context, vertical),
               _toolbarButton(
                 cs: cs,
@@ -156,7 +171,7 @@ class DesktopToolbar extends StatelessWidget {
     IconData? icon,
     Widget? iconWidget,
     required String tooltip,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     bool isActive = false,
   }) {
     return Padding(

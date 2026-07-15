@@ -13,6 +13,9 @@ class CompactToolbar extends StatelessWidget {
   final ValueChanged<ToolbarDock>? onDockChanged;
   final VoidCallback? onCollapse;
   final bool useFlatBackground;
+  final VoidCallback? onSpeechPressed;
+  final bool speechActive;
+  final bool speechAvailable;
 
   const CompactToolbar({
     super.key,
@@ -21,6 +24,9 @@ class CompactToolbar extends StatelessWidget {
     this.onDockChanged,
     this.onCollapse,
     this.useFlatBackground = false,
+    this.onSpeechPressed,
+    this.speechActive = false,
+    this.speechAvailable = false,
   });
 
   @override
@@ -90,6 +96,15 @@ class CompactToolbar extends StatelessWidget {
                 cs: cs,
                 type: ToolType.laser,
                 activeType: activeType,
+              ),
+              _compactButton(
+                cs: cs,
+                icon: speechActive
+                    ? Icons.stop_circle_outlined
+                    : Icons.mic_none,
+                tooltip: speechAvailable ? '语音转文字' : '当前设备不支持语音转文字',
+                onPressed: speechAvailable ? onSpeechPressed : null,
+                isActive: speechActive,
               ),
               _compactButton(
                 cs: cs,
@@ -222,7 +237,7 @@ class CompactToolbar extends StatelessWidget {
     IconData? icon,
     Widget? iconWidget,
     required String tooltip,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     bool isActive = false,
     bool isEmphasized = false,
     bool useFlatBackground = false,
