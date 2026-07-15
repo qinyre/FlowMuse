@@ -151,9 +151,14 @@ class CollaborationParticipantBadge {
 
 class _MarkdrawEditorState extends State<MarkdrawEditor> {
   static const _toolbarDockKey = 'whiteboard.toolbarDock.v1';
+  static const _controlGroupPositionKey =
+      'whiteboard.controlGroupPosition.v1';
+  static const _controlGroupReservedExtent = 120.0;
 
   MarkdrawController? _ownController;
   ToolbarDock _toolbarDock = ToolbarDock.top;
+  ControlGroupPosition _controlGroupPosition =
+      ControlGroupPosition.bottomLeft;
   bool _toolbarCollapsed = false;
   bool _propertyPanelCollapsed = false;
   String _propertyPanelContext = '';
@@ -175,7 +180,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
     _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     _controller.restoreKeyboardFocusWhenStable();
-    unawaited(_restoreToolbarDock());
+    unawaited(_restoreEditorChrome());
   }
 
   @override
@@ -238,15 +243,35 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
 
   void _noop() {}
 
-  Future<void> _restoreToolbarDock() async {
-    final storedValue = await defaultLocalSettingsRepository.readString(
-      _toolbarDockKey,
-    );
-    final dock = ToolbarDock.values.where((item) => item.name == storedValue);
-    if (!mounted || dock.isEmpty) {
+  Future<void> _restoreEditorChrome() async {
+    final storedValues = await Future.wait([
+      defaultLocalSettingsRepository.readString(_toolbarDockKey),
+      defaultLocalSettingsRepository.readString(_controlGroupPositionKey),
+    ]);
+    if (!mounted) {
       return;
     }
-    setState(() => _toolbarDock = dock.first);
+    final toolbarDock = ToolbarDock.values.where(
+      (item) => item.name == storedValues[0],
+    );
+    final restoredToolbarDock = toolbarDock.isEmpty
+        ? _toolbarDock
+        : toolbarDock.first;
+    final controlGroupPosition = ControlGroupPosition.values.where(
+      (item) => item.name == storedValues[1],
+    );
+    setState(() {
+      _toolbarDock = restoredToolbarDock;
+      _controlGroupPosition = controlGroupPosition.isEmpty
+          ? _legacyControlGroupPositionFor(restoredToolbarDock)
+          : controlGroupPosition.first;
+    });
+  }
+
+  ControlGroupPosition _legacyControlGroupPositionFor(ToolbarDock dock) {
+    return dock == ToolbarDock.left
+        ? ControlGroupPosition.bottomRight
+        : ControlGroupPosition.bottomLeft;
   }
 
   void _setToolbarDock(ToolbarDock dock) {
@@ -264,6 +289,52 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
 
   void _setToolbarCollapsed(bool collapsed) {
     setState(() => _toolbarCollapsed = collapsed);
+  }
+
+  void _setControlGroupPosition(ControlGroupPosition position) {
+    if (_controlGroupPosition == position) {
+      return;
+    }
+    setState(() => _controlGroupPosition = position);
+    unawaited(
+      defaultLocalSettingsRepository.writeString(
+        _controlGroupPositionKey,
+        position.name,
+      ),
+    );
+  }
+
+  Future<void> _showControlGroupPositionDialog() async {
+    final selected = await showDialog<ControlGroupPosition>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('控制组位置'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final position in ControlGroupPosition.values)
+              RadioListTile<ControlGroupPosition>(
+                value: position,
+                groupValue: _controlGroupPosition,
+                title: Text(_controlGroupPositionLabel(position)),
+                onChanged: (value) => Navigator.of(context).pop(value),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      _setControlGroupPosition(selected);
+    }
+  }
+
+  String _controlGroupPositionLabel(ControlGroupPosition position) {
+    return switch (position) {
+      ControlGroupPosition.topLeft => '左上',
+      ControlGroupPosition.topRight => '右上',
+      ControlGroupPosition.bottomLeft => '左下',
+      ControlGroupPosition.bottomRight => '右下',
+    };
   }
 
   void _collapsePropertyPanel() {
@@ -433,6 +504,26 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     final canvasTopInset = showChrome ? safeArea.top + chromeHeight : 0.0;
     final topChromeOffset = safeArea.top + chromeHeight + 12;
     final bottomChromeOffset = safeArea.bottom + 12;
+    final showDetachedControls =
+        showChrome && (!_controller.viewMode || widget.config.showZoomControls);
+    final controlGroupAtTop =
+        _controlGroupPosition == ControlGroupPosition.topLeft ||
+        _controlGroupPosition == ControlGroupPosition.topRight;
+    final controlGroupOnLeft =
+        _controlGroupPosition == ControlGroupPosition.topLeft ||
+        _controlGroupPosition == ControlGroupPosition.bottomLeft;
+    final controlGroupSharesVerticalToolbar =
+        showNavigationTools &&
+        _toolbarDock != ToolbarDock.top &&
+        ((_toolbarDock == ToolbarDock.left) == controlGroupOnLeft);
+    final verticalToolbarTop =
+        controlGroupSharesVerticalToolbar && controlGroupAtTop
+        ? topChromeOffset + _controlGroupReservedExtent
+        : safeArea.top + 56;
+    final verticalToolbarBottom =
+        controlGroupSharesVerticalToolbar && !controlGroupAtTop
+        ? bottomChromeOffset + _controlGroupReservedExtent
+        : null;
     Widget body = Stack(
       children: [
         // Full-bleed canvas + desktop library panel
@@ -539,6 +630,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                                   onThemeModeChanged: widget.onThemeModeChanged,
                                   currentThemeMode: widget.currentThemeMode,
                                   onDocumentRenamed: widget.onDocumentRenamed,
+                                  onChooseControlGroupPosition:
+                                      _showControlGroupPositionDialog,
                                 ),
                               if (!isCompact &&
                                   widget.saveStatusLabel != null) ...[
@@ -640,24 +733,25 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
           ),
         if (showNavigationTools && _toolbarDock != ToolbarDock.top)
           Positioned(
-            top: safeArea.top + 56,
+            top: verticalToolbarTop,
+            bottom: verticalToolbarBottom,
             left: _toolbarDock == ToolbarDock.left ? 8 : null,
             right: _toolbarDock == ToolbarDock.right ? 8 : null,
-            child: _toolbarCollapsed
-                ? Align(
-                    alignment: _toolbarDock == ToolbarDock.left
-                        ? Alignment.topLeft
-                        : Alignment.topRight,
-                    child: _buildToolbarExpandButton(),
-                  )
-                : _buildToolbar(compact: isCompact),
+            child: Align(
+              alignment: _toolbarDock == ToolbarDock.left
+                  ? Alignment.topLeft
+                  : Alignment.topRight,
+              child: _toolbarCollapsed
+                  ? _buildToolbarExpandButton()
+                  : _buildToolbar(compact: isCompact),
+            ),
           ),
-        if (showChrome &&
-            (!_controller.viewMode || widget.config.showZoomControls))
+        if (showDetachedControls)
           Positioned(
-            left: _toolbarDock == ToolbarDock.left ? null : 12,
-            right: _toolbarDock == ToolbarDock.left ? 12 : null,
-            bottom: bottomChromeOffset,
+            top: controlGroupAtTop ? topChromeOffset : null,
+            bottom: controlGroupAtTop ? null : bottomChromeOffset,
+            left: controlGroupOnLeft ? 12 : null,
+            right: controlGroupOnLeft ? null : 12,
             child: _buildDetachedControlGroups(),
           ),
         // Floating property panel — desktop left side
@@ -786,6 +880,7 @@ class _LeftChrome extends StatelessWidget {
     required this.onThemeModeChanged,
     required this.currentThemeMode,
     required this.onDocumentRenamed,
+    required this.onChooseControlGroupPosition,
   });
 
   final MarkdrawController controller;
@@ -807,6 +902,7 @@ class _LeftChrome extends StatelessWidget {
   final ValueChanged<ThemeMode>? onThemeModeChanged;
   final ThemeMode? currentThemeMode;
   final VoidCallback? onDocumentRenamed;
+  final VoidCallback onChooseControlGroupPosition;
 
   @override
   Widget build(BuildContext context) {
@@ -843,6 +939,7 @@ class _LeftChrome extends StatelessWidget {
                   onThemeModeChanged: onThemeModeChanged,
                   currentThemeMode: currentThemeMode,
                   onDocumentRenamed: onDocumentRenamed,
+                  onChooseControlGroupPosition: onChooseControlGroupPosition,
                 )
               : HamburgerMenu(
                   controller: controller,
@@ -858,6 +955,7 @@ class _LeftChrome extends StatelessWidget {
                   onThemeModeChanged: onThemeModeChanged,
                   currentThemeMode: currentThemeMode,
                   onDocumentRenamed: onDocumentRenamed,
+                  onChooseControlGroupPosition: onChooseControlGroupPosition,
                 ),
         if (showTitle) ...[
           const SizedBox(width: 10),

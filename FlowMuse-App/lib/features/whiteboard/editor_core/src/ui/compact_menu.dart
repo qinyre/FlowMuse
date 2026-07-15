@@ -24,6 +24,7 @@ class CompactMenuButton extends StatelessWidget {
   final VoidCallback? onImportImage;
   final VoidCallback? onShowLibrary;
   final VoidCallback? onDocumentRenamed;
+  final VoidCallback? onChooseControlGroupPosition;
 
   const CompactMenuButton({
     super.key,
@@ -41,6 +42,7 @@ class CompactMenuButton extends StatelessWidget {
     this.onImportImage,
     this.onShowLibrary,
     this.onDocumentRenamed,
+    this.onChooseControlGroupPosition,
   });
 
   @override
@@ -140,6 +142,10 @@ class CompactMenuButton extends StatelessWidget {
             if (onShowLibrary != null)
               _compactMenuItem(Icons.library_books, '素材库', () {
                 closeThen(onShowLibrary!);
+              }),
+            if (onChooseControlGroupPosition != null)
+              _compactMenuItem(Icons.open_with, '控制组位置', () {
+                closeThen(onChooseControlGroupPosition!);
               }),
             _compactMenuItem(
               controller.gridSize != null ? Icons.grid_on : Icons.grid_off,
