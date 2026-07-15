@@ -44,6 +44,7 @@ lib/features/<feature>/
 
 - SQLite:移动端用原生 sqflite,鸿蒙和桌面用 FFI。分发逻辑在 `shared/storage/local_database_path*.dart`(条件导入)。鸿蒙要先加载 `libharmony_sqlite.z.so`。
 - HTTP:鸿蒙走自研 `NativeHttpClient`(Platform Channel),其他平台走标准 http。
+- 服务卡片：鸿蒙通过 FormExtensionAbility + ArkTS 动态卡片承载最近白板入口；Flutter 侧只负责把 noteId/title/updatedAt 通过 flow_muse/service_widget 通道推送给 ArkTS，并在启动时消费 resumeLastWhiteboard action。
 - 手写笔、文件选择、PDF 渲染:鸿蒙走 Platform Channel,其他平台用现成插件。
 - Flutter 上游有几个包不认识 `ohos`,所以在 `tool/vendor/` 下放了 fork 版本,通过 pubspec 的 `dependency_overrides` 覆盖。`tool/vendor/` 只做适配,不放业务逻辑。
 
