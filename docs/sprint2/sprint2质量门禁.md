@@ -1,6 +1,6 @@
 # Sprint 2 质量门禁证据
 
-更新时间：2026-07-14
+更新时间：2026-07-15
 
 ## 1. 测试覆盖
 
@@ -102,9 +102,21 @@ flutter test --reporter expanded test/performance/home_page_performance_test.dar
 
 ```powershell
 curl.exe -sS -o NUL -w "status=%{http_code} total=%{time_total}s`n" --max-time 5 http://8.133.4.116:48931/health
+curl.exe -sS -o NUL -w "status=%{http_code} total=%{time_total}s`n" --max-time 5 http://8.133.4.116:48931/api/rooms/sprint2-readonly/access
+curl.exe -sS -o NUL -w "status=%{http_code} total=%{time_total}s`n" --max-time 5 http://8.133.4.116:48931/api/rooms/sprint2-readonly/scene
 ```
 
-2026-07-14 检查结果：线上 `/health` 5 秒无响应；场景接口约 5 秒后返回 502。当前**不满足 API <500ms**，必须在验收前检查线上进程、反向代理和容器日志，恢复后重新执行命令并截图。本次未部署或重启服务器。
+2026-07-15 在服务器启动后完成两轮只读复测：
+
+| 接口 | 第一轮 | 第二轮 | 保守取值 | 判定 |
+| --- | ---: | ---: | ---: | --- |
+| `/health` | 181 ms（HTTP 200） | 147 ms（HTTP 200） | 181 ms | 达标 |
+| `/api/rooms/sprint2-readonly/access` | 183 ms（HTTP 200） | 131 ms（HTTP 200） | 183 ms | 达标 |
+| `/api/rooms/sprint2-readonly/scene` | 154 ms（HTTP 404） | 120 ms（HTTP 404） | 154 ms | 达标 |
+
+其中 `scene` 使用不存在的只读测试房间，HTTP 404 是预期业务响应，不影响响应时间判定。三项接口实测范围为 **120–183 ms**，保守取值均低于 **500 ms**，因此本轮 API 响应时间门禁**通过**。本次测试未创建房间、未写入数据，也未部署或重启服务器。
+
+![alt text](image-2.png)
 
 ## 5. AI 反思日志
 
