@@ -395,6 +395,162 @@ try {
 2. 不得仅因已添加/注册 OHOS 插件就假定安全存储可用；必须验证一次读写。
 3. 调整安全存储依赖或 facade 时，验证 Android/桌面已有读写路径及鸿蒙创建房间后重进仍具房主权限。
 
+---
+
+## ADR-013:协作冲突解决用 LWW 而非 CRDT，ACK 走原生 Socket.IO
+
+- **状态**:已采纳
+- **日期**:2026-07-12
+- **关联**:`docs/research/collaboration/codex-best.md`、`SceneReconciler._shouldKeepLocal`
+
+### 背景
+
+协作实时同步出现卡顿和丢同步。调研阶段产出三份 AI 研究文档（claude/codex/zcode-best），在冲突解决机制上有关键分歧：LWW（Last-Writer-Wins）vs CRDT（无冲突复制数据类型）。同时需要确认 Dart 端 `socket_io_client 3.1.6` 是否支持 CSR（Connection State Recovery）和 ACK。
+
+### 决策
+
+- 冲突解决采用**元素级 LWW**（version 降序 + versionNonce 升序），不引入 CRDT。
+- ACK 走 Socket.IO 原生 `EmitWithAck`，不自建 ACK 协议。
+- Go 服务端用 `zishang520/socket.io v2.5.0`，原生支持 CSR 和 permessage-deflate。
+- 选定 `codex-best.md` 为主线方案，吸纳 zcode-best 的性能项（Dirty Set、增量广播）和 claude-best 的运行环境补强。
+
+### 理由
+
+- LWW 实现简单、与 Excalidraw 的 version/versionNonce 字段天然契合；CRDT 需引入额外的 OpSet 和 tombstone 管理，复杂度过高。
+- 通过 `socket_io_client 3.1.6` 源码验证：`_pid`/`recovered`/`_lastOffset` 均已实现（推翻了早期 grep 零匹配导致的误判），CSR 可用。
+- ACK 走原生 API 避免自建协议的可靠性和乱序问题。
+
+### 遗留约束
+
+- 改 `SceneReconciler._shouldKeepLocal` 时必须同时更新 `ChangeAccumulator._shouldReplace`，二者比较逻辑必须一致（version + versionNonce）。
+- 不要引入 CRDT 库或 OpSet 结构。
+- CSR 作为 POC 验证，若实际恢复率不达标再考虑自建 resume 机制。
+
+---
+
+## ADR-014:鸿蒙图片选择用 `photoAccessHelper.PhotoViewPicker`，不用 `picker.DocumentViewPicker`
+
+- **状态**:已采纳
+- **日期**:2026-07-14
+- **关联**:`ohos/entry/src/main/ets/file/FilePickerChannel.ets`、`lib/features/whiteboard/editor_core/src/ui/file_picker_channel_ohos.dart`
+
+### 背景
+
+工具栏「导入图片」在鸿蒙端点击后，系统弹出「文件管理 / 相册」来源选择界面，而非直接进入相册。根因是使用了 `@kit.CoreFileKit` 的 `picker.DocumentViewPicker`——它是通用文件选择器，会同时列出文件管理和图库两个入口。
+
+### 决策
+
+- 新增 `pickImage` 通道方法，使用 `@kit.MediaLibraryKit` 的 `photoAccessHelper.PhotoViewPicker` 打开图库。
+- 保留原有 `pickFiles`（`DocumentViewPicker`）供通用文件选择（PDF 导入、备份导入等）使用。
+- `PhotoViewPicker` 按 MIME 类型过滤（`PhotoViewMIMETypes.IMAGE_TYPE`），不接受后缀过滤器。
+
+### 理由
+
+- `PhotoViewPicker` 是系统图库选择器，调用后直接进入相册，无来源选择弹窗。
+- `DocumentViewPicker` 仍用于非图片场景（PDF、markdraw 文件），不能全局替换。
+- 该 API 是系统 picker，运行在系统进程中，无需申请额外权限。
+
+### 遗留约束
+
+- `PhotoViewPicker`、`PhotoSelectOptions`、`PhotoViewMIMETypes` 均属于 `@kit.MediaLibraryKit` 的 `photoAccessHelper` 命名空间，**不是** `@kit.CoreFileKit` 的 `picker` 命名空间。新增代码时不要混淆。
+- `.ets` 原生改动热重载不生效，必须全量重编 HarmonyOS 工程。
+- 媒体 URI 不能在 picker 回调内直接 `fileIo.openSync`，需 `await select()` 解开后再读取。
+
+---
+
+## ADR-015:安卓图片选择用 `startActivityForResult` + Photo Picker，不用 `ActivityResultContracts`
+
+- **状态**:已采纳
+- **日期**:2026-07-14
+- **关联**:`android/app/src/main/kotlin/com/example/flowmuse/MainActivity.kt`、`lib/features/whiteboard/editor_core/src/ui/image_picker_channel.dart`
+
+### 背景
+
+安卓端「导入图片」通过 `file_picker` 插件的 `FileType.image` 实现，该插件走 `ACTION_PICK` + MediaStore Images，在部分国产 ROM 上仍会弹出来源选择。尝试用 Jetpack `ActivityResultContracts.PickVisualMedia` 改造，但 Kotlin 编译报 `Unresolved reference 'registerForActivityResult'`——Flutter 的 `FlutterActivity` 继承链锁定的 `androidx.activity` 版本无法解析该方法。
+
+### 决策
+
+- 安卓端新增 `flow_muse/image_picker` MethodChannel，在 `MainActivity` 中用 `startActivityForResult` + `onActivityResult` 处理。
+- API ≥ 33（Android 13）用 `Intent("android.provider.action.PICK_IMAGES")` 启动系统 Photo Picker。
+- API < 33 降级为 `ACTION_PICK` + MediaStore Images。
+- 不引入 `androidx.activity:activity` 显式依赖，不使用 `ActivityResultContracts`。
+
+### 理由
+
+- `startActivityForResult` + `onActivityResult` 是 Android 经典 API，所有 API 级别原生支持，零额外依赖。
+- `ACTION_PICK_IMAGES`（Android Photo Picker）直接进相册，不弹来源选择，且无需 `READ_MEDIA_IMAGES` 权限。
+- `ActivityResultContracts` 虽然更现代，但在 Flutter 的 `FlutterActivity` 继承链下编译不通过，强行加依赖有版本冲突风险。
+
+### 遗留约束
+
+- `onActivityResult` 已被标记 `@Deprecated`，但这是 Flutter Activity 下最可靠的方式，**不要**为了消除 deprecation 警告而换回 `ActivityResultContracts`（除非 Flutter 升级后继承链变化）。
+- 新增需要 Activity Result 的功能时，使用不同的 `requestCode` 常量避免冲突。
+- Dart 端通过 `pickImageFromGallery()` 统一调用，鸿蒙走 `PhotoViewPicker` 通道、安卓走此通道，其他平台降级到 `file_picker`。
+
+---
+
+## ADR-016:网盘备份选定坚果云 WebDAV，不选百度网盘 OAuth
+
+- **状态**:已采纳（待实施）
+- **日期**:2026-07-15
+- **关联**:`lib/features/settings/views/settings_page.dart`（cloudBackup 占位分区）
+
+### 背景
+
+设置页「网盘备份」分区为占位状态。选型阶段对比了三条路径：百度网盘开放 API、坚果云 WebDAV、自建服务器备份。百度网盘需要申请 AppKey + OAuth 2.0 授权码流程 + 移动端自定义 URL Scheme 回调，准入门槛和移动端适配成本高。自建方案需要扩后端 + 占服务器存储。
+
+### 决策
+
+- 网盘备份目标选定**坚果云 WebDAV**。
+- 用户在设置页填入坚果云账号 + 应用密码，通过 WebDAV 协议上传加密备份。
+- 不对接百度网盘，不自建服务器备份接口。
+
+### 理由
+
+- WebDAV 本质是 HTTP 扩展（PUT/GET/PROPFIND/MKCOL），项目已大量用 `http.Client()`，甚至可不引第三方包自写薄客户端。
+- 坚果云无准入门槛，注册即用，用户生成「应用密码」即可，无需 OAuth、无需 AppKey 审核。
+- 加密复用已有 `CollaborationCrypto`（AES-GCM-128），服务器零知识。
+- 恢复逻辑复用 `LocalBackupRepository.importBackup()`（整库覆盖恢复）。
+- 百度网盘的 OAuth 审核不确定、移动端回调 URL 在鸿蒙端兼容性未验证，风险过高。
+
+### 遗留约束
+
+- 现有本地备份**不含 `.scene` 溢出文件**（场景 >1MB 落到 `databases/scenes/` 目录），网盘备份必须补上这部分，打包格式为「6 张表 JSON + scenes 目录 → zip → 加密 → 上传」。
+- 坚果云免费账户有流量限制（上传 1GB/月），需在 UI 提示用户。
+- 凭证（邮箱 + 应用密码）用 `flutter_secure_storage` 存储，不存明文。
+- 实施前需确认大文件上传的断点/重试机制。
+
+---
+
+## ADR-017:房主退出协作只能结束房间，不允许单独退出
+
+- **状态**:已采纳
+- **日期**:2026-07-14
+- **关联**:`lib/features/whiteboard/editor_core/src/ui/markdraw_editor.dart`、`lib/features/whiteboard/views/whiteboard_page.dart`
+
+### 背景
+
+协作房间有两种离开方式：「退出房间」（leave，仅断开本地连接，房间保留）和「结束协作」（end，调 HTTP `POST /rooms/{id}/end`，服务器标记 ended，所有成员被踢出）。房主此前可以通过三选一对话框选择「仅自己退出」，导致房间残留、其他成员无法继续协作但房间未关闭。
+
+### 决策
+
+- 房主的协作下拉菜单**不显示「退出房间」**，只显示「结束协作」。
+- 房主按返回键触发离开时，直接走「结束协作」流程（弹出结束确认框），不提供「仅自己退出」选项。
+- 普通成员不受影响，仍只有「退出房间」。
+
+### 理由
+
+- 房主是房间的唯一管理者（持有 ownerKey），房主单独退出后房间无法被结束，成为孤儿房间。
+- 从产品语义上，房主「离开」等价于「不再管理这个房间」，应直接结束协作。
+- 普通成员退出不影响房间存续，保持原有 leave 行为。
+
+### 遗留约束
+
+- 判断房主用 `CollaborationRoomMetadata.isOwner`（基于 `role == owner`），**不要**用 `ownerId` 比对当前用户 ID。
+- 若未来支持「转让房主」功能，需重新评估此约束（转让后原房主变为普通成员，可退出）。
+
+---
+
 做出重要技术决策(选型、架构变更、约束确立)时,追加一条:
 
 ```markdown
