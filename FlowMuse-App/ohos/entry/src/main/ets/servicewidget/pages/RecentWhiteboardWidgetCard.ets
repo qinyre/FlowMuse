@@ -5,8 +5,9 @@ let recentWhiteboardStorage = new LocalStorage();
 struct RecentWhiteboardWidgetCard {
   @LocalStorageProp('appName') appName: string = 'FlowMuse';
   @LocalStorageProp('headline') headline: string = '开始你的第一块白板';
-  @LocalStorageProp('detail') detail: string = '最近白板';
-  @LocalStorageProp('buttonText') buttonText: string = '打开资料库';
+  @LocalStorageProp('detail') detail: string = '';
+  @LocalStorageProp('buttonText') buttonText: string = '立即创建';
+  @LocalStorageProp('buttonAction') buttonAction: string = 'createNote';
 
   build() {
     Column({ space: 8 }) {
@@ -21,11 +22,13 @@ struct RecentWhiteboardWidgetCard {
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      Text(this.detail)
-        .fontSize(12)
-        .opacity(0.65)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      if (this.detail) {
+        Text(this.detail)
+          .fontSize(12)
+          .opacity(0.65)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
 
       Button(this.buttonText)
         .width('100%')
@@ -35,7 +38,7 @@ struct RecentWhiteboardWidgetCard {
           postCardAction(this, {
             action: 'router',
             abilityName: 'EntryAbility',
-            params: { action: 'resumeLastWhiteboard' }
+            params: { action: this.buttonAction }
           });
         })
     }

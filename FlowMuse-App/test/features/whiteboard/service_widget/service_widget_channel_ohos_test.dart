@@ -55,4 +55,20 @@ void main() {
       isNull,
     );
   });
+
+  test('setLaunchListener 在收到 onLaunchActionEnqueued 时触发', () async {
+    int callCount = 0;
+    const ServiceWidgetChannelOhos().setLaunchListener(() => callCount++);
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      'flow_muse/service_widget',
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('onLaunchActionEnqueued'),
+      ),
+      (_) {},
+    );
+
+    expect(callCount, 1);
+  });
 }

@@ -17,8 +17,8 @@ export default class EntryAbility extends FlutterAbility {
     if (want?.parameters?.params) {
       try {
         const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
-        if (params.action === 'resumeLastWhiteboard') {
-          ServiceWidgetChannel.enqueueLaunchAction('resumeLastWhiteboard');
+        if (params.action === 'resumeLastWhiteboard' || params.action === 'createNote') {
+          ServiceWidgetChannel.enqueueLaunchAction(params.action as string);
         }
       } catch (_e) {
         // malformed params — silently skip widget launch action
@@ -33,8 +33,8 @@ export default class EntryAbility extends FlutterAbility {
     if (want?.parameters?.params) {
       try {
         const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
-        if (params.action === 'resumeLastWhiteboard') {
-          ServiceWidgetChannel.enqueueLaunchAction('resumeLastWhiteboard');
+        if (params.action === 'resumeLastWhiteboard' || params.action === 'createNote') {
+          ServiceWidgetChannel.enqueueLaunchAction(params.action as string);
         }
       } catch (_e) {
         // malformed params — silently skip widget launch action

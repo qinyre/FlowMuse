@@ -18,6 +18,7 @@ interface BindingPayload {
   headline: string;
   detail: string;
   buttonText: string;
+  buttonAction: string;
 }
 
 export class ServiceWidgetChannel {
@@ -61,25 +62,43 @@ export class ServiceWidgetChannel {
     const store = await preferences.getPreferences(context, STORE_NAME);
     const raw = await store.get(SNAPSHOT_KEY, '') as string;
     if (!raw) {
-      const empty: BindingPayload = {
+      return {
         appName: 'FlowMuse',
         headline: '开始你的第一块白板',
-        detail: '最近白板',
-        buttonText: '打开资料库'
+        detail: '',
+        buttonText: '立即创建',
+        buttonAction: 'createNote'
       };
-      return empty;
     }
     const snapshot = JSON.parse(raw) as Snapshot;
-    const date = new Date(snapshot.updatedAt);
-    const hh = date.getHours().toString().padStart(2, '0');
-    const mm = date.getMinutes().toString().padStart(2, '0');
-    const payload: BindingPayload = {
+    const detail = ServiceWidgetChannel.formatUpdatedAt(snapshot.updatedAt);
+    return {
       appName: 'FlowMuse',
       headline: snapshot.title,
-      detail: `最近白板 · ${hh}:${mm}`,
-      buttonText: '继续创作'
+      detail,
+      buttonText: '继续创作',
+      buttonAction: 'resumeLastWhiteboard'
     };
-    return payload;
+  }
+
+  private static formatUpdatedAt(updatedAt: number): string {
+    const now = new Date();
+    const date = new Date(updatedAt);
+    const hh = date.getHours().toString().padStart(2, '0');
+    const mm = date.getMinutes().toString().padStart(2, '0');
+    const todayStr = now.toDateString();
+    const dateStr = date.toDateString();
+    if (dateStr === todayStr) {
+      return `最近白板 · 今天 ${hh}:${mm}`;
+    }
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (dateStr === yesterday.toDateString()) {
+      return `最近白板 · 昨天 ${hh}:${mm}`;
+    }
+    const month = (date.getMonth() + 1).toString();
+    const day = date.getDate().toString();
+    return `最近白板 · ${month}月${day}日`;
   }
 
   static async rememberFormId(context: Context, formId: string): Promise<void> {

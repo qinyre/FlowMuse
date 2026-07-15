@@ -2,7 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'recent_whiteboard_snapshot.dart';
 
-enum ServiceWidgetLaunchAction { resumeLastWhiteboard }
+enum ServiceWidgetLaunchAction { resumeLastWhiteboard, createNote }
 
 class ServiceWidgetChannelOhos {
   const ServiceWidgetChannelOhos();
@@ -24,9 +24,11 @@ class ServiceWidgetChannelOhos {
     try {
       final action =
           await _channel.invokeMethod<String>('takePendingLaunchAction');
-      return action == 'resumeLastWhiteboard'
-          ? ServiceWidgetLaunchAction.resumeLastWhiteboard
-          : null;
+      return switch (action) {
+        'resumeLastWhiteboard' => ServiceWidgetLaunchAction.resumeLastWhiteboard,
+        'createNote' => ServiceWidgetLaunchAction.createNote,
+        _ => null,
+      };
     } on MissingPluginException {
       return null;
     } on PlatformException {

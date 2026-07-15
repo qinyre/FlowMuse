@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'recent_whiteboard_snapshot.dart';
 
-enum ServiceWidgetLaunchAction { resumeLastWhiteboard }
+enum ServiceWidgetLaunchAction { resumeLastWhiteboard, createNote }
 
 class ServiceWidgetChannelOhos {
   const ServiceWidgetChannelOhos();

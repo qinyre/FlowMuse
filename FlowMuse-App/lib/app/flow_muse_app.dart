@@ -68,7 +68,15 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
               await _recentWhiteboardSync.takePendingResumeLocation(
             libraryIndex.notes,
           );
-          if (location == null) break;
+          if (location == null) {
+            // 检查是否有创建笔记 action
+            final action =
+                await const ServiceWidgetChannelOhos().takePendingLaunchAction();
+            if (action == ServiceWidgetLaunchAction.createNote) {
+              widget._router.push(AppRoutes.createNote);
+            }
+            break;
+          }
           widget._router.go(location);
         } on PlatformException catch (e, st) {
           debugPrint(
