@@ -15,9 +15,13 @@ export default class EntryAbility extends FlutterAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onCreate(want, launchParam)
     if (want?.parameters?.params) {
-      const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
-      if (params.action === 'resumeLastWhiteboard') {
-        ServiceWidgetChannel.enqueueLaunchAction('resumeLastWhiteboard');
+      try {
+        const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
+        if (params.action === 'resumeLastWhiteboard') {
+          ServiceWidgetChannel.enqueueLaunchAction('resumeLastWhiteboard');
+        }
+      } catch (_e) {
+        // malformed params — silently skip widget launch action
       }
     }
     ExternalDocumentChannel.enqueueWant(want)
@@ -27,9 +31,13 @@ export default class EntryAbility extends FlutterAbility {
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onNewWant(want, launchParam)
     if (want?.parameters?.params) {
-      const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
-      if (params.action === 'resumeLastWhiteboard') {
-        ServiceWidgetChannel.enqueueLaunchAction('resumeLastWhiteboard');
+      try {
+        const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
+        if (params.action === 'resumeLastWhiteboard') {
+          ServiceWidgetChannel.enqueueLaunchAction('resumeLastWhiteboard');
+        }
+      } catch (_e) {
+        // malformed params — silently skip widget launch action
       }
     }
     ExternalDocumentChannel.enqueueWant(want)

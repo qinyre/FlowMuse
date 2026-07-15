@@ -6,7 +6,9 @@ export default class EntryFormAbility extends FormExtensionAbility {
   onAddForm(want: Want): formBindingData.FormBindingData {
     const formId = want.parameters?.[formInfo.FormParam.IDENTITY_KEY]?.toString();
     if (formId) {
-      void ServiceWidgetChannel.rememberFormId(this.context, formId);
+      void ServiceWidgetChannel.rememberFormId(this.context, formId).then(() => {
+        void ServiceWidgetChannel.updateFormById(this.context, formId);
+      });
     }
     return formBindingData.createFormBindingData({
       appName: 'FlowMuse',

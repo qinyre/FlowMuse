@@ -122,9 +122,7 @@ export class ServiceWidgetChannel {
       await store.flush();
       const rawIds = await store.get(FORM_IDS_KEY, '[]') as string;
       const ids = JSON.parse(rawIds) as string[];
-      for (const formId of ids) {
-        await ServiceWidgetChannel.updateFormById(this.context, formId);
-      }
+      await Promise.allSettled(ids.map((formId) => ServiceWidgetChannel.updateFormById(this.context, formId)));
       result.success(null);
     } catch (err) {
       result.error('SERVICE_WIDGET_UPDATE_FAILED', JSON.stringify(err as BusinessError), null);
