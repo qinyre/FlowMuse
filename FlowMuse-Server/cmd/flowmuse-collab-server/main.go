@@ -79,9 +79,10 @@ func main() {
 	)
 
 	socketOptions := socket.DefaultServerOptions()
+	allowCredentials := !slices.Contains(cfg.AllowedOrigins, "*")
 	socketOptions.SetCors(&types.Cors{
 		Origin:      cfg.AllowedOrigins,
-		Credentials: true,
+		Credentials: allowCredentials,
 	})
 	socketOptions.SetPingInterval(25 * time.Second)
 	socketOptions.SetPingTimeout(20 * time.Second)
@@ -124,14 +125,19 @@ func main() {
 func withCORS(next http.Handler, allowedOrigins []string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin == "" || (!slices.Contains(allowedOrigins, "*") && !slices.Contains(allowedOrigins, origin)) {
+		allowAnyOrigin := slices.Contains(allowedOrigins, "*")
+		if origin == "" || (!allowAnyOrigin && !slices.Contains(allowedOrigins, origin)) {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		w.Header().Set("Access-Control-Allow-Origin", origin)
+		if allowAnyOrigin {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 		w.Header().Add("Vary", "Origin")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Cache-Control")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS")
 		if r.Method == http.MethodOptions {

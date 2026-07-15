@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"time"
 
@@ -160,9 +161,7 @@ func (s *RoomStore) EndRoom(ctx context.Context, roomID, userID, ownerKeyHash st
 		return metadata, nil
 	}
 	ownsByAccount := userID != "" && metadata.OwnerID != "" && metadata.OwnerID == userID
-	ownsByKey := ownerKeyHash != "" &&
-		metadata.OwnerKeyHash != "" &&
-		metadata.OwnerKeyHash == ownerKeyHash
+	ownsByKey := ownerKeyHashesEqual(metadata.OwnerKeyHash, ownerKeyHash)
 	if !ownsByAccount && !ownsByKey {
 		return RoomMetadata{}, ErrRoomAccessDenied
 	}
@@ -186,4 +185,11 @@ func roleForOwner(ownerID string) string {
 		return ""
 	}
 	return "owner"
+}
+
+func ownerKeyHashesEqual(expected, supplied string) bool {
+	if expected == "" || supplied == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(expected), []byte(supplied)) == 1
 }

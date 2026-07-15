@@ -23,6 +23,7 @@ import (
 const (
 	maxSceneBodyBytes = 8 * 1024 * 1024
 	maxFileBodyBytes  = 10 * 1024 * 1024
+	maxMetadataBytes  = 64 * 1024
 )
 
 var safeIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
@@ -83,8 +84,7 @@ func (api *HTTPAPI) roomsRoot(w http.ResponseWriter, r *http.Request) {
 			RoomID       string `json:"roomId"`
 			OwnerKeyHash string `json:"ownerKeyHash"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if !decodeJSON(w, r, &request, maxMetadataBytes, false) {
 			return
 		}
 		if !safeIDPattern.MatchString(request.RoomID) {
@@ -202,8 +202,7 @@ func (api *HTTPAPI) endRoom(w http.ResponseWriter, r *http.Request, roomID strin
 	var request struct {
 		OwnerKey string `json:"ownerKey"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if !decodeJSON(w, r, &request, maxMetadataBytes, true) {
 		return
 	}
 	identity, _ := api.identityFromRequest(r)
@@ -248,9 +247,7 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 		writeJSON(w, http.StatusOK, snapshot)
 	case http.MethodPut:
 		var snapshot storage.SceneSnapshot
-		r.Body = http.MaxBytesReader(w, r.Body, maxSceneBodyBytes)
-		if err := json.NewDecoder(r.Body).Decode(&snapshot); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if !decodeJSON(w, r, &snapshot, maxSceneBodyBytes, false) {
 			return
 		}
 		snapshot.RoomID = roomID
@@ -277,9 +274,7 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 		w.WriteHeader(http.StatusNoContent)
 	case http.MethodPost:
 		var snapshot storage.SceneSnapshot
-		r.Body = http.MaxBytesReader(w, r.Body, maxSceneBodyBytes)
-		if err := json.NewDecoder(r.Body).Decode(&snapshot); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		if !decodeJSON(w, r, &snapshot, maxSceneBodyBytes, false) {
 			return
 		}
 		snapshot.RoomID = roomID
@@ -386,6 +381,21 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, target any, maxBytes int64, allowEmpty bool) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	err := json.NewDecoder(r.Body).Decode(target)
+	if err == nil || (allowEmpty && errors.Is(err, io.EOF)) {
+		return true
+	}
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		http.Error(w, "request body is too large", http.StatusRequestEntityTooLarge)
+		return false
+	}
+	http.Error(w, "invalid JSON body", http.StatusBadRequest)
+	return false
 }
 
 func contextWithTimeout(r *http.Request, timeout time.Duration) (context.Context, context.CancelFunc) {

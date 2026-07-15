@@ -24,6 +24,7 @@ const (
 	emailPurposeVerify = "verify_email"
 	emailPurposeReset  = "password_reset"
 	maxAvatarBytes     = 2 * 1024 * 1024
+	maxJSONBodyBytes   = 64 * 1024
 )
 
 type HTTPAPI struct {
@@ -536,8 +537,14 @@ func allowedAvatarType(contentType string) bool {
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(target); err != nil && !errors.Is(err, io.EOF) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			http.Error(w, "request body is too large", http.StatusRequestEntityTooLarge)
+			return false
+		}
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return false
 	}
 	return true

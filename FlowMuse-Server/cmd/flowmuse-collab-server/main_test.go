@@ -22,10 +22,31 @@ func TestWithCORSHandlesBrowserPreflight(t *testing.T) {
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
 	}
-	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:55124" {
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "*" {
 		t.Fatalf("allow origin = %q", got)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Fatalf("allow credentials = %q, want empty for wildcard origin", got)
 	}
 	if called {
 		t.Fatal("preflight request reached API handler")
+	}
+}
+
+func TestWithCORSAllowsCredentialsOnlyForExplicitOrigin(t *testing.T) {
+	handler := withCORS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}), []string{"https://app.flowmuse.example"})
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	request.Header.Set("Origin", "https://app.flowmuse.example")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://app.flowmuse.example" {
+		t.Fatalf("allow origin = %q", got)
+	}
+	if got := response.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Fatalf("allow credentials = %q, want true", got)
 	}
 }
