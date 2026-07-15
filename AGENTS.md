@@ -257,6 +257,7 @@ lib/
 已有参考实现：
 - 文件选择：`file_picker_channel_ohos.dart` + `FilePickerChannel.ets`
 - HTTP 通道：`native_http_client.dart` + `HttpChannel.ets`
+- 语音识别：`speech_recognition_service_io.dart` + `SpeechRecognitionChannel.ets`（通道 `flow_muse/speech_recognition`）
 
 ### 5.5 改动前的跨端自检
 

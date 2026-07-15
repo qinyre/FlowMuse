@@ -1,10 +1,16 @@
 package com.example.flowmuse
 
 import android.app.Activity
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.OpenableColumns
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -18,6 +24,10 @@ class MainActivity : FlutterActivity() {
     /// Completes the in-flight image-picker call.  Set before launching the
     /// picker, cleared once a result arrives in [onActivityResult].
     private var imagePickerResult: MethodChannel.Result? = null
+    private var speechChannel: MethodChannel? = null
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var speechGeneration = 0
+    private var pendingSpeechStart: Pair<Int, String>? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -70,6 +80,40 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        speechChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "flow_muse/speech_recognition",
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isAvailable" -> result.success(SpeechRecognizer.isRecognitionAvailable(this))
+                    "start" -> {
+                        val generation = call.argument<Int>("generation") ?: 0
+                        val locale = call.argument<String>("locale") ?: "zh-CN"
+                        startSpeechRecognition(generation, locale)
+                        result.success(null)
+                    }
+                    "stop" -> {
+                        if (call.argument<Int>("generation") == speechGeneration) {
+                            speechRecognizer?.stopListening()
+                        }
+                        result.success(null)
+                    }
+                    "cancel" -> {
+                        if (call.argument<Int>("generation") == speechGeneration) {
+                            releaseSpeechRecognizer(cancel = true)
+                        }
+                        result.success(null)
+                    }
+                    "dispose" -> {
+                        releaseSpeechRecognizer(cancel = true)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
+
         enqueueDocument(intent)
     }
 
@@ -102,6 +146,29 @@ class MainActivity : FlutterActivity() {
         }.start()
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_RECORD_AUDIO) return
+        val pending = pendingSpeechStart ?: return
+        pendingSpeechStart = null
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            createAndStartSpeechRecognizer(pending.first, pending.second)
+        } else {
+            sendSpeechError(pending.first, "permissionDenied", "麦克风权限被拒绝")
+        }
+    }
+
+    override fun onDestroy() {
+        releaseSpeechRecognizer(cancel = true)
+        speechChannel?.setMethodCallHandler(null)
+        speechChannel = null
+        super.onDestroy()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -122,6 +189,111 @@ class MainActivity : FlutterActivity() {
                 documentChannel?.invokeMethod("onDocumentEnqueued", null)
             }
         }.start()
+    }
+
+    private fun startSpeechRecognition(generation: Int, locale: String) {
+        speechGeneration = generation
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            sendSpeechError(generation, "unavailable", "系统语音识别服务不可用")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
+        ) {
+            pendingSpeechStart = generation to locale
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_RECORD_AUDIO)
+            return
+        }
+        createAndStartSpeechRecognizer(generation, locale)
+    }
+
+    private fun createAndStartSpeechRecognizer(generation: Int, locale: String) {
+        if (generation != speechGeneration) return
+        releaseSpeechRecognizer(cancel = true)
+        speechGeneration = generation
+        val recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        speechRecognizer = recognizer
+        recognizer.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {
+                sendSpeechState(generation, "listening")
+            }
+
+            override fun onResults(results: Bundle?) {
+                sendBestSpeechResult(generation, results, final = true)
+                sendSpeechState(generation, "idle")
+                releaseSpeechRecognizer(cancel = false)
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                sendBestSpeechResult(generation, partialResults, final = false)
+            }
+
+            override fun onError(error: Int) {
+                val code = when (error) {
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "permissionDenied"
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "busy"
+                    SpeechRecognizer.ERROR_NO_MATCH,
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "noSpeech"
+                    SpeechRecognizer.ERROR_NETWORK,
+                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "network"
+                    SpeechRecognizer.ERROR_CLIENT -> "cancelled"
+                    else -> "unknown"
+                }
+                sendSpeechError(generation, code, "Android SpeechRecognizer error $error")
+                releaseSpeechRecognizer(cancel = false)
+            }
+
+            override fun onBeginningOfSpeech() = Unit
+            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onBufferReceived(buffer: ByteArray?) = Unit
+            override fun onEndOfSpeech() = Unit
+            override fun onEvent(eventType: Int, params: Bundle?) = Unit
+        })
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
+        sendSpeechState(generation, "starting")
+        recognizer.startListening(intent)
+    }
+
+    private fun sendBestSpeechResult(generation: Int, bundle: Bundle?, final: Boolean) {
+        if (generation != speechGeneration) return
+        val text = bundle
+            ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            ?.firstOrNull()
+            ?.trim()
+            .orEmpty()
+        if (text.isEmpty()) return
+        speechChannel?.invokeMethod(
+            "onResult",
+            mapOf("text" to text, "final" to final, "generation" to generation),
+        )
+    }
+
+    private fun sendSpeechState(generation: Int, state: String) {
+        if (generation != speechGeneration) return
+        speechChannel?.invokeMethod(
+            "onState",
+            mapOf("state" to state, "generation" to generation),
+        )
+    }
+
+    private fun sendSpeechError(generation: Int, code: String, message: String) {
+        if (generation != speechGeneration && speechGeneration != 0) return
+        speechChannel?.invokeMethod(
+            "onError",
+            mapOf("code" to code, "message" to message, "generation" to generation),
+        )
+    }
+
+    private fun releaseSpeechRecognizer(cancel: Boolean) {
+        if (cancel) speechRecognizer?.cancel()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
+        pendingSpeechStart = null
     }
 
     private fun fileName(uri: Uri): String? {
@@ -153,5 +325,6 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val REQUEST_PICK_IMAGE = 7011
+        private const val REQUEST_RECORD_AUDIO = 7012
     }
 }
