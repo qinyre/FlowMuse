@@ -259,33 +259,38 @@ class _AnimatedHeaderSlot extends StatelessWidget {
         width: visible ? width : 0,
         duration: _headerMotionDuration(context),
         curve: Curves.easeOutCubic,
-        child: Align(
+        child: OverflowBox(
           alignment: Alignment.centerLeft,
-          child: AnimatedSwitcher(
-            duration: _headerMotionDuration(context),
-            reverseDuration: _headerReverseDuration(context),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (child, animation) {
-              final curved = CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeOutCubic,
-                reverseCurve: Curves.easeInCubic,
-              );
-              return FadeTransition(
-                opacity: curved,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(-0.08, 0),
-                    end: Offset.zero,
-                  ).animate(curved),
-                  child: child,
-                ),
-              );
-            },
-            child: visible
-                ? KeyedSubtree(key: const ValueKey('visible'), child: child)
-                : SizedBox(key: const ValueKey('hidden'), width: width),
+          minWidth: width,
+          maxWidth: width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: AnimatedSwitcher(
+              duration: _headerMotionDuration(context),
+              reverseDuration: _headerReverseDuration(context),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) {
+                final curved = CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                  reverseCurve: Curves.easeInCubic,
+                );
+                return FadeTransition(
+                  opacity: curved,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(-0.08, 0),
+                      end: Offset.zero,
+                    ).animate(curved),
+                    child: child,
+                  ),
+                );
+              },
+              child: visible
+                  ? KeyedSubtree(key: const ValueKey('visible'), child: child)
+                  : SizedBox(key: const ValueKey('hidden'), width: width),
+            ),
           ),
         ),
       ),
