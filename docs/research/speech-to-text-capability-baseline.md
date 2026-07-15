@@ -42,6 +42,10 @@
 | Web release 构建 | 通过 | `flutter build web --no-pub` |
 | Android debug APK | 通过 | `flutter build apk --debug --no-pub` |
 | HarmonyOS debug HAP | 通过 | `flutter build hap --debug --no-pub` |
+| Chrome 构造器探针 | 通过 | `SpeechRecognition=function`、`webkitSpeechRecognition=function` |
+| Edge 构造器探针 | 通过 | `SpeechRecognition=undefined`、`webkitSpeechRecognition=function` |
+
+浏览器探针使用各浏览器 headless 模式直接执行 JS 全局能力检测。`flutter test --platform chrome` 在本机能启动 Chrome，但测试驱动长时间停在 loading、没有回传事件，因此不把该次运行记为通过；生产适配已显式按标准构造器、`webkit` 构造器顺序检测。
 
 ## 4. 待真机填写
 
@@ -54,8 +58,8 @@
 | Android 设备 1 | 断网（至少 3 句） | 待测 | 待测 | 待测 | 待测 |
 | HarmonyOS 目标机 | 在线 | 待测 | 待测 | 待测 | 待测 |
 | HarmonyOS 目标机 | 断网（至少 3 句） | 待测 | 待测 | 待测 | 待测 |
-| Chrome localhost/HTTPS | 在线 | 待测 | 待测 | 待测 | 待测 |
-| Edge localhost/HTTPS | 在线 | 待测 | 待测 | 待测 | 待测 |
+| Chrome localhost/HTTPS | 在线 | 构造器可用，语料待测 | 待测 | 待测 | 部分通过 |
+| Edge localhost/HTTPS | 在线 | `webkit` 构造器可用，语料待测 | 待测 | 待测 | 部分通过 |
 
 同时验证：权限允许/拒绝、完成、取消、应用退后台、离开白板、麦克风图标及时消失和协作对端只收到一个最终文本。
 

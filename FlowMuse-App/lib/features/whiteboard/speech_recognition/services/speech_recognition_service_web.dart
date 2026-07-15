@@ -26,8 +26,9 @@ class WebSpeechRecognitionService implements SpeechRecognitionService {
     final webkit = globalContext.getProperty<JSAny?>(
       'webkitSpeechRecognition'.toJS,
     );
-    final value = standard ?? webkit;
-    return value?.isA<JSFunction>() == true ? value as JSFunction : null;
+    if (standard?.isA<JSFunction>() == true) return standard as JSFunction;
+    if (webkit?.isA<JSFunction>() == true) return webkit as JSFunction;
+    return null;
   }
 
   @override
