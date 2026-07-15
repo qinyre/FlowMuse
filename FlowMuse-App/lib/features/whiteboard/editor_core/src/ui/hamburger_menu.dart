@@ -91,6 +91,7 @@ class HamburgerMenu extends StatelessWidget {
   final VoidCallback? onShare;
   final VoidCallback? onImportImage;
   final VoidCallback? onDocumentRenamed;
+  final VoidCallback? onChooseControlGroupPosition;
 
   const HamburgerMenu({
     super.key,
@@ -107,6 +108,7 @@ class HamburgerMenu extends StatelessWidget {
     this.onShare,
     this.onImportImage,
     this.onDocumentRenamed,
+    this.onChooseControlGroupPosition,
   });
 
   @override
@@ -164,6 +166,8 @@ class HamburgerMenu extends StatelessWidget {
                 controller.toggleZenMode();
               case 'view_mode':
                 controller.toggleViewMode();
+              case 'control_group_position':
+                onChooseControlGroupPosition?.call();
             }
           });
         },
@@ -251,6 +255,14 @@ class HamburgerMenu extends StatelessWidget {
               ],
             ),
           ),
+          if (onChooseControlGroupPosition != null)
+            _menuItem(
+              context,
+              'control_group_position',
+              Icons.open_with,
+              '控制组位置',
+              null,
+            ),
           if (onImportImage != null)
             _menuItem(
               context,

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/services.dart';
 
 import '../features/library/repositories/library_repository.dart';
 import '../features/whiteboard/share/models/external_document_request.dart';
@@ -21,16 +24,39 @@ class FlowMuseApp extends ConsumerStatefulWidget {
   ConsumerState<FlowMuseApp> createState() => _FlowMuseAppState();
 }
 
-class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
+class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
+    with WidgetsBindingObserver {
   bool _consuming = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _enableImmersiveMode();
     const ExternalDocumentChannelOhos().setEnqueueListener(
       _drainPendingDocuments,
     );
     Future.microtask(_drainPendingDocuments);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _enableImmersiveMode();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+    super.dispose();
+  }
+
+  void _enableImmersiveMode() {
+    unawaited(
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
+    );
   }
 
   /// 持续消费待处理文档,直到队列清空。重入时跳过,由入队通知或启动触发。
