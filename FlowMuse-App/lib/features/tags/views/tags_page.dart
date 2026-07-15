@@ -169,26 +169,16 @@ class TagDetailPage extends ConsumerWidget {
       viewMode: LibraryViewMode.grid,
       sortAscending: false,
       selectionMode: false,
-      onCreate: () async {
-        final note = await ref
-            .read(libraryIndexProvider.notifier)
-            .createNote(tagIds: [tagId]);
-        if (context.mounted) {
-          _openWhiteboard(context, noteId: note.id, discardIfUnchanged: true);
-        }
+      onCreate: () {
+        context.push(AppRoutes.createNotePath(tagIds: [tagId]));
       },
       onViewModeChanged: null,
       onSortDirectionChanged: null,
       onSelectionModeChanged: null,
       child: _NoteItems(
         notes: notes,
-        onCreate: () async {
-          final note = await ref
-              .read(libraryIndexProvider.notifier)
-              .createNote(tagIds: [tagId]);
-          if (context.mounted) {
-            _openWhiteboard(context, noteId: note.id, discardIfUnchanged: true);
-          }
+        onCreate: () {
+          context.push(AppRoutes.createNotePath(tagIds: [tagId]));
         },
         onOpenNote: (item) {
           _openWhiteboard(context, noteId: item.id);

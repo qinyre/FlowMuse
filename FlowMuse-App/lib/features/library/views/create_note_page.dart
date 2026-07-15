@@ -34,7 +34,14 @@ import '../models/note_item.dart';
 import '../repositories/library_repository.dart';
 
 class CreateNotePage extends ConsumerStatefulWidget {
-  const CreateNotePage({super.key});
+  const CreateNotePage({
+    super.key,
+    this.notebookId,
+    this.tagIds = const [],
+  });
+
+  final String? notebookId;
+  final List<String> tagIds;
 
   @override
   ConsumerState<CreateNotePage> createState() => _CreateNotePageState();
@@ -78,6 +85,8 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
             pageTemplate: pageTemplate,
             pageFlow: pageFlow,
             title: _title,
+            notebookId: widget.notebookId,
+            tagIds: widget.tagIds,
           );
       await defaultWhiteboardSceneRepository.saveScene(
         note.id,
@@ -135,6 +144,8 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
             noteType: noteType,
             pageTemplate: pageTemplate,
             pageFlow: pageFlow,
+            notebookId: widget.notebookId,
+            tagIds: widget.tagIds,
             picker: () async {
               if (defaultTargetPlatform == TargetPlatform.ohos) {
                 try {

@@ -177,26 +177,16 @@ class NotebookDetailPage extends ConsumerWidget {
       selectionMode: false,
       createTooltip: '新建笔记',
       createIcon: LucideIcons.plus,
-      onCreate: () async {
-        final note = await ref
-            .read(libraryIndexProvider.notifier)
-            .createNote(notebookId: notebookId);
-        if (context.mounted) {
-          _openWhiteboard(context, noteId: note.id, discardIfUnchanged: true);
-        }
+      onCreate: () {
+        context.push(AppRoutes.createNotePath(notebookId: notebookId));
       },
       onViewModeChanged: null,
       onSortDirectionChanged: null,
       onSelectionModeChanged: null,
       child: _NoteItems(
         notes: notes,
-        onCreate: () async {
-          final note = await ref
-              .read(libraryIndexProvider.notifier)
-              .createNote(notebookId: notebookId);
-          if (context.mounted) {
-            _openWhiteboard(context, noteId: note.id, discardIfUnchanged: true);
-          }
+        onCreate: () {
+          context.push(AppRoutes.createNotePath(notebookId: notebookId));
         },
         onOpenNote: (item) {
           _openWhiteboard(context, noteId: item.id);
