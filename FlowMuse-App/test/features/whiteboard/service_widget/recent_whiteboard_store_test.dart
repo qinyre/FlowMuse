@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flow_muse/app/app_router.dart';
 import 'package:flow_muse/features/library/models/note_item.dart';
 import 'package:flow_muse/features/whiteboard/service_widget/recent_whiteboard_store.dart';
@@ -39,6 +41,20 @@ void main() {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(1721000000000),
     );
 
+    final rawRows = await db.query(
+      'local_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [RecentWhiteboardStore.settingsKey],
+      limit: 1,
+    );
+    final rawJson = jsonDecode(rawRows.single['value']! as String);
+    expect((rawJson as Map<String, Object?>).keys.toSet(), {
+      'noteId',
+      'title',
+      'updatedAt',
+    });
+
     final snapshot = await store.read();
     expect(snapshot?.noteId, 'note-123');
     expect(snapshot?.title, '线代课堂笔记');
@@ -58,6 +74,14 @@ void main() {
       resolveRecentWhiteboardLocation(snapshot, const []),
       AppRoutes.library,
     );
+  });
+
+  test('非整数 updatedAt 返回 null', () {
+    final snapshot = RecentWhiteboardSnapshot.tryParse(
+      '{"noteId":"note-123","title":"线代课堂笔记","updatedAt":1721000000000.5}',
+    );
+
+    expect(snapshot, isNull);
   });
 
   test('存在快照且笔记未删除时跳最近白板，否则回退资料库', () {

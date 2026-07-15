@@ -27,13 +27,13 @@ class RecentWhiteboardSnapshot {
       final noteId = value['noteId'];
       final title = value['title'];
       final updatedAt = value['updatedAt'];
-      if (noteId is! String || title is! String || updatedAt is! num) {
+      if (noteId is! String || title is! String || updatedAt is! int) {
         return null;
       }
       return RecentWhiteboardSnapshot(
         noteId: noteId,
         title: title,
-        updatedAt: updatedAt.toInt(),
+        updatedAt: updatedAt,
       );
     } catch (_) {
       return null;
