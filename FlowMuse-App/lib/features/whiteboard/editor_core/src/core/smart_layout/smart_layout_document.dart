@@ -174,6 +174,7 @@ class SmartLayoutInkBlockRequest {
     required this.id,
     required this.bounds,
     required this.imageBase64,
+    this.strokeBounds = const [],
     this.pageId,
     this.startedAt,
     this.imageMime = 'image/png',
@@ -182,6 +183,7 @@ class SmartLayoutInkBlockRequest {
   final String id;
   final String? pageId;
   final Bounds bounds;
+  final List<Bounds> strokeBounds;
   final int? startedAt;
   final String imageMime;
   final String imageBase64;
@@ -195,6 +197,16 @@ class SmartLayoutInkBlockRequest {
       'width': bounds.size.width,
       'height': bounds.size.height,
     },
+    if (strokeBounds.isNotEmpty)
+      'strokeBounds': [
+        for (final bounds in strokeBounds)
+          {
+            'x': bounds.left,
+            'y': bounds.top,
+            'width': bounds.size.width,
+            'height': bounds.size.height,
+          },
+      ],
     if (startedAt != null) 'startedAt': startedAt,
     'imageMime': imageMime,
     'imageBase64': imageBase64,
@@ -221,6 +233,7 @@ class SmartLayoutRecognizedBlock {
     this.pageId,
     this.text,
     this.latex,
+    this.strokeBounds = const [],
     this.startedAt,
     this.error,
   });
@@ -231,6 +244,7 @@ class SmartLayoutRecognizedBlock {
   final String? text;
   final String? latex;
   final Bounds bounds;
+  final List<Bounds> strokeBounds;
   final int? startedAt;
   final String? error;
 
@@ -248,12 +262,23 @@ class SmartLayoutRecognizedBlock {
       'width': bounds.size.width,
       'height': bounds.size.height,
     },
+    if (strokeBounds.isNotEmpty)
+      'strokeBounds': [
+        for (final bounds in strokeBounds)
+          {
+            'x': bounds.left,
+            'y': bounds.top,
+            'width': bounds.size.width,
+            'height': bounds.size.height,
+          },
+      ],
     if (startedAt != null) 'startedAt': startedAt,
     if (error != null && error!.isNotEmpty) 'error': error,
   };
 
   factory SmartLayoutRecognizedBlock.fromJson(Map<String, Object?> json) {
     final rawBounds = json['bounds'];
+    final rawStrokeBounds = json['strokeBounds'] as List<Object?>? ?? const [];
     Bounds bounds = Bounds.fromLTWH(0, 0, 1, 1);
     if (rawBounds is Map) {
       final map = Map<String, Object?>.from(rawBounds);
@@ -271,8 +296,21 @@ class SmartLayoutRecognizedBlock {
       text: json['text'] as String?,
       latex: json['latex'] as String?,
       bounds: bounds,
+      strokeBounds: [
+        for (final item in rawStrokeBounds)
+          if (item is Map) _boundsFromJson(Map<String, Object?>.from(item)),
+      ],
       startedAt: (json['startedAt'] as num?)?.toInt(),
       error: json['error'] as String?,
+    );
+  }
+
+  static Bounds _boundsFromJson(Map<String, Object?> json) {
+    return Bounds.fromLTWH(
+      (json['x'] as num?)?.toDouble() ?? 0,
+      (json['y'] as num?)?.toDouble() ?? 0,
+      (json['width'] as num?)?.toDouble() ?? 1,
+      (json['height'] as num?)?.toDouble() ?? 1,
     );
   }
 }

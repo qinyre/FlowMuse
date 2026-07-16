@@ -3119,6 +3119,15 @@ class MarkdrawController extends ChangeNotifier {
       id: id,
       pageId: _pageIdForElement(strokes.first),
       bounds: bounds,
+      strokeBounds: [
+        for (final stroke in strokes)
+          Bounds.fromLTWH(
+            stroke.x,
+            stroke.y,
+            math.max(stroke.width, 1.0),
+            math.max(stroke.height, 1.0),
+          ),
+      ],
       startedAt: _startedAtForStrokes(strokes),
       imageBase64: imageBytes == null ? '' : base64Encode(imageBytes),
     );
@@ -3140,6 +3149,7 @@ class MarkdrawController extends ChangeNotifier {
         pageId: block.pageId,
         type: 'error',
         bounds: block.bounds,
+        strokeBounds: block.strokeBounds,
         startedAt: block.startedAt,
         error: '没有可识别的笔迹点',
       );
@@ -3153,6 +3163,7 @@ class MarkdrawController extends ChangeNotifier {
         pageId: block.pageId,
         type: 'error',
         bounds: block.bounds,
+        strokeBounds: block.strokeBounds,
         startedAt: block.startedAt,
         error: error.toString(),
       );
@@ -3173,6 +3184,7 @@ class MarkdrawController extends ChangeNotifier {
         pageId: block.pageId,
         type: 'error',
         bounds: block.bounds,
+        strokeBounds: block.strokeBounds,
         startedAt: block.startedAt,
         error: 'MyScript 未返回文字',
       );
@@ -3193,6 +3205,7 @@ class MarkdrawController extends ChangeNotifier {
         text: latex,
         latex: latex,
         bounds: block.bounds,
+        strokeBounds: block.strokeBounds,
         startedAt: block.startedAt,
       );
     }
@@ -3211,6 +3224,7 @@ class MarkdrawController extends ChangeNotifier {
         pageId: block.pageId,
         type: 'error',
         bounds: block.bounds,
+        strokeBounds: block.strokeBounds,
         startedAt: block.startedAt,
         error: 'MyScript 未返回文字',
       );
@@ -3221,6 +3235,7 @@ class MarkdrawController extends ChangeNotifier {
       type: 'text',
       text: text,
       bounds: block.bounds,
+      strokeBounds: block.strokeBounds,
       startedAt: block.startedAt,
     );
   }
@@ -3322,16 +3337,18 @@ class MarkdrawController extends ChangeNotifier {
       final pageKey = block.pageId ?? '';
       final pageLayoutIndex = layoutIndexByPage[pageKey] ?? 0;
       final occupied = occupiedByPage.putIfAbsent(pageKey, () => <Bounds>[]);
-      final element = _textElementFromSmartLayoutBlock(
+      final blockElements = _textElementsFromSmartLayoutBlock(
         block,
         pageLayoutIndex,
         occupied,
         useTemplateAnchors: useTemplateAnchors,
       );
-      elements.add(element);
-      occupied.add(
-        Bounds.fromLTWH(element.x, element.y, element.width, element.height),
-      );
+      for (final element in blockElements) {
+        elements.add(element);
+        occupied.add(
+          Bounds.fromLTWH(element.x, element.y, element.width, element.height),
+        );
+      }
       layoutIndexByPage[pageKey] =
           pageLayoutIndex + _smartLayoutLineSpan(block.text);
     }
@@ -3392,6 +3409,66 @@ class MarkdrawController extends ChangeNotifier {
     final lineCount = math.max(1, text.split('\n').length);
     final estimatedLineHeight = block.bounds.size.height / lineCount;
     return math.max(12, math.min(estimatedLineHeight * 0.72, 48));
+  }
+
+  List<TextElement> _textElementsFromSmartLayoutBlock(
+    SmartLayoutBlock block,
+    int layoutIndex,
+    List<Bounds> occupied, {
+    bool useTemplateAnchors = false,
+  }) {
+    if (block.writingMode == 'vertical' || block.type == 'math') {
+      return [
+        _textElementFromSmartLayoutBlock(
+          block,
+          layoutIndex,
+          occupied,
+          useTemplateAnchors: useTemplateAnchors,
+        ),
+      ];
+    }
+    final lines = _smartLayoutDisplayLines(block.text);
+    if (lines.length <= 1) {
+      return [
+        _textElementFromSmartLayoutBlock(
+          block,
+          layoutIndex,
+          occupied,
+          useTemplateAnchors: useTemplateAnchors,
+        ),
+      ];
+    }
+    final elements = <TextElement>[];
+    final localOccupied = [...occupied];
+    final totalLineCount = math.max(lines.length, 1);
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (line.trim().isEmpty) {
+        continue;
+      }
+      final lineBlock = SmartLayoutBlock(
+        id: '${block.id}-line-$i',
+        type: block.type,
+        text: line,
+        latex: block.latex,
+        pageId: block.pageId,
+        bounds: _lineBoundsForSmartLayoutBlock(block, i, totalLineCount),
+        order: block.order,
+        writingMode: block.writingMode,
+        sourceIds: block.sourceIds,
+      );
+      final element = _textElementFromSmartLayoutBlock(
+        lineBlock,
+        layoutIndex + i,
+        localOccupied,
+        useTemplateAnchors: useTemplateAnchors,
+      );
+      elements.add(element);
+      localOccupied.add(
+        Bounds.fromLTWH(element.x, element.y, element.width, element.height),
+      );
+    }
+    return elements;
   }
 
   TextElement _textElementFromSmartLayoutBlock(
@@ -3528,6 +3605,30 @@ class MarkdrawController extends ChangeNotifier {
       return 1;
     }
     return math.max(1, normalized.split('\n').length);
+  }
+
+  List<String> _smartLayoutDisplayLines(String text) {
+    return _trimSmartLayoutDisplayText(
+      text,
+    ).replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+  }
+
+  Bounds? _lineBoundsForSmartLayoutBlock(
+    SmartLayoutBlock block,
+    int lineIndex,
+    int lineCount,
+  ) {
+    final bounds = block.bounds;
+    if (bounds == null || lineCount <= 1) {
+      return bounds;
+    }
+    final lineHeight = math.max(bounds.size.height / lineCount, 1.0);
+    return Bounds.fromLTWH(
+      bounds.left,
+      bounds.top + lineHeight * lineIndex,
+      bounds.size.width,
+      lineHeight,
+    );
   }
 
   String _trimSmartLayoutDisplayText(String text) {

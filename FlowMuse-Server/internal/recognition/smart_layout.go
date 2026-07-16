@@ -82,12 +82,13 @@ func (l *OpenAICompatibleSmartLayouter) recognizeBlocks(ctx context.Context, blo
 			result, err := l.recognizeBlock(ctx, block)
 			if err != nil {
 				result = SmartLayoutRecognizedBlock{
-					ID:        block.ID,
-					PageID:    block.PageID,
-					Type:      "error",
-					Bounds:    block.Bounds,
-					StartedAt: block.StartedAt,
-					Error:     err.Error(),
+					ID:           block.ID,
+					PageID:       block.PageID,
+					Type:         "error",
+					Bounds:       block.Bounds,
+					StrokeBounds: block.StrokeBounds,
+					StartedAt:    block.StartedAt,
+					Error:        err.Error(),
 				}
 			}
 			results[i] = result
@@ -150,13 +151,14 @@ func (l *OpenAICompatibleSmartLayouter) recognizeBlock(ctx context.Context, bloc
 		return SmartLayoutRecognizedBlock{}, errors.New("AI OCR returned empty formula")
 	}
 	return SmartLayoutRecognizedBlock{
-		ID:        block.ID,
-		PageID:    block.PageID,
-		Type:      resultType,
-		Text:      text,
-		LaTeX:     latex,
-		Bounds:    block.Bounds,
-		StartedAt: block.StartedAt,
+		ID:           block.ID,
+		PageID:       block.PageID,
+		Type:         resultType,
+		Text:         text,
+		LaTeX:        latex,
+		Bounds:       block.Bounds,
+		StrokeBounds: block.StrokeBounds,
+		StartedAt:    block.StartedAt,
 	}, nil
 }
 
@@ -422,6 +424,10 @@ func formatSmartLayoutParagraph(blocks []SmartLayoutRecognizedBlock, page SmartL
 	}
 	sorted := append([]SmartLayoutRecognizedBlock(nil), blocks...)
 	sortRecognizedBlocks(sorted)
+	if writingMode != "vertical" {
+		sorted = expandSmartLayoutInternalLines(sorted)
+		sortRecognizedBlocks(sorted)
+	}
 	if writingMode == "vertical" {
 		parts := make([]string, 0, len(sorted))
 		for _, block := range sorted {
@@ -465,6 +471,79 @@ func formatSmartLayoutParagraph(blocks []SmartLayoutRecognizedBlock, page SmartL
 		previous = &line
 	}
 	return trimSmartLayoutDocumentText(strings.Join(out, "\n"))
+}
+
+func expandSmartLayoutInternalLines(blocks []SmartLayoutRecognizedBlock) []SmartLayoutRecognizedBlock {
+	expanded := make([]SmartLayoutRecognizedBlock, 0, len(blocks))
+	for _, block := range blocks {
+		text := smartLayoutBlockText(block)
+		textLines := smartLayoutTextLines(text)
+		if len(textLines) <= 1 || len(block.StrokeBounds) <= 1 {
+			expanded = append(expanded, block)
+			continue
+		}
+		geometryLines := groupSmartLayoutStrokeBounds(block.StrokeBounds)
+		if len(geometryLines) == 0 {
+			expanded = append(expanded, block)
+			continue
+		}
+		for i, lineText := range textLines {
+			lineText = strings.TrimRight(lineText, " \t")
+			if strings.TrimSpace(lineText) == "" {
+				continue
+			}
+			lineBlock := block
+			lineBlock.Text = lineText
+			if block.Type == "formula" {
+				lineBlock.LaTeX = lineText
+			}
+			lineBlock.Bounds = geometryLines[minInt(i, len(geometryLines)-1)].Bounds
+			lineBlock.StrokeBounds = nil
+			lineBlock.StartedAt = block.StartedAt + int64(i)
+			expanded = append(expanded, lineBlock)
+		}
+	}
+	return expanded
+}
+
+func smartLayoutTextLines(text string) []string {
+	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	if !strings.Contains(normalized, "\n") {
+		return []string{strings.TrimSpace(normalized)}
+	}
+	return strings.Split(normalized, "\n")
+}
+
+func groupSmartLayoutStrokeBounds(bounds []InkBounds) []smartLayoutLine {
+	strokes := append([]InkBounds(nil), bounds...)
+	sort.SliceStable(strokes, func(i, j int) bool {
+		a, b := strokes[i], strokes[j]
+		if a.Y != b.Y {
+			return a.Y < b.Y
+		}
+		return a.X < b.X
+	})
+	lines := []smartLayoutLine{}
+	for _, stroke := range strokes {
+		if stroke.Width <= 0 || stroke.Height <= 0 {
+			continue
+		}
+		centerY := stroke.Y + stroke.Height/2
+		if len(lines) == 0 {
+			lines = append(lines, smartLayoutLine{Bounds: stroke})
+			continue
+		}
+		last := &lines[len(lines)-1]
+		lastCenterY := last.Bounds.Y + last.Bounds.Height/2
+		threshold := maxFloat(minFloat(last.Bounds.Height, stroke.Height)*0.7, 12)
+		if absFloat(centerY-lastCenterY) <= threshold {
+			last.Bounds = unionInkBounds(last.Bounds, stroke)
+		} else {
+			lines = append(lines, smartLayoutLine{Bounds: stroke})
+		}
+	}
+	return lines
 }
 
 func groupSmartLayoutLines(blocks []SmartLayoutRecognizedBlock) []smartLayoutLine {
