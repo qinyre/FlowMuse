@@ -2997,7 +2997,7 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   Map<String, List<FreedrawElement>> _smartLayoutInkGroups() {
-    final groups = <String, List<FreedrawElement>>{};
+    final sessionGroups = <String, List<FreedrawElement>>{};
     for (final element in _smartLayoutInkElements()) {
       final sessionId =
           element.customData?[recognitionStrokeSessionKey] as String?;
@@ -3006,9 +3006,116 @@ class MarkdrawController extends ChangeNotifier {
       }
       final pageId = _pageIdForElement(element);
       final groupId = pageId == null ? sessionId : '$pageId:$sessionId';
-      groups.putIfAbsent(groupId, () => <FreedrawElement>[]).add(element);
+      sessionGroups
+          .putIfAbsent(groupId, () => <FreedrawElement>[])
+          .add(element);
+    }
+    final groups = <String, List<FreedrawElement>>{};
+    for (final entry in sessionGroups.entries) {
+      final splits = _splitSmartLayoutInkGroup(entry.value);
+      for (var i = 0; i < splits.length; i++) {
+        groups['${entry.key}:part-$i'] = splits[i];
+      }
     }
     return groups;
+  }
+
+  List<List<FreedrawElement>> _splitSmartLayoutInkGroup(
+    List<FreedrawElement> strokes,
+  ) {
+    if (strokes.length <= 1) {
+      return [strokes];
+    }
+    final vertical =
+        _smartLayoutWritingModeForStrokes(strokes) ==
+        TemplateWritingMode.vertical;
+    final sorted = [...strokes]
+      ..sort((a, b) {
+        final aBounds = Bounds.fromLTWH(a.x, a.y, a.width, a.height);
+        final bBounds = Bounds.fromLTWH(b.x, b.y, b.width, b.height);
+        final primary = vertical
+            ? bBounds.center.x.compareTo(aBounds.center.x)
+            : aBounds.center.y.compareTo(bBounds.center.y);
+        if (primary != 0) return primary;
+        final secondary = vertical
+            ? aBounds.center.y.compareTo(bBounds.center.y)
+            : aBounds.center.x.compareTo(bBounds.center.x);
+        if (secondary != 0) return secondary;
+        return (_startedAtForStrokes([a]) ?? 0).compareTo(
+          _startedAtForStrokes([b]) ?? 0,
+        );
+      });
+
+    final groups = <List<FreedrawElement>>[];
+    for (final stroke in sorted) {
+      if (groups.isEmpty) {
+        groups.add([stroke]);
+        continue;
+      }
+      final last = groups.last;
+      final lastBounds = _boundsForElements(last);
+      if (lastBounds == null) {
+        last.add(stroke);
+        continue;
+      }
+      final strokeBounds = Bounds.fromLTWH(
+        stroke.x,
+        stroke.y,
+        math.max(stroke.width, 1.0),
+        math.max(stroke.height, 1.0),
+      );
+      final distance = vertical
+          ? (strokeBounds.center.x - lastBounds.center.x).abs()
+          : (strokeBounds.center.y - lastBounds.center.y).abs();
+      final strokeExtent = vertical
+          ? math.max(strokeBounds.size.width, 1.0)
+          : math.max(strokeBounds.size.height, 1.0);
+      final lastExtent = vertical
+          ? math.max(lastBounds.size.width, 1.0)
+          : math.max(lastBounds.size.height, 1.0);
+      final threshold = math.max(math.min(strokeExtent, lastExtent) * 0.72, 18);
+      if (distance <= threshold) {
+        last.add(stroke);
+      } else {
+        groups.add([stroke]);
+      }
+    }
+    for (final group in groups) {
+      group.sort((a, b) {
+        if (vertical) {
+          final byY = a.y.compareTo(b.y);
+          if (byY != 0) return byY;
+          return b.x.compareTo(a.x);
+        }
+        final byX = a.x.compareTo(b.x);
+        if (byX != 0) return byX;
+        return a.y.compareTo(b.y);
+      });
+    }
+    return groups;
+  }
+
+  TemplateWritingMode _smartLayoutWritingModeForStrokes(
+    List<FreedrawElement> strokes,
+  ) {
+    if (!_layout.isPaged || strokes.isEmpty) {
+      return TemplateWritingMode.horizontal;
+    }
+    final page = _pageForElement(strokes.first);
+    if (page == null) {
+      return TemplateWritingMode.horizontal;
+    }
+    return TemplateAnchorResolver.resolve(page).writingMode;
+  }
+
+  CanvasPage? _pageForElement(Element element) {
+    if (!_layout.isPaged) {
+      final pages = _layout.ensurePage().pages;
+      return pages.isEmpty ? null : pages.first;
+    }
+    return _layout.pageAt(
+      Offset(element.x + element.width / 2, element.y + element.height / 2),
+    );
   }
 
   String? _pageIdForElement(Element element) {
@@ -3020,9 +3127,7 @@ class MarkdrawController extends ChangeNotifier {
       final pages = _layout.ensurePage().pages;
       return pages.isEmpty ? null : pages.first.id;
     }
-    final page = _layout.pageAt(
-      Offset(element.x + element.width / 2, element.y + element.height / 2),
-    );
+    final page = _pageForElement(element);
     return page?.id;
   }
 
