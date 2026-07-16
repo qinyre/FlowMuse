@@ -70,11 +70,20 @@ class ColorPickerButton extends StatefulWidget {
   /// Canvas size for eyedropper rendering.
   final Size? canvasSize;
 
+  /// Global origin of the rendered canvas image.
+  final Offset canvasGlobalOffset;
+
   /// When true, the palette popup opens automatically on build.
   final bool autoOpen;
 
   /// Called when the auto-opened popup is shown (to clear the trigger flag).
   final VoidCallback? onAutoOpened;
+
+  /// When true, the eyedropper activates automatically after the popup opens.
+  final bool autoActivateEyedropper;
+
+  /// Called once the eyedropper has been auto-activated (to clear flag).
+  final VoidCallback? onEyedropperActivated;
 
   const ColorPickerButton({
     super.key,
@@ -84,8 +93,11 @@ class ColorPickerButton extends StatefulWidget {
     this.onRenderScene,
     this.onSampleColor,
     this.canvasSize,
+    this.canvasGlobalOffset = Offset.zero,
     this.autoOpen = false,
     this.onAutoOpened,
+    this.autoActivateEyedropper = false,
+    this.onEyedropperActivated,
   });
 
   static const paletteColors = [
@@ -192,6 +204,9 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
         onRenderScene: widget.onRenderScene,
         onSampleColor: widget.onSampleColor,
         canvasSize: widget.canvasSize,
+        canvasGlobalOffset: widget.canvasGlobalOffset,
+        autoActivateEyedropper: widget.autoActivateEyedropper,
+        onEyedropperActivated: widget.onEyedropperActivated,
       ),
     );
     _insertOverlay(overlay, _overlayEntry!);
@@ -242,6 +257,15 @@ class ColorPaletteOverlay extends StatefulWidget {
   /// Canvas size for eyedropper rendering.
   final Size? canvasSize;
 
+  /// Global origin of the rendered canvas image.
+  final Offset canvasGlobalOffset;
+
+  /// When true, eyedropper activates automatically once the overlay is shown.
+  final bool autoActivateEyedropper;
+
+  /// Called once after auto-activation (to clear the pending flag in caller).
+  final VoidCallback? onEyedropperActivated;
+
   const ColorPaletteOverlay({
     super.key,
     required this.anchor,
@@ -251,6 +275,9 @@ class ColorPaletteOverlay extends StatefulWidget {
     this.onRenderScene,
     this.onSampleColor,
     this.canvasSize,
+    this.canvasGlobalOffset = Offset.zero,
+    this.autoActivateEyedropper = false,
+    this.onEyedropperActivated,
   });
 
   @override
@@ -273,6 +300,15 @@ class _ColorPaletteOverlayState extends State<ColorPaletteOverlay> {
       text: widget.currentColor == 'transparent' ? '' : widget.currentColor,
     );
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
+    // 工具栏吸管按钮触发时，弹窗打开后立即进入取色模式。
+    if (widget.autoActivateEyedropper && _hasEyedropper) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onEyedropperActivated?.call();
+          _activateEyedropper();
+        }
+      });
+    }
   }
 
   @override
@@ -314,7 +350,10 @@ class _ColorPaletteOverlayState extends State<ColorPaletteOverlay> {
     if (!_eyedropperActive || _cachedImage == null) return;
     setState(() => _cursorPosition = position);
 
-    final color = await widget.onSampleColor!(_cachedImage!, position);
+    final color = await widget.onSampleColor!(
+      _cachedImage!,
+      position - widget.canvasGlobalOffset,
+    );
     if (!mounted || !_eyedropperActive) return;
     setState(() {
       _previewColor = color;

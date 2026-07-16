@@ -71,7 +71,10 @@ class MarkdrawEditor extends StatefulWidget {
     this.onComposeSmartLayout,
     this.canvasThemeBackground = '#ffffff',
     this.useFlatBackgrounds = false,
+    this.onEyedropperPressed,
     this.speechRecognitionService,
+    this.fingerDrawingEnabled = false,
+    this.onFingerDrawingEnabledChanged,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -135,6 +138,12 @@ class MarkdrawEditor extends StatefulWidget {
   final String canvasThemeBackground;
   final bool useFlatBackgrounds;
   final SpeechRecognitionService? speechRecognitionService;
+  final bool fingerDrawingEnabled;
+  final ValueChanged<bool>? onFingerDrawingEnabledChanged;
+
+  /// Optional override for the eyedropper toolbar button.
+  /// When provided (e.g. HarmonyOS), calling this replaces the canvas picker.
+  final VoidCallback? onEyedropperPressed;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -481,6 +490,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         onDockChanged: _setToolbarDock,
         onCollapse: () => _setToolbarCollapsed(true),
         useFlatBackground: widget.useFlatBackgrounds,
+        onEyedropperPressed: widget.onEyedropperPressed,
         onSpeechPressed: _toggleSpeech,
         speechActive: _speechState != SpeechRecognitionState.idle,
         speechAvailable: _speechAvailable,
@@ -493,6 +503,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       onDockChanged: _setToolbarDock,
       onCollapse: () => _setToolbarCollapsed(true),
       useFlatBackground: widget.useFlatBackgrounds,
+      onEyedropperPressed: widget.onEyedropperPressed,
       onSpeechPressed: _toggleSpeech,
       speechActive: _speechState != SpeechRecognitionState.idle,
       speechAvailable: _speechAvailable,
@@ -757,10 +768,30 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                                   onChooseControlGroupPosition:
                                       _showControlGroupPositionDialog,
                                 ),
+                              if (isCompact &&
+                                  widget.onFingerDrawingEnabledChanged !=
+                                      null) ...[
+                                const SizedBox(width: 4),
+                                _FingerDrawingSwitch(
+                                  value: widget.fingerDrawingEnabled,
+                                  onChanged:
+                                      widget.onFingerDrawingEnabledChanged!,
+                                ),
+                              ],
                               if (!isCompact &&
                                   widget.saveStatusLabel != null) ...[
                                 const SizedBox(width: 8),
                                 _StatusPill(label: widget.saveStatusLabel!),
+                              ],
+                              if (!isCompact &&
+                                  widget.onFingerDrawingEnabledChanged !=
+                                      null) ...[
+                                const SizedBox(width: 8),
+                                _FingerDrawingSwitch(
+                                  value: widget.fingerDrawingEnabled,
+                                  onChanged:
+                                      widget.onFingerDrawingEnabledChanged!,
+                                ),
                               ],
                             ],
                           ),
@@ -1156,6 +1187,28 @@ class _LeftChrome extends StatelessWidget {
             maxWidth: compact ? 120 : 168,
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _FingerDrawingSwitch extends StatelessWidget {
+  const _FingerDrawingSwitch({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('手指绘制', style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(width: 4),
+        Tooltip(
+          message: '开启后单指绘制，双指缩放或移动画布',
+          child: Switch(value: value, onChanged: onChanged),
+        ),
       ],
     );
   }
