@@ -71,6 +71,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onComposeSmartLayout,
     this.canvasThemeBackground = '#ffffff',
     this.useFlatBackgrounds = false,
+    this.onEyedropperPressed,
     this.speechRecognitionService,
   });
 
@@ -135,6 +136,10 @@ class MarkdrawEditor extends StatefulWidget {
   final String canvasThemeBackground;
   final bool useFlatBackgrounds;
   final SpeechRecognitionService? speechRecognitionService;
+
+  /// Optional override for the eyedropper toolbar button.
+  /// When provided (e.g. HarmonyOS), calling this replaces the canvas picker.
+  final VoidCallback? onEyedropperPressed;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -481,6 +486,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         onDockChanged: _setToolbarDock,
         onCollapse: () => _setToolbarCollapsed(true),
         useFlatBackground: widget.useFlatBackgrounds,
+        onEyedropperPressed: widget.onEyedropperPressed,
         onSpeechPressed: _toggleSpeech,
         speechActive: _speechState != SpeechRecognitionState.idle,
         speechAvailable: _speechAvailable,
@@ -493,6 +499,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       onDockChanged: _setToolbarDock,
       onCollapse: () => _setToolbarCollapsed(true),
       useFlatBackground: widget.useFlatBackgrounds,
+      onEyedropperPressed: widget.onEyedropperPressed,
       onSpeechPressed: _toggleSpeech,
       speechActive: _speechState != SpeechRecognitionState.idle,
       speechAvailable: _speechAvailable,

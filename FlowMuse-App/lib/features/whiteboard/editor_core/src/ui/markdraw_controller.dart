@@ -164,6 +164,7 @@ class MarkdrawController extends ChangeNotifier {
   bool _viewMode = false;
   ToolType? _toolBeforeViewMode;
   ColorPickerTarget? _pendingColorPicker;
+  bool _pendingEyedropper = false;
   ElementStyle _defaultStyle = const ElementStyle();
   String _canvasBackgroundColor = '#ffffff';
   String _themeCanvasBackgroundColor = '#ffffff';
@@ -232,6 +233,7 @@ class MarkdrawController extends ChangeNotifier {
   Size? _lastCanvasSize;
   Bounds? _contentBounds;
   Size _canvasSize = Size.zero;
+  Offset _canvasGlobalOffset = Offset.zero;
 
   /// Current mouse position in screen coordinates; used for eraser cursor.
   Offset? mousePosition;
@@ -329,6 +331,8 @@ class MarkdrawController extends ChangeNotifier {
   Bounds? get contentBounds => _contentBounds;
 
   Size get canvasSize => _canvasSize;
+
+  Offset get canvasGlobalOffset => _canvasGlobalOffset;
 
   bool get isPagedViewport => _layout.isPaged && _layout.pages.isNotEmpty;
 
@@ -520,6 +524,9 @@ class MarkdrawController extends ChangeNotifier {
   /// Which color picker should auto-open, or null.
   ColorPickerTarget? get pendingColorPicker => _pendingColorPicker;
 
+  /// Whether the eyedropper should auto-activate when the color picker opens.
+  bool get pendingEyedropper => _pendingEyedropper;
+
   /// The element ID currently being inline-text-edited, or null.
   ElementId? get editingTextElementId => _editingTextElementId;
 
@@ -656,6 +663,10 @@ class MarkdrawController extends ChangeNotifier {
   set canvasSize(Size value) {
     _canvasSize = value;
     _applyViewportConstraints();
+  }
+
+  set canvasGlobalOffset(Offset value) {
+    _canvasGlobalOffset = value;
   }
 
   // --- Lifecycle ---
@@ -4348,6 +4359,18 @@ class MarkdrawController extends ChangeNotifier {
   /// Clears the pending color picker request.
   void clearPendingColorPicker() {
     _pendingColorPicker = null;
+  }
+
+  /// Opens the stroke color picker AND auto-activates the eyedropper.
+  void requestEyedropper() {
+    _pendingColorPicker = ColorPickerTarget.stroke;
+    _pendingEyedropper = true;
+    notifyListeners();
+  }
+
+  /// Clears the eyedropper auto-activate flag.
+  void clearPendingEyedropper() {
+    _pendingEyedropper = false;
   }
 
   // --- Eyedropper sampling ---

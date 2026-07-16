@@ -38,6 +38,7 @@ import '../view_models/whiteboard_view_model.dart';
 import '../models/editor_preferences.dart';
 import '../view_models/editor_preferences_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
+import '../../color_picker/pen_color_picker_channel.dart';
 import '../service_widget/recent_whiteboard_sync_coordinator.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
@@ -787,6 +788,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _disconnectCollaboration();
     if (widget.temporaryCollaboration && mounted) {
       _popWhenStable();
+    }
+  }
+
+  /// 取色笔按钮回调。
+  /// 鸿蒙端：调用 Pen Kit 全局取色，取到色值后应用到当前笔色。
+  /// 能力不可用时降级为画布取色，取消或普通失败时保持原颜色。
+  Future<void> _onEyedropperPressed() async {
+    final result = await const PenColorPickerChannelOhos().pickColor();
+    final color = result.color;
+    if (color != null) {
+      _markdrawController.applyStyleChange(ElementStyle(strokeColor: color));
+      return;
+    }
+    if (result.unavailable) {
+      _markdrawController.requestEyedropper();
     }
   }
 
@@ -1725,6 +1741,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               onImportImage: () {
                 unawaited(_fileHandler.importImage(context));
               },
+              onEyedropperPressed: _onEyedropperPressed,
               onImportLibrary: () {
                 unawaited(_fileHandler.importLibrary());
               },
