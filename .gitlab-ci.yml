@@ -1,0 +1,95 @@
+stages:
+  - quality
+  - build
+
+default:
+  interruptible: true
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+analyze_flutter:
+  stage: quality
+  tags: [linux]
+  script:
+    - cd FlowMuse-App
+    - flutter pub get
+    - flutter analyze
+    - flutter test
+
+test_server:
+  stage: quality
+  tags: [linux]
+  script:
+    - cd FlowMuse-Server
+    - go test ./...
+    - go vet ./...
+
+build_android:
+  stage: build
+  tags: [linux]
+  script:
+    - cd FlowMuse-App
+    - flutter pub get
+    - flutter build apk --debug
+  artifacts:
+    paths: [FlowMuse-App/build/app/outputs/flutter-apk/app-debug.apk]
+    expire_in: 7 days
+
+build_web:
+  stage: build
+  tags: [linux]
+  script:
+    - cd FlowMuse-App
+    - flutter pub get
+    - flutter build web --release
+  artifacts:
+    paths: [FlowMuse-App/build/web]
+    expire_in: 7 days
+
+build_ios:
+  stage: build
+  tags: [macos]
+  script:
+    - cd FlowMuse-App
+    - flutter pub get
+    - flutter build ios --release --no-codesign
+  artifacts:
+    paths: [FlowMuse-App/build/ios/iphoneos/Runner.app]
+    expire_in: 7 days
+
+build_macos:
+  stage: build
+  tags: [macos]
+  script:
+    - cd FlowMuse-App
+    - flutter pub get
+    - flutter build macos --release
+  artifacts:
+    paths: [FlowMuse-App/build/macos/Build/Products/Release]
+    expire_in: 7 days
+
+build_windows:
+  stage: build
+  tags: [windows]
+  script:
+    - cd FlowMuse-App
+    - flutter pub get
+    - flutter build windows --release
+  artifacts:
+    paths: [FlowMuse-App/build/windows/x64/runner/Release]
+    expire_in: 7 days
+
+build_ohos:
+  stage: build
+  tags: [ohos]
+  script:
+    - cd FlowMuse-App
+    - flutter pub get
+    - flutter build hap --debug
+  artifacts:
+    paths: [FlowMuse-App/build/ohos/hap/entry-default-signed.hap]
+    expire_in: 7 days
