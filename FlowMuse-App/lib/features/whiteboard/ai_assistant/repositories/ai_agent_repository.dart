@@ -7,10 +7,20 @@ import '../models/ai_agent_models.dart';
 import 'ai_agent_config_store.dart';
 
 class AiAgentRepository {
-  AiAgentRepository({AiAgentConfigStore? configStore})
-    : _configStore = configStore ?? defaultAiAgentConfigStore;
+  AiAgentRepository({AiAgentConfigStore? configStore, AiAgentConfig? config})
+    : _configStore = configStore ?? defaultAiAgentConfigStore,
+      _config = config;
 
   final AiAgentConfigStore _configStore;
+  final AiAgentConfig? _config;
+
+  Future<void> testConnection() async {
+    await run(
+      instruction: '请调用 insert_text，内容仅为“连接测试成功”。',
+      noteTitle: '连接测试',
+      texts: const [AiNoteText(id: 'test', text: '这是接口连通性测试。')],
+    );
+  }
 
   Future<AiAgentResponse> run({
     required String instruction,
@@ -35,7 +45,7 @@ class AiAgentRepository {
         throw const FormatException('笔记上下文过长或为空');
       }
     }
-    final config = await _configStore.read();
+    final config = _config ?? await _configStore.read();
     if (config == null) throw StateError('请先在 StarNote 实验室配置 AI 接口');
     final response = await NativeHttpClient.post(
       url: config.chatCompletionsUri.toString(),

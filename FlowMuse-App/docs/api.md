@@ -80,6 +80,8 @@ POST `{serverUrl}/api/ink/recognize`,body 是 `{sessionId, hint:"auto", strokes:
 
 `tool` 仅允许 `rename_note` 和 `insert_text`。客户端限制指令 1000 字符、标题 100 字符、单段文本 5000 字符、上下文总量 30000 字符、动作数 5；未知动作、额外参数、空值和超长值均拒绝，动作必须经用户预览确认后才应用。各端复用 `NativeHttpClient`，因此鸿蒙继续走原生 HTTP Platform Channel，其他端走标准 HTTP；Web 端还要求目标服务允许 CORS。
 
+StarNote 实验室的“测试连接”会保存当前配置并发送一次最小 `insert_text` 工具调用，用于同时验证 URL、API Key、模型名称和 Function Calling 响应格式。
+
 ## 数据层接口
 
 这层不逐个列了,代码里有完整定义。几个要点:

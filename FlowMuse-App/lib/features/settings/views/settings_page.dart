@@ -25,6 +25,7 @@ import '../../account/widgets/account_avatar.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
 import '../../whiteboard/ai_assistant/repositories/ai_agent_config_store.dart';
+import '../../whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
 import '../../whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import '../../whiteboard/models/editor_preferences.dart';
 import '../../whiteboard/view_models/editor_preferences_view_model.dart';
@@ -1705,8 +1706,10 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
   final _modelController = TextEditingController();
   bool _loading = true;
   bool _saving = false;
+  bool _testing = false;
   bool _hideApiKey = true;
   String? _error;
+  String? _testResult;
 
   @override
   void initState() {
@@ -1742,15 +1745,10 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
     setState(() {
       _saving = true;
       _error = null;
+      _testResult = null;
     });
     try {
-      await defaultAiAgentConfigStore.write(
-        AiAgentConfig(
-          baseUrl: _baseUrlController.text,
-          apiKey: _apiKeyController.text,
-          model: _modelController.text,
-        ),
-      );
+      await _writeConfig();
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -1761,6 +1759,35 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _testConnection() async {
+    if (_testing || _saving) return;
+    setState(() {
+      _testing = true;
+      _error = null;
+      _testResult = null;
+    });
+    try {
+      await AiAgentRepository(config: _currentConfig()).testConnection();
+      if (mounted) setState(() => _testResult = '连接成功，模型支持所需的工具调用');
+    } catch (error) {
+      if (mounted) setState(() => _error = '连接测试失败：$error');
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  Future<void> _writeConfig() {
+    return defaultAiAgentConfigStore.write(_currentConfig());
+  }
+
+  AiAgentConfig _currentConfig() {
+    return AiAgentConfig(
+      baseUrl: _baseUrlController.text,
+      apiKey: _apiKeyController.text,
+      model: _modelController.text,
+    );
   }
 
   @override
@@ -1822,14 +1849,34 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ],
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: const Icon(Icons.save_outlined),
-                label: Text(_saving ? '保存中…' : '保存配置'),
+            if (_testResult != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _testResult!,
+                style: TextStyle(color: Theme.of(context).colorScheme.primary),
               ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _testing || _saving ? null : _testConnection,
+                  icon: _testing
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.network_check),
+                  label: Text(_testing ? '测试中…' : '测试连接'),
+                ),
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  onPressed: _saving || _testing ? null : _save,
+                  icon: const Icon(Icons.save_outlined),
+                  label: Text(_saving ? '保存中…' : '保存配置'),
+                ),
+              ],
             ),
           ],
         ),
