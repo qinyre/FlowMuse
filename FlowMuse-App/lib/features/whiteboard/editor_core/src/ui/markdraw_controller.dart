@@ -4016,8 +4016,16 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Inserts plain text as one standard TextElement at the viewport center.
   void insertPlainText(String text, {Size? canvasSize}) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return;
+    insertPlainTexts([text], canvasSize: canvasSize);
+  }
+
+  /// Inserts multiple standard text elements as one undoable scene change.
+  void insertPlainTexts(Iterable<String> texts, {Size? canvasSize}) {
+    final normalized = [
+      for (final text in texts)
+        if (text.trim().isNotEmpty) text.trim(),
+    ];
+    if (normalized.isEmpty) return;
 
     final targetSize =
         canvasSize ??
@@ -4027,29 +4035,33 @@ class MarkdrawController extends ChangeNotifier {
     final centerScene = _editorState.viewport.screenToScene(
       Offset(targetSize.width / 2, targetSize.height / 2),
     );
-
-    final textElem = TextElement(
-      id: ElementId.generate(),
-      x: centerScene.dx,
-      y: centerScene.dy,
-      width: 10,
-      height: 10,
-      text: trimmed,
-      fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
-      fontSize: _defaultStyle.fontSize ?? 20,
-    );
-
-    final (w, h) = TextRenderer.measure(textElem);
-    final sized = textElem.copyWith(
-      width: math.max(w + 4, 20.0),
-      height: math.max(h, textElem.fontSize * textElem.lineHeight),
-    );
+    final elements = <Element>[];
+    var y = centerScene.dy;
+    for (final text in normalized) {
+      final textElem = TextElement(
+        id: ElementId.generate(),
+        x: centerScene.dx,
+        y: y,
+        width: 10,
+        height: 10,
+        text: text,
+        fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
+        fontSize: _defaultStyle.fontSize ?? 20,
+      );
+      final (width, height) = TextRenderer.measure(textElem);
+      final sized = textElem.copyWith(
+        width: math.max(width + 4, 20.0),
+        height: math.max(height, textElem.fontSize * textElem.lineHeight),
+      );
+      elements.add(applyDefaultStyleToElement(sized));
+      y += sized.height + 24;
+    }
 
     _historyManager.push(_editorState.scene);
     applyResult(
       CompoundResult([
-        AddElementResult(applyDefaultStyleToElement(sized)),
-        SetSelectionResult({sized.id}),
+        for (final element in elements) AddElementResult(element),
+        SetSelectionResult({for (final element in elements) element.id}),
       ]),
     );
   }

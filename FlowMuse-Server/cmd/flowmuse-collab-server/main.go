@@ -114,7 +114,10 @@ func main() {
 		recognizer,
 		cfg.AITimeout+10*time.Second,
 		smartLayouter,
-	).Register(mux)
+	).WithAIAgent(smartLayouter, func(r *http.Request) bool {
+		_, authenticated := authAPI.IdentityFromRequest(r)
+		return authenticated
+	}).Register(mux)
 
 	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)
 	if err := http.ListenAndServe(cfg.Addr, withCORS(mux, cfg.AllowedOrigins)); err != nil {

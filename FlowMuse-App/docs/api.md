@@ -74,6 +74,12 @@ websocket 优先,polling 降级,自动重连。已登录用户用 `Authorization
 
 POST `{serverUrl}/api/ink/recognize`,body 是 `{sessionId, hint:"auto", strokes:[{id, points:[{x,y,t?}]}], bounds:{x,y,width,height}}`。返回 `{elements:[{type, text?, latex?, x, y, width, height, points?}]}`。鸿蒙用 NativeHttpClient(8s 连接 / 15s 读取),其他平台用标准 http。无 token 可匿名调用。
 
+## AI 笔记助手
+
+POST `{serverUrl}/api/ai/agent`，必须携带 `Authorization: Bearer <token>`。请求为 `{instruction, noteTitle, texts:[{id,text}]}`，其中 `texts` 只包含当前笔记未删除的文本元素。响应为 `{message, actions:[{tool, arguments}]}`，`tool` 仅允许 `rename_note` 和 `insert_text`。
+
+服务端限制请求体 64 KiB、指令 1000 字符、标题 100 字符、单段文本 5000 字符、上下文总量 30000 字符、动作数 5。客户端按相同边界再次校验，未知动作、额外参数、空值和超长值均拒绝；动作必须经用户预览确认后才应用。各端复用 `NativeHttpClient`，因此鸿蒙继续走原生 HTTP Platform Channel，其他端走标准 HTTP。
+
 ## 数据层接口
 
 这层不逐个列了,代码里有完整定义。几个要点:

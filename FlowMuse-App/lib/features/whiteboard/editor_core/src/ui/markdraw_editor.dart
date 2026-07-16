@@ -72,6 +72,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.canvasThemeBackground = '#ffffff',
     this.useFlatBackgrounds = false,
     this.speechRecognitionService,
+    this.onAiPressed,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -135,6 +136,7 @@ class MarkdrawEditor extends StatefulWidget {
   final String canvasThemeBackground;
   final bool useFlatBackgrounds;
   final SpeechRecognitionService? speechRecognitionService;
+  final VoidCallback? onAiPressed;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -484,6 +486,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         onSpeechPressed: _toggleSpeech,
         speechActive: _speechState != SpeechRecognitionState.idle,
         speechAvailable: _speechAvailable,
+        onAiPressed: widget.onAiPressed,
       );
     }
     return DesktopToolbar(
@@ -496,6 +499,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       onSpeechPressed: _toggleSpeech,
       speechActive: _speechState != SpeechRecognitionState.idle,
       speechAvailable: _speechAvailable,
+      onAiPressed: widget.onAiPressed,
     );
   }
 

@@ -17,6 +17,7 @@ class DesktopToolbar extends StatelessWidget {
   final VoidCallback? onSpeechPressed;
   final bool speechActive;
   final bool speechAvailable;
+  final VoidCallback? onAiPressed;
 
   const DesktopToolbar({
     super.key,
@@ -29,6 +30,7 @@ class DesktopToolbar extends StatelessWidget {
     this.onSpeechPressed,
     this.speechActive = false,
     this.speechAvailable = false,
+    this.onAiPressed,
   });
 
   @override
@@ -123,6 +125,13 @@ class DesktopToolbar extends StatelessWidget {
                 onPressed: speechAvailable ? onSpeechPressed : null,
                 isActive: speechActive,
               ),
+              if (onAiPressed != null)
+                _toolbarButton(
+                  cs: cs,
+                  icon: Icons.auto_awesome,
+                  tooltip: 'AI 笔记助手',
+                  onPressed: onAiPressed,
+                ),
               _toolbarDivider(context, vertical),
               _toolbarButton(
                 cs: cs,
