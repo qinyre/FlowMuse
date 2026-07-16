@@ -40,6 +40,7 @@ class NoteActionsMenu extends StatelessWidget {
           onTap: () async {
             final selected = await showAnchoredPopupMenu<_NoteAction>(
               context: context,
+              placement: AnchoredPopupPlacement.below,
               items: const [
                 PopupMenuItem<_NoteAction>(
                   value: _NoteAction.rename,

@@ -120,12 +120,13 @@ func (api *HTTPAPI) smartLayoutBlock(w http.ResponseWriter, r *http.Request) {
 	response, err := api.layouter.RecognizeBlock(ctx, request.Block)
 	if err != nil {
 		response = SmartLayoutRecognizedBlock{
-			ID:        request.Block.ID,
-			PageID:    request.Block.PageID,
-			Type:      "error",
-			Bounds:    request.Block.Bounds,
-			StartedAt: request.Block.StartedAt,
-			Error:     err.Error(),
+			ID:           request.Block.ID,
+			PageID:       request.Block.PageID,
+			Type:         "error",
+			Bounds:       request.Block.Bounds,
+			StrokeBounds: request.Block.StrokeBounds,
+			StartedAt:    request.Block.StartedAt,
+			Error:        err.Error(),
 		}
 	}
 	writeJSON(w, http.StatusOK, response)

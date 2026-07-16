@@ -117,30 +117,34 @@ Future<T?> showAnchoredPopupMenu<T extends Object>({
 
   final anchorRect = Rect.fromPoints(
     anchor.localToGlobal(Offset.zero, ancestor: overlay),
-    anchor.localToGlobal(anchor.size.bottomRight(Offset.zero), ancestor: overlay),
+    anchor.localToGlobal(
+      anchor.size.bottomRight(Offset.zero),
+      ancestor: overlay,
+    ),
+  );
+  final belowPosition = RelativeRect.fromLTRB(
+    anchorRect.left,
+    anchorRect.bottom + 4,
+    overlay.size.width - anchorRect.right,
+    overlay.size.height - anchorRect.bottom - 4,
   );
   final position = switch (placement) {
     AnchoredPopupPlacement.automatic => RelativeRect.fromRect(
       anchorRect,
       Offset.zero & overlay.size,
     ),
-    AnchoredPopupPlacement.below => RelativeRect.fromLTRB(
-      anchorRect.left,
-      anchorRect.bottom,
-      overlay.size.width - anchorRect.right,
-      overlay.size.height - anchorRect.bottom,
-    ),
+    AnchoredPopupPlacement.below => belowPosition,
     AnchoredPopupPlacement.right => RelativeRect.fromLTRB(
-      anchorRect.right,
-      anchorRect.top,
-      overlay.size.width - anchorRect.right,
-      overlay.size.height - anchorRect.bottom,
+      anchorRect.right + 4,
+      anchorRect.bottom + 4,
+      overlay.size.width - anchorRect.right - 4,
+      overlay.size.height - anchorRect.bottom - 4,
     ),
     AnchoredPopupPlacement.left => RelativeRect.fromLTRB(
       anchorRect.left,
-      anchorRect.top,
+      anchorRect.bottom + 4,
       overlay.size.width - anchorRect.left,
-      overlay.size.height - anchorRect.bottom,
+      overlay.size.height - anchorRect.bottom - 4,
     ),
   };
 

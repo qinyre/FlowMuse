@@ -7,6 +7,8 @@ import 'color_utils.dart' as color_utils;
 
 enum ToolbarDock { top, left, right }
 
+enum ControlGroupPosition { topLeft, topRight, bottomLeft, bottomRight }
+
 /// Immutable configuration for [MarkdrawEditor] appearance and behavior.
 class MarkdrawEditorConfig {
   const MarkdrawEditorConfig({

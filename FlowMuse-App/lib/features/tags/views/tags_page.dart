@@ -5,18 +5,17 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/widgets/cover_selection_checkbox.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
+import '../../library/models/library_index.dart';
 import '../../library/repositories/library_repository.dart';
 import '../../library/widgets/create_collection_dialog.dart';
-import '../../library/widgets/create_note_card.dart';
+import '../../library/widgets/collection_note_content.dart';
 import '../../library/widgets/edit_collection_page.dart';
-import '../../library/widgets/note_actions.dart';
 import '../../library/widgets/note_card.dart';
 import '../view_models/tags_view_model.dart';
-
-enum _NoteAction { rename, moveToNotebook, selectTags, delete }
 
 class TagsPage extends ConsumerWidget {
   const TagsPage({super.key});
@@ -163,46 +162,26 @@ class TagDetailPage extends ConsumerWidget {
         libraryIndex?.notesForQuery(LibraryQuery(tagIds: [tagId])) ??
         const <NoteItem>[];
 
-    return _TagPageFrame(
+    return CollectionNoteContent(
       title: tag?.name ?? '标签',
       onBack: () => _popOrGo(context, AppRoutes.tags),
-      viewMode: LibraryViewMode.grid,
-      sortAscending: false,
-      selectionMode: false,
-      onCreate: () async {
-        final note = await ref
-            .read(libraryIndexProvider.notifier)
-            .createNote(tagIds: [tagId]);
-        if (context.mounted) {
-          _openWhiteboard(context, noteId: note.id, discardIfUnchanged: true);
-        }
+      libraryIndex: libraryIndex ?? const LibraryIndex(),
+      notes: notes,
+      onCreate: () {
+        context.push(AppRoutes.createNotePath(tagIds: [tagId]));
       },
-      onViewModeChanged: null,
-      onSortDirectionChanged: null,
-      onSelectionModeChanged: null,
-      child: _NoteItems(
-        notes: notes,
-        onCreate: () async {
-          final note = await ref
-              .read(libraryIndexProvider.notifier)
-              .createNote(tagIds: [tagId]);
-          if (context.mounted) {
-            _openWhiteboard(context, noteId: note.id, discardIfUnchanged: true);
-          }
-        },
-        onOpenNote: (item) {
-          _openWhiteboard(context, noteId: item.id);
-        },
-        onRenameNote: (noteId, newName) =>
-            ref.read(libraryIndexProvider.notifier).renameNote(noteId, newName),
-        onMoveNoteToNotebook: (noteId, notebookId) => ref
-            .read(libraryIndexProvider.notifier)
-            .moveNotesToNotebook([noteId], notebookId),
-        onSetNoteTags: (noteId, tagIds) =>
-            ref.read(libraryIndexProvider.notifier).setNoteTags(noteId, tagIds),
-        onDeleteNote: (noteId) =>
-            ref.read(libraryIndexProvider.notifier).deleteNotes([noteId]),
-      ),
+      onOpenNote: (item) => _openWhiteboard(context, noteId: item.id),
+      onRenameNote: (noteId, newName) =>
+          ref.read(libraryIndexProvider.notifier).renameNote(noteId, newName),
+      onMoveNotesToNotebook: (noteIds, targetNotebookId) => ref
+          .read(libraryIndexProvider.notifier)
+          .moveNotesToNotebook(noteIds, targetNotebookId),
+      onSetNoteTags: (noteId, tagIds) =>
+          ref.read(libraryIndexProvider.notifier).setNoteTags(noteId, tagIds),
+      onAddTagsToNotes: (noteIds, tagIds) =>
+          ref.read(libraryIndexProvider.notifier).addTagsToNotes(noteIds, tagIds),
+      onDeleteNotes: (noteIds) =>
+          ref.read(libraryIndexProvider.notifier).deleteNotes(noteIds),
     );
   }
 }
@@ -275,204 +254,34 @@ class _TagItems extends StatelessWidget {
               return _CreateTagCard(onTap: onCreate);
             }
             final tag = state.visibleTags[index - 1];
-            return Stack(
-              children: [
-                Positioned.fill(
-                  child: _TagCoverCard(
-                    tag: tag,
-                    onRename: () => _showNameDialog(
-                      context: context,
-                      title: '重命名标签',
-                      initialValue: tag.name,
-                      onSubmitted: (name) => onRename(tag.id, name),
-                    ),
-                    onEdit: () => onEdit(tag.id),
-                    onDelete: () => onDelete(tag.id),
-                    onTap: () => context.push(AppRoutes.tagPath(tag.id)),
-                  ),
-                ),
-                if (state.selectionMode)
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Checkbox(
-                      value: state.selectedTagIds.contains(tag.id),
-                      onChanged: (_) => onSelectionChanged(tag.id),
-                    ),
-                  ),
-              ],
+            return _TagCoverCard(
+              tag: tag,
+              selectionMode: state.selectionMode,
+              selected: state.selectedTagIds.contains(tag.id),
+              onSelectionChanged: () => onSelectionChanged(tag.id),
+              onRename: () => _showNameDialog(
+                context: context,
+                title: '重命名标签',
+                initialValue: tag.name,
+                onSubmitted: (name) => onRename(tag.id, name),
+              ),
+              onEdit: () => onEdit(tag.id),
+              onDelete: () => onDelete(tag.id),
+              onTap: () => context.push(AppRoutes.tagPath(tag.id)),
             );
           },
         );
       },
     );
-  }
-}
-
-class _NoteItems extends StatelessWidget {
-  const _NoteItems({
-    required this.notes,
-    required this.onCreate,
-    required this.onOpenNote,
-    this.onRenameNote,
-    this.onMoveNoteToNotebook,
-    this.onSetNoteTags,
-    this.onDeleteNote,
-  });
-
-  final List<NoteItem> notes;
-  final VoidCallback onCreate;
-  final ValueChanged<NoteItem> onOpenNote;
-  final Future<void> Function(String noteId, String newName)? onRenameNote;
-  final Future<void> Function(String noteId, String? notebookId)?
-  onMoveNoteToNotebook;
-  final Future<void> Function(String noteId, List<String> tagIds)?
-  onSetNoteTags;
-  final Future<void> Function(String noteId)? onDeleteNote;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 820;
-        return GridView.builder(
-          itemCount: notes.length + 1,
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
-            mainAxisExtent: NoteCard.gridMainAxisExtent,
-            crossAxisSpacing: compact
-                ? NoteCard.compactGridCrossGap
-                : NoteCard.gridCrossGap,
-            mainAxisSpacing: compact
-                ? NoteCard.compactGridMainGap
-                : NoteCard.gridMainGap,
-          ),
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return CreateNoteCard(onTap: onCreate);
-            }
-            final item = notes[index - 1];
-            return NoteCard(
-              item: item,
-              onTap: () => onOpenNote(item),
-              onActionsTap: onRenameNote != null
-                  ? (BuildContext buttonContext) =>
-                        _showNoteActions(buttonContext, item)
-                  : null,
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showNoteActions(BuildContext context, NoteItem item) async {
-    final RenderBox? button = context.findRenderObject() as RenderBox?;
-    final RenderBox? overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    final actionContext = Navigator.of(context).context;
-
-    RelativeRect position;
-    if (button != null && overlay != null) {
-      final bottomRight = button.localToGlobal(
-        button.size.bottomRight(Offset.zero),
-        ancestor: overlay,
-      );
-      final arrowY = bottomRight.dy;
-      final menuLeft = bottomRight.dx - 8;
-      position = RelativeRect.fromLTRB(
-        menuLeft,
-        arrowY + 4,
-        menuLeft,
-        overlay.size.height - arrowY - 4,
-      );
-    } else {
-      final size = MediaQuery.of(context).size;
-      position = RelativeRect.fromLTRB(
-        size.width / 2,
-        size.height / 2,
-        size.width / 2,
-        size.height / 2,
-      );
-    }
-
-    final selected = await showMenu<_NoteAction>(
-      context: context,
-      position: position,
-      items: const [
-        PopupMenuItem(
-          value: _NoteAction.rename,
-          child: ListTile(
-            leading: Icon(LucideIcons.penLine),
-            title: Text('重命名'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        PopupMenuItem(
-          value: _NoteAction.moveToNotebook,
-          child: ListTile(
-            leading: Icon(LucideIcons.bookOpen),
-            title: Text('移动至'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        PopupMenuItem(
-          value: _NoteAction.selectTags,
-          child: ListTile(
-            leading: Icon(LucideIcons.tag),
-            title: Text('选择标签'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        PopupMenuItem(
-          value: _NoteAction.delete,
-          child: ListTile(
-            leading: Icon(LucideIcons.trash2),
-            title: Text('删除'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      ],
-    );
-    if (selected == null || !actionContext.mounted) return;
-
-    await runAfterContextTeardownAsync(actionContext, () async {
-      switch (selected) {
-        case _NoteAction.rename:
-          final name = await showDialog<String>(
-            context: actionContext,
-            builder: (context) => _NoteRenameDialog(initialValue: item.title),
-          );
-          if (name != null && actionContext.mounted) {
-            await onRenameNote!(item.id, name);
-          }
-        case _NoteAction.moveToNotebook:
-          final result = await showDialog<MoveToNotebookResult>(
-            context: actionContext,
-            builder: (context) =>
-                MoveToNotebookDialog(currentNotebookId: item.notebookId),
-          );
-          if (result != null && actionContext.mounted) {
-            await onMoveNoteToNotebook!(item.id, result.notebookId);
-          }
-        case _NoteAction.selectTags:
-          final tagIds = await showDialog<List<String>>(
-            context: actionContext,
-            builder: (context) => SelectTagsDialog(currentTagIds: item.tagIds),
-          );
-          if (tagIds != null && actionContext.mounted) {
-            await onSetNoteTags!(item.id, tagIds);
-          }
-        case _NoteAction.delete:
-          await onDeleteNote!(item.id);
-      }
-    });
   }
 }
 
 class _TagCoverCard extends StatelessWidget {
   _TagCoverCard({
     required this.tag,
+    required this.selectionMode,
+    required this.selected,
+    required this.onSelectionChanged,
     required this.onRename,
     required this.onEdit,
     required this.onDelete,
@@ -482,6 +291,9 @@ class _TagCoverCard extends StatelessWidget {
   final GlobalKey _arrowKey = GlobalKey();
 
   final TagItem tag;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback onSelectionChanged;
   final VoidCallback onRename;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -522,6 +334,15 @@ class _TagCoverCard extends StatelessWidget {
                     },
                   ),
                 ),
+                if (selectionMode)
+                  Positioned(
+                    top: -8,
+                    right: -8,
+                    child: CoverSelectionCheckbox(
+                      selected: selected,
+                      onChanged: onSelectionChanged,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -770,6 +591,7 @@ class _TagPageFrame extends StatelessWidget {
               onPressed: () async {
                 final selected = await showAnchoredPopupMenu<LibraryViewMode>(
                   context: context,
+                  placement: AnchoredPopupPlacement.below,
                   items: const [
                     PopupMenuItem<LibraryViewMode>(
                       value: LibraryViewMode.grid,
@@ -1104,60 +926,6 @@ class _NameDialogState extends State<_NameDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.title),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        textInputAction: TextInputAction.done,
-        onSubmitted: _submit,
-        decoration: const InputDecoration(border: OutlineInputBorder()),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('保存')),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 笔记重命名对话框
-// ---------------------------------------------------------------------------
-
-class _NoteRenameDialog extends StatefulWidget {
-  const _NoteRenameDialog({required this.initialValue});
-
-  final String initialValue;
-
-  @override
-  State<_NoteRenameDialog> createState() => _NoteRenameDialogState();
-}
-
-class _NoteRenameDialogState extends State<_NoteRenameDialog> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialValue);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit([String? value]) {
-    Navigator.of(context).pop(value ?? _controller.text);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('重命名笔记'),
       content: TextField(
         controller: _controller,
         autofocus: true,

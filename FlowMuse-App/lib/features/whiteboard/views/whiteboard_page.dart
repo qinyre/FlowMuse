@@ -291,6 +291,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       await repository.saveScene(noteId, updatedContent);
       await _touchNoteWithCurrentCover(noteId);
       await _broadcastCurrentScene(serializedScene: updatedContent);
+    } else if (note?.kind != LibraryFilter.pdf &&
+        note?.coverThumbnailBytes == null) {
+      await _touchNoteWithCurrentCover(noteId);
     }
     final latestIndex = ref.read(libraryIndexProvider).asData?.value;
     _syncDocumentTitle(

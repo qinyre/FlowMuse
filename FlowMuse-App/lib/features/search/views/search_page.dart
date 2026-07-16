@@ -173,6 +173,7 @@ class _ScopeMenu extends StatelessWidget {
             onPressed: () async {
               final selected = await showAnchoredPopupMenu<_ScopeOption>(
                 context: context,
+                placement: AnchoredPopupPlacement.below,
                 items: [
                   for (final option in options)
                     PopupMenuItem<_ScopeOption>(

@@ -29,9 +29,12 @@ import '../input/input_policy.dart';
 import '../input/stroke_recorder.dart';
 
 const String _logTag = 'InkRecognition';
+const int _smartLayoutClientRecognitionConcurrency = 3;
 
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
+
+enum SmartLayoutRecognitionEngine { ai, myscript }
 
 Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
   if (!layout.isPaged) {
@@ -1237,8 +1240,9 @@ class MarkdrawController extends ChangeNotifier {
 
   InkRecognitionRequest? _buildInkRecognitionRequest(
     String sessionId,
-    List<FreedrawElement> strokes,
-  ) {
+    List<FreedrawElement> strokes, {
+    String hint = 'text',
+  }) {
     if (strokes.isEmpty) {
       return null;
     }
@@ -1284,7 +1288,7 @@ class MarkdrawController extends ChangeNotifier {
         width: math.max(maxX - minX, 1.0),
         height: math.max(maxY - minY, 1.0),
       ),
-      hint: 'text',
+      hint: hint,
     );
   }
 
@@ -2873,13 +2877,21 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   Future<bool> runGlobalSmartLayout({
+    SmartLayoutRecognitionEngine engine = SmartLayoutRecognitionEngine.ai,
     void Function(int completed, int total)? onProgress,
   }) async {
     final layoutCallback = onSmartLayoutInk;
     final blockCallback = onRecognizeSmartLayoutBlock;
     final composeCallback = onComposeSmartLayout;
-    if ((layoutCallback == null &&
-            (blockCallback == null || composeCallback == null)) ||
+    final myScriptCallback = onRecognizeInk;
+    final canRecognizeWithAI =
+        layoutCallback != null ||
+        (blockCallback != null && composeCallback != null);
+    final canRecognizeWithMyScript =
+        myScriptCallback != null && composeCallback != null;
+    if ((engine == SmartLayoutRecognitionEngine.ai && !canRecognizeWithAI) ||
+        (engine == SmartLayoutRecognitionEngine.myscript &&
+            !canRecognizeWithMyScript) ||
         _recognizingInk) {
       return false;
     }
@@ -2888,18 +2900,33 @@ class MarkdrawController extends ChangeNotifier {
       final inkGroups = _smartLayoutInkGroups();
       if (inkGroups.isEmpty) return false;
       if (_disposed) return false;
-      final request = await _buildSmartLayoutRequest(inkGroups);
+      final request = await _buildSmartLayoutRequest(inkGroups, engine: engine);
       if (_disposed || request.blocks.isEmpty) return false;
       SmartLayoutResponse response;
       try {
-        if (blockCallback != null && composeCallback != null) {
-          final recognized = <SmartLayoutRecognizedBlock>[];
-          onProgress?.call(0, request.blocks.length);
-          for (final block in request.blocks) {
-            if (_disposed) return false;
-            recognized.add(await blockCallback(block));
-            onProgress?.call(recognized.length, request.blocks.length);
-          }
+        if (engine == SmartLayoutRecognitionEngine.myscript) {
+          final recognized = await _recognizeSmartLayoutBlocksInParallel(
+            request.blocks,
+            (block) {
+              final strokes = inkGroups[block.id] ?? const <FreedrawElement>[];
+              return _recognizeSmartLayoutBlockWithMyScript(
+                block,
+                strokes,
+                myScriptCallback!,
+              );
+            },
+            onProgress,
+          );
+          if (_disposed) return false;
+          response = await composeCallback!(
+            SmartLayoutComposeRequest(pages: request.pages, blocks: recognized),
+          );
+        } else if (blockCallback != null && composeCallback != null) {
+          final recognized = await _recognizeSmartLayoutBlocksInParallel(
+            request.blocks,
+            blockCallback,
+            onProgress,
+          );
           if (_disposed) return false;
           response = await composeCallback(
             SmartLayoutComposeRequest(pages: request.pages, blocks: recognized),
@@ -2940,6 +2967,65 @@ class MarkdrawController extends ChangeNotifier {
     }
   }
 
+  Future<List<SmartLayoutRecognizedBlock>>
+  _recognizeSmartLayoutBlocksInParallel(
+    List<SmartLayoutInkBlockRequest> blocks,
+    Future<SmartLayoutRecognizedBlock> Function(SmartLayoutInkBlockRequest)
+    recognize,
+    void Function(int completed, int total)? onProgress,
+  ) async {
+    if (blocks.isEmpty) {
+      onProgress?.call(0, 0);
+      return const [];
+    }
+    final results = List<SmartLayoutRecognizedBlock?>.filled(
+      blocks.length,
+      null,
+    );
+    var nextIndex = 0;
+    var completed = 0;
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    onProgress?.call(0, blocks.length);
+
+    Future<void> worker() async {
+      while (true) {
+        if (_disposed) return;
+        if (firstError != null) return;
+        final index = nextIndex;
+        if (index >= blocks.length) return;
+        nextIndex++;
+        try {
+          results[index] = await recognize(blocks[index]);
+          completed++;
+          onProgress?.call(completed, blocks.length);
+        } catch (error, stackTrace) {
+          firstError ??= error;
+          firstStackTrace ??= stackTrace;
+          return;
+        }
+      }
+    }
+
+    final workerCount = math.min(
+      _smartLayoutClientRecognitionConcurrency,
+      blocks.length,
+    );
+    await Future.wait([for (var i = 0; i < workerCount; i++) worker()]);
+    final error = firstError;
+    if (error != null) {
+      Error.throwWithStackTrace(error, firstStackTrace ?? StackTrace.current);
+    }
+    if (_disposed) {
+      throw StateError('智能识别已取消');
+    }
+    final missingIndex = results.indexWhere((result) => result == null);
+    if (missingIndex >= 0) {
+      throw StateError('智能识别结果不完整：第 ${missingIndex + 1} 个块未返回');
+    }
+    return [for (final result in results) result!];
+  }
+
   String exportSmartLayout(SmartLayoutExportFormat format) {
     final document = _editorState.scene.smartLayout;
     if (document == null || document.isEmpty) return '';
@@ -2947,8 +3033,9 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   Future<SmartLayoutRequest> _buildSmartLayoutRequest(
-    Map<String, List<FreedrawElement>> inkGroups,
-  ) async {
+    Map<String, List<FreedrawElement>> inkGroups, {
+    SmartLayoutRecognitionEngine engine = SmartLayoutRecognitionEngine.ai,
+  }) async {
     final pages = _layout.ensurePage().pages.map((page) {
       final geometry = TemplateAnchorResolver.resolve(page);
       return SmartLayoutPageRequest(
@@ -2978,7 +3065,11 @@ class MarkdrawController extends ChangeNotifier {
     }).toList();
     final blocks = <SmartLayoutInkBlockRequest>[];
     for (final entry in inkGroups.entries) {
-      final block = await _smartLayoutInkBlockRequest(entry.key, entry.value);
+      final block = await _smartLayoutInkBlockRequest(
+        entry.key,
+        entry.value,
+        includeImage: engine == SmartLayoutRecognitionEngine.ai,
+      );
       if (block != null) {
         blocks.add(block);
       }
@@ -2997,7 +3088,7 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   Map<String, List<FreedrawElement>> _smartLayoutInkGroups() {
-    final groups = <String, List<FreedrawElement>>{};
+    final sessionGroups = <String, List<FreedrawElement>>{};
     for (final element in _smartLayoutInkElements()) {
       final sessionId =
           element.customData?[recognitionStrokeSessionKey] as String?;
@@ -3006,9 +3097,21 @@ class MarkdrawController extends ChangeNotifier {
       }
       final pageId = _pageIdForElement(element);
       final groupId = pageId == null ? sessionId : '$pageId:$sessionId';
-      groups.putIfAbsent(groupId, () => <FreedrawElement>[]).add(element);
+      sessionGroups
+          .putIfAbsent(groupId, () => <FreedrawElement>[])
+          .add(element);
     }
-    return groups;
+    return sessionGroups;
+  }
+
+  CanvasPage? _pageForElement(Element element) {
+    if (!_layout.isPaged) {
+      final pages = _layout.ensurePage().pages;
+      return pages.isEmpty ? null : pages.first;
+    }
+    return _layout.pageAt(
+      Offset(element.x + element.width / 2, element.y + element.height / 2),
+    );
   }
 
   String? _pageIdForElement(Element element) {
@@ -3020,27 +3123,144 @@ class MarkdrawController extends ChangeNotifier {
       final pages = _layout.ensurePage().pages;
       return pages.isEmpty ? null : pages.first.id;
     }
-    final page = _layout.pageAt(
-      Offset(element.x + element.width / 2, element.y + element.height / 2),
-    );
+    final page = _pageForElement(element);
     return page?.id;
   }
 
   Future<SmartLayoutInkBlockRequest?> _smartLayoutInkBlockRequest(
     String id,
-    List<FreedrawElement> strokes,
-  ) async {
+    List<FreedrawElement> strokes, {
+    bool includeImage = true,
+  }) async {
     if (strokes.isEmpty) return null;
     final bounds = _boundsForElements(strokes);
     if (bounds == null) return null;
-    final imageBytes = await _renderInkBlockPng(strokes);
-    if (imageBytes == null || imageBytes.isEmpty) return null;
+    final imageBytes = includeImage ? await _renderInkBlockPng(strokes) : null;
+    if (includeImage && (imageBytes == null || imageBytes.isEmpty)) {
+      return null;
+    }
     return SmartLayoutInkBlockRequest(
       id: id,
       pageId: _pageIdForElement(strokes.first),
       bounds: bounds,
+      strokeBounds: [
+        for (final stroke in strokes)
+          Bounds.fromLTWH(
+            stroke.x,
+            stroke.y,
+            math.max(stroke.width, 1.0),
+            math.max(stroke.height, 1.0),
+          ),
+      ],
       startedAt: _startedAtForStrokes(strokes),
-      imageBase64: base64Encode(imageBytes),
+      imageBase64: imageBytes == null ? '' : base64Encode(imageBytes),
+    );
+  }
+
+  Future<SmartLayoutRecognizedBlock> _recognizeSmartLayoutBlockWithMyScript(
+    SmartLayoutInkBlockRequest block,
+    List<FreedrawElement> strokes,
+    Future<InkRecognitionResult> Function(InkRecognitionRequest) recognize,
+  ) async {
+    final request = _buildInkRecognitionRequest(
+      block.id,
+      strokes,
+      hint: 'auto',
+    );
+    if (request == null) {
+      return SmartLayoutRecognizedBlock(
+        id: block.id,
+        pageId: block.pageId,
+        type: 'error',
+        bounds: block.bounds,
+        strokeBounds: block.strokeBounds,
+        startedAt: block.startedAt,
+        error: '没有可识别的笔迹点',
+      );
+    }
+    try {
+      final result = await recognize(request);
+      return _smartLayoutBlockFromInkRecognitionResult(block, result);
+    } catch (error) {
+      return SmartLayoutRecognizedBlock(
+        id: block.id,
+        pageId: block.pageId,
+        type: 'error',
+        bounds: block.bounds,
+        strokeBounds: block.strokeBounds,
+        startedAt: block.startedAt,
+        error: error.toString(),
+      );
+    }
+  }
+
+  SmartLayoutRecognizedBlock _smartLayoutBlockFromInkRecognitionResult(
+    SmartLayoutInkBlockRequest block,
+    InkRecognitionResult result,
+  ) {
+    final elements = result.elements.where((element) {
+      final text = (element.latex ?? element.text ?? '').trim();
+      return text.isNotEmpty;
+    }).toList();
+    if (elements.isEmpty) {
+      return SmartLayoutRecognizedBlock(
+        id: block.id,
+        pageId: block.pageId,
+        type: 'error',
+        bounds: block.bounds,
+        strokeBounds: block.strokeBounds,
+        startedAt: block.startedAt,
+        error: 'MyScript 未返回文字',
+      );
+    }
+    InkRecognizedElement? formula;
+    for (final element in elements) {
+      if (element.type == 'math' || (element.latex ?? '').trim().isNotEmpty) {
+        formula = element;
+        break;
+      }
+    }
+    if (formula != null) {
+      final latex = (formula.latex ?? formula.text ?? '').trim();
+      return SmartLayoutRecognizedBlock(
+        id: block.id,
+        pageId: block.pageId,
+        type: 'formula',
+        text: latex,
+        latex: latex,
+        bounds: block.bounds,
+        strokeBounds: block.strokeBounds,
+        startedAt: block.startedAt,
+      );
+    }
+    elements.sort((a, b) {
+      final byY = a.y.compareTo(b.y);
+      if (byY != 0) return byY;
+      return a.x.compareTo(b.x);
+    });
+    final text = elements
+        .map((element) => (element.text ?? element.latex ?? '').trim())
+        .where((value) => value.isNotEmpty)
+        .join('');
+    if (text.isEmpty) {
+      return SmartLayoutRecognizedBlock(
+        id: block.id,
+        pageId: block.pageId,
+        type: 'error',
+        bounds: block.bounds,
+        strokeBounds: block.strokeBounds,
+        startedAt: block.startedAt,
+        error: 'MyScript 未返回文字',
+      );
+    }
+    return SmartLayoutRecognizedBlock(
+      id: block.id,
+      pageId: block.pageId,
+      type: 'text',
+      text: text,
+      bounds: block.bounds,
+      strokeBounds: block.strokeBounds,
+      startedAt: block.startedAt,
     );
   }
 
@@ -3141,17 +3361,20 @@ class MarkdrawController extends ChangeNotifier {
       final pageKey = block.pageId ?? '';
       final pageLayoutIndex = layoutIndexByPage[pageKey] ?? 0;
       final occupied = occupiedByPage.putIfAbsent(pageKey, () => <Bounds>[]);
-      final element = _textElementFromSmartLayoutBlock(
+      final blockElements = _textElementsFromSmartLayoutBlock(
         block,
         pageLayoutIndex,
         occupied,
         useTemplateAnchors: useTemplateAnchors,
       );
-      elements.add(element);
-      occupied.add(
-        Bounds.fromLTWH(element.x, element.y, element.width, element.height),
-      );
-      layoutIndexByPage[pageKey] = pageLayoutIndex + 1;
+      for (final element in blockElements) {
+        elements.add(element);
+        occupied.add(
+          Bounds.fromLTWH(element.x, element.y, element.width, element.height),
+        );
+      }
+      layoutIndexByPage[pageKey] =
+          pageLayoutIndex + _smartLayoutLineSpan(block.text);
     }
     return elements;
   }
@@ -3172,6 +3395,7 @@ class MarkdrawController extends ChangeNotifier {
               : block.text?.trim())
         : block.text?.trim();
     if (text == null || text.isEmpty) return null;
+    final fontSize = _fontSizeForRecognizedBlock(block, text);
     final element = TextElement(
       id: ElementId.generate(),
       x: block.bounds.left,
@@ -3179,7 +3403,7 @@ class MarkdrawController extends ChangeNotifier {
       width: math.max(block.bounds.size.width, 80),
       height: math.max(block.bounds.size.height, 28),
       text: text,
-      fontSize: block.type == 'formula' ? 20 : 20,
+      fontSize: fontSize,
       fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
       lineHeight: 1.25,
       customData: {
@@ -3191,12 +3415,74 @@ class MarkdrawController extends ChangeNotifier {
         },
       },
     );
-    final styled = applyDefaultStyleToElement(element) as TextElement;
+    final styled = _applySmartLayoutTextStyle(element);
     final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
     return styled.copyWith(
       width: math.max(styled.width, measuredWidth),
       height: math.max(styled.height, measuredHeight),
     );
+  }
+
+  double _fontSizeForRecognizedBlock(
+    SmartLayoutRecognizedBlock block,
+    String text,
+  ) {
+    if (block.type == 'formula') {
+      return math.max(16, math.min(block.bounds.size.height * 0.72, 40));
+    }
+    final lineCount = math.max(1, text.split('\n').length);
+    final estimatedLineHeight = block.bounds.size.height / lineCount;
+    return math.max(12, math.min(estimatedLineHeight * 0.72, 48));
+  }
+
+  List<TextElement> _textElementsFromSmartLayoutBlock(
+    SmartLayoutBlock block,
+    int layoutIndex,
+    List<Bounds> occupied, {
+    bool useTemplateAnchors = false,
+  }) {
+    final lines = _smartLayoutDisplayLines(block.text);
+    if (lines.length <= 1) {
+      return [
+        _textElementFromSmartLayoutBlock(
+          block,
+          layoutIndex,
+          occupied,
+          useTemplateAnchors: useTemplateAnchors,
+        ),
+      ];
+    }
+    final elements = <TextElement>[];
+    final localOccupied = [...occupied];
+    final totalLineCount = math.max(lines.length, 1);
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (line.trim().isEmpty) {
+        continue;
+      }
+      final lineBlock = SmartLayoutBlock(
+        id: '${block.id}-line-$i',
+        type: block.type,
+        text: line,
+        latex: block.type == 'math' ? line : block.latex,
+        pageId: block.pageId,
+        bounds: _lineBoundsForSmartLayoutBlock(block, i, totalLineCount),
+        order: block.order,
+        writingMode: block.writingMode,
+        sourceIds: block.sourceIds,
+      );
+      final element = _textElementFromSmartLayoutBlock(
+        lineBlock,
+        layoutIndex + i,
+        localOccupied,
+        useTemplateAnchors: useTemplateAnchors,
+      );
+      elements.add(element);
+      localOccupied.add(
+        Bounds.fromLTWH(element.x, element.y, element.width, element.height),
+      );
+    }
+    return elements;
   }
 
   TextElement _textElementFromSmartLayoutBlock(
@@ -3216,7 +3502,7 @@ class MarkdrawController extends ChangeNotifier {
         block.writingMode == 'vertical';
     final text = block.type == 'math' && block.latex?.trim().isNotEmpty == true
         ? block.latex!.trim()
-        : block.text.trim();
+        : _trimSmartLayoutDisplayText(block.text);
     final element = TextElement(
       id: ElementId.generate(),
       x: initialBounds.left,
@@ -3237,20 +3523,134 @@ class MarkdrawController extends ChangeNotifier {
         },
       },
     );
-    final styled = applyDefaultStyleToElement(element) as TextElement;
-    final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
-    final measured = styled.copyWith(
-      width: math.max(styled.width, measuredWidth),
-      height: math.max(styled.height, measuredHeight),
-    );
+    final styled = _applySmartLayoutTextStyle(element);
+    final measured = _measureSmartLayoutText(styled, vertical: vertical);
+    final anchored = anchor == null
+        ? measured
+        : _alignSmartLayoutTextToAnchor(measured, anchor, vertical);
     final placedBounds = _nonOverlappingSmartLayoutBounds(
-      Bounds.fromLTWH(measured.x, measured.y, measured.width, measured.height),
+      Bounds.fromLTWH(anchored.x, anchored.y, anchored.width, anchored.height),
       block,
       layoutIndex,
       occupied,
       vertical,
     );
-    return measured.copyWith(x: placedBounds.left, y: placedBounds.top);
+    return anchored.copyWith(x: placedBounds.left, y: placedBounds.top);
+  }
+
+  TextElement _applySmartLayoutTextStyle(TextElement element) {
+    final styled = element.copyWith(
+      strokeColor: _defaultStyle.strokeColor,
+      backgroundColor: _defaultStyle.backgroundColor,
+      strokeWidth: _defaultStyle.strokeWidth,
+      strokeStyle: _defaultStyle.strokeStyle,
+      fillStyle: _defaultStyle.fillStyle,
+      roughness: _defaultStyle.roughness,
+      opacity: _defaultStyle.opacity,
+    );
+    return _attachCurrentPage(
+          styled.copyWithText(
+            fontFamily: _defaultStyle.fontFamily,
+            textAlign: _defaultStyle.textAlign,
+          ),
+        )
+        as TextElement;
+  }
+
+  TextElement _measureSmartLayoutText(
+    TextElement element, {
+    required bool vertical,
+  }) {
+    if (!vertical) {
+      final (measuredWidth, measuredHeight) = TextRenderer.measure(element);
+      return element.copyWith(
+        width: math.max(element.width, measuredWidth),
+        height: math.max(element.height, measuredHeight),
+      );
+    }
+    final chars = element.text.runes
+        .map((rune) => String.fromCharCode(rune))
+        .where((char) => char.trim().isNotEmpty)
+        .toList();
+    var measuredWidth = element.width;
+    for (final char in chars) {
+      final (charWidth, _) = TextRenderer.measure(
+        element.copyWithText(text: char),
+      );
+      measuredWidth = math.max(measuredWidth, charWidth);
+    }
+    final measuredHeight = math.max(
+      element.height,
+      chars.length * element.fontSize * element.lineHeight,
+    );
+    return element.copyWith(width: measuredWidth, height: measuredHeight);
+  }
+
+  TextElement _alignSmartLayoutTextToAnchor(
+    TextElement element,
+    TemplateAnchor anchor,
+    bool vertical,
+  ) {
+    if (vertical) {
+      return element.copyWith(
+        x: anchor.crossAxis - element.width / 2,
+        y: anchor.position.dy,
+      );
+    }
+    final painter = TextRenderer.buildTextPainter(element);
+    painter.layout(maxWidth: element.width);
+    final metrics = painter.computeLineMetrics();
+    final firstLineHeight = metrics.isEmpty
+        ? element.fontSize * element.lineHeight
+        : metrics.first.height;
+    final firstLineBottom = metrics.isEmpty
+        ? element.fontSize
+        : metrics.first.baseline + metrics.first.descent;
+    painter.dispose();
+    final y = anchor.textAlignment == TemplateAnchorTextAlignment.bottom
+        ? anchor.crossAxis - firstLineBottom
+        : anchor.crossAxis - firstLineHeight / 2;
+    return element.copyWith(x: anchor.position.dx, y: y);
+  }
+
+  int _smartLayoutLineSpan(String text) {
+    final normalized = _trimSmartLayoutDisplayText(text);
+    if (normalized.isEmpty) {
+      return 1;
+    }
+    return math.max(1, normalized.split('\n').length);
+  }
+
+  List<String> _smartLayoutDisplayLines(String text) {
+    return _trimSmartLayoutDisplayText(
+      text,
+    ).replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+  }
+
+  Bounds? _lineBoundsForSmartLayoutBlock(
+    SmartLayoutBlock block,
+    int lineIndex,
+    int lineCount,
+  ) {
+    final bounds = block.bounds;
+    if (bounds == null || lineCount <= 1) {
+      return bounds;
+    }
+    final lineHeight = math.max(bounds.size.height / lineCount, 1.0);
+    return Bounds.fromLTWH(
+      bounds.left,
+      bounds.top + lineHeight * lineIndex,
+      bounds.size.width,
+      lineHeight,
+    );
+  }
+
+  String _trimSmartLayoutDisplayText(String text) {
+    var normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    while (normalized.startsWith('\n')) {
+      normalized = normalized.substring(1);
+    }
+    return normalized.replaceFirst(RegExp(r'[ \t\n]+$'), '');
   }
 
   TemplateAnchor? _templateAnchorForSmartLayoutBlock(
@@ -3610,10 +4010,22 @@ class MarkdrawController extends ChangeNotifier {
   /// Pastes clipboard text as a new TextElement at viewport center.
   Future<void> pasteAsPlaintext(Size canvasSize) async {
     final text = await _clipboardService.readText();
-    if (text == null || text.trim().isEmpty) return;
+    if (text == null) return;
+    insertPlainText(text, canvasSize: canvasSize);
+  }
+
+  /// Inserts plain text as one standard TextElement at the viewport center.
+  void insertPlainText(String text, {Size? canvasSize}) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+
+    final targetSize =
+        canvasSize ??
+        _lastCanvasSize ??
+        (_canvasSize.isEmpty ? const Size(800, 600) : _canvasSize);
 
     final centerScene = _editorState.viewport.screenToScene(
-      Offset(canvasSize.width / 2, canvasSize.height / 2),
+      Offset(targetSize.width / 2, targetSize.height / 2),
     );
 
     final textElem = TextElement(
@@ -3622,7 +4034,9 @@ class MarkdrawController extends ChangeNotifier {
       y: centerScene.dy,
       width: 10,
       height: 10,
-      text: text.trim(),
+      text: trimmed,
+      fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
+      fontSize: _defaultStyle.fontSize ?? 20,
     );
 
     final (w, h) = TextRenderer.measure(textElem);

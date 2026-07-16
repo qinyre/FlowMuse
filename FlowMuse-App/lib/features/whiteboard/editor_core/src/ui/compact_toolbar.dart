@@ -13,6 +13,9 @@ class CompactToolbar extends StatelessWidget {
   final ValueChanged<ToolbarDock>? onDockChanged;
   final VoidCallback? onCollapse;
   final bool useFlatBackground;
+  final VoidCallback? onSpeechPressed;
+  final bool speechActive;
+  final bool speechAvailable;
 
   const CompactToolbar({
     super.key,
@@ -21,6 +24,9 @@ class CompactToolbar extends StatelessWidget {
     this.onDockChanged,
     this.onCollapse,
     this.useFlatBackground = false,
+    this.onSpeechPressed,
+    this.speechActive = false,
+    this.speechAvailable = false,
   });
 
   @override
@@ -90,6 +96,15 @@ class CompactToolbar extends StatelessWidget {
                 cs: cs,
                 type: ToolType.laser,
                 activeType: activeType,
+              ),
+              _compactButton(
+                cs: cs,
+                icon: speechActive
+                    ? Icons.stop_circle_outlined
+                    : Icons.mic_none,
+                tooltip: speechAvailable ? '语音转文字' : '当前设备不支持语音转文字',
+                onPressed: speechAvailable ? onSpeechPressed : null,
+                isActive: speechActive,
               ),
               _compactButton(
                 cs: cs,
@@ -184,6 +199,7 @@ class CompactToolbar extends StatelessWidget {
   Future<void> _showDockMenu(BuildContext context) async {
     final selected = await showAnchoredPopupMenu<ToolbarDock>(
       context: context,
+      placement: AnchoredPopupPlacement.below,
       items: [
         for (final option in ToolbarDock.values)
           PopupMenuItem(
@@ -222,7 +238,7 @@ class CompactToolbar extends StatelessWidget {
     IconData? icon,
     Widget? iconWidget,
     required String tooltip,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     bool isActive = false,
     bool isEmphasized = false,
     bool useFlatBackground = false,
@@ -244,10 +260,15 @@ class CompactToolbar extends StatelessWidget {
 
   Future<void> _runGlobalSmartLayout(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
+    final engine = await _pickSmartLayoutRecognitionEngine(context);
+    if (engine == null || !context.mounted) {
+      return;
+    }
     bool changed;
     Object? error;
     try {
       changed = await controller.runGlobalSmartLayout(
+        engine: engine,
         onProgress: (completed, total) {
           if (!context.mounted) return;
           _showSmartLayoutProgress(messenger, completed, total);
@@ -265,6 +286,36 @@ class CompactToolbar extends StatelessWidget {
           maxLines: 5,
           overflow: TextOverflow.ellipsis,
         ),
+      ),
+    );
+  }
+
+  Future<SmartLayoutRecognitionEngine?> _pickSmartLayoutRecognitionEngine(
+    BuildContext context,
+  ) {
+    return showDialog<SmartLayoutRecognitionEngine>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('选择识别模式'),
+        content: const Text('请选择全局智能排版使用的识别引擎。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(SmartLayoutRecognitionEngine.myscript),
+            child: const Text('MyScript识别'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(SmartLayoutRecognitionEngine.ai),
+            child: const Text('AI识别'),
+          ),
+        ],
       ),
     );
   }

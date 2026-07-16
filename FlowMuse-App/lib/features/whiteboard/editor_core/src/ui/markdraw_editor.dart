@@ -7,6 +7,9 @@ import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
 
 import 'package:flow_muse/features/account/widgets/account_avatar.dart';
+import 'package:flow_muse/features/whiteboard/speech_recognition/models/speech_recognition_event.dart';
+import 'package:flow_muse/features/whiteboard/speech_recognition/services/speech_recognition_service.dart';
+import 'package:flow_muse/features/whiteboard/speech_recognition/services/speech_recognition_service_factory.dart';
 import 'package:flow_muse/shared/storage/local_settings_repository.dart';
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
@@ -68,6 +71,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onComposeSmartLayout,
     this.canvasThemeBackground = '#ffffff',
     this.useFlatBackgrounds = false,
+    this.speechRecognitionService,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -130,6 +134,7 @@ class MarkdrawEditor extends StatefulWidget {
   onComposeSmartLayout;
   final String canvasThemeBackground;
   final bool useFlatBackgrounds;
+  final SpeechRecognitionService? speechRecognitionService;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -149,14 +154,25 @@ class CollaborationParticipantBadge {
   final bool idle;
 }
 
-class _MarkdrawEditorState extends State<MarkdrawEditor> {
+class _MarkdrawEditorState extends State<MarkdrawEditor>
+    with WidgetsBindingObserver {
   static const _toolbarDockKey = 'whiteboard.toolbarDock.v1';
+  static const _controlGroupPositionKey = 'whiteboard.controlGroupPosition.v1';
+  static const _controlGroupReservedExtent = 120.0;
+  static const _speechNoticeKey = 'whiteboard.speechRecognitionNoticeSeen.v1';
 
   MarkdrawController? _ownController;
   ToolbarDock _toolbarDock = ToolbarDock.top;
+  ControlGroupPosition _controlGroupPosition = ControlGroupPosition.bottomLeft;
   bool _toolbarCollapsed = false;
   bool _propertyPanelCollapsed = false;
   String _propertyPanelContext = '';
+  late final SpeechRecognitionService _speechService;
+  StreamSubscription<SpeechRecognitionEvent>? _speechSubscription;
+  SpeechRecognitionState _speechState = SpeechRecognitionState.idle;
+  bool _speechAvailable = false;
+  String _speechPreview = '';
+  bool _speechFinalCommitted = false;
 
   MarkdrawController get _controller =>
       widget.controller ??
@@ -165,6 +181,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _speechService =
+        widget.speechRecognitionService ?? createSpeechRecognitionService();
+    _speechSubscription = _speechService.events.listen(_onSpeechEvent);
+    unawaited(_checkSpeechAvailability());
     _controller.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
     _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
@@ -175,7 +196,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
     _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     _controller.restoreKeyboardFocusWhenStable();
-    unawaited(_restoreToolbarDock());
+    unawaited(_restoreEditorChrome());
   }
 
   @override
@@ -216,10 +237,112 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_speechSubscription?.cancel());
+    unawaited(_speechService.dispose());
     _controller.removeListener(_onControllerChanged);
     _ownController?.dispose();
     super.dispose();
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      unawaited(_cancelSpeech());
+    }
+  }
+
+  Future<void> _checkSpeechAvailability() async {
+    final available = await _speechService.isAvailable();
+    if (mounted) setState(() => _speechAvailable = available);
+  }
+
+  Future<void> _toggleSpeech() async {
+    if (_speechState != SpeechRecognitionState.idle) {
+      await _speechService.stop();
+      return;
+    }
+    await _showSpeechNoticeOnce();
+    _speechFinalCommitted = false;
+    await _speechService.start();
+  }
+
+  Future<void> _cancelSpeech() async {
+    if (_speechState == SpeechRecognitionState.idle) return;
+    await _speechService.cancel();
+    if (mounted) {
+      setState(() {
+        _speechState = SpeechRecognitionState.idle;
+        _speechPreview = '';
+        _speechFinalCommitted = false;
+      });
+    }
+  }
+
+  Future<void> _showSpeechNoticeOnce() async {
+    try {
+      if (await defaultLocalSettingsRepository.readBool(_speechNoticeKey) ==
+          true) {
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('FlowMuse 默认不保存录音。语音可能由设备、浏览器或其识别服务处理。'),
+          ),
+        );
+      }
+      await defaultLocalSettingsRepository.writeBool(_speechNoticeKey, true);
+    } catch (error) {
+      debugPrint('[FlowMuseCreateNote] speech notice failed: $error');
+    }
+  }
+
+  void _onSpeechEvent(SpeechRecognitionEvent event) {
+    if (!mounted) return;
+    switch (event) {
+      case SpeechRecognitionResult(:final text, :final isFinal):
+        if (isFinal) {
+          if (_speechFinalCommitted) return;
+          _speechFinalCommitted = true;
+          _controller.insertPlainText(text, canvasSize: _getCanvasSize());
+          setState(() {
+            _speechPreview = '';
+            _speechState = SpeechRecognitionState.idle;
+          });
+        } else {
+          setState(() => _speechPreview = text);
+        }
+      case SpeechRecognitionStateChanged(:final state):
+        setState(() {
+          _speechState = state;
+          if (state == SpeechRecognitionState.starting) {
+            _speechFinalCommitted = false;
+          }
+          if (state == SpeechRecognitionState.idle) _speechPreview = '';
+        });
+      case SpeechRecognitionFailed(:final code, :final message):
+        setState(() {
+          _speechState = SpeechRecognitionState.idle;
+          _speechPreview = '';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_speechErrorMessage(code, message))),
+        );
+    }
+  }
+
+  String _speechErrorMessage(SpeechRecognitionErrorCode code, String message) =>
+      switch (code) {
+        SpeechRecognitionErrorCode.permissionDenied => '未获得麦克风权限',
+        SpeechRecognitionErrorCode.unavailable => '当前设备不支持语音转文字',
+        SpeechRecognitionErrorCode.busy => '语音识别服务正忙，请稍后重试',
+        SpeechRecognitionErrorCode.noSpeech => '没有检测到语音',
+        SpeechRecognitionErrorCode.network => '语音识别网络不可用',
+        SpeechRecognitionErrorCode.cancelled => '语音识别已取消',
+        SpeechRecognitionErrorCode.unknown =>
+          message.trim().isEmpty ? '语音识别失败' : '语音识别失败：$message',
+      };
 
   void _onControllerChanged() {
     if (!mounted) {
@@ -238,15 +361,35 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
 
   void _noop() {}
 
-  Future<void> _restoreToolbarDock() async {
-    final storedValue = await defaultLocalSettingsRepository.readString(
-      _toolbarDockKey,
-    );
-    final dock = ToolbarDock.values.where((item) => item.name == storedValue);
-    if (!mounted || dock.isEmpty) {
+  Future<void> _restoreEditorChrome() async {
+    final storedValues = await Future.wait([
+      defaultLocalSettingsRepository.readString(_toolbarDockKey),
+      defaultLocalSettingsRepository.readString(_controlGroupPositionKey),
+    ]);
+    if (!mounted) {
       return;
     }
-    setState(() => _toolbarDock = dock.first);
+    final toolbarDock = ToolbarDock.values.where(
+      (item) => item.name == storedValues[0],
+    );
+    final restoredToolbarDock = toolbarDock.isEmpty
+        ? _toolbarDock
+        : toolbarDock.first;
+    final controlGroupPosition = ControlGroupPosition.values.where(
+      (item) => item.name == storedValues[1],
+    );
+    setState(() {
+      _toolbarDock = restoredToolbarDock;
+      _controlGroupPosition = controlGroupPosition.isEmpty
+          ? _legacyControlGroupPositionFor(restoredToolbarDock)
+          : controlGroupPosition.first;
+    });
+  }
+
+  ControlGroupPosition _legacyControlGroupPositionFor(ToolbarDock dock) {
+    return dock == ToolbarDock.left
+        ? ControlGroupPosition.bottomRight
+        : ControlGroupPosition.bottomLeft;
   }
 
   void _setToolbarDock(ToolbarDock dock) {
@@ -264,6 +407,52 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
 
   void _setToolbarCollapsed(bool collapsed) {
     setState(() => _toolbarCollapsed = collapsed);
+  }
+
+  void _setControlGroupPosition(ControlGroupPosition position) {
+    if (_controlGroupPosition == position) {
+      return;
+    }
+    setState(() => _controlGroupPosition = position);
+    unawaited(
+      defaultLocalSettingsRepository.writeString(
+        _controlGroupPositionKey,
+        position.name,
+      ),
+    );
+  }
+
+  Future<void> _showControlGroupPositionDialog() async {
+    final selected = await showDialog<ControlGroupPosition>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('控制组位置'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final position in ControlGroupPosition.values)
+              RadioListTile<ControlGroupPosition>(
+                value: position,
+                groupValue: _controlGroupPosition,
+                title: Text(_controlGroupPositionLabel(position)),
+                onChanged: (value) => Navigator.of(context).pop(value),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      _setControlGroupPosition(selected);
+    }
+  }
+
+  String _controlGroupPositionLabel(ControlGroupPosition position) {
+    return switch (position) {
+      ControlGroupPosition.topLeft => '左上',
+      ControlGroupPosition.topRight => '右上',
+      ControlGroupPosition.bottomLeft => '左下',
+      ControlGroupPosition.bottomRight => '右下',
+    };
   }
 
   void _collapsePropertyPanel() {
@@ -292,6 +481,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
         onDockChanged: _setToolbarDock,
         onCollapse: () => _setToolbarCollapsed(true),
         useFlatBackground: widget.useFlatBackgrounds,
+        onSpeechPressed: _toggleSpeech,
+        speechActive: _speechState != SpeechRecognitionState.idle,
+        speechAvailable: _speechAvailable,
       );
     }
     return DesktopToolbar(
@@ -301,6 +493,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       onDockChanged: _setToolbarDock,
       onCollapse: () => _setToolbarCollapsed(true),
       useFlatBackground: widget.useFlatBackgrounds,
+      onSpeechPressed: _toggleSpeech,
+      speechActive: _speechState != SpeechRecognitionState.idle,
+      speechAvailable: _speechAvailable,
     );
   }
 
@@ -433,6 +628,26 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
     final canvasTopInset = showChrome ? safeArea.top + chromeHeight : 0.0;
     final topChromeOffset = safeArea.top + chromeHeight + 12;
     final bottomChromeOffset = safeArea.bottom + 12;
+    final showDetachedControls =
+        showChrome && (!_controller.viewMode || widget.config.showZoomControls);
+    final controlGroupAtTop =
+        _controlGroupPosition == ControlGroupPosition.topLeft ||
+        _controlGroupPosition == ControlGroupPosition.topRight;
+    final controlGroupOnLeft =
+        _controlGroupPosition == ControlGroupPosition.topLeft ||
+        _controlGroupPosition == ControlGroupPosition.bottomLeft;
+    final controlGroupSharesVerticalToolbar =
+        showNavigationTools &&
+        _toolbarDock != ToolbarDock.top &&
+        ((_toolbarDock == ToolbarDock.left) == controlGroupOnLeft);
+    final verticalToolbarTop =
+        controlGroupSharesVerticalToolbar && controlGroupAtTop
+        ? topChromeOffset + _controlGroupReservedExtent
+        : safeArea.top + 56;
+    final verticalToolbarBottom =
+        controlGroupSharesVerticalToolbar && !controlGroupAtTop
+        ? bottomChromeOffset + _controlGroupReservedExtent
+        : null;
     Widget body = Stack(
       children: [
         // Full-bleed canvas + desktop library panel
@@ -539,6 +754,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
                                   onThemeModeChanged: widget.onThemeModeChanged,
                                   currentThemeMode: widget.currentThemeMode,
                                   onDocumentRenamed: widget.onDocumentRenamed,
+                                  onChooseControlGroupPosition:
+                                      _showControlGroupPositionDialog,
                                 ),
                               if (!isCompact &&
                                   widget.saveStatusLabel != null) ...[
@@ -640,24 +857,25 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
           ),
         if (showNavigationTools && _toolbarDock != ToolbarDock.top)
           Positioned(
-            top: safeArea.top + 56,
+            top: verticalToolbarTop,
+            bottom: verticalToolbarBottom,
             left: _toolbarDock == ToolbarDock.left ? 8 : null,
             right: _toolbarDock == ToolbarDock.right ? 8 : null,
-            child: _toolbarCollapsed
-                ? Align(
-                    alignment: _toolbarDock == ToolbarDock.left
-                        ? Alignment.topLeft
-                        : Alignment.topRight,
-                    child: _buildToolbarExpandButton(),
-                  )
-                : _buildToolbar(compact: isCompact),
+            child: Align(
+              alignment: _toolbarDock == ToolbarDock.left
+                  ? Alignment.topLeft
+                  : Alignment.topRight,
+              child: _toolbarCollapsed
+                  ? _buildToolbarExpandButton()
+                  : _buildToolbar(compact: isCompact),
+            ),
           ),
-        if (showChrome &&
-            (!_controller.viewMode || widget.config.showZoomControls))
+        if (showDetachedControls)
           Positioned(
-            left: _toolbarDock == ToolbarDock.left ? null : 12,
-            right: _toolbarDock == ToolbarDock.left ? 12 : null,
-            bottom: bottomChromeOffset,
+            top: controlGroupAtTop ? topChromeOffset : null,
+            bottom: controlGroupAtTop ? null : bottomChromeOffset,
+            left: controlGroupOnLeft ? 12 : null,
+            right: controlGroupOnLeft ? null : 12,
             child: _buildDetachedControlGroups(),
           ),
         // Floating property panel — desktop left side
@@ -707,6 +925,20 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
         if (_controller.isLinkEditorOpen &&
             _controller.selectedElements.length == 1)
           _buildLinkOverlay(topChromeOffset),
+        if (_speechState != SpeechRecognitionState.idle)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: safeArea.bottom + 24,
+            child: Center(
+              child: _SpeechRecognitionOverlay(
+                text: _speechPreview,
+                stopping: _speechState == SpeechRecognitionState.stopping,
+                onCancel: _cancelSpeech,
+                onFinish: _speechService.stop,
+              ),
+            ),
+          ),
       ],
     );
     if (!isCompact && _controller.showMarkdownPanel) {
@@ -735,6 +967,59 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       child: LinkOverlay(
         controller: _controller,
         getCanvasSize: _getCanvasSize,
+      ),
+    );
+  }
+}
+
+class _SpeechRecognitionOverlay extends StatelessWidget {
+  const _SpeechRecognitionOverlay({
+    required this.text,
+    required this.stopping,
+    required this.onCancel,
+    required this.onFinish,
+  });
+
+  final String text;
+  final bool stopping;
+  final VoidCallback onCancel;
+  final VoidCallback onFinish;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      liveRegion: true,
+      label: text.isEmpty ? '正在聆听' : '识别结果：$text',
+      child: Material(
+        color: colors.surfaceContainerHigh,
+        elevation: 6,
+        borderRadius: BorderRadius.circular(16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.mic, size: 20),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    text.isEmpty ? (stopping ? '正在生成文字…' : '正在聆听…') : text,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                TextButton(onPressed: onCancel, child: const Text('取消')),
+                FilledButton.tonal(
+                  onPressed: stopping ? null : onFinish,
+                  child: const Text('完成'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -786,6 +1071,7 @@ class _LeftChrome extends StatelessWidget {
     required this.onThemeModeChanged,
     required this.currentThemeMode,
     required this.onDocumentRenamed,
+    required this.onChooseControlGroupPosition,
   });
 
   final MarkdrawController controller;
@@ -807,6 +1093,7 @@ class _LeftChrome extends StatelessWidget {
   final ValueChanged<ThemeMode>? onThemeModeChanged;
   final ThemeMode? currentThemeMode;
   final VoidCallback? onDocumentRenamed;
+  final VoidCallback onChooseControlGroupPosition;
 
   @override
   Widget build(BuildContext context) {
@@ -843,6 +1130,7 @@ class _LeftChrome extends StatelessWidget {
                   onThemeModeChanged: onThemeModeChanged,
                   currentThemeMode: currentThemeMode,
                   onDocumentRenamed: onDocumentRenamed,
+                  onChooseControlGroupPosition: onChooseControlGroupPosition,
                 )
               : HamburgerMenu(
                   controller: controller,
@@ -858,6 +1146,7 @@ class _LeftChrome extends StatelessWidget {
                   onThemeModeChanged: onThemeModeChanged,
                   currentThemeMode: currentThemeMode,
                   onDocumentRenamed: onDocumentRenamed,
+                  onChooseControlGroupPosition: onChooseControlGroupPosition,
                 ),
         if (showTitle) ...[
           const SizedBox(width: 10),
@@ -1283,6 +1572,7 @@ class _CollaborationChipState extends State<_CollaborationChip> {
   ) async {
     final selected = await showAnchoredPopupMenu<_CollaborationAction>(
       context: anchorContext,
+      placement: AnchoredPopupPlacement.below,
       items: [
         PopupMenuItem<_CollaborationAction>(
           enabled: false,

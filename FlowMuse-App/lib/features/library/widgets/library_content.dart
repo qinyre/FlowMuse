@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/widgets/cover_selection_checkbox.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../models/library_special_view.dart';
@@ -10,9 +11,17 @@ import '../repositories/library_repository.dart';
 import '../view_models/library_home_view_model.dart';
 import 'create_note_card.dart';
 import 'note_actions.dart';
+import 'note_bulk_action_bar.dart';
 import 'note_card.dart';
 
-enum _NoteAction { rename, moveToNotebook, selectTags, delete, restore }
+enum _NoteAction {
+  rename,
+  moveToNotebook,
+  selectTags,
+  delete,
+  restore,
+  deleteForever,
+}
 
 class LibraryContent extends StatefulWidget {
   const LibraryContent({
@@ -32,6 +41,7 @@ class LibraryContent extends StatefulWidget {
     required this.onDeleteSelected,
     required this.onRestoreSelected,
     required this.onRestoreNote,
+    required this.onDeleteNoteForever,
     required this.onDeleteSelectedForever,
     required this.onMoveSelectedToNotebook,
     required this.onAddTagsToSelected,
@@ -59,6 +69,7 @@ class LibraryContent extends StatefulWidget {
   final Future<void> Function() onDeleteSelected;
   final Future<void> Function() onRestoreSelected;
   final Future<void> Function(String noteId) onRestoreNote;
+  final Future<void> Function(String noteId) onDeleteNoteForever;
   final Future<void> Function() onDeleteSelectedForever;
   final Future<void> Function(String? notebookId) onMoveSelectedToNotebook;
   final Future<void> Function(List<String> tagIds) onAddTagsToSelected;
@@ -159,6 +170,7 @@ class _LibraryContentState extends State<LibraryContent> {
             onPressed: () async {
               final selected = await showAnchoredPopupMenu<LibraryViewMode>(
                 context: context,
+                placement: AnchoredPopupPlacement.below,
                 items: const [
                   PopupMenuItem<LibraryViewMode>(
                     value: LibraryViewMode.grid,
@@ -217,17 +229,22 @@ class _LibraryContentState extends State<LibraryContent> {
           const SizedBox(height: AppSpacing.controlGap),
         ],
         if (widget.state.selectionMode) ...[
-          _BulkActionBar(
-            trash: widget.specialView == LibrarySpecialView.trash,
-            selectedCount: widget.state.selectedNoteIds.length,
-            libraryIndex: widget.libraryIndex,
-            onClearSelection: widget.onClearSelection,
-            onDeleteSelected: widget.onDeleteSelected,
-            onRestoreSelected: widget.onRestoreSelected,
-            onDeleteSelectedForever: widget.onDeleteSelectedForever,
-            onMoveSelectedToNotebook: widget.onMoveSelectedToNotebook,
-            onAddTagsToSelected: widget.onAddTagsToSelected,
-          ),
+          if (widget.specialView == LibrarySpecialView.trash)
+            NoteBulkActionBar.trash(
+              selectedCount: widget.state.selectedNoteIds.length,
+              onClearSelection: widget.onClearSelection,
+              onRestoreSelected: widget.onRestoreSelected,
+              onDeleteSelectedForever: widget.onDeleteSelectedForever,
+            )
+          else
+            NoteBulkActionBar.active(
+              selectedCount: widget.state.selectedNoteIds.length,
+              libraryIndex: widget.libraryIndex,
+              onClearSelection: widget.onClearSelection,
+              onDeleteSelected: widget.onDeleteSelected,
+              onMoveSelectedToNotebook: widget.onMoveSelectedToNotebook,
+              onAddTagsToSelected: widget.onAddTagsToSelected,
+            ),
           const SizedBox(height: AppSpacing.controlGap),
         ],
       ],
@@ -243,6 +260,7 @@ class _LibraryContentState extends State<LibraryContent> {
         onJoinRoom: widget.onJoinRoom,
         onOpenNote: widget.onOpenNote,
         onRestoreNote: widget.onRestoreNote,
+        onDeleteNoteForever: widget.onDeleteNoteForever,
         onRenameNote: widget.onRenameNote,
         onMoveNoteToNotebook: widget.onMoveNoteToNotebook,
         onSetNoteTags: widget.onSetNoteTags,
@@ -382,6 +400,7 @@ class _LibraryItems extends StatelessWidget {
     required this.onJoinRoom,
     required this.onOpenNote,
     required this.onRestoreNote,
+    required this.onDeleteNoteForever,
     this.onRenameNote,
     this.onMoveNoteToNotebook,
     this.onSetNoteTags,
@@ -399,6 +418,7 @@ class _LibraryItems extends StatelessWidget {
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
   final Future<void> Function(String noteId) onRestoreNote;
+  final Future<void> Function(String noteId) onDeleteNoteForever;
   final Future<void> Function(String noteId, String newName)? onRenameNote;
   final Future<void> Function(String noteId, String? notebookId)?
   onMoveNoteToNotebook;
@@ -419,6 +439,7 @@ class _LibraryItems extends StatelessWidget {
         onJoinRoom: onJoinRoom,
         onOpenNote: onOpenNote,
         onRestoreNote: onRestoreNote,
+        onDeleteNoteForever: onDeleteNoteForever,
         onRenameNote: onRenameNote,
         onMoveNoteToNotebook: onMoveNoteToNotebook,
         onSetNoteTags: onSetNoteTags,
@@ -441,6 +462,7 @@ class _LibraryItems extends StatelessWidget {
             onJoinRoom: onJoinRoom,
             onOpenNote: onOpenNote,
             onRestoreNote: onRestoreNote,
+            onDeleteNoteForever: onDeleteNoteForever,
             onRenameNote: onRenameNote,
             onMoveNoteToNotebook: onMoveNoteToNotebook,
             onSetNoteTags: onSetNoteTags,
@@ -473,6 +495,7 @@ class _LibraryItemsContent extends StatelessWidget {
     required this.onJoinRoom,
     required this.onOpenNote,
     required this.onRestoreNote,
+    required this.onDeleteNoteForever,
     this.onRenameNote,
     this.onMoveNoteToNotebook,
     this.onSetNoteTags,
@@ -488,6 +511,7 @@ class _LibraryItemsContent extends StatelessWidget {
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
   final Future<void> Function(String noteId) onRestoreNote;
+  final Future<void> Function(String noteId) onDeleteNoteForever;
   final Future<void> Function(String noteId, String newName)? onRenameNote;
   final Future<void> Function(String noteId, String? notebookId)?
   onMoveNoteToNotebook;
@@ -532,6 +556,14 @@ class _LibraryItemsContent extends StatelessWidget {
               child: ListTile(
                 leading: Icon(LucideIcons.rotateCcw),
                 title: Text('恢复'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem<_NoteAction>(
+              value: _NoteAction.deleteForever,
+              child: ListTile(
+                leading: Icon(LucideIcons.trash2),
+                title: Text('永久删除'),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
@@ -609,6 +641,8 @@ class _LibraryItemsContent extends StatelessWidget {
           await onDeleteNote!(item.id);
         case _NoteAction.restore:
           await onRestoreNote(item.id);
+        case _NoteAction.deleteForever:
+          await onDeleteNoteForever(item.id);
       }
     });
   }
@@ -687,32 +721,22 @@ class _LibraryItemsContent extends StatelessWidget {
             ? index - 2
             : index;
         final item = notes[noteIndex];
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: NoteCard(
-                item: item,
-                onTap: state.selectionMode
-                    ? () => onSelectionChanged(item.id)
-                    : () => onOpenNote(item),
-                onActionsTap:
-                    specialView == LibrarySpecialView.trash ||
-                        onRenameNote != null
-                    ? (BuildContext buttonContext) =>
-                          _showNoteActions(buttonContext, item)
-                    : null,
-              ),
-            ),
-            if (state.selectionMode)
-              Positioned(
-                top: 10,
-                right: 10,
-                child: Checkbox(
-                  value: state.selectedNoteIds.contains(item.id),
-                  onChanged: (_) => onSelectionChanged(item.id),
-                ),
-              ),
-          ],
+        return NoteCard(
+          item: item,
+          onTap: state.selectionMode
+              ? () => onSelectionChanged(item.id)
+              : () => onOpenNote(item),
+          onActionsTap:
+              specialView == LibrarySpecialView.trash || onRenameNote != null
+              ? (BuildContext buttonContext) =>
+                    _showNoteActions(buttonContext, item)
+              : null,
+          selectionControl: state.selectionMode
+              ? CoverSelectionCheckbox(
+                  selected: state.selectedNoteIds.contains(item.id),
+                  onChanged: () => onSelectionChanged(item.id),
+                )
+              : null,
         );
       },
     );
@@ -878,162 +902,6 @@ class _EmptyLibrary extends StatelessWidget {
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _BulkActionBar extends StatelessWidget {
-  const _BulkActionBar({
-    required this.trash,
-    required this.selectedCount,
-    required this.libraryIndex,
-    required this.onClearSelection,
-    required this.onDeleteSelected,
-    required this.onRestoreSelected,
-    required this.onDeleteSelectedForever,
-    required this.onMoveSelectedToNotebook,
-    required this.onAddTagsToSelected,
-  });
-
-  final bool trash;
-  final int selectedCount;
-  final LibraryIndex libraryIndex;
-  final VoidCallback onClearSelection;
-  final Future<void> Function() onDeleteSelected;
-  final Future<void> Function() onRestoreSelected;
-  final Future<void> Function() onDeleteSelectedForever;
-  final Future<void> Function(String? notebookId) onMoveSelectedToNotebook;
-  final Future<void> Function(List<String> tagIds) onAddTagsToSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card.outlined(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Text('已选 $selectedCount 项'),
-            const Spacer(),
-            TextButton(onPressed: onClearSelection, child: const Text('取消')),
-            if (trash) ...[
-              TextButton(
-                onPressed: selectedCount == 0 ? null : onRestoreSelected,
-                child: const Text('恢复'),
-              ),
-              TextButton(
-                onPressed: selectedCount == 0 ? null : onDeleteSelectedForever,
-                child: const Text('永久删除'),
-              ),
-            ] else ...[
-              _NotebookMoveMenu(
-                enabled: selectedCount > 0,
-                libraryIndex: libraryIndex,
-                onSelected: onMoveSelectedToNotebook,
-              ),
-              _TagAddMenu(
-                enabled: selectedCount > 0,
-                libraryIndex: libraryIndex,
-                onSelected: onAddTagsToSelected,
-              ),
-              TextButton(
-                onPressed: selectedCount == 0 ? null : onDeleteSelected,
-                child: const Text('删除'),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NotebookMoveMenu extends StatelessWidget {
-  const _NotebookMoveMenu({
-    required this.enabled,
-    required this.libraryIndex,
-    required this.onSelected,
-  });
-
-  final bool enabled;
-  final LibraryIndex libraryIndex;
-  final Future<void> Function(String? notebookId) onSelected;
-  static const _unfiledNotebookId = '__flow_muse_unfiled_notebook__';
-
-  @override
-  Widget build(BuildContext context) {
-    return _LibraryPopupMenuButton<String>(
-      enabled: enabled,
-      label: '移动到',
-      items: [
-        const PopupMenuItem<String>(
-          value: _unfiledNotebookId,
-          child: Text('未归入笔记本'),
-        ),
-        for (final notebook in libraryIndex.notebooks)
-          PopupMenuItem<String>(value: notebook.id, child: Text(notebook.name)),
-      ],
-      onSelected: (notebookId) =>
-          onSelected(notebookId == _unfiledNotebookId ? null : notebookId),
-    );
-  }
-}
-
-class _TagAddMenu extends StatelessWidget {
-  const _TagAddMenu({
-    required this.enabled,
-    required this.libraryIndex,
-    required this.onSelected,
-  });
-
-  final bool enabled;
-  final LibraryIndex libraryIndex;
-  final Future<void> Function(List<String> tagIds) onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return _LibraryPopupMenuButton<String>(
-      enabled: enabled && libraryIndex.tags.isNotEmpty,
-      label: '添加标签',
-      items: [
-        for (final tag in libraryIndex.tags)
-          PopupMenuItem<String>(value: tag.id, child: Text(tag.name)),
-      ],
-      onSelected: (tagId) => onSelected([tagId]),
-    );
-  }
-}
-
-class _LibraryPopupMenuButton<T extends Object> extends StatelessWidget {
-  const _LibraryPopupMenuButton({
-    required this.enabled,
-    required this.label,
-    required this.items,
-    required this.onSelected,
-  });
-
-  final bool enabled;
-  final String label;
-  final List<PopupMenuEntry<T>> items;
-  final Future<void> Function(T value) onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Builder(
-      builder: (context) => TextButton(
-        onPressed: !enabled || items.isEmpty
-            ? null
-            : () async {
-                final selected = await showAnchoredPopupMenu<T>(
-                  context: context,
-                  items: items,
-                );
-                if (selected == null || !context.mounted) {
-                  return;
-                }
-                runAfterUiTeardown(() => onSelected(selected));
-              },
-        child: Text(label),
       ),
     );
   }

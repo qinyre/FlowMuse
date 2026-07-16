@@ -70,6 +70,9 @@ class LibraryHomePage extends ConsumerWidget {
           onRestoreSelected: viewModel.restoreSelectedNotes,
           onRestoreNote: (noteId) =>
               ref.read(libraryIndexProvider.notifier).restoreNotes([noteId]),
+          onDeleteNoteForever: (noteId) => ref
+              .read(libraryIndexProvider.notifier)
+              .deleteNotesForever([noteId]),
           onDeleteSelectedForever: viewModel.deleteSelectedNotesForever,
           onMoveSelectedToNotebook: viewModel.moveSelectedNotesToNotebook,
           onAddTagsToSelected: viewModel.addTagsToSelectedNotes,
@@ -127,5 +130,8 @@ List<NoteItem> _notesForSpecialView(
       const LibraryQuery(onlyDeleted: true),
     ),
   };
-  return source.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  return source.toList()..sort((a, b) {
+    final result = a.updatedAt.compareTo(b.updatedAt);
+    return state.sortAscending ? result : -result;
+  });
 }

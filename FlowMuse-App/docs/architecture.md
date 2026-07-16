@@ -16,7 +16,7 @@ lib/features/<feature>/
 
 依赖只能自上而下。feature 之间不互相 import 内部实现,要共享数据就通过暴露出来的 Provider(比如 `libraryIndexProvider`)。跨 feature 的通用东西放 `lib/shared/`(数据库、通用组件、工具函数)。
 
-主要的 feature:`library`(资料库,笔记和集合的索引)、`notebooks` / `tags`(集合视图)、`search`、`settings`、`account`、`whiteboard`。其中 whiteboard 最大,下面挂了四个子模块:编辑器内核 `editor_core`、实时协作 `collaboration`、手写识别 `ink_recognition`、PDF 导入 `pdf_note_import`。
+主要的 feature:`library`(资料库,笔记和集合的索引)、`notebooks` / `tags`(集合视图)、`search`、`settings`、`account`、`whiteboard`。其中 whiteboard 最大,下面挂了五个子模块:编辑器内核 `editor_core`、实时协作 `collaboration`、手写识别 `ink_recognition`、PDF 导入 `pdf_note_import`、语音识别 `speech_recognition`。
 
 ## 状态管理
 
@@ -32,6 +32,8 @@ lib/features/<feature>/
 
 输入处理是一条独立的流水线:PointerEvent 归一化 → OneEuro 自适应滤波(带转角保护和压感独立滤波)→ 喂给当前 Tool。不同设备(手写笔/触摸/鼠标)的滤波参数由 `InputPolicySelector` 分策略。
 
+语音转文字通过统一 `SpeechRecognitionService` 接入：Android 与鸿蒙共用 `flow_muse/speech_recognition` Platform Channel，Web 使用浏览器 SpeechRecognition。中间结果只保存在 `MarkdrawEditor` 的临时 UI 状态，最终结果经 `MarkdrawController.insertPlainText()` 创建一个普通 `TextElement`，因此不改变 Excalidraw 格式和协作协议。默认不保存录音，其他平台缺少原生实现时安全降级为 unavailable。
+
 ## 协作
 
 端到端加密。房间链接里带 roomId 和 roomKey(`#room=roomId,roomKey`),所有实时消息和快照用 roomKey 做 AES-GCM-128 加密,服务端只转发和存密文。房主额外有个 ownerKey,它的 sha256 哈希存服务端,用来鉴权"结束房间"。
@@ -45,7 +47,7 @@ lib/features/<feature>/
 - SQLite:移动端用原生 sqflite,鸿蒙和桌面用 FFI。分发逻辑在 `shared/storage/local_database_path*.dart`(条件导入)。鸿蒙要先加载 `libharmony_sqlite.z.so`。
 - HTTP:鸿蒙走自研 `NativeHttpClient`(Platform Channel),其他平台走标准 http。
 - 服务卡片：鸿蒙通过 FormExtensionAbility + ArkTS 动态卡片承载最近白板入口；Flutter 侧只负责把 noteId/title/updatedAt 通过 flow_muse/service_widget 通道推送给 ArkTS，并在启动时消费 resumeLastWhiteboard action。
-- 手写笔、文件选择、PDF 渲染:鸿蒙走 Platform Channel,其他平台用现成插件。
+- 手写笔、文件选择、PDF 渲染、语音识别:鸿蒙走 Platform Channel,其他平台用原生能力或现成插件。
 - Flutter 上游有几个包不认识 `ohos`,所以在 `tool/vendor/` 下放了 fork 版本,通过 pubspec 的 `dependency_overrides` 覆盖。`tool/vendor/` 只做适配,不放业务逻辑。
 
 ## 启动

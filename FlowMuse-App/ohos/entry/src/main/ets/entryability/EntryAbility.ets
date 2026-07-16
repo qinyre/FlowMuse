@@ -10,6 +10,7 @@ import { HttpChannel } from '../channels/HttpChannel';
 import { SystemShareChannel } from '../channels/SystemShareChannel';
 import { ExternalDocumentChannel } from '../channels/ExternalDocumentChannel';
 import { ServiceWidgetChannel } from '../channels/ServiceWidgetChannel';
+import { SpeechRecognitionChannel } from '../channels/SpeechRecognitionChannel';
 
 export default class EntryAbility extends FlutterAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -64,5 +65,6 @@ export default class EntryAbility extends FlutterAbility {
     new SystemShareChannel(this.context).register(flutterEngine)
     new ExternalDocumentChannel().register(flutterEngine)
     new ServiceWidgetChannel(this.context).register(flutterEngine)
+    new SpeechRecognitionChannel(this.context).register(flutterEngine)
   }
 }
