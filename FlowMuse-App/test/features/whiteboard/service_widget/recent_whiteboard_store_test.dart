@@ -76,12 +76,14 @@ void main() {
     );
   });
 
-  test('非整数 updatedAt 返回 null', () {
+  test('float updatedAt 被接受并截断为 int（鸿蒙桥发 float64）', () {
+    // Dart 侧 toJson() 将 updatedAt 发为 double 以绕过鸿蒙 MethodChannel 的
+    // BigInt 编码问题。tryParse 需要接受 num 并用 toInt() 截断。
     final snapshot = RecentWhiteboardSnapshot.tryParse(
-      '{"noteId":"note-123","title":"线代课堂笔记","updatedAt":1721000000000.5}',
+      '{"noteId":"note-123","title":"线代课堂笔记","updatedAt":1721000000000.0}',
     );
 
-    expect(snapshot, isNull);
+    expect(snapshot?.updatedAt, 1721000000000);
   });
 
   test('存在快照且笔记未删除时跳最近白板，否则回退资料库', () {

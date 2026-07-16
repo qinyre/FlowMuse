@@ -134,7 +134,11 @@ export class ServiceWidgetChannel {
       const snapshot: Snapshot = {
         noteId: args['noteId'] as string,
         title: args['title'] as string,
-        updatedAt: args['updatedAt'] as number,
+        // updatedAt comes from Flutter's Dart side as float64 to avoid BigInt
+        // encoding issues over MethodChannel (int64 is decoded as BigInt in
+        // ArkTS which cannot be JSON.stringify'd). Number() handles both
+        // number and any edge-case type the bridge might produce.
+        updatedAt: Number(args['updatedAt'] as Object),
       };
       const store = await preferences.getPreferences(this.context, STORE_NAME);
       await store.put(SNAPSHOT_KEY, JSON.stringify(snapshot));

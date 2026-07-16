@@ -14,7 +14,9 @@ class RecentWhiteboardSnapshot {
   Map<String, Object?> toJson() => {
     'noteId': noteId,
     'title': title,
-    'updatedAt': updatedAt,
+    // int64 在鸿蒙 Flutter 桥被解码为 BigInt，BigInt 无法 JSON.stringify。
+    // 改发 float64（double），桥侧解码为普通 JS number，ArkTS 可直接使用。
+    'updatedAt': updatedAt.toDouble(),
   };
 
   String toJsonString() => jsonEncode(toJson());
@@ -27,13 +29,13 @@ class RecentWhiteboardSnapshot {
       final noteId = value['noteId'];
       final title = value['title'];
       final updatedAt = value['updatedAt'];
-      if (noteId is! String || title is! String || updatedAt is! int) {
+      if (noteId is! String || title is! String || updatedAt is! num) {
         return null;
       }
       return RecentWhiteboardSnapshot(
         noteId: noteId,
         title: title,
-        updatedAt: updatedAt,
+        updatedAt: updatedAt.toInt(),
       );
     } catch (_) {
       return null;
