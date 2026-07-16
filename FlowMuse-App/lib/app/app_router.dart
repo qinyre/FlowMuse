@@ -136,7 +136,7 @@ GoRouter createAppRouter() {
             path: AppRoutes.notebookDetail,
             pageBuilder: (context, state) {
               final notebookId = state.pathParameters['notebookId'] ?? '';
-              return _detailPage(
+              return _contentPage(
                 state,
                 NotebookDetailPage(notebookId: notebookId),
               );
@@ -152,7 +152,7 @@ GoRouter createAppRouter() {
             path: AppRoutes.tagDetail,
             pageBuilder: (context, state) {
               final tagId = state.pathParameters['tagId'] ?? '';
-              return _detailPage(state, TagDetailPage(tagId: tagId));
+              return _contentPage(state, TagDetailPage(tagId: tagId));
             },
           ),
         ],
