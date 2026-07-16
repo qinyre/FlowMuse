@@ -82,4 +82,33 @@ void main() {
 
     expect(await service.isAvailable(), isFalse);
   });
+
+  test('系统识别界面打开时保留返回结果', () async {
+    messenger.setMockMethodCallHandler(
+      channel,
+      (call) async => call.method == 'cancel' ? false : true,
+    );
+    final service = MethodChannelSpeechRecognitionService(channel: channel);
+    addTearDown(service.dispose);
+    final events = <SpeechRecognitionEvent>[];
+    final subscription = service.events.listen(events.add);
+    addTearDown(subscription.cancel);
+
+    await service.start();
+    await service.cancel();
+    await messenger.handlePlatformMessage(
+      channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('onResult', {
+          'text': '系统识别结果',
+          'final': true,
+          'generation': 1,
+        }),
+      ),
+      (_) {},
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(events.whereType<SpeechRecognitionResult>().single.text, '系统识别结果');
+  });
 }

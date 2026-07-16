@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 
 import '../models/speech_recognition_event.dart';
+import 'sherpa_speech_recognition_service.dart';
 import 'speech_recognition_service.dart';
 
 SpeechRecognitionService createSpeechRecognitionService() =>
@@ -22,6 +24,9 @@ class MethodChannelSpeechRecognitionService
   int _generation = 0;
   bool _finalEmitted = false;
   bool _disposed = false;
+  bool _useOffline = false;
+  SherpaSpeechRecognitionService? _offline;
+  StreamSubscription<SpeechRecognitionEvent>? _offlineSubscription;
 
   @override
   Stream<SpeechRecognitionEvent> get events => _events.stream;
@@ -29,18 +34,24 @@ class MethodChannelSpeechRecognitionService
   @override
   Future<bool> isAvailable() async {
     if (_disposed) return false;
+    var nativeAvailable = false;
     try {
-      return await _channel.invokeMethod<bool>('isAvailable') ?? false;
+      nativeAvailable =
+          await _channel.invokeMethod<bool>('isAvailable') ?? false;
     } on PlatformException {
-      return false;
+      nativeAvailable = false;
     } on MissingPluginException {
-      return false;
+      nativeAvailable = false;
     }
+    if (nativeAvailable || !Platform.isAndroid) return nativeAvailable;
+    _useOffline = true;
+    return _ensureOffline().isAvailable();
   }
 
   @override
   Future<void> start({String locale = 'zh-CN'}) async {
     if (_disposed) return;
+    if (_useOffline) return _ensureOffline().start(locale: locale);
     final generation = ++_generation;
     _finalEmitted = false;
     _emit(const SpeechRecognitionStateChanged(SpeechRecognitionState.starting));
@@ -61,6 +72,10 @@ class MethodChannelSpeechRecognitionService
 
   @override
   Future<void> stop() async {
+    if (_useOffline) {
+      await _offline?.stop();
+      return;
+    }
     if (_disposed || _generation == 0) return;
     _emit(const SpeechRecognitionStateChanged(SpeechRecognitionState.stopping));
     try {
@@ -76,17 +91,25 @@ class MethodChannelSpeechRecognitionService
 
   @override
   Future<void> cancel() async {
+    if (_useOffline) {
+      await _offline?.cancel();
+      return;
+    }
     if (_disposed || _generation == 0) return;
     final activeGeneration = _generation;
-    _generation++;
     _finalEmitted = false;
     try {
-      await _channel.invokeMethod<void>('cancel', {
-        'generation': activeGeneration,
-      });
+      final cancelled =
+          await _channel.invokeMethod<bool>('cancel', {
+            'generation': activeGeneration,
+          }) ??
+          true;
+      if (cancelled) _generation++;
     } on PlatformException {
+      _generation++;
       // Cancelling is best-effort; the generation guard already drops callbacks.
     } on MissingPluginException {
+      _generation++;
       // The platform has no active recognizer to release.
     }
     _emit(const SpeechRecognitionStateChanged(SpeechRecognitionState.idle));
@@ -98,6 +121,10 @@ class MethodChannelSpeechRecognitionService
     _disposed = true;
     _generation++;
     _channel.setMethodCallHandler(null);
+    await _offlineSubscription?.cancel();
+    _offlineSubscription = null;
+    await _offline?.dispose();
+    _offline = null;
     try {
       await _channel.invokeMethod<void>('dispose');
     } on PlatformException {
@@ -106,6 +133,14 @@ class MethodChannelSpeechRecognitionService
       // Other desktop platforms intentionally have no implementation.
     }
     await _events.close();
+  }
+
+  SherpaSpeechRecognitionService _ensureOffline() {
+    final service = _offline ??= SherpaSpeechRecognitionService(
+      channel: _channel,
+    );
+    _offlineSubscription ??= service.events.listen(_emit);
+    return service;
   }
 
   Future<void> _handleNativeCall(MethodCall call) async {

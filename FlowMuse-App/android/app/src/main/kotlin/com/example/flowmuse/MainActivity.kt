@@ -2,6 +2,7 @@ package com.example.flowmuse
 
 import android.app.Activity
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
@@ -15,6 +16,8 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.util.ArrayDeque
 
 class MainActivity : FlutterActivity() {
@@ -28,6 +31,7 @@ class MainActivity : FlutterActivity() {
     private var speechRecognizer: SpeechRecognizer? = null
     private var speechGeneration = 0
     private var pendingSpeechStart: Pair<Int, String>? = null
+    private var pendingSpeechActivityGeneration: Int? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -86,7 +90,17 @@ class MainActivity : FlutterActivity() {
         ).also { channel ->
             channel.setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "isAvailable" -> result.success(SpeechRecognizer.isRecognitionAvailable(this))
+                    "isAvailable" -> result.success(isSpeechRecognitionAvailable())
+                    "prepareOfflineModel" -> Thread {
+                        try {
+                            val paths = prepareOfflineSpeechModel()
+                            runOnUiThread { result.success(paths) }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error("MODEL_PREPARE_FAILED", error.message, null)
+                            }
+                        }
+                    }.start()
                     "start" -> {
                         val generation = call.argument<Int>("generation") ?: 0
                         val locale = call.argument<String>("locale") ?: "zh-CN"
@@ -100,10 +114,13 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                     "cancel" -> {
-                        if (call.argument<Int>("generation") == speechGeneration) {
+                        val generation = call.argument<Int>("generation")
+                        val externalActivityActive =
+                            generation != null && generation == pendingSpeechActivityGeneration
+                        if (generation == speechGeneration && !externalActivityActive) {
                             releaseSpeechRecognizer(cancel = true)
                         }
-                        result.success(null)
+                        result.success(!externalActivityActive)
                     }
                     "dispose" -> {
                         releaseSpeechRecognizer(cancel = true)
@@ -120,6 +137,27 @@ class MainActivity : FlutterActivity() {
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_SPEECH_RECOGNITION) {
+            val generation = pendingSpeechActivityGeneration ?: return
+            pendingSpeechActivityGeneration = null
+            if (generation != speechGeneration) return
+            if (resultCode != Activity.RESULT_OK) {
+                sendSpeechState(generation, "idle")
+                return
+            }
+            val text = data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            if (text.isEmpty()) {
+                sendSpeechError(generation, "noSpeech", "No speech result")
+            } else {
+                sendSpeechText(generation, text, final = true)
+                sendSpeechState(generation, "idle")
+            }
+            return
+        }
         if (requestCode != REQUEST_PICK_IMAGE) return
         val pending = imagePickerResult ?: return
         imagePickerResult = null
@@ -194,7 +232,7 @@ class MainActivity : FlutterActivity() {
     private fun startSpeechRecognition(generation: Int, locale: String) {
         speechGeneration = generation
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            sendSpeechError(generation, "unavailable", "系统语音识别服务不可用")
+            startSpeechRecognitionActivity(generation, locale)
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
@@ -205,6 +243,50 @@ class MainActivity : FlutterActivity() {
             return
         }
         createAndStartSpeechRecognizer(generation, locale)
+    }
+
+    private fun isSpeechRecognitionAvailable(): Boolean =
+        SpeechRecognizer.isRecognitionAvailable(this) ||
+            speechRecognitionIntent("zh-CN").resolveActivity(packageManager) != null
+
+    @Suppress("DEPRECATION")
+    private fun startSpeechRecognitionActivity(generation: Int, locale: String) {
+        val intent = speechRecognitionIntent(locale)
+        if (intent.resolveActivity(packageManager) == null) {
+            sendSpeechError(generation, "unavailable", "System speech recognition is unavailable")
+            return
+        }
+        pendingSpeechActivityGeneration = generation
+        sendSpeechState(generation, "starting")
+        try {
+            startActivityForResult(intent, REQUEST_SPEECH_RECOGNITION)
+        } catch (_: ActivityNotFoundException) {
+            pendingSpeechActivityGeneration = null
+            sendSpeechError(generation, "unavailable", "System speech recognition is unavailable")
+        }
+    }
+
+    private fun speechRecognitionIntent(locale: String) =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
+
+    private fun prepareOfflineSpeechModel(): Map<String, String> {
+        val modelDir = File(filesDir, OFFLINE_MODEL_DIRECTORY).apply { mkdirs() }
+        val paths = mutableMapOf<String, String>()
+        for ((key, fileName) in OFFLINE_MODEL_FILES) {
+            val target = File(modelDir, fileName)
+            if (!target.exists() || target.length() == 0L) {
+                assets.open("speech/$OFFLINE_MODEL_DIRECTORY/$fileName").use { input ->
+                    FileOutputStream(target).use { output -> input.copyTo(output) }
+                }
+            }
+            paths[key] = target.absolutePath
+        }
+        return paths
     }
 
     private fun createAndStartSpeechRecognizer(generation: Int, locale: String) {
@@ -267,6 +349,10 @@ class MainActivity : FlutterActivity() {
             ?.trim()
             .orEmpty()
         if (text.isEmpty()) return
+        sendSpeechText(generation, text, final)
+    }
+
+    private fun sendSpeechText(generation: Int, text: String, final: Boolean) {
         speechChannel?.invokeMethod(
             "onResult",
             mapOf("text" to text, "final" to final, "generation" to generation),
@@ -326,5 +412,14 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val REQUEST_PICK_IMAGE = 7011
         private const val REQUEST_RECORD_AUDIO = 7012
+        private const val REQUEST_SPEECH_RECOGNITION = 7013
+        private const val OFFLINE_MODEL_DIRECTORY =
+            "sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16"
+        private val OFFLINE_MODEL_FILES = mapOf(
+            "encoder" to "encoder-epoch-99-avg-1.int8.onnx",
+            "decoder" to "decoder-epoch-99-avg-1.onnx",
+            "joiner" to "joiner-epoch-99-avg-1.int8.onnx",
+            "tokens" to "tokens.txt",
+        )
     }
 }
