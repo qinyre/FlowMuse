@@ -3417,16 +3417,6 @@ class MarkdrawController extends ChangeNotifier {
     List<Bounds> occupied, {
     bool useTemplateAnchors = false,
   }) {
-    if (block.writingMode == 'vertical' || block.type == 'math') {
-      return [
-        _textElementFromSmartLayoutBlock(
-          block,
-          layoutIndex,
-          occupied,
-          useTemplateAnchors: useTemplateAnchors,
-        ),
-      ];
-    }
     final lines = _smartLayoutDisplayLines(block.text);
     if (lines.length <= 1) {
       return [
@@ -3450,7 +3440,7 @@ class MarkdrawController extends ChangeNotifier {
         id: '${block.id}-line-$i',
         type: block.type,
         text: line,
-        latex: block.latex,
+        latex: block.type == 'math' ? line : block.latex,
         pageId: block.pageId,
         bounds: _lineBoundsForSmartLayoutBlock(block, i, totalLineCount),
         order: block.order,
