@@ -2974,23 +2974,36 @@ class MarkdrawController extends ChangeNotifier {
     recognize,
     void Function(int completed, int total)? onProgress,
   ) async {
+    if (blocks.isEmpty) {
+      onProgress?.call(0, 0);
+      return const [];
+    }
     final results = List<SmartLayoutRecognizedBlock?>.filled(
       blocks.length,
       null,
     );
     var nextIndex = 0;
     var completed = 0;
+    Object? firstError;
+    StackTrace? firstStackTrace;
     onProgress?.call(0, blocks.length);
 
     Future<void> worker() async {
       while (true) {
         if (_disposed) return;
+        if (firstError != null) return;
         final index = nextIndex;
         if (index >= blocks.length) return;
         nextIndex++;
-        results[index] = await recognize(blocks[index]);
-        completed++;
-        onProgress?.call(completed, blocks.length);
+        try {
+          results[index] = await recognize(blocks[index]);
+          completed++;
+          onProgress?.call(completed, blocks.length);
+        } catch (error, stackTrace) {
+          firstError ??= error;
+          firstStackTrace ??= stackTrace;
+          return;
+        }
       }
     }
 
@@ -2999,7 +3012,18 @@ class MarkdrawController extends ChangeNotifier {
       blocks.length,
     );
     await Future.wait([for (var i = 0; i < workerCount; i++) worker()]);
-    return results.whereType<SmartLayoutRecognizedBlock>().toList();
+    final error = firstError;
+    if (error != null) {
+      Error.throwWithStackTrace(error, firstStackTrace ?? StackTrace.current);
+    }
+    if (_disposed) {
+      throw StateError('智能识别已取消');
+    }
+    final missingIndex = results.indexWhere((result) => result == null);
+    if (missingIndex >= 0) {
+      throw StateError('智能识别结果不完整：第 ${missingIndex + 1} 个块未返回');
+    }
+    return [for (final result in results) result!];
   }
 
   String exportSmartLayout(SmartLayoutExportFormat format) {
