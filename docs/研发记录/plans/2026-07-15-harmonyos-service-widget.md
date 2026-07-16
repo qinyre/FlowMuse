@@ -1156,8 +1156,8 @@ git commit -m "feat:接入鸿蒙最近白板服务卡片"
 ### Task 5: 文档同步、全量校验与最终提交
 
 **Files:**
-- Modify: `REQUIREMENTS.md`
-- Modify: `FlowMuse-App/docs/architecture.md`
+- Modify: `docs/项目说明/项目需求.md`
+- Modify: `docs/技术设计/前端架构.md`
 - Verify all files changed in Tasks 1-4.
 
 **Interfaces:**
@@ -1167,12 +1167,12 @@ git commit -m "feat:接入鸿蒙最近白板服务卡片"
 - [ ] **Step 1: Update user-facing requirements and architecture docs**
 
 ```md
-<!-- REQUIREMENTS.md 在 4.10 鸿蒙端特有中补一行 -->
+<!-- docs/项目说明/项目需求.md 在 4.10 鸿蒙端特有中补一行 -->
 | 桌面服务卡片 | 鸿蒙桌面显示最近白板并一键继续创作；无最近白板时回到资料库 |
 ```
 
 ```md
-<!-- FlowMuse-App/docs/architecture.md 在跨平台章节补一段 -->
+<!-- docs/技术设计/前端架构.md 在跨平台章节补一段 -->
 - 服务卡片：鸿蒙通过 `FormExtensionAbility` + ArkTS 动态卡片承载最近白板入口；
   Flutter 侧只负责把 `noteId/title/updatedAt` 通过 `flow_muse/service_widget`
   通道推送给 ArkTS，并在启动时消费 `resumeLastWhiteboard` action。
@@ -1208,7 +1208,7 @@ Expected: PASS.
 - [ ] **Step 6: Final commit**
 
 ```bash
-git add REQUIREMENTS.md FlowMuse-App/docs/architecture.md FlowMuse-App/lib/features/whiteboard/service_widget FlowMuse-App/lib/app/flow_muse_app.dart FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart FlowMuse-App/ohos/entry/src/main/ets/channels/ServiceWidgetChannel.ets FlowMuse-App/ohos/entry/src/main/ets/entryformability/EntryFormAbility.ets FlowMuse-App/ohos/entry/src/main/ets/servicewidget/pages/RecentWhiteboardWidgetCard.ets FlowMuse-App/ohos/entry/src/main/resources/base/profile/recent_whiteboard_form_config.json FlowMuse-App/ohos/entry/src/main/ets/entryability/EntryAbility.ets FlowMuse-App/ohos/entry/src/main/module.json5 FlowMuse-App/ohos/entry/src/main/resources/base/element/string.json FlowMuse-App/ohos/entry/src/main/resources/zh_CN/element/string.json FlowMuse-App/ohos/entry/src/main/resources/en_US/element/string.json FlowMuse-App/test/features/whiteboard/service_widget/recent_whiteboard_store_test.dart FlowMuse-App/test/features/whiteboard/service_widget/service_widget_channel_ohos_test.dart FlowMuse-App/test/features/whiteboard/service_widget/recent_whiteboard_sync_coordinator_test.dart
+git add docs/项目说明/项目需求.md docs/技术设计/前端架构.md FlowMuse-App/lib/features/whiteboard/service_widget FlowMuse-App/lib/app/flow_muse_app.dart FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart FlowMuse-App/ohos/entry/src/main/ets/channels/ServiceWidgetChannel.ets FlowMuse-App/ohos/entry/src/main/ets/entryformability/EntryFormAbility.ets FlowMuse-App/ohos/entry/src/main/ets/servicewidget/pages/RecentWhiteboardWidgetCard.ets FlowMuse-App/ohos/entry/src/main/resources/base/profile/recent_whiteboard_form_config.json FlowMuse-App/ohos/entry/src/main/ets/entryability/EntryAbility.ets FlowMuse-App/ohos/entry/src/main/module.json5 FlowMuse-App/ohos/entry/src/main/resources/base/element/string.json FlowMuse-App/ohos/entry/src/main/resources/zh_CN/element/string.json FlowMuse-App/ohos/entry/src/main/resources/en_US/element/string.json FlowMuse-App/test/features/whiteboard/service_widget/recent_whiteboard_store_test.dart FlowMuse-App/test/features/whiteboard/service_widget/service_widget_channel_ohos_test.dart FlowMuse-App/test/features/whiteboard/service_widget/recent_whiteboard_sync_coordinator_test.dart
 git commit -m "feat:实现鸿蒙最近白板服务卡片"
 ```
 

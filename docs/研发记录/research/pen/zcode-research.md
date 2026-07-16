@@ -10,7 +10,7 @@
 
 ## 结论先行（TL;DR）
 
-1. **当前项目线条锯齿的根因是确定的、单点的**：`lib/features/whiteboard/widgets/spike_canvas.dart:54-56` 用一个 `path.lineTo` 循环把**每一个原始采样点**连成直线段，没有任何曲线平滑、没有任何压感/速度驱动的宽度变化。这样画出来的是一条折线（polyline），锯齿和尖锐转角是几何上的必然结果，与本项目 Stage-1 的验收记录一致（`docs/superpowers/plans/2026-07-06-pen-spike-stage1-result.md:56` 明确写"模拟点画出折线"）。
+1. **当前项目线条锯齿的根因是确定的、单点的**：`lib/features/whiteboard/widgets/spike_canvas.dart:54-56` 用一个 `path.lineTo` 循环把**每一个原始采样点**连成直线段，没有任何曲线平滑、没有任何压感/速度驱动的宽度变化。这样画出来的是一条折线（polyline），锯齿和尖锐转角是几何上的必然结果，与本项目 Stage-1 的验收记录一致（`docs/研发记录/plans/2026-07-06-pen-spike-stage1-result.md:56` 明确写"模拟点画出折线"）。
 
 2. **成熟产品的"光滑感"不是来自单一魔法，而是 4 层叠加**（输入采集 → 点云预处理 → 曲线拟合 → 变宽轮廓渲染），本项目目前**只做了第 1 层的采集和第 4 层的最简 stroked 直线**，中间两层完全缺失。
 
@@ -54,7 +54,7 @@ canvas.drawPath(path, paint);
 
 **全程无任何：去重、抽稀、滑动平均、曲线拟合。** 压力 `force`/`pressure` 字段一路采集到了 Dart（`models/stroke_point.dart:33-38`），但渲染时被完全忽略。
 
-> 设计文档本来就要做平滑：`docs/superpowers/specs/2026-07-06-harmonyos-pen-whiteboard-design-v2.md` 第 196-209 行的"笔刷渲染：perfect_freehand"小节、数据流图（124-133 行）末端的"perfect_freehand 把 points 转成轮廓多边形"，都是 Stage-1 主动延后、尚未实现的。所以这不是"漏了"，而是"还没到"，现在正是补上它的时候。
+> 设计文档本来就要做平滑：`docs/研发记录/specs/2026-07-06-harmonyos-pen-whiteboard-design-v2.md` 第 196-209 行的"笔刷渲染：perfect_freehand"小节、数据流图（124-133 行）末端的"perfect_freehand 把 points 转成轮廓多边形"，都是 Stage-1 主动延后、尚未实现的。所以这不是"漏了"，而是"还没到"，现在正是补上它的时候。
 
 ---
 

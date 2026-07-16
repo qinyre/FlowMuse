@@ -177,7 +177,7 @@ Expected: PASS.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add docs/superpowers/specs/2026-07-07-ohos-local-persistence-design.md docs/superpowers/plans/2026-07-07-ohos-local-persistence.md FlowMuse-App/lib/shared/storage FlowMuse-App/lib/features/library/repositories/library_repository.dart FlowMuse-App/lib/features/whiteboard/view_models/whiteboard_view_model.dart FlowMuse-App/test/shared/storage FlowMuse-App/test/features/library/library_repository_persistence_test.dart FlowMuse-App/test/features/whiteboard/whiteboard_scene_repository_persistence_test.dart
+git add docs/研发记录/specs/2026-07-07-ohos-local-persistence-design.md docs/研发记录/plans/2026-07-07-ohos-local-persistence.md FlowMuse-App/lib/shared/storage FlowMuse-App/lib/features/library/repositories/library_repository.dart FlowMuse-App/lib/features/whiteboard/view_models/whiteboard_view_model.dart FlowMuse-App/test/shared/storage FlowMuse-App/test/features/library/library_repository_persistence_test.dart FlowMuse-App/test/features/whiteboard/whiteboard_scene_repository_persistence_test.dart
 git commit -m "实现鸿蒙端本地持久化存储"
 ```
 

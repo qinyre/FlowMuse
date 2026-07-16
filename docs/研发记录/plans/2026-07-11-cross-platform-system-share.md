@@ -172,7 +172,7 @@ Future<String> importAsNewNote(ImportedDocumentPreview preview);
 - Modify: `FlowMuse-App/lib/features/whiteboard/share/services/share_service.dart`
 - Modify: `FlowMuse-App/pubspec.yaml`
 - Create: `FlowMuse-App/test/features/whiteboard/share/services/share_service_web_test.dart`
-- Modify: `REQUIREMENTS.md`
+- Modify: `docs/项目说明/项目需求.md`
 - Modify: `.agent/architecture.md`
 - Modify: `.agent/conventions.md`
 

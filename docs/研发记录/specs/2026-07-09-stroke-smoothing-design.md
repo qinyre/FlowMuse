@@ -3,7 +3,7 @@
 > 日期：2026-07-09
 > 状态：设计（待评审）
 > 适用项目：FlowMuse-App（`2024-se-17-markdraw-probe/FlowMuse-App/`），目标多端：HarmonyOS、Android、iOS、Windows、macOS、Linux、Web
-> 上游决策依据：`docs/research/codex-best.md`（三份调研的整合最优方案）
+> 上游决策依据：`docs/研发记录/research/codex-best.md`（三份调研的整合最优方案）
 > 后续产物：实施计划（writing-plans）
 
 ---
@@ -318,8 +318,8 @@ Path buildOutlinePath(List<PointVector> outline, OutlineRenderMode mode);
 
 ## 9. 参考资料
 
-- 上游整合方案：`docs/research/codex-best.md`
-- 三份原始调研：`docs/research/codex-research.md`、`claude-research.md`、`zcode-research.md`
+- 上游整合方案：`docs/研发记录/research/codex-best.md`
+- 三份原始调研：`docs/研发记录/research/codex-research.md`、`claude-research.md`、`zcode-research.md`
 - perfect-freehand（含官方渲染示例）：<https://github.com/steveruizok/perfect-freehand>
 - One Euro Filter（Casiez et al., CHI 2012）：<https://doi.org/10.1145/2207676.2208639>
 - Windows Ink wet/dry 模型：<https://learn.microsoft.com/en-us/uwp/api/windows.ui.input.inking.inkpresenter>

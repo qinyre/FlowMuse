@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - **所有路径根目录**：`D:\Program\HarmonyOS\2024-se-17-markdraw-probe\FlowMuse-App`（下文简称 `<APP>`）。docs 目录在其父层 `<REPO>` = `D:\Program\HarmonyOS\2024-se-17-markdraw-probe`。
-- **spec 文档**：`<REPO>/docs/superpowers/specs/2026-07-08-pdf-note-import-design.md`（已确认）。
+- **spec 文档**：`<REPO>/docs/研发记录/specs/2026-07-08-pdf-note-import-design.md`（已确认）。
 - **鸿蒙端参考文档**：`D:\Program\HarmonyOS\harmonyos-guides\应用服务\PDF Kit（PDF服务）\`，本次涉及的关键参考为 `pdfService能力\转换PDF文档为图片\pdf-get-img.md` 与 `pdfService能力\pdf-open-document.md`。
 - **鸿蒙端原生代码（`ohos/entry/src/main/ets/pdf/PdfImportChannel.ets`）本次零改动**。其现有债务（targetPageWidth 被丢弃、pixelMap/imagePacker 未释放）已在 spec 第 9 节登记为独立后续任务，不在本计划范围。本计划仅动 Flutter/Dart 侧。
 - **测试命令**：`flutter test test/路径`（在 `<APP>` 下执行）。

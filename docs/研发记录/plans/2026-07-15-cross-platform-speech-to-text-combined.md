@@ -10,7 +10,7 @@
 - P0 共享文本插入、编辑器交互、Android、HarmonyOS、Web 适配均已实现。
 - 自动化测试、Web 构建、Android debug APK、HarmonyOS debug HAP 已通过。
 - P1-A/P1-B 的准入条件尚无实测数据触发，因此按本计划不实施。
-- Android/HarmonyOS 当前未连接真机；固定语料与验收表已写入 `docs/research/speech-to-text-capability-baseline.md`，真机质量数据仍须补录。
+- Android/HarmonyOS 当前未连接真机；固定语料与验收表已写入 `docs/研发记录/research/speech-to-text-capability-baseline.md`，真机质量数据仍须补录。
 
 ## 1. 结论先行
 
@@ -401,7 +401,7 @@ whiteboard.speechRecognitionNoticeSeen.v1
 新增：
 
 ```text
-docs/research/speech-to-text-capability-baseline.md
+docs/研发记录/research/speech-to-text-capability-baseline.md
 ```
 
 必须包含设备/浏览器版本、网络状态、10 条语料结果和 P1-A/P1-B go/no-go。没有这份数据不得启动 sherpa 或后端 ASR。

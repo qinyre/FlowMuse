@@ -122,5 +122,5 @@ curl.exe -sS -o NUL -w "status=%{http_code} total=%{time_total}s`n" --max-time 5
 
 AI 使用记录已独立归档，格式严格遵循“问了什么 → AI 给了什么 → 我们改了什么”：
 
-- [Sprint 2 AI 反思日志](sprint2-ai-reflection-log.md)
+- [项目 AI 使用日志](AI使用反思日志.md)
 

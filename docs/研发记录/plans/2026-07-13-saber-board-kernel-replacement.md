@@ -768,7 +768,7 @@ git commit -m "refactor: 移除旧 markdraw 画板内核"
 
 **Files:**
 
-- Modify: `REQUIREMENTS.md`
+- Modify: `docs/项目说明/项目需求.md`
 - Modify: `FlowMuse-App/README.md`
 - Modify if present: `.agent/architecture.md`
 - Modify if present: `.agent/conventions.md`
@@ -792,7 +792,7 @@ Expected: 无尾随空格。
 - [ ] 提交：
 
 ```powershell
-git add REQUIREMENTS.md FlowMuse-App/README.md .agent docs
+git add docs/项目说明/项目需求.md FlowMuse-App/README.md .agent docs
 git commit -m "docs: 更新 saber 画板内核架构说明"
 ```
 

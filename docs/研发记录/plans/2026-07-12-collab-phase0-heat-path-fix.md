@@ -1420,7 +1420,7 @@ Expected: `flutter analyze` 无新增 error，`flutter test` 全部 PASS。
 
 - [ ] **Step 3: 记录 Phase 0 后指标**
 
-填入 `docs/research/collaboration/codex-best.md`:
+填入 `docs/研发记录/research/collaboration/codex-best.md`:
 - 单条 batch 平均元素数
 - 单条 batch 加密后字节数 P50/P95
 - 每秒 batch 发送次数 / 快照 PUT 次数
@@ -1430,7 +1430,7 @@ Expected: `flutter analyze` 无新增 error，`flutter test` 全部 PASS。
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/research/collaboration/codex-best.md
+git add docs/研发记录/research/collaboration/codex-best.md
 git commit -m "docs: Phase 0 验收指标记录"
 ```
 

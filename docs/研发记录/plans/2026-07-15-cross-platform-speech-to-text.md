@@ -3,7 +3,7 @@
 > 日期：2026-07-15  
 > 分支：`语音转文字`  
 > 实施范围：Android、HarmonyOS、Web  
-> 计划目录沿用仓库既有约定：`docs/superpowers/plans/`
+> 计划目录沿用仓库既有约定：`docs/研发记录/plans/`
 
 ## 1. 目标
 
@@ -531,7 +531,7 @@ feat:接入Web Speech API语音识别
 
 - Modify: `lib/features/whiteboard/editor_core/src/ui/markdraw_editor.dart`
 - Test: `test/features/whiteboard/editor_core/speech_collaboration_boundary_test.dart`
-- Optional docs: `FlowMuse-App/docs/architecture.md`
+- Optional docs: `docs/技术设计/前端架构.md`
 
 - [ ] 首次点击前显示一次隐私提示，复用 `LocalSettingsRepository`。
 - [ ] 验证 partial 回调期间 `onSceneChanged` 调用次数为 0。

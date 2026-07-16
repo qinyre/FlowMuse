@@ -27,7 +27,7 @@
 - Modify: `FlowMuse-App/ohos/entry/src/main/ets/channels/PenColorPickerChannel.ets` — 使用官方 Pen Kit API 并返回状态 Map。
 - Modify: `FlowMuse-App/ohos/entry/src/main/module.json5` — 移除未要求的屏幕捕获权限。
 - Modify locally: `FlowMuse-App/ohos/build-profile.json5` — 恢复正确 SDK 兼容配置，保留签名。
-- Modify: `REQUIREMENTS.md` — 补充鸿蒙全局取色需求。
+- Modify: `docs/项目说明/项目需求.md` — 补充鸿蒙全局取色需求。
 
 ---
 
@@ -314,7 +314,7 @@ Expected: PASS and produce a debug HAP. If compilation reports a Pen Kit symbol 
 ### Task 3: Document and Verify the Feature
 
 **Files:**
-- Modify: `REQUIREMENTS.md:114`
+- Modify: `docs/项目说明/项目需求.md:114`
 - Verify: all files from Tasks 1–2
 
 **Interfaces:**
@@ -323,7 +323,7 @@ Expected: PASS and produce a debug HAP. If compilation reports a Pen Kit symbol 
 
 - [ ] **Step 1: Record the user-visible HarmonyOS requirement**
 
-Add this row under `### 4.10 鸿蒙端特有` in `REQUIREMENTS.md`:
+Add this row under `### 4.10 鸿蒙端特有` in `docs/项目说明/项目需求.md`:
 
 ```markdown
 | Pen Kit 全局取色 | 支持设备调用系统全局取色器；不支持时降级到画布取色，用户取消时保持原颜色 |
@@ -355,7 +355,7 @@ Run:
 ```powershell
 git diff --check
 git status --short
-git diff -- FlowMuse-App/lib/features/color_picker FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart FlowMuse-App/ohos/entry/src/main/ets/channels/PenColorPickerChannel.ets FlowMuse-App/ohos/entry/src/main/module.json5 FlowMuse-App/test/features/color_picker REQUIREMENTS.md docs/superpowers
+git diff -- FlowMuse-App/lib/features/color_picker FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart FlowMuse-App/ohos/entry/src/main/ets/channels/PenColorPickerChannel.ets FlowMuse-App/ohos/entry/src/main/module.json5 FlowMuse-App/test/features/color_picker docs/项目说明/项目需求.md docs/研发记录
 git check-ignore -v FlowMuse-App/ohos/build-profile.json5
 ```
 
@@ -390,6 +390,6 @@ Expected: all steps match the design; Windows verification is not required.
 
 ## Handoff Notes
 
-- Design source: `docs/superpowers/specs/2026-07-16-pen-kit-global-color-picker-design.md`.
+- Design source: `docs/研发记录/specs/2026-07-16-pen-kit-global-color-picker-design.md`.
 - The working tree already contains user-owned generated registrant and HarmonyOS changes. Do not discard, reset or stage unrelated files.
 - Manual device acceptance requires the user's HarmonyOS real device and Android tablet; report automated evidence separately from device evidence.
