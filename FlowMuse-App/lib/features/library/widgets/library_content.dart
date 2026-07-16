@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/widgets/cover_selection_checkbox.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../models/library_special_view.dart';
@@ -687,32 +688,22 @@ class _LibraryItemsContent extends StatelessWidget {
             ? index - 2
             : index;
         final item = notes[noteIndex];
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: NoteCard(
-                item: item,
-                onTap: state.selectionMode
-                    ? () => onSelectionChanged(item.id)
-                    : () => onOpenNote(item),
-                onActionsTap:
-                    specialView == LibrarySpecialView.trash ||
-                        onRenameNote != null
-                    ? (BuildContext buttonContext) =>
-                          _showNoteActions(buttonContext, item)
-                    : null,
-              ),
-            ),
-            if (state.selectionMode)
-              Positioned(
-                top: 10,
-                right: 10,
-                child: Checkbox(
-                  value: state.selectedNoteIds.contains(item.id),
-                  onChanged: (_) => onSelectionChanged(item.id),
-                ),
-              ),
-          ],
+        return NoteCard(
+          item: item,
+          onTap: state.selectionMode
+              ? () => onSelectionChanged(item.id)
+              : () => onOpenNote(item),
+          onActionsTap:
+              specialView == LibrarySpecialView.trash || onRenameNote != null
+              ? (BuildContext buttonContext) =>
+                    _showNoteActions(buttonContext, item)
+              : null,
+          selectionControl: state.selectionMode
+              ? CoverSelectionCheckbox(
+                  selected: state.selectedNoteIds.contains(item.id),
+                  onChanged: () => onSelectionChanged(item.id),
+                )
+              : null,
         );
       },
     );

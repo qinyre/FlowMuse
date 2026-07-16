@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/widgets/cover_selection_checkbox.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
@@ -282,36 +283,20 @@ class _NotebookCollectionItems extends StatelessWidget {
               );
             }
             final notebook = state.visibleNotebooks[index - 1];
-            return Stack(
-              children: [
-                Positioned.fill(
-                  child: _NotebookCollectionCoverCard(
-                    notebook: notebook,
-                    selectionMode: state.selectionMode,
-                    selected: state.selectedNotebookIds.contains(notebook.id),
-                    onSelectionChanged: () => onSelectionChanged(notebook.id),
-                    onRename: () => _showNameDialog(
-                      context: context,
-                      title: '重命名笔记本',
-                      initialValue: notebook.name,
-                      onSubmitted: (name) => onRename(notebook.id, name),
-                    ),
-                    onEdit: () => onEdit(notebook.id),
-                    onDelete: () => onDelete(notebook.id),
-                    onTap: () =>
-                        context.push(AppRoutes.notebookPath(notebook.id)),
-                  ),
-                ),
-                if (state.selectionMode)
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Checkbox(
-                      value: state.selectedNotebookIds.contains(notebook.id),
-                      onChanged: (_) => onSelectionChanged(notebook.id),
-                    ),
-                  ),
-              ],
+            return _NotebookCollectionCoverCard(
+              notebook: notebook,
+              selectionMode: state.selectionMode,
+              selected: state.selectedNotebookIds.contains(notebook.id),
+              onSelectionChanged: () => onSelectionChanged(notebook.id),
+              onRename: () => _showNameDialog(
+                context: context,
+                title: '重命名笔记本',
+                initialValue: notebook.name,
+                onSubmitted: (name) => onRename(notebook.id, name),
+              ),
+              onEdit: () => onEdit(notebook.id),
+              onDelete: () => onDelete(notebook.id),
+              onTap: () => context.push(AppRoutes.notebookPath(notebook.id)),
             );
           },
         );
@@ -545,6 +530,15 @@ class _NotebookCollectionCoverCard extends StatelessWidget {
                     },
                   ),
                 ),
+                if (selectionMode)
+                  Positioned(
+                    top: -8,
+                    right: -8,
+                    child: CoverSelectionCheckbox(
+                      selected: selected,
+                      onChanged: onSelectionChanged,
+                    ),
+                  ),
               ],
             ),
           ),

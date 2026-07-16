@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_spacing.dart';
+import '../../../shared/widgets/cover_selection_checkbox.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
@@ -265,32 +266,20 @@ class _TagItems extends StatelessWidget {
               return _CreateTagCard(onTap: onCreate);
             }
             final tag = state.visibleTags[index - 1];
-            return Stack(
-              children: [
-                Positioned.fill(
-                  child: _TagCoverCard(
-                    tag: tag,
-                    onRename: () => _showNameDialog(
-                      context: context,
-                      title: '重命名标签',
-                      initialValue: tag.name,
-                      onSubmitted: (name) => onRename(tag.id, name),
-                    ),
-                    onEdit: () => onEdit(tag.id),
-                    onDelete: () => onDelete(tag.id),
-                    onTap: () => context.push(AppRoutes.tagPath(tag.id)),
-                  ),
-                ),
-                if (state.selectionMode)
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Checkbox(
-                      value: state.selectedTagIds.contains(tag.id),
-                      onChanged: (_) => onSelectionChanged(tag.id),
-                    ),
-                  ),
-              ],
+            return _TagCoverCard(
+              tag: tag,
+              selectionMode: state.selectionMode,
+              selected: state.selectedTagIds.contains(tag.id),
+              onSelectionChanged: () => onSelectionChanged(tag.id),
+              onRename: () => _showNameDialog(
+                context: context,
+                title: '重命名标签',
+                initialValue: tag.name,
+                onSubmitted: (name) => onRename(tag.id, name),
+              ),
+              onEdit: () => onEdit(tag.id),
+              onDelete: () => onDelete(tag.id),
+              onTap: () => context.push(AppRoutes.tagPath(tag.id)),
             );
           },
         );
@@ -463,6 +452,9 @@ class _NoteItems extends StatelessWidget {
 class _TagCoverCard extends StatelessWidget {
   _TagCoverCard({
     required this.tag,
+    required this.selectionMode,
+    required this.selected,
+    required this.onSelectionChanged,
     required this.onRename,
     required this.onEdit,
     required this.onDelete,
@@ -472,6 +464,9 @@ class _TagCoverCard extends StatelessWidget {
   final GlobalKey _arrowKey = GlobalKey();
 
   final TagItem tag;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback onSelectionChanged;
   final VoidCallback onRename;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -512,6 +507,15 @@ class _TagCoverCard extends StatelessWidget {
                     },
                   ),
                 ),
+                if (selectionMode)
+                  Positioned(
+                    top: -8,
+                    right: -8,
+                    child: CoverSelectionCheckbox(
+                      selected: selected,
+                      onChanged: onSelectionChanged,
+                    ),
+                  ),
               ],
             ),
           ),
