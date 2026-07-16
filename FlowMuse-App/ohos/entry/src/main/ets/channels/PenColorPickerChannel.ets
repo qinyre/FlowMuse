@@ -1,6 +1,7 @@
 import { BusinessError } from '@kit.BasicServicesKit';
 import { imageFeaturePicker } from '@kit.Penkit';
 import { FlutterEngine, MethodCall, MethodChannel, MethodResult } from '@ohos/flutter_ohos';
+import display from '@ohos.display';
 
 export class PenColorPickerChannel {
   private static readonly CHANNEL_NAME = 'flow_muse/pen_color_picker';
@@ -18,7 +19,12 @@ export class PenColorPickerChannel {
           return;
         }
 
-        imageFeaturePicker.pickForResult().then((colorInfo) => {
+        const defaultDisplay = display.getDefaultDisplaySync();
+        imageFeaturePicker.pickForResult(
+          defaultDisplay.width / 2,
+          defaultDisplay.height / 2,
+          false
+        ).then((colorInfo) => {
           const color = colorInfo.color;
           const red = color.red.toString(16).padStart(2, '0');
           const green = color.green.toString(16).padStart(2, '0');
