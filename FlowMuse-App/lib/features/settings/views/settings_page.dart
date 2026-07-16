@@ -1262,6 +1262,15 @@ class _ToolsSettingsSection extends ConsumerWidget {
     '#7048e8',
     '#ffff00',
   ];
+  static const _colorLabels = {
+    '#1e1e1e': '黑色',
+    '#e03131': '红色',
+    '#1971c2': '蓝色',
+    '#2f9e44': '绿色',
+    '#f08c00': '橙色',
+    '#7048e8': '紫色',
+    '#ffff00': '黄色',
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1278,21 +1287,12 @@ class _ToolsSettingsSection extends ConsumerWidget {
                   leading: const Icon(LucideIcons.mousePointer2),
                   title: const Text('默认工具'),
                   subtitle: const Text('打开白板时自动选择'),
-                  trailing: DropdownButton<ToolType>(
+                  trailing: _SettingsPopupMenu<ToolType>(
                     value: preferences.defaultTool,
-                    onChanged: (value) {
-                      if (value != null) {
-                        unawaited(notifier.setDefaultTool(value));
-                      }
-                    },
-                    items: _defaultTools
-                        .map(
-                          (tool) => DropdownMenuItem(
-                            value: tool,
-                            child: Text(_toolLabel(tool)),
-                          ),
-                        )
-                        .toList(),
+                    options: _defaultTools,
+                    label: _toolLabel,
+                    onSelected: (value) =>
+                        unawaited(notifier.setDefaultTool(value)),
                   ),
                 ),
                 const Divider(height: 1),
@@ -1301,21 +1301,12 @@ class _ToolsSettingsSection extends ConsumerWidget {
                   leading: const Icon(LucideIcons.penTool),
                   title: const Text('默认笔形'),
                   subtitle: const Text('颜色和粗细会按每支笔分别记忆'),
-                  trailing: DropdownButton<BrushType>(
+                  trailing: _SettingsPopupMenu<BrushType>(
                     value: brush,
-                    onChanged: (value) {
-                      if (value != null) {
-                        unawaited(notifier.setDefaultBrush(value));
-                      }
-                    },
-                    items: BrushType.values
-                        .map(
-                          (type) => DropdownMenuItem(
-                            value: type,
-                            child: Text(_brushLabel(type)),
-                          ),
-                        )
-                        .toList(),
+                    options: BrushType.values,
+                    label: _brushLabel,
+                    onSelected: (value) =>
+                        unawaited(notifier.setDefaultBrush(value)),
                   ),
                 ),
               ],
@@ -1343,7 +1334,7 @@ class _ToolsSettingsSection extends ConsumerWidget {
                           avatar: CircleAvatar(
                             backgroundColor: _colorFromHex(color),
                           ),
-                          label: Text(color),
+                          label: Text(_colorLabels[color]!),
                           onSelected: (_) {
                             unawaited(
                               notifier.updateBrushState(
@@ -1392,6 +1383,46 @@ class _ToolsSettingsSection extends ConsumerWidget {
   }
 }
 
+class _SettingsPopupMenu<T extends Object> extends StatelessWidget {
+  const _SettingsPopupMenu({
+    required this.value,
+    required this.options,
+    required this.label,
+    this.onSelected,
+  });
+
+  final T value;
+  final List<T> options;
+  final String Function(T value) label;
+  final ValueChanged<T>? onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onSelected != null;
+    final color = enabled
+        ? Theme.of(context).colorScheme.onSurface
+        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38);
+
+    return PopupMenuButton<T>(
+      enabled: enabled,
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 4),
+      onSelected: onSelected,
+      itemBuilder: (context) => [
+        for (final option in options)
+          PopupMenuItem(value: option, child: Text(label(option))),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label(value), style: TextStyle(color: color)),
+          Icon(Icons.arrow_drop_down, color: color),
+        ],
+      ),
+    );
+  }
+}
+
 class _DocumentSettingsSection extends ConsumerWidget {
   const _DocumentSettingsSection();
 
@@ -1410,21 +1441,12 @@ class _DocumentSettingsSection extends ConsumerWidget {
                     ? '仅在退出或切换到后台时保存；强制结束应用可能丢失修改'
                     : '编辑后自动保存草稿的等待时间',
               ),
-              trailing: DropdownButton<AutosaveInterval>(
+              trailing: _SettingsPopupMenu<AutosaveInterval>(
                 value: preferences.autosaveInterval,
-                onChanged: (value) {
-                  if (value != null) {
-                    unawaited(notifier.setAutosaveInterval(value));
-                  }
-                },
-                items: AutosaveInterval.values
-                    .map(
-                      (interval) => DropdownMenuItem(
-                        value: interval,
-                        child: Text(_autosaveIntervalLabel(interval)),
-                      ),
-                    )
-                    .toList(),
+                options: AutosaveInterval.values,
+                label: _autosaveIntervalLabel,
+                onSelected: (value) =>
+                    unawaited(notifier.setAutosaveInterval(value)),
               ),
             ),
             const Divider(height: 1),
@@ -1433,21 +1455,12 @@ class _DocumentSettingsSection extends ConsumerWidget {
               leading: const Icon(LucideIcons.fileText),
               title: const Text('默认文档类型'),
               subtitle: const Text('新建笔记时预先选择'),
-              trailing: DropdownButton<CanvasLayoutType>(
+              trailing: _SettingsPopupMenu<CanvasLayoutType>(
                 value: preferences.defaultLayoutType,
-                onChanged: (value) {
-                  if (value != null) {
-                    unawaited(notifier.setDefaultLayoutType(value));
-                  }
-                },
-                items: CanvasLayoutType.values
-                    .map(
-                      (type) => DropdownMenuItem(
-                        value: type,
-                        child: Text(_layoutTypeLabel(type)),
-                      ),
-                    )
-                    .toList(),
+                options: CanvasLayoutType.values,
+                label: _layoutTypeLabel,
+                onSelected: (value) =>
+                    unawaited(notifier.setDefaultLayoutType(value)),
               ),
             ),
             const Divider(height: 1),
@@ -1456,21 +1469,12 @@ class _DocumentSettingsSection extends ConsumerWidget {
               leading: const Icon(LucideIcons.layoutTemplate),
               title: const Text('默认页面模板'),
               subtitle: const Text('仅用于以后新建的文档'),
-              trailing: DropdownButton<CanvasPageTemplate>(
+              trailing: _SettingsPopupMenu<CanvasPageTemplate>(
                 value: preferences.defaultPageTemplate,
-                onChanged: (value) {
-                  if (value != null) {
-                    unawaited(notifier.setDefaultPageTemplate(value));
-                  }
-                },
-                items: CanvasPageTemplate.values
-                    .map(
-                      (template) => DropdownMenuItem(
-                        value: template,
-                        child: Text(_pageTemplateLabel(template)),
-                      ),
-                    )
-                    .toList(),
+                options: CanvasPageTemplate.values,
+                label: _pageTemplateLabel,
+                onSelected: (value) =>
+                    unawaited(notifier.setDefaultPageTemplate(value)),
               ),
             ),
             const Divider(height: 1),
@@ -1479,21 +1483,12 @@ class _DocumentSettingsSection extends ConsumerWidget {
               leading: const Icon(LucideIcons.rows3),
               title: const Text('默认页面排列'),
               subtitle: const Text('分页文档的新页面排列方向'),
-              trailing: DropdownButton<CanvasPageFlow>(
+              trailing: _SettingsPopupMenu<CanvasPageFlow>(
                 value: preferences.defaultPageFlow,
-                onChanged: (value) {
-                  if (value != null) {
-                    unawaited(notifier.setDefaultPageFlow(value));
-                  }
-                },
-                items: CanvasPageFlow.values
-                    .map(
-                      (flow) => DropdownMenuItem(
-                        value: flow,
-                        child: Text(_pageFlowLabel(flow)),
-                      ),
-                    )
-                    .toList(),
+                options: CanvasPageFlow.values,
+                label: _pageFlowLabel,
+                onSelected: (value) =>
+                    unawaited(notifier.setDefaultPageFlow(value)),
               ),
             ),
           ],
@@ -1561,23 +1556,13 @@ class _StylusSettingsSection extends ConsumerWidget {
               leading: const Icon(LucideIcons.activity),
               title: const Text('压感曲线'),
               subtitle: const Text('控制轻压和重压之间的变化幅度'),
-              trailing: DropdownButton<PressureCurvePreset>(
+              trailing: _SettingsPopupMenu<PressureCurvePreset>(
                 value: preferences.pressureCurve,
-                onChanged: preferences.pressureEnabled
-                    ? (value) {
-                        if (value != null) {
-                          unawaited(notifier.setPressureCurve(value));
-                        }
-                      }
+                options: PressureCurvePreset.values,
+                label: _pressureCurveLabel,
+                onSelected: preferences.pressureEnabled
+                    ? (value) => unawaited(notifier.setPressureCurve(value))
                     : null,
-                items: PressureCurvePreset.values
-                    .map(
-                      (curve) => DropdownMenuItem(
-                        value: curve,
-                        child: Text(_pressureCurveLabel(curve)),
-                      ),
-                    )
-                    .toList(),
               ),
             ),
             const Divider(height: 1),

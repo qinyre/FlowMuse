@@ -7,6 +7,9 @@ import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
 
 import 'package:flow_muse/features/account/widgets/account_avatar.dart';
+import 'package:flow_muse/features/whiteboard/speech_recognition/models/speech_recognition_event.dart';
+import 'package:flow_muse/features/whiteboard/speech_recognition/services/speech_recognition_service.dart';
+import 'package:flow_muse/features/whiteboard/speech_recognition/services/speech_recognition_service_factory.dart';
 import 'package:flow_muse/shared/storage/local_settings_repository.dart';
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
@@ -69,6 +72,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.canvasThemeBackground = '#ffffff',
     this.useFlatBackgrounds = false,
     this.onEyedropperPressed,
+    this.speechRecognitionService,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -131,6 +135,7 @@ class MarkdrawEditor extends StatefulWidget {
   onComposeSmartLayout;
   final String canvasThemeBackground;
   final bool useFlatBackgrounds;
+  final SpeechRecognitionService? speechRecognitionService;
 
   /// Optional override for the eyedropper toolbar button.
   /// When provided (e.g. HarmonyOS), calling this replaces the canvas picker.
@@ -154,19 +159,25 @@ class CollaborationParticipantBadge {
   final bool idle;
 }
 
-class _MarkdrawEditorState extends State<MarkdrawEditor> {
+class _MarkdrawEditorState extends State<MarkdrawEditor>
+    with WidgetsBindingObserver {
   static const _toolbarDockKey = 'whiteboard.toolbarDock.v1';
-  static const _controlGroupPositionKey =
-      'whiteboard.controlGroupPosition.v1';
+  static const _controlGroupPositionKey = 'whiteboard.controlGroupPosition.v1';
   static const _controlGroupReservedExtent = 120.0;
+  static const _speechNoticeKey = 'whiteboard.speechRecognitionNoticeSeen.v1';
 
   MarkdrawController? _ownController;
   ToolbarDock _toolbarDock = ToolbarDock.top;
-  ControlGroupPosition _controlGroupPosition =
-      ControlGroupPosition.bottomLeft;
+  ControlGroupPosition _controlGroupPosition = ControlGroupPosition.bottomLeft;
   bool _toolbarCollapsed = false;
   bool _propertyPanelCollapsed = false;
   String _propertyPanelContext = '';
+  late final SpeechRecognitionService _speechService;
+  StreamSubscription<SpeechRecognitionEvent>? _speechSubscription;
+  SpeechRecognitionState _speechState = SpeechRecognitionState.idle;
+  bool _speechAvailable = false;
+  String _speechPreview = '';
+  bool _speechFinalCommitted = false;
 
   MarkdrawController get _controller =>
       widget.controller ??
@@ -175,6 +186,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _speechService =
+        widget.speechRecognitionService ?? createSpeechRecognitionService();
+    _speechSubscription = _speechService.events.listen(_onSpeechEvent);
+    unawaited(_checkSpeechAvailability());
     _controller.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
     _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
@@ -226,10 +242,112 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_speechSubscription?.cancel());
+    unawaited(_speechService.dispose());
     _controller.removeListener(_onControllerChanged);
     _ownController?.dispose();
     super.dispose();
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      unawaited(_cancelSpeech());
+    }
+  }
+
+  Future<void> _checkSpeechAvailability() async {
+    final available = await _speechService.isAvailable();
+    if (mounted) setState(() => _speechAvailable = available);
+  }
+
+  Future<void> _toggleSpeech() async {
+    if (_speechState != SpeechRecognitionState.idle) {
+      await _speechService.stop();
+      return;
+    }
+    await _showSpeechNoticeOnce();
+    _speechFinalCommitted = false;
+    await _speechService.start();
+  }
+
+  Future<void> _cancelSpeech() async {
+    if (_speechState == SpeechRecognitionState.idle) return;
+    await _speechService.cancel();
+    if (mounted) {
+      setState(() {
+        _speechState = SpeechRecognitionState.idle;
+        _speechPreview = '';
+        _speechFinalCommitted = false;
+      });
+    }
+  }
+
+  Future<void> _showSpeechNoticeOnce() async {
+    try {
+      if (await defaultLocalSettingsRepository.readBool(_speechNoticeKey) ==
+          true) {
+        return;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('FlowMuse 默认不保存录音。语音可能由设备、浏览器或其识别服务处理。'),
+          ),
+        );
+      }
+      await defaultLocalSettingsRepository.writeBool(_speechNoticeKey, true);
+    } catch (error) {
+      debugPrint('[FlowMuseCreateNote] speech notice failed: $error');
+    }
+  }
+
+  void _onSpeechEvent(SpeechRecognitionEvent event) {
+    if (!mounted) return;
+    switch (event) {
+      case SpeechRecognitionResult(:final text, :final isFinal):
+        if (isFinal) {
+          if (_speechFinalCommitted) return;
+          _speechFinalCommitted = true;
+          _controller.insertPlainText(text, canvasSize: _getCanvasSize());
+          setState(() {
+            _speechPreview = '';
+            _speechState = SpeechRecognitionState.idle;
+          });
+        } else {
+          setState(() => _speechPreview = text);
+        }
+      case SpeechRecognitionStateChanged(:final state):
+        setState(() {
+          _speechState = state;
+          if (state == SpeechRecognitionState.starting) {
+            _speechFinalCommitted = false;
+          }
+          if (state == SpeechRecognitionState.idle) _speechPreview = '';
+        });
+      case SpeechRecognitionFailed(:final code, :final message):
+        setState(() {
+          _speechState = SpeechRecognitionState.idle;
+          _speechPreview = '';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_speechErrorMessage(code, message))),
+        );
+    }
+  }
+
+  String _speechErrorMessage(SpeechRecognitionErrorCode code, String message) =>
+      switch (code) {
+        SpeechRecognitionErrorCode.permissionDenied => '未获得麦克风权限',
+        SpeechRecognitionErrorCode.unavailable => '当前设备不支持语音转文字',
+        SpeechRecognitionErrorCode.busy => '语音识别服务正忙，请稍后重试',
+        SpeechRecognitionErrorCode.noSpeech => '没有检测到语音',
+        SpeechRecognitionErrorCode.network => '语音识别网络不可用',
+        SpeechRecognitionErrorCode.cancelled => '语音识别已取消',
+        SpeechRecognitionErrorCode.unknown =>
+          message.trim().isEmpty ? '语音识别失败' : '语音识别失败：$message',
+      };
 
   void _onControllerChanged() {
     if (!mounted) {
@@ -369,6 +487,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
         onCollapse: () => _setToolbarCollapsed(true),
         useFlatBackground: widget.useFlatBackgrounds,
         onEyedropperPressed: widget.onEyedropperPressed,
+        onSpeechPressed: _toggleSpeech,
+        speechActive: _speechState != SpeechRecognitionState.idle,
+        speechAvailable: _speechAvailable,
       );
     }
     return DesktopToolbar(
@@ -379,6 +500,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       onCollapse: () => _setToolbarCollapsed(true),
       useFlatBackground: widget.useFlatBackgrounds,
       onEyedropperPressed: widget.onEyedropperPressed,
+      onSpeechPressed: _toggleSpeech,
+      speechActive: _speechState != SpeechRecognitionState.idle,
+      speechAvailable: _speechAvailable,
     );
   }
 
@@ -808,6 +932,20 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
         if (_controller.isLinkEditorOpen &&
             _controller.selectedElements.length == 1)
           _buildLinkOverlay(topChromeOffset),
+        if (_speechState != SpeechRecognitionState.idle)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: safeArea.bottom + 24,
+            child: Center(
+              child: _SpeechRecognitionOverlay(
+                text: _speechPreview,
+                stopping: _speechState == SpeechRecognitionState.stopping,
+                onCancel: _cancelSpeech,
+                onFinish: _speechService.stop,
+              ),
+            ),
+          ),
       ],
     );
     if (!isCompact && _controller.showMarkdownPanel) {
@@ -836,6 +974,59 @@ class _MarkdrawEditorState extends State<MarkdrawEditor> {
       child: LinkOverlay(
         controller: _controller,
         getCanvasSize: _getCanvasSize,
+      ),
+    );
+  }
+}
+
+class _SpeechRecognitionOverlay extends StatelessWidget {
+  const _SpeechRecognitionOverlay({
+    required this.text,
+    required this.stopping,
+    required this.onCancel,
+    required this.onFinish,
+  });
+
+  final String text;
+  final bool stopping;
+  final VoidCallback onCancel;
+  final VoidCallback onFinish;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      liveRegion: true,
+      label: text.isEmpty ? '正在聆听' : '识别结果：$text',
+      child: Material(
+        color: colors.surfaceContainerHigh,
+        elevation: 6,
+        borderRadius: BorderRadius.circular(16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.mic, size: 20),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    text.isEmpty ? (stopping ? '正在生成文字…' : '正在聆听…') : text,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                TextButton(onPressed: onCancel, child: const Text('取消')),
+                FilledButton.tonal(
+                  onPressed: stopping ? null : onFinish,
+                  child: const Text('完成'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1388,6 +1579,7 @@ class _CollaborationChipState extends State<_CollaborationChip> {
   ) async {
     final selected = await showAnchoredPopupMenu<_CollaborationAction>(
       context: anchorContext,
+      placement: AnchoredPopupPlacement.below,
       items: [
         PopupMenuItem<_CollaborationAction>(
           enabled: false,

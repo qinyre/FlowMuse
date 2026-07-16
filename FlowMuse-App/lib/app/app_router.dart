@@ -48,6 +48,19 @@ class AppRoutes {
     return '/tags/${Uri.encodeComponent(tagId)}';
   }
 
+  static String createNotePath({
+    String? notebookId,
+    List<String> tagIds = const [],
+  }) {
+    return Uri(
+      path: createNote,
+      queryParameters: {
+        if (notebookId != null) 'notebookId': notebookId,
+        if (tagIds.isNotEmpty) 'tagId': tagIds,
+      },
+    ).toString();
+  }
+
   static String whiteboardPath({
     required String noteId,
     bool discardIfUnchanged = true,
@@ -123,7 +136,7 @@ GoRouter createAppRouter() {
             path: AppRoutes.notebookDetail,
             pageBuilder: (context, state) {
               final notebookId = state.pathParameters['notebookId'] ?? '';
-              return _detailPage(
+              return _contentPage(
                 state,
                 NotebookDetailPage(notebookId: notebookId),
               );
@@ -139,7 +152,7 @@ GoRouter createAppRouter() {
             path: AppRoutes.tagDetail,
             pageBuilder: (context, state) {
               final tagId = state.pathParameters['tagId'] ?? '';
-              return _detailPage(state, TagDetailPage(tagId: tagId));
+              return _contentPage(state, TagDetailPage(tagId: tagId));
             },
           ),
         ],
@@ -147,7 +160,14 @@ GoRouter createAppRouter() {
       GoRoute(
         path: AppRoutes.createNote,
         pageBuilder: (context, state) {
-          return _modalPage(state, const CreateNotePage());
+          final tagId = state.uri.queryParameters['tagId'];
+          return _modalPage(
+            state,
+            CreateNotePage(
+              notebookId: state.uri.queryParameters['notebookId'],
+              tagIds: tagId == null ? const [] : [tagId],
+            ),
+          );
         },
       ),
       GoRoute(

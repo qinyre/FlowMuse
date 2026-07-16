@@ -72,23 +72,25 @@ type SmartLayoutElement struct {
 }
 
 type SmartLayoutInkBlock struct {
-	ID          string    `json:"id"`
-	PageID      string    `json:"pageId,omitempty"`
-	Bounds      InkBounds `json:"bounds"`
-	StartedAt   int64     `json:"startedAt,omitempty"`
-	ImageMime   string    `json:"imageMime"`
-	ImageBase64 string    `json:"imageBase64"`
+	ID           string      `json:"id"`
+	PageID       string      `json:"pageId,omitempty"`
+	Bounds       InkBounds   `json:"bounds"`
+	StrokeBounds []InkBounds `json:"strokeBounds,omitempty"`
+	StartedAt    int64       `json:"startedAt,omitempty"`
+	ImageMime    string      `json:"imageMime"`
+	ImageBase64  string      `json:"imageBase64"`
 }
 
 type SmartLayoutRecognizedBlock struct {
-	ID        string    `json:"id"`
-	PageID    string    `json:"pageId,omitempty"`
-	Type      string    `json:"type"`
-	Text      string    `json:"text,omitempty"`
-	LaTeX     string    `json:"latex,omitempty"`
-	Bounds    InkBounds `json:"bounds"`
-	StartedAt int64     `json:"startedAt,omitempty"`
-	Error     string    `json:"error,omitempty"`
+	ID           string      `json:"id"`
+	PageID       string      `json:"pageId,omitempty"`
+	Type         string      `json:"type"`
+	Text         string      `json:"text,omitempty"`
+	LaTeX        string      `json:"latex,omitempty"`
+	Bounds       InkBounds   `json:"bounds"`
+	StrokeBounds []InkBounds `json:"strokeBounds,omitempty"`
+	StartedAt    int64       `json:"startedAt,omitempty"`
+	Error        string      `json:"error,omitempty"`
 }
 
 type SmartLayoutPageDecision struct {

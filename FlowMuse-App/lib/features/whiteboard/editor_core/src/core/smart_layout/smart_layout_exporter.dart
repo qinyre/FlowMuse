@@ -18,11 +18,11 @@ class SmartLayoutExporter {
   static String _markdown(List<SmartLayoutBlock> blocks) {
     final buffer = StringBuffer();
     for (final block in blocks) {
-      final text = block.text.trim();
+      final text = _trimDocumentText(block.text);
       if (text.isEmpty) continue;
       if (buffer.isNotEmpty) buffer.writeln();
       if (block.type == 'heading') {
-        buffer.writeln('# $text');
+        buffer.writeln('# ${text.trim()}');
       } else if (block.type == 'math') {
         buffer.writeln(r'$$');
         buffer.writeln(
@@ -43,10 +43,10 @@ class SmartLayoutExporter {
       ..writeln(r'\usepackage[UTF8]{ctex}')
       ..writeln(r'\begin{document}');
     for (final block in blocks) {
-      final text = block.text.trim();
+      final text = _trimDocumentText(block.text);
       if (text.isEmpty) continue;
       if (block.type == 'heading') {
-        buffer.writeln('\\section*{${_escapeLatex(text)}}');
+        buffer.writeln('\\section*{${_escapeLatex(text.trim())}}');
       } else if (block.type == 'math') {
         buffer.writeln(r'\[');
         buffer.writeln(
@@ -56,12 +56,42 @@ class SmartLayoutExporter {
         );
         buffer.writeln(r'\]');
       } else {
-        buffer.writeln(_escapeLatex(text));
-        buffer.writeln();
+        _writeLatexLayoutText(buffer, text);
       }
     }
     buffer.writeln(r'\end{document}');
     return buffer.toString();
+  }
+
+  static String _trimDocumentText(String value) {
+    var text = value.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    while (text.startsWith('\n')) {
+      text = text.substring(1);
+    }
+    return text.replaceFirst(RegExp(r'[ \t\n]+$'), '');
+  }
+
+  static void _writeLatexLayoutText(StringBuffer buffer, String text) {
+    final lines = text.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (line.trim().isEmpty) {
+        buffer.writeln(r'\par');
+        continue;
+      }
+      final indent = line.length - line.trimLeft().length;
+      final content = line.trimLeft();
+      if (indent > 0) {
+        buffer.write('\\hspace*{${(indent * 0.5).toStringAsFixed(1)}em}');
+      }
+      buffer.write(_escapeLatex(content));
+      if (i < lines.length - 1) {
+        buffer.writeln(r'\\');
+      } else {
+        buffer.writeln();
+      }
+    }
+    buffer.writeln();
   }
 
   static String _escapeLatex(String value) {

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -46,27 +47,35 @@ func (r *MyScriptRecognizer) Recognize(ctx context.Context, request RecognizeReq
 	switch strings.TrimSpace(request.Hint) {
 	case "math":
 		return r.recognizeContent(ctx, request, "Math")
-	case "text":
+	default:
 		return r.recognizeContent(ctx, request, "Text")
 	}
-	mathResult, mathErr := r.recognizeContent(ctx, request, "Math")
-	if mathErr == nil && len(mathResult.Elements) > 0 && looksLikeMath(mathResult.Elements[0].LaTeX) {
-		return mathResult, nil
-	}
-	textResult, textErr := r.recognizeContent(ctx, request, "Text")
-	if textErr == nil && len(textResult.Elements) > 0 {
-		return textResult, nil
-	}
-	if mathErr != nil {
-		return RecognizeResponse{}, mathErr
-	}
-	if textErr != nil {
-		return RecognizeResponse{}, textErr
-	}
-	return RecognizeResponse{}, errors.New("MyScript returned no recognized elements")
 }
 
 func (r *MyScriptRecognizer) recognizeContent(ctx context.Context, request RecognizeRequest, contentType string) (RecognizeResponse, error) {
+	if contentType == "Text" {
+		lineRequests := splitTextRecognizeRequestLines(request)
+		if len(lineRequests) > 1 {
+			parts := make([]string, 0, len(lineRequests))
+			for _, lineRequest := range lineRequests {
+				result, err := r.recognizeContentOnce(ctx, lineRequest, contentType)
+				if err != nil {
+					return RecognizeResponse{}, err
+				}
+				if text := recognizeResponsePlainText(result); text != "" {
+					parts = append(parts, text)
+				}
+			}
+			if len(parts) == 0 {
+				return RecognizeResponse{}, errors.New("MyScript returned no recognized elements")
+			}
+			return RecognizeResponse{Elements: []RecognizedElement{textElement(strings.Join(parts, "\n"), request.Bounds)}}, nil
+		}
+	}
+	return r.recognizeContentOnce(ctx, request, contentType)
+}
+
+func (r *MyScriptRecognizer) recognizeContentOnce(ctx context.Context, request RecognizeRequest, contentType string) (RecognizeResponse, error) {
 	body, err := json.Marshal(r.toMyScriptRequest(request, contentType))
 	if err != nil {
 		return RecognizeResponse{}, err
@@ -115,6 +124,147 @@ func (r *MyScriptRecognizer) recognizeContent(ctx context.Context, request Recog
 		return RecognizeResponse{}, errors.New("MyScript returned no recognized elements")
 	}
 	return result, nil
+}
+
+type textLineStroke struct {
+	Index  int
+	Stroke InkStroke
+	Bounds InkBounds
+}
+
+type textLineGroup struct {
+	Strokes []textLineStroke
+	Bounds  InkBounds
+}
+
+func splitTextRecognizeRequestLines(request RecognizeRequest) []RecognizeRequest {
+	if len(request.Strokes) <= 1 {
+		return []RecognizeRequest{request}
+	}
+	strokes := make([]textLineStroke, 0, len(request.Strokes))
+	for i, stroke := range request.Strokes {
+		bounds, ok := inkStrokeBounds(stroke)
+		if !ok {
+			continue
+		}
+		strokes = append(strokes, textLineStroke{Index: i, Stroke: stroke, Bounds: bounds})
+	}
+	if len(strokes) <= 1 {
+		return []RecognizeRequest{request}
+	}
+	sort.SliceStable(strokes, func(i, j int) bool {
+		a, b := strokes[i].Bounds, strokes[j].Bounds
+		if a.Y != b.Y {
+			return a.Y < b.Y
+		}
+		if a.X != b.X {
+			return a.X < b.X
+		}
+		return strokes[i].Index < strokes[j].Index
+	})
+	groups := []textLineGroup{}
+	for _, stroke := range strokes {
+		centerY := stroke.Bounds.Y + stroke.Bounds.Height/2
+		if len(groups) == 0 {
+			groups = append(groups, textLineGroup{Strokes: []textLineStroke{stroke}, Bounds: stroke.Bounds})
+			continue
+		}
+		last := &groups[len(groups)-1]
+		lastCenterY := last.Bounds.Y + last.Bounds.Height/2
+		threshold := mathMax(mathMin(last.Bounds.Height, stroke.Bounds.Height)*0.7, 12)
+		if mathAbs(centerY-lastCenterY) <= threshold {
+			last.Strokes = append(last.Strokes, stroke)
+			last.Bounds = unionMyScriptInkBounds(last.Bounds, stroke.Bounds)
+		} else {
+			groups = append(groups, textLineGroup{Strokes: []textLineStroke{stroke}, Bounds: stroke.Bounds})
+		}
+	}
+	if len(groups) <= 1 {
+		return []RecognizeRequest{request}
+	}
+	lineRequests := make([]RecognizeRequest, 0, len(groups))
+	for _, group := range groups {
+		sort.SliceStable(group.Strokes, func(i, j int) bool {
+			return group.Strokes[i].Index < group.Strokes[j].Index
+		})
+		lineStrokes := make([]InkStroke, 0, len(group.Strokes))
+		for _, stroke := range group.Strokes {
+			lineStrokes = append(lineStrokes, stroke.Stroke)
+		}
+		lineRequests = append(lineRequests, RecognizeRequest{
+			SessionID: request.SessionID,
+			Hint:      request.Hint,
+			Strokes:   lineStrokes,
+			Bounds:    group.Bounds,
+		})
+	}
+	return lineRequests
+}
+
+func inkStrokeBounds(stroke InkStroke) (InkBounds, bool) {
+	if len(stroke.Points) == 0 {
+		return InkBounds{}, false
+	}
+	minX, minY := stroke.Points[0].X, stroke.Points[0].Y
+	maxX, maxY := minX, minY
+	for _, point := range stroke.Points[1:] {
+		if point.X < minX {
+			minX = point.X
+		}
+		if point.Y < minY {
+			minY = point.Y
+		}
+		if point.X > maxX {
+			maxX = point.X
+		}
+		if point.Y > maxY {
+			maxY = point.Y
+		}
+	}
+	return InkBounds{X: minX, Y: minY, Width: mathMax(maxX-minX, 1), Height: mathMax(maxY-minY, 1)}, true
+}
+
+func recognizeResponsePlainText(response RecognizeResponse) string {
+	parts := make([]string, 0, len(response.Elements))
+	for _, element := range response.Elements {
+		text := strings.TrimSpace(element.Text)
+		if text == "" {
+			text = strings.TrimSpace(element.LaTeX)
+		}
+		if text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "")
+}
+
+func unionMyScriptInkBounds(a, b InkBounds) InkBounds {
+	left := mathMin(a.X, b.X)
+	top := mathMin(a.Y, b.Y)
+	right := mathMax(a.X+a.Width, b.X+b.Width)
+	bottom := mathMax(a.Y+a.Height, b.Y+b.Height)
+	return InkBounds{X: left, Y: top, Width: right - left, Height: bottom - top}
+}
+
+func mathMin(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func mathMax(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func mathAbs(value float64) float64 {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func (r *MyScriptRecognizer) toMyScriptRequest(request RecognizeRequest, contentType string) map[string]any {

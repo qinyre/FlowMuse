@@ -14,6 +14,9 @@ class DesktopToolbar extends StatelessWidget {
   final ValueChanged<ToolbarDock>? onDockChanged;
   final VoidCallback? onCollapse;
   final bool useFlatBackground;
+  final VoidCallback? onSpeechPressed;
+  final bool speechActive;
+  final bool speechAvailable;
 
   /// Override for the eyedropper button (e.g. HarmonyOS Pen Kit global pick).
   final VoidCallback? onEyedropperPressed;
@@ -27,6 +30,9 @@ class DesktopToolbar extends StatelessWidget {
     this.onCollapse,
     this.useFlatBackground = false,
     this.onEyedropperPressed,
+    this.onSpeechPressed,
+    this.speechActive = false,
+    this.speechAvailable = false,
   });
 
   @override
@@ -118,6 +124,15 @@ class DesktopToolbar extends StatelessWidget {
                 useFlatBackground: useFlatBackground,
                 onPressed: () => controller.switchTool(ToolType.laser),
               ),
+              _toolbarButton(
+                cs: cs,
+                icon: speechActive
+                    ? Icons.stop_circle_outlined
+                    : Icons.mic_none,
+                tooltip: speechAvailable ? '语音转文字' : '当前设备不支持语音转文字',
+                onPressed: speechAvailable ? onSpeechPressed : null,
+                isActive: speechActive,
+              ),
               _toolbarDivider(context, vertical),
               _toolbarButton(
                 cs: cs,
@@ -166,7 +181,7 @@ class DesktopToolbar extends StatelessWidget {
     IconData? icon,
     Widget? iconWidget,
     required String tooltip,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     bool isActive = false,
   }) {
     return Padding(
@@ -200,10 +215,15 @@ class DesktopToolbar extends StatelessWidget {
 
   Future<void> _runGlobalSmartLayout(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
+    final engine = await _pickSmartLayoutRecognitionEngine(context);
+    if (engine == null || !context.mounted) {
+      return;
+    }
     bool changed;
     Object? error;
     try {
       changed = await controller.runGlobalSmartLayout(
+        engine: engine,
         onProgress: (completed, total) {
           if (!context.mounted) return;
           _showSmartLayoutProgress(messenger, completed, total);
@@ -221,6 +241,36 @@ class DesktopToolbar extends StatelessWidget {
           maxLines: 5,
           overflow: TextOverflow.ellipsis,
         ),
+      ),
+    );
+  }
+
+  Future<SmartLayoutRecognitionEngine?> _pickSmartLayoutRecognitionEngine(
+    BuildContext context,
+  ) {
+    return showDialog<SmartLayoutRecognitionEngine>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('选择识别模式'),
+        content: const Text('请选择全局智能排版使用的识别引擎。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(SmartLayoutRecognitionEngine.myscript),
+            child: const Text('MyScript识别'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(SmartLayoutRecognitionEngine.ai),
+            child: const Text('AI识别'),
+          ),
+        ],
       ),
     );
   }
@@ -281,6 +331,7 @@ class _DockMenuButton extends StatelessWidget {
       onPressed: () async {
         final selected = await showAnchoredPopupMenu<ToolbarDock>(
           context: context,
+          placement: AnchoredPopupPlacement.below,
           items: [
             for (final option in ToolbarDock.values)
               PopupMenuItem(
