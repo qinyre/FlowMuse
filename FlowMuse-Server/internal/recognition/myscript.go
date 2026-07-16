@@ -46,24 +46,9 @@ func (r *MyScriptRecognizer) Recognize(ctx context.Context, request RecognizeReq
 	switch strings.TrimSpace(request.Hint) {
 	case "math":
 		return r.recognizeContent(ctx, request, "Math")
-	case "text":
+	default:
 		return r.recognizeContent(ctx, request, "Text")
 	}
-	mathResult, mathErr := r.recognizeContent(ctx, request, "Math")
-	if mathErr == nil && len(mathResult.Elements) > 0 && looksLikeMath(mathResult.Elements[0].LaTeX) {
-		return mathResult, nil
-	}
-	textResult, textErr := r.recognizeContent(ctx, request, "Text")
-	if textErr == nil && len(textResult.Elements) > 0 {
-		return textResult, nil
-	}
-	if mathErr != nil {
-		return RecognizeResponse{}, mathErr
-	}
-	if textErr != nil {
-		return RecognizeResponse{}, textErr
-	}
-	return RecognizeResponse{}, errors.New("MyScript returned no recognized elements")
 }
 
 func (r *MyScriptRecognizer) recognizeContent(ctx context.Context, request RecognizeRequest, contentType string) (RecognizeResponse, error) {
