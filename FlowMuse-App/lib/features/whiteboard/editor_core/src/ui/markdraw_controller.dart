@@ -3172,6 +3172,7 @@ class MarkdrawController extends ChangeNotifier {
               : block.text?.trim())
         : block.text?.trim();
     if (text == null || text.isEmpty) return null;
+    final fontSize = _fontSizeForRecognizedBlock(block, text);
     final element = TextElement(
       id: ElementId.generate(),
       x: block.bounds.left,
@@ -3179,7 +3180,7 @@ class MarkdrawController extends ChangeNotifier {
       width: math.max(block.bounds.size.width, 80),
       height: math.max(block.bounds.size.height, 28),
       text: text,
-      fontSize: block.type == 'formula' ? 20 : 20,
+      fontSize: fontSize,
       fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
       lineHeight: 1.25,
       customData: {
@@ -3191,12 +3192,24 @@ class MarkdrawController extends ChangeNotifier {
         },
       },
     );
-    final styled = applyDefaultStyleToElement(element) as TextElement;
+    final styled = _applySmartLayoutTextStyle(element);
     final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
     return styled.copyWith(
       width: math.max(styled.width, measuredWidth),
       height: math.max(styled.height, measuredHeight),
     );
+  }
+
+  double _fontSizeForRecognizedBlock(
+    SmartLayoutRecognizedBlock block,
+    String text,
+  ) {
+    if (block.type == 'formula') {
+      return math.max(16, math.min(block.bounds.size.height * 0.72, 40));
+    }
+    final lineCount = math.max(1, text.split('\n').length);
+    final estimatedLineHeight = block.bounds.size.height / lineCount;
+    return math.max(12, math.min(estimatedLineHeight * 0.72, 48));
   }
 
   TextElement _textElementFromSmartLayoutBlock(
@@ -3237,20 +3250,91 @@ class MarkdrawController extends ChangeNotifier {
         },
       },
     );
-    final styled = applyDefaultStyleToElement(element) as TextElement;
-    final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
-    final measured = styled.copyWith(
-      width: math.max(styled.width, measuredWidth),
-      height: math.max(styled.height, measuredHeight),
-    );
+    final styled = _applySmartLayoutTextStyle(element);
+    final measured = _measureSmartLayoutText(styled, vertical: vertical);
+    final anchored = anchor == null
+        ? measured
+        : _alignSmartLayoutTextToAnchor(measured, anchor, vertical);
     final placedBounds = _nonOverlappingSmartLayoutBounds(
-      Bounds.fromLTWH(measured.x, measured.y, measured.width, measured.height),
+      Bounds.fromLTWH(anchored.x, anchored.y, anchored.width, anchored.height),
       block,
       layoutIndex,
       occupied,
       vertical,
     );
-    return measured.copyWith(x: placedBounds.left, y: placedBounds.top);
+    return anchored.copyWith(x: placedBounds.left, y: placedBounds.top);
+  }
+
+  TextElement _applySmartLayoutTextStyle(TextElement element) {
+    final styled = element.copyWith(
+      strokeColor: _defaultStyle.strokeColor,
+      backgroundColor: _defaultStyle.backgroundColor,
+      strokeWidth: _defaultStyle.strokeWidth,
+      strokeStyle: _defaultStyle.strokeStyle,
+      fillStyle: _defaultStyle.fillStyle,
+      roughness: _defaultStyle.roughness,
+      opacity: _defaultStyle.opacity,
+    );
+    return _attachCurrentPage(
+          styled.copyWithText(
+            fontFamily: _defaultStyle.fontFamily,
+            textAlign: _defaultStyle.textAlign,
+          ),
+        )
+        as TextElement;
+  }
+
+  TextElement _measureSmartLayoutText(
+    TextElement element, {
+    required bool vertical,
+  }) {
+    if (!vertical) {
+      final (measuredWidth, measuredHeight) = TextRenderer.measure(element);
+      return element.copyWith(
+        width: math.max(element.width, measuredWidth),
+        height: math.max(element.height, measuredHeight),
+      );
+    }
+    final chars = element.text.runes
+        .map((rune) => String.fromCharCode(rune))
+        .where((char) => char.trim().isNotEmpty)
+        .toList();
+    var measuredWidth = element.width;
+    for (final char in chars) {
+      final (charWidth, _) = TextRenderer.measure(
+        element.copyWithText(text: char),
+      );
+      measuredWidth = math.max(measuredWidth, charWidth);
+    }
+    final measuredHeight = math.max(
+      element.height,
+      chars.length * element.fontSize * element.lineHeight,
+    );
+    return element.copyWith(width: measuredWidth, height: measuredHeight);
+  }
+
+  TextElement _alignSmartLayoutTextToAnchor(
+    TextElement element,
+    TemplateAnchor anchor,
+    bool vertical,
+  ) {
+    if (vertical) {
+      return element.copyWith(
+        x: anchor.crossAxis - element.width / 2,
+        y: anchor.position.dy,
+      );
+    }
+    final painter = TextRenderer.buildTextPainter(element);
+    painter.layout(maxWidth: element.width);
+    final metrics = painter.computeLineMetrics();
+    final baseline = metrics.isEmpty
+        ? element.fontSize
+        : metrics.first.baseline;
+    painter.dispose();
+    return element.copyWith(
+      x: anchor.position.dx,
+      y: anchor.crossAxis - baseline,
+    );
   }
 
   TemplateAnchor? _templateAnchorForSmartLayoutBlock(
