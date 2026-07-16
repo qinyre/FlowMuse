@@ -780,12 +780,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   /// 取色笔按钮回调。
   /// 鸿蒙端：调用 Pen Kit 全局取色，取到色值后应用到当前笔色。
-  /// 其他端：Pen Kit 通道不存在（返回 null），自动降级为画布内取色。
+  /// 能力不可用时降级为画布取色，取消或普通失败时保持原颜色。
   Future<void> _onEyedropperPressed() async {
-    final color = await const PenColorPickerChannelOhos().pickColorAt();
+    final result = await const PenColorPickerChannelOhos().pickColor();
+    final color = result.color;
     if (color != null) {
       _markdrawController.applyStyleChange(ElementStyle(strokeColor: color));
-    } else {
+      return;
+    }
+    if (result.unavailable) {
       _markdrawController.requestEyedropper();
     }
   }

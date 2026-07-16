@@ -2,5 +2,6 @@
 class PenColorPickerChannelOhos {
   const PenColorPickerChannelOhos();
 
-  Future<String?> pickColorAt({double x = 0, double y = 0}) async => null;
+  Future<({String? color, bool unavailable})> pickColor() async =>
+      (color: null, unavailable: true);
 }
