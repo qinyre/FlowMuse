@@ -29,6 +29,7 @@ import '../input/input_policy.dart';
 import '../input/stroke_recorder.dart';
 
 const String _logTag = 'InkRecognition';
+const int _smartLayoutClientRecognitionConcurrency = 3;
 
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
@@ -2904,32 +2905,28 @@ class MarkdrawController extends ChangeNotifier {
       SmartLayoutResponse response;
       try {
         if (engine == SmartLayoutRecognitionEngine.myscript) {
-          final recognized = <SmartLayoutRecognizedBlock>[];
-          onProgress?.call(0, request.blocks.length);
-          for (final block in request.blocks) {
-            if (_disposed) return false;
-            final strokes = inkGroups[block.id] ?? const <FreedrawElement>[];
-            recognized.add(
-              await _recognizeSmartLayoutBlockWithMyScript(
+          final recognized = await _recognizeSmartLayoutBlocksInParallel(
+            request.blocks,
+            (block) {
+              final strokes = inkGroups[block.id] ?? const <FreedrawElement>[];
+              return _recognizeSmartLayoutBlockWithMyScript(
                 block,
                 strokes,
                 myScriptCallback!,
-              ),
-            );
-            onProgress?.call(recognized.length, request.blocks.length);
-          }
+              );
+            },
+            onProgress,
+          );
           if (_disposed) return false;
           response = await composeCallback!(
             SmartLayoutComposeRequest(pages: request.pages, blocks: recognized),
           );
         } else if (blockCallback != null && composeCallback != null) {
-          final recognized = <SmartLayoutRecognizedBlock>[];
-          onProgress?.call(0, request.blocks.length);
-          for (final block in request.blocks) {
-            if (_disposed) return false;
-            recognized.add(await blockCallback(block));
-            onProgress?.call(recognized.length, request.blocks.length);
-          }
+          final recognized = await _recognizeSmartLayoutBlocksInParallel(
+            request.blocks,
+            blockCallback,
+            onProgress,
+          );
           if (_disposed) return false;
           response = await composeCallback(
             SmartLayoutComposeRequest(pages: request.pages, blocks: recognized),
@@ -2968,6 +2965,41 @@ class MarkdrawController extends ChangeNotifier {
     } finally {
       _recognizingInk = false;
     }
+  }
+
+  Future<List<SmartLayoutRecognizedBlock>>
+  _recognizeSmartLayoutBlocksInParallel(
+    List<SmartLayoutInkBlockRequest> blocks,
+    Future<SmartLayoutRecognizedBlock> Function(SmartLayoutInkBlockRequest)
+    recognize,
+    void Function(int completed, int total)? onProgress,
+  ) async {
+    final results = List<SmartLayoutRecognizedBlock?>.filled(
+      blocks.length,
+      null,
+    );
+    var nextIndex = 0;
+    var completed = 0;
+    onProgress?.call(0, blocks.length);
+
+    Future<void> worker() async {
+      while (true) {
+        if (_disposed) return;
+        final index = nextIndex;
+        if (index >= blocks.length) return;
+        nextIndex++;
+        results[index] = await recognize(blocks[index]);
+        completed++;
+        onProgress?.call(completed, blocks.length);
+      }
+    }
+
+    final workerCount = math.min(
+      _smartLayoutClientRecognitionConcurrency,
+      blocks.length,
+    );
+    await Future.wait([for (var i = 0; i < workerCount; i++) worker()]);
+    return results.whereType<SmartLayoutRecognizedBlock>().toList();
   }
 
   String exportSmartLayout(SmartLayoutExportFormat format) {
