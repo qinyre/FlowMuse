@@ -1992,18 +1992,27 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
   }
 
   Future<void> _loadConfig() async {
-    final repo = defaultWebDavSettingsRepository;
-    final config = await repo.loadConfig();
-    final lastBackup = await repo.loadLastBackupAt();
-    if (!mounted) return;
-    setState(() {
-      _serverCtrl.text = config.serverUrl;
-      _usernameCtrl.text = config.username;
-      _passwordCtrl.text = config.password;
-      _pathCtrl.text = config.remotePath.isEmpty ? '/FlowMuse/' : config.remotePath;
-      _lastBackupAt = lastBackup;
-      _configLoaded = true;
-    });
+    try {
+      final repo = defaultWebDavSettingsRepository;
+      final config = await repo.loadConfig();
+      final lastBackup = await repo.loadLastBackupAt();
+      if (!mounted) return;
+      setState(() {
+        _serverCtrl.text = config.serverUrl;
+        _usernameCtrl.text = config.username;
+        _passwordCtrl.text = config.password;
+        _pathCtrl.text = config.remotePath.isEmpty ? '/FlowMuse/' : config.remotePath;
+        _lastBackupAt = lastBackup;
+        _configLoaded = true;
+      });
+    } catch (_) {
+      // 安全存储不可用时（如部分鸿蒙环境）降级为空配置，避免页面卡在加载状态
+      if (!mounted) return;
+      setState(() {
+        _pathCtrl.text = '/FlowMuse/';
+        _configLoaded = true;
+      });
+    }
   }
 
   WebDavClient _buildClient() => WebDavClient(

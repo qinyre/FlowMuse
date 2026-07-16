@@ -58,7 +58,12 @@ class WebDavSettingsRepository {
     final username = await _settings.readString(_keyUsername) ?? '';
     final remotePath =
         await _settings.readString(_keyRemotePath) ?? _defaultRemotePath;
-    final password = await _secure.read(key: _secureKeyPassword) ?? '';
+    // flutter_secure_storage may not be available on all platforms (e.g. OHOS
+    // without the ohos plugin). Degrade to empty password rather than throwing.
+    String password = '';
+    try {
+      password = await _secure.read(key: _secureKeyPassword) ?? '';
+    } catch (_) {}
     return WebDavConfig(
       serverUrl: serverUrl,
       username: username,
@@ -75,15 +80,18 @@ class WebDavSettingsRepository {
         config.remotePath.trim().isEmpty
             ? _defaultRemotePath
             : config.remotePath.trim());
-    await _secure.write(
-        key: _secureKeyPassword, value: config.password);
+    try {
+      await _secure.write(key: _secureKeyPassword, value: config.password);
+    } catch (_) {}
   }
 
   Future<void> clearConfig() async {
     await _settings.writeString(_keyServerUrl, '');
     await _settings.writeString(_keyUsername, '');
     await _settings.writeString(_keyRemotePath, _defaultRemotePath);
-    await _secure.delete(key: _secureKeyPassword);
+    try {
+      await _secure.delete(key: _secureKeyPassword);
+    } catch (_) {}
   }
 
   Future<DateTime?> loadLastBackupAt() async {
