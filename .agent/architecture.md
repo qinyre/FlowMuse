@@ -48,9 +48,9 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `search` | 笔记搜索(内存过滤,非 SQL) | `views/search_page.dart` |
 | `settings` | 设置 / 本地备份 | `views/settings_page.dart` |
 | `account` | 账户认证(注册/登录/资料) | `repositories/account_repository.dart` |
-| `whiteboard` | 白板编辑器(含 4 个子模块,见下) | — |
+| `whiteboard` | 白板编辑器(含 6 个子模块,见下) | — |
 
-### whiteboard 的四个子模块
+### whiteboard 的六个子模块
 
 | 子模块 | 职责 |
 |--------|------|
@@ -58,6 +58,8 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `collaboration/` | 端到端加密实时协作(AES-GCM + Socket.IO + CRDT 合并) |
 | `ink_recognition/` | 手写识别(HTTP 调后端) |
 | `pdf_note_import/` | PDF 作为白板背景导入 |
+| `speech_recognition/` | 跨平台语音转文字，最终写入普通文本元素 |
+| `ai_assistant/` | 受限 AI 动作的请求、校验、预览与确认 |
 
 ---
 

@@ -42,4 +42,18 @@ void main() {
 
     expect(controller.editorState.scene.activeElements, isEmpty);
   });
+
+  test('AI 多段文字作为一次场景变更插入并可一次撤销', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    var sceneChanges = 0;
+    controller.onSceneChanged = (_, _) => sceneChanges++;
+
+    controller.insertPlainTexts(['总结内容', '待办事项']);
+
+    expect(controller.editorState.scene.activeElements, hasLength(2));
+    expect(sceneChanges, 1);
+    controller.undo();
+    expect(controller.editorState.scene.activeElements, isEmpty);
+  });
 }

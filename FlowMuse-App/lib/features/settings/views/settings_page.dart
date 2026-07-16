@@ -24,6 +24,8 @@ import '../../account/view_models/account_view_model.dart';
 import '../../account/widgets/account_avatar.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
+import '../../whiteboard/ai_assistant/repositories/ai_agent_config_store.dart';
+import '../../whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
 import '../../whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import '../../whiteboard/models/editor_preferences.dart';
 import '../../whiteboard/view_models/editor_preferences_view_model.dart';
@@ -296,6 +298,7 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
           _SettingsSection.tools => const _ToolsSettingsSection(),
           _SettingsSection.stylus => const _StylusSettingsSection(),
           _SettingsSection.gestures => const _GestureSettingsSection(),
+          _SettingsSection.lab => const _AiSettingsSection(),
           _SettingsSection.privacy => const _PrivacySettingsSection(),
           _SettingsSection.other => const _OtherSettingsSection(),
           _ => _PlaceholderSettingsSection(section: widget.section),
@@ -1143,7 +1146,7 @@ class _PrivacySettingsSectionState extends State<_PrivacySettingsSection> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  '你的白板内容、笔记本、标签与主题设置均保存在本机 SQLite 数据库，默认不会上传服务器。参与协作时，场景数据会通过加密通道在协作者之间同步。',
+                  '你的白板内容、笔记本、标签与主题设置均保存在本机 SQLite 数据库，默认不会上传服务器。参与协作时，场景数据会通过加密通道同步；主动使用 AI 助手时，当前标题和文本元素会发送到你配置的模型服务。',
                   style: Theme.of(
                     context,
                   ).textTheme.bodySmall?.copyWith(color: muted, height: 1.5),
@@ -1189,7 +1192,7 @@ class _PrivacySettingsSectionState extends State<_PrivacySettingsSection> {
                 _PermissionRow(
                   icon: LucideIcons.wifi,
                   name: '网络访问（INTERNET）',
-                  purpose: '用于账号登录与实时协作同步',
+                  purpose: '用于账号登录、实时协作与用户主动发起的 AI 请求',
                 ),
                 const SizedBox(height: 8),
                 _PermissionRow(
@@ -1693,6 +1696,198 @@ String _pressureCurveLabel(PressureCurvePreset value) => switch (value) {
 
 Color _colorFromHex(String value) =>
     Color(int.parse('ff${value.substring(1)}', radix: 16));
+
+class _AiSettingsSection extends StatefulWidget {
+  const _AiSettingsSection();
+
+  @override
+  State<_AiSettingsSection> createState() => _AiSettingsSectionState();
+}
+
+class _AiSettingsSectionState extends State<_AiSettingsSection> {
+  final _baseUrlController = TextEditingController();
+  final _apiKeyController = TextEditingController();
+  final _modelController = TextEditingController();
+  bool _loading = true;
+  bool _saving = false;
+  bool _testing = false;
+  bool _hideApiKey = true;
+  String? _error;
+  String? _testResult;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _baseUrlController.dispose();
+    _apiKeyController.dispose();
+    _modelController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final config = await defaultAiAgentConfigStore.read();
+      if (config != null) {
+        _baseUrlController.text = config.baseUrl;
+        _apiKeyController.text = config.apiKey;
+        _modelController.text = config.model;
+      }
+    } catch (error) {
+      _error = '读取 AI 配置失败：$error';
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+      _testResult = null;
+    });
+    try {
+      await _writeConfig();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('AI 接口配置已保存')));
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _testConnection() async {
+    if (_testing || _saving) return;
+    setState(() {
+      _testing = true;
+      _error = null;
+      _testResult = null;
+    });
+    try {
+      await AiAgentRepository(config: _currentConfig()).testConnection();
+      if (mounted) setState(() => _testResult = '连接成功，模型支持所需的工具调用');
+    } catch (error) {
+      if (mounted) setState(() => _error = '连接测试失败：$error');
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  Future<void> _writeConfig() {
+    return defaultAiAgentConfigStore.write(_currentConfig());
+  }
+
+  AiAgentConfig _currentConfig() {
+    return AiAgentConfig(
+      baseUrl: _baseUrlController.text,
+      apiKey: _apiKeyController.text,
+      model: _modelController.text,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return _SettingsCard(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'OpenAI 兼容接口',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Base URL 可省略 /chat/completions；API Key 保存在本机。Web 端的密钥保护受浏览器限制，目标服务还必须允许 CORS。',
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _baseUrlController,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Base URL',
+                hintText: 'https://api.openai.com/v1',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _apiKeyController,
+              obscureText: _hideApiKey,
+              decoration: InputDecoration(
+                labelText: 'API Key',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  tooltip: _hideApiKey ? '显示' : '隐藏',
+                  onPressed: () => setState(() => _hideApiKey = !_hideApiKey),
+                  icon: Icon(
+                    _hideApiKey ? Icons.visibility_off : Icons.visibility,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _modelController,
+              decoration: const InputDecoration(
+                labelText: '模型名称',
+                hintText: 'gpt-4.1-mini',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            if (_testResult != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _testResult!,
+                style: TextStyle(color: Theme.of(context).colorScheme.primary),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _testing || _saving ? null : _testConnection,
+                  icon: _testing
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.network_check),
+                  label: Text(_testing ? '测试中…' : '测试连接'),
+                ),
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  onPressed: _saving || _testing ? null : _save,
+                  icon: const Icon(Icons.save_outlined),
+                  label: Text(_saving ? '保存中…' : '保存配置'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _PlaceholderSettingsSection extends StatelessWidget {
   const _PlaceholderSettingsSection({required this.section});
