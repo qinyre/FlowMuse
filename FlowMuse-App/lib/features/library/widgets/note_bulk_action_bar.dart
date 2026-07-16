@@ -161,6 +161,7 @@ class _LibraryPopupMenuButton<T extends Object> extends StatelessWidget {
             : () async {
                 final selected = await showAnchoredPopupMenu<T>(
                   context: context,
+                  placement: AnchoredPopupPlacement.below,
                   items: items,
                 );
                 if (selected == null || !context.mounted) {

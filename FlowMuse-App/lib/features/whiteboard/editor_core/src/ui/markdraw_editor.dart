@@ -151,14 +151,12 @@ class CollaborationParticipantBadge {
 
 class _MarkdrawEditorState extends State<MarkdrawEditor> {
   static const _toolbarDockKey = 'whiteboard.toolbarDock.v1';
-  static const _controlGroupPositionKey =
-      'whiteboard.controlGroupPosition.v1';
+  static const _controlGroupPositionKey = 'whiteboard.controlGroupPosition.v1';
   static const _controlGroupReservedExtent = 120.0;
 
   MarkdrawController? _ownController;
   ToolbarDock _toolbarDock = ToolbarDock.top;
-  ControlGroupPosition _controlGroupPosition =
-      ControlGroupPosition.bottomLeft;
+  ControlGroupPosition _controlGroupPosition = ControlGroupPosition.bottomLeft;
   bool _toolbarCollapsed = false;
   bool _propertyPanelCollapsed = false;
   String _propertyPanelContext = '';
@@ -1381,6 +1379,7 @@ class _CollaborationChipState extends State<_CollaborationChip> {
   ) async {
     final selected = await showAnchoredPopupMenu<_CollaborationAction>(
       context: anchorContext,
+      placement: AnchoredPopupPlacement.below,
       items: [
         PopupMenuItem<_CollaborationAction>(
           enabled: false,

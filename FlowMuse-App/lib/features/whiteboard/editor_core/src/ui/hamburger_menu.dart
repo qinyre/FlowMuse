@@ -124,7 +124,8 @@ class HamburgerMenu extends StatelessWidget {
       child: PopupMenuButton<String>(
         icon: const Icon(Icons.menu, size: 20),
         tooltip: '菜单',
-        offset: const Offset(0, 40),
+        position: PopupMenuPosition.under,
+        offset: const Offset(0, 4),
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
         onSelected: (value) {

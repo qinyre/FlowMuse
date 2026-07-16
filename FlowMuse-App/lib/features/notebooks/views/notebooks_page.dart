@@ -625,6 +625,7 @@ class _CollectionPage extends StatelessWidget {
               onPressed: () async {
                 final selected = await showAnchoredPopupMenu<LibraryViewMode>(
                   context: context,
+                  placement: AnchoredPopupPlacement.below,
                   items: const [
                     PopupMenuItem<LibraryViewMode>(
                       value: LibraryViewMode.grid,

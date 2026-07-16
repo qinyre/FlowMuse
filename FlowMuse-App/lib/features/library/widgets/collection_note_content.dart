@@ -102,6 +102,7 @@ class _CollectionNoteContentState extends State<CollectionNoteContent> {
   Future<void> _showViewModeMenu(BuildContext context) async {
     final selected = await showAnchoredPopupMenu<LibraryViewMode>(
       context: context,
+      placement: AnchoredPopupPlacement.below,
       items: const [
         PopupMenuItem<LibraryViewMode>(
           value: LibraryViewMode.grid,
