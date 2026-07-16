@@ -70,6 +70,9 @@ class ColorPickerButton extends StatefulWidget {
   /// Canvas size for eyedropper rendering.
   final Size? canvasSize;
 
+  /// Global origin of the rendered canvas image.
+  final Offset canvasGlobalOffset;
+
   /// When true, the palette popup opens automatically on build.
   final bool autoOpen;
 
@@ -90,6 +93,7 @@ class ColorPickerButton extends StatefulWidget {
     this.onRenderScene,
     this.onSampleColor,
     this.canvasSize,
+    this.canvasGlobalOffset = Offset.zero,
     this.autoOpen = false,
     this.onAutoOpened,
     this.autoActivateEyedropper = false,
@@ -200,6 +204,7 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
         onRenderScene: widget.onRenderScene,
         onSampleColor: widget.onSampleColor,
         canvasSize: widget.canvasSize,
+        canvasGlobalOffset: widget.canvasGlobalOffset,
         autoActivateEyedropper: widget.autoActivateEyedropper,
         onEyedropperActivated: widget.onEyedropperActivated,
       ),
@@ -252,6 +257,9 @@ class ColorPaletteOverlay extends StatefulWidget {
   /// Canvas size for eyedropper rendering.
   final Size? canvasSize;
 
+  /// Global origin of the rendered canvas image.
+  final Offset canvasGlobalOffset;
+
   /// When true, eyedropper activates automatically once the overlay is shown.
   final bool autoActivateEyedropper;
 
@@ -267,6 +275,7 @@ class ColorPaletteOverlay extends StatefulWidget {
     this.onRenderScene,
     this.onSampleColor,
     this.canvasSize,
+    this.canvasGlobalOffset = Offset.zero,
     this.autoActivateEyedropper = false,
     this.onEyedropperActivated,
   });
@@ -341,7 +350,10 @@ class _ColorPaletteOverlayState extends State<ColorPaletteOverlay> {
     if (!_eyedropperActive || _cachedImage == null) return;
     setState(() => _cursorPosition = position);
 
-    final color = await widget.onSampleColor!(_cachedImage!, position);
+    final color = await widget.onSampleColor!(
+      _cachedImage!,
+      position - widget.canvasGlobalOffset,
+    );
     if (!mounted || !_eyedropperActive) return;
     setState(() {
       _previewColor = color;

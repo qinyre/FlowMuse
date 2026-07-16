@@ -301,6 +301,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
               : null,
           onSampleColor: controller.sampleColorFromImage,
           canvasSize: canvasSize,
+          canvasGlobalOffset: controller.canvasGlobalOffset,
           autoOpen: shouldAutoOpen,
           onAutoOpened: controller.clearPendingColorPicker,
           autoActivateEyedropper: target == ColorPickerTarget.stroke &&

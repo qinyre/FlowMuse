@@ -233,6 +233,7 @@ class MarkdrawController extends ChangeNotifier {
   Size? _lastCanvasSize;
   Bounds? _contentBounds;
   Size _canvasSize = Size.zero;
+  Offset _canvasGlobalOffset = Offset.zero;
 
   /// Current mouse position in screen coordinates; used for eraser cursor.
   Offset? mousePosition;
@@ -330,6 +331,8 @@ class MarkdrawController extends ChangeNotifier {
   Bounds? get contentBounds => _contentBounds;
 
   Size get canvasSize => _canvasSize;
+
+  Offset get canvasGlobalOffset => _canvasGlobalOffset;
 
   bool get isPagedViewport => _layout.isPaged && _layout.pages.isNotEmpty;
 
@@ -660,6 +663,10 @@ class MarkdrawController extends ChangeNotifier {
   set canvasSize(Size value) {
     _canvasSize = value;
     _applyViewportConstraints();
+  }
+
+  set canvasGlobalOffset(Offset value) {
+    _canvasGlobalOffset = value;
   }
 
   // --- Lifecycle ---
