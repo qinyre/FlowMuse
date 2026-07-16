@@ -242,6 +242,14 @@ class SharedSidebarIconButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       iconSize: AppSpacing.shellHeaderIconSize,
       color: Theme.of(context).colorScheme.onSurfaceVariant,
+      style: ButtonStyle(
+        overlayColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.hovered) ||
+                  states.contains(WidgetState.focused)
+              ? Colors.transparent
+              : null,
+        ),
+      ),
       icon: icon,
     );
   }

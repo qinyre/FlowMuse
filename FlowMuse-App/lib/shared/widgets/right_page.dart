@@ -136,7 +136,8 @@ class RightPageHeader extends StatelessWidget {
       );
     }
 
-    final sidebarReserve = showSidebarControls
+    final sidebarReserve =
+        showSidebarControls || (chrome?.sidebarCollapsed ?? false)
         ? _controlWidth + AppSpacing.controlGap
         : 0.0;
     final leadingReserve = leadingActions.isEmpty
@@ -254,41 +255,9 @@ class _AnimatedHeaderSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: AnimatedContainer(
-        width: visible ? width : 0,
-        duration: _headerMotionDuration(context),
-        curve: Curves.easeOutCubic,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: AnimatedSwitcher(
-            duration: _headerMotionDuration(context),
-            reverseDuration: _headerReverseDuration(context),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (child, animation) {
-              final curved = CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeOutCubic,
-                reverseCurve: Curves.easeInCubic,
-              );
-              return FadeTransition(
-                opacity: curved,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(-0.08, 0),
-                    end: Offset.zero,
-                  ).animate(curved),
-                  child: child,
-                ),
-              );
-            },
-            child: visible
-                ? KeyedSubtree(key: const ValueKey('visible'), child: child)
-                : SizedBox(key: const ValueKey('hidden'), width: width),
-          ),
-        ),
-      ),
+    return SizedBox(
+      width: visible ? width : 0,
+      child: visible ? child : const SizedBox.shrink(),
     );
   }
 }
@@ -357,6 +326,13 @@ class _RightPageSidebarControls extends StatelessWidget {
   const _RightPageSidebarControls({required this.onOpenSidebar});
 
   final VoidCallback? onOpenSidebar;
+  static final _noHoverOverlay = ButtonStyle(
+    overlayColor: WidgetStateProperty.resolveWith(
+      (states) => states.contains(WidgetState.hovered)
+          ? Colors.transparent
+          : null,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -367,12 +343,14 @@ class _RightPageSidebarControls extends StatelessWidget {
           IconButton(
             tooltip: '打开侧边栏',
             onPressed: onOpenSidebar,
+            style: _noHoverOverlay,
             icon: const Icon(LucideIcons.panelLeftOpen),
           ),
           const SizedBox(width: AppSpacing.controlGap),
           IconButton(
             tooltip: '设置',
             onPressed: () => context.push(AppRoutes.settings),
+            style: _noHoverOverlay,
             icon: const Icon(LucideIcons.settings),
           ),
         ],

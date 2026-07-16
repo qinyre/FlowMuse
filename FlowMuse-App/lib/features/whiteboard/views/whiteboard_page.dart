@@ -38,6 +38,8 @@ import '../view_models/whiteboard_view_model.dart';
 import '../models/editor_preferences.dart';
 import '../view_models/editor_preferences_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
+import '../../color_picker/pen_color_picker_channel.dart';
+import '../service_widget/recent_whiteboard_sync_coordinator.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
   const WhiteboardPage({
@@ -103,6 +105,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _localDraftDirty = false;
 
   Scene? _previousEditorScene;
+  final _recentWhiteboardSync = RecentWhiteboardSyncCoordinator();
 
   @override
   void initState() {
@@ -144,6 +147,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       palmRejectionEnabled: preferences.palmRejectionEnabled,
       twoFingerZoomEnabled: preferences.twoFingerZoomEnabled,
       singleFingerPanEnabled: preferences.singleFingerPanEnabled,
+      fingerDrawingEnabled: preferences.fingerDrawingEnabled,
     );
     _editorPreferencesApplied = true;
   }
@@ -256,6 +260,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _markdrawController.setViewport(const ViewportState(zoom: 0.5));
     }
     _syncDocumentTitle(note);
+    if (note != null) {
+      unawaited(_recentWhiteboardSync.syncFromNote(note));
+    }
     await _restoreInkRecognitionPreference(noteId);
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote controller loaded '
@@ -286,6 +293,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       await repository.saveScene(noteId, updatedContent);
       await _touchNoteWithCurrentCover(noteId);
       await _broadcastCurrentScene(serializedScene: updatedContent);
+    } else if (note?.kind != LibraryFilter.pdf &&
+        note?.coverThumbnailBytes == null) {
+      await _touchNoteWithCurrentCover(noteId);
     }
     final latestIndex = ref.read(libraryIndexProvider).asData?.value;
     _syncDocumentTitle(
@@ -370,6 +380,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
     await repository.saveScene(widget.noteId, content);
     await _touchNoteWithCurrentCover(widget.noteId);
+    final latestIndex = await ref.read(libraryIndexProvider.future);
+    final latestNote = _noteById(latestIndex.notes, widget.noteId);
+    if (latestNote != null) {
+      unawaited(_recentWhiteboardSync.syncFromNote(latestNote));
+    }
     if (mounted) {
       viewModel.markSaved();
     }
@@ -774,6 +789,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _disconnectCollaboration();
     if (widget.temporaryCollaboration && mounted) {
       _popWhenStable();
+    }
+  }
+
+  /// 取色笔按钮回调。
+  /// 鸿蒙端：调用 Pen Kit 全局取色，取到色值后应用到当前笔色。
+  /// 能力不可用时降级为画布取色，取消或普通失败时保持原颜色。
+  Future<void> _onEyedropperPressed() async {
+    final result = await const PenColorPickerChannelOhos().pickColor();
+    final color = result.color;
+    if (color != null) {
+      _markdrawController.applyStyleChange(ElementStyle(strokeColor: color));
+      return;
+    }
+    if (result.unavailable) {
+      _markdrawController.requestEyedropper();
     }
   }
 
@@ -1614,6 +1644,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       );
     });
     final state = ref.watch(whiteboardViewModelProvider);
+    final editorPreferences = ref.watch(editorPreferencesProvider).value;
     final themePreset = ref.watch(themeViewModelProvider);
     final effectivePreset = effectiveAppThemePreset(
       themePreset,
@@ -1661,6 +1692,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               useFlatBackgrounds: effectivePreset.usesMonochromeBackground,
               currentThemeMode: themePreset.themeMode,
               onThemeModeChanged: _changeThemeMode,
+              fingerDrawingEnabled:
+                  editorPreferences?.fingerDrawingEnabled ?? false,
+              onFingerDrawingEnabledChanged: (value) {
+                unawaited(
+                  ref
+                      .read(editorPreferencesProvider.notifier)
+                      .setFingerDrawingEnabled(value),
+                );
+              },
               saveStatusLabel: _saveStatusLabel(state.saveStatus),
               collaborating: state.collaborating,
               collaborationConnecting:
@@ -1712,6 +1752,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               onImportImage: () {
                 unawaited(_fileHandler.importImage(context));
               },
+              onEyedropperPressed: _onEyedropperPressed,
               onImportLibrary: () {
                 unawaited(_fileHandler.importLibrary());
               },

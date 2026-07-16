@@ -9,6 +9,7 @@ class NoteCard extends StatelessWidget {
     required this.item,
     required this.onTap,
     this.onActionsTap,
+    this.selectionControl,
   });
 
   static const coverWidth = 132.0;
@@ -23,6 +24,7 @@ class NoteCard extends StatelessWidget {
   final NoteItem item;
   final VoidCallback onTap;
   final void Function(BuildContext context)? onActionsTap;
+  final Widget? selectionControl;
 
   @override
   Widget build(BuildContext context) {
@@ -47,11 +49,18 @@ class NoteCard extends StatelessWidget {
             shadowColor: colorScheme.shadow.withValues(alpha: 0.06),
             clipBehavior: Clip.antiAlias,
             shape: const RoundedRectangleBorder(),
-            child: InkWell(
-              key: ValueKey('note-card-${item.id}'),
-              onTap: onTap,
-              onLongPress: onActionsTap != null ? showActions : null,
-              child: NoteCover(item: item),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                InkWell(
+                  key: ValueKey('note-card-${item.id}'),
+                  onTap: onTap,
+                  onLongPress: onActionsTap != null ? showActions : null,
+                  child: NoteCover(item: item),
+                ),
+                if (selectionControl != null)
+                  Positioned(top: -8, right: -8, child: selectionControl!),
+              ],
             ),
           ),
         ),

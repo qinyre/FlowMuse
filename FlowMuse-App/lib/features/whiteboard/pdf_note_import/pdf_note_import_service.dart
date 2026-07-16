@@ -15,6 +15,8 @@ class PdfNoteImportService {
     required NoteType noteType,
     required PageTemplate pageTemplate,
     required PageFlow pageFlow,
+    String? notebookId,
+    List<String> tagIds = const [],
   }) async {
     final payload = await picker();
     if (payload == null) {
@@ -28,6 +30,8 @@ class PdfNoteImportService {
       pageFlow: pageFlow,
       title: _titleFromFileName(payload.name),
       subtitle: payload.name,
+      notebookId: notebookId,
+      tagIds: tagIds,
     );
     read(pendingPdfImportProvider.notifier).set(payload);
     return note;

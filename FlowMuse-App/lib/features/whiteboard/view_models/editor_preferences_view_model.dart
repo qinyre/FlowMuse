@@ -52,6 +52,9 @@ class EditorPreferencesViewModel extends AsyncNotifier<EditorPreferences> {
   Future<void> setSingleFingerPanEnabled(bool value) =>
       _save(_current.copyWith(singleFingerPanEnabled: value));
 
+  Future<void> setFingerDrawingEnabled(bool value) =>
+      _save(_current.copyWith(fingerDrawingEnabled: value));
+
   Future<void> setAutosaveInterval(AutosaveInterval value) =>
       _save(_current.copyWith(autosaveInterval: value));
 

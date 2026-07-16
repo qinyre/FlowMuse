@@ -62,7 +62,7 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 ## ADR-002:Excalidraw 格式兼容是不可破坏的硬约束
 
 - **状态**:已采纳(持续生效)
-- **来源**:`docs/architecture_constraints.md`
+- **来源**:`docs/项目说明/架构约束.md`
 
 ### 背景
 
@@ -129,7 +129,7 @@ dependency_overrides:
 ## ADR-004:鸿蒙探针分支(probe)合并到 main 时按功能重写,不直接 cherry-pick
 
 - **状态**:已采纳(一次性决策,记录为范式)
-- **来源**:`docs/probe-to-main-migration-audit.md`(2026-07-09)
+- **来源**:`docs/研发记录/archive/probe-to-main-migration-audit.md`(2026-07-09)
 
 ### 背景
 
@@ -401,7 +401,7 @@ try {
 
 - **状态**:已采纳
 - **日期**:2026-07-12
-- **关联**:`docs/research/collaboration/codex-best.md`、`SceneReconciler._shouldKeepLocal`
+- **关联**:`docs/研发记录/research/collaboration/codex-best.md`、`SceneReconciler._shouldKeepLocal`
 
 ### 背景
 

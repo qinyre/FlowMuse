@@ -19,6 +19,7 @@ void main() {
       palmRejectionEnabled: false,
       twoFingerZoomEnabled: false,
       singleFingerPanEnabled: false,
+      fingerDrawingEnabled: true,
       autosaveInterval: AutosaveInterval.threeSeconds,
       defaultLayoutType: CanvasLayoutType.unbounded,
       defaultPageTemplate: CanvasPageTemplate.dotGrid,
@@ -37,6 +38,7 @@ void main() {
     expect(restored.palmRejectionEnabled, isFalse);
     expect(restored.twoFingerZoomEnabled, isFalse);
     expect(restored.singleFingerPanEnabled, isFalse);
+    expect(restored.fingerDrawingEnabled, isTrue);
     expect(restored.autosaveInterval, AutosaveInterval.threeSeconds);
     expect(restored.defaultLayoutType, CanvasLayoutType.unbounded);
     expect(restored.defaultPageTemplate, CanvasPageTemplate.dotGrid);
@@ -55,6 +57,7 @@ void main() {
 
     expect(restored.defaultTool, ToolType.select);
     expect(restored.defaultBrush, BrushType.fountainPen);
+    expect(restored.fingerDrawingEnabled, isFalse);
     expect(restored.pressureCurve, PressureCurvePreset.standard);
     expect(restored.brushStates.keys, containsAll(BrushType.values));
     expect(restored.autosaveInterval, AutosaveInterval.halfSecond);

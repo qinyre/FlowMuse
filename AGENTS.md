@@ -14,7 +14,7 @@
 2. **能复用就绝不重写**：项目已有完善的模块（编辑器内核、资料库 Repository、协作层、导航壳、主题系统等）。需要某能力时，**先找现有实现**，找不到再新建。重复造轮子是最严重的浪费。
 3. **新改动不得破坏已有功能**：任何修改完成后，必须按"验证清单"（第 6 节）确认未引入回归。声称"完成"前必须有证据。
 4. **对某端的调整不得影响其他端**：本项目跑在 6 个平台（Android / iOS / macOS / Windows / Web / 鸿蒙）。平台特有改动必须收敛在适配层，**禁止污染共享代码**（详见第 5 节）。
-5. **Excalidraw 兼容性不可破坏**：白板数据模型、场景 JSON、协作协议必须与 Excalidraw 格式保持兼容（详见 `docs/architecture_constraints.md`）。这是产品基石。
+5. **Excalidraw 兼容性不可破坏**：白板数据模型、场景 JSON、协作协议必须与 Excalidraw 格式保持兼容（详见 `docs/项目说明/架构约束.md`）。这是产品基石。
 6. **数据库迁移必须幂等**：任何 schema 变更必须用 `_safeAddColumn` 等"列已存在则跳过"的方式，**禁止裸 `ALTER TABLE ADD COLUMN`**（详见第 7 节的惨痛教训）。
 
 ---
@@ -29,15 +29,18 @@
 ├── .agent/                       # Agent 知识库（详细规范，按需深读）
 │   ├── conventions.md            #   编码与协作约定（怎么做）
 │   ├── architecture.md           #   架构速览（项目长什么样）
-│   └── decisions.md              #   架构决策记录 ADR（为什么这样选）
-├── REQUIREMENTS.md               # 产品需求（先读这个理解"做什么"）
+│   ├── decisions.md              #   架构决策记录 ADR（为什么这样选）
+│   ├── forbidden_zones.md        #   H10 禁飞区与验收边界
+│   └── ai_usage.md               #   项目 AI 使用日志
 ├── README.md
-├── docs/                         # 设计文档、计划、研究记录
-│   ├── architecture_constraints.md   # ⚠️ 架构硬约束（必读）
-│   └── superpowers/plans/            # 历次功能的实现计划（团队工作范式）
+├── docs/                         # 面向教师与团队的项目文档
+│   ├── 项目说明/                    # 需求正文、架构硬约束
+│   ├── 项目报告/                    # 成员周报与总结报告
+│   ├── 验收材料/                    # Sprint 验收要求、报告与实测附件
+│   ├── 技术设计/                    # 架构、接口、数据模型与专题设计
+│   └── 研发记录/                    # 计划、调研、排障、归档与许可证
 ├── FlowMuse-App/                 # Flutter 前端（主工程）
 │   ├── lib/                      # Dart 源码（见 1.2）
-│   ├── docs/                     # 前端技术文档（架构/接口/数据模型）
 │   ├── test/                     # 单元测试与 widget 测试
 │   ├── ohos/                     # 鸿蒙工程（ArkTS + Platform Channel）
 │   ├── tool/vendor/              # 因鸿蒙适配而 fork 的上游包（勿随意改动）
@@ -77,17 +80,21 @@ lib/
 
 ### 1.3 关键参考文档
 
-| 文档 | 用途 |
-|------|------|
-| `.agent/conventions.md` | **编码与协作约定**（命名、目录、Riverpod、持久化、Git、测试） |
-| `.agent/architecture.md` | **架构速览**（系统全景、分层、数据流、跨端边界） |
-| `.agent/decisions.md` | **架构决策记录 ADR**（为什么这样选,含白屏事故等教训） |
-| `REQUIREMENTS.md` | 产品要做什么（功能需求清单） |
-| `docs/architecture_constraints.md` | 架构硬约束（Excalidraw 对齐原则） |
-| `FlowMuse-App/docs/architecture.md` | 前端架构设计（分层、模块、跨平台策略） |
-| `FlowMuse-App/docs/api.md` | 接口设计（后端 HTTP/Socket.IO、Repository、Provider） |
-| `FlowMuse-App/docs/data-model.md` | 数据模型（SQLite schema、领域类、元素模型） |
-| `docs/superpowers/plans/*.md` | 历次功能实现计划（团队既有的开发流程范例） |
+| 文档                        | 用途                                                             |
+| --------------------------- | ---------------------------------------------------------------- |
+| `.agent/conventions.md`     | **编码与协作约定**（命名、目录、Riverpod、持久化、Git、测试）    |
+| `.agent/architecture.md`    | **架构速览**（系统全景、分层、数据流、跨端边界）                 |
+| `.agent/decisions.md`       | **架构决策记录 ADR**（为什么这样选,含白屏事故等教训）            |
+| `.agent/forbidden_zones.md` | H10 禁飞区、人工讲解要点与测试入口                               |
+| `.agent/ai_usage.md`        | 项目 AI 使用日志；验收材料中保留同内容副本供教师查看             |
+| `docs/项目说明/项目需求.md` | 产品要做什么（功能需求清单）                                     |
+| `docs/项目说明/架构约束.md` | 架构硬约束（Excalidraw 对齐原则）                                |
+| `docs/项目报告/*.md`        | 成员周报与过程总结（人类过程材料，非 AI 默认必读）               |
+| `docs/验收材料/`            | Sprint 验收要求、质量门禁、AI 日志副本与实测附件（人类验收材料） |
+| `docs/技术设计/前端架构.md` | 前端架构设计（分层、模块、跨平台策略）                           |
+| `docs/技术设计/接口设计.md` | 接口设计（后端 HTTP/Socket.IO、Repository、Provider）            |
+| `docs/技术设计/数据模型.md` | 数据模型（SQLite schema、领域类、元素模型）                      |
+| `docs/研发记录/plans/*.md`  | 历次功能实现计划（团队既有的开发流程范例）                       |
 
 ---
 
@@ -99,11 +106,12 @@ lib/
 
 完成本文件的勘察清单后，按任务读取 `.agent/`：
 
-| 任务类型 | 必读文档 |
-|---|---|
-| 任意代码改动 | `.agent/conventions.md` |
-| 跨 feature、存储、协作或平台改动 | `.agent/architecture.md` |
+| 任务类型                                               | 必读文档                         |
+| ------------------------------------------------------ | -------------------------------- |
+| 任意代码改动                                           | `.agent/conventions.md`          |
+| 跨 feature、存储、协作或平台改动                       | `.agent/architecture.md`         |
 | 数据库、Excalidraw、鸿蒙适配、协作加密或编辑器状态改动 | `.agent/decisions.md` 中对应 ADR |
+| H10 冲突合并、AI 排版或跨端同步冲突改动                | `.agent/forbidden_zones.md`      |
 
 `.agent/` 是项目知识库，不替代代码审查；不要只按概述推断文件位置、版本或现有行为。
 
@@ -113,11 +121,17 @@ lib/
 2. **确认当前分支与工作区状态**：`git status` + `git branch --show-current`。是否在 feature 分支？工作区是否干净？
 3. **定位受影响的模块**：根据任务，找出会改动的 feature 目录与文件。**先读现有实现的完整内容**，不要只看片段就动手。
 4. **检查是否已有同类实现**：用 grep/搜索关键词，确认要做的能力是否已存在（见第 3 节"复用优先"）。
-5. **查阅相关计划文档**：`docs/superpowers/plans/` 下是否已有同类功能的计划？按既有计划走。
-6. **核对需求**：改功能前回看 `REQUIREMENTS.md` 对应条目，确认没有偏离需求。
+5. **查阅相关计划文档**：`docs/研发记录/plans/` 下是否已有同类功能的计划？按既有计划走。
+6. **核对需求**：改功能前回看 `docs/项目说明/项目需求.md` 对应条目，确认没有偏离需求。
 7. **跨端影响评估**：改动是否触及共享代码？是否影响除目标平台外的其他端？（见第 5 节）
 
-> 如果任务较大或涉及多文件，遵循团队既有范式：先在 `docs/superpowers/plans/` 写一份计划文档（参考已有的 `2026-07-*.md` 格式：Context → 需求 → 实现方案 → 关键文件 → 验证方案 → 实施步骤），再动手。
+> 如果任务较大或涉及多文件，遵循团队既有范式：先在 `docs/研发记录/plans/` 写一份计划文档（参考已有的 `2026-07-*.md` 格式：Context → 需求 → 实现方案 → 关键文件 → 验证方案 → 实施步骤），再动手。
+
+### 2.1 AI 研发文档落盘规则（强制）
+
+- Superpowers 等 Agent 技能中出现的 `docs/superpowers/**` 仅是通用默认路径，**不适用于本仓库**；本文件的目录约定优先。
+- 实现计划存入 `docs/研发记录/plans/`，设计规格存入 `docs/研发记录/specs/`，调研、排障、归档与第三方材料分别存入 `research/`、`troubleshooting/`、`archive/`、`third_party/`。
+- **禁止新建 `docs/superpowers/`。** 若外部分支或工具在该路径生成文件，必须在同一变更中按上述分类迁入 `docs/研发记录/`，不得保留副本。
 
 ---
 
@@ -127,24 +141,24 @@ lib/
 
 ### 3.1 已有的核心能力（直接用，别重写）
 
-| 需要做什么 | 用什么 | 位置 |
-|------------|--------|------|
-| 笔记/笔记本/标签的 CRUD | `LibraryRepository` + `LibraryIndexNotifier` | `features/library/repositories/library_repository.dart` |
-| 读资料库数据 | watch `libraryIndexProvider`（SSOT，内存聚合根） | 同上 |
-| 本地 key-value 存储 | `LocalSettingsRepository`（**不是** shared_preferences） | `shared/storage/local_settings_repository.dart` |
-| 最近封面记录 | `RecentCoversRepository`（复用 local_settings 表） | `shared/storage/recent_covers_repository.dart` |
-| 数据库访问 | `LocalDatabase.open()`（单例，已处理平台分发） | `shared/storage/local_database.dart` |
-| 白板场景存取 | `WhiteboardSceneRepository` | `features/whiteboard/repositories/` |
-| 协作房间管理 | `CollaborationRepository`（外观，已组合 transport+crypto+store） | `features/whiteboard/collaboration/repositories/` |
-| 账户认证 | `AccountRepository` + `accountViewModelProvider` | `features/account/` |
-| 主题切换 | `ThemeViewModel` + `themeViewModelProvider` | `app/view_models/theme_view_model.dart` |
-| 导航/侧边栏壳 | `AppShell` + `ShellRoute`（已处理三态切换） | `shared/widgets/app_shell.dart` |
-| 侧边栏组件 | `SharedSidebar` 系列 | `shared/widgets/shared_sidebar.dart` |
-| 间距/尺寸常量 | `AppSpacing`（统一设计 token） | `shared/widgets/app_spacing.dart` |
-| 页面骨架 | `RightPageScaffold` + `RightPageHeader` | `shared/widgets/right_page.dart` |
-| UI 安全时机操作 | `runAfterUiFrame` / `runWhenContextStable` 等 | `shared/utils/ui_lifecycle.dart` |
-| 锚点弹出菜单 | `showAnchoredPopupMenu` | `shared/utils/ui_lifecycle.dart` |
-| 编辑器能力 | `MarkdrawController`（导入/导出/场景/识别回调） | `features/whiteboard/editor_core/` |
+| 需要做什么              | 用什么                                                           | 位置                                                    |
+| ----------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
+| 笔记/笔记本/标签的 CRUD | `LibraryRepository` + `LibraryIndexNotifier`                     | `features/library/repositories/library_repository.dart` |
+| 读资料库数据            | watch `libraryIndexProvider`（SSOT，内存聚合根）                 | 同上                                                    |
+| 本地 key-value 存储     | `LocalSettingsRepository`（**不是** shared_preferences）         | `shared/storage/local_settings_repository.dart`         |
+| 最近封面记录            | `RecentCoversRepository`（复用 local_settings 表）               | `shared/storage/recent_covers_repository.dart`          |
+| 数据库访问              | `LocalDatabase.open()`（单例，已处理平台分发）                   | `shared/storage/local_database.dart`                    |
+| 白板场景存取            | `WhiteboardSceneRepository`                                      | `features/whiteboard/repositories/`                     |
+| 协作房间管理            | `CollaborationRepository`（外观，已组合 transport+crypto+store） | `features/whiteboard/collaboration/repositories/`       |
+| 账户认证                | `AccountRepository` + `accountViewModelProvider`                 | `features/account/`                                     |
+| 主题切换                | `ThemeViewModel` + `themeViewModelProvider`                      | `app/view_models/theme_view_model.dart`                 |
+| 导航/侧边栏壳           | `AppShell` + `ShellRoute`（已处理三态切换）                      | `shared/widgets/app_shell.dart`                         |
+| 侧边栏组件              | `SharedSidebar` 系列                                             | `shared/widgets/shared_sidebar.dart`                    |
+| 间距/尺寸常量           | `AppSpacing`（统一设计 token）                                   | `shared/widgets/app_spacing.dart`                       |
+| 页面骨架                | `RightPageScaffold` + `RightPageHeader`                          | `shared/widgets/right_page.dart`                        |
+| UI 安全时机操作         | `runAfterUiFrame` / `runWhenContextStable` 等                    | `shared/utils/ui_lifecycle.dart`                        |
+| 锚点弹出菜单            | `showAnchoredPopupMenu`                                          | `shared/utils/ui_lifecycle.dart`                        |
+| 编辑器能力              | `MarkdrawController`（导入/导出/场景/识别回调）                  | `features/whiteboard/editor_core/`                      |
 
 ### 3.2 状态管理统一用 Riverpod
 
@@ -157,6 +171,7 @@ lib/
 ### 3.3 复用检查流程
 
 写新代码前问自己三个问题：
+
 1. **这个数据/能力，`libraryIndexProvider` 或某个现有 Provider 已经有了吗？** 多数资料库派生数据都能从 `libraryIndexProvider` watch 得到。
 2. **这个 UI 模式，`SharedSidebar` / `AppSpacing` / `RightPageHeader` 已经支持了吗？**
 3. **这个 repository 方法已经存在吗？** 看接口定义，优先扩展而非新建。
@@ -176,16 +191,16 @@ lib/
 
 ### 4.2 命名约定（从代码归纳）
 
-| 类别 | 约定 | 示例 |
-|------|------|------|
-| 文件名 | snake_case | `library_repository.dart` |
-| 类名 | PascalCase | `LibraryIndexNotifier` |
-| Provider | camelCase + `Provider` 后缀 | `libraryIndexProvider` |
-| 路由路径 | kebab-case，`/` 开头 | `/create-collection` |
-| 数据库表 | snake_case | `note_tags` |
-| 数据库字段 | snake_case | `cover_color`、`updated_at` |
-| ID 前缀 | `实体-{uuid}` | `notebook-xxx`、`tag-xxx` |
-| 私有方法 | `_` 前缀 | `_safeAddColumn` |
+| 类别       | 约定                        | 示例                        |
+| ---------- | --------------------------- | --------------------------- |
+| 文件名     | snake_case                  | `library_repository.dart`   |
+| 类名       | PascalCase                  | `LibraryIndexNotifier`      |
+| Provider   | camelCase + `Provider` 后缀 | `libraryIndexProvider`      |
+| 路由路径   | kebab-case，`/` 开头        | `/create-collection`        |
+| 数据库表   | snake_case                  | `note_tags`                 |
+| 数据库字段 | snake_case                  | `cover_color`、`updated_at` |
+| ID 前缀    | `实体-{uuid}`               | `notebook-xxx`、`tag-xxx`   |
+| 私有方法   | `_` 前缀                    | `_safeAddColumn`            |
 
 ### 4.3 调试日志
 
@@ -193,22 +208,24 @@ lib/
 
 ### 4.4 错误处理模式
 
-| 场景 | 做法 | 示例 |
-|------|------|------|
-| Platform Channel 调用 | catch `PlatformException` + `MissingPluginException`，返回 `null` 或默认值 | `try { ... } on PlatformException { return null; }` |
-| 数据库操作 | 让异常向上抛到 ViewModel 层，由 UI 展示 SnackBar | `catch (error) { _showCreateError(context, error); }` |
-| 非关键初始化（如 shader） | try-catch + 静默降级，**不能阻塞启动** | `try { await init(); } catch (_) { /* 降级 */ }` |
-| 网络请求 | catch 后区分超时/连接拒绝/其他，分别给用户可理解的提示 | 见 `ink_recognition_repository.dart` |
-| 用户操作失败 | 用 `ScaffoldMessenger.showSnackBar` 提示，**不要用 dialog 打断用户** | 见 `library_sidebar.dart` 的 `_showCreateError` |
-| 不可恢复的致命错误 | 在 `main()` 初始化阶段才允许崩溃，其余位置必须兜底 | — |
+| 场景                      | 做法                                                                       | 示例                                                  |
+| ------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Platform Channel 调用     | catch `PlatformException` + `MissingPluginException`，返回 `null` 或默认值 | `try { ... } on PlatformException { return null; }`   |
+| 数据库操作                | 让异常向上抛到 ViewModel 层，由 UI 展示 SnackBar                           | `catch (error) { _showCreateError(context, error); }` |
+| 非关键初始化（如 shader） | try-catch + 静默降级，**不能阻塞启动**                                     | `try { await init(); } catch (_) { /* 降级 */ }`      |
+| 网络请求                  | catch 后区分超时/连接拒绝/其他，分别给用户可理解的提示                     | 见 `ink_recognition_repository.dart`                  |
+| 用户操作失败              | 用 `ScaffoldMessenger.showSnackBar` 提示，**不要用 dialog 打断用户**       | 见 `library_sidebar.dart` 的 `_showCreateError`       |
+| 不可恢复的致命错误        | 在 `main()` 初始化阶段才允许崩溃，其余位置必须兜底                         | —                                                     |
 
 **禁止**：
+
 - 空 catch 块（`catch (_) {}` 不带日志或恢复逻辑）
 - 在 UI 层直接用 `try-catch` 包装大段 Widget build（应在 ViewModel/Repository 层处理）
 
 ### 4.5 提交信息约定
 
 观察既有提交，团队用**中文描述**为主，部分带类型前缀：
+
 - 常见前缀：`fix:`、`refactor:`、`merge:`（如 `fix:修复二次创建笔记失败的bug`、`refactor:重构创建集合页面布局`）
 - 合并提交：`Merge ...` 或 `merge:合并...到主分支`
 - 提交信息用中文，简洁描述"做了什么"。
@@ -223,14 +240,14 @@ lib/
 
 ### 5.2 平台差异必须收敛在适配层
 
-| 差异类型 | 正确做法 | 错误做法 |
-|----------|----------|----------|
-| SQLite 实现 | 放在 `shared/storage/local_database_path*.dart`（条件导入） | 在业务代码里写 `if (Platform.isAndroid)` |
-| HTTP 通道 | 鸿蒙用 `NativeHttpClient`，其他用 http；通过统一接口封装 | 在调用方判断平台 |
-| 手写笔压感 | 通过 `InputPolicySelector` 按设备分策略 | 在 Tool 里硬编码设备判断 |
-| 文件选择/保存/PDF渲染 | 鸿蒙走 Platform Channel，封装在 service 层 | UI 层直接调平台 API |
-| 路径提供器 | 通过 `dependency_overrides` 指向 vendor 版本 | 在 pubspec 直接锁版本 |
-| shader 不支持 | `PencilShader` 静默降级 | 抛异常崩溃 |
+| 差异类型              | 正确做法                                                    | 错误做法                                 |
+| --------------------- | ----------------------------------------------------------- | ---------------------------------------- |
+| SQLite 实现           | 放在 `shared/storage/local_database_path*.dart`（条件导入） | 在业务代码里写 `if (Platform.isAndroid)` |
+| HTTP 通道             | 鸿蒙用 `NativeHttpClient`，其他用 http；通过统一接口封装    | 在调用方判断平台                         |
+| 手写笔压感            | 通过 `InputPolicySelector` 按设备分策略                     | 在 Tool 里硬编码设备判断                 |
+| 文件选择/保存/PDF渲染 | 鸿蒙走 Platform Channel，封装在 service 层                  | UI 层直接调平台 API                      |
+| 路径提供器            | 通过 `dependency_overrides` 指向 vendor 版本                | 在 pubspec 直接锁版本                    |
+| shader 不支持         | `PencilShader` 静默降级                                     | 抛异常崩溃                               |
 
 **铁律：共享代码（`lib/features/*`、`lib/shared/*`）里禁止出现 `Platform.is*` / `if (operatingSystem == ...)` 的分支判断。** 平台差异一律走条件导入或抽象接口 + 平台实现。
 
@@ -255,6 +272,7 @@ lib/
 5. **权限**：如果原生 API 需要权限，在 `module.json5` 的 `requestPermissions` 中声明，并在 ArkTS 侧做权限检查。
 
 已有参考实现：
+
 - 文件选择：`file_picker_channel_ohos.dart` + `FilePickerChannel.ets`
 - HTTP 通道：`native_http_client.dart` + `HttpChannel.ets`
 - 语音识别：`speech_recognition_service_io.dart` + `SpeechRecognitionChannel.ets`（通道 `flow_muse/speech_recognition`）
@@ -262,6 +280,7 @@ lib/
 ### 5.5 改动前的跨端自检
 
 改完任何共享代码后自问：
+
 - 这个改动在 Android 上行为变了吗？（要变，且是预期的）
 - 在鸿蒙上呢？（不能因为安卓的改动而崩）
 - 在 Web/桌面呢？（不能引入 dart:io 等不支持的 API）
@@ -287,14 +306,14 @@ lib/
 
 ### 6.1 测试编写规范
 
-| 规则 | 说明 |
-|------|------|
-| 目录结构 | `test/` 镜像 `lib/` 目录结构：`lib/features/library/repositories/foo.dart` → `test/features/library/repositories/foo_test.dart` |
-| 命名 | 测试文件 `*_test.dart`；测试描述用中文；关键场景用 Given-When-Then 注释分段 |
-| 覆盖率 | 不要求 100%，但 **Repository 层和工具函数必须有测试**；UI widget 测试覆盖关键交互路径即可 |
-| 独立运行 | 每个 `test()` 用例不依赖其他用例的执行结果，**不得共享可变状态** |
-| Mock 隔离 | 数据库/网络/Platform Channel 用 mock 隔离，单元测试**不访问真实的文件系统或网络** |
-| 运行 | 提交前跑全量 `flutter test`；开发中可用 `flutter test --name="关键词"` 只跑相关测试 |
+| 规则      | 说明                                                                                                                            |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 目录结构  | `test/` 镜像 `lib/` 目录结构：`lib/features/library/repositories/foo.dart` → `test/features/library/repositories/foo_test.dart` |
+| 命名      | 测试文件 `*_test.dart`；测试描述用中文；关键场景用 Given-When-Then 注释分段                                                     |
+| 覆盖率    | 不要求 100%，但 **Repository 层和工具函数必须有测试**；UI widget 测试覆盖关键交互路径即可                                       |
+| 独立运行  | 每个 `test()` 用例不依赖其他用例的执行结果，**不得共享可变状态**                                                                |
+| Mock 隔离 | 数据库/网络/Platform Channel 用 mock 隔离，单元测试**不访问真实的文件系统或网络**                                               |
+| 运行      | 提交前跑全量 `flutter test`；开发中可用 `flutter test --name="关键词"` 只跑相关测试                                             |
 
 ---
 
@@ -383,15 +402,15 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 
 代码改动后，**改变了对外行为、架构边界、数据格式或开发约束时**，相关文档必须同步更新；纯局部实现修复不为凑文档而重复描述。文档以准确反映现状为目标，不能复制过期实现细节：
 
-| 改动类型 | 需更新的文档 |
-|----------|-------------|
-| 新增功能/用户可见变更 | `REQUIREMENTS.md`（更新功能清单） |
-| 架构变更/新模块 | `FlowMuse-App/docs/architecture.md` |
-| 新 API 端点/协议变更 | `FlowMuse-App/docs/api.md` |
-| 数据模型/表结构变更 | `FlowMuse-App/docs/data-model.md` |
-| 新增 Platform Channel | 在本 `AGENTS.md` 5.4 节补充引用 |
-| 项目级流程/规范调整 | 本 `AGENTS.md` |
-| 重大实现决策 | `docs/superpowers/plans/` 新建计划文档 |
+| 改动类型              | 需更新的文档                                |
+| --------------------- | ------------------------------------------- |
+| 新增功能/用户可见变更 | `docs/项目说明/项目需求.md`（更新功能清单） |
+| 架构变更/新模块       | `docs/技术设计/前端架构.md`                 |
+| 新 API 端点/协议变更  | `docs/技术设计/接口设计.md`                 |
+| 数据模型/表结构变更   | `docs/技术设计/数据模型.md`                 |
+| 新增 Platform Channel | 在本 `AGENTS.md` 5.4 节补充引用             |
+| 项目级流程/规范调整   | 本 `AGENTS.md`                              |
+| 重大实现决策          | `docs/研发记录/plans/` 新建计划文档         |
 
 **原则**：改了代码就要能找到对应的文档说明。文档不在多，在**准确反映现状**。过期文档比没有文档更危险。
 
@@ -401,8 +420,8 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 
 - **不确定是否有现成实现** → 先 grep / 用 Explore agent 搜，再决定新建。
 - **不确定改动是否影响其他端** → 按 5.5 自检，拿不准就在计划里标注"需跨端验证"并提示用户。
-- **不确定需求边界** → 回看 `REQUIREMENTS.md` 和 `docs/architecture_constraints.md`。
-- **不确定架构是否合适** → 查 `docs/superpowers/plans/` 是否有同类先例，或参考 `FlowMuse-App/docs/architecture.md`。
+- **不确定需求边界** → 回看 `docs/项目说明/项目需求.md` 和 `docs/项目说明/架构约束.md`。
+- **不确定架构是否合适** → 查 `docs/研发记录/plans/` 是否有同类先例，或参考 `docs/技术设计/前端架构.md`。
 - **遇到 3 次修复都失败** → 停下来，这大概率是架构问题而非 bug，向用户说明并讨论方案，不要继续盲目打补丁。
 
 ---

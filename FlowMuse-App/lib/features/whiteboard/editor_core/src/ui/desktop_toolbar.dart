@@ -18,6 +18,9 @@ class DesktopToolbar extends StatelessWidget {
   final bool speechActive;
   final bool speechAvailable;
 
+  /// Override for the eyedropper button (e.g. HarmonyOS Pen Kit global pick).
+  final VoidCallback? onEyedropperPressed;
+
   const DesktopToolbar({
     super.key,
     required this.controller,
@@ -26,6 +29,7 @@ class DesktopToolbar extends StatelessWidget {
     this.onDockChanged,
     this.onCollapse,
     this.useFlatBackground = false,
+    this.onEyedropperPressed,
     this.onSpeechPressed,
     this.speechActive = false,
     this.speechAvailable = false,
@@ -106,6 +110,12 @@ class DesktopToolbar extends StatelessWidget {
                 colorScheme: cs,
                 useFlatBackground: useFlatBackground,
                 onPressed: () => controller.switchTool(ToolType.eraser),
+              ),
+              _toolbarButton(
+                cs: cs,
+                icon: Icons.colorize,
+                tooltip: '取色笔 (I)',
+                onPressed: onEyedropperPressed ?? controller.requestEyedropper,
               ),
               _ToolButton(
                 type: ToolType.laser,
@@ -321,6 +331,7 @@ class _DockMenuButton extends StatelessWidget {
       onPressed: () async {
         final selected = await showAnchoredPopupMenu<ToolbarDock>(
           context: context,
+          placement: AnchoredPopupPlacement.below,
           items: [
             for (final option in ToolbarDock.values)
               PopupMenuItem(

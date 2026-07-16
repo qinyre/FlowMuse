@@ -251,6 +251,14 @@ class _EditorCanvasState extends State<EditorCanvas>
       child: LayoutBuilder(
         builder: (context, constraints) {
           final canvasSize = Size(constraints.maxWidth, constraints.maxHeight);
+          runWhenUiStable(() {
+            final renderBox = context.findRenderObject() as RenderBox?;
+            if (renderBox != null && renderBox.attached) {
+              controller.canvasGlobalOffset = renderBox.localToGlobal(
+                Offset.zero,
+              );
+            }
+          });
           if (_lastReportedSize != canvasSize) {
             _lastReportedSize = canvasSize;
             runWhenUiStable(() {

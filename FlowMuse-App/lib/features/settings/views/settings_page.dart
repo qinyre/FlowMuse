@@ -28,7 +28,10 @@ import '../../whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import '../../whiteboard/models/editor_preferences.dart';
 import '../../whiteboard/view_models/editor_preferences_view_model.dart';
 import '../repositories/local_backup_repository.dart';
+import '../repositories/webdav_settings_repository.dart';
 import '../services/cache_cleaner.dart';
+import '../services/webdav_backup_service.dart';
+import '../services/webdav_client.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key, this.initialSection});
@@ -284,6 +287,7 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
             onExport: _exportBackup,
             onImport: _importBackup,
           ),
+          _SettingsSection.cloudBackup => const _CloudBackupSection(),
           _SettingsSection.theme => _ThemePresetSection(
             selectedPreset: widget.selectedPreset,
             onPresetChanged: widget.onPresetChanged,
@@ -1262,6 +1266,15 @@ class _ToolsSettingsSection extends ConsumerWidget {
     '#7048e8',
     '#ffff00',
   ];
+  static const _colorLabels = {
+    '#1e1e1e': '黑色',
+    '#e03131': '红色',
+    '#1971c2': '蓝色',
+    '#2f9e44': '绿色',
+    '#f08c00': '橙色',
+    '#7048e8': '紫色',
+    '#ffff00': '黄色',
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1278,21 +1291,12 @@ class _ToolsSettingsSection extends ConsumerWidget {
                   leading: const Icon(LucideIcons.mousePointer2),
                   title: const Text('默认工具'),
                   subtitle: const Text('打开白板时自动选择'),
-                  trailing: DropdownButton<ToolType>(
+                  trailing: _SettingsPopupMenu<ToolType>(
                     value: preferences.defaultTool,
-                    onChanged: (value) {
-                      if (value != null) {
-                        unawaited(notifier.setDefaultTool(value));
-                      }
-                    },
-                    items: _defaultTools
-                        .map(
-                          (tool) => DropdownMenuItem(
-                            value: tool,
-                            child: Text(_toolLabel(tool)),
-                          ),
-                        )
-                        .toList(),
+                    options: _defaultTools,
+                    label: _toolLabel,
+                    onSelected: (value) =>
+                        unawaited(notifier.setDefaultTool(value)),
                   ),
                 ),
                 const Divider(height: 1),
@@ -1301,21 +1305,12 @@ class _ToolsSettingsSection extends ConsumerWidget {
                   leading: const Icon(LucideIcons.penTool),
                   title: const Text('默认笔形'),
                   subtitle: const Text('颜色和粗细会按每支笔分别记忆'),
-                  trailing: DropdownButton<BrushType>(
+                  trailing: _SettingsPopupMenu<BrushType>(
                     value: brush,
-                    onChanged: (value) {
-                      if (value != null) {
-                        unawaited(notifier.setDefaultBrush(value));
-                      }
-                    },
-                    items: BrushType.values
-                        .map(
-                          (type) => DropdownMenuItem(
-                            value: type,
-                            child: Text(_brushLabel(type)),
-                          ),
-                        )
-                        .toList(),
+                    options: BrushType.values,
+                    label: _brushLabel,
+                    onSelected: (value) =>
+                        unawaited(notifier.setDefaultBrush(value)),
                   ),
                 ),
               ],
@@ -1343,7 +1338,7 @@ class _ToolsSettingsSection extends ConsumerWidget {
                           avatar: CircleAvatar(
                             backgroundColor: _colorFromHex(color),
                           ),
-                          label: Text(color),
+                          label: Text(_colorLabels[color]!),
                           onSelected: (_) {
                             unawaited(
                               notifier.updateBrushState(
@@ -1392,6 +1387,46 @@ class _ToolsSettingsSection extends ConsumerWidget {
   }
 }
 
+class _SettingsPopupMenu<T extends Object> extends StatelessWidget {
+  const _SettingsPopupMenu({
+    required this.value,
+    required this.options,
+    required this.label,
+    this.onSelected,
+  });
+
+  final T value;
+  final List<T> options;
+  final String Function(T value) label;
+  final ValueChanged<T>? onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onSelected != null;
+    final color = enabled
+        ? Theme.of(context).colorScheme.onSurface
+        : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38);
+
+    return PopupMenuButton<T>(
+      enabled: enabled,
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 4),
+      onSelected: onSelected,
+      itemBuilder: (context) => [
+        for (final option in options)
+          PopupMenuItem(value: option, child: Text(label(option))),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label(value), style: TextStyle(color: color)),
+          Icon(Icons.arrow_drop_down, color: color),
+        ],
+      ),
+    );
+  }
+}
+
 class _DocumentSettingsSection extends ConsumerWidget {
   const _DocumentSettingsSection();
 
@@ -1410,21 +1445,12 @@ class _DocumentSettingsSection extends ConsumerWidget {
                     ? '仅在退出或切换到后台时保存；强制结束应用可能丢失修改'
                     : '编辑后自动保存草稿的等待时间',
               ),
-              trailing: DropdownButton<AutosaveInterval>(
+              trailing: _SettingsPopupMenu<AutosaveInterval>(
                 value: preferences.autosaveInterval,
-                onChanged: (value) {
-                  if (value != null) {
-                    unawaited(notifier.setAutosaveInterval(value));
-                  }
-                },
-                items: AutosaveInterval.values
-                    .map(
-                      (interval) => DropdownMenuItem(
-                        value: interval,
-                        child: Text(_autosaveIntervalLabel(interval)),
-                      ),
-                    )
-                    .toList(),
+                options: AutosaveInterval.values,
+                label: _autosaveIntervalLabel,
+                onSelected: (value) =>
+                    unawaited(notifier.setAutosaveInterval(value)),
               ),
             ),
             const Divider(height: 1),
@@ -1433,21 +1459,12 @@ class _DocumentSettingsSection extends ConsumerWidget {
               leading: const Icon(LucideIcons.fileText),
               title: const Text('默认文档类型'),
               subtitle: const Text('新建笔记时预先选择'),
-              trailing: DropdownButton<CanvasLayoutType>(
+              trailing: _SettingsPopupMenu<CanvasLayoutType>(
                 value: preferences.defaultLayoutType,
-                onChanged: (value) {
-                  if (value != null) {
-                    unawaited(notifier.setDefaultLayoutType(value));
-                  }
-                },
-                items: CanvasLayoutType.values
-                    .map(
-                      (type) => DropdownMenuItem(
-                        value: type,
-                        child: Text(_layoutTypeLabel(type)),
-                      ),
-                    )
-                    .toList(),
+                options: CanvasLayoutType.values,
+                label: _layoutTypeLabel,
+                onSelected: (value) =>
+                    unawaited(notifier.setDefaultLayoutType(value)),
               ),
             ),
             const Divider(height: 1),
@@ -1456,21 +1473,12 @@ class _DocumentSettingsSection extends ConsumerWidget {
               leading: const Icon(LucideIcons.layoutTemplate),
               title: const Text('默认页面模板'),
               subtitle: const Text('仅用于以后新建的文档'),
-              trailing: DropdownButton<CanvasPageTemplate>(
+              trailing: _SettingsPopupMenu<CanvasPageTemplate>(
                 value: preferences.defaultPageTemplate,
-                onChanged: (value) {
-                  if (value != null) {
-                    unawaited(notifier.setDefaultPageTemplate(value));
-                  }
-                },
-                items: CanvasPageTemplate.values
-                    .map(
-                      (template) => DropdownMenuItem(
-                        value: template,
-                        child: Text(_pageTemplateLabel(template)),
-                      ),
-                    )
-                    .toList(),
+                options: CanvasPageTemplate.values,
+                label: _pageTemplateLabel,
+                onSelected: (value) =>
+                    unawaited(notifier.setDefaultPageTemplate(value)),
               ),
             ),
             const Divider(height: 1),
@@ -1479,21 +1487,12 @@ class _DocumentSettingsSection extends ConsumerWidget {
               leading: const Icon(LucideIcons.rows3),
               title: const Text('默认页面排列'),
               subtitle: const Text('分页文档的新页面排列方向'),
-              trailing: DropdownButton<CanvasPageFlow>(
+              trailing: _SettingsPopupMenu<CanvasPageFlow>(
                 value: preferences.defaultPageFlow,
-                onChanged: (value) {
-                  if (value != null) {
-                    unawaited(notifier.setDefaultPageFlow(value));
-                  }
-                },
-                items: CanvasPageFlow.values
-                    .map(
-                      (flow) => DropdownMenuItem(
-                        value: flow,
-                        child: Text(_pageFlowLabel(flow)),
-                      ),
-                    )
-                    .toList(),
+                options: CanvasPageFlow.values,
+                label: _pageFlowLabel,
+                onSelected: (value) =>
+                    unawaited(notifier.setDefaultPageFlow(value)),
               ),
             ),
           ],
@@ -1561,23 +1560,13 @@ class _StylusSettingsSection extends ConsumerWidget {
               leading: const Icon(LucideIcons.activity),
               title: const Text('压感曲线'),
               subtitle: const Text('控制轻压和重压之间的变化幅度'),
-              trailing: DropdownButton<PressureCurvePreset>(
+              trailing: _SettingsPopupMenu<PressureCurvePreset>(
                 value: preferences.pressureCurve,
-                onChanged: preferences.pressureEnabled
-                    ? (value) {
-                        if (value != null) {
-                          unawaited(notifier.setPressureCurve(value));
-                        }
-                      }
+                options: PressureCurvePreset.values,
+                label: _pressureCurveLabel,
+                onSelected: preferences.pressureEnabled
+                    ? (value) => unawaited(notifier.setPressureCurve(value))
                     : null,
-                items: PressureCurvePreset.values
-                    .map(
-                      (curve) => DropdownMenuItem(
-                        value: curve,
-                        child: Text(_pressureCurveLabel(curve)),
-                      ),
-                    )
-                    .toList(),
               ),
             ),
             const Divider(height: 1),
@@ -1960,5 +1949,512 @@ class _ThemeSwatch extends StatelessWidget {
       ),
       child: const SizedBox(width: 22, height: 22),
     );
+  }
+}
+
+// ── Cloud backup section ────────────────────────────────────────────────────
+
+enum _CloudBackupStatus { idle, testing, backingUp, loadingList }
+
+class _CloudBackupSection extends ConsumerStatefulWidget {
+  const _CloudBackupSection();
+
+  @override
+  ConsumerState<_CloudBackupSection> createState() => _CloudBackupSectionState();
+}
+
+class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
+  final _serverCtrl = TextEditingController();
+  final _usernameCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _pathCtrl = TextEditingController();
+
+  _CloudBackupStatus _status = _CloudBackupStatus.idle;
+  String? _statusMessage;
+  bool _statusIsError = false;
+  bool _configLoaded = false;
+  DateTime? _lastBackupAt;
+  bool _passwordVisible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConfig();
+  }
+
+  @override
+  void dispose() {
+    _serverCtrl.dispose();
+    _usernameCtrl.dispose();
+    _passwordCtrl.dispose();
+    _pathCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadConfig() async {
+    try {
+      final repo = defaultWebDavSettingsRepository;
+      final config = await repo.loadConfig();
+      final lastBackup = await repo.loadLastBackupAt();
+      if (!mounted) return;
+      setState(() {
+        _serverCtrl.text = config.serverUrl;
+        _usernameCtrl.text = config.username;
+        _passwordCtrl.text = config.password;
+        _pathCtrl.text = config.remotePath.isEmpty ? '/FlowMuse/' : config.remotePath;
+        _lastBackupAt = lastBackup;
+        _configLoaded = true;
+      });
+    } catch (_) {
+      // 安全存储不可用时（如部分鸿蒙环境）降级为空配置，避免页面卡在加载状态
+      if (!mounted) return;
+      setState(() {
+        _pathCtrl.text = '/FlowMuse/';
+        _configLoaded = true;
+      });
+    }
+  }
+
+  WebDavClient _buildClient() => WebDavClient(
+    baseUrl: _serverCtrl.text.trim(),
+    username: _usernameCtrl.text.trim(),
+    password: _passwordCtrl.text,
+  );
+
+  bool get _busy => _status != _CloudBackupStatus.idle;
+  bool get _canAct =>
+      _serverCtrl.text.trim().isNotEmpty &&
+      _usernameCtrl.text.trim().isNotEmpty &&
+      _passwordCtrl.text.isNotEmpty;
+
+  Future<void> _saveConfig() async {
+    final config = WebDavConfig(
+      serverUrl: _serverCtrl.text.trim(),
+      username: _usernameCtrl.text.trim(),
+      password: _passwordCtrl.text,
+      remotePath: _pathCtrl.text.trim().isEmpty ? '/FlowMuse/' : _pathCtrl.text.trim(),
+    );
+    await defaultWebDavSettingsRepository.saveConfig(config);
+  }
+
+  Future<void> _testConnection() async {
+    await _saveConfig();
+    setState(() {
+      _status = _CloudBackupStatus.testing;
+      _statusMessage = null;
+    });
+    final client = _buildClient();
+    try {
+      await client.testConnection();
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = '连接成功 ✓';
+        _statusIsError = false;
+      });
+    } on WebDavException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = '连接失败：$e';
+        _statusIsError = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = '连接失败：$e';
+        _statusIsError = true;
+      });
+    } finally {
+      client.dispose();
+      if (mounted) setState(() => _status = _CloudBackupStatus.idle);
+    }
+  }
+
+  Future<void> _backupNow() async {
+    await _saveConfig();
+    setState(() {
+      _status = _CloudBackupStatus.backingUp;
+      _statusMessage = null;
+    });
+    final client = _buildClient();
+    try {
+      await webDavBackupService.createBackup(
+        client: client,
+        remotePath: _pathCtrl.text.trim().isEmpty ? '/FlowMuse/' : _pathCtrl.text.trim(),
+        localRepo: defaultLocalBackupRepository,
+      );
+      final now = DateTime.now();
+      await defaultWebDavSettingsRepository.saveLastBackupAt(now);
+      if (!mounted) return;
+      setState(() {
+        _lastBackupAt = now;
+        _statusMessage = '备份成功 ✓';
+        _statusIsError = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = '备份失败：$e';
+        _statusIsError = true;
+      });
+    } finally {
+      client.dispose();
+      if (mounted) setState(() => _status = _CloudBackupStatus.idle);
+    }
+  }
+
+  Future<void> _showBackupList() async {
+    await _saveConfig();
+    setState(() => _status = _CloudBackupStatus.loadingList);
+    final client = _buildClient();
+    try {
+      final backups = await webDavBackupService.listBackups(
+        client: client,
+        remotePath: _pathCtrl.text.trim().isEmpty ? '/FlowMuse/' : _pathCtrl.text.trim(),
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => _BackupListDialog(
+          backups: backups,
+          client: client,
+          remotePath: _pathCtrl.text.trim().isEmpty
+              ? '/FlowMuse/'
+              : _pathCtrl.text.trim(),
+          onRestored: () {
+            ref.invalidate(libraryIndexProvider);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('备份已恢复，请重启应用使更改完全生效')),
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = '获取备份列表失败：$e';
+        _statusIsError = true;
+      });
+    } finally {
+      client.dispose();
+      if (mounted) setState(() => _status = _CloudBackupStatus.idle);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final primary = scheme.primary;
+    final muted = scheme.onSurfaceVariant;
+
+    if (!_configLoaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final busyLabel = switch (_status) {
+      _CloudBackupStatus.testing => '测试中…',
+      _CloudBackupStatus.backingUp => '备份中…',
+      _CloudBackupStatus.loadingList => '加载中…',
+      _CloudBackupStatus.idle => '',
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Config card ──────────────────────────────────────────────────
+        _SettingsCard(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('WebDAV 连接',
+                    style: Theme.of(context).textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _serverCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: '服务器地址',
+                    hintText: 'https://dav.jianguoyun.com/dav/',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _usernameCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(labelText: '用户名 / 邮箱'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _passwordCtrl,
+                  onChanged: (_) => setState(() {}),
+                  obscureText: !_passwordVisible,
+                  decoration: InputDecoration(
+                    labelText: '密码 / 应用专用密码',
+                    suffixIcon: IconButton(
+                      icon: Icon(_passwordVisible
+                          ? LucideIcons.eyeOff
+                          : LucideIcons.eye,
+                          size: 18),
+                      onPressed: () =>
+                          setState(() => _passwordVisible = !_passwordVisible),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _pathCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: '备份目录',
+                    hintText: '/FlowMuse/',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: AppSpacing.controlGap,
+                  runSpacing: AppSpacing.controlGap,
+                  children: [
+                    FilledButton(
+                      onPressed: (!_busy && _canAct) ? _testConnection : null,
+                      child: Text(_status == _CloudBackupStatus.testing
+                          ? busyLabel
+                          : '测试连接'),
+                    ),
+                  ],
+                ),
+                if (_statusMessage != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _statusMessage!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: _statusIsError ? scheme.error : primary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.listGap),
+        // ── Backup / restore card ────────────────────────────────────────
+        _SettingsCard(
+          child: Column(
+            children: [
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                leading: _status == _CloudBackupStatus.backingUp
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(LucideIcons.cloudUpload),
+                title: const Text('立即备份'),
+                subtitle: Text(_lastBackupAt == null
+                    ? '从未备份'
+                    : '上次备份：${_formatDateTime(_lastBackupAt!)}'),
+                trailing: Text(
+                  _status == _CloudBackupStatus.backingUp ? busyLabel : '备份',
+                  style: TextStyle(
+                    color: (!_busy && _canAct) ? primary : muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: (!_busy && _canAct) ? _backupNow : null,
+              ),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                leading: _status == _CloudBackupStatus.loadingList
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(LucideIcons.cloudDownload),
+                title: const Text('浏览并恢复备份'),
+                subtitle: const Text('从网盘选择一个历史备份恢复'),
+                trailing: Text(
+                  _status == _CloudBackupStatus.loadingList ? busyLabel : '浏览',
+                  style: TextStyle(
+                    color: (!_busy && _canAct) ? primary : muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: (!_busy && _canAct) ? _showBackupList : null,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.listGap),
+        // ── Usage tips card ──────────────────────────────────────────────
+        _SettingsCard(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(LucideIcons.info, size: 16, color: muted),
+                  const SizedBox(width: 8),
+                  Text('如何使用坚果云',
+                      style: Theme.of(context).textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                ]),
+                const SizedBox(height: 10),
+                Text(
+                  '1. 服务器地址填写 https://dav.jianguoyun.com/dav/\n'
+                  '2. 用户名为坚果云账号邮箱\n'
+                  '3. 密码使用"应用专用密码"，在坚果云网页版 → 账户设置 → 安全中创建\n'
+                  '4. 备份目录留空时默认使用 /FlowMuse/',
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: muted, height: 1.6),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _formatDateTime(DateTime dt) {
+    final local = dt.toLocal();
+    return '${local.year}-'
+        '${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+// ── Backup list dialog ────────────────────────────────────────────────────────
+
+class _BackupListDialog extends StatefulWidget {
+  const _BackupListDialog({
+    required this.backups,
+    required this.client,
+    required this.remotePath,
+    required this.onRestored,
+  });
+
+  final List<WebDavBackupEntry> backups;
+  final WebDavClient client;
+  final String remotePath;
+  final VoidCallback onRestored;
+
+  @override
+  State<_BackupListDialog> createState() => _BackupListDialogState();
+}
+
+class _BackupListDialogState extends State<_BackupListDialog> {
+  String? _restoringHref;
+
+  Future<void> _restore(WebDavBackupEntry entry) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('确认恢复'),
+        content: Text(
+          '将用"${entry.fileName}"覆盖当前所有本地数据，此操作不可撤销。确定继续吗？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('确认恢复'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    setState(() => _restoringHref = entry.href);
+    try {
+      await webDavBackupService.restoreBackup(
+        client: widget.client,
+        remoteDirectory: widget.remotePath,
+        fileName: entry.fileName,
+        localRepo: defaultLocalBackupRepository,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onRestored();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('恢复失败：$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _restoringHref = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('选择备份恢复'),
+      content: SizedBox(
+        width: 420,
+        child: widget.backups.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Text('当前目录中没有找到 FlowMuse 备份文件'),
+              )
+            : ListView.separated(
+                shrinkWrap: true,
+                itemCount: widget.backups.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (ctx, i) {
+                  final entry = widget.backups[i];
+                  final restoring = _restoringHref == entry.href;
+                  return ListTile(
+                    leading: restoring
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(LucideIcons.fileJson),
+                    title: Text(entry.fileName,
+                        style: const TextStyle(fontFamily: 'monospace',
+                            fontSize: 13)),
+                    subtitle: Text([
+                      if (entry.lastModified != null)
+                        _fmtDate(entry.lastModified!),
+                      if (entry.displaySize.isNotEmpty) entry.displaySize,
+                    ].join('  ·  ')),
+                    trailing: TextButton(
+                      onPressed: (_restoringHref != null || restoring)
+                          ? null
+                          : () => _restore(entry),
+                      child: const Text('恢复'),
+                    ),
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _restoringHref != null
+              ? null
+              : () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
+  }
+
+  static String _fmtDate(DateTime dt) {
+    final l = dt.toLocal();
+    return '${l.year}-${l.month.toString().padLeft(2,'0')}-'
+        '${l.day.toString().padLeft(2,'0')} '
+        '${l.hour.toString().padLeft(2,'0')}:'
+        '${l.minute.toString().padLeft(2,'0')}';
   }
 }

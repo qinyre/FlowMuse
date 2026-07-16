@@ -9,17 +9,39 @@ import { PdfImportChannel } from '../pdf/PdfImportChannel';
 import { HttpChannel } from '../channels/HttpChannel';
 import { SystemShareChannel } from '../channels/SystemShareChannel';
 import { ExternalDocumentChannel } from '../channels/ExternalDocumentChannel';
+import { PenColorPickerChannel } from '../channels/PenColorPickerChannel';
+import { ServiceWidgetChannel } from '../channels/ServiceWidgetChannel';
 import { SpeechRecognitionChannel } from '../channels/SpeechRecognitionChannel';
 
 export default class EntryAbility extends FlutterAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onCreate(want, launchParam)
+    if (want?.parameters?.params) {
+      try {
+        const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
+        if (params.action === 'resumeLastWhiteboard' || params.action === 'createNote') {
+          ServiceWidgetChannel.enqueueLaunchAction(params.action as string);
+        }
+      } catch (_e) {
+        // malformed params — silently skip widget launch action
+      }
+    }
     ExternalDocumentChannel.enqueueWant(want)
     this.enqueueSharedDocuments(want)
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onNewWant(want, launchParam)
+    if (want?.parameters?.params) {
+      try {
+        const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
+        if (params.action === 'resumeLastWhiteboard' || params.action === 'createNote') {
+          ServiceWidgetChannel.enqueueLaunchAction(params.action as string);
+        }
+      } catch (_e) {
+        // malformed params — silently skip widget launch action
+      }
+    }
     ExternalDocumentChannel.enqueueWant(want)
     this.enqueueSharedDocuments(want)
   }
@@ -43,6 +65,8 @@ export default class EntryAbility extends FlutterAbility {
     new HttpChannel().register(flutterEngine)
     new SystemShareChannel(this.context).register(flutterEngine)
     new ExternalDocumentChannel().register(flutterEngine)
+    new PenColorPickerChannel().register(flutterEngine)
+    new ServiceWidgetChannel(this.context).register(flutterEngine)
     new SpeechRecognitionChannel(this.context).register(flutterEngine)
   }
 }

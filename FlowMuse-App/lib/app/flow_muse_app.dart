@@ -1,15 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter/services.dart';
 
 import '../features/library/repositories/library_repository.dart';
 import '../features/whiteboard/share/models/external_document_request.dart';
 import '../features/whiteboard/share/services/external_document_channel.dart';
 import '../features/whiteboard/share/services/imported_document_coordinator.dart';
 import '../features/whiteboard/view_models/whiteboard_view_model.dart';
+import '../features/whiteboard/service_widget/recent_whiteboard_sync_coordinator.dart';
+import '../features/whiteboard/service_widget/service_widget_channel.dart';
 import 'app_router.dart';
 import 'app_theme.dart';
 import 'app_theme_preset.dart';
@@ -27,16 +29,25 @@ class FlowMuseApp extends ConsumerStatefulWidget {
 class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
     with WidgetsBindingObserver {
   bool _consuming = false;
+  bool _consumingServiceWidget = false;
+  final _recentWhiteboardSync = RecentWhiteboardSyncCoordinator();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _enableImmersiveMode();
+    // 推迟到第一帧绘制完成后再设置，避免 platform channel 触发 Android 窗口重布局，
+    // 打断 FlutterActivityAndFragmentDelegate 的 OnPreDrawListener 导致
+    // VRI "cancelAndRedraw" 警告循环。
+    WidgetsBinding.instance.addPostFrameCallback((_) => _enableImmersiveMode());
     const ExternalDocumentChannelOhos().setEnqueueListener(
       _drainPendingDocuments,
     );
+    const ServiceWidgetChannelOhos().setLaunchListener(
+      _drainPendingServiceWidgetActions,
+    );
     Future.microtask(_drainPendingDocuments);
+    Future.microtask(_drainPendingServiceWidgetActions);
   }
 
   @override
@@ -71,6 +82,47 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
       }
     } finally {
       _consuming = false;
+    }
+  }
+
+  Future<void> _drainPendingServiceWidgetActions() async {
+    if (_consumingServiceWidget) return;
+    _consumingServiceWidget = true;
+    try {
+      while (true) {
+        try {
+          final libraryIndex = await ref.read(libraryIndexProvider.future);
+          // 启动时把已存储的最近白板推一次给服务卡片，使卡片在冷启动后
+          // 能尽快从占位文案切换为真实内容（卡片进程与主进程独立）。
+          await _recentWhiteboardSync.syncFromStore();
+          final location =
+              await _recentWhiteboardSync.takePendingResumeLocation(
+            libraryIndex.notes,
+          );
+          if (location == null) {
+            // 检查是否有创建笔记 action
+            final action =
+                await const ServiceWidgetChannelOhos().takePendingLaunchAction();
+            if (action == ServiceWidgetLaunchAction.createNote) {
+              widget._router.push(AppRoutes.createNote);
+            }
+            break;
+          }
+          widget._router.go(location);
+        } on PlatformException catch (e, st) {
+          debugPrint(
+            '[FlowMuseApp] _drainPendingServiceWidgetActions PlatformException: $e\n$st',
+          );
+          break;
+        } on MissingPluginException catch (e, st) {
+          debugPrint(
+            '[FlowMuseApp] _drainPendingServiceWidgetActions MissingPluginException: $e\n$st',
+          );
+          break;
+        }
+      }
+    } finally {
+      _consumingServiceWidget = false;
     }
   }
 

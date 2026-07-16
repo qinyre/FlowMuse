@@ -73,6 +73,8 @@ Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
 /// (like [TextEditingController]).
 enum SceneChangeSource { userEdit, undo, redo, remoteApply, restore }
 
+enum _TwoFingerGestureMode { pan, zoom }
+
 class MarkdrawController extends ChangeNotifier {
   MarkdrawController({
     MarkdrawEditorConfig config = const MarkdrawEditorConfig(),
@@ -122,6 +124,7 @@ class MarkdrawController extends ChangeNotifier {
   bool _palmRejectionEnabled = true;
   bool _twoFingerZoomEnabled = true;
   bool _singleFingerPanEnabled = true;
+  bool _fingerDrawingEnabled = false;
   final bool _useUnifiedModeler = true;
 
   // debug/test 录制器：null 时不录制（release 默认关闭）
@@ -164,6 +167,7 @@ class MarkdrawController extends ChangeNotifier {
   bool _viewMode = false;
   ToolType? _toolBeforeViewMode;
   ColorPickerTarget? _pendingColorPicker;
+  bool _pendingEyedropper = false;
   ElementStyle _defaultStyle = const ElementStyle();
   String _canvasBackgroundColor = '#ffffff';
   String _themeCanvasBackgroundColor = '#ffffff';
@@ -232,6 +236,7 @@ class MarkdrawController extends ChangeNotifier {
   Size? _lastCanvasSize;
   Bounds? _contentBounds;
   Size _canvasSize = Size.zero;
+  Offset _canvasGlobalOffset = Offset.zero;
 
   /// Current mouse position in screen coordinates; used for eraser cursor.
   Offset? mousePosition;
@@ -240,6 +245,7 @@ class MarkdrawController extends ChangeNotifier {
   double _pinchStartZoom = 1.0;
   Offset _pinchStartOffset = Offset.zero;
   Offset _pinchStartFocalPoint = Offset.zero;
+  _TwoFingerGestureMode? _twoFingerGestureMode;
   bool _isViewportGesture = false;
 
   /// Callback invoked when the user toggles the theme. Set by [MarkdrawEditor].
@@ -330,10 +336,13 @@ class MarkdrawController extends ChangeNotifier {
 
   Size get canvasSize => _canvasSize;
 
+  Offset get canvasGlobalOffset => _canvasGlobalOffset;
+
   bool get isPagedViewport => _layout.isPaged && _layout.pages.isNotEmpty;
 
   bool get canPanPagedViewportWithTouch =>
       _singleFingerPanEnabled &&
+      !_fingerDrawingEnabled &&
       (!_palmRejectionEnabled || _activeStylusPointerId == null);
 
   PagedViewportMetrics? get pagedViewportMetrics => computePagedViewportMetrics(
@@ -391,6 +400,7 @@ class MarkdrawController extends ChangeNotifier {
     required bool palmRejectionEnabled,
     required bool twoFingerZoomEnabled,
     required bool singleFingerPanEnabled,
+    required bool fingerDrawingEnabled,
   }) {
     _brushStates.addAll(brushStates);
     _activeBrushType = defaultBrush;
@@ -401,6 +411,7 @@ class MarkdrawController extends ChangeNotifier {
     if (!palmRejectionEnabled) _rejectedTouchPointers.clear();
     _twoFingerZoomEnabled = twoFingerZoomEnabled;
     _singleFingerPanEnabled = singleFingerPanEnabled;
+    _fingerDrawingEnabled = fingerDrawingEnabled;
     if (_editorState.activeToolType == defaultTool) {
       notifyListeners();
     } else {
@@ -519,6 +530,9 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Which color picker should auto-open, or null.
   ColorPickerTarget? get pendingColorPicker => _pendingColorPicker;
+
+  /// Whether the eyedropper should auto-activate when the color picker opens.
+  bool get pendingEyedropper => _pendingEyedropper;
 
   /// The element ID currently being inline-text-edited, or null.
   ElementId? get editingTextElementId => _editingTextElementId;
@@ -656,6 +670,10 @@ class MarkdrawController extends ChangeNotifier {
   set canvasSize(Size value) {
     _canvasSize = value;
     _applyViewportConstraints();
+  }
+
+  set canvasGlobalOffset(Offset value) {
+    _canvasGlobalOffset = value;
   }
 
   // --- Lifecycle ---
@@ -1888,7 +1906,9 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   bool get _usesTemporaryTouchPan =>
-      _singleFingerPanEnabled && _editorState.activeToolType != ToolType.hand;
+      _singleFingerPanEnabled &&
+      !_fingerDrawingEnabled &&
+      _editorState.activeToolType != ToolType.hand;
 
   /// Handles pointer down: commits text edits, dispatches to tool, handles
   /// link-to-element mode and link icon clicks.
@@ -2240,23 +2260,32 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Records the starting zoom and offset for a pinch gesture.
   void onScaleStart(ScaleStartDetails details) {
-    if (!_twoFingerZoomEnabled) return;
+    if (!_twoFingerZoomEnabled && !_fingerDrawingEnabled) return;
     _pinchStartZoom = _editorState.viewport.zoom;
     _pinchStartOffset = _editorState.viewport.offset;
     _pinchStartFocalPoint = details.localFocalPoint;
+    _twoFingerGestureMode = null;
   }
 
   /// Applies pinch-to-zoom and pan during a scale gesture.
   void onScaleUpdate(ScaleUpdateDetails details) {
-    if (!_twoFingerZoomEnabled) return;
+    if (!_twoFingerZoomEnabled && !_fingerDrawingEnabled) return;
     if (details.pointerCount < 2) return;
+    final mode = _twoFingerGestureMode ?? _resolveTwoFingerGesture(details);
+    if (mode == null) return;
+    _twoFingerGestureMode = mode;
     if (!_isViewportGesture) {
       _isViewportGesture = true;
       _cancelActiveInteractionForViewportGesture();
     }
-    final newZoom = (_pinchStartZoom * details.scale)
-        .clamp(_config.minZoom, _config.maxZoom)
-        .toDouble();
+    final newZoom = mode == _TwoFingerGestureMode.zoom
+        ? (_pinchStartZoom * details.scale)
+              .clamp(_config.minZoom, _config.maxZoom)
+              .toDouble()
+        : _pinchStartZoom;
+    final focalPoint = mode == _TwoFingerGestureMode.zoom
+        ? _pinchStartFocalPoint
+        : details.localFocalPoint;
 
     // Both `scale` and the focal point are cumulative from the start of the
     // gesture. Keep the scene point under the initial focal point anchored
@@ -2267,12 +2296,24 @@ class MarkdrawController extends ChangeNotifier {
     );
     final newViewport = ViewportState(
       offset: Offset(
-        anchoredScenePoint.dx - details.localFocalPoint.dx / newZoom,
-        anchoredScenePoint.dy - details.localFocalPoint.dy / newZoom,
+        anchoredScenePoint.dx - focalPoint.dx / newZoom,
+        anchoredScenePoint.dy - focalPoint.dy / newZoom,
       ),
       zoom: newZoom,
     );
     applyResult(UpdateViewportResult(newViewport));
+  }
+
+  _TwoFingerGestureMode? _resolveTwoFingerGesture(
+    ScaleUpdateDetails details,
+  ) {
+    if ((details.scale - 1).abs() >= 0.02) {
+      return _TwoFingerGestureMode.zoom;
+    }
+    if ((details.localFocalPoint - _pinchStartFocalPoint).distance >= 2) {
+      return _TwoFingerGestureMode.pan;
+    }
+    return null;
   }
 
   /// Releases any tool interaction once a two-finger viewport gesture wins.
@@ -2327,6 +2368,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Marks the end of a two-finger viewport gesture.
   void onScaleEnd(ScaleEndDetails details) {
     _isViewportGesture = false;
+    _twoFingerGestureMode = null;
   }
 
   // --- Style changes ---
@@ -4348,6 +4390,18 @@ class MarkdrawController extends ChangeNotifier {
   /// Clears the pending color picker request.
   void clearPendingColorPicker() {
     _pendingColorPicker = null;
+  }
+
+  /// Opens the stroke color picker AND auto-activates the eyedropper.
+  void requestEyedropper() {
+    _pendingColorPicker = ColorPickerTarget.stroke;
+    _pendingEyedropper = true;
+    notifyListeners();
+  }
+
+  /// Clears the eyedropper auto-activate flag.
+  void clearPendingEyedropper() {
+    _pendingEyedropper = false;
   }
 
   // --- Eyedropper sampling ---
