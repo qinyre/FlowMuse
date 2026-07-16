@@ -4,6 +4,8 @@ import 'canvas_layout.dart';
 
 enum TemplateWritingMode { horizontal, vertical }
 
+enum TemplateAnchorTextAlignment { center, bottom }
+
 class TemplateAnchor {
   const TemplateAnchor({
     required this.position,
@@ -13,6 +15,7 @@ class TemplateAnchor {
     required this.lineHeight,
     required this.writingMode,
     required this.pageId,
+    this.textAlignment = TemplateAnchorTextAlignment.center,
   });
 
   final Offset position;
@@ -22,6 +25,7 @@ class TemplateAnchor {
   final double lineHeight;
   final TemplateWritingMode writingMode;
   final String pageId;
+  final TemplateAnchorTextAlignment textAlignment;
 }
 
 class TemplateGeometry {
@@ -127,12 +131,13 @@ class TemplateAnchorResolver {
       anchors.add(
         TemplateAnchor(
           position: Offset(rect.left, y),
-          crossAxis: y + step / 2,
+          crossAxis: y,
           mainAxis: rect.left,
           fontSize: fontSize,
           lineHeight: step,
           writingMode: TemplateWritingMode.horizontal,
           pageId: page.id,
+          textAlignment: TemplateAnchorTextAlignment.bottom,
         ),
       );
     }

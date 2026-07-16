@@ -3330,11 +3330,14 @@ class MarkdrawController extends ChangeNotifier {
     final firstLineHeight = metrics.isEmpty
         ? element.fontSize * element.lineHeight
         : metrics.first.height;
+    final firstLineBottom = metrics.isEmpty
+        ? element.fontSize
+        : metrics.first.baseline + metrics.first.descent;
     painter.dispose();
-    return element.copyWith(
-      x: anchor.position.dx,
-      y: anchor.crossAxis - firstLineHeight / 2,
-    );
+    final y = anchor.textAlignment == TemplateAnchorTextAlignment.bottom
+        ? anchor.crossAxis - firstLineBottom
+        : anchor.crossAxis - firstLineHeight / 2;
+    return element.copyWith(x: anchor.position.dx, y: y);
   }
 
   TemplateAnchor? _templateAnchorForSmartLayoutBlock(
