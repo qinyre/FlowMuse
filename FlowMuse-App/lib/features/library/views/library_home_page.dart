@@ -130,5 +130,8 @@ List<NoteItem> _notesForSpecialView(
       const LibraryQuery(onlyDeleted: true),
     ),
   };
-  return source.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  return source.toList()..sort((a, b) {
+    final result = a.updatedAt.compareTo(b.updatedAt);
+    return state.sortAscending ? result : -result;
+  });
 }
