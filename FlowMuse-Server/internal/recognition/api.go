@@ -12,7 +12,6 @@ import (
 
 const maxInkBodyBytes = 512 * 1024
 const maxSmartLayoutBodyBytes = 32 * 1024 * 1024
-const maxAIAgentBodyBytes = 64 * 1024
 
 type Recognizer interface {
 	Recognize(context.Context, RecognizeRequest) (RecognizeResponse, error)
@@ -21,8 +20,6 @@ type Recognizer interface {
 type HTTPAPI struct {
 	recognizer     Recognizer
 	layouter       SmartLayouter
-	agent          AIAgentRunner
-	authorizeAgent func(*http.Request) bool
 	requestTimeout time.Duration
 }
 
@@ -38,49 +35,11 @@ func NewHTTPAPI(recognizer Recognizer, requestTimeout time.Duration, layouter ..
 	}
 }
 
-func (api *HTTPAPI) WithAIAgent(agent AIAgentRunner, authorize func(*http.Request) bool) *HTTPAPI {
-	api.agent = agent
-	api.authorizeAgent = authorize
-	return api
-}
-
 func (api *HTTPAPI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/ink/recognize", api.recognize)
 	mux.HandleFunc("/api/ink/smart-layout", api.smartLayout)
 	mux.HandleFunc("/api/ink/smart-layout/block", api.smartLayoutBlock)
 	mux.HandleFunc("/api/ink/smart-layout/compose", api.smartLayoutCompose)
-	if api.agent != nil {
-		mux.HandleFunc("/api/ai/agent", api.aiAgent)
-	}
-}
-
-func (api *HTTPAPI) aiAgent(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, "POST")
-		return
-	}
-	if api.authorizeAgent == nil || !api.authorizeAgent(r) {
-		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return
-	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-	var request AIAgentRequest
-	r.Body = http.MaxBytesReader(w, r.Body, maxAIAgentBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := validateAIAgentRequest(request); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	response, err := api.agent.RunAgent(ctx, request)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	writeJSON(w, http.StatusOK, response)
 }
 
 func (api *HTTPAPI) recognize(w http.ResponseWriter, r *http.Request) {

@@ -69,9 +69,17 @@ class PrivacyPolicyPage extends StatelessWidget {
                 '无法解读任何场景内容。',
           ),
           _PolicySection(
+            icon: LucideIcons.wandSparkles,
+            title: 'AI 笔记助手',
+            body:
+                '仅当你主动使用 AI 助手时，当前笔记标题和文本元素会发送到你在'
+                'StarNote 实验室中配置的模型服务。FlowMuse 不会把 API Key 或笔记内容'
+                '转发到自身服务器；模型服务如何处理数据取决于其隐私政策。',
+          ),
+          _PolicySection(
             icon: LucideIcons.wifi,
             title: '权限用途',
-            body: '· 网络访问（INTERNET）：用于账户登录与实时协作同步\n'
+            body: '· 网络访问（INTERNET）：用于账户登录、实时协作与用户主动发起的 AI 请求\n'
                 '· 网络状态（GET_NETWORK_INFO，鸿蒙端）：用于检测当前网络连接状态\n'
                 '· 文件读取（按需）：仅在你主动导入图片、PDF 或备份文件时使用',
           ),

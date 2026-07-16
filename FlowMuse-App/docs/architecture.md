@@ -34,7 +34,7 @@ lib/features/<feature>/
 
 语音转文字通过统一 `SpeechRecognitionService` 接入：Android 与鸿蒙共用 `flow_muse/speech_recognition` Platform Channel，Web 使用浏览器 SpeechRecognition。中间结果只保存在 `MarkdrawEditor` 的临时 UI 状态，最终结果经 `MarkdrawController.insertPlainText()` 创建一个普通 `TextElement`，因此不改变 Excalidraw 格式和协作协议。默认不保存录音，其他平台缺少原生实现时安全降级为 unavailable。
 
-AI 笔记助手只提取当前标题和未删除 `TextElement` 的文本，通过已登录请求发送给服务端。服务端使用 Function Calling 将模型输出收敛为 `rename_note` / `insert_text` 动作；客户端再次严格校验并展示预览，确认后才复用 `LibraryIndexNotifier.renameNote()` 和 `MarkdrawController.insertPlainTexts()` 写入。模型密钥不进入客户端，第一版不读取原始笔迹、图片或 PDF，也不改变场景格式和协作协议。
+AI 笔记助手只提取当前标题和未删除 `TextElement` 的文本，使用用户在 StarNote 实验室配置的 OpenAI 兼容 Base URL、API Key 和模型名称直接发起 Function Calling。API Key 存在本机安全存储，模型输出只允许 `rename_note` / `insert_text`，经客户端严格校验和预览确认后才复用 `LibraryIndexNotifier.renameNote()` 与 `MarkdrawController.insertPlainTexts()` 写入。第一版不读取原始笔迹、图片或 PDF，也不改变场景格式和协作协议。
 
 ## 协作
 

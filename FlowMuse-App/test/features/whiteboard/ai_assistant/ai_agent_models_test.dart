@@ -1,18 +1,29 @@
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_config_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('解析受支持的多操作响应', () {
-    final response = AiAgentResponse.fromJson({
-      'message': '准备应用',
-      'actions': [
+    final response = AiAgentResponse.fromOpenAiJson({
+      'choices': [
         {
-          'tool': 'rename_note',
-          'arguments': {'title': '课堂笔记总结'},
-        },
-        {
-          'tool': 'insert_text',
-          'arguments': {'text': '总结：今天学习了状态管理。'},
+          'message': {
+            'content': '准备应用',
+            'tool_calls': [
+              {
+                'function': {
+                  'name': 'rename_note',
+                  'arguments': '{"title":"课堂笔记总结"}',
+                },
+              },
+              {
+                'function': {
+                  'name': 'insert_text',
+                  'arguments': {'text': '总结：今天学习了状态管理。'},
+                },
+              },
+            ],
+          },
         },
       ],
     });
@@ -20,6 +31,32 @@ void main() {
     expect(response.actions, hasLength(2));
     expect(response.actions.first.tool, AiAgentTool.renameNote);
     expect(response.actions.first.value, '课堂笔记总结');
+  });
+
+  test('Base URL 自动补齐 Chat Completions 路径', () {
+    const config = AiAgentConfig(
+      baseUrl: 'https://example.com/v1/',
+      apiKey: 'key',
+      model: 'model',
+    );
+
+    expect(
+      config.chatCompletionsUri.toString(),
+      'https://example.com/v1/chat/completions',
+    );
+  });
+
+  test('完整 Chat Completions URL 末尾斜杠不会重复拼接', () {
+    const config = AiAgentConfig(
+      baseUrl: 'https://example.com/v1/chat/completions/',
+      apiKey: 'key',
+      model: 'model',
+    );
+
+    expect(
+      config.chatCompletionsUri.toString(),
+      'https://example.com/v1/chat/completions',
+    );
   });
 
   test('未知工具一律拒绝', () {
