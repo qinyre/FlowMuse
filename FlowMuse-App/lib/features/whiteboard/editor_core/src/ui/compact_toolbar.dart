@@ -259,10 +259,15 @@ class CompactToolbar extends StatelessWidget {
 
   Future<void> _runGlobalSmartLayout(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
+    final engine = await _pickSmartLayoutRecognitionEngine(context);
+    if (engine == null || !context.mounted) {
+      return;
+    }
     bool changed;
     Object? error;
     try {
       changed = await controller.runGlobalSmartLayout(
+        engine: engine,
         onProgress: (completed, total) {
           if (!context.mounted) return;
           _showSmartLayoutProgress(messenger, completed, total);
@@ -280,6 +285,36 @@ class CompactToolbar extends StatelessWidget {
           maxLines: 5,
           overflow: TextOverflow.ellipsis,
         ),
+      ),
+    );
+  }
+
+  Future<SmartLayoutRecognitionEngine?> _pickSmartLayoutRecognitionEngine(
+    BuildContext context,
+  ) {
+    return showDialog<SmartLayoutRecognitionEngine>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('选择识别模式'),
+        content: const Text('请选择全局智能排版使用的识别引擎。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(SmartLayoutRecognitionEngine.myscript),
+            child: const Text('MyScript识别'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(SmartLayoutRecognitionEngine.ai),
+            child: const Text('AI识别'),
+          ),
+        ],
       ),
     );
   }

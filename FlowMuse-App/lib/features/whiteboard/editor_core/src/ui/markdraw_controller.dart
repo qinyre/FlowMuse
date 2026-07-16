@@ -33,6 +33,8 @@ const String _logTag = 'InkRecognition';
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
 
+enum SmartLayoutRecognitionEngine { ai, myscript }
+
 Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
   if (!layout.isPaged) {
     return scene;
@@ -1237,8 +1239,9 @@ class MarkdrawController extends ChangeNotifier {
 
   InkRecognitionRequest? _buildInkRecognitionRequest(
     String sessionId,
-    List<FreedrawElement> strokes,
-  ) {
+    List<FreedrawElement> strokes, {
+    String hint = 'text',
+  }) {
     if (strokes.isEmpty) {
       return null;
     }
@@ -1284,7 +1287,7 @@ class MarkdrawController extends ChangeNotifier {
         width: math.max(maxX - minX, 1.0),
         height: math.max(maxY - minY, 1.0),
       ),
-      hint: 'text',
+      hint: hint,
     );
   }
 
@@ -2873,13 +2876,21 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   Future<bool> runGlobalSmartLayout({
+    SmartLayoutRecognitionEngine engine = SmartLayoutRecognitionEngine.ai,
     void Function(int completed, int total)? onProgress,
   }) async {
     final layoutCallback = onSmartLayoutInk;
     final blockCallback = onRecognizeSmartLayoutBlock;
     final composeCallback = onComposeSmartLayout;
-    if ((layoutCallback == null &&
-            (blockCallback == null || composeCallback == null)) ||
+    final myScriptCallback = onRecognizeInk;
+    final canRecognizeWithAI =
+        layoutCallback != null ||
+        (blockCallback != null && composeCallback != null);
+    final canRecognizeWithMyScript =
+        myScriptCallback != null && composeCallback != null;
+    if ((engine == SmartLayoutRecognitionEngine.ai && !canRecognizeWithAI) ||
+        (engine == SmartLayoutRecognitionEngine.myscript &&
+            !canRecognizeWithMyScript) ||
         _recognizingInk) {
       return false;
     }
@@ -2888,11 +2899,30 @@ class MarkdrawController extends ChangeNotifier {
       final inkGroups = _smartLayoutInkGroups();
       if (inkGroups.isEmpty) return false;
       if (_disposed) return false;
-      final request = await _buildSmartLayoutRequest(inkGroups);
+      final request = await _buildSmartLayoutRequest(inkGroups, engine: engine);
       if (_disposed || request.blocks.isEmpty) return false;
       SmartLayoutResponse response;
       try {
-        if (blockCallback != null && composeCallback != null) {
+        if (engine == SmartLayoutRecognitionEngine.myscript) {
+          final recognized = <SmartLayoutRecognizedBlock>[];
+          onProgress?.call(0, request.blocks.length);
+          for (final block in request.blocks) {
+            if (_disposed) return false;
+            final strokes = inkGroups[block.id] ?? const <FreedrawElement>[];
+            recognized.add(
+              await _recognizeSmartLayoutBlockWithMyScript(
+                block,
+                strokes,
+                myScriptCallback!,
+              ),
+            );
+            onProgress?.call(recognized.length, request.blocks.length);
+          }
+          if (_disposed) return false;
+          response = await composeCallback!(
+            SmartLayoutComposeRequest(pages: request.pages, blocks: recognized),
+          );
+        } else if (blockCallback != null && composeCallback != null) {
           final recognized = <SmartLayoutRecognizedBlock>[];
           onProgress?.call(0, request.blocks.length);
           for (final block in request.blocks) {
@@ -2947,8 +2977,9 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   Future<SmartLayoutRequest> _buildSmartLayoutRequest(
-    Map<String, List<FreedrawElement>> inkGroups,
-  ) async {
+    Map<String, List<FreedrawElement>> inkGroups, {
+    SmartLayoutRecognitionEngine engine = SmartLayoutRecognitionEngine.ai,
+  }) async {
     final pages = _layout.ensurePage().pages.map((page) {
       final geometry = TemplateAnchorResolver.resolve(page);
       return SmartLayoutPageRequest(
@@ -2978,7 +3009,11 @@ class MarkdrawController extends ChangeNotifier {
     }).toList();
     final blocks = <SmartLayoutInkBlockRequest>[];
     for (final entry in inkGroups.entries) {
-      final block = await _smartLayoutInkBlockRequest(entry.key, entry.value);
+      final block = await _smartLayoutInkBlockRequest(
+        entry.key,
+        entry.value,
+        includeImage: engine == SmartLayoutRecognitionEngine.ai,
+      );
       if (block != null) {
         blocks.add(block);
       }
@@ -3203,19 +3238,123 @@ class MarkdrawController extends ChangeNotifier {
 
   Future<SmartLayoutInkBlockRequest?> _smartLayoutInkBlockRequest(
     String id,
-    List<FreedrawElement> strokes,
-  ) async {
+    List<FreedrawElement> strokes, {
+    bool includeImage = true,
+  }) async {
     if (strokes.isEmpty) return null;
     final bounds = _boundsForElements(strokes);
     if (bounds == null) return null;
-    final imageBytes = await _renderInkBlockPng(strokes);
-    if (imageBytes == null || imageBytes.isEmpty) return null;
+    final imageBytes = includeImage ? await _renderInkBlockPng(strokes) : null;
+    if (includeImage && (imageBytes == null || imageBytes.isEmpty)) {
+      return null;
+    }
     return SmartLayoutInkBlockRequest(
       id: id,
       pageId: _pageIdForElement(strokes.first),
       bounds: bounds,
       startedAt: _startedAtForStrokes(strokes),
-      imageBase64: base64Encode(imageBytes),
+      imageBase64: imageBytes == null ? '' : base64Encode(imageBytes),
+    );
+  }
+
+  Future<SmartLayoutRecognizedBlock> _recognizeSmartLayoutBlockWithMyScript(
+    SmartLayoutInkBlockRequest block,
+    List<FreedrawElement> strokes,
+    Future<InkRecognitionResult> Function(InkRecognitionRequest) recognize,
+  ) async {
+    final request = _buildInkRecognitionRequest(
+      block.id,
+      strokes,
+      hint: 'auto',
+    );
+    if (request == null) {
+      return SmartLayoutRecognizedBlock(
+        id: block.id,
+        pageId: block.pageId,
+        type: 'error',
+        bounds: block.bounds,
+        startedAt: block.startedAt,
+        error: '没有可识别的笔迹点',
+      );
+    }
+    try {
+      final result = await recognize(request);
+      return _smartLayoutBlockFromInkRecognitionResult(block, result);
+    } catch (error) {
+      return SmartLayoutRecognizedBlock(
+        id: block.id,
+        pageId: block.pageId,
+        type: 'error',
+        bounds: block.bounds,
+        startedAt: block.startedAt,
+        error: error.toString(),
+      );
+    }
+  }
+
+  SmartLayoutRecognizedBlock _smartLayoutBlockFromInkRecognitionResult(
+    SmartLayoutInkBlockRequest block,
+    InkRecognitionResult result,
+  ) {
+    final elements = result.elements.where((element) {
+      final text = (element.latex ?? element.text ?? '').trim();
+      return text.isNotEmpty;
+    }).toList();
+    if (elements.isEmpty) {
+      return SmartLayoutRecognizedBlock(
+        id: block.id,
+        pageId: block.pageId,
+        type: 'error',
+        bounds: block.bounds,
+        startedAt: block.startedAt,
+        error: 'MyScript 未返回文字',
+      );
+    }
+    InkRecognizedElement? formula;
+    for (final element in elements) {
+      if (element.type == 'math' || (element.latex ?? '').trim().isNotEmpty) {
+        formula = element;
+        break;
+      }
+    }
+    if (formula != null) {
+      final latex = (formula.latex ?? formula.text ?? '').trim();
+      return SmartLayoutRecognizedBlock(
+        id: block.id,
+        pageId: block.pageId,
+        type: 'formula',
+        text: latex,
+        latex: latex,
+        bounds: block.bounds,
+        startedAt: block.startedAt,
+      );
+    }
+    elements.sort((a, b) {
+      final byY = a.y.compareTo(b.y);
+      if (byY != 0) return byY;
+      return a.x.compareTo(b.x);
+    });
+    final text = elements
+        .map((element) => (element.text ?? element.latex ?? '').trim())
+        .where((value) => value.isNotEmpty)
+        .join('');
+    if (text.isEmpty) {
+      return SmartLayoutRecognizedBlock(
+        id: block.id,
+        pageId: block.pageId,
+        type: 'error',
+        bounds: block.bounds,
+        startedAt: block.startedAt,
+        error: 'MyScript 未返回文字',
+      );
+    }
+    return SmartLayoutRecognizedBlock(
+      id: block.id,
+      pageId: block.pageId,
+      type: 'text',
+      text: text,
+      bounds: block.bounds,
+      startedAt: block.startedAt,
     );
   }
 
