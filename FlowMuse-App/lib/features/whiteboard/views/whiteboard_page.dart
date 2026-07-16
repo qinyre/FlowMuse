@@ -147,6 +147,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       palmRejectionEnabled: preferences.palmRejectionEnabled,
       twoFingerZoomEnabled: preferences.twoFingerZoomEnabled,
       singleFingerPanEnabled: preferences.singleFingerPanEnabled,
+      fingerDrawingEnabled: preferences.fingerDrawingEnabled,
     );
     _editorPreferencesApplied = true;
   }
@@ -1643,6 +1644,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       );
     });
     final state = ref.watch(whiteboardViewModelProvider);
+    final editorPreferences = ref.watch(editorPreferencesProvider).value;
     final themePreset = ref.watch(themeViewModelProvider);
     final effectivePreset = effectiveAppThemePreset(
       themePreset,
@@ -1690,6 +1692,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               useFlatBackgrounds: effectivePreset.usesMonochromeBackground,
               currentThemeMode: themePreset.themeMode,
               onThemeModeChanged: _changeThemeMode,
+              fingerDrawingEnabled:
+                  editorPreferences?.fingerDrawingEnabled ?? false,
+              onFingerDrawingEnabledChanged: (value) {
+                unawaited(
+                  ref
+                      .read(editorPreferencesProvider.notifier)
+                      .setFingerDrawingEnabled(value),
+                );
+              },
               saveStatusLabel: _saveStatusLabel(state.saveStatus),
               collaborating: state.collaborating,
               collaborationConnecting:

@@ -38,6 +38,7 @@ class EditorPreferences {
     this.palmRejectionEnabled = true,
     this.twoFingerZoomEnabled = true,
     this.singleFingerPanEnabled = true,
+    this.fingerDrawingEnabled = false,
     this.autosaveInterval = AutosaveInterval.halfSecond,
     this.defaultLayoutType = CanvasLayoutType.paged,
     this.defaultPageTemplate = CanvasPageTemplate.blank,
@@ -55,6 +56,7 @@ class EditorPreferences {
   final bool palmRejectionEnabled;
   final bool twoFingerZoomEnabled;
   final bool singleFingerPanEnabled;
+  final bool fingerDrawingEnabled;
 
   /// Local-draft auto-save debounce interval.
   final AutosaveInterval autosaveInterval;
@@ -74,6 +76,7 @@ class EditorPreferences {
     bool? palmRejectionEnabled,
     bool? twoFingerZoomEnabled,
     bool? singleFingerPanEnabled,
+    bool? fingerDrawingEnabled,
     AutosaveInterval? autosaveInterval,
     CanvasLayoutType? defaultLayoutType,
     CanvasPageTemplate? defaultPageTemplate,
@@ -89,6 +92,7 @@ class EditorPreferences {
       twoFingerZoomEnabled: twoFingerZoomEnabled ?? this.twoFingerZoomEnabled,
       singleFingerPanEnabled:
           singleFingerPanEnabled ?? this.singleFingerPanEnabled,
+      fingerDrawingEnabled: fingerDrawingEnabled ?? this.fingerDrawingEnabled,
       autosaveInterval: autosaveInterval ?? this.autosaveInterval,
       defaultLayoutType: defaultLayoutType ?? this.defaultLayoutType,
       defaultPageTemplate: defaultPageTemplate ?? this.defaultPageTemplate,
@@ -112,6 +116,7 @@ class EditorPreferences {
     'palmRejectionEnabled': palmRejectionEnabled,
     'twoFingerZoomEnabled': twoFingerZoomEnabled,
     'singleFingerPanEnabled': singleFingerPanEnabled,
+    'fingerDrawingEnabled': fingerDrawingEnabled,
     'autosaveInterval': autosaveInterval.name,
     'defaultLayoutType': defaultLayoutType.name,
     'defaultPageTemplate': defaultPageTemplate.name,
@@ -159,6 +164,7 @@ class EditorPreferences {
       palmRejectionEnabled: _bool(json['palmRejectionEnabled'], true),
       twoFingerZoomEnabled: _bool(json['twoFingerZoomEnabled'], true),
       singleFingerPanEnabled: _bool(json['singleFingerPanEnabled'], true),
+      fingerDrawingEnabled: _bool(json['fingerDrawingEnabled'], false),
       autosaveInterval: _enumByName(
         AutosaveInterval.values,
         json['autosaveInterval'],
