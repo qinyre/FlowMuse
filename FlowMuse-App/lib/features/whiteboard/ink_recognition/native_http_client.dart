@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -41,7 +43,7 @@ class NativeHttpClient {
   }) async {
     debugPrint('[NativeHttp] 📡 鸿蒙原生通道 | url: $url');
     final result = await _channel.invokeMethod<Map<Object?, Object?>>('post', {
-      'url': url, 'headers': headers, 'body': body,
+      'url': url, 'headersJson': jsonEncode(headers), 'body': body,
       'connectTimeoutMs': connectTimeoutMs, 'readTimeoutMs': readTimeoutMs,
     });
     if (result == null) throw Exception('Native HTTP channel returned null');
