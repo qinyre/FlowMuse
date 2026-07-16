@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter/services.dart';
 
 import '../features/library/repositories/library_repository.dart';
 import '../features/whiteboard/share/models/external_document_request.dart';
@@ -37,7 +36,10 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _enableImmersiveMode();
+    // 推迟到第一帧绘制完成后再设置，避免 platform channel 触发 Android 窗口重布局，
+    // 打断 FlutterActivityAndFragmentDelegate 的 OnPreDrawListener 导致
+    // VRI "cancelAndRedraw" 警告循环。
+    WidgetsBinding.instance.addPostFrameCallback((_) => _enableImmersiveMode());
     const ExternalDocumentChannelOhos().setEnqueueListener(
       _drainPendingDocuments,
     );

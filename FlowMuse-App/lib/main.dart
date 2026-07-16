@@ -8,12 +8,15 @@ import 'features/whiteboard/editor_core/src/rendering/rough/pencil_shader.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(isOptional: true);
 
-  // 铅笔纹理 shader（鸿蒙等不支持的平台会静默降级，不影响使用）
-  await PencilShader.init();
-
-  final initialThemePreset = await loadSavedThemePreset();
+  // 并行初始化，减少 runApp 前的等待时间，缩小 OnPreDrawListener 触发窗口
+  final (_, initialThemePreset) = await (
+    Future.wait([
+      dotenv.load(isOptional: true),
+      PencilShader.init(), // 铅笔纹理 shader（不支持的平台静默降级）
+    ]),
+    loadSavedThemePreset(),
+  ).wait;
   runApp(
     ProviderScope(
       overrides: [
