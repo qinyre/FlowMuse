@@ -13,7 +13,7 @@ workflow:
 
 analyze_flutter:
   stage: quality
-  tags: [linux]
+  tags: [ohos]
   script:
     - cd FlowMuse-App
     - flutter pub get
