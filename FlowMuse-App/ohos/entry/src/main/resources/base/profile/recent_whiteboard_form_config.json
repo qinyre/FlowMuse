@@ -11,7 +11,8 @@
         "autoDesignWidth": true
       },
       "isDefault": true,
-      "updateEnabled": false,
+      "updateEnabled": true,
+      "updateDuration": 1,
       "defaultDimension": "2*2",
       "supportDimensions": ["2*2", "2*4"],
       "isDynamic": true

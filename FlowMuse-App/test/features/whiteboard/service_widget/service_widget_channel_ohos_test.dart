@@ -31,7 +31,8 @@ void main() {
     expect(recorded?.method, 'updateLastWhiteboard');
     expect(recorded?.arguments['noteId'], 'note-123');
     expect(recorded?.arguments['title'], '线代课堂笔记');
-    expect(recorded?.arguments['updatedAt'], 1721000000000);
+    // updatedAt 以字符串传输，避开鸿蒙 MethodChannel 对 int64 的 BigInt 解码问题。
+    expect(recorded?.arguments['updatedAt'], '1721000000000');
   });
 
   test('takePendingLaunchAction 识别 resumeLastWhiteboard', () async {

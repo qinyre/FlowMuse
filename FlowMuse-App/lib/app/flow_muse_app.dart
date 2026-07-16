@@ -64,6 +64,9 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp> {
       while (true) {
         try {
           final libraryIndex = await ref.read(libraryIndexProvider.future);
+          // 启动时把已存储的最近白板推一次给服务卡片，使卡片在冷启动后
+          // 能尽快从占位文案切换为真实内容（卡片进程与主进程独立）。
+          await _recentWhiteboardSync.syncFromStore();
           final location =
               await _recentWhiteboardSync.takePendingResumeLocation(
             libraryIndex.notes,

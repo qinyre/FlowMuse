@@ -76,14 +76,22 @@ void main() {
     );
   });
 
-  test('float updatedAt 被接受并截断为 int（鸿蒙桥发 float64）', () {
-    // Dart 侧 toJson() 将 updatedAt 发为 double 以绕过鸿蒙 MethodChannel 的
-    // BigInt 编码问题。tryParse 需要接受 num 并用 toInt() 截断。
+  test('字符串 updatedAt 被解析为 int（鸿蒙桥新格式，绕过 BigInt）', () {
+    // Dart 侧 toJson() 将 updatedAt 发为字符串，彻底绕过鸿蒙 MethodChannel
+    // 对 int64 的 BigInt 解码与精度问题。tryParse 用 int.tryParse 还原。
     final snapshot = RecentWhiteboardSnapshot.tryParse(
-      '{"noteId":"note-123","title":"线代课堂笔记","updatedAt":1721000000000.0}',
+      '{"noteId":"note-123","title":"线代课堂笔记","updatedAt":"1721000000000"}',
     );
 
     expect(snapshot?.updatedAt, 1721000000000);
+  });
+
+  test('旧格式 float/int updatedAt 仍被接受（向后兼容）', () {
+    // 旧版本以 double/int 存储的快照仍需可读。
+    final fromDouble = RecentWhiteboardSnapshot.tryParse(
+      '{"noteId":"note-123","title":"线代课堂笔记","updatedAt":1721000000000.0}',
+    );
+    expect(fromDouble?.updatedAt, 1721000000000);
   });
 
   test('存在快照且笔记未删除时跳最近白板，否则回退资料库', () {

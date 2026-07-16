@@ -14,9 +14,10 @@ class RecentWhiteboardSnapshot {
   Map<String, Object?> toJson() => {
     'noteId': noteId,
     'title': title,
-    // int64 在鸿蒙 Flutter 桥被解码为 BigInt，BigInt 无法 JSON.stringify。
-    // 改发 float64（double），桥侧解码为普通 JS number，ArkTS 可直接使用。
-    'updatedAt': updatedAt.toDouble(),
+    // updatedAt 以字符串传输，避开鸿蒙 MethodChannel 对 int64/double 的
+    // BigInt 解码与精度问题（曾出现大数被解码为 0 导致卡片显示"1月1日"）。
+    // 原生侧用 parseInt_ 还是 Number 还原。
+    'updatedAt': updatedAt.toString(),
   };
 
   String toJsonString() => jsonEncode(toJson());
@@ -29,13 +30,22 @@ class RecentWhiteboardSnapshot {
       final noteId = value['noteId'];
       final title = value['title'];
       final updatedAt = value['updatedAt'];
-      if (noteId is! String || title is! String || updatedAt is! num) {
+      if (noteId is! String || title is! String) {
         return null;
       }
+      // updatedAt 兼容字符串（新格式）与数字（旧格式/测试）
+      final parsedUpdatedAt = updatedAt is int
+          ? updatedAt
+          : updatedAt is double
+              ? updatedAt.toInt()
+              : updatedAt is String
+                  ? int.tryParse(updatedAt)
+                  : null;
+      if (parsedUpdatedAt == null) return null;
       return RecentWhiteboardSnapshot(
         noteId: noteId,
         title: title,
-        updatedAt: updatedAt.toInt(),
+        updatedAt: parsedUpdatedAt,
       );
     } catch (_) {
       return null;

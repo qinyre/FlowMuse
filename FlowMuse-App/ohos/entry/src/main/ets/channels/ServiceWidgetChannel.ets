@@ -1,3 +1,4 @@
+import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { formBindingData, formProvider } from '@kit.FormKit';
@@ -21,6 +22,26 @@ interface BindingPayload {
   buttonAction: string;
 }
 
+/**
+ * Returns a Preferences instance accessible across processes.
+ *
+ * 关键修复：UIAbility 与 FormExtensionAbility 运行在不同进程，且各自的
+ * ability context 解析出的 preferencesDir 不同（base/haps/<module>/preferences
+ * vs base/preferences），导致两进程访问的不是同一个 Preferences 文件——
+ * 主进程写的 snapshot 卡片进程永远读不到。改用 applicationContext 统一指向
+ * base/preferences，确保两进程访问同一文件。
+ *
+ * 同时使用 GSKV 模式（API 18+）保证多进程并发读写安全。
+ */
+async function getStore(context: Context): Promise<preferences.Preferences> {
+  const appContext = context.getApplicationContext();
+  const gskvSupported = preferences.isStorageTypeSupported(preferences.StorageType.GSKV);
+  const options: preferences.Options = gskvSupported
+    ? { name: STORE_NAME, storageType: preferences.StorageType.GSKV }
+    : { name: STORE_NAME };
+  return await preferences.getPreferences(appContext, options);
+}
+
 export class ServiceWidgetChannel {
   private static channel: MethodChannel | null = null;
   private static pendingLaunchAction: string | null = null;
@@ -40,7 +61,7 @@ export class ServiceWidgetChannel {
     channel.setMethodCallHandler({
       onMethodCall: (call: MethodCall, result: MethodResult): void => {
         if (call.method === 'updateLastWhiteboard') {
-          void this.handleUpdate(call.args as Record<string, Object>, result);
+          void this.handleUpdate(call.args as Map<string, Object>, result);
           return;
         }
         if (call.method === 'takePendingLaunchAction') {
@@ -59,8 +80,9 @@ export class ServiceWidgetChannel {
   }
 
   static async buildBindingPayload(context: Context): Promise<BindingPayload> {
-    const store = await preferences.getPreferences(context, STORE_NAME);
+    const store = await getStore(context);
     const raw = await store.get(SNAPSHOT_KEY, '') as string;
+    console.info('[ServiceWidget] buildBindingPayload raw snapshot: ' + raw);
     if (!raw) {
       return {
         appName: 'FlowMuse',
@@ -71,6 +93,8 @@ export class ServiceWidgetChannel {
       };
     }
     const snapshot = JSON.parse(raw) as Snapshot;
+    console.info('[ServiceWidget] buildBindingPayload parsed: title=' + snapshot.title
+      + ' updatedAt=' + snapshot.updatedAt);
     const detail = ServiceWidgetChannel.formatUpdatedAt(snapshot.updatedAt);
     return {
       appName: 'FlowMuse',
@@ -102,7 +126,7 @@ export class ServiceWidgetChannel {
   }
 
   static async rememberFormId(context: Context, formId: string): Promise<void> {
-    const store = await preferences.getPreferences(context, STORE_NAME);
+    const store = await getStore(context);
     const raw = await store.get(FORM_IDS_KEY, '[]') as string;
     const ids = JSON.parse(raw) as string[];
     if (!ids.includes(formId)) {
@@ -113,7 +137,7 @@ export class ServiceWidgetChannel {
   }
 
   static async removeFormId(context: Context, formId: string): Promise<void> {
-    const store = await preferences.getPreferences(context, STORE_NAME);
+    const store = await getStore(context);
     const raw = await store.get(FORM_IDS_KEY, '[]') as string;
     const ids = (JSON.parse(raw) as string[]).filter((id) => id !== formId);
     await store.put(FORM_IDS_KEY, JSON.stringify(ids));
@@ -127,26 +151,47 @@ export class ServiceWidgetChannel {
   }
 
   private async handleUpdate(
-    args: Record<string, Object>,
+    args: Map<string, Object>,
     result: MethodResult,
   ): Promise<void> {
     try {
+      const noteId = args.get('noteId') as string;
+      const title = args.get('title') as string;
+      const updatedAtRaw = args.get('updatedAt') as string;
+      console.info('[ServiceWidget] handleUpdate raw: noteId=' + noteId
+        + ' title=' + title + ' updatedAt=' + updatedAtRaw);
       const snapshot: Snapshot = {
-        noteId: args['noteId'] as string,
-        title: args['title'] as string,
-        // updatedAt comes from Flutter's Dart side as float64 to avoid BigInt
-        // encoding issues over MethodChannel (int64 is decoded as BigInt in
-        // ArkTS which cannot be JSON.stringify'd). Number() handles both
-        // number and any edge-case type the bridge might produce.
-        updatedAt: Number(args['updatedAt'] as Object),
+        noteId: noteId,
+        title: title,
+        // updatedAt 以字符串传输（避开鸿蒙 MethodChannel 对 int64 的 BigInt
+        // 解码问题），这里用 parseInt 还原为毫秒时间戳。
+        updatedAt: parseInt(updatedAtRaw, 10),
       };
-      const store = await preferences.getPreferences(this.context, STORE_NAME);
+      console.info('[ServiceWidget] handleUpdate snapshot: noteId=' + snapshot.noteId
+        + ' title=' + snapshot.title + ' updatedAt=' + snapshot.updatedAt);
+      const store = await getStore(this.context);
       await store.put(SNAPSHOT_KEY, JSON.stringify(snapshot));
       await store.flush();
-      const rawIds = await store.get(FORM_IDS_KEY, '[]') as string;
-      const ids = JSON.parse(rawIds) as string[];
-      await Promise.allSettled(ids.map((formId) => ServiceWidgetChannel.updateFormById(this.context, formId)));
-      result.success(null);
+      // 诊断：读回验证写入是否成功
+      const verifyRaw = await store.get(SNAPSHOT_KEY, '') as string;
+      console.info('[ServiceWidget] handleUpdate verify after write: ' + verifyRaw);
+      // 主进程（UIAbility）通知 FormExtensionAbility 进程重新加载。reloadAllForms
+      // 会回调该进程的 onUpdateForm，由它在自己的进程内读取 snapshot 并调 updateForm。
+      let reloadResult = 'unknown';
+      try {
+        await formProvider.reloadAllForms(this.context as common.UIAbilityContext);
+        reloadResult = 'reloadAllForms ok';
+      } catch (e) {
+        reloadResult = 'reloadAllForms failed: ' + (e as BusinessError).message;
+        // 回退：遍历 form_ids 直接刷新（主进程调 updateForm 也被官方支持）。
+        const rawIds = await store.get(FORM_IDS_KEY, '[]') as string;
+        console.info('[ServiceWidget] handleUpdate fallback form_ids: ' + rawIds);
+        const ids = JSON.parse(rawIds) as string[];
+        await Promise.allSettled(ids.map((formId) => ServiceWidgetChannel.updateFormById(this.context, formId)));
+        reloadResult += ' | fallback updated ' + ids.length + ' forms';
+      }
+      console.info('[ServiceWidget] handleUpdate done: ' + reloadResult);
+      result.success(reloadResult);
     } catch (err) {
       result.error('SERVICE_WIDGET_UPDATE_FAILED', JSON.stringify(err as BusinessError), null);
     }

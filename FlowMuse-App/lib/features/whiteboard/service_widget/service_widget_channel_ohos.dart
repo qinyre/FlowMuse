@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'recent_whiteboard_snapshot.dart';
@@ -10,12 +11,19 @@ class ServiceWidgetChannelOhos {
   static const _channel = MethodChannel('flow_muse/service_widget');
 
   Future<void> updateLastWhiteboard(RecentWhiteboardSnapshot snapshot) async {
+    debugPrint('[ServiceWidget] channel.updateLastWhiteboard invoking: ${snapshot.toJson()}');
     try {
-      await _channel.invokeMethod<void>(
+      final result = await _channel.invokeMethod<String>(
           'updateLastWhiteboard', snapshot.toJson());
-    } on MissingPluginException {
+      debugPrint('[ServiceWidget] channel.updateLastWhiteboard succeeded: $result');
+    } on MissingPluginException catch (e) {
+      debugPrint('[ServiceWidget] channel.updateLastWhiteboard MissingPluginException: $e');
       return;
-    } on PlatformException {
+    } on PlatformException catch (e) {
+      debugPrint('[ServiceWidget] channel.updateLastWhiteboard PlatformException: $e');
+      return;
+    } catch (e) {
+      debugPrint('[ServiceWidget] channel.updateLastWhiteboard error: $e');
       return;
     }
   }
