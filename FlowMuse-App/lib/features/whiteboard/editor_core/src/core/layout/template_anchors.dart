@@ -68,19 +68,24 @@ class TemplateAnchorResolver {
     final rect = page.bounds.deflate(TemplateGeometry.pageTemplateMargin);
     return switch (page.template) {
       CanvasPageTemplate.blank => _blank(page, rect),
-      CanvasPageTemplate.narrowLine => _horizontalLines(page, rect, 72, 96),
-      CanvasPageTemplate.wideLine => _horizontalLines(page, rect, 96, 144),
-      CanvasPageTemplate.grid => _horizontalLines(page, rect, 32, 64),
-      CanvasPageTemplate.dotGrid => _horizontalLines(page, rect, 32, 64),
-      CanvasPageTemplate.tianGrid => _practiceGrid(page, rect),
-      CanvasPageTemplate.miGrid => _practiceGrid(page, rect),
-      CanvasPageTemplate.narrowVerticalLine => _verticalLines(
+      CanvasPageTemplate.narrowLine => _ruledHorizontalLines(
         page,
         rect,
         72,
         96,
       ),
-      CanvasPageTemplate.wideVerticalLine => _verticalLines(
+      CanvasPageTemplate.wideLine => _ruledHorizontalLines(page, rect, 96, 144),
+      CanvasPageTemplate.grid => _horizontalLines(page, rect, 32, 64),
+      CanvasPageTemplate.dotGrid => _horizontalLines(page, rect, 32, 64),
+      CanvasPageTemplate.tianGrid => _practiceGrid(page, rect),
+      CanvasPageTemplate.miGrid => _practiceGrid(page, rect),
+      CanvasPageTemplate.narrowVerticalLine => _ruledVerticalLines(
+        page,
+        rect,
+        72,
+        96,
+      ),
+      CanvasPageTemplate.wideVerticalLine => _ruledVerticalLines(
         page,
         rect,
         96,
@@ -98,7 +103,7 @@ class TemplateAnchorResolver {
       anchors: [
         TemplateAnchor(
           position: rect.topLeft,
-          crossAxis: rect.top,
+          crossAxis: rect.top + lineHeight / 2,
           mainAxis: rect.left,
           fontSize: lineHeight * fontSizeToLineHeightRatio,
           lineHeight: lineHeight,
@@ -106,6 +111,34 @@ class TemplateAnchorResolver {
           pageId: page.id,
         ),
       ],
+      writingMode: TemplateWritingMode.horizontal,
+    );
+  }
+
+  static TemplateGeometry _ruledHorizontalLines(
+    CanvasPage page,
+    Rect rect,
+    double start,
+    double step,
+  ) {
+    final anchors = <TemplateAnchor>[];
+    for (var y = rect.top + start; y + step <= rect.bottom; y += step) {
+      final fontSize = step * fontSizeToLineHeightRatio;
+      anchors.add(
+        TemplateAnchor(
+          position: Offset(rect.left, y),
+          crossAxis: y + step / 2,
+          mainAxis: rect.left,
+          fontSize: fontSize,
+          lineHeight: step,
+          writingMode: TemplateWritingMode.horizontal,
+          pageId: page.id,
+        ),
+      );
+    }
+    return TemplateGeometry(
+      contentRect: rect,
+      anchors: anchors,
       writingMode: TemplateWritingMode.horizontal,
     );
   }
@@ -188,19 +221,19 @@ class TemplateAnchorResolver {
     );
   }
 
-  static TemplateGeometry _verticalLines(
+  static TemplateGeometry _ruledVerticalLines(
     CanvasPage page,
     Rect rect,
     double start,
     double step,
   ) {
     final anchors = <TemplateAnchor>[];
-    for (var x = rect.left + start; x < rect.right; x += step) {
+    for (var x = rect.left + start; x + step <= rect.right; x += step) {
       final fontSize = step * fontSizeToLineHeightRatio;
       anchors.add(
         TemplateAnchor(
-          position: Offset(x - fontSize, rect.top),
-          crossAxis: x,
+          position: Offset(x, rect.top),
+          crossAxis: x + step / 2,
           mainAxis: rect.top,
           fontSize: fontSize,
           lineHeight: step,

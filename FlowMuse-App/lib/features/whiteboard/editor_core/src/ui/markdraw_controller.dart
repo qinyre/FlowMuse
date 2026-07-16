@@ -3327,13 +3327,13 @@ class MarkdrawController extends ChangeNotifier {
     final painter = TextRenderer.buildTextPainter(element);
     painter.layout(maxWidth: element.width);
     final metrics = painter.computeLineMetrics();
-    final baseline = metrics.isEmpty
-        ? element.fontSize
-        : metrics.first.baseline;
+    final firstLineHeight = metrics.isEmpty
+        ? element.fontSize * element.lineHeight
+        : metrics.first.height;
     painter.dispose();
     return element.copyWith(
       x: anchor.position.dx,
-      y: anchor.crossAxis - baseline,
+      y: anchor.crossAxis - firstLineHeight / 2,
     );
   }
 
