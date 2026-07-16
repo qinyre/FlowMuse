@@ -14,7 +14,14 @@ import 'note_actions.dart';
 import 'note_bulk_action_bar.dart';
 import 'note_card.dart';
 
-enum _NoteAction { rename, moveToNotebook, selectTags, delete, restore }
+enum _NoteAction {
+  rename,
+  moveToNotebook,
+  selectTags,
+  delete,
+  restore,
+  deleteForever,
+}
 
 class LibraryContent extends StatefulWidget {
   const LibraryContent({
@@ -34,6 +41,7 @@ class LibraryContent extends StatefulWidget {
     required this.onDeleteSelected,
     required this.onRestoreSelected,
     required this.onRestoreNote,
+    required this.onDeleteNoteForever,
     required this.onDeleteSelectedForever,
     required this.onMoveSelectedToNotebook,
     required this.onAddTagsToSelected,
@@ -61,6 +69,7 @@ class LibraryContent extends StatefulWidget {
   final Future<void> Function() onDeleteSelected;
   final Future<void> Function() onRestoreSelected;
   final Future<void> Function(String noteId) onRestoreNote;
+  final Future<void> Function(String noteId) onDeleteNoteForever;
   final Future<void> Function() onDeleteSelectedForever;
   final Future<void> Function(String? notebookId) onMoveSelectedToNotebook;
   final Future<void> Function(List<String> tagIds) onAddTagsToSelected;
@@ -250,6 +259,7 @@ class _LibraryContentState extends State<LibraryContent> {
         onJoinRoom: widget.onJoinRoom,
         onOpenNote: widget.onOpenNote,
         onRestoreNote: widget.onRestoreNote,
+        onDeleteNoteForever: widget.onDeleteNoteForever,
         onRenameNote: widget.onRenameNote,
         onMoveNoteToNotebook: widget.onMoveNoteToNotebook,
         onSetNoteTags: widget.onSetNoteTags,
@@ -389,6 +399,7 @@ class _LibraryItems extends StatelessWidget {
     required this.onJoinRoom,
     required this.onOpenNote,
     required this.onRestoreNote,
+    required this.onDeleteNoteForever,
     this.onRenameNote,
     this.onMoveNoteToNotebook,
     this.onSetNoteTags,
@@ -406,6 +417,7 @@ class _LibraryItems extends StatelessWidget {
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
   final Future<void> Function(String noteId) onRestoreNote;
+  final Future<void> Function(String noteId) onDeleteNoteForever;
   final Future<void> Function(String noteId, String newName)? onRenameNote;
   final Future<void> Function(String noteId, String? notebookId)?
   onMoveNoteToNotebook;
@@ -426,6 +438,7 @@ class _LibraryItems extends StatelessWidget {
         onJoinRoom: onJoinRoom,
         onOpenNote: onOpenNote,
         onRestoreNote: onRestoreNote,
+        onDeleteNoteForever: onDeleteNoteForever,
         onRenameNote: onRenameNote,
         onMoveNoteToNotebook: onMoveNoteToNotebook,
         onSetNoteTags: onSetNoteTags,
@@ -448,6 +461,7 @@ class _LibraryItems extends StatelessWidget {
             onJoinRoom: onJoinRoom,
             onOpenNote: onOpenNote,
             onRestoreNote: onRestoreNote,
+            onDeleteNoteForever: onDeleteNoteForever,
             onRenameNote: onRenameNote,
             onMoveNoteToNotebook: onMoveNoteToNotebook,
             onSetNoteTags: onSetNoteTags,
@@ -480,6 +494,7 @@ class _LibraryItemsContent extends StatelessWidget {
     required this.onJoinRoom,
     required this.onOpenNote,
     required this.onRestoreNote,
+    required this.onDeleteNoteForever,
     this.onRenameNote,
     this.onMoveNoteToNotebook,
     this.onSetNoteTags,
@@ -495,6 +510,7 @@ class _LibraryItemsContent extends StatelessWidget {
   final VoidCallback onJoinRoom;
   final ValueChanged<NoteItem> onOpenNote;
   final Future<void> Function(String noteId) onRestoreNote;
+  final Future<void> Function(String noteId) onDeleteNoteForever;
   final Future<void> Function(String noteId, String newName)? onRenameNote;
   final Future<void> Function(String noteId, String? notebookId)?
   onMoveNoteToNotebook;
@@ -539,6 +555,14 @@ class _LibraryItemsContent extends StatelessWidget {
               child: ListTile(
                 leading: Icon(LucideIcons.rotateCcw),
                 title: Text('恢复'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            PopupMenuItem<_NoteAction>(
+              value: _NoteAction.deleteForever,
+              child: ListTile(
+                leading: Icon(LucideIcons.trash2),
+                title: Text('永久删除'),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
@@ -616,6 +640,8 @@ class _LibraryItemsContent extends StatelessWidget {
           await onDeleteNote!(item.id);
         case _NoteAction.restore:
           await onRestoreNote(item.id);
+        case _NoteAction.deleteForever:
+          await onDeleteNoteForever(item.id);
       }
     });
   }
