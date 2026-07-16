@@ -2108,6 +2108,9 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
         builder: (ctx) => _BackupListDialog(
           backups: backups,
           client: client,
+          remotePath: _pathCtrl.text.trim().isEmpty
+              ? '/FlowMuse/'
+              : _pathCtrl.text.trim(),
           onRestored: () {
             ref.invalidate(libraryIndexProvider);
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2324,11 +2327,13 @@ class _BackupListDialog extends StatefulWidget {
   const _BackupListDialog({
     required this.backups,
     required this.client,
+    required this.remotePath,
     required this.onRestored,
   });
 
   final List<WebDavBackupEntry> backups;
   final WebDavClient client;
+  final String remotePath;
   final VoidCallback onRestored;
 
   @override
@@ -2364,7 +2369,8 @@ class _BackupListDialogState extends State<_BackupListDialog> {
     try {
       await webDavBackupService.restoreBackup(
         client: widget.client,
-        remoteFilePath: entry.href,
+        remoteDirectory: widget.remotePath,
+        fileName: entry.fileName,
         localRepo: defaultLocalBackupRepository,
       );
       if (!mounted) return;

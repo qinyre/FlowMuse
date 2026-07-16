@@ -94,15 +94,25 @@ class WebDavBackupService {
     return backups;
   }
 
-  /// Downloads [remoteFilePath] from WebDAV and restores it into the local DB.
+  /// Downloads a backup file from WebDAV and restores it into the local DB.
+  ///
+  /// [remoteDirectory] is the user-configured directory (e.g. `/FlowMuse/`).
+  /// [fileName] is the bare filename (e.g. `FlowMuse_2026-07-16_12-00-00.json`).
+  ///
+  /// The path is rebuilt from directory + filename rather than using the raw
+  /// PROPFIND href, which would be an absolute server path (e.g. `/dav/FlowMuse/…`)
+  /// and would cause _resolve() to double the WebDAV base path, resulting in
+  /// a 409 Conflict error.
   Future<void> restoreBackup({
     required WebDavClient client,
-    required String remoteFilePath,
+    required String remoteDirectory,
+    required String fileName,
     required LocalBackupRepository localRepo,
   }) async {
-    final bytes = await client.getFile(remoteFilePath);
-    final decoded =
-        jsonDecode(utf8.decode(bytes)) as Map<String, Object?>;
+    final sep = remoteDirectory.endsWith('/') ? '' : '/';
+    final path = '$remoteDirectory$sep$fileName';
+    final bytes = await client.getFile(path);
+    final decoded = jsonDecode(utf8.decode(bytes)) as Map<String, Object?>;
     await localRepo.importBackup(decoded);
   }
 }
