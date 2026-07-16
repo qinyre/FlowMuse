@@ -166,48 +166,33 @@ class _AppShellState extends ConsumerState<AppShell> {
                 chrome: chrome,
                 child: Row(
                   children: [
-                    AnimatedSwitcher(
-                      duration: MediaQuery.disableAnimationsOf(context)
-                          ? Duration.zero
-                          : const Duration(milliseconds: 340),
-                      reverseDuration: MediaQuery.disableAnimationsOf(context)
-                          ? Duration.zero
-                          : const Duration(milliseconds: 280),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (child, animation) {
-                        final curved = CurvedAnimation(
-                          parent: animation,
+                    ClipRect(
+                      child: AnimatedContainer(
+                        width: showDockedSidebar ? sharedSidebarWidth : 0,
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : const Duration(milliseconds: 240),
+                        curve: Curves.easeOutCubic,
+                        child: AnimatedOpacity(
+                          opacity: showDockedSidebar ? 1 : 0,
+                          duration: MediaQuery.disableAnimationsOf(context)
+                              ? Duration.zero
+                              : const Duration(milliseconds: 180),
                           curve: Curves.easeOutCubic,
-                          reverseCurve: Curves.easeInCubic,
-                        );
-                        return ClipRect(
-                          child: SizeTransition(
-                            axis: Axis.horizontal,
-                            axisAlignment: -1,
-                            sizeFactor: curved,
-                            child: FadeTransition(
-                              opacity: curved,
-                              child: SlideTransition(
-                                position: Tween<Offset>(
-                                  begin: const Offset(-0.04, 0),
-                                  end: Offset.zero,
-                                ).animate(curved),
-                                child: child,
+                          child: OverflowBox(
+                            alignment: Alignment.centerLeft,
+                            minWidth: sharedSidebarWidth,
+                            maxWidth: sharedSidebarWidth,
+                            child: IgnorePointer(
+                              ignoring: !showDockedSidebar,
+                              child: LibrarySidebar(
+                                section: widget.section,
+                                onCollapse: layoutViewModel.collapseSidebar,
                               ),
                             ),
                           ),
-                        );
-                      },
-                      child: showDockedSidebar
-                          ? LibrarySidebar(
-                              key: const ValueKey('docked-sidebar'),
-                              section: widget.section,
-                              onCollapse: layoutViewModel.collapseSidebar,
-                            )
-                          : const SizedBox.shrink(
-                              key: ValueKey('docked-sidebar-hidden'),
-                            ),
+                        ),
+                      ),
                     ),
                     Expanded(child: widget.child),
                   ],

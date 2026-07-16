@@ -1572,6 +1572,7 @@ class _CollaborationChipState extends State<_CollaborationChip> {
   ) async {
     final selected = await showAnchoredPopupMenu<_CollaborationAction>(
       context: anchorContext,
+      placement: AnchoredPopupPlacement.below,
       items: [
         PopupMenuItem<_CollaborationAction>(
           enabled: false,

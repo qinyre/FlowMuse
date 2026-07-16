@@ -199,6 +199,7 @@ class CompactToolbar extends StatelessWidget {
   Future<void> _showDockMenu(BuildContext context) async {
     final selected = await showAnchoredPopupMenu<ToolbarDock>(
       context: context,
+      placement: AnchoredPopupPlacement.below,
       items: [
         for (final option in ToolbarDock.values)
           PopupMenuItem(

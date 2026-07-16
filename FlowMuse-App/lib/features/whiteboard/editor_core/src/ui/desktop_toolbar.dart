@@ -321,6 +321,7 @@ class _DockMenuButton extends StatelessWidget {
       onPressed: () async {
         final selected = await showAnchoredPopupMenu<ToolbarDock>(
           context: context,
+          placement: AnchoredPopupPlacement.below,
           items: [
             for (final option in ToolbarDock.values)
               PopupMenuItem(
