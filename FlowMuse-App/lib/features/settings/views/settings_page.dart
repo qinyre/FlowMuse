@@ -1262,6 +1262,15 @@ class _ToolsSettingsSection extends ConsumerWidget {
     '#7048e8',
     '#ffff00',
   ];
+  static const _colorLabels = {
+    '#1e1e1e': '黑色',
+    '#e03131': '红色',
+    '#1971c2': '蓝色',
+    '#2f9e44': '绿色',
+    '#f08c00': '橙色',
+    '#7048e8': '紫色',
+    '#ffff00': '黄色',
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1343,7 +1352,7 @@ class _ToolsSettingsSection extends ConsumerWidget {
                           avatar: CircleAvatar(
                             backgroundColor: _colorFromHex(color),
                           ),
-                          label: Text(color),
+                          label: Text(_colorLabels[color]!),
                           onSelected: (_) {
                             unawaited(
                               notifier.updateBrushState(
