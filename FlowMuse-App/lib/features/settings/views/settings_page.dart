@@ -2307,6 +2307,7 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
         remotePath: _pathCtrl.text.trim().isEmpty ? '/FlowMuse/' : _pathCtrl.text.trim(),
       );
       if (!mounted) return;
+      setState(() => _status = _CloudBackupStatus.idle);
       await showDialog<void>(
         context: context,
         builder: (ctx) => _BackupListDialog(
@@ -2545,30 +2546,10 @@ class _BackupListDialog extends StatefulWidget {
 }
 
 class _BackupListDialogState extends State<_BackupListDialog> {
+  WebDavBackupEntry? _pendingRestore;
   String? _restoringHref;
 
   Future<void> _restore(WebDavBackupEntry entry) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('确认恢复'),
-        content: Text(
-          '将用"${entry.fileName}"覆盖当前所有本地数据，此操作不可撤销。确定继续吗？',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('确认恢复'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true || !mounted) return;
-
     setState(() => _restoringHref = entry.href);
     try {
       await webDavBackupService.restoreBackup(
@@ -2592,56 +2573,87 @@ class _BackupListDialogState extends State<_BackupListDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final pending = _pendingRestore;
+    final restoring = _restoringHref != null;
+    final listHeight = (widget.backups.length * 72.0)
+        .clamp(72.0, MediaQuery.sizeOf(context).height * 0.55)
+        .toDouble();
     return AlertDialog(
-      title: const Text('选择备份恢复'),
+      title: Text(pending == null ? '选择备份恢复' : '确认恢复'),
       content: SizedBox(
         width: 420,
-        child: widget.backups.isEmpty
+        child: pending != null
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '将用"${pending.fileName}"覆盖当前所有本地数据，此操作不可撤销。确定继续吗？',
+                  ),
+                  if (restoring) ...[
+                    const SizedBox(height: 24),
+                    const CircularProgressIndicator(),
+                  ],
+                ],
+              )
+            : widget.backups.isEmpty
             ? const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Text('当前目录中没有找到 FlowMuse 备份文件'),
               )
-            : ListView.separated(
-                shrinkWrap: true,
-                itemCount: widget.backups.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (ctx, i) {
-                  final entry = widget.backups[i];
-                  final restoring = _restoringHref == entry.href;
-                  return ListTile(
-                    leading: restoring
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(LucideIcons.fileJson),
-                    title: Text(entry.fileName,
-                        style: const TextStyle(fontFamily: 'monospace',
-                            fontSize: 13)),
-                    subtitle: Text([
-                      if (entry.lastModified != null)
-                        _fmtDate(entry.lastModified!),
-                      if (entry.displaySize.isNotEmpty) entry.displaySize,
-                    ].join('  ·  ')),
-                    trailing: TextButton(
-                      onPressed: (_restoringHref != null || restoring)
-                          ? null
-                          : () => _restore(entry),
-                      child: const Text('恢复'),
-                    ),
-                  );
-                },
+            : SizedBox(
+                height: listHeight,
+                child: ListView.separated(
+                  primary: false,
+                  itemCount: widget.backups.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (ctx, i) {
+                    final entry = widget.backups[i];
+                    final restoring = _restoringHref == entry.href;
+                    return ListTile(
+                      leading: restoring
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(LucideIcons.fileJson),
+                      title: Text(entry.fileName,
+                          style: const TextStyle(fontFamily: 'monospace',
+                              fontSize: 13)),
+                      subtitle: Text([
+                        if (entry.lastModified != null)
+                          _fmtDate(entry.lastModified!),
+                        if (entry.displaySize.isNotEmpty) entry.displaySize,
+                      ].join('  ·  ')),
+                      trailing: TextButton(
+                        onPressed: () =>
+                            setState(() => _pendingRestore = entry),
+                        child: const Text('恢复'),
+                      ),
+                    );
+                  },
+                ),
               ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _restoringHref != null
-              ? null
-              : () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
-        ),
-      ],
+      actions: pending == null
+          ? [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('关闭'),
+              ),
+            ]
+          : [
+              TextButton(
+                onPressed: restoring
+                    ? null
+                    : () => setState(() => _pendingRestore = null),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: restoring ? null : () => _restore(pending),
+                child: const Text('确认恢复'),
+              ),
+            ],
     );
   }
 
