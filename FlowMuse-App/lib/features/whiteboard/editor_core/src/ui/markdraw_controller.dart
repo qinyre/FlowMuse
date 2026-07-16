@@ -3026,6 +3026,10 @@ class MarkdrawController extends ChangeNotifier {
     if (strokes.length <= 1) {
       return [strokes];
     }
+    final templateGroups = _splitSmartLayoutInkGroupByTemplateAnchors(strokes);
+    if (templateGroups != null) {
+      return templateGroups;
+    }
     final vertical =
         _smartLayoutWritingModeForStrokes(strokes) ==
         TemplateWritingMode.vertical;
@@ -3093,6 +3097,72 @@ class MarkdrawController extends ChangeNotifier {
       });
     }
     return groups;
+  }
+
+  List<List<FreedrawElement>>? _splitSmartLayoutInkGroupByTemplateAnchors(
+    List<FreedrawElement> strokes,
+  ) {
+    final page = _pageForElement(strokes.first);
+    if (page == null || page.template == CanvasPageTemplate.blank) {
+      return null;
+    }
+    final geometry = TemplateAnchorResolver.resolve(page);
+    if (geometry.anchors.length <= 1) {
+      return null;
+    }
+    final buckets = <int, List<FreedrawElement>>{};
+    for (final stroke in strokes) {
+      final bounds = Bounds.fromLTWH(
+        stroke.x,
+        stroke.y,
+        math.max(stroke.width, 1.0),
+        math.max(stroke.height, 1.0),
+      );
+      final anchorIndex = _nearestSmartLayoutAnchorIndex(geometry, bounds);
+      buckets.putIfAbsent(anchorIndex, () => <FreedrawElement>[]).add(stroke);
+    }
+    final groups = buckets.values.toList();
+    final vertical = geometry.writingMode == TemplateWritingMode.vertical;
+    groups.sort((a, b) {
+      final aBounds = _boundsForElements(a);
+      final bBounds = _boundsForElements(b);
+      if (aBounds == null || bBounds == null) return 0;
+      return vertical
+          ? bBounds.center.x.compareTo(aBounds.center.x)
+          : aBounds.center.y.compareTo(bBounds.center.y);
+    });
+    for (final group in groups) {
+      group.sort((a, b) {
+        if (vertical) {
+          final byY = a.y.compareTo(b.y);
+          if (byY != 0) return byY;
+          return b.x.compareTo(a.x);
+        }
+        final byX = a.x.compareTo(b.x);
+        if (byX != 0) return byX;
+        return a.y.compareTo(b.y);
+      });
+    }
+    return groups;
+  }
+
+  int _nearestSmartLayoutAnchorIndex(TemplateGeometry geometry, Bounds bounds) {
+    var bestIndex = 0;
+    var bestDistance = double.infinity;
+    for (var i = 0; i < geometry.anchors.length; i++) {
+      final anchor = geometry.anchors[i];
+      final strokeAxis = geometry.writingMode == TemplateWritingMode.vertical
+          ? bounds.center.x
+          : anchor.textAlignment == TemplateAnchorTextAlignment.bottom
+          ? bounds.bottom
+          : bounds.center.y;
+      final distance = (strokeAxis - anchor.crossAxis).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
   }
 
   TemplateWritingMode _smartLayoutWritingModeForStrokes(
