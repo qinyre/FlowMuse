@@ -16,7 +16,7 @@ class StudioRailIconButton extends StatelessWidget {
 
   final String tooltip;
   final Widget child;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool selected;
   final bool emphasized;
   final double size;
@@ -29,6 +29,7 @@ class StudioRailIconButton extends StatelessWidget {
     return Semantics(
       label: tooltip,
       button: true,
+      enabled: onPressed != null,
       child: Tooltip(
         message: tooltip,
         child: Material(

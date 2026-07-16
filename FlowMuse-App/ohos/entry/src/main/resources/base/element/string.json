@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "FlowMuse"
+    },
+    {
+      "name": "microphone_reason",
+      "value": "用于将语音转换为白板文字"
     }
   ]
 }

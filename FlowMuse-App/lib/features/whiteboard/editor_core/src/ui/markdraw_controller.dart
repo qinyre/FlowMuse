@@ -3819,10 +3819,22 @@ class MarkdrawController extends ChangeNotifier {
   /// Pastes clipboard text as a new TextElement at viewport center.
   Future<void> pasteAsPlaintext(Size canvasSize) async {
     final text = await _clipboardService.readText();
-    if (text == null || text.trim().isEmpty) return;
+    if (text == null) return;
+    insertPlainText(text, canvasSize: canvasSize);
+  }
+
+  /// Inserts plain text as one standard TextElement at the viewport center.
+  void insertPlainText(String text, {Size? canvasSize}) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+
+    final targetSize =
+        canvasSize ??
+        _lastCanvasSize ??
+        (_canvasSize.isEmpty ? const Size(800, 600) : _canvasSize);
 
     final centerScene = _editorState.viewport.screenToScene(
-      Offset(canvasSize.width / 2, canvasSize.height / 2),
+      Offset(targetSize.width / 2, targetSize.height / 2),
     );
 
     final textElem = TextElement(
@@ -3831,7 +3843,9 @@ class MarkdrawController extends ChangeNotifier {
       y: centerScene.dy,
       width: 10,
       height: 10,
-      text: text.trim(),
+      text: trimmed,
+      fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
+      fontSize: _defaultStyle.fontSize ?? 20,
     );
 
     final (w, h) = TextRenderer.measure(textElem);
