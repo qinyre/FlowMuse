@@ -71,7 +71,7 @@ class AiAgentRepository {
           },
         ],
         'tools': [_renameTool, _insertTool],
-        'tool_choice': 'required',
+        'tool_choice': 'auto',
         'temperature': 0,
       }),
       connectTimeoutMs: 8000,

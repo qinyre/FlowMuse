@@ -76,7 +76,7 @@ POST `{serverUrl}/api/ink/recognize`,body 是 `{sessionId, hint:"auto", strokes:
 
 ## AI 笔记助手
 
-客户端直接 POST 用户配置的 OpenAI 兼容 `{baseUrl}/chat/completions`，请求携带 `Authorization: Bearer <apiKey>`、`model`、`messages`、`tools` 和 `tool_choice: required`。如果用户填写的是完整 Chat Completions URL，则不再追加路径。模型必须返回标准 `choices[0].message.tool_calls`。
+客户端直接 POST 用户配置的 OpenAI 兼容 `{baseUrl}/chat/completions`，请求携带 `Authorization: Bearer <apiKey>`、`model`、`messages`、`tools` 和 `tool_choice: auto`。使用 `auto` 是为了兼容不接受强制工具调用的思考模型；提示词仍要求模型返回工具。用户填写完整 Chat Completions URL 时不再追加路径，模型必须返回标准 `choices[0].message.tool_calls`。
 
 `tool` 仅允许 `rename_note` 和 `insert_text`。客户端限制指令 1000 字符、标题 100 字符、单段文本 5000 字符、上下文总量 30000 字符、动作数 5；未知动作、额外参数、空值和超长值均拒绝，动作必须经用户预览确认后才应用。各端复用 `NativeHttpClient`，因此鸿蒙继续走原生 HTTP Platform Channel，其他端走标准 HTTP；Web 端还要求目标服务允许 CORS。
 
