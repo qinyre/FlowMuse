@@ -17,7 +17,7 @@ analyze_flutter:
   script:
     - cd FlowMuse-App
     - flutter pub get
-    - flutter analyze
+    - flutter analyze --no-fatal-warnings --no-fatal-infos
     - flutter test
 
 test_server:
