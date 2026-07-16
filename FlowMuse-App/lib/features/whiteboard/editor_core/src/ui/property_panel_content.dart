@@ -303,6 +303,9 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           canvasSize: canvasSize,
           autoOpen: shouldAutoOpen,
           onAutoOpened: controller.clearPendingColorPicker,
+          autoActivateEyedropper: target == ColorPickerTarget.stroke &&
+              controller.pendingEyedropper,
+          onEyedropperActivated: controller.clearPendingEyedropper,
         ),
       ],
     );

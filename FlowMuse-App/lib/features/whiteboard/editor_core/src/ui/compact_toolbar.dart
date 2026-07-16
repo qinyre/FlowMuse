@@ -14,6 +14,10 @@ class CompactToolbar extends StatelessWidget {
   final VoidCallback? onCollapse;
   final bool useFlatBackground;
 
+  /// Override for the eyedropper button. When provided (e.g. on HarmonyOS),
+  /// tapping the eyedropper calls this instead of the canvas picker flow.
+  final VoidCallback? onEyedropperPressed;
+
   const CompactToolbar({
     super.key,
     required this.controller,
@@ -21,6 +25,7 @@ class CompactToolbar extends StatelessWidget {
     this.onDockChanged,
     this.onCollapse,
     this.useFlatBackground = false,
+    this.onEyedropperPressed,
   });
 
   @override
@@ -85,6 +90,12 @@ class CompactToolbar extends StatelessWidget {
                 cs: cs,
                 type: ToolType.eraser,
                 activeType: activeType,
+              ),
+              _compactButton(
+                cs: cs,
+                icon: Icons.colorize,
+                tooltip: '取色笔 (I)',
+                onPressed: onEyedropperPressed ?? controller.requestEyedropper,
               ),
               _compactToolButton(
                 cs: cs,
