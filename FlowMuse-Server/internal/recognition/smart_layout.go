@@ -345,15 +345,17 @@ func buildSmartLayoutDocument(blocks []SmartLayoutRecognizedBlock, pages []Smart
 		}
 	}
 	writingModeByPage := map[string]string{}
+	pageByID := map[string]SmartLayoutPage{}
 	for _, page := range pageRequests {
 		writingModeByPage[page.ID] = smartLayoutWritingModeForTemplate(page.Template)
+		pageByID[page.ID] = page
 	}
 	docBlocks := []SmartLayoutBlock{}
 	order := 0
 	for _, page := range pages {
 		for _, paragraph := range page.Paragraphs {
-			parts := []string{}
 			sourceIDs := []string{}
+			sourceBlocks := []SmartLayoutRecognizedBlock{}
 			var bounds *InkBounds
 			blockType := "paragraph"
 			latex := ""
@@ -367,6 +369,7 @@ func buildSmartLayoutDocument(blocks []SmartLayoutRecognizedBlock, pages []Smart
 					continue
 				}
 				sourceIDs = append(sourceIDs, id)
+				sourceBlocks = append(sourceBlocks, block)
 				if bounds == nil {
 					copyBounds := block.Bounds
 					bounds = &copyBounds
@@ -381,12 +384,9 @@ func buildSmartLayoutDocument(blocks []SmartLayoutRecognizedBlock, pages []Smart
 						value = block.Text
 					}
 					latex = strings.TrimSpace(value)
-					parts = append(parts, latex)
-				} else {
-					parts = append(parts, strings.TrimSpace(block.Text))
 				}
 			}
-			text := strings.TrimSpace(strings.Join(parts, "\n"))
+			text := formatSmartLayoutParagraph(sourceBlocks, pageByID[page.PageID], writingMode)
 			if text == "" {
 				continue
 			}
@@ -409,6 +409,211 @@ func buildSmartLayoutDocument(blocks []SmartLayoutRecognizedBlock, pages []Smart
 		GeneratedAt: time.Now().UnixMilli(),
 		Blocks:      docBlocks,
 	}
+}
+
+type smartLayoutLine struct {
+	Blocks []SmartLayoutRecognizedBlock
+	Bounds InkBounds
+}
+
+func formatSmartLayoutParagraph(blocks []SmartLayoutRecognizedBlock, page SmartLayoutPage, writingMode string) string {
+	if len(blocks) == 0 {
+		return ""
+	}
+	sorted := append([]SmartLayoutRecognizedBlock(nil), blocks...)
+	sortRecognizedBlocks(sorted)
+	if writingMode == "vertical" {
+		parts := make([]string, 0, len(sorted))
+		for _, block := range sorted {
+			if text := smartLayoutBlockText(block); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.TrimSpace(strings.Join(parts, "\n"))
+	}
+
+	lines := groupSmartLayoutLines(sorted)
+	if len(lines) == 0 {
+		return ""
+	}
+	lineHeight := medianSmartLayoutLineHeight(lines)
+	if lineHeight <= 0 {
+		lineHeight = 32
+	}
+	charWidth := lineHeight * 0.45
+	if charWidth < 8 {
+		charWidth = 8
+	}
+	baseLeft := smartLayoutTextBaseLeft(page, lines)
+	out := []string{}
+	var previous *smartLayoutLine
+	for i := range lines {
+		line := lines[i]
+		if previous != nil {
+			gap := line.Bounds.Y - (previous.Bounds.Y + previous.Bounds.Height)
+			blankLines := int(gap/lineHeight + 0.5)
+			if blankLines > 1 {
+				for b := 0; b < minInt(blankLines-1, 4); b++ {
+					out = append(out, "")
+				}
+			}
+		}
+		text := formatSmartLayoutLine(line, baseLeft, charWidth)
+		if text != "" {
+			out = append(out, text)
+		}
+		previous = &line
+	}
+	return trimSmartLayoutDocumentText(strings.Join(out, "\n"))
+}
+
+func groupSmartLayoutLines(blocks []SmartLayoutRecognizedBlock) []smartLayoutLine {
+	lines := []smartLayoutLine{}
+	for _, block := range blocks {
+		if smartLayoutBlockText(block) == "" {
+			continue
+		}
+		centerY := block.Bounds.Y + block.Bounds.Height/2
+		if len(lines) == 0 {
+			lines = append(lines, smartLayoutLine{Blocks: []SmartLayoutRecognizedBlock{block}, Bounds: block.Bounds})
+			continue
+		}
+		last := &lines[len(lines)-1]
+		lastCenterY := last.Bounds.Y + last.Bounds.Height/2
+		threshold := maxFloat(minFloat(last.Bounds.Height, block.Bounds.Height)*0.7, 12)
+		if absFloat(centerY-lastCenterY) <= threshold {
+			last.Blocks = append(last.Blocks, block)
+			last.Bounds = unionInkBounds(last.Bounds, block.Bounds)
+			sortSmartLayoutLineBlocks(last.Blocks)
+		} else {
+			lines = append(lines, smartLayoutLine{Blocks: []SmartLayoutRecognizedBlock{block}, Bounds: block.Bounds})
+		}
+	}
+	return lines
+}
+
+func medianSmartLayoutLineHeight(lines []smartLayoutLine) float64 {
+	heights := make([]float64, 0, len(lines))
+	for _, line := range lines {
+		if line.Bounds.Height > 0 {
+			heights = append(heights, line.Bounds.Height)
+		}
+	}
+	if len(heights) == 0 {
+		return 0
+	}
+	sort.Float64s(heights)
+	return heights[len(heights)/2]
+}
+
+func smartLayoutTextBaseLeft(page SmartLayoutPage, lines []smartLayoutLine) float64 {
+	if len(page.Anchors) > 0 {
+		left := 0.0
+		found := false
+		for _, anchor := range page.Anchors {
+			x, ok := smartLayoutNumber(anchor["x"])
+			if !ok {
+				continue
+			}
+			if !found || x < left {
+				left = x
+				found = true
+			}
+		}
+		if found {
+			return left
+		}
+	}
+	left := lines[0].Bounds.X
+	for _, line := range lines[1:] {
+		if line.Bounds.X < left {
+			left = line.Bounds.X
+		}
+	}
+	return left
+}
+
+func formatSmartLayoutLine(line smartLayoutLine, baseLeft float64, charWidth float64) string {
+	if len(line.Blocks) == 0 {
+		return ""
+	}
+	sortSmartLayoutLineBlocks(line.Blocks)
+	indent := int((line.Bounds.X-baseLeft)/charWidth + 0.5)
+	indent = minInt(maxInt(indent, 0), 24)
+	var builder strings.Builder
+	builder.WriteString(strings.Repeat(" ", indent))
+	prevRight := 0.0
+	hasText := false
+	for _, block := range line.Blocks {
+		text := smartLayoutBlockText(block)
+		if text == "" {
+			continue
+		}
+		if hasText {
+			gap := block.Bounds.X - prevRight
+			spaces := 1
+			if gap > charWidth {
+				spaces = minInt(maxInt(int(gap/charWidth+0.5), 1), 12)
+			}
+			builder.WriteString(strings.Repeat(" ", spaces))
+		}
+		builder.WriteString(text)
+		prevRight = block.Bounds.X + block.Bounds.Width
+		hasText = true
+	}
+	if !hasText {
+		return ""
+	}
+	return strings.TrimRight(builder.String(), " \t")
+}
+
+func sortSmartLayoutLineBlocks(blocks []SmartLayoutRecognizedBlock) {
+	sort.SliceStable(blocks, func(i, j int) bool {
+		a, b := blocks[i], blocks[j]
+		if a.Bounds.X != b.Bounds.X {
+			return a.Bounds.X < b.Bounds.X
+		}
+		return a.StartedAt < b.StartedAt
+	})
+}
+
+func smartLayoutNumber(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case float64:
+		return typed, true
+	case float32:
+		return float64(typed), true
+	case int:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case int32:
+		return float64(typed), true
+	case json.Number:
+		parsed, err := typed.Float64()
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func smartLayoutBlockText(block SmartLayoutRecognizedBlock) string {
+	if block.Type == "formula" {
+		value := strings.TrimSpace(block.LaTeX)
+		if value == "" {
+			value = strings.TrimSpace(block.Text)
+		}
+		return value
+	}
+	return strings.TrimSpace(block.Text)
+}
+
+func trimSmartLayoutDocumentText(text string) string {
+	text = strings.TrimRight(text, " \t\r\n")
+	for strings.HasPrefix(text, "\n") {
+		text = strings.TrimPrefix(text, "\n")
+	}
+	return text
 }
 
 func smartLayoutWritingModeForTemplate(template string) string {
@@ -449,6 +654,27 @@ func minFloat(a, b float64) float64 {
 }
 
 func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func absFloat(value float64) float64 {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}

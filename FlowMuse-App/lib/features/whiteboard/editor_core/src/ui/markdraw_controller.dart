@@ -3151,7 +3151,8 @@ class MarkdrawController extends ChangeNotifier {
       occupied.add(
         Bounds.fromLTWH(element.x, element.y, element.width, element.height),
       );
-      layoutIndexByPage[pageKey] = pageLayoutIndex + 1;
+      layoutIndexByPage[pageKey] =
+          pageLayoutIndex + _smartLayoutLineSpan(block.text);
     }
     return elements;
   }
@@ -3229,7 +3230,7 @@ class MarkdrawController extends ChangeNotifier {
         block.writingMode == 'vertical';
     final text = block.type == 'math' && block.latex?.trim().isNotEmpty == true
         ? block.latex!.trim()
-        : block.text.trim();
+        : _trimSmartLayoutDisplayText(block.text);
     final element = TextElement(
       id: ElementId.generate(),
       x: initialBounds.left,
@@ -3338,6 +3339,22 @@ class MarkdrawController extends ChangeNotifier {
         ? anchor.crossAxis - firstLineBottom
         : anchor.crossAxis - firstLineHeight / 2;
     return element.copyWith(x: anchor.position.dx, y: y);
+  }
+
+  int _smartLayoutLineSpan(String text) {
+    final normalized = _trimSmartLayoutDisplayText(text);
+    if (normalized.isEmpty) {
+      return 1;
+    }
+    return math.max(1, normalized.split('\n').length);
+  }
+
+  String _trimSmartLayoutDisplayText(String text) {
+    var normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    while (normalized.startsWith('\n')) {
+      normalized = normalized.substring(1);
+    }
+    return normalized.replaceFirst(RegExp(r'[ \t\n]+$'), '');
   }
 
   TemplateAnchor? _templateAnchorForSmartLayoutBlock(
