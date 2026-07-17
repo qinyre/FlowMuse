@@ -28,7 +28,48 @@ void main() {
     expect(elements.whereType<ArrowElement>(), hasLength(2));
     expect(sceneChanges, 1);
 
+    final bounds = elements
+        .map(
+          (element) => Rect.fromLTWH(
+            element.x,
+            element.y,
+            element.width,
+            element.height,
+          ),
+        )
+        .reduce((left, right) => left.expandToInclude(right));
+    expect(bounds.center.dx, closeTo(400, 0.001));
+    expect(bounds.center.dy, closeTo(300, 0.001));
+
     controller.undo();
     expect(controller.editorState.scene.activeElements, isEmpty);
+  });
+
+  test('宽度超过视口时从可见区域左边距开始布局', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.lastCanvasSize = const Size(800, 600);
+
+    controller.insertMindmap(
+      MindmapNode(
+        text: '第一层',
+        children: [
+          MindmapNode(
+            text: '第二层',
+            children: [
+              MindmapNode(
+                text: '第三层',
+                children: [MindmapNode(text: '第四层')],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final left = controller.editorState.scene.activeElements
+        .map((element) => element.x)
+        .reduce((left, right) => left < right ? left : right);
+    expect(left, closeTo(48, 0.001));
   });
 }

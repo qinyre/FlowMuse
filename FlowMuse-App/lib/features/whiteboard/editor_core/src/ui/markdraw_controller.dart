@@ -4663,10 +4663,35 @@ class MarkdrawController extends ChangeNotifier {
         _lastCanvasSize ??
         (_canvasSize.isEmpty ? const Size(800, 600) : _canvasSize);
     final visible = _editorState.viewport.visibleRect(targetSize);
-    final elements = MindmapLayout.treeToElements(
-      tree,
-      origin: Point(visible.left + 48, visible.top + 48),
+    final placementRect = _layout.isPaged
+        ? (_layout.pageAt(visible.center)?.bounds ?? visible)
+        : visible;
+    final placementArea = placementRect.deflate(
+      math.min(48.0, placementRect.shortestSide / 8),
     );
+    final preview = MindmapLayout.treeToElements(
+      tree,
+      origin: const Point(0, 0),
+    );
+    final previewBounds = preview
+        .map(
+          (element) => Bounds.fromLTWH(
+            element.x,
+            element.y,
+            element.width,
+            element.height,
+          ),
+        )
+        .reduce((bounds, element) => bounds.union(element));
+    final origin = Point(
+      previewBounds.size.width <= placementArea.width
+          ? placementArea.center.dx - previewBounds.center.x
+          : placementArea.left - previewBounds.left,
+      previewBounds.size.height <= placementArea.height
+          ? placementArea.center.dy - previewBounds.center.y
+          : placementArea.top - previewBounds.top,
+    );
+    final elements = MindmapLayout.treeToElements(tree, origin: origin);
     final root = elements.whereType<RectangleElement>().firstOrNull;
 
     _historyManager.push(_editorState.scene);
