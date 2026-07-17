@@ -1646,29 +1646,9 @@ class MarkdrawController extends ChangeNotifier {
     } else {
       final element = _editorState.scene.getElementById(id);
       if (element is TextElement) {
-        final measured = element.copyWithText(text: text);
-        final isBound = element.containerId != null;
-        if (isBound) {
-          _editorState = _editorState.applyResult(
-            UpdateElementResult(measured),
-          );
-        } else if (!element.autoResize && element.width > 0) {
-          final (_, h) = TextRenderer.measure(
-            measured,
-            maxWidth: element.width,
-          );
-          final updated = measured.copyWith(
-            height: math.max(h, element.height),
-          );
-          _editorState = _editorState.applyResult(UpdateElementResult(updated));
-        } else {
-          final (w, h) = TextRenderer.measure(measured);
-          final updated = measured.copyWith(
-            width: math.max(w + 4, 20.0),
-            height: math.max(h, element.fontSize * element.lineHeight),
-          );
-          _editorState = _editorState.applyResult(UpdateElementResult(updated));
-        }
+        _editorState = _editorState.applyResult(
+          UpdateElementResult(_textElementWithContent(element, text)),
+        );
       }
     }
     _editingTextElementId = null;
@@ -1794,26 +1774,54 @@ class MarkdrawController extends ChangeNotifier {
     if (element is! TextElement) return;
 
     final text = textEditingController.text;
-    final measured = element.copyWithText(text: text);
-    final isBound = element.containerId != null;
-    if (isBound) {
-      _editorState = _editorState.applyResult(UpdateElementResult(measured));
-    } else if (!element.autoResize && element.width > 0) {
-      final (_, h) = TextRenderer.measure(measured, maxWidth: element.width);
-      final updated = measured.copyWith(height: math.max(h, element.height));
-      _editorState = _editorState.applyResult(UpdateElementResult(updated));
-    } else {
-      final (w, h) = TextRenderer.measure(measured);
-      final updated = measured.copyWith(
-        width: math.max(w + 4, 20.0),
-        height: math.max(h, element.fontSize * element.lineHeight),
-      );
-      _editorState = _editorState.applyResult(UpdateElementResult(updated));
-    }
+    _editorState = _editorState.applyResult(
+      UpdateElementResult(_textElementWithContent(element, text)),
+    );
     final changed = _editorState.scene.getElementById(id);
     _lastChangedElements = changed == null ? const [] : [changed];
     onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
+  }
+
+  TextElement _textElementWithContent(TextElement element, String text) {
+    final measured = element.copyWithText(text: text);
+    if (element.containerId != null) return measured;
+
+    if (!element.autoResize && element.width > 0) {
+      final (_, height) = TextRenderer.measure(
+        measured,
+        maxWidth: element.width,
+      );
+      return measured.copyWith(height: math.max(height, element.height));
+    }
+
+    final (width, height) = TextRenderer.measure(measured);
+    final desiredWidth = math.max(width + 4, 20.0);
+    final canvasSize = _canvasSize.isEmpty ? const Size(800, 600) : _canvasSize;
+    final visible = _editorState.viewport.visibleRect(canvasSize);
+    final bounds = _layout.isPaged
+        ? (_layout.pageAt(Offset(element.x, element.y))?.bounds ?? visible)
+        : visible;
+    final area = bounds.deflate(math.min(48.0, bounds.shortestSide / 8));
+    final minWidth = math.min(320.0, area.width);
+    final x = element.x.clamp(area.left, area.right - minWidth).toDouble();
+    final maxWidth = area.right - x;
+
+    if (desiredWidth <= maxWidth) {
+      return measured.copyWith(
+        x: x,
+        width: desiredWidth,
+        height: math.max(height, element.fontSize * element.lineHeight),
+      );
+    }
+
+    final (_, wrappedHeight) = TextRenderer.measure(
+      measured,
+      maxWidth: maxWidth,
+    );
+    return measured
+        .copyWithText(autoResize: false)
+        .copyWith(x: x, width: maxWidth, height: wrappedHeight);
   }
 
   // --- Library ---
@@ -4653,6 +4661,54 @@ class MarkdrawController extends ChangeNotifier {
     applyResult(result);
     switchTool(ToolType.select);
     _enterMindmapNodeEditing();
+  }
+
+  /// Inserts a complete content tree using the deterministic mind-map layout.
+  /// The whole tree is one scene change and can be removed with one undo.
+  void insertMindmap(MindmapNode tree, {Size? canvasSize}) {
+    final targetSize =
+        canvasSize ??
+        _lastCanvasSize ??
+        (_canvasSize.isEmpty ? const Size(800, 600) : _canvasSize);
+    final visible = _editorState.viewport.visibleRect(targetSize);
+    final placementRect = _layout.isPaged
+        ? (_layout.pageAt(visible.center)?.bounds ?? visible)
+        : visible;
+    final placementArea = placementRect.deflate(
+      math.min(48.0, placementRect.shortestSide / 8),
+    );
+    final preview = MindmapLayout.treeToElements(
+      tree,
+      origin: const Point(0, 0),
+    );
+    final previewBounds = preview
+        .map(
+          (element) => Bounds.fromLTWH(
+            element.x,
+            element.y,
+            element.width,
+            element.height,
+          ),
+        )
+        .reduce((bounds, element) => bounds.union(element));
+    final origin = Point(
+      previewBounds.size.width <= placementArea.width
+          ? placementArea.center.dx - previewBounds.center.x
+          : placementArea.left - previewBounds.left,
+      previewBounds.size.height <= placementArea.height
+          ? placementArea.center.dy - previewBounds.center.y
+          : placementArea.top - previewBounds.top,
+    );
+    final elements = MindmapLayout.treeToElements(tree, origin: origin);
+    final root = elements.whereType<RectangleElement>().firstOrNull;
+
+    _historyManager.push(_editorState.scene);
+    applyResult(
+      CompoundResult([
+        for (final element in elements) AddElementResult(element),
+        if (root != null) SetSelectionResult({root.id}),
+      ]),
+    );
   }
 
   /// Adds a child node to the single selected mind-map node, then reflows

@@ -79,6 +79,37 @@ void main() {
     expect(response.actions.first.value, '课堂笔记总结');
   });
 
+  test('允许不调用工具的普通对话响应', () {
+    final response = AiAgentResponse.fromOpenAiJson({
+      'choices': [
+        {
+          'message': {'content': '你好，有什么想一起创作的？'},
+        },
+      ],
+    });
+
+    expect(response.message, '你好，有什么想一起创作的？');
+    expect(response.actions, isEmpty);
+  });
+
+  test('空对话且无工具操作一律拒绝', () {
+    expect(
+      () =>
+          AiAgentResponse.fromJson({'message': '   ', 'actions': <Object?>[]}),
+      throwsFormatException,
+    );
+  });
+
+  test('超长对话回复一律拒绝', () {
+    expect(
+      () => AiAgentResponse.fromJson({
+        'message': List.filled(maxAiAgentTextLength + 1, '字').join(),
+        'actions': <Object?>[],
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('Base URL 自动补齐 Chat Completions 路径', () {
     const config = AiAgentConfig(
       baseUrl: 'https://example.com/v1/',
@@ -132,6 +163,31 @@ void main() {
     );
   });
 
+  test('Markdown 插入内容转为文本框可显示的纯文本', () {
+    final action = AiAgentAction.fromJson({
+      'tool': 'insert_text',
+      'arguments': {
+        'text': '''# 课堂总结
+
+**重点**：理解 [Riverpod](https://riverpod.dev)
+
+- 完成作业
+- `flutter test`
+''',
+      },
+    });
+
+    expect(action.value, '课堂总结\n\n重点：理解 Riverpod\n\n• 完成作业\n• flutter test');
+
+    expect(
+      () => AiAgentAction.fromJson({
+        'tool': 'insert_text',
+        'arguments': {'text': '```'},
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('多个重命名操作一律拒绝', () {
     expect(
       () => AiAgentResponse.fromJson({
@@ -149,4 +205,104 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('思维导图内容树通过校验并可编辑往返', () {
+    final action = AiAgentAction.fromJson({
+      'tool': 'generate_mindmap',
+      'arguments': {
+        'root': {
+          'text': '软件工程',
+          'children': [
+            {'text': '需求分析', 'children': <Object?>[]},
+          ],
+        },
+      },
+    });
+
+    expect(action.tool, AiAgentTool.generateMindmap);
+    expect(action.mindmapRoot['text'], '软件工程');
+    expect(
+      AiAgentAction.edited(tool: action.tool, value: action.value).toJson(),
+      action.toJson(),
+    );
+  });
+
+  test('思维导图叶子节点可省略空 children', () {
+    final action = AiAgentAction.fromJson({
+      'tool': 'generate_mindmap',
+      'arguments': {
+        'root': {
+          'text': '根',
+          'children': [
+            {'text': '叶子'},
+          ],
+        },
+      },
+    });
+
+    final children = action.mindmapRoot['children']! as List;
+    expect(children.single, {'text': '叶子', 'children': <Object?>[]});
+  });
+
+  test('思维导图拒绝未知字段和超过四层的树', () {
+    expect(
+      () => AiAgentAction.fromJson({
+        'tool': 'generate_mindmap',
+        'arguments': {
+          'root': {'text': '根', 'children': <Object?>[], 'x': 10},
+        },
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => AiAgentAction.fromJson({
+        'tool': 'generate_mindmap',
+        'arguments': {'root': _mindmapChain(5)},
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('思维导图最多允许五十个节点', () {
+    expect(
+      () => AiAgentAction.fromJson({
+        'tool': 'generate_mindmap',
+        'arguments': {
+          'root': {
+            'text': '根',
+            'children': [
+              for (var index = 0; index < maxAiMindmapNodes; index++)
+                {'text': '分支 $index', 'children': <Object?>[]},
+            ],
+          },
+        },
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('思维导图与插入文字不能在同一响应中混用', () {
+    expect(
+      () => AiAgentResponse.fromJson({
+        'actions': [
+          {
+            'tool': 'generate_mindmap',
+            'arguments': {
+              'root': {'text': '根', 'children': <Object?>[]},
+            },
+          },
+          {
+            'tool': 'insert_text',
+            'arguments': {'text': '重复内容'},
+          },
+        ],
+      }),
+      throwsFormatException,
+    );
+  });
 }
+
+Map<String, Object?> _mindmapChain(int depth) => {
+  'text': '第 $depth 层',
+  'children': depth == 1 ? <Object?>[] : [_mindmapChain(depth - 1)],
+};

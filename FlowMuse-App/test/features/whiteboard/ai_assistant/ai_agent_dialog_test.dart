@@ -7,6 +7,7 @@ import 'package:flow_muse/features/whiteboard/ai_assistant/views/ai_agent_dialog
 import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
 import 'package:flow_muse/shared/storage/local_settings_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -24,9 +25,11 @@ void main() {
       '提取待办事项',
     );
 
-    await tester.tap(find.text('生成操作'));
+    await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(CheckboxListTile, '重命名笔记'));
+    final renameAction = find.widgetWithText(CheckboxListTile, '重命名笔记');
+    await tester.ensureVisible(renameAction);
+    await tester.tap(renameAction);
     await tester.pump();
     await tester.tap(find.text('确认应用'));
     await tester.pumpAndSettle();
@@ -44,7 +47,8 @@ void main() {
       onApply: (response) async => applied = response,
     );
 
-    await tester.tap(find.text('生成操作'));
+    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '再精简一点');
     await tester.tap(find.text('追问修改'));
@@ -67,12 +71,35 @@ void main() {
     );
   });
 
+  testWidgets('AI 回复渲染 Markdown 且应用后面板保持打开', (tester) async {
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: const AiAgentResponse(
+          message: '**重点**\n\n- 第一项',
+          actions: [AiAgentAction(tool: AiAgentTool.insertText, value: '总结内容')],
+        ),
+      ),
+      onApply: (_) async {},
+    );
+
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MarkdownBody), findsOneWidget);
+
+    await tester.tap(find.text('确认应用'));
+    await tester.pumpAndSettle();
+    expect(find.text('AI 笔记助手'), findsOneWidget);
+    expect(find.text('追问修改'), findsOneWidget);
+  });
+
   testWidgets('取消生成会终止令牌并忽略迟到响应', (tester) async {
     final completer = Completer<AiAgentResponse>();
     final repository = _FakeAiAgentRepository(completer: completer);
     await _openDialog(tester, repository: repository, onApply: (_) async {});
 
-    await tester.tap(find.text('生成操作'));
+    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.tap(find.text('发送'));
     await tester.pump();
     await tester.tap(find.text('取消生成'));
     await tester.pump();
@@ -83,12 +110,142 @@ void main() {
     await tester.pump();
     expect(find.text('准备应用'), findsNothing);
   });
+
+  testWidgets('空笔记可直接对话且不显示应用操作', (tester) async {
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: const AiAgentResponse(message: '这是直接回答', actions: []),
+      ),
+      texts: const [],
+      onApply: (_) async {},
+    );
+
+    await tester.enterText(find.byType(TextField).first, '帮我构思一个故事');
+    await tester.pump();
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('这是直接回答'), findsOneWidget);
+    expect(find.text('确认后将执行：'), findsNothing);
+    expect(find.text('确认应用'), findsNothing);
+    expect(find.text('追问修改'), findsOneWidget);
+  });
+
+  testWidgets('右侧面板不会用遮罩阻断画布操作', (tester) async {
+    var canvasTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => canvasTaps++,
+                  child: const Text('画布操作'),
+                ),
+              ),
+              SizedBox(
+                width: 400,
+                child: AiAgentPanel(
+                  repository: _FakeAiAgentRepository(),
+                  noteTitle: '测试笔记',
+                  texts: const [],
+                  contextTruncated: false,
+                  contextLabel: '当前笔记（暂无文字）',
+                  promptStore: AiPromptStore(_MemorySettings()),
+                  onApply: (_) async {},
+                  onClose: () {},
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(Dialog), findsNothing);
+    await tester.tap(find.text('画布操作'));
+    expect(canvasTaps, 1);
+  });
+
+  testWidgets('面板打开后发送时读取最新文本框选区', (tester) async {
+    var context = const (
+      noteTitle: '测试笔记',
+      texts: [AiNoteText(id: 'text-a', text: '旧选区')],
+      truncated: false,
+      label: '当前选区（1 个文本框）',
+    );
+    final repository = _FakeAiAgentRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: repository,
+            noteTitle: context.noteTitle,
+            texts: context.texts,
+            contextTruncated: context.truncated,
+            contextLabel: context.label,
+            contextProvider: () => context,
+            promptStore: AiPromptStore(_MemorySettings()),
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+
+    context = const (
+      noteTitle: '测试笔记',
+      texts: [AiNoteText(id: 'text-b', text: '新选区')],
+      truncated: false,
+      label: '当前选区（1 个文本框）',
+    );
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+
+    expect(repository.receivedTexts.single.single.id, 'text-b');
+    expect(repository.receivedTexts.single.single.text, '新选区');
+  });
+
+  testWidgets('思维导图动作展示结构并经确认应用', (tester) async {
+    final action = AiAgentAction.fromJson({
+      'tool': 'generate_mindmap',
+      'arguments': {
+        'root': {
+          'text': '中心主题',
+          'children': [
+            {'text': '分支', 'children': <Object?>[]},
+          ],
+        },
+      },
+    });
+    AiAgentResponse? applied;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: AiAgentResponse(message: '已生成', actions: [action]),
+      ),
+      onApply: (response) async => applied = response,
+    );
+
+    await tester.tap(find.text('根据当前内容生成思维导图'));
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('生成思维导图'), findsOneWidget);
+    expect(find.textContaining('中心主题'), findsOneWidget);
+    await tester.tap(find.text('确认应用'));
+    await tester.pumpAndSettle();
+    expect(applied!.actions.single.tool, AiAgentTool.generateMindmap);
+  });
 }
 
 Future<void> _openDialog(
   WidgetTester tester, {
   required AiAgentRepository repository,
   required Future<void> Function(AiAgentResponse) onApply,
+  List<AiNoteText> texts = const [AiNoteText(id: 'text-1', text: '测试内容')],
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -99,7 +256,7 @@ Future<void> _openDialog(
             repository: repository,
             promptStore: AiPromptStore(_MemorySettings()),
             noteTitle: '测试笔记',
-            texts: const [AiNoteText(id: 'text-1', text: '测试内容')],
+            texts: texts,
             onApply: onApply,
           ),
           child: const Text('打开'),
@@ -112,7 +269,7 @@ Future<void> _openDialog(
 }
 
 class _FakeAiAgentRepository extends AiAgentRepository {
-  _FakeAiAgentRepository({this.completer});
+  _FakeAiAgentRepository({this.completer, this.response = firstResponse});
 
   static const firstResponse = AiAgentResponse(
     message: '准备应用',
@@ -122,7 +279,9 @@ class _FakeAiAgentRepository extends AiAgentRepository {
     ],
   );
   final Completer<AiAgentResponse>? completer;
+  final AiAgentResponse response;
   final previousResponses = <AiAgentResponse?>[];
+  final receivedTexts = <List<AiNoteText>>[];
   NativeHttpCancelToken? cancelToken;
 
   @override
@@ -134,6 +293,7 @@ class _FakeAiAgentRepository extends AiAgentRepository {
     NativeHttpCancelToken? cancelToken,
   }) async {
     previousResponses.add(previousResponse);
+    receivedTexts.add(texts);
     this.cancelToken = cancelToken;
     if (completer != null) return completer!.future;
     if (previousResponse != null) {
@@ -145,7 +305,7 @@ class _FakeAiAgentRepository extends AiAgentRepository {
         ],
       );
     }
-    return firstResponse;
+    return response;
   }
 }
 
