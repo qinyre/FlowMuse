@@ -146,6 +146,45 @@ void main() {
     expect(canvasTaps, 1);
   });
 
+  testWidgets('面板打开后发送时读取最新文本框选区', (tester) async {
+    var context = const (
+      noteTitle: '测试笔记',
+      texts: [AiNoteText(id: 'text-a', text: '旧选区')],
+      truncated: false,
+      label: '当前选区（1 个文本框）',
+    );
+    final repository = _FakeAiAgentRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: repository,
+            noteTitle: context.noteTitle,
+            texts: context.texts,
+            contextTruncated: context.truncated,
+            contextLabel: context.label,
+            contextProvider: () => context,
+            promptStore: AiPromptStore(_MemorySettings()),
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+
+    context = const (
+      noteTitle: '测试笔记',
+      texts: [AiNoteText(id: 'text-b', text: '新选区')],
+      truncated: false,
+      label: '当前选区（1 个文本框）',
+    );
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+
+    expect(repository.receivedTexts.single.single.id, 'text-b');
+    expect(repository.receivedTexts.single.single.text, '新选区');
+  });
+
   testWidgets('思维导图动作展示结构并经确认应用', (tester) async {
     final action = AiAgentAction.fromJson({
       'tool': 'generate_mindmap',
@@ -219,6 +258,7 @@ class _FakeAiAgentRepository extends AiAgentRepository {
   final Completer<AiAgentResponse>? completer;
   final AiAgentResponse response;
   final previousResponses = <AiAgentResponse?>[];
+  final receivedTexts = <List<AiNoteText>>[];
   NativeHttpCancelToken? cancelToken;
 
   @override
@@ -230,6 +270,7 @@ class _FakeAiAgentRepository extends AiAgentRepository {
     NativeHttpCancelToken? cancelToken,
   }) async {
     previousResponses.add(previousResponse);
+    receivedTexts.add(texts);
     this.cancelToken = cancelToken;
     if (completer != null) return completer!.future;
     if (previousResponse != null) {

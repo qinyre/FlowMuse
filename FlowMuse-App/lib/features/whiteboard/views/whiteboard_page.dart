@@ -576,6 +576,49 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _closeAiPanel();
       return;
     }
+    final initialContext = _currentAiAgentContext();
+    final repository = ref.read(aiAgentRepositoryProvider);
+    final entry = OverlayEntry(
+      builder: (overlayContext) {
+        final size = MediaQuery.sizeOf(overlayContext);
+        final padding = MediaQuery.paddingOf(overlayContext);
+        final keyboardInset = MediaQuery.viewInsetsOf(overlayContext).bottom;
+        final panelTop = padding.top + 16;
+        final panelWidth = min(360.0, size.width - 24);
+        final panelHeight = min(
+          520.0,
+          size.height - panelTop - max(padding.bottom, keyboardInset) - 16,
+        );
+        return Positioned(
+          top: panelTop,
+          right: 12,
+          width: panelWidth,
+          height: panelHeight,
+          child: Material(
+            elevation: 12,
+            shadowColor: Colors.black38,
+            clipBehavior: Clip.antiAlias,
+            borderRadius: BorderRadius.circular(12),
+            child: AiAgentPanel(
+              repository: repository,
+              noteTitle: initialContext.noteTitle,
+              texts: initialContext.texts,
+              contextTruncated: initialContext.truncated,
+              contextLabel: initialContext.label,
+              contextProvider: _currentAiAgentContext,
+              promptStore: defaultAiPromptStore,
+              onApply: _applyAiAgentResponse,
+              onClose: _closeAiPanel,
+            ),
+          ),
+        );
+      },
+    );
+    _aiPanelEntry = entry;
+    Overlay.of(context).insert(entry);
+  }
+
+  AiAgentContextSnapshot _currentAiAgentContext() {
     final selectedTexts = _markdrawController.selectedElements
         .whereType<editor_core.TextElement>()
         .where((element) => !element.isDeleted)
@@ -609,44 +652,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               ? '当前笔记（暂无文字）'
               : '整篇笔记（${sourceTexts.length} 个文本框）'
         : '当前选区（${selectedTexts.length} 个文本框）';
-    final repository = ref.read(aiAgentRepositoryProvider);
-    final entry = OverlayEntry(
-      builder: (overlayContext) {
-        final size = MediaQuery.sizeOf(overlayContext);
-        final padding = MediaQuery.paddingOf(overlayContext);
-        final keyboardInset = MediaQuery.viewInsetsOf(overlayContext).bottom;
-        final panelTop = padding.top + 16;
-        final panelWidth = min(360.0, size.width - 24);
-        final panelHeight = min(
-          520.0,
-          size.height - panelTop - max(padding.bottom, keyboardInset) - 16,
-        );
-        return Positioned(
-          top: panelTop,
-          right: 12,
-          width: panelWidth,
-          height: panelHeight,
-          child: Material(
-            elevation: 12,
-            shadowColor: Colors.black38,
-            clipBehavior: Clip.antiAlias,
-            borderRadius: BorderRadius.circular(12),
-            child: AiAgentPanel(
-              repository: repository,
-              noteTitle: noteTitle,
-              texts: noteContext.texts,
-              contextTruncated: noteContext.truncated,
-              contextLabel: contextLabel,
-              promptStore: defaultAiPromptStore,
-              onApply: _applyAiAgentResponse,
-              onClose: _closeAiPanel,
-            ),
-          ),
-        );
-      },
+    return (
+      noteTitle: noteTitle,
+      texts: noteContext.texts,
+      truncated: noteContext.truncated,
+      label: contextLabel,
     );
-    _aiPanelEntry = entry;
-    Overlay.of(context).insert(entry);
   }
 
   void _closeAiPanel() {

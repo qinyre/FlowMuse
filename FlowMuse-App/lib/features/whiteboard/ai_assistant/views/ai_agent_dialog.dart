@@ -6,6 +6,13 @@ import '../models/ai_agent_models.dart';
 import '../repositories/ai_agent_repository.dart';
 import '../repositories/ai_prompt_store.dart';
 
+typedef AiAgentContextSnapshot = ({
+  String noteTitle,
+  List<AiNoteText> texts,
+  bool truncated,
+  String label,
+});
+
 Future<void> showAiAgentDialog({
   required BuildContext context,
   required AiAgentRepository repository,
@@ -46,6 +53,7 @@ class AiAgentPanel extends StatefulWidget {
     required this.texts,
     required this.contextTruncated,
     required this.contextLabel,
+    this.contextProvider,
     required this.promptStore,
     required this.onApply,
     required this.onClose,
@@ -56,6 +64,7 @@ class AiAgentPanel extends StatefulWidget {
   final List<AiNoteText> texts;
   final bool contextTruncated;
   final String contextLabel;
+  final AiAgentContextSnapshot Function()? contextProvider;
   final AiPromptStore promptStore;
   final Future<void> Function(AiAgentResponse response) onApply;
   final VoidCallback onClose;
@@ -75,10 +84,17 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   int _generation = 0;
   bool _loading = false;
   bool _applying = false;
+  late AiAgentContextSnapshot _context;
 
   @override
   void initState() {
     super.initState();
+    _context = (
+      noteTitle: widget.noteTitle,
+      texts: widget.texts,
+      truncated: widget.contextTruncated,
+      label: widget.contextLabel,
+    );
     if (widget.texts.isNotEmpty) {
       _instructionController.text = '总结当前笔记，提取待办事项，并生成合适的标题';
     }
@@ -135,11 +151,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   Future<void> _generate() async {
     final instruction = _instructionController.text.trim();
     if (instruction.isEmpty || _loading) return;
+    final context = widget.contextProvider?.call() ?? _context;
     final previousResponse = _response;
     final generation = ++_generation;
     final cancelToken = NativeHttpCancelToken();
     _cancelToken = cancelToken;
     setState(() {
+      _context = context;
       _loading = true;
       _error = null;
       if (previousResponse == null) _selectedActions = const {};
@@ -147,8 +165,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     try {
       final response = await widget.repository.run(
         instruction: instruction,
-        noteTitle: widget.noteTitle,
-        texts: widget.texts,
+        noteTitle: context.noteTitle,
+        texts: context.texts,
         previousResponse: previousResponse,
         cancelToken: cancelToken,
       );
@@ -298,7 +316,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        widget.contextLabel,
+                        _context.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -391,7 +409,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                       label: const Text('保存为常用指令'),
                     ),
                   ),
-                  if (widget.contextTruncated)
+                  Text(
+                    '发送时读取画布当前选中的文本框；未选择时使用整篇笔记。',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  if (_context.truncated)
                     Text(
                       '当前笔记较长，已使用前 $maxAiAgentContextLength 字作为上下文。',
                       style: Theme.of(context).textTheme.bodySmall,
@@ -400,7 +424,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     const SizedBox(height: AppSpacing.controlGap),
                     Text(
                       response == null
-                          ? widget.texts.isEmpty
+                          ? _context.texts.isEmpty
                                 ? '正在生成回复…'
                                 : '正在阅读笔记并生成操作…'
                           : '正在根据追问修改…',
