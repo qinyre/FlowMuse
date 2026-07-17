@@ -12,25 +12,23 @@ class WebDavClient {
     required this.baseUrl,
     required this.username,
     required this.password,
-  });
+    http.Client? httpClient,
+  }) : _inner = httpClient ?? http.Client();
 
   final String baseUrl;
   final String username;
   final String password;
 
-  final _inner = http.Client();
+  final http.Client _inner;
 
   String get _authHeader =>
       'Basic ${base64Encode(utf8.encode('$username:$password'))}';
 
-  Map<String, String> get _baseHeaders => {
-    'Authorization': _authHeader,
-  };
+  Map<String, String> get _baseHeaders => {'Authorization': _authHeader};
 
   /// Joins [baseUrl] and [path], normalizing slashes.
   String _resolve(String path) {
-    final base =
-        baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+    final base = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
     final p = path.startsWith('/') ? path.substring(1) : path;
     return '$base$p';
   }
@@ -44,11 +42,18 @@ class WebDavClient {
         '<d:propfind xmlns:d="DAV:"><d:prop>'
         '<d:resourcetype/></d:prop></d:propfind>';
     final request = http.Request('PROPFIND', Uri.parse(_resolve('/')))
-      ..headers.addAll({..._baseHeaders, 'Depth': '0', 'Content-Type': 'application/xml'})
+      ..headers.addAll({
+        ..._baseHeaders,
+        'Depth': '0',
+        'Content-Type': 'application/xml',
+        'Connection': 'close',
+      })
       ..body = body;
-    final streamed = await _inner.send(request).timeout(const Duration(seconds: 15));
+    final streamed = await _inner
+        .send(request)
+        .timeout(const Duration(seconds: 15));
     final status = streamed.statusCode;
-    await streamed.stream.drain<void>();
+    await streamed.stream.drain<void>().timeout(const Duration(seconds: 15));
     if (status == 401) {
       throw const WebDavException('用户名或密码错误', statusCode: 401);
     }
@@ -64,11 +69,11 @@ class WebDavClient {
   Future<void> ensureDirectory(String path) async {
     final uri = Uri.parse(_resolve(path.endsWith('/') ? path : '$path/'));
     final request = http.Request('MKCOL', uri)
-      ..headers.addAll(_baseHeaders);
+      ..headers.addAll({..._baseHeaders, 'Connection': 'close'});
     final streamed = await _inner
         .send(request)
         .timeout(const Duration(seconds: 15));
-    await streamed.stream.drain<void>();
+    await streamed.stream.drain<void>().timeout(const Duration(seconds: 15));
     final status = streamed.statusCode;
     // 201 = created, 405/409 = already exists — all acceptable
     if (status != 201 && status != 405 && status != 409 && status != 301) {
@@ -88,12 +93,13 @@ class WebDavClient {
         ..._baseHeaders,
         'Content-Type': contentType,
         'Content-Length': '${data.length}',
+        'Connection': 'close',
       })
       ..bodyBytes = data;
     final streamed = await _inner
         .send(request)
         .timeout(const Duration(seconds: 90));
-    await streamed.stream.drain<void>();
+    await streamed.stream.drain<void>().timeout(const Duration(seconds: 90));
     final status = streamed.statusCode;
     if (status != 200 && status != 201 && status != 204) {
       throw WebDavException('上传失败，服务器返回 $status', statusCode: status);
@@ -104,7 +110,7 @@ class WebDavClient {
   Future<Uint8List> getFile(String path) async {
     final uri = Uri.parse(_resolve(path));
     final response = await _inner
-        .get(uri, headers: _baseHeaders)
+        .get(uri, headers: {..._baseHeaders, 'Connection': 'close'})
         .timeout(const Duration(seconds: 90));
     if (response.statusCode != 200) {
       throw WebDavException(
@@ -132,6 +138,8 @@ class WebDavClient {
         ..._baseHeaders,
         'Depth': '1',
         'Content-Type': 'application/xml',
+        'Accept-Encoding': 'identity',
+        'Connection': 'close',
       })
       ..body = body;
     final streamed = await _inner
@@ -142,10 +150,12 @@ class WebDavClient {
       return const [];
     }
     if (status != 207) {
-      await streamed.stream.drain<void>();
+      await streamed.stream.drain<void>().timeout(const Duration(seconds: 20));
       throw WebDavException('读取目录失败，服务器返回 $status', statusCode: status);
     }
-    final xml = await streamed.stream.bytesToString();
+    final xml = await streamed.stream.bytesToString().timeout(
+      const Duration(seconds: 20),
+    );
     return _parseMultiStatus(xml);
   }
 
@@ -164,7 +174,8 @@ class WebDavClient {
     for (final m in blocks) {
       final block = m.group(1)!;
       final href = _xmlText(block, 'href') ?? '';
-      final isDir = block.contains(':collection') || block.contains('collection/');
+      final isDir =
+          block.contains(':collection') || block.contains('collection/');
       if (isDir) continue; // skip the directory itself and any sub-dirs
 
       final rawName = _xmlText(block, 'displayname');
@@ -174,14 +185,18 @@ class WebDavClient {
       final sizeStr = _xmlText(block, 'getcontentlength');
       final sizeBytes = sizeStr != null ? int.tryParse(sizeStr) : null;
       final lastModStr = _xmlText(block, 'getlastmodified');
-      final lastModified = lastModStr != null ? _parseHttpDate(lastModStr) : null;
+      final lastModified = lastModStr != null
+          ? _parseHttpDate(lastModStr)
+          : null;
 
-      entries.add(WebDavEntry(
-        href: href,
-        name: name,
-        sizeBytes: sizeBytes,
-        lastModified: lastModified,
-      ));
+      entries.add(
+        WebDavEntry(
+          href: href,
+          name: name,
+          sizeBytes: sizeBytes,
+          lastModified: lastModified,
+        ),
+      );
     }
     return entries;
   }
@@ -199,8 +214,18 @@ class WebDavClient {
   static DateTime? _parseHttpDate(String value) {
     try {
       const months = [
-        'jan', 'feb', 'mar', 'apr', 'may', 'jun',
-        'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+        'jan',
+        'feb',
+        'mar',
+        'apr',
+        'may',
+        'jun',
+        'jul',
+        'aug',
+        'sep',
+        'oct',
+        'nov',
+        'dec',
       ];
       final parts = value.trim().split(RegExp(r'[\s,]+'));
       // Format: [DayOfWeek, Day, Month, Year, HH:MM:SS, TZ]
@@ -226,8 +251,7 @@ class WebDavException implements Exception {
   final int? statusCode;
 
   @override
-  String toString() =>
-      statusCode != null ? '[$statusCode] $message' : message;
+  String toString() => statusCode != null ? '[$statusCode] $message' : message;
 }
 
 /// Metadata for a file on the WebDAV server.

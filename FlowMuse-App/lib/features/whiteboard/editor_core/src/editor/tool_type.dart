@@ -15,4 +15,5 @@ enum ToolType {
   frame,
   eraser,
   laser,
+  mindmap,
 }

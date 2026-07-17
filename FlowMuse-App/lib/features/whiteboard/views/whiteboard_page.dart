@@ -569,23 +569,34 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _openAiAgent() async {
-    final texts = <AiNoteText>[];
-    var totalLength = 0;
-    for (final element
-        in _markdrawController.editorState.scene.elements
-            .whereType<editor_core.TextElement>()) {
-      final text = element.text.trim();
-      if (element.isDeleted || text.isEmpty) continue;
-      final length = text.runes.length;
-      if (length > maxAiAgentTextLength ||
-          totalLength + length > maxAiAgentContextLength) {
-        _showMessage('当前笔记文字过长，请先选择较短内容或精简后再试');
-        return;
-      }
-      totalLength += length;
-      texts.add(AiNoteText(id: element.id.value, text: text));
-    }
-    if (texts.isEmpty) {
+    final selectedTexts = _markdrawController.selectedElements
+        .whereType<editor_core.TextElement>()
+        .where((element) => !element.isDeleted)
+        .toList();
+    final sourceTexts = selectedTexts.isNotEmpty
+        ? selectedTexts
+        : _markdrawController.editorState.scene.elements
+              .whereType<editor_core.TextElement>()
+              .where((element) => !element.isDeleted)
+              .toList();
+    sourceTexts.sort((left, right) {
+      final page = _aiPageIndex(left).compareTo(_aiPageIndex(right));
+      if (page != 0) return page;
+      final y = left.y.compareTo(right.y);
+      return y != 0 ? y : left.x.compareTo(right.x);
+    });
+    final noteContext = AiNoteContext.fromTexts(
+      sourceTexts.map(
+        (element) => AiNoteText(
+          id: element.id.value,
+          text: element.text,
+          pageIndex: _aiPageIndex(element),
+          x: element.x,
+          y: element.y,
+        ),
+      ),
+    );
+    if (noteContext.texts.isEmpty) {
       _showMessage('当前笔记没有可分析的文字，请先使用语音输入或手写识别');
       return;
     }
@@ -593,9 +604,28 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       context: context,
       repository: ref.read(aiAgentRepositoryProvider),
       noteTitle: _markdrawController.documentName ?? '未命名笔记',
-      texts: texts,
+      texts: noteContext.texts,
+      contextTruncated: noteContext.truncated,
+      contextLabel: selectedTexts.isEmpty
+          ? '整篇笔记（${sourceTexts.length} 个文本框）'
+          : '当前选区（${selectedTexts.length} 个文本框）',
       onApply: _applyAiAgentResponse,
     );
+  }
+
+  int _aiPageIndex(editor_core.TextElement element) {
+    final pages = _markdrawController.layout.pages;
+    final pageId = element.pageId;
+    if (pageId != null) {
+      final index = pages.indexWhere((page) => page.id == pageId);
+      if (index >= 0) return index;
+    }
+    final center = Offset(
+      element.x + element.width / 2,
+      element.y + element.height / 2,
+    );
+    final index = pages.indexWhere((page) => page.bounds.contains(center));
+    return index < 0 ? 0 : index;
   }
 
   Future<void> _applyAiAgentResponse(AiAgentResponse response) async {
@@ -618,7 +648,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _markdrawController.renameDocument(rename.value);
     }
     try {
-      _markdrawController.insertPlainTexts(insertedTexts);
+      _markdrawController.insertPlainTexts(insertedTexts, adaptiveLayout: true);
     } catch (_) {
       if (rename != null) {
         await ref

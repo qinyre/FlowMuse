@@ -43,17 +43,120 @@ void main() {
     expect(controller.editorState.scene.activeElements, isEmpty);
   });
 
+  test('长语音文字复用自适应布局并自动换行', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.lastCanvasSize = const Size(800, 600);
+    controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
+
+    controller.insertPlainText(
+      List.filled(200, '语音文字').join(),
+      adaptiveLayout: true,
+    );
+
+    final elements = controller.editorState.scene.activeElements
+        .whereType<TextElement>()
+        .toList();
+    expect(elements, isNotEmpty);
+    expect(elements.every((element) => !element.autoResize), isTrue);
+    expect(elements.every((element) => element.width < 800), isTrue);
+    expect(
+      elements.map((element) => element.text).join(),
+      List.filled(200, '语音文字').join(),
+    );
+  });
+
   test('AI 多段文字作为一次场景变更插入并可一次撤销', () {
     final controller = MarkdrawController();
     addTearDown(controller.dispose);
+    controller.lastCanvasSize = const Size(800, 600);
+    controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
     var sceneChanges = 0;
     controller.onSceneChanged = (_, _) => sceneChanges++;
 
-    controller.insertPlainTexts(['总结内容', '待办事项']);
+    controller.insertPlainTexts(['总结内容', '待办事项'], adaptiveLayout: true);
 
     expect(controller.editorState.scene.activeElements, hasLength(2));
     expect(sceneChanges, 1);
     controller.undo();
     expect(controller.editorState.scene.activeElements, isEmpty);
+  });
+
+  test('AI 超高文本拆分到新增页面且仍可一次撤销', () {
+    final controller = MarkdrawController(
+      config: MarkdrawEditorConfig(
+        initialLayout: CanvasLayout(
+          type: CanvasLayoutType.paged,
+          pages: [
+            CanvasPage(
+              id: 'page-1',
+              index: 0,
+              bounds: Rect.fromLTWH(0, 0, 400, 800),
+              template: CanvasPageTemplate.blank,
+            ),
+          ],
+        ),
+      ),
+    );
+    addTearDown(controller.dispose);
+    controller.lastCanvasSize = const Size(800, 600);
+    controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
+
+    controller.insertPlainTexts([
+      List.filled(300, '长文本').join(),
+    ], adaptiveLayout: true);
+
+    final elements = controller.editorState.scene.activeElements
+        .whereType<TextElement>()
+        .toList();
+    expect(elements.length, greaterThan(1));
+    expect(controller.layout.pages.length, greaterThan(1));
+    for (final element in elements) {
+      final page = controller.layout.pages.singleWhere(
+        (page) => page.id == element.pageId,
+      );
+      expect(element.autoResize, isFalse);
+      expect(element.x, greaterThanOrEqualTo(page.bounds.left + 72));
+      expect(
+        element.x + element.width,
+        lessThanOrEqualTo(page.bounds.right - 72),
+      );
+      expect(
+        element.y + element.height,
+        lessThanOrEqualTo(page.bounds.bottom - 72),
+      );
+    }
+
+    controller.undo();
+    expect(
+      controller.editorState.scene.activeElements.whereType<TextElement>(),
+      isEmpty,
+    );
+    expect(controller.layout.pages, hasLength(1));
+  });
+
+  test('AI 文本优先放入当前视口的空闲区域', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.lastCanvasSize = const Size(800, 600);
+    controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
+    controller.applyResult(
+      AddElementResult(
+        RectangleElement(
+          id: ElementId('occupied'),
+          x: 32,
+          y: 32,
+          width: 340,
+          height: 200,
+        ),
+      ),
+    );
+
+    controller.insertPlainTexts(['AI 总结'], adaptiveLayout: true);
+
+    final element = controller.editorState.scene.activeElements
+        .whereType<TextElement>()
+        .single;
+    expect(element.x, greaterThanOrEqualTo(448));
   });
 }

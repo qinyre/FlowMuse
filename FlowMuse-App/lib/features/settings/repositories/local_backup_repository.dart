@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../../shared/storage/local_database.dart';
@@ -72,7 +74,13 @@ class LocalBackupRepository {
         throw const FormatException('备份文件格式不正确');
       }
       await txn.insert(table, {
-        for (final entry in rawRow.entries) entry.key.toString(): entry.value,
+        for (final entry in rawRow.entries)
+          entry.key.toString():
+              table == 'notes' &&
+                  entry.key == 'cover_thumbnail' &&
+                  entry.value is List
+              ? Uint8List.fromList((entry.value as List).cast<int>())
+              : entry.value,
       });
     }
   }

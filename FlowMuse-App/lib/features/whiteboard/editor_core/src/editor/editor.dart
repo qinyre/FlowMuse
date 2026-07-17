@@ -2,6 +2,7 @@ export 'bindings/bindings.dart';
 export 'clipboard_service.dart';
 export 'editor_state.dart';
 export 'flowchart/flowchart.dart';
+export 'mindmap/mindmap.dart';
 export 'object_snap.dart';
 export 'property_panel_state.dart';
 export 'tool_result.dart';
