@@ -20,12 +20,15 @@ void main() {
       ),
     );
 
-    expect(find.byTooltip('手指绘制'), findsOneWidget);
+    final fingerDrawingLabel = find.text('手指绘制');
+    final fingerDrawingSwitch = find.byType(Switch);
+    expect(fingerDrawingLabel, findsOneWidget);
+    expect(fingerDrawingSwitch, findsOneWidget);
     expect(
-      tester.getCenter(find.byTooltip('手指绘制')).dx,
+      tester.getCenter(fingerDrawingSwitch).dx,
       greaterThan(tester.getCenter(find.text('已保存')).dx),
     );
-    await tester.tap(find.byTooltip('手指绘制'));
+    await tester.tap(fingerDrawingSwitch);
     expect(values, [true]);
   });
 
@@ -41,6 +44,7 @@ void main() {
       ),
     );
 
-    expect(find.byTooltip('手指绘制'), findsOneWidget);
+    expect(find.text('手指绘制'), findsOneWidget);
+    expect(find.byType(Switch), findsOneWidget);
   });
 }
