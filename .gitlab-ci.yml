@@ -34,7 +34,7 @@ build_ohos:
   tags: [ohos]
   script:
     - cd FlowMuse-App
-    - $env:Path = "$env:FLUTTER_OHOS_HOME\bin;$env:NODE_HOME;$env:Path"
+    - $env:Path = "$env:FLUTTER_OHOS_HOME\bin;$env:NODE_HOME;$env:HVIGOR_HOME;$env:Path"
     - if (-not $env:OHOS_BUILD_PROFILE) { throw 'OHOS_BUILD_PROFILE not configured' }
     - Copy-Item -LiteralPath $env:OHOS_BUILD_PROFILE -Destination 'ohos\build-profile.json5'
     - flutter pub get

@@ -11,7 +11,7 @@ Windows GitLab Runner 作为 `SYSTEM` 服务运行，不能继承开发用户 `L
 ## 方案
 
 - 新增 `build_ohos`，标签为 `ohos`。
-- 在 Job 内复用分析 Job 的 PATH 注入，再执行 `flutter pub get` 与 `flutter build hap --debug`。
+- 在 Job 内注入 Flutter、Node.js 与 DevEco Hvigor 路径，再执行 `flutter pub get` 与 `flutter build hap --debug`。
 - 通过 GitLab File 变量 `OHOS_BUILD_PROFILE` 注入被忽略的 `ohos/build-profile.json5`，不输出其内容。
 - 归档 `FlowMuse-App/build/ohos/hap/entry-default-signed.hap` 七天。
 - Android、Web、Windows、iOS、macOS 构建继续不启用。
