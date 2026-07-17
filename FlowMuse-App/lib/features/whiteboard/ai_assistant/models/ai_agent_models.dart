@@ -11,12 +11,27 @@ enum AiAgentTool { renameNote, insertText }
 
 @immutable
 class AiNoteText {
-  const AiNoteText({required this.id, required this.text});
+  const AiNoteText({
+    required this.id,
+    required this.text,
+    this.pageIndex,
+    this.x,
+    this.y,
+  });
 
   final String id;
   final String text;
+  final int? pageIndex;
+  final double? x;
+  final double? y;
 
-  Map<String, Object?> toJson() => {'id': id, 'text': text};
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'text': text,
+    if (pageIndex != null) 'pageIndex': pageIndex,
+    if (x != null) 'x': x,
+    if (y != null) 'y': y,
+  };
 }
 
 @immutable
@@ -47,6 +62,9 @@ class AiNoteContext {
                 ? item.id
                 : '${item.id}:${offset ~/ maxAiAgentTextLength}',
             text: String.fromCharCodes(runes.sublist(offset, offset + length)),
+            pageIndex: item.pageIndex,
+            x: item.x,
+            y: item.y,
           ),
         );
         offset += length;
@@ -72,6 +90,31 @@ class AiAgentAction {
   String get label => switch (tool) {
     AiAgentTool.renameNote => '重命名笔记',
     AiAgentTool.insertText => '插入白板文字',
+  };
+
+  factory AiAgentAction.edited({
+    required AiAgentTool tool,
+    required String value,
+  }) {
+    final argumentKey = switch (tool) {
+      AiAgentTool.renameNote => 'title',
+      AiAgentTool.insertText => 'text',
+    };
+    return AiAgentAction.fromJson({
+      'tool': switch (tool) {
+        AiAgentTool.renameNote => 'rename_note',
+        AiAgentTool.insertText => 'insert_text',
+      },
+      'arguments': {argumentKey: value},
+    });
+  }
+
+  Map<String, Object?> toJson() => {
+    'tool': switch (tool) {
+      AiAgentTool.renameNote => 'rename_note',
+      AiAgentTool.insertText => 'insert_text',
+    },
+    'arguments': {(tool == AiAgentTool.renameNote ? 'title' : 'text'): value},
   };
 
   factory AiAgentAction.fromJson(Object? value) {
@@ -126,6 +169,11 @@ class AiAgentResponse {
 
   final String message;
   final List<AiAgentAction> actions;
+
+  Map<String, Object?> toJson() => {
+    'message': message,
+    'actions': [for (final action in actions) action.toJson()],
+  };
 
   factory AiAgentResponse.fromOpenAiJson(Map<String, Object?> json) {
     final choices = json['choices'];

@@ -3,6 +3,8 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { FlutterEngine, MethodCall, MethodChannel, MethodResult } from '@ohos/flutter_ohos';
 
 export class HttpChannel {
+  private readonly requests: Map<string, http.HttpRequest> = new Map();
+
   register(flutterEngine: FlutterEngine): void {
     const channel = new MethodChannel(
       flutterEngine.getDartExecutor().getBinaryMessenger(),
@@ -10,6 +12,13 @@ export class HttpChannel {
     );
     channel.setMethodCallHandler({
       onMethodCall: (call: MethodCall, result: MethodResult): void => {
+        if (call.method === 'cancel') {
+          const requestId = call.args as string;
+          this.requests.get(requestId)?.destroy();
+          this.requests.delete(requestId);
+          result.success(null);
+          return;
+        }
         if (call.method !== 'post') {
           result.notImplemented();
           return;
@@ -23,6 +32,10 @@ export class HttpChannel {
 
   private async doPost(args: Map<string, Object>): Promise<Map<string, Object>> {
     const req = http.createHttp();
+    const requestId = (args.get('requestId') as string) ?? '';
+    if (requestId.length > 0) {
+      this.requests.set(requestId, req);
+    }
     try {
       const headers = JSON.parse(
         (args.get('headersJson') as string) ?? '{}'
@@ -40,6 +53,9 @@ export class HttpChannel {
       map.set('body', (response.result as string) ?? '');
       return map;
     } finally {
+      if (requestId.length > 0) {
+        this.requests.delete(requestId);
+      }
       req.destroy();
     }
   }

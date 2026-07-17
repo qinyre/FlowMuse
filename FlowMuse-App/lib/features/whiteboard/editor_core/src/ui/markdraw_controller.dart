@@ -791,6 +791,7 @@ class MarkdrawController extends ChangeNotifier {
     final undone = _historyManager.undo(_editorState.scene);
     if (undone != null) {
       _editorState = _editorState.copyWith(scene: undone);
+      _syncLayoutFromScene();
       _lastChangedElements = null;
       onSceneChanged?.call(_editorState.scene, SceneChangeSource.undo);
       notifyListeners();
@@ -802,6 +803,7 @@ class MarkdrawController extends ChangeNotifier {
     final redone = _historyManager.redo(_editorState.scene);
     if (redone != null) {
       _editorState = _editorState.copyWith(scene: redone);
+      _syncLayoutFromScene();
       _lastChangedElements = null;
       onSceneChanged?.call(_editorState.scene, SceneChangeSource.redo);
       notifyListeners();
@@ -4102,47 +4104,88 @@ class MarkdrawController extends ChangeNotifier {
                 ),
           ]
         : <Bounds>[];
-    final insertionArea = adaptiveLayout
-        ? _adaptiveTextInsertionArea(targetSize)
-        : null;
+    final insertionAreas = adaptiveLayout
+        ? _adaptiveTextInsertionAreas(targetSize)
+        : <({Rect rect, String? pageId})>[];
+    final pageElements = <Element>[];
+    final preparedTexts = adaptiveLayout
+        ? [
+            for (final text in normalized)
+              ..._splitAdaptiveText(
+                text,
+                insertionAreas.first.rect.width,
+                insertionAreas.first.rect.height * 0.8,
+              ),
+          ]
+        : normalized;
+    var areaIndex = 0;
     var y = centerScene.dy;
-    for (final text in normalized) {
+    for (final text in preparedTexts) {
+      var insertionArea = adaptiveLayout ? insertionAreas[areaIndex] : null;
       final textElem = TextElement(
         id: ElementId.generate(),
-        x: insertionArea?.left ?? centerScene.dx,
-        y: insertionArea?.top ?? y,
+        x: insertionArea?.rect.left ?? centerScene.dx,
+        y: insertionArea?.rect.top ?? y,
         width: 10,
         height: 10,
         text: text,
         fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
         fontSize: _defaultStyle.fontSize ?? 20,
         autoResize: !adaptiveLayout,
+        customData: insertionArea?.pageId == null
+            ? null
+            : CanvasLayout.elementCustomData(insertionArea!.pageId!),
       );
       final naturalWidth = TextRenderer.measure(textElem).$1 + 4;
       var width = insertionArea == null
           ? naturalWidth
           : math.min(
-              insertionArea.width,
+              insertionArea.rect.width,
               math.max(
                 320.0,
-                math.min(naturalWidth, insertionArea.width * 0.6),
+                math.min(naturalWidth, insertionArea.rect.width * 0.6),
               ),
             );
       var height = TextRenderer.measure(textElem, maxWidth: width).$2;
       if (insertionArea != null &&
-          height > insertionArea.height * 0.8 &&
-          width < insertionArea.width) {
-        width = insertionArea.width;
+          height > insertionArea.rect.height * 0.8 &&
+          width < insertionArea.rect.width) {
+        width = insertionArea.rect.width;
         height = TextRenderer.measure(textElem, maxWidth: width).$2;
       }
-      final placement = insertionArea == null
-          ? null
-          : _findTextInsertionBounds(insertionArea, width, height, occupied);
+      Bounds? placement;
+      while (insertionArea != null && placement == null) {
+        placement = _findTextInsertionBounds(
+          insertionArea.rect,
+          width,
+          height,
+          occupied,
+        );
+        if (placement != null) break;
+        areaIndex++;
+        if (areaIndex >= insertionAreas.length) {
+          if (_layout.isPaged) {
+            final appended = _appendAdaptiveTextPage();
+            insertionAreas.add((rect: appended.rect, pageId: appended.pageId));
+            pageElements.add(appended.element);
+          } else {
+            final previous = insertionAreas.last.rect;
+            insertionAreas.add((
+              rect: previous.shift(Offset(0, previous.height + 24)),
+              pageId: null,
+            ));
+          }
+        }
+        insertionArea = insertionAreas[areaIndex];
+      }
       final sized = textElem.copyWith(
         x: placement?.left,
         y: placement?.top,
         width: math.max(width, 20.0),
         height: math.max(height, textElem.fontSize * textElem.lineHeight),
+        customData: insertionArea?.pageId == null
+            ? null
+            : CanvasLayout.elementCustomData(insertionArea!.pageId!),
       );
       final styled = applyDefaultStyleToElement(sized);
       elements.add(styled);
@@ -4155,24 +4198,120 @@ class MarkdrawController extends ChangeNotifier {
     _historyManager.push(_editorState.scene);
     applyResult(
       CompoundResult([
+        for (final page in pageElements) AddElementResult(page),
         for (final element in elements) AddElementResult(element),
         SetSelectionResult({for (final element in elements) element.id}),
       ]),
     );
   }
 
-  Rect _adaptiveTextInsertionArea(Size canvasSize) {
+  List<({Rect rect, String? pageId})> _adaptiveTextInsertionAreas(
+    Size canvasSize,
+  ) {
     final visible = _editorState.viewport.visibleRect(canvasSize);
     if (_layout.isPaged) {
       final page = _layout.pageAt(visible.center);
       if (page != null) {
-        return page.bounds.deflate(72);
+        final index = _layout.pages.indexWhere((item) => item.id == page.id);
+        return [
+          for (final item in _layout.pages.skip(math.max(index, 0)))
+            (rect: item.bounds.deflate(72), pageId: item.id),
+        ];
       }
     }
-    return visible.deflate(math.min(32, visible.shortestSide / 8));
+    return [
+      (
+        rect: visible.deflate(math.min(32, visible.shortestSide / 8)),
+        pageId: null,
+      ),
+    ];
   }
 
-  Bounds _findTextInsertionBounds(
+  List<String> _splitAdaptiveText(String text, double width, double maxHeight) {
+    final runes = text.runes.toList();
+    final chunks = <String>[];
+    var offset = 0;
+    while (offset < runes.length) {
+      var low = 1;
+      var high = runes.length - offset;
+      while (low < high) {
+        final mid = (low + high + 1) ~/ 2;
+        final candidate = String.fromCharCodes(
+          runes.sublist(offset, offset + mid),
+        );
+        if (_adaptiveTextHeight(candidate, width) <= maxHeight) {
+          low = mid;
+        } else {
+          high = mid - 1;
+        }
+      }
+      var end = offset + low;
+      if (end < runes.length) {
+        final minimumBreak = offset + low ~/ 2;
+        for (var index = end - 1; index >= minimumBreak; index--) {
+          if (runes[index] == 10 || runes[index] == 32) {
+            end = index + 1;
+            break;
+          }
+        }
+      }
+      final chunk = String.fromCharCodes(runes.sublist(offset, end)).trim();
+      if (chunk.isNotEmpty) chunks.add(chunk);
+      offset = end;
+    }
+    return chunks;
+  }
+
+  double _adaptiveTextHeight(String text, double width) {
+    final element = TextElement(
+      id: ElementId('measure'),
+      x: 0,
+      y: 0,
+      width: width,
+      height: 10,
+      text: text,
+      fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
+      fontSize: _defaultStyle.fontSize ?? 20,
+      autoResize: false,
+    );
+    return TextRenderer.measure(element, maxWidth: width).$2;
+  }
+
+  ({Rect rect, String pageId, Element element}) _appendAdaptiveTextPage() {
+    final index = _layout.pages.length;
+    final pageId = 'page-${ElementId.generate().value}';
+    final size = CanvasLayout.pageSizeForTemplate(_layout.template);
+    final page = CanvasPage(
+      id: pageId,
+      index: index,
+      bounds: CanvasLayout.pageBoundsForIndex(
+        index: index,
+        pageSize: size,
+        pageFlow: _layout.pageFlow,
+      ),
+      template: _layout.template,
+      pageFlow: _layout.pageFlow,
+    );
+    _layout = _layout.copyWith(pages: [..._layout.pages, page]);
+    return (
+      rect: page.bounds.deflate(72),
+      pageId: pageId,
+      element: RectangleElement(
+        id: ElementId(pageId),
+        x: page.bounds.left,
+        y: page.bounds.top,
+        width: page.bounds.width,
+        height: page.bounds.height,
+        strokeColor: 'transparent',
+        backgroundColor: 'transparent',
+        opacity: 0,
+        locked: true,
+        customData: CanvasLayout.pageCustomData(page),
+      ),
+    );
+  }
+
+  Bounds? _findTextInsertionBounds(
     Rect area,
     double width,
     double height,
@@ -4198,7 +4337,7 @@ class MarkdrawController extends ChangeNotifier {
         }
       }
     }
-    return Bounds.fromLTWH(area.left, area.top, width, height);
+    return null;
   }
 
   /// Renames the document. Empty string is treated as null (no name).

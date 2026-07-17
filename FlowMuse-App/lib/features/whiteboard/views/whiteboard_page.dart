@@ -569,13 +569,32 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _openAiAgent() async {
+    final selectedTexts = _markdrawController.selectedElements
+        .whereType<editor_core.TextElement>()
+        .where((element) => !element.isDeleted)
+        .toList();
+    final sourceTexts = selectedTexts.isNotEmpty
+        ? selectedTexts
+        : _markdrawController.editorState.scene.elements
+              .whereType<editor_core.TextElement>()
+              .where((element) => !element.isDeleted)
+              .toList();
+    sourceTexts.sort((left, right) {
+      final page = _aiPageIndex(left).compareTo(_aiPageIndex(right));
+      if (page != 0) return page;
+      final y = left.y.compareTo(right.y);
+      return y != 0 ? y : left.x.compareTo(right.x);
+    });
     final noteContext = AiNoteContext.fromTexts(
-      _markdrawController.editorState.scene.elements
-          .whereType<editor_core.TextElement>()
-          .where((element) => !element.isDeleted)
-          .map(
-            (element) => AiNoteText(id: element.id.value, text: element.text),
-          ),
+      sourceTexts.map(
+        (element) => AiNoteText(
+          id: element.id.value,
+          text: element.text,
+          pageIndex: _aiPageIndex(element),
+          x: element.x,
+          y: element.y,
+        ),
+      ),
     );
     if (noteContext.texts.isEmpty) {
       _showMessage('当前笔记没有可分析的文字，请先使用语音输入或手写识别');
@@ -587,8 +606,26 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       noteTitle: _markdrawController.documentName ?? '未命名笔记',
       texts: noteContext.texts,
       contextTruncated: noteContext.truncated,
+      contextLabel: selectedTexts.isEmpty
+          ? '整篇笔记（${sourceTexts.length} 个文本框）'
+          : '当前选区（${selectedTexts.length} 个文本框）',
       onApply: _applyAiAgentResponse,
     );
+  }
+
+  int _aiPageIndex(editor_core.TextElement element) {
+    final pages = _markdrawController.layout.pages;
+    final pageId = element.pageId;
+    if (pageId != null) {
+      final index = pages.indexWhere((page) => page.id == pageId);
+      if (index >= 0) return index;
+    }
+    final center = Offset(
+      element.x + element.width / 2,
+      element.y + element.height / 2,
+    );
+    final index = pages.indexWhere((page) => page.bounds.contains(center));
+    return index < 0 ? 0 : index;
   }
 
   Future<void> _applyAiAgentResponse(AiAgentResponse response) async {

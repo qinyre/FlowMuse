@@ -25,6 +25,30 @@ void main() {
     );
   });
 
+  test('上下文切分保留页面和坐标元数据', () {
+    final context = AiNoteContext.fromTexts(const [
+      AiNoteText(id: 'text', text: '页面文字', pageIndex: 2, x: 30, y: 40),
+    ]);
+
+    expect(context.texts.single.toJson(), {
+      'id': 'text',
+      'text': '页面文字',
+      'pageIndex': 2,
+      'x': 30.0,
+      'y': 40.0,
+    });
+  });
+
+  test('用户编辑后的动作仍执行长度校验', () {
+    expect(
+      () => AiAgentAction.edited(
+        tool: AiAgentTool.renameNote,
+        value: List.filled(maxAiAgentTitleLength + 1, '字').join(),
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('解析受支持的多操作响应', () {
     final response = AiAgentResponse.fromOpenAiJson({
       'choices': [

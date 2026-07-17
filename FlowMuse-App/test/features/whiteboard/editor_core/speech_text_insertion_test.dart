@@ -54,11 +54,16 @@ void main() {
       adaptiveLayout: true,
     );
 
-    final element =
-        controller.editorState.scene.activeElements.single as TextElement;
-    expect(element.autoResize, isFalse);
-    expect(element.width, lessThan(800));
-    expect(element.height, greaterThan(element.fontSize * element.lineHeight));
+    final elements = controller.editorState.scene.activeElements
+        .whereType<TextElement>()
+        .toList();
+    expect(elements, isNotEmpty);
+    expect(elements.every((element) => !element.autoResize), isTrue);
+    expect(elements.every((element) => element.width < 800), isTrue);
+    expect(
+      elements.map((element) => element.text).join(),
+      List.filled(200, '语音文字').join(),
+    );
   });
 
   test('AI 多段文字作为一次场景变更插入并可一次撤销', () {
@@ -77,7 +82,7 @@ void main() {
     expect(controller.editorState.scene.activeElements, isEmpty);
   });
 
-  test('AI 长文本按可用宽度换行而不是生成单行超长文本框', () {
+  test('AI 超高文本拆分到新增页面且仍可一次撤销', () {
     final controller = MarkdrawController(
       config: MarkdrawEditorConfig(
         initialLayout: CanvasLayout(
@@ -101,13 +106,33 @@ void main() {
       List.filled(300, '长文本').join(),
     ], adaptiveLayout: true);
 
-    final element = controller.editorState.scene.activeElements
+    final elements = controller.editorState.scene.activeElements
         .whereType<TextElement>()
-        .single;
-    expect(element.autoResize, isFalse);
-    expect(element.x, greaterThanOrEqualTo(72));
-    expect(element.x + element.width, lessThanOrEqualTo(328));
-    expect(element.height, greaterThan(element.fontSize * element.lineHeight));
+        .toList();
+    expect(elements.length, greaterThan(1));
+    expect(controller.layout.pages.length, greaterThan(1));
+    for (final element in elements) {
+      final page = controller.layout.pages.singleWhere(
+        (page) => page.id == element.pageId,
+      );
+      expect(element.autoResize, isFalse);
+      expect(element.x, greaterThanOrEqualTo(page.bounds.left + 72));
+      expect(
+        element.x + element.width,
+        lessThanOrEqualTo(page.bounds.right - 72),
+      );
+      expect(
+        element.y + element.height,
+        lessThanOrEqualTo(page.bounds.bottom - 72),
+      );
+    }
+
+    controller.undo();
+    expect(
+      controller.editorState.scene.activeElements.whereType<TextElement>(),
+      isEmpty,
+    );
+    expect(controller.layout.pages, hasLength(1));
   });
 
   test('AI 文本优先放入当前视口的空闲区域', () {
