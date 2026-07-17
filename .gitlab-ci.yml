@@ -38,6 +38,7 @@ build_ohos:
     - if (-not $env:OHOS_BUILD_PROFILE) { throw 'OHOS_BUILD_PROFILE not configured' }
     - Copy-Item -LiteralPath $env:OHOS_BUILD_PROFILE -Destination 'ohos\build-profile.json5'
     - flutter pub get
+    - '& "$env:NODE_HOME\npm.cmd" install pnpm@10.28.2 --loglevel verbose'
     - flutter build hap --debug
   artifacts:
     paths: [FlowMuse-App/build/ohos/hap/entry-default-signed.hap]
