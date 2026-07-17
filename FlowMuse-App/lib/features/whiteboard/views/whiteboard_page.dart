@@ -596,10 +596,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         ),
       ),
     );
-    if (noteContext.texts.isEmpty) {
-      _showMessage('当前笔记没有可分析的文字，请先使用语音输入或手写识别');
-      return;
-    }
     await showAiAgentDialog(
       context: context,
       repository: ref.read(aiAgentRepositoryProvider),
@@ -607,7 +603,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       texts: noteContext.texts,
       contextTruncated: noteContext.truncated,
       contextLabel: selectedTexts.isEmpty
-          ? '整篇笔记（${sourceTexts.length} 个文本框）'
+          ? sourceTexts.isEmpty
+                ? '当前笔记（暂无文字，可直接对话）'
+                : '整篇笔记（${sourceTexts.length} 个文本框）'
           : '当前选区（${selectedTexts.length} 个文本框）',
       onApply: _applyAiAgentResponse,
     );
@@ -666,12 +664,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       }
       rethrow;
     }
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _syncDocumentTitle(NoteItem? note) {

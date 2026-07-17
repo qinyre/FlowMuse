@@ -79,6 +79,37 @@ void main() {
     expect(response.actions.first.value, '课堂笔记总结');
   });
 
+  test('允许不调用工具的普通对话响应', () {
+    final response = AiAgentResponse.fromOpenAiJson({
+      'choices': [
+        {
+          'message': {'content': '你好，有什么想一起创作的？'},
+        },
+      ],
+    });
+
+    expect(response.message, '你好，有什么想一起创作的？');
+    expect(response.actions, isEmpty);
+  });
+
+  test('空对话且无工具操作一律拒绝', () {
+    expect(
+      () =>
+          AiAgentResponse.fromJson({'message': '   ', 'actions': <Object?>[]}),
+      throwsFormatException,
+    );
+  });
+
+  test('超长对话回复一律拒绝', () {
+    expect(
+      () => AiAgentResponse.fromJson({
+        'message': List.filled(maxAiAgentTextLength + 1, '字').join(),
+        'actions': <Object?>[],
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('Base URL 自动补齐 Chat Completions 路径', () {
     const config = AiAgentConfig(
       baseUrl: 'https://example.com/v1/',
@@ -127,6 +158,31 @@ void main() {
             },
           },
         ],
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('Markdown 插入内容转为文本框可显示的纯文本', () {
+    final action = AiAgentAction.fromJson({
+      'tool': 'insert_text',
+      'arguments': {
+        'text': '''# 课堂总结
+
+**重点**：理解 [Riverpod](https://riverpod.dev)
+
+- 完成作业
+- `flutter test`
+''',
+      },
+    });
+
+    expect(action.value, '课堂总结\n\n重点：理解 Riverpod\n\n• 完成作业\n• flutter test');
+
+    expect(
+      () => AiAgentAction.fromJson({
+        'tool': 'insert_text',
+        'arguments': {'text': '```'},
       }),
       throwsFormatException,
     );

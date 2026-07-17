@@ -24,7 +24,7 @@ void main() {
       '提取待办事项',
     );
 
-    await tester.tap(find.text('生成操作'));
+    await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(CheckboxListTile, '重命名笔记'));
     await tester.pump();
@@ -44,7 +44,8 @@ void main() {
       onApply: (response) async => applied = response,
     );
 
-    await tester.tap(find.text('生成操作'));
+    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, '再精简一点');
     await tester.tap(find.text('追问修改'));
@@ -72,7 +73,8 @@ void main() {
     final repository = _FakeAiAgentRepository(completer: completer);
     await _openDialog(tester, repository: repository, onApply: (_) async {});
 
-    await tester.tap(find.text('生成操作'));
+    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.tap(find.text('发送'));
     await tester.pump();
     await tester.tap(find.text('取消生成'));
     await tester.pump();
@@ -82,6 +84,27 @@ void main() {
     completer.complete(_FakeAiAgentRepository.firstResponse);
     await tester.pump();
     expect(find.text('准备应用'), findsNothing);
+  });
+
+  testWidgets('空笔记可直接对话且不显示应用操作', (tester) async {
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: const AiAgentResponse(message: '这是直接回答', actions: []),
+      ),
+      texts: const [],
+      onApply: (_) async {},
+    );
+
+    await tester.enterText(find.byType(TextField).first, '帮我构思一个故事');
+    await tester.pump();
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('这是直接回答'), findsOneWidget);
+    expect(find.text('确认后将执行：'), findsNothing);
+    expect(find.text('确认应用'), findsNothing);
+    expect(find.text('追问修改'), findsOneWidget);
   });
 
   testWidgets('思维导图动作展示结构并经确认应用', (tester) async {
@@ -106,7 +129,7 @@ void main() {
     );
 
     await tester.tap(find.text('根据当前内容生成思维导图'));
-    await tester.tap(find.text('生成操作'));
+    await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
 
     expect(find.text('生成思维导图'), findsOneWidget);
@@ -121,6 +144,7 @@ Future<void> _openDialog(
   WidgetTester tester, {
   required AiAgentRepository repository,
   required Future<void> Function(AiAgentResponse) onApply,
+  List<AiNoteText> texts = const [AiNoteText(id: 'text-1', text: '测试内容')],
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -131,7 +155,7 @@ Future<void> _openDialog(
             repository: repository,
             promptStore: AiPromptStore(_MemorySettings()),
             noteTitle: '测试笔记',
-            texts: const [AiNoteText(id: 'text-1', text: '测试内容')],
+            texts: texts,
             onApply: onApply,
           ),
           child: const Text('打开'),

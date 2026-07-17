@@ -162,10 +162,8 @@ class AiAgentAction {
       ),
       'insert_text' => AiAgentAction(
         tool: AiAgentTool.insertText,
-        value: _requiredText(
-          args,
-          key: 'text',
-          maxLength: maxAiAgentTextLength,
+        value: _markdownToPlainText(
+          _requiredText(args, key: 'text', maxLength: maxAiAgentTextLength),
         ),
       ),
       'generate_mindmap' => AiAgentAction(
@@ -244,6 +242,31 @@ class AiAgentAction {
   }
 }
 
+String _markdownToPlainText(String source) {
+  var text = source
+      .replaceAll(RegExp(r'^\s*```[^\n]*$', multiLine: true), '')
+      .replaceAll(RegExp(r'^\s{0,3}#{1,6}\s+', multiLine: true), '')
+      .replaceAll(RegExp(r'^\s{0,3}>\s?', multiLine: true), '')
+      .replaceAllMapped(
+        RegExp(r'^(\s*)[-*+]\s+', multiLine: true),
+        (match) => '${match[1]}• ',
+      )
+      .replaceAllMapped(
+        RegExp(r'!\[([^\]]*)\]\([^)]*\)'),
+        (match) => match[1] ?? '',
+      )
+      .replaceAllMapped(
+        RegExp(r'\[([^\]]+)\]\([^)]*\)'),
+        (match) => match[1] ?? '',
+      );
+  for (final marker in ['**', '__', '~~', '`']) {
+    text = text.replaceAll(marker, '');
+  }
+  final result = text.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+  if (result.isEmpty) throw const FormatException('AI 插入内容为空');
+  return result;
+}
+
 @immutable
 class AiAgentResponse {
   const AiAgentResponse({required this.message, required this.actions});
@@ -266,18 +289,19 @@ class AiAgentResponse {
     if (rawMessage is! Map) throw const FormatException('AI 响应格式无效');
     final message = Map<String, Object?>.from(rawMessage);
     final toolCalls = message['tool_calls'];
-    if (toolCalls is! List) throw const FormatException('AI 未返回工具操作');
+    if (toolCalls != null && toolCalls is! List) {
+      throw const FormatException('AI 工具调用格式无效');
+    }
+    final calls = toolCalls is List ? toolCalls : const <Object?>[];
     return AiAgentResponse.fromJson({
       'message': message['content'],
-      'actions': [for (final call in toolCalls) _actionFromToolCall(call)],
+      'actions': [for (final call in calls) _actionFromToolCall(call)],
     });
   }
 
   factory AiAgentResponse.fromJson(Map<String, Object?> json) {
     final rawActions = json['actions'];
-    if (rawActions is! List ||
-        rawActions.isEmpty ||
-        rawActions.length > maxAiAgentActions) {
+    if (rawActions is! List || rawActions.length > maxAiAgentActions) {
       throw const FormatException('AI 返回的操作数量无效');
     }
     final actions = rawActions.map(AiAgentAction.fromJson).toList();
@@ -298,10 +322,15 @@ class AiAgentResponse {
       throw const FormatException('思维导图与插入文字不能同时执行');
     }
     final message = json['message'];
+    final normalizedMessage = message is String ? message.trim() : '';
+    if (normalizedMessage.runes.length > maxAiAgentTextLength) {
+      throw const FormatException('AI 回复内容过长');
+    }
+    if (actions.isEmpty && normalizedMessage.isEmpty) {
+      throw const FormatException('AI 未返回有效内容');
+    }
     return AiAgentResponse(
-      message: message is String && message.trim().isNotEmpty
-          ? message.trim()
-          : '已生成可执行的笔记操作',
+      message: normalizedMessage.isNotEmpty ? normalizedMessage : '已生成可执行的笔记操作',
       actions: List.unmodifiable(actions),
     );
   }

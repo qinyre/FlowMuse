@@ -53,9 +53,7 @@ class _AiAgentDialog extends StatefulWidget {
 }
 
 class _AiAgentDialogState extends State<_AiAgentDialog> {
-  final _instructionController = TextEditingController(
-    text: '总结当前笔记，提取待办事项，并生成合适的标题',
-  );
+  final _instructionController = TextEditingController();
   final _actionControllers = <TextEditingController>[];
   AiAgentResponse? _response;
   Set<int> _selectedActions = const {};
@@ -69,6 +67,9 @@ class _AiAgentDialogState extends State<_AiAgentDialog> {
   @override
   void initState() {
     super.initState();
+    if (widget.texts.isNotEmpty) {
+      _instructionController.text = '总结当前笔记，提取待办事项，并生成合适的标题';
+    }
     _loadPrompts();
   }
 
@@ -319,7 +320,13 @@ class _AiAgentDialogState extends State<_AiAgentDialog> {
                 const SizedBox(height: 8),
                 const LinearProgressIndicator(),
                 const SizedBox(height: 12),
-                Text(response == null ? '正在阅读笔记并生成操作…' : '正在根据追问修改…'),
+                Text(
+                  response == null
+                      ? widget.texts.isEmpty
+                            ? '正在生成回复…'
+                            : '正在阅读笔记并生成操作…'
+                      : '正在根据追问修改…',
+                ),
               ],
               if (_error != null) ...[
                 const SizedBox(height: 8),
@@ -331,11 +338,13 @@ class _AiAgentDialogState extends State<_AiAgentDialog> {
               if (response != null) ...[
                 const SizedBox(height: 12),
                 Text(response.message),
-                const SizedBox(height: 12),
-                const Text(
-                  '确认后将执行：',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
+                if (response.actions.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    '确认后将执行：',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ],
                 for (var index = 0; index < response.actions.length; index++)
                   Column(
                     children: [
@@ -412,17 +421,18 @@ class _AiAgentDialogState extends State<_AiAgentDialog> {
         else if (response == null)
           FilledButton(
             onPressed: instruction.isEmpty ? null : _generate,
-            child: const Text('生成操作'),
+            child: const Text('发送'),
           )
         else ...[
           TextButton(
             onPressed: instruction.isEmpty ? null : _generate,
             child: const Text('追问修改'),
           ),
-          FilledButton(
-            onPressed: _canApply ? _apply : null,
-            child: Text(_applying ? '正在应用…' : '确认应用'),
-          ),
+          if (response.actions.isNotEmpty)
+            FilledButton(
+              onPressed: _canApply ? _apply : null,
+              child: Text(_applying ? '正在应用…' : '确认应用'),
+            ),
         ],
       ],
     );
