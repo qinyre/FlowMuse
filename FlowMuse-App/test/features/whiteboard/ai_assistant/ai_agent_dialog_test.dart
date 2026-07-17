@@ -26,7 +26,9 @@ void main() {
 
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(CheckboxListTile, '重命名笔记'));
+    final renameAction = find.widgetWithText(CheckboxListTile, '重命名笔记');
+    await tester.ensureVisible(renameAction);
+    await tester.tap(renameAction);
     await tester.pump();
     await tester.tap(find.text('确认应用'));
     await tester.pumpAndSettle();
@@ -105,6 +107,43 @@ void main() {
     expect(find.text('确认后将执行：'), findsNothing);
     expect(find.text('确认应用'), findsNothing);
     expect(find.text('追问修改'), findsOneWidget);
+  });
+
+  testWidgets('右侧面板不会用遮罩阻断画布操作', (tester) async {
+    var canvasTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => canvasTaps++,
+                  child: const Text('画布操作'),
+                ),
+              ),
+              SizedBox(
+                width: 400,
+                child: AiAgentPanel(
+                  repository: _FakeAiAgentRepository(),
+                  noteTitle: '测试笔记',
+                  texts: const [],
+                  contextTruncated: false,
+                  contextLabel: '当前笔记（暂无文字）',
+                  promptStore: AiPromptStore(_MemorySettings()),
+                  onApply: (_) async {},
+                  onClose: () {},
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(Dialog), findsNothing);
+    await tester.tap(find.text('画布操作'));
+    expect(canvasTaps, 1);
   });
 
   testWidgets('思维导图动作展示结构并经确认应用', (tester) async {

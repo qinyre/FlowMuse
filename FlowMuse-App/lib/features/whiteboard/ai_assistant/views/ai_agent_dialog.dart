@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/widgets/app_spacing.dart';
 import '../../ink_recognition/native_http_client.dart';
 import '../models/ai_agent_models.dart';
 import '../repositories/ai_agent_repository.dart';
@@ -17,20 +18,29 @@ Future<void> showAiAgentDialog({
 }) {
   return showDialog<void>(
     context: context,
-    builder: (_) => _AiAgentDialog(
-      repository: repository,
-      noteTitle: noteTitle,
-      texts: texts,
-      contextTruncated: contextTruncated,
-      contextLabel: contextLabel,
-      promptStore: promptStore ?? defaultAiPromptStore,
-      onApply: onApply,
+    builder: (dialogContext) => Dialog(
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: 560,
+        height: MediaQuery.sizeOf(dialogContext).height * 0.82,
+        child: AiAgentPanel(
+          repository: repository,
+          noteTitle: noteTitle,
+          texts: texts,
+          contextTruncated: contextTruncated,
+          contextLabel: contextLabel,
+          promptStore: promptStore ?? defaultAiPromptStore,
+          onApply: onApply,
+          onClose: () => Navigator.of(dialogContext).pop(),
+        ),
+      ),
     ),
   );
 }
 
-class _AiAgentDialog extends StatefulWidget {
-  const _AiAgentDialog({
+class AiAgentPanel extends StatefulWidget {
+  const AiAgentPanel({
+    super.key,
     required this.repository,
     required this.noteTitle,
     required this.texts,
@@ -38,6 +48,7 @@ class _AiAgentDialog extends StatefulWidget {
     required this.contextLabel,
     required this.promptStore,
     required this.onApply,
+    required this.onClose,
   });
 
   final AiAgentRepository repository;
@@ -47,12 +58,13 @@ class _AiAgentDialog extends StatefulWidget {
   final String contextLabel;
   final AiPromptStore promptStore;
   final Future<void> Function(AiAgentResponse response) onApply;
+  final VoidCallback onClose;
 
   @override
-  State<_AiAgentDialog> createState() => _AiAgentDialogState();
+  State<AiAgentPanel> createState() => _AiAgentPanelState();
 }
 
-class _AiAgentDialogState extends State<_AiAgentDialog> {
+class _AiAgentPanelState extends State<AiAgentPanel> {
   final _instructionController = TextEditingController();
   final _actionControllers = <TextEditingController>[];
   AiAgentResponse? _response;
@@ -222,7 +234,7 @@ class _AiAgentDialogState extends State<_AiAgentDialog> {
           ],
         ),
       );
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) widget.onClose();
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -243,198 +255,301 @@ class _AiAgentDialogState extends State<_AiAgentDialog> {
   Widget build(BuildContext context) {
     final response = _response;
     final instruction = _instructionController.text.trim();
-    return AlertDialog(
-      title: const Row(
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surface,
+      child: Column(
         children: [
-          Icon(Icons.auto_awesome),
-          SizedBox(width: 8),
-          Text('AI 笔记助手'),
-        ],
-      ),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('分析范围：${widget.contextLabel}'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (final prompt in const [
-                    '总结当前笔记',
-                    '提取待办事项',
-                    '生成结构化大纲',
-                    '根据当前内容生成思维导图',
-                  ])
-                    ActionChip(
-                      label: Text(prompt),
-                      onPressed: _loading || _applying
-                          ? null
-                          : () => _fillInstruction(prompt),
-                    ),
-                  for (final prompt in _customPrompts)
-                    InputChip(
-                      label: Text(prompt),
-                      onPressed: _loading || _applying
-                          ? null
-                          : () => _fillInstruction(prompt),
-                      onDeleted: _loading || _applying
-                          ? null
-                          : () => _removePrompt(prompt),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _instructionController,
-                enabled: !_loading && !_applying,
-                onChanged: (_) => setState(() {}),
-                maxLength: 1000,
-                minLines: 2,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  labelText: response == null ? '希望 AI 完成什么？' : '继续修改，例如：再精简一点',
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: _loading || _applying || instruction.isEmpty
-                      ? null
-                      : _savePrompt,
-                  icon: const Icon(Icons.bookmark_add_outlined),
-                  label: const Text('保存为常用指令'),
-                ),
-              ),
-              if (widget.contextTruncated)
-                Text(
-                  '当前笔记较长，已使用前 $maxAiAgentContextLength 字作为上下文。',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              if (_loading) ...[
-                const SizedBox(height: 8),
-                const LinearProgressIndicator(),
-                const SizedBox(height: 12),
-                Text(
-                  response == null
-                      ? widget.texts.isEmpty
-                            ? '正在生成回复…'
-                            : '正在阅读笔记并生成操作…'
-                      : '正在根据追问修改…',
-                ),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
-              if (response != null) ...[
-                const SizedBox(height: 12),
-                Text(response.message),
-                if (response.actions.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Text(
-                    '确认后将执行：',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+          Container(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.sidebarInset,
+              AppSpacing.listGap,
+              AppSpacing.controlGap,
+              AppSpacing.listGap,
+            ),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerLow,
+              border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: colors.primaryContainer,
+                    borderRadius: BorderRadius.circular(AppSpacing.radius),
                   ),
-                ],
-                for (var index = 0; index < response.actions.length; index++)
-                  Column(
+                  child: Icon(
+                    Icons.auto_awesome,
+                    size: 19,
+                    color: colors.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.listGap),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CheckboxListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        value: _selectedActions.contains(index),
-                        onChanged: _applying || _loading
-                            ? null
-                            : (selected) {
-                                setState(() {
-                                  _selectedActions = {..._selectedActions};
-                                  if (selected ?? false) {
-                                    _selectedActions.add(index);
-                                  } else {
-                                    _selectedActions.remove(index);
-                                  }
-                                });
-                              },
-                        secondary: Icon(switch (response.actions[index].tool) {
-                          AiAgentTool.renameNote =>
-                            Icons.drive_file_rename_outline,
-                          AiAgentTool.insertText => Icons.note_add_outlined,
-                          AiAgentTool.generateMindmap => Icons.account_tree,
-                        }),
-                        title: Text(response.actions[index].label),
+                      Text(
+                        'AI 笔记助手',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 40, bottom: 8),
-                        child: TextField(
-                          controller: _actionControllers[index],
-                          enabled: !_applying && !_loading,
-                          onChanged: (_) => setState(() {}),
-                          minLines: 1,
-                          maxLines: switch (response.actions[index].tool) {
-                            AiAgentTool.renameNote => 2,
-                            AiAgentTool.insertText => 8,
-                            AiAgentTool.generateMindmap => 12,
-                          },
-                          maxLength: switch (response.actions[index].tool) {
-                            AiAgentTool.renameNote => maxAiAgentTitleLength,
-                            AiAgentTool.insertText => maxAiAgentTextLength,
-                            AiAgentTool.generateMindmap =>
-                              maxAiMindmapJsonLength,
-                          },
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.contextLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
+                ),
+                IconButton(
+                  tooltip: '关闭 AI 助手',
+                  onPressed: _applying
+                      ? null
+                      : () {
+                          _cancelToken?.cancel();
+                          widget.onClose();
+                        },
+                  icon: const Icon(Icons.close),
+                ),
               ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _applying
-              ? null
-              : () {
-                  _cancelToken?.cancel();
-                  Navigator.of(context).pop();
-                },
-          child: const Text('关闭'),
-        ),
-        if (_loading)
-          FilledButton.tonal(
-            onPressed: _cancelGeneration,
-            child: const Text('取消生成'),
-          )
-        else if (response == null)
-          FilledButton(
-            onPressed: instruction.isEmpty ? null : _generate,
-            child: const Text('发送'),
-          )
-        else ...[
-          TextButton(
-            onPressed: instruction.isEmpty ? null : _generate,
-            child: const Text('追问修改'),
-          ),
-          if (response.actions.isNotEmpty)
-            FilledButton(
-              onPressed: _canApply ? _apply : null,
-              child: Text(_applying ? '正在应用…' : '确认应用'),
             ),
+          ),
+          if (_loading) const LinearProgressIndicator(minHeight: 2),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.sidebarInset),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '快捷指令',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.controlGap),
+                  Wrap(
+                    spacing: AppSpacing.controlGap,
+                    runSpacing: AppSpacing.controlGap,
+                    children: [
+                      for (final prompt in const [
+                        '总结当前笔记',
+                        '提取待办事项',
+                        '生成结构化大纲',
+                        '根据当前内容生成思维导图',
+                      ])
+                        ActionChip(
+                          label: Text(prompt),
+                          onPressed: _loading || _applying
+                              ? null
+                              : () => _fillInstruction(prompt),
+                        ),
+                      for (final prompt in _customPrompts)
+                        InputChip(
+                          label: Text(prompt),
+                          onPressed: _loading || _applying
+                              ? null
+                              : () => _fillInstruction(prompt),
+                          onDeleted: _loading || _applying
+                              ? null
+                              : () => _removePrompt(prompt),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.listGap),
+                  TextField(
+                    controller: _instructionController,
+                    enabled: !_loading && !_applying,
+                    onChanged: (_) => setState(() {}),
+                    maxLength: 1000,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: response == null
+                          ? '希望 AI 完成什么？'
+                          : '继续修改，例如：再精简一点',
+                      border: const OutlineInputBorder(),
+                      filled: true,
+                      fillColor: colors.surfaceContainerLowest,
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _loading || _applying || instruction.isEmpty
+                          ? null
+                          : _savePrompt,
+                      icon: const Icon(Icons.bookmark_add_outlined),
+                      label: const Text('保存为常用指令'),
+                    ),
+                  ),
+                  if (widget.contextTruncated)
+                    Text(
+                      '当前笔记较长，已使用前 $maxAiAgentContextLength 字作为上下文。',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  if (_loading) ...[
+                    const SizedBox(height: AppSpacing.controlGap),
+                    Text(
+                      response == null
+                          ? widget.texts.isEmpty
+                                ? '正在生成回复…'
+                                : '正在阅读笔记并生成操作…'
+                          : '正在根据追问修改…',
+                    ),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: AppSpacing.controlGap),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(AppSpacing.listGap),
+                      decoration: BoxDecoration(
+                        color: colors.errorContainer,
+                        borderRadius: BorderRadius.circular(AppSpacing.radius),
+                      ),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(color: colors.onErrorContainer),
+                      ),
+                    ),
+                  ],
+                  if (response != null) ...[
+                    const SizedBox(height: AppSpacing.listGap),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(AppSpacing.listGap),
+                      decoration: BoxDecoration(
+                        color: colors.secondaryContainer.withValues(
+                          alpha: 0.55,
+                        ),
+                        borderRadius: BorderRadius.circular(AppSpacing.radius),
+                      ),
+                      child: Text(
+                        response.message,
+                        style: TextStyle(color: colors.onSecondaryContainer),
+                      ),
+                    ),
+                    if (response.actions.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.listGap),
+                      const Text(
+                        '确认后将执行：',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                    for (
+                      var index = 0;
+                      index < response.actions.length;
+                      index++
+                    )
+                      Column(
+                        children: [
+                          CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            value: _selectedActions.contains(index),
+                            onChanged: _applying || _loading
+                                ? null
+                                : (selected) {
+                                    setState(() {
+                                      _selectedActions = {..._selectedActions};
+                                      if (selected ?? false) {
+                                        _selectedActions.add(index);
+                                      } else {
+                                        _selectedActions.remove(index);
+                                      }
+                                    });
+                                  },
+                            secondary: Icon(switch (response
+                                .actions[index]
+                                .tool) {
+                              AiAgentTool.renameNote =>
+                                Icons.drive_file_rename_outline,
+                              AiAgentTool.insertText => Icons.note_add_outlined,
+                              AiAgentTool.generateMindmap => Icons.account_tree,
+                            }),
+                            title: Text(response.actions[index].label),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              left: 40,
+                              bottom: AppSpacing.controlGap,
+                            ),
+                            child: TextField(
+                              controller: _actionControllers[index],
+                              enabled: !_applying && !_loading,
+                              onChanged: (_) => setState(() {}),
+                              minLines: 1,
+                              maxLines: switch (response.actions[index].tool) {
+                                AiAgentTool.renameNote => 2,
+                                AiAgentTool.insertText => 8,
+                                AiAgentTool.generateMindmap => 12,
+                              },
+                              maxLength: switch (response.actions[index].tool) {
+                                AiAgentTool.renameNote => maxAiAgentTitleLength,
+                                AiAgentTool.insertText => maxAiAgentTextLength,
+                                AiAgentTool.generateMindmap =>
+                                  maxAiMindmapJsonLength,
+                              },
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.listGap),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerLow,
+              border: Border(top: BorderSide(color: colors.outlineVariant)),
+            ),
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              spacing: AppSpacing.controlGap,
+              runSpacing: AppSpacing.controlGap,
+              children: [
+                if (_loading)
+                  FilledButton.tonal(
+                    onPressed: _cancelGeneration,
+                    child: const Text('取消生成'),
+                  )
+                else if (response == null)
+                  FilledButton.icon(
+                    onPressed: instruction.isEmpty ? null : _generate,
+                    icon: const Icon(Icons.arrow_upward, size: 18),
+                    label: const Text('发送'),
+                  )
+                else ...[
+                  TextButton(
+                    onPressed: instruction.isEmpty ? null : _generate,
+                    child: const Text('追问修改'),
+                  ),
+                  if (response.actions.isNotEmpty)
+                    FilledButton(
+                      onPressed: _canApply ? _apply : null,
+                      child: Text(_applying ? '正在应用…' : '确认应用'),
+                    ),
+                ],
+              ],
+            ),
+          ),
         ],
-      ],
+      ),
     );
   }
 }
