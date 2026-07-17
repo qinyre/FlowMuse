@@ -38,7 +38,11 @@ import '../view_models/whiteboard_view_model.dart';
 import '../models/editor_preferences.dart';
 import '../view_models/editor_preferences_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
+import '../../color_picker/pen_color_picker_channel.dart';
 import '../service_widget/recent_whiteboard_sync_coordinator.dart';
+import '../ai_assistant/models/ai_agent_models.dart';
+import '../ai_assistant/repositories/ai_agent_repository.dart';
+import '../ai_assistant/views/ai_agent_dialog.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
   const WhiteboardPage({
@@ -146,6 +150,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       palmRejectionEnabled: preferences.palmRejectionEnabled,
       twoFingerZoomEnabled: preferences.twoFingerZoomEnabled,
       singleFingerPanEnabled: preferences.singleFingerPanEnabled,
+      fingerDrawingEnabled: preferences.fingerDrawingEnabled,
     );
     _editorPreferencesApplied = true;
   }
@@ -563,6 +568,74 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _saveMarkdrawScene();
   }
 
+  Future<void> _openAiAgent() async {
+    final texts = <AiNoteText>[];
+    var totalLength = 0;
+    for (final element
+        in _markdrawController.editorState.scene.elements
+            .whereType<editor_core.TextElement>()) {
+      final text = element.text.trim();
+      if (element.isDeleted || text.isEmpty) continue;
+      final length = text.runes.length;
+      if (length > maxAiAgentTextLength ||
+          totalLength + length > maxAiAgentContextLength) {
+        _showMessage('当前笔记文字过长，请先选择较短内容或精简后再试');
+        return;
+      }
+      totalLength += length;
+      texts.add(AiNoteText(id: element.id.value, text: text));
+    }
+    if (texts.isEmpty) {
+      _showMessage('当前笔记没有可分析的文字，请先使用语音输入或手写识别');
+      return;
+    }
+    await showAiAgentDialog(
+      context: context,
+      repository: ref.read(aiAgentRepositoryProvider),
+      noteTitle: _markdrawController.documentName ?? '未命名笔记',
+      texts: texts,
+      onApply: _applyAiAgentResponse,
+    );
+  }
+
+  Future<void> _applyAiAgentResponse(AiAgentResponse response) async {
+    AiAgentAction? rename;
+    for (final action in response.actions) {
+      if (action.tool == AiAgentTool.renameNote) {
+        rename = action;
+        break;
+      }
+    }
+    final insertedTexts = [
+      for (final action in response.actions)
+        if (action.tool == AiAgentTool.insertText) action.value,
+    ];
+    final oldTitle = _markdrawController.documentName ?? '未命名笔记';
+    if (rename != null) {
+      await ref
+          .read(libraryIndexProvider.notifier)
+          .renameNote(widget.noteId, rename.value);
+      _markdrawController.renameDocument(rename.value);
+    }
+    try {
+      _markdrawController.insertPlainTexts(insertedTexts);
+    } catch (_) {
+      if (rename != null) {
+        await ref
+            .read(libraryIndexProvider.notifier)
+            .renameNote(widget.noteId, oldTitle);
+        _markdrawController.renameDocument(oldTitle);
+      }
+      rethrow;
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   void _syncDocumentTitle(NoteItem? note) {
     if (note == null || note.title == _markdrawController.documentName) {
       return;
@@ -787,6 +860,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _disconnectCollaboration();
     if (widget.temporaryCollaboration && mounted) {
       _popWhenStable();
+    }
+  }
+
+  /// 取色笔按钮回调。
+  /// 鸿蒙端：调用 Pen Kit 全局取色，取到色值后应用到当前笔色。
+  /// 能力不可用时降级为画布取色，取消或普通失败时保持原颜色。
+  Future<void> _onEyedropperPressed() async {
+    final result = await const PenColorPickerChannelOhos().pickColor();
+    final color = result.color;
+    if (color != null) {
+      _markdrawController.applyStyleChange(ElementStyle(strokeColor: color));
+      return;
+    }
+    if (result.unavailable) {
+      _markdrawController.requestEyedropper();
     }
   }
 
@@ -1627,6 +1715,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       );
     });
     final state = ref.watch(whiteboardViewModelProvider);
+    final editorPreferences = ref.watch(editorPreferencesProvider).value;
     final themePreset = ref.watch(themeViewModelProvider);
     final effectivePreset = effectiveAppThemePreset(
       themePreset,
@@ -1674,6 +1763,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               useFlatBackgrounds: effectivePreset.usesMonochromeBackground,
               currentThemeMode: themePreset.themeMode,
               onThemeModeChanged: _changeThemeMode,
+              fingerDrawingEnabled:
+                  editorPreferences?.fingerDrawingEnabled ?? false,
+              onFingerDrawingEnabledChanged: (value) {
+                unawaited(
+                  ref
+                      .read(editorPreferencesProvider.notifier)
+                      .setFingerDrawingEnabled(value),
+                );
+              },
               saveStatusLabel: _saveStatusLabel(state.saveStatus),
               collaborating: state.collaborating,
               collaborationConnecting:
@@ -1725,6 +1823,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               onImportImage: () {
                 unawaited(_fileHandler.importImage(context));
               },
+              onEyedropperPressed: _onEyedropperPressed,
               onImportLibrary: () {
                 unawaited(_fileHandler.importLibrary());
               },
@@ -1759,6 +1858,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               onComposeSmartLayout: (request) => ref
                   .read(inkRecognitionRepositoryProvider)
                   .composeSmartLayout(request),
+              onAiPressed: widget.temporaryCollaboration
+                  ? null
+                  : () {
+                      unawaited(_openAiAgent());
+                    },
               onLiveFreedrawChanged: state.collaborating
                   ? _broadcastLiveFreedraw
                   : null,

@@ -1,8 +1,8 @@
 # architecture.md — 架构速览
 
 > 本文件是 `.agent/` 知识库的一部分,给 Agent 一个**快速建立全局认知**的架构地图。
-> 完整设计见 `FlowMuse-App/docs/architecture.md`(前端)与 `FlowMuse-Server/`(后端代码)。
-> 本文件只讲"骨架与边界",不讲字段细节(那些在 `FlowMuse-App/docs/data-model.md`)。
+> 完整设计见 `docs/技术设计/前端架构.md`(前端)与 `FlowMuse-Server/`(后端代码)。
+> 本文件只讲"骨架与边界",不讲字段细节(那些在 `docs/技术设计/数据模型.md`)。
 
 ---
 
@@ -22,7 +22,7 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 1. **离线优先**:所有用户数据本地 SQLite,无网络也能用。
 2. **服务端零知识**:协作内容端到端加密,服务端只存密文、只转发密文。
 3. **一份 Dart 代码多端运行**:平台差异收敛到适配层(见第 5 节)。
-4. **Excalidraw 兼容**:数据模型、场景 JSON、协作协议对齐 Excalidraw(硬约束,见 `docs/architecture_constraints.md`)。
+4. **Excalidraw 兼容**:数据模型、场景 JSON、协作协议对齐 Excalidraw(硬约束,见 `docs/项目说明/架构约束.md`)。
 
 ---
 
@@ -48,9 +48,9 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `search` | 笔记搜索(内存过滤,非 SQL) | `views/search_page.dart` |
 | `settings` | 设置 / 本地备份 | `views/settings_page.dart` |
 | `account` | 账户认证(注册/登录/资料) | `repositories/account_repository.dart` |
-| `whiteboard` | 白板编辑器(含 4 个子模块,见下) | — |
+| `whiteboard` | 白板编辑器(含 6 个子模块,见下) | — |
 
-### whiteboard 的四个子模块
+### whiteboard 的六个子模块
 
 | 子模块 | 职责 |
 |--------|------|
@@ -58,6 +58,8 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `collaboration/` | 端到端加密实时协作(AES-GCM + Socket.IO + CRDT 合并) |
 | `ink_recognition/` | 手写识别(HTTP 调后端) |
 | `pdf_note_import/` | PDF 作为白板背景导入 |
+| `speech_recognition/` | 跨平台语音转文字，最终写入普通文本元素 |
+| `ai_assistant/` | 受限 AI 动作的请求、校验、预览与确认 |
 
 ---
 
@@ -204,12 +206,12 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 
 | 想了解 | 看 |
 |--------|-----|
-| 产品做什么 | `REQUIREMENTS.md` |
-| 架构硬约束 | `docs/architecture_constraints.md` |
-| 前端完整架构 | `FlowMuse-App/docs/architecture.md` |
-| 接口(后端/Repository/Provider) | `FlowMuse-App/docs/api.md` |
-| 数据模型与 schema | `FlowMuse-App/docs/data-model.md` |
-| 历次功能实现计划 | `docs/superpowers/plans/*.md` |
+| 产品做什么 | `docs/项目说明/项目需求.md` |
+| 架构硬约束 | `docs/项目说明/架构约束.md` |
+| 前端完整架构 | `docs/技术设计/前端架构.md` |
+| 接口(后端/Repository/Provider) | `docs/技术设计/接口设计.md` |
+| 数据模型与 schema | `docs/技术设计/数据模型.md` |
+| 历次功能实现计划 | `docs/研发记录/plans/*.md` |
 | Agent 总指令 | `AGENTS.md`(根目录) |
 | 编码约定 | `.agent/conventions.md` |
 | 架构决策记录 | `.agent/decisions.md` |

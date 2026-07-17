@@ -16,6 +16,11 @@ class CompactToolbar extends StatelessWidget {
   final VoidCallback? onSpeechPressed;
   final bool speechActive;
   final bool speechAvailable;
+  final VoidCallback? onAiPressed;
+
+  /// Override for the eyedropper button. When provided (e.g. on HarmonyOS),
+  /// tapping the eyedropper calls this instead of the canvas picker flow.
+  final VoidCallback? onEyedropperPressed;
 
   const CompactToolbar({
     super.key,
@@ -24,9 +29,11 @@ class CompactToolbar extends StatelessWidget {
     this.onDockChanged,
     this.onCollapse,
     this.useFlatBackground = false,
+    this.onEyedropperPressed,
     this.onSpeechPressed,
     this.speechActive = false,
     this.speechAvailable = false,
+    this.onAiPressed,
   });
 
   @override
@@ -92,6 +99,12 @@ class CompactToolbar extends StatelessWidget {
                 type: ToolType.eraser,
                 activeType: activeType,
               ),
+              _compactButton(
+                cs: cs,
+                icon: Icons.colorize,
+                tooltip: '取色笔 (I)',
+                onPressed: onEyedropperPressed ?? controller.requestEyedropper,
+              ),
               _compactToolButton(
                 cs: cs,
                 type: ToolType.laser,
@@ -111,6 +124,13 @@ class CompactToolbar extends StatelessWidget {
                 onPressed: speechAvailable ? onSpeechPressed : null,
                 isActive: speechActive,
               ),
+              if (onAiPressed != null)
+                _compactButton(
+                  cs: cs,
+                  icon: Icons.auto_awesome,
+                  tooltip: 'AI 笔记助手',
+                  onPressed: onAiPressed,
+                ),
               _compactButton(
                 cs: cs,
                 icon: Icons.text_fields,

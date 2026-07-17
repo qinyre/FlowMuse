@@ -17,6 +17,10 @@ class DesktopToolbar extends StatelessWidget {
   final VoidCallback? onSpeechPressed;
   final bool speechActive;
   final bool speechAvailable;
+  final VoidCallback? onAiPressed;
+
+  /// Override for the eyedropper button (e.g. HarmonyOS Pen Kit global pick).
+  final VoidCallback? onEyedropperPressed;
 
   const DesktopToolbar({
     super.key,
@@ -26,9 +30,11 @@ class DesktopToolbar extends StatelessWidget {
     this.onDockChanged,
     this.onCollapse,
     this.useFlatBackground = false,
+    this.onEyedropperPressed,
     this.onSpeechPressed,
     this.speechActive = false,
     this.speechAvailable = false,
+    this.onAiPressed,
   });
 
   @override
@@ -107,6 +113,12 @@ class DesktopToolbar extends StatelessWidget {
                 useFlatBackground: useFlatBackground,
                 onPressed: () => controller.switchTool(ToolType.eraser),
               ),
+              _toolbarButton(
+                cs: cs,
+                icon: Icons.colorize,
+                tooltip: '取色笔 (I)',
+                onPressed: onEyedropperPressed ?? controller.requestEyedropper,
+              ),
               _ToolButton(
                 type: ToolType.laser,
                 activeType: activeType,
@@ -130,6 +142,13 @@ class DesktopToolbar extends StatelessWidget {
                 onPressed: speechAvailable ? onSpeechPressed : null,
                 isActive: speechActive,
               ),
+              if (onAiPressed != null)
+                _toolbarButton(
+                  cs: cs,
+                  icon: Icons.auto_awesome,
+                  tooltip: 'AI 笔记助手',
+                  onPressed: onAiPressed,
+                ),
               _toolbarDivider(context, vertical),
               _toolbarButton(
                 cs: cs,
