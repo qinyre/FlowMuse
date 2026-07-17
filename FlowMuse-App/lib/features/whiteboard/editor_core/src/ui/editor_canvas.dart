@@ -208,6 +208,15 @@ class _EditorCanvasState extends State<EditorCanvas>
     return icons.isEmpty ? null : icons;
   }
 
+  /// Returns the single selected mind-map node, or null if the selection is
+  /// empty, multi, or not a mind-map node. Used to gate the floating + button.
+  Element? _singleSelectedMindmapNode(MarkdrawController controller) {
+    final selected = controller.selectedElements;
+    if (selected.length != 1) return null;
+    final node = selected.first;
+    return MindmapUtils.isMindmapNode(node) ? node : null;
+  }
+
   List<RemoteCollaboratorOverlay> _buildRemoteCollaborators() {
     return [
       for (final collaborator in widget.collaborators)
@@ -345,8 +354,8 @@ class _EditorCanvasState extends State<EditorCanvas>
                         ),
                         editingElementId: controller.editingTextElementId,
                         resolvedImages: controller.resolveImages(),
-                        pendingElements: controller.flowchartCreator.isCreating
-                            ? controller.flowchartCreator.pendingElements
+                        pendingElements: controller.pendingPreviewElements.isNotEmpty
+                            ? controller.pendingPreviewElements
                             : null,
                         gridSize: controller.gridSize,
                         isDarkBackground: _isDark(
@@ -417,6 +426,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                     right: 12,
                     child: _CompactPropertyButton(controller: controller),
                   ),
+                // Mind-map floating + button: shown when a single mind-map
+                // node is selected, positioned at the node's right edge.
+                if (_singleSelectedMindmapNode(controller) != null)
+                  _MindmapAddButtonOverlay(controller: controller),
                 _PagedProgressIndicator(controller: controller),
               ],
             ),
@@ -761,6 +774,50 @@ class _CompactPropertyButton extends StatelessWidget {
         tooltip: '属性',
         constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         onPressed: () => showCompactPropertyPanel(context, controller),
+      ),
+    );
+  }
+}
+
+/// Floating "+" button anchored to the right edge of the selected mind-map
+/// node. Tapping it adds a child node — this is the primary mobile interaction
+/// for growing a mind-map, since it bypasses the canvas's single-finger pan
+/// gesture interception that would otherwise swallow the touch.
+class _MindmapAddButtonOverlay extends StatelessWidget {
+  const _MindmapAddButtonOverlay({required this.controller});
+
+  final MarkdrawController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = controller.selectedElements;
+    if (selected.length != 1 || !MindmapUtils.isMindmapNode(selected.first)) {
+      return const SizedBox.shrink();
+    }
+    final node = selected.first;
+    final viewport = controller.editorState.viewport;
+    // Anchor at the node's right edge, vertically centred.
+    final rightEdgeScene = Offset(node.x + node.width, node.y + node.height / 2);
+    final screen = viewport.sceneToScreen(rightEdgeScene);
+
+    final cs = Theme.of(context).colorScheme;
+    const size = 28.0;
+    return Positioned(
+      left: screen.dx + 6,
+      top: screen.dy - size / 2,
+      child: Material(
+        color: cs.primary,
+        shape: const CircleBorder(),
+        elevation: 3,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: controller.mindmapAddChild,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Icon(Icons.add, size: 18, color: cs.onPrimary),
+          ),
+        ),
       ),
     );
   }

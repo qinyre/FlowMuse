@@ -97,6 +97,11 @@ class CompactToolbar extends StatelessWidget {
                 type: ToolType.laser,
                 activeType: activeType,
               ),
+              _compactToolButton(
+                cs: cs,
+                type: ToolType.mindmap,
+                activeType: activeType,
+              ),
               _compactButton(
                 cs: cs,
                 icon: speechActive

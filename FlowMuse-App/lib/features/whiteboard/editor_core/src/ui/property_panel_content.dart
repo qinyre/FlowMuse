@@ -784,11 +784,27 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     final canConvertInk =
         elements.isNotEmpty &&
         elements.every((element) => element is FreedrawElement);
+    final isMindmapNode =
+        isSingle && MindmapUtils.isMindmapNode(elements.first);
 
     return Wrap(
       spacing: 6,
       runSpacing: 6,
       children: [
+        if (isMindmapNode) ...[
+          IconToggleChip(
+            isSelected: false,
+            onTap: controller.mindmapAddChild,
+            tooltip: '子节点 (Tab)',
+            child: const Icon(Icons.account_tree, size: 18),
+          ),
+          IconToggleChip(
+            isSelected: false,
+            onTap: controller.mindmapAddSibling,
+            tooltip: '同级节点 (Enter)',
+            child: const Icon(Icons.low_priority, size: 18),
+          ),
+        ],
         IconToggleChip(
           isSelected: false,
           onTap: () => controller.dispatchKey('d', ctrl: true),

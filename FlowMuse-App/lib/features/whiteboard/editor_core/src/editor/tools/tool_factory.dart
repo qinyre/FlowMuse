@@ -8,6 +8,7 @@ import 'freedraw_tool.dart';
 import 'hand_tool.dart';
 import 'laser_tool.dart';
 import 'line_tool.dart';
+import 'mindmap_tool.dart';
 import 'rectangle_tool.dart';
 import 'select_tool.dart';
 import 'text_tool.dart';
@@ -28,5 +29,6 @@ Tool createTool(ToolType type) {
     ToolType.frame => FrameTool(),
     ToolType.eraser => EraserTool(),
     ToolType.laser => LaserTool(),
+    ToolType.mindmap => MindmapTool(),
   };
 }
