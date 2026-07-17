@@ -1006,6 +1006,9 @@ class SelectTool implements Tool {
         height: newH,
       );
     }
+    if (resized is TextElement) {
+      resized = resized.copyWithText(autoResize: false);
+    }
 
     final arrowUpdates = _buildBoundArrowUpdates(context.scene, [
       resized,
@@ -1076,6 +1079,9 @@ class SelectTool implements Tool {
             .copyWith(x: newX, y: newY, width: newW, height: newH);
       } else {
         resized = elem.copyWith(x: newX, y: newY, width: newW, height: newH);
+      }
+      if (resized is TextElement) {
+        resized = resized.copyWithText(autoResize: false);
       }
       updates.add(UpdateElementResult(resized));
       movedElements.add(resized);
