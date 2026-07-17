@@ -126,6 +126,13 @@ class DesktopToolbar extends StatelessWidget {
                 useFlatBackground: useFlatBackground,
                 onPressed: () => controller.switchTool(ToolType.laser),
               ),
+              _ToolButton(
+                type: ToolType.mindmap,
+                activeType: activeType,
+                colorScheme: cs,
+                useFlatBackground: useFlatBackground,
+                onPressed: () => controller.switchTool(ToolType.mindmap),
+              ),
               _toolbarButton(
                 cs: cs,
                 icon: speechActive

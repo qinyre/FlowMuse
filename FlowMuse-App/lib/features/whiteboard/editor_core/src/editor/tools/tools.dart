@@ -7,6 +7,7 @@ export 'freedraw_tool.dart';
 export 'hand_tool.dart';
 export 'laser_tool.dart';
 export 'line_tool.dart';
+export 'mindmap_tool.dart';
 export 'rectangle_tool.dart';
 export 'select_tool.dart';
 export 'text_tool.dart';
