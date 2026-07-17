@@ -630,16 +630,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _applyAiAgentResponse(AiAgentResponse response) async {
     AiAgentAction? rename;
+    AiAgentAction? mindmap;
     for (final action in response.actions) {
       if (action.tool == AiAgentTool.renameNote) {
         rename = action;
-        break;
+      } else if (action.tool == AiAgentTool.generateMindmap) {
+        mindmap = action;
       }
     }
     final insertedTexts = [
       for (final action in response.actions)
         if (action.tool == AiAgentTool.insertText) action.value,
     ];
+    final mindmapTree = mindmap == null
+        ? null
+        : MindmapNode.fromJson(mindmap.mindmapRoot);
     final oldTitle = _markdrawController.documentName ?? '未命名笔记';
     if (rename != null) {
       await ref
@@ -649,6 +654,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
     try {
       _markdrawController.insertPlainTexts(insertedTexts, adaptiveLayout: true);
+      if (mindmapTree != null) {
+        _markdrawController.insertMindmap(mindmapTree);
+      }
     } catch (_) {
       if (rename != null) {
         await ref

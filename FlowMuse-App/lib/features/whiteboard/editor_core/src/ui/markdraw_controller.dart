@@ -4655,6 +4655,29 @@ class MarkdrawController extends ChangeNotifier {
     _enterMindmapNodeEditing();
   }
 
+  /// Inserts a complete content tree using the deterministic mind-map layout.
+  /// The whole tree is one scene change and can be removed with one undo.
+  void insertMindmap(MindmapNode tree, {Size? canvasSize}) {
+    final targetSize =
+        canvasSize ??
+        _lastCanvasSize ??
+        (_canvasSize.isEmpty ? const Size(800, 600) : _canvasSize);
+    final visible = _editorState.viewport.visibleRect(targetSize);
+    final elements = MindmapLayout.treeToElements(
+      tree,
+      origin: Point(visible.left + 48, visible.top + 48),
+    );
+    final root = elements.whereType<RectangleElement>().firstOrNull;
+
+    _historyManager.push(_editorState.scene);
+    applyResult(
+      CompoundResult([
+        for (final element in elements) AddElementResult(element),
+        if (root != null) SetSelectionResult({root.id}),
+      ]),
+    );
+  }
+
   /// Adds a child node to the single selected mind-map node, then reflows
   /// the whole tree so the parent re-centres over its children (auto-reflow,
   /// like XMind/MindNode).

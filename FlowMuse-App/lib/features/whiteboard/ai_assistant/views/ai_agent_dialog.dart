@@ -263,7 +263,12 @@ class _AiAgentDialogState extends State<_AiAgentDialog> {
                 spacing: 8,
                 runSpacing: 4,
                 children: [
-                  for (final prompt in const ['总结当前笔记', '提取待办事项', '生成结构化大纲'])
+                  for (final prompt in const [
+                    '总结当前笔记',
+                    '提取待办事项',
+                    '生成结构化大纲',
+                    '根据当前内容生成思维导图',
+                  ])
                     ActionChip(
                       label: Text(prompt),
                       onPressed: _loading || _applying
@@ -350,11 +355,12 @@ class _AiAgentDialogState extends State<_AiAgentDialog> {
                                   }
                                 });
                               },
-                        secondary: Icon(
-                          response.actions[index].tool == AiAgentTool.renameNote
-                              ? Icons.drive_file_rename_outline
-                              : Icons.note_add_outlined,
-                        ),
+                        secondary: Icon(switch (response.actions[index].tool) {
+                          AiAgentTool.renameNote =>
+                            Icons.drive_file_rename_outline,
+                          AiAgentTool.insertText => Icons.note_add_outlined,
+                          AiAgentTool.generateMindmap => Icons.account_tree,
+                        }),
                         title: Text(response.actions[index].label),
                       ),
                       Padding(
@@ -364,16 +370,17 @@ class _AiAgentDialogState extends State<_AiAgentDialog> {
                           enabled: !_applying && !_loading,
                           onChanged: (_) => setState(() {}),
                           minLines: 1,
-                          maxLines:
-                              response.actions[index].tool ==
-                                  AiAgentTool.renameNote
-                              ? 2
-                              : 8,
-                          maxLength:
-                              response.actions[index].tool ==
-                                  AiAgentTool.renameNote
-                              ? maxAiAgentTitleLength
-                              : maxAiAgentTextLength,
+                          maxLines: switch (response.actions[index].tool) {
+                            AiAgentTool.renameNote => 2,
+                            AiAgentTool.insertText => 8,
+                            AiAgentTool.generateMindmap => 12,
+                          },
+                          maxLength: switch (response.actions[index].tool) {
+                            AiAgentTool.renameNote => maxAiAgentTitleLength,
+                            AiAgentTool.insertText => maxAiAgentTextLength,
+                            AiAgentTool.generateMindmap =>
+                              maxAiMindmapJsonLength,
+                          },
                           decoration: const InputDecoration(
                             border: OutlineInputBorder(),
                             isDense: true,

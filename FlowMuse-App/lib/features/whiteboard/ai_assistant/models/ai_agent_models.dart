@@ -6,8 +6,12 @@ const int maxAiAgentActions = 5;
 const int maxAiAgentTitleLength = 100;
 const int maxAiAgentTextLength = 5000;
 const int maxAiAgentContextLength = 30000;
+const int maxAiMindmapNodes = 50;
+const int maxAiMindmapDepth = 4;
+const int maxAiMindmapNodeTextLength = 100;
+const int maxAiMindmapJsonLength = 12000;
 
-enum AiAgentTool { renameNote, insertText }
+enum AiAgentTool { renameNote, insertText, generateMindmap }
 
 @immutable
 class AiNoteText {
@@ -90,6 +94,7 @@ class AiAgentAction {
   String get label => switch (tool) {
     AiAgentTool.renameNote => '重命名笔记',
     AiAgentTool.insertText => '插入白板文字',
+    AiAgentTool.generateMindmap => '生成思维导图',
   };
 
   factory AiAgentAction.edited({
@@ -99,13 +104,19 @@ class AiAgentAction {
     final argumentKey = switch (tool) {
       AiAgentTool.renameNote => 'title',
       AiAgentTool.insertText => 'text',
+      AiAgentTool.generateMindmap => 'root',
     };
     return AiAgentAction.fromJson({
       'tool': switch (tool) {
         AiAgentTool.renameNote => 'rename_note',
         AiAgentTool.insertText => 'insert_text',
+        AiAgentTool.generateMindmap => 'generate_mindmap',
       },
-      'arguments': {argumentKey: value},
+      'arguments': {
+        argumentKey: tool == AiAgentTool.generateMindmap
+            ? _decodeMindmap(value)
+            : value,
+      },
     });
   }
 
@@ -113,9 +124,23 @@ class AiAgentAction {
     'tool': switch (tool) {
       AiAgentTool.renameNote => 'rename_note',
       AiAgentTool.insertText => 'insert_text',
+      AiAgentTool.generateMindmap => 'generate_mindmap',
     },
-    'arguments': {(tool == AiAgentTool.renameNote ? 'title' : 'text'): value},
+    'arguments': switch (tool) {
+      AiAgentTool.renameNote => {'title': value},
+      AiAgentTool.insertText => {'text': value},
+      AiAgentTool.generateMindmap => {'root': _decodeMindmap(value)},
+    },
   };
+
+  Map<String, Object?> get mindmapRoot {
+    if (tool != AiAgentTool.generateMindmap) {
+      throw StateError('当前操作不是思维导图');
+    }
+    final decoded = _decodeMindmap(value);
+    if (decoded is! Map) throw const FormatException('思维导图根节点无效');
+    return Map<String, Object?>.from(decoded);
+  }
 
   factory AiAgentAction.fromJson(Object? value) {
     if (value is! Map) throw const FormatException('AI 操作格式无效');
@@ -143,8 +168,63 @@ class AiAgentAction {
           maxLength: maxAiAgentTextLength,
         ),
       ),
+      'generate_mindmap' => AiAgentAction(
+        tool: AiAgentTool.generateMindmap,
+        value: _requiredMindmap(args),
+      ),
       _ => throw FormatException('不支持的 AI 操作：$tool'),
     };
+  }
+
+  static Object? _decodeMindmap(String value) {
+    try {
+      return jsonDecode(value);
+    } on FormatException {
+      throw const FormatException('思维导图 JSON 格式无效');
+    }
+  }
+
+  static String _requiredMindmap(Map<String, Object?> arguments) {
+    if (arguments.length != 1 || !arguments.containsKey('root')) {
+      throw const FormatException('思维导图参数无效');
+    }
+    var nodeCount = 0;
+
+    Map<String, Object?> validateNode(Object? value, int depth) {
+      if (value is! Map || value.keys.any((key) => key is! String)) {
+        throw const FormatException('思维导图节点格式无效');
+      }
+      final node = Map<String, Object?>.from(value);
+      if (node.length != 2 ||
+          !node.containsKey('text') ||
+          !node.containsKey('children')) {
+        throw const FormatException('思维导图节点字段无效');
+      }
+      if (depth > maxAiMindmapDepth) {
+        throw const FormatException('思维导图层级过深');
+      }
+      final text = node['text'];
+      final children = node['children'];
+      if (text is! String ||
+          text.trim().isEmpty ||
+          text.trim().runes.length > maxAiMindmapNodeTextLength ||
+          children is! List) {
+        throw const FormatException('思维导图节点内容无效');
+      }
+      nodeCount++;
+      if (nodeCount > maxAiMindmapNodes) {
+        throw const FormatException('思维导图节点过多');
+      }
+      return {
+        'text': text.trim(),
+        'children': [
+          for (final child in children) validateNode(child, depth + 1),
+        ],
+      };
+    }
+
+    final root = validateNode(arguments['root'], 1);
+    return const JsonEncoder.withIndent('  ').convert(root);
   }
 
   static String _requiredText(
@@ -205,6 +285,16 @@ class AiAgentResponse {
             .length >
         1) {
       throw const FormatException('AI 返回了多个重命名操作');
+    }
+    final mindmapCount = actions
+        .where((action) => action.tool == AiAgentTool.generateMindmap)
+        .length;
+    if (mindmapCount > 1) {
+      throw const FormatException('AI 返回了多个思维导图操作');
+    }
+    if (mindmapCount == 1 &&
+        actions.any((action) => action.tool == AiAgentTool.insertText)) {
+      throw const FormatException('思维导图与插入文字不能同时执行');
     }
     final message = json['message'];
     return AiAgentResponse(

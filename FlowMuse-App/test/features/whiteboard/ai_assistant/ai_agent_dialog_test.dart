@@ -83,6 +83,38 @@ void main() {
     await tester.pump();
     expect(find.text('准备应用'), findsNothing);
   });
+
+  testWidgets('思维导图动作展示结构并经确认应用', (tester) async {
+    final action = AiAgentAction.fromJson({
+      'tool': 'generate_mindmap',
+      'arguments': {
+        'root': {
+          'text': '中心主题',
+          'children': [
+            {'text': '分支', 'children': <Object?>[]},
+          ],
+        },
+      },
+    });
+    AiAgentResponse? applied;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: AiAgentResponse(message: '已生成', actions: [action]),
+      ),
+      onApply: (response) async => applied = response,
+    );
+
+    await tester.tap(find.text('根据当前内容生成思维导图'));
+    await tester.tap(find.text('生成操作'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('生成思维导图'), findsOneWidget);
+    expect(find.textContaining('中心主题'), findsOneWidget);
+    await tester.tap(find.text('确认应用'));
+    await tester.pumpAndSettle();
+    expect(applied!.actions.single.tool, AiAgentTool.generateMindmap);
+  });
 }
 
 Future<void> _openDialog(
@@ -112,7 +144,7 @@ Future<void> _openDialog(
 }
 
 class _FakeAiAgentRepository extends AiAgentRepository {
-  _FakeAiAgentRepository({this.completer});
+  _FakeAiAgentRepository({this.completer, this.response = firstResponse});
 
   static const firstResponse = AiAgentResponse(
     message: '准备应用',
@@ -122,6 +154,7 @@ class _FakeAiAgentRepository extends AiAgentRepository {
     ],
   );
   final Completer<AiAgentResponse>? completer;
+  final AiAgentResponse response;
   final previousResponses = <AiAgentResponse?>[];
   NativeHttpCancelToken? cancelToken;
 
@@ -145,7 +178,7 @@ class _FakeAiAgentRepository extends AiAgentRepository {
         ],
       );
     }
-    return firstResponse;
+    return response;
   }
 }
 
