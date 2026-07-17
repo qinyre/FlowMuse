@@ -110,6 +110,7 @@ class MarkdrawController extends ChangeNotifier {
   final _imageCache = ImageElementCache();
   final _flowchartCreator = FlowchartCreator();
   final _flowchartNavigator = FlowchartNavigator();
+  final _mindmapCreator = MindmapCreator();
   // ignore: unused_field — retained for debug comparison with modeler output
   final _harmonyStylusStrokeSmoother = HarmonyStylusStrokeSmoother();
   final _normalizer = StrokeInputNormalizer();
@@ -1014,6 +1015,10 @@ class MarkdrawController extends ChangeNotifier {
 
       if (previousToolType == ToolType.text) {
         _startTextEditing(newState);
+      } else if (previousToolType == ToolType.mindmap) {
+        // After creating a mind-map root node via tap, enter text editing
+        // for the newly created (and now selected) node.
+        _enterMindmapNodeEditing();
       }
     }
     _editorState = newState;
@@ -4623,6 +4628,243 @@ class MarkdrawController extends ChangeNotifier {
   void flowchartNavigateEnd() {
     if (!_flowchartNavigator.isExploring) return;
     _flowchartNavigator.clear();
+  }
+
+  // --- Mind map ---
+
+  /// The mind-map creator.
+  MindmapCreator get mindmapCreator => _mindmapCreator;
+
+  /// Pending preview elements for the active creator (flowchart or mind-map).
+  /// Used by [StaticCanvasPainter] to render translucent previews.
+  List<Element> get pendingPreviewElements {
+    if (_flowchartCreator.isCreating) return _flowchartCreator.pendingElements;
+    return const [];
+  }
+
+  /// Creates a mind-map root node at the centre of the visible canvas area,
+  /// commits it, switches back to the select tool, and enters text editing.
+  void mindmapCreateRoot() {
+    final center = _editorState.viewport.screenToScene(
+      Offset(_canvasSize.width / 2, _canvasSize.height / 2),
+    );
+    _historyManager.push(_editorState.scene);
+    final result = _mindmapCreator.createRoot(Point(center.dx, center.dy));
+    applyResult(result);
+    switchTool(ToolType.select);
+    _enterMindmapNodeEditing();
+  }
+
+  /// Adds a child node to the single selected mind-map node, then reflows
+  /// the whole tree so the parent re-centres over its children (auto-reflow,
+  /// like XMind/MindNode).
+  void mindmapAddChild() {
+    final selected = selectedElements;
+    if (selected.length != 1 || !MindmapUtils.isMindmapNode(selected.first)) {
+      return;
+    }
+    final sceneElements = _editorState.scene.elements;
+    final rootNode = MindmapUtils.rootOf(selected.first, sceneElements);
+    final tree = MindmapUtils.treeFromScene(rootNode, sceneElements);
+
+    // Append a new child to the selected node's tree node.
+    final parentTreeNode = _findTreeNode(tree, selected.first.id.value) ?? tree;
+    parentTreeNode.children.add(
+      MindmapNode(text: '分支 ${parentTreeNode.children.length + 1}'),
+    );
+
+    _historyManager.push(_editorState.scene);
+    final result = _applyReflow(tree, rootNode);
+    applyResult(result);
+    _enterMindmapNodeEditing();
+  }
+
+  /// Adds a sibling below the single selected mind-map node, then reflows.
+  void mindmapAddSibling() {
+    final selected = selectedElements;
+    if (selected.length != 1 || !MindmapUtils.isMindmapNode(selected.first)) {
+      return;
+    }
+    final sceneElements = _editorState.scene.elements;
+    final rootNode = MindmapUtils.rootOf(selected.first, sceneElements);
+    final tree = MindmapUtils.treeFromScene(rootNode, sceneElements);
+
+    final parentTreeNode = _findParentTreeNode(tree, selected.first.id.value);
+    if (parentTreeNode == null) return; // selected is root — no sibling
+    final idx = parentTreeNode.children.indexWhere(
+      (c) => c.sourceId == selected.first.id.value,
+    );
+    parentTreeNode.children.insert(idx + 1, MindmapNode(text: '分支'));
+
+    _historyManager.push(_editorState.scene);
+    final result = _applyReflow(tree, rootNode);
+    applyResult(result);
+    _enterMindmapNodeEditing();
+  }
+
+  /// Finds the [MindmapNode] in [tree] whose sourceId matches [id].
+  MindmapNode? _findTreeNode(MindmapNode tree, String id) {
+    if (tree.sourceId == id) return tree;
+    for (final child in tree.children) {
+      final found = _findTreeNode(child, id);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
+  /// Finds the parent of the tree node whose sourceId matches [id].
+  MindmapNode? _findParentTreeNode(MindmapNode tree, String id) {
+    for (final child in tree.children) {
+      if (child.sourceId == id) return tree;
+      final found = _findParentTreeNode(child, id);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
+  /// Runs the reflow and builds a ToolResult: updates for existing nodes
+  /// (position + style by depth/branch) + updates for existing edges (points
+  /// recomputed from new node positions) + adds for new elements + selection.
+  ToolResult _applyReflow(MindmapNode tree, Element rootNode) {
+    final origin = Point(rootNode.x, rootNode.y);
+    final plan = MindmapLayout.reflowTree(tree, origin: origin);
+    final results = <ToolResult>[];
+
+    // Build a lookup of new node positions by sourceId, so we can recompute
+    // existing edges against the post-reflow coordinates.
+    final newPosByNodeId = <String, ElementUpdate>{
+      for (final u in plan.nodeUpdates) u.nodeId: u,
+    };
+
+    // Update existing nodes: look up by sourceId, move + restyle.
+    for (final u in plan.nodeUpdates) {
+      final node = _editorState.scene.getElementById(ElementId(u.nodeId));
+      if (node == null) continue;
+      results.add(_updateMindmapNode(node, u));
+    }
+
+    // Recompute existing mind-map edges: their sampled Bézier points don't
+    // follow node moves (renderer doesn't resolve bindings), so regenerate
+    // them against the post-reflow node positions.
+    final scene = _editorState.scene;
+    for (final e in scene.elements) {
+      if (e.isDeleted) continue;
+      if (e is! ArrowElement) continue;
+      if (!MindmapUtils.isMindmapEdge(e)) continue;
+      final startId = e.startBinding?.elementId;
+      final endId = e.endBinding?.elementId;
+      if (startId == null || endId == null) continue;
+      // Only touch edges whose endpoints moved (are in this tree's reflow).
+      if (!newPosByNodeId.containsKey(startId) &&
+          !newPosByNodeId.containsKey(endId)) {
+        continue;
+      }
+      // Use post-reflow positions (from newPosByNodeId) so the edge matches
+      // where the nodes *will* be after this result is applied.
+      results.add(
+        UpdateElementResult(
+          _recomputeEdgeFromPlan(e, startId, endId, newPosByNodeId, scene),
+        ),
+      );
+    }
+
+    // Add brand-new elements (new node rect + text + edge).
+    for (final e in plan.newElements) {
+      results.add(AddElementResult(e));
+    }
+
+    // Select the first new node rect for immediate text editing.
+    final newNode = plan.newElements
+        .where((e) => e.type == 'rectangle')
+        .firstOrNull;
+    if (newNode != null) {
+      results.add(SetSelectionResult({newNode.id}));
+    }
+
+    return CompoundResult(results);
+  }
+
+  /// Moves an existing mind-map node to its new position and restyles it
+  /// (background/size by depth, branch colour). Also repositions its bound
+  /// text element.
+  ToolResult _updateMindmapNode(Element node, ElementUpdate u) {
+    final scene = _editorState.scene;
+    final boundText = scene.findBoundText(node.id);
+
+    // Restyle the rectangle by depth/branch. We re-derive the style the same
+    // way _buildPair does, by querying MindmapLayout's public helpers.
+    final (bg, stroke, strokeWidth, roundnessValue) =
+        MindmapLayout.styleForNode(depth: u.depth, branchIndex: u.branchIndex);
+    final updatedRect = (node as RectangleElement).copyWith(
+      x: u.x,
+      y: u.y,
+      backgroundColor: bg,
+      strokeColor: stroke,
+      strokeWidth: strokeWidth,
+      roundness: Roundness.adaptive(value: roundnessValue),
+    );
+
+    if (boundText == null) {
+      return UpdateElementResult(updatedRect);
+    }
+    final (textColor, fontSize) =
+        MindmapLayout.textStyleForNode(depth: u.depth);
+    // copyWithText handles font size; copyWith handles position + text colour
+    // (TextElement has no single method covering both).
+    final updatedText = boundText
+        .copyWithText(fontSize: fontSize)
+        .copyWith(x: u.x, y: u.y, strokeColor: textColor);
+    return CompoundResult([
+      UpdateElementResult(updatedRect),
+      UpdateElementResult(updatedText),
+    ]);
+  }
+
+  /// Recomputes an existing mind-map edge's Bézier points from the post-reflow
+  /// positions of its endpoints. Width/height come from the current element
+  /// (node size is constant); x/y come from the reflow plan.
+  ArrowElement _recomputeEdgeFromPlan(
+    ArrowElement edge,
+    String startId,
+    String endId,
+    Map<String, ElementUpdate> newPosByNodeId,
+    Scene scene,
+  ) {
+    final parent = scene.getElementById(ElementId(startId));
+    final child = scene.getElementById(ElementId(endId));
+    if (parent == null || child == null) return edge;
+    // Apply the new x/y from the plan (width/height unchanged).
+    final pu = newPosByNodeId[startId];
+    final cu = newPosByNodeId[endId];
+    final parentMoved = parent.copyWith(
+      x: pu?.x ?? parent.x,
+      y: pu?.y ?? parent.y,
+    );
+    final childMoved = child.copyWith(
+      x: cu?.x ?? child.x,
+      y: cu?.y ?? child.y,
+    );
+    return MindmapLayout.recomputeEdge(edge, parentMoved, childMoved);
+  }
+
+  /// No-op in the immediate-commit model; kept for parity with flowchart.
+  void mindmapCancel() {
+    _mindmapCreator.clear();
+    notifyListeners();
+  }
+
+  /// Starts editing the text of the most recently added mind-map node (the
+  /// currently selected element), reusing the bound-text editing path.
+  void _enterMindmapNodeEditing() {
+    final selected = selectedElements;
+    if (selected.length != 1) return;
+    final node = selected.first;
+    final text = _editorState.scene.findBoundText(node.id);
+    if (text != null) {
+      startTextEditingExisting(text);
+    } else {
+      startBoundTextEditing(node);
+    }
   }
 
   /// Requests programmatic opening of a color picker.

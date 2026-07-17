@@ -21,6 +21,7 @@ ToolType? toolTypeForKey(String key) {
     'h' => ToolType.hand,
     '0' || 'e' => ToolType.eraser,
     'k' => ToolType.laser,
+    'm' => ToolType.mindmap,
     _ => null,
   };
 }
@@ -41,6 +42,7 @@ String? shortcutForToolType(ToolType type) {
     ToolType.hand => 'H',
     ToolType.eraser => '0',
     ToolType.laser => 'K',
+    ToolType.mindmap => 'M',
   };
 }
 
@@ -59,5 +61,6 @@ String labelForToolType(ToolType type) {
     ToolType.frame => '画框',
     ToolType.eraser => '橡皮擦',
     ToolType.laser => '激光笔',
+    ToolType.mindmap => '思维导图',
   };
 }

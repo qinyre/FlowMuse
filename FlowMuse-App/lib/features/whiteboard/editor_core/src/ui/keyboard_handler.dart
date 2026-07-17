@@ -157,6 +157,21 @@ bool handleKeyEvent({
     }
   }
 
+  // Mind-map shortcuts: Tab adds a child, Enter adds a sibling. Both require
+  // a single mind-map node to be selected. Escape is a no-op in the
+  // immediate-commit model but kept for parity.
+  if (controller.selectedElements.length == 1 &&
+      MindmapUtils.isMindmapNode(controller.selectedElements.first)) {
+    if (!ctrl && !alt && key == LogicalKeyboardKey.tab) {
+      controller.mindmapAddChild();
+      return true;
+    }
+    if (!ctrl && !alt && key == LogicalKeyboardKey.enter) {
+      controller.mindmapAddSibling();
+      return true;
+    }
+  }
+
   // Page scrolling: PgDn/PgUp pans viewport by canvas height (Shift for horizontal)
   if (key == LogicalKeyboardKey.pageDown || key == LogicalKeyboardKey.pageUp) {
     final size = getCanvasSize();
