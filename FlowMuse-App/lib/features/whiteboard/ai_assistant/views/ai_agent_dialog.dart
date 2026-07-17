@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../../../shared/widgets/app_spacing.dart';
 import '../../ink_recognition/native_http_client.dart';
@@ -252,7 +253,12 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
           ],
         ),
       );
-      if (mounted) widget.onClose();
+      if (mounted) {
+        setState(() {
+          _applying = false;
+          _selectedActions = const {};
+        });
+      }
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -456,9 +462,15 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                         ),
                         borderRadius: BorderRadius.circular(AppSpacing.radius),
                       ),
-                      child: Text(
-                        response.message,
-                        style: TextStyle(color: colors.onSecondaryContainer),
+                      child: MarkdownBody(
+                        data: response.message,
+                        selectable: true,
+                        styleSheet:
+                            MarkdownStyleSheet.fromTheme(
+                              Theme.of(context),
+                            ).copyWith(
+                              p: TextStyle(color: colors.onSecondaryContainer),
+                            ),
                       ),
                     ),
                     if (response.actions.isNotEmpty) ...[

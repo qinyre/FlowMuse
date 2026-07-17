@@ -7,6 +7,7 @@ import 'package:flow_muse/features/whiteboard/ai_assistant/views/ai_agent_dialog
 import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
 import 'package:flow_muse/shared/storage/local_settings_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -68,6 +69,28 @@ void main() {
           .value,
       '用户修改后的总结',
     );
+  });
+
+  testWidgets('AI 回复渲染 Markdown 且应用后面板保持打开', (tester) async {
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: const AiAgentResponse(
+          message: '**重点**\n\n- 第一项',
+          actions: [AiAgentAction(tool: AiAgentTool.insertText, value: '总结内容')],
+        ),
+      ),
+      onApply: (_) async {},
+    );
+
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MarkdownBody), findsOneWidget);
+
+    await tester.tap(find.text('确认应用'));
+    await tester.pumpAndSettle();
+    expect(find.text('AI 笔记助手'), findsOneWidget);
+    expect(find.text('追问修改'), findsOneWidget);
   });
 
   testWidgets('取消生成会终止令牌并忽略迟到响应', (tester) async {
