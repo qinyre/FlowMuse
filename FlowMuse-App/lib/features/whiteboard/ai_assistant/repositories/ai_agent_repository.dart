@@ -159,5 +159,5 @@ Map<String, Object?> _mindmapNodeSchema(int remainingDepth) => {
           : _mindmapNodeSchema(remainingDepth - 1),
     },
   },
-  'required': ['text', 'children'],
+  'required': ['text'],
 };

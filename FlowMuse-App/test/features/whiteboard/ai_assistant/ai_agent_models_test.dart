@@ -171,6 +171,23 @@ void main() {
     );
   });
 
+  test('思维导图叶子节点可省略空 children', () {
+    final action = AiAgentAction.fromJson({
+      'tool': 'generate_mindmap',
+      'arguments': {
+        'root': {
+          'text': '根',
+          'children': [
+            {'text': '叶子'},
+          ],
+        },
+      },
+    });
+
+    final children = action.mindmapRoot['children']! as List;
+    expect(children.single, {'text': '叶子', 'children': <Object?>[]});
+  });
+
   test('思维导图拒绝未知字段和超过四层的树', () {
     expect(
       () => AiAgentAction.fromJson({

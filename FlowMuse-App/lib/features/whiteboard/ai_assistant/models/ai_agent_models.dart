@@ -195,16 +195,17 @@ class AiAgentAction {
         throw const FormatException('思维导图节点格式无效');
       }
       final node = Map<String, Object?>.from(value);
-      if (node.length != 2 ||
-          !node.containsKey('text') ||
-          !node.containsKey('children')) {
+      if (!node.containsKey('text') ||
+          node.keys.any((key) => key != 'text' && key != 'children')) {
         throw const FormatException('思维导图节点字段无效');
       }
       if (depth > maxAiMindmapDepth) {
         throw const FormatException('思维导图层级过深');
       }
       final text = node['text'];
-      final children = node['children'];
+      final children = node.containsKey('children')
+          ? node['children']
+          : const <Object?>[];
       if (text is! String ||
           text.trim().isEmpty ||
           text.trim().runes.length > maxAiMindmapNodeTextLength ||
