@@ -1,5 +1,6 @@
 stages:
   - quality
+  - build
 
 default:
   interruptible: true
@@ -27,3 +28,15 @@ test_server:
     - cd FlowMuse-Server
     - go test ./...
     - go vet ./...
+
+build_ohos:
+  stage: build
+  tags: [ohos]
+  script:
+    - cd FlowMuse-App
+    - $env:Path = "$env:FLUTTER_OHOS_HOME\bin;$env:NODE_HOME;$env:Path"
+    - flutter pub get
+    - flutter build hap --debug
+  artifacts:
+    paths: [FlowMuse-App/build/ohos/hap/entry-default-signed.hap]
+    expire_in: 7 days
