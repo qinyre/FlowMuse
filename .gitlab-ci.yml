@@ -16,7 +16,7 @@ analyze_flutter:
   tags: [ohos]
   script:
     - cd FlowMuse-App
-    - $env:Path = "$env:FLUTTER_OHOS_HOME\bin;$env:Path"
+    - $env:Path = "$env:FLUTTER_OHOS_HOME\bin;$env:NODE_HOME;$env:Path"
     - flutter pub get
     - flutter analyze --no-fatal-warnings --no-fatal-infos
     - flutter test
