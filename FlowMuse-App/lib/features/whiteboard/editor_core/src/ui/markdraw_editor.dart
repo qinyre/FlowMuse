@@ -75,6 +75,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.speechRecognitionService,
     this.fingerDrawingEnabled = false,
     this.onFingerDrawingEnabledChanged,
+    this.onAiPressed,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -144,6 +145,8 @@ class MarkdrawEditor extends StatefulWidget {
   /// Optional override for the eyedropper toolbar button.
   /// When provided (e.g. HarmonyOS), calling this replaces the canvas picker.
   final VoidCallback? onEyedropperPressed;
+
+  final VoidCallback? onAiPressed;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -494,6 +497,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         onSpeechPressed: _toggleSpeech,
         speechActive: _speechState != SpeechRecognitionState.idle,
         speechAvailable: _speechAvailable,
+        onAiPressed: widget.onAiPressed,
       );
     }
     return DesktopToolbar(
@@ -507,6 +511,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       onSpeechPressed: _toggleSpeech,
       speechActive: _speechState != SpeechRecognitionState.idle,
       speechAvailable: _speechAvailable,
+      onAiPressed: widget.onAiPressed,
     );
   }
 

@@ -24,9 +24,12 @@ export class HttpChannel {
   private async doPost(args: Map<string, Object>): Promise<Map<string, Object>> {
     const req = http.createHttp();
     try {
+      const headers = JSON.parse(
+        (args.get('headersJson') as string) ?? '{}'
+      ) as Record<string, string>;
       const response = await req.request(args.get('url') as string, {
         method: http.RequestMethod.POST,
-        header: (args.get('headers') as Object) ?? new Object(),
+        header: headers,
         extraData: (args.get('body') as string) ?? '',
         expectDataType: http.HttpDataType.STRING,
         connectTimeout: (args.get('connectTimeoutMs') as number) ?? 8000,

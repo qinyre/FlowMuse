@@ -40,6 +40,9 @@ import '../view_models/editor_preferences_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../color_picker/pen_color_picker_channel.dart';
 import '../service_widget/recent_whiteboard_sync_coordinator.dart';
+import '../ai_assistant/models/ai_agent_models.dart';
+import '../ai_assistant/repositories/ai_agent_repository.dart';
+import '../ai_assistant/views/ai_agent_dialog.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
   const WhiteboardPage({
@@ -563,6 +566,74 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           .renameNote(widget.noteId, title);
     }
     await _saveMarkdrawScene();
+  }
+
+  Future<void> _openAiAgent() async {
+    final texts = <AiNoteText>[];
+    var totalLength = 0;
+    for (final element
+        in _markdrawController.editorState.scene.elements
+            .whereType<editor_core.TextElement>()) {
+      final text = element.text.trim();
+      if (element.isDeleted || text.isEmpty) continue;
+      final length = text.runes.length;
+      if (length > maxAiAgentTextLength ||
+          totalLength + length > maxAiAgentContextLength) {
+        _showMessage('当前笔记文字过长，请先选择较短内容或精简后再试');
+        return;
+      }
+      totalLength += length;
+      texts.add(AiNoteText(id: element.id.value, text: text));
+    }
+    if (texts.isEmpty) {
+      _showMessage('当前笔记没有可分析的文字，请先使用语音输入或手写识别');
+      return;
+    }
+    await showAiAgentDialog(
+      context: context,
+      repository: ref.read(aiAgentRepositoryProvider),
+      noteTitle: _markdrawController.documentName ?? '未命名笔记',
+      texts: texts,
+      onApply: _applyAiAgentResponse,
+    );
+  }
+
+  Future<void> _applyAiAgentResponse(AiAgentResponse response) async {
+    AiAgentAction? rename;
+    for (final action in response.actions) {
+      if (action.tool == AiAgentTool.renameNote) {
+        rename = action;
+        break;
+      }
+    }
+    final insertedTexts = [
+      for (final action in response.actions)
+        if (action.tool == AiAgentTool.insertText) action.value,
+    ];
+    final oldTitle = _markdrawController.documentName ?? '未命名笔记';
+    if (rename != null) {
+      await ref
+          .read(libraryIndexProvider.notifier)
+          .renameNote(widget.noteId, rename.value);
+      _markdrawController.renameDocument(rename.value);
+    }
+    try {
+      _markdrawController.insertPlainTexts(insertedTexts);
+    } catch (_) {
+      if (rename != null) {
+        await ref
+            .read(libraryIndexProvider.notifier)
+            .renameNote(widget.noteId, oldTitle);
+        _markdrawController.renameDocument(oldTitle);
+      }
+      rethrow;
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _syncDocumentTitle(NoteItem? note) {
@@ -1787,6 +1858,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               onComposeSmartLayout: (request) => ref
                   .read(inkRecognitionRepositoryProvider)
                   .composeSmartLayout(request),
+              onAiPressed: widget.temporaryCollaboration
+                  ? null
+                  : () {
+                      unawaited(_openAiAgent());
+                    },
               onLiveFreedrawChanged: state.collaborating
                   ? _broadcastLiveFreedraw
                   : null,
