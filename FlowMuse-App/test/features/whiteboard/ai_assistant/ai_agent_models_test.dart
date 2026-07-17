@@ -3,6 +3,28 @@ import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('超长笔记上下文按单段和总长度限制安全裁剪', () {
+    final context = AiNoteContext.fromTexts([
+      AiNoteText(
+        id: 'long',
+        text: List.filled(maxAiAgentContextLength + 100, '字').join(),
+      ),
+    ]);
+
+    expect(context.truncated, isTrue);
+    expect(context.texts, hasLength(6));
+    expect(
+      context.texts.fold<int>(0, (sum, text) => sum + text.text.runes.length),
+      maxAiAgentContextLength,
+    );
+    expect(
+      context.texts.every(
+        (text) => text.text.runes.length <= maxAiAgentTextLength,
+      ),
+      isTrue,
+    );
+  });
+
   test('解析受支持的多操作响应', () {
     final response = AiAgentResponse.fromOpenAiJson({
       'choices': [

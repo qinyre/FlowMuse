@@ -317,7 +317,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         if (isFinal) {
           if (_speechFinalCommitted) return;
           _speechFinalCommitted = true;
-          _controller.insertPlainText(text, canvasSize: _getCanvasSize());
+          _controller.insertPlainText(
+            text,
+            canvasSize: _getCanvasSize(),
+            adaptiveLayout: true,
+          );
           setState(() {
             _speechPreview = '';
             _speechState = SpeechRecognitionState.idle;

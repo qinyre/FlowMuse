@@ -569,23 +569,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _openAiAgent() async {
-    final texts = <AiNoteText>[];
-    var totalLength = 0;
-    for (final element
-        in _markdrawController.editorState.scene.elements
-            .whereType<editor_core.TextElement>()) {
-      final text = element.text.trim();
-      if (element.isDeleted || text.isEmpty) continue;
-      final length = text.runes.length;
-      if (length > maxAiAgentTextLength ||
-          totalLength + length > maxAiAgentContextLength) {
-        _showMessage('当前笔记文字过长，请先选择较短内容或精简后再试');
-        return;
-      }
-      totalLength += length;
-      texts.add(AiNoteText(id: element.id.value, text: text));
-    }
-    if (texts.isEmpty) {
+    final noteContext = AiNoteContext.fromTexts(
+      _markdrawController.editorState.scene.elements
+          .whereType<editor_core.TextElement>()
+          .where((element) => !element.isDeleted)
+          .map(
+            (element) => AiNoteText(id: element.id.value, text: element.text),
+          ),
+    );
+    if (noteContext.texts.isEmpty) {
       _showMessage('当前笔记没有可分析的文字，请先使用语音输入或手写识别');
       return;
     }
@@ -593,7 +585,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       context: context,
       repository: ref.read(aiAgentRepositoryProvider),
       noteTitle: _markdrawController.documentName ?? '未命名笔记',
-      texts: texts,
+      texts: noteContext.texts,
+      contextTruncated: noteContext.truncated,
       onApply: _applyAiAgentResponse,
     );
   }
@@ -618,7 +611,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _markdrawController.renameDocument(rename.value);
     }
     try {
-      _markdrawController.insertPlainTexts(insertedTexts);
+      _markdrawController.insertPlainTexts(insertedTexts, adaptiveLayout: true);
     } catch (_) {
       if (rename != null) {
         await ref

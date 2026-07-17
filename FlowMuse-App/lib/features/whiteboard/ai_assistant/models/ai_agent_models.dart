@@ -20,6 +20,49 @@ class AiNoteText {
 }
 
 @immutable
+class AiNoteContext {
+  const AiNoteContext({required this.texts, required this.truncated});
+
+  final List<AiNoteText> texts;
+  final bool truncated;
+
+  factory AiNoteContext.fromTexts(Iterable<AiNoteText> source) {
+    final texts = <AiNoteText>[];
+    var totalLength = 0;
+    var truncated = false;
+
+    for (final item in source) {
+      final runes = item.text.trim().runes.toList();
+      if (runes.isEmpty) continue;
+      var offset = 0;
+      while (offset < runes.length && totalLength < maxAiAgentContextLength) {
+        final length = [
+          maxAiAgentTextLength,
+          maxAiAgentContextLength - totalLength,
+          runes.length - offset,
+        ].reduce((left, right) => left < right ? left : right);
+        texts.add(
+          AiNoteText(
+            id: offset == 0 && length == runes.length
+                ? item.id
+                : '${item.id}:${offset ~/ maxAiAgentTextLength}',
+            text: String.fromCharCodes(runes.sublist(offset, offset + length)),
+          ),
+        );
+        offset += length;
+        totalLength += length;
+      }
+      if (offset < runes.length) {
+        truncated = true;
+        break;
+      }
+    }
+
+    return AiNoteContext(texts: List.unmodifiable(texts), truncated: truncated);
+  }
+}
+
+@immutable
 class AiAgentAction {
   const AiAgentAction({required this.tool, required this.value});
 

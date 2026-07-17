@@ -4057,12 +4057,24 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Inserts plain text as one standard TextElement at the viewport center.
-  void insertPlainText(String text, {Size? canvasSize}) {
-    insertPlainTexts([text], canvasSize: canvasSize);
+  void insertPlainText(
+    String text, {
+    Size? canvasSize,
+    bool adaptiveLayout = false,
+  }) {
+    insertPlainTexts(
+      [text],
+      canvasSize: canvasSize,
+      adaptiveLayout: adaptiveLayout,
+    );
   }
 
   /// Inserts multiple standard text elements as one undoable scene change.
-  void insertPlainTexts(Iterable<String> texts, {Size? canvasSize}) {
+  void insertPlainTexts(
+    Iterable<String> texts, {
+    Size? canvasSize,
+    bool adaptiveLayout = false,
+  }) {
     final normalized = [
       for (final text in texts)
         if (text.trim().isNotEmpty) text.trim(),
@@ -4078,24 +4090,65 @@ class MarkdrawController extends ChangeNotifier {
       Offset(targetSize.width / 2, targetSize.height / 2),
     );
     final elements = <Element>[];
+    final occupied = adaptiveLayout
+        ? [
+            for (final element in _editorState.scene.activeElements)
+              if (!element.isCanvasPage && !element.isPdfBackground)
+                Bounds.fromLTWH(
+                  element.x,
+                  element.y,
+                  element.width,
+                  element.height,
+                ),
+          ]
+        : <Bounds>[];
+    final insertionArea = adaptiveLayout
+        ? _adaptiveTextInsertionArea(targetSize)
+        : null;
     var y = centerScene.dy;
     for (final text in normalized) {
       final textElem = TextElement(
         id: ElementId.generate(),
-        x: centerScene.dx,
-        y: y,
+        x: insertionArea?.left ?? centerScene.dx,
+        y: insertionArea?.top ?? y,
         width: 10,
         height: 10,
         text: text,
         fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
         fontSize: _defaultStyle.fontSize ?? 20,
+        autoResize: !adaptiveLayout,
       );
-      final (width, height) = TextRenderer.measure(textElem);
+      final naturalWidth = TextRenderer.measure(textElem).$1 + 4;
+      var width = insertionArea == null
+          ? naturalWidth
+          : math.min(
+              insertionArea.width,
+              math.max(
+                320.0,
+                math.min(naturalWidth, insertionArea.width * 0.6),
+              ),
+            );
+      var height = TextRenderer.measure(textElem, maxWidth: width).$2;
+      if (insertionArea != null &&
+          height > insertionArea.height * 0.8 &&
+          width < insertionArea.width) {
+        width = insertionArea.width;
+        height = TextRenderer.measure(textElem, maxWidth: width).$2;
+      }
+      final placement = insertionArea == null
+          ? null
+          : _findTextInsertionBounds(insertionArea, width, height, occupied);
       final sized = textElem.copyWith(
-        width: math.max(width + 4, 20.0),
+        x: placement?.left,
+        y: placement?.top,
+        width: math.max(width, 20.0),
         height: math.max(height, textElem.fontSize * textElem.lineHeight),
       );
-      elements.add(applyDefaultStyleToElement(sized));
+      final styled = applyDefaultStyleToElement(sized);
+      elements.add(styled);
+      occupied.add(
+        Bounds.fromLTWH(styled.x, styled.y, styled.width, styled.height),
+      );
       y += sized.height + 24;
     }
 
@@ -4106,6 +4159,46 @@ class MarkdrawController extends ChangeNotifier {
         SetSelectionResult({for (final element in elements) element.id}),
       ]),
     );
+  }
+
+  Rect _adaptiveTextInsertionArea(Size canvasSize) {
+    final visible = _editorState.viewport.visibleRect(canvasSize);
+    if (_layout.isPaged) {
+      final page = _layout.pageAt(visible.center);
+      if (page != null) {
+        return page.bounds.deflate(72);
+      }
+    }
+    return visible.deflate(math.min(32, visible.shortestSide / 8));
+  }
+
+  Bounds _findTextInsertionBounds(
+    Rect area,
+    double width,
+    double height,
+    List<Bounds> occupied,
+  ) {
+    const gap = 24.0;
+    final xCandidates = <double>[
+      area.left,
+      math.max(area.left, area.right - width),
+    ];
+    final yCandidates = <double>[
+      area.top,
+      for (final bounds in occupied) bounds.bottom + gap,
+    ]..sort();
+
+    for (final y in yCandidates) {
+      for (final x in xCandidates) {
+        final candidate = Bounds.fromLTWH(x, y, width, height);
+        if (candidate.right <= area.right &&
+            (height > area.height || candidate.bottom <= area.bottom) &&
+            !occupied.any(candidate.intersects)) {
+          return candidate;
+        }
+      }
+    }
+    return Bounds.fromLTWH(area.left, area.top, width, height);
   }
 
   /// Renames the document. Empty string is treated as null (no name).
