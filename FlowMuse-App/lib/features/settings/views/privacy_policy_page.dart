@@ -73,7 +73,7 @@ class PrivacyPolicyPage extends StatelessWidget {
             title: 'AI 笔记助手',
             body:
                 '仅当你主动使用 AI 助手时，当前笔记标题和文本元素会发送到你在'
-                'StarNote 实验室中配置的模型服务。FlowMuse 不会把 API Key 或笔记内容'
+                'FlowMuse 实验室中配置的模型服务。FlowMuse 不会把 API Key 或笔记内容'
                 '转发到自身服务器；模型服务如何处理数据取决于其隐私政策。',
           ),
           _PolicySection(

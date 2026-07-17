@@ -98,7 +98,7 @@ enum _SettingsSection {
   tools(LucideIcons.wrench, '工具设置', '默认工具与每种笔形的颜色、粗细'),
   stylus(LucideIcons.penLine, '手写笔设置', '压感曲线与防误触'),
   gestures(LucideIcons.hand, '手势设置', '缩放和平移手势'),
-  lab(LucideIcons.wandSparkles, 'StarNote 实验室', 'Beta AI'),
+  lab(LucideIcons.wandSparkles, 'FlowMuse 实验室', 'Beta AI'),
   privacy(LucideIcons.shield, '隐私设置', '查看本地数据存储位置与权限说明'),
   other(LucideIcons.ellipsis, '其他设置', '关于应用、版本信息与缓存清理');
 

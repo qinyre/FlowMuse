@@ -48,7 +48,7 @@ class AiAgentRepository {
       }
     }
     final config = _config ?? await _configStore.read();
-    if (config == null) throw StateError('请先在 StarNote 实验室配置 AI 接口');
+    if (config == null) throw StateError('请先在 FlowMuse 实验室配置 AI 接口');
     final response = await NativeHttpClient.post(
       url: config.chatCompletionsUri.toString(),
       headers: {
