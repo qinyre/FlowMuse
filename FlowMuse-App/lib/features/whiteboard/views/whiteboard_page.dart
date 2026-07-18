@@ -683,9 +683,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   Future<void> _applyAiAgentResponse(AiAgentResponse response) async {
     AiAgentAction? rename;
     AiAgentAction? mindmap;
+    var skippedRename = false;
     for (final action in response.actions) {
       if (action.tool == AiAgentTool.renameNote) {
-        rename = action;
+        if (widget.temporaryCollaboration) {
+          skippedRename = true;
+        } else {
+          rename = action;
+        }
       } else if (action.tool == AiAgentTool.generateMindmap) {
         mindmap = action;
       }
@@ -717,6 +722,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         _markdrawController.renameDocument(oldTitle);
       }
       rethrow;
+    }
+    if (skippedRename && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('加入协作时不能重命名房主的笔记')));
     }
   }
 
@@ -1946,9 +1956,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               onComposeSmartLayout: (request) => ref
                   .read(inkRecognitionRepositoryProvider)
                   .composeSmartLayout(request),
-              onAiPressed: widget.temporaryCollaboration
-                  ? null
-                  : _toggleAiAgent,
+              onAiPressed: _toggleAiAgent,
               onLiveFreedrawChanged: state.collaborating
                   ? _broadcastLiveFreedraw
                   : null,
