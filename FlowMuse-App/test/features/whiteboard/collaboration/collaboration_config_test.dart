@@ -10,7 +10,7 @@ void main() {
 
     final config = CollaborationConfig.fromEnvironment;
 
-    expect(config.serverUrl, isNotEmpty);
+    expect(config.serverUrl, CollaborationConfig.defaultServerUrl);
     expect(config.shareOrigin, CollaborationConfig.defaultShareOrigin);
   });
 

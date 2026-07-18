@@ -6,6 +6,7 @@ class CollaborationConfig {
     required this.shareOrigin,
   });
 
+  static const String defaultServerUrl = 'http://124.221.68.239:48931';
   static const String defaultShareOrigin = 'https://flowmuse.local';
 
   static CollaborationConfig get fromEnvironment {
@@ -24,7 +25,7 @@ class CollaborationConfig {
     return CollaborationConfig(
       serverUrl: dartDefinedServerUrl.isNotEmpty
           ? dartDefinedServerUrl
-          : dotenvServerUrl ?? 'http://8.133.4.116:48931',
+          : dotenvServerUrl ?? defaultServerUrl,
       shareOrigin: dartDefinedShareOrigin.isNotEmpty
           ? dartDefinedShareOrigin
           : dotenvShareOrigin ?? defaultShareOrigin,

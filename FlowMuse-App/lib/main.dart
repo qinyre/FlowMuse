@@ -12,7 +12,7 @@ Future<void> main() async {
   // 并行初始化，减少 runApp 前的等待时间，缩小 OnPreDrawListener 触发窗口
   final (_, initialThemePreset) = await (
     Future.wait([
-      dotenv.load(isOptional: true),
+      dotenv.load(fileName: 'assets/config/app.env', isOptional: true),
       PencilShader.init(), // 铅笔纹理 shader（不支持的平台静默降级）
     ]),
     loadSavedThemePreset(),

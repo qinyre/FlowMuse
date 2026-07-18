@@ -122,7 +122,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - .env
+    - assets/config/app.env
     - assets/covers/manifest.json
     - assets/covers/notebooks/
     - assets/covers/tags/

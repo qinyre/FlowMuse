@@ -62,7 +62,7 @@ Web 端可直接运行：
 flutter run -d chrome
 ```
 
-客户端默认读取 `FlowMuse-App/.env`。连接自建服务时可在启动命令中覆盖地址：
+客户端默认读取 `FlowMuse-App/assets/config/app.env`。连接自建服务时可在启动命令中覆盖地址：
 
 ```bash
 flutter run -d <device-id> \
