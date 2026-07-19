@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha512"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -155,9 +154,8 @@ func (r *MyScriptRecognizer) toMyScriptRequest(request RecognizeRequest, content
 
 func hmacSignature(appKey string, hmacKey string, body []byte) string {
 	key := []byte(appKey + hmacKey)
-	message := []byte(base64.StdEncoding.EncodeToString(body))
 	mac := hmac.New(sha512.New, key)
-	mac.Write(message)
+	mac.Write(body)
 	return strings.ToUpper(hex.EncodeToString(mac.Sum(nil)))
 }
 
