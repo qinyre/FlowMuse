@@ -68,9 +68,9 @@ sudo docker compose down
 代码更新后执行：
 
 ```bash
-cd ~/FlowMuse
-git pull
-cd FlowMuse-Server
+cd ~/FlowMuse-new
+git remote set-url origin git@github.com:qinyre/FlowMuse.git
+git pull --ff-only
 sudo docker compose up -d --build
 sudo docker compose ps
 curl -i http://127.0.0.1:48931/health
