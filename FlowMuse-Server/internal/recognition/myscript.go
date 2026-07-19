@@ -156,7 +156,7 @@ func hmacSignature(appKey string, hmacKey string, body []byte) string {
 	key := []byte(appKey + hmacKey)
 	mac := hmac.New(sha512.New, key)
 	mac.Write(body)
-	return strings.ToUpper(hex.EncodeToString(mac.Sum(nil)))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func parseMyScriptResponse(raw map[string]any, bounds InkBounds, contentType string) RecognizeResponse {
