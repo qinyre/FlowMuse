@@ -21,9 +21,10 @@ jobs:
         working-directory: FlowMuse-App
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.44.6
+      - name: Set up OpenHarmony Flutter
+        run: |
+          git clone --depth 1 --branch 3.41.10-ohos-0.0.1-canary1 https://gitcode.com/CPF-Flutter/flutter_flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
       - run: flutter pub get
       - run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - run: flutter test
