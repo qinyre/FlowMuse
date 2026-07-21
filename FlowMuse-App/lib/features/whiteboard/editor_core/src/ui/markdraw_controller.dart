@@ -1906,9 +1906,7 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   bool canCreateAt(Point point) {
-    final isPdfLayout =
-        _layout.isPaged && _layout.pages.any((page) => page.source == 'pdf');
-    if (!isPdfLayout) return true;
+    if (!_layout.isPaged) return true;
     final offset = Offset(point.x, point.y);
     return _layout.pages.any((page) => page.bounds.contains(offset));
   }
