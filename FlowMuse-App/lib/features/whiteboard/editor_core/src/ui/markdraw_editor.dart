@@ -175,7 +175,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
 
   MarkdrawController? _ownController;
   ToolbarDock _toolbarDock = ToolbarDock.top;
-  ControlGroupPosition _controlGroupPosition = ControlGroupPosition.bottomLeft;
+  ControlGroupPosition _controlGroupPosition = ControlGroupPosition.bottomRight;
   bool _toolbarCollapsed = false;
   bool _propertyPanelCollapsed = false;
   String _propertyPanelContext = '';
@@ -397,15 +397,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     setState(() {
       _toolbarDock = restoredToolbarDock;
       _controlGroupPosition = controlGroupPosition.isEmpty
-          ? _legacyControlGroupPositionFor(restoredToolbarDock)
+          ? ControlGroupPosition.bottomRight
           : controlGroupPosition.first;
     });
-  }
-
-  ControlGroupPosition _legacyControlGroupPositionFor(ToolbarDock dock) {
-    return dock == ToolbarDock.left
-        ? ControlGroupPosition.bottomRight
-        : ControlGroupPosition.bottomLeft;
   }
 
   void _setToolbarDock(ToolbarDock dock) {
