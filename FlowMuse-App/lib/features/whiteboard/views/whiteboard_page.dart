@@ -1704,8 +1704,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   void _popWhenStable() {
     runWhenUiStable(() {
-      if (mounted && Navigator.of(context).canPop()) {
+      if (!mounted) return;
+      if (Navigator.of(context).canPop()) {
         context.pop();
+      } else {
+        // 卡片冷启动等场景下,GoRouter.go() 把初始的 /library 从栈中抹掉,
+        // 白板成了栈底唯一路由,canPop() 为 false 会导致退出键失灵。
+        // 此时显式跳回首页,与从列表正常进入白板后按退出键的行为一致。
+        context.go(AppRoutes.library);
       }
     });
   }
