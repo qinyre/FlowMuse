@@ -3,8 +3,22 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
+
+func TestSocketAllowedOriginsUsesTypesSupportedByEngineIO(t *testing.T) {
+	if got := socketAllowedOrigins([]string{"*"}); got != "*" {
+		t.Fatalf("wildcard origins = %#v", got)
+	}
+	want := []any{"https://qinyre.github.io", "http://localhost:3000"}
+	if got := socketAllowedOrigins([]string{
+		"https://qinyre.github.io",
+		"http://localhost:3000",
+	}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("explicit origins = %#v, want %#v", got, want)
+	}
+}
 
 func TestWithCORSHandlesBrowserPreflight(t *testing.T) {
 	called := false

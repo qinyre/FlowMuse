@@ -81,7 +81,7 @@ func main() {
 	socketOptions := socket.DefaultServerOptions()
 	allowCredentials := !slices.Contains(cfg.AllowedOrigins, "*")
 	socketOptions.SetCors(&types.Cors{
-		Origin:      cfg.AllowedOrigins,
+		Origin:      socketAllowedOrigins(cfg.AllowedOrigins),
 		Credentials: allowCredentials,
 	})
 	socketOptions.SetPingInterval(25 * time.Second)
@@ -120,6 +120,17 @@ func main() {
 	if err := http.ListenAndServe(cfg.Addr, withCORS(mux, cfg.AllowedOrigins)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func socketAllowedOrigins(origins []string) any {
+	if slices.Contains(origins, "*") {
+		return "*"
+	}
+	allowed := make([]any, len(origins))
+	for index, origin := range origins {
+		allowed[index] = origin
+	}
+	return allowed
 }
 
 func withCORS(next http.Handler, allowedOrigins []string) http.Handler {
