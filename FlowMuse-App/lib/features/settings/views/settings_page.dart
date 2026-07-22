@@ -6,7 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -15,6 +15,7 @@ import '../../../app/app_router.dart';
 import '../../../app/app_theme_preset.dart';
 import '../../../app/view_models/theme_view_model.dart';
 import '../../../shared/storage/local_database_path.dart';
+import '../../../shared/url_launcher/app_url_launcher.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/right_page.dart';
@@ -982,6 +983,30 @@ class _OtherSettingsSectionState extends State<_OtherSettingsSection> {
     }
   }
 
+  Future<void> _launchOfficialWebsite() async {
+    final uri = Uri.parse('https://qinyre.github.io/flowmuse-website/');
+    final opened = await AppUrlLauncher.launch(uri);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('无法打开网页，请稍后重试')));
+    }
+  }
+
+  Future<void> _launchFeedbackEmail() async {
+    const address = '3252024846@qq.com';
+    final uri = Uri(scheme: 'mailto', path: address);
+    final opened = await AppUrlLauncher.launch(uri);
+    if (opened) return;
+    // 设备没有邮件 App 时,复制邮箱到剪贴板,让用户自己粘贴到任意邮箱客户端。
+    if (!mounted) return;
+    await Clipboard.setData(const ClipboardData(text: address));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已复制邮箱:3252024846@qq.com')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
@@ -1037,7 +1062,9 @@ class _OtherSettingsSectionState extends State<_OtherSettingsSection> {
               ListTile(
                 leading: const Icon(LucideIcons.globe),
                 title: const Text('官方网站'),
-                subtitle: const Text('即将上线'),
+                subtitle: const Text('qinyre.github.io/flowmuse-website'),
+                trailing: const Icon(LucideIcons.externalLink, size: 18),
+                onTap: () => _launchOfficialWebsite(),
               ),
               ListTile(
                 leading: const Icon(LucideIcons.scrollText),
@@ -1054,7 +1081,9 @@ class _OtherSettingsSectionState extends State<_OtherSettingsSection> {
               ListTile(
                 leading: const Icon(LucideIcons.mail),
                 title: const Text('帮助与反馈'),
-                subtitle: const Text('即将上线'),
+                subtitle: const Text('3252024846@qq.com'),
+                trailing: const Icon(LucideIcons.externalLink, size: 18),
+                onTap: () => _launchFeedbackEmail(),
               ),
             ],
           ),

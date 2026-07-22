@@ -12,6 +12,7 @@ import { ExternalDocumentChannel } from '../channels/ExternalDocumentChannel';
 import { PenColorPickerChannel } from '../channels/PenColorPickerChannel';
 import { ServiceWidgetChannel } from '../channels/ServiceWidgetChannel';
 import { SpeechRecognitionChannel } from '../channels/SpeechRecognitionChannel';
+import { UrlLauncherChannel } from '../channels/UrlLauncherChannel';
 
 export default class EntryAbility extends FlutterAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -68,5 +69,6 @@ export default class EntryAbility extends FlutterAbility {
     new PenColorPickerChannel().register(flutterEngine)
     new ServiceWidgetChannel(this.context).register(flutterEngine)
     new SpeechRecognitionChannel(this.context).register(flutterEngine)
+    new UrlLauncherChannel(this.context).register(flutterEngine)
   }
 }
