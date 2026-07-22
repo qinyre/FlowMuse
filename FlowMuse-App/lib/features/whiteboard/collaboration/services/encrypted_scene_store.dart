@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../models/collaboration_room.dart';
 import '../models/encrypted_payload.dart';
 import '../models/excalidraw_scene.dart';
+import '../../ink_recognition/native_http_client.dart';
 import 'collaboration_debug_log.dart';
 import 'collaboration_crypto.dart';
 import 'scene_reconciler.dart';
@@ -105,7 +106,7 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   }) : _serverUri = Uri.parse(serverUrl),
        _crypto = crypto,
        _authToken = authToken,
-       _client = client ?? http.Client(),
+       _client = client ?? HarmonyAwareHttpClient(),
        _ownsClient = client == null,
        _reconciler = reconciler ?? SceneReconciler();
 
@@ -367,7 +368,7 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
       });
       if (_ownsClient) {
         _client.close();
-        _client = http.Client();
+        _client = HarmonyAwareHttpClient();
       }
       return send(closeConnection: true);
     }

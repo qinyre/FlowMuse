@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -145,5 +144,101 @@ class NativeHttpClient {
       cancelToken?._detach();
       client.close();
     }
+  }
+}
+
+/// HTTP client that uses HarmonyOS Network Kit when the platform channel is
+/// available and preserves package:http behavior everywhere else.
+class HarmonyAwareHttpClient extends http.BaseClient {
+  HarmonyAwareHttpClient({
+    http.Client? fallbackClient,
+    this.connectTimeoutMs = 8000,
+    this.readTimeoutMs = 15000,
+  }) : _fallbackClient = fallbackClient ?? http.Client();
+
+  final http.Client _fallbackClient;
+  final int connectTimeoutMs;
+  final int readTimeoutMs;
+  final Set<String> _activeRequestIds = {};
+  bool _channelUnavailable = false;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final bodyBytes = await request.finalize().toBytes();
+    if (_channelUnavailable) {
+      return _sendFallback(request, bodyBytes);
+    }
+
+    final requestId =
+        '${DateTime.now().microsecondsSinceEpoch}-${NativeHttpClient._nextRequestId++}';
+    _activeRequestIds.add(requestId);
+    try {
+      final result = await NativeHttpClient._channel
+          .invokeMethod<Map<Object?, Object?>>('request', {
+            'requestId': requestId,
+            'method': request.method,
+            'url': request.url.toString(),
+            'headersJson': jsonEncode(request.headers),
+            'bodyBytes': bodyBytes,
+            'connectTimeoutMs': connectTimeoutMs,
+            'readTimeoutMs': readTimeoutMs,
+          });
+      if (result == null) {
+        throw StateError('Native HTTP channel returned null');
+      }
+      final responseBytes = switch (result['bodyBytes']) {
+        final Uint8List bytes => bytes,
+        final List<Object?> bytes => Uint8List.fromList(bytes.cast<int>()),
+        _ => Uint8List(0),
+      };
+      return http.StreamedResponse(
+        Stream.value(responseBytes),
+        result['statusCode'] as int,
+        contentLength: responseBytes.length,
+        headers: _decodeHeaders(result['headersJson']),
+        request: request,
+      );
+    } on MissingPluginException {
+      _channelUnavailable = true;
+      return _sendFallback(request, bodyBytes);
+    } finally {
+      _activeRequestIds.remove(requestId);
+    }
+  }
+
+  Future<http.StreamedResponse> _sendFallback(
+    http.BaseRequest original,
+    Uint8List bodyBytes,
+  ) {
+    final request = http.Request(original.method, original.url)
+      ..headers.addAll(original.headers)
+      ..bodyBytes = bodyBytes
+      ..followRedirects = original.followRedirects
+      ..maxRedirects = original.maxRedirects
+      ..persistentConnection = original.persistentConnection;
+    return _fallbackClient.send(request);
+  }
+
+  static Map<String, String> _decodeHeaders(Object? encoded) {
+    if (encoded is! String || encoded.isEmpty) return const {};
+    final decoded = jsonDecode(encoded);
+    if (decoded is! Map) return const {};
+    return decoded.map(
+      (key, value) => MapEntry(
+        key.toString().toLowerCase(),
+        value is List ? value.join(',') : value.toString(),
+      ),
+    );
+  }
+
+  @override
+  void close() {
+    for (final requestId in _activeRequestIds) {
+      unawaited(
+        NativeHttpClient._channel.invokeMethod<void>('cancel', requestId),
+      );
+    }
+    _activeRequestIds.clear();
+    _fallbackClient.close();
   }
 }

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../../editor_core/flow_muse_whiteboard_editor.dart' show ImageFile;
+import '../../ink_recognition/native_http_client.dart';
 import 'collaboration_debug_log.dart';
 import 'excalidraw_binary_codec.dart';
 
@@ -50,7 +51,7 @@ class HttpCollaborationFileStore implements CollaborationFileStore {
     ExcalidrawBinaryCodec? binaryCodec,
   }) : _serverUri = Uri.parse(serverUrl),
        _authToken = authToken,
-       _client = client ?? http.Client(),
+       _client = client ?? HarmonyAwareHttpClient(readTimeoutMs: 20000),
        _binaryCodec = binaryCodec ?? ExcalidrawBinaryCodec();
 
   final Uri _serverUri;
