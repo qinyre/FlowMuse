@@ -54,7 +54,7 @@ void main() {
       onApply: (response) async => applied = response,
     );
 
-    await tester.tap(find.text('提取待办事项'));
+    await tester.tap(find.text('待办'));
     expect(
       tester.widget<TextField>(find.byType(TextField).first).controller!.text,
       '提取待办事项',
@@ -288,7 +288,7 @@ void main() {
       onApply: (response) async => applied = response,
     );
 
-    await tester.tap(find.text('根据当前内容生成思维导图'));
+    await tester.tap(find.text('思维导图'));
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
 

@@ -469,25 +469,27 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                   ),
                   const SizedBox(height: AppSpacing.controlGap),
                   Wrap(
-                    spacing: AppSpacing.controlGap,
-                    runSpacing: AppSpacing.controlGap,
+                    spacing: 4,
+                    runSpacing: 4,
                     children: [
-                      for (final prompt in const [
-                        '总结当前笔记',
-                        '提取待办事项',
-                        '生成结构化大纲',
-                        '根据当前内容生成思维导图',
-                        '智能排版当前手写内容',
-                      ])
+                      for (final shortcut in const {
+                        '总结': '总结当前笔记',
+                        '待办': '提取待办事项',
+                        '大纲': '生成结构化大纲',
+                        '思维导图': '根据当前内容生成思维导图',
+                        '手写排版': '智能排版当前手写内容',
+                      }.entries)
                         ActionChip(
-                          label: Text(prompt),
+                          label: Text(shortcut.key),
+                          visualDensity: VisualDensity.compact,
                           onPressed: _loading || _applying
                               ? null
-                              : () => _fillInstruction(prompt),
+                              : () => _fillInstruction(shortcut.value),
                         ),
                       for (final prompt in _customPrompts)
                         InputChip(
                           label: Text(prompt),
+                          visualDensity: VisualDensity.compact,
                           onPressed: _loading || _applying
                               ? null
                               : () => _fillInstruction(prompt),
