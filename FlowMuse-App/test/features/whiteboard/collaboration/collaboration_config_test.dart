@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   tearDown(dotenv.clean);
 
-  test('环境文件未初始化时使用安全默认配置', () {
+  test('环境文件未初始化时使用内置默认配置', () {
     dotenv.clean();
 
     final config = CollaborationConfig.fromEnvironment;
