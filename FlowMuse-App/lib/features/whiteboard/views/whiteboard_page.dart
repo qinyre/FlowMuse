@@ -44,6 +44,8 @@ import '../ai_assistant/models/ai_agent_models.dart';
 import '../ai_assistant/repositories/ai_agent_repository.dart';
 import '../ai_assistant/repositories/ai_prompt_store.dart';
 import '../ai_assistant/views/ai_agent_dialog.dart';
+import '../speech_recognition/services/speech_recognition_service.dart';
+import '../speech_recognition/services/speech_recognition_service_factory.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
   const WhiteboardPage({
@@ -103,6 +105,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _handlingBack = false;
   bool _editorPreferencesApplied = false;
   OverlayEntry? _aiPanelEntry;
+  bool _aiSpeechInputActive = false;
+  late final SpeechRecognitionService _speechRecognitionService;
   Future<void> _remoteSceneQueue = Future<void>.value();
 
   // LocalDraftScheduler — debounce duration comes from editor preferences.
@@ -117,6 +121,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _markdrawController = MarkdrawController();
+    _speechRecognitionService = createSpeechRecognitionService();
     _seedDocumentTitleFromCache();
     _markdrawController.onBrushStateChanged = (type, state) {
       unawaited(
@@ -607,6 +612,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               contextLabel: initialContext.label,
               contextProvider: _currentAiAgentContext,
               promptStore: defaultAiPromptStore,
+              speechRecognitionService: _speechRecognitionService,
               onApply: _applyAiAgentResponse,
               onClose: _closeAiPanel,
             ),
@@ -615,6 +621,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       },
     );
     _aiPanelEntry = entry;
+    _aiSpeechInputActive = true;
+    unawaited(_speechRecognitionService.cancel());
+    setState(() {});
     Overlay.of(context).insert(entry);
   }
 
@@ -663,6 +672,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void _closeAiPanel() {
     _aiPanelEntry?.remove();
     _aiPanelEntry = null;
+    unawaited(_finishAiSpeechInput());
+  }
+
+  Future<void> _finishAiSpeechInput() async {
+    await _speechRecognitionService.cancel();
+    if (mounted) setState(() => _aiSpeechInputActive = false);
   }
 
   int _aiPageIndex(editor_core.TextElement element) {
@@ -1862,6 +1877,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             bottom: false,
             child: MarkdrawEditor(
               controller: _markdrawController,
+              speechRecognitionService: _speechRecognitionService,
+              speechRecognitionEnabled: !_aiSpeechInputActive,
               config: const MarkdrawEditorConfig(),
               canvasThemeBackground: effectivePreset.canvasBackground,
               useFlatBackgrounds: effectivePreset.usesMonochromeBackground,

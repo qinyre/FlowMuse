@@ -5,12 +5,47 @@ import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_prompt_store.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/views/ai_agent_dialog.dart';
 import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
+import 'package:flow_muse/features/whiteboard/speech_recognition/models/speech_recognition_event.dart';
+import 'package:flow_muse/features/whiteboard/speech_recognition/services/speech_recognition_service.dart';
 import 'package:flow_muse/shared/storage/local_settings_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('语音识别结果填入 AI 指令且不会重复追加', (tester) async {
+    final speech = _FakeSpeechRecognitionService();
+    addTearDown(speech.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: _FakeAiAgentRepository(),
+            noteTitle: '测试笔记',
+            texts: const [],
+            contextTruncated: false,
+            contextLabel: '当前笔记',
+            promptStore: AiPromptStore(_MemorySettings()),
+            speechRecognitionService: speech,
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('语音输入'));
+    speech.emit(const SpeechRecognitionResult('生成一份总结', isFinal: true));
+    speech.emit(const SpeechRecognitionResult('重复结果', isFinal: true));
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+      '生成一份总结',
+    );
+  });
+
   testWidgets('快捷指令可填充输入且只应用勾选动作', (tester) async {
     AiAgentResponse? applied;
     await _openDialog(
@@ -321,4 +356,30 @@ class _MemorySettings extends LocalSettingsRepository {
   Future<void> writeString(String key, String value) async {
     values[key] = value;
   }
+}
+
+class _FakeSpeechRecognitionService implements SpeechRecognitionService {
+  final _events = StreamController<SpeechRecognitionEvent>.broadcast();
+
+  void emit(SpeechRecognitionEvent event) => _events.add(event);
+
+  @override
+  Stream<SpeechRecognitionEvent> get events => _events.stream;
+
+  @override
+  Future<bool> isAvailable() async => true;
+
+  @override
+  Future<void> start({String locale = 'zh-CN'}) async {
+    emit(const SpeechRecognitionStateChanged(SpeechRecognitionState.listening));
+  }
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> cancel() async {}
+
+  @override
+  Future<void> dispose() => _events.close();
 }

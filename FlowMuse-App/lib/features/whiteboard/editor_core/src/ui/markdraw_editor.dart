@@ -73,6 +73,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.useFlatBackgrounds = false,
     this.onEyedropperPressed,
     this.speechRecognitionService,
+    this.speechRecognitionEnabled = true,
     this.fingerDrawingEnabled = false,
     this.onFingerDrawingEnabledChanged,
     this.onAiPressed,
@@ -139,6 +140,7 @@ class MarkdrawEditor extends StatefulWidget {
   final String canvasThemeBackground;
   final bool useFlatBackgrounds;
   final SpeechRecognitionService? speechRecognitionService;
+  final bool speechRecognitionEnabled;
   final bool fingerDrawingEnabled;
   final ValueChanged<bool>? onFingerDrawingEnabledChanged;
 
@@ -214,6 +216,12 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   @override
   void didUpdateWidget(MarkdrawEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.speechRecognitionEnabled &&
+        oldWidget.speechRecognitionEnabled) {
+      _speechState = SpeechRecognitionState.idle;
+      _speechPreview = '';
+      _speechFinalCommitted = false;
+    }
     if (widget.controller != oldWidget.controller) {
       oldWidget.controller?.removeListener(_onControllerChanged);
       _controller.addListener(_onControllerChanged);
@@ -311,7 +319,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   }
 
   void _onSpeechEvent(SpeechRecognitionEvent event) {
-    if (!mounted) return;
+    if (!mounted || !widget.speechRecognitionEnabled) return;
     switch (event) {
       case SpeechRecognitionResult(:final text, :final isFinal):
         if (isFinal) {
@@ -494,7 +502,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         onEyedropperPressed: widget.onEyedropperPressed,
         onSpeechPressed: _toggleSpeech,
         speechActive: _speechState != SpeechRecognitionState.idle,
-        speechAvailable: _speechAvailable,
+        speechAvailable: _speechAvailable && widget.speechRecognitionEnabled,
         onAiPressed: widget.onAiPressed,
       );
     }
@@ -508,7 +516,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       onEyedropperPressed: widget.onEyedropperPressed,
       onSpeechPressed: _toggleSpeech,
       speechActive: _speechState != SpeechRecognitionState.idle,
-      speechAvailable: _speechAvailable,
+      speechAvailable: _speechAvailable && widget.speechRecognitionEnabled,
       onAiPressed: widget.onAiPressed,
     );
   }
@@ -959,7 +967,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         if (_controller.isLinkEditorOpen &&
             _controller.selectedElements.length == 1)
           _buildLinkOverlay(topChromeOffset),
-        if (_speechState != SpeechRecognitionState.idle)
+        if (widget.speechRecognitionEnabled &&
+            _speechState != SpeechRecognitionState.idle)
           Positioned(
             left: 16,
             right: 16,

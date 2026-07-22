@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
@@ -6,6 +8,9 @@ import '../../ink_recognition/native_http_client.dart';
 import '../models/ai_agent_models.dart';
 import '../repositories/ai_agent_repository.dart';
 import '../repositories/ai_prompt_store.dart';
+import '../../speech_recognition/models/speech_recognition_event.dart';
+import '../../speech_recognition/services/speech_recognition_service.dart';
+import '../../speech_recognition/services/speech_recognition_service_factory.dart';
 
 typedef AiAgentContextSnapshot = ({
   String noteTitle,
@@ -56,6 +61,7 @@ class AiAgentPanel extends StatefulWidget {
     required this.contextLabel,
     this.contextProvider,
     required this.promptStore,
+    this.speechRecognitionService,
     required this.onApply,
     required this.onClose,
   });
@@ -67,6 +73,7 @@ class AiAgentPanel extends StatefulWidget {
   final String contextLabel;
   final AiAgentContextSnapshot Function()? contextProvider;
   final AiPromptStore promptStore;
+  final SpeechRecognitionService? speechRecognitionService;
   final Future<void> Function(AiAgentResponse response) onApply;
   final VoidCallback onClose;
 
@@ -85,6 +92,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   int _generation = 0;
   bool _loading = false;
   bool _applying = false;
+  late final SpeechRecognitionService _speechService;
+  late final bool _ownsSpeechService;
+  StreamSubscription<SpeechRecognitionEvent>? _speechSubscription;
+  SpeechRecognitionState _speechState = SpeechRecognitionState.idle;
+  bool _speechAvailable = false;
+  String _speechPreview = '';
+  bool _speechFinalCommitted = false;
   late AiAgentContextSnapshot _context;
 
   @override
@@ -96,6 +110,11 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       truncated: widget.contextTruncated,
       label: widget.contextLabel,
     );
+    _ownsSpeechService = widget.speechRecognitionService == null;
+    _speechService =
+        widget.speechRecognitionService ?? createSpeechRecognitionService();
+    _speechSubscription = _speechService.events.listen(_onSpeechEvent);
+    unawaited(_checkSpeechAvailability());
     if (widget.texts.isNotEmpty) {
       _instructionController.text = '总结当前笔记，提取待办事项，并生成合适的标题';
     }
@@ -105,6 +124,9 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   @override
   void dispose() {
     _cancelToken?.cancel();
+    unawaited(_speechService.cancel());
+    unawaited(_speechSubscription?.cancel());
+    if (_ownsSpeechService) unawaited(_speechService.dispose());
     _instructionController.dispose();
     for (final controller in _actionControllers) {
       controller.dispose();
@@ -118,6 +140,58 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       if (mounted) setState(() => _customPrompts = prompts);
     } catch (_) {
       // 常用指令是非关键功能，存储不可用时保留内置指令。
+    }
+  }
+
+  Future<void> _checkSpeechAvailability() async {
+    final available = await _speechService.isAvailable();
+    if (mounted) setState(() => _speechAvailable = available);
+  }
+
+  Future<void> _toggleSpeech() async {
+    if (_speechState == SpeechRecognitionState.idle) {
+      _speechFinalCommitted = false;
+      await _speechService.start();
+    } else {
+      await _speechService.stop();
+    }
+  }
+
+  void _onSpeechEvent(SpeechRecognitionEvent event) {
+    if (!mounted) return;
+    switch (event) {
+      case SpeechRecognitionResult(:final text, :final isFinal):
+        if (isFinal) {
+          if (_speechFinalCommitted) return;
+          _speechFinalCommitted = true;
+          final current = _instructionController.text.trimRight();
+          _instructionController.text = current.isEmpty
+              ? text
+              : '$current$text';
+          _instructionController.selection = TextSelection.collapsed(
+            offset: _instructionController.text.length,
+          );
+          setState(() {
+            _speechPreview = '';
+            _speechState = SpeechRecognitionState.idle;
+          });
+        } else {
+          setState(() => _speechPreview = text);
+        }
+      case SpeechRecognitionStateChanged(:final state):
+        setState(() {
+          _speechState = state;
+          if (state == SpeechRecognitionState.starting) {
+            _speechFinalCommitted = false;
+          }
+          if (state == SpeechRecognitionState.idle) _speechPreview = '';
+        });
+      case SpeechRecognitionFailed(:final message):
+        setState(() {
+          _speechState = SpeechRecognitionState.idle;
+          _speechPreview = '';
+          _error = message.trim().isEmpty ? '语音识别失败' : message;
+        });
     }
   }
 
@@ -151,7 +225,11 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
 
   Future<void> _generate() async {
     final instruction = _instructionController.text.trim();
-    if (instruction.isEmpty || _loading) return;
+    if (instruction.isEmpty ||
+        _loading ||
+        _speechState != SpeechRecognitionState.idle) {
+      return;
+    }
     final context = widget.contextProvider?.call() ?? _context;
     final previousResponse = _response;
     final generation = ++_generation;
@@ -403,6 +481,25 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                       border: const OutlineInputBorder(),
                       filled: true,
                       fillColor: colors.surfaceContainerLowest,
+                      helperText: _speechState == SpeechRecognitionState.idle
+                          ? null
+                          : (_speechPreview.isEmpty ? '正在聆听…' : _speechPreview),
+                      suffixIcon: _speechAvailable
+                          ? IconButton(
+                              tooltip:
+                                  _speechState == SpeechRecognitionState.idle
+                                  ? '语音输入'
+                                  : '结束语音输入',
+                              onPressed: _loading || _applying
+                                  ? null
+                                  : _toggleSpeech,
+                              icon: Icon(
+                                _speechState == SpeechRecognitionState.idle
+                                    ? Icons.mic_none
+                                    : Icons.stop_circle_outlined,
+                              ),
+                            )
+                          : null,
                     ),
                   ),
                   Align(
@@ -566,13 +663,21 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                   )
                 else if (response == null)
                   FilledButton.icon(
-                    onPressed: instruction.isEmpty ? null : _generate,
+                    onPressed:
+                        instruction.isEmpty ||
+                            _speechState != SpeechRecognitionState.idle
+                        ? null
+                        : _generate,
                     icon: const Icon(Icons.arrow_upward, size: 18),
                     label: const Text('发送'),
                   )
                 else ...[
                   TextButton(
-                    onPressed: instruction.isEmpty ? null : _generate,
+                    onPressed:
+                        instruction.isEmpty ||
+                            _speechState != SpeechRecognitionState.idle
+                        ? null
+                        : _generate,
                     child: const Text('追问修改'),
                   ),
                   if (response.actions.isNotEmpty)
