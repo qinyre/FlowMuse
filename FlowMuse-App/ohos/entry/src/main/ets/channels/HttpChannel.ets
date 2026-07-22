@@ -26,7 +26,11 @@ export class HttpChannel {
           }
           this.doRequest(call.args as Map<string, Object>)
             .then((responseMap: Map<string, Object>) => result.success(responseMap))
-            .catch((error: BusinessError) => result.error('HTTP_REQUEST_FAILED', error.message ?? `${error}`, ''));
+            .catch((error: BusinessError) => result.error(
+              'HTTP_REQUEST_FAILED',
+              `${error.code ?? ''}: ${error.message ?? error}`,
+              ''
+            ));
           return;
         }
         this.doPost(call.args as Map<string, Object>)
@@ -46,14 +50,19 @@ export class HttpChannel {
       const headers = JSON.parse(
         (args.get('headersJson') as string) ?? '{}'
       ) as Record<string, string>;
-      const response = await req.request(args.get('url') as string, {
+      const bodyBytes = args.get('bodyBytes') as Uint8Array;
+      const options: http.HttpRequestOptions = {
         method: this.requestMethod((args.get('method') as string) ?? 'GET'),
         header: headers,
-        extraData: (args.get('bodyBytes') as Uint8Array) ?? new Uint8Array(),
         expectDataType: http.HttpDataType.ARRAY_BUFFER,
         connectTimeout: (args.get('connectTimeoutMs') as number) ?? 8000,
         readTimeout: (args.get('readTimeoutMs') as number) ?? 15000,
-      });
+        usingProtocol: http.HttpProtocol.HTTP1_1,
+      };
+      if (bodyBytes && bodyBytes.byteLength > 0) {
+        options.extraData = bodyBytes.buffer;
+      }
+      const response = await req.request(args.get('url') as string, options);
       const map = new Map<string, Object>();
       map.set('statusCode', response.responseCode);
       map.set('bodyBytes', new Uint8Array(response.result as ArrayBuffer));
