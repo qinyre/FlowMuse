@@ -77,4 +77,27 @@ void main() {
     expect(source, SceneChangeSource.remoteApply);
     expect(controller.lastChangedElements, isNull);
   });
+
+  test('reset canvas reports a full-scene replacement', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.applyResult(
+      AddElementResult(
+        RectangleElement(
+          id: const ElementId('element'),
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+        ),
+      ),
+    );
+
+    SceneChangeSource? source;
+    controller.onSceneChanged = (_, value) => source = value;
+    controller.resetCanvas();
+
+    expect(source, SceneChangeSource.reset);
+    expect(controller.editorState.scene.activeElements, isEmpty);
+  });
 }

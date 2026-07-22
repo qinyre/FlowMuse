@@ -1970,6 +1970,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                 switch (source) {
                   case SceneChangeSource.undo:
                   case SceneChangeSource.redo:
+                  case SceneChangeSource.reset:
                     unawaited(
                       _broadcastUndoRedoScene(
                         _previousEditorScene,

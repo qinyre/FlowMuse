@@ -71,7 +71,7 @@ Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
 ///
 /// Can be created internally by the widget or provided externally
 /// (like [TextEditingController]).
-enum SceneChangeSource { userEdit, undo, redo, remoteApply, restore }
+enum SceneChangeSource { userEdit, undo, redo, reset, remoteApply, restore }
 
 enum _TwoFingerGestureMode { pan, zoom }
 
@@ -4363,7 +4363,7 @@ class MarkdrawController extends ChangeNotifier {
     _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
     _documentName = null;
     _lastChangedElements = null;
-    onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
+    onSceneChanged?.call(_editorState.scene, SceneChangeSource.reset);
     notifyListeners();
   }
 
