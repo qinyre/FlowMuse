@@ -6,12 +6,60 @@ const int maxAiAgentActions = 5;
 const int maxAiAgentTitleLength = 100;
 const int maxAiAgentTextLength = 5000;
 const int maxAiAgentContextLength = 30000;
+const int maxAiAgentInstructionLength = 1000;
+const int maxAiAgentConversationTurns = 6;
+const int maxAiAgentConversationLength = 12000;
 const int maxAiMindmapNodes = 50;
 const int maxAiMindmapDepth = 4;
 const int maxAiMindmapNodeTextLength = 100;
 const int maxAiMindmapJsonLength = 12000;
 
 enum AiAgentTool { renameNote, insertText, generateMindmap, smartLayout }
+
+@immutable
+class AiAgentConversationTurn {
+  const AiAgentConversationTurn({
+    required this.instruction,
+    required this.response,
+  });
+
+  final String instruction;
+  final AiAgentResponse response;
+
+  Map<String, Object?> toJson() => {
+    'instruction': instruction,
+    'response': response.toJson(),
+  };
+}
+
+List<AiAgentConversationTurn> compactAiAgentConversation(
+  Iterable<AiAgentConversationTurn> source,
+) {
+  final turns = source.toList(growable: false);
+  final retained = <AiAgentConversationTurn>[];
+  var totalLength = 0;
+  for (
+    var index = turns.length - 1;
+    index >= 0 && retained.length < maxAiAgentConversationTurns;
+    index--
+  ) {
+    final turn = turns[index];
+    final instruction = turn.instruction.trim();
+    if (instruction.isEmpty ||
+        instruction.runes.length > maxAiAgentInstructionLength) {
+      throw const FormatException('AI 会话指令长度无效');
+    }
+    final normalized = AiAgentConversationTurn(
+      instruction: instruction,
+      response: AiAgentResponse.fromJson(turn.response.toJson()),
+    );
+    final length = jsonEncode(normalized.toJson()).runes.length;
+    if (totalLength + length > maxAiAgentConversationLength) break;
+    retained.add(normalized);
+    totalLength += length;
+  }
+  return List.unmodifiable(retained.reversed);
+}
 
 @immutable
 class AiNoteText {

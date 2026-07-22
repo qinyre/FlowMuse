@@ -39,6 +39,35 @@ void main() {
     });
   });
 
+  test('会话记忆保留最近六轮并优先保留预算内的最新完整轮次', () {
+    final turns = [
+      for (var index = 0; index < 7; index++)
+        AiAgentConversationTurn(
+          instruction: '指令$index',
+          response: AiAgentResponse(message: '回复$index', actions: const []),
+        ),
+    ];
+
+    final recent = compactAiAgentConversation(turns);
+    expect(recent, hasLength(maxAiAgentConversationTurns));
+    expect(recent.first.instruction, '指令1');
+    expect(recent.last.instruction, '指令6');
+
+    final large = compactAiAgentConversation([
+      for (var index = 0; index < 3; index++)
+        AiAgentConversationTurn(
+          instruction: '长指令$index',
+          response: AiAgentResponse(
+            message: List.filled(maxAiAgentTextLength, '$index').join(),
+            actions: const [],
+          ),
+        ),
+    ]);
+    expect(large, hasLength(2));
+    expect(large.first.instruction, '长指令1');
+    expect(large.last.instruction, '长指令2');
+  });
+
   test('用户编辑后的动作仍执行长度校验', () {
     expect(
       () => AiAgentAction.edited(

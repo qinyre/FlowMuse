@@ -99,6 +99,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   bool _speechAvailable = false;
   String _speechPreview = '';
   bool _speechFinalCommitted = false;
+  List<AiAgentConversationTurn> _conversation = const [];
   late AiAgentContextSnapshot _context;
 
   @override
@@ -231,7 +232,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       return;
     }
     final context = widget.contextProvider?.call() ?? _context;
-    final previousResponse = _response;
+    final isFollowUp = _response != null;
     final generation = ++_generation;
     final cancelToken = NativeHttpCancelToken();
     _cancelToken = cancelToken;
@@ -239,21 +240,21 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       _context = context;
       _loading = true;
       _error = null;
-      if (previousResponse == null) _selectedActions = const {};
+      if (!isFollowUp) _selectedActions = const {};
     });
     try {
       final response = await widget.repository.run(
         instruction: instruction,
         noteTitle: context.noteTitle,
         texts: context.texts,
-        previousResponse: previousResponse,
+        conversation: _conversation,
         cancelToken: cancelToken,
       );
       if (!mounted || generation != _generation || cancelToken.isCancelled) {
         return;
       }
-      _setResponse(response);
-      if (previousResponse != null) _instructionController.clear();
+      _setResponse(response, instruction: instruction);
+      if (isFollowUp) _instructionController.clear();
     } on NativeHttpCancelledException {
       // 用户主动取消，不显示为失败。
     } catch (error) {
@@ -267,7 +268,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     }
   }
 
-  void _setResponse(AiAgentResponse response) {
+  void _setResponse(AiAgentResponse response, {required String instruction}) {
     for (final controller in _actionControllers) {
       controller.dispose();
     }
@@ -279,10 +280,28 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         ),
       );
     setState(() {
+      _conversation = compactAiAgentConversation([
+        ..._conversation,
+        AiAgentConversationTurn(instruction: instruction, response: response),
+      ]);
       _response = response;
       _selectedActions = {
         for (var index = 0; index < response.actions.length; index++) index,
       };
+    });
+  }
+
+  void _clearConversation() {
+    for (final controller in _actionControllers) {
+      controller.dispose();
+    }
+    _actionControllers.clear();
+    _instructionController.clear();
+    setState(() {
+      _conversation = const [];
+      _response = null;
+      _selectedActions = const {};
+      _error = null;
     });
   }
 
@@ -413,6 +432,14 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     ],
                   ),
                 ),
+                if (_conversation.isNotEmpty)
+                  IconButton(
+                    tooltip: '清除对话',
+                    onPressed: _loading || _applying
+                        ? null
+                        : _clearConversation,
+                    icon: const Icon(Icons.delete_sweep_outlined),
+                  ),
                 IconButton(
                   tooltip: '关闭 AI 助手',
                   onPressed: _applying

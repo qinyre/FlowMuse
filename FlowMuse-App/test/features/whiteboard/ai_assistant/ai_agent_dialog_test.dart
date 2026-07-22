@@ -89,8 +89,13 @@ void main() {
     await tester.tap(find.text('追问修改'));
     await tester.pumpAndSettle();
 
-    expect(repository.previousResponses.last, isNotNull);
-    expect(repository.previousResponses.last!.actions, hasLength(2));
+    expect(repository.conversations.last, hasLength(1));
+    expect(repository.conversations.last.single.response.actions, hasLength(2));
+    await tester.enterText(find.byType(TextField).first, '改成三条待办');
+    await tester.pump();
+    await tester.tap(find.text('追问修改'));
+    await tester.pumpAndSettle();
+    expect(repository.conversations.last, hasLength(2));
     final insertField = find.byWidgetPredicate(
       (widget) => widget is TextField && widget.controller?.text == '精简后的总结',
     );
@@ -126,6 +131,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('AI 笔记助手'), findsOneWidget);
     expect(find.text('追问修改'), findsOneWidget);
+  });
+
+  testWidgets('清除对话会清空当前回复和后续请求历史', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    await _openDialog(tester, repository: repository, onApply: (_) async {});
+
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('清除对话'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('清除对话'));
+    await tester.pump();
+    expect(find.text('准备应用'), findsNothing);
+    expect(find.byTooltip('清除对话'), findsNothing);
+
+    await tester.enterText(find.byType(TextField).first, '重新开始');
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    expect(repository.conversations.last, isEmpty);
   });
 
   testWidgets('取消生成会终止令牌并忽略迟到响应', (tester) async {
@@ -315,7 +339,7 @@ class _FakeAiAgentRepository extends AiAgentRepository {
   );
   final Completer<AiAgentResponse>? completer;
   final AiAgentResponse response;
-  final previousResponses = <AiAgentResponse?>[];
+  final conversations = <List<AiAgentConversationTurn>>[];
   final receivedTexts = <List<AiNoteText>>[];
   NativeHttpCancelToken? cancelToken;
 
@@ -324,14 +348,14 @@ class _FakeAiAgentRepository extends AiAgentRepository {
     required String instruction,
     required String noteTitle,
     required List<AiNoteText> texts,
-    AiAgentResponse? previousResponse,
+    List<AiAgentConversationTurn> conversation = const [],
     NativeHttpCancelToken? cancelToken,
   }) async {
-    previousResponses.add(previousResponse);
+    conversations.add(List.unmodifiable(conversation));
     receivedTexts.add(texts);
     this.cancelToken = cancelToken;
     if (completer != null) return completer!.future;
-    if (previousResponse != null) {
+    if (conversation.isNotEmpty) {
       return const AiAgentResponse(
         message: '已按追问修改',
         actions: [
