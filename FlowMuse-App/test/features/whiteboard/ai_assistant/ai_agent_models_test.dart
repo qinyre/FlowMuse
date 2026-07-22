@@ -147,6 +147,35 @@ void main() {
     );
   });
 
+  test('智能排版工具只接受空参数且必须单独执行', () {
+    final response = AiAgentResponse.fromJson({
+      'actions': [
+        {'tool': 'smart_layout', 'arguments': <String, Object?>{}},
+      ],
+    });
+
+    expect(response.actions.single.tool, AiAgentTool.smartLayout);
+    expect(
+      () => AiAgentAction.fromJson({
+        'tool': 'smart_layout',
+        'arguments': {'unexpected': true},
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => AiAgentResponse.fromJson({
+        'actions': [
+          {'tool': 'smart_layout', 'arguments': <String, Object?>{}},
+          {
+            'tool': 'insert_text',
+            'arguments': {'text': '额外文字'},
+          },
+        ],
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('超长插入内容一律拒绝', () {
     expect(
       () => AiAgentResponse.fromJson({

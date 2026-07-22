@@ -296,6 +296,9 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   }
 
   AiAgentAction _editedAction(int index) {
+    if (_response!.actions[index].tool == AiAgentTool.smartLayout) {
+      return _response!.actions[index];
+    }
     return AiAgentAction.edited(
       tool: _response!.actions[index].tool,
       value: _actionControllers[index].text,
@@ -447,6 +450,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                         '提取待办事项',
                         '生成结构化大纲',
                         '根据当前内容生成思维导图',
+                        '智能排版当前手写内容',
                       ])
                         ActionChip(
                           label: Text(prompt),
@@ -607,36 +611,45 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                 Icons.drive_file_rename_outline,
                               AiAgentTool.insertText => Icons.note_add_outlined,
                               AiAgentTool.generateMindmap => Icons.account_tree,
+                              AiAgentTool.smartLayout => Icons.auto_fix_high,
                             }),
                             title: Text(response.actions[index].label),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              left: 40,
-                              bottom: AppSpacing.controlGap,
-                            ),
-                            child: TextField(
-                              controller: _actionControllers[index],
-                              enabled: !_applying && !_loading,
-                              onChanged: (_) => setState(() {}),
-                              minLines: 1,
-                              maxLines: switch (response.actions[index].tool) {
-                                AiAgentTool.renameNote => 2,
-                                AiAgentTool.insertText => 8,
-                                AiAgentTool.generateMindmap => 12,
-                              },
-                              maxLength: switch (response.actions[index].tool) {
-                                AiAgentTool.renameNote => maxAiAgentTitleLength,
-                                AiAgentTool.insertText => maxAiAgentTextLength,
-                                AiAgentTool.generateMindmap =>
-                                  maxAiMindmapJsonLength,
-                              },
-                              decoration: const InputDecoration(
-                                border: OutlineInputBorder(),
-                                isDense: true,
+                          if (response.actions[index].tool !=
+                              AiAgentTool.smartLayout)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: 40,
+                                bottom: AppSpacing.controlGap,
+                              ),
+                              child: TextField(
+                                controller: _actionControllers[index],
+                                enabled: !_applying && !_loading,
+                                onChanged: (_) => setState(() {}),
+                                minLines: 1,
+                                maxLines:
+                                    switch (response.actions[index].tool) {
+                                      AiAgentTool.renameNote => 2,
+                                      AiAgentTool.insertText => 8,
+                                      AiAgentTool.generateMindmap => 12,
+                                      AiAgentTool.smartLayout => 1,
+                                    },
+                                maxLength:
+                                    switch (response.actions[index].tool) {
+                                      AiAgentTool.renameNote =>
+                                        maxAiAgentTitleLength,
+                                      AiAgentTool.insertText =>
+                                        maxAiAgentTextLength,
+                                      AiAgentTool.generateMindmap =>
+                                        maxAiMindmapJsonLength,
+                                      AiAgentTool.smartLayout => 0,
+                                    },
+                                decoration: const InputDecoration(
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
                               ),
                             ),
-                          ),
                         ],
                       ),
                   ],

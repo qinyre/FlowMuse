@@ -588,12 +588,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         final size = MediaQuery.sizeOf(overlayContext);
         final padding = MediaQuery.paddingOf(overlayContext);
         final keyboardInset = MediaQuery.viewInsetsOf(overlayContext).bottom;
-        final panelTop = padding.top + 16;
+        final safeTop = padding.top + 16;
+        final safeBottom = max(keyboardInset, padding.bottom + 120) + 16;
+        final availableHeight = max(0.0, size.height - safeTop - safeBottom);
         final panelWidth = min(360.0, size.width - 24);
-        final panelHeight = min(
-          520.0,
-          size.height - panelTop - max(padding.bottom, keyboardInset) - 16,
-        );
+        final panelHeight = min(520.0, availableHeight);
+        final verticalSpace = availableHeight - panelHeight;
+        final panelTop = safeTop + min(verticalSpace, verticalSpace / 2 + 48);
         return Positioned(
           top: panelTop,
           right: 12,
@@ -696,6 +697,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _applyAiAgentResponse(AiAgentResponse response) async {
+    if (response.actions.any(
+      (action) => action.tool == AiAgentTool.smartLayout,
+    )) {
+      final changed = await _markdrawController.runGlobalSmartLayout();
+      if (!changed) {
+        throw StateError('当前画布没有可智能排版的手写内容');
+      }
+      return;
+    }
     AiAgentAction? rename;
     AiAgentAction? mindmap;
     var skippedRename = false;

@@ -11,7 +11,7 @@ const int maxAiMindmapDepth = 4;
 const int maxAiMindmapNodeTextLength = 100;
 const int maxAiMindmapJsonLength = 12000;
 
-enum AiAgentTool { renameNote, insertText, generateMindmap }
+enum AiAgentTool { renameNote, insertText, generateMindmap, smartLayout }
 
 @immutable
 class AiNoteText {
@@ -95,6 +95,7 @@ class AiAgentAction {
     AiAgentTool.renameNote => '重命名笔记',
     AiAgentTool.insertText => '插入白板文字',
     AiAgentTool.generateMindmap => '生成思维导图',
+    AiAgentTool.smartLayout => '智能排版手写内容',
   };
 
   factory AiAgentAction.edited({
@@ -105,18 +106,22 @@ class AiAgentAction {
       AiAgentTool.renameNote => 'title',
       AiAgentTool.insertText => 'text',
       AiAgentTool.generateMindmap => 'root',
+      AiAgentTool.smartLayout => '',
     };
     return AiAgentAction.fromJson({
       'tool': switch (tool) {
         AiAgentTool.renameNote => 'rename_note',
         AiAgentTool.insertText => 'insert_text',
         AiAgentTool.generateMindmap => 'generate_mindmap',
+        AiAgentTool.smartLayout => 'smart_layout',
       },
-      'arguments': {
-        argumentKey: tool == AiAgentTool.generateMindmap
-            ? _decodeMindmap(value)
-            : value,
-      },
+      'arguments': tool == AiAgentTool.smartLayout
+          ? <String, Object?>{}
+          : {
+              argumentKey: tool == AiAgentTool.generateMindmap
+                  ? _decodeMindmap(value)
+                  : value,
+            },
     });
   }
 
@@ -125,11 +130,13 @@ class AiAgentAction {
       AiAgentTool.renameNote => 'rename_note',
       AiAgentTool.insertText => 'insert_text',
       AiAgentTool.generateMindmap => 'generate_mindmap',
+      AiAgentTool.smartLayout => 'smart_layout',
     },
     'arguments': switch (tool) {
       AiAgentTool.renameNote => {'title': value},
       AiAgentTool.insertText => {'text': value},
       AiAgentTool.generateMindmap => {'root': _decodeMindmap(value)},
+      AiAgentTool.smartLayout => <String, Object?>{},
     },
   };
 
@@ -170,6 +177,11 @@ class AiAgentAction {
         tool: AiAgentTool.generateMindmap,
         value: _requiredMindmap(args),
       ),
+      'smart_layout' when args.isEmpty => const AiAgentAction(
+        tool: AiAgentTool.smartLayout,
+        value: '',
+      ),
+      'smart_layout' => throw const FormatException('智能排版参数无效'),
       _ => throw FormatException('不支持的 AI 操作：$tool'),
     };
   }
@@ -320,6 +332,13 @@ class AiAgentResponse {
     if (mindmapCount == 1 &&
         actions.any((action) => action.tool == AiAgentTool.insertText)) {
       throw const FormatException('思维导图与插入文字不能同时执行');
+    }
+    final smartLayoutCount = actions
+        .where((action) => action.tool == AiAgentTool.smartLayout)
+        .length;
+    if (smartLayoutCount > 1 ||
+        (smartLayoutCount == 1 && actions.length != 1)) {
+      throw const FormatException('智能排版必须单独执行');
     }
     final message = json['message'];
     final normalizedMessage = message is String ? message.trim() : '';
