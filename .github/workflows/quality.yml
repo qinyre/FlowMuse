@@ -1,0 +1,49 @@
+name: Quality
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter analyze and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FlowMuse-App
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up OpenHarmony Flutter
+        run: |
+          git clone --depth 1 --branch 3.41.10-ohos-0.0.1-canary1 https://gitcode.com/CPF-Flutter/flutter_flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Provide HarmonyOS SDK layout for checks
+        run: |
+          # ponytail: static checks only; install the real SDK before enabling HAP builds.
+          mkdir -p "$RUNNER_TEMP/hos-sdk/hmscore" "$RUNNER_TEMP/hos-sdk/openharmony"
+          echo "HOS_SDK_HOME=$RUNNER_TEMP/hos-sdk" >> "$GITHUB_ENV"
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-warnings --no-fatal-infos
+      - run: flutter test
+
+  server:
+    name: Go test and vet
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FlowMuse-Server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: FlowMuse-Server/go.mod
+      - run: go test ./...
+      - run: go vet ./...

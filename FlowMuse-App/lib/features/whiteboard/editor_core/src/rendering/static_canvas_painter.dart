@@ -93,10 +93,18 @@ class StaticCanvasPainter extends CustomPainter {
     canvas.translate(-viewport.offset.dx, -viewport.offset.dy);
 
     // Render pages BEFORE clip — so page shadows extend freely on all sides.
-    if (layout?.isPaged ?? false) {
+    final pagedLayout = layout;
+    if (pagedLayout != null && pagedLayout.isPaged) {
       _renderPages(canvas);
       if (appendPageHint != null) {
         _renderAppendPageHint(canvas, appendPageHint!);
+      }
+      if (pagedLayout.pages.isNotEmpty) {
+        final pageClip = Path();
+        for (final page in pagedLayout.pages) {
+          pageClip.addRect(page.bounds);
+        }
+        canvas.clipPath(pageClip);
       }
     }
 

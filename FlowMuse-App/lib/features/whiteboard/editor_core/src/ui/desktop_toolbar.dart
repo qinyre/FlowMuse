@@ -249,7 +249,7 @@ class DesktopToolbar extends StatelessWidget {
       changed = false;
       error = caught;
     }
-    messenger.hideCurrentSnackBar();
+    messenger.removeCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -297,7 +297,7 @@ class DesktopToolbar extends StatelessWidget {
     int total,
   ) {
     final progress = total <= 0 ? null : completed / total;
-    messenger.hideCurrentSnackBar();
+    messenger.removeCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
         duration: const Duration(days: 1),
