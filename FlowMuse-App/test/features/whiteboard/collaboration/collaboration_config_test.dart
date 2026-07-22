@@ -12,6 +12,7 @@ void main() {
 
     expect(config.serverUrl, CollaborationConfig.defaultServerUrl);
     expect(config.shareOrigin, CollaborationConfig.defaultShareOrigin);
+    expect(config.hasConfiguredShareOrigin, isTrue);
   });
 
   test('环境文件已初始化时读取协作配置', () {
