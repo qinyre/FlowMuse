@@ -50,6 +50,7 @@ export class HttpChannel {
       const headers = JSON.parse(
         (args.get('headersJson') as string) ?? '{}'
       ) as Record<string, string>;
+      const body = args.get('body') as string;
       const bodyBytes = args.get('bodyBytes') as Uint8Array;
       const options: http.HttpRequestOptions = {
         method: this.requestMethod((args.get('method') as string) ?? 'GET'),
@@ -59,7 +60,9 @@ export class HttpChannel {
         readTimeout: (args.get('readTimeoutMs') as number) ?? 15000,
         usingProtocol: http.HttpProtocol.HTTP1_1,
       };
-      if (bodyBytes && bodyBytes.byteLength > 0) {
+      if (body) {
+        options.extraData = body;
+      } else if (bodyBytes && bodyBytes.byteLength > 0) {
         options.extraData = bodyBytes.buffer;
       }
       const response = await req.request(args.get('url') as string, options);

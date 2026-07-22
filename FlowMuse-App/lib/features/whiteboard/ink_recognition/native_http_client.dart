@@ -171,6 +171,11 @@ class HarmonyAwareHttpClient extends http.BaseClient {
 
     final requestId =
         '${DateTime.now().microsecondsSinceEpoch}-${NativeHttpClient._nextRequestId++}';
+    final contentType = request.headers['content-type']?.toLowerCase() ?? '';
+    final isTextBody =
+        contentType.startsWith('text/') ||
+        contentType.contains('json') ||
+        contentType.contains('x-www-form-urlencoded');
     _activeRequestIds.add(requestId);
     try {
       final result = await NativeHttpClient._channel
@@ -179,6 +184,7 @@ class HarmonyAwareHttpClient extends http.BaseClient {
             'method': request.method,
             'url': request.url.toString(),
             'headersJson': jsonEncode(request.headers),
+            if (isTextBody) 'body': utf8.decode(bodyBytes),
             'bodyBytes': bodyBytes,
             'connectTimeoutMs': connectTimeoutMs,
             'readTimeoutMs': readTimeoutMs,

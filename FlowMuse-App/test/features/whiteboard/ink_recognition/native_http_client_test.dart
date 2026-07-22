@@ -36,6 +36,7 @@ void main() {
     expect(captured?.method, 'request');
     final arguments = captured?.arguments as Map<Object?, Object?>;
     expect(arguments['method'], 'PUT');
+    expect(arguments['body'], '{"scene":1}');
     expect(utf8.decode(arguments['bodyBytes'] as Uint8List), '{"scene":1}');
     expect(response.statusCode, 201);
     expect(response.body, '{"ok":true}');
