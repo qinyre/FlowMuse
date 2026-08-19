@@ -5,6 +5,7 @@ import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration
 import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/encrypted_payload.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/room_collaborator.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/received_live_ink_frame.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_crypto.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
@@ -229,6 +230,9 @@ class _LifecycleTransport implements RealtimeTransport {
   Stream<EncryptedPayload> get messages => messagesController.stream;
 
   @override
+  Stream<ReceivedLiveInkFrame> get liveInkFrames => const Stream.empty();
+
+  @override
   Stream<String> get newUsers => newUsersController.stream;
 
   @override
@@ -250,10 +254,19 @@ class _LifecycleTransport implements RealtimeTransport {
   String? get socketId => 'lifecycle';
 
   @override
+  int get serverLiveInkProtocolVersion => 0;
+
+  @override
+  int get liveInkTransportNotWritableDrops => 0;
+
+  @override
   Future<void> connect(String roomId) async {}
 
   @override
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {}
+
+  @override
+  Future<void> sendLiveInk(EncryptedPayload payload) async {}
 
   @override
   Future<void> endRoom({String? ownerKey}) async {}

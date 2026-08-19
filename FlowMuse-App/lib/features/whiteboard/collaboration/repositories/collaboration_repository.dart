@@ -6,10 +6,12 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
 import '../models/collaboration_message.dart';
+import '../config/live_ink_flags.dart';
 import '../models/collaboration_room.dart';
 import '../models/encrypted_payload.dart';
 import '../models/excalidraw_scene.dart';
 import '../models/room_collaborator.dart';
+import '../models/received_live_ink_frame.dart';
 import 'collaboration_owner_key_store.dart';
 import '../services/collaboration_crypto.dart';
 import '../services/collaboration_debug_log.dart';
@@ -36,6 +38,7 @@ class CollaborationRepository {
     CollaborationCrypto? crypto,
     SceneReconciler? reconciler,
     CollaborationPerformanceProbe? performanceProbe,
+    this.flags = liveInkFlags,
   }) : _transport = transport ?? const DisconnectedRealtimeTransport(),
        _sceneStore = sceneStore ?? MemoryEncryptedSceneStore(),
        _fileStore = fileStore,
@@ -59,6 +62,7 @@ class CollaborationRepository {
   final CollaborationCrypto _crypto;
   final SceneReconciler _reconciler;
   final CollaborationPerformanceProbe? _performanceProbe;
+  final LiveInkFlags flags;
   final ChangeAccumulator _accumulator;
   final CollaborationFileManager _fileManager = CollaborationFileManager();
   final math.Random _random = math.Random();
@@ -103,7 +107,20 @@ class CollaborationRepository {
 
   String get socketId => _transport.socketId ?? 'local-client';
 
+  bool get effectiveLiveInk =>
+      flags.effectiveFor(_transport.serverLiveInkProtocolVersion);
+
+  Stream<ReceivedLiveInkFrame> get liveInkFrames => _transport.liveInkFrames;
+
+  int get liveInkTransportNotWritableDrops =>
+      _transport.liveInkTransportNotWritableDrops;
+
   Stream<String> get newUsers => _transport.newUsers;
+
+  Future<void> sendLiveInk(EncryptedPayload payload) async {
+    if (!effectiveLiveInk) return;
+    await _transport.sendLiveInk(payload);
+  }
 
   Stream<List<RoomCollaborator>> get roomUsers => _transport.roomUsers;
 

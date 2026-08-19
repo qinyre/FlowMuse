@@ -53,6 +53,8 @@ live-ink-ready   server → joined socket，普通独立事件
 
 **负责人/复核：** Enchograph / qinyre；**估时：** 1d；**前置：** P0-4。
 
+**执行状态：** 已完成；增加 effective flag、独立 live stream/send API 与 1 秒 ready 门禁；连接、重连、换房和断开均清零版本，Socket.IO 直接使用 `volatile.emit` 且不可写时不缓冲。
+
 ### 文件
 
 - Create: `FlowMuse-App/lib/features/whiteboard/collaboration/config/live_ink_flags.dart`

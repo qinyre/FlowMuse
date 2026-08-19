@@ -4,9 +4,11 @@ class WritingFeatureFlags {
   final bool layeredWetInk;
 }
 
+const layeredWetInkEnabled = bool.fromEnvironment(
+  'FLOWMUSE_LAYERED_WET_INK',
+  defaultValue: false,
+);
+
 const writingFeatureFlags = WritingFeatureFlags(
-  layeredWetInk: bool.fromEnvironment(
-    'FLOWMUSE_LAYERED_WET_INK',
-    defaultValue: false,
-  ),
+  layeredWetInk: layeredWetInkEnabled,
 );
