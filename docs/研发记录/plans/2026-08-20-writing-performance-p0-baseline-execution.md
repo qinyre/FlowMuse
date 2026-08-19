@@ -57,6 +57,8 @@ Pop-Location
 
 **负责人/复核：** qinyre / Tiax；**估时：** 1d；**前置：** P0-0。
 
+**执行状态：** 已实现并通过单元/Widget 测试；真机 Profile 数据仍按总约束记为 `deferred_device`。
+
 ### 文件
 
 - Create: `FlowMuse-App/lib/features/whiteboard/editor_core/src/input/active_preview_metrics_probe.dart`

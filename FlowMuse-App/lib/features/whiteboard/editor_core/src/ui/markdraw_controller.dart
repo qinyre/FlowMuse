@@ -21,6 +21,7 @@ import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
 import '../rendering/viewport_clamp.dart';
+import '../input/active_preview_metrics_probe.dart';
 import '../input/outline_render_mode.dart';
 import '../input/stroke_input_normalizer.dart';
 import '../input/stroke_input_modeler.dart';
@@ -78,6 +79,7 @@ enum _TwoFingerGestureMode { pan, zoom }
 class MarkdrawController extends ChangeNotifier {
   MarkdrawController({
     MarkdrawEditorConfig config = const MarkdrawEditorConfig(),
+    this.activePreviewMetricsProbe,
   }) : _config = config {
     _layout = config.initialLayout.ensurePage();
     _editorState = EditorState(
@@ -100,6 +102,9 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   final MarkdrawEditorConfig _config;
+  final ActivePreviewMetricsProbe? activePreviewMetricsProbe;
+  int? _activePreviewStrokeEpoch;
+  int? _activePreviewMaxInputSeq;
 
   // Core state
   late EditorState _editorState;
@@ -354,6 +359,16 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Current scene snapshot.
   Scene get currentScene => _editorState.scene;
+
+  ActivePreviewPaintMarker? get activePreviewPaintMarker {
+    final strokeEpoch = _activePreviewStrokeEpoch;
+    final maxInputSeq = _activePreviewMaxInputSeq;
+    if (strokeEpoch == null || maxInputSeq == null) return null;
+    return ActivePreviewPaintMarker(
+      strokeEpoch: strokeEpoch,
+      maxInputSeq: maxInputSeq,
+    );
+  }
 
   /// The snap grid size in pixels, or null if grid is off.
   int? get gridSize => _gridSize;
@@ -682,6 +697,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Releases all resources: image cache, focus nodes, text controller.
   @override
   void dispose() {
+    _finishActivePreviewStroke(ActivePreviewTerminalReason.dispose);
     _disposed = true;
     _inkRecognitionTimer?.cancel();
     _liveFreedrawTimer?.cancel();
@@ -743,7 +759,7 @@ class MarkdrawController extends ChangeNotifier {
   void switchTool(ToolType type) {
     // In view mode, only the hand tool is allowed
     if (_viewMode && type != ToolType.hand) return;
-    _cancelActiveToolInteraction();
+    _cancelActiveToolInteraction(ActivePreviewTerminalReason.toolSwitch);
     _activeTool = createTool(type);
     _editorState = _editorState.copyWith(
       activeToolType: type,
@@ -1986,9 +2002,11 @@ class MarkdrawController extends ChangeNotifier {
       }
 
       _sceneBeforeDrag = _editorState.scene;
+      _startActivePreviewStroke();
       applyResult(
         _activeTool.onPointerDown(point, toolContext, pressure: r.pressure),
       );
+      _recordAcceptedActivePreviewPoint();
       return;
     }
 
@@ -2072,7 +2090,12 @@ class MarkdrawController extends ChangeNotifier {
         viewportTransform: _viewportTransform,
       );
       final r = _modeler!.process(sample);
-      if (r.point == null) return; // dropped by modeler
+      if (r.point == null) {
+        activePreviewMetricsProbe?.recordRejectedRawSample(
+          r.reason ?? r.decision.name,
+        );
+        return;
+      }
       final sceneOffset = _editorState.viewport.screenToScenePrecise(
         Offset(r.point!.x, r.point!.y),
       );
@@ -2085,6 +2108,7 @@ class MarkdrawController extends ChangeNotifier {
           pressure: r.pressure,
         ),
       );
+      _recordAcceptedActivePreviewPoint();
       _scheduleLiveFreedraw();
       mousePosition = event.localPosition;
       notifyListeners();
@@ -2141,10 +2165,13 @@ class MarkdrawController extends ChangeNotifier {
         applyResult(
           _activeTool.onPointerMove(point, toolContext, pressure: r.pressure),
         );
+        _recordAcceptedActivePreviewPoint();
         applyResult(
           _activeTool.onPointerUp(point, toolContext, pressure: r.pressure),
         );
       }
+
+      _finishActivePreviewStroke(ActivePreviewTerminalReason.pointerUp);
 
       _modeler = null;
       _activeDrawPointerId = null;
@@ -2238,7 +2265,7 @@ class MarkdrawController extends ChangeNotifier {
     _modeler?.reset(reason: 'cancel');
     _modeler = null;
     _activeDrawPointerId = null;
-    _cancelActiveToolInteraction();
+    _cancelActiveToolInteraction(ActivePreviewTerminalReason.cancel);
     _sceneBeforeDrag = null;
   }
 
@@ -2338,11 +2365,12 @@ class MarkdrawController extends ChangeNotifier {
     _activeDrawPointerId = null;
     _temporaryTouchPanPointerId = null;
     _activeStylusPointerId = null;
-    _cancelActiveToolInteraction();
+    _cancelActiveToolInteraction(ActivePreviewTerminalReason.viewportGesture);
     _sceneBeforeDrag = null;
   }
 
-  void _cancelActiveToolInteraction() {
+  void _cancelActiveToolInteraction(ActivePreviewTerminalReason reason) {
+    _finishActivePreviewStroke(reason);
     if (_activeTool is FreedrawTool) {
       _cancelPendingLiveFreedraw();
       _emitLiveFreedraw((_activeTool as FreedrawTool).cancelStroke());
@@ -2376,6 +2404,29 @@ class MarkdrawController extends ChangeNotifier {
   void _cancelPendingLiveFreedraw() {
     _liveFreedrawTimer?.cancel();
     _liveFreedrawTimer = null;
+  }
+
+  void _startActivePreviewStroke() {
+    final probe = activePreviewMetricsProbe;
+    if (probe == null) return;
+    _activePreviewStrokeEpoch = probe.startStroke();
+    _activePreviewMaxInputSeq = null;
+  }
+
+  void _recordAcceptedActivePreviewPoint() {
+    final probe = activePreviewMetricsProbe;
+    final strokeEpoch = _activePreviewStrokeEpoch;
+    if (probe == null || strokeEpoch == null) return;
+    _activePreviewMaxInputSeq = probe.recordAcceptedPoint(strokeEpoch);
+  }
+
+  void _finishActivePreviewStroke(ActivePreviewTerminalReason reason) {
+    final strokeEpoch = _activePreviewStrokeEpoch;
+    if (strokeEpoch != null) {
+      activePreviewMetricsProbe?.finishStroke(strokeEpoch, reason);
+    }
+    _activePreviewStrokeEpoch = null;
+    _activePreviewMaxInputSeq = null;
   }
 
   /// Marks the end of a two-finger viewport gesture.
@@ -2540,7 +2591,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Dispatches a key event to the active tool (for programmatic shortcuts).
   void dispatchKey(String key, {bool shift = false, bool ctrl = false}) {
     if (key == 'Escape' && _activeTool is FreedrawTool) {
-      _cancelActiveToolInteraction();
+      _cancelActiveToolInteraction(ActivePreviewTerminalReason.cancel);
       return;
     }
     final result = _activeTool.onKeyEvent(

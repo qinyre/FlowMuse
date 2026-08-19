@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/active_preview_metrics_probe.dart';
 import 'package:integration_test/integration_test.dart';
 
 const _perfTestEnabled = bool.fromEnvironment('FLOWMUSE_PERF_TEST');
@@ -17,7 +18,8 @@ void main() {
       reason: '性能入口仅允许通过 FLOWMUSE_PERF_TEST=true 启用',
     );
 
-    final controller = MarkdrawController();
+    final probe = ActivePreviewMetricsProbe();
+    final controller = MarkdrawController(activePreviewMetricsProbe: probe);
     addTearDown(controller.dispose);
     controller.switchTool(ToolType.freedraw);
 
@@ -51,6 +53,7 @@ void main() {
     );
     await gesture.moveTo(start + const Offset(60, 20));
     await gesture.moveTo(start + const Offset(120, -10));
+    await tester.pump();
     await gesture.up();
     await tester.pump();
 
@@ -65,7 +68,12 @@ void main() {
           : 'debug',
       'platform': defaultTargetPlatform.name,
       'elementsAfterSmokeStroke': controller.currentScene.elements.length,
-      'note': 'P0-0 runner smoke only; frame metrics are added by P0-1/P0-2.',
+      'acceptedPoints': probe.samples.length,
+      'paintedPoints': probe.samples.where((sample) => sample.painted).length,
+      'terminalBeforePreview': probe.samples
+          .where((sample) => sample.terminalBeforePreview)
+          .length,
+      'note': 'P0-1 active-preview proxy; FrameTiming is added by P0-2.',
     };
   });
 }

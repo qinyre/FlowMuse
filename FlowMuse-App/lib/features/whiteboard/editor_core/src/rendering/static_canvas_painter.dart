@@ -9,6 +9,7 @@ import '../core/elements/elements.dart' hide TextElement;
 import '../core/layout/layout.dart';
 import '../core/scene/scene_exports.dart';
 import '../editor/bindings/arrow_label_utils.dart';
+import '../input/active_preview_metrics_probe.dart';
 import 'element_renderer.dart';
 import 'rough/rough_adapter.dart';
 import 'text_renderer.dart';
@@ -66,6 +67,8 @@ class StaticCanvasPainter extends CustomPainter {
   final bool renderPageShadows;
   final PagedAppendPageHint? appendPageHint;
   final bool skipMathText;
+  final ActivePreviewMetricsProbe? activePreviewMetricsProbe;
+  final ActivePreviewPaintMarker? activePreviewPaintMarker;
 
   const StaticCanvasPainter({
     required this.scene,
@@ -82,6 +85,8 @@ class StaticCanvasPainter extends CustomPainter {
     this.renderPageShadows = true,
     this.appendPageHint,
     this.skipMathText = false,
+    this.activePreviewMetricsProbe,
+    this.activePreviewPaintMarker,
   });
 
   @override
@@ -192,6 +197,13 @@ class StaticCanvasPainter extends CustomPainter {
         resolvedImages: resolvedImages,
         skipMathText: skipMathText,
       );
+      final marker = activePreviewPaintMarker;
+      if (previewElement is FreedrawElement && marker != null) {
+        activePreviewMetricsProbe?.recordPaintedThrough(
+          marker: marker,
+          frameNumber: ui.PlatformDispatcher.instance.frameData.frameNumber,
+        );
+      }
     }
 
     // Render pending flowchart elements at 50% opacity
@@ -722,6 +734,8 @@ class StaticCanvasPainter extends CustomPainter {
         isDarkBackground != oldDelegate.isDarkBackground ||
         renderPageShadows != oldDelegate.renderPageShadows ||
         skipMathText != oldDelegate.skipMathText ||
-        appendPageHint != oldDelegate.appendPageHint;
+        appendPageHint != oldDelegate.appendPageHint ||
+        activePreviewMetricsProbe != oldDelegate.activePreviewMetricsProbe ||
+        activePreviewPaintMarker != oldDelegate.activePreviewPaintMarker;
   }
 }

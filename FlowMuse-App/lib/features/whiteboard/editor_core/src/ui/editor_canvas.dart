@@ -372,6 +372,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                         contentBounds: controller.contentBounds,
                         appendPageHint: appendPageHint,
                         skipMathText: true,
+                        activePreviewMetricsProbe:
+                            controller.activePreviewMetricsProbe,
+                        activePreviewPaintMarker:
+                            controller.activePreviewPaintMarker,
                       ),
                       foregroundPainter: InteractiveCanvasPainter(
                         viewport: paintViewport,
