@@ -81,6 +81,59 @@ void main() {
     disposeController.dispose();
     expect(disposeController.localWetInkState.frame, isNull);
   });
+
+  test('V2 模式按笔冻结并在 final 清点前交出最后一点', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.switchTool(ToolType.freedraw);
+    var ready = true;
+    controller.shouldUseLiveInkV2 = () => ready;
+    final terminals = <bool>[];
+    final pointCounts = <int>[];
+    final strokeIds = <ElementId>[];
+    controller.onLiveInkChanged = (view, _, terminal) {
+      terminals.add(terminal);
+      pointCounts.add(view.points.length);
+      strokeIds.add(view.strokeId);
+    };
+
+    _down(controller);
+    ready = false;
+    _up(controller, 1);
+
+    expect(terminals, [false, true]);
+    expect(pointCounts.first, 1);
+    expect(pointCounts.last, greaterThanOrEqualTo(2));
+    expect(strokeIds.toSet(), hasLength(1));
+    expect(controller.currentScene.elements.single.id, strokeIds.first);
+
+    _down(controller);
+    _up(controller, 1);
+    expect(terminals, [false, true]);
+  });
+
+  test('V2 Cancel 只清 sender，不生成 V1 tombstone 或 final', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.switchTool(ToolType.freedraw);
+    controller.shouldUseLiveInkV2 = () => true;
+    String? cancelledStrokeId;
+    String? activeStrokeId;
+    controller.onLiveInkChanged = (view, _, _) {
+      activeStrokeId = view.strokeId.value;
+    };
+    controller.onLiveInkCancelled = (strokeId) {
+      cancelledStrokeId = strokeId;
+    };
+
+    _down(controller);
+    controller.onPointerCancel(
+      const PointerCancelEvent(pointer: 1, kind: PointerDeviceKind.stylus),
+    );
+
+    expect(cancelledStrokeId, activeStrokeId);
+    expect(controller.currentScene.elements, isEmpty);
+  });
 }
 
 void _down(MarkdrawController controller) {

@@ -79,6 +79,9 @@ enum SceneChangeSource { userEdit, undo, redo, reset, remoteApply, restore }
 
 enum _TwoFingerGestureMode { pan, zoom }
 
+typedef LiveInkFreedrawCallback =
+    void Function(ActiveFreedrawView view, ElementStyle style, bool terminal);
+
 class MarkdrawController extends ChangeNotifier {
   MarkdrawController({
     MarkdrawEditorConfig config = const MarkdrawEditorConfig(),
@@ -267,6 +270,9 @@ class MarkdrawController extends ChangeNotifier {
   /// Called whenever the scene changes (element add/update/remove).
   void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
   void Function(FreedrawElement element)? onLiveFreedrawChanged;
+  bool Function()? shouldUseLiveInkV2;
+  LiveInkFreedrawCallback? onLiveInkChanged;
+  ValueChanged<String>? onLiveInkCancelled;
   Timer? _liveFreedrawTimer;
   static const Duration _liveFreedrawBroadcastInterval = Duration(
     milliseconds: 50,
@@ -704,8 +710,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Releases all resources: image cache, focus nodes, text controller.
   @override
   void dispose() {
-    _finishActivePreviewStroke(ActivePreviewTerminalReason.dispose);
-    _activeTool.reset();
+    _cancelActiveToolInteraction(ActivePreviewTerminalReason.dispose);
     localWetInkState.clear(notify: false);
     localWetInkState.dispose();
     _disposed = true;
@@ -1985,6 +1990,8 @@ class MarkdrawController extends ChangeNotifier {
 
     if (_useUnifiedModeler && _activeTool is FreedrawTool) {
       // --- Unified modeler path for freedraw ---
+      final freedrawTool = _activeTool as FreedrawTool;
+      freedrawTool.prepareStrokeLiveMode(shouldUseLiveInkV2?.call() ?? false);
       final sample = _normalizer.normalize(event, phase: StrokePhase.down);
       _recorder?.record(
         sample,
@@ -2024,6 +2031,9 @@ class MarkdrawController extends ChangeNotifier {
       );
       _recordAcceptedActivePreviewPoint();
       _publishLocalWetInk();
+      if (freedrawTool.activeView?.strokeLiveMode ?? false) {
+        _emitLiveFreedraw();
+      }
       return;
     }
 
@@ -2199,6 +2209,10 @@ class MarkdrawController extends ChangeNotifier {
           _activeTool.onPointerMove(point, toolContext, pressure: r.pressure),
         );
         _recordAcceptedActivePreviewPoint();
+        final activeView = (_activeTool as FreedrawTool).activeView;
+        if (activeView?.strokeLiveMode ?? false) {
+          _emitLiveFreedraw(terminal: true);
+        }
         final finalResult = _activeTool.onPointerUp(
           point,
           toolContext,
@@ -2411,30 +2425,50 @@ class MarkdrawController extends ChangeNotifier {
   void _cancelActiveToolInteraction(ActivePreviewTerminalReason reason) {
     _finishActivePreviewStroke(reason);
     if (_activeTool is FreedrawTool) {
+      final tool = _activeTool as FreedrawTool;
+      final activeView = tool.activeView;
       _cancelPendingLiveFreedraw();
-      _emitLiveFreedraw((_activeTool as FreedrawTool).cancelStroke());
+      if (activeView?.strokeLiveMode ?? false) {
+        tool.cancelStroke();
+        onLiveInkCancelled?.call(activeView!.strokeId.value);
+      } else {
+        _emitLiveFreedraw(element: tool.cancelStroke());
+      }
       if (writingFlags.layeredWetInk) {
-        localWetInkState.clear();
+        localWetInkState.clear(
+          notify: reason != ActivePreviewTerminalReason.dispose,
+        );
       }
     } else {
       _activeTool.reset();
     }
   }
 
-  void _emitLiveFreedraw([FreedrawElement? element]) {
+  void _emitLiveFreedraw({FreedrawElement? element, bool terminal = false}) {
+    final tool = _activeTool;
+    if (tool is FreedrawTool) {
+      final activeView = tool.activeView;
+      if (activeView?.strokeLiveMode ?? false) {
+        onLiveInkChanged?.call(activeView!, _defaultStyle, terminal);
+        return;
+      }
+    }
     final callback = onLiveFreedrawChanged;
     if (callback == null) return;
     final live =
         element ??
-        (_activeTool is FreedrawTool
-            ? (_activeTool as FreedrawTool).buildLiveElement(toolContext)
-            : null);
+        (tool is FreedrawTool ? tool.buildLiveElement(toolContext) : null);
     if (live == null) return;
     callback(applyDefaultStyleToElement(live) as FreedrawElement);
   }
 
   void _scheduleLiveFreedraw() {
-    if (onLiveFreedrawChanged == null || _liveFreedrawTimer != null) {
+    final tool = _activeTool;
+    final activeView = tool is FreedrawTool ? tool.activeView : null;
+    final hasCallback = activeView?.strokeLiveMode ?? false
+        ? onLiveInkChanged != null
+        : onLiveFreedrawChanged != null;
+    if (!hasCallback || _liveFreedrawTimer != null) {
       return;
     }
     _liveFreedrawTimer = Timer(_liveFreedrawBroadcastInterval, () {

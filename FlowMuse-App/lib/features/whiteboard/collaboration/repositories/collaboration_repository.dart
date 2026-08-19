@@ -10,6 +10,7 @@ import '../config/live_ink_flags.dart';
 import '../models/collaboration_room.dart';
 import '../models/encrypted_payload.dart';
 import '../models/excalidraw_scene.dart';
+import '../models/live_ink_chunk.dart';
 import '../models/room_collaborator.dart';
 import '../models/received_live_ink_frame.dart';
 import 'collaboration_owner_key_store.dart';
@@ -120,6 +121,19 @@ class CollaborationRepository {
   Future<void> sendLiveInk(EncryptedPayload payload) async {
     if (!effectiveLiveInk) return;
     await _transport.sendLiveInk(payload);
+  }
+
+  Future<void> sendLiveInkChunk({
+    required CollaborationRoom room,
+    required LiveInkChunk chunk,
+  }) async {
+    if (!effectiveLiveInk || _activeRoom?.roomId != room.roomId) return;
+    final encrypted = await _crypto.encrypt(
+      roomKey: room.roomKey,
+      plainBytes: CollaborationMessage.inkChunk(chunk).toBytes(),
+    );
+    if (_activeRoom?.roomId != room.roomId) return;
+    await sendLiveInk(encrypted);
   }
 
   Stream<List<RoomCollaborator>> get roomUsers => _transport.roomUsers;

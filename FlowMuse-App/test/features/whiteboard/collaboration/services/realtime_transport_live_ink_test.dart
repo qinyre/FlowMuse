@@ -1,7 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/config/live_ink_flags.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_message.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/encrypted_payload.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/live_ink_chunk.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_room.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_crypto.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
 
 void main() {
@@ -101,5 +107,56 @@ void main() {
     );
     expect(transport.liveInkTransportNotWritableDrops, 0);
     await transport.disconnect();
+  });
+
+  test('Repository 将 INK_CHUNK 加密后只发到 live 通道', () async {
+    final hub = MemoryRealtimeRoomHub();
+    final senderTransport = MemoryRealtimeTransport(
+      hub: hub,
+      socketId: 'sender',
+    );
+    final receiver = MemoryRealtimeTransport(hub: hub, socketId: 'receiver');
+    final crypto = CollaborationCrypto();
+    final sceneStore = MemoryEncryptedSceneStore();
+    final repository = CollaborationRepository(
+      transport: senderTransport,
+      crypto: crypto,
+      sceneStore: sceneStore,
+      flags: const LiveInkFlags(layeredWetInk: true, liveInkV2: true),
+    );
+    final room = CollaborationRoom.newRoom(crypto: crypto);
+    await sceneStore.createRoom(
+      room: room,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'unused',
+    );
+    await repository.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    await receiver.connect(room.roomId);
+    final frameFuture = receiver.liveInkFrames.first;
+    const chunk = LiveInkChunk(
+      strokeId: 'stroke-1',
+      startIndex: 0,
+      points: [LiveInkPoint(x: 1, y: 2)],
+      style: LiveInkStyle(
+        brushType: 'fountainPen',
+        strokeColor: '#1e1e1e',
+        strokeWidth: 2,
+        opacity: 100,
+      ),
+    );
+
+    await repository.sendLiveInkChunk(room: room, chunk: chunk);
+    final frame = await frameFuture;
+    final plainBytes = await crypto.decrypt(
+      roomKey: room.roomKey,
+      encryptedPayload: frame.payload,
+    );
+    final decoded = CollaborationMessage.fromBytes(plainBytes);
+
+    expect(frame.senderSocketId, 'sender');
+    expect(decoded.type, CollaborationMessageType.inkChunk);
+    expect(decoded.liveInkChunk?.strokeId, chunk.strokeId);
+    await repository.stop();
+    await receiver.disconnect();
   });
 }

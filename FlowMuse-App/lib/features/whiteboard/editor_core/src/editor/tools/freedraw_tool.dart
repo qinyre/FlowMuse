@@ -21,6 +21,7 @@ class ActiveFreedrawView {
     required this.pressures,
     required this.simulatePressure,
     required this.brushType,
+    this.strokeLiveMode = false,
   });
 
   final ElementId strokeId;
@@ -28,6 +29,7 @@ class ActiveFreedrawView {
   final List<double> pressures;
   final bool simulatePressure;
   final BrushType brushType;
+  final bool strokeLiveMode;
 }
 
 /// Tool for creating freehand drawing elements by continuous path recording.
@@ -50,12 +52,17 @@ class FreedrawTool implements Tool {
   String? _sessionId;
   int? _startedAt;
   int? _lastStrokeEndedAt;
+  bool _nextStrokeLiveMode = false;
 
   @override
   ToolType get type => ToolType.freedraw;
 
   FreedrawElement? get liveElement => _liveElement;
   ActiveFreedrawView? get activeView => _activeView;
+
+  void prepareStrokeLiveMode(bool enabled) {
+    if (!_isDrawing) _nextStrokeLiveMode = enabled;
+  }
 
   @override
   ToolResult? onPointerDown(
@@ -84,6 +91,7 @@ class FreedrawTool implements Tool {
       pressures: _hasRealPressure ? _previewPressures : const [],
       simulatePressure: !_hasRealPressure,
       brushType: context.brushType,
+      strokeLiveMode: _nextStrokeLiveMode,
     );
     return null;
   }

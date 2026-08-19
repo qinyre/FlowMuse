@@ -22,9 +22,11 @@ import '../collaboration/models/collaboration_message.dart';
 import '../collaboration/models/collaboration_room.dart';
 import '../collaboration/models/collaborator_presence.dart';
 import '../collaboration/models/excalidraw_scene.dart';
+import '../collaboration/models/live_ink_chunk.dart';
 import '../collaboration/models/room_collaborator.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
 import '../collaboration/services/collaboration_debug_log.dart';
+import '../collaboration/services/live_ink_sender.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
@@ -85,6 +87,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   late final MarkdrawFileHandler _fileHandler;
   late final WhiteboardCollaborationAdapter _collaborationAdapter;
   late final CollaborationRepository _collaborationRepository;
+  late final LiveInkSender _liveInkSender;
   StreamSubscription<CollaborationMessage>? _collaborationSubscription;
   StreamSubscription<ExcalidrawScene>? _fileStatusSceneSubscription;
   StreamSubscription<List<RoomCollaborator>>? _roomUsersSubscription;
@@ -138,6 +141,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _fileHandler = MarkdrawFileHandler(controller: _markdrawController);
     _collaborationAdapter = WhiteboardCollaborationAdapter(_markdrawController);
     _collaborationRepository = ref.read(collaborationRepositoryProvider);
+    _liveInkSender = LiveInkSender(emit: _sendLiveInkChunk);
     Future.microtask(_openNote);
   }
 
@@ -189,6 +193,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _idleTimer?.cancel();
     _awayTimer?.cancel();
     _loadImagesTimer?.cancel();
+    _liveInkSender.cancel();
     unawaited(_collaborationRepository.stop());
     _markdrawController.dispose();
     super.dispose();
@@ -1052,6 +1057,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _cancelCollaborationStreams() async {
+    _liveInkSender.cancel();
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = null;
     await _fileStatusSceneSubscription?.cancel();
@@ -1455,6 +1461,73 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     unawaited(_broadcastChangedElements([element], latestOnly: true));
   }
 
+  bool _shouldUseLiveInkV2() {
+    return ref.read(whiteboardViewModelProvider).collaborating &&
+        _collaborationRepository.effectiveLiveInk;
+  }
+
+  void _broadcastLiveInk(
+    ActiveFreedrawView view,
+    ElementStyle style,
+    bool terminal,
+  ) {
+    final strokeId = view.strokeId.value;
+    if (_liveInkSender.strokeId != strokeId) {
+      _liveInkSender.start(
+        strokeId: strokeId,
+        style: LiveInkStyle(
+          brushType: switch (view.brushType) {
+            BrushType.pencil => 'pencil',
+            BrushType.ballpoint => 'ballpoint',
+            BrushType.fountainPen => 'fountainPen',
+            BrushType.brushPen => 'brushPen',
+            BrushType.highlighter => 'highlighter',
+          },
+          strokeColor: style.strokeColor ?? '#1e1e1e',
+          strokeWidth: style.strokeWidth ?? 2,
+          opacity: ((style.opacity ?? 1) * 100).clamp(0, 100).toDouble(),
+        ),
+      );
+    }
+    final startIndex = max(0, view.points.length - LiveInkChunk.maxPoints);
+    final points = <LiveInkPoint>[
+      for (var index = startIndex; index < view.points.length; index++)
+        LiveInkPoint(
+          x: view.points[index].x,
+          y: view.points[index].y,
+          pressure: index < view.pressures.length
+              ? view.pressures[index]
+              : null,
+        ),
+    ];
+    if (terminal) {
+      _liveInkSender.finishTail(
+        totalCount: view.points.length,
+        startIndex: startIndex,
+        points: points,
+      );
+    } else {
+      _liveInkSender.offerTail(
+        totalCount: view.points.length,
+        startIndex: startIndex,
+        points: points,
+      );
+    }
+  }
+
+  void _cancelLiveInk(String strokeId) {
+    if (_liveInkSender.strokeId == strokeId) {
+      _liveInkSender.cancel();
+    }
+  }
+
+  Future<void> _sendLiveInkChunk(LiveInkChunk chunk) async {
+    final state = ref.read(whiteboardViewModelProvider);
+    final room = state.activeRoom;
+    if (!state.collaborating || room == null) return;
+    await _collaborationRepository.sendLiveInkChunk(room: room, chunk: chunk);
+  }
+
   Future<void> _handleCollaborationMessage(CollaborationMessage message) async {
     if (!_canMutateWhiteboard) {
       CollaborationDebugLog.write('scene', 'message_skipped', {
@@ -1480,6 +1553,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               .read(whiteboardViewModelProvider.notifier)
               .applyPresenceMessage(message);
         });
+      case CollaborationMessageType.inkChunk:
       case CollaborationMessageType.invalidResponse:
         break;
     }
@@ -1993,6 +2067,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               onLiveFreedrawChanged: state.collaborating
                   ? _broadcastLiveFreedraw
                   : null,
+              shouldUseLiveInkV2: _shouldUseLiveInkV2,
+              onLiveInkChanged: _broadcastLiveInk,
+              onLiveInkCancelled: _cancelLiveInk,
               onSceneChanged: (editorScene, SceneChangeSource source) {
                 switch (source) {
                   case SceneChangeSource.undo:

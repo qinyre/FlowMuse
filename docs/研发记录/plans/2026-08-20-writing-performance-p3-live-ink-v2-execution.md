@@ -116,6 +116,8 @@ live-ink-ready   server → joined socket，普通独立事件
 
 **负责人/复核：** qinyre / Enchograph；**估时：** 1.25d；**前置：** P1-1、P3-0B、P3-1。
 
+**执行状态：** 已完成；PointerDown 按笔冻结 V1/V2，20Hz 聚合发送最近三次实际周期的最多 64 点窗口，并以单笔 1 in-flight + 1 覆盖式 pending 控制背压；PointerUp 在清点前交出最后 accepted 点且不等待可靠 final，Cancel/切工具/dispose/离房均清理 sender。真机时延仍按既定条件门禁延期。
+
 ### 文件
 
 - Modify: `FlowMuse-App/lib/features/whiteboard/editor_core/src/editor/tools/freedraw_tool.dart`

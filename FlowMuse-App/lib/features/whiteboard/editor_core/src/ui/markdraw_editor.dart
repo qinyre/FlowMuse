@@ -44,6 +44,9 @@ class MarkdrawEditor extends StatefulWidget {
     this.currentThemeMode,
     this.onSceneChanged,
     this.onLiveFreedrawChanged,
+    this.shouldUseLiveInkV2,
+    this.onLiveInkChanged,
+    this.onLiveInkCancelled,
     this.onBack,
     this.saveStatusLabel,
     this.collaborating = false,
@@ -105,6 +108,9 @@ class MarkdrawEditor extends StatefulWidget {
   /// Called when the scene changes (for auto-save, etc.).
   final void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
   final void Function(FreedrawElement element)? onLiveFreedrawChanged;
+  final bool Function()? shouldUseLiveInkV2;
+  final LiveInkFreedrawCallback? onLiveInkChanged;
+  final ValueChanged<String>? onLiveInkCancelled;
 
   /// FlowMuse host chrome callbacks and state.
   final VoidCallback? onBack;
@@ -203,6 +209,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     _controller.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
     _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
+    _controller.shouldUseLiveInkV2 = widget.shouldUseLiveInkV2;
+    _controller.onLiveInkChanged = widget.onLiveInkChanged;
+    _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
     _controller.onRecognizeInk = widget.onRecognizeInk;
     _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
     _controller.onRecognizeSmartLayoutBlock =
@@ -227,6 +236,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _controller.addListener(_onControllerChanged);
       _controller.onSceneChanged = widget.onSceneChanged;
       _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
+      _controller.shouldUseLiveInkV2 = widget.shouldUseLiveInkV2;
+      _controller.onLiveInkChanged = widget.onLiveInkChanged;
+      _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
       _controller.onRecognizeInk = widget.onRecognizeInk;
       _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
       _controller.onRecognizeSmartLayoutBlock =
@@ -238,6 +250,15 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     }
     if (widget.onLiveFreedrawChanged != oldWidget.onLiveFreedrawChanged) {
       _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
+    }
+    if (widget.shouldUseLiveInkV2 != oldWidget.shouldUseLiveInkV2) {
+      _controller.shouldUseLiveInkV2 = widget.shouldUseLiveInkV2;
+    }
+    if (widget.onLiveInkChanged != oldWidget.onLiveInkChanged) {
+      _controller.onLiveInkChanged = widget.onLiveInkChanged;
+    }
+    if (widget.onLiveInkCancelled != oldWidget.onLiveInkCancelled) {
+      _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
     }
     if (widget.onSmartLayoutInk != oldWidget.onSmartLayoutInk) {
       _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
@@ -261,6 +282,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     unawaited(_speechSubscription?.cancel());
     unawaited(_speechService.dispose());
     _controller.removeListener(_onControllerChanged);
+    _controller.shouldUseLiveInkV2 = null;
+    _controller.onLiveInkChanged = null;
+    _controller.onLiveInkCancelled = null;
     _ownController?.dispose();
     super.dispose();
   }
