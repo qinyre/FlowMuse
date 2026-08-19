@@ -201,6 +201,8 @@ P3-3B 创建并独占房间生命周期的 `finalizedStrokeIds`：初始 Scene �
 
 **负责人/复核：** Enchograph / Hongyu Chen；**估时：** 1d；**前置：** P3-0A、P3-1。
 
+**执行状态：** 已完成；live 事件先校验当前房间成员，再以标准库令牌桶执行每 socket 60/s、burst 120 和每 room 300/s、burst 600；IV、ciphertext 与不安全 `[]any` 在复制和广播前拒绝，leave/disconnect/end-room 同步清理 bucket，可靠消息与 Presence 不受限流影响。
+
 - 只用 Go 标准库实现有界 token bucket；每 socket 60 包/s、burst 120，每 room 300 包/s、burst 600，IV 恰好 12 bytes，解码后 ciphertext ≤64KiB，常量集中在 `hub.go`。
 - 拒绝原因只记录枚举、socket 脱敏前缀和字节数；不记录 ciphertext/nonce/正文。
 - 成员校验在限流和广播前；disconnect/leave 删除 bucket；限流只影响 live 事件。
