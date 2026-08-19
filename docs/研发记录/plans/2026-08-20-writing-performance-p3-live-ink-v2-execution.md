@@ -27,8 +27,6 @@ effectiveLiveInk = FLOWMUSE_LAYERED_WET_INK
 
 **负责人/复核：** Enchograph / Hongyu Chen；**估时：** 0.75d；**前置：** P0-4。
 
-**执行状态：** 已完成；`INK_CHUNK` 复用现有大写消息包络与 AES-GCM，严格验证 v2、UTF-8 ID、绝对索引/坐标、1～64 点、压力及固定样式，并支持按绝对索引去重乱序重叠点。
-
 **执行状态：** 已完成；新增独立 ready/live 事件，服务端校验房间归属、外层类型、12-byte IV 与 64KiB ciphertext，并以服务端 socketId 构造 volatile 下行帧。
 
 ### 文件
@@ -81,6 +79,8 @@ live-ink-ready   server → joined socket，普通独立事件
 ## 5. Task P3-1：加密 INK_CHUNK 模型
 
 **负责人/复核：** Enchograph / Hongyu Chen；**估时：** 0.75d；**前置：** P0-4。
+
+**执行状态：** 已完成；`INK_CHUNK` 复用现有大写消息包络与 AES-GCM，严格验证 v2、UTF-8 ID、绝对索引/坐标、1～64 点、压力及固定样式，并支持按绝对索引去重乱序重叠点。
 
 ### 文件
 
