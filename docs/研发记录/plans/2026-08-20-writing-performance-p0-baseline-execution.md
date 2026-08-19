@@ -109,6 +109,8 @@ Pop-Location
 
 **负责人/复核：** Tiax / qinyre；**估时：** 0.75d；**前置：** P0-0。
 
+**执行状态：** 已实现 5 类书写 recording 与 100/1000/5000 元素场景；确定性、modeler accepted 数、JSON round-trip 和真实编辑器 codec 加载测试通过。
+
 ### 文件
 
 - Create: `FlowMuse-App/integration_test/fixtures/writing_recordings.dart`
