@@ -27,6 +27,8 @@
 
 **负责人/复核：** qinyre / Tiax；**估时：** 0.25d；**前置：** P0-4。
 
+**执行状态：** 已实现单次环境读取、默认关闭且可注入的只读 effective value，并通过单元测试。
+
 ### 文件
 
 - Create: `FlowMuse-App/lib/features/whiteboard/editor_core/src/config/writing_feature_flags.dart`
