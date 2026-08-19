@@ -7,6 +7,7 @@ import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
 
 import 'package:flow_muse/features/account/widgets/account_avatar.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_ink_store.dart';
 import 'package:flow_muse/features/whiteboard/speech_recognition/models/speech_recognition_event.dart';
 import 'package:flow_muse/features/whiteboard/speech_recognition/services/speech_recognition_service.dart';
 import 'package:flow_muse/features/whiteboard/speech_recognition/services/speech_recognition_service_factory.dart';
@@ -47,6 +48,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.shouldUseLiveInkV2,
     this.onLiveInkChanged,
     this.onLiveInkCancelled,
+    this.remoteWetInkStore,
     this.onBack,
     this.saveStatusLabel,
     this.collaborating = false,
@@ -111,6 +113,7 @@ class MarkdrawEditor extends StatefulWidget {
   final bool Function()? shouldUseLiveInkV2;
   final LiveInkFreedrawCallback? onLiveInkChanged;
   final ValueChanged<String>? onLiveInkCancelled;
+  final RemoteWetInkStore? remoteWetInkStore;
 
   /// FlowMuse host chrome callbacks and state.
   final VoidCallback? onBack;
@@ -714,6 +717,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                     return EditorCanvas(
                       controller: _controller,
                       collaborators: widget.collaborators,
+                      remoteWetInkStore: widget.remoteWetInkStore,
                       onPointerPresence: widget.onPointerPresence,
                       onVisibleSceneBoundsChanged:
                           widget.onVisibleSceneBoundsChanged,

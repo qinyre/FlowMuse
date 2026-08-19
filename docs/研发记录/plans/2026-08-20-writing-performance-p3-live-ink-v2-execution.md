@@ -163,6 +163,8 @@ live-ink-ready   server → joined socket，普通独立事件
 
 **负责人/复核：** qinyre / Tiax；**估时：** 1.5d；**前置：** P1-2、P3-1、P3-3A。
 
+**执行状态：** 已完成；RemoteWetInkStore 固定执行 8 sender、64 stroke、16384 点/笔、65536 点/房间、5s TTL 和 10s completed cache，并以房间生命周期 finalized set 阻止 final 后复活；远端画层使用 1 个 consolidated picture、最多 8 个增量 picture 和 64 点 tail，final 到达先清湿墨再进入 Scene。
+
 ### 文件
 
 - Create: `FlowMuse-App/lib/features/whiteboard/collaboration/services/remote_wet_ink_store.dart`
