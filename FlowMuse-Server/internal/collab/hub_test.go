@@ -7,6 +7,49 @@ import (
 	"testing"
 )
 
+func TestLiveInkFrameForValidatesMembershipAndEnvelope(t *testing.T) {
+	hub := &Hub{socketRooms: map[string]string{"sender": "room"}}
+	valid := []any{"room", map[string]any{
+		"encryptedBuffer": []byte{1, 2, 3},
+		"iv":              make([]byte, liveInkIVBytes),
+		"senderSocketId":  "forged",
+	}}
+
+	roomID, frame, ok := hub.liveInkFrameFor("sender", valid)
+	if !ok || roomID != "room" {
+		t.Fatal("valid member frame was rejected")
+	}
+	if frame.SenderSocketID != "sender" {
+		t.Fatalf("sender id was not server-derived: %q", frame.SenderSocketID)
+	}
+
+	invalidCases := []struct {
+		name     string
+		socketID string
+		args     []any
+	}{
+		{name: "non-member", socketID: "unknown", args: valid},
+		{name: "cross-room", socketID: "sender", args: []any{"other", valid[1]}},
+		{name: "short-iv", socketID: "sender", args: []any{"room", map[string]any{"encryptedBuffer": []byte{1}, "iv": make([]byte, 11)}}},
+		{name: "oversize", socketID: "sender", args: []any{"room", map[string]any{"encryptedBuffer": make([]byte, maxLiveInkCiphertextBytes+1), "iv": make([]byte, liveInkIVBytes)}}},
+		{name: "legacy-shape", socketID: "sender", args: []any{"room", []byte{1}, make([]byte, liveInkIVBytes)}},
+	}
+	for _, testCase := range invalidCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if _, _, ok := hub.liveInkFrameFor(testCase.socketID, testCase.args); ok {
+				t.Fatal("invalid live ink frame was accepted")
+			}
+		})
+	}
+}
+
+func TestLiveInkReadyIsIndependentPayload(t *testing.T) {
+	ready := LiveInkReady{RoomID: "room", LiveInkProtocolVersion: liveInkProtocolVersion}
+	if ready.RoomID != "room" || ready.LiveInkProtocolVersion != 2 {
+		t.Fatalf("unexpected ready payload: %+v", ready)
+	}
+}
+
 func TestRemoveSocketClearsRoomAndFollowState(t *testing.T) {
 	hub := &Hub{
 		roomUsers: map[string]map[string]RoomUser{

@@ -19,6 +19,12 @@ import (
 
 const maxEncryptedFrameBytes = 8 * 1024 * 1024
 
+const (
+	liveInkProtocolVersion    = 2
+	liveInkIVBytes            = 12
+	maxLiveInkCiphertextBytes = 64 * 1024
+)
+
 type Hub struct {
 	server     *socket.Server
 	sceneStore *storage.SceneStore
@@ -91,6 +97,10 @@ func (h *Hub) Register() {
 			h.forward(client, args, true)
 		})
 
+		client.On(EventServerLiveInk, func(args ...any) {
+			h.forwardLiveInk(client, args)
+		})
+
 		client.On(EventUserFollow, func(args ...any) {
 			h.userFollow(client, args)
 		})
@@ -142,6 +152,36 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 		client.To(room).Emit(EventNewUser, user)
 	}
 	h.server.To(room).Emit(EventRoomUserChange, currentUsers)
+	client.Emit(EventLiveInkReady, LiveInkReady{
+		RoomID:                 roomID,
+		LiveInkProtocolVersion: liveInkProtocolVersion,
+	})
+}
+
+func (h *Hub) forwardLiveInk(client *socket.Socket, args []any) {
+	roomID, frame, ok := h.liveInkFrameFor(string(client.Id()), args)
+	if !ok {
+		return
+	}
+	client.To(socket.Room(roomID)).Volatile().Emit(EventClientLiveInk, frame)
+}
+
+func (h *Hub) liveInkFrameFor(socketID string, args []any) (string, ReceivedLiveInkFrame, bool) {
+	roomID, frame, ok := parseLiveInkArgs(args)
+	if !ok || len(frame.IV) != liveInkIVBytes || len(frame.EncryptedBuffer) > maxLiveInkCiphertextBytes {
+		return "", ReceivedLiveInkFrame{}, false
+	}
+	h.mu.Lock()
+	currentRoomID := h.socketRooms[socketID]
+	h.mu.Unlock()
+	if currentRoomID == "" || currentRoomID != roomID {
+		return "", ReceivedLiveInkFrame{}, false
+	}
+	return roomID, ReceivedLiveInkFrame{
+		EncryptedBuffer: frame.EncryptedBuffer,
+		IV:              frame.IV,
+		SenderSocketID:  socketID,
+	}, true
 }
 
 func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
@@ -341,6 +381,18 @@ func parseBroadcastArgs(args []any) (string, EncryptedFrame, bool) {
 		return "", EncryptedFrame{}, false
 	}
 	return roomID, EncryptedFrame{EncryptedBuffer: encryptedBuffer, IV: iv}, true
+}
+
+func parseLiveInkArgs(args []any) (string, EncryptedFrame, bool) {
+	if len(args) != 2 {
+		return "", EncryptedFrame{}, false
+	}
+	roomID, ok := asString(args[0])
+	if !ok {
+		return "", EncryptedFrame{}, false
+	}
+	frame, ok := asFrame(args[1])
+	return roomID, frame, ok
 }
 
 func asFrame(value any) (EncryptedFrame, bool) {

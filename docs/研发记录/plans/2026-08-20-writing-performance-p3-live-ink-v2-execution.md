@@ -27,6 +27,8 @@ effectiveLiveInk = FLOWMUSE_LAYERED_WET_INK
 
 **负责人/复核：** Enchograph / Hongyu Chen；**估时：** 0.75d；**前置：** P0-4。
 
+**执行状态：** 已完成；新增独立 ready/live 事件，服务端校验房间归属、外层类型、12-byte IV 与 64KiB ciphertext，并以服务端 socketId 构造 volatile 下行帧。
+
 ### 文件
 
 - Modify: `FlowMuse-Server/internal/collab/events.go`
