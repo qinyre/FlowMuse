@@ -127,10 +127,14 @@ fixture 使用编译进测试 bundle 的 Dart 常量/固定 seed 生成器，不
 
 **负责人/复核：** Enchograph / qinyre；**估时：** 1d；**前置：** P0-0/P0-2/P0-3。
 
+**执行状态：** 真实 2/5 人 repository 内存流水线、分段 probe、100/1000 次正式场景和非 UI 报告已实现；缩短迭代的单元回归通过，完整 Profile 基线为 `deferred_device`。
+
 ### 文件
 
 - Create: `FlowMuse-App/integration_test/collaboration_pipeline_perf_test.dart`
 - Create: `FlowMuse-App/integration_test/fixtures/collaboration_scenarios.dart`
+- Create: `FlowMuse-App/lib/features/whiteboard/collaboration/services/collaboration_performance_probe.dart`
+- Modify: `FlowMuse-App/lib/features/whiteboard/collaboration/repositories/collaboration_repository.dart`
 - Create: `FlowMuse-App/test/features/whiteboard/collaboration/services/collaboration_perf_harness_test.dart`
 
 ### 真实仓库路径

@@ -13,6 +13,7 @@ import '../models/room_collaborator.dart';
 import 'collaboration_owner_key_store.dart';
 import '../services/collaboration_crypto.dart';
 import '../services/collaboration_debug_log.dart';
+import '../services/collaboration_performance_probe.dart';
 import '../services/collaboration_file_manager.dart';
 import '../services/collaboration_file_store.dart';
 import '../services/encrypted_scene_store.dart';
@@ -34,12 +35,14 @@ class CollaborationRepository {
     CollaborationOwnerKeyStore? ownerKeyStore,
     CollaborationCrypto? crypto,
     SceneReconciler? reconciler,
+    CollaborationPerformanceProbe? performanceProbe,
   }) : _transport = transport ?? const DisconnectedRealtimeTransport(),
        _sceneStore = sceneStore ?? MemoryEncryptedSceneStore(),
        _fileStore = fileStore,
        _ownerKeyStore = ownerKeyStore ?? CollaborationOwnerKeyStore(),
        _crypto = crypto ?? CollaborationCrypto(),
        _reconciler = reconciler ?? SceneReconciler(),
+       _performanceProbe = performanceProbe,
        _accumulator = ChangeAccumulator(
          reconciler: reconciler ?? SceneReconciler(),
        ) {
@@ -55,6 +58,7 @@ class CollaborationRepository {
   final CollaborationOwnerKeyStore _ownerKeyStore;
   final CollaborationCrypto _crypto;
   final SceneReconciler _reconciler;
+  final CollaborationPerformanceProbe? _performanceProbe;
   final ChangeAccumulator _accumulator;
   final CollaborationFileManager _fileManager = CollaborationFileManager();
   final math.Random _random = math.Random();
@@ -251,6 +255,7 @@ class CollaborationRepository {
     if (storedScene == null) {
       return null;
     }
+    final reconcileStarted = _performanceProbe?.nowMicros();
     final reconciledElements = kReleaseMode
         ? _reconciler.reconcile(
             localElements: localScene.elements,
@@ -267,6 +272,13 @@ class CollaborationRepository {
               'remoteElements': storedScene.elements.length,
             },
           );
+    if (reconcileStarted != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.reconcile,
+        reconcileStarted,
+        itemCount: localScene.elements.length + storedScene.elements.length,
+      );
+    }
     final nextScene = storedScene.copyWith(
       elements: _reconciler.getSyncableElements(reconciledElements),
       files: {...localScene.files, ...storedScene.files},
@@ -526,6 +538,7 @@ class CollaborationRepository {
         ))
           remote,
     ];
+    final reconcileStarted = _performanceProbe?.nowMicros();
     final reconciled = kReleaseMode
         ? _reconciler.reconcile(
             localElements: localScene.elements,
@@ -544,6 +557,13 @@ class CollaborationRepository {
               'remoteElements': remoteElements.length,
             },
           );
+    if (reconcileStarted != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.reconcile,
+        reconcileStarted,
+        itemCount: localScene.elements.length + remoteElements.length,
+      );
+    }
     final nextScene = localScene.copyWith(
       elements: _reconciler.getSyncableElements(reconciled),
     );
@@ -672,6 +692,7 @@ class CollaborationRepository {
       return;
     }
     try {
+      final decryptStarted = _performanceProbe?.nowMicros();
       final decryptTask = kReleaseMode
           ? null
           : (developer.TimelineTask()..start(
@@ -690,6 +711,14 @@ class CollaborationRepository {
       } finally {
         decryptTask?.finish();
       }
+      if (decryptStarted != null) {
+        _performanceProbe!.recordSince(
+          CollaborationPerformanceStage.decrypt,
+          decryptStarted,
+          byteCount: payload.encryptedBuffer.length + payload.iv.length,
+        );
+      }
+      final decodeStarted = _performanceProbe?.nowMicros();
       final message = kReleaseMode
           ? CollaborationMessage.fromBytes(bytes)
           : developer.Timeline.timeSync(
@@ -697,6 +726,14 @@ class CollaborationRepository {
               () => CollaborationMessage.fromBytes(bytes),
               arguments: {'plainBytes': bytes.length},
             );
+      if (decodeStarted != null) {
+        _performanceProbe!.recordSince(
+          CollaborationPerformanceStage.jsonDecode,
+          decodeStarted,
+          itemCount: message.elements.length,
+          byteCount: bytes.length,
+        );
+      }
       CollaborationDebugLog.write('crypto', 'decoded', {
         'room': _shortRoomId(room.roomId),
         'type': message.type.wireName,
@@ -748,6 +785,7 @@ class CollaborationRepository {
     required CollaborationMessage message,
     bool volatile = false,
   }) async {
+    final encodeStarted = _performanceProbe?.nowMicros();
     final plainBytes = kReleaseMode
         ? message.toBytes()
         : developer.Timeline.timeSync(
@@ -758,6 +796,15 @@ class CollaborationRepository {
               'elements': message.elements.length,
             },
           );
+    if (encodeStarted != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.jsonEncode,
+        encodeStarted,
+        itemCount: message.elements.length,
+        byteCount: plainBytes.length,
+      );
+    }
+    final encryptStarted = _performanceProbe?.nowMicros();
     final encryptTask = kReleaseMode
         ? null
         : (developer.TimelineTask()..start(
@@ -776,6 +823,13 @@ class CollaborationRepository {
     } finally {
       encryptTask?.finish();
     }
+    if (encryptStarted != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.encrypt,
+        encryptStarted,
+        byteCount: encrypted.encryptedBuffer.length + encrypted.iv.length,
+      );
+    }
     CollaborationDebugLog.write('wire', 'send_message', {
       'room': _shortRoomId(room.roomId),
       'type': message.type.wireName,
@@ -785,6 +839,7 @@ class CollaborationRepository {
       'ivBytes': encrypted.iv.length,
       'summary': CollaborationDebugLog.elementSummary(message.elements),
     });
+    final transportStarted = _performanceProbe?.nowMicros();
     final transportTask = kReleaseMode
         ? null
         : (developer.TimelineTask()..start(
@@ -799,6 +854,13 @@ class CollaborationRepository {
       await _transport.send(encrypted, volatile: volatile);
     } finally {
       transportTask?.finish();
+    }
+    if (transportStarted != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.transportSend,
+        transportStarted,
+        byteCount: encrypted.encryptedBuffer.length + encrypted.iv.length,
+      );
     }
     return encrypted.encryptedBuffer.length + encrypted.iv.length;
   }
@@ -862,6 +924,7 @@ class CollaborationRepository {
       if (storedScene == null) {
         rethrow;
       }
+      final reconcileStarted = _performanceProbe?.nowMicros();
       final reconciledElements = kReleaseMode
           ? _reconciler.reconcile(
               localElements: scene.elements,
@@ -878,6 +941,13 @@ class CollaborationRepository {
                 'remoteElements': storedScene.elements.length,
               },
             );
+      if (reconcileStarted != null) {
+        _performanceProbe!.recordSince(
+          CollaborationPerformanceStage.reconcile,
+          reconcileStarted,
+          itemCount: scene.elements.length + storedScene.elements.length,
+        );
+      }
       final mergedScene = scene.copyWith(
         elements: _reconciler.getSyncableElements(reconciledElements),
       );
