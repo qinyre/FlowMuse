@@ -13,6 +13,8 @@ P1 使用 P0 同一设备/fixture 达到 event-to-paint 目标，但高速摄像
 
 **负责人/复核：** qinyre / Tiax；**估时：** 0.25d。
 
+**执行状态：** `not_triggered / deferred_device`；当前没有真机高速摄像或光电 stylus-to-photon 数据，无法满足唯一启动门禁，不用 event-to-paint 代理推断物理延迟。
+
 - 引用 P0 报告中的设备、刷新率、物理目标、相机帧率/光电装置、误差和 P95 算法；禁止事后修改。
 - A/B 共用同一构建 SHA、场景、笔、动作脚本和环境；轮换 AB/BA，5 轮，每轮每 variant 有效样本 ≥100。
 - 所有候选先保持最终点列/Scene hash 相同；任何预测点只用于活动视觉层。
@@ -20,6 +22,8 @@ P1 使用 P0 同一设备/fixture 达到 event-to-paint 目标，但高速摄像
 ## 3. Task P2-1：最小即时尾段/笔尖帽
 
 **负责人/复核：** qinyre / Tiax；**估时：** 0.75～1d；**前置：** P2-0。
+
+**执行状态：** `not_triggered`；P2-0 未触发，未修改输入模型、控制器或本地 painter。
 
 ### 文件
 
@@ -37,11 +41,15 @@ P1 使用 P0 同一设备/fixture 达到 event-to-paint 目标，但高速摄像
 
 **负责人/复核：** qinyre / Tiax；**估时：** 0.75～1.5d；**前置：** P2-1 仍未达目标。
 
+**执行状态：** `not_triggered`；P2-1 未启动，未进行猜测性调参。
+
 只测试现有 input modeler 中 3 个可解释参数，每个 baseline/low/high；先单因素淘汰，完整 fixture 最多 3 个组合，禁止笛卡尔积。候选必须同时满足：final hash 不变、视觉错误不增加、CPU P95 不回退 >5%。结果写入 `docs/研发记录/research/writing-tip-latency-p2.md`。
 
 ## 5. Task P2-3：HarmonyOS Pen Kit 两阶段 spike
 
 **负责人/复核：** Tiax / qinyre；**总 timebox：** ≤2d；**前置：** P2-1/2 后 app-side 达标但物理延迟仍失败。
+
+**执行状态：** `not_triggered`；上游物理门禁与 P2-1/2 均未触发，未接入生产输入链或新增权限。
 
 ### 必读本地资料
 
