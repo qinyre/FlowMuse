@@ -1,11 +1,14 @@
 import 'dart:convert';
 
+import 'live_ink_chunk.dart';
+
 enum CollaborationMessageType {
   sceneInit('SCENE_INIT'),
   sceneUpdate('SCENE_UPDATE'),
   mouseLocation('MOUSE_LOCATION'),
   idleStatus('IDLE_STATUS'),
   userVisibleSceneBounds('USER_VISIBLE_SCENE_BOUNDS'),
+  inkChunk('INK_CHUNK'),
   invalidResponse('INVALID_RESPONSE');
 
   const CollaborationMessageType(this.wireName);
@@ -47,6 +50,13 @@ class CollaborationMessage {
     return CollaborationMessage(
       type: CollaborationMessageType.sceneUpdate,
       payload: {'elements': elements},
+    );
+  }
+
+  factory CollaborationMessage.inkChunk(LiveInkChunk chunk) {
+    return CollaborationMessage(
+      type: CollaborationMessageType.inkChunk,
+      payload: chunk.toJson(),
     );
   }
 
@@ -134,4 +144,8 @@ class CollaborationMessage {
         Map<String, Object?>.from(element as Map),
     ];
   }
+
+  LiveInkChunk? get liveInkChunk => type == CollaborationMessageType.inkChunk
+      ? LiveInkChunk.fromJson(payload)
+      : null;
 }
