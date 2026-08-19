@@ -98,6 +98,8 @@ P1-3/G1/G2 必须在 P1-2 合并后、使用同一 P0 fixture 和门槛重新采
 
 ### Task P1-3：有界 retained prefix（条件）
 
+**执行状态：** `not_evaluated / deferred_device`；当前无真机，未获得 P1-2 后 30 秒长笔的分段 raster、deadline miss、Path 输入点或 retained layer 证据，禁止触发实现。
+
 **触发：** P1-2 后比较同一 30 秒长笔迹最初/最后 10 秒；最后 10 秒 wet raster P95/P99 高出 >20%、deadline miss 增长 >0.5 个百分点、每帧 getStroke/Path 输入点持续增长、或 retained layer/count 持续增长，任一成立才触发。  
 **负责人/复核：** qinyre / Tiax；**估时：** 1～2d；**前置：** P1-2 复测。
 
@@ -111,10 +113,14 @@ P1-3/G1/G2 必须在 P1-2 合并后、使用同一 P0 fixture 和门槛重新采
 
 ### Task P1-G1：Path 派生缓存（条件）
 
+**执行状态：** `not_evaluated / deferred_device`；当前无真机，无法证明 completed-Freedraw 的 `getStroke + Path build` 达到触发阈值，未引入缓存。
+
 **触发：** 仅在 P1-2/P1-3 后 completed-Freedraw 的 `getStroke + Path build` P95 >2ms，或占 UI paint/frame >25%。  
 缓存用标准库 `LinkedHashMap`；key 包含 ID/version/versionNonce 和全部轮廓参数，同时限制条目数、源点数/估算字节和单项成本，超长单笔超过预算不缓存。未达到触发条件标 `not_triggered`。
 
 ### Task P1-G2：Scene 派生缓存（条件）
+
+**执行状态：** `not_evaluated / deferred_device`；当前无真机，无法证明排序/线性查找达到触发阈值，未增加 Scene 缓存状态。
 
 **触发：** 仅在排序或线性查找 P95 >1ms，或 >dry paint 时间的 15%。  
 利用 Scene 不可变性在实例中使用 `late final` 缓存 ordered list、byId 和 boundText map；不增加 Scene version 服务、集中刷新器或空间索引，保证 z-order/删除过滤/绑定文本行为。
