@@ -28,6 +28,8 @@ P0 必须在固定提交 SHA、真机 Profile、固定 Dart fixture 和固定算
 
 **负责人/复核：** Tiax / qinyre；**估时：** 1d；**前置：** 无。
 
+**执行状态：** runner、host driver、依赖和文档已实现；真机 Profile 运行与原始结果为 `deferred_device`。
+
 ### 文件
 
 - Modify: `FlowMuse-App/pubspec.yaml`、`FlowMuse-App/pubspec.lock`（仅 `integration_test` SDK dev dependency）
