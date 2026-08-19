@@ -174,11 +174,11 @@ class CollaborationRepository {
       'sceneVersion': _reconciler.getSceneVersion(syncableScene.elements),
       'summary': CollaborationDebugLog.elementSummary(syncableScene.elements),
     });
-    _startRoomSession(room);
+    await _startRoomSession(room);
     try {
       await _transport.connect(room.roomId);
     } catch (_) {
-      _resetLocalState();
+      await _resetLocalState();
       rethrow;
     }
     await _send(
@@ -218,11 +218,11 @@ class CollaborationRepository {
       'sceneVersion': _reconciler.getSceneVersion(nextScene.elements),
       'summary': CollaborationDebugLog.elementSummary(nextScene.elements),
     });
-    _startRoomSession(room);
+    await _startRoomSession(room);
     try {
       await _transport.connect(room.roomId);
     } catch (_) {
-      _resetLocalState();
+      await _resetLocalState();
       rethrow;
     }
     _startFullSceneSync();
@@ -243,7 +243,7 @@ class CollaborationRepository {
       await _transport.endRoom(ownerKey: ownerKey);
     } catch (_) {}
     await _ownerKeyStore.clearOwnerKey(room.roomId);
-    _resetLocalState();
+    await _resetLocalState();
     return metadata;
   }
 
@@ -644,8 +644,8 @@ class CollaborationRepository {
     );
   }
 
-  void _startRoomSession(CollaborationRoom room) {
-    _stopRoomSession();
+  Future<void> _startRoomSession(CollaborationRoom room) async {
+    await _stopRoomSession();
     _accumulator.dispose();
     _accumulator.onFlush = _onAccumulatorFlush;
     _messageBacklog.clear();
@@ -765,11 +765,15 @@ class CollaborationRepository {
     }
   }
 
-  void _stopRoomSession() {
-    unawaited(_transportMessageSubscription?.cancel());
+  Future<void> _stopRoomSession() async {
+    final transportMessages = _transportMessageSubscription;
     _transportMessageSubscription = null;
-    unawaited(_newUserSubscription?.cancel());
+    final newUsers = _newUserSubscription;
     _newUserSubscription = null;
+    await Future.wait([
+      if (transportMessages != null) transportMessages.cancel(),
+      if (newUsers != null) newUsers.cancel(),
+    ]);
     _messageDecodeQueue = Future<void>.value();
     _messageBacklog.clear();
   }
@@ -1151,11 +1155,11 @@ class CollaborationRepository {
 
   Future<void> stop() async {
     await forceFlushSnapshot();
-    _resetLocalState();
+    await _resetLocalState();
     await _transport.disconnect();
   }
 
-  void _resetLocalState() {
+  Future<void> _resetLocalState() async {
     _fullSceneSyncTimer?.cancel();
     _fullSceneSyncTimer = null;
     _fileUploadTimer?.cancel();
@@ -1164,7 +1168,7 @@ class CollaborationRepository {
     _snapshotTimer = null;
     _snapshotSaving = false;
     _snapshotDirty = false;
-    _stopRoomSession();
+    await _stopRoomSession();
     _activeRoom = null;
     _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();

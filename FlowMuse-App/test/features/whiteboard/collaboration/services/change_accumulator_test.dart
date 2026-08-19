@@ -99,6 +99,22 @@ void main() {
     await Future.delayed(const Duration(milliseconds: 100));
     expect(flushCount, 0);
   });
+
+  test('dispose 取消待发送批次且不再 tick', () async {
+    final accumulator = ChangeAccumulator(
+      batchWindow: const Duration(milliseconds: 20),
+    );
+    var flushCount = 0;
+    accumulator.onFlush = (_, _) async => flushCount++;
+    accumulator.schedule(
+      _sceneWithElements([_element(id: 'a', version: 1, versionNonce: 10)]),
+    );
+
+    accumulator.dispose();
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(flushCount, 0);
+  });
 }
 
 Map<String, Object?> _element({

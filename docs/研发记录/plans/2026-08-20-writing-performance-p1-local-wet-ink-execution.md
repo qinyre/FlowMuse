@@ -123,6 +123,8 @@ P1-3/G1/G2 必须在 P1-2 合并后、使用同一 P0 fixture 和门槛重新采
 
 **负责人/复核：** Enchograph / qinyre；**估时：** 0.5d；**前置：** P0-4；可与 P1 并行但不得进入 P0 固定 SHA。
 
+**执行状态：** 已完成；Repository 停止前同步取消房间订阅并清理 Timer，ChangeAccumulator dispose 清空 Timer 引用；服务端 volatile 高频帧不再逐帧记录成功日志，可靠帧保留尺寸摘要。
+
 - 客户端销毁/断开时取消协作 Timer/订阅；服务端高频帧日志降为计数器或 debug sampling。
 - 只修改已有生命周期点；不新建 scheduler/日志框架。
 - Go 测试写入 `FlowMuse-Server/internal/collab/hub_test.go`；验证 disconnect 后无 tick/泄漏、高频 live 不逐帧输出正文。

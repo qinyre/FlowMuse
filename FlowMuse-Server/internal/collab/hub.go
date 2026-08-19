@@ -166,14 +166,7 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 		client.Emit(EventRoomError, "协作消息过大")
 		return
 	}
-	log.Printf(
-		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=%t",
-		socketID,
-		roomID,
-		len(frame.EncryptedBuffer),
-		len(frame.IV),
-		volatile,
-	)
+	logForward(socketID, roomID, frame, volatile)
 	operator := client.To(socket.Room(roomID))
 	if volatile {
 		operator = operator.Volatile()
@@ -255,8 +248,16 @@ func (h *Hub) userFollow(client *socket.Socket, args []any) {
 
 func (h *Hub) leaveAll(client *socket.Socket) {
 	socketID := string(client.Id())
+	roomID, users := h.removeSocket(socketID)
 
+	if roomID != "" {
+		h.server.To(socket.Room(roomID)).Emit(EventRoomUserChange, users)
+	}
+}
+
+func (h *Hub) removeSocket(socketID string) (string, []RoomUser) {
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	roomID := h.socketRooms[socketID]
 	if roomID != "" {
 		h.removeFromRoomLocked(socketID, roomID)
@@ -272,11 +273,20 @@ func (h *Hub) leaveAll(client *socket.Socket) {
 		users = roomUserList(h.roomUsers[roomID])
 	}
 	delete(h.socketUsers, socketID)
-	h.mu.Unlock()
+	return roomID, users
+}
 
-	if roomID != "" {
-		h.server.To(socket.Room(roomID)).Emit(EventRoomUserChange, users)
+func logForward(socketID, roomID string, frame EncryptedFrame, volatile bool) {
+	if volatile {
+		return
 	}
+	log.Printf(
+		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=false",
+		socketID,
+		roomID,
+		len(frame.EncryptedBuffer),
+		len(frame.IV),
+	)
 }
 
 func (h *Hub) removeFromRoomLocked(socketID, roomID string) {

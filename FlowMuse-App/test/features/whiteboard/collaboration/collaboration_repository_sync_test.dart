@@ -4,6 +4,7 @@ import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_room.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/encrypted_payload.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/room_collaborator.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_crypto.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
@@ -192,6 +193,80 @@ void main() {
     await repository.stop();
     await peerTransport.disconnect();
   });
+
+  test('stop 返回前取消房间订阅并断开 transport', () async {
+    final crypto = CollaborationCrypto();
+    final room = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    final initial = _scene([_element('element', 1)]);
+    await store.createRoom(room: room, scene: initial, ownerKeyHash: 'test');
+    final transport = _LifecycleTransport();
+    final repository = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+      crypto: crypto,
+    );
+
+    await repository.joinRoom(room: room, localScene: initial);
+    expect(transport.messagesController.hasListener, isTrue);
+    expect(transport.newUsersController.hasListener, isTrue);
+
+    await repository.stop();
+
+    expect(transport.messagesController.hasListener, isFalse);
+    expect(transport.newUsersController.hasListener, isFalse);
+    expect(transport.disconnectCount, 1);
+    await transport.close();
+  });
+}
+
+class _LifecycleTransport implements RealtimeTransport {
+  final messagesController = StreamController<EncryptedPayload>.broadcast();
+  final newUsersController = StreamController<String>.broadcast();
+  int disconnectCount = 0;
+
+  @override
+  Stream<EncryptedPayload> get messages => messagesController.stream;
+
+  @override
+  Stream<String> get newUsers => newUsersController.stream;
+
+  @override
+  Stream<List<RoomCollaborator>> get roomUsers => const Stream.empty();
+
+  @override
+  Stream<CollaborationRoomMetadata> get roomEnded => const Stream.empty();
+
+  @override
+  Stream<void> get firstInRoom => const Stream.empty();
+
+  @override
+  Stream<String> get errors => const Stream.empty();
+
+  @override
+  Stream<RealtimeConnectionStatus> get connectionStatus => const Stream.empty();
+
+  @override
+  String? get socketId => 'lifecycle';
+
+  @override
+  Future<void> connect(String roomId) async {}
+
+  @override
+  Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {}
+
+  @override
+  Future<void> endRoom({String? ownerKey}) async {}
+
+  @override
+  Future<void> disconnect() async {
+    disconnectCount++;
+  }
+
+  Future<void> close() async {
+    await messagesController.close();
+    await newUsersController.close();
+  }
 }
 
 class _GatedMemoryRealtimeTransport extends MemoryRealtimeTransport {
