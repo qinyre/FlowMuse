@@ -213,6 +213,8 @@ P3-3B 创建并独占房间生命周期的 `finalizedStrokeIds`：初始 Scene �
 
 **负责人/复核：** Tiax / Enchograph；**估时：** 1.5d；**前置：** P3-0A/0B/1/2/3A/3B/4 全部完成。
 
+**执行状态：** 可在当前环境完成的部分已完成；新增固定 seed 的 drop/duplicate/reorder/delay 与断线故障注入，自动覆盖 flag/legacy、final 先到与迟到防复活、N 矩阵线性约束、5000 finalized ID 和真实 repository→store→painter Profile 入口。当前无真机，且 Windows 缺少 Visual Studio 工具链、Web 不支持 integration test，因此三组 Profile 命令及 5 分钟真机阈值保持为发布前延期门禁，不生成伪造性能结论。
+
 ### 文件
 
 - Create: `FlowMuse-App/test/features/whiteboard/collaboration/services/fault_injecting_realtime_transport.dart`
