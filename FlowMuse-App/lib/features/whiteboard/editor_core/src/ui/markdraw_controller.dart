@@ -2,11 +2,12 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
@@ -1987,7 +1988,13 @@ class MarkdrawController extends ChangeNotifier {
         useRealPressure: _pressureEnabled,
         pressureExponent: _pressureExponent,
       );
-      final r = _modeler!.process(sample);
+      final r = kReleaseMode
+          ? _modeler!.process(sample)
+          : developer.Timeline.timeSync(
+              'whiteboard.input_model',
+              () => _modeler!.process(sample),
+              arguments: {'phase': sample.phase.name},
+            );
       if (r.point == null) return;
 
       final sceneOffset = _editorState.viewport.screenToScenePrecise(
@@ -2089,7 +2096,13 @@ class MarkdrawController extends ChangeNotifier {
         viewportZoom: _editorState.viewport.zoom,
         viewportTransform: _viewportTransform,
       );
-      final r = _modeler!.process(sample);
+      final r = kReleaseMode
+          ? _modeler!.process(sample)
+          : developer.Timeline.timeSync(
+              'whiteboard.input_model',
+              () => _modeler!.process(sample),
+              arguments: {'phase': sample.phase.name},
+            );
       if (r.point == null) {
         activePreviewMetricsProbe?.recordRejectedRawSample(
           r.reason ?? r.decision.name,
@@ -2155,7 +2168,13 @@ class MarkdrawController extends ChangeNotifier {
         viewportZoom: _editorState.viewport.zoom,
         viewportTransform: _viewportTransform,
       );
-      final r = _modeler!.process(sample); // flushes real endpoint
+      final r = kReleaseMode
+          ? _modeler!.process(sample)
+          : developer.Timeline.timeSync(
+              'whiteboard.input_model',
+              () => _modeler!.process(sample),
+              arguments: {'phase': sample.phase.name},
+            ); // flushes real endpoint
 
       if (r.point != null) {
         final sceneOffset = _editorState.viewport.screenToScenePrecise(

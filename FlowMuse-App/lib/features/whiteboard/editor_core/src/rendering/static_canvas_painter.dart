@@ -1,6 +1,8 @@
+import 'dart:developer' as developer;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 
 import '../core/elements/elements.dart' as core show TextElement;
@@ -91,6 +93,21 @@ class StaticCanvasPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (kReleaseMode) {
+      _paint(canvas, size);
+      return;
+    }
+    developer.Timeline.timeSync(
+      'whiteboard.static_paint',
+      () => _paint(canvas, size),
+      arguments: {
+        'elements': scene.elements.length,
+        'hasActivePreview': previewElement != null,
+      },
+    );
+  }
+
+  void _paint(Canvas canvas, Size size) {
     canvas.save();
 
     // Apply viewport transform: scale then translate

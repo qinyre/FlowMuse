@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/active_preview_metrics_probe.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_render_metrics.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_report.dart';
 import 'package:integration_test/integration_test.dart';
 
 const _perfTestEnabled = bool.fromEnvironment('FLOWMUSE_PERF_TEST');
@@ -19,6 +21,8 @@ void main() {
     );
 
     final probe = ActivePreviewMetricsProbe();
+    final frameTimings = FrameTimingMetricsCollector()..start();
+    addTearDown(frameTimings.stop);
     final controller = MarkdrawController(activePreviewMetricsProbe: probe);
     addTearDown(controller.dispose);
     controller.switchTool(ToolType.freedraw);
@@ -56,8 +60,13 @@ void main() {
     await tester.pump();
     await gesture.up();
     await tester.pump();
+    await Future<void>.delayed(const Duration(milliseconds: 150));
 
     expect(controller.currentScene.elements, isNotEmpty);
+    final performance = WritingPerformanceReport.capture(
+      activePreview: probe,
+      frames: frameTimings.frames,
+    );
     binding.reportData = <String, Object?>{
       'schemaVersion': 1,
       'measurementEligible': kProfileMode,
@@ -68,12 +77,8 @@ void main() {
           : 'debug',
       'platform': defaultTargetPlatform.name,
       'elementsAfterSmokeStroke': controller.currentScene.elements.length,
-      'acceptedPoints': probe.samples.length,
-      'paintedPoints': probe.samples.where((sample) => sample.painted).length,
-      'terminalBeforePreview': probe.samples
-          .where((sample) => sample.terminalBeforePreview)
-          .length,
-      'note': 'P0-1 active-preview proxy; FrameTiming is added by P0-2.',
+      'performance': performance.toJson(),
+      'note': 'P0-2 event-to-paint proxy with FrameTiming by frameNumber.',
     };
   });
 }

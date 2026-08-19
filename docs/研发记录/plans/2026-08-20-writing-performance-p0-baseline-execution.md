@@ -85,10 +85,15 @@ Pop-Location
 
 **负责人/复核：** qinyre / Tiax；**估时：** 0.75d；**前置：** P0-0。
 
+**执行状态：** 已实现并通过报告 schema、活动预览和协作仓库回归测试；真机 FrameTiming 结果为 `deferred_device`。
+
 ### 文件
 
+- Modify: `FlowMuse-App/integration_test/whiteboard_writing_perf_test.dart`
 - Modify: `FlowMuse-App/lib/features/whiteboard/editor_core/src/input/stroke_render_metrics.dart`
 - Modify: `FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/static_canvas_painter.dart`
+- Modify: `FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/editor_canvas.dart`
+- Modify: `FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart`
 - Modify: `FlowMuse-App/lib/features/whiteboard/collaboration/repositories/collaboration_repository.dart`
 - Create: `FlowMuse-App/lib/features/whiteboard/editor_core/src/input/writing_performance_report.dart`
 - Create: `FlowMuse-App/test/features/whiteboard/editor_core/input/writing_performance_report_test.dart`

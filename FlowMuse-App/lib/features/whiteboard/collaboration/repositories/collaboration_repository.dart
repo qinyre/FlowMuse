@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 
 import '../models/collaboration_message.dart';
 import '../models/collaboration_room.dart';
@@ -248,10 +251,22 @@ class CollaborationRepository {
     if (storedScene == null) {
       return null;
     }
-    final reconciledElements = _reconciler.reconcile(
-      localElements: localScene.elements,
-      remoteElements: storedScene.elements,
-    );
+    final reconciledElements = kReleaseMode
+        ? _reconciler.reconcile(
+            localElements: localScene.elements,
+            remoteElements: storedScene.elements,
+          )
+        : developer.Timeline.timeSync(
+            'collaboration.reconcile',
+            () => _reconciler.reconcile(
+              localElements: localScene.elements,
+              remoteElements: storedScene.elements,
+            ),
+            arguments: {
+              'localElements': localScene.elements.length,
+              'remoteElements': storedScene.elements.length,
+            },
+          );
     final nextScene = storedScene.copyWith(
       elements: _reconciler.getSyncableElements(reconciledElements),
       files: {...localScene.files, ...storedScene.files},
@@ -511,11 +526,24 @@ class CollaborationRepository {
         ))
           remote,
     ];
-    final reconciled = _reconciler.reconcile(
-      localElements: localScene.elements,
-      remoteElements: remoteElements,
-      protectedElementIds: protectedElementIds,
-    );
+    final reconciled = kReleaseMode
+        ? _reconciler.reconcile(
+            localElements: localScene.elements,
+            remoteElements: remoteElements,
+            protectedElementIds: protectedElementIds,
+          )
+        : developer.Timeline.timeSync(
+            'collaboration.reconcile',
+            () => _reconciler.reconcile(
+              localElements: localScene.elements,
+              remoteElements: remoteElements,
+              protectedElementIds: protectedElementIds,
+            ),
+            arguments: {
+              'localElements': localScene.elements.length,
+              'remoteElements': remoteElements.length,
+            },
+          );
     final nextScene = localScene.copyWith(
       elements: _reconciler.getSyncableElements(reconciled),
     );
@@ -644,11 +672,31 @@ class CollaborationRepository {
       return;
     }
     try {
-      final bytes = await _crypto.decrypt(
-        roomKey: room.roomKey,
-        encryptedPayload: payload,
-      );
-      final message = CollaborationMessage.fromBytes(bytes);
+      final decryptTask = kReleaseMode
+          ? null
+          : (developer.TimelineTask()..start(
+              'collaboration.decrypt',
+              arguments: {
+                'room': _shortRoomId(room.roomId),
+                'encryptedBytes': payload.encryptedBuffer.length,
+              },
+            ));
+      late final List<int> bytes;
+      try {
+        bytes = await _crypto.decrypt(
+          roomKey: room.roomKey,
+          encryptedPayload: payload,
+        );
+      } finally {
+        decryptTask?.finish();
+      }
+      final message = kReleaseMode
+          ? CollaborationMessage.fromBytes(bytes)
+          : developer.Timeline.timeSync(
+              'collaboration.json_decode',
+              () => CollaborationMessage.fromBytes(bytes),
+              arguments: {'plainBytes': bytes.length},
+            );
       CollaborationDebugLog.write('crypto', 'decoded', {
         'room': _shortRoomId(room.roomId),
         'type': message.type.wireName,
@@ -700,10 +748,34 @@ class CollaborationRepository {
     required CollaborationMessage message,
     bool volatile = false,
   }) async {
-    final encrypted = await _crypto.encrypt(
-      roomKey: room.roomKey,
-      plainBytes: message.toBytes(),
-    );
+    final plainBytes = kReleaseMode
+        ? message.toBytes()
+        : developer.Timeline.timeSync(
+            'collaboration.json_encode',
+            message.toBytes,
+            arguments: {
+              'type': message.type.wireName,
+              'elements': message.elements.length,
+            },
+          );
+    final encryptTask = kReleaseMode
+        ? null
+        : (developer.TimelineTask()..start(
+            'collaboration.encrypt',
+            arguments: {
+              'room': _shortRoomId(room.roomId),
+              'plainBytes': plainBytes.length,
+            },
+          ));
+    late final EncryptedPayload encrypted;
+    try {
+      encrypted = await _crypto.encrypt(
+        roomKey: room.roomKey,
+        plainBytes: plainBytes,
+      );
+    } finally {
+      encryptTask?.finish();
+    }
     CollaborationDebugLog.write('wire', 'send_message', {
       'room': _shortRoomId(room.roomId),
       'type': message.type.wireName,
@@ -713,7 +785,21 @@ class CollaborationRepository {
       'ivBytes': encrypted.iv.length,
       'summary': CollaborationDebugLog.elementSummary(message.elements),
     });
-    await _transport.send(encrypted, volatile: volatile);
+    final transportTask = kReleaseMode
+        ? null
+        : (developer.TimelineTask()..start(
+            'collaboration.transport_send',
+            arguments: {
+              'room': _shortRoomId(room.roomId),
+              'encryptedBytes': encrypted.encryptedBuffer.length,
+              'volatile': volatile,
+            },
+          ));
+    try {
+      await _transport.send(encrypted, volatile: volatile);
+    } finally {
+      transportTask?.finish();
+    }
     return encrypted.encryptedBuffer.length + encrypted.iv.length;
   }
 
@@ -776,10 +862,22 @@ class CollaborationRepository {
       if (storedScene == null) {
         rethrow;
       }
-      final reconciledElements = _reconciler.reconcile(
-        localElements: scene.elements,
-        remoteElements: storedScene.elements,
-      );
+      final reconciledElements = kReleaseMode
+          ? _reconciler.reconcile(
+              localElements: scene.elements,
+              remoteElements: storedScene.elements,
+            )
+          : developer.Timeline.timeSync(
+              'collaboration.reconcile',
+              () => _reconciler.reconcile(
+                localElements: scene.elements,
+                remoteElements: storedScene.elements,
+              ),
+              arguments: {
+                'localElements': scene.elements.length,
+                'remoteElements': storedScene.elements.length,
+              },
+            );
       final mergedScene = scene.copyWith(
         elements: _reconciler.getSyncableElements(reconciledElements),
       );

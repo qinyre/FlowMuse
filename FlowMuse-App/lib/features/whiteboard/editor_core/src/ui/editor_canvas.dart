@@ -1,5 +1,8 @@
 library;
 
+import 'dart:developer' as developer;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter_math_fork/flutter_math.dart';
@@ -279,6 +282,12 @@ class _EditorCanvasState extends State<EditorCanvas>
           }
           final paintViewport = _paintViewport();
           final appendPageHint = _appendPageHint();
+          final previewElement = kReleaseMode
+              ? controller.buildPreviewElement(toolOverlay)
+              : developer.Timeline.timeSync(
+                  'whiteboard.active_element_build',
+                  () => controller.buildPreviewElement(toolOverlay),
+                );
           return MouseRegion(
             cursor: controller.cursorForTool,
             child: Stack(
@@ -357,9 +366,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                         adapter: controller.adapter,
                         viewport: paintViewport,
                         layout: controller.layout,
-                        previewElement: controller.buildPreviewElement(
-                          toolOverlay,
-                        ),
+                        previewElement: previewElement,
                         editingElementId: controller.editingTextElementId,
                         resolvedImages: controller.resolveImages(),
                         pendingElements: controller.pendingPreviewElements.isNotEmpty
