@@ -14,6 +14,22 @@ const String recognitionStrokeStartedAtKey = 'flowmuse.recognition.startedAt';
 const String recognitionStrokePointTimesKey = 'flowmuse.recognition.pointTimes';
 const Duration recognitionStrokeSessionTimeout = Duration(seconds: 5);
 
+class ActiveFreedrawView {
+  const ActiveFreedrawView({
+    required this.strokeId,
+    required this.points,
+    required this.pressures,
+    required this.simulatePressure,
+    required this.brushType,
+  });
+
+  final ElementId strokeId;
+  final List<Point> points;
+  final List<double> pressures;
+  final bool simulatePressure;
+  final BrushType brushType;
+}
+
 /// Tool for creating freehand drawing elements by continuous path recording.
 ///
 /// 当 pressure 参数可用(手写笔)时,收集真实压感并存入 FreedrawElement.pressures,
@@ -30,6 +46,7 @@ class FreedrawTool implements Tool {
   ElementId? _liveElementId;
   int _liveVersion = 0;
   FreedrawElement? _liveElement;
+  ActiveFreedrawView? _activeView;
   String? _sessionId;
   int? _startedAt;
   int? _lastStrokeEndedAt;
@@ -38,6 +55,7 @@ class FreedrawTool implements Tool {
   ToolType get type => ToolType.freedraw;
 
   FreedrawElement? get liveElement => _liveElement;
+  ActiveFreedrawView? get activeView => _activeView;
 
   @override
   ToolResult? onPointerDown(
@@ -59,6 +77,14 @@ class FreedrawTool implements Tool {
     }
     _points.add(point);
     _recordPressure(pressure);
+    final strokeId = _liveElementId ??= ElementId.generate();
+    _activeView = ActiveFreedrawView(
+      strokeId: strokeId,
+      points: _previewPoints,
+      pressures: _hasRealPressure ? _previewPressures : const [],
+      simulatePressure: !_hasRealPressure,
+      brushType: context.brushType,
+    );
     return null;
   }
 
@@ -186,6 +212,7 @@ class FreedrawTool implements Tool {
     _liveElementId = null;
     _liveVersion = 0;
     _liveElement = null;
+    _activeView = null;
     if (clearSession) {
       _sessionId = null;
       _startedAt = null;

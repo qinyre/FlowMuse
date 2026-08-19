@@ -19,9 +19,11 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
+import '../config/writing_feature_flags.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
 import '../rendering/viewport_clamp.dart';
+import '../rendering/local_wet_ink_state.dart';
 import '../input/active_preview_metrics_probe.dart';
 import '../input/outline_render_mode.dart';
 import '../input/stroke_input_normalizer.dart';
@@ -81,6 +83,7 @@ class MarkdrawController extends ChangeNotifier {
   MarkdrawController({
     MarkdrawEditorConfig config = const MarkdrawEditorConfig(),
     this.activePreviewMetricsProbe,
+    this.writingFlags = writingFeatureFlags,
   }) : _config = config {
     _layout = config.initialLayout.ensurePage();
     _editorState = EditorState(
@@ -104,6 +107,9 @@ class MarkdrawController extends ChangeNotifier {
 
   final MarkdrawEditorConfig _config;
   final ActivePreviewMetricsProbe? activePreviewMetricsProbe;
+  final WritingFeatureFlags writingFlags;
+  final LocalWetInkState localWetInkState = LocalWetInkState();
+  int _nextLocalWetInkEpoch = 0;
   int? _activePreviewStrokeEpoch;
   int? _activePreviewMaxInputSeq;
 
@@ -699,6 +705,9 @@ class MarkdrawController extends ChangeNotifier {
   @override
   void dispose() {
     _finishActivePreviewStroke(ActivePreviewTerminalReason.dispose);
+    _activeTool.reset();
+    localWetInkState.clear(notify: false);
+    localWetInkState.dispose();
     _disposed = true;
     _inkRecognitionTimer?.cancel();
     _liveFreedrawTimer?.cancel();
@@ -2014,6 +2023,7 @@ class MarkdrawController extends ChangeNotifier {
         _activeTool.onPointerDown(point, toolContext, pressure: r.pressure),
       );
       _recordAcceptedActivePreviewPoint();
+      _publishLocalWetInk();
       return;
     }
 
@@ -2124,7 +2134,11 @@ class MarkdrawController extends ChangeNotifier {
       _recordAcceptedActivePreviewPoint();
       _scheduleLiveFreedraw();
       mousePosition = event.localPosition;
-      notifyListeners();
+      if (writingFlags.layeredWetInk) {
+        _publishLocalWetInk();
+      } else {
+        notifyListeners();
+      }
       return;
     }
 
@@ -2185,9 +2199,15 @@ class MarkdrawController extends ChangeNotifier {
           _activeTool.onPointerMove(point, toolContext, pressure: r.pressure),
         );
         _recordAcceptedActivePreviewPoint();
-        applyResult(
-          _activeTool.onPointerUp(point, toolContext, pressure: r.pressure),
+        final finalResult = _activeTool.onPointerUp(
+          point,
+          toolContext,
+          pressure: r.pressure,
         );
+        if (writingFlags.layeredWetInk) {
+          localWetInkState.clear(notify: false);
+        }
+        applyResult(finalResult);
       }
 
       _finishActivePreviewStroke(ActivePreviewTerminalReason.pointerUp);
@@ -2393,6 +2413,9 @@ class MarkdrawController extends ChangeNotifier {
     if (_activeTool is FreedrawTool) {
       _cancelPendingLiveFreedraw();
       _emitLiveFreedraw((_activeTool as FreedrawTool).cancelStroke());
+      if (writingFlags.layeredWetInk) {
+        localWetInkState.clear();
+      }
     } else {
       _activeTool.reset();
     }
@@ -2427,8 +2450,9 @@ class MarkdrawController extends ChangeNotifier {
 
   void _startActivePreviewStroke() {
     final probe = activePreviewMetricsProbe;
-    if (probe == null) return;
-    _activePreviewStrokeEpoch = probe.startStroke();
+    if (probe == null && !writingFlags.layeredWetInk) return;
+    _activePreviewStrokeEpoch =
+        probe?.startStroke() ?? ++_nextLocalWetInkEpoch;
     _activePreviewMaxInputSeq = null;
   }
 
@@ -2437,6 +2461,20 @@ class MarkdrawController extends ChangeNotifier {
     final strokeEpoch = _activePreviewStrokeEpoch;
     if (probe == null || strokeEpoch == null) return;
     _activePreviewMaxInputSeq = probe.recordAcceptedPoint(strokeEpoch);
+  }
+
+  void _publishLocalWetInk() {
+    if (!writingFlags.layeredWetInk || _activeTool is! FreedrawTool) return;
+    final strokeEpoch = _activePreviewStrokeEpoch;
+    final view = (_activeTool as FreedrawTool).activeView;
+    if (strokeEpoch == null || view == null) return;
+    localWetInkState.publish(
+      LocalWetInkFrame(
+        strokeEpoch: strokeEpoch,
+        view: view,
+        style: _defaultStyle,
+      ),
+    );
   }
 
   void _finishActivePreviewStroke(ActivePreviewTerminalReason reason) {

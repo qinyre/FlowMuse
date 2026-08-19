@@ -40,6 +40,8 @@
 
 **负责人/复核：** qinyre / Tiax；**估时：** 1d；**前置：** P1-0。
 
+**执行状态：** 已完成；活动笔迹使用稳定 `strokeId` 与专用 notifier，PointerUp 同步交接 final，Cancel/切换/dispose 与 flag=false 回退均已由测试覆盖。
+
 ### 文件
 
 - Modify: `FlowMuse-App/lib/features/whiteboard/editor_core/src/editor/tools/freedraw_tool.dart`
