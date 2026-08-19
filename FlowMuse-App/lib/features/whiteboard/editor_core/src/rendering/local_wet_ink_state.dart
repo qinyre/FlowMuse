@@ -9,11 +9,13 @@ class LocalWetInkFrame {
     required this.strokeEpoch,
     required this.view,
     required this.style,
+    this.maxInputSeq,
   });
 
   final int strokeEpoch;
   final ActiveFreedrawView view;
   final ElementStyle style;
+  final int? maxInputSeq;
 }
 
 class LocalWetInkState extends ChangeNotifier {

@@ -2473,6 +2473,7 @@ class MarkdrawController extends ChangeNotifier {
         strokeEpoch: strokeEpoch,
         view: view,
         style: _defaultStyle,
+        maxInputSeq: _activePreviewMaxInputSeq,
       ),
     );
   }

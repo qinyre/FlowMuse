@@ -70,6 +70,8 @@
 
 **负责人/复核：** qinyre / Tiax；**估时：** 1.5d；**前置：** P1-1。
 
+**执行状态：** 已完成；专用 `CustomPainter` 直接监听活动状态并置于静态画层与交互前景之间，复用现有 Freedraw renderer，开关关闭时保留旧预览路径。
+
 ### 文件
 
 - Create: `FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/local_wet_ink_painter.dart`

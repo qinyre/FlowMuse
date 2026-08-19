@@ -12,6 +12,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 import '../rendering/math_text_utils.dart';
+import '../rendering/local_wet_ink_painter.dart';
 
 /// The main canvas area with pointer/gesture handling.
 class EditorCanvas extends StatefulWidget {
@@ -282,12 +283,18 @@ class _EditorCanvasState extends State<EditorCanvas>
           }
           final paintViewport = _paintViewport();
           final appendPageHint = _appendPageHint();
-          final previewElement = kReleaseMode
-              ? controller.buildPreviewElement(toolOverlay)
-              : developer.Timeline.timeSync(
-                  'whiteboard.active_element_build',
-                  () => controller.buildPreviewElement(toolOverlay),
-                );
+          final useLayeredWetInk =
+              controller.writingFlags.layeredWetInk &&
+              controller.activeTool is FreedrawTool;
+          Element? previewElement;
+          if (!useLayeredWetInk) {
+            previewElement = kReleaseMode
+                ? controller.buildPreviewElement(toolOverlay)
+                : developer.Timeline.timeSync(
+                    'whiteboard.active_element_build',
+                    () => controller.buildPreviewElement(toolOverlay),
+                  );
+          }
           return MouseRegion(
             cursor: controller.cursorForTool,
             child: Stack(
@@ -413,7 +420,19 @@ class _EditorCanvasState extends State<EditorCanvas>
                         linkIcons: _buildLinkIcons(),
                         remoteCollaborators: _buildRemoteCollaborators(),
                       ),
-                      child: const SizedBox.expand(),
+                      child: useLayeredWetInk
+                          ? CustomPaint(
+                              painter: LocalWetInkPainter(
+                                state: controller.localWetInkState,
+                                adapter: controller.adapter,
+                                viewport: paintViewport,
+                                layout: controller.layout,
+                                activePreviewMetricsProbe:
+                                    controller.activePreviewMetricsProbe,
+                              ),
+                              child: const SizedBox.expand(),
+                            )
+                          : const SizedBox.expand(),
                     ),
                   ),
                 ),

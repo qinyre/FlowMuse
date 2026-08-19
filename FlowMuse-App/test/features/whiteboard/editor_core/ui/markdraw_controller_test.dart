@@ -21,12 +21,14 @@ void main() {
     for (var index = 1; index <= 100; index++) {
       _move(controller, index);
     }
+    final wetStrokeId = controller.localWetInkState.frame!.view.strokeId;
     _up(controller, 100);
 
     expect(wetNotifications, 101);
     expect(controllerNotifications, 1);
     expect(controller.localWetInkState.frame, isNull);
     expect(controller.currentScene.elements, hasLength(1));
+    expect(controller.currentScene.elements.single.id, wetStrokeId);
     expect(controller.historyManager.undoCount, 1);
   });
 
