@@ -148,10 +148,16 @@ fixture 使用编译进测试 bundle 的 Dart 常量/固定 seed 生成器，不
 
 **负责人/复核：** Tiax / 任逸青；**估时：** 0.5d；**前置：** P0-0/1/2/3/3B。
 
+**执行状态：** 固定时长 fixture replay、注入 jitter、host Git 证据、汇总器及冻结报告已实现并通过非真机测试；所有真机数值保持 `not_measured/deferred_device`。
+
 ### 文件
 
 - Create: `FlowMuse-App/tool/writing_perf/summarize_results.dart`
 - Create: `FlowMuse-App/test/tool/writing_perf/summarize_results_test.dart`
+- Modify: `FlowMuse-App/integration_test/whiteboard_writing_perf_test.dart`
+- Modify: `FlowMuse-App/lib/features/whiteboard/editor_core/src/input/active_preview_metrics_probe.dart`
+- Modify: `FlowMuse-App/test_driver/whiteboard_writing_perf_driver.dart`
+- Modify: `FlowMuse-App/integration_test/README.md`
 - Create: `docs/研发记录/research/writing-performance-p0-baseline.md`
 
 ### 开跑前冻结的目标

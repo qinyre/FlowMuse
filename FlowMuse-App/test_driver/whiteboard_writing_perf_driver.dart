@@ -18,10 +18,27 @@ Future<void> main() {
       final output = File(
         '${outputDirectory.path}${Platform.pathSeparator}writing-perf-$timestamp.json',
       );
+      final report = <String, Object?>{
+        if (data != null) ...Map<String, Object?>.from(data),
+        'hostEvidence': await _hostEvidence(),
+      };
       await output.writeAsString(
-        const JsonEncoder.withIndent('  ').convert(data ?? const {}),
+        const JsonEncoder.withIndent('  ').convert(report),
       );
       stdout.writeln('[FlowMuseWritingPerf] result=${output.absolute.path}');
     },
   );
+}
+
+Future<Map<String, Object?>> _hostEvidence() async {
+  final sha = await Process.run('git', ['rev-parse', 'HEAD']);
+  final status = await Process.run('git', ['status', '--porcelain']);
+  return {
+    'gitSha': sha.exitCode == 0 ? (sha.stdout as String).trim() : 'unknown',
+    'gitDirty':
+        status.exitCode != 0 || (status.stdout as String).trim().isNotEmpty,
+    'capturedAtUtc': DateTime.now().toUtc().toIso8601String(),
+    'hostOperatingSystem': Platform.operatingSystem,
+    'hostOperatingSystemVersion': Platform.operatingSystemVersion,
+  };
 }

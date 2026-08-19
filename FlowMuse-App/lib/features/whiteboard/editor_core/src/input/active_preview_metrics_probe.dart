@@ -96,6 +96,15 @@ class ActivePreviewMetricsProbe {
   Map<String, int> get rejectedRawSamples =>
       Map.unmodifiable(_rejectedRawSamples);
 
+  void clear() {
+    if (_nextUnpaintedIndexByEpoch.isNotEmpty) {
+      throw StateError('Cannot clear while a stroke is active');
+    }
+    _samples.clear();
+    _lastPaintedSeqByEpoch.clear();
+    _rejectedRawSamples.clear();
+  }
+
   int startStroke() {
     final strokeEpoch = ++_nextStrokeEpoch;
     _nextUnpaintedIndexByEpoch[strokeEpoch] = _samples.length;

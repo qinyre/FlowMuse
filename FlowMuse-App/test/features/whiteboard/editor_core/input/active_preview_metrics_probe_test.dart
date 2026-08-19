@@ -137,4 +137,18 @@ void main() {
     expect(probe.samples.single.painted, isFalse);
     expect(probe.rejectedRawSamples, {'minDistance': 1});
   });
+
+  test('完成笔画后可清空 warm-up 样本且 epoch 保持递增', () {
+    final probe = ActivePreviewMetricsProbe(nowMicros: () => 0);
+    final firstEpoch = probe.startStroke();
+    probe.recordAcceptedPoint(firstEpoch);
+    probe.finishStroke(firstEpoch, ActivePreviewTerminalReason.pointerUp);
+
+    probe.clear();
+    final nextEpoch = probe.startStroke();
+
+    expect(probe.samples, isEmpty);
+    expect(nextEpoch, greaterThan(firstEpoch));
+    probe.finishStroke(nextEpoch, ActivePreviewTerminalReason.cancel);
+  });
 }
