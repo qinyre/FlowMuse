@@ -20,6 +20,7 @@ import '../services/collaboration_performance_probe.dart';
 import '../services/collaboration_file_manager.dart';
 import '../services/collaboration_file_store.dart';
 import '../services/encrypted_scene_store.dart';
+import '../services/live_ink_receive_scheduler.dart';
 import '../services/realtime_transport.dart';
 import '../services/change_accumulator.dart';
 import '../services/scene_reconciler.dart';
@@ -75,6 +76,8 @@ class CollaborationRepository {
       StreamController<CollaborationMessage>.broadcast();
   final StreamController<ExcalidrawScene> _fileStatusScenes =
       StreamController<ExcalidrawScene>.broadcast();
+  final StreamController<DecodedLiveInkChunk> _liveInkChunks =
+      StreamController<DecodedLiveInkChunk>.broadcast();
   final List<CollaborationMessage> _messageBacklog = [];
 
   Timer? _fullSceneSyncTimer;
@@ -98,7 +101,10 @@ class CollaborationRepository {
   int _snapshot409Count = 0;
   DateTime _lastMetricsReport = DateTime.now();
   StreamSubscription<EncryptedPayload>? _transportMessageSubscription;
+  StreamSubscription<ReceivedLiveInkFrame>? _liveInkFrameSubscription;
+  StreamSubscription<DecodedLiveInkChunk>? _liveInkChunkSubscription;
   StreamSubscription<String>? _newUserSubscription;
+  LiveInkReceiveScheduler? _liveInkScheduler;
   Future<void> _messageDecodeQueue = Future<void>.value();
   Future<void> _sendQueue = Future<void>.value();
   bool _latestSendQueued = false;
@@ -112,6 +118,16 @@ class CollaborationRepository {
       flags.effectiveFor(_transport.serverLiveInkProtocolVersion);
 
   Stream<ReceivedLiveInkFrame> get liveInkFrames => _transport.liveInkFrames;
+
+  Stream<DecodedLiveInkChunk> get liveInkChunks => _liveInkChunks.stream;
+
+  int get liveInkReceiveSenderLimitDrops =>
+      _liveInkScheduler?.senderLimitDrops ?? 0;
+
+  int get liveInkReceiveDecodeErrors => _liveInkScheduler?.decodeErrors ?? 0;
+
+  int get liveInkPendingSenderCount =>
+      _liveInkScheduler?.pendingSenderCount ?? 0;
 
   int get liveInkTransportNotWritableDrops =>
       _transport.liveInkTransportNotWritableDrops;
@@ -681,6 +697,20 @@ class CollaborationRepository {
     _accumulator.onFlush = _onAccumulatorFlush;
     _messageBacklog.clear();
     _messageDecodeQueue = Future<void>.value();
+    final liveInkScheduler = LiveInkReceiveScheduler(
+      decode: (frame) => _decodeLiveInkFrame(room, frame),
+    );
+    _liveInkScheduler = liveInkScheduler;
+    _liveInkChunkSubscription = liveInkScheduler.chunks.listen((decoded) {
+      if (_activeRoom?.roomId == room.roomId) {
+        _liveInkChunks.add(decoded);
+      }
+    });
+    _liveInkFrameSubscription = _transport.liveInkFrames.listen((frame) {
+      if (_activeRoom?.roomId == room.roomId && effectiveLiveInk) {
+        liveInkScheduler.add(frame);
+      }
+    });
     _transportMessageSubscription = _transport.messages.listen(
       (payload) {
         CollaborationDebugLog.write('wire', 'payload_received', {
@@ -788,6 +818,27 @@ class CollaborationRepository {
     }
   }
 
+  Future<LiveInkChunk> _decodeLiveInkFrame(
+    CollaborationRoom room,
+    ReceivedLiveInkFrame frame,
+  ) async {
+    if (_activeRoom?.roomId != room.roomId) {
+      throw const FormatException('Live ink room is no longer active');
+    }
+    final bytes = await _crypto.decrypt(
+      roomKey: room.roomKey,
+      encryptedPayload: frame.payload,
+    );
+    if (_activeRoom?.roomId != room.roomId) {
+      throw const FormatException('Live ink room changed during decrypt');
+    }
+    final chunk = CollaborationMessage.fromBytes(bytes).liveInkChunk;
+    if (chunk == null) {
+      throw const FormatException('Live ink payload is not INK_CHUNK');
+    }
+    return chunk;
+  }
+
   Future<void> _sendSceneInitToNewUser(CollaborationRoom room) async {
     try {
       await broadcastScene(room: room, scene: _latestScene, initial: true);
@@ -799,12 +850,21 @@ class CollaborationRepository {
   Future<void> _stopRoomSession() async {
     final transportMessages = _transportMessageSubscription;
     _transportMessageSubscription = null;
+    final liveInkFrames = _liveInkFrameSubscription;
+    _liveInkFrameSubscription = null;
+    final liveInkChunks = _liveInkChunkSubscription;
+    _liveInkChunkSubscription = null;
+    final liveInkScheduler = _liveInkScheduler;
+    _liveInkScheduler = null;
     final newUsers = _newUserSubscription;
     _newUserSubscription = null;
     await Future.wait([
       if (transportMessages != null) transportMessages.cancel(),
+      if (liveInkFrames != null) liveInkFrames.cancel(),
+      if (liveInkChunks != null) liveInkChunks.cancel(),
       if (newUsers != null) newUsers.cancel(),
     ]);
+    if (liveInkScheduler != null) await liveInkScheduler.close();
     _messageDecodeQueue = Future<void>.value();
     _messageBacklog.clear();
   }

@@ -145,6 +145,8 @@ live-ink-ready   server → joined socket，普通独立事件
 
 **负责人/复核：** Enchograph / qinyre；**估时：** 1d；**前置：** P3-0B、P3-1。
 
+**执行状态：** 已完成；live 帧进入独立异步解密/校验 scheduler，同时仅解密 1 帧、每 sender 覆盖保留最新密文、最多 8 个 pending sender，并按 sender 轮转且每 2ms 主动 yield；坏密文和 sender 上限只聚合计数，不进入可靠 Scene 队列。
+
 ### 文件
 
 - Create: `FlowMuse-App/lib/features/whiteboard/collaboration/services/live_ink_receive_scheduler.dart`
