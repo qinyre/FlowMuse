@@ -12,6 +12,34 @@ import '../models/received_live_ink_frame.dart';
 import 'collaboration_debug_log.dart';
 import 'realtime_transport.dart';
 
+abstract interface class LiveInkVolatileChannel {
+  bool get writable;
+  void emit(String event, Object data);
+}
+
+bool emitLiveInkIfWritable(
+  LiveInkVolatileChannel channel,
+  String event,
+  Object data,
+) {
+  if (!channel.writable) return false;
+  channel.emit(event, data);
+  return true;
+}
+
+class _SocketIoLiveInkVolatileChannel implements LiveInkVolatileChannel {
+  const _SocketIoLiveInkVolatileChannel(this.socket);
+
+  final io.Socket socket;
+
+  @override
+  bool get writable =>
+      socket.connected && socket.io.engine?.transport?.writable == true;
+
+  @override
+  void emit(String event, Object data) => socket.volatile.emit(event, data);
+}
+
 class SocketIoRealtimeTransport
     implements RealtimeTransport, LiveInkNegotiationDiagnostics {
   SocketIoRealtimeTransport({required this.serverUrl, required this.identity});
@@ -399,21 +427,22 @@ class SocketIoRealtimeTransport
   Future<void> sendLiveInk(EncryptedPayload payload) async {
     final roomId = _roomId;
     final socket = _socket;
-    final transport = socket?.io.engine?.transport;
-    if (roomId == null ||
-        socket == null ||
-        !socket.connected ||
-        transport?.writable != true) {
+    if (roomId == null || socket == null) {
       _liveInkTransportNotWritableDrops++;
       return;
     }
-    socket.volatile.emit(_eventServerLiveInk, [
-      roomId,
-      {
-        'encryptedBuffer': Uint8List.fromList(payload.encryptedBuffer),
-        'iv': Uint8List.fromList(payload.iv),
-      },
-    ]);
+    final emitted = emitLiveInkIfWritable(
+      _SocketIoLiveInkVolatileChannel(socket),
+      _eventServerLiveInk,
+      [
+        roomId,
+        {
+          'encryptedBuffer': Uint8List.fromList(payload.encryptedBuffer),
+          'iv': Uint8List.fromList(payload.iv),
+        },
+      ],
+    );
+    if (!emitted) _liveInkTransportNotWritableDrops++;
   }
 
   @override
