@@ -39,7 +39,7 @@ P0 必须在固定提交 SHA、真机 Profile、固定 Dart fixture 和固定算
 
 ### 任务
 
-- 仅 `--dart-define=FLOWMUSE_PERF_TEST=true` 启用入口；普通构建不注册性能页面。
+- 仅 `--dart-define=FLOWMUSE_PERF_TEST=true` 启用入口；正式命令还必须用同一个唯一真机 ID 填写 `-d` 与 `FLOWMUSE_DEVICE_ID`，并声明设备类/物理设备；普通构建不注册性能页面。
 - 必须用真实 `Widget`、真实 Pointer 注入、真实帧；算法 replay 只校验 fixture，不计帧性能。
 - 必跑矩阵固定为 HarmonyOS 60Hz 中端、HarmonyOS 高刷、Android 中端 × 100/1000/5000 元素 × 快速书写 60 秒/长笔迹 30 秒 × 5 轮；中文、尖角、压力样本只作功能/几何验证，不做全笛卡尔积。
 - recording 按单调时间差实时注入，不使用同步紧循环或每事件单独 pump；记录目标/实际注入时间，jitter P95 >4ms 或 max >16ms 的整轮 invalid。前 5 个 warm-up frame、首次 shader/图片解码不入稳定态但单列最差值。
@@ -49,7 +49,7 @@ P0 必须在固定提交 SHA、真机 Profile、固定 Dart fixture 和固定算
 ```powershell
 Push-Location FlowMuse-App
 flutter pub get
-flutter drive --profile --driver=test_driver/whiteboard_writing_perf_driver.dart --target=integration_test/whiteboard_writing_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true
+flutter drive --profile -d <唯一真机ID> --driver=test_driver/whiteboard_writing_perf_driver.dart --target=integration_test/whiteboard_writing_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_DEVICE_ID=<唯一真机ID> --dart-define=FLOWMUSE_DEVICE_CLASS=<冻结设备类> --dart-define=FLOWMUSE_PHYSICAL_DEVICE=true --dart-define=FLOWMUSE_SCENE_ELEMENTS=100 --dart-define=FLOWMUSE_WRITING_FIXTURE=quick_zigzag --dart-define=FLOWMUSE_RUN_INDEX=1
 Pop-Location
 ```
 
@@ -148,7 +148,7 @@ fixture 使用编译进测试 bundle 的 Dart 常量/固定 seed 生成器，不
 
 **负责人/复核：** Tiax / 任逸青；**估时：** 0.5d；**前置：** P0-0/1/2/3/3B。
 
-**执行状态：** 固定时长 fixture replay、注入 jitter、host Git 证据、汇总器及冻结报告已实现并通过非真机测试；所有真机数值保持 `not_measured/deferred_device`。
+**执行状态：** 版本化 manifest 已冻结正式 fixture/hash/时长/场景 hash/刷新率目标；runner 使用设备实测刷新率，driver 完整扫描设备列表并要求唯一匹配真机。raw 携带 canonical final Scene，汇总器按 `--phase p0|p1` 独立 round-trip Scene、重算 canonical/semantic hash、Freedraw 数量、唯一 `(strokeEpoch,inputSeq)`、覆盖率和帧覆盖。非真机测试已通过；所有真机数值保持 `not_measured/deferred_device`。
 
 ### 文件
 
@@ -174,7 +174,7 @@ fixture 使用编译进测试 bundle 的 Dart 常量/固定 seed 生成器，不
 
 ```powershell
 Push-Location FlowMuse-App
-dart run tool/writing_perf/summarize_results.dart --input <raw-directory> --output ../docs/研发记录/research/writing-performance-p0-baseline.md
+dart run tool/writing_perf/summarize_results.dart --phase p0 --input <raw-directory> --output ../docs/研发记录/research/writing-performance-p0-baseline.md
 flutter analyze
 flutter test test/features/whiteboard/editor_core
 flutter test test/features/whiteboard/collaboration
