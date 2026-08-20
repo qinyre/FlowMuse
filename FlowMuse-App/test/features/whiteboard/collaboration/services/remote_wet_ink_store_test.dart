@@ -138,6 +138,43 @@ void main() {
       );
     }
   });
+
+  test('单点小包更新只检查新增点与 64 点 tail，不扫描历史前缀', () {
+    final store = RemoteWetInkStore(autoCleanup: false);
+    addTearDown(store.dispose);
+
+    for (var index = 0; index < RemoteWetInkStore.maxPointsPerStroke; index++) {
+      expect(
+        store.apply(_decoded('sender', 'stroke', startIndex: index)).accepted,
+        isTrue,
+      );
+      expect(
+        store.lastApplyExaminedPointCount,
+        lessThanOrEqualTo(LiveInkChunk.maxPoints + 2),
+      );
+    }
+    expect(store.strokes.single.pointCount, 16384);
+    expect(store.strokes.single.maxPointIndex, 16383);
+  });
+
+  test('completed cache 清理按秒限频，不随每个 live 包全表扫描', () {
+    var now = 1000;
+    final store = RemoteWetInkStore(nowMs: () => now, autoCleanup: false);
+    addTearDown(store.dispose);
+    for (var index = 0; index < 5000; index++) {
+      store.finalizeStroke('final-$index');
+    }
+
+    for (var index = 0; index < 150; index++) {
+      store.apply(_decoded('sender', 'stroke', startIndex: index));
+    }
+
+    expect(store.completedCacheCount, 5000);
+    expect(store.cleanupPassCount, 1);
+    now += 1000;
+    store.apply(_decoded('sender', 'stroke', startIndex: 150));
+    expect(store.cleanupPassCount, 2);
+  });
 }
 
 void _fillStroke(

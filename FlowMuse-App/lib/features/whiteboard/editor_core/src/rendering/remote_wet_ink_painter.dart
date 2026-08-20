@@ -11,6 +11,9 @@ import 'rough/rough_adapter.dart';
 import 'viewport_state.dart';
 
 class RemoteWetInkRenderCache {
+  static const int _estimatedBytesPerRecordedPoint = 240;
+  static const int _estimatedBytesPerPicture = 1024;
+
   final Map<String, _RemoteStrokePictureCache> _strokes = {};
   int recordedGeometryPointCount = 0;
   int lastFrameTailPointCount = 0;
@@ -19,6 +22,21 @@ class RemoteWetInkRenderCache {
     0,
     (total, stroke) => total + stroke.pictureLayerCount,
   );
+
+  int get retainedGeometryPointCount => _strokes.values.fold(
+    0,
+    (total, stroke) => total + stroke.retainedGeometryPointCount,
+  );
+
+  int get maxPictureNestingDepth => _strokes.values.fold(
+    0,
+    (depth, stroke) =>
+        stroke.pictureNestingDepth > depth ? stroke.pictureNestingDepth : depth,
+  );
+
+  int get estimatedRetainedBytes =>
+      retainedGeometryPointCount * _estimatedBytesPerRecordedPoint +
+      pictureLayerCount * _estimatedBytesPerPicture;
 
   void sync(List<RemoteWetInkStrokeSnapshot> snapshots, RoughAdapter adapter) {
     final activeIds = {for (final snapshot in snapshots) snapshot.strokeId};
@@ -117,9 +135,17 @@ class _RemoteStrokePictureCache {
   ui.Picture? _consolidatedPicture;
   int _consolidatedSegmentCount = 0;
   final Map<RemoteWetInkSegment, ui.Picture> _incrementalPictures = {};
+  int _consolidatedPointCount = 0;
 
   int get pictureLayerCount =>
       (_consolidatedPicture == null ? 0 : 1) + _incrementalPictures.length;
+  int get pictureNestingDepth => pictureLayerCount == 0 ? 0 : 1;
+  int get retainedGeometryPointCount =>
+      _consolidatedPointCount +
+      _incrementalPictures.keys.fold(
+        0,
+        (total, segment) => total + segment.points.length,
+      );
 
   int sync(RemoteWetInkStrokeSnapshot snapshot, RoughAdapter adapter) {
     var recordedPoints = 0;
@@ -129,17 +155,17 @@ class _RemoteStrokePictureCache {
     if (snapshot.consolidatedSegments.length > _consolidatedSegmentCount) {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      final oldPicture = _consolidatedPicture;
-      if (oldPicture != null) canvas.drawPicture(oldPicture);
-      for (final segment in snapshot.consolidatedSegments.skip(
-        _consolidatedSegmentCount,
-      )) {
+      var consolidatedPointCount = 0;
+      for (final segment in snapshot.consolidatedSegments) {
         recordedPoints += segment.points.length;
+        consolidatedPointCount += segment.points.length;
         _drawSegment(canvas, segment, snapshot, adapter);
       }
-      _consolidatedPicture = recorder.endRecording();
-      oldPicture?.dispose();
+      final nextPicture = recorder.endRecording();
+      _consolidatedPicture?.dispose();
+      _consolidatedPicture = nextPicture;
       _consolidatedSegmentCount = snapshot.consolidatedSegments.length;
+      _consolidatedPointCount = consolidatedPointCount;
     }
 
     final currentSegments = snapshot.incrementalSegments.toSet();
@@ -173,6 +199,7 @@ class _RemoteStrokePictureCache {
     _consolidatedPicture?.dispose();
     _consolidatedPicture = null;
     _consolidatedSegmentCount = 0;
+    _consolidatedPointCount = 0;
     for (final picture in _incrementalPictures.values) {
       picture.dispose();
     }

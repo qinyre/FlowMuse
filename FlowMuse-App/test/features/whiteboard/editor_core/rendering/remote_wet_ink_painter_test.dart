@@ -56,7 +56,7 @@ void main() {
       cache.dispose();
       store.dispose();
     });
-    for (var start = 0; start < 1024; start += 64) {
+    for (var start = 0; start < 960; start += 64) {
       store.apply(_decoded('stroke', startIndex: start, count: 64));
     }
     final painter = RemoteWetInkPainter(
@@ -68,12 +68,11 @@ void main() {
     _paint(painter);
     final before = cache.recordedGeometryPointCount;
 
-    store.apply(_decoded('stroke', startIndex: 1024, count: 64));
+    store.apply(_decoded('stroke', startIndex: 960, count: 64));
     _paint(painter);
     final newlyRecorded = cache.recordedGeometryPointCount - before;
 
-    expect(newlyRecorded, lessThanOrEqualTo(512));
-    expect(newlyRecorded, lessThan(1024));
+    expect(newlyRecorded, 64);
     expect(cache.pictureLayerCount, lessThanOrEqualTo(9));
   });
 
@@ -131,6 +130,35 @@ void main() {
 
     expect(cache.pictureLayerCount, 0);
     expect(adapter.calls, 0);
+  });
+
+  test('16k 长笔的 retained picture 始终为单层且估算缓存有界', () {
+    final store = RemoteWetInkStore(autoCleanup: false);
+    final cache = RemoteWetInkRenderCache();
+    final adapter = _RecordingAdapter();
+    addTearDown(() {
+      cache.dispose();
+      store.dispose();
+    });
+    for (var start = 0; start < 16384; start += 64) {
+      store.apply(_decoded('stroke', startIndex: start, count: 64));
+    }
+    final painter = RemoteWetInkPainter(
+      store: store,
+      cache: cache,
+      adapter: adapter,
+      viewport: const ViewportState(),
+    );
+
+    _paint(painter);
+
+    expect(cache.maxPictureNestingDepth, 1);
+    expect(cache.pictureLayerCount, lessThanOrEqualTo(9));
+    expect(cache.retainedGeometryPointCount, lessThanOrEqualTo(16320));
+    expect(
+      cache.estimatedRetainedBytes,
+      lessThan(RemoteWetInkStore.maxEstimatedRenderBytes),
+    );
   });
 }
 

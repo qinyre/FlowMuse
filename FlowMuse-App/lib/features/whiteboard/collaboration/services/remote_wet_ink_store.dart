@@ -45,6 +45,7 @@ class RemoteWetInkStrokeSnapshot {
     required this.incrementalSegments,
     required this.tailSegments,
     required this.pointCount,
+    required this.maxPointIndex,
     required this.revision,
   });
 
@@ -55,6 +56,7 @@ class RemoteWetInkStrokeSnapshot {
   final List<RemoteWetInkSegment> incrementalSegments;
   final List<RemoteWetInkSegment> tailSegments;
   final int pointCount;
+  final int maxPointIndex;
   final int revision;
 
   int get layerCount =>
@@ -84,7 +86,7 @@ class RemoteWetInkStore extends ChangeNotifier {
   static const int maxPointsPerRoom = 65536;
   static const int maxIncrementalSegments = 8;
   static const int maxEstimatedRenderBytes = 16 * 1024 * 1024;
-  static const int _estimatedBytesPerPoint = 48;
+  static const int _estimatedBytesPerPoint = 240;
   static const int _estimatedBytesPerSegment = 128;
 
   final int Function() _nowMs;
@@ -98,6 +100,9 @@ class RemoteWetInkStore extends ChangeNotifier {
   Timer? _cleanupTimer;
   int _roomPointCount = 0;
   int _revision = 0;
+  int _nextCleanupAtMs = 0;
+  int _cleanupPassCount = 0;
+  int _lastApplyExaminedPointCount = 0;
 
   int get roomPointCount => _roomPointCount;
   int get senderCount => _senderLastActiveMs.length;
@@ -105,6 +110,8 @@ class RemoteWetInkStore extends ChangeNotifier {
   int get revision => _revision;
   int get finalizedStrokeCount => _finalizedStrokeIds.length;
   int get completedCacheCount => _completedUntilMs.length;
+  int get cleanupPassCount => _cleanupPassCount;
+  int get lastApplyExaminedPointCount => _lastApplyExaminedPointCount;
   int dropCount(RemoteWetInkDropReason reason) => _dropCounts[reason] ?? 0;
 
   List<RemoteWetInkStrokeSnapshot> get strokes =>
@@ -118,9 +125,10 @@ class RemoteWetInkStore extends ChangeNotifier {
 
   RemoteWetInkApplyResult apply(DecodedLiveInkChunk decoded) {
     final now = _nowMs();
-    cleanup(nowMs: now);
+    _cleanupIfDue(now);
     final sender = decoded.senderSocketId;
     final chunk = decoded.chunk;
+    _lastApplyExaminedPointCount = chunk.points.length;
     if (_finalizedStrokeIds.contains(chunk.strokeId) ||
         (_completedUntilMs[chunk.strokeId] ?? 0) > now) {
       return _drop(RemoteWetInkDropReason.finalized);
@@ -177,7 +185,7 @@ class RemoteWetInkStore extends ChangeNotifier {
     if (newPoints.isEmpty) {
       return const RemoteWetInkApplyResult.accepted(0);
     }
-    stroke.addPoints(newPoints);
+    _lastApplyExaminedPointCount += stroke.addPoints(newPoints);
     _roomPointCount += newPoints.length;
     _revision++;
     notifyListeners();
@@ -219,6 +227,8 @@ class RemoteWetInkStore extends ChangeNotifier {
 
   void cleanup({int? nowMs}) {
     final now = nowMs ?? _nowMs();
+    _cleanupPassCount++;
+    _nextCleanupAtMs = now + const Duration(seconds: 1).inMilliseconds;
     final cutoff = now - inactivityTtl.inMilliseconds;
     final expiredSenders = [
       for (final entry in _senderLastActiveMs.entries)
@@ -247,6 +257,7 @@ class RemoteWetInkStore extends ChangeNotifier {
     _completedUntilMs.clear();
     _dropCounts.clear();
     _roomPointCount = 0;
+    _nextCleanupAtMs = 0;
     if (hadStrokes) _notifyChanged();
   }
 
@@ -285,6 +296,10 @@ class RemoteWetInkStore extends ChangeNotifier {
     return RemoteWetInkApplyResult.dropped(reason);
   }
 
+  void _cleanupIfDue(int now) {
+    if (now >= _nextCleanupAtMs) cleanup(nowMs: now);
+  }
+
   bool _removeStroke(String strokeId) {
     final stroke = _strokes.remove(strokeId);
     if (stroke == null) return false;
@@ -310,15 +325,18 @@ class _RemoteWetInkStroke {
   final String strokeId;
   final LiveInkStyle style;
   int lastActiveMs;
-  final SplayTreeMap<int, LiveInkPoint> _points = SplayTreeMap();
+  final SplayTreeMap<int, LiveInkPoint> _tailPoints = SplayTreeMap();
   final Set<int> _frozenIndices = {};
   final List<RemoteWetInkSegment> consolidatedSegments = [];
   final List<RemoteWetInkSegment> incrementalSegments = [];
   List<RemoteWetInkSegment> tailSegments = const [];
   int revision = 0;
+  int _pointCount = 0;
+  int _maxPointIndex = -1;
 
-  int get pointCount => _points.length;
-  bool containsIndex(int index) => _points.containsKey(index);
+  int get pointCount => _pointCount;
+  bool containsIndex(int index) =>
+      _frozenIndices.contains(index) || _tailPoints.containsKey(index);
 
   RemoteWetInkStrokeSnapshot get snapshot => RemoteWetInkStrokeSnapshot(
     senderSocketId: senderSocketId,
@@ -328,29 +346,48 @@ class _RemoteWetInkStroke {
     incrementalSegments: List.unmodifiable(incrementalSegments),
     tailSegments: tailSegments,
     pointCount: pointCount,
+    maxPointIndex: _maxPointIndex,
     revision: revision,
   );
 
-  void addPoints(Map<int, LiveInkPoint> points) {
-    _points.addAll(points);
-    final entries = _points.entries.toList(growable: false);
-    final tailStart = entries.length > LiveInkChunk.maxPoints
-        ? entries.length - LiveInkChunk.maxPoints
-        : 0;
-    final newlyFrozen = <MapEntry<int, LiveInkPoint>>[];
-    for (var index = 0; index < tailStart; index++) {
-      final entry = entries[index];
-      if (_frozenIndices.add(entry.key)) newlyFrozen.add(entry);
+  int addPoints(Map<int, LiveInkPoint> points) {
+    if (points.isEmpty) return 0;
+    for (final index in points.keys) {
+      if (index > _maxPointIndex) _maxPointIndex = index;
     }
-    incrementalSegments.addAll(_segmentsFrom(newlyFrozen));
+    final tailFloor = _maxPointIndex - LiveInkChunk.maxPoints + 1;
+    final newlyFrozen = SplayTreeMap<int, LiveInkPoint>();
+    var examinedPointCount = points.length;
+
+    final expiredTailIndices = <int>[];
+    for (final entry in _tailPoints.entries) {
+      examinedPointCount++;
+      if (entry.key >= tailFloor) break;
+      expiredTailIndices.add(entry.key);
+      newlyFrozen[entry.key] = entry.value;
+    }
+    for (final index in expiredTailIndices) {
+      _tailPoints.remove(index);
+    }
+    for (final entry in points.entries) {
+      if (entry.key < tailFloor) {
+        newlyFrozen[entry.key] = entry.value;
+      } else {
+        _tailPoints[entry.key] = entry.value;
+      }
+    }
+    _frozenIndices.addAll(newlyFrozen.keys);
+    incrementalSegments.addAll(_segmentsFrom(newlyFrozen.entries));
     while (incrementalSegments.length >
         RemoteWetInkStore.maxIncrementalSegments) {
       final mergeCount = incrementalSegments.length >= 4 ? 4 : 1;
       consolidatedSegments.addAll(incrementalSegments.take(mergeCount));
       incrementalSegments.removeRange(0, mergeCount);
     }
-    tailSegments = List.unmodifiable(_segmentsFrom(entries.skip(tailStart)));
+    tailSegments = List.unmodifiable(_segmentsFrom(_tailPoints.entries));
+    _pointCount += points.length;
     revision++;
+    return examinedPointCount;
   }
 
   static List<RemoteWetInkSegment> _segmentsFrom(
