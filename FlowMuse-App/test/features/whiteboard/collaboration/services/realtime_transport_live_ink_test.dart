@@ -41,9 +41,11 @@ void main() {
       isTrue,
     );
     expect(negotiation.version, 2);
+    expect(negotiation.negotiatedRoomId, 'room-a');
     expect(negotiation.accept(const {}), isFalse);
     negotiation.reset();
     expect(negotiation.version, 0);
+    expect(negotiation.negotiatedRoomId, isNull);
   });
 
   test('Memory transport 将 live 与可靠消息分流', () async {
@@ -52,6 +54,8 @@ void main() {
     final receiver = MemoryRealtimeTransport(hub: hub, socketId: 'receiver');
     await sender.connect('room');
     await receiver.connect('room');
+    expect(sender.liveInkNegotiationGeneration, 1);
+    expect(sender.liveInkNegotiatedRoomId, 'room');
     final liveFrames = <Object>[];
     final reliableFrames = <Object>[];
     final liveSubscription = receiver.liveInkFrames.listen(liveFrames.add);

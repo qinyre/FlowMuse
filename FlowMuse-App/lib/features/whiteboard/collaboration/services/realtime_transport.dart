@@ -48,6 +48,11 @@ abstract interface class RealtimeTransport {
   Future<void> disconnect();
 }
 
+abstract interface class LiveInkNegotiationDiagnostics {
+  int get liveInkNegotiationGeneration;
+  String? get liveInkNegotiatedRoomId;
+}
+
 class DisconnectedRealtimeTransport implements RealtimeTransport {
   const DisconnectedRealtimeTransport();
 
@@ -149,7 +154,7 @@ class MemoryRealtimeRoomHub {
     final metadata = CollaborationRoomMetadata.localOwner(roomId);
     for (final transport in transports) {
       transport._roomId = null;
-      transport._serverLiveInkProtocolVersion = 0;
+      transport._liveInkNegotiation.reset();
       transport._receiveRoomEnded(metadata);
       transport._receiveRoomUsers(const []);
     }
@@ -201,6 +206,7 @@ class LiveInkNegotiation {
 
   int get generation => _generation;
   int get version => _version;
+  String? get negotiatedRoomId => _version >= 2 ? _roomId : null;
 
   void begin(String roomId) {
     _generation++;
@@ -245,7 +251,8 @@ class LiveInkNegotiation {
   }
 }
 
-class MemoryRealtimeTransport implements RealtimeTransport {
+class MemoryRealtimeTransport
+    implements RealtimeTransport, LiveInkNegotiationDiagnostics {
   MemoryRealtimeTransport({required this.hub, required String socketId})
     : _socketId = socketId;
 
@@ -267,7 +274,7 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   final StreamController<RealtimeConnectionStatus> _connectionStatus =
       StreamController<RealtimeConnectionStatus>.broadcast();
   String? _roomId;
-  int _serverLiveInkProtocolVersion = 0;
+  final LiveInkNegotiation _liveInkNegotiation = LiveInkNegotiation();
   int _liveInkTransportNotWritableDrops = 0;
 
   @override
@@ -299,22 +306,32 @@ class MemoryRealtimeTransport implements RealtimeTransport {
   String? get socketId => _socketId;
 
   @override
-  int get serverLiveInkProtocolVersion => _serverLiveInkProtocolVersion;
+  int get serverLiveInkProtocolVersion => _liveInkNegotiation.version;
+
+  @override
+  int get liveInkNegotiationGeneration => _liveInkNegotiation.generation;
+
+  @override
+  String? get liveInkNegotiatedRoomId => _liveInkNegotiation.negotiatedRoomId;
 
   @override
   int get liveInkTransportNotWritableDrops => _liveInkTransportNotWritableDrops;
 
   @override
   Future<void> connect(String roomId) async {
-    _serverLiveInkProtocolVersion = 0;
+    _liveInkNegotiation.begin(roomId);
     _connectionStatus.add(RealtimeConnectionStatus.connecting);
     final previousRoomId = _roomId;
     if (previousRoomId != null) {
       hub.leave(previousRoomId, this);
     }
     _roomId = roomId;
+    _liveInkNegotiation.arm();
     final first = hub.join(roomId, this);
-    _serverLiveInkProtocolVersion = hub.liveInkProtocolVersion;
+    _liveInkNegotiation.accept({
+      'roomId': roomId,
+      'liveInkProtocolVersion': hub.liveInkProtocolVersion,
+    });
     if (first) {
       _firstInRoom.add(null);
     }
@@ -347,7 +364,7 @@ class MemoryRealtimeTransport implements RealtimeTransport {
       throw StateError('协作连接未建立');
     }
     hub.end(roomId, this);
-    _serverLiveInkProtocolVersion = 0;
+    _liveInkNegotiation.reset();
     _connectionStatus.add(RealtimeConnectionStatus.disconnected);
   }
 
@@ -358,7 +375,7 @@ class MemoryRealtimeTransport implements RealtimeTransport {
       hub.leave(roomId, this);
       _roomId = null;
     }
-    _serverLiveInkProtocolVersion = 0;
+    _liveInkNegotiation.reset();
     _connectionStatus.add(RealtimeConnectionStatus.disconnected);
   }
 

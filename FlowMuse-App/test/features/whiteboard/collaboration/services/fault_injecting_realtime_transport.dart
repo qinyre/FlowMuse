@@ -28,7 +28,8 @@ class LiveInkFaultModel {
 }
 
 /// Test-only wrapper. Reliable messages bypass the injected live faults.
-class FaultInjectingRealtimeTransport implements RealtimeTransport {
+class FaultInjectingRealtimeTransport
+    implements RealtimeTransport, LiveInkNegotiationDiagnostics {
   FaultInjectingRealtimeTransport({
     required RealtimeTransport delegate,
     required LiveInkFaultModel model,
@@ -85,6 +86,19 @@ class FaultInjectingRealtimeTransport implements RealtimeTransport {
   @override
   int get serverLiveInkProtocolVersion =>
       _delegate.serverLiveInkProtocolVersion;
+
+  @override
+  int get liveInkNegotiationGeneration =>
+      _delegate is LiveInkNegotiationDiagnostics
+      ? (_delegate as LiveInkNegotiationDiagnostics)
+            .liveInkNegotiationGeneration
+      : 0;
+
+  @override
+  String? get liveInkNegotiatedRoomId =>
+      _delegate is LiveInkNegotiationDiagnostics
+      ? (_delegate as LiveInkNegotiationDiagnostics).liveInkNegotiatedRoomId
+      : null;
 
   @override
   int get liveInkTransportNotWritableDrops =>

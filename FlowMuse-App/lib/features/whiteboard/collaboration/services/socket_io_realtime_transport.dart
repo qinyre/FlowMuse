@@ -12,7 +12,8 @@ import '../models/received_live_ink_frame.dart';
 import 'collaboration_debug_log.dart';
 import 'realtime_transport.dart';
 
-class SocketIoRealtimeTransport implements RealtimeTransport {
+class SocketIoRealtimeTransport
+    implements RealtimeTransport, LiveInkNegotiationDiagnostics {
   SocketIoRealtimeTransport({required this.serverUrl, required this.identity});
 
   static const String _eventJoinRoom = 'join-room';
@@ -86,6 +87,12 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
 
   @override
   int get serverLiveInkProtocolVersion => _liveInkNegotiation.version;
+
+  @override
+  int get liveInkNegotiationGeneration => _liveInkNegotiation.generation;
+
+  @override
+  String? get liveInkNegotiatedRoomId => _liveInkNegotiation.negotiatedRoomId;
 
   @override
   int get liveInkTransportNotWritableDrops => _liveInkTransportNotWritableDrops;
