@@ -1,10 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/input_policy.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input_modeler.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input_sample.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_recorder.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input_normalizer.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import '../../../../../integration_test/fixtures/scene_fixtures.dart';
@@ -64,6 +66,36 @@ void main() {
         );
         expect(jsonEncode(decoded.toJson()), encoded, reason: fixture.name);
       }
+    });
+
+    test('无压力 fixture 通过真实 PointerEvent 边界仍保持无压力', () {
+      final fixture = writingRecordingFixtures.singleWhere(
+        (item) => item.name == 'short_horizontal_no_pressure',
+      );
+      final sample = fixture.recording.samples.first;
+      expect(sample.kind, StrokeInputKind.touch);
+      expect(sample.pressure, isNull);
+
+      final normalized = StrokeInputNormalizer().normalize(
+        PointerDownEvent(
+          pointer: sample.pointerId,
+          kind: PointerDeviceKind.touch,
+          position: Offset(sample.x, sample.y),
+          pressure: 0,
+          pressureMin: 0,
+          pressureMax: 1,
+        ),
+        phase: StrokePhase.down,
+      );
+      expect(normalized.pressure, isNull);
+    });
+
+    test('fixture 内容 hash 稳定且彼此区分', () {
+      final hashes = writingRecordingFixtures
+          .map((fixture) => fixture.contentHash)
+          .toList();
+      expect(hashes.toSet(), hasLength(writingRecordingFixtures.length));
+      expect(hashes.every((hash) => hash.length == 64), isTrue);
     });
   });
 

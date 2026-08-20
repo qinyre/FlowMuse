@@ -1,5 +1,7 @@
 import 'dart:math' as math;
+import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input_sample.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_recorder.dart';
 
@@ -21,6 +23,8 @@ class WritingRecordingFixture {
   final StrokeRecording recording;
 
   int get schemaVersion => writingFixtureSchemaVersion;
+  String get contentHash =>
+      sha256.convert(utf8.encode(jsonEncode(recording.toJson()))).toString();
 }
 
 final List<WritingRecordingFixture> writingRecordingFixtures = [
@@ -29,6 +33,7 @@ final List<WritingRecordingFixture> writingRecordingFixtures = [
     seed: 101,
     moveCount: 8,
     expectedAccepted: 10,
+    kind: StrokeInputKind.touch,
     pointAt: (index) => (100.0 + index * 8, 160.0),
     pressureAt: (_) => null,
   ),
@@ -75,6 +80,7 @@ WritingRecordingFixture _fixture({
   required int expectedAccepted,
   required (double, double) Function(int index) pointAt,
   required double? Function(int index) pressureAt,
+  StrokeInputKind kind = StrokeInputKind.stylus,
   int intervalMicros = 8333,
   StrokePhase terminalPhase = StrokePhase.up,
 }) {
@@ -94,7 +100,7 @@ WritingRecordingFixture _fixture({
         y: y,
         time: Duration(microseconds: index * intervalMicros),
         pressure: pressureAt(pointIndex),
-        kind: StrokeInputKind.stylus,
+        kind: kind,
         phase: phase,
         source: StrokeSampleSource.actual,
       ),
