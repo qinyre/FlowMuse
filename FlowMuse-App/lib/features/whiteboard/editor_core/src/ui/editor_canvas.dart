@@ -309,6 +309,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                 adapter: controller.adapter,
                 viewport: paintViewport,
                 layout: controller.layout,
+                contentBounds: controller.contentBounds,
                 activePreviewMetricsProbe: controller.activePreviewMetricsProbe,
               ),
               child: wetInkLayers,

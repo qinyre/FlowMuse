@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 
 import '../core/elements/elements.dart';
 import '../core/layout/layout.dart';
+import '../core/math/math.dart';
 import '../input/active_preview_metrics_probe.dart';
 import 'element_renderer.dart';
 import 'local_wet_ink_state.dart';
@@ -17,6 +18,7 @@ class LocalWetInkPainter extends CustomPainter {
     required this.adapter,
     required this.viewport,
     this.layout,
+    this.contentBounds,
     this.activePreviewMetricsProbe,
   }) : super(repaint: state);
 
@@ -24,6 +26,7 @@ class LocalWetInkPainter extends CustomPainter {
   final RoughAdapter adapter;
   final ViewportState viewport;
   final CanvasLayout? layout;
+  final Bounds? contentBounds;
   final ActivePreviewMetricsProbe? activePreviewMetricsProbe;
 
   @override
@@ -35,6 +38,17 @@ class LocalWetInkPainter extends CustomPainter {
     canvas.scale(viewport.zoom);
     canvas.translate(-viewport.offset.dx, -viewport.offset.dy);
     _clipToPages(canvas);
+    final bounds = contentBounds;
+    if (bounds != null) {
+      canvas.clipRect(
+        Rect.fromLTWH(
+          bounds.left,
+          bounds.top,
+          bounds.size.width,
+          bounds.size.height,
+        ),
+      );
+    }
 
     final view = frame.view;
     final base = FreedrawElement(
@@ -94,5 +108,6 @@ class LocalWetInkPainter extends CustomPainter {
       oldDelegate.adapter != adapter ||
       oldDelegate.viewport != viewport ||
       oldDelegate.layout != layout ||
+      oldDelegate.contentBounds != contentBounds ||
       oldDelegate.activePreviewMetricsProbe != activePreviewMetricsProbe;
 }

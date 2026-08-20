@@ -89,6 +89,41 @@ void main() {
       state.dispose();
     }
   });
+
+  test('活动湿墨沿用静态画层的 contentBounds 裁剪', () async {
+    final state = LocalWetInkState();
+    addTearDown(state.dispose);
+    state.publish(
+      const LocalWetInkFrame(
+        strokeEpoch: 1,
+        view: ActiveFreedrawView(
+          strokeId: ElementId('stroke'),
+          points: [Point.zero],
+          pressures: [],
+          simulatePressure: true,
+          brushType: BrushType.ballpoint,
+        ),
+        style: ElementStyle(),
+      ),
+    );
+    final recorder = PictureRecorder();
+    final adapter = _SolidCanvasAdapter();
+
+    LocalWetInkPainter(
+      state: state,
+      adapter: adapter,
+      viewport: const ViewportState(),
+      contentBounds: Bounds.fromLTWH(10, 10, 20, 20),
+    ).paint(Canvas(recorder), const Size(40, 40));
+
+    final image = await recorder.endRecording().toImage(40, 40);
+    final bytes = await image.toByteData();
+    expect(bytes, isNotNull);
+    int alphaAt(int x, int y) => bytes!.getUint8((y * 40 + x) * 4 + 3);
+    expect(alphaAt(5, 5), 0);
+    expect(alphaAt(15, 15), 255);
+    image.dispose();
+  });
 }
 
 class _RecordingAdapter implements RoughAdapter {
@@ -113,6 +148,27 @@ class _RecordingAdapter implements RoughAdapter {
     this.pressures = pressures;
     this.simulatePressure = simulatePressure;
     this.style = style;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _SolidCanvasAdapter implements RoughAdapter {
+  @override
+  void drawFreedraw(
+    Canvas canvas,
+    List<Point> points,
+    List<double> pressures,
+    bool simulatePressure,
+    BrushType brushType,
+    DrawStyle style, {
+    bool isComplete = true,
+  }) {
+    canvas.drawRect(
+      const Rect.fromLTWH(0, 0, 40, 40),
+      Paint()..color = const Color(0xffffffff),
+    );
   }
 
   @override
