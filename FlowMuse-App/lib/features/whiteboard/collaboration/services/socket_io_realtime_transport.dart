@@ -27,8 +27,8 @@ bool emitLiveInkIfWritable(
   return true;
 }
 
-class _SocketIoLiveInkVolatileChannel implements LiveInkVolatileChannel {
-  const _SocketIoLiveInkVolatileChannel(this.socket);
+class SocketIoLiveInkVolatileChannel implements LiveInkVolatileChannel {
+  const SocketIoLiveInkVolatileChannel(this.socket);
 
   final io.Socket socket;
 
@@ -432,7 +432,7 @@ class SocketIoRealtimeTransport
       return;
     }
     final emitted = emitLiveInkIfWritable(
-      _SocketIoLiveInkVolatileChannel(socket),
+      SocketIoLiveInkVolatileChannel(socket),
       _eventServerLiveInk,
       [
         roomId,
