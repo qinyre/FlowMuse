@@ -148,7 +148,7 @@ fixture 使用编译进测试 bundle 的 Dart 常量/固定 seed 生成器，不
 
 **负责人/复核：** Tiax / 任逸青；**估时：** 0.5d；**前置：** P0-0/1/2/3/3B。
 
-**执行状态：** 版本化 manifest 已冻结正式 fixture/hash/时长/场景 hash/刷新率目标；runner 使用设备实测刷新率，driver 完整扫描设备列表并要求唯一匹配真机。raw 携带 canonical final Scene，汇总器按 `--phase p0|p1` 独立 round-trip Scene、重算 canonical/semantic hash、Freedraw 数量、唯一 `(strokeEpoch,inputSeq)`、覆盖率和帧覆盖。非真机测试已通过；所有真机数值保持 `not_measured/deferred_device`。
+**执行状态：** 版本化 manifest 已冻结正式 fixture/hash/时长/场景 hash/刷新率目标及每笔 accepted 样本数；runner 使用设备实测刷新率，driver 完整扫描设备列表并要求唯一匹配真机。raw 携带 canonical final Scene，汇总器按 `--phase p0|p1` 独立 round-trip Scene、重算 canonical/semantic hash、Freedraw 数量、唯一 `(strokeEpoch,inputSeq)`、逐笔样本基数、覆盖率和帧覆盖。非真机测试已通过；所有真机数值保持 `not_measured/deferred_device`。
 
 ### 文件
 
@@ -186,5 +186,5 @@ Pop-Location
 ## 9. 回滚与 DoD
 
 - 删除性能入口/probe 并移除 dev dependency 即可回滚；fixture/report 无生产数据迁移。
-- P0 completed 需要：真机 raw 可复现；`paired/(accepted-terminalBeforePreview) >=99.5%`，terminal 比例单列且新路径不得比同 recording 基线恶化 >0.5 个百分点；5 轮满足稳定性公式；所有 invalid 可解释；2/5 人协作 hash 收敛；目标已在运行前签名冻结；普通构建行为和产物不含性能入口。
+- P0 completed 需要：真机 raw 可复现；每个 completed `strokeEpoch` 的 accepted 样本数必须精确匹配 manifest；`paired/(accepted-terminalBeforePreview) >=99.5%`，terminal 比例单列且新路径不得比同 recording 基线恶化 >0.5 个百分点；5 轮满足稳定性公式；所有 invalid 可解释；2/5 人协作 hash 收敛；目标已在运行前签名冻结；普通构建行为和产物不含性能入口。
 - 任何以 Debug、纯算法 replay、timings callback 到达时钟或后改阈值形成的“基线”均判失败。
