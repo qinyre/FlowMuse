@@ -346,6 +346,35 @@ void main() {
     expect(summary.status, 'stable');
     expect(summary.acceptanceStatus, 'failed');
   });
+
+  test('P1 合并五轮计算 terminal 比例，不能被三轮中位数掩盖', () async {
+    final directory = await _tempDirectory('terminal-outliers');
+    for (var run = 1; run <= 5; run++) {
+      await _writeRun(
+        directory,
+        'legacy-$run.json',
+        runIndex: run,
+        offset: 40000 + run - 1,
+      );
+      await _writeRun(
+        directory,
+        'layered-$run.json',
+        runIndex: run,
+        offset: run - 1,
+        layeredWetInk: true,
+        terminalSamples: run <= 3 ? 0 : 210,
+        terminalFromStart: true,
+      );
+    }
+
+    final summary = await summarizeDirectory(
+      directory,
+      phase: WritingSummaryPhase.p1,
+    );
+
+    expect(summary.status, 'stable');
+    expect(summary.acceptanceStatus, 'failed');
+  });
 }
 
 Future<Directory> _tempDirectory(String name) async {
@@ -375,6 +404,7 @@ Future<void> _writeRun(
   int? reportedAccepted,
   int acceptedSampleCount = 420,
   int terminalSamples = 0,
+  bool terminalFromStart = false,
   int finalStrokeCount = 10,
   bool duplicateLastSample = false,
 }) async {
@@ -405,15 +435,33 @@ Future<void> _writeRun(
             ((sample - 1) * expectedCompletedStrokes) ~/ acceptedSampleCount +
             1,
         'inputSeq': sample,
-        'eventToPaintMicros': sample <= acceptedSampleCount - terminalSamples
-            ? sample + offset
-            : null,
-        'frameNumber': sample <= acceptedSampleCount - terminalSamples
-            ? sample
-            : null,
-        'terminalReason': sample <= acceptedSampleCount - terminalSamples
+        'eventToPaintMicros':
+            _isTerminalSample(
+              sample,
+              acceptedSampleCount,
+              terminalSamples,
+              terminalFromStart,
+            )
             ? null
-            : 'pointerUp',
+            : sample + offset,
+        'frameNumber':
+            _isTerminalSample(
+              sample,
+              acceptedSampleCount,
+              terminalSamples,
+              terminalFromStart,
+            )
+            ? null
+            : sample,
+        'terminalReason':
+            _isTerminalSample(
+              sample,
+              acceptedSampleCount,
+              terminalSamples,
+              terminalFromStart,
+            )
+            ? 'pointerUp'
+            : null,
       },
   ];
   if (duplicateLastSample) {
@@ -479,3 +527,14 @@ Future<void> _writeRun(
 }
 
 String _repeated(String value, int count) => List.filled(count, value).join();
+
+bool _isTerminalSample(
+  int sample,
+  int acceptedSampleCount,
+  int terminalSamples,
+  bool fromStart,
+) =>
+    terminalSamples > 0 &&
+    (fromStart
+        ? sample <= terminalSamples
+        : sample > acceptedSampleCount - terminalSamples);

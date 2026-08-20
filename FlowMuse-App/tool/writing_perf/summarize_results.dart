@@ -138,6 +138,19 @@ class WritingScenarioSummary {
   double? get medianTerminalRatio =>
       _medianDouble([for (final run in validRuns) run.terminalRatio]);
 
+  double? get aggregateTerminalRatio {
+    final totalAccepted = validRuns.fold<int>(
+      0,
+      (total, run) => total + run.accepted,
+    );
+    if (totalAccepted == 0) return null;
+    final totalTerminal = validRuns.fold<int>(
+      0,
+      (total, run) => total + run.terminalBeforePreview,
+    );
+    return totalTerminal / totalAccepted;
+  }
+
   double? get runP95SpreadRatio {
     final values = [for (final run in validRuns) run.p95Micros!]..sort();
     final median = medianRunP95;
@@ -288,7 +301,8 @@ class WritingResultsSummary {
       if (improvement < 0.30 ||
           !layered.frameGatePassed ||
           layered.medianDeadlineMissRatio! > legacy.medianDeadlineMissRatio! ||
-          layered.medianTerminalRatio! > legacy.medianTerminalRatio! + 0.005 ||
+          layered.aggregateTerminalRatio! >
+              legacy.aggregateTerminalRatio! + 0.005 ||
           !hashesMatch) {
         return false;
       }
