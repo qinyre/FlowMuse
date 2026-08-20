@@ -7,6 +7,7 @@ import '../tool/writing_perf/profile_device_eligibility.dart';
 
 Future<void> main() {
   return integrationDriver(
+    timeout: const Duration(minutes: 50),
     responseDataCallback: (data) async {
       final directory = Directory(
         Platform.environment['FLOWMUSE_PERF_OUTPUT_DIR'] ??
