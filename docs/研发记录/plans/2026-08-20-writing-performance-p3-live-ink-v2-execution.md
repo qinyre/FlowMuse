@@ -163,7 +163,7 @@ live-ink-ready   server → joined socket，普通独立事件
 
 **负责人/复核：** qinyre / Tiax；**估时：** 1.5d；**前置：** P1-2、P3-1、P3-3A。
 
-**执行状态：** 已完成；RemoteWetInkStore 固定执行 8 sender、64 stroke、16384 点/笔、65536 点/房间、5s TTL 和 10s completed cache，并以房间生命周期 finalized set 阻止 final 后复活；远端画层使用 1 个 consolidated picture、最多 8 个增量 picture 和 64 点 tail，final 到达先清湿墨再进入 Scene。
+**执行状态：** 已完成；RemoteWetInkStore 固定执行 8 sender、64 stroke、16384 点/笔、65536 点/房间、5s TTL 和 10s completed cache，并以房间生命周期 finalized set 阻止 final 后复活；远端画层以 64 点为基础块做最多 8 层的二进制合并，冻结块按绝对索引合并、跨块连续边由后到点携带锚点，冻结快照持久复用、Picture 不嵌套，活动 tail 最多 127 点，final 到达先清湿墨再进入 Scene。
 
 ### 文件
 
@@ -190,12 +190,12 @@ P3-3B 创建并独占房间生命周期的 `finalizedStrokeIds`：初始 Scene �
 
 ### 渲染成本硬边界
 
-- 每个 remote stroke 最多 1 个 consolidated prefix、8 个 immutable incremental segment 和 1 个 64 点 tail 层，总层数 ≤10；room 总估算渲染缓存 ≤16MiB。第 8 个 segment 冻结时按 P1-3 的冻结边界规则合并最旧 4 个，普通包不得重录全部前缀。
+- 每个 remote stroke 把离开 64 点网络 tail 的点先聚成 64 点不可变基础块，再按二进制进位合并到最多 8 个非嵌套 Picture；每个点最多参与 8 次有界重录，普通包不复制/扫描/重录历史，未满基础块与网络 tail 合计最多 127 点。总 Picture 层数 ≤8，room 总估算渲染缓存 ≤16MiB。
 - 若 P1-3 已 completed，可复用其 `RetainedFreedrawPrefix`；若 P1-3 为 not_triggered/rejected，P3-3B 在 `remote_wet_ink_painter.dart` 内实现上述最小 remote-only bounded prefix，不反向强制启动 P1-3，也不抽象通用框架。
 - 合并追不上或缓存到顶时，拒绝该 stroke 的新增 wet 包并计 `render_cache_limit`；final Scene 仍正常到达和接管。禁止以遍历全部历史点或无界 layer/tail 兜底。
 - style 缺失/非法、startIndex 溢出或非有限坐标整包丢弃；重复索引去重，缺口拆子路径。Painter 只读 store，不写 Scene/history/save/AI。
 
-验收含 64 个 16k 点 stroke 的合成压力输入；逐帧几何遍历量、layer 数和内存始终不越界，final 接管无残影。
+压力验收拆成三个互不冲突的边界：`1×16k` 验单笔上限与 recorder 工作，`4×16k` 验房间点上限，`64×1024` 验 stroke 数上限；每组分别断言总 Picture 层数和估算 retained bytes。逐点 `apply+paint` 的累计 recorder 工作 ≤`8N`，冻结块对象跨普通更新保持同一实例；真实绘制索引由 revision 绑定的增量点日志写入固定 16k-bit bitmap，查询 O(1)，不得由历史 segment 扫描推断。final 接管无残影。
 
 ## 9. Task P3-4：服务端外层安全边界
 
@@ -213,7 +213,7 @@ P3-3B 创建并独占房间生命周期的 `finalizedStrokeIds`：初始 Scene �
 
 **负责人/复核：** Tiax / Enchograph；**估时：** 1.5d；**前置：** P3-0A/0B/1/2/3A/3B/4 全部完成。
 
-**执行状态：** 可在当前环境完成的部分已完成；新增固定 seed 的 drop/duplicate/reorder/delay 与断线故障注入，自动覆盖 flag/legacy、final 先到与迟到防复活、N 矩阵线性约束、5000 finalized ID 和真实 repository→store→painter Profile 入口。当前无真机，且 Windows 缺少 Visual Studio 工具链、Web 不支持 integration test，因此三组 Profile 命令及 5 分钟真机阈值保持为发布前延期门禁，不生成伪造性能结论。
+**执行状态：** 可在当前环境完成的部分已完成；新增固定 seed 的 drop/duplicate/reorder/delay 与断线故障注入，自动覆盖 flag/legacy、final 先到与迟到防复活、N 矩阵线性约束、5000 finalized ID 和真实 repository→store→painter Profile 入口。可靠 queue-wait 样本记录接收端入队瞬间是否存在 live in-flight/pending，同轮 no-live 基线替代可手填的外部 P1 值；driver 写出 raw 后对非唯一真机、模拟器或 dirty checkout 以非零退出阻断。当前无真机，且 Windows 缺少 Visual Studio 工具链、Web 不支持 integration test，因此三组 Profile 命令及 5 分钟真机阈值保持为发布前延期门禁，不生成伪造性能结论。
 
 ### 文件
 
@@ -229,7 +229,7 @@ Profile target 复用 P0 fixture/report schema，在同一应用进程通过扩�
 
 - live 可缺段但最终 Scene hash 100% 收敛；
 - 无远端湿墨永久残留、无跨笔复活、无未界定队列/内存增长；
-- 本地 event-to-paint 达 P0 绝对目标且 P95 相对 P1 不回退 >5%；
+- 本地 event-to-paint 达 P0 绝对目标；每个场景在启动 live sender 前先用同一画布、同一轨迹、同一 33ms 输入节奏采集 5 秒 no-live 基线，loaded P95 相对该同轮基线不得回退 >5%，不接受手填的外部 P1 数值；
 - 5 人下可靠 Scene 消息处理 P95 不因 live 洪泛回退 >10%；
 - 良好网络远端 accepted-to-remote-paint P95 ≤200ms，RTT=100ms 时 P95 ≤300ms；该指标在同进程确定性 2/5 repository harness 中用同一 Stopwatch 测量，不跨未同步设备时钟。5 个 sender 各 30 包/s 持续 60 秒时每 sender 最大连续饥饿 ≤200ms；
 - N 矩阵累计 point entries ≤3N、每 accepted index 实际发送次数 ≤3、`bytes(2N)/bytes(N)` 在 `[1.7,2.3]`；报告斜率、R²、最大重复次数和原始计数；
@@ -247,9 +247,9 @@ flutter analyze
 flutter test test/features/whiteboard/collaboration
 flutter test test/features/whiteboard/editor_core
 flutter test
-flutter drive --profile --driver=test_driver/collaboration_live_ink_perf_driver.dart --target=integration_test/collaboration_live_ink_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_LAYERED_WET_INK=false --dart-define=FLOWMUSE_LIVE_INK_V2=false
-flutter drive --profile --driver=test_driver/collaboration_live_ink_perf_driver.dart --target=integration_test/collaboration_live_ink_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=false
-flutter drive --profile --driver=test_driver/collaboration_live_ink_perf_driver.dart --target=integration_test/collaboration_live_ink_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true
+flutter drive --profile -d <唯一真机ID> --driver=test_driver/collaboration_live_ink_perf_driver.dart --target=integration_test/collaboration_live_ink_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_DEVICE_ID=<唯一真机ID> --dart-define=FLOWMUSE_DEVICE_CLASS=<冻结设备类> --dart-define=FLOWMUSE_PHYSICAL_DEVICE=true --dart-define=FLOWMUSE_LAYERED_WET_INK=false --dart-define=FLOWMUSE_LIVE_INK_V2=false
+flutter drive --profile -d <唯一真机ID> --driver=test_driver/collaboration_live_ink_perf_driver.dart --target=integration_test/collaboration_live_ink_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_DEVICE_ID=<唯一真机ID> --dart-define=FLOWMUSE_DEVICE_CLASS=<冻结设备类> --dart-define=FLOWMUSE_PHYSICAL_DEVICE=true --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=false
+flutter drive --profile -d <唯一真机ID> --driver=test_driver/collaboration_live_ink_perf_driver.dart --target=integration_test/collaboration_live_ink_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_DEVICE_ID=<唯一真机ID> --dart-define=FLOWMUSE_DEVICE_CLASS=<冻结设备类> --dart-define=FLOWMUSE_PHYSICAL_DEVICE=true --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true --dart-define=FLOWMUSE_EVENT_TO_PAINT_TARGET_MICROS=<同设备manifest冻结目标>
 Pop-Location
 
 Push-Location FlowMuse-Server
