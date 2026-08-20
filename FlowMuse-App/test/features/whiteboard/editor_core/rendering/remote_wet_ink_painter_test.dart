@@ -107,12 +107,12 @@ void main() {
     }
 
     expect(recordedAt2048, greaterThan(0));
-    expect(cache.recordedGeometryPointCount / recordedAt2048, lessThan(2.2));
+    expect(cache.recordedGeometryPointCount / recordedAt2048, lessThan(2.6));
     expect(
       cache.recordedGeometryPointCount,
-      lessThanOrEqualTo(RemoteWetInkStore.frozenBlockPointCapacity * 4096),
+      lessThanOrEqualTo(RemoteWetInkStore.maxIncrementalSegments * 4096),
     );
-    expect(cache.pictureLayerCount, lessThanOrEqualTo(2));
+    expect(cache.pictureLayerCount, lessThanOrEqualTo(8));
   });
 
   test('延迟到达不能在 painter 真正 paint 前产生关联标记', () {
@@ -165,6 +165,9 @@ void main() {
     expect(adapter.style?.strokeColor, const Color(0xff123456));
     expect(adapter.style?.strokeWidth, 3);
     expect(adapter.style?.opacity, 0.5);
+    expect(cache.wasPointPainted('stroke', 0), isTrue);
+    expect(cache.wasPointPainted('stroke', 2), isFalse);
+    expect(cache.wasPointPainted('stroke', 4), isTrue);
   });
 
   test('final 接管立即清 picture 且不留残影', () {

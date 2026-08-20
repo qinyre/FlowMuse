@@ -134,8 +134,25 @@ void main() {
         store.strokes.single.tailSegments
             .expand((segment) => segment.points)
             .length,
-        lessThanOrEqualTo(64),
+        lessThanOrEqualTo(127),
       );
+    }
+  });
+
+  test('已冻结块快照跨普通更新复用且不复制历史点', () {
+    final store = RemoteWetInkStore(autoCleanup: false);
+    addTearDown(store.dispose);
+    for (var index = 0; index < 256; index++) {
+      store.apply(_decoded('sender', 'stroke', startIndex: index));
+    }
+    final before = store.strokes.single.frozenBlocks;
+
+    store.apply(_decoded('sender', 'stroke', startIndex: 256));
+    final after = store.strokes.single.frozenBlocks;
+
+    expect(after, hasLength(before.length));
+    for (var index = 0; index < before.length; index++) {
+      expect(identical(after[index], before[index]), isTrue);
     }
   });
 

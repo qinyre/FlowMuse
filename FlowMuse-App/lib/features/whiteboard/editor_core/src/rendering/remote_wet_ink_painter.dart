@@ -16,6 +16,7 @@ class RemoteWetInkRenderCache {
 
   final Map<String, _RemoteStrokePictureCache> _strokes = {};
   final Map<String, int> _lastPaintedMaxPointIndex = {};
+  final Map<String, RemoteWetInkStrokeSnapshot> _lastPaintedSnapshots = {};
   int recordedGeometryPointCount = 0;
   int lastFrameTailPointCount = 0;
 
@@ -42,6 +43,12 @@ class RemoteWetInkRenderCache {
   int? paintedMaxPointIndex(String strokeId) =>
       _lastPaintedMaxPointIndex[strokeId];
 
+  int? paintedRevision(String strokeId) =>
+      _lastPaintedSnapshots[strokeId]?.revision;
+
+  bool wasPointPainted(String strokeId, int pointIndex) =>
+      _lastPaintedSnapshots[strokeId]?.containsIndex(pointIndex) ?? false;
+
   void sync(List<RemoteWetInkStrokeSnapshot> snapshots, RoughAdapter adapter) {
     final activeIds = {for (final snapshot in snapshots) snapshot.strokeId};
     final removedIds = [
@@ -51,6 +58,7 @@ class RemoteWetInkRenderCache {
     for (final strokeId in removedIds) {
       _strokes.remove(strokeId)?.dispose();
       _lastPaintedMaxPointIndex.remove(strokeId);
+      _lastPaintedSnapshots.remove(strokeId);
     }
     for (final snapshot in snapshots) {
       final cache = _strokes.putIfAbsent(
@@ -75,6 +83,7 @@ class RemoteWetInkRenderCache {
         _drawSegment(canvas, segment, snapshot, adapter);
       }
       _lastPaintedMaxPointIndex[snapshot.strokeId] = snapshot.maxPointIndex;
+      _lastPaintedSnapshots[snapshot.strokeId] = snapshot;
     }
   }
 
@@ -84,6 +93,7 @@ class RemoteWetInkRenderCache {
     }
     _strokes.clear();
     _lastPaintedMaxPointIndex.clear();
+    _lastPaintedSnapshots.clear();
   }
 }
 
@@ -139,23 +149,27 @@ class RemoteWetInkPainter extends CustomPainter {
 }
 
 class _RemoteStrokePictureCache {
-  final List<_FrozenBlockPicture> _blockPictures = [];
+  final Map<int, _FrozenBlockPicture> _blockPictures = {};
 
   int get pictureLayerCount => _blockPictures.length;
   int get pictureNestingDepth => pictureLayerCount == 0 ? 0 : 1;
   int get retainedGeometryPointCount =>
-      _blockPictures.fold(0, (total, block) => total + block.pointCount);
+      _blockPictures.values.fold(0, (total, block) => total + block.pointCount);
 
   int sync(RemoteWetInkStrokeSnapshot snapshot, RoughAdapter adapter) {
     var recordedPoints = 0;
-    while (_blockPictures.length > snapshot.frozenBlocks.length) {
-      _blockPictures.removeLast().picture.dispose();
+    final activeLevels = {
+      for (final block in snapshot.frozenBlocks) block.level,
+    };
+    final removedLevels = [
+      for (final level in _blockPictures.keys)
+        if (!activeLevels.contains(level)) level,
+    ];
+    for (final level in removedLevels) {
+      _blockPictures.remove(level)?.picture.dispose();
     }
-    for (var index = 0; index < snapshot.frozenBlocks.length; index++) {
-      final block = snapshot.frozenBlocks[index];
-      final current = index < _blockPictures.length
-          ? _blockPictures[index]
-          : null;
+    for (final block in snapshot.frozenBlocks) {
+      final current = _blockPictures[block.level];
       if (current?.revision == block.revision) continue;
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
@@ -169,24 +183,22 @@ class _RemoteStrokePictureCache {
         revision: block.revision,
         pointCount: block.pointCount,
       );
-      if (current == null) {
-        _blockPictures.add(replacement);
-      } else {
-        current.picture.dispose();
-        _blockPictures[index] = replacement;
-      }
+      current?.picture.dispose();
+      _blockPictures[block.level] = replacement;
     }
     return recordedPoints;
   }
 
   void paint(Canvas canvas) {
-    for (final block in _blockPictures) {
+    final levels = _blockPictures.keys.toList()..sort((a, b) => b.compareTo(a));
+    for (final level in levels) {
+      final block = _blockPictures[level]!;
       canvas.drawPicture(block.picture);
     }
   }
 
   void dispose() {
-    for (final block in _blockPictures) {
+    for (final block in _blockPictures.values) {
       block.picture.dispose();
     }
     _blockPictures.clear();
