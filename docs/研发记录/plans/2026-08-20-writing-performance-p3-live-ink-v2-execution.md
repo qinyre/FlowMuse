@@ -27,13 +27,14 @@ effectiveLiveInk = FLOWMUSE_LAYERED_WET_INK
 
 **负责人/复核：** Enchograph / Hongyu Chen；**估时：** 0.75d；**前置：** P0-4。
 
-**执行状态：** 已完成；新增独立 ready/live 事件，服务端校验房间归属、外层类型、12-byte IV 与 64KiB ciphertext，并以服务端 socketId 构造 volatile 下行帧。
+**执行状态：** 已完成；新增独立 ready/live 事件，服务端校验房间归属、外层类型、12-byte IV 与 64KiB ciphertext，并以服务端 socketId 构造 volatile 下行帧。真实 Engine.IO v4 polling 集成测试已覆盖 connect、join、ready、二进制附件转发，以及接收端不可写时不进入缓冲区。
 
 ### 文件
 
 - Modify: `FlowMuse-Server/internal/collab/events.go`
 - Modify: `FlowMuse-Server/internal/collab/hub.go`
 - Modify/Create: `FlowMuse-Server/internal/collab/hub_test.go`
+- Create: `FlowMuse-Server/internal/collab/hub_socketio_integration_test.go`
 
 ### 独立事件
 
@@ -47,7 +48,7 @@ live-ink-ready   server → joined socket，普通独立事件
 
 服务端对入站外层做成员、room/socket 归属、字段类型、IV 恰好 12 bytes 和解码后 ciphertext ≤64KiB 校验，再使用 Socket.IO volatile operator 转发给同房间其他 socket；`senderSocketId` 必须由服务端根据连接写入下行外层，忽略客户端同名字段。Presence 常量/行为不变。
 
-测试：非成员、跨房间、伪造 sender、超限、leave/disconnect 清理、下行确为 volatile、ready 独立于 join。
+测试：非成员、跨房间、伪造 sender、超限、leave/disconnect 清理、ready 独立于 join；另用真实 Socket.IO server 和两名 polling 客户端验证 `452-` binary event、placeholder 对应附件、服务端 senderSocketId，并通过“无 active poll 时 live 丢弃、随后可靠 marker 可达”证明下行确为 volatile。
 
 ## 4. Task P3-0B：客户端开关、transport 分流和握手
 
