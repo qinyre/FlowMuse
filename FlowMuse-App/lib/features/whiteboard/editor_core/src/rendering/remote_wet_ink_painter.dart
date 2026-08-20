@@ -69,7 +69,7 @@ class RemoteWetInkRenderCache {
     lastFrameTailPointCount = 0;
     for (final snapshot in snapshots) {
       final cache = _strokes[snapshot.strokeId];
-      cache?.paint(canvas, snapshot.incrementalSegments);
+      cache?.paint(canvas);
       for (final segment in snapshot.tailSegments) {
         lastFrameTailPointCount += segment.points.length;
         _drawSegment(canvas, segment, snapshot, adapter);
@@ -139,79 +139,70 @@ class RemoteWetInkPainter extends CustomPainter {
 }
 
 class _RemoteStrokePictureCache {
-  ui.Picture? _consolidatedPicture;
-  int _consolidatedSegmentCount = 0;
-  final Map<RemoteWetInkSegment, ui.Picture> _incrementalPictures = {};
-  int _consolidatedPointCount = 0;
+  final List<_FrozenBlockPicture> _blockPictures = [];
 
-  int get pictureLayerCount =>
-      (_consolidatedPicture == null ? 0 : 1) + _incrementalPictures.length;
+  int get pictureLayerCount => _blockPictures.length;
   int get pictureNestingDepth => pictureLayerCount == 0 ? 0 : 1;
   int get retainedGeometryPointCount =>
-      _consolidatedPointCount +
-      _incrementalPictures.keys.fold(
-        0,
-        (total, segment) => total + segment.points.length,
-      );
+      _blockPictures.fold(0, (total, block) => total + block.pointCount);
 
   int sync(RemoteWetInkStrokeSnapshot snapshot, RoughAdapter adapter) {
     var recordedPoints = 0;
-    if (snapshot.consolidatedSegments.length < _consolidatedSegmentCount) {
-      dispose();
+    while (_blockPictures.length > snapshot.frozenBlocks.length) {
+      _blockPictures.removeLast().picture.dispose();
     }
-    if (snapshot.consolidatedSegments.length > _consolidatedSegmentCount) {
+    for (var index = 0; index < snapshot.frozenBlocks.length; index++) {
+      final block = snapshot.frozenBlocks[index];
+      final current = index < _blockPictures.length
+          ? _blockPictures[index]
+          : null;
+      if (current?.revision == block.revision) continue;
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      var consolidatedPointCount = 0;
-      for (final segment in snapshot.consolidatedSegments) {
+      for (final segment in block.segments) {
         recordedPoints += segment.points.length;
-        consolidatedPointCount += segment.points.length;
         _drawSegment(canvas, segment, snapshot, adapter);
       }
       final nextPicture = recorder.endRecording();
-      _consolidatedPicture?.dispose();
-      _consolidatedPicture = nextPicture;
-      _consolidatedSegmentCount = snapshot.consolidatedSegments.length;
-      _consolidatedPointCount = consolidatedPointCount;
-    }
-
-    final currentSegments = snapshot.incrementalSegments.toSet();
-    final removed = [
-      for (final segment in _incrementalPictures.keys)
-        if (!currentSegments.contains(segment)) segment,
-    ];
-    for (final segment in removed) {
-      _incrementalPictures.remove(segment)?.dispose();
-    }
-    for (final segment in snapshot.incrementalSegments) {
-      if (_incrementalPictures.containsKey(segment)) continue;
-      final recorder = ui.PictureRecorder();
-      _drawSegment(Canvas(recorder), segment, snapshot, adapter);
-      _incrementalPictures[segment] = recorder.endRecording();
-      recordedPoints += segment.points.length;
+      final replacement = _FrozenBlockPicture(
+        picture: nextPicture,
+        revision: block.revision,
+        pointCount: block.pointCount,
+      );
+      if (current == null) {
+        _blockPictures.add(replacement);
+      } else {
+        current.picture.dispose();
+        _blockPictures[index] = replacement;
+      }
     }
     return recordedPoints;
   }
 
-  void paint(Canvas canvas, List<RemoteWetInkSegment> incrementalSegments) {
-    final consolidated = _consolidatedPicture;
-    if (consolidated != null) canvas.drawPicture(consolidated);
-    for (final segment in incrementalSegments) {
-      final picture = _incrementalPictures[segment];
-      if (picture != null) canvas.drawPicture(picture);
+  void paint(Canvas canvas) {
+    for (final block in _blockPictures) {
+      canvas.drawPicture(block.picture);
     }
   }
 
   void dispose() {
-    _consolidatedPicture?.dispose();
-    _consolidatedPicture = null;
-    _consolidatedSegmentCount = 0;
-    _consolidatedPointCount = 0;
-    for (final picture in _incrementalPictures.values) {
-      picture.dispose();
+    for (final block in _blockPictures) {
+      block.picture.dispose();
     }
-    _incrementalPictures.clear();
+    _blockPictures.clear();
   }
+}
+
+class _FrozenBlockPicture {
+  const _FrozenBlockPicture({
+    required this.picture,
+    required this.revision,
+    required this.pointCount,
+  });
+
+  final ui.Picture picture;
+  final int revision;
+  final int pointCount;
 }
 
 void _drawSegment(

@@ -119,7 +119,7 @@ void main() {
     expect(store.strokeCount, 0);
   });
 
-  test('长笔渲染快照始终不超过 1+8+1 层', () {
+  test('长笔渲染快照始终不超过 8 个冻结块与 1 个 tail', () {
     final store = RemoteWetInkStore(autoCleanup: false);
     addTearDown(store.dispose);
 
@@ -127,7 +127,7 @@ void main() {
       store.apply(_decoded('sender', 'stroke', startIndex: start, count: 64));
       expect(store.strokes.single.layerCount, lessThanOrEqualTo(10));
       expect(
-        store.strokes.single.incrementalSegments,
+        store.strokes.single.frozenBlocks,
         hasLength(lessThanOrEqualTo(8)),
       );
       expect(

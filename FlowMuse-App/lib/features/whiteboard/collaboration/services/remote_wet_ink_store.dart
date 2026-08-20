@@ -36,13 +36,25 @@ class RemoteWetInkSegment {
 }
 
 @immutable
+class RemoteWetInkBlock {
+  const RemoteWetInkBlock({
+    required this.segments,
+    required this.pointCount,
+    required this.revision,
+  });
+
+  final List<RemoteWetInkSegment> segments;
+  final int pointCount;
+  final int revision;
+}
+
+@immutable
 class RemoteWetInkStrokeSnapshot {
   const RemoteWetInkStrokeSnapshot({
     required this.senderSocketId,
     required this.strokeId,
     required this.style,
-    required this.consolidatedSegments,
-    required this.incrementalSegments,
+    required this.frozenBlocks,
     required this.tailSegments,
     required this.pointCount,
     required this.maxPointIndex,
@@ -52,17 +64,13 @@ class RemoteWetInkStrokeSnapshot {
   final String senderSocketId;
   final String strokeId;
   final LiveInkStyle style;
-  final List<RemoteWetInkSegment> consolidatedSegments;
-  final List<RemoteWetInkSegment> incrementalSegments;
+  final List<RemoteWetInkBlock> frozenBlocks;
   final List<RemoteWetInkSegment> tailSegments;
   final int pointCount;
   final int maxPointIndex;
   final int revision;
 
-  int get layerCount =>
-      (consolidatedSegments.isEmpty ? 0 : 1) +
-      incrementalSegments.length +
-      (tailSegments.isEmpty ? 0 : 1);
+  int get layerCount => frozenBlocks.length + (tailSegments.isEmpty ? 0 : 1);
 }
 
 class RemoteWetInkStore extends ChangeNotifier {
@@ -85,6 +93,7 @@ class RemoteWetInkStore extends ChangeNotifier {
   static const int maxPointsPerStroke = 16384;
   static const int maxPointsPerRoom = 65536;
   static const int maxIncrementalSegments = 8;
+  static const int frozenBlockPointCapacity = 2048;
   static const int maxEstimatedRenderBytes = 16 * 1024 * 1024;
   static const int _estimatedBytesPerPoint = 240;
   static const int _estimatedBytesPerSegment = 128;
@@ -268,12 +277,14 @@ class RemoteWetInkStore extends ChangeNotifier {
   }
 
   int get _estimatedSegmentCount {
-    return _strokes.values.fold(
+    return _strokes.values.fold<int>(
       0,
       (total, stroke) =>
           total +
-          stroke.consolidatedSegments.length +
-          stroke.incrementalSegments.length +
+          stroke._frozenBlocks.fold<int>(
+            0,
+            (blockTotal, block) => blockTotal + block.segmentCount,
+          ) +
           stroke.tailSegments.length,
     );
   }
@@ -327,8 +338,7 @@ class _RemoteWetInkStroke {
   int lastActiveMs;
   final SplayTreeMap<int, LiveInkPoint> _tailPoints = SplayTreeMap();
   final Set<int> _frozenIndices = {};
-  final List<RemoteWetInkSegment> consolidatedSegments = [];
-  final List<RemoteWetInkSegment> incrementalSegments = [];
+  final List<_RemoteWetInkBlockBuilder> _frozenBlocks = [];
   List<RemoteWetInkSegment> tailSegments = const [];
   int revision = 0;
   int _pointCount = 0;
@@ -342,8 +352,9 @@ class _RemoteWetInkStroke {
     senderSocketId: senderSocketId,
     strokeId: strokeId,
     style: style,
-    consolidatedSegments: List.unmodifiable(consolidatedSegments),
-    incrementalSegments: List.unmodifiable(incrementalSegments),
+    frozenBlocks: List.unmodifiable(
+      _frozenBlocks.map((block) => block.snapshot),
+    ),
     tailSegments: tailSegments,
     pointCount: pointCount,
     maxPointIndex: _maxPointIndex,
@@ -377,17 +388,23 @@ class _RemoteWetInkStroke {
       }
     }
     _frozenIndices.addAll(newlyFrozen.keys);
-    incrementalSegments.addAll(_segmentsFrom(newlyFrozen.entries));
-    while (incrementalSegments.length >
-        RemoteWetInkStore.maxIncrementalSegments) {
-      final mergeCount = incrementalSegments.length >= 4 ? 4 : 1;
-      consolidatedSegments.addAll(incrementalSegments.take(mergeCount));
-      incrementalSegments.removeRange(0, mergeCount);
-    }
+    _appendFrozen(newlyFrozen.entries);
     tailSegments = List.unmodifiable(_segmentsFrom(_tailPoints.entries));
     _pointCount += points.length;
     revision++;
     return examinedPointCount;
+  }
+
+  void _appendFrozen(Iterable<MapEntry<int, LiveInkPoint>> entries) {
+    for (final entry in entries) {
+      var block = _frozenBlocks.isEmpty ? null : _frozenBlocks.last;
+      if (block == null ||
+          block.pointCount >= RemoteWetInkStore.frozenBlockPointCapacity) {
+        block = _RemoteWetInkBlockBuilder();
+        _frozenBlocks.add(block);
+      }
+      block.add(entry.key, entry.value);
+    }
   }
 
   static List<RemoteWetInkSegment> _segmentsFrom(
@@ -409,4 +426,31 @@ class _RemoteWetInkStroke {
     }
     return segments;
   }
+}
+
+class _RemoteWetInkBlockBuilder {
+  final List<List<LiveInkPoint>> _segments = [];
+  int pointCount = 0;
+  int revision = 0;
+  int? _lastIndex;
+
+  int get segmentCount => _segments.length;
+
+  void add(int index, LiveInkPoint point) {
+    if (_segments.isEmpty || _lastIndex == null || index != _lastIndex! + 1) {
+      _segments.add(<LiveInkPoint>[]);
+    }
+    _segments.last.add(point);
+    _lastIndex = index;
+    pointCount++;
+    revision++;
+  }
+
+  RemoteWetInkBlock get snapshot => RemoteWetInkBlock(
+    segments: List.unmodifiable(
+      _segments.map((points) => RemoteWetInkSegment(List.unmodifiable(points))),
+    ),
+    pointCount: pointCount,
+    revision: revision,
+  );
 }

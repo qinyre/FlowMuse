@@ -50,7 +50,7 @@ void main() {
     expect(adapter.totalPoints, 64);
   });
 
-  test('普通增量只录新冻结段，不重录完整 prefix', () {
+  test('普通增量只重录当前有界冻结块，不重录完整 prefix', () {
     final store = RemoteWetInkStore(autoCleanup: false);
     final cache = RemoteWetInkRenderCache();
     final adapter = _RecordingAdapter();
@@ -74,8 +74,45 @@ void main() {
     _paint(painter);
     final newlyRecorded = cache.recordedGeometryPointCount - before;
 
-    expect(newlyRecorded, 64);
+    expect(
+      newlyRecorded,
+      lessThanOrEqualTo(RemoteWetInkStore.frozenBlockPointCapacity),
+    );
     expect(cache.pictureLayerCount, lessThanOrEqualTo(9));
+  });
+
+  test('逐点 apply+paint 的累计录制成本随 N 线性增长', () {
+    final store = RemoteWetInkStore(autoCleanup: false);
+    final cache = RemoteWetInkRenderCache();
+    final adapter = _RecordingAdapter();
+    final painter = RemoteWetInkPainter(
+      store: store,
+      cache: cache,
+      adapter: adapter,
+      viewport: const ViewportState(),
+    );
+    addTearDown(() {
+      cache.dispose();
+      store.dispose();
+    });
+    var recordedAt2048 = 0;
+    for (var index = 0; index < 4096; index++) {
+      store.apply(_decoded('stroke', startIndex: index, count: 1));
+      _paint(painter);
+      adapter.paths.clear();
+      adapter.pressures.clear();
+      if (index == 2047) {
+        recordedAt2048 = cache.recordedGeometryPointCount;
+      }
+    }
+
+    expect(recordedAt2048, greaterThan(0));
+    expect(cache.recordedGeometryPointCount / recordedAt2048, lessThan(2.2));
+    expect(
+      cache.recordedGeometryPointCount,
+      lessThanOrEqualTo(RemoteWetInkStore.frozenBlockPointCapacity * 4096),
+    );
+    expect(cache.pictureLayerCount, lessThanOrEqualTo(2));
   });
 
   test('延迟到达不能在 painter 真正 paint 前产生关联标记', () {
