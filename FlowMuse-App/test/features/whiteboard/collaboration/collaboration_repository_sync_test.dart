@@ -219,6 +219,53 @@ void main() {
     expect(transport.disconnectCount, 1);
     await transport.close();
   });
+
+  test('换房期间完成的旧房解密不会进入新房消息流', () async {
+    final crypto = _GatedDecryptCrypto();
+    final roomA = CollaborationRoom.newRoom(crypto: crypto);
+    final roomB = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    await store.createRoom(
+      room: roomA,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'a',
+    );
+    await store.createRoom(
+      room: roomB,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'b',
+    );
+    final transport = _LifecycleTransport();
+    final repository = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+      crypto: crypto,
+    );
+    await repository.joinRoom(room: roomA, localScene: ExcalidrawScene.empty());
+    final payload = await CollaborationCrypto().encrypt(
+      roomKey: roomA.roomKey,
+      plainBytes: CollaborationMessage.sceneUpdate(
+        elements: [_element('old-room', 1)],
+      ).toBytes(),
+    );
+    crypto.blockNextDecrypt();
+    transport.messagesController.add(payload);
+    await crypto.decryptStarted;
+
+    await repository.joinRoom(room: roomB, localScene: ExcalidrawScene.empty());
+    final received = <CollaborationMessage>[];
+    final subscription = repository
+        .encryptedMessages(roomB)
+        .listen(received.add);
+    crypto.releaseDecrypt();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(received, isEmpty);
+    await subscription.cancel();
+    await repository.stop();
+    await transport.close();
+  });
 }
 
 class _LifecycleTransport implements RealtimeTransport {
@@ -308,6 +355,34 @@ class _GatedMemoryRealtimeTransport extends MemoryRealtimeTransport {
       }
     }
     await super.send(payload, volatile: volatile);
+  }
+}
+
+class _GatedDecryptCrypto extends CollaborationCrypto {
+  Completer<void>? _gate;
+  Completer<void>? _started;
+
+  Future<void> get decryptStarted => _started!.future;
+
+  void blockNextDecrypt() {
+    _gate = Completer<void>();
+    _started = Completer<void>();
+  }
+
+  void releaseDecrypt() => _gate?.complete();
+
+  @override
+  Future<List<int>> decrypt({
+    required String roomKey,
+    required EncryptedPayload encryptedPayload,
+  }) async {
+    final gate = _gate;
+    if (gate != null) {
+      _gate = null;
+      _started!.complete();
+      await gate.future;
+    }
+    return super.decrypt(roomKey: roomKey, encryptedPayload: encryptedPayload);
   }
 }
 

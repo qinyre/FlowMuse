@@ -106,6 +106,7 @@ class CollaborationRepository {
   StreamSubscription<String>? _newUserSubscription;
   LiveInkReceiveScheduler? _liveInkScheduler;
   Future<void> _messageDecodeQueue = Future<void>.value();
+  int _roomSessionGeneration = 0;
   Future<void> _sendQueue = Future<void>.value();
   bool _latestSendQueued = false;
   int _sendGeneration = 0;
@@ -693,6 +694,7 @@ class CollaborationRepository {
 
   Future<void> _startRoomSession(CollaborationRoom room) async {
     await _stopRoomSession();
+    final sessionGeneration = _roomSessionGeneration;
     _accumulator.dispose();
     _accumulator.onFlush = _onAccumulatorFlush;
     _messageBacklog.clear();
@@ -719,7 +721,9 @@ class CollaborationRepository {
           'ivBytes': payload.iv.length,
         });
         _messageDecodeQueue = _messageDecodeQueue
-            .then((_) => _handleEncryptedPayload(room, payload))
+            .then(
+              (_) => _handleEncryptedPayload(room, payload, sessionGeneration),
+            )
             .catchError((Object error) {
               CollaborationDebugLog.write('repo', 'message_queue_failed', {
                 'error': error,
@@ -748,8 +752,9 @@ class CollaborationRepository {
   Future<void> _handleEncryptedPayload(
     CollaborationRoom room,
     EncryptedPayload payload,
+    int sessionGeneration,
   ) async {
-    if (_activeRoom?.roomId != room.roomId) {
+    if (!_isCurrentRoomSession(room, sessionGeneration)) {
       return;
     }
     try {
@@ -772,6 +777,7 @@ class CollaborationRepository {
       } finally {
         decryptTask?.finish();
       }
+      if (!_isCurrentRoomSession(room, sessionGeneration)) return;
       if (decryptStarted != null) {
         _performanceProbe!.recordSince(
           CollaborationPerformanceStage.decrypt,
@@ -795,6 +801,7 @@ class CollaborationRepository {
           byteCount: bytes.length,
         );
       }
+      if (!_isCurrentRoomSession(room, sessionGeneration)) return;
       CollaborationDebugLog.write('crypto', 'decoded', {
         'room': _shortRoomId(room.roomId),
         'type': message.type.wireName,
@@ -810,6 +817,7 @@ class CollaborationRepository {
         _messageBacklog.add(message);
       }
     } catch (error) {
+      if (!_isCurrentRoomSession(room, sessionGeneration)) return;
       CollaborationDebugLog.write('crypto', 'decrypt_failed', {
         'room': _shortRoomId(room.roomId),
         'error': error,
@@ -848,6 +856,7 @@ class CollaborationRepository {
   }
 
   Future<void> _stopRoomSession() async {
+    _roomSessionGeneration++;
     final transportMessages = _transportMessageSubscription;
     _transportMessageSubscription = null;
     final liveInkFrames = _liveInkFrameSubscription;
@@ -868,6 +877,10 @@ class CollaborationRepository {
     _messageDecodeQueue = Future<void>.value();
     _messageBacklog.clear();
   }
+
+  bool _isCurrentRoomSession(CollaborationRoom room, int sessionGeneration) =>
+      _roomSessionGeneration == sessionGeneration &&
+      _activeRoom?.roomId == room.roomId;
 
   void _addRepositoryError(String message) {
     if (!_repositoryErrors.isClosed) {
