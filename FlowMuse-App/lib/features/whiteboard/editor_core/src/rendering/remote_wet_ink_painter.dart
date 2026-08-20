@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'dart:typed_data';
 
 import 'package:flutter/rendering.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_ink_store.dart';
@@ -17,6 +18,8 @@ class RemoteWetInkRenderCache {
   final Map<String, _RemoteStrokePictureCache> _strokes = {};
   final Map<String, int> _lastPaintedMaxPointIndex = {};
   final Map<String, RemoteWetInkStrokeSnapshot> _lastPaintedSnapshots = {};
+  final Map<String, Uint8List> _paintedPointBits = {};
+  final Map<String, int> _paintedPointLogEnds = {};
   int recordedGeometryPointCount = 0;
   int lastFrameTailPointCount = 0;
 
@@ -47,7 +50,11 @@ class RemoteWetInkRenderCache {
       _lastPaintedSnapshots[strokeId]?.revision;
 
   bool wasPointPainted(String strokeId, int pointIndex) =>
-      _lastPaintedSnapshots[strokeId]?.containsIndex(pointIndex) ?? false;
+      pointIndex >= 0 &&
+      pointIndex < RemoteWetInkStore.maxPointsPerStroke &&
+      ((_paintedPointBits[strokeId]?[pointIndex >> 3] ?? 0) &
+              (1 << (pointIndex & 7))) !=
+          0;
 
   void sync(List<RemoteWetInkStrokeSnapshot> snapshots, RoughAdapter adapter) {
     final activeIds = {for (final snapshot in snapshots) snapshot.strokeId};
@@ -59,6 +66,8 @@ class RemoteWetInkRenderCache {
       _strokes.remove(strokeId)?.dispose();
       _lastPaintedMaxPointIndex.remove(strokeId);
       _lastPaintedSnapshots.remove(strokeId);
+      _paintedPointBits.remove(strokeId);
+      _paintedPointLogEnds.remove(strokeId);
     }
     for (final snapshot in snapshots) {
       final cache = _strokes.putIfAbsent(
@@ -84,6 +93,7 @@ class RemoteWetInkRenderCache {
       }
       _lastPaintedMaxPointIndex[snapshot.strokeId] = snapshot.maxPointIndex;
       _lastPaintedSnapshots[snapshot.strokeId] = snapshot;
+      _markPaintedIndices(snapshot);
     }
   }
 
@@ -94,6 +104,21 @@ class RemoteWetInkRenderCache {
     _strokes.clear();
     _lastPaintedMaxPointIndex.clear();
     _lastPaintedSnapshots.clear();
+    _paintedPointBits.clear();
+    _paintedPointLogEnds.clear();
+  }
+
+  void _markPaintedIndices(RemoteWetInkStrokeSnapshot snapshot) {
+    final bits = _paintedPointBits.putIfAbsent(
+      snapshot.strokeId,
+      () => Uint8List(RemoteWetInkStore.maxPointsPerStroke >> 3),
+    );
+    final start = _paintedPointLogEnds[snapshot.strokeId] ?? 0;
+    for (var cursor = start; cursor < snapshot.pointIndexLogEnd; cursor++) {
+      final index = snapshot.pointIndexLog[cursor];
+      bits[index >> 3] |= 1 << (index & 7);
+    }
+    _paintedPointLogEnds[snapshot.strokeId] = snapshot.pointIndexLogEnd;
   }
 }
 
@@ -224,8 +249,13 @@ void _drawSegment(
   RoughAdapter adapter,
 ) {
   if (segment.points.isEmpty) return;
-  final pressures = segment.points.every((point) => point.pressure != null)
-      ? [for (final point in segment.points) point.pressure!]
+  final renderedPoints = [
+    if (segment.leadingPoint != null) segment.leadingPoint!,
+    ...segment.points,
+    if (segment.trailingPoint != null) segment.trailingPoint!,
+  ];
+  final pressures = renderedPoints.every((point) => point.pressure != null)
+      ? [for (final point in renderedPoints) point.pressure!]
       : const <double>[];
   final element = FreedrawElement(
     id: ElementId(stroke.strokeId),
@@ -233,7 +263,7 @@ void _drawSegment(
     y: 0,
     width: 0,
     height: 0,
-    points: [for (final point in segment.points) Point(point.x, point.y)],
+    points: [for (final point in renderedPoints) Point(point.x, point.y)],
     pressures: pressures,
     simulatePressure: pressures.isEmpty,
     isComplete: false,

@@ -156,6 +156,22 @@ void main() {
     }
   });
 
+  test('乱序冻结块按绝对点序合并为连续段', () {
+    final store = RemoteWetInkStore(autoCleanup: false);
+    addTearDown(store.dispose);
+
+    store.apply(_decoded('sender', 'stroke', startIndex: 128, count: 64));
+    store.apply(_decoded('sender', 'stroke', startIndex: 64, count: 64));
+    store.apply(_decoded('sender', 'stroke', startIndex: 0, count: 64));
+
+    final block = store.strokes.single.frozenBlocks.single;
+    expect(block.segments, hasLength(1));
+    expect(block.segments.single.startIndex, 0);
+    expect(block.segments.single.points, hasLength(128));
+    expect(block.segments.single.points.first.x, 0);
+    expect(block.segments.single.points.last.x, 127);
+  });
+
   test('单点小包更新只检查新增点与 64 点 tail，不扫描历史前缀', () {
     final store = RemoteWetInkStore(autoCleanup: false);
     addTearDown(store.dispose);

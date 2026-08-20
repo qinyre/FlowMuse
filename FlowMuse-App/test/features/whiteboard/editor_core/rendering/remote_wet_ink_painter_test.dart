@@ -47,7 +47,7 @@ void main() {
     _paint(painter);
     expect(cache.recordedGeometryPointCount, recordedAfterFirstPaint);
     expect(cache.lastFrameTailPointCount, 64);
-    expect(adapter.totalPoints, 64);
+    expect(adapter.totalPoints, 65);
   });
 
   test('普通增量只重录当前有界冻结块，不重录完整 prefix', () {
@@ -170,6 +170,59 @@ void main() {
     expect(cache.wasPointPainted('stroke', 4), isTrue);
   });
 
+  test('连续点跨 64 点冻结边界仍绘制 63→64 连接边', () {
+    final store = RemoteWetInkStore(autoCleanup: false);
+    final cache = RemoteWetInkRenderCache();
+    final adapter = _RecordingAdapter();
+    addTearDown(() {
+      cache.dispose();
+      store.dispose();
+    });
+    store.apply(_decoded('stroke', startIndex: 0, count: 64));
+    store.apply(_decoded('stroke', startIndex: 64, count: 64));
+    final painter = RemoteWetInkPainter(
+      store: store,
+      cache: cache,
+      adapter: adapter,
+      viewport: const ViewportState(),
+    );
+
+    _paint(painter);
+
+    expect(
+      adapter.paths,
+      contains(
+        predicate<List<Point>>(
+          (path) => path.length >= 2 && path.first.x == 63 && path[1].x == 64,
+        ),
+      ),
+    );
+  });
+
+  test('新到点只有实际 paint 后才进入 O(1) painted index', () {
+    final store = RemoteWetInkStore(autoCleanup: false);
+    final cache = RemoteWetInkRenderCache();
+    final painter = RemoteWetInkPainter(
+      store: store,
+      cache: cache,
+      adapter: _RecordingAdapter(),
+      viewport: const ViewportState(),
+    );
+    addTearDown(() {
+      cache.dispose();
+      store.dispose();
+    });
+
+    store.apply(_decoded('stroke', startIndex: 0, count: 1));
+    _paint(painter);
+    store.apply(_decoded('stroke', startIndex: 1, count: 1));
+
+    expect(cache.wasPointPainted('stroke', 0), isTrue);
+    expect(cache.wasPointPainted('stroke', 1), isFalse);
+    _paint(painter);
+    expect(cache.wasPointPainted('stroke', 1), isTrue);
+  });
+
   test('final 接管立即清 picture 且不留残影', () {
     final store = RemoteWetInkStore(autoCleanup: false);
     final cache = RemoteWetInkRenderCache();
@@ -227,6 +280,64 @@ void main() {
       cache.estimatedRetainedBytes,
       lessThan(RemoteWetInkStore.maxEstimatedRenderBytes),
     );
+  });
+
+  test('1×16k、4×16k 与 64×1024 三组房间压力边界可实际绘制', () {
+    for (final scenario in const [
+      (strokeCount: 1, pointsPerStroke: 16384),
+      (strokeCount: 4, pointsPerStroke: 16384),
+      (strokeCount: 64, pointsPerStroke: 1024),
+    ]) {
+      final store = RemoteWetInkStore(autoCleanup: false);
+      final cache = RemoteWetInkRenderCache();
+      final adapter = _RecordingAdapter();
+      for (var stroke = 0; stroke < scenario.strokeCount; stroke++) {
+        for (
+          var start = 0;
+          start < scenario.pointsPerStroke;
+          start += LiveInkChunk.maxPoints
+        ) {
+          expect(
+            store
+                .apply(
+                  _decoded(
+                    'stroke-$stroke',
+                    startIndex: start,
+                    count: LiveInkChunk.maxPoints,
+                  ),
+                )
+                .accepted,
+            isTrue,
+          );
+        }
+      }
+      final painter = RemoteWetInkPainter(
+        store: store,
+        cache: cache,
+        adapter: adapter,
+        viewport: const ViewportState(),
+      );
+
+      _paint(painter);
+
+      expect(
+        store.roomPointCount,
+        scenario.strokeCount * scenario.pointsPerStroke,
+      );
+      expect(
+        cache.pictureLayerCount,
+        lessThanOrEqualTo(
+          scenario.strokeCount * RemoteWetInkStore.maxIncrementalSegments,
+        ),
+      );
+      expect(cache.maxPictureNestingDepth, 1);
+      expect(
+        cache.estimatedRetainedBytes,
+        lessThan(RemoteWetInkStore.maxEstimatedRenderBytes),
+      );
+      cache.dispose();
+      store.dispose();
+    }
   });
 }
 

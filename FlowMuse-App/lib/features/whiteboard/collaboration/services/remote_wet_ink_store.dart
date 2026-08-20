@@ -30,10 +30,17 @@ class RemoteWetInkApplyResult {
 
 @immutable
 class RemoteWetInkSegment {
-  const RemoteWetInkSegment({required this.startIndex, required this.points});
+  const RemoteWetInkSegment({
+    required this.startIndex,
+    required this.points,
+    this.leadingPoint,
+    this.trailingPoint,
+  });
 
   final int startIndex;
   final List<LiveInkPoint> points;
+  final LiveInkPoint? leadingPoint;
+  final LiveInkPoint? trailingPoint;
 
   bool containsIndex(int index) =>
       index >= startIndex && index < startIndex + points.length;
@@ -65,6 +72,8 @@ class RemoteWetInkStrokeSnapshot {
     required this.pointCount,
     required this.maxPointIndex,
     required this.revision,
+    required this.pointIndexLog,
+    required this.pointIndexLogEnd,
   });
 
   final String senderSocketId;
@@ -75,17 +84,10 @@ class RemoteWetInkStrokeSnapshot {
   final int pointCount;
   final int maxPointIndex;
   final int revision;
+  final List<int> pointIndexLog;
+  final int pointIndexLogEnd;
 
   int get layerCount => frozenBlocks.length + (tailSegments.isEmpty ? 0 : 1);
-
-  bool containsIndex(int index) {
-    for (final block in frozenBlocks) {
-      if (block.segments.any((segment) => segment.containsIndex(index))) {
-        return true;
-      }
-    }
-    return tailSegments.any((segment) => segment.containsIndex(index));
-  }
 }
 
 class RemoteWetInkStore extends ChangeNotifier {
@@ -360,8 +362,10 @@ class _RemoteWetInkStroke {
   final String strokeId;
   final LiveInkStyle style;
   int lastActiveMs;
+  final SplayTreeMap<int, LiveInkPoint> _allPoints = SplayTreeMap();
+  final Map<int, int> _arrivalOrder = {};
+  final List<int> _pointIndexLog = [];
   final SplayTreeMap<int, LiveInkPoint> _tailPoints = SplayTreeMap();
-  final Set<int> _frozenIndices = {};
   final List<RemoteWetInkBlock?> _frozenBlocks = List.filled(
     RemoteWetInkStore.maxIncrementalSegments,
     null,
@@ -372,11 +376,11 @@ class _RemoteWetInkStroke {
   int _pointCount = 0;
   int _maxPointIndex = -1;
   int _blockRevision = 0;
+  int _nextArrivalOrder = 0;
   RemoteWetInkStrokeSnapshot? _cachedSnapshot;
 
   int get pointCount => _pointCount;
-  bool containsIndex(int index) =>
-      _frozenIndices.contains(index) || _tailPoints.containsKey(index);
+  bool containsIndex(int index) => _allPoints.containsKey(index);
 
   RemoteWetInkStrokeSnapshot get snapshot {
     final cached = _cachedSnapshot;
@@ -392,13 +396,19 @@ class _RemoteWetInkStroke {
       pointCount: pointCount,
       maxPointIndex: _maxPointIndex,
       revision: revision,
+      pointIndexLog: _pointIndexLog,
+      pointIndexLogEnd: _pointIndexLog.length,
     );
   }
 
   int addPoints(Map<int, LiveInkPoint> points) {
     if (points.isEmpty) return 0;
-    for (final index in points.keys) {
+    for (final entry in points.entries) {
+      final index = entry.key;
       if (index > _maxPointIndex) _maxPointIndex = index;
+      _allPoints[index] = entry.value;
+      _arrivalOrder[index] = ++_nextArrivalOrder;
+      _pointIndexLog.add(index);
     }
     final tailFloor = _maxPointIndex - LiveInkChunk.maxPoints + 1;
     final newlyFrozen = SplayTreeMap<int, LiveInkPoint>();
@@ -421,7 +431,6 @@ class _RemoteWetInkStroke {
         _tailPoints[entry.key] = entry.value;
       }
     }
-    _frozenIndices.addAll(newlyFrozen.keys);
     _appendFrozen(newlyFrozen.entries);
     final visibleTail = SplayTreeMap<int, LiveInkPoint>()
       ..addAll(_pendingFrozen)
@@ -471,7 +480,9 @@ class _RemoteWetInkStroke {
       _frozenBlocks[level] = null;
       block = RemoteWetInkBlock(
         level: level + 1,
-        segments: List.unmodifiable([...existing.segments, ...block.segments]),
+        segments: List.unmodifiable(
+          _mergeSegments(existing.segments, block.segments),
+        ),
         pointCount: existing.pointCount + block.pointCount,
         revision: ++_blockRevision,
       );
@@ -479,7 +490,7 @@ class _RemoteWetInkStroke {
     throw StateError('remote wet ink frozen block capacity exceeded');
   }
 
-  static List<RemoteWetInkSegment> _segmentsFrom(
+  List<RemoteWetInkSegment> _segmentsFrom(
     Iterable<MapEntry<int, LiveInkPoint>> entries,
   ) {
     final segments = <RemoteWetInkSegment>[];
@@ -487,25 +498,59 @@ class _RemoteWetInkStroke {
     int? previousIndex;
     for (final entry in entries) {
       if (previousIndex != null && entry.key != previousIndex + 1) {
-        segments.add(
-          RemoteWetInkSegment(
-            startIndex: previousIndex - points.length + 1,
-            points: List.unmodifiable(points),
-          ),
-        );
+        segments.add(_segment(previousIndex - points.length + 1, points));
         points = <LiveInkPoint>[];
       }
       points.add(entry.value);
       previousIndex = entry.key;
     }
     if (points.isNotEmpty) {
-      segments.add(
-        RemoteWetInkSegment(
-          startIndex: previousIndex! - points.length + 1,
-          points: List.unmodifiable(points),
-        ),
-      );
+      segments.add(_segment(previousIndex! - points.length + 1, points));
     }
     return segments;
+  }
+
+  RemoteWetInkSegment _segment(int startIndex, List<LiveInkPoint> points) {
+    final endIndex = startIndex + points.length - 1;
+    final firstOrder = _arrivalOrder[startIndex]!;
+    final lastOrder = _arrivalOrder[endIndex]!;
+    final leadingIndex = startIndex - 1;
+    final trailingIndex = endIndex + 1;
+    return RemoteWetInkSegment(
+      startIndex: startIndex,
+      points: List.unmodifiable(points),
+      leadingPoint: (_arrivalOrder[leadingIndex] ?? firstOrder) < firstOrder
+          ? _allPoints[leadingIndex]
+          : null,
+      trailingPoint: (_arrivalOrder[trailingIndex] ?? lastOrder) < lastOrder
+          ? _allPoints[trailingIndex]
+          : null,
+    );
+  }
+
+  static List<RemoteWetInkSegment> _mergeSegments(
+    List<RemoteWetInkSegment> left,
+    List<RemoteWetInkSegment> right,
+  ) {
+    final sorted = [...left, ...right]
+      ..sort((a, b) => a.startIndex.compareTo(b.startIndex));
+    final merged = <RemoteWetInkSegment>[];
+    for (final segment in sorted) {
+      if (merged.isNotEmpty) {
+        final previous = merged.last;
+        if (previous.startIndex + previous.points.length ==
+            segment.startIndex) {
+          merged[merged.length - 1] = RemoteWetInkSegment(
+            startIndex: previous.startIndex,
+            points: List.unmodifiable([...previous.points, ...segment.points]),
+            leadingPoint: previous.leadingPoint,
+            trailingPoint: segment.trailingPoint,
+          );
+          continue;
+        }
+      }
+      merged.add(segment);
+    }
+    return merged;
   }
 }
