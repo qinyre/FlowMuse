@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -23,6 +24,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/config/writing_fea
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/active_preview_metrics_probe.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_render_metrics.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_report.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_manifest.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/remote_wet_ink_painter.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -39,6 +41,9 @@ const _localEventTargetMicros = int.fromEnvironment(
 const _p1BaselineP95Micros = int.fromEnvironment(
   'FLOWMUSE_P1_BASELINE_P95_MICROS',
 );
+const _deviceClass = String.fromEnvironment('FLOWMUSE_DEVICE_CLASS');
+const _deviceId = String.fromEnvironment('FLOWMUSE_DEVICE_ID');
+const _physicalDevice = bool.fromEnvironment('FLOWMUSE_PHYSICAL_DEVICE');
 const _style = LiveInkStyle(
   brushType: 'fountainPen',
   strokeColor: '#1e1e1e',
@@ -58,6 +63,14 @@ void main() {
       reason: '性能入口仅允许通过 FLOWMUSE_PERF_TEST=true 启用',
     );
     final requestedV2 = layeredWetInkEnabled && liveInkFlags.liveInkV2;
+    final refreshHz = ui
+        .PlatformDispatcher
+        .instance
+        .views
+        .first
+        .display
+        .refreshRate
+        .round();
     if (!requestedV2) {
       final result = await _runDisabledMatrixCase();
       expect(result['effective'], isFalse);
@@ -65,6 +78,12 @@ void main() {
       binding.reportData = {
         'schemaVersion': 1,
         'measurementEligible': kProfileMode,
+        'buildMode': kProfileMode ? 'profile' : 'not_profile',
+        'platform': defaultTargetPlatform.name,
+        'physicalDevice': _physicalDevice,
+        'deviceId': _deviceId,
+        'deviceClass': _deviceClass,
+        'refreshHz': refreshHz,
         'mode': 'collaboration_live_ink',
         'requestedLayeredWetInk': layeredWetInkEnabled,
         'requestedLiveInkV2': liveInkFlags.liveInkV2,
@@ -79,8 +98,8 @@ void main() {
     );
     expect(
       _localEventTargetMicros,
-      greaterThan(0),
-      reason: '真机门禁必须显式传入 P0 event-to-paint 目标',
+      frozenEventToPaintTargetMicros(refreshHz),
+      reason: 'P0 event-to-paint 目标必须由实测刷新率的冻结 manifest 推导',
     );
     expect(
       _p1BaselineP95Micros,
@@ -185,6 +204,12 @@ void main() {
     binding.reportData = {
       'schemaVersion': 1,
       'measurementEligible': kProfileMode,
+      'buildMode': kProfileMode ? 'profile' : 'not_profile',
+      'platform': defaultTargetPlatform.name,
+      'physicalDevice': _physicalDevice,
+      'deviceId': _deviceId,
+      'deviceClass': _deviceClass,
+      'refreshHz': refreshHz,
       'mode': 'collaboration_live_ink',
       'requestedLayeredWetInk': layeredWetInkEnabled,
       'requestedLiveInkV2': liveInkFlags.liveInkV2,
@@ -371,7 +396,16 @@ Future<Map<String, Object?>> _runScenario(
     var probeCursor = receiverProbe.samples.length;
     for (var offset = 0; offset < iterations; offset++) {
       final version = firstVersion + offset;
-      final liveDecodeSuccessesBefore = receiver.liveInkDecodeSuccesses;
+      var liveWorkAtSampleStart = false;
+      if (requireLiveDecodeOverlap) {
+        for (var attempt = 0; attempt < 1000; attempt++) {
+          liveWorkAtSampleStart =
+              receiver.liveInkReceiveInFlight ||
+              receiver.liveInkPendingSenderCount > 0;
+          if (liveWorkAtSampleStart) break;
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+      }
       awaitedReliableVersion = version;
       reliableApplied = Completer<void>();
       await senders.first.broadcastScene(
@@ -391,16 +425,16 @@ Future<Map<String, Object?>> _runScenario(
       expect(newSamples, isNotEmpty);
       samples.add(newSamples.last.durationMicros);
       probeCursor = receiverProbe.samples.length;
-      if (interSampleDelay > Duration.zero) {
-        await Future<void>.delayed(interSampleDelay);
-      }
       if (requireLiveDecodeOverlap) {
         expect(
-          receiver.liveInkDecodeSuccesses,
-          greaterThan(liveDecodeSuccessesBefore),
-          reason: '每个 loaded reliable 样本窗口必须与真实 live 解密重叠',
+          liveWorkAtSampleStart,
+          isTrue,
+          reason: '每个 loaded reliable 样本开始时必须已有真实 live 解密或排队工作',
         );
         reliableLoadedOverlapSamples++;
+      }
+      if (interSampleDelay > Duration.zero) {
+        await Future<void>.delayed(interSampleDelay);
       }
     }
     samples.sort();
@@ -440,29 +474,23 @@ Future<Map<String, Object?>> _runScenario(
       style: _style,
     );
   }
-  reliableLoadActive = true;
-  final reliableLoadedFuture = measureReliable(
-    firstVersion: 21,
-    extraElements: const [],
-    interSampleDelay: const Duration(milliseconds: 250),
-    requireLiveDecodeOverlap: true,
-  ).whenComplete(() => reliableLoadActive = false);
+  Future<List<int>>? reliableLoadedFuture;
   var paintCount = 0;
-  final lastPaintedIndex = <String, int>{};
+  final lastPaintedRevision = <String, int>{};
   void collectPaintSamples(RemoteWetInkRenderCache cache) {
     final paintedAtMicros = runClock.elapsedMicroseconds;
     for (var senderIndex = 0; senderIndex < senders.length; senderIndex++) {
       final strokeId = 'stroke-$senderIndex';
-      final paintedIndex = cache.paintedMaxPointIndex(strokeId);
-      if (paintedIndex == null ||
-          paintedIndex <= (lastPaintedIndex[strokeId] ?? -1)) {
+      final paintedRevision = cache.paintedRevision(strokeId);
+      if (paintedRevision == null ||
+          paintedRevision == lastPaintedRevision[strokeId]) {
         continue;
       }
-      lastPaintedIndex[strokeId] = paintedIndex;
+      lastPaintedRevision[strokeId] = paintedRevision;
       final markers = acceptedMicros[strokeId];
       if (markers == null) continue;
       final paintedMarkers = markers.entries
-          .where((entry) => entry.key <= paintedIndex)
+          .where((entry) => cache.wasPointPainted(strokeId, entry.key))
           .toList(growable: false);
       for (final marker in paintedMarkers) {
         markers.remove(marker.key);
@@ -518,6 +546,15 @@ Future<Map<String, Object?>> _runScenario(
     );
     receiverInFlightObserved =
         receiverInFlightObserved || receiver.liveInkReceiveInFlight;
+    if (reliableLoadedFuture == null && receiver.liveInkDecodeSuccesses > 0) {
+      reliableLoadActive = true;
+      reliableLoadedFuture = measureReliable(
+        firstVersion: 21,
+        extraElements: const [],
+        interSampleDelay: const Duration(milliseconds: 250),
+        requireLiveDecodeOverlap: true,
+      ).whenComplete(() => reliableLoadActive = false);
+    }
     maxTransportPending = math.max(
       maxTransportPending,
       transports.fold(0, (sum, item) => sum + item.pendingCount),
@@ -545,7 +582,12 @@ Future<Map<String, Object?>> _runScenario(
   while (liveSenders.any((sender) => sender.inFlight || sender.hasPending)) {
     await Future<void>.delayed(Duration.zero);
   }
-  final reliableLoaded = await reliableLoadedFuture;
+  expect(
+    reliableLoadedFuture,
+    isNotNull,
+    reason: 'loaded reliable 门禁必须在真实 live 解密 warm-up 后启动',
+  );
+  final reliableLoaded = await reliableLoadedFuture!;
   for (final transport in transports) {
     await transport.flushLiveInk();
   }
