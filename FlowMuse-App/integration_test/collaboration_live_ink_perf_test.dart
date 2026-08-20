@@ -412,8 +412,9 @@ Future<Map<String, Object?>> _runScenario(
   var reconnectCount = 0;
   var livePacketsWhileReliablePending = 0;
   final deadline = Duration(seconds: _measureSeconds);
+  final liveClock = Stopwatch()..start();
   var packetIndex = 0;
-  while (runClock.elapsed < deadline) {
+  while (liveClock.elapsed < deadline) {
     for (var senderIndex = 0; senderIndex < senders.length; senderIndex++) {
       final points = senderPoints[senderIndex];
       points.add(
@@ -469,7 +470,7 @@ Future<Map<String, Object?>> _runScenario(
       transports.fold(0, (sum, item) => sum + item.pendingCount),
     );
     if (reconnectCount == 0 &&
-        runClock.elapsedMicroseconds >= deadline.inMicroseconds ~/ 2) {
+        liveClock.elapsedMicroseconds >= deadline.inMicroseconds ~/ 2) {
       await transports.last.disconnect();
       await transports.last.connect(room.roomId);
       reconnectCount++;
