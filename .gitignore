@@ -60,3 +60,7 @@ app.*.map.json
 # HarmonyOS auto-generated
 ohos/entry/src/main/ets/plugins/GeneratedPluginRegistrant.ets
 FlowMuse-Server/.env
+
+# Competition process and acceptance artifacts are kept locally only.
+docs/周报与总结报告/
+docs/验收材料/
