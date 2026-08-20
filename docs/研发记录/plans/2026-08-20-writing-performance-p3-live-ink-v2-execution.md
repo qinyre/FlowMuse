@@ -163,7 +163,7 @@ live-ink-ready   server → joined socket，普通独立事件
 
 **负责人/复核：** qinyre / Tiax；**估时：** 1.5d；**前置：** P1-2、P3-1、P3-3A。
 
-**执行状态：** 已完成；RemoteWetInkStore 固定执行 8 sender、64 stroke、16384 点/笔、65536 点/房间、5s TTL 和 10s completed cache，并以房间生命周期 finalized set 阻止 final 后复活；远端画层以 64 点为基础块做最多 8 层的二进制合并，冻结块按绝对索引合并、跨块连续边由后到点携带锚点，冻结快照持久复用、Picture 不嵌套，活动 tail 最多 127 点，final 到达先清湿墨再进入 Scene。
+**执行状态：** 已完成；RemoteWetInkStore 固定执行 8 sender、64 stroke、16384 点/笔、65536 点/房间、5s TTL 和 10s completed cache，并以房间生命周期 finalized set 阻止 final 后复活；远端画层以 64 点为基础块做最多 8 层的二进制合并，同块 segment 按绝对索引合并、活跃 Picture 按最小绝对索引播放、跨块连续边由后到点携带锚点，冻结快照持久复用、Picture 不嵌套，活动 tail 最多 127 点，final 到达先清湿墨再进入 Scene。
 
 ### 文件
 
@@ -194,6 +194,7 @@ P3-3B 创建并独占房间生命周期的 `finalizedStrokeIds`：初始 Scene �
 - 若 P1-3 已 completed，可复用其 `RetainedFreedrawPrefix`；若 P1-3 为 not_triggered/rejected，P3-3B 在 `remote_wet_ink_painter.dart` 内实现上述最小 remote-only bounded prefix，不反向强制启动 P1-3，也不抽象通用框架。
 - 合并追不上或缓存到顶时，拒绝该 stroke 的新增 wet 包并计 `render_cache_limit`；final Scene 仍正常到达和接管。禁止以遍历全部历史点或无界 layer/tail 兜底。
 - style 缺失/非法、startIndex 溢出或非有限坐标整包丢弃；重复索引去重，缺口拆子路径。Painter 只读 store，不写 Scene/history/save/AI。
+- volatile 湿墨允许丢包、缺口和乱序造成短暂的子路径端帽近似；同一笔 style 冻结且 Picture 使用同一 blend 语义，禁止为追求到达顺序无关的逐像素预览而逐帧重录历史。最终几何与像素权威仍是可靠 `SCENE_UPDATE`，到达后立即接管并清除近似预览。
 
 压力验收拆成三个互不冲突的边界：`1×16k` 验单笔上限与 recorder 工作，`4×16k` 验房间点上限，`64×1024` 验 stroke 数上限；每组分别断言总 Picture 层数和估算 retained bytes。逐点 `apply+paint` 的累计 recorder 工作 ≤`8N`，冻结块对象跨普通更新保持同一实例；真实绘制索引由 revision 绑定的增量点日志写入固定 16k-bit bitmap，查询 O(1)，不得由历史 segment 扫描推断。final 接管无残影。
 
