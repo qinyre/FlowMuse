@@ -49,6 +49,9 @@ class RemoteWetInkRenderCache {
   int? paintedRevision(String strokeId) =>
       _lastPaintedSnapshots[strokeId]?.revision;
 
+  List<int> pictureMinStartIndices(String strokeId) =>
+      _strokes[strokeId]?.orderedMinStartIndices ?? const [];
+
   bool wasPointPainted(String strokeId, int pointIndex) =>
       pointIndex >= 0 &&
       pointIndex < RemoteWetInkStore.maxPointsPerStroke &&
@@ -180,6 +183,11 @@ class _RemoteStrokePictureCache {
   int get pictureNestingDepth => pictureLayerCount == 0 ? 0 : 1;
   int get retainedGeometryPointCount =>
       _blockPictures.values.fold(0, (total, block) => total + block.pointCount);
+  List<int> get orderedMinStartIndices =>
+      (_blockPictures.values.toList()
+            ..sort((a, b) => a.minStartIndex.compareTo(b.minStartIndex)))
+          .map((block) => block.minStartIndex)
+          .toList(growable: false);
 
   int sync(RemoteWetInkStrokeSnapshot snapshot, RoughAdapter adapter) {
     var recordedPoints = 0;
@@ -207,6 +215,7 @@ class _RemoteStrokePictureCache {
         picture: nextPicture,
         revision: block.revision,
         pointCount: block.pointCount,
+        minStartIndex: block.segments.first.startIndex,
       );
       current?.picture.dispose();
       _blockPictures[block.level] = replacement;
@@ -215,9 +224,9 @@ class _RemoteStrokePictureCache {
   }
 
   void paint(Canvas canvas) {
-    final levels = _blockPictures.keys.toList()..sort((a, b) => b.compareTo(a));
-    for (final level in levels) {
-      final block = _blockPictures[level]!;
+    final blocks = _blockPictures.values.toList()
+      ..sort((a, b) => a.minStartIndex.compareTo(b.minStartIndex));
+    for (final block in blocks) {
       canvas.drawPicture(block.picture);
     }
   }
@@ -235,11 +244,13 @@ class _FrozenBlockPicture {
     required this.picture,
     required this.revision,
     required this.pointCount,
+    required this.minStartIndex,
   });
 
   final ui.Picture picture;
   final int revision;
   final int pointCount;
+  final int minStartIndex;
 }
 
 void _drawSegment(

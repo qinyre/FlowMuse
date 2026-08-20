@@ -199,6 +199,28 @@ void main() {
     );
   });
 
+  test('多个活跃冻结块按最小绝对索引播放', () {
+    final store = RemoteWetInkStore(autoCleanup: false);
+    final cache = RemoteWetInkRenderCache();
+    final painter = RemoteWetInkPainter(
+      store: store,
+      cache: cache,
+      adapter: _RecordingAdapter(),
+      viewport: const ViewportState(),
+    );
+    addTearDown(() {
+      cache.dispose();
+      store.dispose();
+    });
+    for (final start in [192, 128, 64, 0]) {
+      store.apply(_decoded('stroke', startIndex: start, count: 64));
+    }
+
+    _paint(painter);
+
+    expect(cache.pictureMinStartIndices('stroke'), [0, 64]);
+  });
+
   test('新到点只有实际 paint 后才进入 O(1) painted index', () {
     final store = RemoteWetInkStore(autoCleanup: false);
     final cache = RemoteWetInkRenderCache();
