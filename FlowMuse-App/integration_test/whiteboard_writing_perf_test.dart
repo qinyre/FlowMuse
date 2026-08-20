@@ -297,8 +297,6 @@ String _semanticSceneHash(Map<String, Object?> scene) {
     'seed',
     'versionNonce',
     'updated',
-    'index',
-    'customData',
     'selectedElementIds',
     'selectedGroupIds',
     'editingElement',

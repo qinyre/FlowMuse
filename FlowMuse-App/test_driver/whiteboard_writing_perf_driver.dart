@@ -20,7 +20,7 @@ Future<void> main() {
       );
       final report = <String, Object?>{
         if (data != null) ...Map<String, Object?>.from(data),
-        'hostEvidence': await _hostEvidence(),
+        'hostEvidence': await _hostEvidence(data),
       };
       await output.writeAsString(
         const JsonEncoder.withIndent('  ').convert(report),
@@ -30,9 +30,27 @@ Future<void> main() {
   );
 }
 
-Future<Map<String, Object?>> _hostEvidence() async {
+Future<Map<String, Object?>> _hostEvidence(Map<String, dynamic>? report) async {
   final sha = await Process.run('git', ['rev-parse', 'HEAD']);
   final status = await Process.run('git', ['status', '--porcelain']);
+  final reportedDeviceId = report?['deviceId'];
+  final devices = await Process.run('flutter', ['devices', '--machine']);
+  Map<String, Object?>? detectedDevice;
+  if (devices.exitCode == 0 && reportedDeviceId is String) {
+    try {
+      final decoded = jsonDecode(devices.stdout as String);
+      if (decoded is List) {
+        for (final item in decoded.whereType<Map>()) {
+          if (item['id'] == reportedDeviceId) {
+            detectedDevice = Map<String, Object?>.from(item);
+            break;
+          }
+        }
+      }
+    } on FormatException {
+      // 由汇总器将缺失的设备证据判为无效，仍保留原始结果。
+    }
+  }
   return {
     'gitSha': sha.exitCode == 0 ? (sha.stdout as String).trim() : 'unknown',
     'gitDirty':
@@ -40,5 +58,10 @@ Future<Map<String, Object?>> _hostEvidence() async {
     'capturedAtUtc': DateTime.now().toUtc().toIso8601String(),
     'hostOperatingSystem': Platform.operatingSystem,
     'hostOperatingSystemVersion': Platform.operatingSystemVersion,
+    'deviceDetectionExitCode': devices.exitCode,
+    'detectedDeviceId': detectedDevice?['id'],
+    'detectedDeviceName': detectedDevice?['name'],
+    'detectedTargetPlatform': detectedDevice?['targetPlatform'],
+    'detectedEmulator': detectedDevice?['emulator'],
   };
 }

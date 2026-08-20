@@ -19,6 +19,7 @@ class FrameRunSummary {
     required this.deadlineMissCount,
     required this.deadlineMissRatio,
     required this.longestConsecutiveDeadlineMiss,
+    required this.frameNumbers,
   });
 
   final int count;
@@ -34,6 +35,7 @@ class FrameRunSummary {
   final int deadlineMissCount;
   final double deadlineMissRatio;
   final int longestConsecutiveDeadlineMiss;
+  final Set<int> frameNumbers;
 
   bool get meetsFrameGate =>
       buildP95Micros <= frameBudgetMicros &&
@@ -52,6 +54,7 @@ class WritingRunSummary {
     required this.layeredWetInk,
     required this.eventToPaintTargetMicros,
     required this.semanticSceneHashAfterRun,
+    required this.finalSceneHashAfterRun,
     required this.accepted,
     required this.painted,
     required this.terminalBeforePreview,
@@ -73,6 +76,7 @@ class WritingRunSummary {
   final bool? layeredWetInk;
   final int? eventToPaintTargetMicros;
   final String? semanticSceneHashAfterRun;
+  final String? finalSceneHashAfterRun;
   final int accepted;
   final int painted;
   final int terminalBeforePreview;
@@ -147,6 +151,27 @@ class WritingScenarioSummary {
     for (final run in validRuns)
       if (run.semanticSceneHashAfterRun != null) run.semanticSceneHashAfterRun!,
   };
+
+  Set<String> get finalSceneHashes => {
+    for (final run in validRuns)
+      if (run.finalSceneHashAfterRun != null) run.finalSceneHashAfterRun!,
+  };
+
+  bool get absoluteTargetPassed {
+    final p95 = medianRunP95;
+    final target = validRuns.isEmpty
+        ? null
+        : validRuns.first.eventToPaintTargetMicros;
+    return p95 != null && target != null && p95 <= target;
+  }
+
+  bool get deterministicScenePassed => semanticSceneHashes.length == 1;
+
+  bool get requiredGatesPassed =>
+      stable &&
+      frameGatePassed &&
+      absoluteTargetPassed &&
+      deterministicScenePassed;
 }
 
 class WritingResultsSummary {
@@ -188,6 +213,13 @@ class WritingResultsSummary {
         : 'unstable';
   }
 
+  String get acceptanceStatus =>
+      status == 'stable' &&
+          scenarios.every((scenario) => scenario.requiredGatesPassed) &&
+          _p1ComparisonsPassed
+      ? 'passed'
+      : 'failed';
+
   int? get medianRunP95 => completeScenarios.length == 1
       ? completeScenarios.single.medianRunP95
       : null;
@@ -200,6 +232,43 @@ class WritingResultsSummary {
       completeScenarios.length == 1
       ? completeScenarios.single.bootstrapP95Interval
       : null;
+
+  bool get _p1ComparisonsPassed {
+    final grouped = <String, List<WritingScenarioSummary>>{};
+    for (final scenario in completeScenarios) {
+      final key = scenario.validRuns.first.comparisonKey;
+      if (key != null) grouped.putIfAbsent(key, () => []).add(scenario);
+    }
+    for (final scenarios in grouped.values) {
+      WritingScenarioSummary? legacy;
+      WritingScenarioSummary? layered;
+      for (final scenario in scenarios) {
+        if (scenario.validRuns.first.layeredWetInk == true) {
+          layered = scenario;
+        } else {
+          legacy = scenario;
+        }
+      }
+      if (legacy == null || layered == null) continue;
+      final legacyP95 = legacy.medianRunP95!;
+      final layeredP95 = layered.medianRunP95!;
+      final improvement = legacyP95 == 0
+          ? 0.0
+          : (legacyP95 - layeredP95) / legacyP95;
+      final hashesMatch =
+          legacy.semanticSceneHashes.length == 1 &&
+          layered.semanticSceneHashes.length == 1 &&
+          legacy.semanticSceneHashes.single ==
+              layered.semanticSceneHashes.single;
+      if (improvement < 0.30 ||
+          !layered.frameGatePassed ||
+          layered.medianDeadlineMissRatio! > legacy.medianDeadlineMissRatio! ||
+          !hashesMatch) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   String toCsv() {
     final buffer = StringBuffer(
@@ -241,6 +310,7 @@ class WritingResultsSummary {
       ..writeln('# 书写性能结果汇总')
       ..writeln()
       ..writeln('- 状态：`$status`')
+      ..writeln('- 验收：`$acceptanceStatus`')
       ..writeln('- 有效轮次：${validRuns.length}/${runs.length}')
       ..writeln('- 有效率：${(validRate * 100).toStringAsFixed(2)}%')
       ..writeln()
@@ -369,6 +439,11 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     invalidReasons.add('not_profile_or_not_device_eligible');
   }
   if (root['physicalDevice'] != true) invalidReasons.add('not_physical_device');
+  final platform = root['platform'];
+  if (platform is! String ||
+      !const {'android', 'iOS', 'ohos'}.contains(platform)) {
+    invalidReasons.add('unsupported_physical_platform');
+  }
   final deviceId = root['deviceId'];
   if (deviceId is! String || deviceId.isEmpty) {
     invalidReasons.add('missing_device_id');
@@ -414,6 +489,18 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     gitSha = hostEvidence['gitSha'] as String?;
     if (hostEvidence['gitDirty'] != false) {
       invalidReasons.add('dirty_git_worktree');
+    }
+    if (hostEvidence['detectedDeviceId'] != deviceId) {
+      invalidReasons.add('device_id_not_host_verified');
+    }
+    if (hostEvidence['detectedEmulator'] != false) {
+      invalidReasons.add('device_is_emulator_or_unknown');
+    }
+    final detectedTarget = hostEvidence['detectedTargetPlatform'];
+    if (platform is String &&
+        (detectedTarget is! String ||
+            !detectedTarget.toLowerCase().startsWith(platform.toLowerCase()))) {
+      invalidReasons.add('device_platform_not_host_verified');
     }
   } else {
     invalidReasons.add('missing_host_evidence');
@@ -488,6 +575,7 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
   if (accepted < 100) invalidReasons.add('fewer_than_100_accepted_samples');
   if (coverage < 0.995) invalidReasons.add('coverage_below_99_5_percent');
   final durations = <int>[];
+  final paintedFrameNumbers = <int>{};
   final samples = performance?['activePreviewSamples'];
   if (samples is List) {
     for (final rawSample in samples) {
@@ -495,6 +583,12 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
       final duration = rawSample['eventToPaintMicros'];
       if (duration is num && rawSample['terminalReason'] == null) {
         durations.add(duration.toInt());
+        final frameNumber = (rawSample['frameNumber'] as num?)?.toInt();
+        if (frameNumber == null) {
+          invalidReasons.add('painted_sample_missing_frame_number');
+        } else {
+          paintedFrameNumbers.add(frameNumber);
+        }
       }
     }
   }
@@ -505,10 +599,14 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     frames = _summarizeFrames(
       performance?['frames'],
       refreshHz,
+      measureSeconds,
       invalidReasons,
     );
   } else if (performance?['frames'] is! List) {
     invalidReasons.add('missing_frame_timings');
+  }
+  if (frames != null && !frames.frameNumbers.containsAll(paintedFrameNumbers)) {
+    invalidReasons.add('painted_sample_frame_not_collected');
   }
   return WritingRunSummary(
     path: path,
@@ -521,6 +619,9 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     eventToPaintTargetMicros: eventTarget,
     semanticSceneHashAfterRun: semanticSceneHash is String
         ? semanticSceneHash
+        : null,
+    finalSceneHashAfterRun: sceneHashAfterRun is String
+        ? sceneHashAfterRun
         : null,
     accepted: accepted,
     painted: painted,
@@ -538,6 +639,7 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
 FrameRunSummary? _summarizeFrames(
   Object? rawFrames,
   int refreshHz,
+  int? measureSeconds,
   List<String> invalidReasons,
 ) {
   if (rawFrames is! List || rawFrames.isEmpty) {
@@ -562,6 +664,12 @@ FrameRunSummary? _summarizeFrames(
   frames.sort((left, right) => left.number.compareTo(right.number));
   if (frames.map((frame) => frame.number).toSet().length != frames.length) {
     invalidReasons.add('duplicate_frame_numbers');
+  }
+  if (measureSeconds != null) {
+    final minimumFrameCount = (measureSeconds * refreshHz * 0.8).ceil();
+    if (frames.length < minimumFrameCount) {
+      invalidReasons.add('insufficient_frame_coverage');
+    }
   }
   final buildValues = [for (final frame in frames) frame.build]..sort();
   final rasterValues = [for (final frame in frames) frame.raster]..sort();
@@ -592,6 +700,7 @@ FrameRunSummary? _summarizeFrames(
     deadlineMissCount: missCount,
     deadlineMissRatio: missCount / frames.length,
     longestConsecutiveDeadlineMiss: longestStreak,
+    frameNumbers: Set.unmodifiable(frames.map((frame) => frame.number)),
   );
 }
 
@@ -652,6 +761,7 @@ String _csv(String value) => '"${value.replaceAll('"', '""')}"';
 Future<void> main(List<String> arguments) async {
   String? inputPath;
   String? outputPath;
+  var reportOnly = false;
   for (var index = 0; index < arguments.length; index++) {
     switch (arguments[index]) {
       case '--input':
@@ -660,11 +770,14 @@ Future<void> main(List<String> arguments) async {
       case '--output':
         outputPath = arguments[++index];
         break;
+      case '--report-only':
+        reportOnly = true;
+        break;
     }
   }
   if (inputPath == null || outputPath == null) {
     stderr.writeln(
-      'Usage: dart run tool/writing_perf/summarize_results.dart --input <raw-directory> --output <report.md>',
+      'Usage: dart run tool/writing_perf/summarize_results.dart --input <raw-directory> --output <report.md> [--report-only]',
     );
     exitCode = 64;
     return;
@@ -679,4 +792,8 @@ Future<void> main(List<String> arguments) async {
   await File(csvPath).writeAsString(summary.toCsv());
   stdout.writeln('markdown=${markdownFile.absolute.path}');
   stdout.writeln('csv=${File(csvPath).absolute.path}');
+  if (!reportOnly && summary.acceptanceStatus != 'passed') {
+    stderr.writeln('acceptance=${summary.acceptanceStatus}');
+    exitCode = 1;
+  }
 }

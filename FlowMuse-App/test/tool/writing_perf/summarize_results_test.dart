@@ -40,6 +40,7 @@ void main() {
     expect(summary.runP95SpreadRatio, closeTo(4 / 97, 0.000001));
     expect(summary.bootstrapP95Interval, isNotNull);
     expect(summary.status, 'stable');
+    expect(summary.acceptanceStatus, 'passed');
     expect(summary.toMarkdown(), contains('状态：`stable`'));
     expect(summary.toMarkdown(), contains('有效轮次：5/6'));
     expect(summary.toCsv().split('\n'), hasLength(8));
@@ -108,12 +109,13 @@ void main() {
     final scenario = summary.completeScenarios.single;
 
     expect(scenario.frameGatePassed, isFalse);
+    expect(summary.acceptanceStatus, 'failed');
     expect(scenario.medianBuildP95, 100000);
     expect(scenario.medianRasterP95, 100000);
     expect(scenario.medianDeadlineMissRatio, 1);
     expect(
       scenario.validRuns.first.frames!.longestConsecutiveDeadlineMiss,
-      100,
+      3000,
     );
     expect(summary.toMarkdown(), contains('100000/100000'));
   });
@@ -184,6 +186,37 @@ void main() {
 
     expect(summary.runs, isEmpty);
   });
+
+  test('桌面平台或未由 host 匹配的设备不能冒充真机', () async {
+    final directory = await _tempDirectory('device-evidence');
+    await _writeRun(
+      directory,
+      'mismatch.json',
+      runIndex: 1,
+      offset: 0,
+      detectedDeviceId: 'another-device',
+    );
+
+    final run = (await summarizeDirectory(directory)).runs.single;
+
+    expect(run.invalidReasons, contains('device_id_not_host_verified'));
+  });
+
+  test('帧数覆盖不足时即使单帧很快也不能验收', () async {
+    final directory = await _tempDirectory('frame-coverage');
+    await _writeRun(
+      directory,
+      'short-frames.json',
+      runIndex: 1,
+      offset: 0,
+      frameCount: 1,
+    );
+
+    final run = (await summarizeDirectory(directory)).runs.single;
+
+    expect(run.invalidReasons, contains('insufficient_frame_coverage'));
+    expect(run.invalidReasons, contains('painted_sample_frame_not_collected'));
+  });
 }
 
 Future<Directory> _tempDirectory(String name) async {
@@ -204,7 +237,9 @@ Future<void> _writeRun(
   bool gitDirty = false,
   int measureSeconds = 60,
   int frameMicros = 5000,
+  int frameCount = 3000,
   String deviceId = 'physical-device-a',
+  String? detectedDeviceId,
 }) {
   return File('${directory.path}/$name').writeAsString(
     jsonEncode({
@@ -228,7 +263,13 @@ Future<void> _writeRun(
       'flags': {'layeredWetInk': layeredWetInk},
       'sceneHashAfterRun': _repeated('d', 64),
       'semanticSceneHashAfterRun': _repeated('e', 64),
-      'hostEvidence': {'gitSha': _repeated('a', 40), 'gitDirty': gitDirty},
+      'hostEvidence': {
+        'gitSha': _repeated('a', 40),
+        'gitDirty': gitDirty,
+        'detectedDeviceId': detectedDeviceId ?? deviceId,
+        'detectedTargetPlatform': 'android-arm64',
+        'detectedEmulator': false,
+      },
       'performance': {
         'schemaVersion': supportedReportSchemaVersion,
         'invalidReasons': <String>[],
@@ -238,10 +279,14 @@ Future<void> _writeRun(
         'coverage': 1.0,
         'activePreviewSamples': [
           for (var sample = 1; sample <= 100; sample++)
-            {'eventToPaintMicros': sample + offset, 'terminalReason': null},
+            {
+              'eventToPaintMicros': sample + offset,
+              'frameNumber': sample,
+              'terminalReason': null,
+            },
         ],
         'frames': [
-          for (var frame = 1; frame <= 100; frame++)
+          for (var frame = 1; frame <= frameCount; frame++)
             {
               'frameNumber': frame,
               'buildMicros': frameMicros,
