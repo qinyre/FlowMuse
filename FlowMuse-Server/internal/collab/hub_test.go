@@ -141,6 +141,73 @@ func TestLiveInkSocketBucketIsConcurrencySafe(t *testing.T) {
 	}
 }
 
+func TestInvalidLiveInkFramesConsumeIngressBudgetAndBoundLogs(t *testing.T) {
+	now := time.Unix(100, 0)
+	hub := liveInkTestHub(&now, "room", "sender")
+	invalid := []any{"room", map[string]any{
+		"encryptedBuffer": []any{1.0},
+		"iv":              make([]byte, liveInkIVBytes),
+	}}
+	previousWriter := log.Writer()
+	previousFlags := log.Flags()
+	defer log.SetOutput(previousWriter)
+	defer log.SetFlags(previousFlags)
+	var output bytes.Buffer
+	log.SetOutput(&output)
+	log.SetFlags(0)
+
+	for range 1000 {
+		hub.liveInkFrameFor("sender", invalid)
+	}
+
+	hub.mu.Lock()
+	invalidCount := hub.liveInkDropCounts[liveInkDropUnsupported]
+	rateCount := hub.liveInkDropCounts[liveInkDropSocketRate]
+	roomBucketCount := len(hub.liveInkRoomBuckets)
+	hub.mu.Unlock()
+	if invalidCount != uint64(liveInkSocketBurst) || rateCount != 1000-uint64(liveInkSocketBurst) {
+		t.Fatalf("unexpected drop counts: invalid=%d rate=%d", invalidCount, rateCount)
+	}
+	if roomBucketCount != 0 {
+		t.Fatalf("invalid envelopes consumed room budget: buckets=%d", roomBucketCount)
+	}
+	if lines := strings.Count(strings.TrimSpace(output.String()), "\n") + 1; lines > 20 {
+		t.Fatalf("drop logging was not aggregated: lines=%d", lines)
+	}
+}
+
+func TestLiveInkAcceptAndMembershipMutationAreSerialized(t *testing.T) {
+	now := time.Unix(100, 0)
+	hub := liveInkTestHub(&now, "room", "sender")
+	accepted := make(chan struct{})
+	release := make(chan struct{})
+	forwardDone := make(chan struct{})
+	go func() {
+		hub.withLiveInkFrame("sender", validLiveInkArgs("room"), func(string, ReceivedLiveInkFrame) {
+			close(accepted)
+			<-release
+		})
+		close(forwardDone)
+	}()
+	<-accepted
+
+	leaveDone := make(chan struct{})
+	go func() {
+		hub.mu.Lock()
+		hub.removeFromRoomLocked("sender", "room")
+		hub.mu.Unlock()
+		close(leaveDone)
+	}()
+	select {
+	case <-leaveDone:
+		t.Fatal("membership changed while live frame accept was in progress")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	<-forwardDone
+	<-leaveDone
+}
+
 func TestLiveInkBucketsAreRemovedOnLeaveAndDisconnect(t *testing.T) {
 	now := time.Unix(100, 0)
 	hub := liveInkTestHub(&now, "room", "a", "b")

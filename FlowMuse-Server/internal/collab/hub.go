@@ -74,6 +74,7 @@ type Hub struct {
 	followRooms          map[string]map[string]struct{}
 	liveInkSocketBuckets map[string]*tokenBucket
 	liveInkRoomBuckets   map[string]*tokenBucket
+	liveInkDropCounts    map[liveInkDropReason]uint64
 	now                  func() time.Time
 }
 
@@ -96,6 +97,7 @@ func NewHub(
 		followRooms:          map[string]map[string]struct{}{},
 		liveInkSocketBuckets: map[string]*tokenBucket{},
 		liveInkRoomBuckets:   map[string]*tokenBucket{},
+		liveInkDropCounts:    map[liveInkDropReason]uint64{},
 		now:                  time.Now,
 	}
 }
@@ -200,40 +202,81 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 }
 
 func (h *Hub) forwardLiveInk(client *socket.Socket, args []any) {
-	roomID, frame, ok := h.liveInkFrameFor(string(client.Id()), args)
-	if !ok {
-		return
-	}
-	client.To(socket.Room(roomID)).Volatile().Emit(EventClientLiveInk, frame)
+	h.withLiveInkFrame(string(client.Id()), args, func(roomID string, frame ReceivedLiveInkFrame) {
+		client.To(socket.Room(roomID)).Volatile().Emit(EventClientLiveInk, frame)
+	})
 }
 
 func (h *Hub) liveInkFrameFor(socketID string, args []any) (string, ReceivedLiveInkFrame, bool) {
+	var roomID string
+	var frame ReceivedLiveInkFrame
+	ok := h.withLiveInkFrame(socketID, args, func(acceptedRoomID string, acceptedFrame ReceivedLiveInkFrame) {
+		roomID = acceptedRoomID
+		frame = acceptedFrame
+	})
+	return roomID, frame, ok
+}
+
+func (h *Hub) withLiveInkFrame(socketID string, args []any, accept func(string, ReceivedLiveInkFrame)) bool {
 	roomID, ok := liveInkRoomID(args)
 	if !ok {
-		logLiveInkDrop(socketID, liveInkDropInvalidEnvelope, visibleLiveInkBytes(args))
-		return "", ReceivedLiveInkFrame{}, false
+		if reason := h.consumeLiveInkIngressToken(socketID, ""); reason != "" {
+			h.recordLiveInkDrop(socketID, reason, visibleLiveInkBytes(args))
+			return false
+		}
+		h.recordLiveInkDrop(socketID, liveInkDropInvalidEnvelope, visibleLiveInkBytes(args))
+		return false
 	}
-	h.mu.Lock()
-	currentRoomID := h.socketRooms[socketID]
-	h.mu.Unlock()
-	if currentRoomID == "" || currentRoomID != roomID {
-		logLiveInkDrop(socketID, liveInkDropNotMember, visibleLiveInkBytes(args))
-		return "", ReceivedLiveInkFrame{}, false
+	if reason := h.consumeLiveInkIngressToken(socketID, roomID); reason != "" {
+		h.recordLiveInkDrop(socketID, reason, visibleLiveInkBytes(args))
+		return false
 	}
 	encryptedBuffer, iv, byteCount, reason, ok := parseLiveInkEnvelope(args[1])
 	if !ok {
-		logLiveInkDrop(socketID, reason, byteCount)
-		return "", ReceivedLiveInkFrame{}, false
+		h.recordLiveInkDrop(socketID, reason, byteCount)
+		return false
 	}
-	if reason := h.consumeLiveInkToken(socketID, roomID); reason != "" {
-		logLiveInkDrop(socketID, reason, byteCount)
-		return "", ReceivedLiveInkFrame{}, false
+
+	h.mu.Lock()
+	if h.socketRooms[socketID] != roomID {
+		h.mu.Unlock()
+		h.recordLiveInkDrop(socketID, liveInkDropNotMember, byteCount)
+		return false
 	}
-	return roomID, ReceivedLiveInkFrame{
+	if reason := h.consumeLiveInkRoomTokenLocked(roomID); reason != "" {
+		h.mu.Unlock()
+		h.recordLiveInkDrop(socketID, reason, byteCount)
+		return false
+	}
+	frame := ReceivedLiveInkFrame{
 		EncryptedBuffer: cloneBytes(encryptedBuffer),
 		IV:              cloneBytes(iv),
 		SenderSocketID:  socketID,
-	}, true
+	}
+	accept(roomID, frame)
+	h.mu.Unlock()
+	return true
+}
+
+func (h *Hub) consumeLiveInkIngressToken(socketID, roomID string) liveInkDropReason {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.liveInkSocketBuckets == nil {
+		h.liveInkSocketBuckets = map[string]*tokenBucket{}
+	}
+	now := h.liveInkNow()
+	socketBucket := h.liveInkSocketBuckets[socketID]
+	if socketBucket == nil {
+		socketBucket = &tokenBucket{}
+		h.liveInkSocketBuckets[socketID] = socketBucket
+	}
+	if !socketBucket.allow(now, liveInkSocketRate, liveInkSocketBurst) {
+		return liveInkDropSocketRate
+	}
+	if roomID != "" && h.socketRooms[socketID] != roomID {
+		return liveInkDropNotMember
+	}
+	return ""
 }
 
 func (h *Hub) consumeLiveInkToken(socketID, roomID string) liveInkDropReason {
@@ -248,10 +291,7 @@ func (h *Hub) consumeLiveInkToken(socketID, roomID string) liveInkDropReason {
 	if h.liveInkRoomBuckets == nil {
 		h.liveInkRoomBuckets = map[string]*tokenBucket{}
 	}
-	now := time.Now()
-	if h.now != nil {
-		now = h.now()
-	}
+	now := h.liveInkNow()
 	socketBucket := h.liveInkSocketBuckets[socketID]
 	if socketBucket == nil {
 		socketBucket = &tokenBucket{}
@@ -259,6 +299,17 @@ func (h *Hub) consumeLiveInkToken(socketID, roomID string) liveInkDropReason {
 	}
 	if !socketBucket.allow(now, liveInkSocketRate, liveInkSocketBurst) {
 		return liveInkDropSocketRate
+	}
+	return h.consumeLiveInkRoomTokenLockedAt(roomID, now)
+}
+
+func (h *Hub) consumeLiveInkRoomTokenLocked(roomID string) liveInkDropReason {
+	return h.consumeLiveInkRoomTokenLockedAt(roomID, h.liveInkNow())
+}
+
+func (h *Hub) consumeLiveInkRoomTokenLockedAt(roomID string, now time.Time) liveInkDropReason {
+	if h.liveInkRoomBuckets == nil {
+		h.liveInkRoomBuckets = map[string]*tokenBucket{}
 	}
 	roomBucket := h.liveInkRoomBuckets[roomID]
 	if roomBucket == nil {
@@ -269,6 +320,13 @@ func (h *Hub) consumeLiveInkToken(socketID, roomID string) liveInkDropReason {
 		return liveInkDropRoomRate
 	}
 	return ""
+}
+
+func (h *Hub) liveInkNow() time.Time {
+	if h.now != nil {
+		return h.now()
+	}
+	return time.Now()
 }
 
 func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
@@ -558,6 +616,19 @@ func logLiveInkDrop(socketID string, reason liveInkDropReason, byteCount int) {
 		socketID,
 		byteCount,
 	)
+}
+
+func (h *Hub) recordLiveInkDrop(socketID string, reason liveInkDropReason, byteCount int) {
+	h.mu.Lock()
+	if h.liveInkDropCounts == nil {
+		h.liveInkDropCounts = map[liveInkDropReason]uint64{}
+	}
+	count := h.liveInkDropCounts[reason] + 1
+	h.liveInkDropCounts[reason] = count
+	h.mu.Unlock()
+	if count&(count-1) == 0 {
+		logLiveInkDrop(socketID, reason, byteCount)
+	}
 }
 
 func asFrame(value any) (EncryptedFrame, bool) {
