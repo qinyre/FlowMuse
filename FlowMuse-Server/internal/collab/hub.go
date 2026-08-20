@@ -76,6 +76,8 @@ type Hub struct {
 	liveInkRoomBuckets   map[string]*tokenBucket
 	liveInkDropCounts    map[liveInkDropReason]uint64
 	now                  func() time.Time
+	roomExistsOverride   func(string) bool
+	roomEndedOverride    func(string) bool
 }
 
 func NewHub(
@@ -203,7 +205,11 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 
 func (h *Hub) forwardLiveInk(client *socket.Socket, args []any) {
 	h.withLiveInkFrame(string(client.Id()), args, func(roomID string, frame ReceivedLiveInkFrame) {
-		client.To(socket.Room(roomID)).Volatile().Emit(EventClientLiveInk, frame)
+		client.To(socket.Room(roomID)).Volatile().Emit(EventClientLiveInk, map[string]any{
+			"encryptedBuffer": frame.EncryptedBuffer,
+			"iv":              frame.IV,
+			"senderSocketId":  frame.SenderSocketID,
+		})
 	})
 }
 
@@ -493,6 +499,9 @@ func (h *Hub) removeFromRoomLocked(socketID, roomID string) {
 }
 
 func (h *Hub) roomExists(roomID string) bool {
+	if h.roomExistsOverride != nil {
+		return h.roomExistsOverride(roomID)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	_, err := h.sceneStore.Load(ctx, roomID)
@@ -503,6 +512,9 @@ func (h *Hub) roomExists(roomID string) bool {
 }
 
 func (h *Hub) roomEnded(roomID string) bool {
+	if h.roomEndedOverride != nil {
+		return h.roomEndedOverride(roomID)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	metadata, err := h.roomStore.LoadRoom(ctx, roomID, "")
