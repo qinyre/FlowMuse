@@ -724,6 +724,9 @@ class CollaborationRepository {
     _transportMessageSubscription = _transport.messages.listen(
       (payload) {
         final enqueuedMicros = _performanceProbe?.nowMicros();
+        final liveInkWorkAtEnqueue =
+            liveInkScheduler.inFlight ||
+            liveInkScheduler.pendingSenderCount > 0;
         CollaborationDebugLog.write('wire', 'payload_received', {
           'room': _shortRoomId(room.roomId),
           'encryptedBytes': payload.encryptedBuffer.length,
@@ -736,6 +739,7 @@ class CollaborationRepository {
                 payload,
                 sessionGeneration,
                 enqueuedMicros,
+                liveInkWorkAtEnqueue,
               ),
             )
             .catchError((Object error) {
@@ -768,6 +772,7 @@ class CollaborationRepository {
     EncryptedPayload payload,
     int sessionGeneration,
     int? enqueuedMicros,
+    bool liveInkWorkAtEnqueue,
   ) async {
     if (!_isCurrentRoomSession(room, sessionGeneration)) {
       return;
@@ -776,6 +781,7 @@ class CollaborationRepository {
       _performanceProbe!.recordSince(
         CollaborationPerformanceStage.reliableQueueWait,
         enqueuedMicros,
+        itemCount: liveInkWorkAtEnqueue ? 1 : 0,
         byteCount: payload.encryptedBuffer.length + payload.iv.length,
       );
     }

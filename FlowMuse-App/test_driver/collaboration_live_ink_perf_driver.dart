@@ -32,6 +32,9 @@ Future<void> main() {
         const JsonEncoder.withIndent('  ').convert(report),
       );
       stdout.writeln('[FlowMuseLiveInkPerf] result=${output.absolute.path}');
+      if (report['measurementEligible'] != true) {
+        throw StateError('Profile report is not eligible; raw report retained');
+      }
     },
   );
 }
@@ -43,24 +46,13 @@ Future<Map<String, Object?>> _hostEvidence(
 ) async {
   final devices = await Process.run('flutter', ['devices', '--machine']);
   final reportedDeviceId = report?['deviceId'];
-  Map<String, Object?>? detectedDevice;
-  var supportedDeviceCount = 0;
+  var deviceEvidence = <String, Object?>{};
   if (devices.exitCode == 0 && reportedDeviceId is String) {
     try {
-      final decoded = jsonDecode(devices.stdout as String);
-      if (decoded is List) {
-        for (final item in decoded.whereType<Map>()) {
-          final target = item['targetPlatform']?.toString().toLowerCase() ?? '';
-          if (target.startsWith('android') ||
-              target.startsWith('ios') ||
-              target.startsWith('ohos')) {
-            supportedDeviceCount++;
-          }
-          if (item['id'] == reportedDeviceId) {
-            detectedDevice = Map<String, Object?>.from(item);
-          }
-        }
-      }
+      deviceEvidence = inspectFlutterDevices(
+        jsonDecode(devices.stdout as String),
+        reportedDeviceId,
+      );
     } on FormatException {
       // 缺失字段会使 measurementEligible=false，并保留原始报告供诊断。
     }
@@ -72,9 +64,6 @@ Future<Map<String, Object?>> _hostEvidence(
     'capturedAtUtc': DateTime.now().toUtc().toIso8601String(),
     'hostOperatingSystem': Platform.operatingSystem,
     'hostOperatingSystemVersion': Platform.operatingSystemVersion,
-    'detectedDeviceId': detectedDevice?['id'],
-    'detectedTargetPlatform': detectedDevice?['targetPlatform'],
-    'detectedEmulator': detectedDevice?['emulator'],
-    'supportedDeviceCount': supportedDeviceCount,
+    ...deviceEvidence,
   };
 }

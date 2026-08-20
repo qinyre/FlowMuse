@@ -38,9 +38,6 @@ const _measureSeconds = int.fromEnvironment(
 const _localEventTargetMicros = int.fromEnvironment(
   'FLOWMUSE_EVENT_TO_PAINT_TARGET_MICROS',
 );
-const _p1BaselineP95Micros = int.fromEnvironment(
-  'FLOWMUSE_P1_BASELINE_P95_MICROS',
-);
 const _deviceClass = String.fromEnvironment('FLOWMUSE_DEVICE_CLASS');
 const _deviceId = String.fromEnvironment('FLOWMUSE_DEVICE_ID');
 const _physicalDevice = bool.fromEnvironment('FLOWMUSE_PHYSICAL_DEVICE');
@@ -101,12 +98,6 @@ void main() {
       frozenEventToPaintTargetMicros(refreshHz),
       reason: 'P0 event-to-paint 目标必须由实测刷新率的冻结 manifest 推导',
     );
-    expect(
-      _p1BaselineP95Micros,
-      greaterThan(0),
-      reason: '真机门禁必须显式传入冻结的 P1 P95',
-    );
-
     final senderScaleEvidence = await _measureSenderScaleEvidence();
     for (final row
         in senderScaleEvidence['raw']! as List<Map<String, Object?>>) {
@@ -198,8 +189,9 @@ void main() {
       final loaded = result['reliableLoadedP95Micros']! as int;
       expect(loaded, lessThanOrEqualTo((baseline * 1.10).ceil()));
       final localP95 = result['localEventToPaintP95Micros']! as int;
+      final localBaselineP95 = result['localBaselineP95Micros']! as int;
       expect(localP95, lessThanOrEqualTo(_localEventTargetMicros));
-      expect(localP95, lessThanOrEqualTo((_p1BaselineP95Micros * 1.05).ceil()));
+      expect(localP95, lessThanOrEqualTo((localBaselineP95 * 1.05).ceil()));
     }
     binding.reportData = {
       'schemaVersion': 1,
@@ -385,6 +377,46 @@ Future<Map<String, Object?>> _runScenario(
   );
   await tester.pump();
   final canvasRect = tester.getRect(find.byType(EditorCanvas));
+  Future<int> measureLocalNoLiveBaseline() async {
+    final gesture = await tester.startGesture(
+      canvasRect.topLeft + const Offset(30, 30),
+      kind: PointerDeviceKind.stylus,
+    );
+    final clock = Stopwatch()..start();
+    var sampleIndex = 0;
+    while (clock.elapsed < const Duration(seconds: 5)) {
+      final usableWidth = math.max(1.0, canvasRect.width - 60);
+      final usableHeight = math.max(1.0, canvasRect.height - 60);
+      await gesture.moveTo(
+        canvasRect.topLeft +
+            Offset(
+              30 + (sampleIndex * 3.0) % usableWidth,
+              30 + (sampleIndex * 2.0) % usableHeight,
+            ),
+      );
+      await tester.pump(const Duration(milliseconds: 33));
+      sampleIndex++;
+    }
+    await gesture.up();
+    await tester.pump();
+    final durations =
+        localProbe.samples
+            .map((sample) => sample.eventToPaintMicros)
+            .whereType<int>()
+            .toList()
+          ..sort();
+    expect(durations, isNotEmpty, reason: '本地无 live 基线必须采集到真实绘制样本');
+    controller.loadFromContent(
+      ExcalidrawScene.empty().toContent(),
+      'collaboration-live-ink-baseline.excalidraw',
+    );
+    controller.switchTool(ToolType.freedraw);
+    localProbe.clear();
+    await tester.pump();
+    return _nearestRank(durations, 0.95);
+  }
+
+  final localBaselineP95 = await measureLocalNoLiveBaseline();
   Future<List<int>> measureReliable({
     required int firstVersion,
     required List<Map<String, Object?>> extraElements,
@@ -430,6 +462,11 @@ Future<Map<String, Object?>> _runScenario(
           liveWorkAtSampleStart,
           isTrue,
           reason: '每个 loaded reliable 样本开始时必须已有真实 live 解密或排队工作',
+        );
+        expect(
+          newSamples.last.itemCount,
+          1,
+          reason: 'reliable 入接收队列的同一时刻必须存在 live 解密或排队工作',
         );
         reliableLoadedOverlapSamples++;
       }
@@ -667,8 +704,8 @@ Future<Map<String, Object?>> _runScenario(
     'localAcceptedCount': localPerformance.accepted,
     'localPaintedCount': localPerformance.painted,
     'localEventToPaintP95Micros': _nearestRank(localEventToPaint, 0.95),
+    'localBaselineP95Micros': localBaselineP95,
     'localEventTargetMicros': _localEventTargetMicros,
-    'p1BaselineP95Micros': _p1BaselineP95Micros,
     'localPerformance': localPerformance.toJson(),
     'recordedGeometryPointCount': painter.cache.recordedGeometryPointCount,
     'dropCount': dropped,

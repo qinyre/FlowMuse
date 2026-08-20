@@ -308,9 +308,9 @@ void main() {
           (sample) =>
               sample.stage == CollaborationPerformanceStage.reliableQueueWait,
         )
-        .map((sample) => sample.durationMicros)
         .toList();
-    expect(queueSamples, [0, 5000]);
+    expect(queueSamples.map((sample) => sample.durationMicros), [0, 5000]);
+    expect(queueSamples.map((sample) => sample.itemCount), [0, 0]);
 
     await repository.stop();
     await transport.close();
