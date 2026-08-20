@@ -17,6 +17,7 @@
 
 - event-to-local-paint proxy P95 必须达到 P0 绝对目标（60Hz 默认 ≤33.4ms）且相对旧路径改善 ≥30%；
 - build P95、raster P95 均不超过真机实测帧周期；固定 60 秒窗口内 deadline miss <1%，且相对旧路径不回退；
+- `terminalBeforePreview/accepted` 相对同 recording 旧路径不得恶化超过 0.5 个百分点；汇总器必须从唯一 `(strokeEpoch,inputSeq)` 样本重算，不接受自报计数；
 - 100/1000/5000 元素和 2/5 人协作下最终 Scene hash 一致；
 - PointerUp/Cancel/工具切换、undo/redo 与压力笔回归通过；
 - flag=false 与 P0 旧路径语义一致。
@@ -143,8 +144,9 @@ flutter analyze
 flutter test test/features/whiteboard/editor_core
 flutter test test/features/whiteboard
 flutter test
-flutter drive --profile --driver=test_driver/whiteboard_writing_perf_driver.dart --target=integration_test/whiteboard_writing_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_LAYERED_WET_INK=false
-flutter drive --profile --driver=test_driver/whiteboard_writing_perf_driver.dart --target=integration_test/whiteboard_writing_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_LAYERED_WET_INK=true
+flutter drive --profile -d <唯一真机ID> --driver=test_driver/whiteboard_writing_perf_driver.dart --target=integration_test/whiteboard_writing_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_DEVICE_ID=<唯一真机ID> --dart-define=FLOWMUSE_DEVICE_CLASS=<冻结设备类> --dart-define=FLOWMUSE_PHYSICAL_DEVICE=true --dart-define=FLOWMUSE_SCENE_ELEMENTS=<100|1000|5000> --dart-define=FLOWMUSE_WRITING_FIXTURE=<quick_zigzag|long_curve_pressure> --dart-define=FLOWMUSE_RUN_INDEX=<1..5> --dart-define=FLOWMUSE_LAYERED_WET_INK=false
+flutter drive --profile -d <唯一真机ID> --driver=test_driver/whiteboard_writing_perf_driver.dart --target=integration_test/whiteboard_writing_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_DEVICE_ID=<唯一真机ID> --dart-define=FLOWMUSE_DEVICE_CLASS=<冻结设备类> --dart-define=FLOWMUSE_PHYSICAL_DEVICE=true --dart-define=FLOWMUSE_SCENE_ELEMENTS=<100|1000|5000> --dart-define=FLOWMUSE_WRITING_FIXTURE=<quick_zigzag|long_curve_pressure> --dart-define=FLOWMUSE_RUN_INDEX=<1..5> --dart-define=FLOWMUSE_LAYERED_WET_INK=true
+dart run tool/writing_perf/summarize_results.dart --phase p1 --input <同设备同fixture的false-true原始目录> --output <p1-report.md>
 Pop-Location
 
 Push-Location FlowMuse-Server
