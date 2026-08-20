@@ -42,6 +42,9 @@ void main() {
 
     expect(decodedIds, [0, 2]);
     expect(output.map((item) => item.chunk.points.single.x), [0, 2]);
+    expect(scheduler.decodeAttempts, 2);
+    expect(scheduler.decodeSuccesses, 2);
+    expect(scheduler.decodeErrors, 0);
   });
 
   test('高频 sender 排到其他 sender 后且不覆盖其 latest', () async {
@@ -134,6 +137,8 @@ void main() {
     await _flush(5);
 
     expect(scheduler.decodeErrors, 1);
+    expect(scheduler.decodeAttempts, 2);
+    expect(scheduler.decodeSuccesses, 1);
     expect(output.single.senderSocketId, 'good');
   });
 

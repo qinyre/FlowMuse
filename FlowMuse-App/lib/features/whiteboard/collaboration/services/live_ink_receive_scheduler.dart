@@ -37,6 +37,8 @@ class LiveInkReceiveScheduler {
   int _generation = 0;
   Timer? _yieldTimer;
   int senderLimitDrops = 0;
+  int decodeAttempts = 0;
+  int decodeSuccesses = 0;
   int decodeErrors = 0;
 
   Stream<DecodedLiveInkChunk> get chunks => _chunks.stream;
@@ -78,8 +80,10 @@ class LiveInkReceiveScheduler {
     _inFlight = true;
     final generation = _generation;
     Future<void>.microtask(() async {
+          decodeAttempts++;
           final chunk = await _decode(frame);
           if (!_closed && generation == _generation) {
+            decodeSuccesses++;
             _chunks.add(
               DecodedLiveInkChunk(senderSocketId: sender, chunk: chunk),
             );

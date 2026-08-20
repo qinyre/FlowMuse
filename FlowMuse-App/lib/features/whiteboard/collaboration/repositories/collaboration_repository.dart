@@ -132,6 +132,12 @@ class CollaborationRepository {
 
   bool get liveInkReceiveInFlight => _liveInkScheduler?.inFlight ?? false;
 
+  int get liveInkDecodeAttempts => _liveInkScheduler?.decodeAttempts ?? 0;
+
+  int get liveInkDecodeSuccesses => _liveInkScheduler?.decodeSuccesses ?? 0;
+
+  int get liveInkDecodeErrors => _liveInkScheduler?.decodeErrors ?? 0;
+
   int get liveInkTransportNotWritableDrops =>
       _transport.liveInkTransportNotWritableDrops;
 

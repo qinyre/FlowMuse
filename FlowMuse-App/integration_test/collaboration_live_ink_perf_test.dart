@@ -77,6 +77,16 @@ void main() {
       greaterThanOrEqualTo(60),
       reason: 'live ink Profile 门禁至少持续 60 秒',
     );
+    expect(
+      _localEventTargetMicros,
+      greaterThan(0),
+      reason: '真机门禁必须显式传入 P0 event-to-paint 目标',
+    );
+    expect(
+      _p1BaselineP95Micros,
+      greaterThan(0),
+      reason: '真机门禁必须显式传入冻结的 P1 P95',
+    );
 
     final senderScaleEvidence = await _measureSenderScaleEvidence();
     for (final row
@@ -99,6 +109,7 @@ void main() {
           'good',
           Duration(milliseconds: 5),
           Duration(milliseconds: 15),
+          1,
           0,
           0,
         ),
@@ -106,6 +117,7 @@ void main() {
           'rtt100',
           Duration(milliseconds: 50),
           Duration(milliseconds: 50),
+          1,
           0,
           0,
         ),
@@ -113,6 +125,7 @@ void main() {
           'fault10',
           Duration.zero,
           Duration(milliseconds: 120),
+          5,
           0.1,
           0.1,
         ),
@@ -120,6 +133,7 @@ void main() {
           'fault20',
           Duration.zero,
           Duration(milliseconds: 120),
+          5,
           0.2,
           0.1,
         ),
@@ -142,7 +156,11 @@ void main() {
       expect(result['finalConverged'], isTrue);
       expect(result['wetInkRemaining'], 0);
       expect(result['pendingCount'], 0);
-      expect(result['livePacketsWhileReliablePending'], greaterThan(0));
+      expect(result['receiverPendingCount'], 0);
+      expect(result['receiverInFlight'], isFalse);
+      expect(result['liveEmitsWhileReliablePending'], greaterThan(0));
+      expect(result['liveReceivesWhileReliablePending'], greaterThan(0));
+      expect(result['reliableLoadedOverlapSamples'], 20);
       expect(result['reconnectCount'], 1);
       final network = result['network'];
       final remoteP95 = result['remotePaintP95Micros']! as int;
@@ -151,6 +169,9 @@ void main() {
       } else if (network == 'rtt100') {
         expect(remoteP95, lessThanOrEqualTo(300000));
       }
+      if (network == 'good' || network == 'rtt100') {
+        expect(result['remotePaintSampleCoverage'], greaterThanOrEqualTo(0.95));
+      }
       if (network == 'good' && result['memberCount'] == 5) {
         expect(result['maxSenderStarvationMicros'], lessThanOrEqualTo(200000));
       }
@@ -158,15 +179,8 @@ void main() {
       final loaded = result['reliableLoadedP95Micros']! as int;
       expect(loaded, lessThanOrEqualTo((baseline * 1.10).ceil()));
       final localP95 = result['localEventToPaintP95Micros']! as int;
-      if (_localEventTargetMicros > 0) {
-        expect(localP95, lessThanOrEqualTo(_localEventTargetMicros));
-      }
-      if (_p1BaselineP95Micros > 0) {
-        expect(
-          localP95,
-          lessThanOrEqualTo((_p1BaselineP95Micros * 1.05).ceil()),
-        );
-      }
+      expect(localP95, lessThanOrEqualTo(_localEventTargetMicros));
+      expect(localP95, lessThanOrEqualTo((_p1BaselineP95Micros * 1.05).ceil()));
     }
     binding.reportData = {
       'schemaVersion': 1,
@@ -184,10 +198,14 @@ void main() {
 Future<Map<String, Object?>> _runDisabledMatrixCase() async {
   final hub = MemoryRealtimeRoomHub();
   final transport = MemoryRealtimeTransport(hub: hub, socketId: 'sender');
+  final receiver = MemoryRealtimeTransport(hub: hub, socketId: 'receiver');
   final repository = CollaborationRepository(
     transport: transport,
     flags: liveInkFlags,
   );
+  var emitCount = 0;
+  await receiver.connect('room');
+  final subscription = receiver.liveInkFrames.listen((_) => emitCount++);
   await transport.connect('room');
   await repository.sendLiveInkChunk(
     room: const CollaborationRoom(
@@ -201,14 +219,17 @@ Future<Map<String, Object?>> _runDisabledMatrixCase() async {
       style: _style,
     ),
   );
+  await Future<void>.delayed(Duration.zero);
   final result = <String, Object?>{
     'effective': repository.effectiveLiveInk,
-    'emitCount': 0,
+    'emitCount': emitCount,
     'readyGeneration': transport.liveInkNegotiationGeneration,
     'readyRoom': transport.liveInkNegotiatedRoomId,
     'readyVersion': transport.serverLiveInkProtocolVersion,
   };
+  await subscription.cancel();
   await transport.disconnect();
+  await receiver.disconnect();
   return result;
 }
 
@@ -246,7 +267,7 @@ Future<Map<String, Object?>> _runScenario(
         seed: 20260820 + index,
         dropRate: network.dropRate,
         duplicateRate: network.duplicateRate,
-        reorderWindow: 5,
+        reorderWindow: network.reorderWindow,
         minDelay: network.minOneWayDelay,
         maxDelay: network.maxOneWayDelay,
       ),
@@ -268,10 +289,15 @@ Future<Map<String, Object?>> _runScenario(
 
   final wetInk = RemoteWetInkStore();
   var receiveCount = 0;
+  var reliableLoadActive = false;
+  var liveReceivesWhileReliablePending = 0;
   final lastReceiveMicros = <String, int>{};
   var maxStarvationMicros = 0;
   final liveSubscription = receiver.liveInkChunks.listen((decoded) {
     receiveCount++;
+    if (reliableLoadActive) {
+      liveReceivesWhileReliablePending++;
+    }
     final now = runClock.elapsedMicroseconds;
     final previous = lastReceiveMicros[decoded.senderSocketId];
     if (previous != null) {
@@ -282,6 +308,7 @@ Future<Map<String, Object?>> _runScenario(
   });
   var receiverScene = ExcalidrawScene.empty();
   var awaitedReliableVersion = -1;
+  var reliableLoadedOverlapSamples = 0;
   Completer<void>? reliableApplied;
   final messageSubscription = receiver.encryptedMessages(room).listen((
     message,
@@ -337,11 +364,14 @@ Future<Map<String, Object?>> _runScenario(
     required int firstVersion,
     required List<Map<String, Object?>> extraElements,
     int iterations = 20,
+    Duration interSampleDelay = Duration.zero,
+    bool requireLiveDecodeOverlap = false,
   }) async {
     final samples = <int>[];
     var probeCursor = receiverProbe.samples.length;
     for (var offset = 0; offset < iterations; offset++) {
       final version = firstVersion + offset;
+      final liveDecodeSuccessesBefore = receiver.liveInkDecodeSuccesses;
       awaitedReliableVersion = version;
       reliableApplied = Completer<void>();
       await senders.first.broadcastScene(
@@ -361,6 +391,17 @@ Future<Map<String, Object?>> _runScenario(
       expect(newSamples, isNotEmpty);
       samples.add(newSamples.last.durationMicros);
       probeCursor = receiverProbe.samples.length;
+      if (interSampleDelay > Duration.zero) {
+        await Future<void>.delayed(interSampleDelay);
+      }
+      if (requireLiveDecodeOverlap) {
+        expect(
+          receiver.liveInkDecodeSuccesses,
+          greaterThan(liveDecodeSuccessesBefore),
+          reason: '每个 loaded reliable 样本窗口必须与真实 live 解密重叠',
+        );
+        reliableLoadedOverlapSamples++;
+      }
     }
     samples.sort();
     return samples;
@@ -370,11 +411,6 @@ Future<Map<String, Object?>> _runScenario(
     firstVersion: 1,
     extraElements: const [],
   );
-  var reliableLoadedCompleted = false;
-  final reliableLoadedFuture = measureReliable(
-    firstVersion: 21,
-    extraElements: const [],
-  ).whenComplete(() => reliableLoadedCompleted = true);
   final frameTimings = FrameTimingMetricsCollector()..start();
   final localGesture = await tester.startGesture(
     canvasRect.topLeft + const Offset(30, 30),
@@ -382,6 +418,8 @@ Future<Map<String, Object?>> _runScenario(
   );
   final latencyMicros = <int>[];
   final acceptedMicros = <String, Map<int, int>>{};
+  var acceptedPaintMarkerCount = 0;
+  var liveEmitsWhileReliablePending = 0;
   final senderPoints = <List<LiveInkPoint>>[
     for (var index = 0; index < senders.length; index++) <LiveInkPoint>[],
   ];
@@ -389,12 +427,10 @@ Future<Map<String, Object?>> _runScenario(
     for (var senderIndex = 0; senderIndex < senders.length; senderIndex++)
       LiveInkSender(
         emit: (chunk) async {
-          acceptedMicros.putIfAbsent(
-                chunk.strokeId,
-                () => <int, int>{},
-              )[chunk.startIndex + chunk.points.length - 1] =
-              runClock.elapsedMicroseconds;
           await senders[senderIndex].sendLiveInkChunk(room: room, chunk: chunk);
+          if (reliableLoadActive) {
+            liveEmitsWhileReliablePending++;
+          }
         },
       ),
   ];
@@ -404,19 +440,52 @@ Future<Map<String, Object?>> _runScenario(
       style: _style,
     );
   }
+  reliableLoadActive = true;
+  final reliableLoadedFuture = measureReliable(
+    firstVersion: 21,
+    extraElements: const [],
+    interSampleDelay: const Duration(milliseconds: 250),
+    requireLiveDecodeOverlap: true,
+  ).whenComplete(() => reliableLoadActive = false);
   var paintCount = 0;
   final lastPaintedIndex = <String, int>{};
+  void collectPaintSamples(RemoteWetInkRenderCache cache) {
+    final paintedAtMicros = runClock.elapsedMicroseconds;
+    for (var senderIndex = 0; senderIndex < senders.length; senderIndex++) {
+      final strokeId = 'stroke-$senderIndex';
+      final paintedIndex = cache.paintedMaxPointIndex(strokeId);
+      if (paintedIndex == null ||
+          paintedIndex <= (lastPaintedIndex[strokeId] ?? -1)) {
+        continue;
+      }
+      lastPaintedIndex[strokeId] = paintedIndex;
+      final markers = acceptedMicros[strokeId];
+      if (markers == null) continue;
+      final paintedMarkers = markers.entries
+          .where((entry) => entry.key <= paintedIndex)
+          .toList(growable: false);
+      for (final marker in paintedMarkers) {
+        markers.remove(marker.key);
+        paintCount++;
+        latencyMicros.add(paintedAtMicros - marker.value);
+      }
+    }
+  }
+
   var maxReceiverPendingSenders = 0;
   var receiverInFlightObserved = false;
   var maxTransportPending = 0;
   var reconnectCount = 0;
-  var livePacketsWhileReliablePending = 0;
   final deadline = Duration(seconds: _measureSeconds);
   final liveClock = Stopwatch()..start();
   var packetIndex = 0;
   while (liveClock.elapsed < deadline) {
     for (var senderIndex = 0; senderIndex < senders.length; senderIndex++) {
       final points = senderPoints[senderIndex];
+      final strokeId = 'stroke-$senderIndex';
+      acceptedPaintMarkerCount++;
+      acceptedMicros.putIfAbsent(strokeId, () => <int, int>{})[points.length] =
+          runClock.elapsedMicroseconds;
       points.add(
         LiveInkPoint(x: packetIndex.toDouble(), y: senderIndex * 10.0),
       );
@@ -426,9 +495,6 @@ Future<Map<String, Object?>> _runScenario(
         startIndex: tailStart,
         points: points.sublist(tailStart),
       );
-      if (!reliableLoadedCompleted) {
-        livePacketsWhileReliablePending++;
-      }
     }
     final usableWidth = math.max(1.0, canvasRect.width - 60);
     final usableHeight = math.max(1.0, canvasRect.height - 60);
@@ -445,20 +511,7 @@ Future<Map<String, Object?>> _runScenario(
         .map((paint) => paint.painter)
         .whereType<RemoteWetInkPainter>()
         .single;
-    for (var senderIndex = 0; senderIndex < senders.length; senderIndex++) {
-      final strokeId = 'stroke-$senderIndex';
-      final paintedIndex = painter.cache.paintedMaxPointIndex(strokeId);
-      if (paintedIndex == null ||
-          paintedIndex <= (lastPaintedIndex[strokeId] ?? -1)) {
-        continue;
-      }
-      lastPaintedIndex[strokeId] = paintedIndex;
-      final accepted = acceptedMicros[strokeId]?.remove(paintedIndex);
-      if (accepted != null) {
-        paintCount++;
-        latencyMicros.add(runClock.elapsedMicroseconds - accepted);
-      }
-    }
+    collectPaintSamples(painter.cache);
     maxReceiverPendingSenders = math.max(
       maxReceiverPendingSenders,
       receiver.liveInkPendingSenderCount,
@@ -489,11 +542,27 @@ Future<Map<String, Object?>> _runScenario(
       points: points.sublist(tailStart),
     );
   }
+  while (liveSenders.any((sender) => sender.inFlight || sender.hasPending)) {
+    await Future<void>.delayed(Duration.zero);
+  }
   final reliableLoaded = await reliableLoadedFuture;
   for (final transport in transports) {
     await transport.flushLiveInk();
   }
+  for (var attempt = 0; attempt < 5000; attempt++) {
+    if (!receiver.liveInkReceiveInFlight &&
+        receiver.liveInkPendingSenderCount == 0) {
+      break;
+    }
+    await tester.pump(const Duration(milliseconds: 1));
+  }
   await tester.pump();
+  final flushedPainter = tester
+      .widgetList<CustomPaint>(find.byType(CustomPaint))
+      .map((paint) => paint.painter)
+      .whereType<RemoteWetInkPainter>()
+      .single;
+  collectPaintSamples(flushedPainter.cache);
 
   final finalElements = [
     for (var index = 0; index < senders.length; index++)
@@ -549,11 +618,9 @@ Future<Map<String, Object?>> _runScenario(
     'acceptedCount': accepted,
     'emitCount': emitted,
     'receiveCount': receiveCount,
-    'decryptCount': receiverProbe.samples
-        .where(
-          (sample) => sample.stage == CollaborationPerformanceStage.decrypt,
-        )
-        .length,
+    'liveDecryptAttemptCount': receiver.liveInkDecodeAttempts,
+    'liveDecryptSuccessCount': receiver.liveInkDecodeSuccesses,
+    'liveDecryptErrorCount': receiver.liveInkDecodeErrors,
     'paintCount': paintCount,
     'localAcceptedCount': localPerformance.accepted,
     'localPaintedCount': localPerformance.painted,
@@ -564,11 +631,19 @@ Future<Map<String, Object?>> _runScenario(
     'recordedGeometryPointCount': painter.cache.recordedGeometryPointCount,
     'dropCount': dropped,
     'pendingCount': pending,
+    'receiverPendingCount': receiver.liveInkPendingSenderCount,
+    'receiverInFlight': receiver.liveInkReceiveInFlight,
     'maxTransportPending': maxTransportPending,
     'maxReceiverPendingSenders': maxReceiverPendingSenders,
     'receiverInFlightObserved': receiverInFlightObserved,
     'reconnectCount': reconnectCount,
-    'livePacketsWhileReliablePending': livePacketsWhileReliablePending,
+    'liveEmitsWhileReliablePending': liveEmitsWhileReliablePending,
+    'liveReceivesWhileReliablePending': liveReceivesWhileReliablePending,
+    'reliableLoadedOverlapSamples': reliableLoadedOverlapSamples,
+    'remotePaintMarkerCount': acceptedPaintMarkerCount,
+    'remotePaintSampleCoverage': acceptedPaintMarkerCount == 0
+        ? 0.0
+        : latencyMicros.length / acceptedPaintMarkerCount,
     'remotePaintP95Micros': _nearestRank(latencyMicros, 0.95),
     'maxSenderStarvationMicros': maxStarvationMicros,
     'reliableBaselineP95Micros': _nearestRank(reliableBaseline, 0.95),
@@ -715,12 +790,14 @@ class _NetworkCase {
     this.name,
     this.minOneWayDelay,
     this.maxOneWayDelay,
+    this.reorderWindow,
     this.dropRate,
     this.duplicateRate,
   );
   final String name;
   final Duration minOneWayDelay;
   final Duration maxOneWayDelay;
+  final int reorderWindow;
   final double dropRate;
   final double duplicateRate;
 }
