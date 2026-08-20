@@ -8,7 +8,7 @@
 Push-Location FlowMuse-App
 flutter devices
 $env:FLOWMUSE_PERF_OUTPUT_DIR = (Resolve-Path .).Path + '\build\writing-perf'
-flutter drive --profile -d <deviceId> --driver=test_driver/whiteboard_writing_perf_driver.dart --target=integration_test/whiteboard_writing_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_DEVICE_CLASS=harmony-60hz-mid --dart-define=FLOWMUSE_REFRESH_HZ=60 --dart-define=FLOWMUSE_SCENE_ELEMENTS=100 --dart-define=FLOWMUSE_WRITING_FIXTURE=quick_zigzag --dart-define=FLOWMUSE_RUN_INDEX=1
+flutter drive --profile -d <deviceId> --driver=test_driver/whiteboard_writing_perf_driver.dart --target=integration_test/whiteboard_writing_perf_test.dart --dart-define=FLOWMUSE_PERF_TEST=true --dart-define=FLOWMUSE_PHYSICAL_DEVICE=true --dart-define=FLOWMUSE_DEVICE_ID=<deviceId> --dart-define=FLOWMUSE_DEVICE_CLASS=harmony-60hz-mid --dart-define=FLOWMUSE_REFRESH_HZ=60 --dart-define=FLOWMUSE_SCENE_ELEMENTS=100 --dart-define=FLOWMUSE_WRITING_FIXTURE=quick_zigzag --dart-define=FLOWMUSE_RUN_INDEX=1 --dart-define=FLOWMUSE_LAYERED_WET_INK=false
 Pop-Location
 ```
 
@@ -27,6 +27,8 @@ Pop-Location
 - `FLOWMUSE_WRITING_FIXTURE` 使用 `short_horizontal_no_pressure`、`long_curve_pressure`、`quick_zigzag`、`pressure_ramp` 或 `pointer_cancel`。
 - 快速书写默认测量 60 秒，`long_curve_pressure` 默认 30 秒；仅排错时可用 `FLOWMUSE_MEASURE_SECONDS` 缩短，缩短结果不能进入基线。
 - 每个设备类/场景独立运行 5 轮并填写 `FLOWMUSE_RUN_INDEX=1..5`。raw 会包含目标/实际注入时间、jitter、Git SHA、dirty 状态和 fixture hash。
+- `FLOWMUSE_PHYSICAL_DEVICE=true` 与 `FLOWMUSE_DEVICE_ID` 必须由操作者按 `flutter devices` 的真机结果填写；模拟器或缺失身份的结果会被汇总器拒绝。每个场景分别运行 `FLOWMUSE_LAYERED_WET_INK=false/true`，不得混合汇总。
+- 60Hz 和 ≥100Hz 目标由 runner 按冻结表生成；其他刷新率必须在运行前用 `FLOWMUSE_EVENT_TO_PAINT_TARGET_MICROS` 显式给出已批准目标。
 
 ```powershell
 dart run tool/writing_perf/summarize_results.dart --input build/writing-perf --output ../docs/研发记录/research/writing-performance-p0-baseline.md

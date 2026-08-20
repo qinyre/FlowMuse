@@ -35,6 +35,9 @@ const _refreshHz = int.fromEnvironment('FLOWMUSE_REFRESH_HZ');
 const _runIndex = int.fromEnvironment('FLOWMUSE_RUN_INDEX');
 const _physicalDevice = bool.fromEnvironment('FLOWMUSE_PHYSICAL_DEVICE');
 const _deviceId = String.fromEnvironment('FLOWMUSE_DEVICE_ID');
+const _eventToPaintTargetOverride = int.fromEnvironment(
+  'FLOWMUSE_EVENT_TO_PAINT_TARGET_MICROS',
+);
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -113,6 +116,13 @@ void main() {
     final expectedMeasureSeconds = fixture.name.contains('long_curve')
         ? 30
         : 60;
+    final eventToPaintTargetMicros = _eventToPaintTargetOverride > 0
+        ? _eventToPaintTargetOverride
+        : _refreshHz >= 55 && _refreshHz <= 65
+        ? 33400
+        : _refreshHz >= 100
+        ? (1000000 / _refreshHz).ceil()
+        : 0;
     var strokeIndex = 0;
     while (runClock.elapsed < Duration(seconds: measureSeconds)) {
       await _replayFixture(
@@ -153,7 +163,8 @@ void main() {
           _refreshHz > 0 &&
           _runIndex >= 1 &&
           _runIndex <= 5 &&
-          measureSeconds == expectedMeasureSeconds,
+          measureSeconds == expectedMeasureSeconds &&
+          eventToPaintTargetMicros > 0,
       'buildMode': kProfileMode
           ? 'profile'
           : kReleaseMode
@@ -172,6 +183,7 @@ void main() {
       'writingFixtureHash': fixture.contentHash,
       'measureSeconds': measureSeconds,
       'expectedMeasureSeconds': expectedMeasureSeconds,
+      'eventToPaintTargetMicros': eventToPaintTargetMicros,
       'flags': {'layeredWetInk': writingFeatureFlags.layeredWetInk},
       'injectionJitterP95Micros': jitterP95,
       'injectionJitterMaxMicros': jitterMax,
@@ -287,6 +299,9 @@ String _semanticSceneHash(Map<String, Object?> scene) {
     'updated',
     'index',
     'customData',
+    'selectedElementIds',
+    'selectedGroupIds',
+    'editingElement',
   };
   Object? normalize(Object? value) {
     if (value is List) return [for (final item in value) normalize(item)];
