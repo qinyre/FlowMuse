@@ -37,4 +37,31 @@ void main() {
       isFalse,
     );
   });
+
+  test('设备列表必须完整扫描，目标后的模拟器也计入歧义设备数', () {
+    final evidence = inspectFlutterDevices([
+      {
+        'id': 'device-a',
+        'name': 'phone',
+        'targetPlatform': 'android-arm64',
+        'emulator': false,
+      },
+      {
+        'id': 'emulator-a',
+        'name': 'emulator',
+        'targetPlatform': 'android-x64',
+        'emulator': true,
+      },
+      {
+        'id': 'windows',
+        'name': 'Windows',
+        'targetPlatform': 'windows-x64',
+        'emulator': false,
+      },
+    ], 'device-a');
+
+    expect(evidence['detectedDeviceId'], 'device-a');
+    expect(evidence['detectedEmulator'], isFalse);
+    expect(evidence['supportedDeviceCount'], 2);
+  });
 }

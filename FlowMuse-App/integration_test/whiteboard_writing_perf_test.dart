@@ -193,6 +193,7 @@ void main() {
       'elementsAfterRun': controller.currentScene.elements.length,
       'expectedCompletedStrokes': strokeIndex,
       'validCompletedFreedrawCount': validCompletedFreedrawCount,
+      'finalScene': sceneAfterRun,
       'sceneHashAfterRun': _jsonHash(sceneAfterRun),
       'semanticSceneHashAfterRun': _semanticSceneHash(sceneAfterRun),
       'codecRoundTripSemanticSceneHashAfterRun': _semanticSceneHash(

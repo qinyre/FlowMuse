@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:integration_test/integration_test_driver.dart';
 
+import '../tool/writing_perf/profile_device_eligibility.dart';
+
 Future<void> main() {
   return integrationDriver(
     responseDataCallback: (data) async {
@@ -35,25 +37,13 @@ Future<Map<String, Object?>> _hostEvidence(Map<String, dynamic>? report) async {
   final status = await Process.run('git', ['status', '--porcelain']);
   final reportedDeviceId = report?['deviceId'];
   final devices = await Process.run('flutter', ['devices', '--machine']);
-  Map<String, Object?>? detectedDevice;
-  var supportedDeviceCount = 0;
+  var deviceEvidence = <String, Object?>{};
   if (devices.exitCode == 0 && reportedDeviceId is String) {
     try {
-      final decoded = jsonDecode(devices.stdout as String);
-      if (decoded is List) {
-        for (final item in decoded.whereType<Map>()) {
-          final target = item['targetPlatform']?.toString().toLowerCase() ?? '';
-          if (target.startsWith('android') ||
-              target.startsWith('ios') ||
-              target.startsWith('ohos')) {
-            supportedDeviceCount++;
-          }
-          if (item['id'] == reportedDeviceId) {
-            detectedDevice = Map<String, Object?>.from(item);
-            break;
-          }
-        }
-      }
+      deviceEvidence = inspectFlutterDevices(
+        jsonDecode(devices.stdout as String),
+        reportedDeviceId,
+      );
     } on FormatException {
       // 由汇总器将缺失的设备证据判为无效，仍保留原始结果。
     }
@@ -66,10 +56,6 @@ Future<Map<String, Object?>> _hostEvidence(Map<String, dynamic>? report) async {
     'hostOperatingSystem': Platform.operatingSystem,
     'hostOperatingSystemVersion': Platform.operatingSystemVersion,
     'deviceDetectionExitCode': devices.exitCode,
-    'detectedDeviceId': detectedDevice?['id'],
-    'detectedDeviceName': detectedDevice?['name'],
-    'detectedTargetPlatform': detectedDevice?['targetPlatform'],
-    'detectedEmulator': detectedDevice?['emulator'],
-    'supportedDeviceCount': supportedDeviceCount,
+    ...deviceEvidence,
   };
 }

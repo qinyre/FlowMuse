@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_manifest.dart';
 
+import '../../../integration_test/fixtures/scene_fixtures.dart';
 import '../../../tool/writing_perf/summarize_results.dart';
 
 void main() {
@@ -272,13 +273,60 @@ void main() {
       runIndex: 1,
       offset: 0,
       reportedAccepted: 101,
-      elementsAfterRun: 109,
+      finalStrokeCount: 9,
     );
 
     final run = (await summarizeDirectory(directory)).runs.single;
 
     expect(run.invalidReasons, contains('performance_counts_not_reproducible'));
     expect(run.invalidReasons, contains('incomplete_final_scene'));
+  });
+
+  test('重复的 strokeEpoch/inputSeq 不能扩大有效样本数', () async {
+    final directory = await _tempDirectory('duplicate-sample');
+    await _writeRun(
+      directory,
+      'duplicate-sample.json',
+      runIndex: 1,
+      offset: 0,
+      duplicateLastSample: true,
+    );
+
+    final run = (await summarizeDirectory(directory)).runs.single;
+
+    expect(
+      run.invalidReasons,
+      contains('invalid_or_duplicate_sample_identity'),
+    );
+    expect(run.invalidReasons, contains('performance_counts_not_reproducible'));
+  });
+
+  test('P1 terminal-before-preview 退化超过 0.5 个百分点时失败', () async {
+    final directory = await _tempDirectory('terminal-regression');
+    for (var run = 1; run <= 5; run++) {
+      await _writeRun(
+        directory,
+        'legacy-$run.json',
+        runIndex: run,
+        offset: 40000 + run - 1,
+      );
+      await _writeRun(
+        directory,
+        'layered-$run.json',
+        runIndex: run,
+        offset: run - 1,
+        layeredWetInk: true,
+        terminalSamples: 1,
+      );
+    }
+
+    final summary = await summarizeDirectory(
+      directory,
+      phase: WritingSummaryPhase.p1,
+    );
+
+    expect(summary.status, 'stable');
+    expect(summary.acceptanceStatus, 'failed');
   });
 }
 
@@ -306,10 +354,49 @@ Future<void> _writeRun(
   String writingFixture = 'quick_zigzag',
   int eventTargetMicros = 33000,
   int supportedDeviceCount = 1,
-  int reportedAccepted = 100,
-  int elementsAfterRun = 110,
-}) {
-  return File('${directory.path}/$name').writeAsString(
+  int? reportedAccepted,
+  int acceptedSampleCount = 100,
+  int terminalSamples = 0,
+  int finalStrokeCount = 10,
+  bool duplicateLastSample = false,
+}) async {
+  const expectedCompletedStrokes = 10;
+  final baseScene = buildSceneFixture(100);
+  final finalScene = baseScene
+      .copyWith(
+        elements: [
+          ...baseScene.elements,
+          for (var stroke = 0; stroke < finalStrokeCount; stroke++)
+            {
+              'id': 'completed-$stroke',
+              'type': 'freedraw',
+              'points': const [
+                [0.0, 0.0],
+                [1.0, 1.0],
+              ],
+            },
+        ],
+      )
+      .toJson();
+  final finalSceneHash = canonicalSceneHash(finalScene);
+  final finalSemanticHash = semanticSceneHash(finalScene);
+  final paintedSamples = acceptedSampleCount - terminalSamples;
+  final activePreviewSamples = <Map<String, Object?>>[
+    for (var sample = 1; sample <= acceptedSampleCount; sample++)
+      {
+        'strokeEpoch':
+            ((sample - 1) * expectedCompletedStrokes) ~/ acceptedSampleCount +
+            1,
+        'inputSeq': sample,
+        'eventToPaintMicros': sample <= paintedSamples ? sample + offset : null,
+        'frameNumber': sample <= paintedSamples ? sample : null,
+        'terminalReason': sample <= paintedSamples ? null : 'pointerUp',
+      },
+  ];
+  if (duplicateLastSample) {
+    activePreviewSamples.last = {...activePreviewSamples.first};
+  }
+  await File('${directory.path}/$name').writeAsString(
     jsonEncode({
       'schemaVersion': supportedReportSchemaVersion,
       'measurementEligible': measurementEligible,
@@ -330,12 +417,13 @@ Future<void> _writeRun(
       'measureSeconds': measureSeconds,
       'eventToPaintTargetMicros': eventTargetMicros,
       'flags': {'layeredWetInk': layeredWetInk},
-      'sceneHashAfterRun': _repeated('d', 64),
-      'semanticSceneHashAfterRun': _repeated('e', 64),
-      'codecRoundTripSemanticSceneHashAfterRun': _repeated('e', 64),
-      'elementsAfterRun': elementsAfterRun,
-      'expectedCompletedStrokes': 10,
-      'validCompletedFreedrawCount': 10,
+      'finalScene': finalScene,
+      'sceneHashAfterRun': finalSceneHash,
+      'semanticSceneHashAfterRun': finalSemanticHash,
+      'codecRoundTripSemanticSceneHashAfterRun': finalSemanticHash,
+      'elementsAfterRun': 100 + finalStrokeCount,
+      'expectedCompletedStrokes': expectedCompletedStrokes,
+      'validCompletedFreedrawCount': finalStrokeCount,
       'hostEvidence': {
         'gitSha': _repeated('a', 40),
         'gitDirty': gitDirty,
@@ -347,18 +435,12 @@ Future<void> _writeRun(
       'performance': {
         'schemaVersion': supportedReportSchemaVersion,
         'invalidReasons': <String>[],
-        'accepted': reportedAccepted,
-        'painted': 100,
-        'terminalBeforePreview': 0,
+        'accepted': reportedAccepted ?? acceptedSampleCount,
+        'painted': paintedSamples,
+        'missingPaint': 0,
+        'terminalBeforePreview': terminalSamples,
         'coverage': 1.0,
-        'activePreviewSamples': [
-          for (var sample = 1; sample <= 100; sample++)
-            {
-              'eventToPaintMicros': sample + offset,
-              'frameNumber': sample,
-              'terminalReason': null,
-            },
-        ],
+        'activePreviewSamples': activePreviewSamples,
         'frames': [
           for (var frame = 1; frame <= frameCount; frame++)
             {

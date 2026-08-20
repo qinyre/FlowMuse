@@ -7,6 +7,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input_sample.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_recorder.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input_normalizer.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_manifest.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import '../../../../../integration_test/fixtures/scene_fixtures.dart';
@@ -96,6 +97,12 @@ void main() {
           .toList();
       expect(hashes.toSet(), hasLength(writingRecordingFixtures.length));
       expect(hashes.every((hash) => hash.length == 64), isTrue);
+      for (final entry in writingPerformanceFixtures.entries) {
+        final fixture = writingRecordingFixtures.singleWhere(
+          (candidate) => candidate.name == entry.key,
+        );
+        expect(fixture.contentHash, entry.value.hash, reason: entry.key);
+      }
     });
   });
 
@@ -119,6 +126,11 @@ void main() {
     test('固定规模覆盖必要类型、占位图与 z-order', () {
       for (final count in supportedSceneFixtureCounts) {
         final scene = buildSceneFixture(count);
+        expect(
+          scene.collaborationHash(),
+          writingSceneFixtureHashes[count],
+          reason: 'scene-$count',
+        );
         expect(scene.elements, hasLength(count));
         final types = scene.elements.map((element) => element['type']).toSet();
         expect(types, containsAll(['freedraw', 'rectangle', 'text', 'image']));

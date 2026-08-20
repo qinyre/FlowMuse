@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_manifest.dart';
 
 const int supportedReportSchemaVersion = 1;
@@ -132,6 +134,9 @@ class WritingScenarioSummary {
     for (final run in validRuns)
       if (run.frames != null) run.frames!.deadlineMissRatio,
   ]);
+
+  double? get medianTerminalRatio =>
+      _medianDouble([for (final run in validRuns) run.terminalRatio]);
 
   double? get runP95SpreadRatio {
     final values = [for (final run in validRuns) run.p95Micros!]..sort();
@@ -283,6 +288,7 @@ class WritingResultsSummary {
       if (improvement < 0.30 ||
           !layered.frameGatePassed ||
           layered.medianDeadlineMissRatio! > legacy.medianDeadlineMissRatio! ||
+          layered.medianTerminalRatio! > legacy.medianTerminalRatio! + 0.005 ||
           !hashesMatch) {
         return false;
       }
@@ -539,11 +545,11 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
   }
   final sceneFixtureHash = root['sceneFixtureHash'];
   final sceneHashAfterRun = root['sceneHashAfterRun'];
-  final semanticSceneHash = root['semanticSceneHashAfterRun'];
+  final reportedSemanticSceneHash = root['semanticSceneHashAfterRun'];
   for (final entry in {
     'invalid_scene_fixture_hash': sceneFixtureHash,
     'invalid_final_scene_hash': sceneHashAfterRun,
-    'invalid_semantic_scene_hash': semanticSceneHash,
+    'invalid_semantic_scene_hash': reportedSemanticSceneHash,
   }.entries) {
     if (entry.value is! String ||
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(entry.value! as String)) {
@@ -553,19 +559,53 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
   if (sceneFixtureHash != writingSceneFixtureHashes[sceneElementCount]) {
     invalidReasons.add('unfrozen_scene_fixture_hash');
   }
-  final codecRoundTripSemanticHash =
-      root['codecRoundTripSemanticSceneHashAfterRun'];
-  if (codecRoundTripSemanticHash != semanticSceneHash) {
-    invalidReasons.add('scene_codec_round_trip_mismatch');
-  }
   final expectedCompletedStrokes =
       (root['expectedCompletedStrokes'] as num?)?.toInt() ?? 0;
-  final elementsAfterRun = (root['elementsAfterRun'] as num?)?.toInt();
-  final validCompletedFreedrawCount =
-      (root['validCompletedFreedrawCount'] as num?)?.toInt();
+  final rawFinalScene = root['finalScene'];
+  Map<String, Object?>? finalScene;
+  try {
+    if (rawFinalScene is Map) {
+      finalScene = ExcalidrawScene.fromJson(
+        Map<String, Object?>.from(rawFinalScene),
+      ).toJson();
+    }
+  } on Object {
+    finalScene = null;
+  }
+  final completedElements = finalScene?['elements'] is List
+      ? (finalScene!['elements']! as List).skip(sceneElementCount ?? 0).toList()
+      : const <Object?>[];
+  final structurallyValidFreedraw = completedElements.where((element) {
+    if (element is! Map || element['type'] != 'freedraw') return false;
+    final points = element['points'];
+    return points is List &&
+        points.isNotEmpty &&
+        points.every(
+          (point) =>
+              point is List &&
+              point.length >= 2 &&
+              point[0] is num &&
+              (point[0] as num).toDouble().isFinite &&
+              point[1] is num &&
+              (point[1] as num).toDouble().isFinite,
+        );
+  }).length;
+  final recomputedSceneHash = finalScene == null
+      ? null
+      : canonicalSceneHash(finalScene);
+  final recomputedSemanticHash = finalScene == null
+      ? null
+      : semanticSceneHash(finalScene);
+  if (finalScene == null ||
+      recomputedSceneHash != sceneHashAfterRun ||
+      recomputedSemanticHash != reportedSemanticSceneHash) {
+    invalidReasons.add('scene_artifact_hash_mismatch');
+  }
   if (expectedCompletedStrokes <= 0 ||
-      elementsAfterRun != sceneElementCount! + expectedCompletedStrokes ||
-      validCompletedFreedrawCount != expectedCompletedStrokes) {
+      finalScene?['elements'] is! List ||
+      (finalScene!['elements']! as List).length !=
+          (sceneElementCount ?? 0) + expectedCompletedStrokes ||
+      structurallyValidFreedraw != expectedCompletedStrokes) {
     invalidReasons.add('incomplete_final_scene');
   }
   final flags = root['flags'];
@@ -614,13 +654,27 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
   var accepted = 0;
   var painted = 0;
   var terminal = 0;
+  final sampleKeys = <String>{};
+  final strokeEpochs = <int>{};
   final samples = performance?['activePreviewSamples'];
   if (samples is List) {
     for (final rawSample in samples) {
       if (rawSample is! Map) continue;
+      final strokeEpoch = (rawSample['strokeEpoch'] as num?)?.toInt();
+      final inputSeq = (rawSample['inputSeq'] as num?)?.toInt();
+      if (strokeEpoch == null ||
+          strokeEpoch <= 0 ||
+          inputSeq == null ||
+          inputSeq < 0 ||
+          !sampleKeys.add('$strokeEpoch:$inputSeq')) {
+        invalidReasons.add('invalid_or_duplicate_sample_identity');
+        continue;
+      }
+      strokeEpochs.add(strokeEpoch);
       accepted++;
       final duration = rawSample['eventToPaintMicros'];
-      if (duration is num && rawSample['terminalReason'] == null) {
+      final terminalReason = rawSample['terminalReason'];
+      if (duration is num && duration.toInt() >= 0 && terminalReason == null) {
         painted++;
         durations.add(duration.toInt());
         final frameNumber = (rawSample['frameNumber'] as num?)?.toInt();
@@ -629,15 +683,22 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
         } else {
           paintedFrameNumbers.add(frameNumber);
         }
-      } else if (rawSample['terminalReason'] != null) {
+      } else if (duration == null && terminalReason is String) {
         terminal++;
+      } else {
+        invalidReasons.add('invalid_sample_state');
       }
     }
   }
+  if (strokeEpochs.length != expectedCompletedStrokes) {
+    invalidReasons.add('sample_stroke_count_mismatch');
+  }
   final denominator = accepted - terminal;
+  final missingPaint = denominator - painted;
   final coverage = denominator <= 0 ? 0.0 : painted / denominator;
   if ((performance?['accepted'] as num?)?.toInt() != accepted ||
       (performance?['painted'] as num?)?.toInt() != painted ||
+      (performance?['missingPaint'] as num?)?.toInt() != missingPaint ||
       (performance?['terminalBeforePreview'] as num?)?.toInt() != terminal ||
       ((performance?['coverage'] as num?)?.toDouble() ?? -1) != coverage) {
     invalidReasons.add('performance_counts_not_reproducible');
@@ -669,8 +730,8 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     runIndex: runIndex,
     layeredWetInk: layeredWetInk,
     eventToPaintTargetMicros: eventTarget,
-    semanticSceneHashAfterRun: semanticSceneHash is String
-        ? semanticSceneHash
+    semanticSceneHashAfterRun: reportedSemanticSceneHash is String
+        ? reportedSemanticSceneHash
         : null,
     finalSceneHashAfterRun: sceneHashAfterRun is String
         ? sceneHashAfterRun
@@ -686,6 +747,44 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     eventToPaintMicros: List.unmodifiable(durations),
     frames: frames,
   );
+}
+
+String canonicalSceneHash(Map<String, Object?> scene) =>
+    sha256.convert(utf8.encode(jsonEncode(scene))).toString();
+
+String semanticSceneHash(Map<String, Object?> scene) {
+  const ignoredKeys = {
+    'id',
+    'seed',
+    'versionNonce',
+    'updated',
+    'selectedElementIds',
+    'selectedGroupIds',
+    'editingElement',
+  };
+  Object? normalize(Object? value) {
+    if (value is List) return [for (final item in value) normalize(item)];
+    if (value is Map) {
+      return {
+        for (final entry in value.entries)
+          if (!ignoredKeys.contains(entry.key))
+            entry.key.toString(): normalize(entry.value),
+      };
+    }
+    return value;
+  }
+
+  return sha256
+      .convert(
+        utf8.encode(
+          jsonEncode({
+            'elements': normalize(scene['elements']),
+            'appState': normalize(scene['appState']),
+            'files': normalize(scene['files']),
+          }),
+        ),
+      )
+      .toString();
 }
 
 FrameRunSummary? _summarizeFrames(

@@ -1,3 +1,31 @@
+Map<String, Object?> inspectFlutterDevices(
+  Object? decoded,
+  Object? reportedDeviceId,
+) {
+  Map<String, Object?>? detectedDevice;
+  var supportedDeviceCount = 0;
+  if (decoded is List && reportedDeviceId is String) {
+    for (final item in decoded.whereType<Map>()) {
+      final target = item['targetPlatform']?.toString().toLowerCase() ?? '';
+      if (target.startsWith('android') ||
+          target.startsWith('ios') ||
+          target.startsWith('ohos')) {
+        supportedDeviceCount++;
+      }
+      if (item['id'] == reportedDeviceId) {
+        detectedDevice = Map<String, Object?>.from(item);
+      }
+    }
+  }
+  return {
+    'detectedDeviceId': detectedDevice?['id'],
+    'detectedDeviceName': detectedDevice?['name'],
+    'detectedTargetPlatform': detectedDevice?['targetPlatform'],
+    'detectedEmulator': detectedDevice?['emulator'],
+    'supportedDeviceCount': supportedDeviceCount,
+  };
+}
+
 bool isHostVerifiedProfileReport(
   Map<String, dynamic>? report,
   Map<String, Object?> host,
