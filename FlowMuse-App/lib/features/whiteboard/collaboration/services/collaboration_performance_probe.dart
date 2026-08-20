@@ -2,6 +2,7 @@ enum CollaborationPerformanceStage {
   jsonEncode,
   encrypt,
   transportSend,
+  reliableQueueWait,
   decrypt,
   jsonDecode,
   reconcile,

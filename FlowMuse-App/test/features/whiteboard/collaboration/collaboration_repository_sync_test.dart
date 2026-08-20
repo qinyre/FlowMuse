@@ -8,6 +8,7 @@ import 'package:flow_muse/features/whiteboard/collaboration/models/room_collabor
 import 'package:flow_muse/features/whiteboard/collaboration/models/received_live_ink_frame.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_crypto.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_performance_probe.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -266,6 +267,54 @@ void main() {
     await repository.stop();
     await transport.close();
   });
+
+  test('可靠消息记录接收至开始处理的排队时间', () async {
+    var nowMicros = 0;
+    final probe = CollaborationPerformanceProbe(nowMicros: () => nowMicros);
+    final crypto = _GatedDecryptCrypto();
+    final room = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    await store.createRoom(
+      room: room,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'queue',
+    );
+    final transport = _LifecycleTransport();
+    final repository = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+      crypto: crypto,
+      performanceProbe: probe,
+    );
+    await repository.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    final payload = await CollaborationCrypto().encrypt(
+      roomKey: room.roomKey,
+      plainBytes: CollaborationMessage.sceneUpdate(
+        elements: [_element('queued', 1)],
+      ).toBytes(),
+    );
+
+    crypto.blockNextDecrypt();
+    transport.messagesController.add(payload);
+    await crypto.decryptStarted;
+    transport.messagesController.add(payload);
+    await Future<void>.delayed(Duration.zero);
+    nowMicros = 5000;
+    crypto.releaseDecrypt();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final queueSamples = probe.samples
+        .where(
+          (sample) =>
+              sample.stage == CollaborationPerformanceStage.reliableQueueWait,
+        )
+        .map((sample) => sample.durationMicros)
+        .toList();
+    expect(queueSamples, [0, 5000]);
+
+    await repository.stop();
+    await transport.close();
+  });
 }
 
 class _LifecycleTransport implements RealtimeTransport {
@@ -378,9 +427,11 @@ class _GatedDecryptCrypto extends CollaborationCrypto {
   }) async {
     final gate = _gate;
     if (gate != null) {
-      _gate = null;
       _started!.complete();
       await gate.future;
+      if (identical(_gate, gate)) {
+        _gate = null;
+      }
     }
     return super.decrypt(roomKey: roomKey, encryptedPayload: encryptedPayload);
   }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/config/live_ink_flags.dart';
@@ -195,30 +196,55 @@ void main() {
       final ratio = results[count * 2]!.bytes / results[count]!.bytes;
       expect(ratio, inInclusiveRange(1.7, 2.3));
     }
+    final byteFit = _linearFit(
+      results.entries
+          .map((entry) => (entry.key.toDouble(), entry.value.bytes.toDouble()))
+          .toList(),
+    );
+    final pointFit = _linearFit(
+      results.entries
+          .map(
+            (entry) =>
+                (entry.key.toDouble(), entry.value.pointEntries.toDouble()),
+          )
+          .toList(),
+    );
+    expect(byteFit.slope, greaterThan(0));
+    expect(byteFit.rSquared, greaterThanOrEqualTo(0.99));
+    expect(pointFit.slope, greaterThan(0));
+    expect(pointFit.rSquared, greaterThanOrEqualTo(0.99));
   });
 
-  test('5000 个 finalized ID 下 150 个 live 包均常数时间集合拒绝', () {
-    final store = RemoteWetInkStore(autoCleanup: false);
-    addTearDown(store.dispose);
-    store.seedFinalizedStrokeIds([
-      for (var index = 0; index < 5000; index++) 'stroke-$index',
-    ]);
-
-    for (var index = 0; index < 150; index++) {
-      final result = store.apply(
-        DecodedLiveInkChunk(
-          senderSocketId: 'sender',
-          chunk: LiveInkChunk(
-            strokeId: 'stroke-${index % 5000}',
-            startIndex: 0,
-            points: const [LiveInkPoint(x: 1, y: 1)],
-            style: _style,
+  test('finalized 规模从 500 到 50000 时每包只检查当前点', () {
+    for (final finalizedCount in [500, 5000, 50000]) {
+      final store = RemoteWetInkStore(nowMs: () => 0, autoCleanup: false);
+      store.seedFinalizedStrokeIds([
+        for (var index = 0; index < finalizedCount; index++) 'stroke-$index',
+      ]);
+      var maxExaminedPoints = 0;
+      for (var index = 0; index < 150; index++) {
+        final result = store.apply(
+          DecodedLiveInkChunk(
+            senderSocketId: 'sender',
+            chunk: LiveInkChunk(
+              strokeId: 'stroke-${index % finalizedCount}',
+              startIndex: 0,
+              points: const [LiveInkPoint(x: 1, y: 1)],
+              style: _style,
+            ),
           ),
-        ),
-      );
-      expect(result.reason, RemoteWetInkDropReason.finalized);
+        );
+        expect(result.reason, RemoteWetInkDropReason.finalized);
+        maxExaminedPoints = math.max(
+          maxExaminedPoints,
+          store.lastApplyExaminedPointCount,
+        );
+      }
+      expect(maxExaminedPoints, 1);
+      expect(store.cleanupPassCount, 1);
+      expect(store.strokeCount, 0);
+      store.dispose();
     }
-    expect(store.strokeCount, 0);
   });
 }
 
@@ -378,4 +404,34 @@ class _SenderResult {
   final int pointEntries;
   final int maxRepeats;
   final int bytes;
+}
+
+_LinearFit _linearFit(List<(double, double)> points) {
+  final meanX =
+      points.fold(0.0, (sum, point) => sum + point.$1) / points.length;
+  final meanY =
+      points.fold(0.0, (sum, point) => sum + point.$2) / points.length;
+  var covariance = 0.0;
+  var varianceX = 0.0;
+  var totalY = 0.0;
+  for (final point in points) {
+    covariance += (point.$1 - meanX) * (point.$2 - meanY);
+    varianceX += (point.$1 - meanX) * (point.$1 - meanX);
+    totalY += (point.$2 - meanY) * (point.$2 - meanY);
+  }
+  final slope = covariance / varianceX;
+  final intercept = meanY - slope * meanX;
+  var residual = 0.0;
+  for (final point in points) {
+    final predicted = intercept + slope * point.$1;
+    residual += (point.$2 - predicted) * (point.$2 - predicted);
+  }
+  return _LinearFit(slope, totalY == 0 ? 1 : 1 - residual / totalY);
+}
+
+class _LinearFit {
+  const _LinearFit(this.slope, this.rSquared);
+
+  final double slope;
+  final double rSquared;
 }

@@ -31,12 +31,14 @@ void main() {
       adapter: adapter,
       viewport: const ViewportState(),
     );
+    expect(cache.paintedMaxPointIndex('stroke'), isNull);
 
     _paint(painter);
     final recordedAfterFirstPaint = cache.recordedGeometryPointCount;
     expect(cache.pictureLayerCount, lessThanOrEqualTo(9));
     expect(cache.lastFrameTailPointCount, 64);
     expect(recordedAfterFirstPaint, greaterThan(0));
+    expect(cache.paintedMaxPointIndex('stroke'), 639);
 
     adapter.calls = 0;
     adapter.totalPoints = 0;
@@ -74,6 +76,30 @@ void main() {
 
     expect(newlyRecorded, 64);
     expect(cache.pictureLayerCount, lessThanOrEqualTo(9));
+  });
+
+  test('延迟到达不能在 painter 真正 paint 前产生关联标记', () {
+    final store = RemoteWetInkStore(autoCleanup: false);
+    final cache = RemoteWetInkRenderCache();
+    final painter = RemoteWetInkPainter(
+      store: store,
+      cache: cache,
+      adapter: _RecordingAdapter(),
+      viewport: const ViewportState(),
+    );
+    addTearDown(() {
+      cache.dispose();
+      store.dispose();
+    });
+    const acceptedMicros = 1000;
+    store.apply(_decoded('delayed', startIndex: 0, count: 1));
+
+    expect(cache.paintedMaxPointIndex('delayed'), isNull);
+    const paintMicros = acceptedMicros + 500000;
+    _paint(painter);
+
+    expect(cache.paintedMaxPointIndex('delayed'), 0);
+    expect(paintMicros - acceptedMicros, 500000);
   });
 
   test('缺口拆成独立子路径，样式和压力传给现有 renderer', () {
@@ -123,6 +149,7 @@ void main() {
     );
     _paint(painter);
     expect(cache.pictureLayerCount, greaterThan(0));
+    expect(cache.paintedMaxPointIndex('stroke'), 255);
 
     store.finalizeStroke('stroke');
     adapter.calls = 0;
@@ -130,6 +157,7 @@ void main() {
 
     expect(cache.pictureLayerCount, 0);
     expect(adapter.calls, 0);
+    expect(cache.paintedMaxPointIndex('stroke'), isNull);
   });
 
   test('16k 长笔的 retained picture 始终为单层且估算缓存有界', () {

@@ -130,6 +130,8 @@ class CollaborationRepository {
   int get liveInkPendingSenderCount =>
       _liveInkScheduler?.pendingSenderCount ?? 0;
 
+  bool get liveInkReceiveInFlight => _liveInkScheduler?.inFlight ?? false;
+
   int get liveInkTransportNotWritableDrops =>
       _transport.liveInkTransportNotWritableDrops;
 
@@ -715,6 +717,7 @@ class CollaborationRepository {
     });
     _transportMessageSubscription = _transport.messages.listen(
       (payload) {
+        final enqueuedMicros = _performanceProbe?.nowMicros();
         CollaborationDebugLog.write('wire', 'payload_received', {
           'room': _shortRoomId(room.roomId),
           'encryptedBytes': payload.encryptedBuffer.length,
@@ -722,7 +725,12 @@ class CollaborationRepository {
         });
         _messageDecodeQueue = _messageDecodeQueue
             .then(
-              (_) => _handleEncryptedPayload(room, payload, sessionGeneration),
+              (_) => _handleEncryptedPayload(
+                room,
+                payload,
+                sessionGeneration,
+                enqueuedMicros,
+              ),
             )
             .catchError((Object error) {
               CollaborationDebugLog.write('repo', 'message_queue_failed', {
@@ -753,9 +761,17 @@ class CollaborationRepository {
     CollaborationRoom room,
     EncryptedPayload payload,
     int sessionGeneration,
+    int? enqueuedMicros,
   ) async {
     if (!_isCurrentRoomSession(room, sessionGeneration)) {
       return;
+    }
+    if (enqueuedMicros != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.reliableQueueWait,
+        enqueuedMicros,
+        byteCount: payload.encryptedBuffer.length + payload.iv.length,
+      );
     }
     try {
       final decryptStarted = _performanceProbe?.nowMicros();

@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/config/live_ink_flags.dart';
@@ -11,11 +13,16 @@ import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_sc
 import 'package:flow_muse/features/whiteboard/collaboration/models/live_ink_chunk.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_crypto.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_performance_probe.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/live_ink_sender.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_ink_store.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/config/writing_feature_flags.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/active_preview_metrics_probe.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_render_metrics.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_report.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/remote_wet_ink_painter.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -25,6 +32,12 @@ const _perfTestEnabled = bool.fromEnvironment('FLOWMUSE_PERF_TEST');
 const _measureSeconds = int.fromEnvironment(
   'FLOWMUSE_MEASURE_SECONDS',
   defaultValue: 300,
+);
+const _localEventTargetMicros = int.fromEnvironment(
+  'FLOWMUSE_EVENT_TO_PAINT_TARGET_MICROS',
+);
+const _p1BaselineP95Micros = int.fromEnvironment(
+  'FLOWMUSE_P1_BASELINE_P95_MICROS',
 );
 const _style = LiveInkStyle(
   brushType: 'fountainPen',
@@ -36,7 +49,9 @@ const _style = LiveInkStyle(
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('真实 repository 到 RemoteWetInkPainter 的 2/5 人门禁', (tester) async {
+  testWidgets('真实 repository 到 RemoteWetInkPainter 的 2/5 sender 门禁', (
+    tester,
+  ) async {
     expect(
       _perfTestEnabled,
       isTrue,
@@ -57,7 +72,26 @@ void main() {
       };
       return;
     }
+    expect(
+      _measureSeconds,
+      greaterThanOrEqualTo(60),
+      reason: 'live ink Profile 门禁至少持续 60 秒',
+    );
 
+    final senderScaleEvidence = await _measureSenderScaleEvidence();
+    for (final row
+        in senderScaleEvidence['raw']! as List<Map<String, Object?>>) {
+      expect(
+        row['pointEntries'],
+        lessThanOrEqualTo(3 * (row['acceptedPoints']! as int)),
+      );
+      expect(row['maxRepeats'], lessThanOrEqualTo(3));
+    }
+    expect(senderScaleEvidence['bytesRSquared'], greaterThanOrEqualTo(0.99));
+    expect(
+      senderScaleEvidence['pointEntriesRSquared'],
+      greaterThanOrEqualTo(0.99),
+    );
     final results = <Map<String, Object?>>[];
     for (final memberCount in [2, 5]) {
       for (final network in const [
@@ -103,9 +137,13 @@ void main() {
       expect(result['effective'], isTrue);
       expect(result['emitCount'], greaterThan(0));
       expect(result['paintCount'], greaterThan(0));
+      expect(result['localAcceptedCount'], greaterThan(0));
+      expect(result['localPaintedCount'], greaterThan(0));
       expect(result['finalConverged'], isTrue);
       expect(result['wetInkRemaining'], 0);
       expect(result['pendingCount'], 0);
+      expect(result['livePacketsWhileReliablePending'], greaterThan(0));
+      expect(result['reconnectCount'], 1);
       final network = result['network'];
       final remoteP95 = result['remotePaintP95Micros']! as int;
       if (network == 'good') {
@@ -119,6 +157,16 @@ void main() {
       final baseline = result['reliableBaselineP95Micros']! as int;
       final loaded = result['reliableLoadedP95Micros']! as int;
       expect(loaded, lessThanOrEqualTo((baseline * 1.10).ceil()));
+      final localP95 = result['localEventToPaintP95Micros']! as int;
+      if (_localEventTargetMicros > 0) {
+        expect(localP95, lessThanOrEqualTo(_localEventTargetMicros));
+      }
+      if (_p1BaselineP95Micros > 0) {
+        expect(
+          localP95,
+          lessThanOrEqualTo((_p1BaselineP95Micros * 1.05).ceil()),
+        );
+      }
     }
     binding.reportData = {
       'schemaVersion': 1,
@@ -127,6 +175,7 @@ void main() {
       'requestedLayeredWetInk': layeredWetInkEnabled,
       'requestedLiveInkV2': liveInkFlags.liveInkV2,
       'measureSeconds': _measureSeconds,
+      'senderScaleEvidence': senderScaleEvidence,
       'results': results,
     };
   });
@@ -155,8 +204,9 @@ Future<Map<String, Object?>> _runDisabledMatrixCase() async {
   final result = <String, Object?>{
     'effective': repository.effectiveLiveInk,
     'emitCount': 0,
-    'readyGeneration': 1,
-    'readyRoom': 'room',
+    'readyGeneration': transport.liveInkNegotiationGeneration,
+    'readyRoom': transport.liveInkNegotiatedRoomId,
+    'readyVersion': transport.serverLiveInkProtocolVersion,
   };
   await transport.disconnect();
   return result;
@@ -176,15 +226,20 @@ Future<Map<String, Object?>> _runScenario(
     ownerKeyHash: 'fixture',
   );
   final hub = MemoryRealtimeRoomHub();
+  final runClock = Stopwatch()..start();
+  final receiverProbe = CollaborationPerformanceProbe(
+    nowMicros: () => runClock.elapsedMicroseconds,
+  );
   final receiver = CollaborationRepository(
     transport: MemoryRealtimeTransport(hub: hub, socketId: 'receiver'),
     sceneStore: sceneStore,
     crypto: crypto,
     flags: liveInkFlags,
+    performanceProbe: receiverProbe,
   );
   final transports = <FaultInjectingRealtimeTransport>[];
   final senders = <CollaborationRepository>[];
-  for (var index = 0; index < memberCount - 1; index++) {
+  for (var index = 0; index < memberCount; index++) {
     final transport = FaultInjectingRealtimeTransport(
       delegate: MemoryRealtimeTransport(hub: hub, socketId: 'sender-$index'),
       model: LiveInkFaultModel(
@@ -215,7 +270,6 @@ Future<Map<String, Object?>> _runScenario(
   var receiveCount = 0;
   final lastReceiveMicros = <String, int>{};
   var maxStarvationMicros = 0;
-  final runClock = Stopwatch()..start();
   final liveSubscription = receiver.liveInkChunks.listen((decoded) {
     receiveCount++;
     final now = runClock.elapsedMicroseconds;
@@ -227,10 +281,8 @@ Future<Map<String, Object?>> _runScenario(
     wetInk.apply(decoded);
   });
   var receiverScene = ExcalidrawScene.empty();
-  var reliableSentMicros = 0;
   var awaitedReliableVersion = -1;
   Completer<void>? reliableApplied;
-  List<int>? reliableSamples;
   final messageSubscription = receiver.encryptedMessages(room).listen((
     message,
   ) {
@@ -250,12 +302,16 @@ Future<Map<String, Object?>> _runScenario(
         .firstOrNull;
     if (marker?['version'] == awaitedReliableVersion &&
         reliableApplied?.isCompleted == false) {
-      reliableSamples?.add(runClock.elapsedMicroseconds - reliableSentMicros);
       reliableApplied!.complete();
     }
   });
 
-  final controller = MarkdrawController(writingFlags: writingFeatureFlags);
+  final localProbe = ActivePreviewMetricsProbe();
+  final controller = MarkdrawController(
+    writingFlags: writingFeatureFlags,
+    activePreviewMetricsProbe: localProbe,
+  );
+  controller.switchTool(ToolType.freedraw);
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
@@ -276,17 +332,18 @@ Future<Map<String, Object?>> _runScenario(
     ),
   );
   await tester.pump();
+  final canvasRect = tester.getRect(find.byType(EditorCanvas));
   Future<List<int>> measureReliable({
     required int firstVersion,
     required List<Map<String, Object?>> extraElements,
+    int iterations = 20,
   }) async {
     final samples = <int>[];
-    reliableSamples = samples;
-    for (var offset = 0; offset < 20; offset++) {
+    var probeCursor = receiverProbe.samples.length;
+    for (var offset = 0; offset < iterations; offset++) {
       final version = firstVersion + offset;
       awaitedReliableVersion = version;
       reliableApplied = Completer<void>();
-      reliableSentMicros = runClock.elapsedMicroseconds;
       await senders.first.broadcastScene(
         room: room,
         scene: ExcalidrawScene.empty().copyWith(
@@ -295,6 +352,15 @@ Future<Map<String, Object?>> _runScenario(
         syncAll: true,
       );
       await reliableApplied!.future.timeout(const Duration(seconds: 5));
+      final newSamples = receiverProbe.samples
+          .skip(probeCursor)
+          .where(
+            (sample) =>
+                sample.stage == CollaborationPerformanceStage.reliableQueueWait,
+          );
+      expect(newSamples, isNotEmpty);
+      samples.add(newSamples.last.durationMicros);
+      probeCursor = receiverProbe.samples.length;
     }
     samples.sort();
     return samples;
@@ -304,37 +370,125 @@ Future<Map<String, Object?>> _runScenario(
     firstVersion: 1,
     extraElements: const [],
   );
+  var reliableLoadedCompleted = false;
+  final reliableLoadedFuture = measureReliable(
+    firstVersion: 21,
+    extraElements: const [],
+  ).whenComplete(() => reliableLoadedCompleted = true);
+  final frameTimings = FrameTimingMetricsCollector()..start();
+  final localGesture = await tester.startGesture(
+    canvasRect.topLeft + const Offset(30, 30),
+    kind: PointerDeviceKind.stylus,
+  );
   final latencyMicros = <int>[];
+  final acceptedMicros = <String, Map<int, int>>{};
+  final senderPoints = <List<LiveInkPoint>>[
+    for (var index = 0; index < senders.length; index++) <LiveInkPoint>[],
+  ];
+  final liveSenders = <LiveInkSender>[
+    for (var senderIndex = 0; senderIndex < senders.length; senderIndex++)
+      LiveInkSender(
+        emit: (chunk) async {
+          acceptedMicros.putIfAbsent(
+                chunk.strokeId,
+                () => <int, int>{},
+              )[chunk.startIndex + chunk.points.length - 1] =
+              runClock.elapsedMicroseconds;
+          await senders[senderIndex].sendLiveInkChunk(room: room, chunk: chunk);
+        },
+      ),
+  ];
+  for (var senderIndex = 0; senderIndex < liveSenders.length; senderIndex++) {
+    liveSenders[senderIndex].start(
+      strokeId: 'stroke-$senderIndex',
+      style: _style,
+    );
+  }
   var paintCount = 0;
+  final lastPaintedIndex = <String, int>{};
+  var maxReceiverPendingSenders = 0;
+  var receiverInFlightObserved = false;
+  var maxTransportPending = 0;
+  var reconnectCount = 0;
+  var livePacketsWhileReliablePending = 0;
   final deadline = Duration(seconds: _measureSeconds);
   var packetIndex = 0;
   while (runClock.elapsed < deadline) {
-    final started = runClock.elapsedMicroseconds;
     for (var senderIndex = 0; senderIndex < senders.length; senderIndex++) {
-      await senders[senderIndex].sendLiveInkChunk(
-        room: room,
-        chunk: LiveInkChunk(
-          strokeId: 'stroke-$senderIndex',
-          startIndex: packetIndex,
-          points: [
-            LiveInkPoint(x: packetIndex.toDouble(), y: senderIndex * 10.0),
-          ],
-          style: _style,
-        ),
+      final points = senderPoints[senderIndex];
+      points.add(
+        LiveInkPoint(x: packetIndex.toDouble(), y: senderIndex * 10.0),
       );
+      final tailStart = math.max(0, points.length - LiveInkChunk.maxPoints);
+      liveSenders[senderIndex].offerTail(
+        totalCount: points.length,
+        startIndex: tailStart,
+        points: points.sublist(tailStart),
+      );
+      if (!reliableLoadedCompleted) {
+        livePacketsWhileReliablePending++;
+      }
     }
+    final usableWidth = math.max(1.0, canvasRect.width - 60);
+    final usableHeight = math.max(1.0, canvasRect.height - 60);
+    await localGesture.moveTo(
+      canvasRect.topLeft +
+          Offset(
+            30 + (packetIndex * 3.0) % usableWidth,
+            30 + (packetIndex * 2.0) % usableHeight,
+          ),
+    );
     await tester.pump(const Duration(milliseconds: 33));
     final painter = tester
         .widgetList<CustomPaint>(find.byType(CustomPaint))
         .map((paint) => paint.painter)
         .whereType<RemoteWetInkPainter>()
         .single;
-    if (painter.cache.lastFrameTailPointCount > 0) {
-      paintCount++;
-      latencyMicros.add(runClock.elapsedMicroseconds - started);
+    for (var senderIndex = 0; senderIndex < senders.length; senderIndex++) {
+      final strokeId = 'stroke-$senderIndex';
+      final paintedIndex = painter.cache.paintedMaxPointIndex(strokeId);
+      if (paintedIndex == null ||
+          paintedIndex <= (lastPaintedIndex[strokeId] ?? -1)) {
+        continue;
+      }
+      lastPaintedIndex[strokeId] = paintedIndex;
+      final accepted = acceptedMicros[strokeId]?.remove(paintedIndex);
+      if (accepted != null) {
+        paintCount++;
+        latencyMicros.add(runClock.elapsedMicroseconds - accepted);
+      }
+    }
+    maxReceiverPendingSenders = math.max(
+      maxReceiverPendingSenders,
+      receiver.liveInkPendingSenderCount,
+    );
+    receiverInFlightObserved =
+        receiverInFlightObserved || receiver.liveInkReceiveInFlight;
+    maxTransportPending = math.max(
+      maxTransportPending,
+      transports.fold(0, (sum, item) => sum + item.pendingCount),
+    );
+    if (reconnectCount == 0 &&
+        runClock.elapsedMicroseconds >= deadline.inMicroseconds ~/ 2) {
+      await transports.last.disconnect();
+      await transports.last.connect(room.roomId);
+      reconnectCount++;
     }
     packetIndex++;
   }
+  await localGesture.up();
+  await tester.pump();
+  frameTimings.stop();
+  for (var senderIndex = 0; senderIndex < liveSenders.length; senderIndex++) {
+    final points = senderPoints[senderIndex];
+    final tailStart = math.max(0, points.length - LiveInkChunk.maxPoints);
+    liveSenders[senderIndex].finishTail(
+      totalCount: points.length,
+      startIndex: tailStart,
+      points: points.sublist(tailStart),
+    );
+  }
+  final reliableLoaded = await reliableLoadedFuture;
   for (final transport in transports) {
     await transport.flushLiveInk();
   }
@@ -344,12 +498,13 @@ Future<Map<String, Object?>> _runScenario(
     for (var index = 0; index < senders.length; index++)
       _freedrawElement('stroke-$index', packetIndex),
   ];
-  final reliableLoaded = await measureReliable(
-    firstVersion: 21,
+  await measureReliable(
+    firstVersion: 41,
     extraElements: finalElements,
+    iterations: 1,
   );
   final finalScene = ExcalidrawScene.empty().copyWith(
-    elements: [_reliableMarker(40), ...finalElements],
+    elements: [_reliableMarker(41), ...finalElements],
   );
   await tester.pump();
   final painter = tester
@@ -363,24 +518,56 @@ Future<Map<String, Object?>> _runScenario(
   final dropped = transports.fold(0, (sum, item) => sum + item.droppedCount);
   final pending = transports.fold(0, (sum, item) => sum + item.pendingCount);
   latencyMicros.sort();
+  final localPerformance = WritingPerformanceReport.capture(
+    activePreview: localProbe,
+    frames: frameTimings.frames,
+  );
+  final localEventToPaint =
+      localProbe.samples
+          .map((sample) => sample.eventToPaintMicros)
+          .whereType<int>()
+          .toList()
+        ..sort();
   final result = <String, Object?>{
     'memberCount': memberCount,
+    'senderCount': senders.length,
+    'participantCount': senders.length + 1,
     'network': network.name,
     'effective':
         receiver.effectiveLiveInk &&
         senders.every((item) => item.effectiveLiveInk),
     'readyGeneration': transports
-        .map((item) => item.connectionGeneration)
+        .map((item) => item.liveInkNegotiationGeneration)
         .toList(),
-    'readyRoom': transports.map((item) => item.roomId).toList(),
+    'readyRoom': transports
+        .map((item) => item.liveInkNegotiatedRoomId)
+        .toList(),
+    'readyVersion': transports
+        .map((item) => item.serverLiveInkProtocolVersion)
+        .toList(),
     'acceptedCount': accepted,
     'emitCount': emitted,
     'receiveCount': receiveCount,
-    'decryptCount': receiveCount,
+    'decryptCount': receiverProbe.samples
+        .where(
+          (sample) => sample.stage == CollaborationPerformanceStage.decrypt,
+        )
+        .length,
     'paintCount': paintCount,
+    'localAcceptedCount': localPerformance.accepted,
+    'localPaintedCount': localPerformance.painted,
+    'localEventToPaintP95Micros': _nearestRank(localEventToPaint, 0.95),
+    'localEventTargetMicros': _localEventTargetMicros,
+    'p1BaselineP95Micros': _p1BaselineP95Micros,
+    'localPerformance': localPerformance.toJson(),
     'recordedGeometryPointCount': painter.cache.recordedGeometryPointCount,
     'dropCount': dropped,
     'pendingCount': pending,
+    'maxTransportPending': maxTransportPending,
+    'maxReceiverPendingSenders': maxReceiverPendingSenders,
+    'receiverInFlightObserved': receiverInFlightObserved,
+    'reconnectCount': reconnectCount,
+    'livePacketsWhileReliablePending': livePacketsWhileReliablePending,
     'remotePaintP95Micros': _nearestRank(latencyMicros, 0.95),
     'maxSenderStarvationMicros': maxStarvationMicros,
     'reliableBaselineP95Micros': _nearestRank(reliableBaseline, 0.95),
@@ -391,7 +578,7 @@ Future<Map<String, Object?>> _runScenario(
     'finalConverged':
         receiverScene.collaborationHash() == finalScene.collaborationHash(),
     'rawPath':
-        'repository.liveInkChunks->RemoteWetInkStore->RemoteWetInkPainter',
+        'LiveInkSender->repository.liveInkChunks->RemoteWetInkStore->RemoteWetInkPainter.paint',
   };
 
   await messageSubscription.cancel();
@@ -409,6 +596,85 @@ Future<Map<String, Object?>> _runScenario(
 int _nearestRank(List<int> sorted, double percentile) {
   if (sorted.isEmpty) return 0;
   return sorted[math.max(0, (percentile * sorted.length).ceil() - 1)];
+}
+
+Future<Map<String, Object?>> _measureSenderScaleEvidence() async {
+  final rows = <Map<String, Object?>>[];
+  for (final count in [250, 500, 1000, 2000]) {
+    final chunks = <LiveInkChunk>[];
+    final sender = LiveInkSender(emit: (chunk) async => chunks.add(chunk));
+    sender.start(strokeId: 'scale-$count', style: _style);
+    final points = <LiveInkPoint>[];
+    for (var index = 0; index < count; index++) {
+      points.add(LiveInkPoint(x: index.toDouble(), y: (index % 10).toDouble()));
+      if ((index + 1) % 8 != 0 && index + 1 != count) continue;
+      final start = math.max(0, points.length - LiveInkChunk.maxPoints);
+      sender.offerTail(
+        totalCount: points.length,
+        startIndex: start,
+        points: points.sublist(start),
+      );
+      while (sender.inFlight || sender.hasPending) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+    final repeats = <int, int>{};
+    var pointEntries = 0;
+    var bytes = 0;
+    for (final chunk in chunks) {
+      pointEntries += chunk.points.length;
+      bytes += utf8.encode(jsonEncode(chunk.toJson())).length;
+      for (final point in chunk.indexedPoints) {
+        repeats.update(point.index, (value) => value + 1, ifAbsent: () => 1);
+      }
+    }
+    rows.add({
+      'acceptedPoints': count,
+      'pointEntries': pointEntries,
+      'bytes': bytes,
+      'maxRepeats': repeats.values.fold<int>(
+        0,
+        (maximum, value) => value > maximum ? value : maximum,
+      ),
+    });
+  }
+  final byteFit = _linearFit(rows, 'bytes');
+  final pointFit = _linearFit(rows, 'pointEntries');
+  return {
+    'raw': rows,
+    'bytesSlope': byteFit.$1,
+    'bytesRSquared': byteFit.$2,
+    'pointEntriesSlope': pointFit.$1,
+    'pointEntriesRSquared': pointFit.$2,
+  };
+}
+
+(double, double) _linearFit(List<Map<String, Object?>> rows, String field) {
+  final meanX =
+      rows.fold(0.0, (sum, row) => sum + (row['acceptedPoints']! as int)) /
+      rows.length;
+  final meanY =
+      rows.fold(0.0, (sum, row) => sum + (row[field]! as int)) / rows.length;
+  var covariance = 0.0;
+  var varianceX = 0.0;
+  var totalY = 0.0;
+  for (final row in rows) {
+    final x = (row['acceptedPoints']! as int).toDouble();
+    final y = (row[field]! as int).toDouble();
+    covariance += (x - meanX) * (y - meanY);
+    varianceX += (x - meanX) * (x - meanX);
+    totalY += (y - meanY) * (y - meanY);
+  }
+  final slope = covariance / varianceX;
+  final intercept = meanY - slope * meanX;
+  var residual = 0.0;
+  for (final row in rows) {
+    final x = (row['acceptedPoints']! as int).toDouble();
+    final y = (row[field]! as int).toDouble();
+    final delta = y - (intercept + slope * x);
+    residual += delta * delta;
+  }
+  return (slope, totalY == 0 ? 1 : 1 - residual / totalY);
 }
 
 Map<String, Object?> _reliableMarker(int version) => {

@@ -351,7 +351,10 @@ Future<WritingResultsSummary> summarizeDirectory(Directory input) async {
     final json = jsonDecode(await file.readAsString());
     if (json is! Map) continue;
     final root = Map<String, Object?>.from(json);
-    if (root['mode'] == 'collaboration_cpu_non_ui') continue;
+    if (root['mode'] == 'collaboration_cpu_non_ui' ||
+        root['mode'] == 'collaboration_live_ink') {
+      continue;
+    }
     runs.add(_summarizeRun(file.absolute.path, root));
   }
   return WritingResultsSummary(runs: runs);

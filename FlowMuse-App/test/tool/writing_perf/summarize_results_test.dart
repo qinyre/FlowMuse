@@ -171,6 +171,19 @@ void main() {
     expect(run.invalidReasons, contains('fewer_than_100_accepted_samples'));
     expect(run.invalidReasons, contains('missing_frame_timings'));
   });
+
+  test('协作 CPU 与 live ink 专用报告不混入本地书写基线', () async {
+    final directory = await _tempDirectory('collaboration-reports');
+    for (final mode in ['collaboration_cpu_non_ui', 'collaboration_live_ink']) {
+      await File(
+        '${directory.path}/$mode.json',
+      ).writeAsString(jsonEncode({'schemaVersion': 1, 'mode': mode}));
+    }
+
+    final summary = await summarizeDirectory(directory);
+
+    expect(summary.runs, isEmpty);
+  });
 }
 
 Future<Directory> _tempDirectory(String name) async {

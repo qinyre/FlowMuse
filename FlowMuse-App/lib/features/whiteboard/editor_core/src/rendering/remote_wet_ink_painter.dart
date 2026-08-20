@@ -15,6 +15,7 @@ class RemoteWetInkRenderCache {
   static const int _estimatedBytesPerPicture = 1024;
 
   final Map<String, _RemoteStrokePictureCache> _strokes = {};
+  final Map<String, int> _lastPaintedMaxPointIndex = {};
   int recordedGeometryPointCount = 0;
   int lastFrameTailPointCount = 0;
 
@@ -38,6 +39,9 @@ class RemoteWetInkRenderCache {
       retainedGeometryPointCount * _estimatedBytesPerRecordedPoint +
       pictureLayerCount * _estimatedBytesPerPicture;
 
+  int? paintedMaxPointIndex(String strokeId) =>
+      _lastPaintedMaxPointIndex[strokeId];
+
   void sync(List<RemoteWetInkStrokeSnapshot> snapshots, RoughAdapter adapter) {
     final activeIds = {for (final snapshot in snapshots) snapshot.strokeId};
     final removedIds = [
@@ -46,6 +50,7 @@ class RemoteWetInkRenderCache {
     ];
     for (final strokeId in removedIds) {
       _strokes.remove(strokeId)?.dispose();
+      _lastPaintedMaxPointIndex.remove(strokeId);
     }
     for (final snapshot in snapshots) {
       final cache = _strokes.putIfAbsent(
@@ -69,6 +74,7 @@ class RemoteWetInkRenderCache {
         lastFrameTailPointCount += segment.points.length;
         _drawSegment(canvas, segment, snapshot, adapter);
       }
+      _lastPaintedMaxPointIndex[snapshot.strokeId] = snapshot.maxPointIndex;
     }
   }
 
@@ -77,6 +83,7 @@ class RemoteWetInkRenderCache {
       stroke.dispose();
     }
     _strokes.clear();
+    _lastPaintedMaxPointIndex.clear();
   }
 }
 
