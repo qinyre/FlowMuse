@@ -17,7 +17,7 @@
 
 - event-to-local-paint proxy P95 必须达到 P0 绝对目标（60Hz 默认 ≤33.4ms）且相对旧路径改善 ≥30%；
 - build P95、raster P95 均不超过真机实测帧周期；固定 60 秒窗口内 deadline miss <1%，且相对旧路径不回退；
-- `terminalBeforePreview/accepted` 相对同 recording 旧路径不得恶化超过 0.5 个百分点；汇总器必须从唯一 `(strokeEpoch,inputSeq)` 样本重算，不接受自报计数；
+- `terminalBeforePreview/accepted` 相对同 recording 旧路径不得恶化超过 0.5 个百分点；比例按五轮合并后的 `sum(terminal)/sum(accepted)` 计算，不能用逐轮中位数隐藏离群回退；汇总器必须从唯一 `(strokeEpoch,inputSeq)` 样本重算，不接受自报计数；
 - 100/1000/5000 元素和 2/5 人协作下最终 Scene hash 一致；
 - PointerUp/Cancel/工具切换、undo/redo 与压力笔回归通过；
 - flag=false 与 P0 旧路径语义一致。
