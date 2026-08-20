@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +11,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/input/active_previ
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input_sample.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_render_metrics.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_report.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/config/writing_feature_flags.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'fixtures/scene_fixtures.dart';
@@ -30,6 +33,8 @@ const _deviceClass = String.fromEnvironment(
 );
 const _refreshHz = int.fromEnvironment('FLOWMUSE_REFRESH_HZ');
 const _runIndex = int.fromEnvironment('FLOWMUSE_RUN_INDEX');
+const _physicalDevice = bool.fromEnvironment('FLOWMUSE_PHYSICAL_DEVICE');
+const _deviceId = String.fromEnvironment('FLOWMUSE_DEVICE_ID');
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -77,10 +82,16 @@ void main() {
     expect(canvas, findsOneWidget);
     final canvasRect = tester.getRect(canvas);
     final warmupClock = Stopwatch()..start();
-    await _replayFixture(tester, fixture, canvasRect, warmupClock, 0, null);
-    final remainingWarmup = const Duration(seconds: 5) - warmupClock.elapsed;
-    if (remainingWarmup > Duration.zero) {
-      await Future<void>.delayed(remainingWarmup);
+    var warmupStrokeIndex = 0;
+    while (warmupClock.elapsed < const Duration(seconds: 5)) {
+      await _replayFixture(
+        tester,
+        fixture,
+        canvasRect,
+        warmupClock,
+        warmupStrokeIndex++,
+        null,
+      );
     }
     controller.loadFromContent(
       sceneFixture.toContent(),
@@ -97,6 +108,9 @@ void main() {
     final measureSeconds = _measureSecondsOverride > 0
         ? _measureSecondsOverride
         : fixture.name.contains('long_curve')
+        ? 30
+        : 60;
+    final expectedMeasureSeconds = fixture.name.contains('long_curve')
         ? 30
         : 60;
     var strokeIndex = 0;
@@ -128,9 +142,18 @@ void main() {
       frames: frameTimings.frames,
       invalidReasons: invalidReasons,
     );
+    final sceneAfterRun = controller.serializeExcalidrawSceneJson();
     binding.reportData = <String, Object?>{
       'schemaVersion': 1,
-      'measurementEligible': kProfileMode,
+      'measurementEligible':
+          kProfileMode &&
+          _physicalDevice &&
+          _deviceId.isNotEmpty &&
+          _deviceClass != 'unspecified' &&
+          _refreshHz > 0 &&
+          _runIndex >= 1 &&
+          _runIndex <= 5 &&
+          measureSeconds == expectedMeasureSeconds,
       'buildMode': kProfileMode
           ? 'profile'
           : kReleaseMode
@@ -138,17 +161,24 @@ void main() {
           : 'debug',
       'platform': defaultTargetPlatform.name,
       'deviceClass': _deviceClass,
+      'deviceId': _deviceId,
+      'physicalDevice': _physicalDevice,
       'refreshHz': _refreshHz,
       'runIndex': _runIndex,
       'sceneElementCount': _sceneElementCount,
       'sceneFixtureHash': sceneFixture.collaborationHash(),
       'writingFixture': fixture.name,
       'writingFixtureSchemaVersion': fixture.schemaVersion,
+      'writingFixtureHash': fixture.contentHash,
       'measureSeconds': measureSeconds,
+      'expectedMeasureSeconds': expectedMeasureSeconds,
+      'flags': {'layeredWetInk': writingFeatureFlags.layeredWetInk},
       'injectionJitterP95Micros': jitterP95,
       'injectionJitterMaxMicros': jitterMax,
       'injectionSamples': injectionSamples,
       'elementsAfterRun': controller.currentScene.elements.length,
+      'sceneHashAfterRun': _jsonHash(sceneAfterRun),
+      'semanticSceneHashAfterRun': _semanticSceneHash(sceneAfterRun),
       'performance': performance.toJson(),
     };
   });
@@ -194,11 +224,12 @@ Future<void> _replayFixture(
         Offset(20 + (sample.x - minX) * scale, 20 + (sample.y - minY) * scale);
     final timeStamp = Duration(microseconds: targetMicros);
     final pressure = sample.pressure ?? 0;
+    final kind = _pointerDeviceKind(sample.kind);
     final event = switch (sample.phase) {
       StrokePhase.down => PointerDownEvent(
         timeStamp: timeStamp,
         pointer: pointer,
-        kind: PointerDeviceKind.stylus,
+        kind: kind,
         position: position,
         pressure: pressure,
         pressureMin: 0,
@@ -207,7 +238,7 @@ Future<void> _replayFixture(
       StrokePhase.move => PointerMoveEvent(
         timeStamp: timeStamp,
         pointer: pointer,
-        kind: PointerDeviceKind.stylus,
+        kind: kind,
         position: position,
         delta: position - previousPosition!,
         pressure: pressure,
@@ -217,7 +248,7 @@ Future<void> _replayFixture(
       StrokePhase.up => PointerUpEvent(
         timeStamp: timeStamp,
         pointer: pointer,
-        kind: PointerDeviceKind.stylus,
+        kind: kind,
         position: position,
         pressure: pressure,
         pressureMin: 0,
@@ -226,7 +257,7 @@ Future<void> _replayFixture(
       StrokePhase.cancel => PointerCancelEvent(
         timeStamp: timeStamp,
         pointer: pointer,
-        kind: PointerDeviceKind.stylus,
+        kind: kind,
         position: position,
         pressureMin: 0,
         pressureMax: 1,
@@ -235,6 +266,51 @@ Future<void> _replayFixture(
     await tester.sendEventToBinding(event);
     previousPosition = position;
   }
+}
+
+PointerDeviceKind _pointerDeviceKind(StrokeInputKind kind) => switch (kind) {
+  StrokeInputKind.stylus => PointerDeviceKind.stylus,
+  StrokeInputKind.invertedStylus => PointerDeviceKind.invertedStylus,
+  StrokeInputKind.touch => PointerDeviceKind.touch,
+  StrokeInputKind.mouse => PointerDeviceKind.mouse,
+  StrokeInputKind.unknown => PointerDeviceKind.unknown,
+};
+
+String _jsonHash(Map<String, Object?> value) =>
+    sha256.convert(utf8.encode(jsonEncode(value))).toString();
+
+String _semanticSceneHash(Map<String, Object?> scene) {
+  const ignoredKeys = {
+    'id',
+    'seed',
+    'versionNonce',
+    'updated',
+    'index',
+    'customData',
+  };
+  Object? normalize(Object? value) {
+    if (value is List) return [for (final item in value) normalize(item)];
+    if (value is Map) {
+      return {
+        for (final entry in value.entries)
+          if (!ignoredKeys.contains(entry.key))
+            entry.key.toString(): normalize(entry.value),
+      };
+    }
+    return value;
+  }
+
+  return sha256
+      .convert(
+        utf8.encode(
+          jsonEncode({
+            'elements': normalize(scene['elements']),
+            'appState': normalize(scene['appState']),
+            'files': normalize(scene['files']),
+          }),
+        ),
+      )
+      .toString();
 }
 
 int _nearestRank(List<int> sorted, double percentile) {
