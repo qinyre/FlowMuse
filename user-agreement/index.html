@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="FlowMuse 用户服务协议">
+  <meta name="theme-color" content="#f7f5ef">
+  <title>FlowMuse 用户服务协议</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #fffef9;
+      --canvas: #f2f0e9;
+      --ink: #18201d;
+      --muted: #68706c;
+      --line: #d8d7cf;
+      --accent: #176b55;
+      --accent-soft: #e4f0eb;
+      --warning: #7f3f28;
+      --warning-soft: #f7e9df;
+      --shadow: 0 24px 70px rgb(29 43 37 / 10%);
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 28px;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 1px 1px, rgb(24 32 29 / 7%) 1px, transparent 0) 0 0 / 24px 24px,
+        var(--canvas);
+      font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
+      line-height: 1.85;
+    }
+
+    a { color: var(--accent); }
+
+    .skip-link {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 20;
+      padding: 8px 12px;
+      color: white;
+      background: var(--accent);
+      transform: translateY(-160%);
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 210px minmax(0, 760px);
+      gap: 48px;
+      width: min(1080px, calc(100% - 40px));
+      margin: 48px auto;
+      align-items: start;
+    }
+
+    .toc {
+      position: sticky;
+      top: 28px;
+      padding: 22px 0;
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    }
+
+    .toc-label {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .18em;
+    }
+
+    .toc ol {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .toc a {
+      display: block;
+      padding: 5px 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-decoration: none;
+      transition: color .16s ease, transform .16s ease;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      color: var(--accent);
+      transform: translateX(4px);
+    }
+
+    .document {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(28px, 6vw, 68px);
+      background: var(--paper);
+      border: 1px solid rgb(24 32 29 / 9%);
+      border-radius: 3px;
+      box-shadow: var(--shadow);
+    }
+
+    .document::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 7px;
+      height: 100%;
+      background: var(--accent);
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--accent);
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 6vw, 48px);
+      line-height: 1.22;
+      letter-spacing: -.03em;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      margin: 18px 0 32px;
+      color: var(--muted);
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+    }
+
+    .notice {
+      margin: 0 0 42px;
+      padding: 18px 20px;
+      background: var(--warning-soft);
+      border-left: 4px solid var(--warning);
+      color: #482b20;
+    }
+
+    section {
+      padding-top: 12px;
+      margin-top: 34px;
+      border-top: 1px solid var(--line);
+    }
+
+    h2 {
+      margin: 22px 0 12px;
+      font-size: 23px;
+      line-height: 1.45;
+    }
+
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 17px;
+    }
+
+    p { margin: 10px 0; }
+
+    ul, ol {
+      padding-left: 1.5em;
+    }
+
+    li + li { margin-top: 7px; }
+
+    strong {
+      font-weight: 800;
+      text-decoration: underline;
+      text-decoration-color: rgb(23 107 85 / 28%);
+      text-decoration-thickness: .28em;
+      text-underline-offset: -.12em;
+      text-decoration-skip-ink: none;
+    }
+
+    .service-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .service-grid li {
+      margin: 0;
+      padding: 14px 16px;
+      background: var(--accent-soft);
+      border-radius: 2px;
+    }
+
+    .contact {
+      padding: 20px;
+      background: var(--accent-soft);
+      border: 1px solid rgb(23 107 85 / 18%);
+    }
+
+    .footer {
+      margin-top: 48px;
+      padding-top: 20px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 860px) {
+      .layout {
+        display: block;
+        width: min(100% - 24px, 760px);
+        margin: 12px auto;
+      }
+
+      .toc { display: none; }
+      .document { border-radius: 0; }
+      .service-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .toc a { transition: none; }
+    }
+
+    @media print {
+      body { background: white; }
+      .layout { display: block; width: 100%; margin: 0; }
+      .toc { display: none; }
+      .document {
+        padding: 0;
+        border: 0;
+        box-shadow: none;
+      }
+      .document::before { display: none; }
+      section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#agreement">跳转到协议正文</a>
+
+  <div class="layout">
+    <nav class="toc" aria-label="协议目录">
+      <p class="toc-label">协议目录</p>
+      <ol>
+        <li><a href="#about">1. 关于我们</a></li>
+        <li><a href="#scope">2. 协议范围与确认</a></li>
+        <li><a href="#eligibility">3. 使用要求</a></li>
+        <li><a href="#services">4. 服务内容</a></li>
+        <li><a href="#account">5. 账户与安全</a></li>
+        <li><a href="#rules">6. 使用规则</a></li>
+        <li><a href="#content">7. 用户内容与知识产权</a></li>
+        <li><a href="#ai">8. AI 与第三方服务</a></li>
+        <li><a href="#privacy">9. 隐私与数据</a></li>
+        <li><a href="#prohibited">10. 禁止行为</a></li>
+        <li><a href="#changes">11. 服务变更与终止</a></li>
+        <li><a href="#liability">12. 责任限制</a></li>
+        <li><a href="#minors">13. 未成年人保护</a></li>
+        <li><a href="#revision">14. 协议修订</a></li>
+        <li><a href="#law">15. 法律适用与争议</a></li>
+        <li><a href="#contact">16. 联系我们</a></li>
+      </ol>
+    </nav>
+
+    <main class="document" id="agreement">
+      <header>
+        <p class="eyebrow">FlowMuse · Terms of Service</p>
+        <h1>FlowMuse 用户服务协议</h1>
+        <div class="meta">
+          <span>更新日期：2026 年 7 月 25 日</span>
+          <span>生效日期：2026 年 7 月 25 日</span>
+        </div>
+        <div class="notice">
+          <strong>重要提示：</strong>请您在使用 FlowMuse 前认真阅读并理解本协议，尤其是以加粗方式提示的关于服务限制、用户责任、第三方服务和争议解决的条款。您开始使用本服务，即表示您已阅读、理解并同意接受本协议。
+        </div>
+      </header>
+
+      <section id="about">
+        <h2>1. 关于我们</h2>
+        <p>感谢您选择使用 FlowMuse。</p>
+        <p>FlowMuse 是由<strong>青天小老爷团队（以下简称“我们”）</strong>提供与运营的智能笔记与白板应用。本协议是您与我们之间关于下载、安装、访问和使用 FlowMuse 软件及相关服务所订立的协议。</p>
+      </section>
+
+      <section id="scope">
+        <h2>2. 协议范围、目的及确认方式</h2>
+        <p>本协议及 FlowMuse 页面中展示的操作规则、功能说明和提示，共同构成您使用本服务所应遵守的规则。</p>
+        <p><strong>如果您不同意本协议的任何内容，或无法准确理解相关条款，请停止安装、访问或使用 FlowMuse。</strong>您点击同意、注册账户、进入应用或实际使用任何功能，均视为您已接受本协议。</p>
+      </section>
+
+      <section id="eligibility">
+        <h2>3. 使用本服务的要求</h2>
+        <p>3.1 您应当具备与使用本服务相适应的民事行为能力。限制民事行为能力人应在监护人阅读并同意本协议后，在监护人指导下使用本服务。</p>
+        <p>3.2 您应确保使用本服务不会违反您所在地适用的法律法规，也不会侵犯任何第三方的合法权益。</p>
+        <p>3.3 您需要自行准备能够运行 FlowMuse 的终端设备、网络环境以及可能由第三方提供的账户或接口服务，并承担相应费用。</p>
+      </section>
+
+      <section id="services">
+        <h2>4. 服务内容</h2>
+        <p>FlowMuse 为您提供以本地优先方式运行的笔记与白板工具，具体功能以您使用的版本和设备实际支持情况为准，包括但不限于：</p>
+        <ul class="service-grid">
+          <li>自由手写、绘图、分页笔记和 PDF 批注</li>
+          <li>手写识别、智能排版和语音转文字</li>
+          <li>AI 问答、总结、改写和思维导图生成</li>
+          <li>多人实时协作与协作链接分享</li>
+          <li>可编辑文件导入、导出和系统分享</li>
+          <li>用户主动配置的 WebDAV 备份</li>
+        </ul>
+        <p><strong>部分功能依赖网络、服务器或第三方服务，并可能因平台能力、接口额度、地区、设备型号和系统版本不同而存在差异。</strong></p>
+      </section>
+
+      <section id="account">
+        <h2>5. 账户与安全</h2>
+        <p>5.1 部分功能允许您匿名使用；账户、协作或其他在线功能可能要求您注册、登录或提供必要信息。</p>
+        <p>5.2 您应提供真实、准确、完整且有效的信息，并妥善保管账户、密码、协作房间码、API Key 等凭证。通过您的账户或凭证完成的操作，原则上视为由您本人作出。</p>
+        <p>5.3 如发现账户或凭证可能被盗用，请及时修改凭证并通过本协议所列方式联系我们。<strong>因您主动公开、保管不当或在不可信设备中使用凭证造成的损失，由您依法承担相应责任。</strong></p>
+      </section>
+
+      <section id="rules">
+        <h2>6. 用户使用规则</h2>
+        <p>6.1 您应当合法、审慎地使用 FlowMuse，并对您创建、导入、分享、协作或提交的内容负责。</p>
+        <p>6.2 您应在执行删除、覆盖、导入、导出、同步或备份操作前核对目标内容。建议您对重要笔记保留独立备份。</p>
+        <p>6.3 多人协作内容可能被房间内其他参与者查看和修改。<strong>请勿向不可信人员提供房间码或协作链接，也不要在协作内容中放入无必要的敏感信息。</strong></p>
+      </section>
+
+      <section id="content">
+        <h2>7. 用户内容与知识产权</h2>
+        <p>7.1 您对依法享有权利的笔记、绘图、文档及其他用户内容保留相应权利。使用 FlowMuse 不会使相关权利自动转移给我们。</p>
+        <p>7.2 为实现您主动使用的同步、协作、识别、备份或 AI 功能，您授权我们及必要的技术服务方在提供服务所需的范围和期限内处理相关内容。该授权不允许我们将您的内容用于与提供服务无关的目的。</p>
+        <p>7.3 FlowMuse 软件、界面、标识、程序代码及我们提供的其他内容所涉及的知识产权，归我们或相关权利人所有。未经许可，您不得复制、破解、反向利用或以其他方式侵害相关权利，但法律明确允许的情形除外。</p>
+      </section>
+
+      <section id="ai">
+        <h2>8. AI 与第三方服务</h2>
+        <p>8.1 FlowMuse 允许您自行配置兼容接口的 AI 模型服务。您主动提交给 AI 的指令和笔记文本将按照您的配置发送至对应服务商。</p>
+        <p>8.2 <strong>AI 生成内容可能不准确、不完整、具有时效性限制或不符合您的预期，不应作为医疗、法律、金融等专业领域的唯一决策依据。</strong>您应在使用、发布或据此行动前进行独立核验。</p>
+        <p>8.3 第三方 AI、手写识别、语音识别、WebDAV、云服务或系统分享能力由相应第三方提供，其可用性及数据处理规则受第三方条款约束。因第三方服务变更、中断、额度不足或限制导致功能不可用的，我们会在合理范围内协助排查，但无法保证第三方服务持续可用。</p>
+      </section>
+
+      <section id="privacy">
+        <h2>9. 隐私与数据处理</h2>
+        <p>9.1 FlowMuse 采用本地优先设计，普通笔记内容主要保存在您的设备应用沙箱中。仅当您主动使用账户、协作、识别、备份、AI 等在线功能时，相关必要数据才会被传输或处理。</p>
+        <p>9.2 我们将根据 FlowMuse《隐私政策》处理个人信息。隐私政策构成本协议不可分割的一部分，您可以在应用设置页面中查阅。</p>
+        <p>9.3 卸载应用、清除应用数据、设备损坏或系统重置可能导致本地数据丢失。<strong>对于重要内容，请您及时导出或使用可信的备份方式保存。</strong></p>
+      </section>
+
+      <section id="prohibited">
+        <h2>10. 用户禁止性规定</h2>
+        <p>您不得利用 FlowMuse 从事以下行为：</p>
+        <ol>
+          <li>制作、存储、传播违反法律法规或危害网络安全的内容；</li>
+          <li>侵害他人知识产权、隐私权、名誉权、商业秘密或其他合法权益；</li>
+          <li>实施欺诈、骚扰、恶意广告、垃圾信息或误导他人的行为；</li>
+          <li>未经授权探测、攻击、干扰服务器、账户、协作房间或其他用户设备；</li>
+          <li>利用自动化手段恶意占用服务资源、绕过限制或影响服务稳定性；</li>
+          <li>其他违反法律法规、本协议或公序良俗的行为。</li>
+        </ol>
+        <p>如您违反上述规定，我们有权依法采取提醒、限制功能、暂停或终止服务等措施；造成第三方或我们损失的，您应依法承担相应责任。</p>
+      </section>
+
+      <section id="changes">
+        <h2>11. 服务变更、中断与终止</h2>
+        <p>11.1 我们可能根据产品迭代、运营安排、安全风险、法律要求或第三方能力变化，对功能进行更新、调整、暂停或终止。</p>
+        <p>11.2 对可能显著影响您使用的重要变化，我们会在合理范围内通过应用页面、更新说明或其他适当方式提示。</p>
+        <p>11.3 您可以随时停止使用本服务。账户删除、服务终止或卸载前，请您自行导出需要保留的数据。</p>
+      </section>
+
+      <section id="liability">
+        <h2>12. 免责声明与责任限制</h2>
+        <p>12.1 我们将采取合理措施维护服务安全与稳定，但互联网服务可能受到网络波动、设备故障、系统维护、第三方接口调整、不可抗力或其他合理控制范围之外因素的影响。</p>
+        <p>12.2 <strong>在法律允许的范围内，对于因用户误操作、设备或网络故障、第三方服务异常、未及时备份等原因造成的数据丢失、服务延迟或功能不可用，我们不承担超出法定范围的责任。</strong></p>
+        <p>12.3 本条不排除或限制依法不得排除或限制的责任，也不影响您依据适用法律享有的消费者权利。</p>
+      </section>
+
+      <section id="minors">
+        <h2>13. 未成年人保护</h2>
+        <p>未成年人应在监护人指导下使用 FlowMuse。监护人应帮助未成年人了解网络安全、个人信息保护、付费服务和 AI 内容的不确定性，避免提交不必要的个人敏感信息。</p>
+      </section>
+
+      <section id="revision">
+        <h2>14. 对本协议的修订</h2>
+        <p>我们可能因业务调整、技术变化或法律法规要求修订本协议。更新后的协议将在相关页面公布，并标明更新日期。</p>
+        <p>如修订内容会显著影响您的权利义务，我们会以合理方式提示。<strong>如果您不同意修订后的协议，应停止使用相关服务；继续使用即表示您接受修订后的协议。</strong></p>
+      </section>
+
+      <section id="law">
+        <h2>15. 适用法律及争议解决</h2>
+        <p>本协议的订立、生效、履行、解释及争议解决适用中华人民共和国大陆地区法律。</p>
+        <p>因本协议或使用 FlowMuse 产生争议时，双方应首先友好协商；协商不成的，任何一方可以依法向有管辖权的人民法院提起诉讼。</p>
+      </section>
+
+      <section id="contact">
+        <h2>16. 联系我们</h2>
+        <div class="contact">
+          <p>如果您对本协议、账户或 FlowMuse 服务有任何疑问、意见或投诉，可以通过以下方式联系我们：</p>
+          <p><strong>运营团队：</strong>青天小老爷团队<br>
+             <strong>联系邮箱：</strong><a href="mailto:3252024846@qq.com">3252024846@qq.com</a><br>
+             <strong>应用内入口：</strong>设置 → 帮助与反馈</p>
+          <p>我们将在核实您的身份和诉求后，于法律规定或合理期限内处理。</p>
+        </div>
+      </section>
+
+      <footer class="footer">
+        © 2026 FlowMuse · 本协议可通过浏览器打印或另存为 PDF
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

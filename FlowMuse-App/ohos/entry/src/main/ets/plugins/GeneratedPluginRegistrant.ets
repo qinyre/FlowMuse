@@ -1,4 +1,5 @@
 import { FlutterEngine, Log } from '@ohos/flutter_ohos';
+import IntegrationTestPlugin from 'integration_test';
 import SharedPreferencesPlugin from 'shared_preferences_ohos';
 import PathProviderPlugin from 'path_provider_ohos';
 import FlutterSecureStorageOhosPlugin from 'flutter_secure_storage_ohos';
@@ -15,6 +16,7 @@ export class GeneratedPluginRegistrant {
 
   static registerWith(flutterEngine: FlutterEngine) {
     try {
+      flutterEngine.getPlugins()?.add(new IntegrationTestPlugin());
       flutterEngine.getPlugins()?.add(new SharedPreferencesPlugin());
       flutterEngine.getPlugins()?.add(new PathProviderPlugin());
       flutterEngine.getPlugins()?.add(new FlutterSecureStorageOhosPlugin());

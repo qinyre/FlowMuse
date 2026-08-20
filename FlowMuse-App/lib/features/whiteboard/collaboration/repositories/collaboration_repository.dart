@@ -1,18 +1,26 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
+
 import '../models/collaboration_message.dart';
+import '../config/live_ink_flags.dart';
 import '../models/collaboration_room.dart';
 import '../models/encrypted_payload.dart';
 import '../models/excalidraw_scene.dart';
+import '../models/live_ink_chunk.dart';
 import '../models/room_collaborator.dart';
+import '../models/received_live_ink_frame.dart';
 import 'collaboration_owner_key_store.dart';
 import '../services/collaboration_crypto.dart';
 import '../services/collaboration_debug_log.dart';
+import '../services/collaboration_performance_probe.dart';
 import '../services/collaboration_file_manager.dart';
 import '../services/collaboration_file_store.dart';
 import '../services/encrypted_scene_store.dart';
+import '../services/live_ink_receive_scheduler.dart';
 import '../services/realtime_transport.dart';
 import '../services/change_accumulator.dart';
 import '../services/scene_reconciler.dart';
@@ -31,12 +39,15 @@ class CollaborationRepository {
     CollaborationOwnerKeyStore? ownerKeyStore,
     CollaborationCrypto? crypto,
     SceneReconciler? reconciler,
+    CollaborationPerformanceProbe? performanceProbe,
+    this.flags = liveInkFlags,
   }) : _transport = transport ?? const DisconnectedRealtimeTransport(),
        _sceneStore = sceneStore ?? MemoryEncryptedSceneStore(),
        _fileStore = fileStore,
        _ownerKeyStore = ownerKeyStore ?? CollaborationOwnerKeyStore(),
        _crypto = crypto ?? CollaborationCrypto(),
        _reconciler = reconciler ?? SceneReconciler(),
+       _performanceProbe = performanceProbe,
        _accumulator = ChangeAccumulator(
          reconciler: reconciler ?? SceneReconciler(),
        ) {
@@ -52,6 +63,8 @@ class CollaborationRepository {
   final CollaborationOwnerKeyStore _ownerKeyStore;
   final CollaborationCrypto _crypto;
   final SceneReconciler _reconciler;
+  final CollaborationPerformanceProbe? _performanceProbe;
+  final LiveInkFlags flags;
   final ChangeAccumulator _accumulator;
   final CollaborationFileManager _fileManager = CollaborationFileManager();
   final math.Random _random = math.Random();
@@ -63,6 +76,8 @@ class CollaborationRepository {
       StreamController<CollaborationMessage>.broadcast();
   final StreamController<ExcalidrawScene> _fileStatusScenes =
       StreamController<ExcalidrawScene>.broadcast();
+  final StreamController<DecodedLiveInkChunk> _liveInkChunks =
+      StreamController<DecodedLiveInkChunk>.broadcast();
   final List<CollaborationMessage> _messageBacklog = [];
 
   Timer? _fullSceneSyncTimer;
@@ -86,8 +101,12 @@ class CollaborationRepository {
   int _snapshot409Count = 0;
   DateTime _lastMetricsReport = DateTime.now();
   StreamSubscription<EncryptedPayload>? _transportMessageSubscription;
+  StreamSubscription<ReceivedLiveInkFrame>? _liveInkFrameSubscription;
+  StreamSubscription<DecodedLiveInkChunk>? _liveInkChunkSubscription;
   StreamSubscription<String>? _newUserSubscription;
+  LiveInkReceiveScheduler? _liveInkScheduler;
   Future<void> _messageDecodeQueue = Future<void>.value();
+  int _roomSessionGeneration = 0;
   Future<void> _sendQueue = Future<void>.value();
   bool _latestSendQueued = false;
   int _sendGeneration = 0;
@@ -96,7 +115,51 @@ class CollaborationRepository {
 
   String get socketId => _transport.socketId ?? 'local-client';
 
+  bool get effectiveLiveInk =>
+      flags.effectiveFor(_transport.serverLiveInkProtocolVersion);
+
+  Stream<ReceivedLiveInkFrame> get liveInkFrames => _transport.liveInkFrames;
+
+  Stream<DecodedLiveInkChunk> get liveInkChunks => _liveInkChunks.stream;
+
+  int get liveInkReceiveSenderLimitDrops =>
+      _liveInkScheduler?.senderLimitDrops ?? 0;
+
+  int get liveInkReceiveDecodeErrors => _liveInkScheduler?.decodeErrors ?? 0;
+
+  int get liveInkPendingSenderCount =>
+      _liveInkScheduler?.pendingSenderCount ?? 0;
+
+  bool get liveInkReceiveInFlight => _liveInkScheduler?.inFlight ?? false;
+
+  int get liveInkDecodeAttempts => _liveInkScheduler?.decodeAttempts ?? 0;
+
+  int get liveInkDecodeSuccesses => _liveInkScheduler?.decodeSuccesses ?? 0;
+
+  int get liveInkDecodeErrors => _liveInkScheduler?.decodeErrors ?? 0;
+
+  int get liveInkTransportNotWritableDrops =>
+      _transport.liveInkTransportNotWritableDrops;
+
   Stream<String> get newUsers => _transport.newUsers;
+
+  Future<void> sendLiveInk(EncryptedPayload payload) async {
+    if (!effectiveLiveInk) return;
+    await _transport.sendLiveInk(payload);
+  }
+
+  Future<void> sendLiveInkChunk({
+    required CollaborationRoom room,
+    required LiveInkChunk chunk,
+  }) async {
+    if (!effectiveLiveInk || _activeRoom?.roomId != room.roomId) return;
+    final encrypted = await _crypto.encrypt(
+      roomKey: room.roomKey,
+      plainBytes: CollaborationMessage.inkChunk(chunk).toBytes(),
+    );
+    if (_activeRoom?.roomId != room.roomId) return;
+    await sendLiveInk(encrypted);
+  }
 
   Stream<List<RoomCollaborator>> get roomUsers => _transport.roomUsers;
 
@@ -167,11 +230,11 @@ class CollaborationRepository {
       'sceneVersion': _reconciler.getSceneVersion(syncableScene.elements),
       'summary': CollaborationDebugLog.elementSummary(syncableScene.elements),
     });
-    _startRoomSession(room);
+    await _startRoomSession(room);
     try {
       await _transport.connect(room.roomId);
     } catch (_) {
-      _resetLocalState();
+      await _resetLocalState();
       rethrow;
     }
     await _send(
@@ -211,11 +274,11 @@ class CollaborationRepository {
       'sceneVersion': _reconciler.getSceneVersion(nextScene.elements),
       'summary': CollaborationDebugLog.elementSummary(nextScene.elements),
     });
-    _startRoomSession(room);
+    await _startRoomSession(room);
     try {
       await _transport.connect(room.roomId);
     } catch (_) {
-      _resetLocalState();
+      await _resetLocalState();
       rethrow;
     }
     _startFullSceneSync();
@@ -236,7 +299,7 @@ class CollaborationRepository {
       await _transport.endRoom(ownerKey: ownerKey);
     } catch (_) {}
     await _ownerKeyStore.clearOwnerKey(room.roomId);
-    _resetLocalState();
+    await _resetLocalState();
     return metadata;
   }
 
@@ -248,10 +311,30 @@ class CollaborationRepository {
     if (storedScene == null) {
       return null;
     }
-    final reconciledElements = _reconciler.reconcile(
-      localElements: localScene.elements,
-      remoteElements: storedScene.elements,
-    );
+    final reconcileStarted = _performanceProbe?.nowMicros();
+    final reconciledElements = kReleaseMode
+        ? _reconciler.reconcile(
+            localElements: localScene.elements,
+            remoteElements: storedScene.elements,
+          )
+        : developer.Timeline.timeSync(
+            'collaboration.reconcile',
+            () => _reconciler.reconcile(
+              localElements: localScene.elements,
+              remoteElements: storedScene.elements,
+            ),
+            arguments: {
+              'localElements': localScene.elements.length,
+              'remoteElements': storedScene.elements.length,
+            },
+          );
+    if (reconcileStarted != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.reconcile,
+        reconcileStarted,
+        itemCount: localScene.elements.length + storedScene.elements.length,
+      );
+    }
     final nextScene = storedScene.copyWith(
       elements: _reconciler.getSyncableElements(reconciledElements),
       files: {...localScene.files, ...storedScene.files},
@@ -511,11 +594,32 @@ class CollaborationRepository {
         ))
           remote,
     ];
-    final reconciled = _reconciler.reconcile(
-      localElements: localScene.elements,
-      remoteElements: remoteElements,
-      protectedElementIds: protectedElementIds,
-    );
+    final reconcileStarted = _performanceProbe?.nowMicros();
+    final reconciled = kReleaseMode
+        ? _reconciler.reconcile(
+            localElements: localScene.elements,
+            remoteElements: remoteElements,
+            protectedElementIds: protectedElementIds,
+          )
+        : developer.Timeline.timeSync(
+            'collaboration.reconcile',
+            () => _reconciler.reconcile(
+              localElements: localScene.elements,
+              remoteElements: remoteElements,
+              protectedElementIds: protectedElementIds,
+            ),
+            arguments: {
+              'localElements': localScene.elements.length,
+              'remoteElements': remoteElements.length,
+            },
+          );
+    if (reconcileStarted != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.reconcile,
+        reconcileStarted,
+        itemCount: localScene.elements.length + remoteElements.length,
+      );
+    }
     final nextScene = localScene.copyWith(
       elements: _reconciler.getSyncableElements(reconciled),
     );
@@ -596,21 +700,48 @@ class CollaborationRepository {
     );
   }
 
-  void _startRoomSession(CollaborationRoom room) {
-    _stopRoomSession();
+  Future<void> _startRoomSession(CollaborationRoom room) async {
+    await _stopRoomSession();
+    final sessionGeneration = _roomSessionGeneration;
     _accumulator.dispose();
     _accumulator.onFlush = _onAccumulatorFlush;
     _messageBacklog.clear();
     _messageDecodeQueue = Future<void>.value();
+    final liveInkScheduler = LiveInkReceiveScheduler(
+      decode: (frame) => _decodeLiveInkFrame(room, frame),
+    );
+    _liveInkScheduler = liveInkScheduler;
+    _liveInkChunkSubscription = liveInkScheduler.chunks.listen((decoded) {
+      if (_activeRoom?.roomId == room.roomId) {
+        _liveInkChunks.add(decoded);
+      }
+    });
+    _liveInkFrameSubscription = _transport.liveInkFrames.listen((frame) {
+      if (_activeRoom?.roomId == room.roomId && effectiveLiveInk) {
+        liveInkScheduler.add(frame);
+      }
+    });
     _transportMessageSubscription = _transport.messages.listen(
       (payload) {
+        final enqueuedMicros = _performanceProbe?.nowMicros();
+        final liveInkWorkAtEnqueue =
+            liveInkScheduler.inFlight ||
+            liveInkScheduler.pendingSenderCount > 0;
         CollaborationDebugLog.write('wire', 'payload_received', {
           'room': _shortRoomId(room.roomId),
           'encryptedBytes': payload.encryptedBuffer.length,
           'ivBytes': payload.iv.length,
         });
         _messageDecodeQueue = _messageDecodeQueue
-            .then((_) => _handleEncryptedPayload(room, payload))
+            .then(
+              (_) => _handleEncryptedPayload(
+                room,
+                payload,
+                sessionGeneration,
+                enqueuedMicros,
+                liveInkWorkAtEnqueue,
+              ),
+            )
             .catchError((Object error) {
               CollaborationDebugLog.write('repo', 'message_queue_failed', {
                 'error': error,
@@ -639,16 +770,66 @@ class CollaborationRepository {
   Future<void> _handleEncryptedPayload(
     CollaborationRoom room,
     EncryptedPayload payload,
+    int sessionGeneration,
+    int? enqueuedMicros,
+    bool liveInkWorkAtEnqueue,
   ) async {
-    if (_activeRoom?.roomId != room.roomId) {
+    if (!_isCurrentRoomSession(room, sessionGeneration)) {
       return;
     }
-    try {
-      final bytes = await _crypto.decrypt(
-        roomKey: room.roomKey,
-        encryptedPayload: payload,
+    if (enqueuedMicros != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.reliableQueueWait,
+        enqueuedMicros,
+        itemCount: liveInkWorkAtEnqueue ? 1 : 0,
+        byteCount: payload.encryptedBuffer.length + payload.iv.length,
       );
-      final message = CollaborationMessage.fromBytes(bytes);
+    }
+    try {
+      final decryptStarted = _performanceProbe?.nowMicros();
+      final decryptTask = kReleaseMode
+          ? null
+          : (developer.TimelineTask()..start(
+              'collaboration.decrypt',
+              arguments: {
+                'room': _shortRoomId(room.roomId),
+                'encryptedBytes': payload.encryptedBuffer.length,
+              },
+            ));
+      late final List<int> bytes;
+      try {
+        bytes = await _crypto.decrypt(
+          roomKey: room.roomKey,
+          encryptedPayload: payload,
+        );
+      } finally {
+        decryptTask?.finish();
+      }
+      if (!_isCurrentRoomSession(room, sessionGeneration)) return;
+      if (decryptStarted != null) {
+        _performanceProbe!.recordSince(
+          CollaborationPerformanceStage.decrypt,
+          decryptStarted,
+          byteCount: payload.encryptedBuffer.length + payload.iv.length,
+        );
+      }
+      final decodeStarted = _performanceProbe?.nowMicros();
+      final message = kReleaseMode
+          ? CollaborationMessage.fromBytes(bytes)
+          : developer.Timeline.timeSync(
+              'collaboration.json_decode',
+              () => CollaborationMessage.fromBytes(bytes),
+              arguments: {'plainBytes': bytes.length},
+            );
+      if (decodeStarted != null) {
+        _performanceProbe!.recordSince(
+          CollaborationPerformanceStage.jsonDecode,
+          decodeStarted,
+          itemCount: message.elements.length,
+          byteCount: bytes.length,
+        );
+      }
+      if (!_isCurrentRoomSession(room, sessionGeneration)) return;
       CollaborationDebugLog.write('crypto', 'decoded', {
         'room': _shortRoomId(room.roomId),
         'type': message.type.wireName,
@@ -664,12 +845,34 @@ class CollaborationRepository {
         _messageBacklog.add(message);
       }
     } catch (error) {
+      if (!_isCurrentRoomSession(room, sessionGeneration)) return;
       CollaborationDebugLog.write('crypto', 'decrypt_failed', {
         'room': _shortRoomId(room.roomId),
         'error': error,
       });
       _addRepositoryError('协作消息解密失败：$error');
     }
+  }
+
+  Future<LiveInkChunk> _decodeLiveInkFrame(
+    CollaborationRoom room,
+    ReceivedLiveInkFrame frame,
+  ) async {
+    if (_activeRoom?.roomId != room.roomId) {
+      throw const FormatException('Live ink room is no longer active');
+    }
+    final bytes = await _crypto.decrypt(
+      roomKey: room.roomKey,
+      encryptedPayload: frame.payload,
+    );
+    if (_activeRoom?.roomId != room.roomId) {
+      throw const FormatException('Live ink room changed during decrypt');
+    }
+    final chunk = CollaborationMessage.fromBytes(bytes).liveInkChunk;
+    if (chunk == null) {
+      throw const FormatException('Live ink payload is not INK_CHUNK');
+    }
+    return chunk;
   }
 
   Future<void> _sendSceneInitToNewUser(CollaborationRoom room) async {
@@ -680,14 +883,32 @@ class CollaborationRepository {
     }
   }
 
-  void _stopRoomSession() {
-    unawaited(_transportMessageSubscription?.cancel());
+  Future<void> _stopRoomSession() async {
+    _roomSessionGeneration++;
+    final transportMessages = _transportMessageSubscription;
     _transportMessageSubscription = null;
-    unawaited(_newUserSubscription?.cancel());
+    final liveInkFrames = _liveInkFrameSubscription;
+    _liveInkFrameSubscription = null;
+    final liveInkChunks = _liveInkChunkSubscription;
+    _liveInkChunkSubscription = null;
+    final liveInkScheduler = _liveInkScheduler;
+    _liveInkScheduler = null;
+    final newUsers = _newUserSubscription;
     _newUserSubscription = null;
+    await Future.wait([
+      if (transportMessages != null) transportMessages.cancel(),
+      if (liveInkFrames != null) liveInkFrames.cancel(),
+      if (liveInkChunks != null) liveInkChunks.cancel(),
+      if (newUsers != null) newUsers.cancel(),
+    ]);
+    if (liveInkScheduler != null) await liveInkScheduler.close();
     _messageDecodeQueue = Future<void>.value();
     _messageBacklog.clear();
   }
+
+  bool _isCurrentRoomSession(CollaborationRoom room, int sessionGeneration) =>
+      _roomSessionGeneration == sessionGeneration &&
+      _activeRoom?.roomId == room.roomId;
 
   void _addRepositoryError(String message) {
     if (!_repositoryErrors.isClosed) {
@@ -700,10 +921,51 @@ class CollaborationRepository {
     required CollaborationMessage message,
     bool volatile = false,
   }) async {
-    final encrypted = await _crypto.encrypt(
-      roomKey: room.roomKey,
-      plainBytes: message.toBytes(),
-    );
+    final encodeStarted = _performanceProbe?.nowMicros();
+    final plainBytes = kReleaseMode
+        ? message.toBytes()
+        : developer.Timeline.timeSync(
+            'collaboration.json_encode',
+            message.toBytes,
+            arguments: {
+              'type': message.type.wireName,
+              'elements': message.elements.length,
+            },
+          );
+    if (encodeStarted != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.jsonEncode,
+        encodeStarted,
+        itemCount: message.elements.length,
+        byteCount: plainBytes.length,
+      );
+    }
+    final encryptStarted = _performanceProbe?.nowMicros();
+    final encryptTask = kReleaseMode
+        ? null
+        : (developer.TimelineTask()..start(
+            'collaboration.encrypt',
+            arguments: {
+              'room': _shortRoomId(room.roomId),
+              'plainBytes': plainBytes.length,
+            },
+          ));
+    late final EncryptedPayload encrypted;
+    try {
+      encrypted = await _crypto.encrypt(
+        roomKey: room.roomKey,
+        plainBytes: plainBytes,
+      );
+    } finally {
+      encryptTask?.finish();
+    }
+    if (encryptStarted != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.encrypt,
+        encryptStarted,
+        byteCount: encrypted.encryptedBuffer.length + encrypted.iv.length,
+      );
+    }
     CollaborationDebugLog.write('wire', 'send_message', {
       'room': _shortRoomId(room.roomId),
       'type': message.type.wireName,
@@ -713,7 +975,29 @@ class CollaborationRepository {
       'ivBytes': encrypted.iv.length,
       'summary': CollaborationDebugLog.elementSummary(message.elements),
     });
-    await _transport.send(encrypted, volatile: volatile);
+    final transportStarted = _performanceProbe?.nowMicros();
+    final transportTask = kReleaseMode
+        ? null
+        : (developer.TimelineTask()..start(
+            'collaboration.transport_send',
+            arguments: {
+              'room': _shortRoomId(room.roomId),
+              'encryptedBytes': encrypted.encryptedBuffer.length,
+              'volatile': volatile,
+            },
+          ));
+    try {
+      await _transport.send(encrypted, volatile: volatile);
+    } finally {
+      transportTask?.finish();
+    }
+    if (transportStarted != null) {
+      _performanceProbe!.recordSince(
+        CollaborationPerformanceStage.transportSend,
+        transportStarted,
+        byteCount: encrypted.encryptedBuffer.length + encrypted.iv.length,
+      );
+    }
     return encrypted.encryptedBuffer.length + encrypted.iv.length;
   }
 
@@ -776,10 +1060,30 @@ class CollaborationRepository {
       if (storedScene == null) {
         rethrow;
       }
-      final reconciledElements = _reconciler.reconcile(
-        localElements: scene.elements,
-        remoteElements: storedScene.elements,
-      );
+      final reconcileStarted = _performanceProbe?.nowMicros();
+      final reconciledElements = kReleaseMode
+          ? _reconciler.reconcile(
+              localElements: scene.elements,
+              remoteElements: storedScene.elements,
+            )
+          : developer.Timeline.timeSync(
+              'collaboration.reconcile',
+              () => _reconciler.reconcile(
+                localElements: scene.elements,
+                remoteElements: storedScene.elements,
+              ),
+              arguments: {
+                'localElements': scene.elements.length,
+                'remoteElements': storedScene.elements.length,
+              },
+            );
+      if (reconcileStarted != null) {
+        _performanceProbe!.recordSince(
+          CollaborationPerformanceStage.reconcile,
+          reconcileStarted,
+          itemCount: scene.elements.length + storedScene.elements.length,
+        );
+      }
       final mergedScene = scene.copyWith(
         elements: _reconciler.getSyncableElements(reconciledElements),
       );
@@ -983,11 +1287,11 @@ class CollaborationRepository {
 
   Future<void> stop() async {
     await forceFlushSnapshot();
-    _resetLocalState();
+    await _resetLocalState();
     await _transport.disconnect();
   }
 
-  void _resetLocalState() {
+  Future<void> _resetLocalState() async {
     _fullSceneSyncTimer?.cancel();
     _fullSceneSyncTimer = null;
     _fileUploadTimer?.cancel();
@@ -996,7 +1300,7 @@ class CollaborationRepository {
     _snapshotTimer = null;
     _snapshotSaving = false;
     _snapshotDirty = false;
-    _stopRoomSession();
+    await _stopRoomSession();
     _activeRoom = null;
     _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
 
 import 'package:flow_muse/features/account/widgets/account_avatar.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_ink_store.dart';
 import 'package:flow_muse/features/whiteboard/speech_recognition/models/speech_recognition_event.dart';
 import 'package:flow_muse/features/whiteboard/speech_recognition/services/speech_recognition_service.dart';
 import 'package:flow_muse/features/whiteboard/speech_recognition/services/speech_recognition_service_factory.dart';
@@ -44,6 +45,10 @@ class MarkdrawEditor extends StatefulWidget {
     this.currentThemeMode,
     this.onSceneChanged,
     this.onLiveFreedrawChanged,
+    this.shouldUseLiveInkV2,
+    this.onLiveInkChanged,
+    this.onLiveInkCancelled,
+    this.remoteWetInkStore,
     this.onBack,
     this.saveStatusLabel,
     this.collaborating = false,
@@ -105,6 +110,10 @@ class MarkdrawEditor extends StatefulWidget {
   /// Called when the scene changes (for auto-save, etc.).
   final void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
   final void Function(FreedrawElement element)? onLiveFreedrawChanged;
+  final bool Function()? shouldUseLiveInkV2;
+  final LiveInkFreedrawCallback? onLiveInkChanged;
+  final ValueChanged<String>? onLiveInkCancelled;
+  final RemoteWetInkStore? remoteWetInkStore;
 
   /// FlowMuse host chrome callbacks and state.
   final VoidCallback? onBack;
@@ -203,6 +212,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     _controller.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
     _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
+    _controller.shouldUseLiveInkV2 = widget.shouldUseLiveInkV2;
+    _controller.onLiveInkChanged = widget.onLiveInkChanged;
+    _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
     _controller.onRecognizeInk = widget.onRecognizeInk;
     _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
     _controller.onRecognizeSmartLayoutBlock =
@@ -227,6 +239,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _controller.addListener(_onControllerChanged);
       _controller.onSceneChanged = widget.onSceneChanged;
       _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
+      _controller.shouldUseLiveInkV2 = widget.shouldUseLiveInkV2;
+      _controller.onLiveInkChanged = widget.onLiveInkChanged;
+      _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
       _controller.onRecognizeInk = widget.onRecognizeInk;
       _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
       _controller.onRecognizeSmartLayoutBlock =
@@ -238,6 +253,15 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     }
     if (widget.onLiveFreedrawChanged != oldWidget.onLiveFreedrawChanged) {
       _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
+    }
+    if (widget.shouldUseLiveInkV2 != oldWidget.shouldUseLiveInkV2) {
+      _controller.shouldUseLiveInkV2 = widget.shouldUseLiveInkV2;
+    }
+    if (widget.onLiveInkChanged != oldWidget.onLiveInkChanged) {
+      _controller.onLiveInkChanged = widget.onLiveInkChanged;
+    }
+    if (widget.onLiveInkCancelled != oldWidget.onLiveInkCancelled) {
+      _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
     }
     if (widget.onSmartLayoutInk != oldWidget.onSmartLayoutInk) {
       _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
@@ -261,6 +285,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     unawaited(_speechSubscription?.cancel());
     unawaited(_speechService.dispose());
     _controller.removeListener(_onControllerChanged);
+    _controller.shouldUseLiveInkV2 = null;
+    _controller.onLiveInkChanged = null;
+    _controller.onLiveInkCancelled = null;
     _ownController?.dispose();
     super.dispose();
   }
@@ -690,6 +717,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                     return EditorCanvas(
                       controller: _controller,
                       collaborators: widget.collaborators,
+                      remoteWetInkStore: widget.remoteWetInkStore,
                       onPointerPresence: widget.onPointerPresence,
                       onVisibleSceneBoundsChanged:
                           widget.onVisibleSceneBoundsChanged,

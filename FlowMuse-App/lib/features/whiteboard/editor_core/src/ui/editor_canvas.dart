@@ -1,14 +1,20 @@
 library;
 
+import 'dart:developer' as developer;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter_math_fork/flutter_math.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
+import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_ink_store.dart';
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 import '../rendering/math_text_utils.dart';
+import '../rendering/local_wet_ink_painter.dart';
+import '../rendering/remote_wet_ink_painter.dart';
 
 /// The main canvas area with pointer/gesture handling.
 class EditorCanvas extends StatefulWidget {
@@ -17,6 +23,7 @@ class EditorCanvas extends StatefulWidget {
   final void Function(Offset localPosition, bool pointerDown)?
   onPointerPresence;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
+  final RemoteWetInkStore? remoteWetInkStore;
 
   const EditorCanvas({
     super.key,
@@ -24,6 +31,7 @@ class EditorCanvas extends StatefulWidget {
     this.collaborators = const [],
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
+    this.remoteWetInkStore,
   });
 
   @override
@@ -42,6 +50,7 @@ class _EditorCanvasState extends State<EditorCanvas>
   double _appendPageOverscroll = 0;
   bool _appendPageReady = false;
   late final AnimationController _appendPageOverscrollController;
+  final RemoteWetInkRenderCache _remoteWetInkCache = RemoteWetInkRenderCache();
 
   @override
   void initState() {
@@ -58,6 +67,7 @@ class _EditorCanvasState extends State<EditorCanvas>
   @override
   void dispose() {
     _appendPageOverscrollController.dispose();
+    _remoteWetInkCache.dispose();
     super.dispose();
   }
 
@@ -279,6 +289,45 @@ class _EditorCanvasState extends State<EditorCanvas>
           }
           final paintViewport = _paintViewport();
           final appendPageHint = _appendPageHint();
+          final useLayeredWetInk =
+              controller.writingFlags.layeredWetInk &&
+              controller.activeTool is FreedrawTool;
+          Element? previewElement;
+          if (!useLayeredWetInk) {
+            previewElement = kReleaseMode
+                ? controller.buildPreviewElement(toolOverlay)
+                : developer.Timeline.timeSync(
+                    'whiteboard.active_element_build',
+                    () => controller.buildPreviewElement(toolOverlay),
+                  );
+          }
+          Widget wetInkLayers = const SizedBox.expand();
+          if (useLayeredWetInk) {
+            wetInkLayers = CustomPaint(
+              painter: LocalWetInkPainter(
+                state: controller.localWetInkState,
+                adapter: controller.adapter,
+                viewport: paintViewport,
+                layout: controller.layout,
+                contentBounds: controller.contentBounds,
+                activePreviewMetricsProbe: controller.activePreviewMetricsProbe,
+              ),
+              child: wetInkLayers,
+            );
+          }
+          final remoteWetInkStore = widget.remoteWetInkStore;
+          if (remoteWetInkStore != null) {
+            wetInkLayers = CustomPaint(
+              painter: RemoteWetInkPainter(
+                store: remoteWetInkStore,
+                cache: _remoteWetInkCache,
+                adapter: controller.adapter,
+                viewport: paintViewport,
+                layout: controller.layout,
+              ),
+              child: wetInkLayers,
+            );
+          }
           return MouseRegion(
             cursor: controller.cursorForTool,
             child: Stack(
@@ -357,9 +406,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                         adapter: controller.adapter,
                         viewport: paintViewport,
                         layout: controller.layout,
-                        previewElement: controller.buildPreviewElement(
-                          toolOverlay,
-                        ),
+                        previewElement: previewElement,
                         editingElementId: controller.editingTextElementId,
                         resolvedImages: controller.resolveImages(),
                         pendingElements: controller.pendingPreviewElements.isNotEmpty
@@ -372,6 +419,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                         contentBounds: controller.contentBounds,
                         appendPageHint: appendPageHint,
                         skipMathText: true,
+                        activePreviewMetricsProbe:
+                            controller.activePreviewMetricsProbe,
+                        activePreviewPaintMarker:
+                            controller.activePreviewPaintMarker,
                       ),
                       foregroundPainter: InteractiveCanvasPainter(
                         viewport: paintViewport,
@@ -402,7 +453,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                         linkIcons: _buildLinkIcons(),
                         remoteCollaborators: _buildRemoteCollaborators(),
                       ),
-                      child: const SizedBox.expand(),
+                      child: wetInkLayers,
                     ),
                   ),
                 ),

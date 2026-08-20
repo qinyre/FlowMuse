@@ -84,6 +84,7 @@ class ChangeAccumulator {
 
   void dispose() {
     _timer?.cancel();
+    _timer = null;
     _pending.clear();
   }
 }

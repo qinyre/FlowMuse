@@ -2,11 +2,12 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
@@ -18,9 +19,12 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
+import '../config/writing_feature_flags.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
 import '../rendering/viewport_clamp.dart';
+import '../rendering/local_wet_ink_state.dart';
+import '../input/active_preview_metrics_probe.dart';
 import '../input/outline_render_mode.dart';
 import '../input/stroke_input_normalizer.dart';
 import '../input/stroke_input_modeler.dart';
@@ -75,9 +79,14 @@ enum SceneChangeSource { userEdit, undo, redo, reset, remoteApply, restore }
 
 enum _TwoFingerGestureMode { pan, zoom }
 
+typedef LiveInkFreedrawCallback =
+    void Function(ActiveFreedrawView view, ElementStyle style, bool terminal);
+
 class MarkdrawController extends ChangeNotifier {
   MarkdrawController({
     MarkdrawEditorConfig config = const MarkdrawEditorConfig(),
+    this.activePreviewMetricsProbe,
+    this.writingFlags = writingFeatureFlags,
   }) : _config = config {
     _layout = config.initialLayout.ensurePage();
     _editorState = EditorState(
@@ -100,6 +109,12 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   final MarkdrawEditorConfig _config;
+  final ActivePreviewMetricsProbe? activePreviewMetricsProbe;
+  final WritingFeatureFlags writingFlags;
+  final LocalWetInkState localWetInkState = LocalWetInkState();
+  int _nextLocalWetInkEpoch = 0;
+  int? _activePreviewStrokeEpoch;
+  int? _activePreviewMaxInputSeq;
 
   // Core state
   late EditorState _editorState;
@@ -255,6 +270,9 @@ class MarkdrawController extends ChangeNotifier {
   /// Called whenever the scene changes (element add/update/remove).
   void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
   void Function(FreedrawElement element)? onLiveFreedrawChanged;
+  bool Function()? shouldUseLiveInkV2;
+  LiveInkFreedrawCallback? onLiveInkChanged;
+  ValueChanged<String>? onLiveInkCancelled;
   Timer? _liveFreedrawTimer;
   static const Duration _liveFreedrawBroadcastInterval = Duration(
     milliseconds: 50,
@@ -354,6 +372,16 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Current scene snapshot.
   Scene get currentScene => _editorState.scene;
+
+  ActivePreviewPaintMarker? get activePreviewPaintMarker {
+    final strokeEpoch = _activePreviewStrokeEpoch;
+    final maxInputSeq = _activePreviewMaxInputSeq;
+    if (strokeEpoch == null || maxInputSeq == null) return null;
+    return ActivePreviewPaintMarker(
+      strokeEpoch: strokeEpoch,
+      maxInputSeq: maxInputSeq,
+    );
+  }
 
   /// The snap grid size in pixels, or null if grid is off.
   int? get gridSize => _gridSize;
@@ -682,6 +710,9 @@ class MarkdrawController extends ChangeNotifier {
   /// Releases all resources: image cache, focus nodes, text controller.
   @override
   void dispose() {
+    _cancelActiveToolInteraction(ActivePreviewTerminalReason.dispose);
+    localWetInkState.clear(notify: false);
+    localWetInkState.dispose();
     _disposed = true;
     _inkRecognitionTimer?.cancel();
     _liveFreedrawTimer?.cancel();
@@ -743,7 +774,7 @@ class MarkdrawController extends ChangeNotifier {
   void switchTool(ToolType type) {
     // In view mode, only the hand tool is allowed
     if (_viewMode && type != ToolType.hand) return;
-    _cancelActiveToolInteraction();
+    _cancelActiveToolInteraction(ActivePreviewTerminalReason.toolSwitch);
     _activeTool = createTool(type);
     _editorState = _editorState.copyWith(
       activeToolType: type,
@@ -1959,6 +1990,8 @@ class MarkdrawController extends ChangeNotifier {
 
     if (_useUnifiedModeler && _activeTool is FreedrawTool) {
       // --- Unified modeler path for freedraw ---
+      final freedrawTool = _activeTool as FreedrawTool;
+      freedrawTool.prepareStrokeLiveMode(shouldUseLiveInkV2?.call() ?? false);
       final sample = _normalizer.normalize(event, phase: StrokePhase.down);
       _recorder?.record(
         sample,
@@ -1971,7 +2004,13 @@ class MarkdrawController extends ChangeNotifier {
         useRealPressure: _pressureEnabled,
         pressureExponent: _pressureExponent,
       );
-      final r = _modeler!.process(sample);
+      final r = kReleaseMode
+          ? _modeler!.process(sample)
+          : developer.Timeline.timeSync(
+              'whiteboard.input_model',
+              () => _modeler!.process(sample),
+              arguments: {'phase': sample.phase.name},
+            );
       if (r.point == null) return;
 
       final sceneOffset = _editorState.viewport.screenToScenePrecise(
@@ -1986,9 +2025,15 @@ class MarkdrawController extends ChangeNotifier {
       }
 
       _sceneBeforeDrag = _editorState.scene;
+      _startActivePreviewStroke();
       applyResult(
         _activeTool.onPointerDown(point, toolContext, pressure: r.pressure),
       );
+      _recordAcceptedActivePreviewPoint();
+      _publishLocalWetInk();
+      if (freedrawTool.activeView?.strokeLiveMode ?? false) {
+        _emitLiveFreedraw();
+      }
       return;
     }
 
@@ -2071,8 +2116,19 @@ class MarkdrawController extends ChangeNotifier {
         viewportZoom: _editorState.viewport.zoom,
         viewportTransform: _viewportTransform,
       );
-      final r = _modeler!.process(sample);
-      if (r.point == null) return; // dropped by modeler
+      final r = kReleaseMode
+          ? _modeler!.process(sample)
+          : developer.Timeline.timeSync(
+              'whiteboard.input_model',
+              () => _modeler!.process(sample),
+              arguments: {'phase': sample.phase.name},
+            );
+      if (r.point == null) {
+        activePreviewMetricsProbe?.recordRejectedRawSample(
+          r.reason ?? r.decision.name,
+        );
+        return;
+      }
       final sceneOffset = _editorState.viewport.screenToScenePrecise(
         Offset(r.point!.x, r.point!.y),
       );
@@ -2085,9 +2141,14 @@ class MarkdrawController extends ChangeNotifier {
           pressure: r.pressure,
         ),
       );
+      _recordAcceptedActivePreviewPoint();
       _scheduleLiveFreedraw();
       mousePosition = event.localPosition;
-      notifyListeners();
+      if (writingFlags.layeredWetInk) {
+        _publishLocalWetInk();
+      } else {
+        notifyListeners();
+      }
       return;
     }
 
@@ -2131,7 +2192,13 @@ class MarkdrawController extends ChangeNotifier {
         viewportZoom: _editorState.viewport.zoom,
         viewportTransform: _viewportTransform,
       );
-      final r = _modeler!.process(sample); // flushes real endpoint
+      final r = kReleaseMode
+          ? _modeler!.process(sample)
+          : developer.Timeline.timeSync(
+              'whiteboard.input_model',
+              () => _modeler!.process(sample),
+              arguments: {'phase': sample.phase.name},
+            ); // flushes real endpoint
 
       if (r.point != null) {
         final sceneOffset = _editorState.viewport.screenToScenePrecise(
@@ -2141,10 +2208,23 @@ class MarkdrawController extends ChangeNotifier {
         applyResult(
           _activeTool.onPointerMove(point, toolContext, pressure: r.pressure),
         );
-        applyResult(
-          _activeTool.onPointerUp(point, toolContext, pressure: r.pressure),
+        _recordAcceptedActivePreviewPoint();
+        final activeView = (_activeTool as FreedrawTool).activeView;
+        if (activeView?.strokeLiveMode ?? false) {
+          _emitLiveFreedraw(terminal: true);
+        }
+        final finalResult = _activeTool.onPointerUp(
+          point,
+          toolContext,
+          pressure: r.pressure,
         );
+        if (writingFlags.layeredWetInk) {
+          localWetInkState.clear(notify: false);
+        }
+        applyResult(finalResult);
       }
+
+      _finishActivePreviewStroke(ActivePreviewTerminalReason.pointerUp);
 
       _modeler = null;
       _activeDrawPointerId = null;
@@ -2238,7 +2318,7 @@ class MarkdrawController extends ChangeNotifier {
     _modeler?.reset(reason: 'cancel');
     _modeler = null;
     _activeDrawPointerId = null;
-    _cancelActiveToolInteraction();
+    _cancelActiveToolInteraction(ActivePreviewTerminalReason.cancel);
     _sceneBeforeDrag = null;
   }
 
@@ -2338,33 +2418,57 @@ class MarkdrawController extends ChangeNotifier {
     _activeDrawPointerId = null;
     _temporaryTouchPanPointerId = null;
     _activeStylusPointerId = null;
-    _cancelActiveToolInteraction();
+    _cancelActiveToolInteraction(ActivePreviewTerminalReason.viewportGesture);
     _sceneBeforeDrag = null;
   }
 
-  void _cancelActiveToolInteraction() {
+  void _cancelActiveToolInteraction(ActivePreviewTerminalReason reason) {
+    _finishActivePreviewStroke(reason);
     if (_activeTool is FreedrawTool) {
+      final tool = _activeTool as FreedrawTool;
+      final activeView = tool.activeView;
       _cancelPendingLiveFreedraw();
-      _emitLiveFreedraw((_activeTool as FreedrawTool).cancelStroke());
+      if (activeView?.strokeLiveMode ?? false) {
+        tool.cancelStroke();
+        onLiveInkCancelled?.call(activeView!.strokeId.value);
+      } else {
+        _emitLiveFreedraw(element: tool.cancelStroke());
+      }
+      if (writingFlags.layeredWetInk) {
+        localWetInkState.clear(
+          notify: reason != ActivePreviewTerminalReason.dispose,
+        );
+      }
     } else {
       _activeTool.reset();
     }
   }
 
-  void _emitLiveFreedraw([FreedrawElement? element]) {
+  void _emitLiveFreedraw({FreedrawElement? element, bool terminal = false}) {
+    final tool = _activeTool;
+    if (tool is FreedrawTool) {
+      final activeView = tool.activeView;
+      if (activeView?.strokeLiveMode ?? false) {
+        onLiveInkChanged?.call(activeView!, _defaultStyle, terminal);
+        return;
+      }
+    }
     final callback = onLiveFreedrawChanged;
     if (callback == null) return;
     final live =
         element ??
-        (_activeTool is FreedrawTool
-            ? (_activeTool as FreedrawTool).buildLiveElement(toolContext)
-            : null);
+        (tool is FreedrawTool ? tool.buildLiveElement(toolContext) : null);
     if (live == null) return;
     callback(applyDefaultStyleToElement(live) as FreedrawElement);
   }
 
   void _scheduleLiveFreedraw() {
-    if (onLiveFreedrawChanged == null || _liveFreedrawTimer != null) {
+    final tool = _activeTool;
+    final activeView = tool is FreedrawTool ? tool.activeView : null;
+    final hasCallback = activeView?.strokeLiveMode ?? false
+        ? onLiveInkChanged != null
+        : onLiveFreedrawChanged != null;
+    if (!hasCallback || _liveFreedrawTimer != null) {
       return;
     }
     _liveFreedrawTimer = Timer(_liveFreedrawBroadcastInterval, () {
@@ -2376,6 +2480,45 @@ class MarkdrawController extends ChangeNotifier {
   void _cancelPendingLiveFreedraw() {
     _liveFreedrawTimer?.cancel();
     _liveFreedrawTimer = null;
+  }
+
+  void _startActivePreviewStroke() {
+    final probe = activePreviewMetricsProbe;
+    if (probe == null && !writingFlags.layeredWetInk) return;
+    _activePreviewStrokeEpoch =
+        probe?.startStroke() ?? ++_nextLocalWetInkEpoch;
+    _activePreviewMaxInputSeq = null;
+  }
+
+  void _recordAcceptedActivePreviewPoint() {
+    final probe = activePreviewMetricsProbe;
+    final strokeEpoch = _activePreviewStrokeEpoch;
+    if (probe == null || strokeEpoch == null) return;
+    _activePreviewMaxInputSeq = probe.recordAcceptedPoint(strokeEpoch);
+  }
+
+  void _publishLocalWetInk() {
+    if (!writingFlags.layeredWetInk || _activeTool is! FreedrawTool) return;
+    final strokeEpoch = _activePreviewStrokeEpoch;
+    final view = (_activeTool as FreedrawTool).activeView;
+    if (strokeEpoch == null || view == null) return;
+    localWetInkState.publish(
+      LocalWetInkFrame(
+        strokeEpoch: strokeEpoch,
+        view: view,
+        style: _defaultStyle,
+        maxInputSeq: _activePreviewMaxInputSeq,
+      ),
+    );
+  }
+
+  void _finishActivePreviewStroke(ActivePreviewTerminalReason reason) {
+    final strokeEpoch = _activePreviewStrokeEpoch;
+    if (strokeEpoch != null) {
+      activePreviewMetricsProbe?.finishStroke(strokeEpoch, reason);
+    }
+    _activePreviewStrokeEpoch = null;
+    _activePreviewMaxInputSeq = null;
   }
 
   /// Marks the end of a two-finger viewport gesture.
@@ -2540,7 +2683,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Dispatches a key event to the active tool (for programmatic shortcuts).
   void dispatchKey(String key, {bool shift = false, bool ctrl = false}) {
     if (key == 'Escape' && _activeTool is FreedrawTool) {
-      _cancelActiveToolInteraction();
+      _cancelActiveToolInteraction(ActivePreviewTerminalReason.cancel);
       return;
     }
     final result = _activeTool.onKeyEvent(

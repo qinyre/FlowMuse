@@ -8,10 +8,40 @@ import '../../../account/models/collaboration_identity.dart';
 import '../models/collaboration_room.dart';
 import '../models/encrypted_payload.dart';
 import '../models/room_collaborator.dart';
+import '../models/received_live_ink_frame.dart';
 import 'collaboration_debug_log.dart';
 import 'realtime_transport.dart';
 
-class SocketIoRealtimeTransport implements RealtimeTransport {
+abstract interface class LiveInkVolatileChannel {
+  bool get writable;
+  void emit(String event, Object data);
+}
+
+bool emitLiveInkIfWritable(
+  LiveInkVolatileChannel channel,
+  String event,
+  Object data,
+) {
+  if (!channel.writable) return false;
+  channel.emit(event, data);
+  return true;
+}
+
+class SocketIoLiveInkVolatileChannel implements LiveInkVolatileChannel {
+  const SocketIoLiveInkVolatileChannel(this.socket);
+
+  final io.Socket socket;
+
+  @override
+  bool get writable =>
+      socket.connected && socket.io.engine?.transport?.writable == true;
+
+  @override
+  void emit(String event, Object data) => socket.volatile.emit(event, data);
+}
+
+class SocketIoRealtimeTransport
+    implements RealtimeTransport, LiveInkNegotiationDiagnostics {
   SocketIoRealtimeTransport({required this.serverUrl, required this.identity});
 
   static const String _eventJoinRoom = 'join-room';
@@ -27,11 +57,16 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   static const String _eventServerVolatileBroadcast =
       'server-volatile-broadcast';
   static const String _eventClientBroadcast = 'client-broadcast';
+  static const String _eventServerLiveInk = 'server-live-ink';
+  static const String _eventClientLiveInk = 'client-live-ink';
+  static const String _eventLiveInkReady = 'live-ink-ready';
 
   final String serverUrl;
   final CollaborationIdentity identity;
   final StreamController<EncryptedPayload> _messages =
       StreamController<EncryptedPayload>.broadcast();
+  final StreamController<ReceivedLiveInkFrame> _liveInkFrames =
+      StreamController<ReceivedLiveInkFrame>.broadcast();
   final StreamController<String> _newUsers =
       StreamController<String>.broadcast();
   final StreamController<List<RoomCollaborator>> _roomUsers =
@@ -46,9 +81,15 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
 
   io.Socket? _socket;
   String? _roomId;
+  final LiveInkNegotiation _liveInkNegotiation = LiveInkNegotiation();
+  int _joinSentGeneration = -1;
+  int _liveInkTransportNotWritableDrops = 0;
 
   @override
   Stream<EncryptedPayload> get messages => _messages.stream;
+
+  @override
+  Stream<ReceivedLiveInkFrame> get liveInkFrames => _liveInkFrames.stream;
 
   @override
   Stream<String> get newUsers => _newUsers.stream;
@@ -73,8 +114,20 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   String? get socketId => _socket?.id;
 
   @override
+  int get serverLiveInkProtocolVersion => _liveInkNegotiation.version;
+
+  @override
+  int get liveInkNegotiationGeneration => _liveInkNegotiation.generation;
+
+  @override
+  String? get liveInkNegotiatedRoomId => _liveInkNegotiation.negotiatedRoomId;
+
+  @override
+  int get liveInkTransportNotWritableDrops => _liveInkTransportNotWritableDrops;
+
+  @override
   Future<void> connect(String roomId) async {
-    _roomId = roomId;
+    _beginConnection(roomId);
     CollaborationDebugLog.write('socket', 'connect_begin', {
       'room': _shortRoomId(roomId),
       'server': serverUrl,
@@ -86,7 +139,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
         'room': _shortRoomId(roomId),
         'socket': existing.id,
       });
-      existing.emit(_eventJoinRoom, roomId);
+      _sendJoin(existing, roomId);
       await _waitForRoomJoin();
       _emitStatus(RealtimeConnectionStatus.joined);
       return;
@@ -130,7 +183,8 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
         'socket': socket.id,
       });
       _emitStatus(RealtimeConnectionStatus.reconnecting);
-      socket.emit(_eventJoinRoom, activeRoomId);
+      _beginConnection(activeRoomId);
+      _sendJoin(socket, activeRoomId);
     });
     socket.onReconnectAttempt((_) {
       CollaborationDebugLog.write('socket', 'reconnect_attempt', {
@@ -149,6 +203,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       }
     });
     socket.onDisconnect((_) {
+      _resetLiveInkNegotiation();
       CollaborationDebugLog.write('socket', 'disconnected', {
         'room': _shortRoomId(_roomId),
         'socket': socket.id,
@@ -161,7 +216,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       CollaborationDebugLog.write('socket', 'init_room', {
         'room': _shortRoomId(roomId),
       });
-      socket.emit(_eventJoinRoom, roomId);
+      _sendJoin(socket, roomId);
     });
     socket.on(_eventFirstInRoom, (_) {
       CollaborationDebugLog.write('socket', 'first_in_room', {
@@ -225,6 +280,7 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
         _roomEnded.add(metadata);
       }
       _roomId = null;
+      _resetLiveInkNegotiation();
       if (!_roomUsers.isClosed) {
         _roomUsers.add(const []);
       }
@@ -276,13 +332,24 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
         }
       }
     });
+    socket.on(_eventLiveInkReady, _handleLiveInkReady);
+    socket.on(_eventClientLiveInk, (data) {
+      try {
+        final frame = _liveInkFrameFromEventData(data);
+        if (frame != null && !_liveInkFrames.isClosed) {
+          _liveInkFrames.add(frame);
+        }
+      } catch (_) {
+        // Live ink is best-effort; malformed frames are dropped independently.
+      }
+    });
     socket.connect();
 
     await connected.future.timeout(
       const Duration(seconds: 10),
       onTimeout: () => throw StateError('Socket.IO connect timed out'),
     );
-    socket.emit(_eventJoinRoom, roomId);
+    _sendJoin(socket, roomId);
     CollaborationDebugLog.write('socket', 'join_sent', {
       'room': _shortRoomId(roomId),
       'socket': socket.id,
@@ -357,6 +424,28 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
   }
 
   @override
+  Future<void> sendLiveInk(EncryptedPayload payload) async {
+    final roomId = _roomId;
+    final socket = _socket;
+    if (roomId == null || socket == null) {
+      _liveInkTransportNotWritableDrops++;
+      return;
+    }
+    final emitted = emitLiveInkIfWritable(
+      SocketIoLiveInkVolatileChannel(socket),
+      _eventServerLiveInk,
+      [
+        roomId,
+        {
+          'encryptedBuffer': Uint8List.fromList(payload.encryptedBuffer),
+          'iv': Uint8List.fromList(payload.iv),
+        },
+      ],
+    );
+    if (!emitted) _liveInkTransportNotWritableDrops++;
+  }
+
+  @override
   Future<void> endRoom({String? ownerKey}) async {
     final roomId = _roomId;
     final socket = _socket;
@@ -374,12 +463,34 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       socket.emit(_eventLeaveRoom, roomId);
     }
     _roomId = null;
+    _resetLiveInkNegotiation();
     _socket = null;
     socket?.dispose();
     CollaborationDebugLog.write('socket', 'dispose', {
       'room': _shortRoomId(roomId),
     });
     _emitStatus(RealtimeConnectionStatus.disconnected);
+  }
+
+  void _beginConnection(String roomId) {
+    _roomId = roomId;
+    _liveInkNegotiation.begin(roomId);
+    _joinSentGeneration = -1;
+  }
+
+  void _sendJoin(io.Socket socket, String roomId) {
+    if (_joinSentGeneration == _liveInkNegotiation.generation) return;
+    _joinSentGeneration = _liveInkNegotiation.generation;
+    _liveInkNegotiation.arm();
+    socket.emit(_eventJoinRoom, roomId);
+  }
+
+  void _handleLiveInkReady(Object? data) {
+    _liveInkNegotiation.accept(data);
+  }
+
+  void _resetLiveInkNegotiation() {
+    _liveInkNegotiation.reset();
   }
 
   void _emitStatus(RealtimeConnectionStatus status) {
@@ -399,6 +510,16 @@ class SocketIoRealtimeTransport implements RealtimeTransport {
       return EncryptedPayload.fromJson(Map<String, Object?>.from(data));
     }
     return null;
+  }
+
+  ReceivedLiveInkFrame? _liveInkFrameFromEventData(Object? data) {
+    if (data is! Map || data['senderSocketId'] is! String) return null;
+    final payload = _payloadFromEventData(data);
+    if (payload == null) return null;
+    return ReceivedLiveInkFrame(
+      senderSocketId: data['senderSocketId']! as String,
+      payload: payload,
+    );
   }
 
   List<int> _bytes(Object? value) {

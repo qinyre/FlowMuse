@@ -19,6 +19,47 @@ import (
 
 const maxEncryptedFrameBytes = 8 * 1024 * 1024
 
+const (
+	liveInkProtocolVersion    = 2
+	liveInkIVBytes            = 12
+	maxLiveInkCiphertextBytes = 64 * 1024
+	liveInkSocketRate         = 60.0
+	liveInkSocketBurst        = 120.0
+	liveInkRoomRate           = 300.0
+	liveInkRoomBurst          = 600.0
+)
+
+type liveInkDropReason string
+
+const (
+	liveInkDropInvalidEnvelope liveInkDropReason = "invalid_envelope"
+	liveInkDropNotMember       liveInkDropReason = "not_member"
+	liveInkDropInvalidIV       liveInkDropReason = "invalid_iv"
+	liveInkDropOversize        liveInkDropReason = "ciphertext_oversize"
+	liveInkDropUnsupported     liveInkDropReason = "unsupported_bytes"
+	liveInkDropSocketRate      liveInkDropReason = "socket_rate"
+	liveInkDropRoomRate        liveInkDropReason = "room_rate"
+)
+
+type tokenBucket struct {
+	tokens float64
+	last   time.Time
+}
+
+func (b *tokenBucket) allow(now time.Time, rate, burst float64) bool {
+	if b.last.IsZero() {
+		b.tokens = burst
+	} else if elapsed := now.Sub(b.last).Seconds(); elapsed > 0 {
+		b.tokens = min(burst, b.tokens+elapsed*rate)
+	}
+	b.last = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
 type Hub struct {
 	server     *socket.Server
 	sceneStore *storage.SceneStore
@@ -26,11 +67,17 @@ type Hub struct {
 	userStore  *auth.UserStore
 	tokens     *auth.TokenService
 
-	mu          sync.Mutex
-	roomUsers   map[string]map[string]RoomUser
-	socketRooms map[string]string
-	socketUsers map[string]RoomUser
-	followRooms map[string]map[string]struct{}
+	mu                   sync.Mutex
+	roomUsers            map[string]map[string]RoomUser
+	socketRooms          map[string]string
+	socketUsers          map[string]RoomUser
+	followRooms          map[string]map[string]struct{}
+	liveInkSocketBuckets map[string]*tokenBucket
+	liveInkRoomBuckets   map[string]*tokenBucket
+	liveInkDropCounts    map[liveInkDropReason]uint64
+	now                  func() time.Time
+	roomExistsOverride   func(string) bool
+	roomEndedOverride    func(string) bool
 }
 
 func NewHub(
@@ -41,15 +88,19 @@ func NewHub(
 	tokens *auth.TokenService,
 ) *Hub {
 	return &Hub{
-		server:      server,
-		sceneStore:  sceneStore,
-		roomStore:   roomStore,
-		userStore:   userStore,
-		tokens:      tokens,
-		roomUsers:   map[string]map[string]RoomUser{},
-		socketRooms: map[string]string{},
-		socketUsers: map[string]RoomUser{},
-		followRooms: map[string]map[string]struct{}{},
+		server:               server,
+		sceneStore:           sceneStore,
+		roomStore:            roomStore,
+		userStore:            userStore,
+		tokens:               tokens,
+		roomUsers:            map[string]map[string]RoomUser{},
+		socketRooms:          map[string]string{},
+		socketUsers:          map[string]RoomUser{},
+		followRooms:          map[string]map[string]struct{}{},
+		liveInkSocketBuckets: map[string]*tokenBucket{},
+		liveInkRoomBuckets:   map[string]*tokenBucket{},
+		liveInkDropCounts:    map[liveInkDropReason]uint64{},
+		now:                  time.Now,
 	}
 }
 
@@ -89,6 +140,10 @@ func (h *Hub) Register() {
 
 		client.On(EventServerVolatile, func(args ...any) {
 			h.forward(client, args, true)
+		})
+
+		client.On(EventServerLiveInk, func(args ...any) {
+			h.forwardLiveInk(client, args)
 		})
 
 		client.On(EventUserFollow, func(args ...any) {
@@ -142,6 +197,142 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 		client.To(room).Emit(EventNewUser, user)
 	}
 	h.server.To(room).Emit(EventRoomUserChange, currentUsers)
+	client.Emit(EventLiveInkReady, LiveInkReady{
+		RoomID:                 roomID,
+		LiveInkProtocolVersion: liveInkProtocolVersion,
+	})
+}
+
+func (h *Hub) forwardLiveInk(client *socket.Socket, args []any) {
+	h.withLiveInkFrame(string(client.Id()), args, func(roomID string, frame ReceivedLiveInkFrame) {
+		client.To(socket.Room(roomID)).Volatile().Emit(EventClientLiveInk, map[string]any{
+			"encryptedBuffer": frame.EncryptedBuffer,
+			"iv":              frame.IV,
+			"senderSocketId":  frame.SenderSocketID,
+		})
+	})
+}
+
+func (h *Hub) liveInkFrameFor(socketID string, args []any) (string, ReceivedLiveInkFrame, bool) {
+	var roomID string
+	var frame ReceivedLiveInkFrame
+	ok := h.withLiveInkFrame(socketID, args, func(acceptedRoomID string, acceptedFrame ReceivedLiveInkFrame) {
+		roomID = acceptedRoomID
+		frame = acceptedFrame
+	})
+	return roomID, frame, ok
+}
+
+func (h *Hub) withLiveInkFrame(socketID string, args []any, accept func(string, ReceivedLiveInkFrame)) bool {
+	roomID, ok := liveInkRoomID(args)
+	if !ok {
+		if reason := h.consumeLiveInkIngressToken(socketID, ""); reason != "" {
+			h.recordLiveInkDrop(socketID, reason, visibleLiveInkBytes(args))
+			return false
+		}
+		h.recordLiveInkDrop(socketID, liveInkDropInvalidEnvelope, visibleLiveInkBytes(args))
+		return false
+	}
+	if reason := h.consumeLiveInkIngressToken(socketID, roomID); reason != "" {
+		h.recordLiveInkDrop(socketID, reason, visibleLiveInkBytes(args))
+		return false
+	}
+	encryptedBuffer, iv, byteCount, reason, ok := parseLiveInkEnvelope(args[1])
+	if !ok {
+		h.recordLiveInkDrop(socketID, reason, byteCount)
+		return false
+	}
+
+	h.mu.Lock()
+	if h.socketRooms[socketID] != roomID {
+		h.mu.Unlock()
+		h.recordLiveInkDrop(socketID, liveInkDropNotMember, byteCount)
+		return false
+	}
+	if reason := h.consumeLiveInkRoomTokenLocked(roomID); reason != "" {
+		h.mu.Unlock()
+		h.recordLiveInkDrop(socketID, reason, byteCount)
+		return false
+	}
+	frame := ReceivedLiveInkFrame{
+		EncryptedBuffer: cloneBytes(encryptedBuffer),
+		IV:              cloneBytes(iv),
+		SenderSocketID:  socketID,
+	}
+	accept(roomID, frame)
+	h.mu.Unlock()
+	return true
+}
+
+func (h *Hub) consumeLiveInkIngressToken(socketID, roomID string) liveInkDropReason {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.liveInkSocketBuckets == nil {
+		h.liveInkSocketBuckets = map[string]*tokenBucket{}
+	}
+	now := h.liveInkNow()
+	socketBucket := h.liveInkSocketBuckets[socketID]
+	if socketBucket == nil {
+		socketBucket = &tokenBucket{}
+		h.liveInkSocketBuckets[socketID] = socketBucket
+	}
+	if !socketBucket.allow(now, liveInkSocketRate, liveInkSocketBurst) {
+		return liveInkDropSocketRate
+	}
+	if roomID != "" && h.socketRooms[socketID] != roomID {
+		return liveInkDropNotMember
+	}
+	return ""
+}
+
+func (h *Hub) consumeLiveInkToken(socketID, roomID string) liveInkDropReason {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.socketRooms[socketID] != roomID {
+		return liveInkDropNotMember
+	}
+	if h.liveInkSocketBuckets == nil {
+		h.liveInkSocketBuckets = map[string]*tokenBucket{}
+	}
+	if h.liveInkRoomBuckets == nil {
+		h.liveInkRoomBuckets = map[string]*tokenBucket{}
+	}
+	now := h.liveInkNow()
+	socketBucket := h.liveInkSocketBuckets[socketID]
+	if socketBucket == nil {
+		socketBucket = &tokenBucket{}
+		h.liveInkSocketBuckets[socketID] = socketBucket
+	}
+	if !socketBucket.allow(now, liveInkSocketRate, liveInkSocketBurst) {
+		return liveInkDropSocketRate
+	}
+	return h.consumeLiveInkRoomTokenLockedAt(roomID, now)
+}
+
+func (h *Hub) consumeLiveInkRoomTokenLocked(roomID string) liveInkDropReason {
+	return h.consumeLiveInkRoomTokenLockedAt(roomID, h.liveInkNow())
+}
+
+func (h *Hub) consumeLiveInkRoomTokenLockedAt(roomID string, now time.Time) liveInkDropReason {
+	if h.liveInkRoomBuckets == nil {
+		h.liveInkRoomBuckets = map[string]*tokenBucket{}
+	}
+	roomBucket := h.liveInkRoomBuckets[roomID]
+	if roomBucket == nil {
+		roomBucket = &tokenBucket{}
+		h.liveInkRoomBuckets[roomID] = roomBucket
+	}
+	if !roomBucket.allow(now, liveInkRoomRate, liveInkRoomBurst) {
+		return liveInkDropRoomRate
+	}
+	return ""
+}
+
+func (h *Hub) liveInkNow() time.Time {
+	if h.now != nil {
+		return h.now()
+	}
+	return time.Now()
 }
 
 func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
@@ -166,14 +357,7 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 		client.Emit(EventRoomError, "协作消息过大")
 		return
 	}
-	log.Printf(
-		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=%t",
-		socketID,
-		roomID,
-		len(frame.EncryptedBuffer),
-		len(frame.IV),
-		volatile,
-	)
+	logForward(socketID, roomID, frame, volatile)
 	operator := client.To(socket.Room(roomID))
 	if volatile {
 		operator = operator.Volatile()
@@ -217,8 +401,10 @@ func (h *Hub) endRoom(client *socket.Socket, roomID string, ownerKey string) {
 	for socketID := range users {
 		socketIDs = append(socketIDs, socketID)
 		delete(h.socketRooms, socketID)
+		delete(h.liveInkSocketBuckets, socketID)
 	}
 	delete(h.roomUsers, roomID)
+	delete(h.liveInkRoomBuckets, roomID)
 	h.mu.Unlock()
 
 	room := socket.Room(roomID)
@@ -255,8 +441,16 @@ func (h *Hub) userFollow(client *socket.Socket, args []any) {
 
 func (h *Hub) leaveAll(client *socket.Socket) {
 	socketID := string(client.Id())
+	roomID, users := h.removeSocket(socketID)
 
+	if roomID != "" {
+		h.server.To(socket.Room(roomID)).Emit(EventRoomUserChange, users)
+	}
+}
+
+func (h *Hub) removeSocket(socketID string) (string, []RoomUser) {
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	roomID := h.socketRooms[socketID]
 	if roomID != "" {
 		h.removeFromRoomLocked(socketID, roomID)
@@ -272,26 +466,42 @@ func (h *Hub) leaveAll(client *socket.Socket) {
 		users = roomUserList(h.roomUsers[roomID])
 	}
 	delete(h.socketUsers, socketID)
-	h.mu.Unlock()
+	delete(h.liveInkSocketBuckets, socketID)
+	return roomID, users
+}
 
-	if roomID != "" {
-		h.server.To(socket.Room(roomID)).Emit(EventRoomUserChange, users)
+func logForward(socketID, roomID string, frame EncryptedFrame, volatile bool) {
+	if volatile {
+		return
 	}
+	log.Printf(
+		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=false",
+		socketID,
+		roomID,
+		len(frame.EncryptedBuffer),
+		len(frame.IV),
+	)
 }
 
 func (h *Hub) removeFromRoomLocked(socketID, roomID string) {
 	delete(h.socketRooms, socketID)
+	delete(h.liveInkSocketBuckets, socketID)
 	users := h.roomUsers[roomID]
 	if users == nil {
+		delete(h.liveInkRoomBuckets, roomID)
 		return
 	}
 	delete(users, socketID)
 	if len(users) == 0 {
 		delete(h.roomUsers, roomID)
+		delete(h.liveInkRoomBuckets, roomID)
 	}
 }
 
 func (h *Hub) roomExists(roomID string) bool {
+	if h.roomExistsOverride != nil {
+		return h.roomExistsOverride(roomID)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	_, err := h.sceneStore.Load(ctx, roomID)
@@ -302,6 +512,9 @@ func (h *Hub) roomExists(roomID string) bool {
 }
 
 func (h *Hub) roomEnded(roomID string) bool {
+	if h.roomEndedOverride != nil {
+		return h.roomEndedOverride(roomID)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	metadata, err := h.roomStore.LoadRoom(ctx, roomID, "")
@@ -331,6 +544,103 @@ func parseBroadcastArgs(args []any) (string, EncryptedFrame, bool) {
 		return "", EncryptedFrame{}, false
 	}
 	return roomID, EncryptedFrame{EncryptedBuffer: encryptedBuffer, IV: iv}, true
+}
+
+func liveInkRoomID(args []any) (string, bool) {
+	if len(args) != 2 {
+		return "", false
+	}
+	return asString(args[0])
+}
+
+func parseLiveInkEnvelope(value any) ([]byte, []byte, int, liveInkDropReason, bool) {
+	values, ok := value.(map[string]any)
+	if !ok {
+		return nil, nil, 0, liveInkDropInvalidEnvelope, false
+	}
+	encryptedBuffer, encryptedBytes, supported := visibleBytes(values["encryptedBuffer"], maxLiveInkCiphertextBytes)
+	iv, ivBytes, ivSupported := visibleBytes(values["iv"], liveInkIVBytes)
+	byteCount := encryptedBytes + ivBytes
+	if !supported || !ivSupported {
+		return nil, nil, byteCount, liveInkDropUnsupported, false
+	}
+	if ivBytes != liveInkIVBytes {
+		return nil, nil, byteCount, liveInkDropInvalidIV, false
+	}
+	if encryptedBytes > maxLiveInkCiphertextBytes {
+		return nil, nil, byteCount, liveInkDropOversize, false
+	}
+	return encryptedBuffer, iv, byteCount, "", true
+}
+
+// visibleBytes checks a payload's visible length without copying it. Socket.IO's
+// BufferInterface exposes Len, so oversized payloads are rejected before Bytes.
+// Generic []any values are intentionally rejected instead of allocating a copy.
+func visibleBytes(value any, maxBytes int) ([]byte, int, bool) {
+	switch typed := value.(type) {
+	case []byte:
+		return typed, len(typed), true
+	case parserTypes.BufferInterface:
+		length := typed.Len()
+		if length < 0 {
+			return nil, 0, false
+		}
+		if length > maxBytes {
+			return nil, length, true
+		}
+		return typed.Bytes(), length, true
+	default:
+		return nil, visibleByteLen(value), false
+	}
+}
+
+func visibleByteLen(value any) int {
+	switch typed := value.(type) {
+	case []byte:
+		return len(typed)
+	case []any:
+		return len(typed)
+	case parserTypes.BufferInterface:
+		return typed.Len()
+	default:
+		return 0
+	}
+}
+
+func visibleLiveInkBytes(args []any) int {
+	if len(args) < 2 {
+		return 0
+	}
+	values, ok := args[1].(map[string]any)
+	if !ok {
+		return visibleByteLen(args[1])
+	}
+	return visibleByteLen(values["encryptedBuffer"]) + visibleByteLen(values["iv"])
+}
+
+func logLiveInkDrop(socketID string, reason liveInkDropReason, byteCount int) {
+	if len(socketID) > 8 {
+		socketID = socketID[:8]
+	}
+	log.Printf(
+		"[FlowMuseCollab][server][live_ink_drop] reason=%s socket=%s bytes=%d",
+		reason,
+		socketID,
+		byteCount,
+	)
+}
+
+func (h *Hub) recordLiveInkDrop(socketID string, reason liveInkDropReason, byteCount int) {
+	h.mu.Lock()
+	if h.liveInkDropCounts == nil {
+		h.liveInkDropCounts = map[liveInkDropReason]uint64{}
+	}
+	count := h.liveInkDropCounts[reason] + 1
+	h.liveInkDropCounts[reason] = count
+	h.mu.Unlock()
+	if count&(count-1) == 0 {
+		logLiveInkDrop(socketID, reason, byteCount)
+	}
 }
 
 func asFrame(value any) (EncryptedFrame, bool) {
