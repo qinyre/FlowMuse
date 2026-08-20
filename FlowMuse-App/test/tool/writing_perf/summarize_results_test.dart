@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_manifest.dart';
 
 import '../../../tool/writing_perf/summarize_results.dart';
 
@@ -127,7 +128,7 @@ void main() {
         directory,
         'legacy-$run.json',
         runIndex: run,
-        offset: 100 + run - 1,
+        offset: 40000 + run - 1,
       );
       await _writeRun(
         directory,
@@ -138,12 +139,31 @@ void main() {
       );
     }
 
-    final summary = await summarizeDirectory(directory);
+    final summary = await summarizeDirectory(
+      directory,
+      phase: WritingSummaryPhase.p1,
+    );
     final markdown = summary.toMarkdown();
 
     expect(summary.completeScenarios, hasLength(2));
+    expect(summary.acceptanceStatus, 'passed');
     expect(markdown, contains('## P1 成对门禁'));
     expect(markdown, contains('true | true'));
+  });
+
+  test('P1 缺任一成对场景时必须失败', () async {
+    final directory = await _tempDirectory('missing-p1-pair');
+    for (var run = 1; run <= 5; run++) {
+      await _writeRun(directory, 'legacy-$run.json', runIndex: run, offset: 0);
+    }
+
+    final summary = await summarizeDirectory(
+      directory,
+      phase: WritingSummaryPhase.p1,
+    );
+
+    expect(summary.status, 'stable');
+    expect(summary.acceptanceStatus, 'failed');
   });
 
   test('未知 schema 和缺少正式元数据不能形成有效基线', () async {
@@ -217,6 +237,49 @@ void main() {
     expect(run.invalidReasons, contains('insufficient_frame_coverage'));
     expect(run.invalidReasons, contains('painted_sample_frame_not_collected'));
   });
+
+  test('自洽的功能 fixture、任意目标和多设备证据仍必须拒绝', () async {
+    final directory = await _tempDirectory('manifest-bypass');
+    await _writeRun(
+      directory,
+      'bypass.json',
+      runIndex: 1,
+      offset: 0,
+      writingFixture: 'pointer_cancel',
+      measureSeconds: 1,
+      eventTargetMicros: 1000000,
+      supportedDeviceCount: 2,
+    );
+
+    final run = (await summarizeDirectory(directory)).runs.single;
+
+    expect(
+      run.invalidReasons,
+      containsAll([
+        'unsupported_writing_fixture',
+        'nonstandard_measurement_duration',
+        'unfrozen_event_target',
+        'ambiguous_test_device_set',
+      ]),
+    );
+  });
+
+  test('自报计数或 final stroke 数量不一致时必须拒绝', () async {
+    final directory = await _tempDirectory('recomputed-counts');
+    await _writeRun(
+      directory,
+      'bad-counts.json',
+      runIndex: 1,
+      offset: 0,
+      reportedAccepted: 101,
+      elementsAfterRun: 109,
+    );
+
+    final run = (await summarizeDirectory(directory)).runs.single;
+
+    expect(run.invalidReasons, contains('performance_counts_not_reproducible'));
+    expect(run.invalidReasons, contains('incomplete_final_scene'));
+  });
 }
 
 Future<Directory> _tempDirectory(String name) async {
@@ -240,6 +303,11 @@ Future<void> _writeRun(
   int frameCount = 3000,
   String deviceId = 'physical-device-a',
   String? detectedDeviceId,
+  String writingFixture = 'quick_zigzag',
+  int eventTargetMicros = 33000,
+  int supportedDeviceCount = 1,
+  int reportedAccepted = 100,
+  int elementsAfterRun = 110,
 }) {
   return File('${directory.path}/$name').writeAsString(
     jsonEncode({
@@ -253,27 +321,33 @@ Future<void> _writeRun(
       'refreshHz': 60,
       'runIndex': runIndex,
       'sceneElementCount': 100,
-      'sceneFixtureHash': _repeated('b', 64),
-      'writingFixture': 'quick_zigzag',
+      'sceneFixtureHash': writingSceneFixtureHashes[100],
+      'writingFixture': writingFixture,
       'writingFixtureSchemaVersion': 1,
-      'writingFixtureHash': _repeated('c', 64),
+      'writingFixtureHash':
+          writingPerformanceFixtures[writingFixture]?.hash ??
+          _repeated('f', 64),
       'measureSeconds': measureSeconds,
-      'expectedMeasureSeconds': 60,
-      'eventToPaintTargetMicros': 33400,
+      'eventToPaintTargetMicros': eventTargetMicros,
       'flags': {'layeredWetInk': layeredWetInk},
       'sceneHashAfterRun': _repeated('d', 64),
       'semanticSceneHashAfterRun': _repeated('e', 64),
+      'codecRoundTripSemanticSceneHashAfterRun': _repeated('e', 64),
+      'elementsAfterRun': elementsAfterRun,
+      'expectedCompletedStrokes': 10,
+      'validCompletedFreedrawCount': 10,
       'hostEvidence': {
         'gitSha': _repeated('a', 40),
         'gitDirty': gitDirty,
         'detectedDeviceId': detectedDeviceId ?? deviceId,
         'detectedTargetPlatform': 'android-arm64',
         'detectedEmulator': false,
+        'supportedDeviceCount': supportedDeviceCount,
       },
       'performance': {
         'schemaVersion': supportedReportSchemaVersion,
         'invalidReasons': <String>[],
-        'accepted': 100,
+        'accepted': reportedAccepted,
         'painted': 100,
         'terminalBeforePreview': 0,
         'coverage': 1.0,

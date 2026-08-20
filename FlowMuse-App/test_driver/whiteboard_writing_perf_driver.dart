@@ -36,11 +36,18 @@ Future<Map<String, Object?>> _hostEvidence(Map<String, dynamic>? report) async {
   final reportedDeviceId = report?['deviceId'];
   final devices = await Process.run('flutter', ['devices', '--machine']);
   Map<String, Object?>? detectedDevice;
+  var supportedDeviceCount = 0;
   if (devices.exitCode == 0 && reportedDeviceId is String) {
     try {
       final decoded = jsonDecode(devices.stdout as String);
       if (decoded is List) {
         for (final item in decoded.whereType<Map>()) {
+          final target = item['targetPlatform']?.toString().toLowerCase() ?? '';
+          if (target.startsWith('android') ||
+              target.startsWith('ios') ||
+              target.startsWith('ohos')) {
+            supportedDeviceCount++;
+          }
           if (item['id'] == reportedDeviceId) {
             detectedDevice = Map<String, Object?>.from(item);
             break;
@@ -63,5 +70,6 @@ Future<Map<String, Object?>> _hostEvidence(Map<String, dynamic>? report) async {
     'detectedDeviceName': detectedDevice?['name'],
     'detectedTargetPlatform': detectedDevice?['targetPlatform'],
     'detectedEmulator': detectedDevice?['emulator'],
+    'supportedDeviceCount': supportedDeviceCount,
   };
 }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -7,10 +8,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/active_preview_metrics_probe.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_input_sample.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_render_metrics.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_report.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_manifest.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/config/writing_feature_flags.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -26,18 +29,13 @@ const _writingFixtureName = String.fromEnvironment(
   'FLOWMUSE_WRITING_FIXTURE',
   defaultValue: 'quick_zigzag',
 );
-const _measureSecondsOverride = int.fromEnvironment('FLOWMUSE_MEASURE_SECONDS');
 const _deviceClass = String.fromEnvironment(
   'FLOWMUSE_DEVICE_CLASS',
   defaultValue: 'unspecified',
 );
-const _refreshHz = int.fromEnvironment('FLOWMUSE_REFRESH_HZ');
 const _runIndex = int.fromEnvironment('FLOWMUSE_RUN_INDEX');
 const _physicalDevice = bool.fromEnvironment('FLOWMUSE_PHYSICAL_DEVICE');
 const _deviceId = String.fromEnvironment('FLOWMUSE_DEVICE_ID');
-const _eventToPaintTargetOverride = int.fromEnvironment(
-  'FLOWMUSE_EVENT_TO_PAINT_TARGET_MICROS',
-);
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +46,8 @@ void main() {
       isTrue,
       reason: '性能入口仅允许通过 FLOWMUSE_PERF_TEST=true 启用',
     );
+    final fixtureSpec = writingPerformanceFixtures[_writingFixtureName];
+    expect(fixtureSpec, isNotNull, reason: '功能 fixture 不得进入正式性能验收');
     final fixture = writingRecordingFixtures.singleWhere(
       (item) => item.name == _writingFixtureName,
     );
@@ -108,21 +108,16 @@ void main() {
     addTearDown(frameTimings.stop);
     final injectionSamples = <Map<String, int>>[];
     final runClock = Stopwatch()..start();
-    final measureSeconds = _measureSecondsOverride > 0
-        ? _measureSecondsOverride
-        : fixture.name.contains('long_curve')
-        ? 30
-        : 60;
-    final expectedMeasureSeconds = fixture.name.contains('long_curve')
-        ? 30
-        : 60;
-    final eventToPaintTargetMicros = _eventToPaintTargetOverride > 0
-        ? _eventToPaintTargetOverride
-        : _refreshHz >= 55 && _refreshHz <= 65
-        ? 33400
-        : _refreshHz >= 100
-        ? (1000000 / _refreshHz).ceil()
-        : 0;
+    final measureSeconds = fixtureSpec!.durationSeconds;
+    final refreshHz = ui
+        .PlatformDispatcher
+        .instance
+        .views
+        .first
+        .display
+        .refreshRate
+        .round();
+    final eventToPaintTargetMicros = frozenEventToPaintTargetMicros(refreshHz);
     var strokeIndex = 0;
     while (runClock.elapsed < Duration(seconds: measureSeconds)) {
       await _replayFixture(
@@ -153,6 +148,15 @@ void main() {
       invalidReasons: invalidReasons,
     );
     final sceneAfterRun = controller.serializeExcalidrawSceneJson();
+    final roundTripScene = ExcalidrawScene.fromJson(sceneAfterRun);
+    final codecRoundTrip = roundTripScene.toJson();
+    final completedElements = roundTripScene.elements.skip(_sceneElementCount);
+    final validCompletedFreedrawCount = completedElements.where((element) {
+      final points = element['points'];
+      return element['type'] == 'freedraw' &&
+          points is List &&
+          points.isNotEmpty;
+    }).length;
     binding.reportData = <String, Object?>{
       'schemaVersion': 1,
       'measurementEligible':
@@ -160,10 +164,9 @@ void main() {
           _physicalDevice &&
           _deviceId.isNotEmpty &&
           _deviceClass != 'unspecified' &&
-          _refreshHz > 0 &&
+          refreshHz > 0 &&
           _runIndex >= 1 &&
           _runIndex <= 5 &&
-          measureSeconds == expectedMeasureSeconds &&
           eventToPaintTargetMicros > 0,
       'buildMode': kProfileMode
           ? 'profile'
@@ -174,7 +177,7 @@ void main() {
       'deviceClass': _deviceClass,
       'deviceId': _deviceId,
       'physicalDevice': _physicalDevice,
-      'refreshHz': _refreshHz,
+      'refreshHz': refreshHz,
       'runIndex': _runIndex,
       'sceneElementCount': _sceneElementCount,
       'sceneFixtureHash': sceneFixture.collaborationHash(),
@@ -182,15 +185,19 @@ void main() {
       'writingFixtureSchemaVersion': fixture.schemaVersion,
       'writingFixtureHash': fixture.contentHash,
       'measureSeconds': measureSeconds,
-      'expectedMeasureSeconds': expectedMeasureSeconds,
       'eventToPaintTargetMicros': eventToPaintTargetMicros,
       'flags': {'layeredWetInk': writingFeatureFlags.layeredWetInk},
       'injectionJitterP95Micros': jitterP95,
       'injectionJitterMaxMicros': jitterMax,
       'injectionSamples': injectionSamples,
       'elementsAfterRun': controller.currentScene.elements.length,
+      'expectedCompletedStrokes': strokeIndex,
+      'validCompletedFreedrawCount': validCompletedFreedrawCount,
       'sceneHashAfterRun': _jsonHash(sceneAfterRun),
       'semanticSceneHashAfterRun': _semanticSceneHash(sceneAfterRun),
+      'codecRoundTripSemanticSceneHashAfterRun': _semanticSceneHash(
+        codecRoundTrip,
+      ),
       'performance': performance.toJson(),
     };
   });

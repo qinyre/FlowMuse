@@ -2,7 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_manifest.dart';
+
 const int supportedReportSchemaVersion = 1;
+
+enum WritingSummaryPhase { p0, p1 }
 
 class FrameRunSummary {
   const FrameRunSummary({
@@ -175,10 +179,13 @@ class WritingScenarioSummary {
 }
 
 class WritingResultsSummary {
-  WritingResultsSummary({required List<WritingRunSummary> runs})
-    : runs = List.unmodifiable(runs);
+  WritingResultsSummary({
+    required List<WritingRunSummary> runs,
+    this.phase = WritingSummaryPhase.p0,
+  }) : runs = List.unmodifiable(runs);
 
   final List<WritingRunSummary> runs;
+  final WritingSummaryPhase phase;
 
   List<WritingRunSummary> get validRuns =>
       runs.where((run) => run.valid).toList(growable: false);
@@ -215,10 +222,20 @@ class WritingResultsSummary {
 
   String get acceptanceStatus =>
       status == 'stable' &&
-          scenarios.every((scenario) => scenario.requiredGatesPassed) &&
-          _p1ComparisonsPassed
+          (phase == WritingSummaryPhase.p0
+              ? scenarios.every((scenario) => scenario.requiredGatesPassed)
+              : _p1AcceptancePassed)
       ? 'passed'
       : 'failed';
+
+  bool get _p1AcceptancePassed =>
+      completeScenarios.any(
+        (scenario) => scenario.validRuns.first.layeredWetInk == true,
+      ) &&
+      completeScenarios
+          .where((scenario) => scenario.validRuns.first.layeredWetInk == true)
+          .every((scenario) => scenario.requiredGatesPassed) &&
+      _p1ComparisonsPassed;
 
   int? get medianRunP95 => completeScenarios.length == 1
       ? completeScenarios.single.medianRunP95
@@ -239,6 +256,7 @@ class WritingResultsSummary {
       final key = scenario.validRuns.first.comparisonKey;
       if (key != null) grouped.putIfAbsent(key, () => []).add(scenario);
     }
+    if (grouped.isEmpty) return false;
     for (final scenarios in grouped.values) {
       WritingScenarioSummary? legacy;
       WritingScenarioSummary? layered;
@@ -249,7 +267,9 @@ class WritingResultsSummary {
           legacy = scenario;
         }
       }
-      if (legacy == null || layered == null) continue;
+      if (legacy == null || layered == null || scenarios.length != 2) {
+        return false;
+      }
       final legacyP95 = legacy.medianRunP95!;
       final layeredP95 = layered.medianRunP95!;
       final improvement = legacyP95 == 0
@@ -406,7 +426,10 @@ class WritingResultsSummary {
   }
 }
 
-Future<WritingResultsSummary> summarizeDirectory(Directory input) async {
+Future<WritingResultsSummary> summarizeDirectory(
+  Directory input, {
+  WritingSummaryPhase phase = WritingSummaryPhase.p0,
+}) async {
   if (!await input.exists()) {
     throw ArgumentError.value(input.path, 'input', 'directory does not exist');
   }
@@ -427,7 +450,7 @@ Future<WritingResultsSummary> summarizeDirectory(Directory input) async {
     }
     runs.add(_summarizeRun(file.absolute.path, root));
   }
-  return WritingResultsSummary(runs: runs);
+  return WritingResultsSummary(runs: runs, phase: phase);
 }
 
 WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
@@ -455,15 +478,17 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     invalidReasons.add('missing_device_class');
   }
   final refreshHz = (root['refreshHz'] as num?)?.toInt() ?? 0;
-  if (refreshHz <= 0) invalidReasons.add('invalid_refresh_hz');
+  final frozenTarget = frozenEventToPaintTargetMicros(refreshHz);
+  if (frozenTarget <= 0) invalidReasons.add('unsupported_refresh_hz');
   final sceneElementCount = (root['sceneElementCount'] as num?)?.toInt();
   if (!const [100, 1000, 5000].contains(sceneElementCount)) {
     invalidReasons.add('unsupported_scene_element_count');
   }
   final writingFixture = root['writingFixture'];
-  if (writingFixture is! String || writingFixture.isEmpty) {
-    invalidReasons.add('missing_writing_fixture');
-  }
+  final fixtureSpec = writingFixture is String
+      ? writingPerformanceFixtures[writingFixture]
+      : null;
+  if (fixtureSpec == null) invalidReasons.add('unsupported_writing_fixture');
   if (root['writingFixtureSchemaVersion'] != 1) {
     invalidReasons.add('unsupported_writing_fixture_schema');
   }
@@ -472,16 +497,13 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     invalidReasons.add('invalid_run_index');
   }
   final measureSeconds = (root['measureSeconds'] as num?)?.toInt();
-  final expectedMeasureSeconds = (root['expectedMeasureSeconds'] as num?)
-      ?.toInt();
   if (measureSeconds == null ||
-      expectedMeasureSeconds == null ||
-      measureSeconds != expectedMeasureSeconds) {
+      measureSeconds != fixtureSpec?.durationSeconds) {
     invalidReasons.add('nonstandard_measurement_duration');
   }
   final eventTarget = (root['eventToPaintTargetMicros'] as num?)?.toInt();
-  if (eventTarget == null || eventTarget <= 0) {
-    invalidReasons.add('missing_frozen_event_target');
+  if (eventTarget == null || eventTarget != frozenTarget) {
+    invalidReasons.add('unfrozen_event_target');
   }
   final hostEvidence = root['hostEvidence'];
   String? gitSha;
@@ -496,6 +518,9 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     if (hostEvidence['detectedEmulator'] != false) {
       invalidReasons.add('device_is_emulator_or_unknown');
     }
+    if (hostEvidence['supportedDeviceCount'] != 1) {
+      invalidReasons.add('ambiguous_test_device_set');
+    }
     final detectedTarget = hostEvidence['detectedTargetPlatform'];
     if (platform is String &&
         (detectedTarget is! String ||
@@ -509,9 +534,8 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     invalidReasons.add('invalid_git_sha');
   }
   final fixtureHash = root['writingFixtureHash'];
-  if (fixtureHash is! String ||
-      !RegExp(r'^[0-9a-f]{64}$').hasMatch(fixtureHash)) {
-    invalidReasons.add('invalid_writing_fixture_hash');
+  if (fixtureHash != fixtureSpec?.hash) {
+    invalidReasons.add('unfrozen_writing_fixture_hash');
   }
   final sceneFixtureHash = root['sceneFixtureHash'];
   final sceneHashAfterRun = root['sceneHashAfterRun'];
@@ -525,6 +549,24 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
         !RegExp(r'^[0-9a-f]{64}$').hasMatch(entry.value! as String)) {
       invalidReasons.add(entry.key);
     }
+  }
+  if (sceneFixtureHash != writingSceneFixtureHashes[sceneElementCount]) {
+    invalidReasons.add('unfrozen_scene_fixture_hash');
+  }
+  final codecRoundTripSemanticHash =
+      root['codecRoundTripSemanticSceneHashAfterRun'];
+  if (codecRoundTripSemanticHash != semanticSceneHash) {
+    invalidReasons.add('scene_codec_round_trip_mismatch');
+  }
+  final expectedCompletedStrokes =
+      (root['expectedCompletedStrokes'] as num?)?.toInt() ?? 0;
+  final elementsAfterRun = (root['elementsAfterRun'] as num?)?.toInt();
+  final validCompletedFreedrawCount =
+      (root['validCompletedFreedrawCount'] as num?)?.toInt();
+  if (expectedCompletedStrokes <= 0 ||
+      elementsAfterRun != sceneElementCount! + expectedCompletedStrokes ||
+      validCompletedFreedrawCount != expectedCompletedStrokes) {
+    invalidReasons.add('incomplete_final_scene');
   }
   final flags = root['flags'];
   final layeredWetInk = flags is Map ? flags['layeredWetInk'] as bool? : null;
@@ -567,21 +609,19 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
   if (reportInvalidReasons is List) {
     invalidReasons.addAll(reportInvalidReasons.whereType<String>());
   }
-  final accepted = (performance?['accepted'] as num?)?.toInt() ?? 0;
-  final painted = (performance?['painted'] as num?)?.toInt() ?? 0;
-  final terminal =
-      (performance?['terminalBeforePreview'] as num?)?.toInt() ?? 0;
-  final coverage = (performance?['coverage'] as num?)?.toDouble() ?? 0;
-  if (accepted < 100) invalidReasons.add('fewer_than_100_accepted_samples');
-  if (coverage < 0.995) invalidReasons.add('coverage_below_99_5_percent');
   final durations = <int>[];
   final paintedFrameNumbers = <int>{};
+  var accepted = 0;
+  var painted = 0;
+  var terminal = 0;
   final samples = performance?['activePreviewSamples'];
   if (samples is List) {
     for (final rawSample in samples) {
       if (rawSample is! Map) continue;
+      accepted++;
       final duration = rawSample['eventToPaintMicros'];
       if (duration is num && rawSample['terminalReason'] == null) {
+        painted++;
         durations.add(duration.toInt());
         final frameNumber = (rawSample['frameNumber'] as num?)?.toInt();
         if (frameNumber == null) {
@@ -589,9 +629,21 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
         } else {
           paintedFrameNumbers.add(frameNumber);
         }
+      } else if (rawSample['terminalReason'] != null) {
+        terminal++;
       }
     }
   }
+  final denominator = accepted - terminal;
+  final coverage = denominator <= 0 ? 0.0 : painted / denominator;
+  if ((performance?['accepted'] as num?)?.toInt() != accepted ||
+      (performance?['painted'] as num?)?.toInt() != painted ||
+      (performance?['terminalBeforePreview'] as num?)?.toInt() != terminal ||
+      ((performance?['coverage'] as num?)?.toDouble() ?? -1) != coverage) {
+    invalidReasons.add('performance_counts_not_reproducible');
+  }
+  if (accepted < 100) invalidReasons.add('fewer_than_100_accepted_samples');
+  if (coverage < 0.995) invalidReasons.add('coverage_below_99_5_percent');
   durations.sort();
   if (durations.isEmpty) invalidReasons.add('no_painted_samples');
   FrameRunSummary? frames;
@@ -761,6 +813,7 @@ String _csv(String value) => '"${value.replaceAll('"', '""')}"';
 Future<void> main(List<String> arguments) async {
   String? inputPath;
   String? outputPath;
+  WritingSummaryPhase? phase;
   var reportOnly = false;
   for (var index = 0; index < arguments.length; index++) {
     switch (arguments[index]) {
@@ -770,19 +823,26 @@ Future<void> main(List<String> arguments) async {
       case '--output':
         outputPath = arguments[++index];
         break;
+      case '--phase':
+        phase = switch (arguments[++index]) {
+          'p0' => WritingSummaryPhase.p0,
+          'p1' => WritingSummaryPhase.p1,
+          _ => null,
+        };
+        break;
       case '--report-only':
         reportOnly = true;
         break;
     }
   }
-  if (inputPath == null || outputPath == null) {
+  if (inputPath == null || outputPath == null || phase == null) {
     stderr.writeln(
-      'Usage: dart run tool/writing_perf/summarize_results.dart --input <raw-directory> --output <report.md> [--report-only]',
+      'Usage: dart run tool/writing_perf/summarize_results.dart --phase p0|p1 --input <raw-directory> --output <report.md> [--report-only]',
     );
     exitCode = 64;
     return;
   }
-  final summary = await summarizeDirectory(Directory(inputPath));
+  final summary = await summarizeDirectory(Directory(inputPath), phase: phase);
   final markdownFile = File(outputPath);
   await markdownFile.parent.create(recursive: true);
   await markdownFile.writeAsString(summary.toMarkdown());
