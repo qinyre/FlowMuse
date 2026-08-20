@@ -11,6 +11,9 @@ import '../math/bounds.dart';
 class AlignmentUtils {
   AlignmentUtils._();
 
+  /// Returns the element's visual axis-aligned bounds after rotation.
+  static Bounds visualBounds(Element element) => _rotatedAABB(element);
+
   /// Align all elements' visual left edges to the union bounding box's left.
   static List<Element> alignLeft(List<Element> elements) {
     if (elements.length < 2) return [];
@@ -169,53 +172,50 @@ class _ElementInfo {
   _ElementInfo(this.element, this.aabb);
 
   factory _ElementInfo.from(Element e) {
-    return _ElementInfo(e, _rotatedAABB(e));
+    return _ElementInfo(e, AlignmentUtils.visualBounds(e));
+  }
+}
+
+/// Computes the axis-aligned bounding box after rotation.
+Bounds _rotatedAABB(Element e) {
+  if (e.angle == 0) {
+    return Bounds.fromLTWH(e.x, e.y, e.width, e.height);
   }
 
-  /// Compute the axis-aligned bounding box of the element after rotation.
-  ///
-  /// For angle == 0 this returns the element's own (x, y, width, height).
-  static Bounds _rotatedAABB(Element e) {
-    if (e.angle == 0) {
-      return Bounds.fromLTWH(e.x, e.y, e.width, e.height);
-    }
+  final cx = e.x + e.width / 2;
+  final cy = e.y + e.height / 2;
+  final cosA = math.cos(e.angle);
+  final sinA = math.sin(e.angle);
 
-    final cx = e.x + e.width / 2;
-    final cy = e.y + e.height / 2;
-    final cosA = math.cos(e.angle);
-    final sinA = math.sin(e.angle);
+  final corners = [
+    _rotatePoint(e.x, e.y, cx, cy, cosA, sinA),
+    _rotatePoint(e.x + e.width, e.y, cx, cy, cosA, sinA),
+    _rotatePoint(e.x + e.width, e.y + e.height, cx, cy, cosA, sinA),
+    _rotatePoint(e.x, e.y + e.height, cx, cy, cosA, sinA),
+  ];
 
-    // Four corners in local space, rotated around center
-    final corners = [
-      _rotate(e.x, e.y, cx, cy, cosA, sinA),
-      _rotate(e.x + e.width, e.y, cx, cy, cosA, sinA),
-      _rotate(e.x + e.width, e.y + e.height, cx, cy, cosA, sinA),
-      _rotate(e.x, e.y + e.height, cx, cy, cosA, sinA),
-    ];
-
-    var minX = corners[0].x;
-    var minY = corners[0].y;
-    var maxX = corners[0].x;
-    var maxY = corners[0].y;
-    for (var i = 1; i < corners.length; i++) {
-      minX = math.min(minX, corners[i].x);
-      minY = math.min(minY, corners[i].y);
-      maxX = math.max(maxX, corners[i].x);
-      maxY = math.max(maxY, corners[i].y);
-    }
-    return Bounds.fromLTWH(minX, minY, maxX - minX, maxY - minY);
+  var minX = corners[0].x;
+  var minY = corners[0].y;
+  var maxX = corners[0].x;
+  var maxY = corners[0].y;
+  for (var i = 1; i < corners.length; i++) {
+    minX = math.min(minX, corners[i].x);
+    minY = math.min(minY, corners[i].y);
+    maxX = math.max(maxX, corners[i].x);
+    maxY = math.max(maxY, corners[i].y);
   }
+  return Bounds.fromLTWH(minX, minY, maxX - minX, maxY - minY);
+}
 
-  static ({double x, double y}) _rotate(
-    double px,
-    double py,
-    double cx,
-    double cy,
-    double cosA,
-    double sinA,
-  ) {
-    final dx = px - cx;
-    final dy = py - cy;
-    return (x: cx + dx * cosA - dy * sinA, y: cy + dx * sinA + dy * cosA);
-  }
+({double x, double y}) _rotatePoint(
+  double px,
+  double py,
+  double cx,
+  double cy,
+  double cosA,
+  double sinA,
+) {
+  final dx = px - cx;
+  final dy = py - cy;
+  return (x: cx + dx * cosA - dy * sinA, y: cy + dx * sinA + dy * cosA);
 }

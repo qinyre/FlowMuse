@@ -220,6 +220,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     _controller.onRecognizeSmartLayoutBlock =
         widget.onRecognizeSmartLayoutBlock;
     _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
+    _controller.onMindmapOperationError = _showMindmapOperationError;
     _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     _controller.restoreKeyboardFocusWhenStable();
     unawaited(_restoreEditorChrome());
@@ -247,6 +248,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _controller.onRecognizeSmartLayoutBlock =
           widget.onRecognizeSmartLayoutBlock;
       _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
+      _controller.onMindmapOperationError = _showMindmapOperationError;
       _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     } else if (widget.onRecognizeInk != oldWidget.onRecognizeInk) {
       _controller.onRecognizeInk = widget.onRecognizeInk;
@@ -288,8 +290,16 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     _controller.shouldUseLiveInkV2 = null;
     _controller.onLiveInkChanged = null;
     _controller.onLiveInkCancelled = null;
+    _controller.onMindmapOperationError = null;
     _ownController?.dispose();
     super.dispose();
+  }
+
+  void _showMindmapOperationError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

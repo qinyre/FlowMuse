@@ -298,6 +298,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(applied!.actions.single.tool, AiAgentTool.generateMindmap);
   });
+
+  testWidgets('应用思维导图失败时展示可理解的 StateError 消息', (tester) async {
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: AiAgentResponse(
+          message: '已生成',
+          actions: [
+            AiAgentAction.fromJson({
+              'tool': 'generate_mindmap',
+              'arguments': {
+                'root': {'text': '超大主题', 'children': <Object?>[]},
+              },
+            }),
+          ],
+        ),
+      ),
+      onApply: (_) async {
+        throw StateError('思维导图超出页面，请减少分支后重试');
+      },
+    );
+
+    await tester.enterText(find.byType(TextField).first, '生成思维导图');
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认应用'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('思维导图超出页面，请减少分支后重试'), findsOneWidget);
+  });
 }
 
 Future<void> _openDialog(

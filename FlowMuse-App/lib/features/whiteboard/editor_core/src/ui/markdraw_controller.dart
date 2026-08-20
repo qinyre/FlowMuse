@@ -293,6 +293,7 @@ class MarkdrawController extends ChangeNotifier {
   onRecognizeSmartLayoutBlock;
   Future<SmartLayoutResponse> Function(SmartLayoutComposeRequest)?
   onComposeSmartLayout;
+  ValueChanged<String>? onMindmapOperationError;
   void Function(bool enabled)? onInkRecognitionModeChanged;
 
   Timer? _inkRecognitionTimer;
@@ -822,7 +823,10 @@ class MarkdrawController extends ChangeNotifier {
   void undo() {
     final undone = _historyManager.undo(_editorState.scene);
     if (undone != null) {
-      _editorState = _editorState.copyWith(scene: undone);
+      _editorState = _editorState.copyWith(
+        scene: undone,
+        selectedIds: _validSelectionForScene(undone),
+      );
       _syncLayoutFromScene();
       _lastChangedElements = null;
       onSceneChanged?.call(_editorState.scene, SceneChangeSource.undo);
@@ -834,12 +838,20 @@ class MarkdrawController extends ChangeNotifier {
   void redo() {
     final redone = _historyManager.redo(_editorState.scene);
     if (redone != null) {
-      _editorState = _editorState.copyWith(scene: redone);
+      _editorState = _editorState.copyWith(
+        scene: redone,
+        selectedIds: _validSelectionForScene(redone),
+      );
       _syncLayoutFromScene();
       _lastChangedElements = null;
       onSceneChanged?.call(_editorState.scene, SceneChangeSource.redo);
       notifyListeners();
     }
+  }
+
+  Set<ElementId> _validSelectionForScene(Scene scene) {
+    final activeIds = {for (final element in scene.activeElements) element.id};
+    return _editorState.selectedIds.intersection(activeIds);
   }
 
   // --- Zoom ---
@@ -2397,9 +2409,7 @@ class MarkdrawController extends ChangeNotifier {
     applyResult(UpdateViewportResult(newViewport));
   }
 
-  _TwoFingerGestureMode? _resolveTwoFingerGesture(
-    ScaleUpdateDetails details,
-  ) {
+  _TwoFingerGestureMode? _resolveTwoFingerGesture(ScaleUpdateDetails details) {
     if ((details.scale - 1).abs() >= 0.02) {
       return _TwoFingerGestureMode.zoom;
     }
@@ -2485,8 +2495,7 @@ class MarkdrawController extends ChangeNotifier {
   void _startActivePreviewStroke() {
     final probe = activePreviewMetricsProbe;
     if (probe == null && !writingFlags.layeredWetInk) return;
-    _activePreviewStrokeEpoch =
-        probe?.startStroke() ?? ++_nextLocalWetInkEpoch;
+    _activePreviewStrokeEpoch = probe?.startStroke() ?? ++_nextLocalWetInkEpoch;
     _activePreviewMaxInputSeq = null;
   }
 
@@ -3138,8 +3147,6 @@ class MarkdrawController extends ChangeNotifier {
         Error.throwWithStackTrace(error, stackTrace);
       }
       if (_disposed) return false;
-      final replacement = _elementsFromSmartLayoutResponse(response);
-      if (replacement.isEmpty) return false;
       final successBlockIds = {
         for (final block in response.blocks)
           if (block.isSuccess) block.id,
@@ -3149,6 +3156,17 @@ class MarkdrawController extends ChangeNotifier {
           if (successBlockIds.contains(entry.key)) ...entry.value,
       ];
       final removableSmartText = _smartLayoutGeneratedTextElements();
+      final replacement = _elementsFromSmartLayoutResponse(
+        response,
+        excludedIds: {
+          for (final stroke in removableInk) stroke.id,
+          for (final text in removableSmartText) text.id,
+        },
+      );
+      if (replacement == null) {
+        throw StateError('智能排版没有足够的空白区域');
+      }
+      if (replacement.isEmpty) return false;
       pushHistory();
       applyResult(
         CompoundResult([
@@ -3476,6 +3494,31 @@ class MarkdrawController extends ChangeNotifier {
     return result;
   }
 
+  Bounds _placementBoundsForElement(Element element) {
+    final visual = AlignmentUtils.visualBounds(element);
+    final minExtent = element is LineElement
+        ? math.max(element.strokeWidth, 8.0)
+        : 0.0;
+    final width = math.max(visual.size.width, minExtent);
+    final height = math.max(visual.size.height, minExtent);
+    return Bounds.fromLTWH(
+      visual.center.x - width / 2,
+      visual.center.y - height / 2,
+      width,
+      height,
+    );
+  }
+
+  List<Bounds> _scenePlacementBounds({Set<ElementId> excludedIds = const {}}) {
+    return [
+      for (final element in _editorState.scene.activeElements)
+        if (!excludedIds.contains(element.id) &&
+            !element.isCanvasPage &&
+            !element.isPdfBackground)
+          _placementBoundsForElement(element),
+    ];
+  }
+
   int? _startedAtForStrokes(List<FreedrawElement> strokes) {
     int? startedAt;
     for (final stroke in strokes) {
@@ -3513,40 +3556,56 @@ class MarkdrawController extends ChangeNotifier {
     ];
   }
 
-  List<Element> _elementsFromSmartLayoutResponse(SmartLayoutResponse response) {
+  List<Element>? _elementsFromSmartLayoutResponse(
+    SmartLayoutResponse response, {
+    required Set<ElementId> excludedIds,
+  }) {
     final articlePageIds = {
       for (final page in response.pages)
         if (page.isArticle) page.pageId,
     };
-    final elements = <Element>[
-      if (articlePageIds.isNotEmpty)
-        ..._elementsFromSmartLayout(
-          response.document,
-          articlePageIds: articlePageIds,
-          useTemplateAnchors: true,
-        ),
-    ];
+    final occupiedByPage = _smartLayoutSceneOccupancy(excludedIds);
+    final elements = <Element>[];
+    if (articlePageIds.isNotEmpty) {
+      final articleElements = _elementsFromSmartLayout(
+        response.document,
+        articlePageIds: articlePageIds,
+        useTemplateAnchors: true,
+        occupiedByPage: occupiedByPage,
+      );
+      if (articleElements == null) return null;
+      elements.addAll(articleElements);
+    }
+    var layoutIndex = elements.length;
     for (final block in response.blocks) {
       if (!block.isSuccess || articlePageIds.contains(block.pageId)) {
         continue;
       }
       final element = _textElementFromRecognizedBlock(block);
       if (element != null) {
-        elements.add(element);
+        final placed = _placeSmartLayoutElement(
+          element,
+          layoutIndex: layoutIndex,
+          occupiedByPage: occupiedByPage,
+        );
+        if (placed == null) return null;
+        elements.add(placed);
+        layoutIndex++;
       }
     }
     return elements;
   }
 
-  List<Element> _elementsFromSmartLayout(
+  List<Element>? _elementsFromSmartLayout(
     SmartLayoutDocument document, {
     Set<String> articlePageIds = const {},
     bool useTemplateAnchors = false,
+    Map<String, List<Bounds>>? occupiedByPage,
   }) {
     final blocks = [...document.blocks]
       ..sort((a, b) => a.order.compareTo(b.order));
     final elements = <Element>[];
-    final occupiedByPage = <String, List<Bounds>>{};
+    final occupied = occupiedByPage ?? <String, List<Bounds>>{};
     final layoutIndexByPage = <String, int>{};
     for (final block in blocks) {
       if (articlePageIds.isNotEmpty &&
@@ -3556,25 +3615,88 @@ class MarkdrawController extends ChangeNotifier {
       if (block.text.trim().isEmpty) {
         continue;
       }
-      final pageKey = block.pageId ?? '';
+      final pageKey = _layout.isPaged ? block.pageId ?? '' : '';
       final pageLayoutIndex = layoutIndexByPage[pageKey] ?? 0;
-      final occupied = occupiedByPage.putIfAbsent(pageKey, () => <Bounds>[]);
+      final pageOccupied = occupied.putIfAbsent(pageKey, () => <Bounds>[]);
       final blockElements = _textElementsFromSmartLayoutBlock(
         block,
         pageLayoutIndex,
-        occupied,
+        pageOccupied,
         useTemplateAnchors: useTemplateAnchors,
       );
+      if (blockElements == null) return null;
       for (final element in blockElements) {
         elements.add(element);
-        occupied.add(
-          Bounds.fromLTWH(element.x, element.y, element.width, element.height),
-        );
+        pageOccupied.add(_placementBoundsForElement(element));
       }
       layoutIndexByPage[pageKey] =
           pageLayoutIndex + _smartLayoutLineSpan(block.text);
     }
     return elements;
+  }
+
+  Map<String, List<Bounds>> _smartLayoutSceneOccupancy(
+    Set<ElementId> excludedIds,
+  ) {
+    final occupied = <String, List<Bounds>>{};
+    for (final element in _editorState.scene.activeElements) {
+      if (excludedIds.contains(element.id) ||
+          element.isCanvasPage ||
+          element.isPdfBackground) {
+        continue;
+      }
+      final bounds = _placementBoundsForElement(element);
+      final pageId = _layout.isPaged
+          ? element.pageId ?? _pageForBounds(bounds)?.id ?? ''
+          : '';
+      occupied.putIfAbsent(pageId, () => <Bounds>[]).add(bounds);
+    }
+    return occupied;
+  }
+
+  CanvasPage? _pageForBounds(Bounds bounds) {
+    CanvasPage? best;
+    var bestArea = 0.0;
+    for (final page in _layout.pages) {
+      final overlap = page.bounds.intersect(
+        Rect.fromLTWH(
+          bounds.left,
+          bounds.top,
+          bounds.size.width,
+          bounds.size.height,
+        ),
+      );
+      final area = overlap.isEmpty ? 0.0 : overlap.width * overlap.height;
+      if (area > bestArea) {
+        bestArea = area;
+        best = page;
+      }
+    }
+    return best;
+  }
+
+  TextElement? _placeSmartLayoutElement(
+    TextElement element, {
+    required int layoutIndex,
+    required Map<String, List<Bounds>> occupiedByPage,
+  }) {
+    final pageId = _layout.isPaged ? element.pageId ?? '' : '';
+    final occupied = occupiedByPage.putIfAbsent(pageId, () => <Bounds>[]);
+    final bounds = _placementBoundsForElement(element);
+    final block = SmartLayoutBlock(
+      id: 'placement-${element.id.value}',
+      type: 'text',
+      text: element.text,
+      pageId: element.pageId,
+      bounds: bounds,
+      order: layoutIndex,
+      sourceIds: const [],
+    );
+    final placed = _nonOverlappingSmartLayoutBounds(bounds, block, occupied);
+    if (placed == null) return null;
+    final moved = element.copyWith(x: placed.left, y: placed.top);
+    occupied.add(_placementBoundsForElement(moved));
+    return moved;
   }
 
   Map<String, Object?>? _flowMuseData(Element element) {
@@ -3633,7 +3755,7 @@ class MarkdrawController extends ChangeNotifier {
     return math.max(12, math.min(estimatedLineHeight * 0.72, 48));
   }
 
-  List<TextElement> _textElementsFromSmartLayoutBlock(
+  List<TextElement>? _textElementsFromSmartLayoutBlock(
     SmartLayoutBlock block,
     int layoutIndex,
     List<Bounds> occupied, {
@@ -3641,14 +3763,13 @@ class MarkdrawController extends ChangeNotifier {
   }) {
     final lines = _smartLayoutDisplayLines(block.text);
     if (lines.length <= 1) {
-      return [
-        _textElementFromSmartLayoutBlock(
-          block,
-          layoutIndex,
-          occupied,
-          useTemplateAnchors: useTemplateAnchors,
-        ),
-      ];
+      final element = _textElementFromSmartLayoutBlock(
+        block,
+        layoutIndex,
+        occupied,
+        useTemplateAnchors: useTemplateAnchors,
+      );
+      return element == null ? null : [element];
     }
     final elements = <TextElement>[];
     final localOccupied = [...occupied];
@@ -3675,6 +3796,7 @@ class MarkdrawController extends ChangeNotifier {
         localOccupied,
         useTemplateAnchors: useTemplateAnchors,
       );
+      if (element == null) return null;
       elements.add(element);
       localOccupied.add(
         Bounds.fromLTWH(element.x, element.y, element.width, element.height),
@@ -3683,7 +3805,7 @@ class MarkdrawController extends ChangeNotifier {
     return elements;
   }
 
-  TextElement _textElementFromSmartLayoutBlock(
+  TextElement? _textElementFromSmartLayoutBlock(
     SmartLayoutBlock block,
     int layoutIndex,
     List<Bounds> occupied, {
@@ -3729,10 +3851,9 @@ class MarkdrawController extends ChangeNotifier {
     final placedBounds = _nonOverlappingSmartLayoutBounds(
       Bounds.fromLTWH(anchored.x, anchored.y, anchored.width, anchored.height),
       block,
-      layoutIndex,
       occupied,
-      vertical,
     );
+    if (placedBounds == null) return null;
     return anchored.copyWith(x: placedBounds.left, y: placedBounds.top);
   }
 
@@ -3914,61 +4035,24 @@ class MarkdrawController extends ChangeNotifier {
     );
   }
 
-  Bounds _nonOverlappingSmartLayoutBounds(
+  Bounds? _nonOverlappingSmartLayoutBounds(
     Bounds candidate,
     SmartLayoutBlock block,
-    int layoutIndex,
     List<Bounds> occupied,
-    bool vertical,
   ) {
-    var placed = candidate;
-    if (occupied.isEmpty) {
-      return placed;
-    }
     final page = _smartLayoutPageForBlock(block);
     final contentRect = page == null
         ? null
         : TemplateAnchorResolver.resolve(page).contentRect;
-    for (var attempts = 0; attempts < occupied.length + 8; attempts++) {
-      final collision = occupied
-          .where((bounds) => placed.intersects(bounds))
-          .fold<Bounds?>(null, (merged, bounds) {
-            return merged == null ? bounds : merged.union(bounds);
-          });
-      if (collision == null) {
-        return placed;
-      }
-      if (vertical) {
-        final nextLeft = collision.left - placed.size.width - 12;
-        placed = Bounds.fromLTWH(
-          contentRect == null ? nextLeft : math.max(contentRect.left, nextLeft),
-          contentRect?.top ?? candidate.top,
-          placed.size.width,
-          placed.size.height,
-        );
-      } else {
-        final nextTop = collision.bottom + 12;
-        placed = Bounds.fromLTWH(
-          contentRect?.left ?? candidate.left,
-          contentRect == null ? nextTop : math.min(nextTop, contentRect.bottom),
-          placed.size.width,
-          placed.size.height,
-        );
-      }
+    if (contentRect == null) {
+      return _findUnboundedInsertionBounds(candidate, occupied);
     }
-    if (vertical) {
-      return Bounds.fromLTWH(
-        candidate.left - layoutIndex * (candidate.size.width + 12),
-        candidate.top,
-        candidate.size.width,
-        candidate.size.height,
-      );
-    }
-    return Bounds.fromLTWH(
-      candidate.left,
-      candidate.top + layoutIndex * (candidate.size.height + 12),
+    return _findStrictInsertionBounds(
+      contentRect,
       candidate.size.width,
       candidate.size.height,
+      occupied,
+      preferred: candidate,
     );
   }
 
@@ -4246,18 +4330,7 @@ class MarkdrawController extends ChangeNotifier {
       Offset(targetSize.width / 2, targetSize.height / 2),
     );
     final elements = <Element>[];
-    final occupied = adaptiveLayout
-        ? [
-            for (final element in _editorState.scene.activeElements)
-              if (!element.isCanvasPage && !element.isPdfBackground)
-                Bounds.fromLTWH(
-                  element.x,
-                  element.y,
-                  element.width,
-                  element.height,
-                ),
-          ]
-        : <Bounds>[];
+    final occupied = adaptiveLayout ? _scenePlacementBounds() : <Bounds>[];
     final insertionAreas = adaptiveLayout
         ? _adaptiveTextInsertionAreas(targetSize)
         : <({Rect rect, String? pageId})>[];
@@ -4364,7 +4437,7 @@ class MarkdrawController extends ChangeNotifier {
   ) {
     final visible = _editorState.viewport.visibleRect(canvasSize);
     if (_layout.isPaged) {
-      final page = _layout.pageAt(visible.center);
+      final page = _pageForVisibleRect(visible);
       if (page != null) {
         final index = _layout.pages.indexWhere((item) => item.id == page.id);
         return [
@@ -4435,14 +4508,27 @@ class MarkdrawController extends ChangeNotifier {
     final index = _layout.pages.length;
     final pageId = 'page-${ElementId.generate().value}';
     final size = CanvasLayout.pageSizeForTemplate(_layout.template);
+    final lastPage = _layout.pages.lastOrNull;
+    final bounds = switch (_layout.pageFlow) {
+      CanvasPageFlow.topToBottom => Rect.fromLTWH(
+        lastPage?.bounds.left ?? 0,
+        lastPage == null ? 0 : lastPage.bounds.bottom + CanvasLayout.pageGap,
+        size.width,
+        size.height,
+      ),
+      CanvasPageFlow.rightToLeft => Rect.fromLTWH(
+        lastPage == null
+            ? 0
+            : lastPage.bounds.left - CanvasLayout.pageGap - size.width,
+        lastPage?.bounds.top ?? 0,
+        size.width,
+        size.height,
+      ),
+    };
     final page = CanvasPage(
       id: pageId,
       index: index,
-      bounds: CanvasLayout.pageBoundsForIndex(
-        index: index,
-        pageSize: size,
-        pageFlow: _layout.pageFlow,
-      ),
+      bounds: bounds,
       template: _layout.template,
       pageFlow: _layout.pageFlow,
     );
@@ -4463,6 +4549,49 @@ class MarkdrawController extends ChangeNotifier {
         customData: CanvasLayout.pageCustomData(page),
       ),
     );
+  }
+
+  CanvasPage? _pageForVisibleRect(Rect visible) {
+    if (_layout.pages.isEmpty) return null;
+    CanvasPage? bestOverlap;
+    var bestArea = 0.0;
+    for (final page in _layout.pages) {
+      final intersection = page.bounds.intersect(visible);
+      final area = intersection.isEmpty
+          ? 0.0
+          : intersection.width * intersection.height;
+      if (area > bestArea ||
+          (area == bestArea &&
+              area > 0 &&
+              (bestOverlap == null || page.index < bestOverlap.index))) {
+        bestArea = area;
+        bestOverlap = page;
+      }
+    }
+    if (bestOverlap != null) return bestOverlap;
+
+    CanvasPage? nearest;
+    var nearestDistance = double.infinity;
+    for (final page in _layout.pages) {
+      final dx = visible.right < page.bounds.left
+          ? page.bounds.left - visible.right
+          : (page.bounds.right < visible.left
+                ? visible.left - page.bounds.right
+                : 0.0);
+      final dy = visible.bottom < page.bounds.top
+          ? page.bounds.top - visible.bottom
+          : (page.bounds.bottom < visible.top
+                ? visible.top - page.bounds.bottom
+                : 0.0);
+      final distance = dx * dx + dy * dy;
+      if (distance < nearestDistance ||
+          (distance == nearestDistance &&
+              (nearest == null || page.index < nearest.index))) {
+        nearestDistance = distance;
+        nearest = page;
+      }
+    }
+    return nearest;
   }
 
   Bounds? _findTextInsertionBounds(
@@ -4492,6 +4621,76 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  Bounds? _findStrictInsertionBounds(
+    Rect area,
+    double width,
+    double height,
+    List<Bounds> occupied, {
+    Bounds? preferred,
+  }) {
+    if (width > area.width || height > area.height) return null;
+    const gap = 24.0;
+    final xCandidates = <double>{
+      if (preferred != null)
+        preferred.left.clamp(area.left, area.right - width).toDouble(),
+      area.left,
+      area.right - width,
+      for (final bounds in occupied) bounds.right + gap,
+    };
+    final yCandidates = <double>{
+      if (preferred != null)
+        preferred.top.clamp(area.top, area.bottom - height).toDouble(),
+      area.top,
+      area.bottom - height,
+      for (final bounds in occupied) bounds.bottom + gap,
+    };
+    for (final y in yCandidates) {
+      for (final x in xCandidates) {
+        final candidate = Bounds.fromLTWH(x, y, width, height);
+        if (candidate.left >= area.left &&
+            candidate.top >= area.top &&
+            candidate.right <= area.right &&
+            candidate.bottom <= area.bottom &&
+            !occupied.any(candidate.intersects)) {
+          return candidate;
+        }
+      }
+    }
+    return null;
+  }
+
+  Bounds _findUnboundedInsertionBounds(
+    Bounds preferred,
+    List<Bounds> occupied,
+  ) {
+    const gap = 24.0;
+    final xCandidates = <double>{
+      preferred.left,
+      for (final bounds in occupied) bounds.right + gap,
+    };
+    final yCandidates = <double>{
+      preferred.top,
+      for (final bounds in occupied) bounds.bottom + gap,
+    };
+    for (final y in yCandidates) {
+      for (final x in xCandidates) {
+        final candidate = Bounds.fromLTWH(
+          x,
+          y,
+          preferred.size.width,
+          preferred.size.height,
+        );
+        if (!occupied.any(candidate.intersects)) return candidate;
+      }
+    }
+    return Bounds.fromLTWH(
+      xCandidates.last,
+      yCandidates.last,
+      preferred.size.width,
+      preferred.size.height,
+    );
   }
 
   /// Renames the document. Empty string is treated as null (no name).
@@ -4812,43 +5011,202 @@ class MarkdrawController extends ChangeNotifier {
         _lastCanvasSize ??
         (_canvasSize.isEmpty ? const Size(800, 600) : _canvasSize);
     final visible = _editorState.viewport.visibleRect(targetSize);
-    final placementRect = _layout.isPaged
-        ? (_layout.pageAt(visible.center)?.bounds ?? visible)
-        : visible;
-    final placementArea = placementRect.deflate(
-      math.min(48.0, placementRect.shortestSide / 8),
-    );
     final preview = MindmapLayout.treeToElements(
       tree,
       origin: const Point(0, 0),
     );
     final previewBounds = preview
-        .map(
-          (element) => Bounds.fromLTWH(
-            element.x,
-            element.y,
-            element.width,
-            element.height,
-          ),
-        )
+        .map(_placementBoundsForElement)
         .reduce((bounds, element) => bounds.union(element));
-    final origin = Point(
-      previewBounds.size.width <= placementArea.width
-          ? placementArea.center.dx - previewBounds.center.x
-          : placementArea.left - previewBounds.left,
-      previewBounds.size.height <= placementArea.height
-          ? placementArea.center.dy - previewBounds.center.y
-          : placementArea.top - previewBounds.top,
+    final occupied = _scenePlacementBounds()
+        .map((bounds) => _inflateBounds(bounds, 12))
+        .toList();
+    final placement = _mindmapPlacement(
+      previewBounds,
+      visible,
+      targetSize,
+      occupied,
     );
-    final elements = MindmapLayout.treeToElements(tree, origin: origin);
-    final root = elements.whereType<RectangleElement>().firstOrNull;
+    final dx = placement.bounds.left - previewBounds.left;
+    final dy = placement.bounds.top - previewBounds.top;
+    final elements = [
+      for (final element in preview)
+        _mindmapElementOnPage(
+          element.copyWith(x: element.x + dx, y: element.y + dy),
+          placement.pageId,
+        ),
+    ];
+    final childNodeIds = {
+      for (final edge in elements.whereType<ArrowElement>())
+        if (MindmapUtils.isMindmapEdge(edge) && edge.endBinding != null)
+          edge.endBinding!.elementId,
+    };
+    final root = elements
+        .whereType<RectangleElement>()
+        .where((element) => !childNodeIds.contains(element.id.value))
+        .firstOrNull;
+    final viewportResult = root == null || _rectContainsElement(visible, root)
+        ? null
+        : UpdateViewportResult(_viewportCenteredOn(root, targetSize));
 
     _historyManager.push(_editorState.scene);
     applyResult(
       CompoundResult([
+        if (placement.pageElement != null)
+          AddElementResult(placement.pageElement!),
         for (final element in elements) AddElementResult(element),
         if (root != null) SetSelectionResult({root.id}),
+        ?viewportResult,
       ]),
+    );
+  }
+
+  ({Bounds bounds, String? pageId, Element? pageElement}) _mindmapPlacement(
+    Bounds preview,
+    Rect visible,
+    Size canvasSize,
+    List<Bounds> occupied,
+  ) {
+    if (_layout.isPaged) {
+      final areas = _adaptiveTextInsertionAreas(canvasSize);
+      for (final area in areas) {
+        if (preview.size.width > area.rect.width ||
+            preview.size.height > area.rect.height) {
+          continue;
+        }
+        final centered = Bounds.fromLTWH(
+          area.rect.center.dx - preview.size.width / 2,
+          area.rect.center.dy - preview.size.height / 2,
+          preview.size.width,
+          preview.size.height,
+        );
+        if (!occupied.any(centered.intersects)) {
+          return (bounds: centered, pageId: area.pageId, pageElement: null);
+        }
+        final scanned = _findTextInsertionBounds(
+          area.rect,
+          preview.size.width,
+          preview.size.height,
+          occupied,
+        );
+        if (scanned != null) {
+          return (bounds: scanned, pageId: area.pageId, pageElement: null);
+        }
+      }
+
+      final standardContent = Rect.fromLTWH(
+        0,
+        0,
+        CanvasLayout.pageSizeForTemplate(_layout.template).width,
+        CanvasLayout.pageSizeForTemplate(_layout.template).height,
+      ).deflate(72);
+      if (preview.size.width > standardContent.width ||
+          preview.size.height > standardContent.height) {
+        throw StateError('思维导图超出页面，请减少分支后重试');
+      }
+      final appended = _appendAdaptiveTextPage();
+      return (
+        bounds: Bounds.fromLTWH(
+          appended.rect.center.dx - preview.size.width / 2,
+          appended.rect.center.dy - preview.size.height / 2,
+          preview.size.width,
+          preview.size.height,
+        ),
+        pageId: appended.pageId,
+        pageElement: appended.element,
+      );
+    }
+
+    final inner = visible.deflate(math.min(32, visible.shortestSide / 8));
+    if (preview.size.width <= inner.width &&
+        preview.size.height <= inner.height) {
+      final centered = Bounds.fromLTWH(
+        inner.center.dx - preview.size.width / 2,
+        inner.center.dy - preview.size.height / 2,
+        preview.size.width,
+        preview.size.height,
+      );
+      if (!occupied.any(centered.intersects)) {
+        return (bounds: centered, pageId: null, pageElement: null);
+      }
+      final scanned = _findTextInsertionBounds(
+        inner,
+        preview.size.width,
+        preview.size.height,
+        occupied,
+      );
+      if (scanned != null) {
+        return (bounds: scanned, pageId: null, pageElement: null);
+      }
+    }
+
+    final width = math.max(inner.width, preview.size.width + 48);
+    final left = visible.left + 24;
+    final preferredLeft = left + (width - preview.size.width) / 2;
+    final topCandidates = <double>{
+      inner.bottom + 24,
+      for (final bounds in occupied)
+        if (bounds.right >= preferredLeft &&
+            bounds.left <= preferredLeft + preview.size.width &&
+            bounds.bottom >= inner.bottom + 24)
+          bounds.bottom + 24,
+    }.toList()..sort();
+    for (final top in topCandidates) {
+      final candidate = Bounds.fromLTWH(
+        preferredLeft,
+        top,
+        preview.size.width,
+        preview.size.height,
+      );
+      if (!occupied.any(candidate.intersects)) {
+        return (bounds: candidate, pageId: null, pageElement: null);
+      }
+    }
+
+    final height = math.max(inner.height, preview.size.height + 48);
+    final area = Rect.fromLTWH(left, inner.bottom + 24, width, height);
+    return (
+      bounds: Bounds.fromLTWH(
+        area.center.dx - preview.size.width / 2,
+        area.center.dy - preview.size.height / 2,
+        preview.size.width,
+        preview.size.height,
+      ),
+      pageId: null,
+      pageElement: null,
+    );
+  }
+
+  Bounds _inflateBounds(Bounds bounds, double padding) => Bounds.fromLTWH(
+    bounds.left - padding,
+    bounds.top - padding,
+    bounds.size.width + padding * 2,
+    bounds.size.height + padding * 2,
+  );
+
+  Element _mindmapElementOnPage(Element element, String? pageId) {
+    if (pageId == null) return element;
+    return element.copyWith(
+      customData: _mergeCurrentPageCustomData(element.customData, pageId),
+    );
+  }
+
+  bool _rectContainsElement(Rect rect, Element element) =>
+      rect.contains(Offset(element.x, element.y)) &&
+      rect.contains(
+        Offset(element.x + element.width, element.y + element.height),
+      );
+
+  ViewportState _viewportCenteredOn(Element element, Size canvasSize) {
+    final viewport = _editorState.viewport;
+    final visibleWidth = canvasSize.width / viewport.zoom;
+    final visibleHeight = canvasSize.height / viewport.zoom;
+    return ViewportState(
+      offset: Offset(
+        element.x + element.width / 2 - visibleWidth / 2,
+        element.y + element.height / 2 - visibleHeight / 2,
+      ),
+      zoom: viewport.zoom,
     );
   }
 
@@ -4870,8 +5228,12 @@ class MarkdrawController extends ChangeNotifier {
       MindmapNode(text: '分支 ${parentTreeNode.children.length + 1}'),
     );
 
-    _historyManager.push(_editorState.scene);
     final result = _applyReflow(tree, rootNode);
+    if (result == null) {
+      onMindmapOperationError?.call('当前页面没有足够空间，请减少分支');
+      return;
+    }
+    _historyManager.push(_editorState.scene);
     applyResult(result);
     _enterMindmapNodeEditing();
   }
@@ -4893,8 +5255,12 @@ class MarkdrawController extends ChangeNotifier {
     );
     parentTreeNode.children.insert(idx + 1, MindmapNode(text: '分支'));
 
-    _historyManager.push(_editorState.scene);
     final result = _applyReflow(tree, rootNode);
+    if (result == null) {
+      onMindmapOperationError?.call('当前页面没有足够空间，请减少分支');
+      return;
+    }
+    _historyManager.push(_editorState.scene);
     applyResult(result);
     _enterMindmapNodeEditing();
   }
@@ -4922,8 +5288,39 @@ class MarkdrawController extends ChangeNotifier {
   /// Runs the reflow and builds a ToolResult: updates for existing nodes
   /// (position + style by depth/branch) + updates for existing edges (points
   /// recomputed from new node positions) + adds for new elements + selection.
-  ToolResult _applyReflow(MindmapNode tree, Element rootNode) {
-    final origin = Point(rootNode.x, rootNode.y);
+  ToolResult? _applyReflow(MindmapNode tree, Element rootNode) {
+    var origin = Point(rootNode.x, rootNode.y);
+    if (_layout.isPaged && rootNode.pageId != null) {
+      final page = _layout.pages
+          .where((candidate) => candidate.id == rootNode.pageId)
+          .firstOrNull;
+      if (page == null) return null;
+      final content = page.bounds.deflate(72);
+      final preview = MindmapLayout.treeToElements(tree, origin: origin);
+      final previewBounds = preview
+          .map(_placementBoundsForElement)
+          .reduce((left, right) => left.union(right));
+      final treeNodeIds = _mindmapTreeNodeIds(tree);
+      final occupied = [
+        for (final element in _editorState.scene.activeElements)
+          if (!_belongsToMindmapTree(element, treeNodeIds) &&
+              !element.isCanvasPage &&
+              !element.isPdfBackground)
+            _inflateBounds(_placementBoundsForElement(element), 12),
+      ];
+      final placement = _findStrictInsertionBounds(
+        content,
+        previewBounds.size.width,
+        previewBounds.size.height,
+        occupied,
+        preferred: previewBounds,
+      );
+      if (placement == null) return null;
+      origin = Point(
+        origin.x + placement.left - previewBounds.left,
+        origin.y + placement.top - previewBounds.top,
+      );
+    }
     final plan = MindmapLayout.reflowTree(tree, origin: origin);
     final results = <ToolResult>[];
 
@@ -4967,7 +5364,7 @@ class MarkdrawController extends ChangeNotifier {
 
     // Add brand-new elements (new node rect + text + edge).
     for (final e in plan.newElements) {
-      results.add(AddElementResult(e));
+      results.add(AddElementResult(_mindmapElementOnPage(e, rootNode.pageId)));
     }
 
     // Select the first new node rect for immediate text editing.
@@ -4979,6 +5376,37 @@ class MarkdrawController extends ChangeNotifier {
     }
 
     return CompoundResult(results);
+  }
+
+  Set<String> _mindmapTreeNodeIds(MindmapNode tree) {
+    final ids = <String>{};
+    void visit(MindmapNode node) {
+      if (node.sourceId != null) ids.add(node.sourceId!);
+      for (final child in node.children) {
+        visit(child);
+      }
+    }
+
+    visit(tree);
+    return ids;
+  }
+
+  bool _belongsToMindmapTree(Element element, Set<String> nodeIds) {
+    if (nodeIds.contains(element.id.value)) return true;
+    if (element is TextElement &&
+        element.containerId != null &&
+        nodeIds.contains(element.containerId)) {
+      return true;
+    }
+    if (element is ArrowElement && MindmapUtils.isMindmapEdge(element)) {
+      final startId = element.startBinding?.elementId;
+      final endId = element.endBinding?.elementId;
+      return startId != null &&
+          endId != null &&
+          nodeIds.contains(startId) &&
+          nodeIds.contains(endId);
+    }
+    return false;
   }
 
   /// Moves an existing mind-map node to its new position and restyles it
@@ -5004,8 +5432,9 @@ class MarkdrawController extends ChangeNotifier {
     if (boundText == null) {
       return UpdateElementResult(updatedRect);
     }
-    final (textColor, fontSize) =
-        MindmapLayout.textStyleForNode(depth: u.depth);
+    final (textColor, fontSize) = MindmapLayout.textStyleForNode(
+      depth: u.depth,
+    );
     // copyWithText handles font size; copyWith handles position + text colour
     // (TextElement has no single method covering both).
     final updatedText = boundText
@@ -5037,10 +5466,7 @@ class MarkdrawController extends ChangeNotifier {
       x: pu?.x ?? parent.x,
       y: pu?.y ?? parent.y,
     );
-    final childMoved = child.copyWith(
-      x: cu?.x ?? child.x,
-      y: cu?.y ?? child.y,
-    );
+    final childMoved = child.copyWith(x: cu?.x ?? child.x, y: cu?.y ?? child.y);
     return MindmapLayout.recomputeEdge(edge, parentMoved, childMoved);
   }
 
