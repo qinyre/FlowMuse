@@ -38,8 +38,8 @@ void main() {
     expect(summary.runs, hasLength(6));
     expect(summary.validRuns, hasLength(5));
     expect(summary.completeScenarios, hasLength(1));
-    expect(summary.medianRunP95, 97);
-    expect(summary.runP95SpreadRatio, closeTo(4 / 97, 0.000001));
+    expect(summary.medianRunP95, 401);
+    expect(summary.runP95SpreadRatio, closeTo(4 / 401, 0.000001));
     expect(summary.bootstrapP95Interval, isNotNull);
     expect(summary.status, 'stable');
     expect(summary.acceptanceStatus, 'passed');
@@ -301,6 +301,24 @@ void main() {
     expect(run.invalidReasons, contains('performance_counts_not_reproducible'));
   });
 
+  test('正式 fixture 每笔 accepted 样本数被截断时必须拒绝', () async {
+    final directory = await _tempDirectory('truncated-samples');
+    await _writeRun(
+      directory,
+      'truncated.json',
+      runIndex: 1,
+      offset: 0,
+      acceptedSampleCount: 100,
+    );
+
+    final run = (await summarizeDirectory(directory)).runs.single;
+
+    expect(
+      run.invalidReasons,
+      contains('fixture_accepted_sample_count_mismatch'),
+    );
+  });
+
   test('P1 terminal-before-preview 退化超过 0.5 个百分点时失败', () async {
     final directory = await _tempDirectory('terminal-regression');
     for (var run = 1; run <= 5; run++) {
@@ -316,7 +334,7 @@ void main() {
         runIndex: run,
         offset: run - 1,
         layeredWetInk: true,
-        terminalSamples: 1,
+        terminalSamples: 3,
       );
     }
 
@@ -355,7 +373,7 @@ Future<void> _writeRun(
   int eventTargetMicros = 33000,
   int supportedDeviceCount = 1,
   int? reportedAccepted,
-  int acceptedSampleCount = 100,
+  int acceptedSampleCount = 420,
   int terminalSamples = 0,
   int finalStrokeCount = 10,
   bool duplicateLastSample = false,
@@ -380,7 +398,6 @@ Future<void> _writeRun(
       .toJson();
   final finalSceneHash = canonicalSceneHash(finalScene);
   final finalSemanticHash = semanticSceneHash(finalScene);
-  final paintedSamples = acceptedSampleCount - terminalSamples;
   final activePreviewSamples = <Map<String, Object?>>[
     for (var sample = 1; sample <= acceptedSampleCount; sample++)
       {
@@ -388,9 +405,15 @@ Future<void> _writeRun(
             ((sample - 1) * expectedCompletedStrokes) ~/ acceptedSampleCount +
             1,
         'inputSeq': sample,
-        'eventToPaintMicros': sample <= paintedSamples ? sample + offset : null,
-        'frameNumber': sample <= paintedSamples ? sample : null,
-        'terminalReason': sample <= paintedSamples ? null : 'pointerUp',
+        'eventToPaintMicros': sample <= acceptedSampleCount - terminalSamples
+            ? sample + offset
+            : null,
+        'frameNumber': sample <= acceptedSampleCount - terminalSamples
+            ? sample
+            : null,
+        'terminalReason': sample <= acceptedSampleCount - terminalSamples
+            ? null
+            : 'pointerUp',
       },
   ];
   if (duplicateLastSample) {
@@ -436,7 +459,7 @@ Future<void> _writeRun(
         'schemaVersion': supportedReportSchemaVersion,
         'invalidReasons': <String>[],
         'accepted': reportedAccepted ?? acceptedSampleCount,
-        'painted': paintedSamples,
+        'painted': acceptedSampleCount - terminalSamples,
         'missingPaint': 0,
         'terminalBeforePreview': terminalSamples,
         'coverage': 1.0,

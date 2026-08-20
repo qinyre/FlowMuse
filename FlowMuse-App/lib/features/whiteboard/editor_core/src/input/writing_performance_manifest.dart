@@ -2,20 +2,24 @@ class WritingPerformanceFixtureSpec {
   const WritingPerformanceFixtureSpec({
     required this.hash,
     required this.durationSeconds,
+    required this.acceptedSamplesPerStroke,
   });
 
   final String hash;
   final int durationSeconds;
+  final int acceptedSamplesPerStroke;
 }
 
 const writingPerformanceFixtures = <String, WritingPerformanceFixtureSpec>{
   'quick_zigzag': WritingPerformanceFixtureSpec(
     hash: '99d4859fdaa7e814a33937986a4ebb724ca1da0c6d7252b5c07de3e0796b4794',
     durationSeconds: 60,
+    acceptedSamplesPerStroke: 42,
   ),
   'long_curve_pressure': WritingPerformanceFixtureSpec(
     hash: 'dcb0d26d1eb72feeb2333b5096b576b6ca423dae73a9769de03b322673d476d6',
     durationSeconds: 30,
+    acceptedSamplesPerStroke: 122,
   ),
 };
 

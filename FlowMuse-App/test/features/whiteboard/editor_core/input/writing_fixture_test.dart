@@ -102,6 +102,11 @@ void main() {
           (candidate) => candidate.name == entry.key,
         );
         expect(fixture.contentHash, entry.value.hash, reason: entry.key);
+        expect(
+          fixture.expectedAcceptedSampleCount,
+          entry.value.acceptedSamplesPerStroke,
+          reason: entry.key,
+        );
       }
     });
   });

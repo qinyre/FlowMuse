@@ -656,6 +656,7 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
   var terminal = 0;
   final sampleKeys = <String>{};
   final strokeEpochs = <int>{};
+  final acceptedByStrokeEpoch = <int, int>{};
   final samples = performance?['activePreviewSamples'];
   if (samples is List) {
     for (final rawSample in samples) {
@@ -671,6 +672,11 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
         continue;
       }
       strokeEpochs.add(strokeEpoch);
+      acceptedByStrokeEpoch.update(
+        strokeEpoch,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
       accepted++;
       final duration = rawSample['eventToPaintMicros'];
       final terminalReason = rawSample['terminalReason'];
@@ -692,6 +698,12 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
   }
   if (strokeEpochs.length != expectedCompletedStrokes) {
     invalidReasons.add('sample_stroke_count_mismatch');
+  }
+  if (acceptedByStrokeEpoch.length != expectedCompletedStrokes ||
+      acceptedByStrokeEpoch.values.any(
+        (count) => count != fixtureSpec?.acceptedSamplesPerStroke,
+      )) {
+    invalidReasons.add('fixture_accepted_sample_count_mismatch');
   }
   final denominator = accepted - terminal;
   final missingPaint = denominator - painted;
