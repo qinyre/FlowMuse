@@ -59,6 +59,10 @@ app.*.map.json
 
 # HarmonyOS auto-generated
 ohos/entry/src/main/ets/plugins/GeneratedPluginRegistrant.ets
+
+# Vendor fork build artifacts (copied from local Flutter OHOS SDK)
+**/tool/vendor/**/libs/
+
 FlowMuse-Server/.env
 
 # Competition process and acceptance artifacts are kept locally only.
