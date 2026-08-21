@@ -337,12 +337,11 @@ void main() {
 
   testWidgets('带附件时显示数量与隐私提示并传给仓库', (tester) async {
     final repository = _FakeAiAgentRepository();
-    final attachment = AiVisualAttachment.validated(
+    final attachment = AiVisualAttachment(
+      sourceLabel: '当前选区',
       mimeType: 'image/png',
       bytes: Uint8List.fromList([1, 2, 3]),
-      sourceLabel: '当前选区',
-      width: 10,
-      height: 10,
+      kind: AiVisualAttachmentKind.selection,
     );
     await _openDialog(
       tester,
@@ -386,12 +385,11 @@ void main() {
   testWidgets('带附件生成中显示视觉阶段状态并在完成后渲染回复', (tester) async {
     final completer = Completer<AiAgentResponse>();
     final repository = _FakeAiAgentRepository(completer: completer);
-    final attachment = AiVisualAttachment.validated(
+    final attachment = AiVisualAttachment(
+      sourceLabel: '当前选区',
       mimeType: 'image/png',
       bytes: Uint8List.fromList([1, 2, 3]),
-      sourceLabel: '当前选区',
-      width: 10,
-      height: 10,
+      kind: AiVisualAttachmentKind.selection,
     );
     await _openDialog(
       tester,

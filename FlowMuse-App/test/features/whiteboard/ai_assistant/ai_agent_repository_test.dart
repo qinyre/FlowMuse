@@ -8,6 +8,13 @@ import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent
 import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// 1×1 基准 PNG（含魔数，可跨过发送前的结构化校验）。
+final Uint8List basePng = Uint8List.fromList(
+  base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  ),
+);
+
 class _FakePost {
   _FakePost(this.statusCode);
   final int statusCode;
@@ -65,12 +72,11 @@ void main() {
 
   test('带附件时 user content 变为 text+image_url 数组', () async {
     final post = _FakePost(200);
-    final attachment = AiVisualAttachment.validated(
-      mimeType: 'image/png',
-      bytes: Uint8List.fromList([1, 2, 3, 4]),
+    final attachment = AiVisualAttachment(
       sourceLabel: '当前选区',
-      width: 10,
-      height: 10,
+      mimeType: 'image/png',
+      bytes: basePng,
+      kind: AiVisualAttachmentKind.selection,
     );
     await _repositoryWith(post).run(
       instruction: '解释这里',
@@ -90,7 +96,7 @@ void main() {
     expect(imageUrl.startsWith('data:image/png;base64,'), isTrue);
     expect(
       imageUrl.substring('data:image/png;base64,'.length),
-      base64Encode([1, 2, 3, 4]),
+      base64Encode(basePng),
     );
   });
 
@@ -98,12 +104,11 @@ void main() {
     final post = _FakePost(200);
     final attachments = [
       for (var i = 0; i < maxAiVisualAttachments + 1; i++)
-        AiVisualAttachment.validated(
-          mimeType: 'image/png',
-          bytes: Uint8List.fromList([1]),
+        AiVisualAttachment(
           sourceLabel: '选区$i',
-          width: 10,
-          height: 10,
+          mimeType: 'image/png',
+          bytes: basePng,
+          kind: AiVisualAttachmentKind.selection,
         ),
     ];
     expect(
@@ -119,12 +124,11 @@ void main() {
 
   test('带附件遇到 HTTP 400 提示模型可能不支持视觉输入', () async {
     final post = _FakePost(400);
-    final attachment = AiVisualAttachment.validated(
-      mimeType: 'image/png',
-      bytes: Uint8List.fromList([1]),
+    final attachment = AiVisualAttachment(
       sourceLabel: '当前选区',
-      width: 10,
-      height: 10,
+      mimeType: 'image/png',
+      bytes: basePng,
+      kind: AiVisualAttachmentKind.selection,
     );
     await expectLater(
       _repositoryWith(post).run(
