@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_prompt_store.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/views/ai_agent_dialog.dart';
@@ -234,6 +236,8 @@ void main() {
       texts: [AiNoteText(id: 'text-a', text: '旧选区')],
       truncated: false,
       label: '当前选区（1 个文本框）',
+      attachments: <AiVisualAttachment>[],
+      hasSelection: false,
     );
     final repository = _FakeAiAgentRepository();
     await tester.pumpWidget(
@@ -245,7 +249,7 @@ void main() {
             texts: context.texts,
             contextTruncated: context.truncated,
             contextLabel: context.label,
-            contextProvider: () => context,
+            contextProvider: () async => context,
             promptStore: AiPromptStore(_MemorySettings()),
             onApply: (_) async {},
             onClose: () {},
@@ -259,6 +263,8 @@ void main() {
       texts: [AiNoteText(id: 'text-b', text: '新选区')],
       truncated: false,
       label: '当前选区（1 个文本框）',
+      attachments: <AiVisualAttachment>[],
+      hasSelection: false,
     );
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
@@ -328,6 +334,81 @@ void main() {
 
     expect(find.text('思维导图超出页面，请减少分支后重试'), findsOneWidget);
   });
+
+  testWidgets('带附件时显示数量与隐私提示并传给仓库', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    final attachment = AiVisualAttachment.validated(
+      mimeType: 'image/png',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      sourceLabel: '当前选区',
+      width: 10,
+      height: 10,
+    );
+    await _openDialog(
+      tester,
+      repository: repository,
+      attachments: [attachment],
+      onApply: (_) async {},
+    );
+
+    expect(find.textContaining('1 张选区截图'), findsOneWidget);
+    expect(find.textContaining('模型服务'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, '解释这里');
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+
+    expect(repository.receivedAttachments.last, hasLength(1));
+  });
+
+  testWidgets('选区存在时显示选区快捷指令并可填充', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    await _openDialog(
+      tester,
+      repository: repository,
+      hasSelection: true,
+      onApply: (_) async {},
+    );
+
+    expect(find.text('解释这里'), findsOneWidget);
+    expect(find.text('检查公式'), findsOneWidget);
+    expect(find.text('整理文字'), findsOneWidget);
+    expect(find.text('整理成导图'), findsOneWidget);
+    expect(find.text('总结'), findsNothing);
+
+    await tester.tap(find.text('解释这里'));
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+      '解释这里的内容',
+    );
+  });
+
+  testWidgets('带附件生成中显示视觉阶段状态并在完成后渲染回复', (tester) async {
+    final completer = Completer<AiAgentResponse>();
+    final repository = _FakeAiAgentRepository(completer: completer);
+    final attachment = AiVisualAttachment.validated(
+      mimeType: 'image/png',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      sourceLabel: '当前选区',
+      width: 10,
+      height: 10,
+    );
+    await _openDialog(
+      tester,
+      repository: repository,
+      attachments: [attachment],
+      onApply: (_) async {},
+    );
+
+    await tester.enterText(find.byType(TextField).first, '解释这里');
+    await tester.tap(find.text('发送'));
+    await tester.pump();
+    expect(find.text('正在结合选区图像与笔记内容生成…'), findsOneWidget);
+
+    completer.complete(const AiAgentResponse(message: '看懂了', actions: []));
+    await tester.pumpAndSettle();
+    expect(find.text('看懂了'), findsOneWidget);
+  });
 }
 
 Future<void> _openDialog(
@@ -335,6 +416,8 @@ Future<void> _openDialog(
   required AiAgentRepository repository,
   required Future<void> Function(AiAgentResponse) onApply,
   List<AiNoteText> texts = const [AiNoteText(id: 'text-1', text: '测试内容')],
+  List<AiVisualAttachment> attachments = const [],
+  bool hasSelection = false,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -346,6 +429,8 @@ Future<void> _openDialog(
             promptStore: AiPromptStore(_MemorySettings()),
             noteTitle: '测试笔记',
             texts: texts,
+            attachments: attachments,
+            hasSelection: hasSelection,
             onApply: onApply,
           ),
           child: const Text('打开'),
@@ -371,6 +456,7 @@ class _FakeAiAgentRepository extends AiAgentRepository {
   final AiAgentResponse response;
   final conversations = <List<AiAgentConversationTurn>>[];
   final receivedTexts = <List<AiNoteText>>[];
+  final receivedAttachments = <List<AiVisualAttachment>>[];
   NativeHttpCancelToken? cancelToken;
 
   @override
@@ -379,10 +465,12 @@ class _FakeAiAgentRepository extends AiAgentRepository {
     required String noteTitle,
     required List<AiNoteText> texts,
     List<AiAgentConversationTurn> conversation = const [],
+    List<AiVisualAttachment> attachments = const [],
     NativeHttpCancelToken? cancelToken,
   }) async {
     conversations.add(List.unmodifiable(conversation));
     receivedTexts.add(texts);
+    receivedAttachments.add(attachments);
     this.cancelToken = cancelToken;
     if (completer != null) return completer!.future;
     if (conversation.isNotEmpty) {
@@ -437,3 +525,4 @@ class _FakeSpeechRecognitionService implements SpeechRecognitionService {
   @override
   Future<void> dispose() => _events.close();
 }
+

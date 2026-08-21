@@ -45,6 +45,7 @@ import '../../../shared/utils/ui_lifecycle.dart';
 import '../../color_picker/pen_color_picker_channel.dart';
 import '../service_widget/recent_whiteboard_sync_coordinator.dart';
 import '../ai_assistant/models/ai_agent_models.dart';
+import '../ai_assistant/models/ai_visual_attachment.dart';
 import '../ai_assistant/repositories/ai_agent_repository.dart';
 import '../ai_assistant/repositories/ai_prompt_store.dart';
 import '../ai_assistant/views/ai_agent_dialog.dart';
@@ -592,12 +593,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _saveMarkdrawScene();
   }
 
-  void _toggleAiAgent() {
+  Future<void> _toggleAiAgent() async {
     if (_aiPanelEntry != null) {
       _closeAiPanel();
       return;
     }
-    final initialContext = _currentAiAgentContext();
+    final initialContext = await _currentAiAgentContext();
+    if (!mounted) return;
     final repository = ref.read(aiAgentRepositoryProvider);
     final entry = OverlayEntry(
       builder: (overlayContext) {
@@ -607,7 +609,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         final safeTop = padding.top + 16;
         final safeBottom = max(keyboardInset, padding.bottom + 120) + 16;
         final availableHeight = max(0.0, size.height - safeTop - safeBottom);
-        final panelWidth = min(360.0, size.width - 24);
+        final panelWidth = size.width >= 900
+            ? 420.0
+            : min(360.0, size.width - 24);
         final panelHeight = min(520.0, availableHeight);
         final verticalSpace = availableHeight - panelHeight;
         final panelTop = safeTop + min(verticalSpace, verticalSpace / 2 + 48);
@@ -644,10 +648,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     Overlay.of(context).insert(entry);
   }
 
-  AiAgentContextSnapshot _currentAiAgentContext() {
-    final selectedTexts = _markdrawController.selectedElements
-        .whereType<editor_core.TextElement>()
+  Future<AiAgentContextSnapshot> _currentAiAgentContext() async {
+    final selectedElements = _markdrawController.selectedElements
         .where((element) => !element.isDeleted)
+        .toList();
+    final selectedTexts = selectedElements
+        .whereType<editor_core.TextElement>()
         .toList();
     final sourceTexts = selectedTexts.isNotEmpty
         ? selectedTexts
@@ -672,17 +678,39 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         ),
       ),
     );
+    var attachments = const <AiVisualAttachment>[];
+    final visualSelected = selectedElements
+        .where((element) => element is! editor_core.TextElement)
+        .toList();
+    if (visualSelected.isNotEmpty) {
+      try {
+        final png = await _markdrawController.exportPng(
+          scale: 2,
+          selectedOnly: true,
+          embedMarkdraw: false,
+        );
+        final attachment = await buildAiVisualAttachment(png);
+        if (attachment != null) attachments = [attachment];
+      } catch (error) {
+        debugPrint('[FlowMuseCreateNote] 选区截图生成失败，降级纯文本: $error');
+      }
+    }
     final noteTitle = _markdrawController.documentName ?? '未命名笔记';
-    final contextLabel = selectedTexts.isEmpty
+    var contextLabel = selectedTexts.isEmpty
         ? sourceTexts.isEmpty
               ? '当前笔记（暂无文字）'
               : '整篇笔记（${sourceTexts.length} 个文本框）'
         : '当前选区（${selectedTexts.length} 个文本框）';
+    if (attachments.isNotEmpty) {
+      contextLabel += '，含视觉内容';
+    }
     return (
       noteTitle: noteTitle,
       texts: noteContext.texts,
       truncated: noteContext.truncated,
       label: contextLabel,
+      attachments: attachments,
+      hasSelection: selectedTexts.isNotEmpty || visualSelected.isNotEmpty,
     );
   }
 

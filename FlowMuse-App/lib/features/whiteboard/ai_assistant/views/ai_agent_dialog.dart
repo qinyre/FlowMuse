@@ -6,6 +6,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../../../../shared/widgets/app_spacing.dart';
 import '../../ink_recognition/native_http_client.dart';
 import '../models/ai_agent_models.dart';
+import '../models/ai_visual_attachment.dart';
 import '../repositories/ai_agent_repository.dart';
 import '../repositories/ai_prompt_store.dart';
 import '../../speech_recognition/models/speech_recognition_event.dart';
@@ -17,7 +18,14 @@ typedef AiAgentContextSnapshot = ({
   List<AiNoteText> texts,
   bool truncated,
   String label,
+  List<AiVisualAttachment> attachments,
+  bool hasSelection,
 });
+
+typedef AiAgentContextProvider = Future<AiAgentContextSnapshot> Function();
+
+/// 生成期间的客户端可知阶段；真实分阶段需 Repository 进度回调，先以近似状态呈现。
+enum _AiGenerateStage { preparing, generating }
 
 Future<void> showAiAgentDialog({
   required BuildContext context,
@@ -26,6 +34,8 @@ Future<void> showAiAgentDialog({
   required List<AiNoteText> texts,
   bool contextTruncated = false,
   String contextLabel = '整篇笔记',
+  List<AiVisualAttachment> attachments = const [],
+  bool hasSelection = false,
   AiPromptStore? promptStore,
   required Future<void> Function(AiAgentResponse response) onApply,
 }) {
@@ -42,6 +52,8 @@ Future<void> showAiAgentDialog({
           texts: texts,
           contextTruncated: contextTruncated,
           contextLabel: contextLabel,
+          attachments: attachments,
+          hasSelection: hasSelection,
           promptStore: promptStore ?? defaultAiPromptStore,
           onApply: onApply,
           onClose: () => Navigator.of(dialogContext).pop(),
@@ -59,6 +71,8 @@ class AiAgentPanel extends StatefulWidget {
     required this.texts,
     required this.contextTruncated,
     required this.contextLabel,
+    this.attachments = const [],
+    this.hasSelection = false,
     this.contextProvider,
     required this.promptStore,
     this.speechRecognitionService,
@@ -71,7 +85,9 @@ class AiAgentPanel extends StatefulWidget {
   final List<AiNoteText> texts;
   final bool contextTruncated;
   final String contextLabel;
-  final AiAgentContextSnapshot Function()? contextProvider;
+  final List<AiVisualAttachment> attachments;
+  final bool hasSelection;
+  final AiAgentContextProvider? contextProvider;
   final AiPromptStore promptStore;
   final SpeechRecognitionService? speechRecognitionService;
   final Future<void> Function(AiAgentResponse response) onApply;
@@ -101,6 +117,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   bool _speechFinalCommitted = false;
   List<AiAgentConversationTurn> _conversation = const [];
   late AiAgentContextSnapshot _context;
+  _AiGenerateStage _stage = _AiGenerateStage.generating;
 
   @override
   void initState() {
@@ -110,6 +127,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       texts: widget.texts,
       truncated: widget.contextTruncated,
       label: widget.contextLabel,
+      attachments: widget.attachments,
+      hasSelection: widget.hasSelection,
     );
     _ownsSpeechService = widget.speechRecognitionService == null;
     _speechService =
@@ -231,16 +250,25 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         _speechState != SpeechRecognitionState.idle) {
       return;
     }
-    final context = widget.contextProvider?.call() ?? _context;
     final isFollowUp = _response != null;
     final generation = ++_generation;
     final cancelToken = NativeHttpCancelToken();
     _cancelToken = cancelToken;
     setState(() {
-      _context = context;
+      _stage = _AiGenerateStage.preparing;
       _loading = true;
       _error = null;
       if (!isFollowUp) _selectedActions = const {};
+    });
+    final context = widget.contextProvider != null
+        ? await widget.contextProvider!()
+        : _context;
+    if (!mounted || generation != _generation || cancelToken.isCancelled) {
+      return;
+    }
+    setState(() {
+      _context = context;
+      _stage = _AiGenerateStage.generating;
     });
     try {
       final response = await widget.repository.run(
@@ -248,6 +276,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         noteTitle: context.noteTitle,
         texts: context.texts,
         conversation: _conversation,
+        attachments: context.attachments,
         cancelToken: cancelToken,
       );
       if (!mounted || generation != _generation || cancelToken.isCancelled) {
@@ -472,13 +501,21 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     spacing: 4,
                     runSpacing: 4,
                     children: [
-                      for (final shortcut in const {
-                        '总结': '总结当前笔记',
-                        '待办': '提取待办事项',
-                        '大纲': '生成结构化大纲',
-                        '思维导图': '根据当前内容生成思维导图',
-                        '手写排版': '智能排版当前手写内容',
-                      }.entries)
+                      for (final shortcut in (_context.hasSelection
+                          ? const {
+                              '解释这里': '解释这里的内容',
+                              '检查公式': '检查这里的公式是否正确，如有错误请指出',
+                              '整理文字': '整理这里的文字内容',
+                              '整理成导图': '把这里的内容整理成思维导图',
+                            }
+                          : const {
+                              '总结': '总结当前笔记',
+                              '待办': '提取待办事项',
+                              '大纲': '生成结构化大纲',
+                              '思维导图': '根据当前内容生成思维导图',
+                              '手写排版': '智能排版当前手写内容',
+                            })
+                          .entries)
                         ActionChip(
                           label: Text(shortcut.key),
                           visualDensity: VisualDensity.compact,
@@ -551,6 +588,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                       color: colors.onSurfaceVariant,
                     ),
                   ),
+                  if (_context.attachments.isNotEmpty)
+                    Text(
+                      '将随请求发送 ${_context.attachments.length} 张选区截图至您配置的模型服务。',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                   if (_context.truncated)
                     Text(
                       '当前笔记较长，已使用前 $maxAiAgentContextLength 字作为上下文。',
@@ -559,11 +603,15 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                   if (_loading) ...[
                     const SizedBox(height: AppSpacing.controlGap),
                     Text(
-                      response == null
-                          ? _context.texts.isEmpty
-                                ? '正在生成回复…'
-                                : '正在阅读笔记并生成操作…'
-                          : '正在根据追问修改…',
+                      _stage == _AiGenerateStage.preparing
+                          ? '正在准备上下文…'
+                          : response != null
+                          ? '正在根据追问修改…'
+                          : _context.attachments.isNotEmpty
+                          ? '正在结合选区图像与笔记内容生成…'
+                          : _context.texts.isEmpty
+                          ? '正在生成回复…'
+                          : '正在阅读笔记并生成操作…',
                     ),
                   ],
                   if (_error != null) ...[
