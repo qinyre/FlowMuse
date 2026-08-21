@@ -22,6 +22,7 @@ class ImageElementCache {
   final Set<String> _failed = {};
   final List<String> _lruOrder = [];
   bool _disposed = false;
+  int _decodedCallbackPaused = 0;
 
   ImageElementCache({this.maxSize = 50});
 
@@ -111,7 +112,35 @@ class ImageElementCache {
 
   /// Callback invoked when a new image finishes decoding.
   /// Set this to trigger a repaint (e.g., `setState`).
+  ///
+  /// Suppressed while any [pauseDecodedCallback] is active.
   void Function()? onImageDecoded;
+
+  /// Temporarily suspends [onImageDecoded] invocation (nestable counter).
+  ///
+  /// Use this around batch prewarm loops that finish with a single repaint,
+  /// avoiding per-decode repaint storms. Implemented as a counter instead of
+  /// saving/restoring the callback field: overlapping pause windows must not
+  /// clobber one another — with save/restore, the later starter captures the
+  /// earlier starter's suspended value and can restore it over the owner's
+  /// real callback, permanently silencing decode-completion repaints.
+  void pauseDecodedCallback() {
+    _decodedCallbackPaused++;
+  }
+
+  /// Ends one [pauseDecodedCallback]; finished decodes invoke
+  /// [onImageDecoded] again once every pause has been resumed.
+  void resumeDecodedCallback() {
+    if (_decodedCallbackPaused > 0) {
+      _decodedCallbackPaused--;
+    }
+  }
+
+  void _notifyDecoded() {
+    if (_decodedCallbackPaused == 0) {
+      onImageDecoded?.call();
+    }
+  }
 
   Future<void> _decode(String fileId, ImageFile file) async {
     try {
@@ -128,14 +157,14 @@ class ImageElementCache {
       _cache[fileId] = image;
       _lruOrder.add(fileId);
       _evictIfNeeded();
-      onImageDecoded?.call();
+      _notifyDecoded();
     } catch (_) {
       // 解码失败(如并发内存压力):先记 _failed 再正常 complete 共享
       // Future(不以异常 complete,保住静默失败 + peek 复核契约与
       // 多等待者语义),标记为失败避免无限重试,
       // 仍通知一次以便已成功的图片能渲染。
       _failed.add(fileId);
-      onImageDecoded?.call();
+      _notifyDecoded();
     } finally {
       _decoding.remove(fileId);
     }
@@ -164,5 +193,6 @@ class ImageElementCache {
     _lruOrder.clear();
     _decoding.clear();
     _failed.clear();
+    _decodedCallbackPaused = 0;
   }
 }

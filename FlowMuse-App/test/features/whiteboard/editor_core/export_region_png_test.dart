@@ -424,6 +424,78 @@ void main() {
     );
   });
 
+  test('并发 prewarmRegionImages 重叠结束后 onImageDecoded 回调仍生效', () async {
+    // Given: 两张未缓存相交图片（applyResult 注入，勿用 loadScene）
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    for (var i = 0; i < 2; i++) {
+      final png = await _makePng(4, 4, 0xFF00FF00);
+      controller.applyResult(
+        AddFileResult(
+          fileId: 'img-$i',
+          file: ImageFile(mimeType: 'image/png', bytes: png),
+        ),
+      );
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: ElementId('elem-$i'),
+            x: 0,
+            y: i * 10.0,
+            width: 40,
+            height: 40,
+            fileId: 'img-$i',
+            mimeType: 'image/png',
+          ),
+        ),
+      );
+    }
+    const rect = Rect.fromLTWH(0, 0, 100, 100);
+    var decodedCallbacks = 0;
+    void countingCallback() => decodedCallbacks++;
+    controller.imageCache.onImageDecoded = countingCallback;
+
+    // When: 两次预热重叠执行（后启动者处于先启动者的暂停窗口内）
+    final firstPrewarm = controller.prewarmRegionImages(rect);
+    final secondPrewarm = controller.prewarmRegionImages(rect);
+    final results = await Future.wait([firstPrewarm, secondPrewarm]);
+
+    // Then: 均无失败、重叠期间回调未触发（保持暂停）
+    expect(results, everyElement(0));
+    expect(controller.imageCache.length, 2);
+    expect(decodedCallbacks, 0, reason: '重叠预热期间解码完成回调应保持暂停');
+
+    // And: 全部预热结束后回调必须仍然生效——注入新图片经 getImage 路径
+    // 触发解码并断言回调被调用（保存/恢复式互覆会把回调永久丢失为 null，
+    // 后续解码完成的图片不再自动上屏）
+    final latePng = await _makePng(4, 4, 0xFF0000FF);
+    controller.applyResult(
+      AddFileResult(
+        fileId: 'img-late',
+        file: ImageFile(mimeType: 'image/png', bytes: latePng),
+      ),
+    );
+    controller.applyResult(
+      AddElementResult(
+        ImageElement(
+          id: const ElementId('elem-late'),
+          x: 0,
+          y: 80,
+          width: 40,
+          height: 40,
+          fileId: 'img-late',
+          mimeType: 'image/png',
+        ),
+      ),
+    );
+    controller.resolveImages(); // 触发 img-late 的异步解码
+    for (var i = 0; i < 100 && decodedCallbacks == 0; i++) {
+      await Future.delayed(const Duration(milliseconds: 10));
+    }
+    expect(decodedCallbacks, greaterThan(0),
+        reason: '并发预热全部结束后 onImageDecoded 回调应恢复生效');
+  });
+
   test('LRU 逐出后被逐出 id 经 getImage 能重新解码', () async {
     // Given: maxSize=2 的缓存，先解码 a、b 后对含已缓存 id 的集合 markDecoding
     final cache = ImageElementCache(maxSize: 2);

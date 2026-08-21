@@ -5738,8 +5738,10 @@ class MarkdrawController extends ChangeNotifier {
     // 构造函数中注册）会触发全画布重绘，resolveImages 对场景所有未缓存
     // fileId 并发启动解码（>50 图场景即解码风暴 + LRU 挤掉刚预热条目）。
     // 对齐 loadScene"预热完统一刷"语义（_prewarmImageCache）。
-    final previousCallback = _imageCache.onImageDecoded;
-    _imageCache.onImageDecoded = null;
+    // 用可嵌套的暂停计数而非保存/恢复回调字段：两次预热窗口重叠时，
+    // 后启动者捕获到的"先前回调"是前者暂停后的值，恢复会互覆，
+    // 可能把 controller 的重绘闭包在本会话内永久丢失。
+    _imageCache.pauseDecodedCallback();
     try {
       for (final entry in intersecting.entries) {
         if (_disposed) break;
@@ -5747,7 +5749,7 @@ class MarkdrawController extends ChangeNotifier {
         if (_imageCache.peek(entry.key) == null) failed++;
       }
     } finally {
-      _imageCache.onImageDecoded = previousCallback;
+      _imageCache.resumeDecodedCallback();
       // 异常/中断路径上未取得解码所有权的残留占位必须释放：占位会让
       // getImage 对该 fileId 永远返回 null，本会话图片不再渲染。
       _imageCache.releaseDecodingPlaceholders(intersecting.keys);
