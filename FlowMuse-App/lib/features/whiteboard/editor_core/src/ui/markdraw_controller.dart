@@ -4437,7 +4437,7 @@ class MarkdrawController extends ChangeNotifier {
   ) {
     final visible = _editorState.viewport.visibleRect(canvasSize);
     if (_layout.isPaged) {
-      final page = _pageForVisibleRect(visible);
+      final page = pageForVisibleRect(visible);
       if (page != null) {
         final index = _layout.pages.indexWhere((item) => item.id == page.id);
         return [
@@ -4551,7 +4551,14 @@ class MarkdrawController extends ChangeNotifier {
     );
   }
 
-  CanvasPage? _pageForVisibleRect(Rect visible) {
+  /// Returns the page with the largest overlap with [visible], or the
+  /// nearest page (smallest distance, ties broken by page index) when the
+  /// rect does not intersect any page. Returns null only when the layout
+  /// has no pages — with pages present this never returns null.
+  ///
+  /// NOTE: callers that need "is the viewport inside a page" must not rely
+  /// on a null return (nearest fallback); test overlap explicitly.
+  CanvasPage? pageForVisibleRect(Rect visible) {
     if (_layout.pages.isEmpty) return null;
     CanvasPage? bestOverlap;
     var bestArea = 0.0;
@@ -5630,6 +5637,123 @@ class MarkdrawController extends ChangeNotifier {
     const height = CanvasLayout.pageHeight;
     final width = height * aspectRatio;
     return Rect.fromCenter(center: Offset.zero, width: width, height: height);
+  }
+
+  /// Renders an arbitrary scene-space rectangle to PNG bytes, mirroring the
+  /// live canvas (background color, grid, dark-mode grid colors, page-union
+  /// clipping, math-text skipping). Pixels only: never embeds markdraw
+  /// metadata — the bytes may be sent to external AI services.
+  Future<Uint8List?> exportRegionPng(
+    Rect sceneBounds, {
+    double maxLongestSide = 1568,
+  }) async {
+    if (sceneBounds.width <= 0 || sceneBounds.height <= 0) return null;
+    final longest = maxLongestSide <= 0 ? 1568.0 : maxLongestSide;
+    final sourceWidth = math.max(1.0, sceneBounds.width);
+    final sourceHeight = math.max(1.0, sceneBounds.height);
+    final zoom = longest / math.max(sourceWidth, sourceHeight);
+    final pixelSize = Size(
+      (sourceWidth * zoom).ceilToDouble(),
+      (sourceHeight * zoom).ceilToDouble(),
+    );
+    final viewport = ViewportState(offset: sceneBounds.topLeft, zoom: zoom);
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+      Offset.zero & pixelSize,
+      Paint()..color = parseColor(_canvasBackgroundColor),
+    );
+    StaticCanvasPainter(
+      scene: _editorState.scene,
+      adapter: _adapter,
+      viewport: viewport,
+      layout: _layout,
+      resolvedImages: _peekResolvedImages(),
+      gridSize: _gridSize,
+      isDarkBackground:
+          parseColor(_canvasBackgroundColor).computeLuminance() < 0.5,
+      contentBounds: _contentBounds,
+      renderPageShadows: false,
+      skipMathText: true,
+    ).paint(canvas, pixelSize);
+
+    final picture = recorder.endRecording();
+    ui.Image? image;
+    try {
+      image = await picture.toImage(
+        pixelSize.width.ceil(),
+        pixelSize.height.ceil(),
+      );
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      return byteData?.buffer.asUint8List();
+    } finally {
+      image?.dispose();
+      picture.dispose();
+    }
+  }
+
+  /// Peek-only image resolution for region export: unlike [resolveImages],
+  /// never triggers async decodes or per-image repaints; prewarmRegionImages
+  /// has already cached everything the region needs.
+  Map<String, ui.Image>? _peekResolvedImages() {
+    final files = _editorState.scene.files;
+    if (files.isEmpty) return null;
+    final resolved = <String, ui.Image>{};
+    for (final entry in files.entries) {
+      final image = _imageCache.peek(entry.key);
+      if (image != null) resolved[entry.key] = image;
+    }
+    return resolved.isEmpty ? null : resolved;
+  }
+
+  /// Decodes images intersecting [sceneBounds] into the element cache so a
+  /// region render cannot silently miss LRU-evicted files.
+  ///
+  /// Returns how many intersecting images failed to decode.
+  Future<int> prewarmRegionImages(Rect sceneBounds) async {
+    var failed = 0;
+    final intersecting = <String, ImageFile>{};
+    for (final element in _editorState.scene.elements) {
+      if (element is! ImageElement || element.isDeleted) continue;
+      final bounds = Rect.fromLTWH(
+        element.x,
+        element.y,
+        element.width,
+        element.height,
+      );
+      if (!bounds.overlaps(sceneBounds)) continue;
+      final file = _editorState.scene.files[element.fileId];
+      if (file != null) intersecting[element.fileId] = file;
+    }
+    if (intersecting.isEmpty) return 0;
+    // 同步占位相交 fileId：预热 await 窗口内一次交互重绘的 getImage 不应
+    // 自行启动并发解码（破坏串行预热的内存约束）。占位后 getImage 直接
+    // 返回 null，由下方循环串行解码（与已在途的其他预热共享解码 Future）。
+    // 只占位相交子集——全量占位会让未解码的非相交 fileId 在中断路径上
+    // 永久滞留在途表（只有 _decode 的 finally 移除），那些图片本会话
+    // 再也不渲染。
+    _imageCache.markDecoding(intersecting.keys);
+    // 暂停解码完成回调：每次完成都 notifyListeners（markdraw_controller
+    // 构造函数中注册）会触发全画布重绘，resolveImages 对场景所有未缓存
+    // fileId 并发启动解码（>50 图场景即解码风暴 + LRU 挤掉刚预热条目）。
+    // 对齐 loadScene"预热完统一刷"语义（_prewarmImageCache）。
+    final previousCallback = _imageCache.onImageDecoded;
+    _imageCache.onImageDecoded = null;
+    try {
+      for (final entry in intersecting.entries) {
+        if (_disposed) break;
+        await _imageCache.decodeAndWait(entry.key, entry.value);
+        if (_imageCache.peek(entry.key) == null) failed++;
+      }
+    } finally {
+      _imageCache.onImageDecoded = previousCallback;
+      // 异常/中断路径上未取得解码所有权的残留占位必须释放：占位会让
+      // getImage 对该 fileId 永远返回 null，本会话图片不再渲染。
+      _imageCache.releaseDecodingPlaceholders(intersecting.keys);
+    }
+    if (!_disposed) notifyListeners();
+    return failed;
   }
 
   /// Reads the pixel color at [screenPosition] from a pre-rendered [image].
