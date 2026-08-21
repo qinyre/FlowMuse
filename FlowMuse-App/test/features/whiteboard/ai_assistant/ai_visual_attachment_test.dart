@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,26 +19,8 @@ AiVisualAttachment selectionAttachmentOf(Uint8List bytes) =>
       kind: AiVisualAttachmentKind.selection,
     );
 
-Future<Uint8List> solidPng(int width, int height) async {
-  final recorder = ui.PictureRecorder();
-  final canvas = ui.Canvas(recorder);
-  canvas.drawRect(
-    ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
-    ui.Paint()..color = const ui.Color(0xFF336699),
-  );
-  final image = await recorder.endRecording().toImage(width, height);
-  final data = await image.toByteData(format: ui.ImageByteFormat.png);
-  return data!.buffer.asUint8List();
-}
-
-Future<ui.ImageDescriptor> decodePng(Uint8List bytes) async {
-  final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-  try {
-    return await ui.ImageDescriptor.encoded(buffer);
-  } finally {
-    buffer.dispose();
-  }
-}
+// 原 buildAiVisualAttachment 的 3 个归一化行为用例已随该函数删除迁至
+// visual_attachment_capture_test.dart（归一化单点 normalizeAttachmentPng）。
 
 void main() {
   test('第 4 张附件被拒绝并提示数量上限', () {
@@ -232,33 +213,5 @@ void main() {
         reason: '状态码 $statusCode 不应误报为视觉问题',
       );
     }
-  });
-
-  test('超大长边按比例缩放到 1568 上限内并重编码', () async {
-    final png = await solidPng(3000, 1500);
-    final attachment = await buildAiVisualAttachment(png);
-    expect(attachment, isNotNull);
-    expect(attachment!.mimeType, 'image/png');
-    expect(attachment.kind, AiVisualAttachmentKind.selection);
-    final descriptor = await decodePng(attachment.bytes);
-    addTearDown(descriptor.dispose);
-    expect(descriptor.width, maxAiVisualAttachmentLongestSide);
-    expect(descriptor.height, maxAiVisualAttachmentLongestSide ~/ 2);
-  });
-
-  test('小图保持原尺寸', () async {
-    final png = await solidPng(320, 240);
-    final attachment = await buildAiVisualAttachment(png);
-    expect(attachment, isNotNull);
-    final descriptor = await decodePng(attachment!.bytes);
-    addTearDown(descriptor.dispose);
-    expect(descriptor.width, 320);
-    expect(descriptor.height, 240);
-  });
-
-  test('非法字节返回 null 而不是抛异常', () async {
-    expect(await buildAiVisualAttachment(null), isNull);
-    expect(await buildAiVisualAttachment(Uint8List(0)), isNull);
-    expect(await buildAiVisualAttachment(Uint8List.fromList([1, 2, 3])), isNull);
   });
 }

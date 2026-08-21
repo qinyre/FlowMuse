@@ -48,6 +48,7 @@ import '../ai_assistant/models/ai_agent_models.dart';
 import '../ai_assistant/models/ai_visual_attachment.dart';
 import '../ai_assistant/repositories/ai_agent_repository.dart';
 import '../ai_assistant/repositories/ai_prompt_store.dart';
+import '../ai_assistant/repositories/visual_attachment_capture.dart';
 import '../ai_assistant/views/ai_agent_dialog.dart';
 import '../speech_recognition/services/speech_recognition_service.dart';
 import '../speech_recognition/services/speech_recognition_service_factory.dart';
@@ -631,6 +632,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               texts: initialContext.texts,
               contextTruncated: initialContext.truncated,
               contextLabel: initialContext.label,
+              attachments: initialContext.attachments,
+              hasSelection: initialContext.hasSelection,
+              onCaptureSelection: () =>
+                  captureSelectionAttachment(_markdrawController),
+              onCaptureCurrentPdfPage: () =>
+                  captureCurrentPdfPageAttachment(_markdrawController),
               contextProvider: _currentAiAgentContext,
               promptStore: defaultAiPromptStore,
               speechRecognitionService: _speechRecognitionService,
@@ -678,38 +685,23 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         ),
       ),
     );
-    var attachments = const <AiVisualAttachment>[];
     final visualSelected = selectedElements
         .where((element) => element is! editor_core.TextElement)
         .toList();
-    if (visualSelected.isNotEmpty) {
-      try {
-        final png = await _markdrawController.exportPng(
-          scale: 2,
-          selectedOnly: true,
-          embedMarkdraw: false,
-        );
-        final attachment = await buildAiVisualAttachment(png);
-        if (attachment != null) attachments = [attachment];
-      } catch (error) {
-        debugPrint('[FlowMuseCreateNote] 选区截图生成失败，降级纯文本: $error');
-      }
-    }
     final noteTitle = _markdrawController.documentName ?? '未命名笔记';
-    var contextLabel = selectedTexts.isEmpty
+    final contextLabel = selectedTexts.isEmpty
         ? sourceTexts.isEmpty
               ? '当前笔记（暂无文字）'
               : '整篇笔记（${sourceTexts.length} 个文本框）'
         : '当前选区（${selectedTexts.length} 个文本框）';
-    if (attachments.isNotEmpty) {
-      contextLabel += '，含视觉内容';
-    }
+    // 视觉附件改由面板经 onCaptureSelection/onCaptureCurrentPdfPage 回调
+    // 驱动捕获（T5' 接线）；快照 attachments 字段恒空保留，字段删除属 T6'。
     return (
       noteTitle: noteTitle,
       texts: noteContext.texts,
       truncated: noteContext.truncated,
       label: contextLabel,
-      attachments: attachments,
+      attachments: const <AiVisualAttachment>[],
       hasSelection: selectedTexts.isNotEmpty || visualSelected.isNotEmpty,
     );
   }

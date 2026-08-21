@@ -1,6 +1,4 @@
 // Uint8List/ByteData 经 package:flutter/foundation.dart 重导出提供。
-import 'dart:ui' as ui;
-
 import 'package:flutter/foundation.dart';
 
 const int maxAiVisualAttachments = 3;
@@ -115,52 +113,6 @@ String? aiVisualAttachmentError({
   };
 }
 
-/// 过渡期选区附件构建（T5' 切线后删除，归一化单点移交捕获模块）：
-/// 把选区渲染出的 PNG 字节解码重编码到最长边上限内；解码失败返回 null
-/// （调用方降级纯文本）。所有解码资源在 finally 中释放，异常路径不泄漏。
-Future<AiVisualAttachment?> buildAiVisualAttachment(
-  Uint8List? pngBytes, {
-  String sourceLabel = '当前选区',
-}) async {
-  if (pngBytes == null || pngBytes.isEmpty) return null;
-  ui.ImmutableBuffer? buffer;
-  ui.ImageDescriptor? descriptor;
-  ui.Codec? codec;
-  ui.FrameInfo? frame;
-  try {
-    buffer = await ui.ImmutableBuffer.fromUint8List(pngBytes);
-    descriptor = await ui.ImageDescriptor.encoded(buffer);
-    var targetWidth = descriptor.width;
-    var targetHeight = descriptor.height;
-    final longestEdge =
-        targetWidth > targetHeight ? targetWidth : targetHeight;
-    if (longestEdge > maxAiVisualAttachmentLongestSide) {
-      final ratio = maxAiVisualAttachmentLongestSide / longestEdge;
-      targetWidth = (targetWidth * ratio).round();
-      targetHeight = (targetHeight * ratio).round();
-    }
-    codec = await descriptor.instantiateCodec(
-      targetWidth: targetWidth,
-      targetHeight: targetHeight,
-    );
-    frame = await codec.getNextFrame();
-    final encoded = await frame.image.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
-    if (encoded == null) return null;
-    return AiVisualAttachment(
-      sourceLabel: sourceLabel,
-      mimeType: 'image/png',
-      bytes: encoded.buffer.asUint8List(),
-      kind: AiVisualAttachmentKind.selection,
-    );
-  } catch (_) {
-    // 解码/重编码失败属业务失败的一种：返回 null 让调用方降级纯文本。
-    return null;
-  } finally {
-    buffer?.dispose();
-    descriptor?.dispose();
-    codec?.dispose();
-    frame?.image.dispose();
-  }
-}
+// 归一化已单点化到 repositories/visual_attachment_capture.dart 的
+// normalizeAttachmentPng（原过渡期 buildAiVisualAttachment 已随 T5'
+// 接线切换删除）。

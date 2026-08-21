@@ -73,6 +73,8 @@ class AiAgentPanel extends StatefulWidget {
     required this.contextLabel,
     this.attachments = const [],
     this.hasSelection = false,
+    this.onCaptureSelection,
+    this.onCaptureCurrentPdfPage,
     this.contextProvider,
     required this.promptStore,
     this.speechRecognitionService,
@@ -87,6 +89,13 @@ class AiAgentPanel extends StatefulWidget {
   final String contextLabel;
   final List<AiVisualAttachment> attachments;
   final bool hasSelection;
+
+  /// 捕获回调（hybrid §1.2 契约）：返回 null=当前选区无可捕获的视觉内容，
+  /// 抛 StateError=真失败（消息即用户文案）。默认 null——旧调用方零行为
+  /// 变更；附件条 UI 与调用时机由面板侧融合（T6'）接入。
+  final Future<AiVisualAttachment?> Function()? onCaptureSelection;
+  final Future<AiVisualAttachment?> Function()? onCaptureCurrentPdfPage;
+
   final AiAgentContextProvider? contextProvider;
   final AiPromptStore promptStore;
   final SpeechRecognitionService? speechRecognitionService;
