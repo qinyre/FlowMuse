@@ -236,6 +236,7 @@ void main() {
       truncated: false,
       label: '当前选区（1 个文本框）',
       attachments: <AiVisualAttachment>[],
+      hasSelection: false,
     );
     final repository = _FakeAiAgentRepository();
     await tester.pumpWidget(
@@ -262,6 +263,7 @@ void main() {
       truncated: false,
       label: '当前选区（1 个文本框）',
       attachments: <AiVisualAttachment>[],
+      hasSelection: false,
     );
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
@@ -301,6 +303,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(applied!.actions.single.tool, AiAgentTool.generateMindmap);
   });
+
+  testWidgets('选区存在时显示选区快捷指令并可填充', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    await _openDialog(
+      tester,
+      repository: repository,
+      hasSelection: true,
+      onApply: (_) async {},
+    );
+
+    expect(find.text('解释这里'), findsOneWidget);
+    expect(find.text('检查公式'), findsOneWidget);
+    expect(find.text('整理文字'), findsOneWidget);
+    expect(find.text('整理成导图'), findsOneWidget);
+    expect(find.text('总结'), findsNothing);
+
+    await tester.tap(find.text('解释这里'));
+    expect(
+      tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+      '解释这里的内容',
+    );
+  });
 }
 
 Future<void> _openDialog(
@@ -309,6 +333,7 @@ Future<void> _openDialog(
   required Future<void> Function(AiAgentResponse) onApply,
   List<AiNoteText> texts = const [AiNoteText(id: 'text-1', text: '测试内容')],
   List<AiVisualAttachment> attachments = const [],
+  bool hasSelection = false,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -321,6 +346,7 @@ Future<void> _openDialog(
             noteTitle: '测试笔记',
             texts: texts,
             attachments: attachments,
+            hasSelection: hasSelection,
             onApply: onApply,
           ),
           child: const Text('打开'),
@@ -415,3 +441,4 @@ class _FakeSpeechRecognitionService implements SpeechRecognitionService {
   @override
   Future<void> dispose() => _events.close();
 }
+

@@ -708,6 +708,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       truncated: noteContext.truncated,
       label: contextLabel,
       attachments: attachments,
+      hasSelection: selectedTexts.isNotEmpty || visualSelected.isNotEmpty,
     );
   }
 

@@ -19,6 +19,7 @@ typedef AiAgentContextSnapshot = ({
   bool truncated,
   String label,
   List<AiVisualAttachment> attachments,
+  bool hasSelection,
 });
 
 typedef AiAgentContextProvider = Future<AiAgentContextSnapshot> Function();
@@ -31,6 +32,7 @@ Future<void> showAiAgentDialog({
   bool contextTruncated = false,
   String contextLabel = '整篇笔记',
   List<AiVisualAttachment> attachments = const [],
+  bool hasSelection = false,
   AiPromptStore? promptStore,
   required Future<void> Function(AiAgentResponse response) onApply,
 }) {
@@ -48,6 +50,7 @@ Future<void> showAiAgentDialog({
           contextTruncated: contextTruncated,
           contextLabel: contextLabel,
           attachments: attachments,
+          hasSelection: hasSelection,
           promptStore: promptStore ?? defaultAiPromptStore,
           onApply: onApply,
           onClose: () => Navigator.of(dialogContext).pop(),
@@ -66,6 +69,7 @@ class AiAgentPanel extends StatefulWidget {
     required this.contextTruncated,
     required this.contextLabel,
     this.attachments = const [],
+    this.hasSelection = false,
     this.contextProvider,
     required this.promptStore,
     this.speechRecognitionService,
@@ -79,6 +83,7 @@ class AiAgentPanel extends StatefulWidget {
   final bool contextTruncated;
   final String contextLabel;
   final List<AiVisualAttachment> attachments;
+  final bool hasSelection;
   final AiAgentContextProvider? contextProvider;
   final AiPromptStore promptStore;
   final SpeechRecognitionService? speechRecognitionService;
@@ -119,6 +124,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       truncated: widget.contextTruncated,
       label: widget.contextLabel,
       attachments: widget.attachments,
+      hasSelection: widget.hasSelection,
     );
     _ownsSpeechService = widget.speechRecognitionService == null;
     _speechService =
@@ -484,13 +490,21 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     spacing: 4,
                     runSpacing: 4,
                     children: [
-                      for (final shortcut in const {
-                        '总结': '总结当前笔记',
-                        '待办': '提取待办事项',
-                        '大纲': '生成结构化大纲',
-                        '思维导图': '根据当前内容生成思维导图',
-                        '手写排版': '智能排版当前手写内容',
-                      }.entries)
+                      for (final shortcut in (_context.hasSelection
+                          ? const {
+                              '解释这里': '解释这里的内容',
+                              '检查公式': '检查这里的公式是否正确，如有错误请指出',
+                              '整理文字': '整理这里的文字内容',
+                              '整理成导图': '把这里的内容整理成思维导图',
+                            }
+                          : const {
+                              '总结': '总结当前笔记',
+                              '待办': '提取待办事项',
+                              '大纲': '生成结构化大纲',
+                              '思维导图': '根据当前内容生成思维导图',
+                              '手写排版': '智能排版当前手写内容',
+                            })
+                          .entries)
                         ActionChip(
                           label: Text(shortcut.key),
                           visualDensity: VisualDensity.compact,
