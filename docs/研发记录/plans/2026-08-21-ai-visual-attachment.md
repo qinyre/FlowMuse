@@ -14,6 +14,7 @@ FlowMuse 的 AI 笔记助手目前只能读取笔记标题与文本元素（`AiN
 | 主题 | 结论 | 位置 |
 |---|---|---|
 | 请求链路 | `AiAgentRepository.run()` 经 `NativeHttpClient.post`（String body）调 OpenAI 兼容 `/chat/completions`；鸿蒙走 MethodChannel `flow_muse/http`（`HttpChannel.ets` doPost，STRING 收发，多 MiB payload 可行），其他平台回退 package:http | `ai_agent_repository.dart:25-91`、`native_http_client.dart:53-120` |
+| 鸿蒙 HTTP 官方依据 | 官方文档确认 `extraData` 传大字符串/文件内容是标准用法（WebDAV PUT 示例即 `extraData: file`），请求体方向无大小限制；响应方向有 `maxLimit`（默认 5MiB、最大 100MiB，API 11+），`HttpChannel.ets` 未设置该参数——AI 响应为小 JSON，不受默认上限影响。协作文件下载疑似受 5MiB 默认上限影响的存量问题已单独记录：`docs/研发记录/troubleshooting/2026-08-21-ohos-http-maxlimit-collab-download.md` | `harmonyos-guides/系统/网络/Network Kit（网络服务）/访问网络/http-request.md` |
 | Web CORS | 与纯文本请求完全一致：Authorization 头早已触发 preflight，加图片不改变 CORS 流程；仅 body 变大可能撞个别网关的体积限制（服务端配置问题） | `settings_page.dart:1840-1842` 已有 CORS 文案 |
 | 上下文快照 | `_currentAiAgentContext()` 已实现"选中文本优先、否则整篇"快照 + `contextProvider` 刷新模式；AI 面板为 OverlayEntry | `whiteboard_page.dart:595-713` |
 | 选区包围盒 | `ExportBounds.compute(scene, {selectedIds, padding})` 自动包含绑定文本与 frame 父子；`exportPng(selectedOnly:true)`/`copyAsPng` 已验证对任意选区（含笔迹）可用 | `export_bounds.dart:15-37` |
