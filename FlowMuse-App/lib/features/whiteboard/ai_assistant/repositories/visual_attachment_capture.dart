@@ -173,7 +173,15 @@ Future<AiVisualAttachment?> captureCurrentPdfPageAttachment(
   if (file == null || file.mimeType != 'image/png') {
     throw StateError('当前页面不是 PDF 页');
   }
-  final normalized = await normalizeAttachmentPng(file.bytes);
+  final Uint8List normalized;
+  try {
+    normalized = await normalizeAttachmentPng(file.bytes);
+  } on StateError catch (error) {
+    if (error.message != '图片过大，请缩小选区后重试') rethrow;
+    // PDF chip 场景没有"选区"可缩小：体积超限文案按 §1.6 用 PDF 专用
+    // 版本（选区路径仍透传原文案，仅此一处映射）。
+    throw StateError('该 PDF 页面图片过大，无法作为附件发送');
+  }
   return AiVisualAttachment(
     sourceLabel: 'PDF 第 ${page.index + 1} 页',
     mimeType: 'image/png',

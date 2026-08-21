@@ -303,6 +303,50 @@ void main() {
       ),
     );
   });
+
+  test('PDF 页图片过大映射为 PDF 专用文案（不指引"缩小选区"）', () async {
+    // Given: pdfBackground 元素指向声明维度超护栏的 PNG（IHDR 改为
+    // 5000×4000 并修正 CRC；ImageDescriptor.encoded 只读头部不解码像素，
+    // 无需真实构造大图）。经 applyResult 注入——loadScene 会自动全量预热，
+    // 对该文件触发无谓的大图解码。归一化抛出的"缩小选区"文案对 PDF chip
+    // 不可执行，须映射为 §1.6 的 PDF 专用文案。
+    final oversized = _patchPngDimensions(basePng, 5000, 4000);
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.applyResult(
+      AddFileResult(
+        fileId: 'pdf-1',
+        file: ImageFile(mimeType: 'image/png', bytes: oversized),
+      ),
+    );
+    controller.applyResult(
+      AddElementResult(
+        ImageElement(
+          id: const ElementId('pdf-elem-1'),
+          x: 0,
+          y: 0,
+          width: 800,
+          height: 600,
+          fileId: 'pdf-1',
+          customData: CanvasLayout.pdfBackgroundCustomData('page-1'),
+        ),
+      ),
+    );
+    controller.setLayout(_singlePageLayout('page-1'));
+
+    // When/Then: PDF 路径 oversize → PDF 专用文案；其余错误（如
+    // '图片处理失败，请重试'）仍原样透传（见上一用例对归一化本体的锁定）
+    expect(
+      captureCurrentPdfPageAttachment(controller),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          '该 PDF 页面图片过大，无法作为附件发送',
+        ),
+      ),
+    );
+  });
 }
 
 /// 1×1 基准 PNG（IHDR + IDAT + IEND，无文本 chunk、IEND 后无残余字节）。
@@ -365,6 +409,38 @@ CanvasLayout _singlePageLayout(String pageId) => CanvasLayout(
     ),
   ],
 );
+
+/// 把 PNG 的 IHDR 声明维度改为 (width, height) 并修正 IHDR CRC。
+/// ImageDescriptor.encoded 只读头部不解码像素——超大声明维度即可触发
+/// normalizeAttachmentPng 的解压炸弹护栏，无需真实构造超大图字节。
+Uint8List _patchPngDimensions(Uint8List source, int width, int height) {
+  final patched = Uint8List.fromList(source);
+  void writeUint32(int offset, int value) {
+    patched[offset] = (value >> 24) & 0xFF;
+    patched[offset + 1] = (value >> 16) & 0xFF;
+    patched[offset + 2] = (value >> 8) & 0xFF;
+    patched[offset + 3] = value & 0xFF;
+  }
+
+  // 布局：签名(8) + 长度(4) + 'IHDR'(4) + W(4) + H(4) + 其余 5 字节数据
+  // + CRC(4)。CRC 覆盖 type+data 共 17 字节（偏移 12 起）。
+  writeUint32(16, width);
+  writeUint32(20, height);
+  writeUint32(29, _crc32(patched, 12, 17));
+  return patched;
+}
+
+int _crc32(Uint8List bytes, int offset, int length) {
+  var crc = 0xFFFFFFFF;
+  for (var i = offset; i < offset + length; i++) {
+    crc ^= bytes[i];
+    for (var bit = 0; bit < 8; bit++) {
+      final mask = -(crc & 1);
+      crc = (crc >>> 1) ^ (0xEDB88320 & mask);
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
+}
 
 /// 用 PictureRecorder 合成指定尺寸的纯色 PNG。
 Future<Uint8List> _solidPng(int width, int height) async {
