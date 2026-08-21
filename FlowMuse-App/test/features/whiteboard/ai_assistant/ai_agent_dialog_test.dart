@@ -235,6 +235,7 @@ void main() {
       texts: [AiNoteText(id: 'text-a', text: '旧选区')],
       truncated: false,
       label: '当前选区（1 个文本框）',
+      attachments: <AiVisualAttachment>[],
     );
     final repository = _FakeAiAgentRepository();
     await tester.pumpWidget(
@@ -246,7 +247,7 @@ void main() {
             texts: context.texts,
             contextTruncated: context.truncated,
             contextLabel: context.label,
-            contextProvider: () => context,
+            contextProvider: () async => context,
             promptStore: AiPromptStore(_MemorySettings()),
             onApply: (_) async {},
             onClose: () {},
@@ -260,6 +261,7 @@ void main() {
       texts: [AiNoteText(id: 'text-b', text: '新选区')],
       truncated: false,
       label: '当前选区（1 个文本框）',
+      attachments: <AiVisualAttachment>[],
     );
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
@@ -306,6 +308,7 @@ Future<void> _openDialog(
   required AiAgentRepository repository,
   required Future<void> Function(AiAgentResponse) onApply,
   List<AiNoteText> texts = const [AiNoteText(id: 'text-1', text: '测试内容')],
+  List<AiVisualAttachment> attachments = const [],
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -317,6 +320,7 @@ Future<void> _openDialog(
             promptStore: AiPromptStore(_MemorySettings()),
             noteTitle: '测试笔记',
             texts: texts,
+            attachments: attachments,
             onApply: onApply,
           ),
           child: const Text('打开'),

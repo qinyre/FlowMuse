@@ -39,7 +39,7 @@ class _FakePost {
   }
 }
 
-AiAgentRepository repositoryWith(_FakePost post) => AiAgentRepository(
+AiAgentRepository _repositoryWith(_FakePost post) => AiAgentRepository(
       config: const AiAgentConfig(
         baseUrl: 'https://api.example.com/v1',
         apiKey: 'test-key',
@@ -51,7 +51,7 @@ AiAgentRepository repositoryWith(_FakePost post) => AiAgentRepository(
 void main() {
   test('纯文本请求保持字符串 content 且携带鉴权头', () async {
     final post = _FakePost(200);
-    await repositoryWith(post).run(
+    await _repositoryWith(post).run(
       instruction: '总结笔记',
       noteTitle: '标题',
       texts: const [AiNoteText(id: 't1', text: '内容')],
@@ -72,7 +72,7 @@ void main() {
       width: 10,
       height: 10,
     );
-    await repositoryWith(post).run(
+    await _repositoryWith(post).run(
       instruction: '解释这里',
       noteTitle: '标题',
       texts: const [],
@@ -107,7 +107,7 @@ void main() {
         ),
     ];
     expect(
-      () => repositoryWith(post).run(
+      () => _repositoryWith(post).run(
         instruction: '解释这里',
         noteTitle: '标题',
         texts: const [],
@@ -127,7 +127,7 @@ void main() {
       height: 10,
     );
     await expectLater(
-      repositoryWith(post).run(
+      _repositoryWith(post).run(
         instruction: '解释这里',
         noteTitle: '标题',
         texts: const [],

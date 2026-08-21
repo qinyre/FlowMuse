@@ -6,6 +6,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import '../../../../shared/widgets/app_spacing.dart';
 import '../../ink_recognition/native_http_client.dart';
 import '../models/ai_agent_models.dart';
+import '../models/ai_visual_attachment.dart';
 import '../repositories/ai_agent_repository.dart';
 import '../repositories/ai_prompt_store.dart';
 import '../../speech_recognition/models/speech_recognition_event.dart';
@@ -17,7 +18,10 @@ typedef AiAgentContextSnapshot = ({
   List<AiNoteText> texts,
   bool truncated,
   String label,
+  List<AiVisualAttachment> attachments,
 });
+
+typedef AiAgentContextProvider = Future<AiAgentContextSnapshot> Function();
 
 Future<void> showAiAgentDialog({
   required BuildContext context,
@@ -26,6 +30,7 @@ Future<void> showAiAgentDialog({
   required List<AiNoteText> texts,
   bool contextTruncated = false,
   String contextLabel = '整篇笔记',
+  List<AiVisualAttachment> attachments = const [],
   AiPromptStore? promptStore,
   required Future<void> Function(AiAgentResponse response) onApply,
 }) {
@@ -42,6 +47,7 @@ Future<void> showAiAgentDialog({
           texts: texts,
           contextTruncated: contextTruncated,
           contextLabel: contextLabel,
+          attachments: attachments,
           promptStore: promptStore ?? defaultAiPromptStore,
           onApply: onApply,
           onClose: () => Navigator.of(dialogContext).pop(),
@@ -59,6 +65,7 @@ class AiAgentPanel extends StatefulWidget {
     required this.texts,
     required this.contextTruncated,
     required this.contextLabel,
+    this.attachments = const [],
     this.contextProvider,
     required this.promptStore,
     this.speechRecognitionService,
@@ -71,7 +78,8 @@ class AiAgentPanel extends StatefulWidget {
   final List<AiNoteText> texts;
   final bool contextTruncated;
   final String contextLabel;
-  final AiAgentContextSnapshot Function()? contextProvider;
+  final List<AiVisualAttachment> attachments;
+  final AiAgentContextProvider? contextProvider;
   final AiPromptStore promptStore;
   final SpeechRecognitionService? speechRecognitionService;
   final Future<void> Function(AiAgentResponse response) onApply;
@@ -110,6 +118,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       texts: widget.texts,
       truncated: widget.contextTruncated,
       label: widget.contextLabel,
+      attachments: widget.attachments,
     );
     _ownsSpeechService = widget.speechRecognitionService == null;
     _speechService =
@@ -231,7 +240,9 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         _speechState != SpeechRecognitionState.idle) {
       return;
     }
-    final context = widget.contextProvider?.call() ?? _context;
+    final context = widget.contextProvider != null
+        ? await widget.contextProvider!()
+        : _context;
     final isFollowUp = _response != null;
     final generation = ++_generation;
     final cancelToken = NativeHttpCancelToken();
@@ -248,6 +259,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         noteTitle: context.noteTitle,
         texts: context.texts,
         conversation: _conversation,
+        attachments: context.attachments,
         cancelToken: cancelToken,
       );
       if (!mounted || generation != _generation || cancelToken.isCancelled) {
@@ -551,6 +563,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                       color: colors.onSurfaceVariant,
                     ),
                   ),
+                  if (_context.attachments.isNotEmpty)
+                    Text(
+                      '将随请求发送 ${_context.attachments.length} 张选区截图至您配置的模型服务。',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                   if (_context.truncated)
                     Text(
                       '当前笔记较长，已使用前 $maxAiAgentContextLength 字作为上下文。',
