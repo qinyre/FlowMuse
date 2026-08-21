@@ -1,9 +1,22 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Uint8List bytesOf(int length) => Uint8List(length);
+
+Future<Uint8List> solidPng(int width, int height) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder);
+  canvas.drawRect(
+    ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+    ui.Paint()..color = const ui.Color(0xFF336699),
+  );
+  final image = await recorder.endRecording().toImage(width, height);
+  final data = await image.toByteData(format: ui.ImageByteFormat.png);
+  return data!.buffer.asUint8List();
+}
 
 void main() {
   test('合法 PNG 附件通过校验并保留字段', () {
@@ -83,5 +96,27 @@ void main() {
         reason: 'width=$width height=$height 应被拒绝',
       );
     }
+  });
+
+  test('超大长边按比例缩放到上限内并重编码', () async {
+    final png = await solidPng(3000, 1500);
+    final attachment = await buildAiVisualAttachment(png);
+    expect(attachment, isNotNull);
+    expect(attachment!.width, maxAiVisualEdgeLength);
+    expect(attachment.height, maxAiVisualEdgeLength ~/ 2);
+    expect(attachment.mimeType, 'image/png');
+  });
+
+  test('小图保持原尺寸直接复用字节', () async {
+    final png = await solidPng(320, 240);
+    final attachment = await buildAiVisualAttachment(png);
+    expect(attachment, isNotNull);
+    expect(attachment!.width, 320);
+    expect(attachment.height, 240);
+  });
+
+  test('非法字节返回 null 而不是抛异常', () async {
+    expect(await buildAiVisualAttachment(null), isNull);
+    expect(await buildAiVisualAttachment(Uint8List.fromList([1, 2, 3])), isNull);
   });
 }

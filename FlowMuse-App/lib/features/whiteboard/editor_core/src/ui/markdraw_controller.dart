@@ -5322,7 +5322,11 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Exports the scene (or selection) as PNG bytes.
-  Future<Uint8List?> exportPng({int scale = 2, bool selectedOnly = true}) {
+  Future<Uint8List?> exportPng({
+    int scale = 2,
+    bool selectedOnly = true,
+    bool embedMarkdraw = true,
+  }) {
     final selectedIds = selectedOnly && _editorState.selectedIds.isNotEmpty
         ? _editorState.selectedIds
         : null;
@@ -5332,6 +5336,7 @@ class MarkdrawController extends ChangeNotifier {
       scale: scale,
       backgroundColor: parseColor(_canvasBackgroundColor),
       selectedIds: selectedIds,
+      embedMarkdraw: embedMarkdraw,
     );
   }
 

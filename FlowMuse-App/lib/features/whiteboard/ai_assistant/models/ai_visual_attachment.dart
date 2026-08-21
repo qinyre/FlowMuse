@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 
@@ -56,4 +57,42 @@ class AiVisualAttachment {
   final String sourceLabel;
   final int width;
   final int height;
+}
+
+/// 把选区渲染出的 PNG 字节转为受控附件；解码失败返回 null（调用方降级纯文本）。
+Future<AiVisualAttachment?> buildAiVisualAttachment(
+  Uint8List? pngBytes, {
+  String sourceLabel = '当前选区',
+}) async {
+  if (pngBytes == null || pngBytes.isEmpty) return null;
+  try {
+    final buffer = await ui.ImmutableBuffer.fromUint8List(pngBytes);
+    final descriptor = await ui.ImageDescriptor.encoded(buffer);
+    var targetWidth = descriptor.width;
+    var targetHeight = descriptor.height;
+    final longestEdge = targetWidth > targetHeight ? targetWidth : targetHeight;
+    if (longestEdge > maxAiVisualEdgeLength) {
+      final ratio = maxAiVisualEdgeLength / longestEdge;
+      targetWidth = (targetWidth * ratio).round();
+      targetHeight = (targetHeight * ratio).round();
+    }
+    final codec = await descriptor.instantiateCodec(
+      targetWidth: targetWidth,
+      targetHeight: targetHeight,
+    );
+    final frame = await codec.getNextFrame();
+    final encoded = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+    descriptor.dispose();
+    codec.dispose();
+    if (encoded == null) return null;
+    return AiVisualAttachment.validated(
+      mimeType: 'image/png',
+      bytes: encoded.buffer.asUint8List(),
+      sourceLabel: sourceLabel,
+      width: targetWidth,
+      height: targetHeight,
+    );
+  } catch (_) {
+    return null;
+  }
 }
