@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
@@ -304,6 +305,32 @@ void main() {
     expect(applied!.actions.single.tool, AiAgentTool.generateMindmap);
   });
 
+  testWidgets('带附件时显示数量与隐私提示并传给仓库', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    final attachment = AiVisualAttachment.validated(
+      mimeType: 'image/png',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      sourceLabel: '当前选区',
+      width: 10,
+      height: 10,
+    );
+    await _openDialog(
+      tester,
+      repository: repository,
+      attachments: [attachment],
+      onApply: (_) async {},
+    );
+
+    expect(find.textContaining('1 张选区截图'), findsOneWidget);
+    expect(find.textContaining('模型服务'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, '解释这里');
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+
+    expect(repository.receivedAttachments.last, hasLength(1));
+  });
+
   testWidgets('选区存在时显示选区快捷指令并可填充', (tester) async {
     final repository = _FakeAiAgentRepository();
     await _openDialog(
@@ -324,6 +351,33 @@ void main() {
       tester.widget<TextField>(find.byType(TextField).first).controller!.text,
       '解释这里的内容',
     );
+  });
+
+  testWidgets('带附件生成中显示视觉阶段状态并在完成后渲染回复', (tester) async {
+    final completer = Completer<AiAgentResponse>();
+    final repository = _FakeAiAgentRepository(completer: completer);
+    final attachment = AiVisualAttachment.validated(
+      mimeType: 'image/png',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      sourceLabel: '当前选区',
+      width: 10,
+      height: 10,
+    );
+    await _openDialog(
+      tester,
+      repository: repository,
+      attachments: [attachment],
+      onApply: (_) async {},
+    );
+
+    await tester.enterText(find.byType(TextField).first, '解释这里');
+    await tester.tap(find.text('发送'));
+    await tester.pump();
+    expect(find.text('正在结合选区图像与笔记内容生成…'), findsOneWidget);
+
+    completer.complete(const AiAgentResponse(message: '看懂了', actions: []));
+    await tester.pumpAndSettle();
+    expect(find.text('看懂了'), findsOneWidget);
   });
 }
 

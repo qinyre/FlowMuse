@@ -609,7 +609,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         final safeTop = padding.top + 16;
         final safeBottom = max(keyboardInset, padding.bottom + 120) + 16;
         final availableHeight = max(0.0, size.height - safeTop - safeBottom);
-        final panelWidth = min(360.0, size.width - 24);
+        final panelWidth = size.width >= 900
+            ? 420.0
+            : min(360.0, size.width - 24);
         final panelHeight = min(520.0, availableHeight);
         final verticalSpace = availableHeight - panelHeight;
         final panelTop = safeTop + min(verticalSpace, verticalSpace / 2 + 48);

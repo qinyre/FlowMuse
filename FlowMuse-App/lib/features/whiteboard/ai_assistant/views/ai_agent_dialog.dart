@@ -24,6 +24,9 @@ typedef AiAgentContextSnapshot = ({
 
 typedef AiAgentContextProvider = Future<AiAgentContextSnapshot> Function();
 
+/// 生成期间的客户端可知阶段；真实分阶段需 Repository 进度回调，先以近似状态呈现。
+enum _AiGenerateStage { preparing, generating }
+
 Future<void> showAiAgentDialog({
   required BuildContext context,
   required AiAgentRepository repository,
@@ -114,6 +117,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   bool _speechFinalCommitted = false;
   List<AiAgentConversationTurn> _conversation = const [];
   late AiAgentContextSnapshot _context;
+  _AiGenerateStage _stage = _AiGenerateStage.generating;
 
   @override
   void initState() {
@@ -246,18 +250,25 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         _speechState != SpeechRecognitionState.idle) {
       return;
     }
-    final context = widget.contextProvider != null
-        ? await widget.contextProvider!()
-        : _context;
     final isFollowUp = _response != null;
     final generation = ++_generation;
     final cancelToken = NativeHttpCancelToken();
     _cancelToken = cancelToken;
     setState(() {
-      _context = context;
+      _stage = _AiGenerateStage.preparing;
       _loading = true;
       _error = null;
       if (!isFollowUp) _selectedActions = const {};
+    });
+    final context = widget.contextProvider != null
+        ? await widget.contextProvider!()
+        : _context;
+    if (!mounted || generation != _generation || cancelToken.isCancelled) {
+      return;
+    }
+    setState(() {
+      _context = context;
+      _stage = _AiGenerateStage.generating;
     });
     try {
       final response = await widget.repository.run(
@@ -592,11 +603,15 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                   if (_loading) ...[
                     const SizedBox(height: AppSpacing.controlGap),
                     Text(
-                      response == null
-                          ? _context.texts.isEmpty
-                                ? '正在生成回复…'
-                                : '正在阅读笔记并生成操作…'
-                          : '正在根据追问修改…',
+                      _stage == _AiGenerateStage.preparing
+                          ? '正在准备上下文…'
+                          : response != null
+                          ? '正在根据追问修改…'
+                          : _context.attachments.isNotEmpty
+                          ? '正在结合选区图像与笔记内容生成…'
+                          : _context.texts.isEmpty
+                          ? '正在生成回复…'
+                          : '正在阅读笔记并生成操作…',
                     ),
                   ],
                   if (_error != null) ...[
