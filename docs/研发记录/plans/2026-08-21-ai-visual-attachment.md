@@ -61,7 +61,7 @@ FlowMuse 的 AI 笔记助手目前只能读取笔记标题与文本元素（`AiN
 - 新文件 `ai_assistant/models/ai_visual_attachment.dart`：
   - `@immutable class AiVisualAttachment { final String sourceLabel; final String mimeType; final Uint8List bytes; }`
   - 常量 `maxAiVisualAttachments = 3`、`maxAiVisualAttachmentBytes = 4 * 1024 * 1024`、`maxAiVisualAttachmentLongestSide = 1568`。
-  - `List<AiVisualAttachment> requireValidAiVisualAttachments(List<AiVisualAttachment> attachments)`：数量、单张字节、mime 白名单（仅 `image/png`）、非空字节校验，违反抛 `FormatException`（消息可操作）。
+  - `List<AiVisualAttachment> requireValidAiVisualAttachments(List<AiVisualAttachment> attachments)`：数量、单张字节、mime 白名单（仅 `image/png`）、PNG 8 字节魔数（防手工构造文件伪造 mime，见 execution §0 修订 7）、非空字节校验，违反抛 `FormatException`（消息可操作）。
 - 校验在两层执行：UI 添加附件时（即时反馈）与 `run()` 构建请求前（防绕过）。
 - 附件类**不实现 `toJson`**——它从不序列化、不入会话历史。
 
@@ -69,9 +69,9 @@ FlowMuse 的 AI 笔记助手目前只能读取笔记标题与文本元素（`AiN
 
 - **选区截图**：`selectedElements` 过滤 `!isDeleted` 后为空 → 捕获失败，消息"请先在画布选中要发送的内容"。非空 → `ExportBounds.compute(scene, selectedIds: ids, padding: 8)` 得 scene 矩形 → `exportRegionPng` 渲染（底色为当前画布背景色，含图片元素）。已知边界：截图内容为选区包围盒矩形内的**全部可见内容**（可能包含未选中的相邻元素与协作者笔迹，与用户画布所见一致）；分页模式下渲染被裁剪到所有页 bounds 并集 ∩ 选区矩形（实时画布同一 painter 同样裁剪，故"截图=画布所见"成立）。UI 以如实文案披露该语义，发送前缩略图供最终确认。
 - **快照一致性**：`ExportBounds.compute` 与 `painter.paint` 之间不得插入 await（paint 同步、`endRecording` 定格），防止捕获与渲染之间场景被撤销或远端协作改动穿透。
-- **图片元素预解码**：`resolveImages()` 对被 LRU 逐出（缓存上限 50）或未解码的 fileId 返回 null，会导致截图静默缺图。捕获前遍历与选区矩形相交的 `ImageElement`，对 `imageCache.peek(fileId)` 为空者用 `Scene.files[fileId].bytes` 经 `instantiateImageCodec` 解码并 `putImage` 预热；解码失败 → 捕获失败，消息"图片解码失败，请重试"。
+- **图片元素预解码**：`resolveImages()` 对被 LRU 逐出（缓存上限 50）或未解码的 fileId 返回 null，会导致截图静默缺图。捕获前由控制器公开方法 `prewarmRegionImages(Rect)` 遍历与选区矩形相交的 `ImageElement`，复用缓存既有原语 `decodeAndWait` 解码预热并以 `peek` 复核失败数；循环前 `markDecoding(相交子集)` 占位并暂停 `onImageDecoded` 回调、结束后恢复并单次 `notifyListeners()`——否则 await 窗口内每个解码完成都触发全画布重绘，`resolveImages` 对所有未缓存 fileId 并发启动解码（>50 页 PDF 场景即解码风暴 + LRU 挤掉刚预热条目），对齐 loadScene `_prewarmImageCache` 既有防护语义；预热属渲染缓存职责且需"失败计数"语义（`decodeAndWait` 对已失败 fileId 静默跳过），故归属控制器而非 ai_assistant 直接操作缓存（控制器虽有公开 getter `imageCache`，见 execution §0 修订 4）。存在失败 → 捕获失败，消息"图片解码失败，请重新打开笔记后重试"（失败标记本会话粘性、重试无法兑现，文案如实指向重开笔记）。
 - **当前 PDF 页**：当前页 = `pageForVisibleRect(viewport.visibleRect(canvasSize))`（把现有私有方法公开复用，规则不变）。返回 null（无限画布无页面）→ 失败，消息"当前笔记没有 PDF 页面"。找到页后取该页上 `isPdfBackground` 为真的 `ImageElement` → `Scene.files[fileId]`；元素或 bytes 缺失 → 失败，消息"当前页面不是 PDF 页"。原始 bytes 经归一化后成为附件，来源标签"PDF 第 N 页"（N = 页面 index + 1）。
-- **归一化** `normalizeAttachmentPng(Uint8List bytes)`：先经 `ui.ImageDescriptor`（或小尺寸首解）读取原始宽高比，再按目标档位以 `targetWidth/targetHeight` 直接解码，避免全尺寸解码的内存峰值；最长边 >1568 则等比缩至 1568，重编码 PNG；若仍 >4MiB，按 1568→1280→1024→768 逐级降最长边重试（有限 4 档，无死循环）；768 仍超限 → 失败，消息"图片过大，请缩小选区后重试"。只用 dart:ui API，不引入图像库；底色填充发生在渲染层（画布背景色），归一化保持原像素不再合成。
+- **归一化** `normalizeAttachmentPng(Uint8List bytes)`：已合规输入（≤1568 且 ≤4MiB）完全不解码、原样返回；先经 `ui.ImageDescriptor` 只读头部获取原始宽高，超限则按目标档位以 `targetWidth/targetHeight` 解码缩放（注：引擎对 PNG 无原生缩放解码，该分支仍会全尺寸解码一次，故设 `maxPixelCount`（默认 4096×4096）维度护栏拦截超大图，防解压炸弹式内存峰值）；最长边 >1568 则等比缩至 1568，重编码 PNG；若仍 >4MiB，按 1568→1280→1024→768 逐级降最长边重试（有限 4 档，无死循环）；768 仍超限 → 失败，消息"图片过大，请缩小选区后重试"。只用 dart:ui API，不引入图像库；底色填充发生在渲染层（画布背景色），归一化保持原像素不再合成。
 
 ### 3. 附件 PNG 纯净性
 
@@ -93,15 +93,15 @@ FlowMuse 的 AI 笔记助手目前只能读取笔记标题与文本元素（`AiN
   - 已添加附件显示为横向缩略图条：48px 预览 + 来源标签 + KiB 大小 + 移除按钮；
   - 追问（follow-up）保留附件，随每次请求重发；「清除对话」同时清空附件；
   - `_loading || _applying` 期间添加/移除禁用（与现有门控一致）。
-- 附件区下方固定隐私说明，如实披露选区截图语义："选区截图包含选区矩形内的全部可见内容（可能含未选中的相邻内容）；PDF 页附件为整页内容。仅发送你添加的 N 张图片，不会自动上传画布其他内容，发送前请确认。"
+- 附件区下方固定隐私说明，如实披露选区截图语义、PDF 页批注边界与追问重发："选区截图包含选区矩形内的全部可见内容（可能含未选中的相邻内容）；PDF 页附件为导入时的整页原始位图（不含白板批注）。仅发送你添加的 N 张图片，不会自动上传附件之外的画布图像内容（文字上下文仍按既有规则随请求发送）；追问时附件将随每次请求重新发送，直到移除或清除对话。发送前请确认。"
 - 捕获回调抛错（含上述业务失败消息）时写入面板既有 `_error` 展示，不打断面板。
 - `showAiAgentDialog` 与 `whiteboard_page` 的调用点：whiteboard_page 传入两个捕获回调；`showAiAgentDialog` 保持可选参数默认 null。
 
 ### 6. 错误与日志
 
-- 状态码到文案的映射提为纯函数 `aiVisualAttachmentError({required int statusCode, required bool hasAttachments}) → String?`：仅当 `hasAttachments` 且状态码 ∈ {400, 404, 413, 415, 422} 时返回视觉/体积错误文案——413 单独文案"图片附件超出服务大小限制，请减少附件或缩小图片后重试（HTTP 413）"，其余返回"当前模型可能不支持图片输入，请移除图片附件后重试，或更换支持视觉的模型（HTTP xxx）"；其他状态码（含 401/403 鉴权失败）返回 null，走现有通用文案，避免把密钥错误误报为视觉能力问题。
+- 状态码到文案的映射提为纯函数 `aiVisualAttachmentError({required int statusCode, required bool hasAttachments}) → String?`：仅当 `hasAttachments` 且状态码 ∈ {400, 413, 415, 422} 时返回视觉/体积错误文案——413 单独文案"图片附件超出服务大小限制，请减少附件或缩小图片后重试（HTTP 413）"，其余返回"当前模型可能不支持图片输入，请移除图片附件后重试，或更换支持视觉的模型（HTTP xxx）"；其他状态码（含 401/403 鉴权失败与 404 地址/模型名配置错误——报"不支持图片输入"会把用户引向错误排查方向）返回 null，走现有通用文案，避免把密钥/配置错误误报为视觉能力问题。
 - `_errorMessage` 增加 `TimeoutException` 分支："AI 服务响应超时，请检查网络后重试"。平台注记：鸿蒙通道超时表现为 `PlatformException`（原生 promise reject）；package:http 回退路径当前未应用超时参数，该分支属**防御性保留，暂无实际触发源**，保留以为后续 HTTP 层完善超时预留出口。鸿蒙侧超时落入通用兜底文案，属已知边界。
-- 新增 `[AiAgent]` debugPrint 日志（参照 `[InkRecognition]` 模式）：附件数量、单张字节数、请求体总 KiB、HTTP 状态码、耗时毫秒。**不打印** header、API Key、指令/上下文/响应正文、图片字节或 base64 片段。
+- 新增 `[AiAgent]` debugPrint 日志（参照 `[InkRecognition]` 模式）：附件数量、请求体规模（KChars 码元口径，非精确 UTF-8 字节）、HTTP 状态码、耗时毫秒。**不打印** header、API Key、指令/上下文/响应正文、图片字节或 base64 片段。
 
 ## 代码改动
 
@@ -134,9 +134,9 @@ FlowMuse 的 AI 笔记助手目前只能读取笔记标题与文本元素（`AiN
 
 改动：
 
-- 控制器新增 `Future<Uint8List?> exportRegionPng(Rect sceneBounds, {double maxLongestSide = 1568})`：照 `exportCoverThumbnail` 范式——目标像素尺寸由矩形宽高比与最长边上限推得，`ViewportState(offset: sceneBounds.topLeft, zoom: 目标宽/矩形宽)` + `StaticCanvasPainter(scene, adapter, viewport, layout, resolvedImages: resolveImages(), gridSize, isDarkBackground: 与实时画布同源取值, renderPageShadows: false)` + 当前画布背景色填充 + PNG bytes。默认值用 editor_core 本地字面量，**editor_core 不 import ai_assistant**。不传 `contentBounds`（解除 PDF 内容边界裁剪；分页模式下 painter 仍会裁剪到页 bounds 并集，与实时画布行为一致）。**禁止调用 `PngMetadata.embedMarkdrawData`**（见设计不变量 3）。
+- 控制器新增 `Future<Uint8List?> exportRegionPng(Rect sceneBounds, {double maxLongestSide = 1568})`：照 `exportCoverThumbnail` 范式——目标像素尺寸由矩形宽高比与最长边上限推得，`ViewportState(offset: sceneBounds.topLeft, zoom: 目标宽/矩形宽)` + `StaticCanvasPainter(scene, adapter, viewport, layout, resolvedImages: resolveImages(), gridSize, isDarkBackground: 与实时画布同源取值, renderPageShadows: false)` + 当前画布背景色填充 + PNG bytes。默认值用 editor_core 本地字面量，**editor_core 不 import ai_assistant**。传 `contentBounds: _contentBounds` 与 `skipMathText: true`（与实时画布 `editor_canvas.dart:404-426` 同源取值；分页模式下 painter 另会裁剪到页 bounds 并集——三处同源保证"截图=所见"）。**禁止调用 `PngMetadata.embedMarkdrawData`**（见设计不变量 3）。
 - 将 `_pageForVisibleRect` 公开为 `pageForVisibleRect(Rect visible)`（实现不变，仅改可见性；内部调用点同步改名）。
-- `visual_attachment_capture.dart`（依赖方向 ai_assistant → editor_core，合法）：`normalizeAttachmentPng`、`captureSelectionAttachment(MarkdrawController)`、`captureCurrentPdfPageAttachment(MarkdrawController)`，失败一律抛 `StateError`（消息即上文用户文案）；选区捕获含图片元素预解码预热（见设计不变量 2）。
+- `visual_attachment_capture.dart`（依赖方向 ai_assistant → editor_core，合法）：`normalizeAttachmentPng`、`captureSelectionAttachment(MarkdrawController)`、`captureCurrentPdfPageAttachment(MarkdrawController)`，失败一律抛 `StateError`（消息即上文用户文案）；选区捕获先调控制器公开方法 `prewarmRegionImages(Rect)` 预热（见设计不变量 2）；`normalizeAttachmentPng` 带可选 `int byteLimit = maxAiVisualAttachmentBytes` 参数（生产行为不变，供测试注入触发超限分支）。
 - `whiteboard_page.dart`：新增两个回调闭包组合 controller 与捕获函数，传入 `AiAgentPanel`。
 
 ### P4 UI 附件条
@@ -149,11 +149,11 @@ FlowMuse 的 AI 笔记助手目前只能读取笔记标题与文本元素（`AiN
 
 ### P5 测试与文档
 
-新增/修改测试（镜像 lib 结构，中文描述，Given-When-Then 分段）：
+新增/修改测试（既有测试目录为扁平结构，中文描述，Given-When-Then 分段）：
 
-- `test/features/whiteboard/ai_assistant/models/ai_visual_attachment_test.dart`：第 4 张拒绝、>4MiB 拒绝、非 png 拒绝、空字节拒绝、合法列表原样通过；`aiVisualAttachmentError` 纯函数——400/404/415/422 且带附件返回视觉文案、413 返回体积文案，401/403 与不带附件时返回 null。
-- `test/features/whiteboard/ai_assistant/repositories/ai_agent_request_test.dart`：0 附件时 `jsonDecode(body)` 与字面量期望 Map **逐字段 deep-equals**（覆盖 model、messages 两元素的每个字段、tools、tool_choice、temperature，对照现状 `run()` 的 body 构造），锁定回归基线；1 张/3 张附件时 content parts 结构、data URL 前缀 `data:image/png;base64,`、顺序与列表一致、system 提示包含图片不可信声明；base64 断言做**往返验证**——`base64Decode(url.substring(前缀长度))` 等于附件原始字节；超限附件抛 `FormatException` 且不发网络。
-- `test/features/whiteboard/ai_assistant/repositories/visual_attachment_capture_test.dart`：合成 PNG 归一化——超长边被缩到 1568、体积收敛 ≤4MiB 或在 768 档明确失败；空选区、非 PDF 页、无限画布三种失败分支的消息稳定；选区内含图片元素且缓存被逐出时预解码后截图仍含图。
+- `test/features/whiteboard/ai_assistant/ai_visual_attachment_test.dart`：第 4 张拒绝、>4MiB 拒绝、非 png 拒绝（mime 白名单 + PNG 魔数两用例）、空字节拒绝、合法列表原样通过；`aiVisualAttachmentError` 纯函数——400/415/422 且带附件返回视觉文案、413 返回体积文案，401/403/404 与不带附件时返回 null。
+- `test/features/whiteboard/ai_assistant/ai_agent_request_test.dart`：0 附件时 `jsonDecode(body)` 与字面量期望 Map **逐字段 deep-equals**（覆盖 model、messages 两元素的每个字段、tools、tool_choice、temperature，对照现状 `run()` 的 body 构造），锁定回归基线；1 张/3 张附件时 content parts 结构、data URL 前缀 `data:image/png;base64,`、顺序与列表一致、system 提示包含图片不可信声明；base64 断言做**往返验证**——`base64Decode(url.substring(前缀长度))` 等于附件原始字节；超限附件在 `run()` 内先于读配置与网络抛 `FormatException`。
+- `test/features/whiteboard/ai_assistant/visual_attachment_capture_test.dart`：合成 PNG 归一化——超长边被缩到 1568、体积收敛 ≤4MiB 或在 768 档明确失败（经 `byteLimit` 注入稳定触发）；空选区、非 PDF 页、无限画布三种失败分支的消息稳定；选区内含图片元素且缓存被逐出时预解码后截图仍含图。
 - `test/features/whiteboard/editor_core/export_region_png_test.dart`：构造含文本+笔迹+图片元素的 controller，导出非空 PNG、最长边 ≤ 上限、宽高比与源矩形一致；图片元素经 `resolvedImages` 真实渲染（对比含图/不含图字节差异非零）；**输出 PNG 不含 markdraw tEXt 元数据 chunk**（用 `PngMetadata` 反验）；分页模式下跨页选区截图被裁剪到页并集 ∩ 选区矩形。
 - `test/features/whiteboard/ai_assistant/views/ai_agent_dialog_test.dart` 增补：附件条渲染与移除、达上限禁用、捕获回调失败显示错误消息、不传回调时附件区不渲染（旧路径兼容）、`_loading` 期间附件添加/移除按钮禁用；**同步更新 `_FakeAiAgentRepository` 的 `run()` 签名**（新增可选 `attachments` 参数，避免 invalid override）。
 
@@ -229,3 +229,11 @@ git diff --check
 4. 深色画布下网格线配色——`exportRegionPng` 增加 `isDarkBackground` 与实时画布同源取值。
 5. 验收门禁 analyze 范围改为全量 `flutter analyze`——已改。
 6. 文档编号与行号笔误——已修正。
+
+### 详细化阶段修订（2026-08-21，详见 execution 计划 §0）
+
+总体方案展开为详细执行计划 `2026-08-21-ai-visual-attachment-execution.md` 时，逐行核实代码发现 4 处偏差并已同步修订本文：① `exportRegionPng` 改为传 `contentBounds` 与 `skipMathText: true`（原"不传 contentBounds"与实时画布行为不符，破坏截图=所见）；② 图片预热归属控制器公开方法 `prewarmRegionImages`（原描述让 ai_assistant 捕获模块直接访问私有 `_imageCache`，不可实现）；③ 测试路径改为既有扁平目录结构；④ `normalizeAttachmentPng` 增加 `byteLimit` 可测性参数。
+
+详细执行计划第一轮三路子代理对抗审查（可行性 / 性能 / 安全与跨端，结论均 PASS-WITH-FIXES）完成后，以下修订已同步进本文：⑤ 附件校验增加 PNG 8 字节魔数（设计不变量 1）；⑥ 404 移出视觉错误映射、落通用文案（设计不变量 6）；⑦ 隐私文案补齐追问重发与 PDF 批注披露（§5）；⑧ 预热失败文案改为"请重新打开笔记后重试"并更正预热归属理由（设计不变量 2）。吸收 14 处、驳回 3 项建议（compute() isolate、PDF 强制重编码、失败缓存清理 API），明细见 execution 计划 §7 审查记录。
+
+第二、三轮审查（三路全新子代理复审 + 增量复核）另吸收：预热防护——`markDecoding(相交子集)` 占位 + 暂停 `onImageDecoded` 回调 + 尾部单次刷新（设计不变量 2 已同步）；`maxPixelCount` 解压炸弹护栏与归一化措辞如实化（不变量 2 归一化段已同步）；隐私文案"画布图像内容"措辞（§5 已同步）；日志 KChars 口径（§6 已同步）等共 10 项，驳回 1 项（"覆写可省略可选命名参数"之说被 dart analyze 实探证伪，execution §1 原表述正确）。测试图片用例一律经 `applyResult` 注入未缓存图片（loadScene 会自动预热、与被测逻辑竞态）。**三轮对抗审查闭环：子代理无反驳。**
