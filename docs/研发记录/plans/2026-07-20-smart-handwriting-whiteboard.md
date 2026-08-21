@@ -47,8 +47,8 @@ AI 解释、识别或整理用户明确选择的内容
 
 当前 `feature/github-actions-quality` 已包含 GitHub Actions 质量门禁以及 Flutter 版本修正。正式开始本计划前：
 
-- [ ] 将 `feature/github-actions-quality` 合入 `main`。
-- [ ] 确认 `main` 工作区干净且 GitHub Actions 通过。
+- [x] 将 `feature/github-actions-quality` 合入 `main`。（PR #1，`a035317`）
+- [x] 确认 `main` 工作区干净且 GitHub Actions 通过。（Quality run #28 于 `f047615` 通过）
 - [ ] 两人均从同一个最新 `main` 创建功能分支。
 - [ ] 确认正式鸿蒙 Bundle ID、vendor 和签名证书主体。
 - [ ] 准备比赛使用的固定 PDF、固定手写内容和可用 AI 测试账号。
