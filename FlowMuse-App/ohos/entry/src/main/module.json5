@@ -37,12 +37,12 @@
             "uris": [
               {
                 "scheme": "file",
-                "utd": "com.example.flowmuse.markdraw",
+                "utd": "com.flowmuse.app.markdraw",
                 "maxFileSupported": 1
               },
               {
                 "scheme": "file",
-                "utd": "com.example.flowmuse.excalidraw",
+                "utd": "com.flowmuse.app.excalidraw",
                 "maxFileSupported": 1
               }
             ]
@@ -52,12 +52,12 @@
             "uris": [
               {
                 "scheme": "file",
-                "type": "com.example.flowmuse.markdraw",
+                "type": "com.flowmuse.app.markdraw",
                 "linkFeature": "FileOpen"
               },
               {
                 "scheme": "file",
-                "type": "com.example.flowmuse.excalidraw",
+                "type": "com.flowmuse.app.excalidraw",
                 "linkFeature": "FileOpen"
               },
               {

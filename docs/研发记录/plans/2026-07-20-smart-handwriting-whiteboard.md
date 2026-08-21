@@ -228,8 +228,8 @@ B 线第一阶段不修改 `whiteboard_page.dart` 和 `markdraw_controller.dart`
 
 ### B1. 鸿蒙应用身份和发布信息
 
-- [ ] 将 `com.example.flowmuse` 替换为确认后的正式 Bundle ID。
-- [ ] 更新 `vendor: example`、UTD 类型 ID 和外部文档通道类型。
+- [x] 将 `com.example.flowmuse` 替换为正式 Bundle ID `com.flowmuse.app`。
+- [x] 将 vendor 更新为 `FlowMuse`，并同步 UTD 类型 ID 和外部文档通道类型。
 - [ ] 替换 `module description`、`EntryAbility_desc` 等模板文案。
 - [ ] 更新版本号、应用图标、启动页和服务卡片名称。
 - [ ] 更新 `pubspec.yaml` 的模板 description。

@@ -16,10 +16,10 @@ export class ExternalDocumentChannel {
 
   static utdForExtension(ext: string, isImage: boolean): string {
     if (ext === 'markdraw') {
-      return 'com.example.flowmuse.markdraw';
+      return 'com.flowmuse.app.markdraw';
     }
     if (ext === 'excalidraw') {
-      return 'com.example.flowmuse.excalidraw';
+      return 'com.flowmuse.app.excalidraw';
     }
     const fallback = isImage
       ? utd.UniformDataType.IMAGE

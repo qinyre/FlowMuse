@@ -58,7 +58,6 @@ export class HttpChannel {
         expectDataType: http.HttpDataType.ARRAY_BUFFER,
         connectTimeout: (args.get('connectTimeoutMs') as number) ?? 8000,
         readTimeout: (args.get('readTimeoutMs') as number) ?? 15000,
-        usingProtocol: http.HttpProtocol.HTTP1_1,
       };
       if (body) {
         options.extraData = body;
