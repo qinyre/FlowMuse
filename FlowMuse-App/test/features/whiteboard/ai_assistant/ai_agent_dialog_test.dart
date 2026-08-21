@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_prompt_store.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/views/ai_agent_dialog.dart';
@@ -341,6 +342,7 @@ class _FakeAiAgentRepository extends AiAgentRepository {
   final AiAgentResponse response;
   final conversations = <List<AiAgentConversationTurn>>[];
   final receivedTexts = <List<AiNoteText>>[];
+  final receivedAttachments = <List<AiVisualAttachment>>[];
   NativeHttpCancelToken? cancelToken;
 
   @override
@@ -349,10 +351,12 @@ class _FakeAiAgentRepository extends AiAgentRepository {
     required String noteTitle,
     required List<AiNoteText> texts,
     List<AiAgentConversationTurn> conversation = const [],
+    List<AiVisualAttachment> attachments = const [],
     NativeHttpCancelToken? cancelToken,
   }) async {
     conversations.add(List.unmodifiable(conversation));
     receivedTexts.add(texts);
+    receivedAttachments.add(attachments);
     this.cancelToken = cancelToken;
     if (completer != null) return completer!.future;
     if (conversation.isNotEmpty) {
