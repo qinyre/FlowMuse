@@ -85,7 +85,7 @@ feature/harmony-ai-experience
 
 ### 2. 受限白板整理动作
 
-多模态输入只扩展上下文，不扩展模型的写入权限。继续仅允许 `rename_note`、`insert_text` 和 `generate_mindmap`；模型只返回受限内容，客户端负责布局、ID、样式、绑定和一次性场景提交。
+多模态输入只扩展上下文，不扩展模型的写入权限。继续仅允许 `rename_note`、`insert_text`、`generate_mindmap` 和 `smart_layout`（智能排版，无参数触发既有手写识别排版链路）；模型只返回受限内容，客户端负责布局、ID、样式、绑定和一次性场景提交。
 
 - 标题沿用现有 100 字符限制，插入文字沿用现有长度和分页限制。
 - 思维导图继续限制最多 4 层、50 个节点、单节点最多 100 字符。
@@ -172,7 +172,7 @@ B 线在 A 线合并前不修改上述文件。若必须接入公共回调，由
 
 ### A4. 受限整理动作接线
 
-- [ ] 保持 `rename_note`、`insert_text`、`generate_mindmap` 三种白名单 action，不新增学习类 action。
+- [ ] 保持 `rename_note`、`insert_text`、`generate_mindmap`、`smart_layout` 四种白名单 action，不新增学习类 action。
 - [ ] 多模态上下文下继续复用同一 action parser 和严格校验器。
 - [ ] 用户编辑预览后重新走同一校验器。
 - [ ] 拒绝未知字段、非法 JSON、超长内容和超量导图节点。
@@ -328,8 +328,8 @@ B 线第一阶段不修改 `whiteboard_page.dart` 和 `markdraw_controller.dart`
 
 ### Phase 0：共同冻结契约
 
-- [ ] 合并 GitHub Actions 分支。
-- [ ] 冻结 `AiVisualAttachment`、受限白板整理动作和最近白板状态。
+- [x] 合并 GitHub Actions 分支。
+- [x] 冻结 `AiVisualAttachment`、受限白板整理动作和最近白板状态。（2026-08-21 评审冻结：白名单按代码现状修正为含 `smart_layout` 的四动作；服务卡片元数据与 `RecentWhiteboardSnapshot` 现有实现一致）
 - [ ] 确认正式 Bundle ID 和比赛演示环境。
 
 ### Phase 1：完全并行
