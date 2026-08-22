@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
@@ -15,6 +15,18 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  const kTinyPng =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+  AiVisualAttachment attachmentOf(
+    String label, [
+    AiVisualAttachmentKind kind = AiVisualAttachmentKind.selection,
+  ]) => AiVisualAttachment(
+    sourceLabel: label,
+    mimeType: 'image/png',
+    bytes: base64Decode(kTinyPng),
+    kind: kind,
+  );
   testWidgets('语音识别结果填入 AI 指令且不会重复追加', (tester) async {
     final speech = _FakeSpeechRecognitionService();
     addTearDown(speech.dispose);
@@ -236,7 +248,6 @@ void main() {
       texts: [AiNoteText(id: 'text-a', text: '旧选区')],
       truncated: false,
       label: '当前选区（1 个文本框）',
-      attachments: <AiVisualAttachment>[],
       hasSelection: false,
     );
     final repository = _FakeAiAgentRepository();
@@ -263,7 +274,6 @@ void main() {
       texts: [AiNoteText(id: 'text-b', text: '新选区')],
       truncated: false,
       label: '当前选区（1 个文本框）',
-      attachments: <AiVisualAttachment>[],
       hasSelection: false,
     );
     await tester.tap(find.text('发送'));
@@ -335,23 +345,22 @@ void main() {
     expect(find.text('思维导图超出页面，请减少分支后重试'), findsOneWidget);
   });
 
-  testWidgets('带附件时显示数量与隐私提示并传给仓库', (tester) async {
+  testWidgets('开面板自动捕获的附件显示缩略条、隐私文案并随请求发送', (tester) async {
     final repository = _FakeAiAgentRepository();
-    final attachment = AiVisualAttachment(
-      sourceLabel: '当前选区',
-      mimeType: 'image/png',
-      bytes: Uint8List.fromList([1, 2, 3]),
-      kind: AiVisualAttachmentKind.selection,
-    );
     await _openDialog(
       tester,
       repository: repository,
-      attachments: [attachment],
+      onCaptureSelection: () async => attachmentOf('当前选区'),
       onApply: (_) async {},
     );
 
-    expect(find.textContaining('1 张选区截图'), findsOneWidget);
-    expect(find.textContaining('模型服务'), findsOneWidget);
+    expect(find.text('当前选区'), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.textContaining('仅发送附件条中显示的 1 张图片'), findsOneWidget);
+    expect(
+      find.textContaining('会随打开面板或点击视觉指令自动加入或更新'),
+      findsOneWidget,
+    );
 
     await tester.enterText(find.byType(TextField).first, '解释这里');
     await tester.tap(find.text('发送'));
@@ -382,19 +391,13 @@ void main() {
     );
   });
 
-  testWidgets('带附件生成中显示视觉阶段状态并在完成后渲染回复', (tester) async {
+  testWidgets('附件生成中显示视觉阶段状态并在完成后渲染回复', (tester) async {
     final completer = Completer<AiAgentResponse>();
     final repository = _FakeAiAgentRepository(completer: completer);
-    final attachment = AiVisualAttachment(
-      sourceLabel: '当前选区',
-      mimeType: 'image/png',
-      bytes: Uint8List.fromList([1, 2, 3]),
-      kind: AiVisualAttachmentKind.selection,
-    );
     await _openDialog(
       tester,
       repository: repository,
-      attachments: [attachment],
+      onCaptureSelection: () async => attachmentOf('当前选区'),
       onApply: (_) async {},
     );
 
@@ -407,6 +410,186 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('看懂了'), findsOneWidget);
   });
+
+  testWidgets('快捷指令捕获在途时点发送，请求等待捕获完成后携带附件', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    var selectionCalls = 0;
+    final refreshCapture = Completer<AiVisualAttachment?>();
+    await _openDialog(
+      tester,
+      repository: repository,
+      onCaptureSelection: () {
+        selectionCalls++;
+        if (selectionCalls == 1) {
+          return Future.value(attachmentOf('开面板截图'));
+        }
+        return refreshCapture.future;
+      },
+      hasSelection: true,
+      onApply: (_) async {},
+    );
+    // 开面板被动捕获（第 1 次）完成。
+    await tester.pumpAndSettle();
+
+    // 点击快捷指令触发刷新捕获（第 2 次，挂起），随后立即发送。
+    await tester.tap(find.text('解释这里'));
+    await tester.pump();
+    await tester.tap(find.text('发送'));
+    await tester.pump();
+
+    refreshCapture.complete(attachmentOf('刷新后截图'));
+    await tester.pumpAndSettle();
+
+    expect(repository.receivedAttachments.last, hasLength(1));
+    expect(repository.receivedAttachments.last.single.sourceLabel, '刷新后截图');
+  });
+
+  testWidgets('在途捕获失败时移除过期槽并以文字上下文完成发送', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    var selectionCalls = 0;
+    final refreshCapture = Completer<AiVisualAttachment?>();
+    await _openDialog(
+      tester,
+      repository: repository,
+      onCaptureSelection: () {
+        selectionCalls++;
+        if (selectionCalls == 1) {
+          return Future.value(attachmentOf('开面板截图'));
+        }
+        return refreshCapture.future;
+      },
+      hasSelection: true,
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('开面板截图'), findsOneWidget);
+
+    // 点击快捷指令触发刷新捕获（指令由 chip 填入），随后立即发送。
+    await tester.tap(find.text('解释这里'));
+    await tester.pump();
+    await tester.tap(find.text('发送'));
+    await tester.pump();
+
+    refreshCapture.completeError(StateError('图片解码失败，请重新打开笔记后重试'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('本次发送将以文字上下文为主'), findsOneWidget);
+    expect(find.text('开面板截图'), findsNothing);
+    expect(repository.receivedAttachments.last, isEmpty);
+  });
+
+  testWidgets('快捷指令遇纯文本选区时移除活动槽且手动附件保留', (tester) async {
+    var selectionCalls = 0;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onCaptureSelection: () {
+        selectionCalls++;
+        if (selectionCalls == 1) {
+          return Future.value(attachmentOf('开面板截图'));
+        }
+        return Future<AiVisualAttachment?>.value(null); // 用户改选纯文本
+      },
+      onCaptureCurrentPdfPage: () async =>
+          attachmentOf('PDF 第 9 页', AiVisualAttachmentKind.pdfPage),
+      hasSelection: true,
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    // 手动添加 PDF 页（追加式，不登记活动槽）。
+    await tester.tap(find.text('PDF 页'));
+    await tester.pumpAndSettle();
+    expect(find.text('PDF 第 9 页'), findsOneWidget);
+
+    // 改选纯文本后点视觉快捷指令：null → 活动槽移除，手动附件不动。
+    await tester.tap(find.text('解释这里'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('开面板截图'), findsNothing);
+    expect(find.text('PDF 第 9 页'), findsOneWidget);
+    expect(find.textContaining('仅发送附件条中显示的 1 张图片'), findsOneWidget);
+  });
+
+  testWidgets('满额且槽空时快捷指令仅提示不驱逐手动附件', (tester) async {
+    var pdfCalls = 0;
+    var selectionCalls = 0;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onCaptureSelection: () {
+        selectionCalls++;
+        if (selectionCalls == 1) {
+          return Future<AiVisualAttachment?>.value(null); // 开面板无视觉选区
+        }
+        return Future.value(attachmentOf('新选区')); // 快捷指令捕获返回真实图
+      },
+      onCaptureCurrentPdfPage: () {
+        pdfCalls++;
+        return Future.value(
+          attachmentOf('PDF 第 $pdfCalls 页', AiVisualAttachmentKind.pdfPage),
+        );
+      },
+      hasSelection: true,
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.text('PDF 页'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.textContaining('仅发送附件条中显示的 3 张图片'), findsOneWidget);
+
+    await tester.tap(find.text('解释这里'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('附件已满，移除一张以附带当前选区'), findsOneWidget);
+    expect(find.textContaining('仅发送附件条中显示的 3 张图片'), findsOneWidget);
+    expect(find.text('PDF 第 1 页'), findsOneWidget);
+    expect(find.text('PDF 第 3 页'), findsOneWidget);
+  });
+
+  testWidgets('槽占用时快捷指令替换为计数中性操作不受满额限制', (tester) async {
+    var selectionCalls = 0;
+    var pdfCalls = 0;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onCaptureSelection: () {
+        selectionCalls++;
+        return Future.value(
+          attachmentOf(selectionCalls == 1 ? '旧选区' : '新选区'),
+        );
+      },
+      onCaptureCurrentPdfPage: () {
+        pdfCalls++;
+        return Future.value(
+          attachmentOf('PDF 第 $pdfCalls 页', AiVisualAttachmentKind.pdfPage),
+        );
+      },
+      hasSelection: true,
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('旧选区'), findsOneWidget);
+
+    await tester.tap(find.text('PDF 页'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PDF 页'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('仅发送附件条中显示的 3 张图片'), findsOneWidget);
+
+    // 条已满额但槽占用：替换（移除旧槽+加入新槽）计数中性，不受限。
+    await tester.tap(find.text('解释这里'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('旧选区'), findsNothing);
+    expect(find.text('新选区'), findsOneWidget);
+    expect(find.text('PDF 第 1 页'), findsOneWidget);
+    expect(find.text('PDF 第 2 页'), findsOneWidget);
+    expect(find.textContaining('仅发送附件条中显示的 3 张图片'), findsOneWidget);
+  });
 }
 
 Future<void> _openDialog(
@@ -414,7 +597,8 @@ Future<void> _openDialog(
   required AiAgentRepository repository,
   required Future<void> Function(AiAgentResponse) onApply,
   List<AiNoteText> texts = const [AiNoteText(id: 'text-1', text: '测试内容')],
-  List<AiVisualAttachment> attachments = const [],
+  Future<AiVisualAttachment?> Function()? onCaptureSelection,
+  Future<AiVisualAttachment?> Function()? onCaptureCurrentPdfPage,
   bool hasSelection = false,
 }) async {
   await tester.pumpWidget(
@@ -427,8 +611,9 @@ Future<void> _openDialog(
             promptStore: AiPromptStore(_MemorySettings()),
             noteTitle: '测试笔记',
             texts: texts,
-            attachments: attachments,
             hasSelection: hasSelection,
+            onCaptureSelection: onCaptureSelection,
+            onCaptureCurrentPdfPage: onCaptureCurrentPdfPage,
             onApply: onApply,
           ),
           child: const Text('打开'),

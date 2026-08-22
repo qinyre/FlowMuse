@@ -45,7 +45,6 @@ import '../../../shared/utils/ui_lifecycle.dart';
 import '../../color_picker/pen_color_picker_channel.dart';
 import '../service_widget/recent_whiteboard_sync_coordinator.dart';
 import '../ai_assistant/models/ai_agent_models.dart';
-import '../ai_assistant/models/ai_visual_attachment.dart';
 import '../ai_assistant/repositories/ai_agent_repository.dart';
 import '../ai_assistant/repositories/ai_prompt_store.dart';
 import '../ai_assistant/repositories/visual_attachment_capture.dart';
@@ -632,7 +631,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               texts: initialContext.texts,
               contextTruncated: initialContext.truncated,
               contextLabel: initialContext.label,
-              attachments: initialContext.attachments,
               hasSelection: initialContext.hasSelection,
               onCaptureSelection: () =>
                   captureSelectionAttachment(_markdrawController),
@@ -694,14 +692,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               ? '当前笔记（暂无文字）'
               : '整篇笔记（${sourceTexts.length} 个文本框）'
         : '当前选区（${selectedTexts.length} 个文本框）';
-    // 视觉附件改由面板经 onCaptureSelection/onCaptureCurrentPdfPage 回调
-    // 驱动捕获（T5' 接线）；快照 attachments 字段恒空保留，字段删除属 T6'。
+    // 视觉附件由面板经 onCaptureSelection/onCaptureCurrentPdfPage 回调
+    // 驱动捕获并驻留附件条状态（T6'），快照不再承载附件。
     return (
       noteTitle: noteTitle,
       texts: noteContext.texts,
       truncated: noteContext.truncated,
       label: contextLabel,
-      attachments: const <AiVisualAttachment>[],
       hasSelection: selectedTexts.isNotEmpty || visualSelected.isNotEmpty,
     );
   }
