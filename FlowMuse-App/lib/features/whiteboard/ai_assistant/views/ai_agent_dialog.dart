@@ -301,7 +301,9 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     if (_loading || _applying || _capturing) return;
     if (scene == _AiCaptureScene.manual &&
         _attachments.length >= maxAiVisualAttachments) {
-      setState(() => _error = '最多添加 $maxAiVisualAttachments 张图片');
+      // 引导性提示走内联样式而非错误容器（hybrid §1.2）；chips 满额即禁用，
+      // 此守卫仅为纵深防御。
+      setState(() => _attachmentNotice = '最多添加 $maxAiVisualAttachments 张图片');
       return;
     }
     final task = _runCaptureTask(capture, scene);
@@ -334,8 +336,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       switch (scene) {
         case _AiCaptureScene.passive:
           if (attachment == null) {
-            // 无视觉选区：静默不动作（§1.2 表）。
-            setState(() {});
+            // 无视觉选区：静默不动作（§1.2 表）；finally 的 _capturing
+            // 复位已触发重建，无需空 setState。
             return;
           }
           setState(() {
@@ -350,9 +352,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
           _replaceActiveSelectionSlot(attachment);
         case _AiCaptureScene.manual:
           if (attachment == null) {
-            setState(
-              () => _attachmentNotice = '当前选区没有可截图的视觉内容',
-            );
+            setState(() => _attachmentNotice = '当前选区没有可截图的视觉内容');
             return;
           }
           setState(() => _attachments = [..._attachments, attachment]);
@@ -373,7 +373,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
             _error =
                 '$message（本次发送将以文字上下文为主，'
                 '可能无法针对选区内容回答；可重试或修改指令）';
-          });        case _AiCaptureScene.manual:
+          });
+        case _AiCaptureScene.manual:
           setState(() => _error = message);
       }
     } finally {
@@ -385,20 +386,23 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   /// 槽空且已满则提示不驱逐。手动添加的附件一律不动。
   void _replaceActiveSelectionSlot(AiVisualAttachment attachment) {
     final slot = _activeSelectionSlot;
-    if (slot != null) {
-      final index = _attachments.indexOf(slot);
-      _activeSelectionSlot = attachment;
+    final index = slot == null ? -1 : _attachments.indexOf(slot);
+    if (index >= 0) {
       setState(() {
         _attachments = [..._attachments]..[index] = attachment;
+        _activeSelectionSlot = attachment;
       });
       return;
     }
+    // 槽空（或不变量被破坏的脏引用——此处一并清弃）。
     if (_attachments.length >= maxAiVisualAttachments) {
       setState(() => _attachmentNotice = '附件已满，移除一张以附带当前选区');
       return;
     }
-    _activeSelectionSlot = attachment;
-    setState(() => _attachments = [..._attachments, attachment]);
+    setState(() {
+      _attachments = [..._attachments, attachment];
+      _activeSelectionSlot = attachment;
+    });
   }
 
   /// 按引用同一移除活动槽附件；无槽时为幂等空操作。
@@ -697,21 +701,22 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     spacing: 4,
                     runSpacing: 4,
                     children: [
-                      for (final shortcut in (_context.hasSelection
-                          ? const {
-                              '解释这里': '解释这里的内容',
-                              '检查公式': '检查这里的公式是否正确，如有错误请指出',
-                              '整理文字': '整理这里的文字内容',
-                              '整理成导图': '把这里的内容整理成思维导图',
-                            }
-                          : const {
-                              '总结': '总结当前笔记',
-                              '待办': '提取待办事项',
-                              '大纲': '生成结构化大纲',
-                              '思维导图': '根据当前内容生成思维导图',
-                              '手写排版': '智能排版当前手写内容',
-                            })
-                          .entries)
+                      for (final shortcut
+                          in (_context.hasSelection
+                                  ? const {
+                                      '解释这里': '解释这里的内容',
+                                      '检查公式': '检查这里的公式是否正确，如有错误请指出',
+                                      '整理文字': '整理这里的文字内容',
+                                      '整理成导图': '把这里的内容整理成思维导图',
+                                    }
+                                  : const {
+                                      '总结': '总结当前笔记',
+                                      '待办': '提取待办事项',
+                                      '大纲': '生成结构化大纲',
+                                      '思维导图': '根据当前内容生成思维导图',
+                                      '手写排版': '智能排版当前手写内容',
+                                    })
+                              .entries)
                         ActionChip(
                           label: Text(shortcut.key),
                           visualDensity: VisualDensity.compact,
@@ -836,10 +841,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                         height: 56,
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
-                          itemCount:
-                              _attachments.length + (_capturing ? 1 : 0),
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(width: 8),
+                          itemCount: _attachments.length + (_capturing ? 1 : 0),
+                          separatorBuilder: (_, _) => const SizedBox(width: 8),
                           itemBuilder: (context, index) {
                             if (index >= _attachments.length) {
                               // 捕获在途占位项：知情窗口内发送前可见。
@@ -864,9 +867,9 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                     const SizedBox(width: 6),
                                     Text(
                                       '截取中…',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.labelSmall,
                                     ),
                                   ],
                                 ),
@@ -894,9 +897,9 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                     children: [
                                       Text(
                                         attachment.sourceLabel,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall,
                                       ),
                                       Text(
                                         attachment.sizeLabel,
@@ -904,8 +907,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                             .textTheme
                                             .labelSmall
                                             ?.copyWith(
-                                              color:
-                                                  colors.onSurfaceVariant,
+                                              color: colors.onSurfaceVariant,
                                             ),
                                       ),
                                     ],
@@ -913,6 +915,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                   IconButton(
                                     visualDensity: VisualDensity.compact,
                                     tooltip: '移除图片',
+                                    key: const ValueKey('ai-attachment-remove'),
                                     onPressed:
                                         _loading || _applying || _capturing
                                         ? null
@@ -949,13 +952,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                       _attachments.isEmpty
                           ? '本次提问仅发送文字上下文'
                           : '选区截图包含选区矩形内的全部可见内容（可能含未选中的相邻内容）；'
-                              'PDF 页附件为导入时的整页原始位图（不含白板批注）。'
-                              '仅发送附件条中显示的 ${_attachments.length} 张图片'
-                              '（其中选区截图会随打开面板或点击视觉指令自动加入或更新），'
-                              '不会自动上传附件之外的画布图像内容'
-                              '（文字上下文仍按既有规则随请求发送）；'
-                              '追问时附件将随每次请求重新发送，直到移除或清除对话。'
-                              '发送前请确认。',
+                                'PDF 页附件为导入时的整页原始位图（不含白板批注）。'
+                                '仅发送附件条中显示的 ${_attachments.length} 张图片'
+                                '（其中选区截图会随打开面板或点击视觉指令自动加入或更新），'
+                                '不会自动上传附件之外的画布图像内容'
+                                '（文字上下文仍按既有规则随请求发送）；'
+                                '追问时附件将随每次请求重新发送，直到移除或清除对话。'
+                                '发送前请确认。',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colors.onSurfaceVariant,
                       ),
@@ -974,17 +977,17 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     ),
                   if (_loading) ...[
                     const SizedBox(height: AppSpacing.controlGap),
-                      Text(
-                        _stage == _AiGenerateStage.preparing
-                            ? '正在准备上下文…'
-                            : response != null
-                            ? '正在根据追问修改…'
-                            : _attachments.isNotEmpty
-                            ? '正在结合选区图像与笔记内容生成…'
-                            : _context.texts.isEmpty
-                            ? '正在生成回复…'
-                            : '正在阅读笔记并生成操作…',
-                      ),
+                    Text(
+                      _stage == _AiGenerateStage.preparing
+                          ? '正在准备上下文…'
+                          : response != null
+                          ? '正在根据追问修改…'
+                          : _attachments.isNotEmpty
+                          ? '正在结合选区图像与笔记内容生成…'
+                          : _context.texts.isEmpty
+                          ? '正在生成回复…'
+                          : '正在阅读笔记并生成操作…',
+                    ),
                   ],
                   if (_error != null) ...[
                     const SizedBox(height: AppSpacing.controlGap),

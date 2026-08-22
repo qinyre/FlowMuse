@@ -357,10 +357,7 @@ void main() {
     expect(find.text('当前选区'), findsOneWidget);
     expect(find.byType(Image), findsOneWidget);
     expect(find.textContaining('仅发送附件条中显示的 1 张图片'), findsOneWidget);
-    expect(
-      find.textContaining('会随打开面板或点击视觉指令自动加入或更新'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('会随打开面板或点击视觉指令自动加入或更新'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).first, '解释这里');
     await tester.tap(find.text('发送'));
@@ -558,9 +555,7 @@ void main() {
       repository: _FakeAiAgentRepository(),
       onCaptureSelection: () {
         selectionCalls++;
-        return Future.value(
-          attachmentOf(selectionCalls == 1 ? '旧选区' : '新选区'),
-        );
+        return Future.value(attachmentOf(selectionCalls == 1 ? '旧选区' : '新选区'));
       },
       onCaptureCurrentPdfPage: () {
         pdfCalls++;
@@ -589,6 +584,231 @@ void main() {
     expect(find.text('PDF 第 1 页'), findsOneWidget);
     expect(find.text('PDF 第 2 页'), findsOneWidget);
     expect(find.textContaining('仅发送附件条中显示的 3 张图片'), findsOneWidget);
+  });
+
+  testWidgets('不传捕获回调时附件区整体不渲染（旧调用方零回归）', (tester) async {
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onApply: (_) async {},
+    );
+
+    expect(find.text('选区截图'), findsNothing);
+    expect(find.text('PDF 页'), findsNothing);
+    expect(find.textContaining('本次提问仅发送文字上下文'), findsNothing);
+    expect(find.textContaining('仅发送附件条中显示'), findsNothing);
+  });
+
+  testWidgets('手动点击选区截图 chip 追加附件并显示 KiB 大小', (tester) async {
+    var selectionCalls = 0;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onCaptureSelection: () {
+        selectionCalls++;
+        return Future.value(
+          attachmentOf(selectionCalls == 1 ? '开面板截图' : '手动选区'),
+        );
+      },
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('选区截图'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('手动选区'), findsOneWidget);
+    // 两张 70B 基准 PNG 的 KiB 取整均为 0。
+    expect(find.text('0 KiB'), findsNWidgets(2));
+    expect(find.textContaining('仅发送附件条中显示的 2 张图片'), findsOneWidget);
+  });
+
+  testWidgets('达上限后添加 chips 禁用', (tester) async {
+    var pdfCalls = 0;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onCaptureSelection: () async => null,
+      onCaptureCurrentPdfPage: () {
+        pdfCalls++;
+        return Future.value(
+          attachmentOf('PDF 第 $pdfCalls 页', AiVisualAttachmentKind.pdfPage),
+        );
+      },
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.text('PDF 页'));
+      await tester.pumpAndSettle();
+    }
+
+    expect(
+      tester
+          .widget<ActionChip>(find.widgetWithText(ActionChip, '选区截图'))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<ActionChip>(find.widgetWithText(ActionChip, 'PDF 页'))
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('开面板被动捕获失败走内联提示而非全局错误', (tester) async {
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onCaptureSelection: () async => throw StateError('图片解码失败，请重新打开笔记后重试'),
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('图片解码失败'), findsOneWidget);
+    expect(find.textContaining('本次发送将以文字上下文为主'), findsNothing);
+  });
+
+  testWidgets('手动 chip 遇无可捕获视觉内容时展示引导提示', (tester) async {
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onCaptureSelection: () async => null,
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('选区截图'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前选区没有可截图的视觉内容'), findsOneWidget);
+  });
+
+  testWidgets('手动 chip 捕获失败在错误容器展示消息', (tester) async {
+    var selectionCalls = 0;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onCaptureSelection: () {
+        selectionCalls++;
+        if (selectionCalls == 1) {
+          return Future<AiVisualAttachment?>.value(null); // 被动捕获静默
+        }
+        return Future<AiVisualAttachment?>.error(StateError('选区渲染失败'));
+      },
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('选区截图'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选区渲染失败'), findsOneWidget);
+  });
+
+  testWidgets('移除附件后缩略条消失且可经快捷指令重建活动槽', (tester) async {
+    var selectionCalls = 0;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onCaptureSelection: () {
+        selectionCalls++;
+        if (selectionCalls == 1) {
+          return Future.value(attachmentOf('开面板截图'));
+        }
+        return Future.value(attachmentOf('刷新后截图'));
+      },
+      hasSelection: true,
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('开面板截图'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('移除图片'));
+    await tester.pumpAndSettle();
+    expect(find.text('开面板截图'), findsNothing);
+
+    // 移除后槽引用已清空：快捷指令按"槽空加入"路径重建。
+    await tester.tap(find.text('解释这里'));
+    await tester.pumpAndSettle();
+    expect(find.text('刷新后截图'), findsOneWidget);
+  });
+
+  testWidgets('loading 期间添加与移除均禁用', (tester) async {
+    final completer = Completer<AiAgentResponse>();
+    final repository = _FakeAiAgentRepository(completer: completer);
+    await _openDialog(
+      tester,
+      repository: repository,
+      onCaptureSelection: () async => attachmentOf('开面板截图'),
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.tap(find.text('发送'));
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<ActionChip>(find.widgetWithText(ActionChip, '选区截图'))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const ValueKey('ai-attachment-remove')),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    completer.complete(_FakeAiAgentRepository.firstResponse);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('追问时附件随每次请求重发', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    await _openDialog(
+      tester,
+      repository: repository,
+      onCaptureSelection: () async => attachmentOf('开面板截图'),
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '再精简一点');
+    await tester.tap(find.text('追问修改'));
+    await tester.pumpAndSettle();
+
+    expect(repository.receivedAttachments, hasLength(2));
+    expect(repository.receivedAttachments.last, hasLength(1));
+  });
+
+  testWidgets('清除对话同时清空附件', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    await _openDialog(
+      tester,
+      repository: repository,
+      onCaptureSelection: () async => attachmentOf('开面板截图'),
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('清除对话'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('开面板截图'), findsNothing);
+    expect(find.text('本次提问仅发送文字上下文'), findsOneWidget);
   });
 }
 
@@ -708,4 +928,3 @@ class _FakeSpeechRecognitionService implements SpeechRecognitionService {
   @override
   Future<void> dispose() => _events.close();
 }
-
