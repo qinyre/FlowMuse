@@ -143,9 +143,14 @@ class ImageElementCache {
   }
 
   Future<void> _decode(String fileId, ImageFile file) async {
+    ui.Codec? codec;
     try {
-      final codec = await ui.instantiateImageCodec(file.bytes);
+      codec = await ui.instantiateImageCodec(file.bytes);
       final frame = await codec.getNextFrame();
+      // 帧一旦取得编解码器即可释放：不释放会每次解码泄漏一个 Codec
+      // 句柄直至 GC 兜底（最终审查跟进项）。
+      codec.dispose();
+      codec = null;
       final image = frame.image;
 
       if (_disposed) {
@@ -159,6 +164,10 @@ class ImageElementCache {
       _evictIfNeeded();
       _notifyDecoded();
     } catch (_) {
+      if (_disposed) {
+        // 与成功路径的 disposed 早退对称：缓存已弃用，不再回填状态或通知。
+        return;
+      }
       // 解码失败(如并发内存压力):先记 _failed 再正常 complete 共享
       // Future(不以异常 complete,保住静默失败 + peek 复核契约与
       // 多等待者语义),标记为失败避免无限重试,
@@ -166,6 +175,8 @@ class ImageElementCache {
       _failed.add(fileId);
       _notifyDecoded();
     } finally {
+      // instantiate 成功但取帧抛错时补释放；正常路径上已被置空。
+      codec?.dispose();
       _decoding.remove(fileId);
     }
   }
