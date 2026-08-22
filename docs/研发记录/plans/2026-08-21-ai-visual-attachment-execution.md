@@ -398,7 +398,7 @@ Future<int> prewarmRegionImages(Rect sceneBounds) async {
 - zoom 不设上限：选区矩形经 `ExportBounds.compute(padding: 8)` 双侧各加 8，最小边 ≥16 scene units → zoom 实际上限 98；笔迹为矢量重渲，输出像素被 ≤1568 上限硬约束（≤1568×1568×4B≈9.4MiB 瞬时位图）。
 - `decodeAndWait` 对"已失败"fileId 静默跳过且 `_failed` 永不清理（本会话粘性），故返回值用 `peek` 复核计数，报错文案如实告知需重开笔记。
 - 已知边界：相交图片数超过缓存 `maxSize=50` 时，预热循环会自我逐出先解码条目，`peek` 复核将被逐出者计为失败并如实报错（此时重开笔记也无法兑现）——属缓存容量既有语义，不在本任务扩展（第三轮发现 3）。
-- `exportRegionPng` 的 toImage/toByteData 用 try/finally 释放 image/picture（第二轮性能审查发现 2 吸收；存量 `exportCoverThumbnail` 无此防护属历史瑕疵，新代码不复制）。
+- `exportRegionPng` 的 toImage/toByteData 用 try/finally 释放 image/picture（第二轮性能审查发现 2 吸收；存量 `exportCoverThumbnail` 成功路径有 dispose、异常路径无防护，新代码补全 try/finally——融合审查第三轮 R3-M9 勘误）。
 - 与 `exportCoverThumbnail` 的两处刻意差异：`skipMathText: true`、`isDarkBackground` 显式传入（封面缩略图两者都用默认值，是历史行为，不在本任务修正范围）。
 
 **测试文件**：`test/features/whiteboard/editor_core/export_region_png_test.dart`（新建；用例明细见 §3）。
