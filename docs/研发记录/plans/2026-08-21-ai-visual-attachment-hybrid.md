@@ -185,7 +185,7 @@ null 与失败在三种调用场景的处理（单一定义点）：
 ### 第五轮（2026-08-21，同三路子代理确认 v5）
 
 - 三路一致结论：**可行**。R1 0C/0I（R4-N1 ADDRESSED，重试路径/_error 先后/await 吸收/手动附件不变量验证自洽）；R2 0C/0I（Y-1 ADDRESSED，C3 时序逐项推演成立）；R3 0C/0I/0M（M1 落地、提交链编译连贯）。报告：`round5-*.md`。
-- **方案就此定稿（v5）**，进入实现阶段（C1→C5）。
+- **方案就此定稿（v5）**，进入实现阶段（C1→C5）。全部审查报告（五轮 15 份）与各任务审查/复审报告（8 份）已固化于 `docs/研发记录/plans/2026-08-21-ai-visual-attachment-hybrid-reviews/`。
 
 ## 8. 定稿摘要（实现入口）
 
@@ -193,3 +193,17 @@ null 与失败在三种调用场景的处理（单一定义点）：
 - 契约：捕获回调 `Future<AiVisualAttachment?>`（null=无视觉选区；StateError=真失败）；三场景 null/失败处置见 §1.2 表。
 - 工程底线：结构化 chunk 扫描全路径、校验顺序 mime→空→魔数→4MiB→扫描、归一化单点（T5' 删旧）、image_cache 在途去重状态机四点、`_generate` await 在途捕获且异常吸收、0 附件 jsonEncode 串等值回归。
 - 提交链：C1=T3 → C2=T1'+T2'（含构造点适配）→ C3=T4'+T5'（dialog 仅增两回调参数）→ C4=T6'（全面改写+吸收推迟删除）→ C5=T7。每 commit 可绿。
+
+## 9. 实现记录（2026-08-22 完成）
+
+| 提交 | 内容 | 审查结论 |
+|---|---|---|
+| 153ff87 + 04a974d | C1=T3 渲染引擎 + image_cache 在途去重状态机 | 任务审查 0C/1I → fix round 1（并发 prewarm 回调互覆改计数器方案）→ 复审 ADDRESSED |
+| c8715b1 | C2=T1'+T2' 模型校验/请求构建/日志 | 一次过审（21/21 spec，0C/0I） |
+| 489789b + a10425b | C3=T4'+T5' 捕获模块/接线 | 任务审查 0C/1I → fix round 1（PDF oversize 专用文案）→ 复审 ADDRESSED |
+| 137aedc + 30a4d10 | C4=T6' 面板融合（附件条/活动槽/三场景/推迟删除） | 任务审查 0C/1I（§3.5 用例缺口）→ fix round 1（八用例补齐+M-1/3/4/5）→ 复审全 ADDRESSED |
+| fae0b6e | C5=T7 门禁与文档同步 | 最终全分支审查覆盖 |
+
+- 门禁：全量 flutter test 429 全绿；flutter analyze 37 条与基线持平；git diff --check 干净；归一化单点 grep 门禁通过。
+- **最终全分支审查：通过可合并**（九条技术不变量端到端全 ✅，新增 0C/0I；遗留 Minor 6 项 triage：5 留档、1 建议尽快跟进——image_cache `_decode` 未 dispose codec 属存量一行修，见 review-final.md）。
+- 流程备注：C4 实现期间实现级子代理派发被平台容量闸门阻断（多轮空输出），该任务由会话控制器按定稿简报亲自实现；任务审查/复审/终审均由独立子代理完成。
