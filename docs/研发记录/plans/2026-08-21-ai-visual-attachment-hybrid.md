@@ -205,5 +205,6 @@ null 与失败在三种调用场景的处理（单一定义点）：
 | fae0b6e | C5=T7 门禁与文档同步 | 最终全分支审查覆盖 |
 
 - 门禁：全量 flutter test 429 全绿；flutter analyze 37 条与基线持平；git diff --check 干净；归一化单点 grep 门禁通过。
-- **最终全分支审查：通过可合并**（九条技术不变量端到端全 ✅，新增 0C/0I；遗留 Minor 6 项 triage：5 留档、1 建议尽快跟进——image_cache `_decode` 未 dispose codec 属存量一行修，见 review-final.md）。
+- **最终全分支审查：通过可合并**（九条技术不变量端到端全 ✅，新增 0C/0I；遗留 Minor 6 项 triage：5 留档、1 建议尽快跟进）。
+- 跟进闭环：终审标记的"image_cache `_decode` 未 dispose codec"存量项已修复（34613e8，含 catch 段 disposed 守卫对称闭合），范围化复审 0C/0I 通过。
 - 流程备注：C4 实现期间实现级子代理派发被平台容量闸门阻断（多轮空输出），该任务由会话控制器按定稿简报亲自实现；任务审查/复审/终审均由独立子代理完成。
