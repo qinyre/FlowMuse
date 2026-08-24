@@ -371,8 +371,9 @@ func sanitizeLayoutDecision(decision *SmartLayoutLayoutDecision, request SmartLa
 	} else if decision.Confidence > 1 {
 		decision.Confidence = 1
 	}
-	// 结构校验失败（返回 nil）时整体回落 in_place。
-	if decision.Structure == nil && decision.Style != layoutStyleInPlace {
+	// ppt/mindmap 结构校验失败（返回 nil）时整体回落 in_place；article 的 structure 本就为 nil。
+	if decision.Structure == nil &&
+		(decision.Style == layoutStylePPT || decision.Style == layoutStyleMindmap) {
 		decision.Style = layoutStyleInPlace
 	}
 }
