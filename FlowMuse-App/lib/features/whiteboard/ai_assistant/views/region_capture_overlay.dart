@@ -59,11 +59,7 @@ class _RegionCaptureOverlayState extends State<RegionCaptureOverlay> {
   Future<void> _commit(Rect rect) async {
     if (_committing) return;
     setState(() => _committing = true);
-    try {
-      await widget.onCommit(rect);
-    } catch (_) {
-      // 页面已处理错误展示；成功/失败均保持提交态，直至页面卸载本组件。
-    }
+    await widget.onCommit(rect);
   }
 
   @override
