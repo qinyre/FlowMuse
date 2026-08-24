@@ -1,169 +1,88 @@
-# 修复：选中组合元素时只显示最外层虚线框
+# 修复：多选（含手写笔迹簇）只显示外层虚线框
 
-> 分支建议：`feature/fix-group-select-box`（从 `main` 拉出，不基于 `feature/ai-visual-attachment`；当前工作区有无关未提交文件，勿混入）
-> 定位：选中一个组合（群组）元素时，画布冒出每个成员元素的选中框；需求是**只保留最外层虚线框 + 手柄**，隐藏内部成员框。
-> 原则：仅改选中 overlay 的「构图」环节（哪层画框、画几个框），不动数据模型、Excalidraw JSON、协作协议、数据库；不改成员轮廓画法本身（真多选场景仍保留 Excalidraw 风格的逐元素轮廓）。
+> 分支：`feature/fix-group-select-box`
+> 定位：框选/多选一组元素（典型是若干**未分组**手写笔画，如"我思/不行"）时，画布给每个成员都画一个蓝色实线小框；需求是**只保留最外层的 union 虚线框 + 手柄**，去掉内部逐元素框。
+> 版本：v2（修订）。v1 曾假设"笔迹已分组"，用 `isGroupUnit`/`isCompleteGroupSelection` 判定组合选中——**经现场验证无效**（手写笔画共享 `groupIds` 仅来自 Ctrl+G 或 sketch 导入，默认独立未分组），故回退该机制，改为最简方案。
 
-## 0. 事实基线（撰写当日逐行核实）
+## 0. 事实基线（本次逐行核实）
 
 | 主题 | 事实 | 位置 |
 |---|---|---|
-| 点击带群组元素的选择逻辑 | `_handleClick` 经 `GroupUtils.resolveGroupForClick` 求出最外层 groupId，随后 `SetSelectionResult(全部成员 id)`——多成员同时进入选中态 | `select_tool.dart:287-323` |
-| 组合单元的唯一性 | 群组是隐式的（成员共享 `groupIds`，外层靠后 `[inner..., outer]`），无独立 group 对象；可用 `findGroupMembers` 从场景反查成员全集 | `group_utils.dart:6-30` |
-| 选择 overlay 建造 | `buildSelectionOverlay()`：selectedIds → 元素列表 → `SelectionOverlay.fromElements` | `markdraw_controller.dart:2781-2789` |
-| 多选触发内部框 | `fromElements` 中 `elements.length > 1` → 填充 `elementBounds`（逐元素包围盒，供内层框绘制） | `selection_overlay.dart:128-137` |
-| 内部框的绘制入口 | painter 以 `elementBounds.isNotEmpty` 判定 `isMultiSelect` → 先画逐元素轮廓（solid 内层框），再画 union 虚线框 + 手柄 | `interactive_canvas_painter.dart:110-145` |
-| 虚线外框/实心内框 | union 框用 `drawDashedSelectionBox`（虚线）；逐元素轮廓用 `drawElementOutlines`（实线细框）。截图缩放下内层框观感亦为细线 | `selection_renderer.dart:137-194` |
-| 手柄命中测试 | `_hitTestHandle` 只用 overlay 的 bounds/handles/angle，与 `elementBounds` 无关 | `select_tool.dart:608-630` |
-| 现有测试 | editor_core 目录下**无** `SelectionOverlay` / group 选择渲染相关测试 | `test/features/whiteboard/editor_core/` |
-| 陈旧选中 | 撤销等场景可能出现 selectedIds 中元素已被删除的情况；`buildSelectionOverlay` 会 `.whereType<Element>()` 静默剔除 | `markdraw_controller.dart:2783-2787` |
+| 手写元素分组方式 | `groupIds` 只通过 `groupElements`（Ctrl+G）或 sketch 序列化导入赋初值；手写/自由绘制**不自动分组** | `group_utils.dart`；`select_tool.dart:1601`；`sketch_line_parser.dart:205+` |
+| 多选来源 | "我思/不行" 是若干独立 `FreedrawElement`，经 marquee 框选一并选中，构成普通多选（无共享 groupIds） | `select_tool.dart:505-538` |
+| 内层框绘制入口 | painter 以 `elementBounds.isNotEmpty` 判 `isMultiSelect` → 先 `drawElementOutlines` 逐元素画实线框（内层），再 `drawDashedSelectionBox` 画 union 虚线框 + 手柄 | `interactive_canvas_painter.dart:110-145`；`selection_renderer.dart:137-172`(实线)/`174-194`(虚线) |
+| 外层虚线框依据 | 虚线绘制依赖 `elementBounds.isNotEmpty`（isMultiSelect 为真）→ 不可清空 elementBounds，否则外层框变实线 | `interactive_canvas_painter.dart:131-145` |
+| 远端协作框 | 远端成员逐元素框走独立路径 `RemoteCollaboratorOverlay.selectionBounds`（`_drawRemoteCollaborator`），与本改动无关 | `interactive_canvas_painter.dart:250-296` |
+| 手柄命中 | `_hitTestHandle` 只用 overlay 的 bounds/handles/angle，与 elementBounds 无关 | `select_tool.dart:608-630` |
+| 现无 painter 测试 | editor_core 下无 `InteractiveCanvasPainter` 层测试；`ViewportState` 可简构（zoom=1, offset=0）便于测试 | `viewport_state.dart:10-13` |
 
-**根因**：点击组合元素 → 全部成员 id 进入选中态 → `fromElements` 按「元素数 > 1」判定为纯多选 → 填充 `elementBounds` → painter 逐个成员画轮廓框。当前实现无法区分「组合单元选中」与「多个独立元素多选」。
+**v1 无效的根因**：`isCompleteGroupSelection` 要求选中集合恰好等于某群组完整成员集；未分组笔画间无共享 `groupIds` → 恒为 false → 逐元素轮廓照旧绘制。**用户的真实诉求与"是否分组"无关**：任何多选都不想要内部逐元素框。
 
 ## 1. 需求
 
-1. 选中一个组合（任意层级的完整群组）时：只显示最外层 union 虚线框 + 手柄，**不显示**成员元素各自的内层框。
-2. 仅选中单个成员（逐级钻入到个体）时维持现状（单框 + 手柄，无 member 框）。
-3. 多个**独立**元素多选（框选/Shift 多选，非同一组合）维持现状：逐元素轮廓 + union 虚线框（Excalidraw 风格，不动）。
-4. 拖拽/缩放/旋转/layer 顺序/属性面板等交互全部不受影响；本改动纯视觉构成层。
+1. 多选（marquee / Shift / 点击组合）时只绘制 union 虚线框 + 8 个手柄 + 旋转手柄，**不绘制**逐元素内部实线框。
+2. 单选保持不变（单实线框 + 手柄，无 member 框；线段/箭头等例外逻辑不动）。
+3. 远端协作指针/成员选中高亮不变。
+4. 拖拽/缩放/旋转/属性面板等交互不受影响（纯 overlay 构图层改动）。
 
 ## 2. 实现方案
 
-### 2.1 判定函数（纯函数，可单测）
+### 2.1 核心改动：去掉本地逐元素轮廓绘制
 
-新新增 `GroupUtils.isCompleteGroupSelection(Scene scene, List<Element> selected)`：
-
-```dart
-/// 选中的元素是否恰好构成某个群组的完整成员集（组合选中）。
-/// 规则：从外层到内层遍历所有成员共享的 groupId；
-/// 若某一层的场景成员全集 == 当前选中集，则视为组合选中（true）。
-static bool isCompleteGroupSelection(Scene scene, List<Element> selected) {
-  if (selected.length < 2) return false;
-  final first = selected.first;
-  // 每个元素的 groupIds 含义一致（内层在前，外层在后），沿第一个元素由外向内检查
-  for (var i = first.groupIds.length - 1; i >= 0; i--) {
-    final gid = first.groupIds[i];
-    if (!selected.every((e) => e.groupIds.contains(gid))) {
-      continue; // 该层非全员共享，继续向内层找
-    }
-    final members = findGroupMembers(scene, gid).map((e) => e.id).toSet();
-    final ids = selected.map((e) => e.id).toSet();
-    if (members.length == ids.length && members.containsAll(ids)) {
-      return true;
-    }
-  }
-  return false;
-}
-```
-
-要点：
-
-- 嵌套组正确性：选中内层子组时外层 groupId 共享但成员全集大于选中集 → 继续向内层检查 → 内层匹配即 true。
-- 陈旧/部分选中：选中集 ≠ 该层成员全集时不会误判 true（多画几个内层框本来也是现状，无回归风险）。
-- 空/单元素直接 false。
-
-### 2.2 SelectionOverlay 增加「组合单元」位
-
-- `SelectionOverlay` 新增字段 `final bool isGroupUnit`（默认 `false`）；构造函数传入；参与 `==` / `hashCode`（与现有字段并列加 `isGroupUnit == other.isGroupUnit`）。
-- `fromElements(..., {bool isGroupUnit = false})`：
-  - `isGroupUnit == true` 时强制 `elementBounds = const []`（隐藏逐元素轮廓），其余（union bounds、handles、angle、showBoundingBox、isLocked）不变——外层虚线框与手柄自然保留。
-  - 保持「isMultiSelect 视觉」的判定出口给 painter 用（见 2.3），避免外框从虚线悄悄变实线。
-
-### 2.3 Painter 判定归并
-
-`interactive_canvas_painter.dart` 中：
+`interactive_canvas_painter.dart` 中删除多选时调用 `SelectionRenderer.drawElementOutlines(...)` 的分支（现 111-121 行附近）：
 
 ```dart
-final isMultiSelect = selection!.elementBounds.isNotEmpty;
-```
-改为：
-```dart
-final isMultiSelect =
-    selection!.elementBounds.isNotEmpty || selection!.isGroupUnit;
+final isMultiSelect = selection!.elementBounds.isNotEmpty; // 保留（虚线框依据）
+final hasAngle = selection!.angle != 0.0;
+
+// 已删除：多选时逐个成员的实线轮廓绘制（drawElementOutlines 调用及其 elementBounds 循环）
 ```
 
-- `isGroupUnit = true` 时：`elementBounds` 为空 → 不画成员轮廓（需求 1）；`isMultiSelect = true` → union 框画虚线（需求 1 的外框不变）；手柄照画。
-- 其余分支不动；`selection_overlay.dart` / `selection_renderer.dart` 的绘制函数本身不改。
+保留：`isMultiSelect` 判定（仍由 `elementBounds.isNotEmpty` 驱动）→ union 虚线框、8 个缩放手柄、旋转手柄照常；`hasAngle` 旋转变换逻辑不变。
 
-### 2.4 接线
+### 2.2 依赖项回退（v1 引入，现无用）
 
-`markdraw_controller.dart buildSelectionOverlay()`：
+- `group_utils.dart`：删除 `isCompleteGroupSelection`。
+- `selection_overlay.dart`：删除 `isGroupUnit` 字段、构造参数、`==`/`hashCode` 分支，以及 `elementBounds: isGroupUnit ? const [] : elemBounds` 三元——`elementBounds` 仍按"元素数 > 1"填充（供虚线框判定与潜在复用）。
+- `markdraw_controller.dart buildSelectionOverlay()`：恢复为直接 `SelectionOverlay.fromElements(selected, mode: interactionMode)`。
 
-```dart
-final selected = ...;
-if (selected.isEmpty) return null;
-final isGroupUnit =
-    GroupUtils.isCompleteGroupSelection(_editorState.scene, selected);
-return SelectionOverlay.fromElements(
-  selected,
-  mode: interactionMode,
-  isGroupUnit: isGroupUnit,
-);
-```
+不触边界的：Excalidraw JSON、协作协议、数据库、`SelectionRenderer` 的绘制函数本身、`drawElementOutlines`（保留函数但无调用点——留作后续/复用，或按需删除）。
 
-`GroupUtils` 方法，纯函数；`buildSelectionOverlay` 是唯一 overlay 构建点，`_hitTestHandle` 内部调用 `fromElements(elements, mode: mode)` 不传新参数 → 走默认 `false`，零影响。
-
-### 2.5 不变量（本改动不触碰的边界）
-
-- 不改 `SetSelectionResult` / `EditorState` / 历史（undo 不感知此标记，靠场景实时推导——陈旧选中自然回到旧渲染，不算回归）。
-- 不改 Excalidraw JSON 编码（`groupIds` 语义不变）、不碰协作消息、不碰数据库 schema。
-- 共享代码无任何平台分支、无新依赖、无 dart:io 引入，6 端零风险。
-- 样式常量（颜色、线宽、padding）一律不动。
+> 备注：`drawElementOutlines` 保留但不再被本地多选调用；若确认全库无其他引用可一并删除（本计划默认保留，最小 diff）。
 
 ## 3. 关键文件
 
 | 文件 | 动作 | 职责 |
 |---|---|---|
-| `lib/features/whiteboard/editor_core/src/core/groups/group_utils.dart` | 修改 | 新增 `isCompleteGroupSelection(Scene, List<Element>)` 纯函数 |
-| `lib/features/whiteboard/editor_core/src/rendering/interactive/selection_overlay.dart` | 修改 | `SelectionOverlay` 新增 `isGroupUnit` 字段 + 构造参数 + `==`/`hashCode`；`fromElements` 在 `isGroupUnit` 时置空 `elementBounds` |
-| `lib/features/whiteboard/editor_core/src/rendering/interactive/interactive_canvas_painter.dart` | 修改 | `isMultiSelect` 判定加入 `isGroupUnit` |
-| `lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart` | 修改 | `buildSelectionOverlay()` 调用判定并传入 `isGroupUnit` |
-| `test/features/whiteboard/editor_core/group_selection_overlay_test.dart` | 新建 | `isCompleteGroupSelection` + overlay 组合单元位用例 |
-| `docs/研发记录/plans/2026-08-24-group-selection-box-fix.md` | 新建（即本文件） | 修复计划 |
-
-> 本次改动属 UI 行为微调，不改架构/协议/数据模型，按 AGENTS.md §10 无需同步其他文档；如验收后确认语义变化，备忘在 `docs/研发记录/archive/` 即可。
+| `lib/features/whiteboard/editor_core/src/rendering/interactive/interactive_canvas_painter.dart` | 修改 | 删除多选时 `drawElementOutlines` 调用；`isMultiSelect` 判定不变 |
+| `lib/features/whiteboard/editor_core/src/core/groups/group_utils.dart` | 回退 | 删除 `isCompleteGroupSelection` |
+| `lib/features/whiteboard/editor_core/src/rendering/interactive/selection_overlay.dart` | 回退 | 删除 `isGroupUnit` 相关字段/参数/相等性 |
+| `lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart` | 回退 | 恢复 `buildSelectionOverlay` 原样 |
+| `test/features/whiteboard/editor_core/selection_overlay_painter_test.dart` | 重写 | 见 §4：painter 多选不画逐元素框 + overlay 契约 |
+| `docs/研发记录/plans/2026-08-24-group-selection-box-fix.md` | 修改（即本文件） | 修正后的修复计划 |
 
 ## 4. 验证方案
 
-1. `cd FlowMuse-App && flutter analyze`——不得新增 error。
-2. 新增单测（T1，见 §5）。`flutter test test/features/whiteboard/editor_core/group_selection_overlay_test.dart` 通过。
-3. `flutter test` 全量——既有用例无回归（editor_core 现有 40+ 测试全数保留）。
-4. 手动验证（每条必测）：
-   - 手写笔迹 + 文字 **Ctrl+G 组合** → 点击组合：只出现**最外层虚线框 + 手柄**，无成员内层框（复现截图场景）。
-   - 再点一次钻入内层组合（若嵌套）：仍只有该层一个虚线框；重复点到底层个体 → 出现标准单元素实线框。
-   - 框选框住**两个独立元素**：逐元素轮廓 + union 虚线框保持现状（回归点）。
-   - 点击空白：清空选择无框；拖拽组合、旋转组合、缩放手柄：行为不变。
-   - 撤销/重做后选中组合：边界正常（部分选中场景不误判组合单元）。
-5. 跨端自检：纯共享 Dart + 条件无平台 API，Android/iOS/macOS/Windows/Web/鸿蒙 行为一致；无 `Platform.is*` 引入；无需动 `ohos/`、`tool/vendor/`（**不**需要 `flutter build hap`；如顺手跑一次以确保无构建回归更佳，非必须）。
+### 自动化
 
-## 5. 实施步骤（TDD）
+1. `flutter analyze`——不新增 error。
+2. `flutter test test/features/whiteboard/editor_core/selection_overlay_painter_test.dart` 通过。用例：
+   - **painter 契约（核心）**：构造含 2 个未分组矩形元素的多选 `SelectionOverlay`（`elementBounds` 非空），用 `PictureRecorder`+记录型 Canvas 代理（`noSuchMethod` 转发并统计）执行 `paint`；断言**没有**任何 `drawRect` 命中"元素包围盒 ± padding"的大矩形（即不再画逐元素轮廓），但 union 虚线外框仍产生（存在 4 条以上 `drawLine`）。
+   - **overlay 契约**：多选 `fromElements` → `elementBounds` 非空（保证外层走虚线）；单选 → `elementBounds` 为空。
+3. `flutter test` 全量——既有用例无回归。
 
-### T1：纯函数 + 测试先行
+### 手动
 
-1. 先在 `group_selection_overlay_test.dart` 写失败用例（构造小型 `Scene` / 元素桩）：
-   - 单元素 → false；
-   - 3 成员组合全选 → true；
-   - 3 成员组合只含 2 成员（手动构造的“部分选中”）→ false；
-   - 两个不同组合各取全成员 → false；
-   - 嵌套：外层 2 子组，仅选内层子组 2 成员 → true；内外全选 → true；
-   - 组合 + 一个独立元素混选 → false。
-2. 实现 `GroupUtils.isCompleteGroupSelection`（§2.1），跑上面用例全绿。
-3. `SelectionOverlay` 用例：
-   - `fromElements([3 成员], isGroupUnit: true)` → `elementBounds` 为空、`isGroupUnit == true`、bounds 为 union、handles 9 个；
-   - `fromElements([两个独立元素])` → `elementBounds` 非空；相等性含新字段。
+4. 复现截图场景：框选"我思/不行"这组笔迹 → **只剩外层一个虚线框 + 手柄**，无内部小实线框。
+5. 框选两个独立矩形/文字：同样仅外层虚线框（本次改动的统一语义）。
+6. 单选一个元素：仍标准单实线框 + 手柄。
+7. 远端协作（如有）：对方选中高亮仍逐元素显示，不受影响。
+8. 组合选中（Ctrl+G 后点击）：仍仅外层虚线框（v1 的方案被删除后由同一"不画逐元素框"逻辑覆盖）。
 
-### T2：Overlay 字段 + painter 接线
+## 5. 实施步骤
 
-1. `selection_overlay.dart` 加字段与逻辑；`interactive_canvas_painter.dart` 改 `isMultiSelect` 判定。
-2. 跑 `flutter analyze` + T1 全部用例。
-
-### T3：controller 接线
-
-1. `buildSelectionOverlay()` 调用 `GroupUtils.isCompleteGroupSelection` 并传入 `isGroupUnit`。
-2. 跑 `flutter analyze` + `flutter test` 全量。
-3. 手动按 §4 清单回归，确认见截图场景（组合元素只出现最外层虚线框）。
-
-### 提交
-
-- 中文提交信息，如：`fix:选中组合元素时只显示最外层虚线框`。
-- 只提交本计划涉及文件；**排除**工作区已有无关修改（`tool/vendor/path_provider_ohos` 的 M 文件）。
+1. 回退 `group_utils.dart` / `selection_overlay.dart` / `markdraw_controller.dart` 中 v1 的 `isGroupUnit` 机制。
+2. `interactive_canvas_painter.dart` 删除 `drawElementOutlines` 调用。
+3. 重写测试文件为 `selection_overlay_painter_test.dart`（先红后绿：先在删调用前写"断言无逐元素框"用例如预期失败，再删调用使其通过）。
+4. `flutter analyze` + 目标测试 + 全量 `flutter test`。
+5. 手动按 §4 回归第 4-8 条。

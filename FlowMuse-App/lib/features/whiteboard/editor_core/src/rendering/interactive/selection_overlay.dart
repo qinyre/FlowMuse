@@ -58,13 +58,11 @@ class SelectionOverlay {
 
   /// Per-element bounds for drawing individual outlines in multi-select.
   /// Empty for single-element selection.
+  ///
+  /// Non-empty drives the multi-select rendering decision (the union
+  /// bounding box is drawn dashed). Per-element outlines themselves are no
+  /// longer drawn for the local selection overlay.
   final List<ElementSelectionBounds> elementBounds;
-
-  /// Whether the selection is a complete group unit (a single group was
-  /// selected, e.g. by clicking an element inside a group). When true,
-  /// [elementBounds] is empty so only the union bounding box is drawn,
-  /// without a per-element outline for every member.
-  final bool isGroupUnit;
 
   const SelectionOverlay({
     required this.bounds,
@@ -73,7 +71,6 @@ class SelectionOverlay {
     this.isLocked = false,
     this.showBoundingBox = true,
     this.elementBounds = const [],
-    this.isGroupUnit = false,
   });
 
   /// Creates a [SelectionOverlay] from a list of selected elements.
@@ -84,7 +81,6 @@ class SelectionOverlay {
   static SelectionOverlay? fromElements(
     List<Element> elements, {
     InteractionMode mode = InteractionMode.pointer,
-    bool isGroupUnit = false,
   }) {
     if (elements.isEmpty) return null;
 
@@ -150,8 +146,7 @@ class SelectionOverlay {
       angle: angle,
       isLocked: isLocked,
       showBoundingBox: showBoundingBox,
-      elementBounds: isGroupUnit ? const [] : elemBounds,
-      isGroupUnit: isGroupUnit,
+      elementBounds: elemBounds,
     );
   }
 
@@ -188,7 +183,6 @@ class SelectionOverlay {
           angle == other.angle &&
           isLocked == other.isLocked &&
           showBoundingBox == other.showBoundingBox &&
-          isGroupUnit == other.isGroupUnit &&
           listEquals(handles, other.handles) &&
           listEquals(elementBounds, other.elementBounds);
 
@@ -198,7 +192,6 @@ class SelectionOverlay {
     angle,
     isLocked,
     showBoundingBox,
-    isGroupUnit,
     Object.hashAll(handles),
     Object.hashAll(elementBounds),
   );
