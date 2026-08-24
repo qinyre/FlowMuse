@@ -714,6 +714,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   void _closeAiPanel() {
+    if (_aiCaptureModeActive) _handleRegionCancel();
     _aiPanelEntry?.remove();
     _aiPanelEntry = null;
     unawaited(_finishAiSpeechInput());
@@ -746,6 +747,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         _markdrawController,
         sceneRect,
       );
+      if (completer.isCompleted) return;
       completer.complete(attachment);
     } catch (error) {
       completer.completeError(error);
