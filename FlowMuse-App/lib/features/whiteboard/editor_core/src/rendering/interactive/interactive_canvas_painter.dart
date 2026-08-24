@@ -111,14 +111,9 @@ class InteractiveCanvasPainter extends CustomPainter {
       final isMultiSelect = selection!.elementBounds.isNotEmpty;
       final hasAngle = selection!.angle != 0.0;
 
-      // Multi-select: draw individual per-element outlines first
-      if (isMultiSelect) {
-        SelectionRenderer.drawElementOutlines(
-          canvas,
-          selection!.elementBounds,
-          mode: interactionMode,
-        );
-      }
+      // No per-element outlines are drawn for the local multi-select overlay:
+      // only the union bounding box (dashed) plus handles are shown, so a
+      // selected handwriting stroke cluster is presented as a single box.
 
       if (hasAngle) {
         canvas.save();

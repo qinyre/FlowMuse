@@ -58,6 +58,10 @@ class SelectionOverlay {
 
   /// Per-element bounds for drawing individual outlines in multi-select.
   /// Empty for single-element selection.
+  ///
+  /// Non-empty drives the multi-select rendering decision (the union
+  /// bounding box is drawn dashed). Per-element outlines themselves are no
+  /// longer drawn for the local selection overlay.
   final List<ElementSelectionBounds> elementBounds;
 
   const SelectionOverlay({
