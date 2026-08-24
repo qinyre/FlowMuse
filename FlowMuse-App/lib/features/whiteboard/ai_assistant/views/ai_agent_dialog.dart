@@ -87,6 +87,7 @@ class AiAgentPanel extends StatefulWidget {
     this.hasSelection = false,
     this.onCaptureSelection,
     this.onCaptureCurrentPdfPage,
+    this.onRegionCapture,
     this.contextProvider,
     required this.promptStore,
     this.speechRecognitionService,
@@ -106,6 +107,11 @@ class AiAgentPanel extends StatefulWidget {
   /// （开面板被动捕获 / 快捷指令刷新 / 手动 chip 添加）。
   final Future<AiVisualAttachment?> Function()? onCaptureSelection;
   final Future<AiVisualAttachment?> Function()? onCaptureCurrentPdfPage;
+
+  /// 框选截图回调：面板仅作入口，await 页面级框选流程（T4）提交的附件；
+  /// 返回 null=用户取消（静默）。为 null 时 chip 回退元素捕获路径，
+  /// showAiAgentDialog 不传即零回归。
+  final Future<AiVisualAttachment?> Function()? onRegionCapture;
 
   final AiAgentContextProvider? contextProvider;
   final AiPromptStore promptStore;
@@ -155,7 +161,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
 
   bool get _hasAttachmentSources =>
       widget.onCaptureSelection != null ||
-      widget.onCaptureCurrentPdfPage != null;
+      widget.onCaptureCurrentPdfPage != null ||
+      widget.onRegionCapture != null;
 
   @override
   void initState() {
@@ -320,6 +327,30 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     final capture = widget.onCaptureSelection;
     if (capture == null) return;
     await _captureAndApply(capture: capture, scene: _AiCaptureScene.refresh);
+  }
+
+  /// 框选截图添加入口：await 页面级框选流程提交的附件并入附件条；
+  /// 返回 null（用户取消框选）静默——无提示、不报错。
+  Future<void> _addRegionAttachment() async {
+    if (_loading || _applying || _capturing) return;
+    if (_attachments.length >= maxAiVisualAttachments) {
+      setState(() => _attachmentNotice = '最多添加 $maxAiVisualAttachments 张图片');
+      return;
+    }
+    setState(() {
+      _capturing = true;
+      _attachmentNotice = null;
+    });
+    try {
+      final attachment = await widget.onRegionCapture!();
+      if (attachment != null && mounted) {
+        setState(() => _attachments = [..._attachments, attachment]);
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = _errorMessage(error));
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
   }
 
   Future<void> _runCaptureTask(
@@ -795,7 +826,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     Wrap(
                       spacing: 8,
                       children: [
-                        if (widget.onCaptureSelection != null)
+                        if (widget.onCaptureSelection != null ||
+                            widget.onRegionCapture != null)
                           ActionChip(
                             avatar: const Icon(Icons.crop_free, size: 18),
                             label: const Text('选区截图'),
@@ -808,10 +840,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                         maxAiVisualAttachments
                                 ? null
                                 : () => unawaited(
-                                    _captureAndApply(
-                                      capture: widget.onCaptureSelection!,
-                                      scene: _AiCaptureScene.manual,
-                                    ),
+                                    widget.onRegionCapture != null
+                                        ? _addRegionAttachment()
+                                        : _captureAndApply(
+                                            capture:
+                                                widget.onCaptureSelection!,
+                                            scene: _AiCaptureScene.manual,
+                                          ),
                                   ),
                           ),
                         if (widget.onCaptureCurrentPdfPage != null)
@@ -952,6 +987,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                       _attachments.isEmpty
                           ? '本次提问仅发送文字上下文'
                           : '选区截图包含选区矩形内的全部可见内容（可能含未选中的相邻内容）；'
+                                '框选截图包含框内全部可见内容；'
                                 'PDF 页附件为导入时的整页原始位图（不含白板批注）。'
                                 '仅发送附件条中显示的 ${_attachments.length} 张图片'
                                 '（其中选区截图会随打开面板或点击视觉指令自动加入或更新），'

@@ -810,6 +810,143 @@ void main() {
     expect(find.text('开面板截图'), findsNothing);
     expect(find.text('本次提问仅发送文字上下文'), findsOneWidget);
   });
+
+  testWidgets('未传框选截图回调时选区截图芯片仍走元素捕获路径（零回归锚点）',
+      (tester) async {
+    // Given: 仅传 onCaptureSelection 的既有调用方，未传 onRegionCapture。
+    var selectionCalls = 0;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onCaptureSelection: () {
+        selectionCalls++;
+        return Future.value(
+          attachmentOf(selectionCalls == 1 ? '开面板截图' : '手动选区'),
+        );
+      },
+      onApply: (_) async {},
+    );
+    await tester.pumpAndSettle();
+
+    // When: 点击「选区截图」芯片。
+    await tester.tap(find.text('选区截图'));
+    await tester.pumpAndSettle();
+
+    // Then: 元素捕获结果加入附件条，行为与改造前一致。
+    expect(find.text('手动选区'), findsOneWidget);
+    expect(find.textContaining('仅发送附件条中显示的 2 张图片'), findsOneWidget);
+  });
+
+  testWidgets('框选截图完成加入附件并更新计数与隐私文案', (tester) async {
+    // Given: 面板经 onRegionCapture 接入页面级框选流程。
+    await _openPanel(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onRegionCapture: () async => attachmentOf('框选截图'),
+      onApply: (_) async {},
+    );
+    expect(find.textContaining('本次提问仅发送文字上下文'), findsOneWidget);
+
+    // When: 点击「选区截图」芯片，页面框选流程提交一张截图。
+    await tester.tap(find.text('选区截图'));
+    await tester.pumpAndSettle();
+
+    // Then: 缩略图与标签展示，计数与隐私文案随附件更新。
+    expect(find.text('框选截图'), findsOneWidget);
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.textContaining('仅发送附件条中显示的 1 张图片'), findsOneWidget);
+    expect(find.textContaining('框选截图包含框内全部可见内容'), findsOneWidget);
+  });
+
+  testWidgets('框选取消返回 null 时静默无提示', (tester) async {
+    // Given: 页面框选流程返回 null（用户取消）。
+    await _openPanel(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onRegionCapture: () async => null,
+      onApply: (_) async {},
+    );
+
+    // When: 点击「选区截图」芯片。
+    await tester.tap(find.text('选区截图'));
+    await tester.pumpAndSettle();
+
+    // Then: 无新附件、无引导提示、无错误容器。
+    expect(find.textContaining('本次提问仅发送文字上下文'), findsOneWidget);
+    expect(find.textContaining('当前选区没有可截图的视觉内容'), findsNothing);
+    expect(find.textContaining('失败'), findsNothing);
+  });
+
+  testWidgets('框选流程抛错时错误容器展示消息', (tester) async {
+    // Given: 页面框选流程抛出 StateError。
+    await _openPanel(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onRegionCapture: () async =>
+          throw StateError('请先在画布选中要发送的内容'),
+      onApply: (_) async {},
+    );
+
+    // When: 点击「选区截图」芯片。
+    await tester.tap(find.text('选区截图'));
+    await tester.pumpAndSettle();
+
+    // Then: 错误消息出现在全局错误容器。
+    expect(find.text('请先在画布选中要发送的内容'), findsOneWidget);
+  });
+
+  testWidgets('框选截图达满额后芯片禁用', (tester) async {
+    // Given: 通过 onRegionCapture 连续添加至满额。
+    await _openPanel(
+      tester,
+      repository: _FakeAiAgentRepository(),
+      onRegionCapture: () async => attachmentOf('框选截图'),
+      onApply: (_) async {},
+    );
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.text('选区截图'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.textContaining('仅发送附件条中显示的 3 张图片'), findsOneWidget);
+
+    // When: 已达满额。
+    // Then: 「选区截图」芯片不可再点。
+    expect(
+      tester
+          .widget<ActionChip>(find.widgetWithText(ActionChip, '选区截图'))
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('框选截图附件随发送与追问重发', (tester) async {
+    // Given: 面板接入 onRegionCapture 并已添加一张框图。
+    final repository = _FakeAiAgentRepository();
+    await _openPanel(
+      tester,
+      repository: repository,
+      onRegionCapture: () async => attachmentOf('框选截图'),
+      onApply: (_) async {},
+    );
+    await tester.tap(find.text('选区截图'));
+    await tester.pumpAndSettle();
+
+    // When: 发送一次，再追问一次。
+    await tester.enterText(find.byType(TextField).first, '总结当前笔记');
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '再精简一点');
+    await tester.tap(find.text('追问修改'));
+    await tester.pumpAndSettle();
+
+    // Then: 每次请求都携带该框选截图附件。
+    expect(repository.receivedAttachments, hasLength(2));
+    expect(repository.receivedAttachments.last, hasLength(1));
+    expect(
+      repository.receivedAttachments.last.single.sourceLabel,
+      '框选截图',
+    );
+  });
 }
 
 Future<void> _openDialog(
@@ -842,6 +979,34 @@ Future<void> _openDialog(
     ),
   );
   await tester.tap(find.text('打开'));
+  await tester.pumpAndSettle();
+}
+
+/// 直构 AiAgentPanel 以传入 onRegionCapture（showAiAgentDialog 为
+/// 零回归故意不传此参数，页面级调用方会在 T4 中自行构造面板）。
+Future<void> _openPanel(
+  WidgetTester tester, {
+  required AiAgentRepository repository,
+  required Future<void> Function(AiAgentResponse) onApply,
+  Future<AiVisualAttachment?> Function()? onRegionCapture,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: AiAgentPanel(
+          repository: repository,
+          noteTitle: '测试笔记',
+          texts: const [AiNoteText(id: 'text-1', text: '测试内容')],
+          contextTruncated: false,
+          contextLabel: '当前笔记',
+          onRegionCapture: onRegionCapture,
+          promptStore: AiPromptStore(_MemorySettings()),
+          onApply: onApply,
+          onClose: () {},
+        ),
+      ),
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
