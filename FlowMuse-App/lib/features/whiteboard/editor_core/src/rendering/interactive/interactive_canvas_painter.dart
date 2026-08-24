@@ -108,7 +108,8 @@ class InteractiveCanvasPainter extends CustomPainter {
 
     // Selection box + handles (all drawn in the same rotated space)
     if (selection != null) {
-      final isMultiSelect = selection!.elementBounds.isNotEmpty;
+      final isMultiSelect =
+          selection!.elementBounds.isNotEmpty || selection!.isGroupUnit;
       final hasAngle = selection!.angle != 0.0;
 
       // Multi-select: draw individual per-element outlines first

@@ -57,6 +57,33 @@ class GroupUtils {
     }).toList();
   }
 
+  /// Whether [selected] form exactly the complete member set of some group.
+  ///
+  /// Used to distinguish a group-unit selection (e.g. clicking an element
+  /// inside a group selects the whole group) from a plain multi-select of
+  /// independent elements. For a group-unit selection only the union bounding
+  /// box should be drawn, not a per-element outline for every member.
+  ///
+  /// Walks the shared group ids from outermost to innermost; returns true the
+  /// moment some group's full active member set equals the selection (handles
+  /// nested groups correctly). Returns false for empty/single selections.
+  static bool isCompleteGroupSelection(Scene scene, List<Element> selected) {
+    if (selected.length < 2) return false;
+    final ids = selected.map((e) => e.id).toSet();
+    final first = selected.first;
+    for (var i = first.groupIds.length - 1; i >= 0; i--) {
+      final gid = first.groupIds[i];
+      if (!selected.every((e) => e.groupIds.contains(gid))) {
+        continue;
+      }
+      final members = findGroupMembers(scene, gid).map((e) => e.id).toSet();
+      if (members.length == ids.length && members.containsAll(ids)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// Removes the outermost groupId from each element.
   ///
   /// Returns new element copies with the last groupId removed.

@@ -2785,7 +2785,13 @@ class MarkdrawController extends ChangeNotifier {
         .whereType<Element>()
         .toList();
     if (selected.isEmpty) return null;
-    return SelectionOverlay.fromElements(selected, mode: interactionMode);
+    final isGroupUnit =
+        GroupUtils.isCompleteGroupSelection(_editorState.scene, selected);
+    return SelectionOverlay.fromElements(
+      selected,
+      mode: interactionMode,
+      isGroupUnit: isGroupUnit,
+    );
   }
 
   // --- Preview element ---
