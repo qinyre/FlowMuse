@@ -6,6 +6,14 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 
 import '../models/ai_visual_attachment.dart';
 
+/// 画布局部（覆盖层 local 坐标）矩形 → 场景矩形。
+/// 与画布同层 Stack 时覆盖层 local 坐标即画布 local 坐标（见计划 §2.1 不变量）。
+ui.Rect sceneRectFromScreenRect(ViewportState viewport, ui.Rect screenRect) {
+  final topLeft = viewport.screenToScenePrecise(screenRect.topLeft);
+  final bottomRight = viewport.screenToScenePrecise(screenRect.bottomRight);
+  return ui.Rect.fromPoints(topLeft, bottomRight);
+}
+
 /// 把 PNG 归一化到最长边 ≤[maxAiVisualAttachmentLongestSide] 且字节数
 /// ≤[byteLimit]。已合规的输入原样返回（不重编码，保持像素与纯净性）。
 /// [byteLimit] 与 [maxPixelCount] 仅供测试注入（默认值即全局常量）。
@@ -113,17 +121,35 @@ Future<AiVisualAttachment?> captureSelectionAttachment(
     bounds.size.width,
     bounds.size.height,
   );
-  final failedImages = await controller.prewarmRegionImages(rect);
+  return _renderSceneRectAttachment(controller, rect);
+}
+
+/// 捕获任意场景矩形（框选截图入口）。与 [captureSelectionAttachment] 共享管线。
+/// 过小矩形返回 null（调用方按取消/无效处理）；渲染失败抛 StateError（文案即用户提示）。
+Future<AiVisualAttachment?> captureSceneRectAttachment(
+  MarkdrawController controller,
+  ui.Rect sceneRect,
+) async {
+  if (sceneRect.width < 0.5 || sceneRect.height < 0.5) return null;
+  return _renderSceneRectAttachment(controller, sceneRect);
+}
+
+/// 共享私有管线：预热 → 导出 → 归一化 → 附件。失败抛 StateError（复用现语义文案）。
+Future<AiVisualAttachment?> _renderSceneRectAttachment(
+  MarkdrawController controller,
+  ui.Rect sceneRect,
+) async {
+  final failedImages = await controller.prewarmRegionImages(sceneRect);
   if (failedImages > 0) {
     // _failed 集合本会话粘性（image_cache.dart 不清理），"重试"无法兑现，
     // 文案如实指向重开笔记。
     throw StateError('图片解码失败，请重新打开笔记后重试');
   }
-  final png = await controller.exportRegionPng(rect);
+  final png = await controller.exportRegionPng(sceneRect);
   if (png == null) throw StateError('截图生成失败，请重试');
   final normalized = await normalizeAttachmentPng(png);
   return AiVisualAttachment(
-    sourceLabel: '选区截图',
+    sourceLabel: '框选截图',
     mimeType: 'image/png',
     bytes: normalized,
     kind: AiVisualAttachmentKind.selection,

@@ -234,9 +234,11 @@ void main() {
     // When: 捕获选区
     final attachment = await captureSelectionAttachment(controller);
 
-    // Then: 返回合法附件（守卫要求非文本元素，纯文本选区在上一用例覆盖）
+    // Then: 返回合法附件（守卫要求非文本元素，纯文本选区在上一用例覆盖）。
+    // 自共享管线提取后（T1）label 统一为 '框选截图'——两路径同用一个
+    // _renderSceneRectAttachment 附件构造段
     expect(attachment, isNotNull);
-    expect(attachment!.sourceLabel, '选区截图');
+    expect(attachment!.sourceLabel, '框选截图');
     expect(attachment.mimeType, 'image/png');
     expect(attachment.kind, AiVisualAttachmentKind.selection);
     expect(attachment.bytes, isNotEmpty);
@@ -343,6 +345,149 @@ void main() {
           (error) => error.message,
           'message',
           '该 PDF 页面图片过大，无法作为附件发送',
+        ),
+      ),
+    );
+  });
+
+  test('纯函数换算:zoom=2 且 offset=(10,20) 时 100×100 → 50×50', () {
+    // Given: 视口 zoom=2、offset=(10,20)，屏幕矩形 (0,0,100,100)
+    // When: 纯函数换算（走 screenToScenePrecise）
+    final sceneRect = sceneRectFromScreenRect(
+      const ViewportState(offset: Offset(10, 20), zoom: 2),
+      ui.Rect.fromLTWH(0, 0, 100, 100),
+    );
+
+    // Then: 长宽各除以 zoom 再加上 offset（Rect 有 ==，用 const 断言）
+    expect(sceneRect, equals(const Rect.fromLTWH(10, 20, 50, 50)));
+  });
+
+  test('反向拖拽矩形归一化:fromPoints 反向角点恒等换算', () {
+    // Given: 恒等视口；同一选区两种构造——fromLTWH 与反向角点的 fromPoints
+    // （fromPoints 自动归一化，等价于反向拖拽的屏幕 rect）
+    const viewport = ViewportState();
+    final fromLtwh = ui.Rect.fromLTWH(100, 100, 150, 100);
+    final fromReversedPoints = Rect.fromPoints(
+      const Offset(250, 200),
+      const Offset(100, 100),
+    );
+
+    // When/Then: 两者换算结果恒等且宽高均为正（函数不因角点顺序失真）
+    final a = sceneRectFromScreenRect(viewport, fromLtwh);
+    final b = sceneRectFromScreenRect(viewport, fromReversedPoints);
+    expect(a, equals(b));
+    expect(a.width, greaterThan(0));
+    expect(a.height, greaterThan(0));
+  });
+
+  test('非整数换算无量化:zoom=1.7 时 100×100 保留 58.82352941…', () {
+    // Given: zoom=1.7、无平移
+    // When: 纯函数换算（screenToScenePrecise，绕过 screenToScene 的整取整）
+    final sceneRect = sceneRectFromScreenRect(
+      const ViewportState(zoom: 1.7),
+      ui.Rect.fromLTWH(0, 0, 100, 100),
+    );
+
+    // Then: 100/1.7≈58.82352941… 原样保留，无 59 的量化偏差
+    expect(sceneRect.left, closeTo(0, 1e-9));
+    expect(sceneRect.top, closeTo(0, 1e-9));
+    expect(sceneRect.width, closeTo(100 / 1.7, 1e-9));
+    expect(sceneRect.height, closeTo(100 / 1.7, 1e-9));
+  });
+
+  test('框选截图成功:文本元素区域捕获为合法附件', () async {
+    // Given: 场景含 1 个文本元素 (0,0,100,50)（内置字体，避免测试环境
+    // 网络加载字体）
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.loadScene(
+      Scene().addElement(
+        TextElement(
+          id: const ElementId('text-1'),
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 50,
+          text: 'FlowMuse',
+          fontFamily: 'Excalifont',
+        ),
+      ),
+    );
+
+    // When: 捕获含 8px 内边距的场景矩形（与选区路径 ExportBounds 默认
+    // padding 一致的"内容紧贴"矩形）
+    final attachment = await captureSceneRectAttachment(
+      controller,
+      ui.Rect.fromLTWH(-8, -8, 116, 66),
+    );
+
+    // Then: 合法附件 + PNG 签名 + 框选标签与 kind
+    expect(attachment, isNotNull);
+    expect(
+      attachment!.bytes.sublist(0, 8),
+      [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
+      reason: '输出应为 PNG 格式',
+    );
+    expect(attachment.sourceLabel, '框选截图');
+    expect(attachment.kind, AiVisualAttachmentKind.selection);
+    expect(
+      attachment.bytes.length,
+      lessThanOrEqualTo(maxAiVisualAttachmentBytes),
+    );
+  });
+
+  test('零宽/零高返回 null（不抛）', () async {
+    // Given: 空 controller（守卫先于任何控制器操作）
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+
+    // When/Then: 过小矩形按取消/无效处理
+    expect(
+      await captureSceneRectAttachment(
+        controller,
+        ui.Rect.fromLTWH(0, 0, 0, 10),
+      ),
+      isNull,
+    );
+  });
+
+  test('损坏图片侦测失败:报"请重新打开笔记"文案', () async {
+    // Given: 经 applyResult 注入指向损坏 bytes 的 ImageElement——勿用
+    // loadScene（会自动全量预热，与本管线竞态，理由同 export_region_png_test
+    // 首部注释）
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.applyResult(
+      AddFileResult(
+        fileId: 'bad-1',
+        file: ImageFile(
+          mimeType: 'image/png',
+          bytes: Uint8List.fromList([0, 1, 2, 3]),
+        ),
+      ),
+    );
+    controller.applyResult(
+      AddElementResult(
+        ImageElement(
+          id: const ElementId('elem-bad'),
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+          fileId: 'bad-1',
+          mimeType: 'image/png',
+        ),
+      ),
+    );
+
+    // When/Then: 预热失败数>0 → 会话粘性文案指向重开笔记（"重试"无法兑现）
+    await expectLater(
+      captureSceneRectAttachment(controller, ui.Rect.fromLTWH(0, 0, 100, 100)),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('请重新打开笔记'),
         ),
       ),
     );
