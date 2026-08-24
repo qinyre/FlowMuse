@@ -421,3 +421,59 @@ class AiAgentResponse {
     return {'tool': name, 'arguments': arguments};
   }
 }
+
+/// 净化为"确能成立"的写动作，供应用前再次把守。
+///
+/// 模型偶发把对指令的"说明/致歉"误当成可写入内容（例如回复"当前并没有
+/// 可生成代办的内容"却仍返回一个等值的 insert_text 动作）。这类动作如果
+/// 进入确认清单会逼用户把无关文字写进笔记。此函数按内容是否成立来丢弃：
+///
+/// - R1：动作值为空/纯空白 → 丢弃（smart_layout 无值，恒保留）。
+/// - R2：insert_text 的值与回复 message 归一化后同文 → 说明被误当内容，丢弃。
+/// - R3：rename_note 的新标题与当前标题相同 → 无效重命名，丢弃（未提供
+///   [currentNoteTitle] 时保守保留）。
+/// - R4：generate_mindmap 空值 → 丢弃。
+///
+/// 返回保序后的新列表；全部丢弃后调用方应视为"仅回复、无写入"。
+List<AiAgentAction> sanitizeAiAgentActions({
+  required String message,
+  required List<AiAgentAction> actions,
+  String? currentNoteTitle,
+}) {
+  final normalizedMessage = _normalizeForEcho(message);
+  final result = <AiAgentAction>[];
+  for (final action in actions) {
+    switch (action.tool) {
+      case AiAgentTool.smartLayout:
+        result.add(action);
+      case AiAgentTool.insertText:
+        final value = action.value.trim();
+        if (value.isEmpty) continue;
+        if (normalizedMessage.isNotEmpty &&
+            value == normalizedMessage) {
+          continue;
+        }
+        result.add(action);
+      case AiAgentTool.renameNote:
+        final title = action.value.trim();
+        if (title.isEmpty) continue;
+        if (currentNoteTitle != null &&
+            title == currentNoteTitle.trim()) {
+          continue;
+        }
+        result.add(action);
+      case AiAgentTool.generateMindmap:
+        if (action.value.trim().isEmpty) continue;
+        result.add(action);
+    }
+  }
+  return List.unmodifiable(result);
+}
+
+/// 归一化用于同文回声比较：trim + 去尾部中英文句末标点。
+String _normalizeForEcho(String source) {
+  return source
+      .trim()
+      .replaceAll(RegExp(r'[。！？.!?；;，,]*$'), '')
+      .trim();
+}

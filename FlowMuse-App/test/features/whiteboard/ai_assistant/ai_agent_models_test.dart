@@ -358,6 +358,111 @@ void main() {
       throwsFormatException,
     );
   });
+
+  group('sanitizeAiAgentActions', () {
+    AiAgentAction insert(String value) =>
+        AiAgentAction(tool: AiAgentTool.insertText, value: value);
+
+    test('R2：insert_text 与回复 message 同文（说明被误当内容）→ 丢弃', () {
+      final message = '当前并没有可生成代办的内容';
+      final actions = [insert('当前并没有可生成代办的内容')];
+      expect(
+        sanitizeAiAgentActions(message: message, actions: actions),
+        isEmpty,
+      );
+    });
+
+    test('R2：尾部标点差异的同文说明也被丢弃', () {
+      final message = '当前并没有可生成代办的内容。';
+      expect(
+        sanitizeAiAgentActions(
+          message: message,
+          actions: [insert('当前并没有可生成代办的内容')],
+        ),
+        isEmpty,
+      );
+    });
+
+    test('真实内容不与 message 相同的插入操作保留', () {
+      final message = '好的，为你生成如下待办：';
+      final actions = [insert('1. 完成报告\n2. 组织例会')];
+      final result = sanitizeAiAgentActions(message: message, actions: actions);
+      expect(result, hasLength(1));
+      expect(result.single.value, '1. 完成报告\n2. 组织例会');
+    });
+
+    test('R1：空/空白插入动作被丢弃，smartLayout 不受影响', () {
+      final actions = [
+        insert('   '),
+        const AiAgentAction(tool: AiAgentTool.smartLayout, value: ''),
+      ];
+      final result = sanitizeAiAgentActions(
+        message: '说明文字',
+        actions: actions,
+      );
+      expect(result, hasLength(1));
+      expect(result.single.tool, AiAgentTool.smartLayout);
+    });
+
+    test('R3：与当前标题相同的重命名动作被丢弃', () {
+      final actions = [
+        const AiAgentAction(tool: AiAgentTool.renameNote, value: '我的笔记'),
+      ];
+      expect(
+        sanitizeAiAgentActions(
+          message: '笔记标题已很清晰',
+          actions: actions,
+          currentNoteTitle: '我的笔记',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('R3：无当前标题时不因同名而丢弃（保守）', () {
+      final actions = [
+        const AiAgentAction(tool: AiAgentTool.renameNote, value: '我的笔记'),
+      ];
+      final result = sanitizeAiAgentActions(
+        message: '重新命名为我的笔记',
+        actions: actions,
+      );
+      expect(result, hasLength(1));
+    });
+
+    test('R1：空根导图丢弃；有效导图保留', () {
+      final actions = [
+        const AiAgentAction(tool: AiAgentTool.generateMindmap, value: ''),
+        const AiAgentAction(
+          tool: AiAgentTool.generateMindmap,
+          value: '{"text":"根","children":[]}',
+        ),
+      ];
+      final result = sanitizeAiAgentActions(
+        message: '已生成导图',
+        actions: actions,
+      );
+      expect(result, hasLength(1));
+    });
+
+    test('保序：净化后保留指定顺序', () {
+      final result = sanitizeAiAgentActions(
+        message: 'X',
+        actions: [
+          insert('第一条'),
+          insert('X'),
+          insert('第三条'),
+        ],
+      );
+      expect(result.map((a) => a.value).toList(), ['第一条', '第三条']);
+    });
+
+    test('空输入返回空列表', () {
+      expect(
+        sanitizeAiAgentActions(message: '任意', actions: const []),
+        isEmpty,
+      );
+    });
+  });
 }
 
 Map<String, Object?> _mindmapChain(int depth) => {

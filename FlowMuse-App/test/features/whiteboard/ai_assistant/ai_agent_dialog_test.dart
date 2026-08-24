@@ -947,6 +947,48 @@ void main() {
       '框选截图',
     );
   });
+
+  testWidgets('说明性动作被净化后不进入确认区（仅回复）', (tester) async {
+    // Given 模型把对指令的说明误当可写入内容（回复 message 与 insert_text 同文）
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: const AiAgentResponse(
+          message: '当前并没有可生成代办的内容',
+          actions: [
+            AiAgentAction(
+              tool: AiAgentTool.insertText,
+              value: '当前并没有可生成代办的内容',
+            ),
+          ],
+        ),
+      ),
+      onApply: (_) async {},
+    );
+
+    await tester.enterText(find.byType(TextField).first, '生成待办');
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+
+    // Then 只显示回复，不出现确认区块与"确认应用"
+    expect(find.text('当前并没有可生成代办的内容'), findsOneWidget);
+    expect(find.textContaining('确认后写入当前笔记'), findsNothing);
+    expect(find.text('确认应用'), findsNothing);
+  });
+
+  testWidgets('点击指令输入框主动请求焦点以唤起键盘', (tester) async {
+    await _openDialog(tester, repository: _FakeAiAgentRepository(), onApply: (_) async {});
+
+    final inputField = find.byType(TextField).first;
+    await tester.tap(inputField);
+    await tester.pump();
+
+    expect(
+      FocusScope.of(tester.element(inputField)).hasFocus,
+      isTrue,
+      reason: '点击指令框后应获得焦点以弹出软键盘（复刻命名框 02546f3 修复）',
+    );
+  });
 }
 
 Future<void> _openDialog(

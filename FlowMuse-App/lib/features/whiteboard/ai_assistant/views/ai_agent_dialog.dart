@@ -125,7 +125,9 @@ class AiAgentPanel extends StatefulWidget {
 
 class _AiAgentPanelState extends State<AiAgentPanel> {
   final _instructionController = TextEditingController();
+  final _instructionFocusNode = FocusNode();
   final _actionControllers = <TextEditingController>[];
+  final _actionFocusNodes = <FocusNode>[];
   AiAgentResponse? _response;
   Set<int> _selectedActions = const {};
   List<String> _customPrompts = const [];
@@ -204,8 +206,12 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     unawaited(_speechSubscription?.cancel());
     if (_ownsSpeechService) unawaited(_speechService.dispose());
     _instructionController.dispose();
+    _instructionFocusNode.dispose();
     for (final controller in _actionControllers) {
       controller.dispose();
+    }
+    for (final node in _actionFocusNodes) {
+      node.dispose();
     }
     super.dispose();
   }
@@ -510,24 +516,43 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   }
 
   void _setResponse(AiAgentResponse response, {required String instruction}) {
+    // 防呆：丢弃"不成立"的写动作（空值、与回复同文的说明、无效重命名、
+    // 空导图），净化后为空则按纯回复处理，面板不出现确认区块。
+    final actions = sanitizeAiAgentActions(
+      message: response.message,
+      actions: response.actions,
+      currentNoteTitle: _context.noteTitle,
+    );
+    final effective = actions.length == response.actions.length
+        ? response
+        : AiAgentResponse(message: response.message, actions: actions);
     for (final controller in _actionControllers) {
       controller.dispose();
+    }
+    for (final node in _actionFocusNodes) {
+      node.dispose();
     }
     _actionControllers
       ..clear()
       ..addAll(
-        response.actions.map(
+        actions.map(
           (action) => TextEditingController(text: action.value),
         ),
       );
+    _actionFocusNodes
+      ..clear()
+      ..addAll(actions.map((_) => FocusNode()));
     setState(() {
       _conversation = compactAiAgentConversation([
         ..._conversation,
-        AiAgentConversationTurn(instruction: instruction, response: response),
+        AiAgentConversationTurn(
+          instruction: instruction,
+          response: effective,
+        ),
       ]);
-      _response = response;
+      _response = effective;
       _selectedActions = {
-        for (var index = 0; index < response.actions.length; index++) index,
+        for (var index = 0; index < actions.length; index++) index,
       };
     });
   }
@@ -536,7 +561,11 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     for (final controller in _actionControllers) {
       controller.dispose();
     }
+    for (final node in _actionFocusNodes) {
+      node.dispose();
+    }
     _actionControllers.clear();
+    _actionFocusNodes.clear();
     _instructionController.clear();
     setState(() {
       _conversation = const [];
@@ -717,6 +746,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(AppSpacing.sidebarInset),
+              keyboardDismissBehavior:
+                  ScrollViewKeyboardDismissBehavior.onDrag,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -778,7 +809,27 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                   const SizedBox(height: AppSpacing.listGap),
                   TextField(
                     controller: _instructionController,
+                    focusNode: _instructionFocusNode,
                     enabled: !_loading && !_applying,
+                    onTapAlwaysCalled: true,
+                    onTap: () {
+                      if (!_instructionFocusNode.hasFocus) {
+                        FocusScope.of(context)
+                            .requestFocus(_instructionFocusNode);
+                        return;
+                      }
+                      if (_loading || _applying) return;
+                      _instructionFocusNode.unfocus();
+                      Future<void>.delayed(
+                        const Duration(milliseconds: 50),
+                        () {
+                          if (mounted) {
+                            FocusScope.of(context)
+                                .requestFocus(_instructionFocusNode);
+                          }
+                        },
+                      );
+                    },
                     onChanged: (_) => setState(() {}),
                     maxLength: 1000,
                     minLines: 2,
@@ -1065,7 +1116,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     if (response.actions.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.listGap),
                       const Text(
-                        '确认后将执行：',
+                        '确认后写入当前笔记：',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ],
@@ -1112,7 +1163,27 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                               ),
                               child: TextField(
                                 controller: _actionControllers[index],
+                                focusNode: _actionFocusNodes[index],
                                 enabled: !_applying && !_loading,
+                                onTapAlwaysCalled: true,
+                                onTap: () {
+                                  final node = _actionFocusNodes[index];
+                                  if (!node.hasFocus) {
+                                    FocusScope.of(context).requestFocus(node);
+                                    return;
+                                  }
+                                  if (_applying || _loading) return;
+                                  node.unfocus();
+                                  Future<void>.delayed(
+                                    const Duration(milliseconds: 50),
+                                    () {
+                                      if (mounted) {
+                                        FocusScope.of(context)
+                                            .requestFocus(node);
+                                      }
+                                    },
+                                  );
+                                },
                                 onChanged: (_) => setState(() {}),
                                 minLines: 1,
                                 maxLines:
