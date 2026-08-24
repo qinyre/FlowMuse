@@ -131,14 +131,16 @@ Future<AiVisualAttachment?> captureSceneRectAttachment(
   ui.Rect sceneRect,
 ) async {
   if (sceneRect.width < 0.5 || sceneRect.height < 0.5) return null;
-  return _renderSceneRectAttachment(controller, sceneRect);
+  return _renderSceneRectAttachment(controller, sceneRect,
+      sourceLabel: '框选截图');
 }
 
 /// 共享私有管线：预热 → 导出 → 归一化 → 附件。失败抛 StateError（复用现语义文案）。
 Future<AiVisualAttachment?> _renderSceneRectAttachment(
   MarkdrawController controller,
-  ui.Rect sceneRect,
-) async {
+  ui.Rect sceneRect, {
+  String sourceLabel = '选区截图',
+}) async {
   final failedImages = await controller.prewarmRegionImages(sceneRect);
   if (failedImages > 0) {
     // _failed 集合本会话粘性（image_cache.dart 不清理），"重试"无法兑现，
@@ -149,7 +151,7 @@ Future<AiVisualAttachment?> _renderSceneRectAttachment(
   if (png == null) throw StateError('截图生成失败，请重试');
   final normalized = await normalizeAttachmentPng(png);
   return AiVisualAttachment(
-    sourceLabel: '框选截图',
+    sourceLabel: sourceLabel,
     mimeType: 'image/png',
     bytes: normalized,
     kind: AiVisualAttachmentKind.selection,

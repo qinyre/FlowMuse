@@ -234,11 +234,9 @@ void main() {
     // When: 捕获选区
     final attachment = await captureSelectionAttachment(controller);
 
-    // Then: 返回合法附件（守卫要求非文本元素，纯文本选区在上一用例覆盖）。
-    // 自共享管线提取后（T1）label 统一为 '框选截图'——两路径同用一个
-    // _renderSceneRectAttachment 附件构造段
+    // Then: 返回合法附件（守卫要求非文本元素，纯文本选区在上一用例覆盖）
     expect(attachment, isNotNull);
-    expect(attachment!.sourceLabel, '框选截图');
+    expect(attachment!.sourceLabel, '选区截图');
     expect(attachment.mimeType, 'image/png');
     expect(attachment.kind, AiVisualAttachmentKind.selection);
     expect(attachment.bytes, isNotEmpty);
