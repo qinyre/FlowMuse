@@ -51,8 +51,27 @@ type SmartLayoutBlockRequest struct {
 }
 
 type SmartLayoutComposeRequest struct {
-	Pages  []SmartLayoutPage            `json:"pages"`
-	Blocks []SmartLayoutRecognizedBlock `json:"blocks"`
+	Pages      []SmartLayoutPage            `json:"pages"`
+	Blocks     []SmartLayoutRecognizedBlock `json:"blocks"`
+	Elements   []SmartLayoutElementRef      `json:"elements,omitempty"`
+	LayoutHint string                        `json:"layoutHint,omitempty"`
+}
+
+// SmartLayoutElementRef 是 compose 请求中"非笔迹元素"的最小摘要，供 AI 判定整页布局。
+type SmartLayoutElementRef struct {
+	ID       string     `json:"id"`
+	Type     string     `json:"type"`
+	Bounds   InkBounds  `json:"bounds"`
+	PageID   string     `json:"pageId,omitempty"`
+	Locked   bool       `json:"locked,omitempty"`
+	GroupIDs []string   `json:"groupIds,omitempty"`
+}
+
+// SmartLayoutLayoutDecision 是服务端对整页布局风格的判定结果（方案二：只判风格与结构，不给坐标）。
+type SmartLayoutLayoutDecision struct {
+	Style      string         `json:"style"` // ppt | mindmap | article | in_place
+	Confidence float64        `json:"confidence"`
+	Structure  map[string]any `json:"structure,omitempty"`
 }
 
 type SmartLayoutPage struct {
@@ -121,4 +140,5 @@ type SmartLayoutResponse struct {
 	Document SmartLayoutDocument          `json:"document"`
 	Blocks   []SmartLayoutRecognizedBlock `json:"blocks"`
 	Pages    []SmartLayoutPageDecision    `json:"pages"`
+	Layout   *SmartLayoutLayoutDecision   `json:"layout,omitempty"`
 }
