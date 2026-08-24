@@ -995,13 +995,7 @@ class MarkdrawController extends ChangeNotifier {
     Map<String, Object?>? customData,
     String pageId,
   ) {
-    final next = {...?customData};
-    final existingFlowMuse = next['flowMuse'];
-    next['flowMuse'] = {
-      if (existingFlowMuse is Map<String, Object?>) ...existingFlowMuse,
-      'pageId': pageId,
-    };
-    return next;
+    return SmartLayoutUtils.mergePageCustomData(customData, pageId);
   }
 
   Scene _sceneWithLayoutPages(Scene scene) {
@@ -4637,35 +4631,13 @@ class MarkdrawController extends ChangeNotifier {
     List<Bounds> occupied, {
     Bounds? preferred,
   }) {
-    if (width > area.width || height > area.height) return null;
-    const gap = 24.0;
-    final xCandidates = <double>{
-      if (preferred != null)
-        preferred.left.clamp(area.left, area.right - width).toDouble(),
-      area.left,
-      area.right - width,
-      for (final bounds in occupied) bounds.right + gap,
-    };
-    final yCandidates = <double>{
-      if (preferred != null)
-        preferred.top.clamp(area.top, area.bottom - height).toDouble(),
-      area.top,
-      area.bottom - height,
-      for (final bounds in occupied) bounds.bottom + gap,
-    };
-    for (final y in yCandidates) {
-      for (final x in xCandidates) {
-        final candidate = Bounds.fromLTWH(x, y, width, height);
-        if (candidate.left >= area.left &&
-            candidate.top >= area.top &&
-            candidate.right <= area.right &&
-            candidate.bottom <= area.bottom &&
-            !occupied.any(candidate.intersects)) {
-          return candidate;
-        }
-      }
-    }
-    return null;
+    return SmartLayoutPlacement.findInsertionBounds(
+      area,
+      width,
+      height,
+      occupied,
+      preferred: preferred,
+    );
   }
 
   Bounds _findUnboundedInsertionBounds(
