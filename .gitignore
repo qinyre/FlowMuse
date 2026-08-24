@@ -72,3 +72,6 @@ docs/参赛文档/
 
 # Crash dumps (may contain sensitive memory content)
 *.dmp
+
+# SDD workspaces (review artifacts, ledgers)
+.superpowers/

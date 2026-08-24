@@ -159,4 +159,44 @@ void main() {
         .single;
     expect(element.x, greaterThanOrEqualTo(448));
   });
+
+  test('AI 文本避让旋转元素和零高度线的视觉占用', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.lastCanvasSize = const Size(800, 600);
+    controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
+    final rotated = RectangleElement(
+      id: ElementId('rotated'),
+      x: 260,
+      y: 100,
+      width: 280,
+      height: 80,
+      angle: 0.7853981633974483,
+    );
+    controller.applyResult(AddElementResult(rotated));
+    controller.applyResult(
+      AddElementResult(
+        LineElement(
+          id: ElementId('line'),
+          x: 32,
+          y: 260,
+          width: 736,
+          height: 0,
+          points: const [Point(0, 0), Point(736, 0)],
+        ),
+      ),
+    );
+
+    controller.insertPlainTexts(['AI 总结'], adaptiveLayout: true);
+
+    final text = controller.editorState.scene.activeElements
+        .whereType<TextElement>()
+        .single;
+    final textBounds = Bounds.fromLTWH(text.x, text.y, text.width, text.height);
+    expect(
+      textBounds.intersects(AlignmentUtils.visualBounds(rotated)),
+      isFalse,
+    );
+    expect(textBounds.intersects(Bounds.fromLTWH(32, 256, 736, 8)), isFalse);
+  });
 }
