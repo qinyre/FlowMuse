@@ -795,13 +795,24 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
     List<String>? selected;
     if (initialPageIds != null && initialPageIds.length == 1) {
+      // AI 指令路径：已指定单个页面，直接执行，不再弹选页框
       selected = initialPageIds;
+    } else if (pages.length == 1) {
+      // 单页笔记，一键执行，避免弹出多余的选页对话框（灰色遮罩）
+      selected = [pages.first.id];
     } else {
+      final visible = _markdrawController.editorState.viewport.visibleRect(
+        _markdrawController.canvasSize,
+      );
+      final currentPage = _markdrawController.pageForVisibleRect(visible);
       selected = await showDialog<List<String>>(
         context: context,
         builder: (dialogContext) => SmartLayoutPagePickerDialog(
           pages: pages,
-          initial: {...?initialPageIds},
+          initial: {
+            if (currentPage != null) currentPage.id,
+            ...?initialPageIds,
+          },
         ),
       );
     }
