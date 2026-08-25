@@ -383,22 +383,23 @@ class SmartLayoutConfirmBar extends StatelessWidget {
   }
 }
 
-/// 非模态底部"识别失败"悬浮条（红区可见）。
+/// 非模态底部"识别失败"悬浮条（红区可见；展示失败原因便于定位）。
 class SmartLayoutFailureBar extends StatelessWidget {
   const SmartLayoutFailureBar({
     super.key,
-    required this.failureCount,
+    required this.failures,
     required this.isMultiPage,
     required this.onAction,
   });
 
-  final int failureCount;
+  final List<SmartLayoutFailureInfo> failures;
   final bool isMultiPage;
   final ValueChanged<SmartLayoutBarAction> onAction;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final firstError = failures.isEmpty ? null : failures.first.error;
     return Card(
       elevation: 6,
       color: theme.colorScheme.errorContainer,
@@ -407,10 +408,25 @@ class SmartLayoutFailureBar extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                '$failureCount 处手写未识别成功（红色区域），'
-                '可修改字迹后重试，或删除后继续。',
-                style: theme.textTheme.bodySmall,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${failures.length} 处手写未识别成功（红色区域），'
+                    '可修改字迹后重试，或删除后继续。',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  if (firstError != null && firstError.isNotEmpty)
+                    Text(
+                      '原因：$firstError',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onErrorContainer,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: 12),

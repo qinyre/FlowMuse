@@ -119,7 +119,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _aiCaptureModeActive = false;
   bool _smartLayoutFlowActive = false;
   SmartLayoutPlan? _smartLayoutBarPlan;
-  int _smartLayoutBarFailureCount = 0;
+  List<SmartLayoutFailureInfo> _smartLayoutBarFailures = const [];
   bool _smartLayoutBarMultiPage = false;
   Completer<SmartLayoutBarAction>? _smartLayoutBarHandler;
   Completer<AiVisualAttachment?>? _regionCaptureCompleter;
@@ -883,13 +883,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   /// 等待底部悬浮条动作（非模态：画布全程可见）。
   Future<SmartLayoutBarAction> _awaitSmartLayoutBarAction({
     SmartLayoutPlan? plan,
-    int failureCount = 0,
+    List<SmartLayoutFailureInfo> failures = const [],
     required bool isMultiPage,
   }) {
     final completer = Completer<SmartLayoutBarAction>();
     setState(() {
       _smartLayoutBarPlan = plan;
-      _smartLayoutBarFailureCount = failureCount;
+      _smartLayoutBarFailures = failures;
       _smartLayoutBarMultiPage = isMultiPage;
       _smartLayoutBarHandler = completer;
     });
@@ -897,7 +897,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       if (mounted) {
         setState(() {
           _smartLayoutBarPlan = null;
-          _smartLayoutBarFailureCount = 0;
+          _smartLayoutBarFailures = const [];
           _smartLayoutBarHandler = null;
         });
       }
@@ -909,7 +909,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (handler == null || handler.isCompleted) return;
     setState(() {
       _smartLayoutBarPlan = null;
-      _smartLayoutBarFailureCount = 0;
+      _smartLayoutBarFailures = const [];
       _smartLayoutBarHandler = null;
     });
     handler.complete(action);
@@ -952,7 +952,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           ),
         );
         final action = await _awaitSmartLayoutBarAction(
-          failureCount: result.failures.length,
+          failures: result.failures,
           isMultiPage: isMultiPage,
         );
         _markdrawController.setSmartLayoutGhost(null);
@@ -2507,7 +2507,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       ),
                     ),
                   )
-                else if (_smartLayoutBarFailureCount > 0 &&
+                else if (_smartLayoutBarFailures.isNotEmpty &&
                     _smartLayoutBarHandler != null)
                   Positioned(
                     left: 48,
@@ -2515,7 +2515,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                     bottom: 24,
                     child: Center(
                       child: SmartLayoutFailureBar(
-                        failureCount: _smartLayoutBarFailureCount,
+                        failures: _smartLayoutBarFailures,
                         isMultiPage: _smartLayoutBarMultiPage,
                         onAction: _handleSmartLayoutBarAction,
                       ),

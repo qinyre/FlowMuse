@@ -147,11 +147,12 @@ void main() {
     testWidgets('多页：显示失败数、重新识别/跳过本页/取消整个流程', (tester) async {
       SmartLayoutBarAction? tapped;
       await tester.pumpWidget(wrap(SmartLayoutFailureBar(
-        failureCount: 2,
+        failures: [SmartLayoutFailureInfo(blockId: 'b1', bounds: Rect.fromLTWH(0, 0, 10, 10), error: 'HTTP 429'), SmartLayoutFailureInfo(blockId: 'b2', bounds: Rect.fromLTWH(0, 0, 10, 10))],
         isMultiPage: true,
         onAction: (action) => tapped = action,
       )));
-      expect(find.textContaining('2 处手写未识别成功'), findsOneWidget);
+      expect(find.textContaining("2 处手写未识别成功"), findsOneWidget);
+      expect(find.textContaining("HTTP 429"), findsOneWidget);
       await tester.tap(find.text('重新识别'));
       expect(tapped, SmartLayoutBarAction.retry);
       expect(find.text('跳过本页'), findsOneWidget);
@@ -159,7 +160,7 @@ void main() {
 
     testWidgets('单页：无跳过本页，取消文案为"取消"', (tester) async {
       await tester.pumpWidget(wrap(SmartLayoutFailureBar(
-        failureCount: 1,
+        failures: [SmartLayoutFailureInfo(blockId: 'b1', bounds: Rect.fromLTWH(0, 0, 10, 10))],
         isMultiPage: false,
         onAction: (_) {},
       )));
