@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/serialization/external_export_sanitizer.dart';
 
 import '../models/external_document_request.dart';
 
@@ -26,9 +27,10 @@ class ImportedDocumentCoordinator {
     final result = name.endsWith('.markdraw')
         ? DocumentParser.parse(content)
         : ExcalidrawJsonCodec.parse(content);
+    final sanitizedDoc = sanitizeDocumentForExternalExport(result.value);
     return ImportedDocumentPreview(
       fileName: request.fileName,
-      content: ExcalidrawJsonCodec.serialize(result.value),
+      content: ExcalidrawJsonCodec.serialize(sanitizedDoc),
       warnings: result.warnings.map((warning) => warning.message).toList(),
     );
   }

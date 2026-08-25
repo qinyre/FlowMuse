@@ -20,6 +20,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 import '../core/elements/collaboration_element_owner.dart';
+import '../core/serialization/external_export_sanitizer.dart';
 import '../config/writing_feature_flags.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
@@ -1897,7 +1898,11 @@ class MarkdrawController extends ChangeNotifier {
       allSceneElements: _editorState.scene.activeElements,
       sceneFiles: _editorState.scene.files,
     );
-    _libraryItems = [..._libraryItems, item];
+    // 素材模板不保留协作身份（v4 §9.3）。
+    final sanitizedItem = item.copyWith(
+      elements: [for (final e in item.elements) withoutCreator(e)],
+    );
+    _libraryItems = [..._libraryItems, sanitizedItem];
     _showLibraryPanel = true;
     notifyListeners();
   }
@@ -6586,6 +6591,30 @@ class MarkdrawController extends ChangeNotifier {
     };
   }
 
+  /// 外部导出专用：先净化 collaborationOwner 再序列化。文件保存对话框、
+  /// 系统分享等外部出口只能调用本方法（v4 §10.3）；内部持久化与协作
+  /// 链路继续调用 [serializeScene]。
+  String serializeSceneForExternalExport({
+    DocumentFormat format = DocumentFormat.markdraw,
+    bool includeDeleted = false,
+  }) {
+    final doc = SceneDocumentConverter.sceneToDocument(
+      _editorState.scene,
+      settings: CanvasSettings(
+        background: _canvasBackgroundColor,
+        backgroundFollowsTheme: _canvasBackgroundFollowsTheme,
+        grid: _gridSize,
+        name: _documentName,
+      ),
+      includeDeleted: includeDeleted,
+    );
+    final sanitized = sanitizeDocumentForExternalExport(doc);
+    return switch (format) {
+      DocumentFormat.excalidraw => ExcalidrawJsonCodec.serialize(sanitized),
+      _ => DocumentSerializer.serialize(sanitized),
+    };
+  }
+
   /// Serializes the current scene as an Excalidraw JSON object.
   Map<String, Object?> serializeExcalidrawSceneJson({
     bool includeDeleted = false,
@@ -6600,7 +6629,11 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Loads a scene from file content. Detects format from [filename].
-  void loadFromContent(String content, String filename) {
+  void loadFromContent(
+    String content,
+    String filename, {
+    bool isExternalImport = false,
+  }) {
     final format = DocumentService.detectFormat(filename);
     final parseResult = switch (format) {
       DocumentFormat.markdraw => DocumentParser.parse(content),
@@ -6609,15 +6642,20 @@ class MarkdrawController extends ChangeNotifier {
         'Use importLibraryFromContent for library files',
       ),
     };
-    _canvasBackgroundColor = parseResult.value.settings.background;
-    _canvasBackgroundFollowsTheme =
-        parseResult.value.settings.backgroundFollowsTheme;
+    var document = parseResult.value;
+    if (isExternalImport) {
+      // 外部文件的 collaborationOwner 不可信：打开为本地笔记先剥离
+      // （v4 §10.4）。内部本地笔记恢复不走本参数。
+      document = sanitizeDocumentForExternalExport(document);
+    }
+    _canvasBackgroundColor = document.settings.background;
+    _canvasBackgroundFollowsTheme = document.settings.backgroundFollowsTheme;
     if (_canvasBackgroundFollowsTheme) {
       _canvasBackgroundColor = _themeCanvasBackgroundColor;
     }
-    _gridSize = parseResult.value.settings.grid;
-    _documentName = parseResult.value.settings.name;
-    loadScene(SceneDocumentConverter.documentToScene(parseResult.value));
+    _gridSize = document.settings.grid;
+    _documentName = document.settings.name;
+    loadScene(SceneDocumentConverter.documentToScene(document));
   }
 
   /// Applies Excalidraw JSON received from collaboration.
@@ -6661,7 +6699,7 @@ class MarkdrawController extends ChangeNotifier {
         ? _editorState.selectedIds
         : null;
     return PngExporter.export(
-      _editorState.scene,
+      sanitizeSceneForExternalExport(_editorState.scene),
       _adapter,
       scale: scale,
       backgroundColor: parseColor(_canvasBackgroundColor),
@@ -6683,7 +6721,7 @@ class MarkdrawController extends ChangeNotifier {
         ? _editorState.selectedIds
         : null;
     return SvgExporter.export(
-      _editorState.scene,
+      sanitizeSceneForExternalExport(_editorState.scene),
       backgroundColor: _canvasBackgroundColor,
       selectedIds: selectedIds,
     );
@@ -7058,7 +7096,15 @@ class MarkdrawController extends ChangeNotifier {
   String exportLibraryContent({
     DocumentFormat format = DocumentFormat.excalidrawLibrary,
   }) {
-    final doc = LibraryDocument(items: _libraryItems);
+    // 双保险：历史遗留 item 可能带 owner，导出前统一净化（v4 §10.2）。
+    final doc = LibraryDocument(
+      items: [
+        for (final item in _libraryItems)
+          item.copyWith(
+            elements: [for (final e in item.elements) withoutCreator(e)],
+          ),
+      ],
+    );
     return switch (format) {
       DocumentFormat.excalidrawLibrary => ExcalidrawLibCodec.serialize(doc),
       DocumentFormat.markdrawLibrary => LibraryCodec.serialize(doc),
