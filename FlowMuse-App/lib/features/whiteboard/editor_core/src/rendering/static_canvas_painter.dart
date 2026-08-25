@@ -12,6 +12,7 @@ import '../core/layout/layout.dart';
 import '../core/scene/scene_exports.dart';
 import '../editor/bindings/arrow_label_utils.dart';
 import '../input/active_preview_metrics_probe.dart';
+import 'collaboration_focus_alpha.dart';
 import 'element_renderer.dart';
 import 'rough/rough_adapter.dart';
 import 'text_renderer.dart';
@@ -72,6 +73,15 @@ class StaticCanvasPainter extends CustomPainter {
   final ActivePreviewMetricsProbe? activePreviewMetricsProbe;
   final ActivePreviewPaintMarker? activePreviewPaintMarker;
 
+  /// 协作聚焦（本机视图态）：null + false = 无聚焦，渲染与基线完全一致。
+  final String? focusedCreatorKey;
+  final bool focusHistoricalContent;
+
+  /// 本地高亮元素集合（选中/拖动/编辑中的元素），以只读快照传入；
+  /// painter 只比较 [localHighlightRevision]，禁止对 Set 做 identity 比较。
+  final Set<ElementId> locallyHighlightedElementIds;
+  final int localHighlightRevision;
+
   const StaticCanvasPainter({
     required this.scene,
     required this.adapter,
@@ -89,6 +99,10 @@ class StaticCanvasPainter extends CustomPainter {
     this.skipMathText = false,
     this.activePreviewMetricsProbe,
     this.activePreviewPaintMarker,
+    this.focusedCreatorKey,
+    this.focusHistoricalContent = false,
+    this.locallyHighlightedElementIds = const {},
+    this.localHighlightRevision = 0,
   });
 
   @override
@@ -148,15 +162,41 @@ class StaticCanvasPainter extends CustomPainter {
     }
 
     final visible = cullElements(scene.orderedElements, viewport, size);
+    // v4 §7.2：原 z 序单遍绘制，非目标元素按连续区段以 0.22 合成。
+    final focusActive = focusedCreatorKey != null || focusHistoricalContent;
+    var dimOpen = false;
+    final dimPaint = Paint()..color = const Color.fromRGBO(255, 255, 255, 0.22);
+
     for (final element in visible) {
       if (element.isCanvasPage) {
-        continue;
+        continue; // 页底在循环前绘制，不参与 dim 机制
       }
-      // Skip standalone text that is being edited
+      // Skip standalone text that is being edited —— 编辑中的文本由 overlay
+      // 全亮绘制；它同时必须打断 dim 段（等价 alpha 1.0）。
       if (editingElementId != null &&
           element.id == editingElementId &&
           element is core.TextElement) {
+        if (dimOpen) {
+          canvas.restore();
+          dimOpen = false;
+        }
         continue;
+      }
+
+      final alpha = focusActive
+          ? collaborationFocusAlpha(
+              element,
+              focusedCreatorKey: focusedCreatorKey,
+              focusHistoricalContent: focusHistoricalContent,
+              highlightedElementIds: locallyHighlightedElementIds,
+            )
+          : 1.0;
+      if (alpha < 1.0 && !dimOpen) {
+        canvas.saveLayer(null, dimPaint);
+        dimOpen = true;
+      } else if (alpha >= 1.0 && dimOpen) {
+        canvas.restore();
+        dimOpen = false;
       }
 
       // Clip children of frames to frame bounds
@@ -203,6 +243,9 @@ class StaticCanvasPainter extends CustomPainter {
       if (parentFrame != null) {
         canvas.restore();
       }
+    }
+    if (dimOpen) {
+      canvas.restore();
     }
 
     // Render live creation preview on top
@@ -753,6 +796,10 @@ class StaticCanvasPainter extends CustomPainter {
         skipMathText != oldDelegate.skipMathText ||
         appendPageHint != oldDelegate.appendPageHint ||
         activePreviewMetricsProbe != oldDelegate.activePreviewMetricsProbe ||
-        activePreviewPaintMarker != oldDelegate.activePreviewPaintMarker;
+        activePreviewPaintMarker != oldDelegate.activePreviewPaintMarker ||
+        focusedCreatorKey != oldDelegate.focusedCreatorKey ||
+        focusHistoricalContent != oldDelegate.focusHistoricalContent ||
+        (focusedCreatorKey != null || focusHistoricalContent) &&
+            oldDelegate.localHighlightRevision != localHighlightRevision;
   }
 }
