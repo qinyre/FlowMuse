@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/views/smart_layout_dialogs.dart';
 import 'package:flutter/material.dart';
