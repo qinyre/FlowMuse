@@ -78,12 +78,54 @@ class PptLayoutEngine {
     }
 
     if (hasFigure) {
-      final textWidth = contentArea.width * figureColumnRatio - 12;
-      final figureLeft = contentArea.left + textWidth + columnGap;
-      final figureWidth = contentArea.right - figureLeft;
-      if (figureWidth <= 0) return null;
-      if (!placeColumn(textGroups, contentArea.left, textWidth)) return null;
-      if (!placeColumn(figureGroups, figureLeft, figureWidth)) return null;
+      // 自适应列宽：配图列按"最大配图宽"决定（默认 38%，回落时加大），
+      // 文本列必须容纳最大文本单元；配图列被文本挤压放不下时回落单列全宽堆叠。
+      double figureNeeded = 0;
+      for (final group in figureGroups) {
+        final unit = units[group.key];
+        if (unit == null) continue;
+        if (unit.size.width > figureNeeded) {
+          figureNeeded = unit.size.width;
+        }
+      }
+      double textNeeded = 0;
+      for (final group in textGroups) {
+        final unit = units[group.key];
+        if (unit == null) continue;
+        if (unit.size.width > textNeeded) {
+          textNeeded = unit.size.width;
+        }
+      }
+      final defaultTextWidth = contentArea.width * figureColumnRatio - 12;
+      final defaultFigureWidth = contentArea.width - defaultTextWidth - columnGap;
+      final bothFitDefault = figureNeeded <= defaultFigureWidth &&
+          textNeeded <= defaultTextWidth;
+      final adaptiveFigureWidth = contentArea.width - columnGap - textNeeded;
+      final adaptiveFits = figureNeeded <= adaptiveFigureWidth &&
+          textNeeded <= contentArea.width - columnGap - figureNeeded;
+      if (bothFitDefault) {
+        final textWidth = defaultTextWidth;
+        final figureLeft = contentArea.left + textWidth + columnGap;
+        final figureWidth = contentArea.right - figureLeft;
+        if (!placeColumn(textGroups, contentArea.left, textWidth)) return null;
+        if (!placeColumn(figureGroups, figureLeft, figureWidth)) return null;
+      } else if (adaptiveFits) {
+        final figureWidth = figureNeeded;
+        final textWidth = contentArea.width - figureWidth - columnGap;
+        if (!placeColumn(textGroups, contentArea.left, textWidth)) return null;
+        if (!placeColumn(
+          figureGroups,
+          contentArea.left + textWidth + columnGap,
+          figureWidth,
+        )) {
+          return null;
+        }
+      } else {
+        // 单列全宽回落：所有组按原顺序堆叠
+        if (!placeColumn(groups, contentArea.left, contentArea.width)) {
+          return null;
+        }
+      }
     } else {
       if (!placeColumn(textGroups, contentArea.left, contentArea.width)) {
         return null;
