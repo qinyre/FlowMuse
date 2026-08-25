@@ -2655,17 +2655,60 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     WhiteboardState state,
     CollaborationIdentity identity,
   ) {
+    final ownCreatorKey = _currentCreatorKey();
+    final groups = <String, List<CollaboratorPresence>>{};
+    final keyless = <CollaboratorPresence>[];
+    for (final presence in state.collaborators.values) {
+      final key = presence.creatorKey;
+      if (key == null) {
+        keyless.add(presence); // 旧游客：仅按 socket 显示，不合并不猜测
+        continue;
+      }
+      if (key == ownCreatorKey) continue; // 当前用户 badge 代表自己的组（含多设备）
+      groups.putIfAbsent(key, () => []).add(presence);
+    }
+
+    CollaborationParticipantBadge groupBadge(
+      String key,
+      List<CollaboratorPresence> members,
+    ) {
+      final representative = _onlinePresenceFor(key) ?? members.first;
+      return CollaborationParticipantBadge(
+        username: representative.username,
+        avatarUrl: representative.avatarUrl,
+        idle: representative.idleState != CollaboratorIdleState.active,
+        creatorKey: key,
+        focused: _isFocusedOn(key),
+        onTap: () => _toggleCreatorFocus(
+          key,
+          labelSnapshot: representative.username,
+          isGuest: representative.isGuest,
+        ),
+      );
+    }
+
     return [
       CollaborationParticipantBadge(
         username: identity.username,
         avatarUrl: identity.avatarUrl,
         isCurrentUser: true,
+        creatorKey: ownCreatorKey,
+        focused: ownCreatorKey != null && _isFocusedOn(ownCreatorKey),
+        onTap: ownCreatorKey == null
+            ? null
+            : () => _toggleCreatorFocus(
+                ownCreatorKey,
+                labelSnapshot: identity.username,
+                isGuest: identity.isGuest,
+              ),
       ),
-      for (final presence in state.collaborators.values)
+      for (final entry in groups.entries) groupBadge(entry.key, entry.value),
+      for (final presence in keyless)
         CollaborationParticipantBadge(
           username: presence.username,
           avatarUrl: presence.avatarUrl,
           idle: presence.idleState != CollaboratorIdleState.active,
+          // creatorKey 缺失：显示但禁用按作者聚焦（v4 §6.2）
         ),
     ];
   }
