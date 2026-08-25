@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide Element, SelectionOverlay, TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart'
     as editor_core;
 
@@ -25,6 +27,7 @@ import '../collaboration/models/excalidraw_scene.dart';
 import '../collaboration/models/live_ink_chunk.dart';
 import '../collaboration/models/room_collaborator.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
+import '../collaboration/services/collaboration_creator_identity.dart';
 import '../collaboration/services/collaboration_debug_log.dart';
 import '../collaboration/services/live_ink_receive_scheduler.dart';
 import '../collaboration/services/live_ink_sender.dart';
@@ -87,6 +90,11 @@ class WhiteboardPage extends ConsumerStatefulWidget {
 
 enum _ShareSelection { png, markdraw, excalidraw, invitation }
 
+/// 计算 roomUsers 批次中的新增 socket 集合（离开方向不产生"加入"）。
+/// 公开以便源码级单测（Task 4 Step 4.1）。
+Set<String> newlyJoinedSocketIds(Set<String> previous, Set<String> next) =>
+    next.difference(previous);
+
 class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     with WidgetsBindingObserver {
   late final MarkdrawController _markdrawController;
@@ -109,6 +117,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _applyingRemoteScene = false;
   bool _collaborationOpening = false;
   String? _lastIdleState;
+  String? _guestCreatorSessionId;
+  final Map<String, String> _socketCreatorKeys =
+      {}; // socketId -> creatorKey（Task 9/14 消费）
+  // ignore: unused_field
+  int _presenceCreatorRevision = 0; // Task 13/14 消费（painter shouldRepaint）
   bool _temporarySaved = false;
   int _openGeneration = 0;
   RealtimeConnectionStatus? _lastRealtimeStatus;
@@ -216,6 +229,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _loadImagesTimer?.cancel();
     _liveInkSender.cancel();
     _remoteWetInkStore.dispose();
+    _guestCreatorSessionId = null;
+    _socketCreatorKeys.clear();
+    _presenceCreatorRevision++;
     unawaited(_collaborationRepository.stop());
     _markdrawController.dispose();
     super.dispose();
@@ -792,9 +808,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (_smartLayoutFlowActive) return;
     final pages = _markdrawController.layout.pages;
     if (pages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前笔记没有页面')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前笔记没有页面')));
       return;
     }
     List<String> selected;
@@ -814,10 +830,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         builder: (dialogContext) => SmartLayoutScopeDialog(
           pages: pages,
           currentPageId: currentPage?.id,
-          thumbnailBuilder: (bounds) => _markdrawController.exportRegionPng(
-            bounds,
-            maxLongestSide: 120,
-          ),
+          thumbnailBuilder: (bounds) =>
+              _markdrawController.exportRegionPng(bounds, maxLongestSide: 120),
         ),
       );
       if (selection == null) return;
@@ -856,9 +870,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             // 取消整个流程：停止后续页，已应用页保留
             setState(() => _smartLayoutFlowActive = false);
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('已取消，完成 $applied 页')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('已取消，完成 $applied 页')));
             }
             return;
         }
@@ -923,14 +937,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     SmartLayoutPlanResult result;
     try {
       messenger.showSnackBar(
-        const SnackBar(
-          duration: Duration(days: 1),
-          content: Text('智能排版识别中…'),
-        ),
+        const SnackBar(duration: Duration(days: 1), content: Text('智能排版识别中…')),
       );
-      result = await _markdrawController.buildSmartLayoutPlan(
-        pageId: pageId,
-      );
+      result = await _markdrawController.buildSmartLayoutPlan(pageId: pageId);
     } catch (catchError) {
       messenger.removeCurrentSnackBar();
       messenger.showSnackBar(
@@ -957,21 +966,20 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         );
         _markdrawController.setSmartLayoutGhost(null);
         return switch (action) {
-          SmartLayoutBarAction.retry =>
-            _runSmartLayoutPage(pageId, isMultiPage: isMultiPage),
+          SmartLayoutBarAction.retry => _runSmartLayoutPage(
+            pageId,
+            isMultiPage: isMultiPage,
+          ),
           SmartLayoutBarAction.skipPage => _SmartLayoutPageOutcome.skipped,
           SmartLayoutBarAction.cancelAll => _SmartLayoutPageOutcome.cancelled,
           SmartLayoutBarAction.apply ||
-          SmartLayoutBarAction.applyAndDrop =>
-            _SmartLayoutPageOutcome.failed,
+          SmartLayoutBarAction.applyAndDrop => _SmartLayoutPageOutcome.failed,
         };
       }
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            result.error != null
-                ? '智能排版失败：${result.error}'
-                : '本页没有可智能排版的手写内容',
+            result.error != null ? '智能排版失败：${result.error}' : '本页没有可智能排版的手写内容',
           ),
         ),
       );
@@ -992,10 +1000,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
     _markdrawController.setSmartLayoutGhost(null);
     return switch (action) {
-      SmartLayoutBarAction.apply =>
-        _applySmartLayoutPlan(plan, dropFailedBlocks: false),
-      SmartLayoutBarAction.applyAndDrop =>
-        _applySmartLayoutPlan(plan, dropFailedBlocks: true),
+      SmartLayoutBarAction.apply => _applySmartLayoutPlan(
+        plan,
+        dropFailedBlocks: false,
+      ),
+      SmartLayoutBarAction.applyAndDrop => _applySmartLayoutPlan(
+        plan,
+        dropFailedBlocks: true,
+      ),
       SmartLayoutBarAction.skipPage => _SmartLayoutPageOutcome.skipped,
       SmartLayoutBarAction.cancelAll => _SmartLayoutPageOutcome.cancelled,
       SmartLayoutBarAction.retry => _SmartLayoutPageOutcome.failed,
@@ -1013,9 +1025,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     )) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text(
-            dropFailedBlocks ? '智能排版已应用（未识别笔迹已删除）' : '智能排版已应用',
-          ),
+          content: Text(dropFailedBlocks ? '智能排版已应用（未识别笔迹已删除）' : '智能排版已应用'),
         ),
       );
       return _SmartLayoutPageOutcome.applied;
@@ -1423,6 +1433,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _loadImagesTimer = null;
     _lastIdleState = null;
     _lastRealtimeStatus = null;
+    _guestCreatorSessionId = null;
+    _socketCreatorKeys.clear();
+    _presenceCreatorRevision++;
   }
 
   Future<bool?> _confirmEndCollaborationRoom() {
@@ -1630,6 +1643,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _listenToRoom(CollaborationRoom room) async {
     _disposingOrLeaving = false;
+    if (_collaborationIdentity.isGuest && _guestCreatorSessionId == null) {
+      _guestCreatorSessionId = const Uuid().v4();
+    }
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = _collaborationRepository
         .encryptedMessages(room)
@@ -1651,10 +1667,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = _collaborationRepository.roomUsers.listen((users) {
       final nextSocketIds = {for (final user in users) user.socketId};
+      final joinedSocketIds = newlyJoinedSocketIds(
+        _roomSocketIds,
+        nextSocketIds,
+      );
       for (final departed in _roomSocketIds.difference(nextSocketIds)) {
         _remoteWetInkStore.removeSender(departed);
+        _socketCreatorKeys.remove(departed);
       }
       _roomSocketIds = nextSocketIds;
+      if (joinedSocketIds.isNotEmpty) {
+        // 后加入者触发：本端强制绕过 idle 去重补发一次自身 presence，
+        // 使静止的先在线者身份可达（v4 §4.4 规则 3）。单批多人加入只发一次；
+        // 含自身 socket 时该发送幂等冗余，无害；只响应加入，不响应离开。
+        _broadcastIdleState(_lastIdleState ?? 'active', force: true);
+      }
       _runAfterStableFrame(() {
         ref.read(whiteboardViewModelProvider.notifier).applyRoomUsers(users);
       });
@@ -1686,8 +1713,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           if (status == RealtimeConnectionStatus.joined &&
               previous == RealtimeConnectionStatus.reconnecting) {
             unawaited(_refreshCollaborationSnapshot(room));
+            _broadcastIdleState(_lastIdleState ?? 'active', force: true);
           }
         });
+
+    // 首次 start/join 完成点：主动发送一次当前 presence，让已有成员立即
+    // 拿到 creatorKey，不等待用户移动指针（v4 §4.4 规则 2）。
+    _broadcastIdleState(_lastIdleState ?? 'active', force: true);
   }
 
   Future<void> _handleRoomEnded(CollaborationRoomMetadata metadata) async {
@@ -1913,6 +1945,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               .read(whiteboardViewModelProvider.notifier)
               .applyPresenceMessage(message);
         });
+        final presenceSocketId = message.payload['socketId'] as String?;
+        final fallbackUserId = message.payload['userId'] as String?;
+        final presenceCreatorKey =
+            message.payload['creatorKey'] as String? ??
+            (fallbackUserId == null
+                ? null
+                : creatorKeyForUserId(fallbackUserId));
+        if (presenceSocketId != null && presenceCreatorKey != null) {
+          final changed =
+              _socketCreatorKeys[presenceSocketId] != presenceCreatorKey;
+          if (changed) {
+            _socketCreatorKeys[presenceSocketId] = presenceCreatorKey;
+            _presenceCreatorRevision++;
+          }
+        }
       case CollaborationMessageType.inkChunk:
       case CollaborationMessageType.invalidResponse:
         break;
@@ -2431,8 +2478,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       .read(inkRecognitionRepositoryProvider)
                       .composeSmartLayout(request),
                   onAiPressed: _toggleAiAgent,
-                  onSmartLayoutPressed: () =>
-                      _startSmartLayoutFlow(),
+                  onSmartLayoutPressed: () => _startSmartLayoutFlow(),
                   onLiveFreedrawChanged: state.collaborating
                       ? _broadcastLiveFreedraw
                       : null,
@@ -2649,6 +2695,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         username: identity.username,
         userId: identity.userId,
         avatarUrl: identity.avatarUrl,
+        creatorKey: _currentCreatorKey(),
       ),
     );
   }
@@ -2669,6 +2716,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         userId: identity.userId,
         avatarUrl: identity.avatarUrl,
         sceneBounds: _collaborationAdapter.visibleSceneBounds(canvasSize),
+        creatorKey: _currentCreatorKey(),
       ),
     );
   }
@@ -2692,11 +2740,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     });
   }
 
-  void _broadcastIdleState(String state) {
+  void _broadcastIdleState(String state, {bool force = false}) {
     if (!_canMutateWhiteboard) {
       return;
     }
-    if (_lastIdleState == state) {
+    if (!force && _lastIdleState == state) {
       return;
     }
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
@@ -2712,12 +2760,39 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         username: identity.username,
         userId: identity.userId,
         avatarUrl: identity.avatarUrl,
+        creatorKey: _currentCreatorKey(),
       ),
     );
   }
 
   CollaborationIdentity get _collaborationIdentity {
     return ref.read(accountViewModelProvider).collaborationIdentity;
+  }
+
+  /// 当前操作者 creatorKey。仅在协作房间内非空：本地笔记（activeRoom 为
+  /// null）不盖章，旧元素保持"历史内容"语义（v4 §0.1 首版范围）。
+  String? _currentCreatorKey() => _currentCreator()?.creatorKey;
+
+  CollaborationCreator? _currentCreator() {
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room == null) return null;
+    final identity = _collaborationIdentity;
+    if (identity.isGuest) {
+      final sessionId = _guestCreatorSessionId;
+      if (sessionId == null) return null;
+      return CollaborationCreator(
+        creatorKey: creatorKeyForGuest(room.roomId, sessionId),
+        displayName: identity.username,
+        isGuest: true,
+      );
+    }
+    final userId = identity.userId;
+    if (userId == null) return null;
+    return CollaborationCreator(
+      creatorKey: creatorKeyForUserId(userId),
+      displayName: identity.username,
+      isGuest: false,
+    );
   }
 
   NoteItem? _noteById(List<NoteItem> notes, String noteId) {
