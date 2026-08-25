@@ -1,4 +1,4 @@
-# FlowMuse Issue #8 协作元素归属聚焦——v3 执行计划
+# FlowMuse Issue #8 协作元素归属聚焦——v4 执行计划
 
 > Issue：[优化协作时元素归属显示](https://github.com/qinyre/FlowMuse/issues/8)
 >
@@ -6,7 +6,7 @@
 >
 > 代码基线：`origin/main@c40a847`（2026-08-25 拉取后创建分支）
 >
-> 文档状态：**二轮三路复审修订版；首轮 28 项已落实，二轮新增 2 项 Important 与 18 项 Minor 已全部纳入；按要求暂不启动第三轮复核；本提交只修订计划，不实现功能**
+> 文档状态：**第三轮聚焦复审修订版；R1/R3 已判“可行”，R2 唯一 Important 已修复，必要实现注记已补齐；按要求暂不启动第四轮复核；本提交只修订计划，不实现功能**
 >
 > 首版目标：在不改变共享 Scene、全局 z 序和协作 LWW 语义的前提下，显示元素创建者，并允许按创建者或“历史内容”聚焦；其他普通元素变淡但不消失。
 
@@ -42,6 +42,8 @@
 - 不自动 `zoomToFit`，不自动跟随协作者视口。
 - 不在外部导出文件中携带创建者信息。
 
+首版接受以下非阻断显示限制，不为它们增加新身份机制：空态只表示“暂无已提交内容”，可与尚未提交的活动湿墨短暂同屏；同名并发游客不增加会话编号；同一离线创建者若不同元素保存了不同历史名字，属性入口可随所选元素显示各自快照。若实际用户测试证明造成高频误解，再单独设计消歧交互。
+
 ---
 
 ## 1. 本版对前序方案的修订记录
@@ -58,6 +60,7 @@
 | R8 | `.markdraw` 只要有 `id=` 就等价于元素身份稳定 | **收紧；仅在当前分屏会话 sidecar 中稳定** | 外部文件没有可信 sidecar；用户删除、修改或重复 alias 时必须按新元素或受控失败处理 |
 | R9 | 只在本端 start/join 或 reconnect 时补发 creatorKey | **补充新成员触发：现有成员发现新 socket 后补发自身 presence** | 否则先在线且静止的 A 不会向后加入的 B 发送任何 presence，B 永远无法按 A 聚焦 |
 | R10 | analyze 基线按 severity/code/file/line/message 比较 | **改用 `dart analyze --format=machine`，去掉位置字段并按 multiset 比较** | 本任务必改文件中的存量诊断会发生行号平移；含 line 必然假红，set 又会吞掉同键重复诊断 |
+| R11 | tracked/untracked 格式门禁直接合并两个可能为空的 PowerShell 变量 | **在过滤器首项增加 `$_ -and` 空值守卫** | `@($null; $value)` 会保留 null；直接调用 `$_.EndsWith(...)` 会报错并可能使门禁被跳过 |
 
 ---
 
@@ -199,7 +202,7 @@ creatorKey = "guest:" + roomId + ":" + sessionUuid
 
 1. 新客户端发送三类 presence 时都带同一 creatorKey。
 2. 首次 `start/join` 完成点直接复用现有 `IDLE_STATUS` 主动发送一次当前 presence；重连仅在 `reconnecting → joined` 转换时补发。不能依赖 broadcast 状态流重放，也不能等待用户先移动鼠标。
-3. `WhiteboardPage` 在既有 `roomUsers` 订阅中比较前后 socket 集合；每批检测到至少一个新远端 socket 加入时，本端再补发一次自身 `IDLE_STATUS`。只响应新增 socket，不响应离开、改名或普通 presence，批内只发一次，避免风暴和回环。这样后加入的 B 即使面对全程静止的 A，也能收到 A 的 creatorKey。
+3. `WhiteboardPage` 在既有 `roomUsers` 订阅中比较前后 socket 集合；每批检测到至少一个新 socket 加入时，本端再补发一次自身 `IDLE_STATUS`。该补发调用 `_broadcastIdleState(..., force: true)`（或等价的现有底层发送入口），`force` 只绕过 `_lastIdleState == state` 的去重短路，普通 idle 更新仍保持原去重行为。无法可靠取得自身 socketId 时无需排除自己，允许一次幂等冗余补发；只响应新增 socket，不响应离开、改名或普通 presence，批内只发一次，避免风暴和回环。这样后加入的 B 即使面对全程静止的 A，也能收到 A 的 creatorKey。
 4. 接收端把它写入 `CollaboratorPresence.creatorKey`。
 5. 登录用户在字段缺失时可由 presence.userId 本地推导，用于兼容旧客户端。
 6. 游客字段缺失时不得按 username 猜测；头像暂不可按作者聚焦，远端湿墨 fail-open 全亮。
@@ -340,6 +343,8 @@ final class HistoricalFocus extends CollaborationFocusTarget {
 
 `labelSnapshot` 只是离线回退值：只要存在同 `creatorKey` 的在线 Presence，focus pill 和属性入口都显示显示层代表项的当前名字，并持续把 `labelSnapshot` 更新为该最后已知在线名；离线后回退到这个最新快照，不倒退到进入聚焦时的旧名。重连交叠期的名字和头像也必须取 §6.2 选出的同一个代表 socket，禁止从另一个 Presence 任意取值。不需要 Riverpod 全局 provider，不需要数据库，不需要 feature flag。房间退出/结束时清空；普通 Socket 重连时保留。
 
+所有“是否聚焦同一创建者”、头像再次点击退出和 focus 对象更新都按 `creatorKey` 值比较，禁止依赖 `CreatorFocus` 对象 identity。
+
 ### 6.2 顶部头像
 
 扩展现有 `CollaborationParticipantBadge`：
@@ -384,14 +389,14 @@ final class HistoricalFocus extends CollaborationFocusTarget {
 规则：
 
 - 创建者离线后保持聚焦，直到用户手动退出。
-- 空态按整个 Scene 判断：目标组没有任何未删除普通元素时保持聚焦和退出入口，creator focus 显示“该创建者暂无内容”，history focus 显示“暂无历史内容”；目标组新增/恢复任一元素后立即消失。仅内容在视口外不显示空态。
+- 空态按整个 Scene 的已提交元素判断：目标组没有任何未删除普通元素时保持聚焦和退出入口，creator focus 显示“该创建者暂无已提交内容”，history focus 显示“暂无已提交的历史内容”；目标组新增/恢复任一元素后立即消失。仅内容在视口外不显示空态；目标活动湿墨尚未提交时可与该提示短暂同屏，文案不声称“无人正在书写”。
 - 房间退出/结束清空。
 - 进入 `zenMode` 或 `viewMode` 时立即清空 focus，避免协作 chrome 被隐藏后失去退出入口；若此前确有 focus，复用现有轻提示机制显示一次“已退出协作者聚焦”。退出这些模式不会自动恢复旧 focus。
 - 不自动缩放或移动视口。
 - 聚焦时仍可命中和编辑变淡元素。
 - 被选中、拖动或正在编辑的普通元素本体临时恢复全亮，操作结束后重新按当前 focus 分类；这只是本地反馈，不改变归属或交互权限。
 - 框选拖动过程不算“元素拖动”：框选矩形本身始终全亮，框内元素在松手成为选中集后才加入本地高亮。
-- 离线游客旧会话从元素入口聚焦时，pill 在快照名后加“（历史会话）”；不显示 creatorKey，也不尝试把它与同名的新会话合并。
+- 离线游客旧会话从元素入口聚焦时，属性入口和 pill 都在快照名后加“（历史会话）”；同一 creatorKey 的 Presence 重新在线时立即去掉后缀。完整退出后用新 creatorKey 重进不算重连，旧组继续保留后缀；不显示 creatorKey，也不尝试按同名合并。
 
 ---
 
@@ -440,7 +445,7 @@ after loop: if dim=true restore
 - 现有箭头+绑定文字的嵌套 `saveLayer` 必须保持不变。
 - `previewElement`、`pendingElements` 在主循环之后继续全亮绘制。
 - Grid、分页背景、PDF、page shadow 在分组层外全亮。
-- `StaticCanvasPainter.shouldRepaint` 和 `RemoteWetInkPainter.shouldRepaint` 都纳入两个 focus 标量；静态层比较 `localHighlightRevision`。远端湿墨层另比较 socketId→creatorKey 映射的 `presenceCreatorRevision`，该修订号只在映射内容变化时递增，保证 late presence/reconnect 后无需等待下一笔也会重新分类。无 focus 时仍走当前等价路径。
+- `StaticCanvasPainter.shouldRepaint` 和 `RemoteWetInkPainter.shouldRepaint` 都纳入两个 focus 标量。仅当旧/新任一状态存在 focus 时，静态层才比较 `localHighlightRevision`，远端湿墨层才比较 socketId→creatorKey 映射的 `presenceCreatorRevision`；两端都无 focus 时，这两个 revision 单独变化不触发重绘，因为分类恒为 1.0。映射 revision 只在内容变化时递增，保证 focus 中的 late presence/reconnect 无需等待下一笔也会重新分类。
 
 ### 7.3 为什么不做“两遍重绘”
 
@@ -496,7 +501,7 @@ after loop: if dim=true restore
 - 游客重连后通过新 presence 中相同 creatorKey 恢复关联。
 - 未收到 creatorKey、presence 已离线或乱序时全亮；不得缓存错误 owner。
 - 远端 cache 中的冻结 Picture 不能被永久预乘某个 focus alpha，否则切换 focus 后需重录全部几何。优先在绘制每个 stroke cache 时包一层临时 alpha，不改几何缓存。
-- 首版允许逐 stroke 临时乘 alpha；每层必须使用实际笔迹包围盒并包含线宽/抗锯齿余量，禁止 `saveLayer(null, ...)` 形成全屏层。远端 store 上限 64 strokes，先不增加连续段合并。只有真机 Profile 证明这里成为瓶颈时再优化。
+- 首版允许逐 stroke 临时乘 alpha；每层必须使用实际渲染笔迹包围盒，余量按应用 `brush.sizeScale` 和压力变粗后的最大有效线宽，再加抗锯齿安全边界计算，禁止只按名义 `strokeWidth/2` 或使用 `saveLayer(null, ...)` 形成全屏层。用粗笔、最大压力和边缘像素测试兜底裁边风险。远端 store 上限 64 strokes，先不增加连续段合并。只有真机 Profile 证明这里成为瓶颈时再优化。
 
 ### 8.3 数学文字
 
@@ -650,7 +655,7 @@ exportLibraryContent                 外部，统一 sanitize library items
 1. WhiteboardPage 创建/复用/清理当前房间 guest session UUID。
 2. 三类 presence factory、broadcast API、接收解析增加可选 creatorKey。
 3. 首次 start/join 完成点直接发送一次 `IDLE_STATUS`；普通重连在 `reconnecting → joined` 时补发，不能只订阅不会重放的 connectionStatus broadcast stream。
-4. 在既有 roomUsers 订阅中检测新增远端 socket；每批新增事件补发一次自身 `IDLE_STATUS`，忽略离开/资料变化，且不由 presence 消息反向触发。
+4. 在既有 roomUsers 订阅中检测新增 socket；每批新增事件用 `force: true` 绕过 idle 状态去重并补发一次自身 `IDLE_STATUS`，忽略离开/资料变化，且不由 presence 消息反向触发。自身 socketId 不可得时容忍一次冗余补发。
 5. 登录用户对旧 presence 做 userId hash fallback；游客不按名字猜。
 6. 验证 `_send()` 加密路径不变，服务端代码 diff 为零。
 
@@ -659,7 +664,7 @@ exportLibraryContent                 外部，统一 sanitize library items
 - 同一游客 Socket 重连前后 creatorKey 相同、socketId 不同。
 - leave/end 后新会话 key 改变。
 - 不移动指针的新游客在连接后也能让其他新客户端拿到 creatorKey。
-- A 先在线且全程静止、B 后加入时，A 因 roomUsers 新 socket 事件补发一次，B 能拿到 A 的 creatorKey；单批多人加入也只补发一次。
+- A 先在线且全程静止、B 后加入时，即使 `_lastIdleState` 已等于当前状态，A 仍因 roomUsers 新 socket 事件强制补发一次，B 能拿到 A 的 creatorKey；单批多人加入只补发一次，自身 socketId 缺失也不会阻断。
 - 老 payload 无字段可解析。
 - 新 payload 加密后传输，明文不出现在 transport payload/日志。
 - `FlowMuse-Server/` 无修改。
@@ -783,9 +788,9 @@ exportLibraryContent                 外部，统一 sanitize library items
 1. 从 WhiteboardPage 经 MarkdrawEditor/EditorCanvas 传入 `focusedCreatorKey` / `focusHistoricalContent`、不可变本地高亮元素 ID 快照和 revision 等纯数据；绑定文字编辑时加入父元素。
 2. 实现原顺序连续 dim segment。
 3. Math Overlay 在现有颜色 alpha 上乘 focus alpha，不增加 Opacity Widget；本地高亮的数学元素保持全亮。
-4. RemoteWetInkPainter 接收只读 socketId→creatorKey 快照、映射 revision 和 focus 标量，以笔迹包围盒临时合成，不污染几何 cache。
+4. RemoteWetInkPainter 接收只读 socketId→creatorKey 快照、映射 revision 和 focus 标量，以包含 sizeScale/压力最大线宽余量的笔迹包围盒临时合成，不污染几何 cache。
 5. 本地活动预览、被选中/拖动/编辑的元素本体、编辑 overlay、selection、remote cursor 全亮。
-6. 更新静态与远端湿墨 painter 的 `shouldRepaint`：比较 revision 标量，禁止对 Set/Map 使用 identity/`==`；focus、高亮或映射变化都立即重绘。
+6. 更新静态与远端湿墨 painter 的 `shouldRepaint`：focus 中比较 revision 标量，禁止对 Set/Map 使用 identity/`==`；两端均无 focus 时忽略仅由 highlight/mapping revision 引起的重绘。
 7. 用测试 Canvas spy/wrapper 分开统计几何 draw 与 saveLayer，验证 focus 不增加元素绘制次数。
 
 **完成判据**：
@@ -851,7 +856,7 @@ exportLibraryContent                 外部，统一 sanitize library items
 - [ ] presence 新旧 payload 双向兼容。
 - [ ] 新字段仍在 AES-GCM 正文内。
 - [ ] 首次 start/join 完成即主动发送 creatorKey；reconnecting→joined 再补发，静止用户无需移动指针。
-- [ ] A 先在线且静止、B 后加入时，A 检测新 socket 后补发自身 presence，B 能拿到 A 的 creatorKey；单批加入只触发一次补发且无回环。
+- [ ] A 先在线且静止、B 后加入时，A 检测新 socket 后强制绕过 idle 去重补发自身 presence，B 能拿到 A 的 creatorKey；自身 socketId 不可得、单批加入和回环边界正确。
 - [ ] A/B 双端创建、编辑、删除、重连正确。
 
 ### 12.3 UI 与本地状态
@@ -863,11 +868,12 @@ exportLibraryContent                 外部，统一 sanitize library items
 - [ ] 代表项同时决定 badge、在线名字和头像；重连交叠异名时不混用 Presence。
 - [ ] 同账号多设备在本端只显示一个 creatorKey 组，其他设备 socket 映射仍保留。
 - [ ] 重复点击退出，点击另一头像切换。
+- [ ] 同一聚焦目标按 creatorKey 值判断，不依赖 CreatorFocus 对象 identity。
 - [ ] 单元素显示 owner；无 owner 显示历史。
 - [ ] 离线 owner 仍可聚焦。
 - [ ] 在线 Presence 名字在头像、pill、属性入口一致并刷新最后已知快照，离线后名字不倒退。
 - [ ] Scene 中目标组无未删普通元素时显示对应 creator/history 空态；目标恢复后消失，内容仅在视口外不误报。
-- [ ] 游客同名重进后，旧组 pill 有“历史会话”标识且不泄漏 creatorKey。
+- [ ] 游客同名重进后，旧组属性入口和 pill 都有“历史会话”标识且不泄漏 creatorKey；同 key 重连上线后后缀消失。
 - [ ] leave/end 清除，Socket reconnect 不清除。
 - [ ] 进入 zenMode/viewMode 清除 focus、给出一次轻提示，退出后不自动恢复。
 - [ ] focus 不进 Scene、不进 History、不广播。
@@ -876,6 +882,7 @@ exportLibraryContent                 外部，统一 sanitize library items
 ### 12.4 渲染与 Overlay
 
 - [ ] 无 focus 与当前像素输出等价，新增 saveLayer=0。
+- [ ] 无 focus 时仅 highlight/presence-map revision 变化不触发 painter 重绘。
 - [ ] 全 dim 且无本地高亮时仅一个外层 dim segment。
 - [ ] 每个普通元素最多 render 一次。
 - [ ] test-only Canvas spy/wrapper 证明 focus/no-focus 几何 draw-call 数相同；saveLayer 按连续 dim 段单独断言。
@@ -890,12 +897,14 @@ exportLibraryContent                 外部，统一 sanitize library items
 - [ ] finalized Math 按 owner 变淡，被选中/编辑时全亮。
 - [ ] remote wet ink 目标外变淡、未知全亮。
 - [ ] focus/highlight revision 触发 StaticCanvasPainter 重绘；focus/socket-owner-map revision 触发 RemoteWetInkPainter 重绘。
-- [ ] 远端湿墨 alpha saveLayer 使用含线宽余量的 stroke bounds，不创建全屏层。
+- [ ] 远端湿墨 alpha saveLayer 使用含 sizeScale、最大压力线宽和抗锯齿余量的 stroke bounds；粗笔/最大压力边缘像素不裁切且不创建全屏层。
 - [ ] 1000/5000 元素的 focus×跨 owner 高亮场景仍满足“一元素最多绘制一次”和段数断言。
 - [ ] selection/link icon/remote cursor 全亮。
 
 ### 12.5 格式与隐私
 
+- [ ] format 门禁在 tracked-only、untracked-only、两者并存和两者皆空四种输入下均不报空值错误，且不会漏掉存在的 Dart 文件。
+- [ ] analyze machine 路径完成反转义和 `/` 归一化；exit 2 由 multiset 比较接管。
 - [ ] 内部 Excalidraw 本地存储保留 owner。
 - [ ] 协作元素和快照保留 owner。
 - [ ] split pane alias sidecar 正确。
@@ -913,7 +922,7 @@ exportLibraryContent                 外部，统一 sanitize library items
 
 ## 13. 验证命令与提交门禁
 
-基线 `origin/main@c40a847` 的全量 `dart format --set-exit-if-changed lib test` 会报告 96 个既有文件不符合格式，`flutter analyze` 为 42 issues（0 error / 17 warning / 25 info，exit 1）。本任务不得为清理基线混入 96 文件无关 diff；格式门禁只约束本分支触碰的 Dart 文件，analyze 门禁采用“相对基线无新增 error/warning/info”。
+基线 `origin/main@c40a847` 的全量 `dart format --set-exit-if-changed lib test` 会报告 96 个既有文件不符合格式，`dart analyze --format=machine` 为 42 issues（0 error / 17 warning / 25 info，诊断存在时 exit 2）。本任务不得为清理基线混入 96 文件无关 diff；格式门禁只约束本分支触碰的 Dart 文件，analyze 门禁采用“相对基线无新增 error/warning/info”。
 
 在仓库根目录先执行改动文件格式门禁：
 
@@ -921,7 +930,7 @@ exportLibraryContent                 外部，统一 sanitize library items
 $trackedDart = git diff --name-only --diff-filter=ACMRTUXB origin/main -- FlowMuse-App/lib FlowMuse-App/test
 $untrackedDart = git ls-files --others --exclude-standard -- FlowMuse-App/lib FlowMuse-App/test
 $changedDart = @($trackedDart; $untrackedDart) |
-  Where-Object { $_.EndsWith('.dart') -and (Test-Path -LiteralPath $_) } |
+  Where-Object { $_ -and $_.EndsWith('.dart') -and (Test-Path -LiteralPath $_) } |
   Sort-Object -Unique |
   ForEach-Object { (Resolve-Path -LiteralPath $_).Path }
 if ($changedDart.Count -gt 0) {
@@ -955,7 +964,7 @@ git diff -- FlowMuse-App/ohos FlowMuse-App/android FlowMuse-App/ios FlowMuse-App
 - 无数据库 schema migration。
 - 无 `GeneratedPluginRegistrant.ets`。
 - 无 creatorKey/displayName 出现在 debug log 快照。
-- 使用实测可用的 `dart analyze --format=machine` 保存基线与本分支诊断；把文件路径归一化为相对 `FlowMuse-App/` 路径，以 `severity + code + file + message` 为键做 **multiset 计数差**。line/column/length 只供人工定位，不进入门禁键，避免存量诊断行号平移造成假红。本分支相对上述 42-issue 基线不得新增任何 error、warning 或 info，也不能只比较总数或普通 set，以免吞掉同键重复项。
+- 使用实测可用的 `dart analyze --format=machine` 保存基线与本分支诊断；先按 machine 格式反转义 file 字段，再归一化为相对 `FlowMuse-App/` 且统一使用 `/` 分隔符的路径，以 `severity + code + file + message` 为键做 **multiset 计数差**。line/column/length 只供人工定位，不进入门禁键，避免存量诊断行号平移造成假红。本分支相对上述 42-issue 基线不得新增任何 error、warning 或 info，也不能只比较总数或普通 set，以免吞掉同键重复项；诊断导致的 exit 2 由比较脚本接管，不能把“非零”本身误判为新增问题。
 
 鸿蒙真机不作为代码审查前的自动化阻断，但合并前至少做一次 Profile/GPU 手工验证：普通协作场景、PDF 批注、1000 元素混合作者、focus×跨 owner 多选/拖动、连续书写、快速切换头像。记录设备、系统版本、Flutter 构建模式、可见元素数、dim segment 数、远端湿墨 saveLayer 数及其 bounds/覆盖面积和明显掉帧现象；没有基线前不承诺虚构的毫秒指标。
 
@@ -1008,13 +1017,13 @@ git diff -- FlowMuse-App/ohos FlowMuse-App/android FlowMuse-App/ios FlowMuse-App
 1. `onPrepareLocalResult` 是否能覆盖所有本地 Add/Update，是否存在绕过路径？
 2. 系统元素判定是否完整，PDF 底稿是否始终全亮？
 3. 登录 creatorKey 去 roomId 后，跨房间语义是否成立且无新的身份碰撞？
-4. 游客若不扩展 presence.creatorKey 是否确实无法跨 reconnect 关联；当前可选字段方案是否与旧客户端兼容，且“静止 A 先在线、B 后加入”是否通过 roomUsers 新 socket 触发完成反向补发？
+4. 游客若不扩展 presence.creatorKey 是否确实无法跨 reconnect 关联；当前可选字段方案是否与旧客户端兼容，且“静止 A 先在线、B 后加入”是否通过 roomUsers 新 socket 触发并绕过 idle 去重完成强制补发？
 5. presence.creatorKey 是否仍在 AES-GCM 正文内，服务端是否确实无需改动？
 6. reconciler 的 winner/backfill 规则是否对 local/remote 交换保持收敛？
 7. 是否有任何代码把 creator 当权限、锁定或可信身份？
 8. 单遍 dim segment 是否严格保持全局 z 序、Frame clip、箭头标签清洞和绑定文字？
 9. worst-case alternating owner 是否有足够压力证据，fallback 是否没有被过早双实现？
-10. 本地湿墨、文本编辑、预览、数学 Overlay、远端湿墨的行为是否全部有定义和测试；highlight/presence-map revision 是否确保立即重绘？
+10. 本地湿墨、文本编辑、预览、数学 Overlay、远端湿墨的行为是否全部有定义和测试；focus 中 revision 是否立即重绘、无 focus 时是否避免无意义重绘、压力粗笔 bounds 是否不裁切？
 11. `.markdraw` sidecar 是否真按 alias 而非原 UUID；duplicate alias 是否受控？
 12. 内部保存与外部导出是否使用不同入口，是否还有绕过 sanitizer 的调用点？
 13. PNG/SVG embedded data、Library、Share 的测试是否验证最终字节/字符串，而不是只测 helper？
@@ -1022,7 +1031,7 @@ git diff -- FlowMuse-App/ohos FlowMuse-App/android FlowMuse-App/ios FlowMuse-App
 15. focus 是否完全本地，不触发 SceneChanged、History、持久化或网络？
 16. 第 6+ 位参与者、旧客户端禁用态、zen/viewMode、游客完整重进、同账号多设备、空态和被选中 dim 元素是否都有可执行行为？
 17. reconciler 是否 copy-on-write，且测试证明输入列表/嵌套 Map 不变？
-18. format 是否覆盖 tracked+untracked；analyze 是否使用无位置字段的 machine multiset 基线，且未借机制造大范围无关 diff？
+18. format 是否覆盖 tracked+untracked 并防御任一侧 `$null`；analyze 是否正确反转义路径、使用无位置字段的 machine multiset 基线，且未借机制造大范围无关 diff？
 19. 是否能删除任何不必要的抽象、依赖、feature flag、服务端或平台代码，同时不降低验收覆盖？
 
 ### 审查阻断标准
