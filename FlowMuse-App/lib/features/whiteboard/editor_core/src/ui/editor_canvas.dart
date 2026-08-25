@@ -367,6 +367,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                 adapter: controller.adapter,
                 viewport: paintViewport,
                 layout: controller.layout,
+                focusedCreatorKey: widget.focusedCreatorKey,
+                focusHistoricalContent: widget.focusHistoricalContent,
+                socketIdCreatorKeys: widget.socketIdCreatorKeys,
+                presenceCreatorRevision: widget.presenceCreatorRevision,
               ),
               child: wetInkLayers,
             );
