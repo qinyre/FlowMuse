@@ -1,6 +1,6 @@
-# FlowMuse Issue #8 协作元素归属聚焦——实现细节执行计划（v5）
+# FlowMuse Issue #8 协作元素归属聚焦——实现细节执行计划（v6）
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** 一次只执行一个 Task。若运行环境已安装 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans` 可复用；未安装时使用当前 Agent 的原生计划/执行能力，**不得因缺少该技能而阻塞或臆造技能输出**。Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在不改变共享 Scene、全局 z 序和协作 LWW 语义的前提下，为协作元素记录不可变创建者，并提供按创建者/历史内容的本机聚焦视图（其他元素单遍变淡）。
 
@@ -41,7 +41,7 @@
 | `creatorKeyForUserId` / `creatorKeyForGuest` / `creatorForIdentity` | `collaboration/services/collaboration_creator_identity.dart` | 见 Task 2 |
 | `stampCreatorOnResult` | `editor_core/src/editor/creator_stamping.dart` | `ToolResult stampCreatorOnResult(ToolResult, Scene, CollaborationCreator)` |
 | `collaborationFocusAlpha` | `editor_core/src/rendering/collaboration_focus_alpha.dart` | 见 Task 12 |
-| `CollaborationFocusTarget` / `CreatorFocus` / `HistoricalFocus` | `whiteboard/views/collaboration_focus_target.dart` | 见 Task 9（v4 §6.1 定义） |
+| `CollaborationFocusTarget` / `CreatorFocus` / `HistoricalFocus` / `toggleCollaborationCreatorFocus` | `whiteboard/views/collaboration_focus_target.dart` | 见 Task 9（纯本机状态与切换函数） |
 | `onPrepareLocalResult` | `MarkdrawController` 字段 | `ToolResult? Function(ToolResult result, Scene currentScene)?` |
 | `localCreatorResolver` | `MarkdrawController` 字段 | `CollaborationCreator? Function()?` |
 | `serializeSceneForExternalExport` / `serializeSceneWithAliases` | `MarkdrawController` 方法 | 见 Task 7/8 |
@@ -92,6 +92,17 @@ T13 → T14 远端湿墨（构造参数与 EditorCanvas 接线都在 T14 内完�
 - 每个任务自包含：实现者只需读本任务 + §0 全局约束 + §0.1 命名总表 + 上游 spec 对应节（任务内注明）。
 - 任务按编号顺序执行即可，无环。**并行限制**：T12 可与 T9-T11 并行（接口已在 §0.1 固定）；但 **T13 必须在 T12、T4、T9 全部完成后开始**，**T14 必须在 T13 之后**（RemoteWetInkPainter 的构造参数与接线同在 T14，避免跨任务编译期断裂）。
 - 每个任务一个 commit（消息见任务尾）；对应 v4 §15 的 8 提交序列映射在附录 B。
+
+## 0.4 GLM-5.3 / 通用编码 Agent 执行协议
+
+本文件是主控规格，不是“一次性整份提示词”。执行器必须遵守：
+
+1. 每轮只接收当前 Task、§0、§0.1 和该 Task 指向的上游 spec 小节；不得同时实现多个 Task。
+2. 开始前确认上游 Task 的 commit 已存在且工作区干净；结束时只提交当前 Task 的允许文件。
+3. 文中的代码块是目标实现，引用的现有 API 已按 `c40a847` 核验。若当前代码的类型、构造参数、方法签名或调用图与代码块不一致，**立即停止并报告“预期/实际/受影响步骤”**；不得自行改跨任务接口、产品语义或架构裁决。
+4. “源码结构断言”只作为依赖/出口防回退门禁，不能替代行为测试，也不能单独作为任务完成证据。
+5. T4、T5、T8、T9、T12、T14、T15 完成后必须经过独立代码审查；执行模型不得自行宣布这些高风险任务验收完成。
+6. 每个 Task 的交付必须包含：改动文件、实际测试命令与结果、`git diff --check` 结果、剩余风险；审查通过后才执行任务尾 commit。
 
 ---
 
@@ -197,7 +208,10 @@ void main() {
     final before = element.customData.toString();
     withCreator(element, creator);
     expect(element.customData.toString(), before);
-    expect(element.customData!['flowMuse']!['collaborationOwner'], isNull);
+    expect(
+      (element.customData!['flowMuse'] as Map)['collaborationOwner'],
+      isNull,
+    );
   });
 
   test('withoutCreator 只删 collaborationOwner，保留其他键；无 owner 时原样返回', () {
@@ -536,7 +550,7 @@ void main() {
 }
 ```
 
-（`Element.version` 字段若不叫 version，以 element.dart 实际字段名为准调整断言。）
+（已核验 `Element.version` 为公开 `int` 字段；断言按上方精确写法实现，不得改成其他替代指标。）
 
 - [ ] **Step 1.6：运行 sanitizer 测试确认失败**（文件不存在，编译失败）
 
@@ -729,7 +743,7 @@ CollaborationCreator creatorForIdentity({
 }
 ```
 
-import 路径若与仓库相对路径风格不符（例如仓库统一用 `package:flow_muse/...` 绝对导入），按 `whiteboard_collaboration_adapter.dart` 的既有 import 风格改写，语义不变。
+本文件跨 feature import 统一使用 `package:flow_muse/...` 绝对路径，照 `whiteboard_collaboration_adapter.dart` 现有风格；不得改为越级相对路径。
 
 - [ ] **Step 2.4：运行确认全绿 → format → commit**
 
@@ -865,7 +879,7 @@ factory CollaborationMessage.idleStatus({
 }
 ```
 
-（注意：`CollaborationMessage` 的构造是公开 const 构造 `const CollaborationMessage({required this.type, required this.payload})`，不存在 `_` 私有构造——上例按实际构造书写。`mouseLocation`/`userVisibleSceneBounds` 两个工厂做完全相同的两行增量。）
+（已核验：`CollaborationMessage` 使用公开 const 构造 `const CollaborationMessage({required this.type, required this.payload})`，不存在 `_` 私有构造；严格按上例书写。`mouseLocation`/`userVisibleSceneBounds` 两个工厂做完全相同的两行增量。）
 
 2. `collaborator_presence.dart`：构造参数加 `this.creatorKey,`（放在 `isGuest` 之后），字段声明 `final String? creatorKey;`，`copyWith` 加 `String? creatorKey` 参数并透传——注意该类 copyWith 现有风格是非 sentinel 直传（`creatorKey: creatorKey ?? this.creatorKey` 之外的字段都这么写则保持一致；若 copyWith 用的是直接赋值风格，按 `username` 的既有写法照抄）。
 
@@ -959,8 +973,8 @@ void main() {
     );
     expect(newlyJoinedSocketIds(const {'a'}, const {'a', 'b'}), {'b'});
     expect(newlyJoinedSocketIds(const {'a', 'b'}, const {'a', 'b'}), isEmpty);
-    expect(newlyJoinedSocketIds(const {'a'}, const {'b'}), isEmpty,
-        reason: '离开产生的新集合不算"加入"');
+    expect(newlyJoinedSocketIds(const {'a'}, const {'b'}), {'b'},
+        reason: '同一批次中 a 离开且 b 加入时，b 仍是新增 socket，必须触发补发');
   });
 }
 ```
@@ -1029,7 +1043,7 @@ if (_collaborationIdentity.isGuest && _guestCreatorSessionId == null) {
 }
 ```
 
-2. 清理点——找到 `_lastIdleState = null;` 的重置处（L1424 附近的退出流程），在同一函数体内追加：
+2. 清理点——在 `_cancelCollaborationStreams()` 的 `_lastIdleState = null;` 之后追加：
 
 ```dart
 _guestCreatorSessionId = null;
@@ -1037,7 +1051,7 @@ _socketCreatorKeys.clear();
 _presenceCreatorRevision++;
 ```
 
-同样在 `_handleRoomEnded`（L1693）的 `_cancelCollaborationStreams()` 之后追加相同四行。若两处最终都经同一私有函数（如 `_cancelCollaborationStreams` 本体），把清理收敛进该函数一次即可——以实际调用图为准，保证 **leave / end / 房主结束 / 页面销毁** 四条路径全部清空。
+`_disconnectCollaboration()` 与 `_handleRoomEnded()` 均已经调用 `_cancelCollaborationStreams()`，不得在调用方重复清理。`dispose()` 当前不调用该函数，因此在 `unawaited(_collaborationRepository.stop());` 之前单独追加同样三项状态清理（不需要 revision 后续重绘时可只自增、不调用 `setState`）。这样 **leave / end / 房主结束 / 页面销毁** 四条路径全部清空，而普通 Socket 重连不经过清理。
 
 3. Socket 普通重连（`reconnecting → joined`）**不清** sessionUuid（这正是重连保持的关键）。
 
@@ -1556,7 +1570,7 @@ test('CompoundResult 中绑定文字排在父元素之前也能继承父 owner�
 });
 ```
 
-（`MarkdrawController()` 直接构造与 `controller.undo()/redo()` 均有先例：`test/features/whiteboard/editor_core/scene_dirty_elements_test.dart` 与 `markdraw_controller_test.dart`。若 undo/redo 方法名不同，以 controller 实际 API 为准调整。粘贴/导入/AI/思维导图/流程图/智能排版产物全部经 `AddElementResult`/`CompoundResult` 进入同一条盖章路径——"Add 普通元素覆盖为当前 creator（即使传入自带旧 owner）"用例即其语义等价测试，不再逐功能重复造 fixture。tombstone：`RemoveElementResult` 走 Scene soft-delete（`isDeleted` 标记），customData 随元素快照原样保留、任何任务都不剥离——undo/redo 用例即为该机制的间接断言。）
+（已核验 `MarkdrawController()` 可直接构造且公开方法精确为 `undo()` / `redo()`；先例见 `scene_dirty_elements_test.dart` 与 `markdraw_controller_test.dart`。粘贴/导入/AI/思维导图/流程图/智能排版产物全部经 `AddElementResult`/`CompoundResult` 进入同一条盖章路径——"Add 普通元素覆盖为当前 creator（即使传入自带旧 owner）"用例即其语义等价测试，不再逐功能重复造 fixture。tombstone：`RemoveElementResult` 走 Scene soft-delete（`isDeleted` 标记），customData 随元素快照原样保留、任何任务都不剥离——undo/redo 用例即为该机制的间接断言。）
 
 - [ ] **Step 5.7：运行全部相关测试 + format + commit**
 
@@ -2471,6 +2485,12 @@ final class CreatorFocus extends CollaborationFocusTarget {
   final String creatorKey; final String labelSnapshot; final bool isGuest;
 }
 final class HistoricalFocus extends CollaborationFocusTarget { const HistoricalFocus(); }
+CollaborationFocusTarget? toggleCollaborationCreatorFocus(
+  CollaborationFocusTarget? current, {
+  required String creatorKey,
+  required String labelSnapshot,
+  required bool isGuest,
+});
 // WhiteboardPage 私有：CollaborationFocusTarget? _focusTarget;
 //                       Map<String, String> _lastKnownCreatorNames;
 // MarkdrawEditor 新参数：String? collaborationFocusLabel; VoidCallback? onExitCollaborationFocus;
@@ -2495,6 +2515,31 @@ void main() {
 
   test('HistoricalFocus 单例语义', () {
     expect(identical(const HistoricalFocus(), const HistoricalFocus()), isTrue);
+  });
+
+  test('创建者聚焦按 creatorKey 切换：同键退出、异键进入', () {
+    const current = CreatorFocus(
+      'user:1',
+      labelSnapshot: '张三',
+      isGuest: false,
+    );
+    expect(
+      toggleCollaborationCreatorFocus(
+        current,
+        creatorKey: 'user:1',
+        labelSnapshot: '张三改名',
+        isGuest: false,
+      ),
+      isNull,
+    );
+    final next = toggleCollaborationCreatorFocus(
+      current,
+      creatorKey: 'user:2',
+      labelSnapshot: '李四',
+      isGuest: false,
+    ) as CreatorFocus;
+    expect(next.creatorKey, 'user:2');
+    expect(next.labelSnapshot, '李四');
   });
 }
 ```
@@ -2528,6 +2573,23 @@ final class CreatorFocus extends CollaborationFocusTarget {
 
 final class HistoricalFocus extends CollaborationFocusTarget {
   const HistoricalFocus();
+}
+
+/// 纯本机状态转换；本文件不得 import repository、Socket、Scene 或存储层。
+CollaborationFocusTarget? toggleCollaborationCreatorFocus(
+  CollaborationFocusTarget? current, {
+  required String creatorKey,
+  required String labelSnapshot,
+  required bool isGuest,
+}) {
+  if (current is CreatorFocus && current.creatorKey == creatorKey) {
+    return null;
+  }
+  return CreatorFocus(
+    creatorKey,
+    labelSnapshot: labelSnapshot,
+    isGuest: isGuest,
+  );
 }
 ```
 
@@ -2564,11 +2626,14 @@ void _exitFocus() {
 }
 
 void _toggleCreatorFocus(String creatorKey, {required String labelSnapshot, required bool isGuest}) {
-  if (_isFocusedOn(creatorKey)) {
-    _exitFocus();
-  } else {
-    _focusCreator(creatorKey, labelSnapshot: labelSnapshot, isGuest: isGuest);
-  }
+  setState(() {
+    _focusTarget = toggleCollaborationCreatorFocus(
+      _focusTarget,
+      creatorKey: creatorKey,
+      labelSnapshot: labelSnapshot,
+      isGuest: isGuest,
+    );
+  });
 }
 ```
 
@@ -2699,21 +2764,22 @@ onExitCollaborationFocus: _exitFocus,
 8. **focus 纯本地证明测试**（追加到 Task 9.1 测试文件；源码级断言）：
 
 ```dart
-test('focus 状态不触发 SceneChanged/广播：源码结构断言', () {
+test('WhiteboardPage 的 focus 入口只委托纯状态转换且无广播/持久化', () {
   final source = File('lib/features/whiteboard/views/whiteboard_page.dart').readAsStringSync();
-  // 用正则截取 _focusCreator 到 _focusHistory 之间的方法体，避免依赖
-  // split 顺序的脆弱性
+  // 源码门禁只证明宿主接线没有夹带副作用；状态转换行为由上方纯函数用例验证。
   final match = RegExp(
-    r'void _focusCreator\([\s\S]*?\n  \}',
+    r'void _toggleCreatorFocus\([\s\S]*?\n  \}\r?\n',
   ).firstMatch(source);
-  expect(match, isNotNull, reason: '找不到 _focusCreator 方法');
+  expect(match, isNotNull, reason: '找不到 _toggleCreatorFocus 方法');
   final focusBlock = match!.group(0)!;
+  expect(focusBlock.contains('toggleCollaborationCreatorFocus'), isTrue);
   expect(focusBlock.contains('broadcast'), isFalse);
   expect(focusBlock.contains('saveScene'), isFalse);
+  expect(focusBlock.contains('applyResult'), isFalse);
 });
 ```
 
-（结构断言 + Task 15 行为测试双保险。）
+（纯状态转换行为测试 + 宿主源码边界门禁双保险；Task 15 再在已连接的双 Repository 环境中断言调用该转换不会产生消息。）
 
 - [ ] **Step 9.4：运行 + format + commit**
 
@@ -2797,7 +2863,7 @@ void main() {
 }
 ```
 
-（`PropertyPanelContent` 若还有其他 required 参数如 `canvasSize`/`textOnly`，以其实际构造签名为准补齐默认值——以上 6 个是实测必需集。）
+（已核验 `PropertyPanelContent` 的 6 个 required 参数就是 `controller/style/elements/isLocked/showFullTextProps/isEditingText`；`textOnly=false`、`canvasSize=null` 使用构造默认值，不额外传参。）
 
 - [ ] **Step 10.2：实现面板参数**
 
@@ -3264,13 +3330,27 @@ import 'canvas_spy.dart';
 ```dart
 Scene buildScene(List<Element> elements) => elements.fold(Scene(), (s, e) => s.addElement(e));
 
-RectangleElement owned(String id, String key) => withCreator(
-      RectangleElement(id: ElementId(id), x: 0, y: 0, width: 10, height: 10),
+RectangleElement owned(String id, String key, {String? index}) => withCreator(
+      RectangleElement(
+        id: ElementId(id),
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        index: index ?? id,
+      ),
       CollaborationCreator(creatorKey: key, displayName: key, isGuest: false),
     );
 
 RectangleElement plain(String id) =>
-    RectangleElement(id: ElementId(id), x: 0, y: 0, width: 10, height: 10);
+    RectangleElement(
+      id: ElementId(id),
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      index: id,
+    );
 
 StaticCanvasPainter painterFor(
   Scene scene, {
@@ -3818,7 +3898,7 @@ void main() {
 }
 ```
 
-（`LiveInkPoint.pressure` 为可空参数——`_chunk` helper 未传即无压感，粗笔用例显式传 `pressure: 1.0`。**import 指引（实测）**：`DecodedLiveInkChunk` 定义于 `collaboration/services/live_ink_receive_scheduler.dart`；`LiveInkChunk`/`LiveInkPoint`/`LiveInkStyle` 在 `collaboration/models/live_ink_chunk.dart`——两个文件都要 import（既有 `remote_wet_ink_painter_test.dart` 同此）。`const LiveInkPoint(...)` 若其构造非 const，去掉 const 即可，以该类实际声明为准。）
+（已核验 `LiveInkPoint` 为 const 构造且 `pressure` 可空：`_chunk` helper 未传即无压感，粗笔用例显式传 `pressure: 1.0`。`DecodedLiveInkChunk` 定义于 `collaboration/services/live_ink_receive_scheduler.dart`；`LiveInkChunk`/`LiveInkPoint`/`LiveInkStyle` 在 `collaboration/models/live_ink_chunk.dart`，两个文件都要 import。）
 
 - [ ] **Step 14.2：实现**
 
@@ -3972,7 +4052,7 @@ bool shouldRepaint(RemoteWetInkPainter oldDelegate) {
 }
 ```
 
-（`RemoteWetInkSegment` 的类型名/点字段以 remote_wet_ink_store.dart 实际导出为准——已知 `segment.points`、`leadingPoint`、`trailingPoint`、点带 `x/y/pressure`，被 `_drawSegment` 消费。）
+（已核验公开类型精确为 `RemoteWetInkSegment`，字段为 `points`、`leadingPoint`、`trailingPoint`；点类型 `LiveInkPoint` 精确包含 `x/y/pressure`。严格按上述名称实现。）
 
 - [ ] **Step 14.3：运行 + format + commit**
 
@@ -3999,7 +4079,7 @@ git commit -m "feat: 远端湿墨按创建者分类临时合成聚焦透明度"
 
 - [ ] **Step 15.1：双端集成测试**
 
-新建 `test/features/whiteboard/collaboration/collaboration_owner_sync_test.dart`。脚手架照抄 `collaboration_repository_sync_test.dart` L18-45（单 repository + 裸 peer transport，解密在订阅回调内完成；**不需要第二个 repository**）。完整用例：
+新建 `test/features/whiteboard/collaboration/collaboration_owner_sync_test.dart`。必须建立 **A/B 两个真实 `CollaborationRepository`**，B 通过自己的 `encryptedMessages(room)` 接收并解密消息；禁止用“一个 Repository + 裸 Transport”冒充双端。完整用例：
 
 ```dart
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_message.dart';
@@ -4007,8 +4087,10 @@ import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration
 import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_crypto.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_creator_identity.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
+import 'package:flow_muse/features/whiteboard/views/collaboration_focus_target.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Map<String, Object?> _ownedElement(String id, String creatorKey, {int version = 1}) {
@@ -4031,110 +4113,176 @@ Map<String, Object?> _ownedElement(String id, String creatorKey, {int version = 
   };
 }
 
+Future<void> _waitUntil(
+  bool Function() predicate, {
+  Duration timeout = const Duration(seconds: 2),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!predicate()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail('等待协作消息超时');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+}
+
 void main() {
-  test('A 广播的元素经加密通道到达 B 且 owner 保留', () async {
+  test('A Repository 广播的元素经加密通道进入 B Repository 且 owner 保留', () async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
     final store = MemoryEncryptedSceneStore();
-    final initial = ExcalidrawScene.fromJson(const {'elements': []});
+    final initial = ExcalidrawScene.empty();
     await store.createRoom(room: room, scene: initial, ownerKeyHash: 'test');
 
     final hub = MemoryRealtimeRoomHub();
-    final repositoryTransport = MemoryRealtimeTransport(hub: hub, socketId: 'a');
-    final peerTransport = MemoryRealtimeTransport(hub: hub, socketId: 'b');
-    final repository = CollaborationRepository(
-      transport: repositoryTransport,
+    final repositoryA = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'a'),
+      sceneStore: store,
+      crypto: crypto,
+    );
+    final repositoryB = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'b'),
       sceneStore: store,
       crypto: crypto,
     );
     addTearDown(() async {
-      await repository.stop();
-      await peerTransport.disconnect();
+      await repositoryA.stop();
+      await repositoryB.stop();
     });
 
-    await peerTransport.connect(room.roomId);
-    await repository.joinRoom(room: room, localScene: initial);
+    await repositoryA.joinRoom(room: room, localScene: initial);
+    await repositoryB.joinRoom(room: room, localScene: initial);
     final received = <CollaborationMessage>[];
-    final subscription = peerTransport.messages.listen((payload) async {
-      final bytes = await crypto.decrypt(
-        roomKey: room.roomKey,
-        encryptedPayload: payload,
-      );
-      received.add(CollaborationMessage.fromBytes(bytes));
-    });
+    final subscription = repositoryB.encryptedMessages(room).listen(received.add);
+    addTearDown(subscription.cancel);
 
-    // A 广播带 owner 的元素（等价于 A 创建后经 ChangeAccumulator 发送）
     final owned = _ownedElement('e1', 'user:a', version: 2);
-    await repository.broadcastElements(room: room, elements: [owned]);
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await repositoryA.broadcastElements(room: room, elements: [owned]);
+    await _waitUntil(() => received.any(
+          (message) =>
+              message.type == CollaborationMessageType.sceneUpdate &&
+              message.elements.any((element) => element['id'] == 'e1'),
+        ));
 
-    final elementMessages = received
-        .where((m) =>
-            (m.type == CollaborationMessageType.sceneUpdate ||
-                m.type == CollaborationMessageType.sceneInit) &&
-            m.elements.isNotEmpty)
-        .toList();
-    expect(elementMessages, isNotEmpty);
-    expect(elementMessages.first.elements.single['customData'], isNotNull,
-        reason: 'owner 随密文正文到达对端（回填语义由 Task 6 reconciler 测试覆盖）');
-    await subscription.cancel();
+    final remote = received
+        .where((message) => message.type == CollaborationMessageType.sceneUpdate)
+        .expand((message) => message.elements)
+        .singleWhere((element) => element['id'] == 'e1');
+    final owner = (((remote['customData'] as Map)['flowMuse'] as Map)
+        ['collaborationOwner'] as Map);
+    expect(owner['creatorKey'], 'user:a');
   });
 
-  test('idle presence 携带 creatorKey 且两轮广播（模拟重连前后）键一致', () async {
+  test('A 更换 socket 重连后，B 收到的新旧 presence creatorKey 一致', () async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
     final store = MemoryEncryptedSceneStore();
-    final initial = ExcalidrawScene.fromJson(const {'elements': []});
+    final initial = ExcalidrawScene.empty();
     await store.createRoom(room: room, scene: initial, ownerKeyHash: 'test');
 
     final hub = MemoryRealtimeRoomHub();
-    final repositoryTransport = MemoryRealtimeTransport(hub: hub, socketId: 'a');
-    final peerTransport = MemoryRealtimeTransport(hub: hub, socketId: 'b');
-    final repository = CollaborationRepository(
-      transport: repositoryTransport,
+    final repositoryB = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'b'),
       sceneStore: store,
       crypto: crypto,
     );
-    await peerTransport.connect(room.roomId);
-    await repository.joinRoom(room: room, localScene: initial);
-    final idles = <CollaborationMessage>[];
-    final subscription = peerTransport.messages.listen((payload) async {
-      final bytes = await crypto.decrypt(
-        roomKey: room.roomKey,
-        encryptedPayload: payload,
-      );
-      final message = CollaborationMessage.fromBytes(bytes);
-      if (message.type == CollaborationMessageType.idleStatus) {
-        idles.add(message);
-      }
+    late CollaborationRepository repositoryA;
+    var repositoryAStopped = false;
+    addTearDown(() async {
+      if (!repositoryAStopped) await repositoryA.stop();
+      await repositoryB.stop();
     });
 
-    await repository.broadcastIdleStatus(
-      room: room, userState: 'active', username: '张三', creatorKey: 'guest:roomA:uuid-1',
-    );
-    await repository.broadcastIdleStatus(
-      room: room, userState: 'active', username: '张三', creatorKey: 'guest:roomA:uuid-1',
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await repositoryB.joinRoom(room: room, localScene: initial);
+    final idles = <CollaborationMessage>[];
+    final subscription = repositoryB.encryptedMessages(room).listen((message) {
+      if (message.type == CollaborationMessageType.idleStatus) idles.add(message);
+    });
+    addTearDown(subscription.cancel);
 
-    expect(idles.length, 2);
-    expect(idles.first.payload['creatorKey'], 'guest:roomA:uuid-1');
+    final creatorKey = creatorKeyForGuest(room.roomId, 'uuid-1');
+    repositoryA = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'a-before'),
+      sceneStore: store,
+      crypto: crypto,
+    );
+    await repositoryA.joinRoom(room: room, localScene: initial);
+    await repositoryA.broadcastIdleStatus(
+      room: room,
+      userState: 'active',
+      username: '张三',
+      creatorKey: creatorKey,
+    );
+    await _waitUntil(() => idles.length == 1);
+
+    await repositoryA.stop();
+    repositoryAStopped = true;
+    repositoryA = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'a-after'),
+      sceneStore: store,
+      crypto: crypto,
+    );
+    repositoryAStopped = false;
+    await repositoryA.joinRoom(room: room, localScene: initial);
+    await repositoryA.broadcastIdleStatus(
+      room: room,
+      userState: 'active',
+      username: '张三',
+      creatorKey: creatorKey,
+    );
+    await _waitUntil(() => idles.length == 2);
+
+    expect(idles.first.payload['socketId'], 'a-before');
+    expect(idles.last.payload['socketId'], 'a-after');
     expect(idles.last.payload['creatorKey'], idles.first.payload['creatorKey'],
-        reason: '同会话重连前后 creatorKey 稳定（v4 §12.2）');
-    await subscription.cancel();
+        reason: '同一房间会话 UUID 经真实断连/换 socket 后仍派生同一 creatorKey');
   });
 
-  test('focus 不产生网络消息（消息枚举无 focus 相关类型）', () {
-    expect(
-      CollaborationMessageType.values.map((t) => t.wireName.contains('FOCUS')),
-      everyElement(isFalse),
-      reason: 'focus 纯本地，永不进入协作协议（v4 §12.2；行为级源码断言见 Task 9）',
+  test('已连接双端中执行 focus 纯状态转换不产生协作消息', () async {
+    final crypto = CollaborationCrypto();
+    final room = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    final initial = ExcalidrawScene.empty();
+    await store.createRoom(room: room, scene: initial, ownerKeyHash: 'test');
+    final hub = MemoryRealtimeRoomHub();
+    final repositoryA = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'a'),
+      sceneStore: store,
+      crypto: crypto,
     );
+    final repositoryB = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'b'),
+      sceneStore: store,
+      crypto: crypto,
+    );
+    addTearDown(() async {
+      await repositoryA.stop();
+      await repositoryB.stop();
+    });
+    await repositoryA.joinRoom(room: room, localScene: initial);
+    await repositoryB.joinRoom(room: room, localScene: initial);
+    final received = <CollaborationMessage>[];
+    final subscription = repositoryB.encryptedMessages(room).listen(received.add);
+    addTearDown(subscription.cancel);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    received.clear();
+
+    final target = toggleCollaborationCreatorFocus(
+      null,
+      creatorKey: 'user:a',
+      labelSnapshot: '张三',
+      isGuest: false,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    expect(target, isA<CreatorFocus>());
+    expect(received, isEmpty,
+        reason: 'focus 转换不进入 repository；WhiteboardPage 委托关系由 Task 9 源码边界门禁锁定');
   });
 }
 ```
 
-（`ExcalidrawScene.fromJson` 的空场景构造若与上方不符，以 sync test 的 `_scene` helper 实际写法为准照抄；`broadcastElements` 的签名若为位置参数同理。两个核心用例必须完整可运行——它们分别承载 v4 §12.2 的"owner 随密文到达"与"游客重连同键"验收项。）
+三个用例必须完整运行：第一个验证 owner 真正进入 B Repository 解密后的消息；第二个执行真实 `stop → 新 Transport/Repository → join` 并确认 socket 改变、creatorKey 不变；第三个与 Task 9 的宿主委托源码门禁组合，证明 focus 核心转换在活跃连接期间不产生网络消息。禁止退化为枚举名称检查或连续发送两次同一个硬编码键。
 
 - [ ] **Step 15.2：压力测试（painter spy）**
 
@@ -4144,9 +4292,10 @@ void main() {
 Scene alternatingScene(int count) {
   var scene = Scene();
   for (var i = 0; i < count; i++) {
+    final index = i.toString().padLeft(8, '0');
     final element = i.isEven
-        ? owned('e$i', 'user:a')
-        : owned('e$i', 'user:b');
+        ? owned('e$i', 'user:a', index: index)
+        : owned('e$i', 'user:b', index: index);
     scene = scene.addElement(element);
   }
   return scene;
@@ -4231,14 +4380,79 @@ if ($changedDart.Count -gt 0) {
 
 - [ ] **Step 16.2：analyze 门禁（machine 格式 multiset 差）**
 
-在 `FlowMuse-App/` 执行 `dart analyze --format=machine > analyze-branch.txt`（基线 42 issues @c40a847：0 error / 17 warning / 25 info；**比对完成后删除 `analyze-branch.txt`**，避免 Task 16.4 的 `git status --short` 出现未跟踪噪声）。比较脚本要求：
+在仓库根目录执行以下一次性 PowerShell。脚本用临时 worktree 实测 `c40a847` 基线，不要求执行模型自行发明比较器；临时目录和输出在 `finally` 中清理，不进入仓库：
 
-1. 反转义 machine 输出的 `file` 字段（`\` 转义）；归一化为相对 `FlowMuse-App/` 的 `/` 分隔路径。
-2. 以 `severity|code|file|message` 四元组做 **multiset 计数差**（不是 set、不是总数）：分支相对基线不得出现任何新增条目（error/warning/info 均不得新增）。
-3. `dart analyze` 的 exit 2 由比较结果接管，不把"非零"当新增。
-4. 诊断的 line/column/length 只用于人工定位，不进门禁键。
+```powershell
+$ErrorActionPreference = 'Stop'
+if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+  $PSNativeCommandUseErrorActionPreference = $false
+}
+$repoRoot = (git rev-parse --show-toplevel).Trim()
+$baselineRoot = Join-Path ([IO.Path]::GetTempPath()) ("flowmuse-issue8-baseline-" + [guid]::NewGuid())
+$baselineOut = Join-Path ([IO.Path]::GetTempPath()) ("flowmuse-analyze-baseline-" + [guid]::NewGuid() + '.txt')
+$branchOut = Join-Path ([IO.Path]::GetTempPath()) ("flowmuse-analyze-branch-" + [guid]::NewGuid() + '.txt')
 
-（比较脚本落地为一次性 PowerShell/Python 脚本即可，不必入库；若入库放 `.agent/tools/` 并在 ADR-018 中登记一句。）
+function Get-AnalyzeKey([string]$line, [string]$appRoot) {
+  if ($line -notmatch '^(ERROR|WARNING|INFO)\|') { return $null }
+  $parts = $line -split '\|', 8
+  if ($parts.Count -ne 8) { throw "无法解析 analyzer machine 行: $line" }
+  $file = $parts[3].Replace('\\', '\')
+  $fullPath = [IO.Path]::GetFullPath($file)
+  $relative = [IO.Path]::GetRelativePath($appRoot, $fullPath).Replace('\', '/')
+  $message = $parts[7].Replace('\|', '|').Replace('\\', '\')
+  return "$($parts[0])|$($parts[2])|$relative|$message"
+}
+
+function Get-AnalyzeMultiset([string]$path, [string]$appRoot) {
+  $counts = @{}
+  foreach ($line in Get-Content -LiteralPath $path) {
+    $key = Get-AnalyzeKey $line $appRoot
+    if (-not $key) { continue }
+    if ($counts.ContainsKey($key)) { $counts[$key]++ } else { $counts[$key] = 1 }
+  }
+  return $counts
+}
+
+try {
+  git worktree add --detach $baselineRoot c40a847
+  if ($LASTEXITCODE -ne 0) { throw '创建 analyze 基线 worktree 失败' }
+
+  $baselineApp = Join-Path $baselineRoot 'FlowMuse-App'
+  Push-Location $baselineApp
+  try {
+    flutter pub get | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw '基线 flutter pub get 失败' }
+    dart analyze --format=machine 2>&1 | Set-Content -LiteralPath $baselineOut
+  } finally { Pop-Location }
+
+  $branchApp = Join-Path $repoRoot 'FlowMuse-App'
+  Push-Location $branchApp
+  try {
+    dart analyze --format=machine 2>&1 | Set-Content -LiteralPath $branchOut
+  } finally { Pop-Location }
+
+  $baseline = Get-AnalyzeMultiset $baselineOut $baselineApp
+  $branch = Get-AnalyzeMultiset $branchOut $branchApp
+  $added = @()
+  foreach ($key in $branch.Keys) {
+    $baselineCount = if ($baseline.ContainsKey($key)) { $baseline[$key] } else { 0 }
+    if ($branch[$key] -gt $baselineCount) {
+      $added += "$key (新增 $($branch[$key] - $baselineCount))"
+    }
+  }
+  if ($added.Count -gt 0) {
+    throw "dart analyze 出现新增诊断:`n$($added -join "`n")"
+  }
+} finally {
+  if (Test-Path -LiteralPath $baselineOut) { Remove-Item -LiteralPath $baselineOut -Force }
+  if (Test-Path -LiteralPath $branchOut) { Remove-Item -LiteralPath $branchOut -Force }
+  if (Test-Path -LiteralPath $baselineRoot) {
+    git -C $repoRoot worktree remove --force $baselineRoot
+  }
+}
+```
+
+门禁键固定为 `severity|code|file|message` 的 **multiset 计数差**；line/column/length 不入键。`dart analyze` 基线和分支均可能以 exit 2 结束，脚本由 multiset 差判定是否失败，不把非零退出码本身视为新增诊断。基线预期仍为 42 issues（0 error / 17 warning / 25 info）；若数量不同，先检查 SDK/依赖环境，不得直接更新基线。
 
 - [ ] **Step 16.3：测试门禁**
 
