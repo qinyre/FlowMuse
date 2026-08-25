@@ -3779,6 +3779,18 @@ class MarkdrawController extends ChangeNotifier {
         if (!keys.contains(key)) keys.add(key);
       }
       if (keys.isEmpty) continue;
+      // 同组多个文本块：拆成独立组各自占一行（"各自找位置"，避免四句并排成一行）
+      final allTextMembers = keys.every(
+        (key) => createdTexts.containsKey(key),
+      );
+      if (allTextMembers && keys.length > 1) {
+        for (final key in keys) {
+          items.add(
+            PptGroupItem(key: key, role: group.role, memberKeys: [key]),
+          );
+        }
+        continue;
+      }
       final isWholeGroup =
           keys.length == 1 && groupsOnPage.containsKey(keys.first);
       if (isWholeGroup) {
@@ -3821,7 +3833,13 @@ class MarkdrawController extends ChangeNotifier {
       page.bounds.height - 144,
     );
     final pageOccupied =
-        _smartLayoutSceneOccupancy(excludedIds)[pageId] ?? const <Bounds>[];
+        _smartLayoutSceneOccupancy({
+          ...excludedIds,
+          // 参与排版的既有元素不构成障碍（它们会被移动到目标位置）
+          for (final entry in rawToUnitKey.entries)
+            if (pageElements.containsKey(entry.key)) ElementId(entry.key),
+        })[pageId] ??
+        const <Bounds>[];
     final placed = PptLayoutEngine.place(
       contentArea: contentArea,
       groups: items,
