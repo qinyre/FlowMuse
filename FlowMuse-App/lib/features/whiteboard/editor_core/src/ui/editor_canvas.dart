@@ -15,6 +15,7 @@ import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../rendering/math_text_utils.dart';
 import '../rendering/local_wet_ink_painter.dart';
 import '../rendering/remote_wet_ink_painter.dart';
+import '../rendering/collaboration_focus_alpha.dart';
 import '../rendering/interactive/smart_layout_ghost_painter.dart';
 
 /// The main canvas area with pointer/gesture handling.
@@ -29,6 +30,12 @@ class EditorCanvas extends StatefulWidget {
   Function(Element element)?
   attributionActionResolver;
 
+  /// 协作聚焦（本机视图态纯数据通道，v4 §7.1）。
+  final String? focusedCreatorKey;
+  final bool focusHistoricalContent;
+  final Map<String, String> socketIdCreatorKeys;
+  final int presenceCreatorRevision;
+
   const EditorCanvas({
     super.key,
     required this.controller,
@@ -37,6 +44,10 @@ class EditorCanvas extends StatefulWidget {
     this.onVisibleSceneBoundsChanged,
     this.remoteWetInkStore,
     this.attributionActionResolver,
+    this.focusedCreatorKey,
+    this.focusHistoricalContent = false,
+    this.socketIdCreatorKeys = const {},
+    this.presenceCreatorRevision = 0,
   });
 
   @override
@@ -56,6 +67,9 @@ class _EditorCanvasState extends State<EditorCanvas>
   bool _appendPageReady = false;
   late final AnimationController _appendPageOverscrollController;
   final RemoteWetInkRenderCache _remoteWetInkCache = RemoteWetInkRenderCache();
+
+  Set<ElementId> _lastHighlightIds = const {};
+  int _localHighlightRevision = 0;
 
   @override
   void initState() {
@@ -193,6 +207,24 @@ class _EditorCanvasState extends State<EditorCanvas>
     );
   }
 
+  /// §7.1 本地高亮集合：当前选中 + 正在编辑的元素；编辑绑定文字时加入
+  /// 其父容器/箭头。框选拖动期间元素尚未进入选中集，天然不参与（只有框
+  /// 选矩形本身全亮，由 InteractiveCanvasPainter 负责）。
+  Set<ElementId> _computeLocallyHighlightedElementIds() {
+    final state = controller.editorState;
+    final ids = <ElementId>{...state.selectedIds};
+    final editingId = controller.editingTextElementId;
+    if (editingId != null) {
+      ids.add(editingId);
+      final editing = state.scene.getElementById(editingId);
+      final containerId = editing is TextElement ? editing.containerId : null;
+      if (containerId != null) {
+        ids.add(ElementId(containerId));
+      }
+    }
+    return ids;
+  }
+
   PagedAppendPageHint? _appendPageHint() {
     if (_appendPageOverscroll <= 0) {
       return null;
@@ -293,6 +325,12 @@ class _EditorCanvasState extends State<EditorCanvas>
             });
           }
           final paintViewport = _paintViewport();
+          final highlightIds = _computeLocallyHighlightedElementIds();
+          if (!setEquals(highlightIds, _lastHighlightIds)) {
+            _lastHighlightIds = highlightIds;
+            _localHighlightRevision++;
+          }
+          final immutableHighlightIds = Set.unmodifiable(highlightIds);
           final appendPageHint = _appendPageHint();
           final useLayeredWetInk =
               controller.writingFlags.layeredWetInk &&
@@ -429,6 +467,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                             controller.activePreviewMetricsProbe,
                         activePreviewPaintMarker:
                             controller.activePreviewPaintMarker,
+                        focusedCreatorKey: widget.focusedCreatorKey,
+                        focusHistoricalContent: widget.focusHistoricalContent,
+                        locallyHighlightedElementIds: immutableHighlightIds,
+                        localHighlightRevision: _localHighlightRevision,
                       ),
                       foregroundPainter: InteractiveCanvasPainter(
                         viewport: paintViewport,
@@ -496,6 +538,9 @@ class _EditorCanvasState extends State<EditorCanvas>
                 _MathTextOverlay(
                   controller: controller,
                   viewport: paintViewport,
+                  focusedCreatorKey: widget.focusedCreatorKey,
+                  focusHistoricalContent: widget.focusHistoricalContent,
+                  highlightedElementIds: immutableHighlightIds,
                 ),
                 if (controller.editingFrameLabelId != null)
                   _FrameLabelEditingOverlay(controller: controller),
@@ -526,10 +571,19 @@ class _EditorCanvasState extends State<EditorCanvas>
 }
 
 class _MathTextOverlay extends StatelessWidget {
-  const _MathTextOverlay({required this.controller, required this.viewport});
+  const _MathTextOverlay({
+    required this.controller,
+    required this.viewport,
+    this.focusedCreatorKey,
+    this.focusHistoricalContent = false,
+    this.highlightedElementIds = const {},
+  });
 
   final MarkdrawController controller;
   final ViewportState viewport;
+  final String? focusedCreatorKey;
+  final bool focusHistoricalContent;
+  final Set<ElementId> highlightedElementIds;
 
   @override
   Widget build(BuildContext context) {
@@ -549,7 +603,13 @@ class _MathTextOverlay extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           for (final element in elements)
-            _PositionedMathText(element: element, viewport: viewport),
+            _PositionedMathText(
+              element: element,
+              viewport: viewport,
+              focusedCreatorKey: focusedCreatorKey,
+              focusHistoricalContent: focusHistoricalContent,
+              highlightedElementIds: highlightedElementIds,
+            ),
         ],
       ),
     );
@@ -557,10 +617,19 @@ class _MathTextOverlay extends StatelessWidget {
 }
 
 class _PositionedMathText extends StatelessWidget {
-  const _PositionedMathText({required this.element, required this.viewport});
+  const _PositionedMathText({
+    required this.element,
+    required this.viewport,
+    this.focusedCreatorKey,
+    this.focusHistoricalContent = false,
+    this.highlightedElementIds = const {},
+  });
 
   final TextElement element;
   final ViewportState viewport;
+  final String? focusedCreatorKey;
+  final bool focusHistoricalContent;
+  final Set<ElementId> highlightedElementIds;
 
   @override
   Widget build(BuildContext context) {
@@ -569,9 +638,15 @@ class _PositionedMathText extends StatelessWidget {
     final top = (element.y - viewport.offset.dy) * zoom;
     final width = element.width * zoom;
     final height = element.height * zoom;
+    final focusAlpha = collaborationFocusAlpha(
+      element,
+      focusedCreatorKey: focusedCreatorKey,
+      focusHistoricalContent: focusHistoricalContent,
+      highlightedElementIds: highlightedElementIds,
+    );
     final color = parseColor(
       element.strokeColor,
-    ).withValues(alpha: element.opacity);
+    ).withValues(alpha: element.opacity * focusAlpha);
 
     final child = Align(
       alignment: Alignment.topLeft,

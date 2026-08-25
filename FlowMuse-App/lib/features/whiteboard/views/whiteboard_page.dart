@@ -122,8 +122,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   String? _guestCreatorSessionId;
   final Map<String, String> _socketCreatorKeys =
       {}; // socketId -> creatorKey（Task 9/14 消费）
-  // ignore: unused_field
-  int _presenceCreatorRevision = 0; // Task 13/14 消费（painter shouldRepaint）
+  int _presenceCreatorRevision = 0; // painter shouldRepaint 消费（T13 起）
   CollaborationFocusTarget? _focusTarget;
   final Map<String, String> _lastKnownCreatorNames =
       {}; // creatorKey -> 最后已知在线名
@@ -2412,6 +2411,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   collaborationFocusLabel: _focusPillLabel(),
                   onExitCollaborationFocus: _exitFocus,
                   attributionActionResolver: _attributionFor,
+                  focusedCreatorKey: _focusTarget is CreatorFocus
+                      ? (_focusTarget as CreatorFocus).creatorKey
+                      : null,
+                  focusHistoricalContent: _focusTarget is HistoricalFocus,
+                  socketIdCreatorKeys: Map.unmodifiable(_socketCreatorKeys),
+                  presenceCreatorRevision: _presenceCreatorRevision,
                   speechRecognitionService: _speechRecognitionService,
                   speechRecognitionEnabled: !_aiSpeechInputActive,
                   config: const MarkdrawEditorConfig(),

@@ -86,6 +86,10 @@ class MarkdrawEditor extends StatefulWidget {
     this.collaborationFocusLabel,
     this.onExitCollaborationFocus,
     this.attributionActionResolver,
+    this.focusedCreatorKey,
+    this.focusHistoricalContent = false,
+    this.socketIdCreatorKeys = const {},
+    this.presenceCreatorRevision = 0,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -172,6 +176,12 @@ class MarkdrawEditor extends StatefulWidget {
   final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
   Function(Element element)?
   attributionActionResolver;
+
+  /// 协作聚焦纯数据通道（v4 §7.1），透传给 EditorCanvas/painters。
+  final String? focusedCreatorKey;
+  final bool focusHistoricalContent;
+  final Map<String, String> socketIdCreatorKeys;
+  final int presenceCreatorRevision;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -757,6 +767,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                           widget.onVisibleSceneBoundsChanged,
                       attributionActionResolver:
                           widget.attributionActionResolver,
+                      focusedCreatorKey: widget.focusedCreatorKey,
+                      focusHistoricalContent: widget.focusHistoricalContent,
+                      socketIdCreatorKeys: widget.socketIdCreatorKeys,
+                      presenceCreatorRevision: widget.presenceCreatorRevision,
                     );
                   },
                 ),
