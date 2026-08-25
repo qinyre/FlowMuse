@@ -3986,29 +3986,37 @@ class MarkdrawController extends ChangeNotifier {
         if (!keys.contains(key)) keys.add(key);
       }
       if (keys.isEmpty) continue;
-      // 同组多个文本块：拆成独立组各自占一行（"各自找位置"，避免四句并排成一行）
-      final allTextMembers = keys.every(
-        (key) => createdTexts.containsKey(key),
-      );
-      if (allTextMembers && keys.length > 1) {
-        for (final key in keys) {
-          items.add(
-            PptGroupItem(key: key, role: group.role, memberKeys: [key]),
-          );
-        }
-        continue;
+      // 组内文本成员一律拆成独立组各自占一行（"各自找位置"）；图/形状等非文本成员
+      // 走原"整组或合成一行"逻辑——避免"图+文本同组"合成超宽单行导致误报空间不足。
+      final textKeys = [
+        for (final key in keys)
+          if (createdTexts.containsKey(key)) key,
+      ];
+      final otherKeys = [
+        for (final key in keys)
+          if (!createdTexts.containsKey(key)) key,
+      ];
+      for (final key in textKeys) {
+        items.add(
+          PptGroupItem(key: key, role: group.role, memberKeys: [key]),
+        );
       }
+      if (otherKeys.isEmpty) continue;
       final isWholeGroup =
-          keys.length == 1 && groupsOnPage.containsKey(keys.first);
+          otherKeys.length == 1 && groupsOnPage.containsKey(otherKeys.first);
       if (isWholeGroup) {
         items.add(
-          PptGroupItem(key: keys.first, role: group.role, memberKeys: keys),
+          PptGroupItem(
+            key: otherKeys.first,
+            role: group.role,
+            memberKeys: otherKeys,
+          ),
         );
       } else {
         final itemKey = 'g-$i';
         var width = 0.0;
         var height = 0.0;
-        for (final key in keys) {
+        for (final key in otherKeys) {
           final size = units[key];
           if (size == null) continue;
           width += size.width + PptLayoutEngine.unitGap;
@@ -4017,7 +4025,7 @@ class MarkdrawController extends ChangeNotifier {
         width -= PptLayoutEngine.unitGap;
         units[itemKey] = ui.Size(width, height);
         items.add(
-          PptGroupItem(key: itemKey, role: group.role, memberKeys: keys),
+          PptGroupItem(key: itemKey, role: group.role, memberKeys: otherKeys),
         );
       }
     }
