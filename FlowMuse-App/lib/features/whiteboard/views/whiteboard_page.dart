@@ -978,43 +978,54 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return _SmartLayoutPageOutcome.nothing;
     }
     final plan = result.plan!;
-    // 蓝框（新增/移动）+ 灰框（删除笔迹）+ 红框（识别失败）同屏，A：AI 自主定风格
-    _markdrawController.setSmartLayoutGhost(
-      SmartLayoutGhostSpec.preview(
-        previewRects: plan.previewRects,
-        removalRects: plan.removalRects,
-        failureRects: plan.failureRects,
-      ),
-    );
+    // 草稿编辑态：把排版结果渲染为可拖动的临时场景（蓝框=参与者选取框），
+    // 红区以红框标注叠加；用户拖动微调后由底部条确认落地或取消。
+    _markdrawController.enterSmartLayoutDraft(plan);
+    if (plan.failureRects.isNotEmpty) {
+      _markdrawController.setSmartLayoutGhost(
+        SmartLayoutGhostSpec.failures(failureRects: plan.failureRects),
+      );
+    }
     final action = await _awaitSmartLayoutBarAction(
       plan: plan,
       isMultiPage: isMultiPage,
     );
-    _markdrawController.setSmartLayoutGhost(null);
     return switch (action) {
       SmartLayoutBarAction.apply =>
-        _applySmartLayoutPlan(plan, dropFailedBlocks: false),
+        _commitSmartLayoutDraft(plan, dropFailedBlocks: false),
       SmartLayoutBarAction.applyAndDrop =>
-        _applySmartLayoutPlan(plan, dropFailedBlocks: true),
-      SmartLayoutBarAction.skipPage => _SmartLayoutPageOutcome.skipped,
-      SmartLayoutBarAction.cancelAll => _SmartLayoutPageOutcome.cancelled,
-      SmartLayoutBarAction.retry => _SmartLayoutPageOutcome.failed,
+        _commitSmartLayoutDraft(plan, dropFailedBlocks: true),
+      SmartLayoutBarAction.skipPage => _cancelSmartLayoutDraftReturn(
+          _SmartLayoutPageOutcome.skipped,
+        ),
+      SmartLayoutBarAction.cancelAll => _cancelSmartLayoutDraftReturn(
+          _SmartLayoutPageOutcome.cancelled,
+        ),
+      SmartLayoutBarAction.retry => _cancelSmartLayoutDraftReturn(
+          _SmartLayoutPageOutcome.failed,
+        ),
     };
   }
 
-  _SmartLayoutPageOutcome _applySmartLayoutPlan(
+  _SmartLayoutPageOutcome _cancelSmartLayoutDraftReturn(
+    _SmartLayoutPageOutcome outcome,
+  ) {
+    _markdrawController.cancelSmartLayoutDraft();
+    return outcome;
+  }
+
+  _SmartLayoutPageOutcome _commitSmartLayoutDraft(
     SmartLayoutPlan plan, {
     required bool dropFailedBlocks,
   }) {
-    final messenger = ScaffoldMessenger.of(context);
-    if (_markdrawController.applySmartLayoutPlan(
+    if (_markdrawController.commitSmartLayoutDraft(
       plan,
       dropFailedBlocks: dropFailedBlocks,
     )) {
-      messenger.showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            dropFailedBlocks ? '智能排版已应用（未识别笔迹已删除）' : '智能排版已应用',
+            dropFailedBlocks ? '智能排版已落地（未识别笔迹已删除）' : '智能排版已落地',
           ),
         ),
       );
@@ -2477,8 +2488,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                     onCommit: _handleRegionSelected,
                     onCancel: _handleRegionCancel,
                   ),
-                if (_smartLayoutBarHandler != null)
-                  // 预览期间拦截画布编辑（透明遮罩，不遮挡红区/蓝框显示）
+                if (_smartLayoutBarHandler != null &&
+                    _smartLayoutBarPlan == null)
+                  // 失败提示态拦截画布编辑（透明遮罩）；草稿编辑态需要拖动，不拦截（由控制器守卫）
                   const Positioned.fill(
                     child: ModalBarrier(color: Colors.transparent),
                   ),

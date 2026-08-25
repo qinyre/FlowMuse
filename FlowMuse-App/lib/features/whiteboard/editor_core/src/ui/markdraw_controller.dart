@@ -300,6 +300,13 @@ class MarkdrawController extends ChangeNotifier {
   String? _pendingInkSessionId;
   bool _recognizingInk = false;
 
+  // --- 智能排版草稿编辑态（预览即编辑：可拖动、确认落地、取消零残留） ---
+  bool _smartLayoutDraftActive = false;
+  Scene? _draftBaseScene;
+  Set<ElementId> _draftParticipants = {};
+  ViewportState? _draftPreviousViewport;
+  ToolType _draftPreviousTool = ToolType.select;
+
   // --- Public getters ---
 
   /// The current editor state (scene, viewport, selection, tool type).
@@ -775,6 +782,8 @@ class MarkdrawController extends ChangeNotifier {
   void switchTool(ToolType type) {
     // In view mode, only the hand tool is allowed
     if (_viewMode && type != ToolType.hand) return;
+    // 草稿编辑态：只允许"选择+拖动参与者"，禁止切换工具
+    if (_smartLayoutDraftActive && type != ToolType.select) return;
     _cancelActiveToolInteraction(ActivePreviewTerminalReason.toolSwitch);
     _activeTool = createTool(type);
     _editorState = _editorState.copyWith(
@@ -821,6 +830,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Undoes the last scene change.
   void undo() {
+    if (_smartLayoutDraftActive) return;
     final undone = _historyManager.undo(_editorState.scene);
     if (undone != null) {
       _editorState = _editorState.copyWith(
@@ -836,6 +846,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Redoes the last undone scene change.
   void redo() {
+    if (_smartLayoutDraftActive) return;
     final redone = _historyManager.redo(_editorState.scene);
     if (redone != null) {
       _editorState = _editorState.copyWith(
@@ -1061,12 +1072,15 @@ class MarkdrawController extends ChangeNotifier {
     _editorState = newState;
 
     if (isSceneChangingResult(styled)) {
-      _lastChangedElements = _changedElementsFromResult(
-        styled,
-        _editorState.scene,
-      );
-      onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
-      _scheduleInkRecognitionFromResult(styled);
+      // 草稿编辑态：临时场景改动不触发保存/协作广播/识别调度
+      if (!_smartLayoutDraftActive) {
+        _lastChangedElements = _changedElementsFromResult(
+          styled,
+          _editorState.scene,
+        );
+        onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
+        _scheduleInkRecognitionFromResult(styled);
+      }
     }
 
     notifyListeners();
@@ -2053,6 +2067,14 @@ class MarkdrawController extends ChangeNotifier {
       return;
     }
 
+    // 草稿编辑态：只允许点击"方案参与者"（空白与非参与者不响应，禁误选/框选）
+    if (_smartLayoutDraftActive) {
+      final hit = _editorState.scene.getElementAtPoint(point);
+      if (hit == null || !_draftParticipants.contains(hit.id)) {
+        return;
+      }
+    }
+
     // Link-to-element mode: clicking an element sets the link target
     if (_linkToElementMode) {
       final hit = _editorState.scene.getElementAtPoint(point);
@@ -2235,7 +2257,8 @@ class MarkdrawController extends ChangeNotifier {
       _modeler = null;
       _activeDrawPointerId = null;
 
-      if (_sceneBeforeDrag != null &&
+      if (!_smartLayoutDraftActive &&
+          _sceneBeforeDrag != null &&
           !identical(_editorState.scene, _sceneBeforeDrag)) {
         _historyManager.push(_sceneBeforeDrag!);
       }
@@ -3381,6 +3404,190 @@ class MarkdrawController extends ChangeNotifier {
   /// 设置/清除画布幽灵预览。
   void setSmartLayoutGhost(SmartLayoutGhostSpec? spec) {
     smartLayoutGhost.value = spec;
+  }
+
+  /// 是否处于智能排版草稿编辑态。
+  bool get smartLayoutDraftActive => _smartLayoutDraftActive;
+
+  /// 进入草稿编辑态：把排版计划应用到一个临时场景并整体渲染，
+  /// 参与者默认全选（可整组拖动/点选单个），方案外元素不响应；不推历史、不触发保存/广播。
+  void enterSmartLayoutDraft(SmartLayoutPlan plan) {
+    if (_smartLayoutDraftActive || _disposed) return;
+    _draftBaseScene = _editorState.scene;
+    _draftPreviousViewport = _editorState.viewport;
+    _draftPreviousTool = _editorState.activeToolType;
+    _draftParticipants = {
+      ...plan.moveDeltas.keys,
+      ...plan.addElements.map((element) => element.id),
+    };
+    final tempScene = _buildDraftScene(plan);
+    _smartLayoutDraftActive = true;
+    final viewport = _fitViewportToPage(plan.pageId);
+    _editorState = _editorState.copyWith(
+      scene: tempScene,
+      selectedIds: _draftParticipants,
+      activeToolType: ToolType.select,
+      viewport: viewport ?? _editorState.viewport,
+    );
+    _activeTool = createTool(ToolType.select);
+    notifyListeners();
+  }
+
+  /// 确认落地：以草稿中的最终坐标在真实场景上产生**一次**历史提交。
+  bool commitSmartLayoutDraft(
+    SmartLayoutPlan plan, {
+    bool dropFailedBlocks = false,
+  }) {
+    if (!_smartLayoutDraftActive || _disposed) return false;
+    final draft = _editorState.scene;
+    final base = _draftBaseScene!;
+    final finalDeltas = <ElementId, ui.Offset>{};
+    // 计算既有参与者最终位移（草稿位置 - 基础位置）
+    for (final id in _draftParticipants) {
+      Element? baseElement;
+      for (final element in base.activeElements) {
+        if (element.id == id) {
+          baseElement = element;
+          break;
+        }
+      }
+      if (baseElement == null) continue; // 新增元素在 addElements 里
+      Element? draftElement;
+      for (final element in draft.activeElements) {
+        if (element.id == id) {
+          draftElement = element;
+          break;
+        }
+      }
+      if (draftElement == null) continue;
+      final dx = draftElement.x - baseElement.x;
+      final dy = draftElement.y - baseElement.y;
+      if (dx != 0 || dy != 0) {
+        finalDeltas[id] = ui.Offset(dx, dy);
+      }
+    }
+    // 新增元素的最终形态（含拖动后的位置）
+    final finalAdds = <Element>[];
+    for (final element in plan.addElements) {
+      Element? draftElement;
+      for (final candidate in draft.activeElements) {
+        if (candidate.id == element.id) {
+          draftElement = candidate;
+          break;
+        }
+      }
+      finalAdds.add(
+        draftElement ??
+            element.copyWith(
+              customData: SmartLayoutUtils.mergePageCustomData(
+                element.customData,
+                plan.pageId,
+              ),
+            ),
+      );
+    }
+    // 还原真实场景，再一次性提交
+    _smartLayoutDraftActive = false;
+    _smartLayoutDraftPreviousSceneRestore(plan);
+    pushHistory();
+    final results = <ToolResult>[
+      for (final id in plan.removeIds) RemoveElementResult(id),
+      if (dropFailedBlocks)
+        for (final id in plan.failedStrokeIds) RemoveElementResult(id),
+      ...SmartLayoutMoveBuilder.buildResults(base, finalDeltas),
+      for (final element in finalAdds) AddElementResult(element),
+      SetSmartLayoutResult(plan.document),
+      SetSelectionResult({
+        ...{for (final element in finalAdds) element.id},
+        ...finalDeltas.keys,
+      }),
+    ];
+    applyResult(CompoundResult(results));
+    smartLayoutGhost.value = null;
+    return true;
+  }
+
+  /// 取消草稿：完全还原进入前场景与视口（零残留）。
+  void cancelSmartLayoutDraft() {
+    if (!_smartLayoutDraftActive) return;
+    _smartLayoutDraftActive = false;
+    final base = _draftBaseScene!;
+    _editorState = _editorState.copyWith(
+      scene: base,
+      selectedIds: {},
+      activeToolType: _draftPreviousTool,
+      viewport: _draftPreviousViewport ?? _editorState.viewport,
+    );
+    _activeTool = createTool(_draftPreviousTool);
+    _draftBaseScene = null;
+    _draftParticipants = {};
+    _draftPreviousViewport = null;
+    smartLayoutGhost.value = null;
+    notifyListeners();
+  }
+
+  /// 内部：提交前把草稿场景换回真实场景（不触发保存/广播）。
+  void _smartLayoutDraftPreviousSceneRestore(SmartLayoutPlan plan) {
+    _editorState = _editorState.copyWith(scene: _draftBaseScene);
+    _draftBaseScene = null;
+    _draftParticipants = {};
+    _draftPreviousViewport = null;
+  }
+
+  Scene _buildDraftScene(SmartLayoutPlan plan) {
+    var temp = _editorState.scene;
+    temp = _applyResultsToScene(
+      temp,
+      [
+        for (final id in plan.removeIds) RemoveElementResult(id),
+        ...SmartLayoutMoveBuilder.buildResults(temp, plan.moveDeltas),
+        for (final element in plan.addElements)
+          AddElementResult(
+            element.copyWith(
+              customData: SmartLayoutUtils.mergePageCustomData(
+                element.customData,
+                plan.pageId,
+              ),
+            ),
+          ),
+      ],
+    );
+    return temp;
+  }
+
+  Scene _applyResultsToScene(Scene scene, List<ToolResult> results) {
+    var next = scene;
+    for (final result in results) {
+      next = switch (result) {
+        AddElementResult(:final element) => next.addElement(element),
+        UpdateElementResult(:final element) => next.updateElement(element),
+        RemoveElementResult(:final id) => next.softDeleteElement(id),
+        _ => next,
+      };
+    }
+    return next;
+  }
+
+  ViewportState? _fitViewportToPage(String pageId) {
+    CanvasPage? page;
+    for (final candidate in _layout.pages) {
+      if (candidate.id == pageId) {
+        page = candidate;
+        break;
+      }
+    }
+    if (page == null) return null;
+    final size = _lastCanvasSize ?? const ui.Size(800, 600);
+    return _editorState.viewport.fitToBounds(
+      Bounds.fromLTWH(
+        page.bounds.left,
+        page.bounds.top,
+        page.bounds.width,
+        page.bounds.height,
+      ),
+      size,
+      padding: 32,
+    );
   }
 
   SmartLayoutPlanResult _planForStyle(
