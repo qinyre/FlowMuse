@@ -49,6 +49,11 @@
 | 湿墨 painter 参数 `socketIdCreatorKeys` / `presenceCreatorRevision` | `RemoteWetInkPainter` | `Map<String, String>` / `int` |
 | presence 字段 `creatorKey` | `CollaboratorPresence` + 三类消息工厂 + repository 广播方法 | `String?` 可选参数 |
 | `_broadcastIdleState(state, {force})` | `WhiteboardPage` | `force` 绕过 `_lastIdleState == state` 去重 |
+| `newlyJoinedSocketIds(previous, next)` | `WhiteboardPage` 文件级顶层公开函数（Task 4） | `Set<String> Function(Set<String>, Set<String>)` |
+| `findDuplicateAliasIds(text, aliases)` | `markdraw_split_pane.dart` 文件级公开函数（Task 8） | `List<String> Function(String, Map<String, String>)` |
+| `kMaxBrushSizeScale` | `rendering/rough/freedraw_renderer.dart` 公开常量（Task 14） | `const double = 4.2` |
+| `ParticipantAvatarStack` | `markdraw_editor.dart`（Task 11 将 `_ParticipantAvatarStack` 提升为公开） | `StatelessWidget`，参数 `List<CollaborationParticipantBadge> participants` |
+| `SpyCanvas`（共享测试工具） | `test/features/whiteboard/editor_core/rendering/canvas_spy.dart`（Task 12 建，Task 14 复用） | `implements Canvas`；计数 `saveLayerCount`/`drawCallCount`，记录 `pathOrder`/`saveLayerBounds` |
 
 ## 0.2 相对 v4 文档的代码事实勘误（实测 @c40a847，实现以此为准）
 
@@ -134,7 +139,10 @@ MarkdrawDocument sanitizeDocumentForExternalExport(MarkdrawDocument doc);
 新建 `test/features/whiteboard/editor_core/collaboration_element_owner_test.dart`：
 
 ```dart
+import 'dart:io';
+
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/element.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/element_id.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/rectangle_element.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -425,7 +433,14 @@ Map<String, Object?> withoutCreatorInJson(Map<String, Object?> element) {
   } else {
     mergedCustomData[flowMuseCustomDataKey] = flowMuse;
   }
-  return <String, Object?>{...element, 'customData': mergedCustomData};
+  // 与 Task 6 断言对齐：剥离后 customData 为空时整个键移除（无残留空 map）
+  final output = <String, Object?>{...element};
+  if (mergedCustomData.isEmpty) {
+    output.remove('customData');
+  } else {
+    output['customData'] = mergedCustomData;
+  }
+  return output;
 }
 
 Map<String, Object?> _withOwnerInCustomData(
@@ -790,8 +805,11 @@ void main() {
     final restored = CollaborationMessage.fromBytes(idle.toBytes());
     expect(restored.payload['creatorKey'], 'guest:roomA:u1');
   });
-});
+  });
+}
 ```
+
+（group 的 `});` 与 main 的 `}` 两级收尾如上——文件结构为 `void main() { group(..., () { ...tests... }); }`。）
 
 再新建 `test/features/whiteboard/collaboration/models/collaborator_presence_creator_key_test.dart`：
 
@@ -1418,6 +1436,8 @@ CollaborationCreator? _creatorOfSceneElement(Scene scene, ElementId id) {
 
 `isCanvasPage`/`isPdfBackground` 来自 `canvas_layout.dart` 的 `FlowMuseElementData` 扩展（L251-257）——`src/editor` 层 import `core/layout` 无循环风险。
 
+（已知顺序边界：嵌套 `CompoundResult` 在第三段处理，晚于外层绑定文字的第二遍——若外层绑定文字的父元素在嵌套 Compound 内新增，本函数暂查不到父而留空 owner；该组合在现有工具产出中不存在，且 Task 6 reconciler 的父子规范化会在协作合并时确定性修复，故接受此边界并在测试断言中不构造该形态。）
+
 - [ ] **Step 5.4：controller 增加 onPrepareLocalResult 并收口 14 处直连点**
 
 1. `MarkdrawController` 公开字段区（`onSceneChanged` 附近）新增：
@@ -1846,18 +1866,29 @@ void loadFromContent(String content, String filename, {bool isExternalImport = f
 
 - [ ] **Step 7.1：写失败测试**
 
-新建 `test/features/whiteboard/editor_core/external_export_boundary_test.dart`：
+新建 `test/features/whiteboard/editor_core/external_export_boundary_test.dart`（**完整 import 集**在文件创建时一次写全——PNG 用例与源码扫描用例都需要）：
 
 ```dart
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/element.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/element_id.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/rectangle_element.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/io/document_format.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/core/serialization/excalidraw_json_codec.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/export/png_metadata.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/ui/markdraw_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized(); // PNG 栅格化需要
+  // ...以下各用例
+```
+
+（下方代码块接续 `main()` 内部；`excalidraw_json_codec.dart` 若仅断言字符串可不 import，以最终用到的符号为准删减 import。）
+
+```dart
   const creator = CollaborationCreator(creatorKey: 'user:z', displayName: '赵六', isGuest: false);
 
   MarkdrawController buildControllerWithOwnedElement() {
@@ -2026,7 +2057,7 @@ cd FlowMuse-App && flutter test test/features/whiteboard/editor_core/external_ex
 
 - [ ] **Step 7.6：调用点审计门禁（写进测试）**
 
-在 `external_export_boundary_test.dart` 追加源码扫描用例与最终产物用例（import 需补 `dart:convert`、`png_metadata.dart`；`extractTextChunk(png, 'markdraw')` 的 keyword 常量值在 png_metadata.dart L20）：
+在 `external_export_boundary_test.dart` 追加源码扫描用例与最终产物用例（imports 已在 Step 7.1 文件头写全；`extractTextChunk` 的 keyword 常量值为 `'markdraw'`，见 png_metadata.dart L20）：
 
 ```dart
 test('外部出口调用点审计：file handler 与 share 只走外部 API', () {
@@ -2069,6 +2100,7 @@ test('ShareExportCoordinator 产物门禁：prepareDocument 只走外部 API（�
 | `SvgExporter.export` | controller `exportSvg` L6680 | 已 sanitize（Step 7.3.4） |
 | `LibraryCodec.serialize` | document_service L128（无 lib 调用方）、controller `exportLibraryContent` L7059 | exportLibraryContent 已 sanitize（Step 7.3.6） |
 | `ExcalidrawLibCodec.serialize` | document_service L130（无 lib 调用方）、controller L7058/7060 | 同上 |
+| `exportSmartLayout` | controller L4008-4012、file_handler L151 | 只输出 md/tex、无 Scene 数据 → **登记为无需净化**（v4 §10.3 明示） |
 
 - [ ] **Step 7.7：format + commit**
 
@@ -2258,7 +2290,7 @@ String serializeScene({
 ```
 
 2. `markdraw_split_pane.dart`：
-   a. 文件级新增公开纯函数 `applySidecarOwners`（签名见 Step 8.1，实现逻辑）：
+   a. 文件级新增公开纯函数 `applySidecarOwners`（签名见 Step 8.1，实现逻辑）。**import 提示**：`markdraw_split_pane.dart` 需新增 `import '../core/elements/collaboration_element_owner.dart';`（Task 1 明令该文件不入 elements barrel，必须直连路径 import）：
 
 ```dart
 List<Element> applySidecarOwners({
@@ -2657,7 +2689,7 @@ if (collaborationFocusLabel != null) ...[
 ],
 ```
 
-7. **WhiteboardPage build 接线**（L2326 MarkdrawEditor 实例化处）：
+7. **WhiteboardPage build 接线**（L2326 MarkdrawEditor 实例化处；`whiteboard_page.dart` 需新增 `import 'collaboration_focus_target.dart';`——同目录相对导入即可）：
 
 ```dart
 collaborationFocusLabel: _focusPillLabel(),
@@ -2724,12 +2756,13 @@ git commit -m "feat: 协作者/历史内容本机聚焦状态机与顶部提示"
 `test/features/whiteboard/editor_core/property_panel_attribution_test.dart`。**实测构造约束**：`PropertyPanelContent` 有 6 个 required 参数（controller/style/elements/isLocked/showFullTextProps/isEditingText），且 `PropertyPanelState.fromElements`（位于 `editor/property_panel_state.dart` L127-132）**直接返回 `ElementStyle`**，没有 `.style` 取值器：
 
 ```dart
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/element.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/element_id.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/rectangle_element.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/editor/property_panel_state.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/ui/markdraw_controller.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/ui/property_panel_content.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Element;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -2923,20 +2956,21 @@ void main() {
           child: ParticipantAvatarStack(
             participants: [
               CollaborationParticipantBadge(username: 'A', creatorKey: 'user:a', onTap: () => tapped++),
-              const CollaborationParticipantBadge(username: '旧游客'),
+              // 禁用态用户名用单字：头像只渲染首字符（AccountAvatar 取
+              // username 首字渲染），多字名 find.text 找不到完整串
+              const CollaborationParticipantBadge(username: '客'),
             ],
           ),
         ),
       ),
     ));
-    // A 的头像以 username 文本渲染，find.text('A') 可命中
     expect(find.text('A'), findsWidgets);
     await tester.tap(find.text('A'));
     await tester.pump();
     expect(tapped, 1);
 
     // 禁用态：旧游客（无 creatorKey、无 onTap）点击无任何效果、不抛异常
-    await tester.tap(find.text('旧游客'));
+    await tester.tap(find.text('客'));
     await tester.pump();
     expect(tapped, 1);
   });
@@ -3076,14 +3110,17 @@ this.localHighlightRevision = 0,
 import 'dart:ui';
 
 /// test-only Canvas spy：转发真实 Canvas；分开统计几何 draw* 与
-/// saveLayer（v4 §7.4），并记录 drawRect 的出现顺序（z 序证据）。
+/// saveLayer（v4 §7.4），并记录 drawPath 的包围盒出现顺序（z 序证据：
+/// 本仓库 RoughCanvasAdapter 的矩形经 rough generator 走 drawPath 而非
+/// drawRect）。成员集按本仓库 SDK（Flutter 3.41-ohos / Dart 3.11）核对；
+/// 若 SDK 升级后出现新抽象成员，按编译器提示补转发。
 class SpyCanvas implements Canvas {
   SpyCanvas(this._inner);
   final Canvas _inner;
 
   int saveLayerCount = 0;
   int drawCallCount = 0;
-  final List<Rect> rectOrder = [];
+  final List<Rect> pathOrder = [];
   final List<Rect?> saveLayerBounds = [];
 
   @override
@@ -3094,14 +3131,16 @@ class SpyCanvas implements Canvas {
   }
 
   @override
-  void drawRect(Rect rect, Paint paint) {
+  void drawPath(Path path, Paint paint) {
     drawCallCount++;
-    rectOrder.add(rect);
-    _inner.drawRect(rect, paint);
+    pathOrder.add(path.getBounds());
+    _inner.drawPath(path, paint);
   }
 
   void _count() => drawCallCount++;
 
+  @override
+  void drawRect(Rect rect, Paint paint) { _count(); _inner.drawRect(rect, paint); }
   @override
   void drawPaint(Paint paint) { _count(); _inner.drawPaint(paint); }
   @override
@@ -3119,16 +3158,15 @@ class SpyCanvas implements Canvas {
     _count(); _inner.drawArc(rect, startAngle, sweepAngle, useCenter, paint);
   }
   @override
-  void drawPath(Path path, Paint paint) { _count(); _inner.drawPath(path, paint); }
-  @override
   void drawImage(Image image, Offset offset, Paint paint) { _count(); _inner.drawImage(image, offset, paint); }
+  // 本 SDK 的 drawImageRect/drawImageNine 没有 blendMode 可选参数
   @override
-  void drawImageRect(Image image, Rect src, Rect dst, Paint paint, {BlendMode? blendMode}) {
-    _count(); _inner.drawImageRect(image, src, dst, paint, blendMode: blendMode ?? BlendMode.srcOver);
+  void drawImageRect(Image image, Rect src, Rect dst, Paint paint) {
+    _count(); _inner.drawImageRect(image, src, dst, paint);
   }
   @override
-  void drawImageNine(Image image, Rect center, Rect dst, Paint paint, {BlendMode? blendMode}) {
-    _count(); _inner.drawImageNine(image, center, dst, paint, blendMode: blendMode ?? BlendMode.srcOver);
+  void drawImageNine(Image image, Rect center, Rect dst, Paint paint) {
+    _count(); _inner.drawImageNine(image, center, dst, paint);
   }
   @override
   void drawPicture(Picture picture) { _count(); _inner.drawPicture(picture); }
@@ -3146,9 +3184,14 @@ class SpyCanvas implements Canvas {
   void drawVertices(Vertices vertices, BlendMode blendMode, Paint paint) {
     _count(); _inner.drawVertices(vertices, blendMode, paint);
   }
+  // 本 SDK 的 drawAtlas blendMode 为可空
   @override
-  void drawAtlas(Image atlas, List<RSTransform> transforms, List<Rect> rects, List<Color>? colors, BlendMode blendMode, Rect? cullRect, Paint paint) {
+  void drawAtlas(Image atlas, List<RSTransform> transforms, List<Rect> rects, List<Color>? colors, BlendMode? blendMode, Rect? cullRect, Paint paint) {
     _count(); _inner.drawAtlas(atlas, transforms, rects, colors, blendMode, cullRect, paint);
+  }
+  @override
+  void drawRawAtlas(Image atlas, Float32List rstTransforms, Float32List rects, Int32List? colors, BlendMode? blendMode, Rect? cullRect, Paint paint) {
+    _count(); _inner.drawRawAtlas(atlas, rstTransforms, rects, colors, blendMode, cullRect, paint);
   }
   @override
   void drawShadow(Path path, Color color, double elevation, bool transparentOccluder) {
@@ -3156,11 +3199,17 @@ class SpyCanvas implements Canvas {
   }
   @override
   void drawColor(Color color, BlendMode blendMode) { _count(); _inner.drawColor(color, blendMode); }
+  @override
+  void drawRSuperellipse(RSuperellipse rsuperellipse, Paint paint) {
+    _count(); _inner.drawRSuperellipse(rsuperellipse, paint);
+  }
 
   @override
   void save() => _inner.save();
   @override
   void restore() => _inner.restore();
+  @override
+  void restoreToCount(int count) => _inner.restoreToCount(count);
   @override
   int getSaveCount() => _inner.getSaveCount();
   @override
@@ -3174,12 +3223,17 @@ class SpyCanvas implements Canvas {
   @override
   void transform(Float64List matrix4) => _inner.transform(matrix4);
   @override
+  Float64List getTransform() => _inner.getTransform();
+  @override
   void clipRect(Rect rect, {ClipOp clipOp = ClipOp.intersect, bool doAntiAlias = true}) =>
       _inner.clipRect(rect, clipOp: clipOp, doAntiAlias: doAntiAlias);
   @override
   void clipRRect(RRect rrect, {bool doAntiAlias = true}) => _inner.clipRRect(rrect, doAntiAlias: doAntiAlias);
   @override
   void clipPath(Path path, {bool doAntiAlias = true}) => _inner.clipPath(path, doAntiAlias: doAntiAlias);
+  @override
+  void clipRSuperellipse(RSuperellipse rsuperellipse, {bool doAntiAlias = true}) =>
+      _inner.clipRSuperellipse(rsuperellipse, doAntiAlias: doAntiAlias);
   @override
   Rect getDestinationClipBounds() => _inner.getDestinationClipBounds();
   @override
@@ -3193,6 +3247,7 @@ class SpyCanvas implements Canvas {
 import 'dart:ui';
 
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/element.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/element_id.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/rectangle_element.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/scene/scene.dart';
@@ -3204,7 +3259,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'canvas_spy.dart';
 ```
 
-测试主体（同文件）：
+测试主体（同文件；fixture 为顶层函数，`main` 内首行初始化 binding）：
 
 ```dart
 Scene buildScene(List<Element> elements) => elements.fold(Scene(), (s, e) => s.addElement(e));
@@ -3235,6 +3290,8 @@ StaticCanvasPainter painterFor(
     );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('无 focus：saveLayer = 0，draw-call 数与绘制顺序同基线（z 序证据）', () {
     final scene = buildScene([owned('a', 'user:a'), plain('b'), owned('c', 'user:c')]);
     final baseline = SpyCanvas(Canvas(PictureRecorder()));
@@ -3245,18 +3302,19 @@ void main() {
     expect(baseline.saveLayerCount, 0);
     expect(focusOff.saveLayerCount, 0, reason: '无 focus 路径零新增 saveLayer');
     expect(focusOff.drawCallCount, baseline.drawCallCount);
-    // z 序结构化证据：drawRect 顺序逐一相同
-    expect(focusOff.rectOrder, baseline.rectOrder);
-    expect(baseline.rectOrder.length, 3);
+    // z 序结构化证据：矩形经 rough adapter 走 drawPath，pathOrder 记录
+    // 每个元素 path 包围盒的出现顺序，逐一相同
+    expect(focusOff.pathOrder, baseline.pathOrder);
+    expect(baseline.pathOrder.length, 3);
   });
 
-  test('聚焦不改变绘制顺序：drawRect 顺序与无 focus 完全一致（v4 §7.3）', () {
+  test('聚焦不改变绘制顺序：pathOrder 与无 focus 完全一致（v4 §7.3）', () {
     final scene = buildScene([owned('a', 'user:a'), plain('b'), owned('c', 'user:a')]);
     final noFocus = SpyCanvas(Canvas(PictureRecorder()));
     painterFor(scene).paint(noFocus, const Size(1000, 1000));
     final focused = SpyCanvas(Canvas(PictureRecorder()));
     painterFor(scene, focusedCreatorKey: 'user:a').paint(focused, const Size(1000, 1000));
-    expect(focused.rectOrder, noFocus.rectOrder,
+    expect(focused.pathOrder, noFocus.pathOrder,
         reason: '目标元素不得浮到遮挡者上方——绘制顺序不变');
   });
 
@@ -3546,6 +3604,8 @@ final color = parseColor(element.strokeColor)
 
 - [ ] **Step 13.3：MarkdrawEditor / WhiteboardPage 接线**
 
+（`editor_canvas.dart` 需新增 `import '../rendering/collaboration_focus_alpha.dart';` 供数学 overlay 使用。）
+
 1. `MarkdrawEditor` 加四个同名字段；L731 `EditorCanvas(` 实参追加透传（`focusedCreatorKey: widget.focusedCreatorKey, ...`）。
 2. `WhiteboardPage` MarkdrawEditor 实例化（L2326 区域）追加：
 
@@ -3640,7 +3700,10 @@ void paintStroke(Canvas canvas, RemoteWetInkStrokeSnapshot snapshot, RoughAdapte
 `test/features/whiteboard/editor_core/rendering/remote_wet_ink_painter_focus_test.dart`。fixture 复用 `remote_wet_ink_painter_test.dart` 文件底部已验证的 `_decoded` 模式（`DecodedLiveInkChunk(senderSocketId:, chunk: LiveInkChunk(strokeId:, startIndex:, points:[LiveInkPoint(x,y,pressure)], style: LiveInkStyle(brushType:, strokeColor:, strokeWidth:, opacity:)))` + `store.apply(...)`），**复制该 helper 到本文件并加 `senderSocketId` 可选参数**；Canvas spy 直接 import Task 12 的 `canvas_spy.dart`（其 `saveLayerBounds` 记录每个 layer 的 bounds）。完整用例：
 
 ```dart
+import 'dart:ui';
+
 import 'package:flow_muse/features/whiteboard/collaboration/models/live_ink_chunk.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/live_ink_receive_scheduler.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_ink_store.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/remote_wet_ink_painter.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/rough.dart';
@@ -3728,9 +3791,10 @@ void main() {
     final spy = SpyCanvas(Canvas(PictureRecorder()));
     painter.paint(spy, const Size(1000, 1000));
     final bounds = spy.saveLayerBounds.single!;
+    // 公式 margin = w × 4.2 × 0.5 × 1.3 + 2；断言用含完整余量的左/右界
     final margin = 40 * 4.2 * 0.5 * 1.3 + 2.0; // 见 Step 14.2 的公式
-    expect(bounds.left, lessThanOrEqualTo(10 - 40 * 4.2 * 0.5), reason: '左缘含最大有效线宽半径');
-    expect(bounds.right, greaterThanOrEqualTo(20 + 40 * 4.2 * 0.5));
+    expect(bounds.left, lessThanOrEqualTo(10 - margin), reason: '左缘含最大有效线宽余量');
+    expect(bounds.right, greaterThanOrEqualTo(20 + margin));
     expect(bounds.width, lessThan(1000));
   });
 
@@ -3754,7 +3818,7 @@ void main() {
 }
 ```
 
-（文件头需补 `import 'dart:ui';` 以使用 `Canvas`/`PictureRecorder`；`LiveInkPoint.pressure` 为可空参数——`_chunk` helper 未传即无压感，粗笔用例显式传 `pressure: 1.0`。`DecodedLiveInkChunk` 的 import 来自 `collaboration/models/live_ink_chunk.dart`。`const LiveInkPoint(...)` 若其构造非 const，去掉 const 即可，以该类实际声明为准。）
+（`LiveInkPoint.pressure` 为可空参数——`_chunk` helper 未传即无压感，粗笔用例显式传 `pressure: 1.0`。**import 指引（实测）**：`DecodedLiveInkChunk` 定义于 `collaboration/services/live_ink_receive_scheduler.dart`；`LiveInkChunk`/`LiveInkPoint`/`LiveInkStyle` 在 `collaboration/models/live_ink_chunk.dart`——两个文件都要 import（既有 `remote_wet_ink_painter_test.dart` 同此）。`const LiveInkPoint(...)` 若其构造非 const，去掉 const 即可，以该类实际声明为准。）
 
 - [ ] **Step 14.2：实现**
 
@@ -3880,19 +3944,31 @@ Rect _strokeBounds(RemoteWetInkStrokeSnapshot snapshot) {
 ```dart
 /// 笔型 sizeScale 上界（highlighter = 4.2），供远端湿墨聚焦层计算
 /// bounds 余量。新增笔型若超过该值必须同步上调。
+/// 前提：现有笔型的压感 thinning 使最大半径 ≤ size/2×(1+thinning) ≤
+/// size（brushPen thinning 1.0 时最大半径 = 1.15×strokeWidth，远小于
+/// 4.2 上界推导的 2.1×strokeWidth）；若未来新增"高 sizeScale(≥3) +
+/// thinning≈1.0"笔型，1.3 压感因子将不足，需把因子提到 2.0 或按笔型
+/// 精确计算。
 const double kMaxBrushSizeScale = 4.2;
 ```
 
 （`remote_wet_ink_painter.dart` import `rough/freedraw_renderer.dart` 或经 `rough/rough.dart` barrel；freedraw_renderer 与 painter 同在 rendering 层，无依赖边界问题。）
 
-3. `shouldRepaint`（L171-176）追加：
+3. `shouldRepaint`（L171-176）追加——注意现有实现是**表达式体**（`=>` 链），需先改为块体再追加：
 
 ```dart
-if (oldDelegate.focusedCreatorKey != focusedCreatorKey) return true;
-if (oldDelegate.focusHistoricalContent != focusHistoricalContent) return true;
-final anyFocus = focusedCreatorKey != null || focusHistoricalContent;
-if (anyFocus && oldDelegate.presenceCreatorRevision != presenceCreatorRevision) {
-  return true;
+@override
+bool shouldRepaint(RemoteWetInkPainter oldDelegate) {
+  if (oldDelegate.focusedCreatorKey != focusedCreatorKey) return true;
+  if (oldDelegate.focusHistoricalContent != focusHistoricalContent) return true;
+  final anyFocus = focusedCreatorKey != null || focusHistoricalContent;
+  if (anyFocus && oldDelegate.presenceCreatorRevision != presenceCreatorRevision) {
+    return true;
+  }
+  return oldDelegate.store != store ||
+      oldDelegate.adapter != adapter ||
+      oldDelegate.viewport != viewport ||
+      oldDelegate.layout != layout;
 }
 ```
 
@@ -3926,8 +4002,6 @@ git commit -m "feat: 远端湿墨按创建者分类临时合成聚焦透明度"
 新建 `test/features/whiteboard/collaboration/collaboration_owner_sync_test.dart`。脚手架照抄 `collaboration_repository_sync_test.dart` L18-45（单 repository + 裸 peer transport，解密在订阅回调内完成；**不需要第二个 repository**）。完整用例：
 
 ```dart
-import 'dart:async';
-
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_message.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_room.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
@@ -3958,7 +4032,7 @@ Map<String, Object?> _ownedElement(String id, String creatorKey, {int version = 
 }
 
 void main() {
-  test('A 广播的元素经加密通道到达 B 且 owner 保留；reconcile 后仍保留', () async {
+  test('A 广播的元素经加密通道到达 B 且 owner 保留', () async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
     final store = MemoryEncryptedSceneStore();
@@ -3973,6 +4047,10 @@ void main() {
       sceneStore: store,
       crypto: crypto,
     );
+    addTearDown(() async {
+      await repository.stop();
+      await peerTransport.disconnect();
+    });
 
     await peerTransport.connect(room.roomId);
     await repository.joinRoom(room: room, localScene: initial);
@@ -3992,8 +4070,9 @@ void main() {
 
     final elementMessages = received
         .where((m) =>
-            m.type == CollaborationMessageType.sceneUpdate ||
-            m.type == CollaborationMessageType.sceneInit)
+            (m.type == CollaborationMessageType.sceneUpdate ||
+                m.type == CollaborationMessageType.sceneInit) &&
+            m.elements.isNotEmpty)
         .toList();
     expect(elementMessages, isNotEmpty);
     expect(elementMessages.first.elements.single['customData'], isNotNull,
