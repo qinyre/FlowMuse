@@ -11,6 +11,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart'
     as editor_core;
+import 'package:flow_muse/features/whiteboard/editor_core/src/editor/creator_stamping.dart';
 
 import '../../../app/app_router.dart';
 import '../../../app/app_theme_preset.dart';
@@ -153,6 +154,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _markdrawController = MarkdrawController();
+    _markdrawController.onPrepareLocalResult = (result, scene) {
+      final creator = _currentCreator();
+      if (creator == null) return result;
+      return stampCreatorOnResult(result, scene, creator);
+    };
     _speechRecognitionService = createSpeechRecognitionService();
     _seedDocumentTitleFromCache();
     _markdrawController.onBrushStateChanged = (type, state) {
@@ -229,6 +235,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _loadImagesTimer?.cancel();
     _liveInkSender.cancel();
     _remoteWetInkStore.dispose();
+    _markdrawController.onPrepareLocalResult = null;
     _guestCreatorSessionId = null;
     _socketCreatorKeys.clear();
     _presenceCreatorRevision++;

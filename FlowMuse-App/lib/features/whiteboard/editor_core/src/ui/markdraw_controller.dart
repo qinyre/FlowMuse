@@ -19,6 +19,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
+import '../core/elements/collaboration_element_owner.dart';
 import '../config/writing_feature_flags.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
@@ -273,6 +274,16 @@ class MarkdrawController extends ChangeNotifier {
   bool Function()? shouldUseLiveInkV2;
   LiveInkFreedrawCallback? onLiveInkChanged;
   ValueChanged<String>? onLiveInkCancelled;
+
+  /// 宿主注入的本地结果预处理回调（仅本地用户变更经过；远端 applyRemote*、
+  /// undo/redo、reset 不经过）。执行顺序固定于 default style 之后、系统剪贴板
+  /// 副作用之前（v4 §5.1）。
+  ToolResult? Function(ToolResult result, Scene currentScene)?
+  onPrepareLocalResult;
+
+  /// 当前本地创建者快照解析器（宿主注入；split pane sidecar 用于新增行盖章，
+  /// 见 v4 §9.1 规则 3）。null = 无协作上下文，不盖章。
+  CollaborationCreator? Function()? localCreatorResolver;
   Timer? _liveFreedrawTimer;
   static const Duration _liveFreedrawBroadcastInterval = Duration(
     milliseconds: 50,
@@ -1038,13 +1049,16 @@ class MarkdrawController extends ChangeNotifier {
         ? _applyDefaultStyleToResult(constrained)
         : constrained;
 
-    _syncToSystemClipboard(styled);
+    final prepared =
+        onPrepareLocalResult?.call(styled, _editorState.scene) ?? styled;
 
-    if (_isEditingLinear && _containsSelectionChange(styled)) {
+    _syncToSystemClipboard(prepared);
+
+    if (_isEditingLinear && _containsSelectionChange(prepared)) {
       _isEditingLinear = false;
     }
 
-    final newState = _editorState.applyResult(styled);
+    final newState = _editorState.applyResult(prepared);
     if (newState.activeToolType != _editorState.activeToolType) {
       final previousToolType = _editorState.activeToolType;
       _activeTool.reset();
@@ -1060,16 +1074,26 @@ class MarkdrawController extends ChangeNotifier {
     }
     _editorState = newState;
 
-    if (isSceneChangingResult(styled)) {
+    if (isSceneChangingResult(prepared)) {
       _lastChangedElements = _changedElementsFromResult(
-        styled,
+        prepared,
         _editorState.scene,
       );
       onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
-      _scheduleInkRecognitionFromResult(styled);
+      _scheduleInkRecognitionFromResult(prepared);
     }
 
     notifyListeners();
+  }
+
+  /// 文本编辑等内部路径的统一收口：经 onPrepareLocalResult 盖章后应用并
+  /// 替换 _editorState（v4 §5.1：不得只覆盖公开 applyResult）。
+  EditorState _applyLocalResult(ToolResult? result) {
+    final prepared = result == null
+        ? null
+        : onPrepareLocalResult?.call(result, _editorState.scene) ?? result;
+    _editorState = _editorState.applyResult(prepared);
+    return _editorState;
   }
 
   List<Element>? _changedElementsFromResult(ToolResult result, Scene scene) {
@@ -1559,7 +1583,7 @@ class MarkdrawController extends ChangeNotifier {
       baseOffset: 0,
       extentOffset: element.text.length,
     );
-    _editorState = _editorState.applyResult(SetSelectionResult({element.id}));
+    _applyLocalResult(SetSelectionResult({element.id}));
     notifyListeners();
     restoreTextFocusWhenStable();
   }
@@ -1589,12 +1613,12 @@ class MarkdrawController extends ChangeNotifier {
         containerId: shape.id.value,
         textAlign: core.TextAlign.center,
       );
-      _editorState = _editorState.applyResult(AddElementResult(textElem));
+      _applyLocalResult(AddElementResult(textElem));
       final newBound = [
         ...shape.boundElements,
         BoundElement(id: newTextId.value, type: 'text'),
       ];
-      _editorState = _editorState.applyResult(
+      _applyLocalResult(
         UpdateElementResult(shape.copyWith(boundElements: newBound)),
       );
       _editingTextElementId = newTextId;
@@ -1632,12 +1656,12 @@ class MarkdrawController extends ChangeNotifier {
         containerId: arrow.id.value,
         textAlign: core.TextAlign.center,
       );
-      _editorState = _editorState.applyResult(AddElementResult(textElem));
+      _applyLocalResult(AddElementResult(textElem));
       final newBound = [
         ...arrow.boundElements,
         BoundElement(id: newTextId.value, type: 'text'),
       ];
-      _editorState = _editorState.applyResult(
+      _applyLocalResult(
         UpdateElementResult(arrow.copyWith(boundElements: newBound)),
       );
       _editingTextElementId = newTextId;
@@ -1666,7 +1690,7 @@ class MarkdrawController extends ChangeNotifier {
     final text = textEditingController.text.trim();
     if (text.isEmpty) {
       final element = _editorState.scene.getElementById(id);
-      _editorState = _editorState.applyResult(RemoveElementResult(id));
+      _applyLocalResult(RemoveElementResult(id));
       if (element is TextElement && element.containerId != null) {
         final parentId = ElementId(element.containerId!);
         final parent = _editorState.scene.getElementById(parentId);
@@ -1674,16 +1698,16 @@ class MarkdrawController extends ChangeNotifier {
           final newBound = parent.boundElements
               .where((b) => b.id != id.value)
               .toList();
-          _editorState = _editorState.applyResult(
+          _applyLocalResult(
             UpdateElementResult(parent.copyWith(boundElements: newBound)),
           );
         }
       }
-      _editorState = _editorState.applyResult(SetSelectionResult({}));
+      _applyLocalResult(SetSelectionResult({}));
     } else {
       final element = _editorState.scene.getElementById(id);
       if (element is TextElement) {
-        _editorState = _editorState.applyResult(
+        _applyLocalResult(
           UpdateElementResult(_textElementWithContent(element, text)),
         );
       }
@@ -1710,7 +1734,7 @@ class MarkdrawController extends ChangeNotifier {
           _editingTextElementId!,
         );
         if (element is TextElement) {
-          _editorState = _editorState.applyResult(
+          _applyLocalResult(
             UpdateElementResult(element.copyWithText(text: _originalText!)),
           );
         }
@@ -1718,9 +1742,7 @@ class MarkdrawController extends ChangeNotifier {
         final element = _editorState.scene.getElementById(
           _editingTextElementId!,
         );
-        _editorState = _editorState.applyResult(
-          RemoveElementResult(_editingTextElementId!),
-        );
+        _applyLocalResult(RemoveElementResult(_editingTextElementId!));
         if (element is TextElement && element.containerId != null) {
           final parentId = ElementId(element.containerId!);
           final parent = _editorState.scene.getElementById(parentId);
@@ -1728,12 +1750,12 @@ class MarkdrawController extends ChangeNotifier {
             final newBound = parent.boundElements
                 .where((b) => b.id != _editingTextElementId!.value)
                 .toList();
-            _editorState = _editorState.applyResult(
+            _applyLocalResult(
               UpdateElementResult(parent.copyWith(boundElements: newBound)),
             );
           }
         }
-        _editorState = _editorState.applyResult(SetSelectionResult({}));
+        _applyLocalResult(SetSelectionResult({}));
       }
       _editingTextElementId = null;
       _isEditingExisting = false;
@@ -1811,7 +1833,7 @@ class MarkdrawController extends ChangeNotifier {
     if (element is! TextElement) return;
 
     final text = textEditingController.text;
-    _editorState = _editorState.applyResult(
+    _applyLocalResult(
       UpdateElementResult(_textElementWithContent(element, text)),
     );
     final changed = _editorState.scene.getElementById(id);
@@ -3224,10 +3246,7 @@ class MarkdrawController extends ChangeNotifier {
       if (inkGroups.isEmpty) {
         return const SmartLayoutPlanResult();
       }
-      final request = await _buildSmartLayoutRequest(
-        inkGroups,
-        engine: engine,
-      );
+      final request = await _buildSmartLayoutRequest(inkGroups, engine: engine);
       if (_disposed || request.blocks.isEmpty) {
         return const SmartLayoutPlanResult();
       }
@@ -3312,8 +3331,7 @@ class MarkdrawController extends ChangeNotifier {
       ];
       final removalRects = <ui.Rect>[
         for (final entry in inkGroups.entries)
-          if (successBlockIds.contains(entry.key))
-            _inkGroupBounds(entry.value),
+          if (successBlockIds.contains(entry.key)) _inkGroupBounds(entry.value),
       ];
       final failureRects = <ui.Rect>[
         for (final entry in inkGroups.entries)
@@ -3326,7 +3344,8 @@ class MarkdrawController extends ChangeNotifier {
           error: '智能识别结果不完整：本页手写均未识别成功',
         );
       }
-      final style = requestedStyle ??
+      final style =
+          requestedStyle ??
           response.layout?.style ??
           _legacyStyleFromPages(response.pages);
       return _planForStyle(
@@ -3471,9 +3490,7 @@ class MarkdrawController extends ChangeNotifier {
   }) {
     final replacement = _elementsFromSmartLayoutResponse(
       response,
-      excludedIds: {
-        for (final id in removeIds) id,
-      },
+      excludedIds: {for (final id in removeIds) id},
     );
     if (replacement == null) {
       throw StateError('智能排版没有足够的空白区域');
@@ -3526,9 +3543,7 @@ class MarkdrawController extends ChangeNotifier {
     };
     final node = _mindmapNodeFromStructure(structure.root, textByBlockId);
     final occupied =
-        _smartLayoutSceneOccupancy({
-          for (final id in removeIds) id,
-        })[page.id] ??
+        _smartLayoutSceneOccupancy({for (final id in removeIds) id})[page.id] ??
         const <Bounds>[];
     final contentArea = ui.Rect.fromLTWH(
       page.bounds.left + 72,
@@ -3545,9 +3560,7 @@ class MarkdrawController extends ChangeNotifier {
       throw StateError('智能排版没有足够的空白区域');
     }
     final rootId = _mindmapRootElementId(result.elements);
-    final blockCount = response.blocks
-        .where((block) => block.isSuccess)
-        .length;
+    final blockCount = response.blocks.where((block) => block.isSuccess).length;
     final depth = _mindmapDepth(structure.root);
     final nodeCount = _mindmapNodeCount(structure.root);
     final document = SmartLayoutDocumentFactory.fromBlocks([
@@ -3731,10 +3744,7 @@ class MarkdrawController extends ChangeNotifier {
     for (final element in _smartLayoutPageElements(pageId)) {
       final groupId = GroupUtils.outermostGroupId(element);
       if (groupId == null || groupsOnPage.containsKey(groupId)) continue;
-      final members = GroupUtils.findGroupMembers(
-        _editorState.scene,
-        groupId,
-      );
+      final members = GroupUtils.findGroupMembers(_editorState.scene, groupId);
       if (members.isEmpty) continue;
       var union = _placementBoundsForElement(members.first);
       for (final member in members.skip(1)) {
@@ -3887,12 +3897,7 @@ class MarkdrawController extends ChangeNotifier {
               target.dy - element.y,
             );
             previewRects.add(
-              ui.Rect.fromLTWH(
-                x,
-                target.dy,
-                element.width,
-                element.height,
-              ),
+              ui.Rect.fromLTWH(x, target.dy, element.width, element.height),
             );
           }
         }
