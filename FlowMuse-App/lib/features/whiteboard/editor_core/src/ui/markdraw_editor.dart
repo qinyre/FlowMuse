@@ -85,6 +85,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onSmartLayoutPressed,
     this.collaborationFocusLabel,
     this.onExitCollaborationFocus,
+    this.attributionActionResolver,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -166,6 +167,11 @@ class MarkdrawEditor extends StatefulWidget {
   /// 协作聚焦状态提示（本机视图态；null = 不显示 pill）。
   final String? collaborationFocusLabel;
   final VoidCallback? onExitCollaborationFocus;
+
+  /// §6.3 元素入口 resolver：由宿主根据选中元素返回归属文案与聚焦回调。
+  final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
+  Function(Element element)?
+  attributionActionResolver;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -741,6 +747,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                       onPointerPresence: widget.onPointerPresence,
                       onVisibleSceneBoundsChanged:
                           widget.onVisibleSceneBoundsChanged,
+                      attributionActionResolver:
+                          widget.attributionActionResolver,
                     );
                   },
                 ),
@@ -1000,6 +1008,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 controller: _controller,
                 onCollapse: _collapsePropertyPanel,
                 dockOnRight: propertyPanelOnRight,
+                attributionActionResolver: widget.attributionActionResolver,
               ),
             ),
         // Find overlay

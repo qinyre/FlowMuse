@@ -2,13 +2,17 @@ library;
 
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' hide TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    hide TextAlign;
 
 /// Shows compact property panel as a bottom sheet.
 void showCompactPropertyPanel(
   BuildContext context,
-  MarkdrawController controller,
-) {
+  MarkdrawController controller, {
+  ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
+  Function(Element element)?
+  attributionActionResolver,
+}) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -78,6 +82,7 @@ void showCompactPropertyPanel(
                   isEditingText: isEditingText,
                   textOnly: textOnly,
                   canvasSize: controller.canvasSize,
+                  attributionActionResolver: attributionActionResolver,
                 ),
               ],
             ),

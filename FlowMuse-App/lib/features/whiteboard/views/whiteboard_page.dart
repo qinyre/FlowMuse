@@ -2411,6 +2411,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   controller: _markdrawController,
                   collaborationFocusLabel: _focusPillLabel(),
                   onExitCollaborationFocus: _exitFocus,
+                  attributionActionResolver: _attributionFor,
                   speechRecognitionService: _speechRecognitionService,
                   speechRecognitionEnabled: !_aiSpeechInputActive,
                   config: const MarkdrawEditorConfig(),
@@ -2938,6 +2939,39 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           !element.isCanvasPage &&
           !element.isPdfBackground &&
           readCreator(element) == null,
+    );
+  }
+
+  /// §6.3 元素入口 resolver：editor_core 不解析 customData，宿主决定文案。
+  /// 离线回退名用"最后已知在线名"（Task 9 的 _lastKnownCreatorNames，
+  /// 持续刷新），仅当从未在线过才退到创建时快照（v4 §6.3/§6.1）。
+  ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
+  _attributionFor(editor_core.Element element) {
+    if (element.isCanvasPage || element.isPdfBackground) return null;
+    final creator = readCreator(element);
+    if (creator == null) {
+      return (
+        attributionLabel: '历史内容',
+        actionLabel: '查看历史内容',
+        onPressed: _focusHistory,
+      );
+    }
+    final online = _onlinePresenceFor(creator.creatorKey);
+    final name =
+        online?.username ??
+        _lastKnownCreatorNames[creator.creatorKey] ??
+        creator.displayName;
+    // v4 §6.4：离线游客旧会话的属性入口同样带"（历史会话）"后缀；
+    // 同 creatorKey 重新上线后缀消失（online != null 分支自然不带）。
+    final suffix = online == null && creator.isGuest ? '（历史会话）' : '';
+    return (
+      attributionLabel: '由 $name$suffix 创建',
+      actionLabel: '查看$name的内容',
+      onPressed: () => _toggleCreatorFocus(
+        creator.creatorKey,
+        labelSnapshot: name,
+        isGuest: creator.isGuest,
+      ),
     );
   }
 

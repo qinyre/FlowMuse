@@ -25,6 +25,9 @@ class EditorCanvas extends StatefulWidget {
   onPointerPresence;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
   final RemoteWetInkStore? remoteWetInkStore;
+  final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
+  Function(Element element)?
+  attributionActionResolver;
 
   const EditorCanvas({
     super.key,
@@ -33,6 +36,7 @@ class EditorCanvas extends StatefulWidget {
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
     this.remoteWetInkStore,
+    this.attributionActionResolver,
   });
 
   @override
@@ -410,7 +414,8 @@ class _EditorCanvasState extends State<EditorCanvas>
                         previewElement: previewElement,
                         editingElementId: controller.editingTextElementId,
                         resolvedImages: controller.resolveImages(),
-                        pendingElements: controller.pendingPreviewElements.isNotEmpty
+                        pendingElements:
+                            controller.pendingPreviewElements.isNotEmpty
                             ? controller.pendingPreviewElements
                             : null,
                         gridSize: controller.gridSize,
@@ -500,7 +505,11 @@ class _EditorCanvasState extends State<EditorCanvas>
                   Positioned(
                     bottom: 72,
                     right: 12,
-                    child: _CompactPropertyButton(controller: controller),
+                    child: _CompactPropertyButton(
+                      controller: controller,
+                      attributionActionResolver:
+                          widget.attributionActionResolver,
+                    ),
                   ),
                 // Mind-map floating + button: shown when a single mind-map
                 // node is selected, positioned at the node's right edge.
@@ -831,7 +840,13 @@ class _FrameLabelEditingOverlayState extends State<_FrameLabelEditingOverlay> {
 /// Floating button that opens the compact property panel bottom sheet.
 class _CompactPropertyButton extends StatelessWidget {
   final MarkdrawController controller;
-  const _CompactPropertyButton({required this.controller});
+  final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
+  Function(Element element)?
+  attributionActionResolver;
+  const _CompactPropertyButton({
+    required this.controller,
+    this.attributionActionResolver,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -849,7 +864,11 @@ class _CompactPropertyButton extends StatelessWidget {
         icon: const Icon(Icons.tune, size: 22),
         tooltip: '属性',
         constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-        onPressed: () => showCompactPropertyPanel(context, controller),
+        onPressed: () => showCompactPropertyPanel(
+          context,
+          controller,
+          attributionActionResolver: attributionActionResolver,
+        ),
       ),
     );
   }
@@ -873,7 +892,10 @@ class _MindmapAddButtonOverlay extends StatelessWidget {
     final node = selected.first;
     final viewport = controller.editorState.viewport;
     // Anchor at the node's right edge, vertically centred.
-    final rightEdgeScene = Offset(node.x + node.width, node.y + node.height / 2);
+    final rightEdgeScene = Offset(
+      node.x + node.width,
+      node.y + node.height / 2,
+    );
     final screen = viewport.sceneToScreen(rightEdgeScene);
 
     final cs = Theme.of(context).colorScheme;
