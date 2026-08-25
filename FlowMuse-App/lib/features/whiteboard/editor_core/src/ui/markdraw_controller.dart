@@ -3480,7 +3480,7 @@ class MarkdrawController extends ChangeNotifier {
     }
     final title = style == SmartLayoutStyle.article
         ? '按文章阅读流重新排版本页内容'
-        : '仅将手写识别为机器字体，保持原位附近';
+        : '仅识别并转化手写字体，保持原位附近';
     return SmartLayoutPlanResult(
       plan: SmartLayoutPlan(
         pageId: page.id,

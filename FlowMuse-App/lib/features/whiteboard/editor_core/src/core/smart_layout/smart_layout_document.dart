@@ -36,7 +36,7 @@ enum SmartLayoutStyle {
         SmartLayoutStyle.ppt => 'PPT 式排版',
         SmartLayoutStyle.mindmap => '思维导图',
         SmartLayoutStyle.article => '文章式阅读流',
-        SmartLayoutStyle.inPlace => '仅转机器字体',
+        SmartLayoutStyle.inPlace => '仅识别并转化手写字体',
       };
 }
 

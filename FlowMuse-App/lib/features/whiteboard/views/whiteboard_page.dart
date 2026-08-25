@@ -118,6 +118,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   OverlayEntry? _aiPanelEntry;
   bool _aiCaptureModeActive = false;
   bool _smartLayoutFlowActive = false;
+  SmartLayoutPlan? _smartLayoutBarPlan;
+  int _smartLayoutBarFailureCount = 0;
+  bool _smartLayoutBarMultiPage = false;
+  Completer<SmartLayoutBarAction>? _smartLayoutBarHandler;
   Completer<AiVisualAttachment?>? _regionCaptureCompleter;
   bool _aiSpeechInputActive = false;
   late final SpeechRecognitionService _speechRecognitionService;
@@ -793,31 +797,41 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       );
       return;
     }
-    List<String>? selected;
+    List<String> selected;
     if (initialPageIds != null && initialPageIds.length == 1) {
-      // AI 指令路径：已指定单个页面，直接执行，不再弹选页框
+      // AI 指令路径：已指定单个页面，直接执行，不再弹范围选择框
       selected = initialPageIds;
     } else if (pages.length == 1) {
-      // 单页笔记，一键执行，避免弹出多余的选页对话框（灰色遮罩）
+      // 单页笔记：全部页/当前页/选页无区别，一键执行
       selected = [pages.first.id];
     } else {
       final visible = _markdrawController.editorState.viewport.visibleRect(
         _markdrawController.canvasSize,
       );
       final currentPage = _markdrawController.pageForVisibleRect(visible);
-      selected = await showDialog<List<String>>(
+      final selection = await showDialog<SmartLayoutScopeSelection>(
         context: context,
-        builder: (dialogContext) => SmartLayoutPagePickerDialog(
+        builder: (dialogContext) => SmartLayoutScopeDialog(
           pages: pages,
-          initial: {
-            if (currentPage != null) currentPage.id,
-            ...?initialPageIds,
-          },
+          currentPageId: currentPage?.id,
+          thumbnailBuilder: (bounds) => _markdrawController.exportRegionPng(
+            bounds,
+            maxLongestSide: 120,
+          ),
         ),
       );
+      if (selection == null) return;
+      selected = switch (selection.mode) {
+        SmartLayoutScopeMode.allPages => [for (final page in pages) page.id],
+        SmartLayoutScopeMode.currentPage => [
+          if (currentPage != null) currentPage.id else pages.first.id,
+        ],
+        SmartLayoutScopeMode.selectedPages =>
+          selection.pageIds.isEmpty ? [pages.first.id] : selection.pageIds,
+      };
     }
-    if (selected == null || selected.isEmpty) return;
     setState(() => _smartLayoutFlowActive = true);
+    final isMultiPage = selected.length > 1;
     var applied = 0;
     var skipped = 0;
     var failed = 0;
@@ -825,7 +839,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     try {
       for (final pageId in selected) {
         if (!mounted) return;
-        final result = await _runSmartLayoutPage(pageId);
+        final result = await _runSmartLayoutPage(
+          pageId,
+          isMultiPage: isMultiPage,
+        );
         switch (result) {
           case _SmartLayoutPageOutcome.applied:
             applied++;
@@ -836,10 +853,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           case _SmartLayoutPageOutcome.nothing:
             nothing++;
           case _SmartLayoutPageOutcome.cancelled:
+            // 取消整个流程：停止后续页，已应用页保留
             setState(() => _smartLayoutFlowActive = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('已取消，完成 $applied 页')),
-            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('已取消，完成 $applied 页')),
+              );
+            }
             return;
         }
       }
@@ -852,6 +872,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       if (failed > 0) '失败 $failed 页',
       if (nothing > 0) '无内容 $nothing 页',
     ];
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(parts.isEmpty ? '未执行智能排版' : '智能排版完成：${parts.join('，')}'),
@@ -859,7 +880,45 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
   }
 
-  Future<_SmartLayoutPageOutcome> _runSmartLayoutPage(String pageId) async {
+  /// 等待底部悬浮条动作（非模态：画布全程可见）。
+  Future<SmartLayoutBarAction> _awaitSmartLayoutBarAction({
+    SmartLayoutPlan? plan,
+    int failureCount = 0,
+    required bool isMultiPage,
+  }) {
+    final completer = Completer<SmartLayoutBarAction>();
+    setState(() {
+      _smartLayoutBarPlan = plan;
+      _smartLayoutBarFailureCount = failureCount;
+      _smartLayoutBarMultiPage = isMultiPage;
+      _smartLayoutBarHandler = completer;
+    });
+    return completer.future.whenComplete(() {
+      if (mounted) {
+        setState(() {
+          _smartLayoutBarPlan = null;
+          _smartLayoutBarFailureCount = 0;
+          _smartLayoutBarHandler = null;
+        });
+      }
+    });
+  }
+
+  void _handleSmartLayoutBarAction(SmartLayoutBarAction action) {
+    final handler = _smartLayoutBarHandler;
+    if (handler == null || handler.isCompleted) return;
+    setState(() {
+      _smartLayoutBarPlan = null;
+      _smartLayoutBarFailureCount = 0;
+      _smartLayoutBarHandler = null;
+    });
+    handler.complete(action);
+  }
+
+  Future<_SmartLayoutPageOutcome> _runSmartLayoutPage(
+    String pageId, {
+    required bool isMultiPage,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
     SmartLayoutPlanResult result;
     try {
@@ -884,6 +943,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     messenger.removeCurrentSnackBar();
     if (result.plan == null) {
       if (result.hasFailures) {
+        // 失败红区可见：非模态底部条 + 画布红框
         _markdrawController.setSmartLayoutGhost(
           SmartLayoutGhostSpec.failures(
             failureRects: [
@@ -891,12 +951,20 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             ],
           ),
         );
-        final retry = await _showSmartLayoutFailureDialog(result.failures);
+        final action = await _awaitSmartLayoutBarAction(
+          failureCount: result.failures.length,
+          isMultiPage: isMultiPage,
+        );
         _markdrawController.setSmartLayoutGhost(null);
-        if (retry == true) {
-          return _runSmartLayoutPage(pageId);
-        }
-        return _SmartLayoutPageOutcome.cancelled;
+        return switch (action) {
+          SmartLayoutBarAction.retry =>
+            _runSmartLayoutPage(pageId, isMultiPage: isMultiPage),
+          SmartLayoutBarAction.skipPage => _SmartLayoutPageOutcome.skipped,
+          SmartLayoutBarAction.cancelAll => _SmartLayoutPageOutcome.cancelled,
+          SmartLayoutBarAction.apply ||
+          SmartLayoutBarAction.applyAndDrop =>
+            _SmartLayoutPageOutcome.failed,
+        };
       }
       messenger.showSnackBar(
         SnackBar(
@@ -910,92 +978,49 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return _SmartLayoutPageOutcome.nothing;
     }
     final plan = result.plan!;
+    // 蓝框（新增/移动）+ 灰框（删除笔迹）+ 红框（识别失败）同屏，A：AI 自主定风格
     _markdrawController.setSmartLayoutGhost(
       SmartLayoutGhostSpec.preview(
         previewRects: plan.previewRects,
         removalRects: plan.removalRects,
+        failureRects: plan.failureRects,
       ),
     );
-    final action = await showDialog<SmartLayoutConfirmAction>(
-      context: context,
-      builder: (dialogContext) => SmartLayoutConfirmDialog(
-        plan: plan,
-        onSelectStyle: (style) async {
-          final switched = await _markdrawController.buildSmartLayoutPlan(
-            pageId: pageId,
-            requestedStyle: style,
-          );
-          if (switched.plan == null) {
-            if (switched.error != null && mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('切换风格失败：${switched.error}')),
-              );
-            }
-            return null;
-          }
-          _markdrawController.setSmartLayoutGhost(
-            SmartLayoutGhostSpec.preview(
-              previewRects: switched.plan!.previewRects,
-              removalRects: switched.plan!.removalRects,
-            ),
-          );
-          return switched.plan;
-        },
-        onApply: (currentPlan) => Navigator.of(dialogContext).pop(
-          SmartLayoutConfirmAction.apply,
-        ),
-        onApplyAndDrop: (currentPlan) => Navigator.of(dialogContext).pop(
-          SmartLayoutConfirmAction.applyAndDrop,
-        ),
-        onSkip: () => Navigator.of(dialogContext).pop(
-          SmartLayoutConfirmAction.skip,
-        ),
-        onCancel: () => Navigator.of(dialogContext).pop(
-          SmartLayoutConfirmAction.cancel,
-        ),
-      ),
+    final action = await _awaitSmartLayoutBarAction(
+      plan: plan,
+      isMultiPage: isMultiPage,
     );
     _markdrawController.setSmartLayoutGhost(null);
-    switch (action) {
-      case SmartLayoutConfirmAction.apply:
-        if (_markdrawController.applySmartLayoutPlan(plan)) {
-          messenger.showSnackBar(
-            const SnackBar(content: Text('智能排版已应用')),
-          );
-          return _SmartLayoutPageOutcome.applied;
-        }
-        return _SmartLayoutPageOutcome.failed;
-      case SmartLayoutConfirmAction.applyAndDrop:
-        if (_markdrawController.applySmartLayoutPlan(
-          plan,
-          dropFailedBlocks: true,
-        )) {
-          messenger.showSnackBar(
-            const SnackBar(content: Text('智能排版已应用（未识别笔迹已删除）')),
-          );
-          return _SmartLayoutPageOutcome.applied;
-        }
-        return _SmartLayoutPageOutcome.failed;
-      case SmartLayoutConfirmAction.skip:
-        return _SmartLayoutPageOutcome.skipped;
-      case SmartLayoutConfirmAction.cancel:
-        return _SmartLayoutPageOutcome.cancelled;
-      case null:
-        return _SmartLayoutPageOutcome.skipped;
-    }
+    return switch (action) {
+      SmartLayoutBarAction.apply =>
+        _applySmartLayoutPlan(plan, dropFailedBlocks: false),
+      SmartLayoutBarAction.applyAndDrop =>
+        _applySmartLayoutPlan(plan, dropFailedBlocks: true),
+      SmartLayoutBarAction.skipPage => _SmartLayoutPageOutcome.skipped,
+      SmartLayoutBarAction.cancelAll => _SmartLayoutPageOutcome.cancelled,
+      SmartLayoutBarAction.retry => _SmartLayoutPageOutcome.failed,
+    };
   }
 
-  Future<bool?> _showSmartLayoutFailureDialog(
-    List<SmartLayoutFailureInfo> failures,
-  ) {
-    return showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => SmartLayoutFailureDialog(
-        failures: failures,
-        onRetry: () => Navigator.of(dialogContext).pop(true),
-        onCancel: () => Navigator.of(dialogContext).pop(false),
-      ),
-    );
+  _SmartLayoutPageOutcome _applySmartLayoutPlan(
+    SmartLayoutPlan plan, {
+    required bool dropFailedBlocks,
+  }) {
+    final messenger = ScaffoldMessenger.of(context);
+    if (_markdrawController.applySmartLayoutPlan(
+      plan,
+      dropFailedBlocks: dropFailedBlocks,
+    )) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            dropFailedBlocks ? '智能排版已应用（未识别笔迹已删除）' : '智能排版已应用',
+          ),
+        ),
+      );
+      return _SmartLayoutPageOutcome.applied;
+    }
+    return _SmartLayoutPageOutcome.failed;
   }
 
   String _readableSmartLayoutError(Object error) {
@@ -2451,6 +2476,38 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   RegionCaptureOverlay(
                     onCommit: _handleRegionSelected,
                     onCancel: _handleRegionCancel,
+                  ),
+                if (_smartLayoutBarHandler != null)
+                  // 预览期间拦截画布编辑（透明遮罩，不遮挡红区/蓝框显示）
+                  const Positioned.fill(
+                    child: ModalBarrier(color: Colors.transparent),
+                  ),
+                if (_smartLayoutBarPlan != null)
+                  Positioned(
+                    left: 48,
+                    right: 48,
+                    bottom: 24,
+                    child: Center(
+                      child: SmartLayoutConfirmBar(
+                        plan: _smartLayoutBarPlan!,
+                        isMultiPage: _smartLayoutBarMultiPage,
+                        onAction: _handleSmartLayoutBarAction,
+                      ),
+                    ),
+                  )
+                else if (_smartLayoutBarFailureCount > 0 &&
+                    _smartLayoutBarHandler != null)
+                  Positioned(
+                    left: 48,
+                    right: 48,
+                    bottom: 24,
+                    child: Center(
+                      child: SmartLayoutFailureBar(
+                        failureCount: _smartLayoutBarFailureCount,
+                        isMultiPage: _smartLayoutBarMultiPage,
+                        onAction: _handleSmartLayoutBarAction,
+                      ),
+                    ),
                   ),
               ],
             ),
