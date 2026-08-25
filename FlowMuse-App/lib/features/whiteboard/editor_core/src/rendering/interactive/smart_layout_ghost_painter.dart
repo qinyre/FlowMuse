@@ -55,6 +55,23 @@ class SmartLayoutGhostPainter extends CustomPainter {
             ..color = const Color(0xAA888888),
         );
       }
+      // 识别失败区域与预览同屏（红框，便于用户判断后选择应用/删除）
+      for (final rect in spec.failureRects) {
+        canvas.drawRect(
+          rect,
+          Paint()
+            ..style = PaintingStyle.fill
+            ..color = const Color(0x11E03131),
+        );
+        _dashRect(
+          canvas,
+          rect,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.0
+            ..color = const Color(0xFFE03131),
+        );
+      }
     }
     canvas.restore();
   }

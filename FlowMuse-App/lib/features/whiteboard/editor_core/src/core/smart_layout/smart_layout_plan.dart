@@ -89,7 +89,8 @@ class SmartLayoutGhostSpec {
   const SmartLayoutGhostSpec.preview({
     required this.previewRects,
     required this.removalRects,
-  }) : failureRects = const [];
+    this.failureRects = const [],
+  });
 
   const SmartLayoutGhostSpec.failures({required this.failureRects})
     : previewRects = const [],
