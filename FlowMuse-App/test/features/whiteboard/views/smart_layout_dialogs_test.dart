@@ -80,16 +80,22 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '3-4');
       await tester.pumpAndSettle();
-      final tile3 = tester.widget<CheckboxListTile>(
-        find.ancestor(
-          of: find.text('第 3 页'),
-          matching: find.byType(CheckboxListTile),
+      final tile3 = tester.widget<Checkbox>(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('第 3 页'),
+            matching: find.byType(InkWell),
+          ),
+          matching: find.byType(Checkbox),
         ),
       );
-      final tile4 = tester.widget<CheckboxListTile>(
-        find.ancestor(
-          of: find.text('第 4 页'),
-          matching: find.byType(CheckboxListTile),
+      final tile4 = tester.widget<Checkbox>(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('第 4 页'),
+            matching: find.byType(InkWell),
+          ),
+          matching: find.byType(Checkbox),
         ),
       );
       expect(tile3.value, isTrue);
