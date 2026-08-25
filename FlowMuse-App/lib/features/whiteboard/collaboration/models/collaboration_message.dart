@@ -68,6 +68,7 @@ class CollaborationMessage {
     required String username,
     String? userId,
     String? avatarUrl,
+    String? creatorKey,
   }) {
     return CollaborationMessage(
       type: CollaborationMessageType.mouseLocation,
@@ -79,6 +80,7 @@ class CollaborationMessage {
         'username': username,
         'userId': userId,
         'avatarUrl': avatarUrl,
+        'creatorKey': ?creatorKey,
       },
     );
   }
@@ -89,6 +91,7 @@ class CollaborationMessage {
     required String username,
     String? userId,
     String? avatarUrl,
+    String? creatorKey,
   }) {
     return CollaborationMessage(
       type: CollaborationMessageType.idleStatus,
@@ -98,6 +101,7 @@ class CollaborationMessage {
         'username': username,
         'userId': userId,
         'avatarUrl': avatarUrl,
+        'creatorKey': ?creatorKey,
       },
     );
   }
@@ -108,6 +112,7 @@ class CollaborationMessage {
     required Map<String, Object?> sceneBounds,
     String? userId,
     String? avatarUrl,
+    String? creatorKey,
   }) {
     return CollaborationMessage(
       type: CollaborationMessageType.userVisibleSceneBounds,
@@ -117,6 +122,7 @@ class CollaborationMessage {
         'sceneBounds': sceneBounds,
         'userId': userId,
         'avatarUrl': avatarUrl,
+        'creatorKey': ?creatorKey,
       },
     );
   }

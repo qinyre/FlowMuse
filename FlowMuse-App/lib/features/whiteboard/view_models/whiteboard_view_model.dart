@@ -8,6 +8,7 @@ import '../collaboration/models/excalidraw_scene.dart';
 import '../collaboration/models/room_collaborator.dart';
 import '../collaboration/collaboration_config.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
+import '../collaboration/services/collaboration_creator_identity.dart';
 import '../collaboration/services/collaboration_crypto.dart';
 import '../collaboration/services/collaboration_file_store.dart';
 import '../collaboration/services/encrypted_scene_store.dart';
@@ -294,6 +295,11 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
           username: message.payload['username'] as String?,
           userId: message.payload['userId'] as String?,
           avatarUrl: message.payload['avatarUrl'] as String?,
+          creatorKey:
+              message.payload['creatorKey'] as String? ??
+              _fallbackCreatorKeyFromUserId(
+                message.payload['userId'] as String?,
+              ),
           pointer: pointer is Map ? Map<String, Object?>.from(pointer) : null,
           button: message.payload['button'] as String?,
           selectedElementIds: selectedElementIds is Map
@@ -306,6 +312,11 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
           username: message.payload['username'] as String?,
           userId: message.payload['userId'] as String?,
           avatarUrl: message.payload['avatarUrl'] as String?,
+          creatorKey:
+              message.payload['creatorKey'] as String? ??
+              _fallbackCreatorKeyFromUserId(
+                message.payload['userId'] as String?,
+              ),
           idleState: _idleStateFromWire(message.payload['userState']),
         );
       case CollaborationMessageType.userVisibleSceneBounds:
@@ -314,6 +325,11 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
           username: message.payload['username'] as String?,
           userId: message.payload['userId'] as String?,
           avatarUrl: message.payload['avatarUrl'] as String?,
+          creatorKey:
+              message.payload['creatorKey'] as String? ??
+              _fallbackCreatorKeyFromUserId(
+                message.payload['userId'] as String?,
+              ),
           sceneBounds: sceneBounds is Map
               ? Map<String, Object?>.from(sceneBounds)
               : null,
@@ -327,6 +343,11 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
 
     state = state.copyWith(collaborators: collaborators);
   }
+
+  /// 兼容旧客户端：登录用户 presence 缺 creatorKey 时由 userId 本地推导；
+  /// 游客缺字段时绝不按 username 猜测（返回 null → 禁用聚焦）。
+  static String? _fallbackCreatorKeyFromUserId(String? userId) =>
+      userId == null ? null : creatorKeyForUserId(userId);
 
   void applyRoomUsers(List<RoomCollaborator> roomUsers) {
     final collaboratorsBySocketId = {
