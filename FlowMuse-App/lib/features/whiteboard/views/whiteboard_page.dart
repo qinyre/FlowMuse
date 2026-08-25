@@ -56,6 +56,7 @@ import '../ai_assistant/views/ai_agent_dialog.dart';
 import '../ai_assistant/views/region_capture_overlay.dart';
 import '../ai_assistant/models/ai_visual_attachment.dart';
 import '../speech_recognition/services/speech_recognition_service.dart';
+import 'collaboration_focus_target.dart';
 import 'smart_layout_dialogs.dart';
 import '../speech_recognition/services/speech_recognition_service_factory.dart';
 
@@ -123,6 +124,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       {}; // socketId -> creatorKey（Task 9/14 消费）
   // ignore: unused_field
   int _presenceCreatorRevision = 0; // Task 13/14 消费（painter shouldRepaint）
+  CollaborationFocusTarget? _focusTarget;
+  final Map<String, String> _lastKnownCreatorNames =
+      {}; // creatorKey -> 最后已知在线名
   bool _temporarySaved = false;
   int _openGeneration = 0;
   RealtimeConnectionStatus? _lastRealtimeStatus;
@@ -159,6 +163,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       if (creator == null) return result;
       return stampCreatorOnResult(result, scene, creator);
     };
+    _markdrawController.addListener(_onControllerNotifyForFocus);
     _speechRecognitionService = createSpeechRecognitionService();
     _seedDocumentTitleFromCache();
     _markdrawController.onBrushStateChanged = (type, state) {
@@ -236,6 +241,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _liveInkSender.cancel();
     _remoteWetInkStore.dispose();
     _markdrawController.onPrepareLocalResult = null;
+    _markdrawController.removeListener(_onControllerNotifyForFocus);
+    _focusTarget = null;
+    _lastKnownCreatorNames.clear();
     _guestCreatorSessionId = null;
     _socketCreatorKeys.clear();
     _presenceCreatorRevision++;
@@ -1443,6 +1451,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _guestCreatorSessionId = null;
     _socketCreatorKeys.clear();
     _presenceCreatorRevision++;
+    _focusTarget = null;
+    _lastKnownCreatorNames.clear();
   }
 
   Future<bool?> _confirmEndCollaborationRoom() {
@@ -1967,6 +1977,26 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             _presenceCreatorRevision++;
           }
         }
+        final presenceUsername = message.payload['username'] as String? ?? '';
+        if (presenceCreatorKey != null && presenceUsername.isNotEmpty) {
+          final knownAs = _lastKnownCreatorNames[presenceCreatorKey];
+          if (knownAs != presenceUsername) {
+            _lastKnownCreatorNames[presenceCreatorKey] = presenceUsername;
+            final target = _focusTarget;
+            if (target is CreatorFocus &&
+                target.creatorKey == presenceCreatorKey &&
+                target.labelSnapshot != presenceUsername &&
+                mounted) {
+              setState(
+                () => _focusTarget = CreatorFocus(
+                  target.creatorKey,
+                  labelSnapshot: presenceUsername, // 离线后回退到最新在线名，不倒退
+                  isGuest: target.isGuest,
+                ),
+              );
+            }
+          }
+        }
       case CollaborationMessageType.inkChunk:
       case CollaborationMessageType.invalidResponse:
         break;
@@ -2379,6 +2409,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               children: [
                 MarkdrawEditor(
                   controller: _markdrawController,
+                  collaborationFocusLabel: _focusPillLabel(),
+                  onExitCollaborationFocus: _exitFocus,
                   speechRecognitionService: _speechRecognitionService,
                   speechRecognitionEnabled: !_aiSpeechInputActive,
                   config: const MarkdrawEditorConfig(),
@@ -2800,6 +2832,134 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       displayName: identity.username,
       isGuest: false,
     );
+  }
+
+  // ignore: unused_element
+  bool _isFocusedOn(String creatorKey) =>
+      _focusTarget is CreatorFocus &&
+      (_focusTarget as CreatorFocus).creatorKey == creatorKey;
+
+  // ignore: unused_element
+  void _focusCreator(
+    String creatorKey, {
+    required String labelSnapshot,
+    required bool isGuest,
+  }) {
+    setState(() {
+      _focusTarget = CreatorFocus(
+        creatorKey,
+        labelSnapshot: labelSnapshot,
+        isGuest: isGuest,
+      );
+    });
+  }
+
+  // ignore: unused_element
+  void _focusHistory() {
+    setState(() => _focusTarget = const HistoricalFocus());
+  }
+
+  void _exitFocus() {
+    if (_focusTarget != null) {
+      setState(() => _focusTarget = null);
+    }
+  }
+
+  // ignore: unused_element
+  void _toggleCreatorFocus(
+    String creatorKey, {
+    required String labelSnapshot,
+    required bool isGuest,
+  }) {
+    setState(() {
+      _focusTarget = toggleCollaborationCreatorFocus(
+        _focusTarget,
+        creatorKey: creatorKey,
+        labelSnapshot: labelSnapshot,
+        isGuest: isGuest,
+      );
+    });
+  }
+
+  /// §6.2 代表项选择：active > idle > away，状态相同按 socketId 升序。
+  CollaboratorPresence? _onlinePresenceFor(String creatorKey) {
+    final collaborators = ref.read(whiteboardViewModelProvider).collaborators;
+    final candidates =
+        [
+          for (final presence in collaborators.values)
+            if (presence.creatorKey == creatorKey) presence,
+        ]..sort((a, b) {
+          int rank(CollaboratorIdleState s) => switch (s) {
+            CollaboratorIdleState.active => 0,
+            CollaboratorIdleState.idle => 1,
+            CollaboratorIdleState.away => 2,
+          };
+          final byRank = rank(a.idleState).compareTo(rank(b.idleState));
+          return byRank != 0 ? byRank : a.socketId.compareTo(b.socketId);
+        });
+    return candidates.isEmpty ? null : candidates.first;
+  }
+
+  String? _focusPillLabel() {
+    final target = _focusTarget;
+    if (target == null) return null;
+    if (target is HistoricalFocus) {
+      return _historyFocusIsEmpty() ? '正在聚焦：历史内容（暂无已提交的历史内容）' : '正在聚焦：历史内容';
+    }
+    if (target is! CreatorFocus) return null;
+    final online = _onlinePresenceFor(target.creatorKey);
+    if (online != null) {
+      return _creatorFocusIsEmpty(target.creatorKey)
+          ? '正在聚焦：${online.username}（该创建者暂无已提交内容）'
+          : '正在聚焦：${online.username}';
+    }
+    final suffix = target.isGuest ? '（历史会话）' : '';
+    final base = '正在聚焦：${target.labelSnapshot}$suffix';
+    return _creatorFocusIsEmpty(target.creatorKey)
+        ? '$base（该创建者暂无已提交内容）'
+        : base;
+  }
+
+  /// 空态按整个 Scene 的已提交（未删除、非系统）普通元素判断。
+  bool _creatorFocusIsEmpty(String creatorKey) {
+    final scene = _markdrawController.editorState.scene;
+    return !scene.activeElements.any(
+      (element) =>
+          !element.isCanvasPage &&
+          !element.isPdfBackground &&
+          readCreator(element)?.creatorKey == creatorKey,
+    );
+  }
+
+  bool _historyFocusIsEmpty() {
+    final scene = _markdrawController.editorState.scene;
+    return !scene.activeElements.any(
+      (element) =>
+          !element.isCanvasPage &&
+          !element.isPdfBackground &&
+          readCreator(element) == null,
+    );
+  }
+
+  /// zen/viewMode 清退 + 聚焦期间空态文案刷新（v4 §6.4）。
+  void _onControllerNotifyForFocus() {
+    if (!mounted) return;
+    if ((_markdrawController.zenMode || _markdrawController.viewMode) &&
+        _focusTarget != null) {
+      _exitFocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('已退出协作者聚焦'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    // 聚焦中：目标组内容变化时刷新 pill 空态文案
+    if (_focusTarget != null) {
+      setState(() {}); // pill 文案在 build 中按 Scene 计算；仅在聚焦期间
+      // 付出整页重建成本（未聚焦时本监听零开销），不得在此追加其他工作
+    }
   }
 
   NoteItem? _noteById(List<NoteItem> notes, String noteId) {

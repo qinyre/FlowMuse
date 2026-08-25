@@ -83,6 +83,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.onFingerDrawingEnabledChanged,
     this.onAiPressed,
     this.onSmartLayoutPressed,
+    this.collaborationFocusLabel,
+    this.onExitCollaborationFocus,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -160,6 +162,10 @@ class MarkdrawEditor extends StatefulWidget {
 
   final VoidCallback? onAiPressed;
   final VoidCallback? onSmartLayoutPressed;
+
+  /// 协作聚焦状态提示（本机视图态；null = 不显示 pill）。
+  final String? collaborationFocusLabel;
+  final VoidCallback? onExitCollaborationFocus;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -882,6 +888,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                                     widget.onShareCollaboration,
                                 viewMode: _controller.viewMode,
                                 zenMode: _controller.zenMode,
+                                collaborationFocusLabel:
+                                    widget.collaborationFocusLabel,
+                                onExitCollaborationFocus:
+                                    widget.onExitCollaborationFocus,
                                 onExitViewMode: _controller.toggleViewMode,
                                 onExitZenMode: _controller.toggleZenMode,
                                 toolbarExpandButton:
@@ -1338,6 +1348,8 @@ class _RightChrome extends StatelessWidget {
     required this.zenMode,
     required this.onExitViewMode,
     required this.onExitZenMode,
+    this.collaborationFocusLabel,
+    this.onExitCollaborationFocus,
     this.toolbarExpandButton,
   });
 
@@ -1362,6 +1374,8 @@ class _RightChrome extends StatelessWidget {
   final bool zenMode;
   final VoidCallback onExitViewMode;
   final VoidCallback onExitZenMode;
+  final String? collaborationFocusLabel;
+  final VoidCallback? onExitCollaborationFocus;
   final Widget? toolbarExpandButton;
 
   @override
@@ -1387,6 +1401,13 @@ class _RightChrome extends StatelessWidget {
             const SizedBox(width: 8),
           if (collaborating && collaborationParticipants.isNotEmpty) ...[
             _ParticipantAvatarStack(participants: collaborationParticipants),
+            const SizedBox(width: 8),
+          ],
+          if (collaborationFocusLabel != null) ...[
+            _StatusPill(
+              label: collaborationFocusLabel!,
+              onTap: onExitCollaborationFocus,
+            ),
             const SizedBox(width: 8),
           ],
           if (toolbarExpandButton != null) ...[
