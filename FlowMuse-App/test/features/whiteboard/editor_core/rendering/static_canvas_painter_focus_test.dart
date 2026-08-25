@@ -15,7 +15,7 @@ import 'canvas_spy.dart';
 Scene buildScene(List<Element> elements) =>
     elements.fold(Scene(), (s, e) => s.addElement(e));
 
-RectangleElement owned(String id, String key) =>
+RectangleElement owned(String id, String key, {String? index}) =>
     withCreator(
           RectangleElement(
             id: ElementId(id),
@@ -23,7 +23,7 @@ RectangleElement owned(String id, String key) =>
             y: 0,
             width: 10,
             height: 10,
-            index: id,
+            index: index ?? id,
           ),
           CollaborationCreator(
             creatorKey: key,
@@ -218,4 +218,68 @@ void main() {
       );
     },
   );
+
+  Scene alternatingScene(int count) {
+    var scene = Scene();
+    for (var i = 0; i < count; i++) {
+      final index = i.toString().padLeft(8, '0');
+      final element = i.isEven
+          ? owned('e$i', 'user:a', index: index)
+          : owned('e$i', 'user:b', index: index);
+      scene = scene.addElement(element);
+    }
+    return scene;
+  }
+
+  void stressCase(int count) {
+    final scene = alternatingScene(count);
+    // 基线（无 focus）：saveLayer 必须为 0
+    final baseline = SpyCanvas(Canvas(PictureRecorder()));
+    painterFor(scene).paint(baseline, const Size(2000, 2000));
+    expect(baseline.saveLayerCount, 0);
+    // creator focus 'user:a'：被 dim 的是奇数位（user:b）。每个奇数位元素
+    // 被前后偶数位目标元素隔开成独立 dim 段；0..count-1 中奇数索引个数
+    // 恒为 count ~/ 2（count 奇偶无关——5001 时为 2500）。
+    final focused = SpyCanvas(Canvas(PictureRecorder()));
+    painterFor(
+      scene,
+      focusedCreatorKey: 'user:a',
+    ).paint(focused, const Size(2000, 2000));
+    expect(focused.saveLayerCount, count ~/ 2);
+    expect(focused.drawCallCount, baseline.drawCallCount, reason: '每元素最多绘制一次');
+  }
+
+  test('1000 元素交替作者', () => stressCase(1000));
+  test(
+    '5000 元素交替作者',
+    () => stressCase(5000),
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+  test('999 元素交替作者（奇数锁死段数公式）', () => stressCase(999));
+
+  test('focus × 跨 owner 多选：高亮打断 dim 段且不增加元素绘制', () {
+    final scene = alternatingScene(1000);
+    // 高亮奇数位（user:b，即 dim 方向）元素：i % 4 == 1 使约 1/4 的 dim
+    // 元素全亮并打断连续段
+    final highlight = <ElementId>{
+      for (var i = 1; i < 1000; i += 4) ElementId('e$i'),
+    };
+    final spy = SpyCanvas(Canvas(PictureRecorder()));
+    painterFor(
+      scene,
+      focusedCreatorKey: 'user:a',
+      highlight: highlight,
+    ).paint(spy, const Size(2000, 2000));
+    final noHighlight = SpyCanvas(Canvas(PictureRecorder()));
+    painterFor(
+      scene,
+      focusedCreatorKey: 'user:a',
+    ).paint(noHighlight, const Size(2000, 2000));
+    expect(
+      spy.saveLayerCount,
+      lessThan(noHighlight.saveLayerCount),
+      reason: '高亮移除了部分 dim 元素，段数严格减少',
+    );
+    expect(spy.drawCallCount, noHighlight.drawCallCount);
+  });
 }
