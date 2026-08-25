@@ -6574,6 +6574,20 @@ class MarkdrawController extends ChangeNotifier {
     DocumentFormat format = DocumentFormat.markdraw,
     bool includeDeleted = false,
   }) {
+    return serializeSceneWithAliases(
+      format: format,
+      includeDeleted: includeDeleted,
+    ).text;
+  }
+
+  /// 单次构建 MarkdrawDocument，同时返回序列化文本与 alias→ElementId
+  /// 映射（split pane sidecar 用；避免重复生成 alias，v4 T4 工作项 1）。
+  /// settings 实参块与重构前 serializeScene 完全一致（背景/网格/文档名
+  /// 不丢），switch 兜底分支同样保持一致。
+  ({String text, Map<String, String> aliases}) serializeSceneWithAliases({
+    DocumentFormat format = DocumentFormat.markdraw,
+    bool includeDeleted = false,
+  }) {
     final doc = SceneDocumentConverter.sceneToDocument(
       _editorState.scene,
       settings: CanvasSettings(
@@ -6584,11 +6598,11 @@ class MarkdrawController extends ChangeNotifier {
       ),
       includeDeleted: includeDeleted,
     );
-    return switch (format) {
-      DocumentFormat.markdraw => DocumentSerializer.serialize(doc),
+    final text = switch (format) {
       DocumentFormat.excalidraw => ExcalidrawJsonCodec.serialize(doc),
       _ => DocumentSerializer.serialize(doc),
     };
+    return (text: text, aliases: doc.aliases);
   }
 
   /// 外部导出专用：先净化 collaborationOwner 再序列化。文件保存对话框、

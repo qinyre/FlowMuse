@@ -11,6 +11,7 @@ import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 
 import '../../markdraw.dart' hide TextAlign;
+import '../core/elements/collaboration_element_owner.dart';
 
 /// A split pane that shows the editor canvas on the left and a live
 /// sketch text editor on the right, with bidirectional sync.
@@ -38,6 +39,92 @@ class MarkdrawSplitPane extends StatefulWidget {
   State<MarkdrawSplitPane> createState() => _MarkdrawSplitPaneState();
 }
 
+/// v4 §9.1 text→canvas 的归属决策（纯函数，供测试）。
+/// 返回新元素列表：alias 命中 sidecar → 恢复；未命中 → localCreator 盖章
+/// （null 则无 owner）；绑定文字继承父元素（两遍处理）；系统元素清除。
+List<Element> applySidecarOwners({
+  required List<Element> parsedElements,
+  required Map<String, String> aliasToElementId,
+  required Map<String, CollaborationCreator> sidecar,
+  CollaborationCreator? Function()? localCreatorResolver,
+}) {
+  final idToAlias = <String, String>{
+    for (final entry in aliasToElementId.entries) entry.value: entry.key,
+  };
+  final resolved = <ElementId, CollaborationCreator?>{};
+
+  // 第一遍：非绑定文字按 alias 决策
+  final firstPass = <Element>[
+    for (final element in parsedElements)
+      _resolveStandalone(
+        element,
+        idToAlias,
+        sidecar,
+        localCreatorResolver,
+        resolved,
+      ),
+  ];
+
+  // 第二遍：绑定文字跟随父（父在前在后均可）
+  final byId = <ElementId, Element>{
+    for (final element in firstPass) element.id: element,
+  };
+  return [
+    for (final element in firstPass) _resolveBoundText(element, byId, resolved),
+  ];
+}
+
+Element _resolveStandalone(
+  Element element,
+  Map<String, String> idToAlias,
+  Map<String, CollaborationCreator> sidecar,
+  CollaborationCreator? Function()? localCreatorResolver,
+  Map<ElementId, CollaborationCreator?> resolved,
+) {
+  if (element.isCanvasPage || element.isPdfBackground) {
+    return withoutCreator(element);
+  }
+  if (element is TextElement && element.containerId != null) {
+    return element; // 第二遍处理
+  }
+  final alias = idToAlias[element.id.value];
+  CollaborationCreator? owner;
+  if (alias != null && sidecar.containsKey(alias)) {
+    owner = sidecar[alias];
+  } else {
+    owner = localCreatorResolver?.call();
+  }
+  resolved[element.id] = owner;
+  return owner == null ? withoutCreator(element) : withCreator(element, owner);
+}
+
+Element _resolveBoundText(
+  Element element,
+  Map<ElementId, Element> byId,
+  Map<ElementId, CollaborationCreator?> resolved,
+) {
+  final containerId = element is TextElement ? element.containerId : null;
+  if (containerId == null) return element;
+  final parent = byId[ElementId(containerId)];
+  final owner = parent == null
+      ? null
+      : (resolved[parent.id] ?? readCreator(parent));
+  return owner == null ? withoutCreator(element) : withCreator(element, owner);
+}
+
+/// 检测文本中重复出现的 `id=<alias>` 标识。词边界断言防止 `rect1` 误匹配
+/// `rect11`（alias 形如 keyword+数字）。返回重复的 alias 列表。
+List<String> findDuplicateAliasIds(String text, Map<String, String> aliases) {
+  return [
+    for (final alias in aliases.keys)
+      if (RegExp(
+            'id=${RegExp.escape(alias)}(?![0-9A-Za-z_])',
+          ).allMatches(text).length >
+          1)
+        alias,
+  ];
+}
+
 class _MarkdrawSplitPaneState extends State<MarkdrawSplitPane>
     with TickerProviderStateMixin {
   final _codeController = CodeLineEditingController();
@@ -50,6 +137,7 @@ class _MarkdrawSplitPaneState extends State<MarkdrawSplitPane>
   bool _dockBottom = false;
   String _lastSyncedText = '';
   bool _hasPushedForSession = false;
+  final Map<String, CollaborationCreator> _aliasCreators = {};
 
   // Parse status
   List<ParseWarning> _parseWarnings = [];
@@ -150,8 +238,19 @@ class _MarkdrawSplitPaneState extends State<MarkdrawSplitPane>
   void _syncCanvasToText() {
     if (!mounted) return;
     _isSyncing = true;
-    final fullText = widget.controller.serializeScene();
+    final result = widget.controller.serializeSceneWithAliases();
+    final fullText = result.text;
     final sketchLines = _extractSketchLines(fullText);
+    // 重建 alias → creator sidecar：只记录当前 Scene 中带 owner 的 alias，
+    // 不写入文本、不落盘、不进剪贴板（v4 §9.1）。
+    final scene = widget.controller.editorState.scene;
+    _aliasCreators
+      ..clear()
+      ..addAll({
+        for (final entry in result.aliases.entries)
+          if (scene.getElementById(ElementId(entry.value)) case final element?)
+            entry.key: ?readCreator(element),
+      });
     _codeController.text = sketchLines;
     _lastSyncedText = sketchLines;
     _lastSyncedName = widget.controller.documentName;
@@ -221,11 +320,35 @@ class _MarkdrawSplitPaneState extends State<MarkdrawSplitPane>
             '```markdraw\n$text\n```';
         final parseResult = DocumentParser.parse(wrapped);
         final doc = parseResult.value;
+        final duplicateAliases = findDuplicateAliasIds(wrapped, doc.aliases);
+        if (duplicateAliases.isNotEmpty) {
+          // 受控失败：保留上次成功画布，显示可读错误（v4 §9.1 规则 1）。
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '文本中存在重复的元素标识：${duplicateAliases.join('、')}，画布保持上次成功状态',
+                ),
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+          _isSyncing = false;
+          return;
+        }
         final scene = SceneDocumentConverter.documentToScene(doc);
+        final ownedScene = scene.upsertRemoteElements(
+          applySidecarOwners(
+            parsedElements: scene.elements,
+            aliasToElementId: doc.aliases,
+            sidecar: _aliasCreators,
+            localCreatorResolver: widget.controller.localCreatorResolver,
+          ),
+        );
         if (_hasPushedForSession) {
-          widget.controller.replaceScene(scene, background: bg);
+          widget.controller.replaceScene(ownedScene, background: bg);
         } else {
-          widget.controller.applyScene(scene, background: bg);
+          widget.controller.applyScene(ownedScene, background: bg);
           _hasPushedForSession = true;
         }
         // Sync @name directive back to the controller
