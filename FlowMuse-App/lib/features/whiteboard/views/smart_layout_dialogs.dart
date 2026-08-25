@@ -1,55 +1,222 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../editor_core/flow_muse_whiteboard_editor.dart';
+import 'smart_layout_page_ranges.dart';
 
-/// 逐页确认对话框返回的动作。
-enum SmartLayoutConfirmAction { apply, applyAndDrop, skip, cancel }
+/// 页面入口三选一：全部页 / 选页 / 当前页。
+enum SmartLayoutScopeMode { currentPage, allPages, selectedPages }
 
-/// 页面多选：返回选中页面 id 列表（取消返回 null）。
-class SmartLayoutPagePickerDialog extends StatefulWidget {
-  const SmartLayoutPagePickerDialog({
+/// 页面入口选择结果。
+class SmartLayoutScopeSelection {
+  const SmartLayoutScopeSelection({
+    required this.mode,
+    this.pageIds = const [],
+  });
+
+  final SmartLayoutScopeMode mode;
+  final List<String> pageIds;
+}
+
+/// 页面缩略图渲染回调（场景矩形 → PNG 字节；失败返回 null）。
+typedef SmartLayoutThumbnailBuilder =
+    Future<Uint8List?> Function(Rect sceneBounds);
+
+/// 页面入口对话框：三选一 +（选页时）缩略图勾选列表 + 页码范围输入框。
+/// 输入框输入（如 3-5,7）→ 自动勾选对应页；只勾选 → 输入框清空；格式错 → 右下提示并禁用确定。
+class SmartLayoutScopeDialog extends StatefulWidget {
+  const SmartLayoutScopeDialog({
     super.key,
     required this.pages,
-    this.initial = const {},
+    this.currentPageId,
+    this.thumbnailBuilder,
   });
 
   final List<CanvasPage> pages;
-  final Set<String> initial;
+  final String? currentPageId;
+  final SmartLayoutThumbnailBuilder? thumbnailBuilder;
 
   @override
-  State<SmartLayoutPagePickerDialog> createState() =>
-      _SmartLayoutPagePickerDialogState();
+  State<SmartLayoutScopeDialog> createState() => _SmartLayoutScopeDialogState();
 }
 
-class _SmartLayoutPagePickerDialogState
-    extends State<SmartLayoutPagePickerDialog> {
-  late final Set<String> _checked = {...widget.initial};
+class _SmartLayoutScopeDialogState extends State<SmartLayoutScopeDialog> {
+  SmartLayoutScopeMode _mode = SmartLayoutScopeMode.currentPage;
+  final Set<String> _checked = {};
+  final TextEditingController _input = TextEditingController();
+  String _inputError = '';
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  bool get _confirmEnabled {
+    if (_mode != SmartLayoutScopeMode.selectedPages) return true;
+    return _checked.isNotEmpty && _inputError.isEmpty;
+  }
+
+  void _onCheckToggled(String pageId, bool? checked) {
+    setState(() {
+      if (checked == true) {
+        _checked.add(pageId);
+      } else {
+        _checked.remove(pageId);
+      }
+      // 只勾选 → 输入框清空（按需求）
+      if (_input.text.isNotEmpty) {
+        _input.clear();
+        _inputError = '';
+      }
+    });
+  }
+
+  void _onInputChanged(String text) {
+    setState(() {
+      final trimmed = text.trim();
+      if (trimmed.isEmpty) {
+        _inputError = '';
+        return;
+      }
+      final result = SmartLayoutPageRangeParser.parse(
+        trimmed,
+        widget.pages.length,
+      );
+      if (result.isValid) {
+        _inputError = '';
+        _checked
+          ..clear()
+          ..addAll({
+            for (final index in result.pageIndexes) widget.pages[index].id,
+          });
+      } else {
+        _inputError = result.errorText;
+      }
+    });
+  }
+
+  void _submit() {
+    switch (_mode) {
+      case SmartLayoutScopeMode.allPages:
+        Navigator.of(context).pop(
+          SmartLayoutScopeSelection(
+            mode: _mode,
+            pageIds: [for (final page in widget.pages) page.id],
+          ),
+        );
+      case SmartLayoutScopeMode.currentPage:
+        Navigator.of(context).pop(
+          SmartLayoutScopeSelection(
+            mode: _mode,
+            pageIds: [if (widget.currentPageId != null) widget.currentPageId!],
+          ),
+        );
+      case SmartLayoutScopeMode.selectedPages:
+        Navigator.of(context).pop(
+          SmartLayoutScopeSelection(
+            mode: _mode,
+            pageIds: [
+              for (final page in widget.pages)
+                if (_checked.contains(page.id)) page.id,
+            ],
+          ),
+        );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('选择要智能排版的页面'),
+      title: const Text('智能排版范围'),
       content: SizedBox(
-        width: 340,
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            for (final page in widget.pages)
-              CheckboxListTile(
-                dense: true,
-                value: _checked.contains(page.id),
-                title: Text('第 ${page.index + 1} 页'),
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              RadioGroup<SmartLayoutScopeMode>(
+                groupValue: _mode,
                 onChanged: (value) {
-                  setState(() {
-                    if (value == true) {
-                      _checked.add(page.id);
-                    } else {
-                      _checked.remove(page.id);
-                    }
-                  });
+                  if (value != null) {
+                    setState(() => _mode = value);
+                  }
                 },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final mode in SmartLayoutScopeMode.values)
+                      RadioListTile<SmartLayoutScopeMode>(
+                        dense: true,
+                        value: mode,
+                        title: Text(switch (mode) {
+                          SmartLayoutScopeMode.currentPage => '当前页',
+                          SmartLayoutScopeMode.allPages => '全部页',
+                          SmartLayoutScopeMode.selectedPages => '选页',
+                        }),
+                      ),
+                  ],
+                ),
               ),
-          ],
+              if (_mode == SmartLayoutScopeMode.selectedPages)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 300,
+                          child: ListView(
+                            children: [
+                              for (final page in widget.pages)
+                                _PageCheckTile(
+                                  page: page,
+                                  checked: _checked.contains(page.id),
+                                  thumbnailBuilder: widget.thumbnailBuilder,
+                                  onChanged: (value) =>
+                                      _onCheckToggled(page.id, value),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 220,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(
+                              controller: _input,
+                              onChanged: _onInputChanged,
+                              decoration: InputDecoration(
+                                labelText: '页码',
+                                hintText: '如 3-5,7',
+                                border: const OutlineInputBorder(),
+                                errorText: _inputError.isEmpty
+                                    ? null
+                                    : _inputError,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '连续页用 -（如 3-5 表示第 3 到第 5 页），'
+                              '不连续用 ,（如 3,5），混合如 3-5,7。'
+                              '输入后自动勾选；直接勾选则输入框置空。',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -58,9 +225,7 @@ class _SmartLayoutPagePickerDialogState
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: _checked.isEmpty
-              ? null
-              : () => Navigator.of(context).pop(_checked.toList()),
+          onPressed: _confirmEnabled ? _submit : null,
           child: const Text('确定'),
         ),
       ],
@@ -68,171 +233,204 @@ class _SmartLayoutPagePickerDialogState
   }
 }
 
-/// 逐页确认：描述 + 风格切换 + 应用/跳过/取消。
-/// 幽灵预览由调用方通过 controller.setSmartLayoutGhost 维护；切换风格回调返回新计划。
-class SmartLayoutConfirmDialog extends StatefulWidget {
-  const SmartLayoutConfirmDialog({
-    super.key,
-    required this.plan,
-    required this.onSelectStyle,
-    required this.onApply,
-    required this.onApplyAndDrop,
-    required this.onSkip,
-    required this.onCancel,
+/// 单个页面的勾选行：缩略图 + 页码。
+class _PageCheckTile extends StatelessWidget {
+  const _PageCheckTile({
+    required this.page,
+    required this.checked,
+    required this.onChanged,
+    this.thumbnailBuilder,
   });
 
-  final SmartLayoutPlan plan;
-  final Future<SmartLayoutPlan?> Function(SmartLayoutStyle style)
-  onSelectStyle;
-  final void Function(SmartLayoutPlan plan) onApply;
-  final void Function(SmartLayoutPlan plan) onApplyAndDrop;
-  final VoidCallback onSkip;
-  final VoidCallback onCancel;
-
-  @override
-  State<SmartLayoutConfirmDialog> createState() =>
-      _SmartLayoutConfirmDialogState();
-}
-
-class _SmartLayoutConfirmDialogState extends State<SmartLayoutConfirmDialog> {
-  late SmartLayoutPlan _plan = widget.plan;
-  bool _switching = false;
-
-  bool get _hasFailedBlocks =>
-      _plan.failedStrokeIds.isNotEmpty || _plan.failureRects.isNotEmpty;
-
-  Future<void> _switchStyle(SmartLayoutStyle style) async {
-    if (style == _plan.style || _switching) return;
-    setState(() => _switching = true);
-    try {
-      final next = await widget.onSelectStyle(style);
-      if (next != null && mounted) {
-        setState(() => _plan = next);
-      }
-    } finally {
-      if (mounted) setState(() => _switching = false);
-    }
-  }
+  final CanvasPage page;
+  final bool checked;
+  final ValueChanged<bool?> onChanged;
+  final SmartLayoutThumbnailBuilder? thumbnailBuilder;
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('智能排版预览（${_plan.style.displayName}）'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_plan.description),
-            const SizedBox(height: 8),
-            Text(
-              '置信度：${(_plan.confidence * 100).round()}%',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final style in SmartLayoutStyle.values)
-                  ChoiceChip(
-                    label: Text(style.displayName),
-                    selected: style == _plan.style,
-                    onSelected: _switching ? null : (_) => _switchStyle(style),
-                  ),
-              ],
-            ),
-            if (_hasFailedBlocks)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text(
-                  '页内有未识别成功的笔迹（红色区域）。'
-                  '可先应用排版，或选择"删除未识别笔迹后应用"。',
-                  style: TextStyle(color: Colors.redAccent),
-                ),
-              ),
-          ],
-        ),
+    return CheckboxListTile(
+      dense: true,
+      value: checked,
+      onChanged: onChanged,
+      controlAffinity: ListTileControlAffinity.leading,
+      secondary: SizedBox(
+        width: 96,
+        height: 64,
+        child: _PageThumbnail(page: page, builder: thumbnailBuilder),
       ),
-      actions: [
-        TextButton(
-          onPressed: widget.onCancel,
-          child: const Text('取消整个流程'),
-        ),
-        TextButton(
-          onPressed: widget.onSkip,
-          child: const Text('跳过本页'),
-        ),
-        if (_hasFailedBlocks)
-          TextButton(
-            onPressed: () => widget.onApplyAndDrop(_plan),
-            child: const Text('删除未识别笔迹后应用'),
-          ),
-        FilledButton(
-          onPressed: () => widget.onApply(_plan),
-          child: const Text('应用'),
-        ),
-      ],
+      title: Text('第 ${page.index + 1} 页'),
     );
   }
 }
 
-/// 识别失败对话框（计划为空、整页失败时）：再试 / 取消。
-class SmartLayoutFailureDialog extends StatelessWidget {
-  const SmartLayoutFailureDialog({
-    super.key,
-    required this.failures,
-    required this.onRetry,
-    required this.onCancel,
-  });
+/// 页面缩略图：异步渲染，失败回落灰块。
+class _PageThumbnail extends StatelessWidget {
+  const _PageThumbnail({required this.page, this.builder});
 
-  final List<SmartLayoutFailureInfo> failures;
-  final VoidCallback onRetry;
-  final VoidCallback onCancel;
+  final CanvasPage page;
+  final SmartLayoutThumbnailBuilder? builder;
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('部分内容未识别成功'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final thumbBuilder = builder;
+    if (thumbBuilder == null) {
+      return _fallback();
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: FutureBuilder<Uint8List?>(
+        future: thumbBuilder(page.bounds),
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes != null) {
+            return Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              width: 96,
+              height: 64,
+            );
+          }
+          return _fallback();
+        },
+      ),
+    );
+  }
+
+  Widget _fallback() => Container(
+    width: 96,
+    height: 64,
+    color: Colors.grey.shade300,
+    alignment: Alignment.center,
+    child: const Icon(Icons.description_outlined, size: 20),
+  );
+}
+
+/// 底部条形按钮动作。
+enum SmartLayoutBarAction { apply, applyAndDrop, retry, skipPage, cancelAll }
+
+/// 非模态底部"预览确认"悬浮条（画布全程可见，红区/蓝框不被遮挡）。
+/// 风格由 AI 自主决定（不提供人工切换）；按钮随页数/失败情况显隐。
+class SmartLayoutConfirmBar extends StatelessWidget {
+  const SmartLayoutConfirmBar({
+    super.key,
+    required this.plan,
+    required this.isMultiPage,
+    required this.onAction,
+  });
+
+  final SmartLayoutPlan plan;
+  final bool isMultiPage;
+  final ValueChanged<SmartLayoutBarAction> onAction;
+
+  bool get _hasFailures =>
+      plan.failedStrokeIds.isNotEmpty || plan.failureRects.isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 6,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
           children: [
-            const Text('整页将不应用排版。以下手写疑似未能识别：'),
-            const SizedBox(height: 8),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (var i = 0; i < failures.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Text(
-                        '第 ${i + 1} 处：'
-                        '${failures[i].snippet ?? '手写笔迹'}'
-                        '${failures[i].error?.isNotEmpty == true ? '（${failures[i].error}）' : ''}',
-                      ),
-                    ),
+                  Text(
+                    '${plan.style.displayName} · 置信度 '
+                    '${(plan.confidence * 100).round()}%',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    plan.description,
+                    style: theme.textTheme.bodySmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
-            const Text('页面上的红色区域即为未识别部分，可修改字迹后重试。'),
+            const SizedBox(width: 12),
+            if (_hasFailures)
+              TextButton(
+                onPressed: () => onAction(SmartLayoutBarAction.applyAndDrop),
+                child: const Text('删除未识别笔迹后应用'),
+              ),
+            if (isMultiPage)
+              TextButton(
+                onPressed: () => onAction(SmartLayoutBarAction.skipPage),
+                child: const Text('跳过本页'),
+              ),
+            TextButton(
+              onPressed: () => onAction(SmartLayoutBarAction.cancelAll),
+              child: Text(isMultiPage ? '取消整个流程' : '取消'),
+            ),
+            const SizedBox(width: 4),
+            FilledButton(
+              onPressed: () => onAction(SmartLayoutBarAction.apply),
+              child: const Text('应用'),
+            ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: onCancel,
-          child: const Text('取消'),
+    );
+  }
+}
+
+/// 非模态底部"识别失败"悬浮条（红区可见）。
+class SmartLayoutFailureBar extends StatelessWidget {
+  const SmartLayoutFailureBar({
+    super.key,
+    required this.failureCount,
+    required this.isMultiPage,
+    required this.onAction,
+  });
+
+  final int failureCount;
+  final bool isMultiPage;
+  final ValueChanged<SmartLayoutBarAction> onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 6,
+      color: theme.colorScheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '$failureCount 处手写未识别成功（红色区域），'
+                '可修改字迹后重试，或删除后继续。',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            const SizedBox(width: 12),
+            if (isMultiPage)
+              TextButton(
+                onPressed: () => onAction(SmartLayoutBarAction.skipPage),
+                child: const Text('跳过本页'),
+              ),
+            TextButton(
+              onPressed: () => onAction(SmartLayoutBarAction.cancelAll),
+              child: Text(isMultiPage ? '取消整个流程' : '取消'),
+            ),
+            const SizedBox(width: 4),
+            FilledButton(
+              onPressed: () => onAction(SmartLayoutBarAction.retry),
+              child: const Text('重新识别'),
+            ),
+          ],
         ),
-        FilledButton(
-          onPressed: onRetry,
-          child: const Text('重新识别'),
-        ),
-      ],
+      ),
     );
   }
 }

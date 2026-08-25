@@ -3480,7 +3480,7 @@ class MarkdrawController extends ChangeNotifier {
     }
     final title = style == SmartLayoutStyle.article
         ? '按文章阅读流重新排版本页内容'
-        : '仅将手写识别为机器字体，保持原位附近';
+        : '仅识别并转化手写字体，保持原位附近';
     return SmartLayoutPlanResult(
       plan: SmartLayoutPlan(
         pageId: page.id,
@@ -4080,7 +4080,39 @@ class MarkdrawController extends ChangeNotifier {
           .putIfAbsent(groupId, () => <FreedrawElement>[])
           .add(element);
     }
-    return sessionGroups;
+    // 会话内按行拆分：避免同会话的几句话被识别成一个整体、无法分别排版。
+    // 竖排模板（narrowverticalline/wideverticalline/ancientbook）按内容布局跳过拆分。
+    final result = <String, List<FreedrawElement>>{};
+    for (final entry in sessionGroups.entries) {
+      final pageId = entry.key.contains(':')
+          ? entry.key.substring(0, entry.key.lastIndexOf(':'))
+          : '';
+      if (entry.value.length > 1 && !_isVerticalWritingPage(pageId)) {
+        final clusters = SmartLayoutInkClusterer.cluster(entry.value);
+        for (var i = 0; i < clusters.length; i++) {
+          result['${entry.key}:c$i'] = clusters[i];
+        }
+      } else {
+        result[entry.key] = entry.value;
+      }
+    }
+    return result;
+  }
+
+  bool _isVerticalWritingPage(String pageId) {
+    for (final page in _layout.pages) {
+      if (page.id == pageId) {
+        switch (page.template) {
+          case CanvasPageTemplate.narrowVerticalLine:
+          case CanvasPageTemplate.wideVerticalLine:
+          case CanvasPageTemplate.ancientBook:
+            return true;
+          default:
+            return false;
+        }
+      }
+    }
+    return false;
   }
 
   CanvasPage? _pageForElement(Element element) {
