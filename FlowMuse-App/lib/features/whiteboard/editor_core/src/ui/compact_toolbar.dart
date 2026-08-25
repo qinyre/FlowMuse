@@ -17,6 +17,7 @@ class CompactToolbar extends StatelessWidget {
   final bool speechActive;
   final bool speechAvailable;
   final VoidCallback? onAiPressed;
+  final VoidCallback? onSmartLayoutPressed;
 
   /// Override for the eyedropper button. When provided (e.g. on HarmonyOS),
   /// tapping the eyedropper calls this instead of the canvas picker flow.
@@ -34,6 +35,7 @@ class CompactToolbar extends StatelessWidget {
     this.speechActive = false,
     this.speechAvailable = false,
     this.onAiPressed,
+    this.onSmartLayoutPressed,
   });
 
   @override
@@ -150,7 +152,11 @@ class CompactToolbar extends StatelessWidget {
                 icon: Icons.document_scanner_outlined,
                 tooltip: '全局识别排版',
                 onPressed: () {
-                  _runGlobalSmartLayout(context);
+                  if (onSmartLayoutPressed != null) {
+                    onSmartLayoutPressed!();
+                  } else {
+                    _runGlobalSmartLayout(context);
+                  }
                 },
               ),
               _compactButton(

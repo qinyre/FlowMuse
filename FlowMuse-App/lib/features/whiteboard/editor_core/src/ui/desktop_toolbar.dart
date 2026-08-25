@@ -18,6 +18,7 @@ class DesktopToolbar extends StatelessWidget {
   final bool speechActive;
   final bool speechAvailable;
   final VoidCallback? onAiPressed;
+  final VoidCallback? onSmartLayoutPressed;
 
   /// Override for the eyedropper button (e.g. HarmonyOS Pen Kit global pick).
   final VoidCallback? onEyedropperPressed;
@@ -35,6 +36,7 @@ class DesktopToolbar extends StatelessWidget {
     this.speechActive = false,
     this.speechAvailable = false,
     this.onAiPressed,
+    this.onSmartLayoutPressed,
   });
 
   @override
@@ -169,7 +171,11 @@ class DesktopToolbar extends StatelessWidget {
                 icon: Icons.document_scanner_outlined,
                 tooltip: '全局识别排版',
                 onPressed: () {
-                  _runGlobalSmartLayout(context);
+                  if (onSmartLayoutPressed != null) {
+                    onSmartLayoutPressed!();
+                  } else {
+                    _runGlobalSmartLayout(context);
+                  }
                 },
               ),
               _toolbarDivider(context, vertical),

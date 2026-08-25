@@ -15,6 +15,7 @@ import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../rendering/math_text_utils.dart';
 import '../rendering/local_wet_ink_painter.dart';
 import '../rendering/remote_wet_ink_painter.dart';
+import '../rendering/interactive/smart_layout_ghost_painter.dart';
 
 /// The main canvas area with pointer/gesture handling.
 class EditorCanvas extends StatefulWidget {
@@ -456,6 +457,22 @@ class _EditorCanvasState extends State<EditorCanvas>
                       child: wetInkLayers,
                     ),
                   ),
+                ),
+                ValueListenableBuilder<SmartLayoutGhostSpec?>(
+                  valueListenable: controller.smartLayoutGhost,
+                  builder: (context, spec, _) {
+                    if (spec == null) return const SizedBox.shrink();
+                    return Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: SmartLayoutGhostPainter(
+                            spec: spec,
+                            viewport: controller.editorState.viewport,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 if (controller.editorState.activeToolType == ToolType.eraser &&
                     controller.mousePosition != null)

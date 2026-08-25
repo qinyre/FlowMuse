@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -15,6 +16,21 @@ import (
 )
 
 const smartLayoutOCRConcurrency = 3
+
+const (
+	layoutStylePPT     = "ppt"
+	layoutStyleMindmap = "mindmap"
+	layoutStyleArticle = "article"
+	layoutStyleInPlace = "in_place"
+
+	maxMindmapDepth     = 4
+	maxMindmapNodes     = 50
+	maxMindmapNodeText  = 100
+	maxMindmapBlockRefs = 8
+
+	maxPptGroups      = 24
+	maxPptGroupMember = 24
+)
 
 type SmartLayouter interface {
 	Layout(context.Context, SmartLayoutRequest) (SmartLayoutResponse, error)
@@ -63,9 +79,37 @@ func (l *OpenAICompatibleSmartLayouter) RecognizeBlock(ctx context.Context, bloc
 }
 
 func (l *OpenAICompatibleSmartLayouter) Compose(ctx context.Context, request SmartLayoutComposeRequest) (SmartLayoutResponse, error) {
-	pages := l.decidePages(ctx, request.Pages, request.Blocks)
+	layout := l.decideLayout(ctx, request)
+	if layout == nil || (layout.Style != layoutStyleMindmap && layout.Style != layoutStylePPT) {
+		pages := l.decidePages(ctx, request.Pages, request.Blocks)
+		document := buildSmartLayoutDocument(request.Blocks, pages, request.Pages)
+		return SmartLayoutResponse{Document: document, Blocks: request.Blocks, Pages: pages, Layout: layout}, nil
+	}
+	pages := defaultPageDecisions(request.Pages, request.Blocks)
 	document := buildSmartLayoutDocument(request.Blocks, pages, request.Pages)
-	return SmartLayoutResponse{Document: document, Blocks: request.Blocks, Pages: pages}, nil
+	return SmartLayoutResponse{Document: document, Blocks: request.Blocks, Pages: pages, Layout: layout}, nil
+}
+
+// defaultPageDecisions 为所有页面生成默认 in_place 决策（mindmap/ppt 风格不启用文章段落流）。
+func defaultPageDecisions(pages []SmartLayoutPage, blocks []SmartLayoutRecognizedBlock) []SmartLayoutPageDecision {
+	blocksByPage := map[string][]SmartLayoutRecognizedBlock{}
+	for _, block := range blocks {
+		if block.Error != "" {
+			continue
+		}
+		blocksByPage[block.PageID] = append(blocksByPage[block.PageID], block)
+	}
+	decisions := make([]SmartLayoutPageDecision, 0, len(pages))
+	for _, page := range pages {
+		pageBlocks := blocksByPage[page.ID]
+		sortRecognizedBlocks(pageBlocks)
+		decisions = append(decisions, SmartLayoutPageDecision{
+			PageID:     page.ID,
+			Mode:       "in_place",
+			Paragraphs: singleBlockParagraphs(pageBlocks),
+		})
+	}
+	return decisions
 }
 
 func (l *OpenAICompatibleSmartLayouter) recognizeBlocks(ctx context.Context, blocks []SmartLayoutInkBlock) []SmartLayoutRecognizedBlock {
@@ -248,6 +292,246 @@ func (l *OpenAICompatibleSmartLayouter) decidePage(ctx context.Context, page Sma
 		return SmartLayoutPageDecision{}, err
 	}
 	return decision, nil
+}
+
+// decideLayout 判定整页布局风格并返回语义结构（方案二：不回坐标、不做 binding）。
+// 失败时记录日志并返回 nil，调用方回退旧的段落决策路径。
+func (l *OpenAICompatibleSmartLayouter) decideLayout(ctx context.Context, request SmartLayoutComposeRequest) *SmartLayoutLayoutDecision {
+	successBlocks := 0
+	for _, block := range request.Blocks {
+		if block.Error == "" {
+			successBlocks++
+		}
+	}
+	if successBlocks == 0 && len(request.Elements) == 0 {
+		return nil
+	}
+	payload := struct {
+		Pages      []SmartLayoutPage            `json:"pages"`
+		Blocks     []SmartLayoutRecognizedBlock `json:"blocks"`
+		Elements   []SmartLayoutElementRef      `json:"elements,omitempty"`
+		LayoutHint string                       `json:"layoutHint,omitempty"`
+	}{
+		Pages:      request.Pages,
+		Blocks:     request.Blocks,
+		Elements:   request.Elements,
+		LayoutHint: request.LayoutHint,
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("[smart-layout] decideLayout marshal failed: %v", err)
+		return nil
+	}
+	content := []map[string]any{
+		{
+			"type": "text",
+			"text": "你是一个白板笔记智能排版引擎。给定一页白板内容（识别的文字块 blocks 与既有元素 elements 的摘要），判断该页内容应该用哪种排版风格，并给出\"语义结构\"。\n\n风格判断标准：\n- mindmap：内容是头脑风暴/发散/层级话题（如想法清单、主题与分支、大纲），结构适合根节点+分支树。\n- ppt：页面图文并茂（存在图片/图示与说明文字），适合\"标题/正文/配图\"分区摆放。\n- article：连续有逻辑的段落文字（行文、讲义、总结），适合按阅读顺序排列。\n- in_place：内容零散、看不出上述风格，直接按原位识别成机器字体即可。\n\n输出规则（严格 JSON，禁止任何额外文字或 Markdown 代码围栏）：\n{\"style\":\"mindmap|ppt|article|in_place\",\"confidence\":0.0到1.0的小数,\"structure\":{}}\n\nstructure 的两种形态：\n1. style=mindmap 时：\n{\"root\":{\"text\":\"节点文字\",\"blockIds\":[\"块id...\"],\"children\":[{\"text\":\"...\",\"blockIds\":[\"...\"],\"children\":[]}]}}\n- 节点文字必须短标题（不超过100字）；允许带 blockIds 标注依据的识别块。\n- 树最多4层、最多50个节点。根主题放 root。禁止跨层引用块。\n2. style=ppt 时：\n{\"groups\":[{\"role\":\"title|heading|body|figure\",\"elementIds\":[\"块id或元素id...\"]}]}\n- groups 必须按页面视觉顺序排列；每项只能引用给定 blocks（识别文本）或 elements（既有元素）的 id。\n- role 仅 title/heading/body/figure：title 是页面大标题（最多1个），heading 是小节标题，body 是正文段落，figure 是配图/图示元素。\n- 每个 block/element 只能出现在一个 group 中。\n3. style=article 或 in_place 时：structure 为 {}，不要输出 groups 或 root。\n\n若本条消息带有 layoutHint，必须使用该风格，并只输出该风格的 structure。\nInput:\n" + string(payloadJSON),
+		},
+	}
+	body, err := l.chatBody(content, 0)
+	if err != nil {
+		log.Printf("[smart-layout] decideLayout request build failed: %v", err)
+		return nil
+	}
+	responseBody, err := l.postChat(ctx, body)
+	if err != nil {
+		log.Printf("[smart-layout] decideLayout failed: %v", err)
+		return nil
+	}
+	rawContent, err := openAIMessageContent(responseBody)
+	if err != nil {
+		log.Printf("[smart-layout] decideLayout decode failed: %v", err)
+		return nil
+	}
+	decision := &SmartLayoutLayoutDecision{}
+	if err := json.Unmarshal([]byte(smartLayoutJSONContent(rawContent)), decision); err != nil {
+		log.Printf("[smart-layout] decideLayout parse failed: %v", err)
+		return nil
+	}
+	sanitizeLayoutDecision(decision, request)
+	return decision
+}
+
+// sanitizeLayoutDecision 严格校验 AI 返回的判定结果，任何越界回落为 in_place。
+func sanitizeLayoutDecision(decision *SmartLayoutLayoutDecision, request SmartLayoutComposeRequest) {
+	decision.Style = strings.ToLower(strings.TrimSpace(decision.Style))
+	switch decision.Style {
+	case layoutStylePPT:
+		decision.Structure = sanitizePptStructure(decision.Structure, request)
+	case layoutStyleMindmap:
+		decision.Structure = sanitizeMindmapStructure(decision.Structure, request)
+	case layoutStyleArticle, layoutStyleInPlace:
+		decision.Structure = nil
+	default:
+		decision.Style = layoutStyleInPlace
+		decision.Structure = nil
+	}
+	if decision.Confidence < 0 {
+		decision.Confidence = 0
+	} else if decision.Confidence > 1 {
+		decision.Confidence = 1
+	}
+	// ppt/mindmap 结构校验失败（返回 nil）时整体回落 in_place；article 的 structure 本就为 nil。
+	if decision.Structure == nil &&
+		(decision.Style == layoutStylePPT || decision.Style == layoutStyleMindmap) {
+		decision.Style = layoutStyleInPlace
+	}
+}
+
+func isSuccessLayoutBlock(request SmartLayoutComposeRequest, blockID string) bool {
+	for _, block := range request.Blocks {
+		if block.ID == blockID {
+			return block.Error == ""
+		}
+	}
+	return false
+}
+
+func hasLayoutElementRef(request SmartLayoutComposeRequest, elementID string) bool {
+	for _, element := range request.Elements {
+		if element.ID == elementID {
+			return true
+		}
+	}
+	return false
+}
+
+// sanitizePptStructure 返回规范化后的 groups 结构；无法使用返回 nil。
+func sanitizePptStructure(structure map[string]any, request SmartLayoutComposeRequest) map[string]any {
+	if structure == nil {
+		return nil
+	}
+	groups, ok := structure["groups"].([]any)
+	if !ok || len(groups) == 0 {
+		return nil
+	}
+	normalized := make([]map[string]any, 0, len(groups))
+	seenIDs := map[string]bool{}
+	for _, raw := range groups {
+		group, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		role, _ := group["role"].(string)
+		switch role {
+		case "title", "heading", "figure":
+		default:
+			role = "body"
+		}
+		rawIDs, _ := group["elementIds"].([]any)
+		ids := make([]string, 0, len(rawIDs))
+		for _, rawID := range rawIDs {
+			id, ok := rawID.(string)
+			if !ok {
+				continue
+			}
+			if seenIDs[id] {
+				continue
+			}
+			if isSuccessLayoutBlock(request, id) || hasLayoutElementRef(request, id) {
+				seenIDs[id] = true
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) == 0 {
+			continue
+		}
+		if len(ids) > maxPptGroupMember {
+			ids = ids[:maxPptGroupMember]
+		}
+		normalized = append(normalized, map[string]any{"role": role, "elementIds": ids})
+		if len(normalized) >= maxPptGroups {
+			break
+		}
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return map[string]any{"groups": normalized}
+}
+
+// sanitizeMindmapStructure 返回规范化后的树结构；无法使用返回 nil。
+func sanitizeMindmapStructure(structure map[string]any, request SmartLayoutComposeRequest) map[string]any {
+	if structure == nil {
+		return nil
+	}
+	root, ok := structure["root"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	normalized, count := sanitizeMindmapNode(root, request, 1, 0)
+	if normalized == nil || count == 0 {
+		return nil
+	}
+	return map[string]any{"root": normalized}
+}
+
+// sanitizeMindmapNode 递归校验并返回一个节点；节点非法（无文本且无有效块引用、超层数、超节点数）返回 nil。
+func sanitizeMindmapNode(
+	node map[string]any, request SmartLayoutComposeRequest, depth, usedCount int,
+) (map[string]any, int) {
+	text := joinMindmapNodeText(request, node["blockIds"], node["text"])
+	if text == "" {
+		return nil, usedCount
+	}
+	count := usedCount + 1
+	if count > maxMindmapNodes {
+		return nil, usedCount
+	}
+	out := map[string]any{"text": text}
+	rawChildren, _ := node["children"].([]any)
+	if depth < maxMindmapDepth {
+		children := make([]map[string]any, 0, len(rawChildren))
+		for _, rawChild := range rawChildren {
+			child, ok := rawChild.(map[string]any)
+			if !ok {
+				continue
+			}
+			normalized, nextCount := sanitizeMindmapNode(child, request, depth+1, count)
+			if normalized == nil {
+				continue
+			}
+			count = nextCount
+			children = append(children, normalized)
+		}
+		if len(children) > 0 {
+			out["children"] = children
+		}
+	}
+	return out, count
+}
+
+// joinMindmapNodeText 将节点引用的成功块文本拼接为节点文字；无合法块时回退节点自带的 text。
+func joinMindmapNodeText(request SmartLayoutComposeRequest, rawBlockIDs any, fallbackText any) string {
+	var joined string
+	if ids, ok := rawBlockIDs.([]any); ok {
+		parts := make([]string, 0, len(ids))
+		for _, rawID := range ids {
+			if len(parts) >= maxMindmapBlockRefs {
+				break
+			}
+			id, ok := rawID.(string)
+			if !ok {
+				continue
+			}
+			for _, block := range request.Blocks {
+				if block.ID == id && block.Error == "" && strings.TrimSpace(block.Text) != "" {
+					parts = append(parts, strings.TrimSpace(block.Text))
+					break
+				}
+			}
+		}
+		joined = strings.Join(parts, "\n")
+	}
+	if joined == "" {
+		fallback, _ := fallbackText.(string)
+		joined = fallback
+	}
+	joined = strings.TrimSpace(joined)
+	if len([]rune(joined)) > maxMindmapNodeText {
+		joined = string([]rune(joined)[:maxMindmapNodeText])
+	}
+	return joined
 }
 
 func (l *OpenAICompatibleSmartLayouter) chatBody(content []map[string]any, temperature float64) ([]byte, error) {

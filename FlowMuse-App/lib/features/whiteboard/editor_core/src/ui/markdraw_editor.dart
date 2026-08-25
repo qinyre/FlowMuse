@@ -82,6 +82,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.fingerDrawingEnabled = false,
     this.onFingerDrawingEnabledChanged,
     this.onAiPressed,
+    this.onSmartLayoutPressed,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -158,6 +159,7 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onEyedropperPressed;
 
   final VoidCallback? onAiPressed;
+  final VoidCallback? onSmartLayoutPressed;
 
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
@@ -541,6 +543,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         speechActive: _speechState != SpeechRecognitionState.idle,
         speechAvailable: _speechAvailable && widget.speechRecognitionEnabled,
         onAiPressed: widget.onAiPressed,
+        onSmartLayoutPressed: widget.onSmartLayoutPressed,
       );
     }
     return DesktopToolbar(
@@ -555,6 +558,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       speechActive: _speechState != SpeechRecognitionState.idle,
       speechAvailable: _speechAvailable && widget.speechRecognitionEnabled,
       onAiPressed: widget.onAiPressed,
+      onSmartLayoutPressed: widget.onSmartLayoutPressed,
     );
   }
 

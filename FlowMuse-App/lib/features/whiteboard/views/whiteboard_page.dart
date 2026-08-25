@@ -52,6 +52,7 @@ import '../ai_assistant/views/ai_agent_dialog.dart';
 import '../ai_assistant/views/region_capture_overlay.dart';
 import '../ai_assistant/models/ai_visual_attachment.dart';
 import '../speech_recognition/services/speech_recognition_service.dart';
+import 'smart_layout_dialogs.dart';
 import '../speech_recognition/services/speech_recognition_service_factory.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
@@ -116,6 +117,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _editorPreferencesApplied = false;
   OverlayEntry? _aiPanelEntry;
   bool _aiCaptureModeActive = false;
+  bool _smartLayoutFlowActive = false;
   Completer<AiVisualAttachment?>? _regionCaptureCompleter;
   bool _aiSpeechInputActive = false;
   late final SpeechRecognitionService _speechRecognitionService;
@@ -782,14 +784,240 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     return index < 0 ? 0 : index;
   }
 
+  Future<void> _startSmartLayoutFlow({List<String>? initialPageIds}) async {
+    if (_smartLayoutFlowActive) return;
+    final pages = _markdrawController.layout.pages;
+    if (pages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('当前笔记没有页面')),
+      );
+      return;
+    }
+    List<String>? selected;
+    if (initialPageIds != null && initialPageIds.length == 1) {
+      // AI 指令路径：已指定单个页面，直接执行，不再弹选页框
+      selected = initialPageIds;
+    } else if (pages.length == 1) {
+      // 单页笔记，一键执行，避免弹出多余的选页对话框（灰色遮罩）
+      selected = [pages.first.id];
+    } else {
+      final visible = _markdrawController.editorState.viewport.visibleRect(
+        _markdrawController.canvasSize,
+      );
+      final currentPage = _markdrawController.pageForVisibleRect(visible);
+      selected = await showDialog<List<String>>(
+        context: context,
+        builder: (dialogContext) => SmartLayoutPagePickerDialog(
+          pages: pages,
+          initial: {
+            if (currentPage != null) currentPage.id,
+            ...?initialPageIds,
+          },
+        ),
+      );
+    }
+    if (selected == null || selected.isEmpty) return;
+    setState(() => _smartLayoutFlowActive = true);
+    var applied = 0;
+    var skipped = 0;
+    var failed = 0;
+    var nothing = 0;
+    try {
+      for (final pageId in selected) {
+        if (!mounted) return;
+        final result = await _runSmartLayoutPage(pageId);
+        switch (result) {
+          case _SmartLayoutPageOutcome.applied:
+            applied++;
+          case _SmartLayoutPageOutcome.skipped:
+            skipped++;
+          case _SmartLayoutPageOutcome.failed:
+            failed++;
+          case _SmartLayoutPageOutcome.nothing:
+            nothing++;
+          case _SmartLayoutPageOutcome.cancelled:
+            setState(() => _smartLayoutFlowActive = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('已取消，完成 $applied 页')),
+            );
+            return;
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _smartLayoutFlowActive = false);
+    }
+    final parts = <String>[
+      if (applied > 0) '应用 $applied 页',
+      if (skipped > 0) '跳过 $skipped 页',
+      if (failed > 0) '失败 $failed 页',
+      if (nothing > 0) '无内容 $nothing 页',
+    ];
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(parts.isEmpty ? '未执行智能排版' : '智能排版完成：${parts.join('，')}'),
+      ),
+    );
+  }
+
+  Future<_SmartLayoutPageOutcome> _runSmartLayoutPage(String pageId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    SmartLayoutPlanResult result;
+    try {
+      messenger.showSnackBar(
+        const SnackBar(
+          duration: Duration(days: 1),
+          content: Text('智能排版识别中…'),
+        ),
+      );
+      result = await _markdrawController.buildSmartLayoutPlan(
+        pageId: pageId,
+      );
+    } catch (catchError) {
+      messenger.removeCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('智能排版失败：${_readableSmartLayoutError(catchError)}'),
+        ),
+      );
+      return _SmartLayoutPageOutcome.failed;
+    }
+    messenger.removeCurrentSnackBar();
+    if (result.plan == null) {
+      if (result.hasFailures) {
+        _markdrawController.setSmartLayoutGhost(
+          SmartLayoutGhostSpec.failures(
+            failureRects: [
+              for (final failure in result.failures) failure.bounds,
+            ],
+          ),
+        );
+        final retry = await _showSmartLayoutFailureDialog(result.failures);
+        _markdrawController.setSmartLayoutGhost(null);
+        if (retry == true) {
+          return _runSmartLayoutPage(pageId);
+        }
+        return _SmartLayoutPageOutcome.cancelled;
+      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            result.error != null
+                ? '智能排版失败：${result.error}'
+                : '本页没有可智能排版的手写内容',
+          ),
+        ),
+      );
+      return _SmartLayoutPageOutcome.nothing;
+    }
+    final plan = result.plan!;
+    _markdrawController.setSmartLayoutGhost(
+      SmartLayoutGhostSpec.preview(
+        previewRects: plan.previewRects,
+        removalRects: plan.removalRects,
+      ),
+    );
+    final action = await showDialog<SmartLayoutConfirmAction>(
+      context: context,
+      builder: (dialogContext) => SmartLayoutConfirmDialog(
+        plan: plan,
+        onSelectStyle: (style) async {
+          final switched = await _markdrawController.buildSmartLayoutPlan(
+            pageId: pageId,
+            requestedStyle: style,
+          );
+          if (switched.plan == null) {
+            if (switched.error != null && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('切换风格失败：${switched.error}')),
+              );
+            }
+            return null;
+          }
+          _markdrawController.setSmartLayoutGhost(
+            SmartLayoutGhostSpec.preview(
+              previewRects: switched.plan!.previewRects,
+              removalRects: switched.plan!.removalRects,
+            ),
+          );
+          return switched.plan;
+        },
+        onApply: (currentPlan) => Navigator.of(dialogContext).pop(
+          SmartLayoutConfirmAction.apply,
+        ),
+        onApplyAndDrop: (currentPlan) => Navigator.of(dialogContext).pop(
+          SmartLayoutConfirmAction.applyAndDrop,
+        ),
+        onSkip: () => Navigator.of(dialogContext).pop(
+          SmartLayoutConfirmAction.skip,
+        ),
+        onCancel: () => Navigator.of(dialogContext).pop(
+          SmartLayoutConfirmAction.cancel,
+        ),
+      ),
+    );
+    _markdrawController.setSmartLayoutGhost(null);
+    switch (action) {
+      case SmartLayoutConfirmAction.apply:
+        if (_markdrawController.applySmartLayoutPlan(plan)) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('智能排版已应用')),
+          );
+          return _SmartLayoutPageOutcome.applied;
+        }
+        return _SmartLayoutPageOutcome.failed;
+      case SmartLayoutConfirmAction.applyAndDrop:
+        if (_markdrawController.applySmartLayoutPlan(
+          plan,
+          dropFailedBlocks: true,
+        )) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('智能排版已应用（未识别笔迹已删除）')),
+          );
+          return _SmartLayoutPageOutcome.applied;
+        }
+        return _SmartLayoutPageOutcome.failed;
+      case SmartLayoutConfirmAction.skip:
+        return _SmartLayoutPageOutcome.skipped;
+      case SmartLayoutConfirmAction.cancel:
+        return _SmartLayoutPageOutcome.cancelled;
+      case null:
+        return _SmartLayoutPageOutcome.skipped;
+    }
+  }
+
+  Future<bool?> _showSmartLayoutFailureDialog(
+    List<SmartLayoutFailureInfo> failures,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => SmartLayoutFailureDialog(
+        failures: failures,
+        onRetry: () => Navigator.of(dialogContext).pop(true),
+        onCancel: () => Navigator.of(dialogContext).pop(false),
+      ),
+    );
+  }
+
+  String _readableSmartLayoutError(Object error) {
+    final text = error is StateError ? error.message : error.toString();
+    return text
+        .replaceFirst(RegExp(r'^Bad state:\s*'), '')
+        .replaceFirst(RegExp(r'^Exception:\s*'), '')
+        .trim();
+  }
+
   Future<void> _applyAiAgentResponse(AiAgentResponse response) async {
     if (response.actions.any(
       (action) => action.tool == AiAgentTool.smartLayout,
     )) {
-      final changed = await _markdrawController.runGlobalSmartLayout();
-      if (!changed) {
+      final visible = _markdrawController.editorState.viewport.visibleRect(
+        _markdrawController.canvasSize,
+      );
+      final page = _markdrawController.pageForVisibleRect(visible);
+      if (page == null) {
         throw StateError('当前画布没有可智能排版的手写内容');
       }
+      await _startSmartLayoutFlow(initialPageIds: [page.id]);
       return;
     }
     AiAgentAction? rename;
@@ -2178,6 +2406,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       .read(inkRecognitionRepositoryProvider)
                       .composeSmartLayout(request),
                   onAiPressed: _toggleAiAgent,
+                  onSmartLayoutPressed: () =>
+                      _startSmartLayoutFlow(),
                   onLiveFreedrawChanged: state.collaborating
                       ? _broadcastLiveFreedraw
                       : null,
@@ -2519,3 +2749,5 @@ class _RoomInfoBlock extends StatelessWidget {
     );
   }
 }
+
+enum _SmartLayoutPageOutcome { applied, skipped, failed, nothing, cancelled }
