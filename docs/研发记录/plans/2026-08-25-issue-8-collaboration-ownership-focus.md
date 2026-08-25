@@ -1063,3 +1063,51 @@ git diff -- FlowMuse-App/ohos FlowMuse-App/android FlowMuse-App/ios FlowMuse-App
 6. 服务端、数据库、原生平台目录和依赖清单无不必要改动。
 7. 鸿蒙真机完成至少一轮 Profile/GPU 手工验证并记录结果。
 8. 首轮与二轮审查发现均已落实；任何后续审查在进入实现前提出的 Critical/Important 必须全部关闭，NEEDS-EVIDENCE 必须补齐证据。
+
+
+---
+
+## 18. 实现落地记录（2026-08-26）
+
+### 18.1 分支与提交序列
+
+实施分支 `feat/issue-8-collaboration-ownership-focus`（基线 `origin/main@c40a847`），按实现细则计划 T1-T16 逐任务提交：
+
+| 任务 | 提交 | 内容 |
+|---|---|---|
+| T1 | 4257377 | 创建者值对象、customData codec 与外部 sanitizer |
+| T2 | 8a1372e | 登录/游客 creatorKey 稳定身份键派生 |
+| T3 | 1ecb9d4 | 三类加密 presence 消息可选携带 creatorKey |
+| T4 | e16862e | 游客会话 UUID 生命周期、三路强制补发、socket→creatorKey 映射 |
+| T5 | 6a06202 | 本地创建/更新统一盖章（onPrepareLocalResult）并收口 14 处直连点 |
+| T6 | 115e1de | LWW 合并后归属回填、冲突计数与父子规范化 |
+| T7 | 3bb04c1 | 外部导出双入口收口与不可信导入剥离 |
+| T8 | afd4bc2 | .markdraw 分屏 alias sidecar 与重复标识阻断 |
+| T9 | 2c82248 | 聚焦状态机、顶部 pill 与生命周期清理 |
+| T10 | 92f4a1d | 属性面板创建者/历史内容入口 |
+| T11 | 35b98c6 | 参与者头像聚焦、显示层去重与 +N 完整列表 |
+| T12 | 53e0291 | 静态画布单遍连续 dim 段渲染 |
+| T13 | 334ee4c | 聚焦参数穿透、本地高亮集合与数学 Overlay |
+| T14 | a68c1ab | 远端湿墨按创建者分类临时 alpha 合成 |
+| T15 | 33df287 | 双端集成与 1000/5000 结构化压力验收 |
+| T16 | （本提交）| 门禁执行、ADR-018 与文档收尾 |
+
+对应 v4 §15 的 8 提交序列映射见实现细则计划附录 B。
+
+### 18.2 门禁结果摘要
+
+- **格式门禁**：本分支触碰的 43 个 Dart 文件 `dart format --set-exit-if-changed` 全部通过（0 变更）。
+- **analyze 门禁**：`dart analyze --format=machine` 按 severity|code|file|message multiset 差比较，基线（c40a847 worktree 实测）42 issues = 分支 42 issues，零新增 error/warning/info。
+- **测试门禁**：`test/features/whiteboard/collaboration` 93 通过；`test/features/whiteboard/editor_core` 277 通过；`test/features/whiteboard/views` 27 通过。
+- **范围门禁**：`git diff --check` 干净；FlowMuse-Server、ohos/android/ios/macos/windows/web 平台目录、pubspec.yaml 零改动；无数据库 schema 变更；无 GeneratedPluginRegistrant.ets。
+- **隐私断言**：全库无 CollaborationDebugLog.write 调用携带 creatorKey/displayName/userId；owner_repair 日志脱敏测试锁定只输出 `ownerConflictCount=N ownerBackfillCount=N`。
+- **外部导出**：六类外部最终产物（.markdraw/.excalidraw/.json/PNG tEXt/SVG comment/分享与库文件）经测试断言无 collaborationOwner；内部 SQLite/协作密文保留（serializeScene 内部路径源码门禁锁定）。
+
+### 18.3 真机人工验收待办（合并前完成）
+
+当前环境无鸿蒙真机，以下 Profile/GPU 手工验证项按 v4 §13 最后一段执行后回填：普通协作场景、PDF 批注、1000 元素混合作者、focus×跨 owner 多选/拖动、连续书写、快速切换头像；记录设备型号、系统版本、Flutter 构建模式、可见元素数、dim segment 数、远端湿墨 saveLayer 数及其 bounds 覆盖面积与明显掉帧现象。真机数据不达标时按 v4 §7.4 另开 renderer alpha multiplier fallback 决策。
+
+### 18.4 实现裁决登记
+
+1. **非协作状态不盖章**：`activeRoom == null`（本地笔记）时 `_currentCreator()` 返回 null，新建登录用户元素无归属（进入协作后归"历史内容"）。这是 R3（登录键跨房间稳定）字面语义的推论空白而非矛盾——R3 保证"房间 A 已盖章元素在房间 B 仍匹配"，本地阶段新建元素从未盖章。见实现细则 Task 4 Step 4.3。
+2. **远端湿墨 bounds 余量**：采用 `kMaxBrushSizeScale = 4.2`（highlighter 为当前笔型 sizeScale 上界）常量推导 margin = strokeWidth × 4.2 × 0.5 × 1.3 + 2px；若未来新增更粗笔型（sizeScale > 4.2）必须同步上调该常量，否则聚焦层可能裁切边缘像素。见实现细则 Task 14。

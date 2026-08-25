@@ -1,4 +1,5 @@
 import 'package:flow_muse/features/whiteboard/collaboration/services/scene_reconciler.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Map<String, Object?> el(
@@ -17,7 +18,7 @@ Map<String, Object?> el(
     'version': version,
     'versionNonce': nonce,
     'index': 'a$id',
-    if (containerId != null) 'containerId': containerId,
+    'containerId': ?containerId,
     if (ownerKey != null)
       'customData': {
         'flowMuse': {
@@ -145,5 +146,35 @@ void main() {
       remoteElements: [],
     );
     expect(out.single['id'], 'solo');
+  });
+
+  test('日志脱敏：owner_repair 只含计数字段', () {
+    // CollaborationDebugLog.write 的输出通道是 debugPrint（kDebugMode 下），
+    // flutter_test 会把 debugPrint 重定向到 test 输出；临时替换后恢复。
+    final captured = <String>[];
+    final original = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) =>
+        captured.add(message ?? '');
+    addTearDown(() => debugPrint = original);
+    // 构造一次"双方都非空且不同"的 reconcile 触发 conflict 计数
+    SceneReconciler().reconcile(
+      localElements: [el('e1', version: 2, nonce: 5, ownerKey: 'user:a')],
+      remoteElements: [el('e1', version: 2, nonce: 9, ownerKey: 'user:b')],
+    );
+    final ownerLogs = captured
+        .where((line) => line.contains('owner_repair'))
+        .toList();
+    expect(ownerLogs, isNotEmpty);
+    for (final line in ownerLogs) {
+      expect(
+        RegExp(r'ownerConflictCount=\d+ ownerBackfillCount=\d+').hasMatch(line),
+        isTrue,
+        reason:
+            '实际输出形如 [FlowMuseCollab][scene_reconciler][owner_repair] '
+            'ownerConflictCount=1 ownerBackfillCount=0，计数在方括号外',
+      );
+      expect(line.contains('user:a'), isFalse);
+      expect(line.contains('user:b'), isFalse);
+    }
   });
 }

@@ -130,8 +130,9 @@ void main() {
     await repositoryB.joinRoom(room: room, localScene: initial);
     final idles = <CollaborationMessage>[];
     final subscription = repositoryB.encryptedMessages(room).listen((message) {
-      if (message.type == CollaborationMessageType.idleStatus)
+      if (message.type == CollaborationMessageType.idleStatus) {
         idles.add(message);
+      }
     });
     addTearDown(subscription.cancel);
 
