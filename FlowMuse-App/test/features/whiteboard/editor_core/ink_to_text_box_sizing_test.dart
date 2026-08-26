@@ -55,19 +55,11 @@ void main() {
 
     test('单个 CJK 扁平字迹启用宽度兜底并限幅 160', () {
       expect(
-        InkTextSizing.estimateFontSize(
-          inkWidth: 800,
-          inkHeight: 6,
-          text: '一',
-        ),
+        InkTextSizing.estimateFontSize(inkWidth: 800, inkHeight: 6, text: '一'),
         160,
       );
       expect(
-        InkTextSizing.estimateFontSize(
-          inkWidth: 120,
-          inkHeight: 6,
-          text: '一',
-        ),
+        InkTextSizing.estimateFontSize(inkWidth: 120, inkHeight: 6, text: '一'),
         closeTo(120, 0.001),
       );
     });
@@ -85,11 +77,7 @@ void main() {
 
     test('字号下限 12、上限 400', () {
       expect(
-        InkTextSizing.estimateFontSize(
-          inkWidth: 8,
-          inkHeight: 4,
-          text: 'ok',
-        ),
+        InkTextSizing.estimateFontSize(inkWidth: 8, inkHeight: 4, text: 'ok'),
         12,
       );
       expect(
@@ -177,8 +165,8 @@ void main() {
           );
       controller.applyResult(AddElementResult(source));
       controller.applyResult(SetSelectionResult({source.id}));
-      controller.onRecognizeInk =
-          (request) async => InkRecognitionResult(elements: [recognized]);
+      controller.onRecognizeInk = (request) async =>
+          InkRecognitionResult(elements: [recognized]);
       await controller.convertSelectedInkToText();
       return controller.currentScene.activeElements
           .whereType<TextElement>()
@@ -196,11 +184,20 @@ void main() {
           width: 400,
           height: 80,
         ),
-        stroke: _stroke('s1', 100, 100, 400, 80, '#e03131'),
+        stroke: _stroke(
+          's1',
+          100,
+          100,
+          400,
+          80,
+          color: '#e03131',
+          opacity: 0.6,
+        ),
       );
 
       expect(text.fontSize, closeTo(72, 0.001)); // 80 × 0.9
       expect(text.strokeColor, '#e03131'); // 源笔迹颜色保留
+      expect(text.opacity, 0.6); // 源笔迹不透明度保留
       expect(text.x, 100); // 水平原位（左对齐笔迹）
       final (measuredWidth, measuredHeight) = TextRenderer.measure(text);
       expect(text.width, closeTo(math.max(measuredWidth + 4, 20.0), 0.001));
@@ -215,6 +212,55 @@ void main() {
       expect(
         text.y,
         closeTo(100 + (80 - text.height) / 2, 0.001), // 垂直居中于笔迹
+      );
+    });
+
+    testWidgets('自动识别路径：sticky 样式不覆盖推导字号与笔迹颜色', (tester) async {
+      final controller = MarkdrawController();
+      addTearDown(controller.dispose);
+      controller.applyStyleChange(
+        const ElementStyle(
+          fontFamily: 'Excalifont',
+          fontSize: 28,
+          strokeColor: '#1971c2',
+        ),
+      );
+      controller.switchTool(ToolType.freedraw);
+      controller.onRecognizeInk = (request) async => InkRecognitionResult(
+        elements: [
+          _recognized(text: '你好', x: 100, y: 100, width: 400, height: 80),
+        ],
+      );
+      // 带 pending 标记的红笔迹进入场景（模拟多色会话：红笔书写后已切蓝笔，
+      // 注入时跳过样式化以保持红笔迹原色）→ applyResult 调度 1 秒后自动识别
+      controller.applyResult(
+        AddElementResult(
+          _pendingStroke(
+            's1',
+            'session-a',
+            100,
+            100,
+            400,
+            80,
+            color: '#e03131',
+          ),
+        ),
+        applyDefaultStyle: false,
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+
+      final text = controller.currentScene.activeElements
+          .whereType<TextElement>()
+          .single;
+      // freedraw 是创建工具：若 applyResult 仍二次套默认样式，
+      // 这里会变成 28 号蓝字配 72 号字的紧框（框/字号失配）
+      expect(text.fontSize, closeTo(72, 0.001));
+      expect(text.strokeColor, '#e03131');
+      expect(text.width, lessThan(400));
+      expect(
+        controller.currentScene.activeElements.whereType<FreedrawElement>(),
+        isEmpty,
       );
     });
 
@@ -261,13 +307,12 @@ void main() {
       controller.applyResult(
         SetSelectionResult({ElementId('s1'), ElementId('s2')}),
       );
-      controller.onRecognizeInk =
-          (request) async => InkRecognitionResult(
-            elements: [
-              _recognized(text: '第一行', x: 50, y: 50, width: 300, height: 40),
-              _recognized(text: '第二行', x: 50, y: 100, width: 300, height: 40),
-            ],
-          );
+      controller.onRecognizeInk = (request) async => InkRecognitionResult(
+        elements: [
+          _recognized(text: '第一行', x: 50, y: 50, width: 300, height: 40),
+          _recognized(text: '第二行', x: 50, y: 100, width: 300, height: 40),
+        ],
+      );
       await controller.convertSelectedInkToText();
 
       final texts = controller.currentScene.activeElements
@@ -299,7 +344,10 @@ void main() {
         ),
       );
       addTearDown(controller.dispose);
-      controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
+      // sticky 字号已设置：锚点字号仍应优先（模板行高语义依赖锚点字号）
+      controller.applyStyleChange(
+        const ElementStyle(fontFamily: 'Excalifont', fontSize: 28),
+      );
       controller.smartInkLayoutMode = true;
 
       // 古籍栏宽 88、fontSize 61.6；笔迹放在最右列（crossAxis≈660）附近
@@ -307,18 +355,11 @@ void main() {
         AddElementResult(_stroke('s1', 630, 150, 60, 300)),
       );
       controller.applyResult(SetSelectionResult({ElementId('s1')}));
-      controller.onRecognizeInk =
-          (request) async => InkRecognitionResult(
-            elements: [
-              _recognized(
-                text: '床前明月',
-                x: 630,
-                y: 150,
-                width: 60,
-                height: 300,
-              ),
-            ],
-          );
+      controller.onRecognizeInk = (request) async => InkRecognitionResult(
+        elements: [
+          _recognized(text: '床前明月', x: 630, y: 150, width: 60, height: 300),
+        ],
+      );
       await controller.convertSelectedInkToText();
 
       final text = controller.currentScene.activeElements
@@ -338,9 +379,10 @@ FreedrawElement _stroke(
   double x,
   double y,
   double width,
-  double height, [
+  double height, {
   String color = '#1e1e1e',
-]) {
+  double opacity = 1.0,
+}) {
   return FreedrawElement(
     id: ElementId(id),
     x: x,
@@ -349,6 +391,25 @@ FreedrawElement _stroke(
     height: height,
     points: [Point(0, 0), Point(width, height)],
     strokeColor: color,
+    opacity: opacity,
+  );
+}
+
+FreedrawElement _pendingStroke(
+  String id,
+  String sessionId,
+  double x,
+  double y,
+  double width,
+  double height, {
+  String color = '#1e1e1e',
+}) {
+  final stroke = _stroke(id, x, y, width, height, color: color);
+  return stroke.copyWith(
+    customData: {
+      recognitionStrokeSessionKey: sessionId,
+      recognitionStrokePendingKey: true,
+    },
   );
 }
 

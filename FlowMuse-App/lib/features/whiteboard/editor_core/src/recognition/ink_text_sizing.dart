@@ -38,19 +38,12 @@ class InkTextSizing {
     if (lineCount == 1 && _isSingleCjkChar(text)) {
       byWidth = math.min(math.max(inkWidth, 1.0), _maxWidthBasedFontSize);
     }
-    return clampValue(
-      math.max(byHeight, byWidth),
-      _minFontSize,
-      _maxFontSize,
-    );
+    return clampValue(math.max(byHeight, byWidth), _minFontSize, _maxFontSize);
   }
 
   /// 将 `\r\n` / `\r` 统一为 `\n` 后按行拆分。
   static List<String> normalizeLines(String text) {
-    return text
-        .replaceAll('\r\n', '\n')
-        .replaceAll('\r', '\n')
-        .split('\n');
+    return text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
   }
 
   static double clampValue(double value, double min, double max) {
@@ -72,6 +65,7 @@ class InkTextSizing {
   static bool isCjkRune(int rune) {
     return (rune >= 0x2E80 && rune <= 0x9FFF) || // CJK 部首/汉字/注音
         (rune >= 0x3040 && rune <= 0x30FF) || // 假名
+        (rune >= 0xAC00 && rune <= 0xD7AF) || // 谚文音节
         (rune >= 0xF900 && rune <= 0xFAFF) || // 兼容表意
         (rune >= 0x20000 && rune <= 0x3FFFD); // 扩展表意
   }

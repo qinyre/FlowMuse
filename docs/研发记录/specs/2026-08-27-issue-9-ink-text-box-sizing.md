@@ -1,8 +1,8 @@
-# Issue #9：手写转文字默认文本框大小优化（设计稿 v2）
+# Issue #9：手写转文字默认文本框大小优化（设计稿 v3）
 
-- 日期：2026-08-27（v2 吸收三路对抗审查意见）
+- 日期：2026-08-27（v2 吸收方案三路审查；v3 吸收代码两路对抗审查）
 - 关联：[Issue #9 优化手写转文字默认文本框大小](https://github.com/qinyre/FlowMuse/issues/9)
-- 状态：已按审查意见修订，待实施
+- 状态：实施完成，待视觉验收
 
 ## 1. 问题
 
@@ -52,24 +52,30 @@ double estimateInkFontSize({
 - math：`clamp(inkHeight * 0.72, 16, 40)`，与智能排版公式分支（`_fontSizeForRecognizedBlock` :4555）一致。
 - 文本：
   - 行数 = 归一化换行（`\r\n`/`\r` → `\n`）后 split；
-  - CJK 占比 `r`（CJK = U+2E80–9FFF、U+3040–30FF、U+F900–FAFF、U+20000–3FFFD，按非空白 rune 计）：高度系数 `0.72 + 0.18r`（CJK 字形≈0.9em 近方形，拉丁含升降部≈0.72em）——回应"中文稳定缩小 30%"审查意见；
+  - CJK 占比 `r`（CJK = U+2E80–9FFF、U+3040–30FF、U+AC00–D7AF 谚文、U+F900–FAFF、U+20000–3FFFD，按非空白 rune 计）：高度系数 `0.72 + 0.18r`（CJK 字形≈0.9em 近方形，拉丁含升降部≈0.72em）——回应"中文稳定缩小 30%"审查意见；
   - `byHeight = max(inkHeight,1)/行数 × 高度系数`；
-  - 宽度兜底 `byWidth`：仅单行且 CJK 占比 ≥ 0.5 时启用，`byWidth = inkWidth / emUnits`（CJK 1.0em、空白 0.3em、其他 0.55em）——回应"扁平笔迹（一）字号触底"审查意见；
-  - `fontSize = clamp(max(byHeight, min(byWidth, 160)), 12, 400)`（自由画布大标题不被 48 上限截断；宽度兜底单独限幅 160 防退化输入）。
+  - 宽度兜底 `byWidth`：**仅当文本（忽略空白）恰为单个 CJK 字符**时启用（`byWidth = min(inkWidth, 160)`）——用于"一"等扁平字迹高度触底场景；多字符时宽度含字距噪声不采用（v3 收紧：v2 的"单行 CJK≥0.5"会让扁宽多字文本字号翻倍）；
+  - `fontSize = clamp(max(byHeight, byWidth), 12, 400)`（自由画布大标题不被 48 上限截断；宽度兜底单独限幅 160 防退化输入）。
 
 **与智能排版启发式不统一的决策说明**：审查意见建议抽公共函数；本方案刻意不改 `_fontSizeForRecognizedBlock`（A4 分页语境，clamp 12–48 有占位体系依赖），避免本 Issue 波及智能排版行为。差异（CJK 系数、上限）为有意为之，统一化列为后续跟进。
 
-### 3.2 `_measuredTextElement` 重构
+### 3.2 `_measuredTextElement` 重构（v3 修订）
 
-调用链：`_elementFromRecognizedInk` 增参 `inkColor/inkOpacity`（由入口从源笔迹取多数色，按累计点数加权）；文本先做 `\r` 归一化。
+调用链：`_elementFromRecognizedInk` 增参 `inkStyle`（入口先算一次**整组主导色**：累计点数最多的颜色，不透明度取该色加权均值；多元素共享同组颜色——多色会话下切笔前笔迹占优）；文本先做 `\r` 归一化。
 
 1. `fontSize = anchor?.fontSize ?? estimateInkFontSize(...)`；
 2. 构造 TextElement（横排宽高仅作占位，竖排沿用旧构造公式）；
 3. `applyDefaultStyleToElement` 后**写回** `fontSize`（识别/锚点字号优先于 sticky 默认字号——笔迹高度信息一次性不可再得，回应审查 P1；fontFamily/textAlign 仍取默认样式）与 `inkColor/inkOpacity`（保色）；
 4. **竖排分支显式 early return**，保留旧 `max(测量, 构造值)` 语义——回应"伪代码与竖排不动自相矛盾"的 P0；
-5. **math 分支**（非竖排）：`width = max(measuredWidth, inkWidth)`，`height = max(measuredHeight, inkHeight, fontSize * 2.4)`——flutter_math display 模式分式可达 ~2.2em，2.4em 余量防 `ClipRect` 裁剪（回应 P0：math 不得按源码测量紧包）；
+5. **math 分支**（非竖排）：`width = max(measuredWidth + 4, inkWidth)`，`height = max(measuredHeight, inkHeight, fontSize * 2.4)`——flutter_math display 模式分式可达 ~2.2em，2.4em 余量防 `ClipRect` 裁剪（回应 P0：math 不得按源码测量紧包；v3 宽度补 +4 边缘余量）；
 6. **横排文本分支**：`width = max(measuredWidth + 4, 20)`，`height = max(measuredHeight, fontSize × lineHeight)`；`x = inkX`；`y = inkY + (inkHeight − height) / 2`（垂直居中，回应 P2）；
 7. **锚点横排**：紧包后复用 `_alignSmartLayoutTextToAnchor`（:4713）对齐（底部贴线），修复"y 直接取 anchor.position.dy 悬空一行"的既有错位——回应 P1。
+
+### 3.2.1 结果应用跳过二次样式化（v3 新增，代码审查 P1）
+
+`applyResult` 在创建工具激活时会对 `AddElementResult` 再套一次默认样式（`_applyDefaultStyleToResult`）。自动识别入口转换时 `freedraw` 工具必处于激活态，写回的识别字号/笔迹色会被 sticky 默认样式**再次覆盖**且无重测量，造成框/字号失配（旧代码被笔迹大框掩盖，紧框后可见）。
+
+修复：`applyResult` 增加可选参数 `applyDefaultStyle`（默认 true 保持既有语义），两条转换入口的应用调用传 `false`——转换产物已在 `_elementFromRecognizedInk` 内定型。回归测试覆盖 freedraw 激活 + sticky 字号/颜色已设置的自动识别链路。
 
 页面归属不受影响：`_attachCurrentPage` 在 `applyDefaultStyleToElement` 内、紧包改尺寸之前执行（仍按笔迹量级定页）。
 
@@ -93,17 +99,18 @@ double estimateInkFontSize({
 
 ## 5. 测试与验收（v2）
 
-单测（新增 `test/features/whiteboard/editor_core/ink_to_text_box_sizing_test.dart`）：
+单测（新增 `test/features/whiteboard/editor_core/ink_to_text_box_sizing_test.dart`，共 15 例）：
 
 估算器纯函数：CJK 大字（系数 0.9）、拉丁（0.72）、两行、扁平"一"（宽度兜底→限幅 160）、极小笔迹（下限 12）、math（16–40）、`\r\n` 归一化。
 
 入口集成（`convertSelectedInkToText` + fake `onRecognizeInk`，经 `applyResult(AddElementResult + SetSelectionResult)` 构造选中笔迹）：
 
-1. 单行大字迹（ink 400×80，"你好"）→ fontSize=72，框宽=measure+4 < 400（不再被笔迹盒撑大），框高=max(measure, 72×1.25)，y 垂直居中。
+1. 单行大字迹（ink 400×80，"你好"）→ fontSize=72，框宽=measure+4 < 400（不再被笔迹盒撑大），框高=max(measure, 72×1.25)，y 垂直居中，红笔迹保色、不透明度保留。
 2. sticky 字号 28 已设置 → 仍取推导字号（写回覆盖）。
-3. math（latex）→ 字号=clamp(inkH×0.72,16,40)，框高 ≥ fontSize×2.4，框宽 ≥ 笔迹宽。
-4. 红笔墨迹 → 转出文本 strokeColor 为红（保色）。
-5. 竖排回归（ancientBook 模板 + smartInkLayoutMode）：框高 ≥ 字数×lineHeight，writingMode=vertical。
+3. **自动识别路径**（freedraw 激活 + sticky 字号 28/蓝色 + 红色 pending 笔迹 → pump 1s）→ 字号 72、红色、紧框——钉死 `applyDefaultStyle: false` 修复。
+4. math（latex）→ 字号=clamp(inkH×0.72,16,40)，框高 ≥ fontSize×2.4，框宽 ≥ 笔迹宽。
+5. 多元素识别结果各自紧包裹。
+6. 竖排回归（ancientBook 模板 + smartInkLayoutMode + sticky 字号 28）：字号仍为锚点 61.6、框高 ≥ 字数×88、writingMode=vertical。
 
 视觉验收（网页端）：
 

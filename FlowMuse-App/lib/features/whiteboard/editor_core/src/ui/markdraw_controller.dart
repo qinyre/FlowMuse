@@ -1042,11 +1042,15 @@ class MarkdrawController extends ChangeNotifier {
   // --- Result application ---
 
   /// Applies a [ToolResult] to the editor state (scene, viewport, selection).
-  void applyResult(ToolResult? result) {
+  ///
+  /// [applyDefaultStyle] 为 false 时跳过创建工具的默认样式套用，用于
+  /// 手写转文字等"元素已定型（含字号/颜色/尺寸测量）"的复合结果，
+  /// 避免 sticky 默认样式二次覆盖识别产物。
+  void applyResult(ToolResult? result, {bool applyDefaultStyle = true}) {
     if (result == null) return;
 
     final constrained = _constrainViewport(result);
-    final styled = isCreationTool
+    final styled = applyDefaultStyle && isCreationTool
         ? _applyDefaultStyleToResult(constrained)
         : constrained;
 
@@ -1282,12 +1286,13 @@ class MarkdrawController extends ChangeNotifier {
       if (pendingStrokes.isEmpty) {
         return;
       }
+      // 转换产物已在 _elementFromRecognizedInk 内完成样式与尺寸测量，
+      // 跳过 applyResult 的默认样式二次套用（sticky 字号/颜色不得覆盖识别结果）。
+      final inkStyle = _dominantInkStyle(pendingStrokes);
       final elements = result.elements
           .map(
-            (recognized) => _elementFromRecognizedInk(
-              recognized,
-              inkStrokes: pendingStrokes,
-            ),
+            (recognized) =>
+                _elementFromRecognizedInk(recognized, inkStyle: inkStyle),
           )
           .whereType<Element>()
           .toList();
@@ -1306,6 +1311,7 @@ class MarkdrawController extends ChangeNotifier {
           for (final element in elements) AddElementResult(element),
           SetSelectionResult({for (final element in elements) element.id}),
         ]),
+        applyDefaultStyle: false,
       );
       if (_pendingInkSessionId == sessionId) {
         _pendingInkSessionId = null;
@@ -1408,13 +1414,12 @@ class MarkdrawController extends ChangeNotifier {
 
   Element? _elementFromRecognizedInk(
     InkRecognizedElement recognized, {
-    List<FreedrawElement> inkStrokes = const [],
+    ({String color, double opacity})? inkStyle,
   }) {
     final x = recognized.x;
     final y = recognized.y;
     final width = math.max(recognized.width, 1.0);
     final height = math.max(recognized.height, 1.0);
-    final inkStyle = _dominantInkStyle(inkStrokes);
     switch (recognized.type) {
       case 'text':
         final text = _normalizeRecognizedText(recognized.text);
@@ -1431,7 +1436,9 @@ class MarkdrawController extends ChangeNotifier {
           inkOpacity: inkStyle?.opacity,
         );
       case 'math':
-        final text = _normalizeRecognizedText(recognized.latex ?? recognized.text);
+        final text = _normalizeRecognizedText(
+          recognized.latex ?? recognized.text,
+        );
         if (text == null) {
           return null;
         }
@@ -1505,7 +1512,8 @@ class MarkdrawController extends ChangeNotifier {
         ? _nearestTemplateAnchor(Rect.fromLTWH(x, y, width, height))
         : null;
     final vertical = anchor?.writingMode == TemplateWritingMode.vertical;
-    final fontSize = anchor?.fontSize ??
+    final fontSize =
+        anchor?.fontSize ??
         InkTextSizing.estimateFontSize(
           inkWidth: width,
           inkHeight: height,
@@ -1553,7 +1561,7 @@ class MarkdrawController extends ChangeNotifier {
       // 框高按 2.4em 余量兜底，避免公式被 ClipRect 裁剪。
       final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
       final sized = styled.copyWith(
-        width: math.max(measuredWidth, styled.width),
+        width: math.max(measuredWidth + 4, styled.width),
         height: math.max(
           math.max(measuredHeight, styled.height),
           styled.fontSize * 2.4,
@@ -1582,10 +1590,7 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   String? _normalizeRecognizedText(String? raw) {
-    final text = raw
-        ?.replaceAll('\r\n', '\n')
-        .replaceAll('\r', '\n')
-        .trim();
+    final text = raw?.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim();
     if (text == null || text.isEmpty) {
       return null;
     }
@@ -1606,8 +1611,7 @@ class MarkdrawController extends ChangeNotifier {
       colorWeights[stroke.strokeColor] =
           (colorWeights[stroke.strokeColor] ?? 0) + weight;
       colorOpacitySums[stroke.strokeColor] =
-          (colorOpacitySums[stroke.strokeColor] ?? 0) +
-          stroke.opacity * weight;
+          (colorOpacitySums[stroke.strokeColor] ?? 0) + stroke.opacity * weight;
     }
     var dominantColor = strokes.first.strokeColor;
     var bestWeight = -1.0;
@@ -1618,6 +1622,9 @@ class MarkdrawController extends ChangeNotifier {
       }
     });
     final weight = colorWeights[dominantColor]!;
+    if (weight <= 0) {
+      return (color: dominantColor, opacity: 1.0);
+    }
     return (
       color: dominantColor,
       opacity: colorOpacitySums[dominantColor]! / weight,
@@ -5024,12 +5031,12 @@ class MarkdrawController extends ChangeNotifier {
       if (_disposed) {
         return;
       }
+      // 同 _recognizePendingInkSession：转换产物已定型，跳过默认样式二次套用。
+      final inkStyle = _dominantInkStyle(strokes);
       final elements = result.elements
           .map(
-            (recognized) => _elementFromRecognizedInk(
-              recognized,
-              inkStrokes: strokes,
-            ),
+            (recognized) =>
+                _elementFromRecognizedInk(recognized, inkStyle: inkStyle),
           )
           .whereType<Element>()
           .toList();
@@ -5047,6 +5054,7 @@ class MarkdrawController extends ChangeNotifier {
           for (final element in elements) AddElementResult(element),
           SetSelectionResult({for (final element in elements) element.id}),
         ]),
+        applyDefaultStyle: false,
       );
     } finally {
       _recognizingInk = false;
