@@ -38,3 +38,16 @@
 | 关键语义               | 快照以 `baseSceneVersion/baseSceneHash` 乐观锁保存；409 后拉取、reconcile 并重试；协作内容全程 AES-GCM 密文传输     |
 | 自动化证据             | `test/features/whiteboard/collaboration/encrypted_scene_store_test.dart`、`collaboration_repository_sync_test.dart` |
 | 人工验收               | 两端离线后分别编辑再恢复网络，说明合并结果、失败重试与服务端无法读取白板明文的边界                                  |
+
+## 4. 协作元素归属与创建者聚焦
+
+| 项目       | 可核验位置 |
+| ---------- | ---------- |
+| 归属值对象与 codec | `FlowMuse-App/lib/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart`、`core/serialization/external_export_sanitizer.dart` |
+| 创建/更新盖章与 LWW 回填 | `editor_core/src/ui/markdraw_controller.dart`、`collaboration/services/scene_reconciler.dart` |
+| 聚焦与渲染 | `whiteboard/views/whiteboard_page.dart`、`editor_core/src/rendering/static_canvas_painter.dart`、`editor_core/src/rendering/remote_wet_ink_painter.dart` |
+| 关键语义 | `collaborationOwner` 只用于显示；聚焦不改 Scene/History/SQLite/网络；单遍连续 dim 保持 z 序；外部产物剥离归属；缺失 creatorKey 时 fail-open。 |
+| 自动化证据 | `test/features/whiteboard/collaboration/`、`editor_core/`、`views/` 中的 owner、reconciler、focus、导出和性能测试 |
+| 人工验收 | Web/Windows 双端协作冒烟；鸿蒙真机 Profile/GPU 覆盖普通协作、PDF、1000/5000 元素、跨 owner 拖动、连续书写和快速切换头像 |
+
+修改该区域时，必须同时检查 `customData` 深合并、copy-on-write、旧客户端兼容、外部导出净化和本机 focus 边界；不得把 creator 当权限或把逻辑分组改成物理图层。

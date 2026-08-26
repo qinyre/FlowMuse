@@ -212,7 +212,7 @@ dependency_overrides:
 ### 遗留约束
 
 - 新增应用设置项走 `LocalSettingsRepository`,不要引入 shared_preferences 调用。
-- 备份格式版本(=2)与 DB schema 版本(=4)是两个独立常量,勿混淆。
+- 备份格式版本(=2)与 DB schema 版本(当前为=5)是两个独立常量,勿混淆。
 
 ---
 

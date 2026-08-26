@@ -35,10 +35,11 @@
 ├── README.md
 ├── docs/                         # 面向教师与团队的项目文档
 │   ├── 项目说明/                    # 需求正文、架构硬约束
-│   ├── 项目报告/                    # 成员周报与总结报告
-│   ├── 验收材料/                    # Sprint 验收要求、报告与实测附件
 │   ├── 技术设计/                    # 架构、接口、数据模型与专题设计
-│   └── 研发记录/                    # 计划、调研、排障、归档与许可证
+│   ├── 研发记录/                    # 计划、调研、排障、归档与许可证
+│   ├── 周报与总结报告/              # 本地过程材料（Git 忽略）
+│   ├── 验收材料/                    # 本地验收材料（Git 忽略）
+│   └── 参赛文档/                    # 本地参赛材料（Git 忽略）
 ├── FlowMuse-App/                 # Flutter 前端（主工程）
 │   ├── lib/                      # Dart 源码（见 1.2）
 │   ├── test/                     # 单元测试与 widget 测试
@@ -88,9 +89,10 @@ lib/
 | `.agent/forbidden_zones.md` | H10 禁飞区、人工讲解要点与测试入口                               |
 | `.agent/ai_usage.md`        | 项目 AI 使用日志；验收材料中保留同内容副本供教师查看             |
 | `docs/项目说明/项目需求.md` | 产品要做什么（功能需求清单）                                     |
-| `docs/项目说明/架构约束.md` | 架构硬约束（Excalidraw 对齐原则）                                |
-| `docs/项目报告/*.md`        | 成员周报与过程总结（人类过程材料，非 AI 默认必读）               |
-| `docs/验收材料/`            | Sprint 验收要求、质量门禁、AI 日志副本与实测附件（人类验收材料） |
+| `docs/项目说明/架构约束.md` | 架构硬约束（Excalidraw 对齐与协作归属边界）                       |
+| `docs/周报与总结报告/`      | 成员周报与过程总结（本地忽略，非 AI 默认必读）                    |
+| `docs/验收材料/`            | Sprint 验收要求、质量门禁与实测附件（本地忽略）                   |
+| `docs/参赛文档/`            | 竞赛过程材料（本地忽略）                                          |
 | `docs/技术设计/前端架构.md` | 前端架构设计（分层、模块、跨平台策略）                           |
 | `docs/技术设计/接口设计.md` | 接口设计（后端 HTTP/Socket.IO、Repository、Provider）            |
 | `docs/技术设计/数据模型.md` | 数据模型（SQLite schema、领域类、元素模型）                      |
@@ -394,6 +396,8 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 - **token 安全**：账户 token 存 `flutter_secure_storage`（key `flowmuse.auth.token`），**不要**存到 `local_settings` 表或明文文件。
 - **日志与测试脱敏**：不得向 `debugPrint`、异常消息、测试失败输出、截图或提交记录写入 token、ownerKey、roomKey、AES 密钥、白板明文或可还原的协作密文。排障日志只记录脱敏后的标识、长度、状态码或哈希前缀。
 - **乐观锁**：协作快照用 `baseSceneVersion/baseSceneHash`，冲突返回 409 时走 reconcile 重试，不要直接覆盖。
+- **创建者归属只用于显示**：元素的 `customData.flowMuse.collaborationOwner` 是不可变创建者快照，不得用于权限、锁定或鉴权；聚焦状态只存在本机内存，不写 Scene、History、SQLite 或网络消息。
+- **归属数据要保护出口**：协作密文和内部本地存储保留 `collaborationOwner`；所有外部导出和分享产物必须经过 sanitizer，剥离该字段但保留其他 `flowMuse` 扩展键。
 - **软删除优先**：笔记删除默认软删除（置 `deleted_at`），可恢复；物理删除才级联。
 
 ---

@@ -966,7 +966,7 @@ git diff -- FlowMuse-App/ohos FlowMuse-App/android FlowMuse-App/ios FlowMuse-App
 - 无 creatorKey/displayName 出现在 debug log 快照。
 - 使用实测可用的 `dart analyze --format=machine` 保存基线与本分支诊断；先按 machine 格式反转义 file 字段，再归一化为相对 `FlowMuse-App/` 且统一使用 `/` 分隔符的路径，以 `severity + code + file + message` 为键做 **multiset 计数差**。line/column/length 只供人工定位，不进入门禁键，避免存量诊断行号平移造成假红。本分支相对上述 42-issue 基线不得新增任何 error、warning 或 info，也不能只比较总数或普通 set，以免吞掉同键重复项；诊断导致的 exit 2 由比较脚本接管，不能把“非零”本身误判为新增问题。
 
-鸿蒙真机不作为代码审查前的自动化阻断，但合并前至少做一次 Profile/GPU 手工验证：普通协作场景、PDF 批注、1000 元素混合作者、focus×跨 owner 多选/拖动、连续书写、快速切换头像。记录设备、系统版本、Flutter 构建模式、可见元素数、dim segment 数、远端湿墨 saveLayer 数及其 bounds/覆盖面积和明显掉帧现象；没有基线前不承诺虚构的毫秒指标。
+鸿蒙真机不作为代码审查前的自动化阻断。原计划要求合并前至少做一次 Profile/GPU 手工验证，但因当前环境无真机，实际未在合并前完成，现转为发布/竞赛验收门槛并在 §18.3 跟踪：普通协作场景、PDF 批注、1000 元素混合作者、focus×跨 owner 多选/拖动、连续书写、快速切换头像。验收时记录设备、系统版本、Flutter 构建模式、可见元素数、dim segment 数、远端湿墨 saveLayer 数及其 bounds/覆盖面积和明显掉帧现象；没有基线前不承诺虚构的毫秒指标。
 
 ---
 
@@ -1096,16 +1096,16 @@ git diff -- FlowMuse-App/ohos FlowMuse-App/android FlowMuse-App/ios FlowMuse-App
 
 ### 18.2 门禁结果摘要
 
-- **格式门禁**：本分支触碰的 43 个 Dart 文件 `dart format --set-exit-if-changed` 全部通过（0 变更）。
+- **格式门禁**：本分支最终触碰的 44 个 Dart 文件 `dart format --set-exit-if-changed` 全部通过（0 变更）。
 - **analyze 门禁**：`dart analyze --format=machine` 按 severity|code|file|message multiset 差比较，基线（c40a847 worktree 实测）42 issues = 分支 42 issues，零新增 error/warning/info。
-- **测试门禁**：`test/features/whiteboard/collaboration` 94 通过；`test/features/whiteboard/editor_core` 277 通过；`test/features/whiteboard/views` 27 通过。
+- **测试门禁**：`test/features/whiteboard/collaboration` 94 通过；`test/features/whiteboard/editor_core` 280 通过；`test/features/whiteboard/views` 28 通过，共 402 个测试通过。
 - **范围门禁**：`git diff --check` 干净；FlowMuse-Server、ohos/android/ios/macos/windows/web 平台目录、pubspec.yaml 零改动；无数据库 schema 变更；无 GeneratedPluginRegistrant.ets。
 - **隐私断言**：全库无 CollaborationDebugLog.write 调用携带 creatorKey/displayName/userId；owner_repair 日志脱敏测试锁定只输出 `ownerConflictCount=N ownerBackfillCount=N`。
 - **外部导出**：六类外部最终产物（.markdraw/.excalidraw/.json/PNG tEXt/SVG comment/分享与库文件）经测试断言无 collaborationOwner；内部 SQLite/协作密文保留（serializeScene 内部路径源码门禁锁定）。
 
-### 18.3 真机人工验收待办（合并前完成）
+### 18.3 真机人工验收状态（合并后仍待办）
 
-当前环境无鸿蒙真机，以下 Profile/GPU 手工验证项按 v4 §13 最后一段执行后回填：普通协作场景、PDF 批注、1000 元素混合作者、focus×跨 owner 多选/拖动、连续书写、快速切换头像；记录设备型号、系统版本、Flutter 构建模式、可见元素数、dim segment 数、远端湿墨 saveLayer 数及其 bounds 覆盖面积与明显掉帧现象。真机数据不达标时按 v4 §7.4 另开 renderer alpha multiplier fallback 决策。
+当前环境无鸿蒙真机，代码已合入 `main`，但以下 Profile/GPU 手工验证项尚未完成，因此 Issue #8 的真机验收项仍保持 OPEN：普通协作场景、PDF 批注、1000 元素混合作者、focus×跨 owner 多选/拖动、连续书写、快速切换头像。验收时需记录设备型号、系统版本、Flutter 构建模式、可见元素数、dim segment 数、远端湿墨 saveLayer 数及其 bounds 覆盖面积与明显掉帧现象。真机数据不达标时按 v4 §7.4 另开 renderer alpha multiplier fallback 决策；该项应在发布或竞赛最终验收前关闭，不再表述为“合并前”阻断。
 
 ### 18.4 实现裁决登记
 
@@ -1119,4 +1119,10 @@ git diff -- FlowMuse-App/ohos FlowMuse-App/android FlowMuse-App/ios FlowMuse-App
 1. **聚焦通知整页重建**（提交 acc4867）：`_onControllerNotifyForFocus` 原在聚焦期间对每次 Controller 通知无条件 `setState`，连续书写/拖动等高频通知会整页重建 WhiteboardPage。修复为缓存 `_lastFocusEmpty`，仅当聚焦组"空 ↔ 有内容"翻转时重建；`_focusCreator/_focusHistory/_toggleCreatorFocus/_exitFocus` 与房间清理路径同步缓存；源码门禁锁定 setState 必须位于空态守卫之后。未聚焦时监听零开销，pill 在线名字刷新仍由 presence 路径承担。
 2. **远端湿墨聚焦 bounds 每帧重扫冻结点**（提交 7d857f2）：`_strokeBounds` 原每次绘制遍历全部 frozenBlocks/tailSegments（最长 16384 点/笔 × 64 笔），抵消 Picture 缓存的增量设计。修复为 store 侧增量维护：新增 `RemoteWetInkBounds` 纯几何类型；`RemoteWetInkBlock.bounds` 在成块/合并时一次计算；`RemoteWetInkStrokeSnapshot.frozenBounds` 随点到达增量扩展；painter 每帧只扫描有限的 tail 段（≤64 点+边界点）。新增回归：16k 长笔（断言 frozenBounds 极值、dim 层 bounds 含极值+margin、两次 paint `lastFrameTailPointCount` 恒为 64 且 bounds 幂等）、64-stroke 满房逐层断言，以及源码门禁（`_strokeBounds` 禁止引用 frozenBlocks）。
 
-门禁复跑（修复后）：格式门禁全过；analyze multiset 基线 42 = 分支 42 零新增；三测试目录 94 + 280 + 28 全绿（总计 402）；范围门禁（服务端/平台/pubspec/schema）零改动。鸿蒙真机 Profile 人工验收（§18.3）仍为合并前不可豁免项——审查确认 5000 交替作者元素可产生 2500 个 dim saveLayer，须在真机验证通过后方可合并。
+门禁复跑（修复后）：格式门禁全过；analyze multiset 基线 42 = 分支 42 零新增；三测试目录 94 + 280 + 28 全绿（总计 402）；范围门禁（服务端/平台/pubspec/schema）零改动。鸿蒙真机 Profile 人工验收（§18.3）在当前环境仍未完成，审查确认 5000 交替作者元素可产生 2500 个 dim saveLayer；该项已登记为合并后的发布/竞赛验收门槛。
+
+### 18.6 主干合并状态（2026-08-26）
+
+- Issue #8 实现分支已合入 `main`，合入代码提交为 `e1fad29`；GitHub Actions 质量门禁已通过。
+- 文档同步提交为 `9e50093`，当前本地 `main` 相对 `origin/main` 超前 1 个提交，推送前需按团队流程确认。
+- 自动化测试、静态检查、导出隐私和结构化压力证据已完成；鸿蒙真机 Profile/GPU 尚未执行，不能把 Issue #8 标记为“全部验收完成”。

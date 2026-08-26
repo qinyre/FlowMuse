@@ -240,6 +240,13 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 | 协作消息 | AES-GCM-128 加密后的 Excalidraw JSON |
 | 本地备份 | `flowmuse-backup.json`(备份格式版本 = 2,与 DB schema 版本独立) |
 
+### 5.1 协作归属元数据
+
+- 元素归属键固定为 `customData.flowMuse.collaborationOwner`，v1 字段为 `version`、`creatorKey`、`displayName`、`isGuest`；新增字段必须保持深合并和未知键保留。
+- `creatorKey` 和 `displayName` 只用于显示和湿墨分类，不能作为权限、锁定、鉴权或可信身份判断；日志、异常、截图和测试输出不得记录这些值。
+- 聚焦状态只能存在页面/渲染层本地内存，不得写入 Scene、History、SQLite、快照或协作消息；外部导出统一走 sanitizer，内部存储和协作密文保留归属。
+- 修改 reconciler 或 owner helper 时必须采用 copy-on-write，不能原地修改输入元素或嵌套 `customData`；同时覆盖旧客户端缺字段和 LWW 胜者回填测试。
+
 ---
 
 ## 6. Git 与提交约定
