@@ -126,6 +126,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   CollaborationFocusTarget? _focusTarget;
   final Map<String, String> _lastKnownCreatorNames =
       {}; // creatorKey -> 最后已知在线名
+  bool? _lastFocusEmpty; // 上次通知时的聚焦组空态缓存（null = 未聚焦）
   bool _temporarySaved = false;
   int _openGeneration = 0;
   RealtimeConnectionStatus? _lastRealtimeStatus;
@@ -2900,17 +2901,23 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         labelSnapshot: labelSnapshot,
         isGuest: isGuest,
       );
+      _lastFocusEmpty = _creatorFocusIsEmpty(creatorKey);
     });
   }
 
-  // ignore: unused_element
   void _focusHistory() {
-    setState(() => _focusTarget = const HistoricalFocus());
+    setState(() {
+      _focusTarget = const HistoricalFocus();
+      _lastFocusEmpty = _historyFocusIsEmpty();
+    });
   }
 
   void _exitFocus() {
     if (_focusTarget != null) {
-      setState(() => _focusTarget = null);
+      setState(() {
+        _focusTarget = null;
+        _lastFocusEmpty = null;
+      });
     }
   }
 
@@ -2927,6 +2934,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         labelSnapshot: labelSnapshot,
         isGuest: isGuest,
       );
+      final target = _focusTarget;
+      _lastFocusEmpty = target is CreatorFocus
+          ? _creatorFocusIsEmpty(target.creatorKey)
+          : (target is HistoricalFocus ? _historyFocusIsEmpty() : null);
     });
   }
 
@@ -3037,11 +3048,23 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       );
       return;
     }
-    // 聚焦中：目标组内容变化时刷新 pill 空态文案
-    if (_focusTarget != null) {
-      setState(() {}); // pill 文案在 build 中按 Scene 计算；仅在聚焦期间
-      // 付出整页重建成本（未聚焦时本监听零开销），不得在此追加其他工作
+    // 聚焦中：仅当目标组"空 ↔ 有内容"翻转时才重建（评审修复：连续书写
+    // /拖动等高频 Controller 通知不得整页重建 WhiteboardPage）。pill 的
+    // 在线名字刷新由 presence 路径的 setState 与 provider watch 承担；
+    // 未聚焦时本监听零开销。
+    final target = _focusTarget;
+    if (target == null) return;
+    final empty = _focusGroupIsEmpty(target);
+    if (_lastFocusEmpty != empty) {
+      _lastFocusEmpty = empty;
+      setState(() {});
     }
+  }
+
+  /// 聚焦目标组是否有任何未删除普通元素（v4 §6.4 空态判定）。
+  bool _focusGroupIsEmpty(CollaborationFocusTarget target) {
+    if (target is CreatorFocus) return _creatorFocusIsEmpty(target.creatorKey);
+    return _historyFocusIsEmpty();
   }
 
   NoteItem? _noteById(List<NoteItem> notes, String noteId) {

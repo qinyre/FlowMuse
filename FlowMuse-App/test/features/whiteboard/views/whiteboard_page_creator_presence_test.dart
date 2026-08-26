@@ -34,4 +34,26 @@ void main() {
       reason: '同一批次中 a 离开且 b 加入时，b 仍是新增 socket，必须触发补发',
     );
   });
+
+  test('聚焦通知仅在空态翻转时重建（源码门禁，评审 P1 修复）', () {
+    final source = page.readAsStringSync();
+    final match = RegExp(
+      'void _onControllerNotifyForFocus\\([\\s\\S]*?\\n  \\}\\r?\\n',
+    ).firstMatch(source);
+    expect(match, isNotNull, reason: '找不到 _onControllerNotifyForFocus 方法');
+    final block = match!.group(0)!;
+    expect(
+      block.contains('_lastFocusEmpty'),
+      isTrue,
+      reason: '必须用空态缓存对比，而非每次通知都重建',
+    );
+    final guardIndex = block.indexOf('_lastFocusEmpty != empty');
+    final setStateIndex = block.indexOf('setState(');
+    expect(guardIndex, greaterThanOrEqualTo(0), reason: '缺少空态翻转守卫');
+    expect(
+      setStateIndex,
+      greaterThan(guardIndex),
+      reason: 'setState 必须位于"空态翻转"守卫之后，禁止高频通知整页重建',
+    );
+  });
 }
