@@ -29,4 +29,5 @@ export 'src/rendering/paged_viewport_metrics.dart';
 export 'src/rendering/viewport_culling.dart';
 export 'src/rendering/viewport_state.dart';
 export 'src/recognition/ink_recognition.dart';
+export 'src/recognition/ink_text_sizing.dart';
 export 'src/ui/ui.dart';
