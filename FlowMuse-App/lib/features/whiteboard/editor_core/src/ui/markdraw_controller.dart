@@ -1283,7 +1283,12 @@ class MarkdrawController extends ChangeNotifier {
         return;
       }
       final elements = result.elements
-          .map(_elementFromRecognizedInk)
+          .map(
+            (recognized) => _elementFromRecognizedInk(
+              recognized,
+              inkStrokes: pendingStrokes,
+            ),
+          )
           .whereType<Element>()
           .toList();
       debugPrint(
@@ -1401,24 +1406,45 @@ class MarkdrawController extends ChangeNotifier {
     ];
   }
 
-  Element? _elementFromRecognizedInk(InkRecognizedElement recognized) {
+  Element? _elementFromRecognizedInk(
+    InkRecognizedElement recognized, {
+    List<FreedrawElement> inkStrokes = const [],
+  }) {
     final x = recognized.x;
     final y = recognized.y;
     final width = math.max(recognized.width, 1.0);
     final height = math.max(recognized.height, 1.0);
+    final inkStyle = _dominantInkStyle(inkStrokes);
     switch (recognized.type) {
       case 'text':
-        final text = recognized.text?.trim();
-        if (text == null || text.isEmpty) {
+        final text = _normalizeRecognizedText(recognized.text);
+        if (text == null) {
           return null;
         }
-        return _measuredTextElement(text, x, y, width, height);
+        return _measuredTextElement(
+          text,
+          x,
+          y,
+          width,
+          height,
+          inkColor: inkStyle?.color,
+          inkOpacity: inkStyle?.opacity,
+        );
       case 'math':
-        final text = (recognized.latex ?? recognized.text)?.trim();
-        if (text == null || text.isEmpty) {
+        final text = _normalizeRecognizedText(recognized.latex ?? recognized.text);
+        if (text == null) {
           return null;
         }
-        return _measuredTextElement(text, x, y, width, height, isMath: true);
+        return _measuredTextElement(
+          text,
+          x,
+          y,
+          width,
+          height,
+          isMath: true,
+          inkColor: inkStyle?.color,
+          inkOpacity: inkStyle?.opacity,
+        );
       case 'rectangle':
         return RectangleElement(
           id: ElementId.generate(),
@@ -1472,11 +1498,20 @@ class MarkdrawController extends ChangeNotifier {
     double width,
     double height, {
     bool isMath = false,
+    String? inkColor,
+    double? inkOpacity,
   }) {
     final anchor = _smartInkLayoutMode
         ? _nearestTemplateAnchor(Rect.fromLTWH(x, y, width, height))
         : null;
     final vertical = anchor?.writingMode == TemplateWritingMode.vertical;
+    final fontSize = anchor?.fontSize ??
+        InkTextSizing.estimateFontSize(
+          inkWidth: width,
+          inkHeight: height,
+          text: text,
+          isMath: isMath,
+        );
     final flowMuseData = anchor == null && !isMath
         ? null
         : <String, Object?>{
@@ -1496,15 +1531,96 @@ class MarkdrawController extends ChangeNotifier {
           ? math.max(text.runes.length * anchor!.lineHeight, height)
           : math.max(height, 1.0),
       text: text,
-      fontSize: anchor?.fontSize ?? 20.0,
+      fontSize: fontSize,
       lineHeight: _textLineHeightForTemplateAnchor(anchor),
       customData: flowMuseData == null ? null : {'flowMuse': flowMuseData},
     );
-    final styled = applyDefaultStyleToElement(element) as TextElement;
+    var styled = applyDefaultStyleToElement(element) as TextElement;
+    // 识别字号（跟随笔迹/模板锚点）与源笔迹颜色优先于 sticky 默认样式，
+    // 否则用户改过一次字号/笔色后，转换结果会静默偏离手写原貌。
+    styled = styled
+        .copyWith(strokeColor: inkColor, opacity: inkOpacity)
+        .copyWithText(fontSize: fontSize);
+    if (vertical) {
+      final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
+      return styled.copyWith(
+        width: math.max(measuredWidth, styled.width),
+        height: math.max(measuredHeight, styled.height),
+      );
+    }
+    if (isMath) {
+      // latex 源码的文本测量 ≠ Math.tex 渲染尺寸（display 分式高约 2.2em），
+      // 框高按 2.4em 余量兜底，避免公式被 ClipRect 裁剪。
+      final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
+      final sized = styled.copyWith(
+        width: math.max(measuredWidth, styled.width),
+        height: math.max(
+          math.max(measuredHeight, styled.height),
+          styled.fontSize * 2.4,
+        ),
+      );
+      return anchor == null
+          ? sized
+          : _alignSmartLayoutTextToAnchor(sized, anchor, false);
+    }
+    // 横排文本：框紧包裹测量后的文本，垂直居中于笔迹包围盒。
     final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
-    return styled.copyWith(
-      width: math.max(measuredWidth, styled.width),
-      height: math.max(measuredHeight, styled.height),
+    final boxWidth = math.max(measuredWidth + 4, 20.0);
+    final boxHeight = math.max(
+      measuredHeight,
+      styled.fontSize * styled.lineHeight,
+    );
+    final sized = styled.copyWith(
+      x: x,
+      y: y + (height - boxHeight) / 2,
+      width: boxWidth,
+      height: boxHeight,
+    );
+    return anchor == null
+        ? sized
+        : _alignSmartLayoutTextToAnchor(sized, anchor, false);
+  }
+
+  String? _normalizeRecognizedText(String? raw) {
+    final text = raw
+        ?.replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .trim();
+    if (text == null || text.isEmpty) {
+      return null;
+    }
+    return text;
+  }
+
+  /// 源笔迹的主导颜色：按累计点数最多的颜色，不透明度取该色加权均值。
+  ({String color, double opacity})? _dominantInkStyle(
+    List<FreedrawElement> strokes,
+  ) {
+    if (strokes.isEmpty) {
+      return null;
+    }
+    final colorWeights = <String, double>{};
+    final colorOpacitySums = <String, double>{};
+    for (final stroke in strokes) {
+      final weight = stroke.points.length.toDouble();
+      colorWeights[stroke.strokeColor] =
+          (colorWeights[stroke.strokeColor] ?? 0) + weight;
+      colorOpacitySums[stroke.strokeColor] =
+          (colorOpacitySums[stroke.strokeColor] ?? 0) +
+          stroke.opacity * weight;
+    }
+    var dominantColor = strokes.first.strokeColor;
+    var bestWeight = -1.0;
+    colorWeights.forEach((color, weight) {
+      if (weight > bestWeight) {
+        bestWeight = weight;
+        dominantColor = color;
+      }
+    });
+    final weight = colorWeights[dominantColor]!;
+    return (
+      color: dominantColor,
+      opacity: colorOpacitySums[dominantColor]! / weight,
     );
   }
 
@@ -4909,7 +5025,12 @@ class MarkdrawController extends ChangeNotifier {
         return;
       }
       final elements = result.elements
-          .map(_elementFromRecognizedInk)
+          .map(
+            (recognized) => _elementFromRecognizedInk(
+              recognized,
+              inkStrokes: strokes,
+            ),
+          )
           .whereType<Element>()
           .toList();
       debugPrint(
