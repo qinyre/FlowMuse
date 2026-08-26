@@ -13,6 +13,7 @@ class CollaboratorPresence {
     this.userId,
     this.avatarUrl = '',
     this.isGuest = true,
+    this.creatorKey,
   });
 
   final String socketId;
@@ -20,6 +21,7 @@ class CollaboratorPresence {
   final String? userId;
   final String avatarUrl;
   final bool isGuest;
+  final String? creatorKey;
   final Map<String, Object?>? pointer;
   final String button;
   final Map<String, bool> selectedElementIds;
@@ -38,6 +40,7 @@ class CollaboratorPresence {
     String? userId,
     String? avatarUrl,
     bool? isGuest,
+    String? creatorKey,
   }) {
     return CollaboratorPresence(
       socketId: socketId,
@@ -45,6 +48,7 @@ class CollaboratorPresence {
       userId: userId ?? this.userId,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       isGuest: isGuest ?? this.isGuest,
+      creatorKey: creatorKey ?? this.creatorKey,
       pointer: pointer ?? this.pointer,
       button: button ?? this.button,
       selectedElementIds: selectedElementIds ?? this.selectedElementIds,

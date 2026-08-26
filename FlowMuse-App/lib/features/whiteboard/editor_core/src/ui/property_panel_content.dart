@@ -24,6 +24,12 @@ class PropertyPanelContent extends StatefulWidget {
   final bool textOnly;
   final Size? canvasSize;
 
+  /// 宿主注入的归属动作 resolver（v4 §6.3）：editor_core 不解析
+  /// customData，由宿主根据选中元素返回归属文案与聚焦回调。
+  final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
+  Function(Element element)?
+  attributionActionResolver;
+
   const PropertyPanelContent({
     super.key,
     required this.controller,
@@ -34,6 +40,7 @@ class PropertyPanelContent extends StatefulWidget {
     required this.isEditingText,
     this.textOnly = false,
     this.canvasSize,
+    this.attributionActionResolver,
   });
 
   @override
@@ -69,6 +76,18 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (elements.length == 1 &&
+            widget.attributionActionResolver != null) ...[
+          () {
+            final action = widget.attributionActionResolver!(elements.first);
+            if (action == null) return const SizedBox.shrink();
+            return _AttributionSection(
+              attributionLabel: action.attributionLabel,
+              actionLabel: action.actionLabel,
+              onPressed: action.onPressed,
+            );
+          }(),
+        ],
         IgnorePointer(
           ignoring: isLocked,
           child: Opacity(
@@ -149,9 +168,8 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             _buildColorPickerRow(
               context,
               selected: style.backgroundColor,
-              onSelect: (c) => controller.applyStyleChange(
-                ElementStyle(backgroundColor: c),
-              ),
+              onSelect: (c) =>
+                  controller.applyStyleChange(ElementStyle(backgroundColor: c)),
               quickPicks: backgroundQuickPicks,
               target: ColorPickerTarget.background,
             ),
@@ -160,10 +178,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             _buildFillStyleRow(context, style.fillStyle),
           ],
           const SizedBox(height: 8),
-          _buildSectionLabel(
-            context,
-            isFreedrawTool ? '笔迹粗细' : '描边宽度',
-          ),
+          _buildSectionLabel(context, isFreedrawTool ? '笔迹粗细' : '描边宽度'),
           _buildStrokeWidthRow(context, style.strokeWidth),
           if (!isFreedrawTool) ...[
             const SizedBox(height: 8),
@@ -304,7 +319,8 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           canvasGlobalOffset: controller.canvasGlobalOffset,
           autoOpen: shouldAutoOpen,
           onAutoOpened: controller.clearPendingColorPicker,
-          autoActivateEyedropper: target == ColorPickerTarget.stroke &&
+          autoActivateEyedropper:
+              target == ColorPickerTarget.stroke &&
               controller.pendingEyedropper,
           onEyedropperActivated: controller.clearPendingEyedropper,
         ),
@@ -1338,6 +1354,40 @@ String _labelForArrowhead(Arrowhead arrowhead) {
     Arrowhead.crowfootMany => '多端鸦脚',
     Arrowhead.crowfootOneOrMany => '一或多鸦脚',
   };
+}
+
+class _AttributionSection extends StatelessWidget {
+  const _AttributionSection({
+    required this.attributionLabel,
+    required this.actionLabel,
+    required this.onPressed,
+  });
+
+  final String attributionLabel;
+  final String actionLabel;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              attributionLabel,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          TextButton.icon(
+            onPressed: onPressed,
+            icon: const Icon(Icons.center_focus_strong, size: 16),
+            label: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Auto-opens the font picker when [controller.pendingColorPicker] is [ColorPickerTarget.font].

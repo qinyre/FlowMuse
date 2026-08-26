@@ -212,7 +212,7 @@ dependency_overrides:
 ### 遗留约束
 
 - 新增应用设置项走 `LocalSettingsRepository`,不要引入 shared_preferences 调用。
-- 备份格式版本(=2)与 DB schema 版本(=4)是两个独立常量,勿混淆。
+- 备份格式版本(=2)与 DB schema 版本(当前为=5)是两个独立常量,勿混淆。
 
 ---
 
@@ -548,6 +548,37 @@ try {
 
 - 判断房主用 `CollaborationRoomMetadata.isOwner`（基于 `role == owner`），**不要**用 `ownerId` 比对当前用户 ID。
 - 若未来支持「转让房主」功能，需重新评估此约束（转让后原房主变为普通成员，可退出）。
+
+---
+
+## ADR-018:协作创建者元数据经现有加密 presence 可选字段同步
+
+- **状态**:已采纳
+- **日期**:2026-08-26
+- **关联**:`lib/features/whiteboard/collaboration/models/collaboration_message.dart`、`docs/研发记录/plans/2026-08-25-issue-8-collaboration-ownership-focus.md`
+
+### 背景
+
+Issue #8 需要元素创建者分组视图（归属显示与聚焦）。游客没有稳定 userId，socketId 在重连后会变化；若不在加密 payload 中广播稳定 creatorKey，游客头像与远端湿墨无法与重连前的元素关联。
+
+### 决策
+
+- `MOUSE_LOCATION`/`IDLE_STATUS`/`USER_VISIBLE_SCENE_BOUNDS` 三类消息的 AES-GCM 正文增加可选 `creatorKey`；不新增消息类型、不改 Socket.IO 事件、服务端零改动。
+- 归属存于 `customData.flowMuse.collaborationOwner`（v1 schema：version/creatorKey/displayName/isGuest），仅用于显示，不参与权限、锁定或鉴权。
+- 旧客户端忽略新字段；新客户端面对缺字段 presence 降级（禁用按作者聚焦、远端湿墨 fail-open 全亮）。
+- 外部导出（.markdraw/.excalidraw/.json/库文件/PNG tEXt/SVG comment/分享）一律剥离该字段；内部 SQLite 与协作密文保留。
+
+### 理由
+
+- 复用现有加密通道，服务端保持零知识，无 schema/协议升级成本。
+- 可选字段对旧客户端字节级兼容（缺省不写键）。
+- creatorKey 可被客户端伪造，故严格限定为显示元数据。
+
+### 遗留约束
+
+- 改 presence payload 或 owner schema 时必须跑 `collaboration_message_test.dart`、`collaboration_owner_sync_test.dart` 与 `scene_reconciler_owner_test.dart`。
+- analyze/format 门禁按 Issue 8 计划 v4 §13 固化（machine 格式 multiset 差 + 空值守卫）。
+- `_shouldKeepLocal`/`_shouldReplace` 的 LWW 比较规则不得随归属逻辑改动（ADR-013）。
 
 ---
 

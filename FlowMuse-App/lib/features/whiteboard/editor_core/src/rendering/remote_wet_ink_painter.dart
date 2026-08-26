@@ -8,6 +8,7 @@ import '../core/elements/elements.dart';
 import '../core/layout/layout.dart';
 import '../core/math/math.dart';
 import 'rough/draw_style.dart';
+import 'rough/freedraw_renderer.dart';
 import 'rough/rough_adapter.dart';
 import 'viewport_state.dart';
 
@@ -88,16 +89,26 @@ class RemoteWetInkRenderCache {
   ) {
     lastFrameTailPointCount = 0;
     for (final snapshot in snapshots) {
-      final cache = _strokes[snapshot.strokeId];
-      cache?.paint(canvas);
-      for (final segment in snapshot.tailSegments) {
-        lastFrameTailPointCount += segment.points.length;
-        _drawSegment(canvas, segment, snapshot, adapter);
-      }
-      _lastPaintedMaxPointIndex[snapshot.strokeId] = snapshot.maxPointIndex;
-      _lastPaintedSnapshots[snapshot.strokeId] = snapshot;
-      _markPaintedIndices(snapshot);
+      paintStroke(canvas, snapshot, adapter);
     }
+  }
+
+  /// 单个 stroke 的绘制（含 tail 与簿记）。painter 的聚焦包装在调用侧，
+  /// 本方法不感知 focus —— 几何缓存 Picture 复用不受 alpha 影响。
+  void paintStroke(
+    Canvas canvas,
+    RemoteWetInkStrokeSnapshot snapshot,
+    RoughAdapter adapter,
+  ) {
+    final cache = _strokes[snapshot.strokeId];
+    cache?.paint(canvas);
+    for (final segment in snapshot.tailSegments) {
+      lastFrameTailPointCount += segment.points.length;
+      _drawSegment(canvas, segment, snapshot, adapter);
+    }
+    _lastPaintedMaxPointIndex[snapshot.strokeId] = snapshot.maxPointIndex;
+    _lastPaintedSnapshots[snapshot.strokeId] = snapshot;
+    _markPaintedIndices(snapshot);
   }
 
   void dispose() {
@@ -132,6 +143,10 @@ class RemoteWetInkPainter extends CustomPainter {
     required this.adapter,
     required this.viewport,
     this.layout,
+    this.focusedCreatorKey,
+    this.focusHistoricalContent = false,
+    this.socketIdCreatorKeys = const {},
+    this.presenceCreatorRevision = 0,
   }) : super(repaint: store);
 
   final RemoteWetInkStore store;
@@ -140,18 +155,98 @@ class RemoteWetInkPainter extends CustomPainter {
   final ViewportState viewport;
   final CanvasLayout? layout;
 
+  /// 协作聚焦（本机视图态纯数据，v4 §8.2）。
+  final String? focusedCreatorKey;
+  final bool focusHistoricalContent;
+  final Map<String, String> socketIdCreatorKeys;
+  final int presenceCreatorRevision;
+
   @override
   void paint(Canvas canvas, Size size) {
     final strokes = store.strokes;
     cache.sync(strokes, adapter);
     if (strokes.isEmpty) return;
 
+    final focusActive = focusedCreatorKey != null || focusHistoricalContent;
     canvas.save();
     canvas.scale(viewport.zoom);
     canvas.translate(-viewport.offset.dx, -viewport.offset.dy);
     _clipToPages(canvas);
-    cache.paint(canvas, strokes, adapter);
+    // 逐 stroke 调 paintStroke 时不再经过 cache.paint 的每帧重置，这里手动清零。
+    cache.lastFrameTailPointCount = 0;
+    for (final snapshot in strokes) {
+      final alpha = focusActive ? _alphaForSnapshot(snapshot) : 1.0;
+      if (alpha >= 1.0) {
+        cache.paintStroke(canvas, snapshot, adapter);
+      } else {
+        // §8.2：逐 stroke 临时 alpha 合成，冻结 Picture 几何缓存不受污染。
+        // bounds 用实际渲染笔迹包围盒 + 最大有效线宽余量，禁止全屏层。
+        canvas.saveLayer(
+          _strokeBounds(snapshot),
+          Paint()..color = Color.fromRGBO(255, 255, 255, alpha),
+        );
+        cache.paintStroke(canvas, snapshot, adapter);
+        canvas.restore();
+      }
+    }
     canvas.restore();
+  }
+
+  /// §8.1 行为表：映射缺失 fail-open 1.0（宁全亮不错暗）；creator focus
+  /// 目标外 0.22；history focus 下有主的活动湿墨不属于历史 → 0.22。
+  double _alphaForSnapshot(RemoteWetInkStrokeSnapshot snapshot) {
+    final creatorKey = socketIdCreatorKeys[snapshot.senderSocketId];
+    if (creatorKey == null) return 1.0;
+    if (focusedCreatorKey != null) {
+      return creatorKey == focusedCreatorKey ? 1.0 : 0.22;
+    }
+    return 0.22;
+  }
+
+  Rect _strokeBounds(RemoteWetInkStrokeSnapshot snapshot) {
+    // 冻结几何的包围盒由 store 在冻结时增量维护（评审 P1 修复：聚焦层
+    // bounds 不得每帧重扫全部冻结点——最长笔迹可达 16384 点）；每帧只
+    // 扫描有限的 tail 段，与 Picture 缓存"只处理有限 tail"的设计对齐。
+    final frozen = snapshot.frozenBounds;
+    var minX = frozen?.minX ?? double.infinity;
+    var minY = frozen?.minY ?? double.infinity;
+    var maxX = frozen?.maxX ?? double.negativeInfinity;
+    var maxY = frozen?.maxY ?? double.negativeInfinity;
+    void absorb(double x, double y) {
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+
+    for (final segment in snapshot.tailSegments) {
+      if (segment.leadingPoint != null) {
+        absorb(segment.leadingPoint!.x, segment.leadingPoint!.y);
+      }
+      for (final point in segment.points) {
+        absorb(point.x, point.y);
+      }
+      if (segment.trailingPoint != null) {
+        absorb(segment.trailingPoint!.x, segment.trailingPoint!.y);
+      }
+    }
+
+    if (minX > maxX || minY > maxY) {
+      return const Rect.fromLTWH(0, 0, 1, 1);
+    }
+    // §8.2 余量按"brush sizeScale 后的最大有效线宽半径"推导：perfect_
+    // freehand 的 size 是直径 = strokeWidth × brush.sizeScale（freedraw_
+    // renderer），最大半径 = strokeWidth × sizeScale / 2。当前笔型
+    // sizeScale 上界 = highlighter 4.2，再乘 1.3 压感/变粗安全因子 + 2px
+    // 抗锯齿边界。禁止退回名义 strokeWidth/2（v4 §8.2 明令禁止）。
+    final margin =
+        snapshot.style.strokeWidth * kMaxBrushSizeScale * 0.5 * 1.3 + 2.0;
+    return Rect.fromLTRB(
+      minX - margin,
+      minY - margin,
+      maxX + margin,
+      maxY + margin,
+    );
   }
 
   void _clipToPages(Canvas canvas) {
@@ -169,11 +264,21 @@ class RemoteWetInkPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(RemoteWetInkPainter oldDelegate) =>
-      oldDelegate.store != store ||
-      oldDelegate.adapter != adapter ||
-      oldDelegate.viewport != viewport ||
-      oldDelegate.layout != layout;
+  bool shouldRepaint(RemoteWetInkPainter oldDelegate) {
+    if (oldDelegate.focusedCreatorKey != focusedCreatorKey) return true;
+    if (oldDelegate.focusHistoricalContent != focusHistoricalContent) {
+      return true;
+    }
+    final anyFocus = focusedCreatorKey != null || focusHistoricalContent;
+    if (anyFocus &&
+        oldDelegate.presenceCreatorRevision != presenceCreatorRevision) {
+      return true;
+    }
+    return oldDelegate.store != store ||
+        oldDelegate.adapter != adapter ||
+        oldDelegate.viewport != viewport ||
+        oldDelegate.layout != layout;
+  }
 }
 
 class _RemoteStrokePictureCache {

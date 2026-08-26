@@ -36,7 +36,10 @@ class MarkdrawFileHandler {
   /// Saves to [currentFilePath], or falls through to [saveAs].
   Future<void> save() async {
     if (!kIsWeb && currentFilePath != null) {
-      await writeStringToFile(currentFilePath!, controller.serializeScene());
+      await writeStringToFile(
+        currentFilePath!,
+        controller.serializeSceneForExternalExport(),
+      );
     } else {
       await saveAs();
     }
@@ -44,7 +47,7 @@ class MarkdrawFileHandler {
 
   /// Shows a save dialog (or blob download on web) and writes the scene.
   Future<void> saveAs() async {
-    final content = controller.serializeScene();
+    final content = controller.serializeSceneForExternalExport();
     if (kIsWeb) {
       downloadFile('drawing.markdraw', content);
     } else if (defaultTargetPlatform == TargetPlatform.ohos) {
@@ -76,7 +79,11 @@ class MarkdrawFileHandler {
           ],
         );
         final picked = files.first;
-        controller.loadFromContent(utf8.decode(picked.bytes), picked.name);
+        controller.loadFromContent(
+          utf8.decode(picked.bytes),
+          picked.name,
+          isExternalImport: true,
+        );
         lastOpenedFileName = picked.name;
       } on PlatformException {
         return;
@@ -102,7 +109,7 @@ class MarkdrawFileHandler {
         : null;
     if (content == null) return;
 
-    controller.loadFromContent(content, file.name);
+    controller.loadFromContent(content, file.name, isExternalImport: true);
     lastOpenedFileName = file.name;
     currentFilePath = kIsWeb ? null : file.path;
   }

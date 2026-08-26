@@ -5,10 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide Element, SelectionOverlay, TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart'
     as editor_core;
+import 'package:flow_muse/features/whiteboard/editor_core/src/editor/creator_stamping.dart';
 
 import '../../../app/app_router.dart';
 import '../../../app/app_theme_preset.dart';
@@ -25,6 +28,7 @@ import '../collaboration/models/excalidraw_scene.dart';
 import '../collaboration/models/live_ink_chunk.dart';
 import '../collaboration/models/room_collaborator.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
+import '../collaboration/services/collaboration_creator_identity.dart';
 import '../collaboration/services/collaboration_debug_log.dart';
 import '../collaboration/services/live_ink_receive_scheduler.dart';
 import '../collaboration/services/live_ink_sender.dart';
@@ -52,6 +56,7 @@ import '../ai_assistant/views/ai_agent_dialog.dart';
 import '../ai_assistant/views/region_capture_overlay.dart';
 import '../ai_assistant/models/ai_visual_attachment.dart';
 import '../speech_recognition/services/speech_recognition_service.dart';
+import 'collaboration_focus_target.dart';
 import 'smart_layout_dialogs.dart';
 import '../speech_recognition/services/speech_recognition_service_factory.dart';
 
@@ -87,6 +92,11 @@ class WhiteboardPage extends ConsumerStatefulWidget {
 
 enum _ShareSelection { png, markdraw, excalidraw, invitation }
 
+/// 计算 roomUsers 批次中的新增 socket 集合（离开方向不产生"加入"）。
+/// 公开以便源码级单测（Task 4 Step 4.1）。
+Set<String> newlyJoinedSocketIds(Set<String> previous, Set<String> next) =>
+    next.difference(previous);
+
 class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     with WidgetsBindingObserver {
   late final MarkdrawController _markdrawController;
@@ -109,6 +119,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _applyingRemoteScene = false;
   bool _collaborationOpening = false;
   String? _lastIdleState;
+  String? _guestCreatorSessionId;
+  final Map<String, String> _socketCreatorKeys =
+      {}; // socketId -> creatorKey（Task 9/14 消费）
+  int _presenceCreatorRevision = 0; // painter shouldRepaint 消费（T13 起）
+  CollaborationFocusTarget? _focusTarget;
+  final Map<String, String> _lastKnownCreatorNames =
+      {}; // creatorKey -> 最后已知在线名
+  bool? _lastFocusEmpty; // 上次通知时的聚焦组空态缓存（null = 未聚焦）
   bool _temporarySaved = false;
   int _openGeneration = 0;
   RealtimeConnectionStatus? _lastRealtimeStatus;
@@ -140,6 +158,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _markdrawController = MarkdrawController();
+    _markdrawController.onPrepareLocalResult = (result, scene) {
+      final creator = _currentCreator();
+      if (creator == null) return result;
+      return stampCreatorOnResult(result, scene, creator);
+    };
+    _markdrawController.addListener(_onControllerNotifyForFocus);
     _speechRecognitionService = createSpeechRecognitionService();
     _seedDocumentTitleFromCache();
     _markdrawController.onBrushStateChanged = (type, state) {
@@ -216,6 +240,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _loadImagesTimer?.cancel();
     _liveInkSender.cancel();
     _remoteWetInkStore.dispose();
+    _markdrawController.onPrepareLocalResult = null;
+    _markdrawController.removeListener(_onControllerNotifyForFocus);
+    _focusTarget = null;
+    _lastFocusEmpty = null;
+    _lastKnownCreatorNames.clear();
+    _guestCreatorSessionId = null;
+    _socketCreatorKeys.clear();
+    _presenceCreatorRevision++;
     unawaited(_collaborationRepository.stop());
     _markdrawController.dispose();
     super.dispose();
@@ -792,9 +824,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (_smartLayoutFlowActive) return;
     final pages = _markdrawController.layout.pages;
     if (pages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前笔记没有页面')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前笔记没有页面')));
       return;
     }
     List<String> selected;
@@ -814,10 +846,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         builder: (dialogContext) => SmartLayoutScopeDialog(
           pages: pages,
           currentPageId: currentPage?.id,
-          thumbnailBuilder: (bounds) => _markdrawController.exportRegionPng(
-            bounds,
-            maxLongestSide: 120,
-          ),
+          thumbnailBuilder: (bounds) =>
+              _markdrawController.exportRegionPng(bounds, maxLongestSide: 120),
         ),
       );
       if (selection == null) return;
@@ -856,9 +886,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             // 取消整个流程：停止后续页，已应用页保留
             setState(() => _smartLayoutFlowActive = false);
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('已取消，完成 $applied 页')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('已取消，完成 $applied 页')));
             }
             return;
         }
@@ -923,14 +953,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     SmartLayoutPlanResult result;
     try {
       messenger.showSnackBar(
-        const SnackBar(
-          duration: Duration(days: 1),
-          content: Text('智能排版识别中…'),
-        ),
+        const SnackBar(duration: Duration(days: 1), content: Text('智能排版识别中…')),
       );
-      result = await _markdrawController.buildSmartLayoutPlan(
-        pageId: pageId,
-      );
+      result = await _markdrawController.buildSmartLayoutPlan(pageId: pageId);
     } catch (catchError) {
       messenger.removeCurrentSnackBar();
       messenger.showSnackBar(
@@ -957,21 +982,20 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         );
         _markdrawController.setSmartLayoutGhost(null);
         return switch (action) {
-          SmartLayoutBarAction.retry =>
-            _runSmartLayoutPage(pageId, isMultiPage: isMultiPage),
+          SmartLayoutBarAction.retry => _runSmartLayoutPage(
+            pageId,
+            isMultiPage: isMultiPage,
+          ),
           SmartLayoutBarAction.skipPage => _SmartLayoutPageOutcome.skipped,
           SmartLayoutBarAction.cancelAll => _SmartLayoutPageOutcome.cancelled,
           SmartLayoutBarAction.apply ||
-          SmartLayoutBarAction.applyAndDrop =>
-            _SmartLayoutPageOutcome.failed,
+          SmartLayoutBarAction.applyAndDrop => _SmartLayoutPageOutcome.failed,
         };
       }
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            result.error != null
-                ? '智能排版失败：${result.error}'
-                : '本页没有可智能排版的手写内容',
+            result.error != null ? '智能排版失败：${result.error}' : '本页没有可智能排版的手写内容',
           ),
         ),
       );
@@ -1434,6 +1458,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _loadImagesTimer = null;
     _lastIdleState = null;
     _lastRealtimeStatus = null;
+    _guestCreatorSessionId = null;
+    _socketCreatorKeys.clear();
+    _presenceCreatorRevision++;
+    _focusTarget = null;
+    _lastFocusEmpty = null;
+    _lastKnownCreatorNames.clear();
   }
 
   Future<bool?> _confirmEndCollaborationRoom() {
@@ -1641,6 +1671,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _listenToRoom(CollaborationRoom room) async {
     _disposingOrLeaving = false;
+    if (_collaborationIdentity.isGuest && _guestCreatorSessionId == null) {
+      _guestCreatorSessionId = const Uuid().v4();
+    }
     await _collaborationSubscription?.cancel();
     _collaborationSubscription = _collaborationRepository
         .encryptedMessages(room)
@@ -1662,10 +1695,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = _collaborationRepository.roomUsers.listen((users) {
       final nextSocketIds = {for (final user in users) user.socketId};
+      final joinedSocketIds = newlyJoinedSocketIds(
+        _roomSocketIds,
+        nextSocketIds,
+      );
       for (final departed in _roomSocketIds.difference(nextSocketIds)) {
         _remoteWetInkStore.removeSender(departed);
+        _socketCreatorKeys.remove(departed);
       }
       _roomSocketIds = nextSocketIds;
+      if (joinedSocketIds.isNotEmpty) {
+        // 后加入者触发：本端强制绕过 idle 去重补发一次自身 presence，
+        // 使静止的先在线者身份可达（v4 §4.4 规则 3）。单批多人加入只发一次；
+        // 含自身 socket 时该发送幂等冗余，无害；只响应加入，不响应离开。
+        _broadcastIdleState(_lastIdleState ?? 'active', force: true);
+      }
       _runAfterStableFrame(() {
         ref.read(whiteboardViewModelProvider.notifier).applyRoomUsers(users);
       });
@@ -1697,8 +1741,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           if (status == RealtimeConnectionStatus.joined &&
               previous == RealtimeConnectionStatus.reconnecting) {
             unawaited(_refreshCollaborationSnapshot(room));
+            _broadcastIdleState(_lastIdleState ?? 'active', force: true);
           }
         });
+
+    // 首次 start/join 完成点：主动发送一次当前 presence，让已有成员立即
+    // 拿到 creatorKey，不等待用户移动指针（v4 §4.4 规则 2）。
+    _broadcastIdleState(_lastIdleState ?? 'active', force: true);
   }
 
   Future<void> _handleRoomEnded(CollaborationRoomMetadata metadata) async {
@@ -1924,6 +1973,41 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               .read(whiteboardViewModelProvider.notifier)
               .applyPresenceMessage(message);
         });
+        final presenceSocketId = message.payload['socketId'] as String?;
+        final fallbackUserId = message.payload['userId'] as String?;
+        final presenceCreatorKey =
+            message.payload['creatorKey'] as String? ??
+            (fallbackUserId == null
+                ? null
+                : creatorKeyForUserId(fallbackUserId));
+        if (presenceSocketId != null && presenceCreatorKey != null) {
+          final changed =
+              _socketCreatorKeys[presenceSocketId] != presenceCreatorKey;
+          if (changed) {
+            _socketCreatorKeys[presenceSocketId] = presenceCreatorKey;
+            _presenceCreatorRevision++;
+          }
+        }
+        final presenceUsername = message.payload['username'] as String? ?? '';
+        if (presenceCreatorKey != null && presenceUsername.isNotEmpty) {
+          final knownAs = _lastKnownCreatorNames[presenceCreatorKey];
+          if (knownAs != presenceUsername) {
+            _lastKnownCreatorNames[presenceCreatorKey] = presenceUsername;
+            final target = _focusTarget;
+            if (target is CreatorFocus &&
+                target.creatorKey == presenceCreatorKey &&
+                target.labelSnapshot != presenceUsername &&
+                mounted) {
+              setState(
+                () => _focusTarget = CreatorFocus(
+                  target.creatorKey,
+                  labelSnapshot: presenceUsername, // 离线后回退到最新在线名，不倒退
+                  isGuest: target.isGuest,
+                ),
+              );
+            }
+          }
+        }
       case CollaborationMessageType.inkChunk:
       case CollaborationMessageType.invalidResponse:
         break;
@@ -2336,6 +2420,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               children: [
                 MarkdrawEditor(
                   controller: _markdrawController,
+                  collaborationFocusLabel: _focusPillLabel(),
+                  onExitCollaborationFocus: _exitFocus,
+                  attributionActionResolver: _attributionFor,
+                  focusedCreatorKey: _focusTarget is CreatorFocus
+                      ? (_focusTarget as CreatorFocus).creatorKey
+                      : null,
+                  focusHistoricalContent: _focusTarget is HistoricalFocus,
+                  socketIdCreatorKeys: Map.unmodifiable(_socketCreatorKeys),
+                  presenceCreatorRevision: _presenceCreatorRevision,
                   speechRecognitionService: _speechRecognitionService,
                   speechRecognitionEnabled: !_aiSpeechInputActive,
                   config: const MarkdrawEditorConfig(),
@@ -2442,8 +2535,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       .read(inkRecognitionRepositoryProvider)
                       .composeSmartLayout(request),
                   onAiPressed: _toggleAiAgent,
-                  onSmartLayoutPressed: () =>
-                      _startSmartLayoutFlow(),
+                  onSmartLayoutPressed: () => _startSmartLayoutFlow(),
                   onLiveFreedrawChanged: state.collaborating
                       ? _broadcastLiveFreedraw
                       : null,
@@ -2581,17 +2673,60 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     WhiteboardState state,
     CollaborationIdentity identity,
   ) {
+    final ownCreatorKey = _currentCreatorKey();
+    final groups = <String, List<CollaboratorPresence>>{};
+    final keyless = <CollaboratorPresence>[];
+    for (final presence in state.collaborators.values) {
+      final key = presence.creatorKey;
+      if (key == null) {
+        keyless.add(presence); // 旧游客：仅按 socket 显示，不合并不猜测
+        continue;
+      }
+      if (key == ownCreatorKey) continue; // 当前用户 badge 代表自己的组（含多设备）
+      groups.putIfAbsent(key, () => []).add(presence);
+    }
+
+    CollaborationParticipantBadge groupBadge(
+      String key,
+      List<CollaboratorPresence> members,
+    ) {
+      final representative = _onlinePresenceFor(key) ?? members.first;
+      return CollaborationParticipantBadge(
+        username: representative.username,
+        avatarUrl: representative.avatarUrl,
+        idle: representative.idleState != CollaboratorIdleState.active,
+        creatorKey: key,
+        focused: _isFocusedOn(key),
+        onTap: () => _toggleCreatorFocus(
+          key,
+          labelSnapshot: representative.username,
+          isGuest: representative.isGuest,
+        ),
+      );
+    }
+
     return [
       CollaborationParticipantBadge(
         username: identity.username,
         avatarUrl: identity.avatarUrl,
         isCurrentUser: true,
+        creatorKey: ownCreatorKey,
+        focused: ownCreatorKey != null && _isFocusedOn(ownCreatorKey),
+        onTap: ownCreatorKey == null
+            ? null
+            : () => _toggleCreatorFocus(
+                ownCreatorKey,
+                labelSnapshot: identity.username,
+                isGuest: identity.isGuest,
+              ),
       ),
-      for (final presence in state.collaborators.values)
+      for (final entry in groups.entries) groupBadge(entry.key, entry.value),
+      for (final presence in keyless)
         CollaborationParticipantBadge(
           username: presence.username,
           avatarUrl: presence.avatarUrl,
           idle: presence.idleState != CollaboratorIdleState.active,
+          // creatorKey 缺失：显示但禁用按作者聚焦（v4 §6.2）
         ),
     ];
   }
@@ -2661,6 +2796,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         username: identity.username,
         userId: identity.userId,
         avatarUrl: identity.avatarUrl,
+        creatorKey: _currentCreatorKey(),
       ),
     );
   }
@@ -2681,6 +2817,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         userId: identity.userId,
         avatarUrl: identity.avatarUrl,
         sceneBounds: _collaborationAdapter.visibleSceneBounds(canvasSize),
+        creatorKey: _currentCreatorKey(),
       ),
     );
   }
@@ -2704,11 +2841,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     });
   }
 
-  void _broadcastIdleState(String state) {
+  void _broadcastIdleState(String state, {bool force = false}) {
     if (!_canMutateWhiteboard) {
       return;
     }
-    if (_lastIdleState == state) {
+    if (!force && _lastIdleState == state) {
       return;
     }
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
@@ -2724,12 +2861,222 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         username: identity.username,
         userId: identity.userId,
         avatarUrl: identity.avatarUrl,
+        creatorKey: _currentCreatorKey(),
       ),
     );
   }
 
   CollaborationIdentity get _collaborationIdentity {
     return ref.read(accountViewModelProvider).collaborationIdentity;
+  }
+
+  /// 当前操作者 creatorKey。仅在协作房间内非空：本地笔记（activeRoom 为
+  /// null）不盖章，旧元素保持"历史内容"语义（v4 §0.1 首版范围）。
+  String? _currentCreatorKey() => _currentCreator()?.creatorKey;
+
+  CollaborationCreator? _currentCreator() {
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room == null) return null;
+    final identity = _collaborationIdentity;
+    if (identity.isGuest) {
+      final sessionId = _guestCreatorSessionId;
+      if (sessionId == null) return null;
+      return CollaborationCreator(
+        creatorKey: creatorKeyForGuest(room.roomId, sessionId),
+        displayName: identity.username,
+        isGuest: true,
+      );
+    }
+    final userId = identity.userId;
+    if (userId == null) return null;
+    return CollaborationCreator(
+      creatorKey: creatorKeyForUserId(userId),
+      displayName: identity.username,
+      isGuest: false,
+    );
+  }
+
+  // ignore: unused_element
+  bool _isFocusedOn(String creatorKey) =>
+      _focusTarget is CreatorFocus &&
+      (_focusTarget as CreatorFocus).creatorKey == creatorKey;
+
+  // ignore: unused_element
+  void _focusCreator(
+    String creatorKey, {
+    required String labelSnapshot,
+    required bool isGuest,
+  }) {
+    setState(() {
+      _focusTarget = CreatorFocus(
+        creatorKey,
+        labelSnapshot: labelSnapshot,
+        isGuest: isGuest,
+      );
+      _lastFocusEmpty = _creatorFocusIsEmpty(creatorKey);
+    });
+  }
+
+  void _focusHistory() {
+    setState(() {
+      _focusTarget = const HistoricalFocus();
+      _lastFocusEmpty = _historyFocusIsEmpty();
+    });
+  }
+
+  void _exitFocus() {
+    if (_focusTarget != null) {
+      setState(() {
+        _focusTarget = null;
+        _lastFocusEmpty = null;
+      });
+    }
+  }
+
+  // ignore: unused_element
+  void _toggleCreatorFocus(
+    String creatorKey, {
+    required String labelSnapshot,
+    required bool isGuest,
+  }) {
+    setState(() {
+      _focusTarget = toggleCollaborationCreatorFocus(
+        _focusTarget,
+        creatorKey: creatorKey,
+        labelSnapshot: labelSnapshot,
+        isGuest: isGuest,
+      );
+      final target = _focusTarget;
+      _lastFocusEmpty = target is CreatorFocus
+          ? _creatorFocusIsEmpty(target.creatorKey)
+          : (target is HistoricalFocus ? _historyFocusIsEmpty() : null);
+    });
+  }
+
+  /// §6.2 代表项选择：active > idle > away，状态相同按 socketId 升序。
+  CollaboratorPresence? _onlinePresenceFor(String creatorKey) {
+    final collaborators = ref.read(whiteboardViewModelProvider).collaborators;
+    final candidates =
+        [
+          for (final presence in collaborators.values)
+            if (presence.creatorKey == creatorKey) presence,
+        ]..sort((a, b) {
+          int rank(CollaboratorIdleState s) => switch (s) {
+            CollaboratorIdleState.active => 0,
+            CollaboratorIdleState.idle => 1,
+            CollaboratorIdleState.away => 2,
+          };
+          final byRank = rank(a.idleState).compareTo(rank(b.idleState));
+          return byRank != 0 ? byRank : a.socketId.compareTo(b.socketId);
+        });
+    return candidates.isEmpty ? null : candidates.first;
+  }
+
+  String? _focusPillLabel() {
+    final target = _focusTarget;
+    if (target == null) return null;
+    if (target is HistoricalFocus) {
+      return _historyFocusIsEmpty() ? '正在聚焦：历史内容（暂无已提交的历史内容）' : '正在聚焦：历史内容';
+    }
+    if (target is! CreatorFocus) return null;
+    final online = _onlinePresenceFor(target.creatorKey);
+    if (online != null) {
+      return _creatorFocusIsEmpty(target.creatorKey)
+          ? '正在聚焦：${online.username}（该创建者暂无已提交内容）'
+          : '正在聚焦：${online.username}';
+    }
+    final suffix = target.isGuest ? '（历史会话）' : '';
+    final base = '正在聚焦：${target.labelSnapshot}$suffix';
+    return _creatorFocusIsEmpty(target.creatorKey)
+        ? '$base（该创建者暂无已提交内容）'
+        : base;
+  }
+
+  /// 空态按整个 Scene 的已提交（未删除、非系统）普通元素判断。
+  bool _creatorFocusIsEmpty(String creatorKey) {
+    final scene = _markdrawController.editorState.scene;
+    return !scene.activeElements.any(
+      (element) =>
+          !element.isCanvasPage &&
+          !element.isPdfBackground &&
+          readCreator(element)?.creatorKey == creatorKey,
+    );
+  }
+
+  bool _historyFocusIsEmpty() {
+    final scene = _markdrawController.editorState.scene;
+    return !scene.activeElements.any(
+      (element) =>
+          !element.isCanvasPage &&
+          !element.isPdfBackground &&
+          readCreator(element) == null,
+    );
+  }
+
+  /// §6.3 元素入口 resolver：editor_core 不解析 customData，宿主决定文案。
+  /// 离线回退名用"最后已知在线名"（Task 9 的 _lastKnownCreatorNames，
+  /// 持续刷新），仅当从未在线过才退到创建时快照（v4 §6.3/§6.1）。
+  ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
+  _attributionFor(editor_core.Element element) {
+    if (element.isCanvasPage || element.isPdfBackground) return null;
+    final creator = readCreator(element);
+    if (creator == null) {
+      return (
+        attributionLabel: '历史内容',
+        actionLabel: '查看历史内容',
+        onPressed: _focusHistory,
+      );
+    }
+    final online = _onlinePresenceFor(creator.creatorKey);
+    final name =
+        online?.username ??
+        _lastKnownCreatorNames[creator.creatorKey] ??
+        creator.displayName;
+    // v4 §6.4：离线游客旧会话的属性入口同样带"（历史会话）"后缀；
+    // 同 creatorKey 重新上线后缀消失（online != null 分支自然不带）。
+    final suffix = online == null && creator.isGuest ? '（历史会话）' : '';
+    return (
+      attributionLabel: '由 $name$suffix 创建',
+      actionLabel: '查看$name的内容',
+      onPressed: () => _toggleCreatorFocus(
+        creator.creatorKey,
+        labelSnapshot: name,
+        isGuest: creator.isGuest,
+      ),
+    );
+  }
+
+  /// zen/viewMode 清退 + 聚焦期间空态文案刷新（v4 §6.4）。
+  void _onControllerNotifyForFocus() {
+    if (!mounted) return;
+    if ((_markdrawController.zenMode || _markdrawController.viewMode) &&
+        _focusTarget != null) {
+      _exitFocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('已退出协作者聚焦'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    // 聚焦中：仅当目标组"空 ↔ 有内容"翻转时才重建（评审修复：连续书写
+    // /拖动等高频 Controller 通知不得整页重建 WhiteboardPage）。pill 的
+    // 在线名字刷新由 presence 路径的 setState 与 provider watch 承担；
+    // 未聚焦时本监听零开销。
+    final target = _focusTarget;
+    if (target == null) return;
+    final empty = _focusGroupIsEmpty(target);
+    if (_lastFocusEmpty != empty) {
+      _lastFocusEmpty = empty;
+      setState(() {});
+    }
+  }
+
+  /// 聚焦目标组是否有任何未删除普通元素（v4 §6.4 空态判定）。
+  bool _focusGroupIsEmpty(CollaborationFocusTarget target) {
+    if (target is CreatorFocus) return _creatorFocusIsEmpty(target.creatorKey);
+    return _historyFocusIsEmpty();
   }
 
   NoteItem? _noteById(List<NoteItem> notes, String noteId) {

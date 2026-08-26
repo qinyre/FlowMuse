@@ -521,6 +521,7 @@ class CollaborationRepository {
     required String username,
     String? userId,
     String? avatarUrl,
+    String? creatorKey,
   }) {
     return _send(
       room: room,
@@ -533,6 +534,7 @@ class CollaborationRepository {
         username: username,
         userId: userId,
         avatarUrl: avatarUrl,
+        creatorKey: creatorKey,
       ),
     );
   }
@@ -543,6 +545,7 @@ class CollaborationRepository {
     required String username,
     String? userId,
     String? avatarUrl,
+    String? creatorKey,
   }) {
     return _send(
       room: room,
@@ -553,6 +556,7 @@ class CollaborationRepository {
         username: username,
         userId: userId,
         avatarUrl: avatarUrl,
+        creatorKey: creatorKey,
       ),
     );
   }
@@ -563,6 +567,7 @@ class CollaborationRepository {
     required Map<String, Object?> sceneBounds,
     String? userId,
     String? avatarUrl,
+    String? creatorKey,
   }) {
     return _send(
       room: room,
@@ -573,6 +578,7 @@ class CollaborationRepository {
         sceneBounds: sceneBounds,
         userId: userId,
         avatarUrl: avatarUrl,
+        creatorKey: creatorKey,
       ),
     );
   }

@@ -1,3 +1,7 @@
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
+
+import 'collaboration_debug_log.dart';
+
 class SceneReconciler {
   SceneReconciler({DateTime Function()? now}) : _now = now ?? DateTime.now;
 
@@ -15,6 +19,7 @@ class SceneReconciler {
     };
     final added = <String>{};
     final result = <Map<String, Object?>>[];
+    final counters = _OwnerRepairCounters();
 
     for (final remote in remoteElements) {
       final remoteId = _id(remote);
@@ -27,7 +32,7 @@ class SceneReconciler {
               _shouldKeepLocal(local, remote)
           ? local!
           : remote;
-      result.add(chosen);
+      result.add(_repairOwner(chosen, local, remote, counters));
       added.add(_id(chosen));
     }
 
@@ -37,8 +42,20 @@ class SceneReconciler {
       }
     }
 
+    final normalized = _normalizeBoundTextOwners(result, counters);
+    result
+      ..clear()
+      ..addAll(normalized);
+
     result.sort(_compareFractionalIndex);
-    return _ensureUniqueIndices(result);
+    final output = _ensureUniqueIndices(result);
+    if (counters.conflictCount > 0 || counters.backfillCount > 0) {
+      CollaborationDebugLog.write('scene_reconciler', 'owner_repair', {
+        'ownerConflictCount': counters.conflictCount,
+        'ownerBackfillCount': counters.backfillCount,
+      });
+    }
+    return output;
   }
 
   List<Map<String, Object?>> _ensureUniqueIndices(
@@ -99,6 +116,63 @@ class SceneReconciler {
     return false;
   }
 
+  /// v4 §5.3：winner 选定后的归属修复。winner 有 owner → 原样（双方都
+  /// 非空且不同只计数，不改输出）；winner 缺失 → 从 loser 回填。
+  Map<String, Object?> _repairOwner(
+    Map<String, Object?> winner,
+    Map<String, Object?>? local,
+    Map<String, Object?> remote,
+    _OwnerRepairCounters counters,
+  ) {
+    final winnerCreator = readCreatorFromJson(winner);
+    final loser = identical(winner, local) ? remote : local;
+    final loserCreator = loser == null ? null : readCreatorFromJson(loser);
+    if (winnerCreator != null) {
+      if (loserCreator != null &&
+          loserCreator.creatorKey != winnerCreator.creatorKey) {
+        counters.conflictCount++;
+      }
+      return winner;
+    }
+    if (loserCreator == null) return winner;
+    counters.backfillCount++;
+    return withCreatorInJson(winner, loserCreator);
+  }
+
+  /// v4 §5.3：结果集父子规范化。containerId 非空的 text 元素 owner 以结果
+  /// 集中父元素为准（父缺失或无 owner → 清除）。不改 version/versionNonce，
+  /// 所有客户端面对同一结果集得到相同输出。
+  List<Map<String, Object?>> _normalizeBoundTextOwners(
+    List<Map<String, Object?>> elements,
+    _OwnerRepairCounters counters,
+  ) {
+    final byId = <String, Map<String, Object?>>{
+      for (final element in elements) _id(element): element,
+    };
+    final output = <Map<String, Object?>>[];
+    for (final element in elements) {
+      final containerId = element['containerId'];
+      if (element['type'] != 'text' || containerId is! String) {
+        output.add(element);
+        continue;
+      }
+      final parent = byId[containerId];
+      final parentCreator = parent == null ? null : readCreatorFromJson(parent);
+      final currentCreator = readCreatorFromJson(element);
+      if (parentCreator == null) {
+        output.add(
+          currentCreator == null ? element : withoutCreatorInJson(element),
+        );
+      } else if (currentCreator != null &&
+          currentCreator.creatorKey == parentCreator.creatorKey) {
+        output.add(element);
+      } else {
+        output.add(withCreatorInJson(element, parentCreator));
+      }
+    }
+    return output;
+  }
+
   int getSceneVersion(List<Map<String, Object?>> elements) {
     return elements.fold(0, (sum, element) => sum + _version(element));
   }
@@ -157,4 +231,9 @@ class SceneReconciler {
     }
     return width < 1 && height < 1;
   }
+}
+
+class _OwnerRepairCounters {
+  int conflictCount = 0;
+  int backfillCount = 0;
 }

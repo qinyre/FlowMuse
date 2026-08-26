@@ -2,19 +2,24 @@ library;
 
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart' hide TextAlign;
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    hide TextAlign;
 
 /// Desktop floating property panel (left side).
 class PropertyPanel extends StatelessWidget {
   final MarkdrawController controller;
   final VoidCallback? onCollapse;
   final bool dockOnRight;
+  final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
+  Function(Element element)?
+  attributionActionResolver;
 
   const PropertyPanel({
     super.key,
     required this.controller,
     this.onCollapse,
     this.dockOnRight = false,
+    this.attributionActionResolver,
   });
 
   @override
@@ -88,14 +93,8 @@ class PropertyPanel extends StatelessWidget {
           color: cs.surface,
           borderRadius: BorderRadius.circular(8),
           boxShadow: [
-            BoxShadow(
-              color: cs.shadow.withValues(alpha: 0.17),
-              blurRadius: 1,
-            ),
-            BoxShadow(
-              color: cs.shadow.withValues(alpha: 0.08),
-              blurRadius: 3,
-            ),
+            BoxShadow(color: cs.shadow.withValues(alpha: 0.17), blurRadius: 1),
+            BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
             BoxShadow(
               color: cs.shadow.withValues(alpha: 0.05),
               blurRadius: 14,
@@ -141,6 +140,7 @@ class PropertyPanel extends StatelessWidget {
                 isEditingText: isEditingText,
                 textOnly: textOnly,
                 canvasSize: controller.canvasSize,
+                attributionActionResolver: attributionActionResolver,
               ),
             ],
           ),

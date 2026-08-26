@@ -49,7 +49,7 @@ class ShareExportCoordinator {
       extension: extension,
       mimeType: mimeType,
       bytes: Uint8List.fromList(
-        utf8.encode(controller.serializeScene(format: format)),
+        utf8.encode(controller.serializeSceneForExternalExport(format: format)),
       ),
     );
   }

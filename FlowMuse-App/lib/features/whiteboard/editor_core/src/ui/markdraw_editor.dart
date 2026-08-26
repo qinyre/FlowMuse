@@ -83,6 +83,13 @@ class MarkdrawEditor extends StatefulWidget {
     this.onFingerDrawingEnabledChanged,
     this.onAiPressed,
     this.onSmartLayoutPressed,
+    this.collaborationFocusLabel,
+    this.onExitCollaborationFocus,
+    this.attributionActionResolver,
+    this.focusedCreatorKey,
+    this.focusHistoricalContent = false,
+    this.socketIdCreatorKeys = const {},
+    this.presenceCreatorRevision = 0,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -161,6 +168,21 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onAiPressed;
   final VoidCallback? onSmartLayoutPressed;
 
+  /// 协作聚焦状态提示（本机视图态；null = 不显示 pill）。
+  final String? collaborationFocusLabel;
+  final VoidCallback? onExitCollaborationFocus;
+
+  /// §6.3 元素入口 resolver：由宿主根据选中元素返回归属文案与聚焦回调。
+  final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
+  Function(Element element)?
+  attributionActionResolver;
+
+  /// 协作聚焦纯数据通道（v4 §7.1），透传给 EditorCanvas/painters。
+  final String? focusedCreatorKey;
+  final bool focusHistoricalContent;
+  final Map<String, String> socketIdCreatorKeys;
+  final int presenceCreatorRevision;
+
   @override
   State<MarkdrawEditor> createState() => _MarkdrawEditorState();
 }
@@ -171,12 +193,20 @@ class CollaborationParticipantBadge {
     this.avatarUrl = '',
     this.isCurrentUser = false,
     this.idle = false,
+    this.creatorKey,
+    this.focused = false,
+    this.onTap,
   });
 
   final String username;
   final String avatarUrl;
   final bool isCurrentUser;
   final bool idle;
+
+  /// 该参与者的 creatorKey；null = 旧客户端游客，禁用按归属聚焦（v4 §6.2）。
+  final String? creatorKey;
+  final bool focused;
+  final VoidCallback? onTap;
 }
 
 class _MarkdrawEditorState extends State<MarkdrawEditor>
@@ -735,6 +765,12 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                       onPointerPresence: widget.onPointerPresence,
                       onVisibleSceneBoundsChanged:
                           widget.onVisibleSceneBoundsChanged,
+                      attributionActionResolver:
+                          widget.attributionActionResolver,
+                      focusedCreatorKey: widget.focusedCreatorKey,
+                      focusHistoricalContent: widget.focusHistoricalContent,
+                      socketIdCreatorKeys: widget.socketIdCreatorKeys,
+                      presenceCreatorRevision: widget.presenceCreatorRevision,
                     );
                   },
                 ),
@@ -882,6 +918,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                                     widget.onShareCollaboration,
                                 viewMode: _controller.viewMode,
                                 zenMode: _controller.zenMode,
+                                collaborationFocusLabel:
+                                    widget.collaborationFocusLabel,
+                                onExitCollaborationFocus:
+                                    widget.onExitCollaborationFocus,
                                 onExitViewMode: _controller.toggleViewMode,
                                 onExitZenMode: _controller.toggleZenMode,
                                 toolbarExpandButton:
@@ -990,6 +1030,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 controller: _controller,
                 onCollapse: _collapsePropertyPanel,
                 dockOnRight: propertyPanelOnRight,
+                attributionActionResolver: widget.attributionActionResolver,
               ),
             ),
         // Find overlay
@@ -1338,6 +1379,8 @@ class _RightChrome extends StatelessWidget {
     required this.zenMode,
     required this.onExitViewMode,
     required this.onExitZenMode,
+    this.collaborationFocusLabel,
+    this.onExitCollaborationFocus,
     this.toolbarExpandButton,
   });
 
@@ -1362,6 +1405,8 @@ class _RightChrome extends StatelessWidget {
   final bool zenMode;
   final VoidCallback onExitViewMode;
   final VoidCallback onExitZenMode;
+  final String? collaborationFocusLabel;
+  final VoidCallback? onExitCollaborationFocus;
   final Widget? toolbarExpandButton;
 
   @override
@@ -1386,7 +1431,14 @@ class _RightChrome extends StatelessWidget {
               canCollaborate)
             const SizedBox(width: 8),
           if (collaborating && collaborationParticipants.isNotEmpty) ...[
-            _ParticipantAvatarStack(participants: collaborationParticipants),
+            ParticipantAvatarStack(participants: collaborationParticipants),
+            const SizedBox(width: 8),
+          ],
+          if (collaborationFocusLabel != null) ...[
+            _StatusPill(
+              label: collaborationFocusLabel!,
+              onTap: onExitCollaborationFocus,
+            ),
             const SizedBox(width: 8),
           ],
           if (toolbarExpandButton != null) ...[
@@ -1439,8 +1491,8 @@ class _ChromeIconButton extends StatelessWidget {
   }
 }
 
-class _ParticipantAvatarStack extends StatelessWidget {
-  const _ParticipantAvatarStack({required this.participants});
+class ParticipantAvatarStack extends StatelessWidget {
+  const ParticipantAvatarStack({super.key, required this.participants});
 
   static const _avatarSize = 26.0;
   static const _avatarRadius = 11.0;
@@ -1481,7 +1533,10 @@ class _ParticipantAvatarStack extends StatelessWidget {
             if (hiddenCount > 0)
               Positioned(
                 left: visible.length * _overlapStep,
-                child: _ParticipantOverflowAvatar(count: hiddenCount),
+                child: _ParticipantOverflowAvatar(
+                  count: hiddenCount,
+                  participants: participants,
+                ),
               ),
           ],
         ),
@@ -1498,18 +1553,25 @@ class _ParticipantAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final borderColor = participant.isCurrentUser
+    final borderColor = participant.focused
+        ? cs.primary
+        : participant.isCurrentUser
         ? cs.primary
         : cs.surfaceContainerHighest;
     final label = participant.username.isEmpty ? '协' : participant.username;
+    final disabled =
+        participant.creatorKey == null && participant.onTap == null;
 
-    return Opacity(
+    final avatar = Opacity(
       opacity: participant.idle ? 0.56 : 1,
       child: DecoratedBox(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: cs.surface,
-          border: Border.all(color: borderColor, width: 1.5),
+          border: Border.all(
+            color: borderColor,
+            width: participant.focused ? 2 : 1.5,
+          ),
           boxShadow: [
             BoxShadow(
               color: cs.shadow.withValues(alpha: 0.14),
@@ -1523,45 +1585,102 @@ class _ParticipantAvatar extends StatelessWidget {
           child: AccountAvatar(
             label: label,
             avatarUrl: participant.avatarUrl,
-            radius: _ParticipantAvatarStack._avatarRadius,
+            radius: ParticipantAvatarStack._avatarRadius,
           ),
         ),
       ),
+    );
+
+    return Tooltip(
+      message: disabled ? '暂不可按归属聚焦' : participant.username,
+      child: participant.onTap != null
+          ? InkWell(
+              onTap: participant.onTap,
+              customBorder: const CircleBorder(),
+              child: avatar,
+            )
+          : avatar,
     );
   }
 }
 
 class _ParticipantOverflowAvatar extends StatelessWidget {
-  const _ParticipantOverflowAvatar({required this.count});
+  const _ParticipantOverflowAvatar({
+    required this.count,
+    required this.participants,
+  });
 
   final int count;
+  final List<CollaborationParticipantBadge> participants;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Container(
-      width: _ParticipantAvatarStack._avatarSize,
-      height: _ParticipantAvatarStack._avatarSize,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: cs.surface,
-        border: Border.all(color: cs.surfaceContainerHighest, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: cs.shadow.withValues(alpha: 0.14),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
+    return InkWell(
+      onTap: () => _showFullParticipantList(context),
+      customBorder: const CircleBorder(),
+      child: Tooltip(
+        message: '查看全部参与者',
+        child: Container(
+          width: ParticipantAvatarStack._avatarSize,
+          height: ParticipantAvatarStack._avatarSize,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: cs.surface,
+            border: Border.all(color: cs.surfaceContainerHighest, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: cs.shadow.withValues(alpha: 0.14),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
-        ],
+          child: Text(
+            '+$count',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontSize: 10,
+              height: 1,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       ),
-      child: Text(
-        '+$count',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: cs.onSurfaceVariant,
-          fontSize: 10,
-          height: 1,
-          fontWeight: FontWeight.w700,
+    );
+  }
+
+  void _showFullParticipantList(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final participant in participants)
+              ListTile(
+                leading: AccountAvatar(
+                  label: participant.username.isEmpty
+                      ? '协'
+                      : participant.username,
+                  avatarUrl: participant.avatarUrl,
+                  radius: 14,
+                ),
+                title: Text(participant.username),
+                subtitle: participant.creatorKey == null
+                    ? const Text('暂不可按归属聚焦')
+                    : null,
+                enabled: participant.onTap != null,
+                trailing: participant.focused ? const Icon(Icons.check) : null,
+                onTap: participant.onTap == null
+                    ? null
+                    : () {
+                        Navigator.of(sheetContext).pop();
+                        participant.onTap!();
+                      },
+              ),
+          ],
         ),
       ),
     );

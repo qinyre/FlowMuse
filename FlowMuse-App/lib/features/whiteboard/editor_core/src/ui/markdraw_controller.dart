@@ -19,6 +19,8 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
+import '../core/elements/collaboration_element_owner.dart';
+import '../core/serialization/external_export_sanitizer.dart';
 import '../config/writing_feature_flags.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
@@ -273,6 +275,16 @@ class MarkdrawController extends ChangeNotifier {
   bool Function()? shouldUseLiveInkV2;
   LiveInkFreedrawCallback? onLiveInkChanged;
   ValueChanged<String>? onLiveInkCancelled;
+
+  /// 宿主注入的本地结果预处理回调（仅本地用户变更经过；远端 applyRemote*、
+  /// undo/redo、reset 不经过）。执行顺序固定于 default style 之后、系统剪贴板
+  /// 副作用之前（v4 §5.1）。
+  ToolResult? Function(ToolResult result, Scene currentScene)?
+  onPrepareLocalResult;
+
+  /// 当前本地创建者快照解析器（宿主注入；split pane sidecar 用于新增行盖章，
+  /// 见 v4 §9.1 规则 3）。null = 无协作上下文，不盖章。
+  CollaborationCreator? Function()? localCreatorResolver;
   Timer? _liveFreedrawTimer;
   static const Duration _liveFreedrawBroadcastInterval = Duration(
     milliseconds: 50,
@@ -1049,13 +1061,16 @@ class MarkdrawController extends ChangeNotifier {
         ? _applyDefaultStyleToResult(constrained)
         : constrained;
 
-    _syncToSystemClipboard(styled);
+    final prepared =
+        onPrepareLocalResult?.call(styled, _editorState.scene) ?? styled;
 
-    if (_isEditingLinear && _containsSelectionChange(styled)) {
+    _syncToSystemClipboard(prepared);
+
+    if (_isEditingLinear && _containsSelectionChange(prepared)) {
       _isEditingLinear = false;
     }
 
-    final newState = _editorState.applyResult(styled);
+    final newState = _editorState.applyResult(prepared);
     if (newState.activeToolType != _editorState.activeToolType) {
       final previousToolType = _editorState.activeToolType;
       _activeTool.reset();
@@ -1071,7 +1086,7 @@ class MarkdrawController extends ChangeNotifier {
     }
     _editorState = newState;
 
-    if (isSceneChangingResult(styled)) {
+    if (isSceneChangingResult(prepared)) {
       // 草稿编辑态：临时场景改动不触发保存/协作广播/识别调度
       if (!_smartLayoutDraftActive) {
         _lastChangedElements = _changedElementsFromResult(
@@ -1079,11 +1094,21 @@ class MarkdrawController extends ChangeNotifier {
           _editorState.scene,
         );
         onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
-        _scheduleInkRecognitionFromResult(styled);
+        _scheduleInkRecognitionFromResult(prepared);
       }
     }
 
     notifyListeners();
+  }
+
+  /// 文本编辑等内部路径的统一收口：经 onPrepareLocalResult 盖章后应用并
+  /// 替换 _editorState（v4 §5.1：不得只覆盖公开 applyResult）。
+  EditorState _applyLocalResult(ToolResult? result) {
+    final prepared = result == null
+        ? null
+        : onPrepareLocalResult?.call(result, _editorState.scene) ?? result;
+    _editorState = _editorState.applyResult(prepared);
+    return _editorState;
   }
 
   List<Element>? _changedElementsFromResult(ToolResult result, Scene scene) {
@@ -1573,7 +1598,7 @@ class MarkdrawController extends ChangeNotifier {
       baseOffset: 0,
       extentOffset: element.text.length,
     );
-    _editorState = _editorState.applyResult(SetSelectionResult({element.id}));
+    _applyLocalResult(SetSelectionResult({element.id}));
     notifyListeners();
     restoreTextFocusWhenStable();
   }
@@ -1603,12 +1628,12 @@ class MarkdrawController extends ChangeNotifier {
         containerId: shape.id.value,
         textAlign: core.TextAlign.center,
       );
-      _editorState = _editorState.applyResult(AddElementResult(textElem));
+      _applyLocalResult(AddElementResult(textElem));
       final newBound = [
         ...shape.boundElements,
         BoundElement(id: newTextId.value, type: 'text'),
       ];
-      _editorState = _editorState.applyResult(
+      _applyLocalResult(
         UpdateElementResult(shape.copyWith(boundElements: newBound)),
       );
       _editingTextElementId = newTextId;
@@ -1646,12 +1671,12 @@ class MarkdrawController extends ChangeNotifier {
         containerId: arrow.id.value,
         textAlign: core.TextAlign.center,
       );
-      _editorState = _editorState.applyResult(AddElementResult(textElem));
+      _applyLocalResult(AddElementResult(textElem));
       final newBound = [
         ...arrow.boundElements,
         BoundElement(id: newTextId.value, type: 'text'),
       ];
-      _editorState = _editorState.applyResult(
+      _applyLocalResult(
         UpdateElementResult(arrow.copyWith(boundElements: newBound)),
       );
       _editingTextElementId = newTextId;
@@ -1680,7 +1705,7 @@ class MarkdrawController extends ChangeNotifier {
     final text = textEditingController.text.trim();
     if (text.isEmpty) {
       final element = _editorState.scene.getElementById(id);
-      _editorState = _editorState.applyResult(RemoveElementResult(id));
+      _applyLocalResult(RemoveElementResult(id));
       if (element is TextElement && element.containerId != null) {
         final parentId = ElementId(element.containerId!);
         final parent = _editorState.scene.getElementById(parentId);
@@ -1688,16 +1713,16 @@ class MarkdrawController extends ChangeNotifier {
           final newBound = parent.boundElements
               .where((b) => b.id != id.value)
               .toList();
-          _editorState = _editorState.applyResult(
+          _applyLocalResult(
             UpdateElementResult(parent.copyWith(boundElements: newBound)),
           );
         }
       }
-      _editorState = _editorState.applyResult(SetSelectionResult({}));
+      _applyLocalResult(SetSelectionResult({}));
     } else {
       final element = _editorState.scene.getElementById(id);
       if (element is TextElement) {
-        _editorState = _editorState.applyResult(
+        _applyLocalResult(
           UpdateElementResult(_textElementWithContent(element, text)),
         );
       }
@@ -1724,7 +1749,7 @@ class MarkdrawController extends ChangeNotifier {
           _editingTextElementId!,
         );
         if (element is TextElement) {
-          _editorState = _editorState.applyResult(
+          _applyLocalResult(
             UpdateElementResult(element.copyWithText(text: _originalText!)),
           );
         }
@@ -1732,9 +1757,7 @@ class MarkdrawController extends ChangeNotifier {
         final element = _editorState.scene.getElementById(
           _editingTextElementId!,
         );
-        _editorState = _editorState.applyResult(
-          RemoveElementResult(_editingTextElementId!),
-        );
+        _applyLocalResult(RemoveElementResult(_editingTextElementId!));
         if (element is TextElement && element.containerId != null) {
           final parentId = ElementId(element.containerId!);
           final parent = _editorState.scene.getElementById(parentId);
@@ -1742,12 +1765,12 @@ class MarkdrawController extends ChangeNotifier {
             final newBound = parent.boundElements
                 .where((b) => b.id != _editingTextElementId!.value)
                 .toList();
-            _editorState = _editorState.applyResult(
+            _applyLocalResult(
               UpdateElementResult(parent.copyWith(boundElements: newBound)),
             );
           }
         }
-        _editorState = _editorState.applyResult(SetSelectionResult({}));
+        _applyLocalResult(SetSelectionResult({}));
       }
       _editingTextElementId = null;
       _isEditingExisting = false;
@@ -1825,7 +1848,7 @@ class MarkdrawController extends ChangeNotifier {
     if (element is! TextElement) return;
 
     final text = textEditingController.text;
-    _editorState = _editorState.applyResult(
+    _applyLocalResult(
       UpdateElementResult(_textElementWithContent(element, text)),
     );
     final changed = _editorState.scene.getElementById(id);
@@ -1889,7 +1912,11 @@ class MarkdrawController extends ChangeNotifier {
       allSceneElements: _editorState.scene.activeElements,
       sceneFiles: _editorState.scene.files,
     );
-    _libraryItems = [..._libraryItems, item];
+    // 素材模板不保留协作身份（v4 §9.3）。
+    final sanitizedItem = item.copyWith(
+      elements: [for (final e in item.elements) withoutCreator(e)],
+    );
+    _libraryItems = [..._libraryItems, sanitizedItem];
     _showLibraryPanel = true;
     notifyListeners();
   }
@@ -3247,10 +3274,7 @@ class MarkdrawController extends ChangeNotifier {
       if (inkGroups.isEmpty) {
         return const SmartLayoutPlanResult();
       }
-      final request = await _buildSmartLayoutRequest(
-        inkGroups,
-        engine: engine,
-      );
+      final request = await _buildSmartLayoutRequest(inkGroups, engine: engine);
       if (_disposed || request.blocks.isEmpty) {
         return const SmartLayoutPlanResult();
       }
@@ -3335,8 +3359,7 @@ class MarkdrawController extends ChangeNotifier {
       ];
       final removalRects = <ui.Rect>[
         for (final entry in inkGroups.entries)
-          if (successBlockIds.contains(entry.key))
-            _inkGroupBounds(entry.value),
+          if (successBlockIds.contains(entry.key)) _inkGroupBounds(entry.value),
       ];
       final failureRects = <ui.Rect>[
         for (final entry in inkGroups.entries)
@@ -3349,7 +3372,8 @@ class MarkdrawController extends ChangeNotifier {
           error: '智能识别结果不完整：本页手写均未识别成功',
         );
       }
-      final style = requestedStyle ??
+      final style =
+          requestedStyle ??
           response.layout?.style ??
           _legacyStyleFromPages(response.pages);
       return _planForStyle(
@@ -3697,9 +3721,7 @@ class MarkdrawController extends ChangeNotifier {
   }) {
     final replacement = _elementsFromSmartLayoutResponse(
       response,
-      excludedIds: {
-        for (final id in removeIds) id,
-      },
+      excludedIds: {for (final id in removeIds) id},
     );
     if (replacement == null) {
       throw StateError('智能排版没有足够的空白区域');
@@ -3752,9 +3774,7 @@ class MarkdrawController extends ChangeNotifier {
     };
     final node = _mindmapNodeFromStructure(structure.root, textByBlockId);
     final occupied =
-        _smartLayoutSceneOccupancy({
-          for (final id in removeIds) id,
-        })[page.id] ??
+        _smartLayoutSceneOccupancy({for (final id in removeIds) id})[page.id] ??
         const <Bounds>[];
     final contentArea = ui.Rect.fromLTWH(
       page.bounds.left + 72,
@@ -3771,9 +3791,7 @@ class MarkdrawController extends ChangeNotifier {
       throw StateError('智能排版没有足够的空白区域');
     }
     final rootId = _mindmapRootElementId(result.elements);
-    final blockCount = response.blocks
-        .where((block) => block.isSuccess)
-        .length;
+    final blockCount = response.blocks.where((block) => block.isSuccess).length;
     final depth = _mindmapDepth(structure.root);
     final nodeCount = _mindmapNodeCount(structure.root);
     final document = SmartLayoutDocumentFactory.fromBlocks([
@@ -6943,6 +6961,20 @@ class MarkdrawController extends ChangeNotifier {
     DocumentFormat format = DocumentFormat.markdraw,
     bool includeDeleted = false,
   }) {
+    return serializeSceneWithAliases(
+      format: format,
+      includeDeleted: includeDeleted,
+    ).text;
+  }
+
+  /// 单次构建 MarkdrawDocument，同时返回序列化文本与 alias→ElementId
+  /// 映射（split pane sidecar 用；避免重复生成 alias，v4 T4 工作项 1）。
+  /// settings 实参块与重构前 serializeScene 完全一致（背景/网格/文档名
+  /// 不丢），switch 兜底分支同样保持一致。
+  ({String text, Map<String, String> aliases}) serializeSceneWithAliases({
+    DocumentFormat format = DocumentFormat.markdraw,
+    bool includeDeleted = false,
+  }) {
     final doc = SceneDocumentConverter.sceneToDocument(
       _editorState.scene,
       settings: CanvasSettings(
@@ -6953,10 +6985,34 @@ class MarkdrawController extends ChangeNotifier {
       ),
       includeDeleted: includeDeleted,
     );
-    return switch (format) {
-      DocumentFormat.markdraw => DocumentSerializer.serialize(doc),
+    final text = switch (format) {
       DocumentFormat.excalidraw => ExcalidrawJsonCodec.serialize(doc),
       _ => DocumentSerializer.serialize(doc),
+    };
+    return (text: text, aliases: doc.aliases);
+  }
+
+  /// 外部导出专用：先净化 collaborationOwner 再序列化。文件保存对话框、
+  /// 系统分享等外部出口只能调用本方法（v4 §10.3）；内部持久化与协作
+  /// 链路继续调用 [serializeScene]。
+  String serializeSceneForExternalExport({
+    DocumentFormat format = DocumentFormat.markdraw,
+    bool includeDeleted = false,
+  }) {
+    final doc = SceneDocumentConverter.sceneToDocument(
+      _editorState.scene,
+      settings: CanvasSettings(
+        background: _canvasBackgroundColor,
+        backgroundFollowsTheme: _canvasBackgroundFollowsTheme,
+        grid: _gridSize,
+        name: _documentName,
+      ),
+      includeDeleted: includeDeleted,
+    );
+    final sanitized = sanitizeDocumentForExternalExport(doc);
+    return switch (format) {
+      DocumentFormat.excalidraw => ExcalidrawJsonCodec.serialize(sanitized),
+      _ => DocumentSerializer.serialize(sanitized),
     };
   }
 
@@ -6974,7 +7030,11 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Loads a scene from file content. Detects format from [filename].
-  void loadFromContent(String content, String filename) {
+  void loadFromContent(
+    String content,
+    String filename, {
+    bool isExternalImport = false,
+  }) {
     final format = DocumentService.detectFormat(filename);
     final parseResult = switch (format) {
       DocumentFormat.markdraw => DocumentParser.parse(content),
@@ -6983,15 +7043,20 @@ class MarkdrawController extends ChangeNotifier {
         'Use importLibraryFromContent for library files',
       ),
     };
-    _canvasBackgroundColor = parseResult.value.settings.background;
-    _canvasBackgroundFollowsTheme =
-        parseResult.value.settings.backgroundFollowsTheme;
+    var document = parseResult.value;
+    if (isExternalImport) {
+      // 外部文件的 collaborationOwner 不可信：打开为本地笔记先剥离
+      // （v4 §10.4）。内部本地笔记恢复不走本参数。
+      document = sanitizeDocumentForExternalExport(document);
+    }
+    _canvasBackgroundColor = document.settings.background;
+    _canvasBackgroundFollowsTheme = document.settings.backgroundFollowsTheme;
     if (_canvasBackgroundFollowsTheme) {
       _canvasBackgroundColor = _themeCanvasBackgroundColor;
     }
-    _gridSize = parseResult.value.settings.grid;
-    _documentName = parseResult.value.settings.name;
-    loadScene(SceneDocumentConverter.documentToScene(parseResult.value));
+    _gridSize = document.settings.grid;
+    _documentName = document.settings.name;
+    loadScene(SceneDocumentConverter.documentToScene(document));
   }
 
   /// Applies Excalidraw JSON received from collaboration.
@@ -7035,7 +7100,7 @@ class MarkdrawController extends ChangeNotifier {
         ? _editorState.selectedIds
         : null;
     return PngExporter.export(
-      _editorState.scene,
+      sanitizeSceneForExternalExport(_editorState.scene),
       _adapter,
       scale: scale,
       backgroundColor: parseColor(_canvasBackgroundColor),
@@ -7057,7 +7122,7 @@ class MarkdrawController extends ChangeNotifier {
         ? _editorState.selectedIds
         : null;
     return SvgExporter.export(
-      _editorState.scene,
+      sanitizeSceneForExternalExport(_editorState.scene),
       backgroundColor: _canvasBackgroundColor,
       selectedIds: selectedIds,
     );
@@ -7432,7 +7497,15 @@ class MarkdrawController extends ChangeNotifier {
   String exportLibraryContent({
     DocumentFormat format = DocumentFormat.excalidrawLibrary,
   }) {
-    final doc = LibraryDocument(items: _libraryItems);
+    // 双保险：历史遗留 item 可能带 owner，导出前统一净化（v4 §10.2）。
+    final doc = LibraryDocument(
+      items: [
+        for (final item in _libraryItems)
+          item.copyWith(
+            elements: [for (final e in item.elements) withoutCreator(e)],
+          ),
+      ],
+    );
     return switch (format) {
       DocumentFormat.excalidrawLibrary => ExcalidrawLibCodec.serialize(doc),
       DocumentFormat.markdrawLibrary => LibraryCodec.serialize(doc),
