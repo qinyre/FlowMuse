@@ -3999,6 +3999,24 @@ class MarkdrawController extends ChangeNotifier {
     return (items: ordered, pairs: pairs.length);
   }
 
+  /// 识别块是否竖排：笔迹包围盒 高/宽 > 1.5。
+  bool _isVerticalRecognizedBlock(SmartLayoutRecognizedBlock block) {
+    if (block.strokeBounds.isEmpty) return false;
+    var left = block.strokeBounds.first.left;
+    var top = block.strokeBounds.first.top;
+    var right = left + block.strokeBounds.first.size.width;
+    var bottom = top + block.strokeBounds.first.size.height;
+    for (final bounds in block.strokeBounds.skip(1)) {
+      left = math.min(left, bounds.left);
+      top = math.min(top, bounds.top);
+      right = math.max(right, bounds.right);
+      bottom = math.max(bottom, bounds.bottom);
+    }
+    final width = right - left;
+    if (width <= 0) return false;
+    return (bottom - top) / width > 1.5;
+  }
+
   ui.Rect _inkGroupBounds(List<FreedrawElement> strokes) {
     var bounds = _placementBoundsForElement(strokes.first);
     for (final stroke in strokes.skip(1)) {
@@ -4076,7 +4094,10 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
     for (final block in blocksById.values) {
-      final text = _textElementFromRecognizedBlock(block);
+      final text = _textElementFromRecognizedBlock(
+          block,
+          vertical: _isVerticalRecognizedBlock(block),
+        );
       if (text == null) continue;
       createdTexts[block.id] = text;
       rawToUnitKey[block.id] = block.id;
@@ -4397,6 +4418,7 @@ class MarkdrawController extends ChangeNotifier {
         entry.key,
         entry.value,
         includeImage: engine == SmartLayoutRecognitionEngine.ai,
+        vertical: SmartLayoutInkClusterer.isVerticalColumn(entry.value),
       );
       if (block != null) {
         blocks.add(block);
@@ -4491,11 +4513,16 @@ class MarkdrawController extends ChangeNotifier {
     String id,
     List<FreedrawElement> strokes, {
     bool includeImage = true,
+    bool vertical = false,
   }) async {
     if (strokes.isEmpty) return null;
     final bounds = _boundsForElements(strokes);
     if (bounds == null) return null;
-    final imageBytes = includeImage ? await _renderInkBlockPng(strokes) : null;
+    var imageBytes = includeImage ? await _renderInkBlockPng(strokes) : null;
+    // 竖排列：图像顺时针旋转 90° 变横排送 OCR（竖排识别惯例，见计划 2026-08-26）
+    if (vertical && imageBytes != null && imageBytes.isNotEmpty) {
+      imageBytes = await _rotatePng90(imageBytes);
+    }
     if (includeImage && (imageBytes == null || imageBytes.isEmpty)) {
       return null;
     }
@@ -4691,6 +4718,28 @@ class MarkdrawController extends ChangeNotifier {
     );
   }
 
+  /// 将 PNG 顺时针旋转 90°（竖排笔迹图像转横排送识别）。
+  Future<Uint8List?> _rotatePng90(Uint8List bytes) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      canvas.translate(image.height.toDouble(), 0);
+      canvas.rotate(math.pi / 2);
+      canvas.drawImage(image, ui.Offset.zero, ui.Paint());
+      final rotated = await recorder
+          .endRecording()
+          .toImage(image.height, image.width);
+      final data = await rotated.toByteData(format: ui.ImageByteFormat.png);
+      return data?.buffer.asUint8List();
+    } catch (error) {
+      debugPrint("$_logTag 竖排图像旋转失败，按原图识别: $error");
+      return bytes;
+    }
+  }
+
   List<TextElement> _smartLayoutGeneratedTextElements() {
     return [
       for (final element in _editorState.scene.activeElements)
@@ -4851,8 +4900,9 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   TextElement? _textElementFromRecognizedBlock(
-    SmartLayoutRecognizedBlock block,
-  ) {
+    SmartLayoutRecognizedBlock block, {
+    bool vertical = false,
+  }) {
     final text = block.type == 'formula'
         ? (block.latex?.trim().isNotEmpty == true
               ? block.latex!.trim()
@@ -4876,10 +4926,18 @@ class MarkdrawController extends ChangeNotifier {
           'smartLayout': true,
           'blockId': block.id,
           if (block.type == 'formula') 'smartLayoutType': 'math',
+          if (vertical) 'writingMode': 'vertical',
         },
       },
     );
     final styled = _applySmartLayoutTextStyle(element);
+    if (vertical) {
+      // 竖排：保持原稿窄长尺寸（渲染按 writingMode:vertical）
+      return styled.copyWith(
+        width: math.max(block.bounds.size.width, 40),
+        height: math.max(block.bounds.size.height, 28),
+      );
+    }
     final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
     return styled.copyWith(
       width: math.max(styled.width, measuredWidth),

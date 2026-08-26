@@ -46,6 +46,30 @@ void main() {
       expect(SmartLayoutInkClusterer.cluster([stroke('a', 0, 0, 20)]).length, 1);
     });
 
+    test('竖排列（x 窄 y 长）判定为竖排', () {
+      expect(SmartLayoutInkClusterer.isVerticalColumn([
+        stroke('a', 500, 100, 40),
+        stroke('b', 505, 150, 40),
+        stroke('c', 498, 200, 40),
+      ]), isTrue);
+    });
+
+    test('宽横排多行（行宽远大于行距）不判为竖排', () {
+      expect(SmartLayoutInkClusterer.isVerticalColumn([
+        stroke('a', 0, 100, 20),
+        stroke('b', 80, 145, 20),
+        stroke('c', 160, 190, 20),
+      ]), isFalse);
+    });
+
+    test('横排多行（每行较宽）不判为竖排', () {
+      expect(SmartLayoutInkClusterer.isVerticalColumn([
+        stroke('a', 0, 100, 20),
+        stroke('b', 60, 145, 20),
+        stroke('c', 30, 190, 20),
+      ]), isFalse);
+    });
+
     test('确定性：随机输入顺序结果一致', () {
       final input = [
         stroke('a', 0, 100, 20),

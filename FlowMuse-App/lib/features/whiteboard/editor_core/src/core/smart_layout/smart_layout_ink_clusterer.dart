@@ -10,6 +10,26 @@ import '../elements/elements.dart';
 class SmartLayoutInkClusterer {
   const SmartLayoutInkClusterer._();
 
+  /// 竖排列判定：会话整体包围盒 高/宽 > 1.5（x 窄 y 长，如竖排短语）。
+  /// 竖排列不参与按行拆分（否则每个字会被拆成独立簇）。
+  static bool isVerticalColumn(List<FreedrawElement> strokes) {
+    if (strokes.isEmpty) return false;
+    var left = strokes.first.x;
+    var top = strokes.first.y;
+    var right = left + strokes.first.width;
+    var bottom = top + strokes.first.height;
+    for (final stroke in strokes.skip(1)) {
+      left = math.min(left, stroke.x);
+      top = math.min(top, stroke.y);
+      right = math.max(right, stroke.x + stroke.width);
+      bottom = math.max(bottom, stroke.y + stroke.height);
+    }
+    final width = right - left;
+    final height = bottom - top;
+    if (width <= 0) return false;
+    return height / width > 1.5;
+  }
+
   static List<List<FreedrawElement>> cluster(List<FreedrawElement> strokes) {
     if (strokes.isEmpty) {
       return const [];
