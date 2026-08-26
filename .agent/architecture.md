@@ -102,6 +102,7 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `editor_core/src/core/pdf/` | PDF 渲染与导入 |
 | `editor_core/src/editor/` | `EditorState` + Tool 体系,按 Tool、ToolResult、状态折叠组织 |
 | `editor_core/src/input/` | 手写笔输入管线,包括 OneEuro 滤波、压感、转角保护 |
+| `editor_core/src/recognition/` | 识别结果模型与 `InkTextSizing`(由笔迹包围盒反推排版字号,见 ADR-019) |
 | `editor_core/src/rendering/` | `StaticCanvasPainter`、交互层、rough 手绘风格 |
 | `editor_core/src/ui/` | `MarkdrawController` 对外控制器 |
 

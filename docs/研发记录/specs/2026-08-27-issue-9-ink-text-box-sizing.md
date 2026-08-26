@@ -141,4 +141,5 @@ double estimateInkFontSize({
 1. commit 1 `9822fb3`：设计文档（v1→v2，含方案三路对抗审查修订）。
 2. commit 2 `83b423e`：估算器 + `_measuredTextElement` 重构 + 14 例单测。
 3. commit 3 `ad35c57`：代码两路对抗审查修复（P1 二次样式化等）+ 加固测试至 15 例。
-4. commit 4：视觉验收记录 + 截图证据。
+4. commit 4 `57d7c5f`：视觉验收记录 + 截图证据。
+5. commit 5：知识库与设计文档同步（ADR-019、architecture 骨架表、前端架构白板内核段、ai_usage 条目）。

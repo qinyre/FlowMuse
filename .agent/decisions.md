@@ -582,6 +582,37 @@ Issue #8 需要元素创建者分组视图（归属显示与聚焦）。游客�
 
 ---
 
+## ADR-019:手写转文字文本框紧包裹文字，识别产物样式优先于 sticky 默认样式
+
+- **状态**:已采纳
+- **日期**:2026-08-27
+- **关联**:Issue #9、`editor_core/src/recognition/ink_text_sizing.dart`、`markdraw_controller.dart`（`_measuredTextElement`/`_elementFromRecognizedInk`/`applyResult`）、`docs/研发记录/specs/2026-08-27-issue-9-ink-text-box-sizing.md`
+
+### 背景
+
+手写转文字（自动 1 秒识别 + 手动"转文字"）生成的 `TextElement` 此前字号固定 20、尺寸取 `max(文本测量, 笔迹包围盒)` 只增不减，文本框远大于实际文字（Issue #9）。且 `applyDefaultStyleToElement` 的 sticky 默认样式会覆盖识别产物——用户改过一次字号/笔色后，"字号跟随手写"与"红笔出红字"会静默失效；自动识别入口在 freedraw 创建工具下转换时，`applyResult` 会对结果**二次**套用 sticky 样式且无重测量，紧框后表现为框/字号失配。
+
+### 决策
+
+- 横排文本框由 `TextRenderer.measure` 紧包裹（宽 = 测量宽+4、高 = max(测量高, 字号×行高)），垂直居中于笔迹包围盒；笔迹盒不再作横排尺寸下限。
+- 字号由 `InkTextSizing.estimateFontSize` 从笔迹反推：高度主信号（CJK 0.9 / 拉丁 0.72 系数按占比插值），单个 CJK 扁平字迹宽度兜底（限幅 160），clamp 12–400；math 与智能排版公式分支一致（clamp 16–40）。
+- 识别/锚点字号与源笔迹颜色**优先于 sticky 默认**：`_measuredTextElement` 在套用默认样式后写回；两条转换入口经 `applyResult(..., applyDefaultStyle: false)` 应用结果，跳过二次样式化。
+- math（latex 源码测量 ≠ `Math.tex` display 渲染）不参与紧包裹：框不小于笔迹盒且高度含 2.4em 防裁剪余量；竖排模板锚点分支保持旧语义（字符数×行高）。
+
+### 理由
+
+- 笔迹高度是一次性信息，转换后不可再得，必须在此刻定字号；sticky 默认面向键入文本，两者语义不同层。
+- 紧框即命中框，顺带修复"空白大框可点选"的怪异；`TextBoundsValidator` 只扩不缩，加载与协作同步不受影响。
+- 替代方案"抽公共字号函数统一智能排版"被否：智能排版有 A4 占位体系依赖（clamp 12–48），统一化列为后续跟进，本议题不波及。
+
+### 遗留约束
+
+- 改字号估算或紧包裹公式必须跑 `ink_to_text_box_sizing_test.dart`（15 例，含 freedraw 激活态自动路径回归）。
+- 新增转换入口必须传 `applyDefaultStyle: false` 并传入源笔迹主导色，否则 sticky 样式会覆盖识别产物。
+- 服务端 JIIX 多元素相对坐标缺陷与智能排版路径同款 max 缺陷为已知问题，修复时需另行评审（见设计稿 §2）。
+
+---
+
 做出重要技术决策(选型、架构变更、约束确立)时,追加一条:
 
 ```markdown
