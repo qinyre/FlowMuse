@@ -94,6 +94,26 @@ ScreenSpotPro SOTA <40），**正确形态 = VLM 提议角色/文字/配对/粗�
   已对齐 pairFlow 的"置顶居中放大"处理并有回归测试。
 - **验收**：flutter analyze 0 error；flutter test 全量 642/642 通过（含新增 vision 测试 10 例）。
 
+## 第二轮：接管全部风格 + 文字转写走 MyScript（同日需求追加）
+
+需求方确认两点调整：
+
+1. **vision 管线接管全部四种风格**（v1 仅 ppt）：服务端 prompt 增加 mindmap 判据与结构树输出
+   （`structure.root`，节点以 `blockIds:["e0"...]` 引用自己的元素下标）；`sanitizeVisionMindmapStructure`
+   校验树深 ≤4 / 节点 ≤50 / 文字 ≤100 字 / 引用存在且全局唯一，**校验失败整体回落 in_place**（与
+   经典管线 sanitizeLayoutDecision 同语义）。
+2. **文字转写统一"MyScript 优先"**：被认领的笔迹簇合并后逐项走 `_recognizeSmartLayoutBlockWithMyScript`
+   （公式/手写体识别质量优于 VLM 转写）；失败或环境未配置 MyScript 回调时回退 VLM 转写文本，
+   两者皆无则该项进失败红区。
+
+客户端落位完全复用既有机器、模板零改动：ppt→PairFlow/TwoColumn；article/in_place→把合成块
+fabricate 成 `SmartLayoutResponse` 后复用 `_legacyPlacementPlan`；mindmap→同样 fabricate 后直接调
+现有 `_mindmapPlan`（合成块 id=元素引用 id，节点文字经既有 blockIds 拼接逻辑取 MyScript 文本）。
+合成块边界统一为认领笔迹簇并集——in_place 的原位转换语义因此保持不变。
+
+验收：`go test ./... && go vet ./...` 通过；flutter analyze 0 error；flutter test 全量通过
+（vision 定向测试扩至 13 例：四风格分发、MyScript 优先/兜底、mindmap 树布局、两栏标题等）。
+
 ## 边界与风险
 
 - VLM 坐标为粗位置（客户端模板精修）；小而密集元素可能漏/偏（草稿态人工兜底）；

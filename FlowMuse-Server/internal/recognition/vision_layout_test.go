@@ -128,6 +128,76 @@ func TestVisionLayoutInvalidJSONReturnsError(t *testing.T) {
 	}
 }
 
+func TestVisionLayoutAssignsElementIDs(t *testing.T) {
+	content := `{"style":"article","elements":[` +
+		`{"role":"title","text":"标题","box":[0,0,900,60]},` +
+		`{"role":"body","text":"正文","box":[10,100,700,160]}]}`
+	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
+	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
+	if err != nil {
+		t.Fatalf("VisionLayout error: %v", err)
+	}
+	if response.Elements[0].ID != "e0" || response.Elements[1].ID != "e1" {
+		t.Fatalf("ids = %q,%q", response.Elements[0].ID, response.Elements[1].ID)
+	}
+}
+
+func TestVisionLayoutMindmapStructureValidated(t *testing.T) {
+	content := `{"style":"mindmap","confidence":0.9,"elements":[` +
+		`{"role":"body","text":"主题","box":[0,0,200,40]},` +
+		`{"role":"body","text":"分支一","box":[10,50,200,90]},` +
+		`{"role":"figure","box":[300,50,500,150]}],` +
+		`"structure":{"root":{"text":"","blockIds":["e0","e9"],"children":[` +
+		`{"text":"分支","blockIds":["e1"]}]}}}`
+	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
+	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
+	if err != nil {
+		t.Fatalf("VisionLayout error: %v", err)
+	}
+	if response.Style != layoutStyleMindmap {
+		t.Fatalf("style = %q", response.Style)
+	}
+	root, ok := response.Structure["root"].(map[string]any)
+	if !ok {
+		t.Fatalf("structure = %#v", response.Structure)
+	}
+	// e9 是悬空引用应被剔除；根节点 text 空+仅剩 e0 合法
+	refs, _ := root["blockIds"].([]string)
+	if len(refs) != 1 || refs[0] != "e0" {
+		t.Fatalf("root refs = %#v", root["blockIds"])
+	}
+	children, _ := root["children"].([]map[string]any)
+	if len(children) != 1 {
+		t.Fatalf("children = %#v", root["children"])
+	}
+}
+
+func TestVisionLayoutMindmapDanglingRefsFallBackInPlace(t *testing.T) {
+	content := `{"style":"mindmap","elements":[` +
+		`{"role":"body","text":"主题","box":[0,0,200,40]}],` +
+		`"structure":{"root":{"text":"","blockIds":["e5"]}}}`
+	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
+	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
+	if err != nil {
+		t.Fatalf("VisionLayout error: %v", err)
+	}
+	if response.Style != layoutStyleInPlace || response.Structure != nil {
+		t.Fatalf("style=%q structure=%v, want in_place/nil", response.Style, response.Structure)
+	}
+}
+
+func TestVisionLayoutNonMindmapClearsStructure(t *testing.T) {
+	content := `{"style":"ppt","elements":[{"role":"title","text":"T","box":[0,0,100,20]}],"structure":{"root":{}}}`
+	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
+	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
+	if err != nil {
+		t.Fatalf("VisionLayout error: %v", err)
+	}
+	if response.Structure != nil {
+		t.Fatalf("non-mindmap should clear structure, got %#v", response.Structure)
+	}
+}
+
 func TestVisionSendsNoteTitleInPrompt(t *testing.T) {
 	sawTitle := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

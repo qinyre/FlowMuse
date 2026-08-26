@@ -639,10 +639,14 @@ class SmartLayoutVisionElement {
     required this.y1,
     required this.x2,
     required this.y2,
+    this.id,
     this.text,
     this.vertical = false,
     this.pairId,
   });
+
+  /// 服务端按输出顺序分配的引用 id（"e0"、"e1"...），mindmap 树以此引用。
+  final String? id;
 
   /// title | caption | body | figure（未知角色已在服务端归为 body）。
   final String role;
@@ -693,6 +697,7 @@ class SmartLayoutVisionElement {
       y2 = swap;
     }
     return SmartLayoutVisionElement(
+      id: json['id'] as String?,
       role: json['role'] as String? ?? 'body',
       text: json['text'] as String?,
       vertical: json['vertical'] == true,
@@ -711,27 +716,44 @@ class SmartLayoutVisionResponse {
     required this.style,
     required this.elements,
     this.confidence = 0,
+    this.mindmapStructure,
   });
 
   final SmartLayoutStyle style;
   final List<SmartLayoutVisionElement> elements;
   final double confidence;
 
-  bool get isSupported =>
-      style == SmartLayoutStyle.ppt ||
-      style == SmartLayoutStyle.article ||
-      style == SmartLayoutStyle.inPlace;
+  /// style=mindmap 时的语义树（服务端已校验引用合法性）；null = 回退经典管线。
+  final MindmapStructure? mindmapStructure;
 
   factory SmartLayoutVisionResponse.fromJson(Map<String, Object?> json) {
+    final style = SmartLayoutStyle.fromWire(json['style'] as String?);
+    final rawStructure = json['structure'];
+    final structure = rawStructure is Map
+        ? Map<String, Object?>.from(rawStructure)
+        : null;
     return SmartLayoutVisionResponse(
-      style: SmartLayoutStyle.fromWire(json['style'] as String?),
+      style: style,
       confidence:
           ((json['confidence'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0),
+      mindmapStructure: style == SmartLayoutStyle.mindmap && structure != null
+          ? _tryParseMindmapStructure(structure)
+          : null,
       elements: [
         for (final item in json['elements'] as List<Object?>? ?? const [])
           if (item is Map)
             SmartLayoutVisionElement.fromJson(Map<String, Object?>.from(item)),
       ],
     );
+  }
+
+  static MindmapStructure? _tryParseMindmapStructure(
+    Map<String, Object?> structure,
+  ) {
+    try {
+      return MindmapStructure.fromJson(structure);
+    } on FormatException {
+      return null;
+    }
   }
 }

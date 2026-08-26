@@ -3659,11 +3659,9 @@ class MarkdrawController extends ChangeNotifier {
       return null;
     }
     if (_disposed) return null;
-    // v1 仅接管 ppt 风格；article/in_place/mindmap 由经典管线负责。
-    if (!vision.isSupported || vision.style != SmartLayoutStyle.ppt) {
-      debugPrint(
-        '[$_logTag] 视觉排版风格 ${vision.style.wireName} 未接管，回退经典管线',
-      );
+    // 四种风格全部由视觉判定；无有效元素时回退经典管线。
+    if (vision.elements.isEmpty) {
+      debugPrint('[$_logTag] 视觉排版无元素，回退经典管线');
       return null;
     }
 
@@ -3685,30 +3683,28 @@ class MarkdrawController extends ChangeNotifier {
       return null;
     }
 
-    // 文本项 → TextElement（source = 认领笔迹簇并集；AI 文字 + 竖排标记）。
+    // 文本项转写：每个认领的笔迹簇合并后**先走 MyScript**（公式/手写体最稳），
+    // 失败或无 MyScript 回调时回退 VLM 转写文本；两者皆无 → 该项进失败红区。
+    final textBlocksByIndex = await _recognizeVisionTextBlocks(
+      page,
+      vision.elements,
+      match.textClaims,
+      inkGroups,
+      clusterRects,
+    );
+    if (_disposed) return null;
     final textElementsByIndex = <int, TextElement>{};
     final textSourceByIndex = <int, ui.Rect>{};
     for (final entry in match.textClaims.entries) {
-      final visionElement = vision.elements[entry.key];
+      final block = textBlocksByIndex[entry.key];
+      if (block == null || !block.isSuccess) continue;
       var union = clusterRects[entry.value.first]!;
       for (final key in entry.value.skip(1)) {
         union = union.expandToInclude(clusterRects[key]!);
       }
-      final pseudoBlock = SmartLayoutRecognizedBlock(
-        id: 'vision-${entry.key}',
-        pageId: page.id,
-        type: 'text',
-        text: visionElement.text?.trim() ?? '',
-        bounds: Bounds.fromLTWH(
-          union.left,
-          union.top,
-          union.width,
-          union.height,
-        ),
-      );
       final textElement = _textElementFromRecognizedBlock(
-        pseudoBlock,
-        vertical: visionElement.vertical,
+        block,
+        vertical: vision.elements[entry.key].vertical,
       );
       if (textElement == null) continue;
       textElementsByIndex[entry.key] = textElement;
@@ -3835,59 +3831,304 @@ class MarkdrawController extends ChangeNotifier {
       looseFigures: looseFigures,
     );
 
+    // 成功/失败账本：每个簇按其归属文本项的转写结果分入删除或红区；未认领簇直接红区。
+    final successByClusterKey = <String, bool>{};
+    match.textClaims.forEach((index, keys) {
+      final success = textBlocksByIndex[index]?.isSuccess ?? false;
+      for (final key in keys) {
+        successByClusterKey[key] = success;
+      }
+    });
     final removeStrokeIds = <ElementId>[
-      for (final keys in match.textClaims.values)
-        for (final key in keys)
-          for (final stroke in inkGroups[key] ?? const <FreedrawElement>[])
-            stroke.id,
       for (final text in _pageScopedOldSmartText(page.id)) text.id,
     ];
-    final failedStrokeIds = <ElementId>[
-      for (final key in match.unclaimedClusterKeys)
+    final failedStrokeIds = <ElementId>[];
+    final removalRects = <ui.Rect>[];
+    final failureRects = <ui.Rect>[];
+    final failures = <SmartLayoutFailureInfo>[];
+    void account(String key) {
+      final rect = clusterRects[key]!;
+      if (successByClusterKey[key] == true) {
+        removalRects.add(rect);
+        removeStrokeIds.addAll([
+          for (final stroke in inkGroups[key] ?? const <FreedrawElement>[])
+            stroke.id,
+        ]);
+        return;
+      }
+      failureRects.add(rect);
+      failedStrokeIds.addAll([
         for (final stroke in inkGroups[key] ?? const <FreedrawElement>[])
           stroke.id,
-    ];
-    final removalRects = <ui.Rect>[
-      for (final keys in match.textClaims.values)
-        for (final key in keys) clusterRects[key]!,
-    ];
-    final failureRects = <ui.Rect>[
-      for (final key in match.unclaimedClusterKeys) clusterRects[key]!,
-    ];
-
-    try {
-      final plan = _layoutPpt(
-        content,
-        SmartLayoutTemplateContext(
-          response: SmartLayoutResponse(
-            document: SmartLayoutDocumentFactory.fromBlocks(const []),
-            layout: SmartLayoutLayoutDecision(
-              style: vision.style,
-              confidence: vision.confidence,
-            ),
-          ),
-          excludedIds: {...removeStrokeIds},
-          failures: [
-            for (var i = 0; i < failureRects.length; i++)
-              SmartLayoutFailureInfo(
-                blockId: 'vision-failed-$i',
-                bounds: failureRects[i],
-                error: '疑似手写内容未被识别成功',
-              ),
-          ],
-          removeIds: removeStrokeIds,
-          failedStrokeIds: failedStrokeIds,
-          removalRects: removalRects,
-          failureRects: failureRects,
+      ]);
+      failures.add(
+        SmartLayoutFailureInfo(
+          blockId: 'vision-failed-${failureRects.length}',
+          bounds: rect,
+          error: '疑似手写内容未被识别成功',
         ),
       );
+    }
+
+    // 确定性顺序：先被认领的簇（按文本项序），再未认领的簇。
+    for (final key in successByClusterKey.keys) {
+      account(key);
+    }
+    for (final key in match.unclaimedClusterKeys) {
+      account(key);
+    }
+
+    SmartLayoutResponse fabricateResponse() {
+      final blocks =
+          [
+            for (final index in match.textClaims.keys)
+              if (textBlocksByIndex[index]?.isSuccess ?? false)
+                textBlocksByIndex[index]!,
+          ]..sort((a, b) {
+            final byTop = a.bounds.top.compareTo(b.bounds.top);
+            return byTop != 0 ? byTop : a.bounds.left.compareTo(b.bounds.left);
+          });
+      var order = 0;
+      final docBlocks = [
+        for (final block in blocks)
+          SmartLayoutBlock(
+            id: 'vb-${order}',
+            type: block.type == 'formula' ? 'math' : 'paragraph',
+            text: block.text ?? '',
+            latex: block.latex?.trim().isNotEmpty == true ? block.latex : null,
+            pageId: page.id,
+            bounds: Bounds.fromLTWH(
+              block.bounds.left,
+              block.bounds.top,
+              block.bounds.size.width,
+              block.bounds.size.height,
+            ),
+            order: order++,
+            writingMode: 'horizontal',
+            sourceIds: [block.id],
+          ),
+      ];
+      return SmartLayoutResponse(
+        document: SmartLayoutDocumentFactory.fromBlocks(docBlocks),
+        blocks: blocks,
+        pages: [
+          SmartLayoutPageDecision(
+            pageId: page.id,
+            mode: vision.style == SmartLayoutStyle.article
+                ? 'article'
+                : 'in_place',
+          ),
+        ],
+        layout: SmartLayoutLayoutDecision(
+          style: vision.style,
+          confidence: vision.confidence,
+          mindmapStructure: vision.mindmapStructure,
+        ),
+      );
+    }
+
+    try {
+      SmartLayoutPlan? plan;
+      switch (vision.style) {
+        case SmartLayoutStyle.ppt:
+          plan = _layoutPpt(content, _visionContext(vision, failures, removeStrokeIds, failedStrokeIds, removalRects, failureRects));
+        case SmartLayoutStyle.article || SmartLayoutStyle.inPlace:
+          plan = _legacyPlacementPlan(
+            fabricateResponse(),
+            page: page,
+            failures: failures,
+            removeIds: removeStrokeIds,
+            failedStrokeIds: failedStrokeIds,
+            removalRects: removalRects,
+            failureRects: failureRects,
+            style: vision.style,
+          ).plan;
+        case SmartLayoutStyle.mindmap:
+          final structure = vision.mindmapStructure;
+          if (structure == null || structure.isEmpty) {
+            debugPrint('[$_logTag] 视觉排版 mindmap 树缺失，回退经典管线');
+            return null;
+          }
+          plan = _mindmapPlan(
+            fabricateResponse(),
+            page: page,
+            structure: structure,
+            failures: failures,
+            removeIds: removeStrokeIds,
+            failedStrokeIds: failedStrokeIds,
+            removalRects: removalRects,
+            failureRects: failureRects,
+          ).plan;
+      }
       if (plan == null) return null;
-      return SmartLayoutPlanResult(plan: plan);
+      return SmartLayoutPlanResult(plan: plan, failures: failures);
     } on StateError catch (error) {
       // 内容流放不下时交经典管线再试一次（其带避碰回退）。
       debugPrint('[$_logTag] 视觉排版落位失败，回退经典管线: $error');
       return null;
     }
+  }
+
+  SmartLayoutTemplateContext _visionContext(
+    SmartLayoutVisionResponse vision,
+    List<SmartLayoutFailureInfo> failures,
+    List<ElementId> removeStrokeIds,
+    List<ElementId> failedStrokeIds,
+    List<ui.Rect> removalRects,
+    List<ui.Rect> failureRects,
+  ) {
+    return SmartLayoutTemplateContext(
+      response: SmartLayoutResponse(
+        document: SmartLayoutDocumentFactory.fromBlocks(const []),
+        layout: SmartLayoutLayoutDecision(
+          style: vision.style,
+          confidence: vision.confidence,
+        ),
+      ),
+      excludedIds: {...removeStrokeIds},
+      failures: failures,
+      removeIds: removeStrokeIds,
+      failedStrokeIds: failedStrokeIds,
+      removalRects: removalRects,
+      failureRects: failureRects,
+    );
+  }
+
+  /// 视觉匹配到的文本项批量转写：合并认领笔迹后逐项走 MyScript，
+  /// 失败或无回调时以 VLM 转写文本兜底；合成块携带并集边界与元素引用 id。
+  Future<Map<int, SmartLayoutRecognizedBlock>> _recognizeVisionTextBlocks(
+    CanvasPage page,
+    List<SmartLayoutVisionElement> elements,
+    Map<int, List<String>> textClaims,
+    Map<String, List<FreedrawElement>> inkGroups,
+    Map<String, ui.Rect> clusterRects,
+  ) async {
+    final myScriptCallback = onRecognizeInk;
+    final requests = <SmartLayoutInkBlockRequest>[];
+    final unionsByRequestId = <String, ui.Rect>{};
+    final indexByRequestId = <String, int>{};
+    for (final entry in textClaims.entries) {
+      final index = entry.key;
+      var union = clusterRects[entry.value.first]!;
+      for (final key in entry.value.skip(1)) {
+        union = union.expandToInclude(clusterRects[key]!);
+      }
+      final requestId = 'v-e$index';
+      unionsByRequestId[requestId] = union;
+      indexByRequestId[requestId] = index;
+      final strokes = [
+        for (final key in entry.value)
+          ...(inkGroups[key] ?? const <FreedrawElement>[]),
+      ];
+      if (strokes.isEmpty) continue;
+      requests.add(
+        SmartLayoutInkBlockRequest(
+          id: requestId,
+          pageId: page.id,
+          bounds: Bounds.fromLTWH(
+            union.left,
+            union.top,
+            union.width,
+            union.height,
+          ),
+          strokeBounds: [
+            for (final stroke in strokes)
+              Bounds.fromLTWH(
+                stroke.x,
+                stroke.y,
+                math.max(stroke.width, 1.0),
+                math.max(stroke.height, 1.0),
+              ),
+          ],
+          startedAt: _startedAtForStrokes(strokes),
+          // 视觉路径不需要块级截图（整页截图已发 VLM）。
+          imageBase64: '',
+        ),
+      );
+    }
+    Future<SmartLayoutRecognizedBlock> recognizeOne(
+      SmartLayoutInkBlockRequest request,
+    ) async {
+      final index = indexByRequestId[request.id]!;
+      final visionElement = elements[index];
+      SmartLayoutRecognizedBlock block;
+      if (myScriptCallback != null) {
+        final strokes = [
+          for (final key in textClaims[index]!)
+            ...(inkGroups[key] ?? const <FreedrawElement>[]),
+        ];
+        try {
+          block = await _recognizeSmartLayoutBlockWithMyScript(
+            request,
+            strokes,
+            myScriptCallback,
+          );
+        } catch (error) {
+          debugPrint('[$_logTag] 视觉排版 MyScript 转写失败($request.id): $error');
+          block = SmartLayoutRecognizedBlock(
+            id: request.id,
+            pageId: page.id,
+            type: 'error',
+            bounds: request.bounds,
+            strokeBounds: request.strokeBounds,
+            startedAt: request.startedAt,
+            error: error.toString(),
+          );
+        }
+      } else {
+        block = SmartLayoutRecognizedBlock(
+          id: request.id,
+          pageId: page.id,
+          type: 'error',
+          bounds: request.bounds,
+          startedAt: request.startedAt,
+          error: 'no-myscript-callback',
+        );
+      }
+      if (!block.isSuccess) {
+        final vlmText = visionElement.text?.trim() ?? '';
+        if (vlmText.isNotEmpty) {
+          block = SmartLayoutRecognizedBlock(
+            id: request.id,
+            pageId: page.id,
+            type: 'text',
+            text: vlmText,
+            bounds: request.bounds,
+            startedAt: request.startedAt,
+          );
+        }
+      }
+      // 成功块统一：引用 id 用元素 id（mindmap 树引用一致）、边界用认领簇并集。
+      final elementId = visionElement.id ?? 'e$index';
+      final unionRect = unionsByRequestId[request.id];
+      return SmartLayoutRecognizedBlock(
+        id: elementId,
+        pageId: page.id,
+        type: block.type,
+        text: block.text,
+        latex: block.latex,
+        bounds: unionRect == null
+            ? request.bounds
+            : Bounds.fromLTWH(unionRect.left, unionRect.top, unionRect.width,
+                  unionRect.height),
+        strokeBounds: const [],
+        startedAt: request.startedAt,
+        error: block.error,
+      );
+    }
+
+    var results = <SmartLayoutRecognizedBlock>[];
+    if (requests.isNotEmpty) {
+      results = await _recognizeSmartLayoutBlocksInParallel(
+        requests,
+        recognizeOne,
+        null,
+      );
+    }
+    return {
+      for (var i = 0; i < requests.length; i++)
+        indexByRequestId[requests[i].id]!: results[i],
+    };
   }
 
   /// 页内可移动元素 → 版式图形单元（整组共用一个单元），供视觉匹配与模板移动。

@@ -85,7 +85,9 @@ type VisionLayoutRequest struct {
 
 // VisionLayoutElement 是 VLM 对页面内一项内容的描述。
 // Box 为 0-1000 归一化坐标 [x1,y1,x2,y2]（左上原点，Qwen2-VL/Gemini 惯例）。
+// ID 由服务端按输出顺序分配（"e0"、"e1"...），供 mindmap 结构树引用。
 type VisionLayoutElement struct {
+	ID         string    `json:"id,omitempty"`
 	Role       string    `json:"role"` // title | caption | body | figure
 	Text       string    `json:"text,omitempty"`
 	Vertical   bool      `json:"vertical,omitempty"`
@@ -95,11 +97,13 @@ type VisionLayoutElement struct {
 }
 
 // VisionLayoutResponse 是视觉排版的判定结果；坐标为粗位置，客户端模板精修落位。
+// Structure 仅在 style=mindmap 时有效：{"root":{"text","blockIds":["e0"...],"children"}}。
 type VisionLayoutResponse struct {
 	PageID     string                `json:"pageId,omitempty"`
-	Style      string                `json:"style"` // ppt | article | in_place
+	Style      string                `json:"style"` // ppt | mindmap | article | in_place
 	Confidence float64               `json:"confidence,omitempty"`
 	Elements   []VisionLayoutElement `json:"elements"`
+	Structure  map[string]any        `json:"structure,omitempty"`
 }
 
 type SmartLayoutPage struct {
