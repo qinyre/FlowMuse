@@ -1098,7 +1098,7 @@ git diff -- FlowMuse-App/ohos FlowMuse-App/android FlowMuse-App/ios FlowMuse-App
 
 - **格式门禁**：本分支触碰的 43 个 Dart 文件 `dart format --set-exit-if-changed` 全部通过（0 变更）。
 - **analyze 门禁**：`dart analyze --format=machine` 按 severity|code|file|message multiset 差比较，基线（c40a847 worktree 实测）42 issues = 分支 42 issues，零新增 error/warning/info。
-- **测试门禁**：`test/features/whiteboard/collaboration` 93 通过；`test/features/whiteboard/editor_core` 277 通过；`test/features/whiteboard/views` 27 通过。
+- **测试门禁**：`test/features/whiteboard/collaboration` 94 通过；`test/features/whiteboard/editor_core` 277 通过；`test/features/whiteboard/views` 27 通过。
 - **范围门禁**：`git diff --check` 干净；FlowMuse-Server、ohos/android/ios/macos/windows/web 平台目录、pubspec.yaml 零改动；无数据库 schema 变更；无 GeneratedPluginRegistrant.ets。
 - **隐私断言**：全库无 CollaborationDebugLog.write 调用携带 creatorKey/displayName/userId；owner_repair 日志脱敏测试锁定只输出 `ownerConflictCount=N ownerBackfillCount=N`。
 - **外部导出**：六类外部最终产物（.markdraw/.excalidraw/.json/PNG tEXt/SVG comment/分享与库文件）经测试断言无 collaborationOwner；内部 SQLite/协作密文保留（serializeScene 内部路径源码门禁锁定）。
@@ -1111,3 +1111,12 @@ git diff -- FlowMuse-App/ohos FlowMuse-App/android FlowMuse-App/ios FlowMuse-App
 
 1. **非协作状态不盖章**：`activeRoom == null`（本地笔记）时 `_currentCreator()` 返回 null，新建登录用户元素无归属（进入协作后归"历史内容"）。这是 R3（登录键跨房间稳定）字面语义的推论空白而非矛盾——R3 保证"房间 A 已盖章元素在房间 B 仍匹配"，本地阶段新建元素从未盖章。见实现细则 Task 4 Step 4.3。
 2. **远端湿墨 bounds 余量**：采用 `kMaxBrushSizeScale = 4.2`（highlighter 为当前笔型 sizeScale 上界）常量推导 margin = strokeWidth × 4.2 × 0.5 × 1.3 + 2px；若未来新增更粗笔型（sizeScale > 4.2）必须同步上调该常量，否则聚焦层可能裁切边缘像素。见实现细则 Task 14。
+
+### 18.5 审查修复记录（2026-08-26 第二轮）
+
+合并前审查发现 2 个聚焦态性能阻断项（P1），已修复并经独立子代理复核通过：
+
+1. **聚焦通知整页重建**（提交 acc4867）：`_onControllerNotifyForFocus` 原在聚焦期间对每次 Controller 通知无条件 `setState`，连续书写/拖动等高频通知会整页重建 WhiteboardPage。修复为缓存 `_lastFocusEmpty`，仅当聚焦组"空 ↔ 有内容"翻转时重建；`_focusCreator/_focusHistory/_toggleCreatorFocus/_exitFocus` 与房间清理路径同步缓存；源码门禁锁定 setState 必须位于空态守卫之后。未聚焦时监听零开销，pill 在线名字刷新仍由 presence 路径承担。
+2. **远端湿墨聚焦 bounds 每帧重扫冻结点**（提交 7d857f2）：`_strokeBounds` 原每次绘制遍历全部 frozenBlocks/tailSegments（最长 16384 点/笔 × 64 笔），抵消 Picture 缓存的增量设计。修复为 store 侧增量维护：新增 `RemoteWetInkBounds` 纯几何类型；`RemoteWetInkBlock.bounds` 在成块/合并时一次计算；`RemoteWetInkStrokeSnapshot.frozenBounds` 随点到达增量扩展；painter 每帧只扫描有限的 tail 段（≤64 点+边界点）。新增回归：16k 长笔（断言 frozenBounds 极值、dim 层 bounds 含极值+margin、两次 paint `lastFrameTailPointCount` 恒为 64 且 bounds 幂等）、64-stroke 满房逐层断言，以及源码门禁（`_strokeBounds` 禁止引用 frozenBlocks）。
+
+门禁复跑（修复后）：格式门禁全过；analyze multiset 基线 42 = 分支 42 零新增；三测试目录 94 + 280 + 28 全绿（总计 402）；范围门禁（服务端/平台/pubspec/schema）零改动。鸿蒙真机 Profile 人工验收（§18.3）仍为合并前不可豁免项——审查确认 5000 交替作者元素可产生 2500 个 dim saveLayer，须在真机验证通过后方可合并。
