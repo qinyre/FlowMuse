@@ -127,10 +127,6 @@ void main() {
     final imgSleep = scene.activeElements
         .where((e) => e.id == ElementId('img-sleep'))
         .single;
-    // ignore: avoid_print
-    print(
-      'POS t1=${t1.y} t2=${t2.y} imgEye=${imgEye.y} imgSleep=${imgSleep.y}',
-    );
 
     // 单列文档流：配对图文紧邻（文上图下，间隔=行距 24），睁眼对在前、睡觉对在后
     expect(imgEye.y - (t1.y + t1.height), closeTo(24, 1),

@@ -3640,17 +3640,36 @@ class MarkdrawController extends ChangeNotifier {
             style: SmartLayoutStyle.inPlace,
           );
         }
-        return _pptPlan(
-          response,
+        final content = _buildPptContent(
           page: page,
           structure: structure,
-          excludedIds: excludedIds,
-          failures: failures,
-          removeIds: removeIds,
-          failedStrokeIds: failedStrokeIds,
-          removalRects: removalRects,
-          failureRects: failureRects,
+          response: response,
         );
+        final plan = _layoutPpt(
+          content,
+          SmartLayoutTemplateContext(
+            response: response,
+            excludedIds: excludedIds,
+            failures: failures,
+            removeIds: removeIds,
+            failedStrokeIds: failedStrokeIds,
+            removalRects: removalRects,
+            failureRects: failureRects,
+          ),
+        );
+        if (plan == null) {
+          return _legacyPlacementPlan(
+            response,
+            page: page,
+            failures: failures,
+            removeIds: removeIds,
+            failedStrokeIds: failedStrokeIds,
+            removalRects: removalRects,
+            failureRects: failureRects,
+            style: SmartLayoutStyle.inPlace,
+          );
+        }
+        return SmartLayoutPlanResult(plan: plan, failures: failures);
       case SmartLayoutStyle.article:
       case SmartLayoutStyle.inPlace:
         return _legacyPlacementPlan(
@@ -3893,113 +3912,6 @@ class MarkdrawController extends ChangeNotifier {
     ];
   }
 
-  /// 图文配对重排：把"每个图/形状 ↔ 原稿上最近的文本块"配成相邻单元。
-  /// AI 摘要不含图片内容无法语义配对；按原稿几何贪心最近配对（中心距离升序、互为唯一），
-  /// 按配对文本原 y 排序，图在文本上的按 [图, 文]、否则 [文, 图]；未配对项保持原顺序。
-  ({List<PptGroupItem> items, int pairs}) _pairTextAndFigures(
-    List<PptGroupItem> items, {
-    required Map<String, TextElement> createdTexts,
-    required Map<String, Element> pageElements,
-    required Map<String, (ui.Rect, List<String>)> groupsOnPage,
-  }) {
-    final textItems = <PptGroupItem>[
-      for (final item in items)
-        if (item.memberKeys.every((key) => createdTexts.containsKey(key)))
-          item,
-    ];
-    final figureItems = <PptGroupItem>[
-      for (final item in items)
-        if (!item.memberKeys.every((key) => createdTexts.containsKey(key)))
-          item,
-    ];
-    ui.Offset? centerOf(String key) {
-      final text = createdTexts[key];
-      if (text != null) {
-        return ui.Offset(text.x + text.width / 2, text.y + text.height / 2);
-      }
-      final element = pageElements[key];
-      if (element != null) {
-        return ui.Offset(
-          element.x + element.width / 2,
-          element.y + element.height / 2,
-        );
-      }
-      final group = groupsOnPage[key];
-      if (group != null) {
-        return ui.Offset(group.$1.center.dx, group.$1.center.dy);
-      }
-      return null;
-    }
-
-    double squareDistance(ui.Offset a, ui.Offset b) {
-      final dx = a.dx - b.dx;
-      final dy = a.dy - b.dy;
-      return dx * dx + dy * dy;
-    }
-
-    final textItemByKey = {for (final item in textItems) item.key: item};
-    final figureItemById = {
-      for (final item in figureItems)
-        if (item.memberKeys.length == 1) item.memberKeys.first: item,
-    };
-    final distances = <(double, String, String)>[];
-    for (final item in textItems) {
-      final textCenter = centerOf(item.key);
-      if (textCenter == null) continue;
-      for (final figure in figureItems) {
-        if (figure.memberKeys.length != 1) continue;
-        final figureCenter = centerOf(figure.memberKeys.first);
-        if (figureCenter == null) continue;
-        distances.add(
-          (squareDistance(textCenter, figureCenter), item.key, figure.memberKeys.first),
-        );
-      }
-    }
-    distances.sort((a, b) => a.$1.compareTo(b.$1));
-    final pairedTexts = <String>{};
-    final usedFigures = <String>{};
-    final pairs = <(String, String)>[];
-    for (final (_, textKey, figureId) in distances) {
-      if (pairedTexts.contains(textKey) || usedFigures.contains(figureId)) {
-        continue;
-      }
-      pairedTexts.add(textKey);
-      usedFigures.add(figureId);
-      pairs.add((textKey, figureId));
-    }
-    pairs.sort((a, b) {
-      final ay = centerOf(a.$1)?.dy ?? 0;
-      final by = centerOf(b.$1)?.dy ?? 0;
-      return ay.compareTo(by);
-    });
-    final ordered = <PptGroupItem>[];
-    for (final (textKey, figureId) in pairs) {
-      final textItem = textItemByKey[textKey];
-      final figureItem = figureItemById[figureId];
-      if (textItem == null || figureItem == null) continue;
-      final textCenter = centerOf(textKey)!;
-      final figureCenter = centerOf(figureId)!;
-      if (figureCenter.dy < textCenter.dy) {
-        ordered.add(figureItem);
-        ordered.add(textItem);
-      } else {
-        ordered.add(textItem);
-        ordered.add(figureItem);
-      }
-    }
-    for (final item in items) {
-      final single =
-          item.memberKeys.length == 1 ? item.memberKeys.first : null;
-      if (single != null &&
-          (pairedTexts.contains(single) || usedFigures.contains(single))) {
-        continue;
-      }
-      ordered.add(item);
-    }
-    return (items: ordered, pairs: pairs.length);
-  }
-
-  /// 识别块是否竖排：笔迹包围盒 高/宽 > 1.5。
   bool _isVerticalRecognizedBlock(SmartLayoutRecognizedBlock block) {
     if (block.strokeBounds.isEmpty) return false;
     var left = block.strokeBounds.first.left;
@@ -4037,161 +3949,236 @@ class MarkdrawController extends ChangeNotifier {
     return SmartLayoutStyle.inPlace;
   }
 
-  SmartLayoutPlanResult _pptPlan(
-    SmartLayoutResponse response, {
+  SmartLayoutContent _buildPptContent({
     required CanvasPage page,
     required SmartLayoutPptStructure structure,
-    required Set<ElementId> excludedIds,
-    required List<SmartLayoutFailureInfo> failures,
-    required List<ElementId> removeIds,
-    required List<ElementId> failedStrokeIds,
-    required List<ui.Rect> removalRects,
-    required List<ui.Rect> failureRects,
+    required SmartLayoutResponse response,
   }) {
     final pageId = page.id;
     final blocksById = <String, SmartLayoutRecognizedBlock>{
       for (final block in response.blocks)
         if (block.isSuccess) block.id: block,
     };
-    final pageElements = <String, Element>{
-      for (final element in _smartLayoutPageElements(pageId))
-        element.id.value: element,
-    };
     final createdTexts = <String, TextElement>{};
-    final groupsOnPage = <String, (ui.Rect, List<String>)>{};
+    final textSourceBounds = <String, ui.Rect>{};
+    for (final block in blocksById.values) {
+      final vertical = _isVerticalRecognizedBlock(block);
+      final text = _textElementFromRecognizedBlock(block, vertical: vertical);
+      if (text == null) continue;
+      createdTexts[block.id] = text;
+      textSourceBounds[block.id] = ui.Rect.fromLTWH(
+        block.bounds.left,
+        block.bounds.top,
+        block.bounds.size.width,
+        block.bounds.size.height,
+      );
+    }
+    final elementByKey = <String, Element>{};
+    final elementSourceBounds = <String, ui.Rect>{};
+    final groupKeys = <String>{};
     for (final element in _smartLayoutPageElements(pageId)) {
       final groupId = GroupUtils.outermostGroupId(element);
-      if (groupId == null || groupsOnPage.containsKey(groupId)) continue;
-      final members = GroupUtils.findGroupMembers(
-        _editorState.scene,
-        groupId,
-      );
+      if (groupId == null) {
+        elementByKey[element.id.value] = element;
+        final b = _placementBoundsForElement(element);
+        elementSourceBounds[element.id.value] = ui.Rect.fromLTWH(
+          b.left,
+          b.top,
+          b.size.width,
+          b.size.height,
+        );
+        continue;
+      }
+      if (!groupKeys.add(groupId)) continue;
+      final members = GroupUtils.findGroupMembers(_editorState.scene, groupId);
       if (members.isEmpty) continue;
       var union = _placementBoundsForElement(members.first);
       for (final member in members.skip(1)) {
         union = union.union(_placementBoundsForElement(member));
       }
-      groupsOnPage[groupId] = (
-        ui.Rect.fromLTWH(
-          union.left,
-          union.top,
-          union.size.width,
-          union.size.height,
+      elementByKey[groupId] = members.first;
+      elementSourceBounds[groupId] = ui.Rect.fromLTWH(
+        union.left,
+        union.top,
+        union.size.width,
+        union.size.height,
+      );
+    }
+    // AI elementIds（成员 id）→ 版式单元 key（组优先，组内成员共享组单元）
+    final unitKeyOf = <String, String>{
+      for (final element in _smartLayoutPageElements(pageId))
+        element.id.value:
+            GroupUtils.outermostGroupId(element) ?? element.id.value,
+    };
+    for (final blockId in createdTexts.keys) {
+      unitKeyOf[blockId] = blockId;
+    }
+    final resolvedGroups = [
+      for (final group in structure.groups)
+        SmartLayoutPptGroup(
+          role: group.role,
+          elementIds: [
+            for (final rawId in group.elementIds)
+              if (unitKeyOf[rawId] != null) unitKeyOf[rawId]!,
+          ],
         ),
-        [for (final member in members) member.id.value],
-      );
-    }
-    final units = <String, ui.Size>{};
-    final rawToUnitKey = <String, String>{};
-    for (final element in _smartLayoutPageElements(pageId)) {
-      final groupId = GroupUtils.outermostGroupId(element);
-      if (groupId != null && groupsOnPage.containsKey(groupId)) {
-        rawToUnitKey[element.id.value] = groupId;
-        units[groupId] = groupsOnPage[groupId]!.$1.size;
+    ];
+    return SmartLayoutStructureBuilder.build(
+      SmartLayoutStructureInput(
+        groups: resolvedGroups,
+        textByKey: createdTexts,
+        textSourceBounds: textSourceBounds,
+        elementByKey: elementByKey,
+        elementSourceBounds: elementSourceBounds,
+        groupKeys: groupKeys,
+      ),
+      pageId: pageId,
+      contentArea: ui.Rect.fromLTWH(
+        page.bounds.left + 72,
+        page.bounds.top + 72,
+        page.bounds.width - 144,
+        page.bounds.height - 144,
+      ),
+    );
+  }
+
+  SmartLayoutPlan? _layoutPairFlow(
+    SmartLayoutContent content,
+    SmartLayoutTemplateContext ctx,
+  ) {
+    final addElements = <Element>[];
+    final moveDeltas = <ElementId, ui.Offset>{};
+    final previewRects = <ui.Rect>[];
+    final rowGap = 24.0;
+    var y = content.contentArea.top;
+    final centerX = content.contentArea.center.dx;
+
+    // 单元水平居中放置；超出内容区底部 → 整页失败（all-or-nothing）。
+    // ponytail: 配对流不做障碍避碰（内容少且居中），出现场景再加压缩/避让。
+    void placeUnit(LayoutUnit unit) {
+      if (y + unit.size.height > content.contentArea.bottom) {
+        throw StateError('智能排版没有足够的空白区域');
+      }
+      final x = centerX - unit.size.width / 2;
+      if (unit.kind == LayoutUnitKind.text && unit.textElement != null) {
+        addElements.add(unit.textElement!.copyWith(x: x, y: y));
       } else {
-        rawToUnitKey[element.id.value] = element.id.value;
-        units[element.id.value] = ui.Size(element.width, element.height);
-      }
-    }
-    for (final block in blocksById.values) {
-      final text = _textElementFromRecognizedBlock(
-          block,
-          vertical: _isVerticalRecognizedBlock(block),
+        final delta = ui.Offset(
+          x - unit.sourceBounds.left,
+          y - unit.sourceBounds.top,
         );
-      if (text == null) continue;
-      createdTexts[block.id] = text;
-      rawToUnitKey[block.id] = block.id;
-      units[block.id] = ui.Size(text.width, text.height);
-    }
-    var items = <PptGroupItem>[];
-    for (var i = 0; i < structure.groups.length; i++) {
-      final group = structure.groups[i];
-      final keys = <String>[];
-      for (final rawId in group.elementIds) {
-        final key = rawToUnitKey[rawId];
-        if (key == null) continue;
-        if (!keys.contains(key)) keys.add(key);
-      }
-      if (keys.isEmpty) continue;
-      // 组内文本成员一律拆成独立组各自占一行（"各自找位置"）；图/形状等非文本成员
-      // 走原"整组或合成一行"逻辑——避免"图+文本同组"合成超宽单行导致误报空间不足。
-      final textKeys = [
-        for (final key in keys)
-          if (createdTexts.containsKey(key)) key,
-      ];
-      final otherKeys = [
-        for (final key in keys)
-          if (!createdTexts.containsKey(key)) key,
-      ];
-      for (final key in textKeys) {
-        items.add(
-          PptGroupItem(key: key, role: group.role, memberKeys: [key]),
-        );
-      }
-      if (otherKeys.isEmpty) continue;
-      final isWholeGroup =
-          otherKeys.length == 1 && groupsOnPage.containsKey(otherKeys.first);
-      if (isWholeGroup) {
-        items.add(
-          PptGroupItem(
-            key: otherKeys.first,
-            role: group.role,
-            memberKeys: otherKeys,
-          ),
-        );
-      } else {
-        final itemKey = 'g-$i';
-        var width = 0.0;
-        var height = 0.0;
-        for (final key in otherKeys) {
-          final size = units[key];
-          if (size == null) continue;
-          width += size.width + PptLayoutEngine.unitGap;
-          height = math.max(height, size.height);
+        final ids = unit.memberIds.isNotEmpty ? unit.memberIds : [unit.key];
+        for (final id in ids) {
+          moveDeltas[ElementId(id)] = delta;
         }
-        width -= PptLayoutEngine.unitGap;
-        units[itemKey] = ui.Size(width, height);
-        items.add(
-          PptGroupItem(key: itemKey, role: group.role, memberKeys: otherKeys),
+      }
+      previewRects.add(
+        ui.Rect.fromLTWH(x, y, unit.size.width, unit.size.height),
+      );
+      y += unit.size.height + rowGap;
+    }
+
+    if (content.title != null) {
+      final unit = content.title!;
+      var titleElement = unit.textElement!.copyWith(
+        x: centerX - unit.size.width / 2,
+        y: y,
+      );
+      if (titleElement.fontSize < 28) {
+        titleElement = titleElement.copyWithText(fontSize: 28);
+        final (mw, mh) = TextRenderer.measure(titleElement);
+        final width = math.max(titleElement.width, mw);
+        titleElement = titleElement.copyWith(
+          width: width,
+          height: math.max(titleElement.height, mh),
+          x: centerX - width / 2,
         );
       }
-    }
-    // 图文配对：AI 摘要不含图片内容，无法语义配对；按原稿几何
-    // "每个图/形状 ↔ 最近文本块"配对并相邻排序，避免排版后图文对应颠倒。
-    final paired = _pairTextAndFigures(items,
-      createdTexts: createdTexts,
-      pageElements: pageElements,
-      groupsOnPage: groupsOnPage,
-    );
-    items = paired.items;
-    if (items.isEmpty) {
-      return _legacyPlacementPlan(
-        response,
-        page: page,
-        failures: failures,
-        removeIds: removeIds,
-        failedStrokeIds: failedStrokeIds,
-        removalRects: removalRects,
-        failureRects: failureRects,
-        style: SmartLayoutStyle.inPlace,
+      addElements.add(titleElement);
+      previewRects.add(
+        ui.Rect.fromLTWH(
+          titleElement.x,
+          titleElement.y,
+          titleElement.width,
+          titleElement.height,
+        ),
       );
+      y += titleElement.height + rowGap;
     }
-    final contentArea = ui.Rect.fromLTWH(
-      page.bounds.left + 72,
-      page.bounds.top + 72,
-      page.bounds.width - 144,
-      page.bounds.height - 144,
+    for (final pair in content.pairs) {
+      placeUnit(pair.figureAbove ? pair.figure : pair.caption);
+      placeUnit(pair.figureAbove ? pair.caption : pair.figure);
+    }
+    for (final unit in content.looseTexts) {
+      placeUnit(unit);
+    }
+    for (final unit in content.looseFigures) {
+      placeUnit(unit);
+    }
+
+    final titleCount = content.title != null ? 1 : 0;
+    final document = SmartLayoutDocumentFactory.fromBlocks([
+      for (var i = 0; i < addElements.length; i++)
+        if (addElements[i] is TextElement)
+          SmartLayoutBlock(
+            id: 'export-ppt-$i',
+            type: 'paragraph',
+            text: (addElements[i] as TextElement).text,
+            pageId: content.pageId,
+            order: i,
+          ),
+    ]);
+    return SmartLayoutPlan(
+      pageId: content.pageId,
+      style: SmartLayoutStyle.ppt,
+      confidence: ctx.response.layout?.confidence ?? 0,
+      description:
+          '按 PPT 版式重排：标题 $titleCount 处、配对图文 ${content.pairs.length} 组、'
+          '独立文本 ${content.looseTexts.length} 段、独立配图 ${content.looseFigures.length} 张',
+      addElements: addElements,
+      moveDeltas: moveDeltas,
+      removeIds: ctx.removeIds,
+      failedStrokeIds: ctx.failedStrokeIds,
+      selectIds: {
+        ...{for (final element in addElements) element.id},
+        ...moveDeltas.keys,
+      },
+      document: document,
+      previewRects: previewRects,
+      removalRects: ctx.removalRects,
+      failureRects: ctx.failureRects,
     );
+  }
+
+  SmartLayoutPlan? _layoutTwoColumn(
+    SmartLayoutContent content,
+    SmartLayoutTemplateContext ctx,
+  ) {
+    final items = <PptGroupItem>[
+      for (final unit in content.looseTexts)
+        PptGroupItem(key: unit.key, role: 'body', memberKeys: [unit.key]),
+      for (final unit in content.looseFigures)
+        PptGroupItem(key: unit.key, role: 'figure', memberKeys: [unit.key]),
+    ];
+    if (items.isEmpty) return null;
+    final units = <String, ui.Size>{
+      for (final unit in content.looseTexts) unit.key: unit.size,
+      for (final unit in content.looseFigures) unit.key: unit.size,
+    };
+    final participantIds = <ElementId>{
+      for (final unit in content.looseFigures)
+        ...(unit.memberIds.isNotEmpty
+            ? unit.memberIds.map((id) => ElementId(id))
+            : [ElementId(unit.key)]),
+    };
     final pageOccupied =
         _smartLayoutSceneOccupancy({
-          ...excludedIds,
-          // 参与排版的既有元素不构成障碍（它们会被移动到目标位置）
-          for (final entry in rawToUnitKey.entries)
-            if (pageElements.containsKey(entry.key)) ElementId(entry.key),
-        })[pageId] ??
+          ...ctx.excludedIds,
+          ...participantIds,
+        })[content.pageId] ??
         const <Bounds>[];
     final placed = PptLayoutEngine.place(
-      contentArea: contentArea,
+      contentArea: content.contentArea,
       groups: items,
       units: {
         for (final entry in units.entries)
@@ -4206,81 +4193,59 @@ class MarkdrawController extends ChangeNotifier {
             bounds.size.height,
           ),
       ],
-      // 存在图文配对时用单列文档流（文上图下相邻）；双列两侧行高不同会错开配对
-      singleColumn: paired.pairs > 0,
     );
     if (placed == null) {
       throw StateError('智能排版没有足够的空白区域');
     }
+    // 两栏整体水平居中：内容包围盒 centerX 对齐内容区 centerX
+    var unionLeft = double.infinity;
+    var unionRight = double.negativeInfinity;
+    for (final entry in placed.targets.entries) {
+      final unit = units[entry.key];
+      if (unit == null) continue;
+      unionLeft = math.min(unionLeft, entry.value.dx);
+      unionRight = math.max(unionRight, entry.value.dx + unit.width);
+    }
+    final shiftX = unionLeft.isFinite
+        ? content.contentArea.center.dx - (unionLeft + unionRight) / 2
+        : 0.0;
+
     final addElements = <Element>[];
     final moveDeltas = <ElementId, ui.Offset>{};
     final previewRects = <ui.Rect>[];
     for (final item in items) {
       final target = placed.targets[item.key];
       if (target == null) continue;
-      if (item.memberKeys.length == 1 &&
-          groupsOnPage.containsKey(item.memberKeys.first)) {
-        final groupKey = item.memberKeys.first;
-        final group = groupsOnPage[groupKey]!;
+      final x = target.dx + shiftX;
+      final y = target.dy;
+      final textUnit = content.looseTexts
+          .where((unit) => unit.key == item.key)
+          .firstOrNull;
+      final figureUnit = textUnit == null
+          ? content.looseFigures
+                .where((unit) => unit.key == item.key)
+                .firstOrNull
+          : null;
+      if (textUnit?.textElement != null) {
+        addElements.add(textUnit!.textElement!.copyWith(x: x, y: y));
+      } else if (figureUnit != null) {
         final delta = ui.Offset(
-          target.dx - group.$1.left,
-          target.dy - group.$1.top,
+          x - figureUnit.sourceBounds.left,
+          y - figureUnit.sourceBounds.top,
         );
-        for (final memberId in group.$2) {
-          final element = pageElements[memberId];
-          if (element == null) continue;
-          moveDeltas[ElementId(memberId)] = delta;
-          previewRects.add(
-            ui.Rect.fromLTWH(
-              element.x + delta.dx,
-              element.y + delta.dy,
-              element.width,
-              element.height,
-            ),
-          );
-        }
-        continue;
-      }
-      var x = target.dx;
-      for (final key in item.memberKeys) {
-        final text = createdTexts[key];
-        if (text != null) {
-          addElements.add(text.copyWith(x: x, y: target.dy));
-          previewRects.add(
-            ui.Rect.fromLTWH(x, target.dy, text.width, text.height),
-          );
-        } else {
-          final element = pageElements[key];
-          if (element != null) {
-            moveDeltas[ElementId(key)] = ui.Offset(
-              x - element.x,
-              target.dy - element.y,
-            );
-            previewRects.add(
-              ui.Rect.fromLTWH(
-                x,
-                target.dy,
-                element.width,
-                element.height,
-              ),
-            );
-          }
-        }
-        final size = units[key];
-        if (size != null) {
-          x += size.width + PptLayoutEngine.unitGap;
+        final ids = figureUnit.memberIds.isNotEmpty
+            ? figureUnit.memberIds
+            : [figureUnit.key];
+        for (final id in ids) {
+          moveDeltas[ElementId(id)] = delta;
         }
       }
+      final previewSize =
+          textUnit?.size ?? figureUnit?.size ?? const ui.Size(0, 0);
+      previewRects.add(
+        ui.Rect.fromLTWH(x, y, previewSize.width, previewSize.height),
+      );
     }
-    final titleCount = structure.groups
-        .where((group) => group.role == 'title')
-        .length;
-    final bodyCount = structure.groups
-        .where((group) => group.role == 'body' || group.role == 'heading')
-        .length;
-    final figureCount = structure.groups
-        .where((group) => group.role == 'figure')
-        .length;
     final document = SmartLayoutDocumentFactory.fromBlocks([
       for (var i = 0; i < addElements.length; i++)
         if (addElements[i] is TextElement)
@@ -4288,33 +4253,40 @@ class MarkdrawController extends ChangeNotifier {
             id: 'export-ppt-$i',
             type: 'paragraph',
             text: (addElements[i] as TextElement).text,
-            pageId: pageId,
+            pageId: content.pageId,
             order: i,
           ),
     ]);
-    return SmartLayoutPlanResult(
-      plan: SmartLayoutPlan(
-        pageId: pageId,
-        style: SmartLayoutStyle.ppt,
-        confidence: response.layout?.confidence ?? 0,
-        description:
-            '按 PPT 版式重排：标题 $titleCount 处、正文段落 $bodyCount 段、配图 $figureCount 张',
-        addElements: addElements,
-        moveDeltas: moveDeltas,
-        removeIds: removeIds,
-        failedStrokeIds: failedStrokeIds,
-        selectIds: {
-          ...{for (final element in addElements) element.id},
-          ...moveDeltas.keys,
-        },
-        document: document,
-        previewRects: previewRects,
-        removalRects: removalRects,
-        failureRects: failureRects,
-      ),
-      failures: failures,
+    return SmartLayoutPlan(
+      pageId: content.pageId,
+      style: SmartLayoutStyle.ppt,
+      confidence: ctx.response.layout?.confidence ?? 0,
+      description:
+          '按 PPT 版式重排：正文 ${content.looseTexts.length} 段、配图 ${content.looseFigures.length} 张',
+      addElements: addElements,
+      moveDeltas: moveDeltas,
+      removeIds: ctx.removeIds,
+      failedStrokeIds: ctx.failedStrokeIds,
+      selectIds: {
+        ...{for (final element in addElements) element.id},
+        ...moveDeltas.keys,
+      },
+      document: document,
+      previewRects: previewRects,
+      removalRects: ctx.removalRects,
+      failureRects: ctx.failureRects,
     );
   }
+
+  SmartLayoutPlan? _layoutPpt(
+    SmartLayoutContent content,
+    SmartLayoutTemplateContext ctx,
+  ) {
+    return content.pairs.isNotEmpty
+        ? _layoutPairFlow(content, ctx)
+        : _layoutTwoColumn(content, ctx);
+  }
+
 
   Future<List<SmartLayoutRecognizedBlock>>
   _recognizeSmartLayoutBlocksInParallel(
