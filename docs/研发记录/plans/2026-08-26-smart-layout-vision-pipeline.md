@@ -76,6 +76,24 @@ ScreenSpotPro SOTA <40），**正确形态 = VLM 提议角色/文字/配对/粗�
 4. 接线：`_runSmartLayoutPage` 优先 vision、失败回退 + 全量门禁。
 5. 文档同步（接口设计.md + 项目需求.md + 本计划执行结果）+ 提交（不推送）。
 
+## 执行结果（2026-08-26）
+
+全部完成，边界较计划有两处明确收窄/增强：
+
+- **服务端**：`internal/recognition/vision_layout.go`（VisionLayouter + 0-1000 坐标钳制、角色白名单、
+  幻觉过滤、title 去重、元素 ≤50）；路由 `POST /api/ink/smart-layout/vision`（HTTPAPI 增加
+  `WithVisionLayouter` 注入）；`vision_layout_test.go` 9 例（合法 JSON/坐标越界钳制/幻觉丢弃/
+  非法 JSON 报错/端点校验）。`go test ./... && go vet ./...` 通过。
+- **客户端**：`SmartLayoutVisionRequest/Element/Response` 模型（smart_layout_document.dart，fromJson
+  双重钳制+倒置交换）；repository `visionSmartLayout()`；纯函数匹配器 `SmartLayoutVisionMatcher`
+  （新文件 smart_layout_vision_matcher.dart：文本按"簇在框内覆盖率 ≥0.35"认领、图形按
+  interArea/min ≥0.4 唯一匹配）；控制器 `_tryBuildVisionLayoutPlan`（截图 → VLM → 匹配 → 组装
+  SmartLayoutContent → 复用 PairFlow/TwoColumn），未接线/截图失败/接口异常/风格非 ppt/
+  匹配项 <2/落位空间不足 六种情况均自动回退经典管线。
+- **附带修复**：`_layoutTwoColumn` 原先不放置 `content.title`（经典管线 ppt 无配对时标题丢失），
+  已对齐 pairFlow 的"置顶居中放大"处理并有回归测试。
+- **验收**：flutter analyze 0 error；flutter test 全量 642/642 通过（含新增 vision 测试 10 例）。
+
 ## 边界与风险
 
 - VLM 坐标为粗位置（客户端模板精修）；小而密集元素可能漏/偏（草稿态人工兜底）；

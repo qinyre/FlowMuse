@@ -1,3 +1,7 @@
+import 'dart:ui';
+
+import 'package:flutter/foundation.dart';
+
 import '../elements/elements.dart';
 import '../layout/layout.dart';
 import '../math/math.dart';
@@ -600,6 +604,134 @@ class SmartLayoutResponse {
               Map<String, Object?>.from(rawLayout),
             )
           : null,
+    );
+  }
+}
+
+/// 视觉优先管线请求：整页截图（+可选笔记标题），服务端调 VLM 一次判定。
+class SmartLayoutVisionRequest {
+  const SmartLayoutVisionRequest({
+    required this.pageId,
+    required this.imageBase64,
+    this.noteTitle,
+    this.imageMime = 'image/png',
+  });
+
+  final String pageId;
+  final String? noteTitle;
+  final String imageMime;
+  final String imageBase64;
+
+  Map<String, Object?> toJson() => {
+    'pageId': pageId,
+    if (noteTitle != null && noteTitle!.isNotEmpty) 'noteTitle': noteTitle,
+    'imageMime': imageMime,
+    'imageBase64': imageBase64,
+  };
+}
+
+/// VLM 对页面内一项内容的描述；box 为 0-1000 归一化 [x1,y1,x2,y2]。
+@immutable
+class SmartLayoutVisionElement {
+  const SmartLayoutVisionElement({
+    required this.role,
+    required this.x1,
+    required this.y1,
+    required this.x2,
+    required this.y2,
+    this.text,
+    this.vertical = false,
+    this.pairId,
+  });
+
+  /// title | caption | body | figure（未知角色已在服务端归为 body）。
+  final String role;
+  final String? text;
+  final bool vertical;
+  final String? pairId;
+
+  /// 0-1000 归一化坐标（客户端已钳制并保证 x1<x2、y1<y2）。
+  final double x1;
+  final double y1;
+  final double x2;
+  final double y2;
+
+  bool get isFigure => role == 'figure';
+
+  /// 映射到 [bounds]（页面场景坐标）内的矩形。
+  Rect sceneRect(Bounds bounds) {
+    return Rect.fromLTWH(
+      bounds.left + x1 / 1000 * bounds.size.width,
+      bounds.top + y1 / 1000 * bounds.size.height,
+      (x2 - x1) / 1000 * bounds.size.width,
+      (y2 - y1) / 1000 * bounds.size.height,
+    );
+  }
+
+  factory SmartLayoutVisionElement.fromJson(Map<String, Object?> json) {
+    double clampCoord(Object? value) =>
+        ((value as num?)?.toDouble() ?? 0).clamp(0.0, 1000.0).toDouble();
+    var x1 = 0.0;
+    var y1 = 0.0;
+    var x2 = 0.0;
+    var y2 = 0.0;
+    final rawBox = json['box'];
+    if (rawBox is List && rawBox.length == 4) {
+      x1 = clampCoord(rawBox[0]);
+      y1 = clampCoord(rawBox[1]);
+      x2 = clampCoord(rawBox[2]);
+      y2 = clampCoord(rawBox[3]);
+    }
+    if (x2 < x1) {
+      final swap = x1;
+      x1 = x2;
+      x2 = swap;
+    }
+    if (y2 < y1) {
+      final swap = y1;
+      y1 = y2;
+      y2 = swap;
+    }
+    return SmartLayoutVisionElement(
+      role: json['role'] as String? ?? 'body',
+      text: json['text'] as String?,
+      vertical: json['vertical'] == true,
+      pairId: json['pairId'] as String?,
+      x1: x1,
+      y1: y1,
+      x2: x2,
+      y2: y2,
+    );
+  }
+}
+
+/// 视觉排版判定结果（服务端已做过角色白名单/坐标钳制/幻觉过滤）。
+class SmartLayoutVisionResponse {
+  const SmartLayoutVisionResponse({
+    required this.style,
+    required this.elements,
+    this.confidence = 0,
+  });
+
+  final SmartLayoutStyle style;
+  final List<SmartLayoutVisionElement> elements;
+  final double confidence;
+
+  bool get isSupported =>
+      style == SmartLayoutStyle.ppt ||
+      style == SmartLayoutStyle.article ||
+      style == SmartLayoutStyle.inPlace;
+
+  factory SmartLayoutVisionResponse.fromJson(Map<String, Object?> json) {
+    return SmartLayoutVisionResponse(
+      style: SmartLayoutStyle.fromWire(json['style'] as String?),
+      confidence:
+          ((json['confidence'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0),
+      elements: [
+        for (final item in json['elements'] as List<Object?>? ?? const [])
+          if (item is Map)
+            SmartLayoutVisionElement.fromJson(Map<String, Object?>.from(item)),
+      ],
     );
   }
 }

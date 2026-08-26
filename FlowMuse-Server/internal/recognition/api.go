@@ -20,6 +20,7 @@ type Recognizer interface {
 type HTTPAPI struct {
 	recognizer     Recognizer
 	layouter       SmartLayouter
+	visionLayouter VisionLayouter
 	requestTimeout time.Duration
 }
 
@@ -35,11 +36,18 @@ func NewHTTPAPI(recognizer Recognizer, requestTimeout time.Duration, layouter ..
 	}
 }
 
+// WithVisionLayouter 注入视觉优先排版通道（可选；未注入时 vision 端点返回 502）。
+func (api *HTTPAPI) WithVisionLayouter(visionLayouter VisionLayouter) *HTTPAPI {
+	api.visionLayouter = visionLayouter
+	return api
+}
+
 func (api *HTTPAPI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/ink/recognize", api.recognize)
 	mux.HandleFunc("/api/ink/smart-layout", api.smartLayout)
 	mux.HandleFunc("/api/ink/smart-layout/block", api.smartLayoutBlock)
 	mux.HandleFunc("/api/ink/smart-layout/compose", api.smartLayoutCompose)
+	mux.HandleFunc("/api/ink/smart-layout/vision", api.smartLayoutVision)
 }
 
 func (api *HTTPAPI) recognize(w http.ResponseWriter, r *http.Request) {
@@ -154,6 +162,35 @@ func (api *HTTPAPI) smartLayoutCompose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response, err := api.layouter.Compose(ctx, request)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (api *HTTPAPI) smartLayoutVision(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, "POST")
+		return
+	}
+	if api.visionLayouter == nil {
+		http.Error(w, "AI vision layout is not configured", http.StatusBadGateway)
+		return
+	}
+	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
+	defer cancel()
+	var request VisionLayoutRequest
+	r.Body = http.MaxBytesReader(w, r.Body, maxSmartLayoutBodyBytes)
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(request.ImageBase64) == "" {
+		http.Error(w, "image is required", http.StatusBadRequest)
+		return
+	}
+	response, err := api.visionLayouter.VisionLayout(ctx, request)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return

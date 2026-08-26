@@ -2534,6 +2534,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onComposeSmartLayout: (request) => ref
                       .read(inkRecognitionRepositoryProvider)
                       .composeSmartLayout(request),
+                  onVisionSmartLayout: (request) => ref
+                      .read(inkRecognitionRepositoryProvider)
+                      .visionSmartLayout(request),
                   onAiPressed: _toggleAiAgent,
                   onSmartLayoutPressed: () => _startSmartLayoutFlow(),
                   onLiveFreedrawChanged: state.collaborating

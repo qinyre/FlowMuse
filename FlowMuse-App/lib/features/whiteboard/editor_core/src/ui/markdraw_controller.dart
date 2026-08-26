@@ -305,6 +305,8 @@ class MarkdrawController extends ChangeNotifier {
   onRecognizeSmartLayoutBlock;
   Future<SmartLayoutResponse> Function(SmartLayoutComposeRequest)?
   onComposeSmartLayout;
+  Future<SmartLayoutVisionResponse> Function(SmartLayoutVisionRequest)?
+  onVisionSmartLayout;
   ValueChanged<String>? onMindmapOperationError;
   void Function(bool enabled)? onInkRecognitionModeChanged;
 
@@ -3274,6 +3276,14 @@ class MarkdrawController extends ChangeNotifier {
       if (inkGroups.isEmpty) {
         return const SmartLayoutPlanResult();
       }
+      // 视觉优先管线：VLM 看整页截图一次完成认字+结构+配对（失败/不可用回退经典管线）。
+      final visionResult = await _tryBuildVisionLayoutPlan(page, inkGroups);
+      if (_disposed) {
+        return const SmartLayoutPlanResult(error: '编辑器已释放');
+      }
+      if (visionResult != null) {
+        return visionResult;
+      }
       final request = await _buildSmartLayoutRequest(inkGroups, engine: engine);
       if (_disposed || request.blocks.isEmpty) {
         return const SmartLayoutPlanResult();
@@ -3612,6 +3622,309 @@ class MarkdrawController extends ChangeNotifier {
       size,
       padding: 32,
     );
+  }
+
+  /// 视觉优先管线：整页截图交 VLM 判定，匹配回场景原稿后走现有 PPT 模板。
+  /// 返回 null = 回退经典管线（未接线 / 截图失败 / 接口异常 / 风格未接管 / 匹配项过少）。
+  Future<SmartLayoutPlanResult?> _tryBuildVisionLayoutPlan(
+    CanvasPage page,
+    Map<String, List<FreedrawElement>> inkGroups,
+  ) async {
+    final visionCallback = onVisionSmartLayout;
+    if (visionCallback == null) return null;
+    final pageBounds = ui.Rect.fromLTWH(
+      page.bounds.left,
+      page.bounds.top,
+      page.bounds.width,
+      page.bounds.height,
+    );
+    Uint8List? png;
+    try {
+      png = await exportRegionPng(pageBounds);
+    } catch (error) {
+      debugPrint('[$_logTag] 视觉排版截图失败，回退经典管线: $error');
+      return null;
+    }
+    if (png == null || png.isEmpty || _disposed) return null;
+    SmartLayoutVisionResponse vision;
+    try {
+      vision = await visionCallback(
+        SmartLayoutVisionRequest(
+          pageId: page.id,
+          imageBase64: base64Encode(png),
+        ),
+      );
+    } catch (error) {
+      debugPrint('[$_logTag] 视觉排版请求失败，回退经典管线: $error');
+      return null;
+    }
+    if (_disposed) return null;
+    // v1 仅接管 ppt 风格；article/in_place/mindmap 由经典管线负责。
+    if (!vision.isSupported || vision.style != SmartLayoutStyle.ppt) {
+      debugPrint(
+        '[$_logTag] 视觉排版风格 ${vision.style.wireName} 未接管，回退经典管线',
+      );
+      return null;
+    }
+
+    final clusterRects = <String, ui.Rect>{
+      for (final entry in inkGroups.entries)
+        entry.key: _inkGroupBounds(entry.value),
+    };
+    final figures = _smartLayoutFigureUnits(page.id);
+    final match = SmartLayoutVisionMatcher.match(
+      elements: vision.elements,
+      pageBounds: pageBounds,
+      inkClusters: clusterRects,
+      figureUnits: figures.rects,
+    );
+    if (match.matchedItemCount < 2) {
+      debugPrint(
+        '[$_logTag] 视觉排版匹配项过少（${match.matchedItemCount}），回退经典管线',
+      );
+      return null;
+    }
+
+    // 文本项 → TextElement（source = 认领笔迹簇并集；AI 文字 + 竖排标记）。
+    final textElementsByIndex = <int, TextElement>{};
+    final textSourceByIndex = <int, ui.Rect>{};
+    for (final entry in match.textClaims.entries) {
+      final visionElement = vision.elements[entry.key];
+      var union = clusterRects[entry.value.first]!;
+      for (final key in entry.value.skip(1)) {
+        union = union.expandToInclude(clusterRects[key]!);
+      }
+      final pseudoBlock = SmartLayoutRecognizedBlock(
+        id: 'vision-${entry.key}',
+        pageId: page.id,
+        type: 'text',
+        text: visionElement.text?.trim() ?? '',
+        bounds: Bounds.fromLTWH(
+          union.left,
+          union.top,
+          union.width,
+          union.height,
+        ),
+      );
+      final textElement = _textElementFromRecognizedBlock(
+        pseudoBlock,
+        vertical: visionElement.vertical,
+      );
+      if (textElement == null) continue;
+      textElementsByIndex[entry.key] = textElement;
+      textSourceByIndex[entry.key] = union;
+    }
+
+    LayoutUnit makeTextUnit(int index) {
+      final element = textElementsByIndex[index]!;
+      return LayoutUnit(
+        key: 'vision-$index',
+        sourceBounds: textSourceByIndex[index]!,
+        size: ui.Size(element.width, element.height),
+        kind: LayoutUnitKind.text,
+        textElement: element,
+        vertical: vision.elements[index].vertical,
+      );
+    }
+
+    LayoutUnit? makeFigureUnit(int index) {
+      final unitKey = match.figureClaims[index];
+      if (unitKey == null) return null;
+      final rect = figures.rects[unitKey];
+      final representative = figures.elements[unitKey];
+      if (rect == null || representative == null) return null;
+      return LayoutUnit(
+        key: unitKey,
+        sourceBounds: rect,
+        size: ui.Size(rect.width, rect.height),
+        kind: representative is ImageElement
+            ? LayoutUnitKind.image
+            : LayoutUnitKind.shape,
+        element: representative,
+        memberIds: figures.memberIds[unitKey] ?? [unitKey],
+      );
+    }
+
+    // title：第一个 role=title 且成功创建的文本项（仅 1 个，AI 侧已去重）。
+    int? titleIndex;
+    for (final index in match.textClaims.keys) {
+      if (vision.elements[index].role == 'title') {
+        if (textElementsByIndex.containsKey(index)) {
+          titleIndex = index;
+        }
+        break;
+      }
+    }
+
+    // pairId 配对：同 ID 的 caption+figure 各取第一项；figureAbove 按原稿几何。
+    final captionIndexByPair = <String, int>{};
+    for (final index in match.textClaims.keys) {
+      if (index == titleIndex) continue;
+      final pairId = vision.elements[index].pairId?.trim();
+      if (pairId != null &&
+          pairId.isNotEmpty &&
+          !captionIndexByPair.containsKey(pairId)) {
+        captionIndexByPair[pairId] = index;
+      }
+    }
+    final figureIndexByPair = <String, int>{};
+    for (final index in match.figureClaims.keys) {
+      final pairId = vision.elements[index].pairId?.trim();
+      if (pairId != null &&
+          pairId.isNotEmpty &&
+          !figureIndexByPair.containsKey(pairId)) {
+        figureIndexByPair[pairId] = index;
+      }
+    }
+    final pairedTextIndexes = <int>{};
+    final pairs = <FigureTextPair>[];
+    for (final entry in figureIndexByPair.entries) {
+      final captionIndex = captionIndexByPair[entry.key];
+      if (captionIndex == null) continue;
+      final figure = makeFigureUnit(entry.value);
+      if (figure == null || !textElementsByIndex.containsKey(captionIndex)) {
+        continue;
+      }
+      final caption = makeTextUnit(captionIndex);
+      pairs.add(
+        FigureTextPair(
+          figure: figure,
+          caption: caption,
+          figureAbove:
+              figure.sourceBounds.top <= caption.sourceBounds.top,
+        ),
+      );
+      pairedTextIndexes.add(captionIndex);
+    }
+
+    // 松散项按阅读顺序（先上后左）排列——确定性。
+    int readingCompare(ui.Rect a, ui.Rect b) {
+      final byTop = a.top.compareTo(b.top);
+      return byTop != 0 ? byTop : a.left.compareTo(b.left);
+    }
+
+    final looseTexts =
+        [
+          for (final index in textElementsByIndex.keys)
+            if (index != titleIndex && !pairedTextIndexes.contains(index))
+              makeTextUnit(index),
+        ]..sort(
+          (a, b) => readingCompare(a.sourceBounds, b.sourceBounds),
+        );
+    final looseFigures = <LayoutUnit>[];
+    for (final index in match.figureClaims.keys) {
+      if (figureIndexByPair.containsValue(index)) continue;
+      final unit = makeFigureUnit(index);
+      if (unit != null) looseFigures.add(unit);
+    }
+    looseFigures.sort(
+      (a, b) => readingCompare(a.sourceBounds, b.sourceBounds),
+    );
+
+    final content = SmartLayoutContent(
+      pageId: page.id,
+      contentArea: ui.Rect.fromLTWH(
+        page.bounds.left + 72,
+        page.bounds.top + 72,
+        page.bounds.width - 144,
+        page.bounds.height - 144,
+      ),
+      title: titleIndex == null ? null : makeTextUnit(titleIndex),
+      pairs: pairs,
+      looseTexts: looseTexts,
+      looseFigures: looseFigures,
+    );
+
+    final removeStrokeIds = <ElementId>[
+      for (final keys in match.textClaims.values)
+        for (final key in keys)
+          for (final stroke in inkGroups[key] ?? const <FreedrawElement>[])
+            stroke.id,
+      for (final text in _pageScopedOldSmartText(page.id)) text.id,
+    ];
+    final failedStrokeIds = <ElementId>[
+      for (final key in match.unclaimedClusterKeys)
+        for (final stroke in inkGroups[key] ?? const <FreedrawElement>[])
+          stroke.id,
+    ];
+    final removalRects = <ui.Rect>[
+      for (final keys in match.textClaims.values)
+        for (final key in keys) clusterRects[key]!,
+    ];
+    final failureRects = <ui.Rect>[
+      for (final key in match.unclaimedClusterKeys) clusterRects[key]!,
+    ];
+
+    try {
+      final plan = _layoutPpt(
+        content,
+        SmartLayoutTemplateContext(
+          response: SmartLayoutResponse(
+            document: SmartLayoutDocumentFactory.fromBlocks(const []),
+            layout: SmartLayoutLayoutDecision(
+              style: vision.style,
+              confidence: vision.confidence,
+            ),
+          ),
+          excludedIds: {...removeStrokeIds},
+          failures: [
+            for (var i = 0; i < failureRects.length; i++)
+              SmartLayoutFailureInfo(
+                blockId: 'vision-failed-$i',
+                bounds: failureRects[i],
+                error: '疑似手写内容未被识别成功',
+              ),
+          ],
+          removeIds: removeStrokeIds,
+          failedStrokeIds: failedStrokeIds,
+          removalRects: removalRects,
+          failureRects: failureRects,
+        ),
+      );
+      if (plan == null) return null;
+      return SmartLayoutPlanResult(plan: plan);
+    } on StateError catch (error) {
+      // 内容流放不下时交经典管线再试一次（其带避碰回退）。
+      debugPrint('[$_logTag] 视觉排版落位失败，回退经典管线: $error');
+      return null;
+    }
+  }
+
+  /// 页内可移动元素 → 版式图形单元（整组共用一个单元），供视觉匹配与模板移动。
+  ({Map<String, Element> elements, Map<String, ui.Rect> rects,
+  Map<String, List<String>> memberIds}) _smartLayoutFigureUnits(String pageId) {
+    final elements = <String, Element>{};
+    final rects = <String, ui.Rect>{};
+    final memberIds = <String, List<String>>{};
+    void addUnit(String key, List<Element> members) {
+      var union = _placementBoundsForElement(members.first);
+      for (final member in members.skip(1)) {
+        union = union.union(_placementBoundsForElement(member));
+      }
+      elements[key] = members.first;
+      rects[key] = ui.Rect.fromLTWH(
+        union.left,
+        union.top,
+        union.size.width,
+        union.size.height,
+      );
+      memberIds[key] = [
+        for (final member in members) member.id.value,
+      ];
+    }
+
+    for (final element in _smartLayoutPageElements(pageId)) {
+      final groupId = GroupUtils.outermostGroupId(element);
+      if (groupId == null) {
+        addUnit(element.id.value, [element]);
+        continue;
+      }
+      if (elements.containsKey(groupId)) continue;
+      final members = GroupUtils.findGroupMembers(_editorState.scene, groupId);
+      if (members.isEmpty) continue;
+      addUnit(groupId, members);
+    }
+    return (elements: elements, rects: rects, memberIds: memberIds);
   }
 
   SmartLayoutPlanResult _planForStyle(
@@ -4183,6 +4496,31 @@ class MarkdrawController extends ChangeNotifier {
       for (final unit in content.looseTexts) unit.key: unit.size,
       for (final unit in content.looseFigures) unit.key: unit.size,
     };
+    // 标题预留：与 _layoutPairFlow 一致（置顶居中放大），两栏内容区下移。
+    TextElement? titleElement;
+    var columnsArea = content.contentArea;
+    if (content.title?.textElement != null) {
+      var candidate = content.title!.textElement!;
+      if (candidate.fontSize < 28) {
+        candidate = candidate.copyWithText(fontSize: 28);
+        final (measuredWidth, measuredHeight) = TextRenderer.measure(candidate);
+        candidate = candidate.copyWith(
+          width: math.max(candidate.width, measuredWidth),
+          height: math.max(candidate.height, measuredHeight),
+        );
+      }
+      titleElement = candidate;
+      final reserved = candidate.height + 24;
+      if (columnsArea.height - reserved <= 0) {
+        throw StateError('智能排版没有足够的空白区域');
+      }
+      columnsArea = ui.Rect.fromLTWH(
+        content.contentArea.left,
+        content.contentArea.top + reserved,
+        content.contentArea.width,
+        content.contentArea.height - reserved,
+      );
+    }
     final participantIds = <ElementId>{
       for (final unit in content.looseFigures)
         ...(unit.memberIds.isNotEmpty
@@ -4196,7 +4534,7 @@ class MarkdrawController extends ChangeNotifier {
         })[content.pageId] ??
         const <Bounds>[];
     final placed = PptLayoutEngine.place(
-      contentArea: content.contentArea,
+      contentArea: columnsArea,
       groups: items,
       units: {
         for (final entry in units.entries)
@@ -4228,9 +4566,23 @@ class MarkdrawController extends ChangeNotifier {
         ? content.contentArea.center.dx - (unionLeft + unionRight) / 2
         : 0.0;
 
-    final addElements = <Element>[];
+    final addElements = <Element>[
+      if (titleElement != null)
+        titleElement.copyWith(
+          x: content.contentArea.center.dx - titleElement.width / 2,
+          y: content.contentArea.top,
+        ),
+    ];
     final moveDeltas = <ElementId, ui.Offset>{};
-    final previewRects = <ui.Rect>[];
+    final previewRects = <ui.Rect>[
+      if (titleElement != null)
+        ui.Rect.fromLTWH(
+          content.contentArea.center.dx - titleElement.width / 2,
+          content.contentArea.top,
+          titleElement.width,
+          titleElement.height,
+        ),
+    ];
     for (final item in items) {
       final target = placed.targets[item.key];
       if (target == null) continue;
@@ -4280,7 +4632,8 @@ class MarkdrawController extends ChangeNotifier {
       style: SmartLayoutStyle.ppt,
       confidence: ctx.response.layout?.confidence ?? 0,
       description:
-          '按 PPT 版式重排：正文 ${content.looseTexts.length} 段、配图 ${content.looseFigures.length} 张',
+          '按 PPT 版式重排：${content.title != null ? '标题 1 处、' : ''}'
+          '正文 ${content.looseTexts.length} 段、配图 ${content.looseFigures.length} 张',
       addElements: addElements,
       moveDeltas: moveDeltas,
       removeIds: ctx.removeIds,

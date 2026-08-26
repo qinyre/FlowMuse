@@ -251,6 +251,39 @@ class InkRecognitionRepository {
     );
   }
 
+  /// 视觉优先智能排版：整页截图交由服务端 VLM 一次判定风格/内容/粗位置。
+  Future<SmartLayoutVisionResponse> visionSmartLayout(
+    SmartLayoutVisionRequest request,
+  ) async {
+    final bodyJson = jsonEncode(request.toJson());
+    final url = _serverUri
+        .replace(
+          path: _joinPath(_serverUri.path, '/api/ink/smart-layout/vision'),
+        )
+        .toString();
+    final token = await _readTokenForRequest();
+    final response = await NativeHttpClient.post(
+      url: url,
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      },
+      body: bodyJson,
+      connectTimeoutMs: _connectTimeoutMs,
+      readTimeoutMs: _smartLayoutReadTimeoutMs,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        response.body.isEmpty
+            ? '视觉排版失败：HTTP ${response.statusCode}'
+            : response.body,
+      );
+    }
+    return SmartLayoutVisionResponse.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
   Future<String?> _readTokenForRequest() async {
     try {
       return await _tokenStore.readToken().timeout(
