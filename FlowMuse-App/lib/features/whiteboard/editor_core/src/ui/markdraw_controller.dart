@@ -3893,6 +3893,112 @@ class MarkdrawController extends ChangeNotifier {
     ];
   }
 
+  /// 图文配对重排：把"每个图/形状 ↔ 原稿上最近的文本块"配成相邻单元。
+  /// AI 摘要不含图片内容无法语义配对；按原稿几何贪心最近配对（中心距离升序、互为唯一），
+  /// 按配对文本原 y 排序，图在文本上的按 [图, 文]、否则 [文, 图]；未配对项保持原顺序。
+  ({List<PptGroupItem> items, int pairs}) _pairTextAndFigures(
+    List<PptGroupItem> items, {
+    required Map<String, TextElement> createdTexts,
+    required Map<String, Element> pageElements,
+    required Map<String, (ui.Rect, List<String>)> groupsOnPage,
+  }) {
+    final textItems = <PptGroupItem>[
+      for (final item in items)
+        if (item.memberKeys.every((key) => createdTexts.containsKey(key)))
+          item,
+    ];
+    final figureItems = <PptGroupItem>[
+      for (final item in items)
+        if (!item.memberKeys.every((key) => createdTexts.containsKey(key)))
+          item,
+    ];
+    ui.Offset? centerOf(String key) {
+      final text = createdTexts[key];
+      if (text != null) {
+        return ui.Offset(text.x + text.width / 2, text.y + text.height / 2);
+      }
+      final element = pageElements[key];
+      if (element != null) {
+        return ui.Offset(
+          element.x + element.width / 2,
+          element.y + element.height / 2,
+        );
+      }
+      final group = groupsOnPage[key];
+      if (group != null) {
+        return ui.Offset(group.$1.center.dx, group.$1.center.dy);
+      }
+      return null;
+    }
+
+    double squareDistance(ui.Offset a, ui.Offset b) {
+      final dx = a.dx - b.dx;
+      final dy = a.dy - b.dy;
+      return dx * dx + dy * dy;
+    }
+
+    final textItemByKey = {for (final item in textItems) item.key: item};
+    final figureItemById = {
+      for (final item in figureItems)
+        if (item.memberKeys.length == 1) item.memberKeys.first: item,
+    };
+    final distances = <(double, String, String)>[];
+    for (final item in textItems) {
+      final textCenter = centerOf(item.key);
+      if (textCenter == null) continue;
+      for (final figure in figureItems) {
+        if (figure.memberKeys.length != 1) continue;
+        final figureCenter = centerOf(figure.memberKeys.first);
+        if (figureCenter == null) continue;
+        distances.add(
+          (squareDistance(textCenter, figureCenter), item.key, figure.memberKeys.first),
+        );
+      }
+    }
+    distances.sort((a, b) => a.$1.compareTo(b.$1));
+    final pairedTexts = <String>{};
+    final usedFigures = <String>{};
+    final pairs = <(String, String)>[];
+    for (final (_, textKey, figureId) in distances) {
+      if (pairedTexts.contains(textKey) || usedFigures.contains(figureId)) {
+        continue;
+      }
+      pairedTexts.add(textKey);
+      usedFigures.add(figureId);
+      pairs.add((textKey, figureId));
+    }
+    pairs.sort((a, b) {
+      final ay = centerOf(a.$1)?.dy ?? 0;
+      final by = centerOf(b.$1)?.dy ?? 0;
+      return ay.compareTo(by);
+    });
+    final ordered = <PptGroupItem>[];
+    for (final (textKey, figureId) in pairs) {
+      final textItem = textItemByKey[textKey];
+      final figureItem = figureItemById[figureId];
+      if (textItem == null || figureItem == null) continue;
+      final textCenter = centerOf(textKey)!;
+      final figureCenter = centerOf(figureId)!;
+      if (figureCenter.dy < textCenter.dy) {
+        ordered.add(figureItem);
+        ordered.add(textItem);
+      } else {
+        ordered.add(textItem);
+        ordered.add(figureItem);
+      }
+    }
+    for (final item in items) {
+      final single =
+          item.memberKeys.length == 1 ? item.memberKeys.first : null;
+      if (single != null &&
+          (pairedTexts.contains(single) || usedFigures.contains(single))) {
+        continue;
+      }
+      ordered.add(item);
+    }
+    return (items: ordered, pairs: pairs.length);
+  }
+
   ui.Rect _inkGroupBounds(List<FreedrawElement> strokes) {
     var bounds = _placementBoundsForElement(strokes.first);
     for (final stroke in strokes.skip(1)) {
@@ -3976,7 +4082,7 @@ class MarkdrawController extends ChangeNotifier {
       rawToUnitKey[block.id] = block.id;
       units[block.id] = ui.Size(text.width, text.height);
     }
-    final items = <PptGroupItem>[];
+    var items = <PptGroupItem>[];
     for (var i = 0; i < structure.groups.length; i++) {
       final group = structure.groups[i];
       final keys = <String>[];
@@ -4029,6 +4135,14 @@ class MarkdrawController extends ChangeNotifier {
         );
       }
     }
+    // 图文配对：AI 摘要不含图片内容，无法语义配对；按原稿几何
+    // "每个图/形状 ↔ 最近文本块"配对并相邻排序，避免排版后图文对应颠倒。
+    final paired = _pairTextAndFigures(items,
+      createdTexts: createdTexts,
+      pageElements: pageElements,
+      groupsOnPage: groupsOnPage,
+    );
+    items = paired.items;
     if (items.isEmpty) {
       return _legacyPlacementPlan(
         response,
@@ -4071,6 +4185,8 @@ class MarkdrawController extends ChangeNotifier {
             bounds.size.height,
           ),
       ],
+      // 存在图文配对时用单列文档流（文上图下相邻）；双列两侧行高不同会错开配对
+      singleColumn: paired.pairs > 0,
     );
     if (placed == null) {
       throw StateError('智能排版没有足够的空白区域');
