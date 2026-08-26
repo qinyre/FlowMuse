@@ -204,8 +204,14 @@ class RemoteWetInkPainter extends CustomPainter {
   }
 
   Rect _strokeBounds(RemoteWetInkStrokeSnapshot snapshot) {
-    var minX = double.infinity, minY = double.infinity;
-    var maxX = double.negativeInfinity, maxY = double.negativeInfinity;
+    // 冻结几何的包围盒由 store 在冻结时增量维护（评审 P1 修复：聚焦层
+    // bounds 不得每帧重扫全部冻结点——最长笔迹可达 16384 点）；每帧只
+    // 扫描有限的 tail 段，与 Picture 缓存"只处理有限 tail"的设计对齐。
+    final frozen = snapshot.frozenBounds;
+    var minX = frozen?.minX ?? double.infinity;
+    var minY = frozen?.minY ?? double.infinity;
+    var maxX = frozen?.maxX ?? double.negativeInfinity;
+    var maxY = frozen?.maxY ?? double.negativeInfinity;
     void absorb(double x, double y) {
       if (x < minX) minX = x;
       if (y < minY) minY = y;
@@ -213,24 +219,17 @@ class RemoteWetInkPainter extends CustomPainter {
       if (y > maxY) maxY = y;
     }
 
-    void absorbSegmentPoints(Iterable<RemoteWetInkSegment> segments) {
-      for (final segment in segments) {
-        if (segment.leadingPoint != null) {
-          absorb(segment.leadingPoint!.x, segment.leadingPoint!.y);
-        }
-        for (final point in segment.points) {
-          absorb(point.x, point.y);
-        }
-        if (segment.trailingPoint != null) {
-          absorb(segment.trailingPoint!.x, segment.trailingPoint!.y);
-        }
+    for (final segment in snapshot.tailSegments) {
+      if (segment.leadingPoint != null) {
+        absorb(segment.leadingPoint!.x, segment.leadingPoint!.y);
+      }
+      for (final point in segment.points) {
+        absorb(point.x, point.y);
+      }
+      if (segment.trailingPoint != null) {
+        absorb(segment.trailingPoint!.x, segment.trailingPoint!.y);
       }
     }
-
-    absorbSegmentPoints([
-      for (final block in snapshot.frozenBlocks) ...block.segments,
-    ]);
-    absorbSegmentPoints(snapshot.tailSegments);
 
     if (minX > maxX || minY > maxY) {
       return const Rect.fromLTWH(0, 0, 1, 1);

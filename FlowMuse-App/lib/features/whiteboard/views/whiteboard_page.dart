@@ -243,6 +243,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _markdrawController.onPrepareLocalResult = null;
     _markdrawController.removeListener(_onControllerNotifyForFocus);
     _focusTarget = null;
+    _lastFocusEmpty = null;
     _lastKnownCreatorNames.clear();
     _guestCreatorSessionId = null;
     _socketCreatorKeys.clear();
@@ -1452,6 +1453,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _socketCreatorKeys.clear();
     _presenceCreatorRevision++;
     _focusTarget = null;
+    _lastFocusEmpty = null;
     _lastKnownCreatorNames.clear();
   }
 

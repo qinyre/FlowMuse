@@ -46,6 +46,42 @@ class RemoteWetInkSegment {
       index >= startIndex && index < startIndex + points.length;
 }
 
+/// 笔迹点的轴对齐包围盒（纯几何数据，渲染层聚焦 dim 层复用）。
+/// 由 store 在点冻结/合并时增量维护，painter 不得每帧重扫冻结点。
+@immutable
+class RemoteWetInkBounds {
+  const RemoteWetInkBounds(this.minX, this.minY, this.maxX, this.maxY);
+
+  final double minX;
+  final double minY;
+  final double maxX;
+  final double maxY;
+
+  static RemoteWetInkBounds? ofPoints(Iterable<LiveInkPoint> points) {
+    RemoteWetInkBounds? bounds;
+    for (final point in points) {
+      bounds = bounds == null
+          ? RemoteWetInkBounds(point.x, point.y, point.x, point.y)
+          : bounds.expandTo(point.x, point.y);
+    }
+    return bounds;
+  }
+
+  RemoteWetInkBounds expandTo(double x, double y) => RemoteWetInkBounds(
+    x < minX ? x : minX,
+    y < minY ? y : minY,
+    x > maxX ? x : maxX,
+    y > maxY ? y : maxY,
+  );
+
+  RemoteWetInkBounds union(RemoteWetInkBounds other) => RemoteWetInkBounds(
+    other.minX < minX ? other.minX : minX,
+    other.minY < minY ? other.minY : minY,
+    other.maxX > maxX ? other.maxX : maxX,
+    other.maxY > maxY ? other.maxY : maxY,
+  );
+}
+
 @immutable
 class RemoteWetInkBlock {
   const RemoteWetInkBlock({
@@ -53,12 +89,16 @@ class RemoteWetInkBlock {
     required this.segments,
     required this.pointCount,
     required this.revision,
+    required this.bounds,
   });
 
   final int level;
   final List<RemoteWetInkSegment> segments;
   final int pointCount;
   final int revision;
+
+  /// 该冻结块覆盖点的包围盒（创建/合并时一次计算，此后不变）。
+  final RemoteWetInkBounds bounds;
 }
 
 @immutable
@@ -74,6 +114,7 @@ class RemoteWetInkStrokeSnapshot {
     required this.revision,
     required this.pointIndexLog,
     required this.pointIndexLogEnd,
+    this.frozenBounds,
   });
 
   final String senderSocketId;
@@ -86,6 +127,11 @@ class RemoteWetInkStrokeSnapshot {
   final int revision;
   final List<int> pointIndexLog;
   final int pointIndexLogEnd;
+
+  /// 全部已冻结点（含 pending 与已成块）的合并包围盒，随点到达增量扩展；
+  /// null = 尚无冻结点。painter 聚焦 dim 层据此计算 bounds，只另行扫描
+  /// 有限的 tail 段，不重遍历冻结几何（评审 P1 修复）。
+  final RemoteWetInkBounds? frozenBounds;
 
   int get layerCount => frozenBlocks.length + (tailSegments.isEmpty ? 0 : 1);
 }
@@ -372,6 +418,7 @@ class _RemoteWetInkStroke {
   );
   final SplayTreeMap<int, LiveInkPoint> _pendingFrozen = SplayTreeMap();
   List<RemoteWetInkSegment> tailSegments = const [];
+  RemoteWetInkBounds? _frozenBounds;
   int revision = 0;
   int _pointCount = 0;
   int _maxPointIndex = -1;
@@ -398,6 +445,7 @@ class _RemoteWetInkStroke {
       revision: revision,
       pointIndexLog: _pointIndexLog,
       pointIndexLogEnd: _pointIndexLog.length,
+      frozenBounds: _frozenBounds,
     );
   }
 
@@ -444,6 +492,10 @@ class _RemoteWetInkStroke {
   void _appendFrozen(Iterable<MapEntry<int, LiveInkPoint>> entries) {
     for (final entry in entries) {
       _pendingFrozen[entry.key] = entry.value;
+      final point = entry.value;
+      _frozenBounds = _frozenBounds == null
+          ? RemoteWetInkBounds(point.x, point.y, point.x, point.y)
+          : _frozenBounds!.expandTo(point.x, point.y);
     }
     while (_pendingFrozen.length >=
         RemoteWetInkStore.frozenBlockPointCapacity) {
@@ -459,6 +511,9 @@ class _RemoteWetInkStroke {
           segments: List.unmodifiable(_segmentsFrom(entries)),
           pointCount: entries.length,
           revision: ++_blockRevision,
+          bounds: RemoteWetInkBounds.ofPoints(
+            entries.map((entry) => entry.value),
+          )!,
         ),
       );
     }
@@ -474,6 +529,7 @@ class _RemoteWetInkStroke {
           segments: block.segments,
           pointCount: block.pointCount,
           revision: ++_blockRevision,
+          bounds: block.bounds,
         );
         return;
       }
@@ -485,6 +541,7 @@ class _RemoteWetInkStroke {
         ),
         pointCount: existing.pointCount + block.pointCount,
         revision: ++_blockRevision,
+        bounds: existing.bounds.union(block.bounds),
       );
     }
     throw StateError('remote wet ink frozen block capacity exceeded');
