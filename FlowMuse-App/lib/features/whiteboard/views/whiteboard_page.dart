@@ -140,6 +140,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   List<SmartLayoutFailureInfo> _smartLayoutBarFailures = const [];
   bool _smartLayoutBarMultiPage = false;
   Completer<SmartLayoutBarAction>? _smartLayoutBarHandler;
+  Future<void> Function()? _smartLayoutOnProofread;
   Completer<AiVisualAttachment?>? _regionCaptureCompleter;
   bool _aiSpeechInputActive = false;
   late final SpeechRecognitionService _speechRecognitionService;
@@ -915,6 +916,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     SmartLayoutPlan? plan,
     List<SmartLayoutFailureInfo> failures = const [],
     required bool isMultiPage,
+    Future<void> Function()? onProofread,
   }) {
     final completer = Completer<SmartLayoutBarAction>();
     setState(() {
@@ -922,6 +924,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _smartLayoutBarFailures = failures;
       _smartLayoutBarMultiPage = isMultiPage;
       _smartLayoutBarHandler = completer;
+      _smartLayoutOnProofread = onProofread;
     });
     return completer.future.whenComplete(() {
       if (mounted) {
@@ -929,6 +932,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           _smartLayoutBarPlan = null;
           _smartLayoutBarFailures = const [];
           _smartLayoutBarHandler = null;
+          _smartLayoutOnProofread = null;
         });
       }
     });
@@ -941,6 +945,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _smartLayoutBarPlan = null;
       _smartLayoutBarFailures = const [];
       _smartLayoutBarHandler = null;
+      _smartLayoutOnProofread = null;
     });
     handler.complete(action);
   }
@@ -1003,16 +1008,30 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
     final plan = result.plan!;
     // 草稿编辑态：把排版结果渲染为可拖动的临时场景（蓝框=参与者选取框），
-    // 红区以红框标注叠加；用户拖动微调后由底部条确认落地或取消。
+    // 红区以红框标注叠加；低置信文本以橙虚线标注，可经底部条"校对"就地改字。
     _markdrawController.enterSmartLayoutDraft(plan);
-    if (plan.failureRects.isNotEmpty) {
+    void refreshGhost() {
+      final lowConfidenceRects = _markdrawController
+          .smartLayoutDraftLowConfidenceRects;
+      if (plan.failureRects.isEmpty && lowConfidenceRects.isEmpty) return;
       _markdrawController.setSmartLayoutGhost(
-        SmartLayoutGhostSpec.failures(failureRects: plan.failureRects),
+        SmartLayoutGhostSpec.failures(
+          failureRects: plan.failureRects,
+          lowConfidenceRects: lowConfidenceRects,
+        ),
       );
     }
+
+    refreshGhost();
+    Future<void> onProofread() async {
+      await _showSmartLayoutProofreadSheet();
+      refreshGhost();
+    }
+
     final action = await _awaitSmartLayoutBarAction(
       plan: plan,
       isMultiPage: isMultiPage,
+      onProofread: plan.lowConfidenceTexts.isEmpty ? null : onProofread,
     );
     return switch (action) {
       SmartLayoutBarAction.apply =>
@@ -1036,6 +1055,18 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   ) {
     _markdrawController.cancelSmartLayoutDraft();
     return outcome;
+  }
+
+  /// 低置信文本校对编辑条：逐项改字后即时更新草稿场景（关闭后由调用方刷新橙框）。
+  Future<void> _showSmartLayoutProofreadSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SmartLayoutProofreadSheet(
+        items: _markdrawController.smartLayoutDraftProofreadItems,
+        onRevise: _markdrawController.reviseSmartLayoutDraftText,
+      ),
+    );
   }
 
   _SmartLayoutPageOutcome _commitSmartLayoutDraft(
@@ -2599,6 +2630,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                         plan: _smartLayoutBarPlan!,
                         isMultiPage: _smartLayoutBarMultiPage,
                         onAction: _handleSmartLayoutBarAction,
+                        onProofread: _smartLayoutOnProofread,
                       ),
                     ),
                   )

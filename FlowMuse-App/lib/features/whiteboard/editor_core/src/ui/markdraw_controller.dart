@@ -317,9 +317,10 @@ class MarkdrawController extends ChangeNotifier {
   // --- 智能排版草稿编辑态（预览即编辑：可拖动、确认落地、取消零残留） ---
   bool _smartLayoutDraftActive = false;
   Scene? _draftBaseScene;
-  Set<ElementId> _draftParticipants = {};
   ViewportState? _draftPreviousViewport;
   ToolType _draftPreviousTool = ToolType.select;
+  Set<ElementId> _draftParticipants = {};
+  List<ElementId> _smartLayoutDraftLowConfidenceIds = const [];
 
   // --- Public getters ---
 
@@ -3577,6 +3578,9 @@ class MarkdrawController extends ChangeNotifier {
       ...plan.moveDeltas.keys,
       ...plan.addElements.map((element) => element.id),
     };
+    _smartLayoutDraftLowConfidenceIds = [
+      for (final item in plan.lowConfidenceTexts) item.elementId,
+    ];
     final tempScene = _buildDraftScene(plan);
     _smartLayoutDraftActive = true;
     final viewport = _fitViewportToPage(plan.pageId);
@@ -3679,6 +3683,7 @@ class MarkdrawController extends ChangeNotifier {
     _draftBaseScene = null;
     _draftParticipants = {};
     _draftPreviousViewport = null;
+    _smartLayoutDraftLowConfidenceIds = const [];
     smartLayoutGhost.value = null;
     notifyListeners();
   }
@@ -3689,6 +3694,7 @@ class MarkdrawController extends ChangeNotifier {
     _draftBaseScene = null;
     _draftParticipants = {};
     _draftPreviousViewport = null;
+    _smartLayoutDraftLowConfidenceIds = const [];
   }
 
   Scene _buildDraftScene(SmartLayoutPlan plan) {
@@ -3808,7 +3814,7 @@ class MarkdrawController extends ChangeNotifier {
 
     // 文本项转写：每个认领的笔迹簇合并后**先走 MyScript**（公式/手写体最稳），
     // 失败或无 MyScript 回调时回退 VLM 转写文本；两者皆无 → 该项进失败红区。
-    final textBlocksByIndex = await _recognizeVisionTextBlocks(
+    final visionTextResult = await _recognizeVisionTextBlocks(
       page,
       vision.elements,
       match.textClaims,
@@ -3816,6 +3822,8 @@ class MarkdrawController extends ChangeNotifier {
       clusterRects,
     );
     if (_disposed) return null;
+    final textBlocksByIndex = visionTextResult.blocks;
+    final inkFallbackIndexes = visionTextResult.inkFallbackIndexes;
     final textElementsByIndex = <int, TextElement>{};
     final textSourceByIndex = <int, ui.Rect>{};
     for (final entry in match.textClaims.entries) {
@@ -4084,12 +4092,128 @@ class MarkdrawController extends ChangeNotifier {
           ).plan;
       }
       if (plan == null) return null;
-      return SmartLayoutPlanResult(plan: plan, failures: failures);
+      return SmartLayoutPlanResult(
+        plan: _attachVisionLowConfidence(
+          plan,
+          textElementsByIndex,
+          vision.elements,
+          inkFallbackIndexes,
+        ),
+        failures: failures,
+      );
     } on StateError catch (error) {
       // 内容流放不下时交经典管线再试一次（其带避碰回退）。
       debugPrint('[$_logTag] 视觉排版落位失败，回退经典管线: $error');
       return null;
     }
+  }
+
+  /// 视觉装配收尾：把低置信文本项（VLM 自报把握不足 / 回落兜底转写）挂到计划上，
+  /// 供草稿态橙色高亮与校对编辑条。仅保留能在计划新增元素中按 id 定位的项
+  /// （PPT 家族引擎复用原元素 id；legacy/mindmap 引擎内部重建 id、暂无法定位）。
+  SmartLayoutPlan _attachVisionLowConfidence(
+    SmartLayoutPlan plan,
+    Map<int, TextElement> textElementsByIndex,
+    List<SmartLayoutVisionElement> elements,
+    Set<int> inkFallbackIndexes,
+  ) {
+    final knownIds = {for (final element in plan.addElements) element.id};
+    final texts = <SmartLayoutLowConfidenceText>[
+      for (final index in textElementsByIndex.keys)
+        if (inkFallbackIndexes.contains(index) ||
+            elements[index].confidence < kSmartLayoutLowConfidenceThreshold)
+          if (textElementsByIndex[index] case final TextElement element?)
+            if (knownIds.contains(element.id))
+              SmartLayoutLowConfidenceText(
+                elementId: element.id,
+                confidence: inkFallbackIndexes.contains(index)
+                    ? 0
+                    : elements[index].confidence,
+                reason: inkFallbackIndexes.contains(index)
+                    ? 'ink-fallback'
+                    : 'vlm-low',
+              ),
+    ];
+    if (texts.isEmpty) return plan;
+    return plan.withLowConfidenceTexts(texts);
+  }
+
+  /// 草稿态低置信文本项快照（id + 当前文字），供校对编辑条构建。
+  List<({ElementId id, String text})> get smartLayoutDraftProofreadItems {
+    if (!_smartLayoutDraftActive ||
+        _smartLayoutDraftLowConfidenceIds.isEmpty) {
+      return const [];
+    }
+    final scene = _editorState.scene;
+    final items = <({ElementId id, String text})>[];
+    for (final id in _smartLayoutDraftLowConfidenceIds) {
+      for (final element in scene.activeElements) {
+        if (element.id == id && element is TextElement) {
+          items.add((id: id, text: element.text));
+          break;
+        }
+      }
+    }
+    return items;
+  }
+
+  /// 草稿态低置信文本矩形的实时快照（改字/拖动后重取，橙色高亮用）。
+  List<ui.Rect> get smartLayoutDraftLowConfidenceRects {
+    if (!_smartLayoutDraftActive ||
+        _smartLayoutDraftLowConfidenceIds.isEmpty) {
+      return const [];
+    }
+    final scene = _editorState.scene;
+    final rects = <ui.Rect>[];
+    for (final id in _smartLayoutDraftLowConfidenceIds) {
+      for (final element in scene.activeElements) {
+        if (element.id == id) {
+          rects.add(
+            ui.Rect.fromLTWH(
+              element.x,
+              element.y,
+              element.width,
+              element.height,
+            ),
+          );
+          break;
+        }
+      }
+    }
+    return rects;
+  }
+
+  /// 草稿态就地改字：更新临时场景中的文本并按当前字号重测尺寸（位置保持）。
+  /// 提交时 commitSmartLayoutDraft 会按 id 采用草稿场景的最终形态，无需额外登记。
+  bool reviseSmartLayoutDraftText(ElementId id, String newText) {
+    if (!_smartLayoutDraftActive || _disposed) return false;
+    final scene = _editorState.scene;
+    TextElement? current;
+    for (final element in scene.activeElements) {
+      if (element.id == id && element is TextElement) {
+        current = element;
+        break;
+      }
+    }
+    if (current == null) return false;
+    final trimmed = newText.trim();
+    var candidate = current.copyWithText(text: trimmed);
+    // 与创建/引擎一致的尺寸规则：竖排保持原稿窄长不重测；
+    // 横排 max(现值, 测量) 只放不缩，避免改字后盒子跳动。
+    final flowMuseData = current.customData?['flowMuse'];
+    final isVertical =
+        flowMuseData is Map<String, Object?> &&
+        flowMuseData['writingMode'] == 'vertical';
+    if (!isVertical) {
+      final (measuredWidth, measuredHeight) = TextRenderer.measure(candidate);
+      candidate = candidate.copyWith(
+        width: math.max(current.width, measuredWidth),
+        height: math.max(current.height, measuredHeight),
+      );
+    }
+    // 草稿场景内原位替换（同 id）；提交时按 id 采用草稿最终形态。
+    applyResult(UpdateElementResult(candidate));
+    return true;
   }
 
   SmartLayoutTemplateContext _visionContext(
@@ -4119,7 +4243,11 @@ class MarkdrawController extends ChangeNotifier {
 
   /// 视觉匹配到的文本项批量转写：合并认领笔迹后逐项走 MyScript，
   /// 失败或无回调时以 VLM 转写文本兜底；合成块携带并集边界与元素引用 id。
-  Future<Map<int, SmartLayoutRecognizedBlock>> _recognizeVisionTextBlocks(
+  /// 视觉路径逐文本项转写：整页 VLM 文本优先、MyScript 兜底；一并报告哪些项
+  /// 回落了兜底转写（低置信标注依据之一）。
+  Future<({Map<int, SmartLayoutRecognizedBlock> blocks,
+  Set<int> inkFallbackIndexes})>
+  _recognizeVisionTextBlocks(
     CanvasPage page,
     List<SmartLayoutVisionElement> elements,
     Map<int, List<String>> textClaims,
@@ -4130,6 +4258,7 @@ class MarkdrawController extends ChangeNotifier {
     final requests = <SmartLayoutInkBlockRequest>[];
     final unionsByRequestId = <String, ui.Rect>{};
     final indexByRequestId = <String, int>{};
+    final inkFallbackByRequestId = <String, bool>{};
     for (final entry in textClaims.entries) {
       final index = entry.key;
       var union = clusterRects[entry.value.first]!;
@@ -4174,50 +4303,55 @@ class MarkdrawController extends ChangeNotifier {
     ) async {
       final index = indexByRequestId[request.id]!;
       final visionElement = elements[index];
+      // 整页 VLM 文本优先：真机实测逐块 MyScript 对潦草连笔字误识率高
+      // （同一页面 VLM 整图读得准），且免去逐块网络请求；
+      // 仅当 VLM 未给出该元素文本时才回落逐块 MyScript 转写。
+      final vlmText = visionElement.text?.trim() ?? '';
       SmartLayoutRecognizedBlock block;
-      if (myScriptCallback != null) {
-        final strokes = [
-          for (final key in textClaims[index]!)
-            ...(inkGroups[key] ?? const <FreedrawElement>[]),
-        ];
-        try {
-          block = await _recognizeSmartLayoutBlockWithMyScript(
-            request,
-            strokes,
-            myScriptCallback,
-          );
-        } catch (error) {
-          debugPrint('[$_logTag] 视觉排版 MyScript 转写失败($request.id): $error');
+      if (vlmText.isNotEmpty) {
+        inkFallbackByRequestId[request.id] = false;
+        block = SmartLayoutRecognizedBlock(
+          id: request.id,
+          pageId: page.id,
+          type: 'text',
+          text: vlmText,
+          bounds: request.bounds,
+          startedAt: request.startedAt,
+        );
+      } else {
+        // VLM 未给出文本 → 回落逐块转写（该项进入低置信复核名单）。
+        inkFallbackByRequestId[request.id] = true;
+        if (myScriptCallback != null) {
+          final strokes = [
+            for (final key in textClaims[index]!)
+              ...(inkGroups[key] ?? const <FreedrawElement>[]),
+          ];
+          try {
+            block = await _recognizeSmartLayoutBlockWithMyScript(
+              request,
+              strokes,
+              myScriptCallback,
+            );
+          } catch (error) {
+            debugPrint('[$_logTag] 视觉排版 MyScript 兜底转写失败($request.id): $error');
+            block = SmartLayoutRecognizedBlock(
+              id: request.id,
+              pageId: page.id,
+              type: 'error',
+              bounds: request.bounds,
+              strokeBounds: request.strokeBounds,
+              startedAt: request.startedAt,
+              error: error.toString(),
+            );
+          }
+        } else {
           block = SmartLayoutRecognizedBlock(
             id: request.id,
             pageId: page.id,
             type: 'error',
             bounds: request.bounds,
-            strokeBounds: request.strokeBounds,
             startedAt: request.startedAt,
-            error: error.toString(),
-          );
-        }
-      } else {
-        block = SmartLayoutRecognizedBlock(
-          id: request.id,
-          pageId: page.id,
-          type: 'error',
-          bounds: request.bounds,
-          startedAt: request.startedAt,
-          error: 'no-myscript-callback',
-        );
-      }
-      if (!block.isSuccess) {
-        final vlmText = visionElement.text?.trim() ?? '';
-        if (vlmText.isNotEmpty) {
-          block = SmartLayoutRecognizedBlock(
-            id: request.id,
-            pageId: page.id,
-            type: 'text',
-            text: vlmText,
-            bounds: request.bounds,
-            startedAt: request.startedAt,
+            error: 'no-myscript-callback',
           );
         }
       }
@@ -4248,10 +4382,16 @@ class MarkdrawController extends ChangeNotifier {
         null,
       );
     }
-    return {
-      for (var i = 0; i < requests.length; i++)
-        indexByRequestId[requests[i].id]!: results[i],
-    };
+    return (
+      blocks: {
+        for (var i = 0; i < requests.length; i++)
+          indexByRequestId[requests[i].id]!: results[i],
+      },
+      inkFallbackIndexes: {
+        for (final entry in inkFallbackByRequestId.entries)
+          if (entry.value) indexByRequestId[entry.key]!,
+      },
+    );
   }
 
   /// 页内可移动元素 → 版式图形单元（整组共用一个单元），供视觉匹配与模板移动。

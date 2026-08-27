@@ -73,6 +73,17 @@ class SmartLayoutGhostPainter extends CustomPainter {
         );
       }
     }
+    // 低置信文本区域：橙虚线提示需校对（与失败红框/预览同屏）
+    for (final rect in spec.lowConfidenceRects) {
+      _dashRect(
+        canvas,
+        rect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0
+          ..color = const Color(0xFFF08C00),
+      );
+    }
     canvas.restore();
   }
 

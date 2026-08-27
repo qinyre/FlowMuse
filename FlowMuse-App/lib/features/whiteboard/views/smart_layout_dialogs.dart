@@ -336,11 +336,15 @@ class SmartLayoutConfirmBar extends StatelessWidget {
     required this.plan,
     required this.isMultiPage,
     required this.onAction,
+    this.onProofread,
   });
 
   final SmartLayoutPlan plan;
   final bool isMultiPage;
   final ValueChanged<SmartLayoutBarAction> onAction;
+
+  /// 低置信文本校对入口；为 null 表示本页没有可校对项（隐藏按钮）。
+  final Future<void> Function()? onProofread;
 
   bool get _hasFailures =>
       plan.failedStrokeIds.isNotEmpty || plan.failureRects.isNotEmpty;
@@ -375,6 +379,11 @@ class SmartLayoutConfirmBar extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
+            if (onProofread != null)
+              TextButton(
+                onPressed: onProofread,
+                child: Text('校对 ${plan.lowConfidenceTexts.length} 处'),
+              ),
             if (_hasFailures)
               TextButton(
                 onPressed: () => onAction(SmartLayoutBarAction.applyAndDrop),
@@ -461,6 +470,126 @@ class SmartLayoutFailureBar extends StatelessWidget {
             FilledButton(
               onPressed: () => onAction(SmartLayoutBarAction.retry),
               child: const Text('重新识别'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 草稿态低置信文本校对编辑条：逐项展示并允许改字，保存即更新草稿场景。
+class SmartLayoutProofreadSheet extends StatefulWidget {
+  const SmartLayoutProofreadSheet({
+    super.key,
+    required this.items,
+    required this.onRevise,
+  });
+
+  final List<({ElementId id, String text})> items;
+  final bool Function(ElementId id, String newText) onRevise;
+
+  @override
+  State<SmartLayoutProofreadSheet> createState() =>
+      _SmartLayoutProofreadSheetState();
+}
+
+class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
+  final Map<int, TextEditingController> _controllers = {};
+  final Set<int> _savedIndexes = {};
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  TextEditingController _controllerFor(int index, String initial) =>
+      _controllers.putIfAbsent(index, () => TextEditingController(text: initial));
+
+  void _save(int index, ElementId id) {
+    final ok = widget.onRevise(id, _controllers[index]!.text);
+    if (!ok) return;
+    setState(() => _savedIndexes.add(index));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 16,
+          right: 16,
+          top: 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('校对识别文字', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              '橙色虚线标注的文本识别把握不足，请核对或修正后应用。',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: widget.items.length,
+                itemBuilder: (context, index) {
+                  final item = widget.items[index];
+                  final controller = _controllerFor(index, item.text);
+                  final saved = _savedIndexes.contains(index);
+                  final changed =
+                      controller.text.trim() != item.text.trim() && !saved;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Icon(
+                          saved ? Icons.check_circle : Icons.edit_note,
+                          size: 20,
+                          color: saved
+                              ? Colors.green.shade600
+                              : const Color(0xFFF08C00),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: controller,
+                            onChanged: (_) => setState(() {}),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              border: const OutlineInputBorder(),
+                              helperText: saved ? '已更新' : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.tonal(
+                          onPressed: changed
+                              ? () => _save(index, item.id)
+                              : null,
+                          child: const Text('保存'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('完成'),
+              ),
             ),
           ],
         ),

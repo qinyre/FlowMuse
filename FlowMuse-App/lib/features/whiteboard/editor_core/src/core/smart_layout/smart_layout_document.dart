@@ -643,6 +643,7 @@ class SmartLayoutVisionElement {
     this.text,
     this.vertical = false,
     this.pairId,
+    this.confidence = 0.9,
   });
 
   /// 服务端按输出顺序分配的引用 id（"e0"、"e1"...），mindmap 树以此引用。
@@ -653,6 +654,9 @@ class SmartLayoutVisionElement {
   final String? text;
   final bool vertical;
   final String? pairId;
+
+  /// VLM 对该元素认字把握的自评分（0-1；服务端已钳制，缺省 0.9）。
+  final double confidence;
 
   /// 0-1000 归一化坐标（客户端已钳制并保证 x1<x2、y1<y2）。
   final double x1;
@@ -706,6 +710,10 @@ class SmartLayoutVisionElement {
       y1: y1,
       x2: x2,
       y2: y2,
+      confidence:
+          ((json['confidence'] as num?)?.toDouble() ?? 0.9)
+              .clamp(0.0, 1.0)
+              .toDouble(),
     );
   }
 }

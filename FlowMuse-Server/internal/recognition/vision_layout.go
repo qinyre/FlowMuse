@@ -38,6 +38,7 @@ const visionLayoutPrompt = `你是一个白板笔记智能排版引擎。给定�
 其他标注：
 - vertical：竖排文字（从上往下书写）置 true。
 - pairId：figure 与它的 caption 用相同的 pairId（如 "pair-1"）配对。
+- confidence：你对这项认字把握的自评分（0 到 1 小数）；看不清、连笔潦草时如实给低分。
 
 style 判定：
 - ppt：图文并茂（存在图片/图示且有说明文字）。
@@ -46,7 +47,7 @@ style 判定：
 - in_place：内容零散，看不出上述风格。
 
 输出规则（严格 JSON，禁止任何额外文字或 Markdown 代码围栏）：
-{"style":"ppt|mindmap|article|in_place","confidence":0.0到1.0的小数,"elements":[{"role":"title|caption|body|figure","text":"...","vertical":false,"box":[x1,y1,x2,y2],"pairId":"..."}]}
+{"style":"ppt|mindmap|article|in_place","confidence":0.0到1.0的小数,"elements":[{"role":"title|caption|body|figure","text":"...","vertical":false,"box":[x1,y1,x2,y2],"pairId":"...","confidence":0.0到1.0的小数}]}
 
 structure（仅 style=mindmap 时输出，其他 style 省略或输出 {}）：
 {"root":{"text":"节点文字","blockIds":["e0","e3"],"children":[...]}}
@@ -148,8 +149,9 @@ func sanitizeVisionLayoutResponse(response *VisionLayoutResponse, pageID string)
 			continue
 		}
 		element.Box = box
-		if element.Confidence < 0 {
-			element.Confidence = 0
+		if element.Confidence <= 0 {
+			// 未自报把握时按宽松默认处理，避免老提示词输出被整体判为低置信。
+			element.Confidence = 0.9
 		} else if element.Confidence > 1 {
 			element.Confidence = 1
 		}

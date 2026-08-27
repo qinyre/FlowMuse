@@ -85,6 +85,24 @@ func TestVisionLayoutClampsOutOfRangeCoordinates(t *testing.T) {
 	}
 }
 
+func TestVisionLayoutElementConfidenceNormalized(t *testing.T) {
+	content := `{"style":"in_place","elements":[` +
+		`{"role":"body","text":"未自报把握","box":[10,10,200,80]},` + // 缺省 → 0.9
+		`{"role":"body","text":"潦草字","confidence":0.25,"box":[10,100,200,170]},` + // 透传
+		`{"role":"body","text":"过分自信","confidence":2.5,"box":[10,190,200,260]}]}` // 越界 → 1
+	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
+	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
+	if err != nil {
+		t.Fatalf("VisionLayout error: %v", err)
+	}
+	want := []float64{0.9, 0.25, 1}
+	for i, expected := range want {
+		if got := response.Elements[i].Confidence; got != expected {
+			t.Fatalf("elements[%d].confidence = %v, want %v", i, got, expected)
+		}
+	}
+}
+
 func TestVisionLayoutDropsHallucinatedTextAndDegenerateBoxes(t *testing.T) {
 	content := `{"style":"in_place","elements":[` +
 		`{"role":"body","text":"","box":[10,10,200,80]},` + // 文字角色无文字 → 幻觉，丢弃

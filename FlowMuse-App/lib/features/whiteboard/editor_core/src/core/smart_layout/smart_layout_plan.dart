@@ -1,8 +1,29 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
+
 import '../elements/elements.dart';
 import '../math/math.dart';
 import 'smart_layout_document.dart';
+
+/// 视觉管线低置信阈值：低于该值的已识别文本在草稿态橙色高亮并可校对改字。
+const double kSmartLayoutLowConfidenceThreshold = 0.6;
+
+/// 单个低置信文本项：elementId 用于从场景中定位最终矩形与改字。
+@immutable
+class SmartLayoutLowConfidenceText {
+  const SmartLayoutLowConfidenceText({
+    required this.elementId,
+    required this.confidence,
+    required this.reason,
+  });
+
+  final ElementId elementId;
+  final double confidence;
+
+  /// 'vlm-low'（VLM 自报把握不足）或 'ink-fallback'（回落逐块转写）。
+  final String reason;
+}
 
 /// 一次"确定"后的智能排版本页计划：所有坐标已由客户端算好，apply 不依赖网络。
 class SmartLayoutPlan {
@@ -20,6 +41,7 @@ class SmartLayoutPlan {
     required this.previewRects,
     required this.removalRects,
     required this.failureRects,
+    this.lowConfidenceTexts = const [],
   });
 
   final String pageId;
@@ -52,6 +74,39 @@ class SmartLayoutPlan {
 
   /// 场景坐标：识别失败区域（红色高亮，仅失败提示模式）。
   final List<Rect> failureRects;
+
+  /// 低置信文本清单（视觉管线专属；经典管线为空）。供草稿态橙色高亮与校对编辑条。
+  final List<SmartLayoutLowConfidenceText> lowConfidenceTexts;
+
+  /// 低置信文本的当前场景矩形（按新增元素 id 反查；无法定位的项被忽略）。
+  List<Rect> get lowConfidenceRects {
+    final byId = {for (final element in addElements) element.id: element};
+    return [
+      for (final item in lowConfidenceTexts)
+        if (byId[item.elementId] case final Element element?)
+          Rect.fromLTWH(element.x, element.y, element.width, element.height),
+    ];
+  }
+
+  /// 复制并替换低置信文本清单（视觉装配后附加，引擎产物不可变）。
+  SmartLayoutPlan withLowConfidenceTexts(
+    List<SmartLayoutLowConfidenceText> texts,
+  ) => SmartLayoutPlan(
+    pageId: pageId,
+    style: style,
+    confidence: confidence,
+    description: description,
+    addElements: addElements,
+    moveDeltas: moveDeltas,
+    removeIds: removeIds,
+    failedStrokeIds: failedStrokeIds,
+    selectIds: selectIds,
+    document: document,
+    previewRects: previewRects,
+    removalRects: removalRects,
+    failureRects: failureRects,
+    lowConfidenceTexts: texts,
+  );
 }
 
 /// 单页计划构建结果：plan 为 null 表示本页无内容可排版（无手写）或整页失败。
@@ -90,15 +145,21 @@ class SmartLayoutGhostSpec {
     required this.previewRects,
     required this.removalRects,
     this.failureRects = const [],
+    this.lowConfidenceRects = const [],
   });
 
-  const SmartLayoutGhostSpec.failures({required this.failureRects})
-    : previewRects = const [],
-      removalRects = const [];
+  const SmartLayoutGhostSpec.failures({
+    required this.failureRects,
+    this.lowConfidenceRects = const [],
+  }) : previewRects = const [],
+       removalRects = const [];
 
   final List<Rect> previewRects;
   final List<Rect> removalRects;
   final List<Rect> failureRects;
+
+  /// 场景坐标：低置信文本区域（橙色虚线高亮，提示需校对）。
+  final List<Rect> lowConfidenceRects;
 
   bool get isFailure => failureRects.isNotEmpty;
 }

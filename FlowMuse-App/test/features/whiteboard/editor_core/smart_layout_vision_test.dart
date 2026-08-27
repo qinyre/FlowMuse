@@ -4,7 +4,8 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flutter_test/flutter_test.dart';
 
 /// 视觉优先管线：模型解析、坐标映射/元素匹配纯函数、四风格分发与回退。
-/// 文字转写统一"MyScript 优先、VLM 文本兜底"；未注入 onRecognizeInk 时直接用 VLM 文本。
+/// 文字转写统一"整页 VLM 文本优先、逐块 MyScript 兜底"；
+/// VLM 无文本且未注入 onRecognizeInk 时该项按失败处理。
 void main() {
   group('SmartLayoutVisionElement 模型', () {
     test('解析 box 并钳制到 0-1000、交换倒置坐标、携带引用 id', () {
@@ -160,7 +161,7 @@ void main() {
   });
 
   group('控制器视觉优先管线', () {
-    testWidgets('ppt 判定 + pairId 配对 → 走 pairFlow；无 MyScript 用 VLM 文本',
+    testWidgets('ppt 判定 + pairId 配对 → 走 pairFlow；文字用整页 VLM 文本',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 2400);
       tester.view.devicePixelRatio = 1.0;
@@ -344,7 +345,7 @@ void main() {
       }
     });
 
-    testWidgets('mindmap 判定：VLM 树 + MyScript 文本 → 导图节点与连线', (tester) async {
+    testWidgets('mindmap 判定：VLM 树 + 整页 VLM 文本 → 导图节点与连线', (tester) async {
       tester.view.physicalSize = const Size(1600, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -354,16 +355,7 @@ void main() {
       var myScriptCalls = 0;
       controller.onRecognizeInk = (request) async {
         myScriptCalls++;
-        return InkRecognitionResult(elements: [
-          InkRecognizedElement(
-            type: 'text',
-            text: 'MyScript-${request.sessionId}',
-            x: request.bounds.x,
-            y: request.bounds.y,
-            width: request.bounds.width,
-            height: request.bounds.height,
-          ),
-        ]);
+        throw StateError('整页 VLM 文本可用时不应调用 MyScript');
       };
       controller.onSmartLayoutInk = (request) async {
         throw StateError('不应回退');
@@ -380,8 +372,8 @@ void main() {
               ],
             )),
             elements: [
-              _boxCovering('body', '', 200, 150, 300, 60, id: 'e0'),
-              _boxCovering('body', '', 250, 400, 280, 56, id: 'e1'),
+              _boxCovering('body', '手写要点甲', 200, 150, 300, 60, id: 'e0'),
+              _boxCovering('body', '手写要点乙', 250, 400, 280, 56, id: 'e1'),
             ],
           );
       final SmartLayoutPlanResult result =
@@ -390,7 +382,7 @@ void main() {
           ))!;
       final plan = result.plan;
       expect(plan, isNotNull, reason: 'mindmap 应由视觉管线产出计划');
-      expect(myScriptCalls, greaterThanOrEqualTo(2), reason: '认领笔迹应逐项走 MyScript');
+      expect(myScriptCalls, 0, reason: '整页 VLM 文本优先，无需逐块转写');
       expect(plan!.style, SmartLayoutStyle.mindmap);
       expect(plan.moveDeltas, isEmpty, reason: '导图为全新元素整体布置');
       final nodeCount = plan.addElements
@@ -405,10 +397,11 @@ void main() {
       );
       final texts =
           plan.addElements.whereType<TextElement>().map((e) => e.text).join('|');
-      expect(texts, contains('MyScript-'), reason: '导图节点文字来自 MyScript 转写');
+      expect(texts, contains('手写要点甲'), reason: '导图节点文字来自整页 VLM 文本');
+      expect(texts, contains('手写要点乙'));
     });
 
-    testWidgets('MyScript 优先：可用时用 MyScript 文本，失败项回落 VLM 文本',
+    testWidgets('VLM 文本优先：可用时直接采用，缺失项回落 MyScript',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 2400);
       tester.view.devicePixelRatio = 1.0;
@@ -416,10 +409,9 @@ void main() {
       final controller = _buildController();
       addTearDown(controller.dispose);
       _addStrokes(controller);
+      var myScriptCalls = 0;
       controller.onRecognizeInk = (request) async {
-        if (request.bounds.y < 200) {
-          throw StateError('HTTP 429');
-        }
+        myScriptCalls++;
         return InkRecognitionResult(elements: [
           InkRecognizedElement(
             type: 'text',
@@ -438,8 +430,8 @@ void main() {
           SmartLayoutVisionResponse(
             style: SmartLayoutStyle.inPlace,
             elements: [
-              _boxCovering('body', 'VLM兜底文本', 200, 150, 300, 60),
-              _boxCovering('body', '占位说明', 250, 400, 280, 56),
+              _boxCovering('body', 'VLM正文', 200, 150, 300, 60),
+              _boxCovering('body', '', 250, 400, 280, 56),
             ],
           );
       final SmartLayoutPlanResult result =
@@ -453,8 +445,151 @@ void main() {
           .whereType<TextElement>()
           .map((e) => e.text)
           .toList();
-      expect(texts, contains('MyScript正文'), reason: 'MyScript 成功项优先生效');
-      expect(texts, contains('VLM兜底文本'), reason: 'MyScript 失败项用 VLM 文本兜底');
+      expect(texts, contains('VLM正文'), reason: 'VLM 有文本时直接采用，不走逐块转写');
+      expect(texts, contains('MyScript正文'), reason: 'VLM 无文本项回落 MyScript 兜底');
+      expect(myScriptCalls, 1, reason: '仅 VLM 缺失文本的元素需要 MyScript 兜底');
+    });
+
+    test('响应解析：元素 confidence 缺省 0.9 并钳制到 0-1', () {
+      final response = SmartLayoutVisionResponse.fromJson({
+        'style': 'in_place',
+        'elements': [
+          {'role': 'body', 'text': '未自报', 'box': [0, 0, 10, 10]},
+          {'role': 'body', 'text': '过分自信', 'box': [0, 20, 10, 30], 'confidence': 2.5},
+          {'role': 'body', 'text': '低把握', 'box': [0, 40, 10, 50], 'confidence': 0.25},
+        ],
+      });
+      expect(response.elements[0].confidence, 0.9);
+      expect(response.elements[1].confidence, 1);
+      expect(response.elements[2].confidence, 0.25);
+    });
+
+    testWidgets(
+      '低置信标注：VLM 自报把握不足 → 计划携带橙色校对清单与场景矩形',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        final controller = _buildController();
+        addTearDown(controller.dispose);
+        _addStrokes(controller);
+        controller.applyResult(
+          AddElementResult(
+            ImageElement(
+              id: const ElementId('img-cat'),
+              x: 700,
+              y: 600,
+              width: 600,
+              height: 600,
+              fileId: 'file-cat',
+            ),
+          ),
+        );
+        controller.onSmartLayoutInk = (request) async {
+          throw StateError('不应回退');
+        };
+        controller.onVisionSmartLayout = (request) async =>
+            SmartLayoutVisionResponse(
+              style: SmartLayoutStyle.ppt,
+              confidence: 0.9,
+              elements: [
+                _boxCovering('title', '手工记账', 200, 150, 300, 60),
+                _boxCovering(
+                  'caption',
+                  '流水明细一整段',
+                  250,
+                  400,
+                  280,
+                  56,
+                  pairId: 'pair-1',
+                  confidence: 0.2,
+                ),
+                _boxCovering(
+                  'figure',
+                  '',
+                  700,
+                  600,
+                  600,
+                  600,
+                  pairId: 'pair-1',
+                ),
+              ],
+            );
+        final SmartLayoutPlanResult result =
+            (await tester.runAsync(
+              () => controller.buildSmartLayoutPlan(pageId: 'page-1'),
+            ))!;
+        final plan = result.plan!;
+        expect(plan.lowConfidenceTexts, hasLength(1));
+        expect(plan.lowConfidenceTexts.single.reason, 'vlm-low');
+        expect(plan.lowConfidenceTexts.single.confidence, 0.2);
+        // 场景矩形可定位（PPT 家族保留原元素 id），且为有效矩形
+        expect(plan.lowConfidenceRects, hasLength(1));
+        expect(plan.lowConfidenceRects.single.isFinite, isTrue);
+        expect(plan.lowConfidenceRects.single.width, greaterThan(0));
+      },
+    );
+
+    testWidgets('低置信标注：VLM 无文本回落 MyScript → 该项标记兜底转写',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: const ElementId('img-cat'),
+            x: 700,
+            y: 600,
+            width: 600,
+            height: 600,
+            fileId: 'file-cat',
+          ),
+        ),
+      );
+      controller.onRecognizeInk = (request) async {
+        return InkRecognitionResult(elements: [
+          InkRecognizedElement(
+            type: 'text',
+            text: 'MyScript标题',
+            x: request.bounds.x,
+            y: request.bounds.y,
+            width: request.bounds.width,
+            height: request.bounds.height,
+          ),
+        ]);
+      };
+      controller.onSmartLayoutInk = (request) async {
+        throw StateError('不应回退');
+      };
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            style: SmartLayoutStyle.ppt,
+            confidence: 0.9,
+            elements: [
+              _boxCovering('title', '', 200, 150, 300, 60),
+              _boxCovering(
+                'caption',
+                '流水明细一整段',
+                250,
+                400,
+                280,
+                56,
+                pairId: 'pair-1',
+              ),
+              _boxCovering('figure', '', 700, 600, 600, 600, pairId: 'pair-1'),
+            ],
+          );
+      final SmartLayoutPlanResult result =
+          (await tester.runAsync(
+            () => controller.buildSmartLayoutPlan(pageId: 'page-1'),
+          ))!;
+      final plan = result.plan!;
+      expect(plan.lowConfidenceTexts, hasLength(1));
+      expect(plan.lowConfidenceTexts.single.reason, 'ink-fallback');
     });
 
     testWidgets('vision 接口抛异常 → 自动回退经典管线并成功', (tester) async {
@@ -551,6 +686,7 @@ SmartLayoutVisionElement _boxCovering(
   double height, {
   String? id,
   String? pairId,
+  double confidence = 0.9,
 }) => SmartLayoutVisionElement(
   id: id,
   role: role,
@@ -560,4 +696,5 @@ SmartLayoutVisionElement _boxCovering(
   x2: (left + width) / 1588 * 1000 + 5,
   y2: (top + height) / 2246 * 1000 + 5,
   pairId: pairId,
+  confidence: confidence,
 );
