@@ -450,6 +450,148 @@ void main() {
       expect(myScriptCalls, 1, reason: '仅 VLM 缺失文本的元素需要 MyScript 兜底');
     });
 
+    test('响应解析：元素 confidence 缺省 0.9 并钳制到 0-1', () {
+      final response = SmartLayoutVisionResponse.fromJson({
+        'style': 'in_place',
+        'elements': [
+          {'role': 'body', 'text': '未自报', 'box': [0, 0, 10, 10]},
+          {'role': 'body', 'text': '过分自信', 'box': [0, 20, 10, 30], 'confidence': 2.5},
+          {'role': 'body', 'text': '低把握', 'box': [0, 40, 10, 50], 'confidence': 0.25},
+        ],
+      });
+      expect(response.elements[0].confidence, 0.9);
+      expect(response.elements[1].confidence, 1);
+      expect(response.elements[2].confidence, 0.25);
+    });
+
+    testWidgets(
+      '低置信标注：VLM 自报把握不足 → 计划携带橙色校对清单与场景矩形',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        final controller = _buildController();
+        addTearDown(controller.dispose);
+        _addStrokes(controller);
+        controller.applyResult(
+          AddElementResult(
+            ImageElement(
+              id: const ElementId('img-cat'),
+              x: 700,
+              y: 600,
+              width: 600,
+              height: 600,
+              fileId: 'file-cat',
+            ),
+          ),
+        );
+        controller.onSmartLayoutInk = (request) async {
+          throw StateError('不应回退');
+        };
+        controller.onVisionSmartLayout = (request) async =>
+            SmartLayoutVisionResponse(
+              style: SmartLayoutStyle.ppt,
+              confidence: 0.9,
+              elements: [
+                _boxCovering('title', '手工记账', 200, 150, 300, 60),
+                _boxCovering(
+                  'caption',
+                  '流水明细一整段',
+                  250,
+                  400,
+                  280,
+                  56,
+                  pairId: 'pair-1',
+                  confidence: 0.2,
+                ),
+                _boxCovering(
+                  'figure',
+                  '',
+                  700,
+                  600,
+                  600,
+                  600,
+                  pairId: 'pair-1',
+                ),
+              ],
+            );
+        final SmartLayoutPlanResult result =
+            (await tester.runAsync(
+              () => controller.buildSmartLayoutPlan(pageId: 'page-1'),
+            ))!;
+        final plan = result.plan!;
+        expect(plan.lowConfidenceTexts, hasLength(1));
+        expect(plan.lowConfidenceTexts.single.reason, 'vlm-low');
+        expect(plan.lowConfidenceTexts.single.confidence, 0.2);
+        // 场景矩形可定位（PPT 家族保留原元素 id），且为有效矩形
+        expect(plan.lowConfidenceRects, hasLength(1));
+        expect(plan.lowConfidenceRects.single.isFinite, isTrue);
+        expect(plan.lowConfidenceRects.single.width, greaterThan(0));
+      },
+    );
+
+    testWidgets('低置信标注：VLM 无文本回落 MyScript → 该项标记兜底转写',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: const ElementId('img-cat'),
+            x: 700,
+            y: 600,
+            width: 600,
+            height: 600,
+            fileId: 'file-cat',
+          ),
+        ),
+      );
+      controller.onRecognizeInk = (request) async {
+        return InkRecognitionResult(elements: [
+          InkRecognizedElement(
+            type: 'text',
+            text: 'MyScript标题',
+            x: request.bounds.x,
+            y: request.bounds.y,
+            width: request.bounds.width,
+            height: request.bounds.height,
+          ),
+        ]);
+      };
+      controller.onSmartLayoutInk = (request) async {
+        throw StateError('不应回退');
+      };
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            style: SmartLayoutStyle.ppt,
+            confidence: 0.9,
+            elements: [
+              _boxCovering('title', '', 200, 150, 300, 60),
+              _boxCovering(
+                'caption',
+                '流水明细一整段',
+                250,
+                400,
+                280,
+                56,
+                pairId: 'pair-1',
+              ),
+              _boxCovering('figure', '', 700, 600, 600, 600, pairId: 'pair-1'),
+            ],
+          );
+      final SmartLayoutPlanResult result =
+          (await tester.runAsync(
+            () => controller.buildSmartLayoutPlan(pageId: 'page-1'),
+          ))!;
+      final plan = result.plan!;
+      expect(plan.lowConfidenceTexts, hasLength(1));
+      expect(plan.lowConfidenceTexts.single.reason, 'ink-fallback');
+    });
+
     testWidgets('vision 接口抛异常 → 自动回退经典管线并成功', (tester) async {
       tester.view.physicalSize = const Size(1600, 2400);
       tester.view.devicePixelRatio = 1.0;
@@ -544,6 +686,7 @@ SmartLayoutVisionElement _boxCovering(
   double height, {
   String? id,
   String? pairId,
+  double confidence = 0.9,
 }) => SmartLayoutVisionElement(
   id: id,
   role: role,
@@ -553,4 +696,5 @@ SmartLayoutVisionElement _boxCovering(
   x2: (left + width) / 1588 * 1000 + 5,
   y2: (top + height) / 2246 * 1000 + 5,
   pairId: pairId,
+  confidence: confidence,
 );
