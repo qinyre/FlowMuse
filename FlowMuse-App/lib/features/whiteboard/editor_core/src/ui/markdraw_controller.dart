@@ -4174,8 +4174,21 @@ class MarkdrawController extends ChangeNotifier {
     ) async {
       final index = indexByRequestId[request.id]!;
       final visionElement = elements[index];
+      // 整页 VLM 文本优先：真机实测逐块 MyScript 对潦草连笔字误识率高
+      // （同一页面 VLM 整图读得准），且免去逐块网络请求；
+      // 仅当 VLM 未给出该元素文本时才回落逐块 MyScript 转写。
+      final vlmText = visionElement.text?.trim() ?? '';
       SmartLayoutRecognizedBlock block;
-      if (myScriptCallback != null) {
+      if (vlmText.isNotEmpty) {
+        block = SmartLayoutRecognizedBlock(
+          id: request.id,
+          pageId: page.id,
+          type: 'text',
+          text: vlmText,
+          bounds: request.bounds,
+          startedAt: request.startedAt,
+        );
+      } else if (myScriptCallback != null) {
         final strokes = [
           for (final key in textClaims[index]!)
             ...(inkGroups[key] ?? const <FreedrawElement>[]),
@@ -4187,7 +4200,7 @@ class MarkdrawController extends ChangeNotifier {
             myScriptCallback,
           );
         } catch (error) {
-          debugPrint('[$_logTag] 视觉排版 MyScript 转写失败($request.id): $error');
+          debugPrint('[$_logTag] 视觉排版 MyScript 兜底转写失败($request.id): $error');
           block = SmartLayoutRecognizedBlock(
             id: request.id,
             pageId: page.id,
@@ -4207,19 +4220,6 @@ class MarkdrawController extends ChangeNotifier {
           startedAt: request.startedAt,
           error: 'no-myscript-callback',
         );
-      }
-      if (!block.isSuccess) {
-        final vlmText = visionElement.text?.trim() ?? '';
-        if (vlmText.isNotEmpty) {
-          block = SmartLayoutRecognizedBlock(
-            id: request.id,
-            pageId: page.id,
-            type: 'text',
-            text: vlmText,
-            bounds: request.bounds,
-            startedAt: request.startedAt,
-          );
-        }
       }
       // 成功块统一：引用 id 用元素 id（mindmap 树引用一致）、边界用认领簇并集。
       final elementId = visionElement.id ?? 'e$index';

@@ -120,6 +120,19 @@ fabricate 成 `SmartLayoutResponse` 后复用 `_legacyPlacementPlan`；mindmap�
 - 潦草手写认字错误率仍取决于模型（R6 同前）；
 - 服务端需重新部署（新增端点）。
 
+## 第三轮：文字转写反转为"整页 VLM 文本优先"（2026-08-27 真机反馈）
+
+鸿蒙真机日志证实 vision 全链路跑通（`/api/ink/smart-layout/vision` 200 → v-e0/e1/e3
+逐块匹配成功），但转写质量差：逐块 MyScript 把潦草连笔字误识（"照片"→"止咒"、标题→
+"有主句"），且引擎返回"成功"即被无条件采信。同一页面 VLM 整图直读明显更准——**反转
+第二轮的优先级**：认领文本项直接采用 VLM 整页转写文本，仅 VLM 未给出该元素文本时回落
+逐块 MyScript；附带省掉每块约 2s 的并行网络请求。经典管线行为不变。
+
+改动：`markdraw_controller.dart` `_recognizeVisionTextBlocks.recognizeOne` 分支顺序翻转；
+测试改写语义（mindmap 节点取 VLM 文本、优先级/兜底用例、MyScript 调用数断言为 1）；
+接口设计与项目需求文档同步。未处理项（后续按数据决定）：左侧"总结"簇未被认领落红框的
+匹配层问题、确认条管线来源标识与逐项诊断日志。
+
 ## 附录：调研出处
 
 Qwen2-VL 论文 https://hf-mirror.com/papers/2409.12191 ｜ Qwen2.5-VL 博客
