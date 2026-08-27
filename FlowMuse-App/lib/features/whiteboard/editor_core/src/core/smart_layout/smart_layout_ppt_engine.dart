@@ -47,17 +47,9 @@ class PptLayoutEngine {
     required List<PptGroupItem> groups,
     required Map<String, PptUnit> units,
     required List<Rect> occupied,
+    bool singleColumn = false,
   }) {
     if (groups.isEmpty) return null;
-    final hasFigure = groups.any((group) => group.role == 'figure');
-    final textGroups = [
-      for (final group in groups)
-        if (group.role != 'figure') group,
-    ];
-    final figureGroups = [
-      for (final group in groups)
-        if (group.role == 'figure') group,
-    ];
     final placements = <String, Offset>{};
 
     bool placeColumn(
@@ -76,6 +68,43 @@ class PptLayoutEngine {
       }
       return true;
     }
+
+    void shiftDown() {
+      for (final key in placements.keys.toList()) {
+        placements[key] = placements[key]! + const Offset(0, downShiftStep);
+      }
+    }
+
+    PptLayoutResult? settle() {
+      if (_insideAndClear(contentArea, placements, units, occupied)) {
+        return PptLayoutResult(targets: placements);
+      }
+      for (var i = 1; i <= maxDownShifts; i++) {
+        shiftDown();
+        if (_insideAndClear(contentArea, placements, units, occupied)) {
+          return PptLayoutResult(targets: placements);
+        }
+      }
+      return null;
+    }
+
+    if (singleColumn) {
+      // 图文配对模式：单列文档流（文上图下紧邻），配对相邻不被双列行高错开
+      if (!placeColumn(groups, contentArea.left, contentArea.width)) {
+        return null;
+      }
+      return settle();
+    }
+
+    final hasFigure = groups.any((group) => group.role == 'figure');
+    final textGroups = [
+      for (final group in groups)
+        if (group.role != 'figure') group,
+    ];
+    final figureGroups = [
+      for (final group in groups)
+        if (group.role == 'figure') group,
+    ];
 
     if (hasFigure) {
       // 自适应列宽：配图列按"最大配图宽"决定（默认 38%，回落时加大），
@@ -132,40 +161,34 @@ class PptLayoutEngine {
       }
     }
 
-    bool insideAndClear() {
-      for (final entry in placements.entries) {
-        final unit = units[entry.key];
-        if (unit == null) continue;
-        final rect = Rect.fromLTWH(
-          entry.value.dx,
-          entry.value.dy,
-          unit.size.width,
-          unit.size.height,
-        );
-        if (rect.left < contentArea.left ||
-            rect.top < contentArea.top ||
-            rect.right > contentArea.right ||
-            rect.bottom > contentArea.bottom) {
-          return false;
-        }
-        for (final obstacle in occupied) {
-          if (rect.overlaps(obstacle)) return false;
-        }
-      }
-      return true;
-    }
+    return settle();
+  }
 
-    if (insideAndClear()) {
-      return PptLayoutResult(targets: placements);
-    }
-    for (var i = 1; i <= maxDownShifts; i++) {
-      for (final key in placements.keys.toList()) {
-        placements[key] = placements[key]! + const Offset(0, downShiftStep);
+  static bool _insideAndClear(
+    Rect contentArea,
+    Map<String, Offset> placements,
+    Map<String, PptUnit> units,
+    List<Rect> occupied,
+  ) {
+    for (final entry in placements.entries) {
+      final unit = units[entry.key];
+      if (unit == null) continue;
+      final rect = Rect.fromLTWH(
+        entry.value.dx,
+        entry.value.dy,
+        unit.size.width,
+        unit.size.height,
+      );
+      if (rect.left < contentArea.left ||
+          rect.top < contentArea.top ||
+          rect.right > contentArea.right ||
+          rect.bottom > contentArea.bottom) {
+        return false;
       }
-      if (insideAndClear()) {
-        return PptLayoutResult(targets: placements);
+      for (final obstacle in occupied) {
+        if (rect.overlaps(obstacle)) return false;
       }
     }
-    return null;
+    return true;
   }
 }

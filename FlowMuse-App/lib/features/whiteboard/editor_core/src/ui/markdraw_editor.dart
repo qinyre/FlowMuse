@@ -74,6 +74,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onSmartLayoutInk,
     this.onRecognizeSmartLayoutBlock,
     this.onComposeSmartLayout,
+    this.onVisionSmartLayout,
     this.canvasThemeBackground = '#ffffff',
     this.useFlatBackgrounds = false,
     this.onEyedropperPressed,
@@ -154,6 +155,8 @@ class MarkdrawEditor extends StatefulWidget {
   onRecognizeSmartLayoutBlock;
   final Future<SmartLayoutResponse> Function(SmartLayoutComposeRequest)?
   onComposeSmartLayout;
+  final Future<SmartLayoutVisionResponse> Function(SmartLayoutVisionRequest)?
+  onVisionSmartLayout;
   final String canvasThemeBackground;
   final bool useFlatBackgrounds;
   final SpeechRecognitionService? speechRecognitionService;
@@ -252,6 +255,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     _controller.onRecognizeSmartLayoutBlock =
         widget.onRecognizeSmartLayoutBlock;
     _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
+    _controller.onVisionSmartLayout = widget.onVisionSmartLayout;
     _controller.onMindmapOperationError = _showMindmapOperationError;
     _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     _controller.restoreKeyboardFocusWhenStable();
@@ -280,6 +284,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _controller.onRecognizeSmartLayoutBlock =
           widget.onRecognizeSmartLayoutBlock;
       _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
+      _controller.onVisionSmartLayout = widget.onVisionSmartLayout;
       _controller.onMindmapOperationError = _showMindmapOperationError;
       _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     } else if (widget.onRecognizeInk != oldWidget.onRecognizeInk) {
@@ -307,6 +312,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     }
     if (widget.onComposeSmartLayout != oldWidget.onComposeSmartLayout) {
       _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
+    }
+    if (widget.onVisionSmartLayout != oldWidget.onVisionSmartLayout) {
+      _controller.onVisionSmartLayout = widget.onVisionSmartLayout;
     }
     if (widget.canvasThemeBackground != oldWidget.canvasThemeBackground) {
       _controller.setThemeCanvasBackground(widget.canvasThemeBackground);

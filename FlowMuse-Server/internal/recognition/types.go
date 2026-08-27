@@ -74,6 +74,38 @@ type SmartLayoutLayoutDecision struct {
 	Structure  map[string]any `json:"structure,omitempty"`
 }
 
+// VisionLayoutRequest 是视觉优先管线的请求：整页截图（+可选笔记标题），
+// VLM 一次调用完成认字、结构理解、图文配对与风格判定。
+type VisionLayoutRequest struct {
+	PageID      string `json:"pageId"`
+	NoteTitle   string `json:"noteTitle,omitempty"`
+	ImageMime   string `json:"imageMime,omitempty"`
+	ImageBase64 string `json:"imageBase64"`
+}
+
+// VisionLayoutElement 是 VLM 对页面内一项内容的描述。
+// Box 为 0-1000 归一化坐标 [x1,y1,x2,y2]（左上原点，Qwen2-VL/Gemini 惯例）。
+// ID 由服务端按输出顺序分配（"e0"、"e1"...），供 mindmap 结构树引用。
+type VisionLayoutElement struct {
+	ID         string    `json:"id,omitempty"`
+	Role       string    `json:"role"` // title | caption | body | figure
+	Text       string    `json:"text,omitempty"`
+	Vertical   bool      `json:"vertical,omitempty"`
+	Box        []float64 `json:"box"`
+	PairID     string    `json:"pairId,omitempty"`
+	Confidence float64   `json:"confidence,omitempty"`
+}
+
+// VisionLayoutResponse 是视觉排版的判定结果；坐标为粗位置，客户端模板精修落位。
+// Structure 仅在 style=mindmap 时有效：{"root":{"text","blockIds":["e0"...],"children"}}。
+type VisionLayoutResponse struct {
+	PageID     string                `json:"pageId,omitempty"`
+	Style      string                `json:"style"` // ppt | mindmap | article | in_place
+	Confidence float64               `json:"confidence,omitempty"`
+	Elements   []VisionLayoutElement `json:"elements"`
+	Structure  map[string]any        `json:"structure,omitempty"`
+}
+
 type SmartLayoutPage struct {
 	ID       string           `json:"id"`
 	Index    int              `json:"index"`

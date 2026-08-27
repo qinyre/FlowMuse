@@ -114,7 +114,7 @@ func main() {
 		recognizer,
 		cfg.AITimeout+10*time.Second,
 		smartLayouter,
-	).Register(mux)
+	).WithVisionLayouter(smartLayouter).Register(mux)
 
 	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)
 	if err := http.ListenAndServe(cfg.Addr, withCORS(mux, cfg.AllowedOrigins)); err != nil {

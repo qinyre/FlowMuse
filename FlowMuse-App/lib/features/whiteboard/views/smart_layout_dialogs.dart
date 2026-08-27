@@ -169,23 +169,29 @@ class _SmartLayoutScopeDialogState extends State<SmartLayoutScopeDialog> {
                       Expanded(
                         child: SizedBox(
                           height: 300,
-                          child: ListView(
-                            children: [
-                              for (final page in widget.pages)
-                                _PageCheckTile(
-                                  page: page,
-                                  checked: _checked.contains(page.id),
-                                  thumbnailBuilder: widget.thumbnailBuilder,
-                                  onChanged: (value) =>
-                                      _onCheckToggled(page.id, value),
-                                ),
-                            ],
+                          // 用 SingleChildScrollView 而非 ListView：
+                          // ListView（viewport）不支持 intrinsic 尺寸，真实 showDialog 路由
+                          // 会因 AlertDialog 的 IntrinsicWidth 布局查询抛异常（白框）。
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (final page in widget.pages)
+                                  _PageCheckTile(
+                                    page: page,
+                                    checked: _checked.contains(page.id),
+                                    thumbnailBuilder: widget.thumbnailBuilder,
+                                    onChanged: (value) =>
+                                        _onCheckToggled(page.id, value),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       SizedBox(
-                        width: 220,
+                        width: 180,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,17 +255,29 @@ class _PageCheckTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CheckboxListTile(
-      dense: true,
-      value: checked,
-      onChanged: onChanged,
-      controlAffinity: ListTileControlAffinity.leading,
-      secondary: SizedBox(
-        width: 96,
-        height: 64,
-        child: _PageThumbnail(page: page, builder: thumbnailBuilder),
+    // 自绘行而非 CheckboxListTile：窄窗口下 ListTile 的 trailing 缩略图会占满瓦片宽度抛断言。
+    return InkWell(
+      onTap: () => onChanged(!checked),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Checkbox(value: checked, onChanged: onChanged),
+            SizedBox(
+              width: 72,
+              height: 48,
+              child: _PageThumbnail(page: page, builder: thumbnailBuilder),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '第 ${page.index + 1} 页',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
-      title: Text('第 ${page.index + 1} 页'),
     );
   }
 }
@@ -288,8 +306,8 @@ class _PageThumbnail extends StatelessWidget {
               bytes,
               fit: BoxFit.cover,
               gaplessPlayback: true,
-              width: 96,
-              height: 64,
+              width: 72,
+              height: 48,
             );
           }
           return _fallback();
@@ -299,8 +317,8 @@ class _PageThumbnail extends StatelessWidget {
   }
 
   Widget _fallback() => Container(
-    width: 96,
-    height: 64,
+    width: 72,
+    height: 48,
     color: Colors.grey.shade300,
     alignment: Alignment.center,
     child: const Icon(Icons.description_outlined, size: 20),
@@ -383,22 +401,23 @@ class SmartLayoutConfirmBar extends StatelessWidget {
   }
 }
 
-/// 非模态底部"识别失败"悬浮条（红区可见）。
+/// 非模态底部"识别失败"悬浮条（红区可见；展示失败原因便于定位）。
 class SmartLayoutFailureBar extends StatelessWidget {
   const SmartLayoutFailureBar({
     super.key,
-    required this.failureCount,
+    required this.failures,
     required this.isMultiPage,
     required this.onAction,
   });
 
-  final int failureCount;
+  final List<SmartLayoutFailureInfo> failures;
   final bool isMultiPage;
   final ValueChanged<SmartLayoutBarAction> onAction;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final firstError = failures.isEmpty ? null : failures.first.error;
     return Card(
       elevation: 6,
       color: theme.colorScheme.errorContainer,
@@ -407,10 +426,25 @@ class SmartLayoutFailureBar extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                '$failureCount 处手写未识别成功（红色区域），'
-                '可修改字迹后重试，或删除后继续。',
-                style: theme.textTheme.bodySmall,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${failures.length} 处手写未识别成功（红色区域），'
+                    '可修改字迹后重试，或删除后继续。',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  if (firstError != null && firstError.isNotEmpty)
+                    Text(
+                      '原因：$firstError',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onErrorContainer,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: 12),
