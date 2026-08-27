@@ -4198,8 +4198,19 @@ class MarkdrawController extends ChangeNotifier {
     if (current == null) return false;
     final trimmed = newText.trim();
     var candidate = current.copyWithText(text: trimmed);
-    final (measuredWidth, measuredHeight) = TextRenderer.measure(candidate);
-    candidate = candidate.copyWith(width: measuredWidth, height: measuredHeight);
+    // 与创建/引擎一致的尺寸规则：竖排保持原稿窄长不重测；
+    // 横排 max(现值, 测量) 只放不缩，避免改字后盒子跳动。
+    final flowMuseData = current.customData?['flowMuse'];
+    final isVertical =
+        flowMuseData is Map<String, Object?> &&
+        flowMuseData['writingMode'] == 'vertical';
+    if (!isVertical) {
+      final (measuredWidth, measuredHeight) = TextRenderer.measure(candidate);
+      candidate = candidate.copyWith(
+        width: math.max(current.width, measuredWidth),
+        height: math.max(current.height, measuredHeight),
+      );
+    }
     // 草稿场景内原位替换（同 id）；提交时按 id 采用草稿最终形态。
     applyResult(UpdateElementResult(candidate));
     return true;
