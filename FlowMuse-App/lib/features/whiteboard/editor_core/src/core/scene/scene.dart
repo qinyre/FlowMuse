@@ -123,11 +123,14 @@ class Scene {
 
   /// Returns the bounding box that encloses all active (non-deleted) elements,
   /// or null if there are no active elements.
+  ///
+  /// 自由笔画使用可视边界（中心线 AABB + profile.visualHalfWidth 外扩，
+  /// issue #5 T6）：场景边界必须覆盖真实可见笔宽。
   Bounds? sceneBounds() {
     Bounds? result;
     for (final e in _elements) {
       if (e.isDeleted) continue;
-      final b = Bounds.fromLTWH(e.x, e.y, e.width, e.height);
+      final b = elementVisualBounds(e);
       result = result == null ? b : result.union(b);
     }
     return result;
@@ -153,6 +156,11 @@ class Scene {
 
       if (e is LineElement) {
         if (_isPointNearLine(point, e, _lineHitThreshold)) return e;
+      } else if (e is FreedrawElement) {
+        // 自由笔画命中含笔刷可见半径（A20：最大荧光笔可见外缘可
+        // 选择/擦除）；保留 AABB 语义，不做逐段精确 hit-test。
+        final bounds = elementVisualBounds(e);
+        if (bounds.containsPoint(point)) return e;
       } else {
         final bounds = Bounds.fromLTWH(e.x, e.y, e.width, e.height);
         if (bounds.containsPoint(point)) return e;

@@ -575,16 +575,17 @@ void main() {
     // When: 计算默认 padding=20 的导出边界
     final bounds = ExportBounds.compute(scene);
 
-    // Then: 上缘 = 100 - 20 = 80，而可视上缘 = 100 + 2 - 42 = 60 ——
-    // 中心线 AABB + 固定 padding 不含 42px 可视半宽（缺陷证据）
+    // Then（A21，P6 缺陷已于 T6 修复）：自由笔画用可视边界
+    // （半宽 20×4.2/2+2=44）+ 普通 padding——上缘 ≤ 100+2-44-20+0.001
+    // = 38，可视上缘 60 完整包含，不再裁边。
     expect(bounds, isNotNull);
     expect(
       bounds!.top,
-      lessThanOrEqualTo(80.0 + 0.001),
-      reason: '现状边界按中心线 AABB+20 padding 计算',
+      lessThanOrEqualTo(38.001),
+      reason: '导出上缘应含可视半宽 44 + padding 20',
     );
-    // 可视上缘在导出边界之外约 20px → 裁边
-    expect(bounds.top, greaterThan(60.0), reason: '可视上缘 60 在导出边界外，荧光笔上缘被裁（缺陷）');
+    expect(bounds.top, lessThan(60.0), reason: '可视上缘 60 必须在界内');
+    expect(bounds.bottom, greaterThan(160.0), reason: '下缘同理含可视半宽');
   });
 }
 

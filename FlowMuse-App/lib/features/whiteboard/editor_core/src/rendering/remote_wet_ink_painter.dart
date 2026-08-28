@@ -265,13 +265,13 @@ class RemoteWetInkPainter extends CustomPainter {
     if (minX > maxX || minY > maxY) {
       return const Rect.fromLTWH(0, 0, 1, 1);
     }
-    // §8.2 余量按"brush sizeScale 后的最大有效线宽半径"推导：perfect_
-    // freehand 的 size 是直径 = strokeWidth × brush.sizeScale（freedraw_
-    // renderer），最大半径 = strokeWidth × sizeScale / 2。当前笔型
-    // sizeScale 上界 = highlighter 4.2，再乘 1.3 压感/变粗安全因子 + 2px
-    // 抗锯齿边界。禁止退回名义 strokeWidth/2（v4 §8.2 明令禁止）。
-    final margin =
-        snapshot.style.strokeWidth * kMaxBrushSizeScale * 0.5 * 1.3 + 2.0;
+    // §8.2 余量按笔刷 profile 的保守可视半径（issue #5 T6 单一真源：
+    // visualHalfWidth = size×(0.5+maxThinning×0.5)+AA 余量，覆盖
+    // thinning/平头/抗锯齿）。禁止退回名义 strokeWidth/2 或手写
+    // kMaxBrushSizeScale 常量（v4 §8.2 明令禁止）。
+    final margin = BrushRenderProfile.forType(
+      BrushType.fromWireName(snapshot.style.brushType),
+    ).visualHalfWidth(snapshot.style.strokeWidth);
     return Rect.fromLTRB(
       minX - margin,
       minY - margin,

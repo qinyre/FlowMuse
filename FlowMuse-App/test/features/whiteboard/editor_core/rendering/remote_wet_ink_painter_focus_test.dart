@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/live_ink_chunk.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/live_ink_receive_scheduler.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_ink_store.dart';
@@ -151,7 +152,9 @@ void main() {
     painter.paint(spy, const Size(1000, 1000));
     final bounds = spy.saveLayerBounds.single!;
     // 公式 margin = w × 4.2 × 0.5 × 1.3 + 2；断言用含完整余量的左/右界
-    final margin = 40 * 4.2 * 0.5 * 1.3 + 2.0; // 见 Step 14.2 的公式
+    final margin = BrushRenderProfile.forType(
+      BrushType.highlighter,
+    ).visualHalfWidth(40); // issue #5 T6：profile.visualHalfWidth 单一真源
     expect(bounds.left, lessThanOrEqualTo(10 - margin), reason: '左缘含最大有效线宽余量');
     expect(bounds.right, greaterThanOrEqualTo(20 + margin));
     expect(bounds.width, lessThan(1000));
@@ -216,7 +219,9 @@ void main() {
       focusedCreatorKey: 'user:a',
       socketIdCreatorKeys: const {'s-other': 'user:other'},
     );
-    final margin = 3 * 4.2 * 0.5 * 1.3 + 2.0;
+    final margin = BrushRenderProfile.forType(
+      BrushType.fountainPen,
+    ).visualHalfWidth(3); // issue #5 T6：profile.visualHalfWidth 单一真源
     final first = SpyCanvas(Canvas(PictureRecorder()));
     painter.paint(first, const Size(2000, 2000));
     expect(first.saveLayerCount, 1);
@@ -278,7 +283,9 @@ void main() {
     final spy = SpyCanvas(Canvas(PictureRecorder()));
     painter.paint(spy, const Size(5000, 5000));
     expect(spy.saveLayerCount, 64, reason: '每条非目标笔迹一个 dim 层');
-    final margin = 3 * 4.2 * 0.5 * 1.3 + 2.0;
+    final margin = BrushRenderProfile.forType(
+      BrushType.fountainPen,
+    ).visualHalfWidth(3); // issue #5 T6：profile.visualHalfWidth 单一真源
     final firstStrokeBounds = spy.saveLayerBounds.first!;
     expect(firstStrokeBounds.left, lessThanOrEqualTo(0 - margin));
     expect(firstStrokeBounds.right, greaterThanOrEqualTo(10 + margin));

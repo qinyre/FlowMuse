@@ -5,6 +5,7 @@ export 'brush_type.dart';
 export 'diamond_element.dart';
 export 'element.dart';
 export 'element_id.dart';
+export 'element_visual_bounds.dart';
 export 'ellipse_element.dart';
 export 'shape_converter.dart';
 export 'fill_style.dart';

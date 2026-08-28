@@ -414,12 +414,3 @@ class FreedrawRenderer {
     return path;
   }
 }
-
-/// 笔型 sizeScale 上界（highlighter = 4.2），供远端湿墨聚焦层计算
-/// bounds 余量。新增笔型若超过该值必须同步上调。
-/// 前提：现有笔型的压感 thinning 使最大半径 ≤ size/2×(1+thinning) ≤
-/// size（brushPen thinning 1.0 时最大半径 = 1.15×strokeWidth，远小于
-/// 4.2 上界推导的 2.1×strokeWidth）；若未来新增"高 sizeScale(≥3) +
-/// thinning≈1.0"笔型，1.3 压感因子将不足，需把因子提到 2.0 或按笔型
-/// 精确计算。（issue #5 T6 将删除本常量，改由 profile.visualHalfWidth 派生。）
-const double kMaxBrushSizeScale = 4.2;
