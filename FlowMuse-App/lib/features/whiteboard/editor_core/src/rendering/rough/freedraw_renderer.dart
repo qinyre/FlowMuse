@@ -106,13 +106,18 @@ class FreedrawRenderer {
       streamline: profile.streamline,
       simulatePressure: !hasPressure || profile.forceSimulatePressure,
       isComplete: isComplete,
-      // 笔锋：绝对距离（customTaper 单位即距离）；未启用时传 null 走
-      // 默认圆端帽。taper 期间包会忽略 cap。
+      // 笔锋：绝对距离（customTaper 单位即距离）；平头笔型（荧光笔）
+      // 显式 cap:false 生成包原生平截面；其余未启用时传 null 走默认
+      // 圆端帽。taper 期间包会忽略 cap。
       start: startTaper > 0
           ? StrokeEndOptions.start(taperEnabled: true, customTaper: startTaper)
+          : profile.capStyle == BrushCapStyle.flat
+          ? StrokeEndOptions.start(cap: false)
           : null,
       end: endTaper > 0
           ? StrokeEndOptions.end(taperEnabled: true, customTaper: endTaper)
+          : profile.capStyle == BrushCapStyle.flat
+          ? StrokeEndOptions.end(cap: false)
           : null,
     );
 
@@ -241,7 +246,8 @@ class FreedrawRenderer {
         ..style = PaintingStyle.fill
         ..color = basePaint.color.withValues(
           alpha: basePaint.color.a * profile.opacityScale,
-        );
+        )
+        ..blendMode = _blendModeOf(profile);
       canvas.drawCircle(Offset(p.x, p.y), size / 2, paint);
       return;
     }
@@ -259,7 +265,11 @@ class FreedrawRenderer {
       ..style = PaintingStyle.fill
       ..color = basePaint.color.withValues(
         alpha: basePaint.color.a * profile.opacityScale,
-      );
+      )
+      // 荧光笔 darken：可分离混合，输出 alpha 按 srcOver（透明层内
+      // 不消失）；禁止 multiply/modulate（会乘 alpha）。仅最终合成，
+      // 不隐式创建 saveLayer。
+      ..blendMode = _blendModeOf(profile);
 
     // 铅笔纹理：shader 可用时复用应用级单实例（每元素 set uniform 后立即
     // drawPath；engine 逐 draw 快照 uniform，跨元素安全）。
@@ -287,6 +297,11 @@ class FreedrawRenderer {
   static List<PointVector> _asPointVectors(List<Offset> outline) => [
     for (final o in outline) PointVector(o.dx, o.dy, 0),
   ];
+
+  static BlendMode _blendModeOf(BrushRenderProfile profile) =>
+      profile.compositeMode == BrushCompositeMode.darken
+      ? BlendMode.darken
+      : BlendMode.srcOver;
 
   /// 原始输入点折线总长（未插值、未 streamline）。
   static double _polylineLength(List<Point> points) {
