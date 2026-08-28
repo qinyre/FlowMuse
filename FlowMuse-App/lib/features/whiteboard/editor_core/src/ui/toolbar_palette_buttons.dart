@@ -69,10 +69,7 @@ class _BrushPaletteButtonState extends State<BrushPaletteButton> {
           _showPalette(context);
         }
       },
-      child: Icon(
-        _iconForBrush(widget.controller.activeBrushType),
-        size: 20,
-      ),
+      child: Icon(_iconForBrush(widget.controller.activeBrushType), size: 20),
     );
   }
 
@@ -185,55 +182,89 @@ class _BrushPalette extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return ListenableBuilder(
       listenable: controller,
-      builder: (context, _) => SizedBox(
-        width: 310,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  for (final brushType in BrushType.values)
-                    StudioRailIconButton(
-                      tooltip: _labelForBrush(brushType),
-                      selected: controller.activeBrushType == brushType,
-                      size: 44,
-                      onPressed: () {
-                        controller.selectBrush(brushType);
-                        Navigator.of(context).pop();
-                      },
-                      child: Icon(_iconForBrush(brushType), size: 20),
+      builder: (context, _) {
+        // 圆珠笔/荧光笔恒定线宽：不显示压力滑块（历史偏好仍持久化，
+        // 切回压感笔型时自动恢复，不丢用户设置）。
+        final pressureEnabled = BrushRenderProfile.forType(
+          controller.activeBrushType,
+        ).pressureEnabled;
+        return SizedBox(
+          width: 310,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    for (final brushType in BrushType.values)
+                      StudioRailIconButton(
+                        tooltip: _labelForBrush(brushType),
+                        selected: controller.activeBrushType == brushType,
+                        size: 44,
+                        onPressed: () {
+                          controller.selectBrush(brushType);
+                          Navigator.of(context).pop();
+                        },
+                        child: Icon(_iconForBrush(brushType), size: 20),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (pressureEnabled)
+                  Row(
+                    children: [
+                      Text(
+                        '压感',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('均匀', style: TextStyle(fontSize: 11)),
+                      Expanded(
+                        child: Slider(
+                          value: controller.pressureSensitivity,
+                          min: 0,
+                          max: 1,
+                          onChanged: (value) {
+                            controller.pressureSensitivity = value;
+                          },
+                        ),
+                      ),
+                      const Text('极强', style: TextStyle(fontSize: 11)),
+                    ],
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Text(
+                          '压感',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '恒定线宽',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Text(
-                    '压感',
-                    style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
                   ),
-                  const SizedBox(width: 8),
-                  const Text('均匀', style: TextStyle(fontSize: 11)),
-                  Expanded(
-                    child: Slider(
-                      value: controller.pressureSensitivity,
-                      min: 0,
-                      max: 1,
-                      onChanged: (value) {
-                        controller.pressureSensitivity = value;
-                      },
-                    ),
-                  ),
-                  const Text('极强', style: TextStyle(fontSize: 11)),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
