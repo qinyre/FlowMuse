@@ -97,14 +97,25 @@ type VisionLayoutElement struct {
 	Confidence float64  `json:"confidence,omitempty"`
 }
 
-// VisionLayoutResponse 是视觉排版判定结果；客户端按 markIds 直查场景对象后模板精修落位。
-// Structure 仅在 style=mindmap 时有效：{"root":{"text","blockIds":["e0"...],"children"}}。
+// VisionLayoutResponse 是视觉识别结果：只含认字与图文配对，不再判定版式；
+// 版式由客户端模板卡片选择后确定性落位。客户端按 markIds 直查场景对象。
 type VisionLayoutResponse struct {
-	PageID     string                `json:"pageId,omitempty"`
-	Style      string                `json:"style"` // ppt | mindmap | article | in_place
-	Confidence float64               `json:"confidence,omitempty"`
-	Elements   []VisionLayoutElement `json:"elements"`
-	Structure  map[string]any        `json:"structure,omitempty"`
+	PageID   string                `json:"pageId,omitempty"`
+	Elements []VisionLayoutElement `json:"elements"`
+}
+
+// TranscribeRequest 是低置信裁剪重问的请求：一块从整页截图裁出的局部图像，
+// 无上下文单独转写。Hint 只允许笔记标题等中性提示，禁止传入原识别结果以免锚定。
+type TranscribeRequest struct {
+	Hint        string `json:"hint,omitempty"`
+	ImageMime   string `json:"imageMime,omitempty"`
+	ImageBase64 string `json:"imageBase64"`
+}
+
+// TranscribeResponse 是单块转写结果；text 为空表示无法辨认（confidence 恒为 0）。
+type TranscribeResponse struct {
+	Text       string  `json:"text"`
+	Confidence float64 `json:"confidence"`
 }
 
 type SmartLayoutPage struct {

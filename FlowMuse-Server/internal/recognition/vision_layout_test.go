@@ -47,7 +47,7 @@ func sampleVisionRequest() VisionLayoutRequest {
 }
 
 func TestVisionLayoutParsesAndMapsPageID(t *testing.T) {
-	content := `{"style":"ppt","confidence":0.9,"elements":[` +
+	content := `{"elements":[` +
 		`{"role":"title","text":"手工记账","markIds":["m1"]},` +
 		`{"role":"figure","text":"","markIds":["m2"],"pairId":"pair-1"},` +
 		`{"role":"caption","text":"小羊睡觉","vertical":true,"markIds":["m3"],"pairId":"pair-1"}]}`
@@ -59,9 +59,6 @@ func TestVisionLayoutParsesAndMapsPageID(t *testing.T) {
 	if response.PageID != "p-1" {
 		t.Fatalf("pageId = %q", response.PageID)
 	}
-	if response.Style != layoutStylePPT {
-		t.Fatalf("style = %q", response.Style)
-	}
 	if len(response.Elements) != 3 {
 		t.Fatalf("elements = %d, want 3", len(response.Elements))
 	}
@@ -71,7 +68,7 @@ func TestVisionLayoutParsesAndMapsPageID(t *testing.T) {
 }
 
 func TestVisionLayoutMarkReferencesValidated(t *testing.T) {
-	content := `{"style":"in_place","elements":[` +
+	content := `{"elements":[` +
 		`{"role":"body","text":"未知编号","markIds":["m9"]},` + // 不在请求标记里 → 丢元素
 		`{"role":"body","text":"多项合并","markIds":["m2","m1","m99"]},` + // 剔除未知，保留 m2,m1
 		`{"role":"body","text":"重复引用","markIds":["m1"]},` + // m1 已被前项占用 → 剔空丢元素
@@ -94,7 +91,7 @@ func TestVisionLayoutMarkReferencesValidated(t *testing.T) {
 }
 
 func TestVisionLayoutElementConfidenceNormalized(t *testing.T) {
-	content := `{"style":"in_place","elements":[` +
+	content := `{"elements":[` +
 		`{"role":"body","text":"未自报把握","markIds":["m1"]},` + // 缺省 → 0.9
 		`{"role":"body","text":"潦草字","confidence":0.25,"markIds":["m2"]},` + // 透传
 		`{"role":"body","text":"过分自信","confidence":2.5,"markIds":["m3"]}]}` // 越界 → 1
@@ -112,7 +109,7 @@ func TestVisionLayoutElementConfidenceNormalized(t *testing.T) {
 }
 
 func TestVisionLayoutDropsHallucinatedTextAndNormalizesRoles(t *testing.T) {
-	content := `{"style":"in_place","elements":[` +
+	content := `{"elements":[` +
 		`{"role":"body","text":"","markIds":["m1"]},` + // 文字角色无文字 → 幻觉，丢弃
 		`{"role":"unknown-role","text":"角色未知","markIds":["m1"]},` + // 归为 body 保留
 		`{"role":"title","text":"标题一","markIds":["m2"]},` +
@@ -133,27 +130,15 @@ func TestVisionLayoutDropsHallucinatedTextAndNormalizesRoles(t *testing.T) {
 	}
 }
 
-func TestVisionLayoutBadStyleFallsBackToInPlace(t *testing.T) {
-	content := `{"style":"diagram","elements":[{"role":"body","text":"内容","markIds":["m1"]}]}`
-	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
-	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
-	if err != nil {
-		t.Fatalf("VisionLayout error: %v", err)
-	}
-	if response.Style != layoutStyleInPlace {
-		t.Fatalf("style = %q, want in_place", response.Style)
-	}
-}
-
 func TestVisionLayoutInvalidJSONReturnsError(t *testing.T) {
 	layouter := newTestSmartLayouter(fakeVisionServer(t, `这不是 JSON`, nil).URL)
 	if _, err := layouter.VisionLayout(context.Background(), sampleVisionRequest()); err == nil {
-		t.Fatal("invalid JSON should return an error so客户端回退经典管线")
+		t.Fatal("invalid JSON should return an error so客户端直接提示重试")
 	}
 }
 
 func TestVisionLayoutAssignsElementIDs(t *testing.T) {
-	content := `{"style":"article","elements":[` +
+	content := `{"elements":[` +
 		`{"role":"title","text":"标题","markIds":["m1"]},` +
 		`{"role":"body","text":"正文","markIds":["m2"]}]}`
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
@@ -166,62 +151,6 @@ func TestVisionLayoutAssignsElementIDs(t *testing.T) {
 	}
 }
 
-func TestVisionLayoutMindmapStructureValidated(t *testing.T) {
-	content := `{"style":"mindmap","confidence":0.9,"elements":[` +
-		`{"role":"body","text":"主题","markIds":["m1"]},` +
-		`{"role":"body","text":"分支一","markIds":["m2"]},` +
-		`{"role":"figure","markIds":["m3"]}],` +
-		`"structure":{"root":{"text":"","blockIds":["e0","e9"],"children":[` +
-		`{"text":"分支","blockIds":["e1"]}]}}}`
-	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
-	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
-	if err != nil {
-		t.Fatalf("VisionLayout error: %v", err)
-	}
-	if response.Style != layoutStyleMindmap {
-		t.Fatalf("style = %q", response.Style)
-	}
-	root, ok := response.Structure["root"].(map[string]any)
-	if !ok {
-		t.Fatalf("structure = %#v", response.Structure)
-	}
-	// e9 是悬空引用应被剔除；根节点 text 空+仅剩 e0 合法
-	refs, _ := root["blockIds"].([]string)
-	if len(refs) != 1 || refs[0] != "e0" {
-		t.Fatalf("root refs = %#v", root["blockIds"])
-	}
-	children, _ := root["children"].([]map[string]any)
-	if len(children) != 1 {
-		t.Fatalf("children = %#v", root["children"])
-	}
-}
-
-func TestVisionLayoutMindmapDanglingRefsFallBackInPlace(t *testing.T) {
-	content := `{"style":"mindmap","elements":[` +
-		`{"role":"body","text":"主题","markIds":["m1"]}],` +
-		`"structure":{"root":{"text":"","blockIds":["e5"]}}}`
-	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
-	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
-	if err != nil {
-		t.Fatalf("VisionLayout error: %v", err)
-	}
-	if response.Style != layoutStyleInPlace || response.Structure != nil {
-		t.Fatalf("style=%q structure=%v, want in_place/nil", response.Style, response.Structure)
-	}
-}
-
-func TestVisionLayoutNonMindmapClearsStructure(t *testing.T) {
-	content := `{"style":"ppt","elements":[{"role":"title","text":"T","markIds":["m1"]}],"structure":{"root":{}}}`
-	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
-	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
-	if err != nil {
-		t.Fatalf("VisionLayout error: %v", err)
-	}
-	if response.Structure != nil {
-		t.Fatalf("non-mindmap should clear structure, got %#v", response.Structure)
-	}
-}
-
 func TestVisionSendsNoteTitleInPrompt(t *testing.T) {
 	sawTitle := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -231,19 +160,15 @@ func TestVisionSendsNoteTitleInPrompt(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":` +
-			jsonString(`{"style":"article","elements":[]}`) + `}}]}`))
+			jsonString(`{"elements":[]}`) + `}}]}`))
 	}))
 	defer server.Close()
 	layouter := newTestSmartLayouter(server.URL)
-	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
-	if err != nil {
+	if _, err := layouter.VisionLayout(context.Background(), sampleVisionRequest()); err != nil {
 		t.Fatalf("VisionLayout error: %v", err)
 	}
 	if !sawTitle {
 		t.Fatal("prompt should embed note title")
-	}
-	if response.Style != layoutStyleArticle {
-		t.Fatalf("style = %q", response.Style)
 	}
 }
 
@@ -285,4 +210,115 @@ func TestVisionEndpointWithoutLayouterFails(t *testing.T) {
 
 func sampleJSONVisionRequest() string {
 	return `{"pageId":"p-1","imageBase64":"dGVzdA=="}`
+}
+
+func sampleTranscribeRequest() TranscribeRequest {
+	return TranscribeRequest{
+		Hint:        "我的笔记",
+		ImageMime:   "image/png",
+		ImageBase64: "dGVzdA==",
+	}
+}
+
+func TestTranscribeParsesTextAndClampsConfidence(t *testing.T) {
+	content := `{"text":" 先头小子 ","confidence":1.5}`
+	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
+	response, err := layouter.Transcribe(context.Background(), sampleTranscribeRequest())
+	if err != nil {
+		t.Fatalf("Transcribe error: %v", err)
+	}
+	if response.Text != "先头小子" {
+		t.Fatalf("text = %q", response.Text)
+	}
+	if response.Confidence != 1 {
+		t.Fatalf("confidence = %v, want 1", response.Confidence)
+	}
+}
+
+func TestTranscribeEmptyTextClearsConfidence(t *testing.T) {
+	content := `{"text":"   ","confidence":0.8}` // 整块无法辨认 → 空文本、把握清零
+	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
+	response, err := layouter.Transcribe(context.Background(), sampleTranscribeRequest())
+	if err != nil {
+		t.Fatalf("Transcribe error: %v", err)
+	}
+	if response.Text != "" || response.Confidence != 0 {
+		t.Fatalf("response = %#v, want empty text / 0 confidence", response)
+	}
+}
+
+func TestTranscribeMissingConfidenceDefaultsLenient(t *testing.T) {
+	content := `{"text":"字"}` // 未自报把握 → 0.9，与整页识别元素默认一致
+	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
+	response, err := layouter.Transcribe(context.Background(), sampleTranscribeRequest())
+	if err != nil {
+		t.Fatalf("Transcribe error: %v", err)
+	}
+	if response.Confidence != 0.9 {
+		t.Fatalf("confidence = %v, want 0.9", response.Confidence)
+	}
+}
+
+func TestTranscribeInvalidJSONReturnsError(t *testing.T) {
+	layouter := newTestSmartLayouter(fakeVisionServer(t, `不是 JSON`, nil).URL)
+	if _, err := layouter.Transcribe(context.Background(), sampleTranscribeRequest()); err == nil {
+		t.Fatal("invalid JSON should return an error so客户端保留原识别结果")
+	}
+}
+
+func TestTranscribeSendsHintInPrompt(t *testing.T) {
+	sawHint := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := readAllBody(t, r)
+		if strings.Contains(body, "提示：我的笔记") {
+			sawHint = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":` +
+			jsonString(`{"text":"字","confidence":0.5}`) + `}}]}`))
+	}))
+	defer server.Close()
+	layouter := newTestSmartLayouter(server.URL)
+	if _, err := layouter.Transcribe(context.Background(), sampleTranscribeRequest()); err != nil {
+		t.Fatalf("Transcribe error: %v", err)
+	}
+	if !sawHint {
+		t.Fatal("prompt should embed the hint")
+	}
+}
+
+func TestTranscribeEndpointRejectsEmptyImage(t *testing.T) {
+	api := NewHTTPAPI(nil, 0, nil).WithVisionLayouter(newTestSmartLayouter("http://unused"))
+	mux := http.NewServeMux()
+	api.Register(mux)
+	request := httptest.NewRequest(http.MethodPost, "/api/ink/smart-layout/transcribe",
+		strings.NewReader(`{"imageBase64":""}`))
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", recorder.Code)
+	}
+}
+
+func TestTranscribeEndpointRejectsNonPost(t *testing.T) {
+	api := NewHTTPAPI(nil, 0, nil).WithVisionLayouter(newTestSmartLayouter("http://unused"))
+	mux := http.NewServeMux()
+	api.Register(mux)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/ink/smart-layout/transcribe", nil))
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", recorder.Code)
+	}
+}
+
+func TestTranscribeEndpointWithoutLayouterFails(t *testing.T) {
+	api := NewHTTPAPI(nil, 0, nil)
+	mux := http.NewServeMux()
+	api.Register(mux)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost,
+		"/api/ink/smart-layout/transcribe", strings.NewReader(`{"imageBase64":"dGVzdA=="}`)))
+	if recorder.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", recorder.Code)
+	}
 }
