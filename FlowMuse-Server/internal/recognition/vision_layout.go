@@ -6,12 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 )
 
 const (
 	maxVisionElements  = 50
 	maxVisionTextRunes = 500
+
+	// VLM 未自报把握时的默认值：视为存疑，客户端会触发裁剪重问复核。
+	defaultVisionConfidence = 0.5
+	// 编号回显剥离后的把握上限：该内容已被标签污染过，压低交重问复核。
+	markEchoConfidenceCap = 0.5
 )
 
 // VisionLayouter 是视觉优先识别通道：整页截图一次认字与图文配对，
@@ -26,8 +32,10 @@ type VisionLayouter interface {
 // 版式决策完全交给客户端模板。
 const visionLayoutPrompt = `你是一个白板笔记智能排版引擎。给定一页白板的整页截图（可能附带笔记标题），请识别页面上的全部手写内容与图示。
 
-截图上的候选对象（手写笔迹簇、图片、图形等）已用彩色外框标出，每个外框左上角有一个
+截图上的候选对象（手写笔迹簇、图片、图形等）已用彩色外框标出，每个外框左上角外侧悬有
 编号标签（m1、m2、……）。你引用内容时只能使用这些编号，禁止编造截图上不存在的编号。
+彩色外框与编号标签是系统叠加的定位标注，不是页面内容：任何编号（如 m6）都严禁出现在
+text 转写结果里，text 只包含笔迹实际写出的文字。
 
 工作方式：
 1. 先逐区域扫描（上→中→下，左→右），读懂每个编号对象的内容与角色，再统一输出。
@@ -58,6 +66,7 @@ const visionLayoutPrompt = `你是一个白板笔记智能排版引擎。给定�
 const transcribePrompt = `你是手写文字转写引擎。给定一块从白板截图上裁出的局部图像，里面是一段待转写的手写内容。
 
 - 只转写图像中真实写出的文字，逐字忠实；禁止联想、补全，禁止根据常识推测"这里应该是什么词"。
+- 图中若出现彩色编号标签、外框等系统标注，一律忽略，严禁转写进结果。
 - 看不清、连笔潦草的字，给出你最有把握的读法，并在 confidence 里如实给低分。
 - 整块都无法辨认时 text 留空、confidence 给接近 0 的小数。
 
@@ -113,6 +122,7 @@ func (l *OpenAICompatibleSmartLayouter) VisionLayout(
 
 // sanitizeVisionLayoutResponse 校验并规范化 VLM 输出：角色白名单、markIds 引用校验
 // （必须出自请求标记且全局不重复，剔空丢元素）、文字角色必须有文字（幻觉过滤）、
+// 编号回显剥离（标签被抄进 text 时剥掉，纯回显保留空文本交客户端重问救回）、
 // title 唯一、文本限长、元素数上限。
 func sanitizeVisionLayoutResponse(response *VisionLayoutResponse, pageID string, marks []string) {
 	response.PageID = pageID
@@ -139,11 +149,14 @@ func sanitizeVisionLayoutResponse(response *VisionLayoutResponse, pageID string,
 			element.Role = "body"
 		}
 		element.Text = strings.TrimSpace(element.Text)
+		markEchoStripped := false
+		element.Text, markEchoStripped = stripMarkEcho(element.Text, validMarks)
 		if element.Text != "" && len([]rune(element.Text)) > maxVisionTextRunes {
 			element.Text = string([]rune(element.Text)[:maxVisionTextRunes])
 		}
-		if element.Text == "" && element.Role != "figure" {
-			// 幻觉过滤：文字角色没有可转写的文字则丢弃。
+		if element.Text == "" && !markEchoStripped && element.Role != "figure" {
+			// 幻觉过滤：文字角色没有可转写的文字则丢弃。编号回显剥离成空的
+			// 除外——保留空文本，客户端按"无文本"走裁剪重问救回。
 			continue
 		}
 		markIds := make([]string, 0, len(element.MarkIds))
@@ -162,10 +175,18 @@ func sanitizeVisionLayoutResponse(response *VisionLayoutResponse, pageID string,
 		}
 		element.MarkIds = markIds
 		if element.Confidence <= 0 {
-			// 未自报把握时按宽松默认处理，避免老提示词输出被整体判为低置信。
-			element.Confidence = 0.9
+			// 未自报把握视为存疑，客户端会对低把握块做裁剪重问复核。
+			element.Confidence = defaultVisionConfidence
 		} else if element.Confidence > 1 {
 			element.Confidence = 1
+		}
+		if markEchoStripped {
+			// 被标签污染过的内容不可信：纯回显清零把握强制重问，其余压到上限。
+			if element.Text == "" {
+				element.Confidence = 0
+			} else if element.Confidence > markEchoConfidenceCap {
+				element.Confidence = markEchoConfidenceCap
+			}
 		}
 		normalized = append(normalized, element)
 		if len(normalized) >= maxVisionElements {
@@ -177,6 +198,46 @@ func sanitizeVisionLayoutResponse(response *VisionLayoutResponse, pageID string,
 	for i := range response.Elements {
 		response.Elements[i].ID = fmt.Sprintf("e%d", i)
 	}
+}
+
+var (
+	// markEchoToken 匹配文本开头的编号 token（m+数字）。
+	markEchoToken = regexp.MustCompile(`^m[0-9]+`)
+	// pureMarkEcho 匹配整条文本只由编号与分隔符构成的纯回显，如 "m9"、"m9，m10"；
+	// 编号不必真实存在（模型可能编造截图上没有的编号）。
+	pureMarkEcho = regexp.MustCompile(`^(?:m[0-9]+[\p{Zs}\t,，、;；:：]*)+$`)
+)
+
+// markEchoSeparators 是编号回显里编号之间（及之后）的常见分隔符。
+const markEchoSeparators = " \t　,，、;；:："
+
+// stripMarkEcho 剥离转写文本里的编号标签回显（SoM 标签被 VLM 抄进 text，
+// 如 "m6三月"→"三月"、"m9"→""）。返回剥离后的文本与是否发生剥离：
+//   - 整条文本全是编号与分隔符 → 空串（不校验编号存在性）；
+//   - 否则从开头逐个剥离真实存在的编号 token 及其后分隔符；
+//   - 开头不是本页真实编号时不剥离，避免误伤用户手写的普通文字。
+func stripMarkEcho(text string, validMarks map[string]bool) (string, bool) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return trimmed, false
+	}
+	if pureMarkEcho.MatchString(trimmed) {
+		return "", true
+	}
+	rest := trimmed
+	changed := false
+	for {
+		loc := markEchoToken.FindStringIndex(rest)
+		if loc == nil || !validMarks[rest[:loc[1]]] {
+			break
+		}
+		rest = strings.TrimLeft(rest[loc[1]:], markEchoSeparators)
+		changed = true
+	}
+	if !changed {
+		return trimmed, false
+	}
+	return strings.TrimSpace(rest), true
 }
 
 // Transcribe 对一块无上下文的局部截图做单块转写（低置信裁剪重问通道）。
@@ -227,14 +288,16 @@ func (l *OpenAICompatibleSmartLayouter) Transcribe(
 }
 
 // sanitizeTranscribeResponse 规范化单块转写：文本限长、把握钳制到 [0,1]；
-// 空文本视为未认出、把握清零，客户端择优时自然保留原结果；未自报把握时按宽松
-// 默认处理（与整页识别的元素默认一致）。
+// 空文本或纯编号回显（干净裁剪图里本不该有标签，出现即幻觉）视为未认出、
+// 把握清零，客户端择优时自然保留原结果；未自报把握时按宽松默认处理
+// （与整页识别的元素默认不同：单块干净图聚焦可信，重问结果才有资格覆盖原值）。
 func sanitizeTranscribeResponse(response *TranscribeResponse) {
 	response.Text = strings.TrimSpace(response.Text)
 	if response.Text != "" && len([]rune(response.Text)) > maxVisionTextRunes {
 		response.Text = string([]rune(response.Text)[:maxVisionTextRunes])
 	}
-	if response.Text == "" {
+	if response.Text == "" || pureMarkEcho.MatchString(response.Text) {
+		response.Text = ""
 		response.Confidence = 0
 		return
 	}

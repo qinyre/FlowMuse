@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
@@ -10,8 +11,51 @@ import 'package:flutter_test/flutter_test.dart';
 /// 标记编号约定（控制器按阅读序上→左编号）：仅 _addStrokes 时 m1=簇s1、
 /// m2=簇s2；再加 img-cat 时 m3=图片元素。
 void main() {
+  group('visionMarkLabelRect（SoM 徽章落位：不遮笔迹）', () {
+    const canvas = Size(400, 300);
+    const label = Size(30, 20);
+
+    test('默认悬在簇框左上角上方（框外，间隙 2px）', () {
+      final rect = MarkdrawController.visionMarkLabelRect(
+        boxRect: const Rect.fromLTWH(100, 100, 80, 40),
+        labelSize: label,
+        canvasSize: canvas,
+      );
+      expect(rect, const Rect.fromLTWH(100, 78, 30, 20));
+      expect(rect.bottom, lessThanOrEqualTo(100), reason: '徽章必须在框外上方');
+    });
+
+    test('顶部余量不足退到框下方', () {
+      final rect = MarkdrawController.visionMarkLabelRect(
+        boxRect: const Rect.fromLTWH(100, 10, 80, 40),
+        labelSize: label,
+        canvasSize: canvas,
+      );
+      expect(rect, const Rect.fromLTWH(100, 52, 30, 20));
+    });
+
+    test('上下都放不下（画布贴边）回框内左上角', () {
+      final rect = MarkdrawController.visionMarkLabelRect(
+        boxRect: const Rect.fromLTWH(100, 0, 80, 300),
+        labelSize: label,
+        canvasSize: canvas,
+      );
+      expect(rect, const Rect.fromLTWH(100, 0, 30, 20));
+    });
+
+    test('横向贴边时向内收，徽章不出画布', () {
+      final rect = MarkdrawController.visionMarkLabelRect(
+        boxRect: const Rect.fromLTWH(390, 100, 80, 40),
+        labelSize: label,
+        canvasSize: canvas,
+      );
+      expect(rect.left, 370, reason: '徽章右缘恰好在画布右缘');
+      expect(rect.top, 78);
+    });
+  });
+
   group('SmartLayoutVisionElement 模型', () {
-    test('解析 markIds 与引用 id；confidence 缺省 0.9 并钳制到 0-1', () {
+    test('解析 markIds 与引用 id；confidence 缺省 0.5 并钳制到 0-1', () {
       final element = SmartLayoutVisionElement.fromJson({
         'id': 'e2',
         'role': 'caption',
@@ -32,7 +76,7 @@ void main() {
         'text': '缺省',
       });
       expect(defaults.markIds, isEmpty);
-      expect(defaults.confidence, 0.9);
+      expect(defaults.confidence, 0.5, reason: '未自报把握视为存疑，触发裁剪重问');
     });
 
     test('请求 toJson：marks 非空时携带编号列表', () {
@@ -473,6 +517,49 @@ void main() {
       expect(plan.lowConfidenceTexts, hasLength(1), reason: '原把握 0.4 应标橙');
     });
 
+    testWidgets('SoM 徽章只进 VLM 整页图，裁剪重问用无标记干净截图',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      String? markedImageBase64;
+      controller.onVisionSmartLayout = (request) async {
+        markedImageBase64 = request.imageBase64;
+        return SmartLayoutVisionResponse(
+          elements: [_visionElement('body', 'M', ['m1'], confidence: 0.4)],
+        );
+      };
+      final reAskRequests = <SmartLayoutTranscribeRequest>[];
+      controller.onTranscribeCrop = (request) async {
+        reAskRequests.add(request);
+        return const SmartLayoutTranscribeResponse(text: '先', confidence: 0.95);
+      };
+      await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      );
+      expect(reAskRequests, hasLength(1), reason: '把握 0.4 的块被裁剪重问');
+      expect(markedImageBase64, isNotNull);
+      final markedHasBadge = await tester.runAsync(
+        () => _hasBadgeRedPixel(markedImageBase64!),
+      );
+      final cropHasBadge = await tester.runAsync(
+        () => _hasBadgeRedPixel(reAskRequests.single.imageBase64),
+      );
+      expect(
+        markedHasBadge,
+        isTrue,
+        reason: '发往 VLM 的整页图应含编号徽章（红 0xFFE5484D）',
+      );
+      expect(
+        cropHasBadge,
+        isFalse,
+        reason: '裁剪重问必须用无标记干净截图，避免徽章被二次转写',
+      );
+    });
+
     testWidgets('vision 接口抛异常 → 直接向上抛出（无经典管线回退）', (tester) async {
       tester.view.physicalSize = const Size(1600, 2400);
       tester.view.devicePixelRatio = 1.0;
@@ -574,6 +661,34 @@ void _addStrokes(MarkdrawController controller) {
 
   add('k-s1', 's1', 200, 150, 300, 60);
   add('k-s2', 's2', 250, 400, 280, 56);
+}
+
+/// 解码 base64 PNG（降采样到 800px 宽）并扫描是否存在徽章红像素：
+/// 编号徽章只允许出现在发往 VLM 的整页图，裁剪重问图必须干净。
+Future<bool> _hasBadgeRedPixel(String base64) async {
+  final codec = await instantiateImageCodec(
+    base64Decode(base64),
+    targetWidth: 800,
+  );
+  try {
+    final frame = await codec.getNextFrame();
+    final data = await frame.image.toByteData(
+      format: ImageByteFormat.rawRgba,
+    );
+    frame.image.dispose();
+    if (data == null) return false;
+    final pixels = data.buffer.asUint8List();
+    for (var i = 0; i + 2 < pixels.length; i += 4) {
+      final r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+      // 徽章红 0xFFE5484D（留抗锯齿容差），与黑色笔迹/白色背景不重叠。
+      if (r > 180 && g > 30 && g < 130 && b > 30 && b < 130 && r - g > 60) {
+        return true;
+      }
+    }
+    return false;
+  } finally {
+    codec.dispose();
+  }
 }
 
 /// Set-of-Mark 测试桩：直接以编号引用候选对象（m1=簇s1、m2=簇s2、m3=img-cat）。

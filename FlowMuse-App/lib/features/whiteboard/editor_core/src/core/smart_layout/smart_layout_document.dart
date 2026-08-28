@@ -283,7 +283,7 @@ class SmartLayoutVisionElement {
     this.vertical = false,
     this.markIds = const [],
     this.pairId,
-    this.confidence = 0.9,
+    this.confidence = 0.5,
   });
 
   /// 服务端按输出顺序分配的引用 id（"e0"、"e1"...），mindmap 树以此引用。
@@ -299,7 +299,9 @@ class SmartLayoutVisionElement {
 
   final String? pairId;
 
-  /// VLM 对该元素认字把握的自评分（0-1；服务端已钳制，缺省 0.9）。
+  /// VLM 对该元素认字把握的自评分（0-1；服务端已钳制）。
+  /// 未自报时视为存疑（0.5，与服务端 defaultVisionConfidence 一致），
+  /// 低于重问阈值会触发裁剪重问复核。
   final double confidence;
 
   bool get isFigure => role == 'figure';
@@ -316,7 +318,7 @@ class SmartLayoutVisionElement {
       ],
       pairId: json['pairId'] as String?,
       confidence:
-          ((json['confidence'] as num?)?.toDouble() ?? 0.9)
+          ((json['confidence'] as num?)?.toDouble() ?? 0.5)
               .clamp(0.0, 1.0)
               .toDouble(),
     );

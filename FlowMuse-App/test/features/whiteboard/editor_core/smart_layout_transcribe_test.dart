@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// 低置信裁剪重问：触发条件、择优采用规则与转写协议模型。
 /// 触发（shouldReAskTranscription）：无文本或把握 < 0.7 才重问；
-/// 择优（adoptTranscription）：新结果有文字、与原文不同且把握严格更高才采用。
+/// 择优（adoptTranscription）：新结果有文字且把握严格更高才采用——与原文
+/// 不同采用新文；与原文相同则采信原文并把把握提升到新值（两次独立读一致，
+/// 清除存疑橙框）。
 void main() {
   group('SmartLayoutTranscribeRequest 模型', () {
     test('toJson：hint 为空时不下发，避免锚定模型', () {
@@ -84,18 +86,35 @@ void main() {
       );
     });
 
-    test('新结果与原文相同或把握不升 → 不采用', () {
+    test('新结果与原文相同且把握更高 → 采信原文并提升把握（清除存疑橙框）', () {
+      final adopted = MarkdrawController.adoptTranscription(
+        currentText: '总结',
+        currentConfidence: 0.55,
+        reAsk: const SmartLayoutTranscribeResponse(
+          text: '总结',
+          confidence: 0.95,
+        ),
+      );
+      expect(adopted, isNotNull, reason: '两次独立读一致应清除存疑状态');
+      expect(adopted!.text, '总结');
+      expect(adopted.confidence, 0.95);
+    });
+
+    test('新结果与原文相同但把握不升 → 保留原结果', () {
       expect(
         MarkdrawController.adoptTranscription(
           currentText: '总结',
-          currentConfidence: 0.75,
+          currentConfidence: 0.95,
           reAsk: const SmartLayoutTranscribeResponse(
             text: '总结',
-            confidence: 0.95,
+            confidence: 0.6,
           ),
         ),
         isNull,
       );
+    });
+
+    test('新结果与原文不同且把握不升 → 不采用', () {
       expect(
         MarkdrawController.adoptTranscription(
           currentText: '总结',

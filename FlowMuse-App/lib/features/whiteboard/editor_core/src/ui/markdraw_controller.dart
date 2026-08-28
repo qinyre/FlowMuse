@@ -3589,7 +3589,14 @@ class MarkdrawController extends ChangeNotifier {
       page.bounds.width,
       page.bounds.height,
     );
-    Uint8List? png;
+    // 导出区外扩一圈：SoM 徽章悬在簇框上方、裁剪重问外扩 16pt 都需要画布边缘有余量。
+    final exportMargin =
+        _visionExportMarginPx *
+        math.max(pageBounds.width, pageBounds.height) /
+        _visionExportLongestSide;
+    final exportBounds = pageBounds.inflate(exportMargin);
+    Uint8List? cleanPng;
+    Uint8List? markedPng;
     final clusterRects = <String, ui.Rect>{
       for (final entry in inkGroups.entries)
         entry.key: _inkGroupBounds(entry.value),
@@ -3621,22 +3628,33 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
     try {
-      png = await exportRegionPng(
-        pageBounds,
+      // 双导出：干净截图供裁剪重问（无标记，避免徽章被二次转写），
+      // 带标记截图只发 VLM 做编号引用。
+      cleanPng = await exportRegionPng(
+        exportBounds,
+        maxLongestSide: _visionExportLongestSide,
+      );
+      markedPng = await exportRegionPng(
+        exportBounds,
+        maxLongestSide: _visionExportLongestSide,
         afterPaint: (canvas, zoom) =>
-            _drawVisionMarkOverlay(canvas, zoom, pageBounds.topLeft, markLabels),
+            _drawVisionMarkOverlay(canvas, zoom, exportBounds, markLabels),
       );
     } catch (error) {
       debugPrint('[$_logTag] 视觉排版截图失败: $error');
       throw StateError('页面截图失败，请重试');
     }
-    if (png == null || png.isEmpty || _disposed) {
+    if (cleanPng == null ||
+        cleanPng.isEmpty ||
+        markedPng == null ||
+        markedPng.isEmpty ||
+        _disposed) {
       throw StateError('页面截图失败，请重试');
     }
     final vision = await visionCallback(
       SmartLayoutVisionRequest(
         pageId: page.id,
-        imageBase64: base64Encode(png),
+        imageBase64: base64Encode(markedPng),
         marks: markIds,
       ),
     );
@@ -3669,8 +3687,8 @@ class MarkdrawController extends ChangeNotifier {
       match.textClaims,
       inkGroups,
       clusterRects,
-      png,
-      pageBounds,
+      cleanPng,
+      exportBounds,
     );
     if (_disposed) {
       throw StateError('编辑器已释放');
@@ -4001,11 +4019,10 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   
-  /// 视觉路径逐文本项转写：统一整页 VLM 文本单引擎（智能排版不再使用 MyScript，
-  /// 其仅保留在独立"手写字迹识别"入口）；VLM 未给出文本的项按失败进红区。
-  /// 视觉路径逐文本项转写：整页 VLM 文本单引擎（智能排版不使用 MyScript，
+  /// 视觉路径逐文本项转写：整页 VLM 文本单引擎（智能排版不再使用 MyScript，
   /// 其仅保留在独立"手写字迹识别"入口）；把握不足或无文本的块走低置信裁剪
-  /// 重问。返回各项文本块与"有效把握"（重问后可能高于 VLM 自报值）。
+  /// 重问（裁剪自无标记干净截图）。返回各项文本块与"有效把握"
+  /// （重问后可能高于 VLM 自报值）。
   Future<
     ({Map<int, SmartLayoutRecognizedBlock> blocks, Map<int, double> confidences})
   >
@@ -4015,8 +4032,8 @@ class MarkdrawController extends ChangeNotifier {
     Map<int, List<String>> textClaims,
     Map<String, List<FreedrawElement>> inkGroups,
     Map<String, ui.Rect> clusterRects,
-    Uint8List? pagePng,
-    ui.Rect pageBounds,
+    Uint8List? cleanPagePng,
+    ui.Rect exportBounds,
   ) async {
     final requests = <SmartLayoutInkBlockRequest>[];
     final unionsByRequestId = <String, ui.Rect>{};
@@ -4060,7 +4077,8 @@ class MarkdrawController extends ChangeNotifier {
         ),
       );
     }
-    // 整页截图延迟解码：只有存在待重问的块才解一次（并发 worker 共享）。
+    // 干净整页截图（无 SoM 标记）延迟解码：只有存在待重问的块才解一次
+    // （并发 worker 共享）。
     final retryRequestIds = <String>{
       for (final request in requests)
         if (shouldReAskTranscription(
@@ -4071,8 +4089,8 @@ class MarkdrawController extends ChangeNotifier {
     };
     Future<ui.Image?>? decodeFuture;
     Future<ui.Image?> pageImage() {
-      if (pagePng == null) return Future.value(null);
-      return decodeFuture ??= _decodeUiImage(pagePng);
+      if (cleanPagePng == null) return Future.value(null);
+      return decodeFuture ??= _decodeUiImage(cleanPagePng);
     }
 
     final effectiveConfidenceByIndex = <int, double>{};
@@ -4083,7 +4101,7 @@ class MarkdrawController extends ChangeNotifier {
       final visionElement = elements[index];
       var text = visionElement.text?.trim() ?? '';
       var confidence = visionElement.confidence;
-      // 低置信裁剪重问：从整页截图裁出该块（外扩 16pt），无上下文单块转写；
+      // 低置信裁剪重问：从干净整页截图裁出该块（外扩 16pt），无上下文单块转写；
       // 新结果有文字且把握更高才采用（KIE-HVQA：上下文隔离降幻觉）。
       if (retryRequestIds.contains(request.id) && onTranscribeCrop != null) {
         try {
@@ -4091,7 +4109,7 @@ class MarkdrawController extends ChangeNotifier {
           if (image != null) {
             final reAsk = await _transcribeCropFromImage(
               pageImage: image,
-              pageBounds: pageBounds,
+              pageBounds: exportBounds,
               blockRect: unionsByRequestId[request.id]!,
             );
             final adopted = adoptTranscription(
@@ -4157,8 +4175,10 @@ class MarkdrawController extends ChangeNotifier {
         confidence < kSmartLayoutTranscribeRetryThreshold;
   }
 
-  /// 低置信裁剪重问的择优规则：新结果有文字、与原文不同且把握严格更高才
-  /// 采用；端点失败、无文字（模型自认看不清）或把握不升 → 保留原结果。
+  /// 低置信裁剪重问的择优规则：新结果有文字且把握严格更高才采用——与原文
+  /// 不同 → 采用新文；与原文相同 → 采信原文并把把握提升到新值（两次独立
+  /// 读一致，清除存疑橙框）。端点失败、无文字（模型自认看不清）或把握
+  /// 不升 → 保留原结果。
   @visibleForTesting
   static ({String text, double confidence})? adoptTranscription({
     required String currentText,
@@ -4167,13 +4187,22 @@ class MarkdrawController extends ChangeNotifier {
   }) {
     if (reAsk == null) return null;
     final text = reAsk.text.trim();
-    if (text.isEmpty || text == currentText) return null;
+    if (text.isEmpty) return null;
     if (reAsk.confidence <= currentConfidence) return null;
+    if (text == currentText) {
+      return (text: currentText, confidence: reAsk.confidence);
+    }
     return (text: text, confidence: reAsk.confidence);
   }
 
   /// 裁剪重问的外扩边距（pt）：给识别留出上下文边缘，避免字被裁半。
   static const double _visionCropPadding = 16.0;
+
+  /// 智能排版整页导出的最长边像素（与 exportRegionPng 的默认值一致）。
+  static const double _visionExportLongestSide = 1568;
+
+  /// 导出区外扩的目标像素余量：SoM 徽章（约 22px 高）悬在簇框上方需要边距。
+  static const double _visionExportMarginPx = 28;
 
   Future<SmartLayoutTranscribeResponse?> _transcribeCropFromImage({
     required ui.Image pageImage,
@@ -4273,12 +4302,50 @@ class MarkdrawController extends ChangeNotifier {
     return (elements: elements, rects: rects, memberIds: memberIds);
   }
 
+  /// SoM 编号徽章落位：悬在簇框左上角上方（间隙 2px，不遮笔迹——VLM 曾把
+  /// 框内徽章当成手写内容抄进转写）；顶部余量不足退到框下方，底部也不足
+  /// （画布贴边）才回框内左上角；横向贴边时向内收。
+  @visibleForTesting
+  static Rect visionMarkLabelRect({
+    required Rect boxRect,
+    required Size labelSize,
+    required Size canvasSize,
+  }) {
+    const gap = 2.0;
+    final left = boxRect.left
+        .clamp(0.0, math.max(0.0, canvasSize.width - labelSize.width))
+        .toDouble();
+    if (boxRect.top >= labelSize.height + gap) {
+      return Rect.fromLTWH(
+        left,
+        boxRect.top - labelSize.height - gap,
+        labelSize.width,
+        labelSize.height,
+      );
+    }
+    if (boxRect.bottom + gap + labelSize.height <= canvasSize.height) {
+      return Rect.fromLTWH(
+        left,
+        boxRect.bottom + gap,
+        labelSize.width,
+        labelSize.height,
+      );
+    }
+    return Rect.fromLTWH(
+      left,
+      math.max(0.0, boxRect.top),
+      labelSize.width,
+      labelSize.height,
+    );
+  }
+
   /// Set-of-Mark 叠加：把编号标记画进导出截图（场景坐标→导出像素坐标），
-  /// VLM 读图上编号输出 markIds，不做坐标回归。
+  /// VLM 读图上编号输出 markIds，不做坐标回归。徽章悬在簇框外侧上方，
+  /// 不遮笔迹（见 visionMarkLabelRect）。
   void _drawVisionMarkOverlay(
     Canvas canvas,
     double zoom,
-    Offset sceneOrigin,
+    ui.Rect pageBounds,
     List<({String id, ui.Rect bounds})> marks,
   ) {
     const markColors = [
@@ -4291,11 +4358,15 @@ class MarkdrawController extends ChangeNotifier {
       Color(0xFFE11D8F),
       Color(0xFF84CC16),
     ];
+    final canvasSize = ui.Size(
+      pageBounds.width * zoom,
+      pageBounds.height * zoom,
+    );
     for (var i = 0; i < marks.length; i++) {
       final mark = marks[i];
       final pixelRect = Rect.fromLTWH(
-        (mark.bounds.left - sceneOrigin.dx) * zoom,
-        (mark.bounds.top - sceneOrigin.dy) * zoom,
+        (mark.bounds.left - pageBounds.left) * zoom,
+        (mark.bounds.top - pageBounds.top) * zoom,
         mark.bounds.width * zoom,
         mark.bounds.height * zoom,
       );
@@ -4318,11 +4389,10 @@ class MarkdrawController extends ChangeNotifier {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      final labelRect = Rect.fromLTWH(
-        math.max(0.0, pixelRect.left),
-        math.max(0.0, pixelRect.top),
-        textPainter.width + 10,
-        textPainter.height + 6,
+      final labelRect = visionMarkLabelRect(
+        boxRect: pixelRect,
+        labelSize: Size(textPainter.width + 10, textPainter.height + 6),
+        canvasSize: canvasSize,
       );
       canvas.drawRRect(
         RRect.fromRectAndRadius(labelRect, const Radius.circular(3)),
