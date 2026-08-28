@@ -914,9 +914,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             // 取消整个流程：停止后续页，已应用页保留
             setState(() => _smartLayoutFlowActive = false);
             if (mounted) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('已取消，完成 $applied 页')));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    applied > 0 ? '已取消，完成 $applied 页' : '已取消智能排版',
+                  ),
+                ),
+              );
             }
             return;
         }
@@ -992,6 +996,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         // 用户主动取消识别：静默结束（不弹"失败"提示），停止整个流程。
         return _SmartLayoutPageOutcome.cancelled;
       } catch (catchError) {
+        // 页面可能已在识别途中退出（dispose 触发'编辑器已释放'），
+        // 不再向离开后的页面弹失败提示。
+        if (!mounted) return _SmartLayoutPageOutcome.cancelled;
         messenger.showSnackBar(
           SnackBar(
             content: Text('智能排版失败：${_readableSmartLayoutError(catchError)}'),
@@ -1006,12 +1013,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         );
         return _SmartLayoutPageOutcome.nothing;
       }
-      // 模板选择卡：三张真实内容缩略图，点选后确定性落位；关闭 = 取消（零残留）。
-      final kind = await showSmartLayoutTemplateSheet(
+      // 模板选择卡：三张真实内容缩略图，点选后确定性落位；关闭 = 取消整个
+      // 流程（零残留）；多页流程提供"跳过本页"继续后续页。
+      final choice = await showSmartLayoutTemplateSheet(
         context: context,
         preparation: preparation,
+        allowSkip: isMultiPage,
       );
       if (!mounted) return _SmartLayoutPageOutcome.cancelled;
+      if (choice == null) {
+        return _SmartLayoutPageOutcome.cancelled;
+      }
+      if (choice.skipped) {
+        return _SmartLayoutPageOutcome.skipped;
+      }
+      final kind = choice.kind;
       if (kind == null) {
         return _SmartLayoutPageOutcome.cancelled;
       }

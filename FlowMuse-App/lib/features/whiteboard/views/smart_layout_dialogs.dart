@@ -534,7 +534,9 @@ class SmartLayoutProofreadSheet extends StatefulWidget {
 
 class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
   final Map<int, TextEditingController> _controllers = {};
-  final Set<int> _savedIndexes = {};
+  // 每项最近一次已保存的文本：既是"已保存"标记，也是再次改动的比较基准
+  // （支持保存后继续修改再保存，而不是锁死）。
+  final Map<int, String> _savedTexts = {};
 
   @override
   void dispose() {
@@ -548,9 +550,9 @@ class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
       _controllers.putIfAbsent(index, () => TextEditingController(text: initial));
 
   void _save(int index, ElementId id) {
-    final ok = widget.onRevise(id, _controllers[index]!.text);
-    if (!ok) return;
-    setState(() => _savedIndexes.add(index));
+    final text = _controllers[index]!.text;
+    if (!widget.onRevise(id, text)) return;
+    setState(() => _savedTexts[index] = text);
   }
 
   @override
@@ -582,9 +584,12 @@ class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
                 itemBuilder: (context, index) {
                   final item = widget.items[index];
                   final controller = _controllerFor(index, item.text);
-                  final saved = _savedIndexes.contains(index);
+                  final baseline = _savedTexts[index] ?? item.text;
+                  final saved =
+                      _savedTexts.containsKey(index) &&
+                      controller.text.trim() == baseline.trim();
                   final changed =
-                      controller.text.trim() != item.text.trim() && !saved;
+                      controller.text.trim() != baseline.trim();
                   // 空文本禁用保存（会产生不可见的空文字元素）。
                   final canSave =
                       changed && controller.text.trim().isNotEmpty;

@@ -7,23 +7,36 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 
 /// 模板选择卡：识别完成后展示三张模板卡，每卡用本页真实内容按该模板
 /// 预落位的结果渲染缩略图（所见即所得）；点选后进入既有草稿态，
-/// 关闭即取消（零残留）。放不下的模板置灰并标注。
+/// 关闭即取消（零残留）。放不下的模板置灰并标注；三卡全放不下时给出
+/// 分页提示。多页流程提供"跳过本页"（[allowSkip]），避免一页超容终止整单。
 /// 窄屏（可用宽度 < 560）时三卡改纵向铺满列表，避免横排拥挤。
-Future<SmartLayoutTemplateKind?> showSmartLayoutTemplateSheet({
+typedef SmartLayoutTemplateChoice = ({SmartLayoutTemplateKind? kind, bool skipped});
+
+Future<SmartLayoutTemplateChoice?> showSmartLayoutTemplateSheet({
   required BuildContext context,
   required SmartLayoutTemplatePreparation preparation,
+  bool allowSkip = false,
 }) {
-  return showModalBottomSheet<SmartLayoutTemplateKind>(
+  return showModalBottomSheet<SmartLayoutTemplateChoice>(
     context: context,
-    builder: (sheetContext) =>
-        SmartLayoutTemplateSheet(preparation: preparation),
+    builder: (sheetContext) => SmartLayoutTemplateSheet(
+      preparation: preparation,
+      allowSkip: allowSkip,
+    ),
   );
 }
 
 class SmartLayoutTemplateSheet extends StatelessWidget {
-  const SmartLayoutTemplateSheet({super.key, required this.preparation});
+  const SmartLayoutTemplateSheet({
+    super.key,
+    required this.preparation,
+    this.allowSkip = false,
+  });
 
   final SmartLayoutTemplatePreparation preparation;
+
+  /// true = 多页流程：底栏提供"跳过本页"（本页不排版，继续下一页）。
+  final bool allowSkip;
 
   /// 横排三卡的最低可用宽度（每卡缩略图 + 间距 + 内边距）。
   static const double _wideLayoutBreakpoint = 560;
@@ -31,6 +44,9 @@ class SmartLayoutTemplateSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final allDisabled = SmartLayoutTemplateKind.values.every(
+      (kind) => preparation.layouts[kind] == null,
+    );
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -61,6 +77,15 @@ class SmartLayoutTemplateSheet extends StatelessWidget {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
+              if (allDisabled) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '本页内容超出所有模板的容量，请分页后再试（可关闭后选择"跳过本页"继续）。',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               LayoutBuilder(
                 builder: (context, constraints) {
@@ -94,6 +119,16 @@ class SmartLayoutTemplateSheet extends StatelessWidget {
                   );
                 },
               ),
+              if (allowSkip)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pop((kind: null, skipped: true)),
+                    child: const Text('跳过本页'),
+                  ),
+                ),
             ],
           ),
         ),
@@ -119,7 +154,9 @@ class _TemplateCard extends StatelessWidget {
     final layout = this.layout;
     final enabled = layout != null;
     return InkWell(
-      onTap: enabled ? () => Navigator.of(context).pop(kind) : null,
+      onTap: enabled
+          ? () => Navigator.of(context).pop((kind: kind, skipped: false))
+          : null,
       borderRadius: BorderRadius.circular(12),
       child: Opacity(
         opacity: enabled ? 1 : 0.55,
