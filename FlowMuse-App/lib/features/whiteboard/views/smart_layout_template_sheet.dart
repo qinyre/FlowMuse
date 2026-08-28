@@ -80,7 +80,9 @@ class SmartLayoutTemplateSheet extends StatelessWidget {
               if (allDisabled) ...[
                 const SizedBox(height: 8),
                 Text(
-                  '本页内容超出所有模板的容量，请分页后再试（可关闭后选择"跳过本页"继续）。',
+                  allowSkip
+                      ? '本页内容超出所有模板的容量，请分页后再试，或点下方"跳过本页"继续后续页。'
+                      : '本页内容超出所有模板的容量，请分页后再试。',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.error,
                   ),
