@@ -124,6 +124,9 @@ void main() {
             pressures: encoded,
             pressureEncoded: true,
             brushType: type,
+            // 关闭笔锋，隔离验证“压力编码 + maxThinning”这一层等价；
+            // taper 属于另一正交维度（brush_geometry_test 覆盖）。
+            taperPhase: FreedrawTaperPhase.none,
           );
           final baseMetrics = BrushOutlineMetrics.measure(baseline);
           final bakedMetrics = BrushOutlineMetrics.measure(baked);
@@ -295,14 +298,16 @@ void main() {
       expect(ballpoint.renderSize(0.5), 1.0, reason: '极细笔迹钳到 1.0 下限');
     });
 
-    test('折线长度 <3×size 时 taper 关闭（T3 前因子为 0，先冻结接口）', () {
+    test('taper 门控：短笔关闭、长笔按种子因子（T3 起 6×size）', () {
       final profile = BrushRenderProfile.forType(BrushType.brushPen);
+      final size = profile.renderSize(4);
+      // 折线长度 <3×size：taper 关闭（单点/短划可见性保障）
       expect(profile.startTaperDistance(4, 0), 0);
-      expect(
-        profile.endTaperDistance(4, 100),
-        0,
-        reason: 'T2 阶段 taper 因子为 0，距离恒 0',
-      );
+      expect(profile.startTaperDistance(4, 3 * size - 0.01), 0);
+      expect(profile.endTaperDistance(4, 3 * size - 0.01), 0);
+      // 长笔：起/收锋按种子因子给绝对距离
+      expect(profile.startTaperDistance(4, 100), closeTo(6 * size, 1e-9));
+      expect(profile.endTaperDistance(4, 100), closeTo(6 * size, 1e-9));
     });
   });
 }

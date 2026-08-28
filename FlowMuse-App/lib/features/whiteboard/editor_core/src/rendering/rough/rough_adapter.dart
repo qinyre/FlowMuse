@@ -86,6 +86,9 @@ abstract class RoughAdapter {
   ///
   /// [pressureEncoded]：pressures 是否已按创建时灵敏度烘焙（决定渲染端
   /// thinning 语义，见 BrushRenderProfile；湿墨恒传 true）。
+  /// [taperPhase]/[wholeStrokeRawLength]：远端湿墨分段渲染时的笔锋相位
+  /// 与整笔折线长度（taper 门控与分段收针控制，见 FreedrawTaperPhase）；
+  /// 整笔渲染（本地湿墨/静态元素）使用默认值。
   void drawFreedraw(
     Canvas canvas,
     List<Point> points,
@@ -95,5 +98,7 @@ abstract class RoughAdapter {
     DrawStyle style, {
     bool isComplete = true,
     bool pressureEncoded = false,
+    FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
+    double? wholeStrokeRawLength,
   });
 }

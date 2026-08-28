@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -115,6 +116,7 @@ class RemoteWetInkStrokeSnapshot {
     required this.pointIndexLog,
     required this.pointIndexLogEnd,
     this.frozenBounds,
+    this.frozenRawLength = 0,
   });
 
   final String senderSocketId;
@@ -132,6 +134,11 @@ class RemoteWetInkStrokeSnapshot {
   /// null = 尚无冻结点。painter 聚焦 dim 层据此计算 bounds，只另行扫描
   /// 有限的 tail 段，不重遍历冻结几何（评审 P1 修复）。
   final RemoteWetInkBounds? frozenBounds;
+
+  /// 已冻结部分的原始折线长度（索引跳跃按直线桥接，与渲染的
+  /// leading/trailing 桥接一致）。painter 与 tail 段长度相加得到整笔
+  /// 可见长度，用于笔锋 <3×size 门控（issue #5 T3）。
+  final double frozenRawLength;
 
   int get layerCount => frozenBlocks.length + (tailSegments.isEmpty ? 0 : 1);
 }
@@ -419,6 +426,9 @@ class _RemoteWetInkStroke {
   final SplayTreeMap<int, LiveInkPoint> _pendingFrozen = SplayTreeMap();
   List<RemoteWetInkSegment> tailSegments = const [];
   RemoteWetInkBounds? _frozenBounds;
+  double _frozenRawLength = 0;
+  int? _frozenLastIndex;
+  LiveInkPoint? _frozenLastPoint;
   int revision = 0;
   int _pointCount = 0;
   int _maxPointIndex = -1;
@@ -446,6 +456,7 @@ class _RemoteWetInkStroke {
       pointIndexLog: _pointIndexLog,
       pointIndexLogEnd: _pointIndexLog.length,
       frozenBounds: _frozenBounds,
+      frozenRawLength: _frozenRawLength,
     );
   }
 
@@ -496,6 +507,19 @@ class _RemoteWetInkStroke {
       _frozenBounds = _frozenBounds == null
           ? RemoteWetInkBounds(point.x, point.y, point.x, point.y)
           : _frozenBounds!.expandTo(point.x, point.y);
+      // 折线长度增量：索引前进时累加（跳号按直线桥接，与渲染的
+      // leading/trailing 桥接一致；乱序回填的旧点不重复计入）。
+      final lastIndex = _frozenLastIndex;
+      final lastPoint = _frozenLastPoint;
+      if (lastIndex != null && lastPoint != null && entry.key > lastIndex) {
+        final dx = point.x - lastPoint.x;
+        final dy = point.y - lastPoint.y;
+        _frozenRawLength += math.sqrt(dx * dx + dy * dy);
+      }
+      if (lastIndex == null || entry.key > lastIndex) {
+        _frozenLastIndex = entry.key;
+        _frozenLastPoint = point;
+      }
     }
     while (_pendingFrozen.length >=
         RemoteWetInkStore.frozenBlockPointCapacity) {

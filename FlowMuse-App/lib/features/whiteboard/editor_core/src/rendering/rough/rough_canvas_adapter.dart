@@ -724,6 +724,8 @@ class RoughCanvasAdapter implements RoughAdapter {
     DrawStyle style, {
     bool isComplete = true,
     bool pressureEncoded = false,
+    FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
+    double? wholeStrokeRawLength,
   }) {
     // 仅当非 simulatePressure 且 pressures 非空时传给 renderer 做变粗渲染;
     // simulatePressure=true(鼠标/触摸)时 pressures 留空,退回等粗 Bezier。
@@ -739,6 +741,8 @@ class RoughCanvasAdapter implements RoughAdapter {
       isComplete: isComplete,
       outlineRenderMode: outlineRenderMode,
       brushType: brushType,
+      taperPhase: taperPhase,
+      wholeStrokeRawLength: wholeStrokeRawLength,
     );
   }
 

@@ -268,7 +268,7 @@ BrushRenderProfile.visualHalfWidth 必须给出当前笔刷的保守最大可见
 | 铅笔 | 0.82 | 0.68 | 0.00+0.45 | 0.32 | 模拟/真实均可 | 3×size | 4×size | round | sourceOver |
 | 圆珠笔 | 0.72 | 1.00 | 0.00+0.00 | 0.00 | 忽略 | 0 | 0 | round | sourceOver |
 | 钢笔 | 1.00 | 1.00 | 0.05+0.90 | 现有默认值 | 启用 | 0 | 0 | round | sourceOver |
-| 毛笔 | 1.15 | 1.00 | 0.00+1.00 | 0.82 | 强 | 4×size | 6×size | round | sourceOver |
+| 毛笔 | 1.15 | 1.00 | 0.00+1.00 | 0.82 | 强 | 6×size | 6×size | round | sourceOver |
 | 荧光笔 | 4.20 | 0.28～0.32 | 0.00+0.00 | 0.00 | 忽略 | 0 | 0 | flat（cap:false） | darken |
 
 任何调参不得突破以下语义：

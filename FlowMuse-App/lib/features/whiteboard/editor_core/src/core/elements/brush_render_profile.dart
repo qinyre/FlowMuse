@@ -93,6 +93,8 @@ final class BrushRenderProfile {
 
   static BrushRenderProfile forType(BrushType type) => switch (type) {
     // 铅笔：半透明 + 低延迟跟手；纹理由 PencilShader/降级路径提供。
+    // 铅笔：半透明 + 低延迟跟手；纹理由 PencilShader/降级路径提供。
+    // 起笔 taper 因包内 runningLength<size 丢点，可见渐变需 ≥3×size。
     BrushType.pencil => const BrushRenderProfile(
       sizeScale: 0.82,
       opacityScale: 0.68,
@@ -103,8 +105,8 @@ final class BrushRenderProfile {
       streamline: 0.15,
       pressureEnabled: true,
       forceSimulatePressure: false,
-      startTaperSizeFactor: 0,
-      endTaperSizeFactor: 0,
+      startTaperSizeFactor: 3,
+      endTaperSizeFactor: 4,
       capStyle: BrushCapStyle.round,
       compositeMode: BrushCompositeMode.sourceOver,
       usesPencilTexture: true,
@@ -143,7 +145,8 @@ final class BrushRenderProfile {
       compositeMode: BrushCompositeMode.sourceOver,
       usesPencilTexture: false,
     ),
-    // 毛笔：强压感 + 明显收锋（taper 距离在 T3 启用）。
+    // 毛笔：强压感 + 明显收锋（起 4×size / 收 6×size 绝对距离；
+    // <3×size 短笔由 startTaperDistance/endTaperDistance 门控关闭）。
     BrushType.brushPen => const BrushRenderProfile(
       sizeScale: 1.15,
       opacityScale: 1.0,
@@ -154,8 +157,8 @@ final class BrushRenderProfile {
       streamline: 0.42,
       pressureEnabled: true,
       forceSimulatePressure: false,
-      startTaperSizeFactor: 0,
-      endTaperSizeFactor: 0,
+      startTaperSizeFactor: 6,
+      endTaperSizeFactor: 6,
       capStyle: BrushCapStyle.round,
       compositeMode: BrushCompositeMode.sourceOver,
       usesPencilTexture: false,

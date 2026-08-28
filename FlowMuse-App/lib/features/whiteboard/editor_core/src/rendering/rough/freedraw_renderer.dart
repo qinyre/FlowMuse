@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
@@ -61,6 +62,8 @@ class FreedrawRenderer {
     bool pressureEncoded = false,
     bool isComplete = true,
     BrushType brushType = BrushType.fountainPen,
+    FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
+    double? wholeStrokeRawLength,
   }) {
     if (points.isEmpty) return const [];
 
@@ -77,6 +80,19 @@ class FreedrawRenderer {
           hasPressure ? pressures[i] : null,
         ),
     ];
+    // taper 门控按整条可见笔迹的原始折线长度判断（远端分段渲染时由
+    // 调用方传入 wholeStrokeRawLength；本地/静态渲染即本列表长度）。
+    final rawLength = wholeStrokeRawLength ?? _polylineLength(points);
+    final startTaper =
+        taperPhase == FreedrawTaperPhase.full ||
+            taperPhase == FreedrawTaperPhase.headOnly
+        ? profile.startTaperDistance(strokeWidth, rawLength)
+        : 0.0;
+    final endTaper =
+        taperPhase == FreedrawTaperPhase.full ||
+            taperPhase == FreedrawTaperPhase.tailOnly
+        ? profile.endTaperDistance(strokeWidth, rawLength)
+        : 0.0;
     final options = StrokeOptions(
       size: profile.renderSize(strokeWidth),
       thinning: hasPressure
@@ -90,6 +106,14 @@ class FreedrawRenderer {
       streamline: profile.streamline,
       simulatePressure: !hasPressure || profile.forceSimulatePressure,
       isComplete: isComplete,
+      // 笔锋：绝对距离（customTaper 单位即距离）；未启用时传 null 走
+      // 默认圆端帽。taper 期间包会忽略 cap。
+      start: startTaper > 0
+          ? StrokeEndOptions.start(taperEnabled: true, customTaper: startTaper)
+          : null,
+      end: endTaper > 0
+          ? StrokeEndOptions.end(taperEnabled: true, customTaper: endTaper)
+          : null,
     );
 
     return getStroke(inputPoints, options: options);
@@ -141,6 +165,8 @@ class FreedrawRenderer {
     bool isComplete = true,
     required OutlineRenderMode outlineRenderMode,
     BrushType brushType = BrushType.fountainPen,
+    FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
+    double? wholeStrokeRawLength,
   }) {
     final outlineWatch = Stopwatch()..start();
     final outline = buildOutline(
@@ -150,6 +176,8 @@ class FreedrawRenderer {
       pressureEncoded: pressureEncoded,
       isComplete: isComplete,
       brushType: brushType,
+      taperPhase: taperPhase,
+      wholeStrokeRawLength: wholeStrokeRawLength,
     );
     final getStrokeDuration = (outlineWatch..stop()).elapsed;
     final pathWatch = Stopwatch()..start();
@@ -177,6 +205,8 @@ class FreedrawRenderer {
     required OutlineRenderMode outlineRenderMode,
     StrokeRenderMetricsSink? metricsSink,
     BrushType brushType = BrushType.fountainPen,
+    FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
+    double? wholeStrokeRawLength,
   }) {
     if (points.isEmpty) return;
 
@@ -196,6 +226,8 @@ class FreedrawRenderer {
       pressureEncoded: pressureEncoded,
       isComplete: isComplete,
       brushType: brushType,
+      taperPhase: taperPhase,
+      wholeStrokeRawLength: wholeStrokeRawLength,
     );
     final getStrokeDuration = outlineWatch != null
         ? (outlineWatch..stop()).elapsed
@@ -255,6 +287,17 @@ class FreedrawRenderer {
   static List<PointVector> _asPointVectors(List<Offset> outline) => [
     for (final o in outline) PointVector(o.dx, o.dy, 0),
   ];
+
+  /// 原始输入点折线总长（未插值、未 streamline）。
+  static double _polylineLength(List<Point> points) {
+    var total = 0.0;
+    for (var i = 0; i < points.length - 1; i++) {
+      final dx = points[i + 1].x - points[i].x;
+      final dy = points[i + 1].y - points[i].y;
+      total += math.sqrt(dx * dx + dy * dy);
+    }
+    return total;
+  }
 
   /// Builds a smooth cubic Bezier path through 3+ points using
   /// Catmull-Rom to cubic Bezier conversion (等粗退化路径用)。
