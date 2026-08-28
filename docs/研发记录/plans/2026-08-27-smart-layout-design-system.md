@@ -143,6 +143,45 @@
    语义规格字段（density/emphasis/图位偏好）缓判至 R3a 真机反馈后；R4 异步精修维持
    最后且明确可裁。
 
+## 方案修订二：Set-of-Mark 重构（2026-08-28 用户决定"直接重构，不再修补"）
+
+R2 后再次对照业界（Set-of-Mark prompting arXiv 2310.11441；KIE-HVQA NeurIPS 2025 证明
+VLM 幻觉是"高自信、零依据"型，自报 confidence 抓不住薛之谦类错误）得出：坐标回归是
+管线原罪，匹配容差/二次合并/文本回填全是为它打的补丁。用户拍板：删补丁、换结构。
+
+**新协议（破坏性变更，服务端与客户端同版本部署）**：
+
+- 请求 `VisionLayoutRequest` / `SmartLayoutVisionRequest` 增加 `marks: []string`——
+  客户端把"墨迹簇 + 页面可移动元素（图/形/既有文本/组）"全部作为候选对象，按阅读序
+  （上→左）编号 m1..mN，编号与候选对象的映射留在客户端；服务端只拿编号列表做校验。
+- 截图叠加标记：`exportRegionPng` 增加可选 afterPaint 回调，SoM 路径在导出像素空间画
+  彩色框 + "mN" 标签（scene→pixel = (rect-topLeft)*zoom），VLM 直接读图上编号。
+- 元素输出删除 `box` 坐标，改为 `markIds: []string`（引用一个或多个编号——一句被拆成
+  多簇的手写可合并引用；figure 单编号）。服务端仍按输出顺序分配 `id: "e{i}"` 供
+  mindmap 树引用，客户端协议模型不变引用方式。
+- sanitize：markIds 必须 ∈ 请求 marks 且全局不重复（首占者赢，后续引用剔除，剔空则丢
+  元素）；`normalizeVisionBox` 删除；title 唯一、文本幻觉过滤、confidence 钳制、50 上限
+  保留。
+
+**客户端匹配器改为直查表**（textMarks: markId→簇 key，figureMarks: markId→图形单元
+key）：元素 index → markIds → 簇/单元，无任何几何阈值。以下补丁连同删除：
+`minClusterCoverage`、`centerClaimTolerance`、`secondPassMergeRatio`、
+`minFigureOverlapRatio`、`maxClustersPerTextItem`、二次合并扫描、`sceneRect` 坐标换算。
+
+**低置信标注改确定性直查**：`_textElementFromRecognizedBlock` 本就把来源块 id 写进
+`customData.flowMuse.blockId`，且视觉路径块 id == VLM 元素 id → `_attachVisionLowConfidence`
+改为按 blockId 反查 plan.addElements，一条路径覆盖 PPT 家族与 legacy/mindmap，
+删除"按转写文本匹配首个未占用同文项"的启发式回填。
+
+**边界与兼容**：老服务端（只回 box）→ 客户端 markIds 全空 → 匹配项 <2 → 静默回退经典
+管线（与 vision 抛异常同路径）；VLM 编造/看漏编号 → 未认领簇进红区（语义干净，无半认
+半红）；墨迹涂鸦簇被 VLM 标 figure 时仍按文本候选处理（无文本 → 红区，与 R2 行为一致，
+不在本轮扩大范围）。
+
+**验证**：服务端 sanitize 用例改 markIds 校验（未知编号丢弃/重复首占/剔空丢元素）；
+客户端 matcher 直查表单测；控制器 vision 测试 stub 全部改 markIds 形式；低置信回填
+用例改断言 blockId 直查生效。门禁照旧 go test/vet + analyze + 全量 flutter test。
+
 ## 实施步骤（每轮独立可交付、可回退）
 
 - **R1**（commit 分两个）：① 服务端 confidence 字段 + Dart 模型解析 + 透传 → go/dart
@@ -194,7 +233,32 @@ flutter test 见提交说明。注意：服务端需重新部署（prompt 反幻
 - 注意：服务端不重新部署时 VLM 不输出元素级 confidence，客户端按缺省 0.9 处理
   （不会出现橙色标注，功能静默降级）；真机验证前需先部署。
 
+## 执行结果（Set-of-Mark 重构 · 2026-08-28）
+
+按"方案修订二"整轮落地，**破坏性协议变更，服务端与客户端需同版本部署**：
+
+- 服务端：`VisionLayoutRequest` 增 `marks`；`VisionLayoutElement` 删 `Box` 增
+  `MarkIds`；prompt 删坐标系段、增"编号标记"段（只引用编号/禁止编造/拆簇合并引用/
+  编号全局唯一）；sanitize 增 markIds 校验（须出自请求 marks、首占者赢、剔空丢元素），
+  删 `normalizeVisionBox`；`TestVisionLayoutMarkReferencesValidated` 等用例重写。
+- 客户端协议：`SmartLayoutVisionElement` 删 x1..y2/`sceneRect` 增 `markIds`；
+  `SmartLayoutVisionRequest` 增 `marks`。
+- 客户端匹配器：整文件重写为 markIds 直查表（textMarks/figureMarks 两张映射 +
+  首占者赢），删除 minClusterCoverage/centerClaimTolerance/secondPassMergeRatio/
+  minFigureOverlapRatio/maxClustersPerTextItem 五个阈值与全部几何 helper。
+- 客户端控制器：候选对象（墨迹簇 + 可移动元素/组）按阅读序编号 m1..mN；
+  `exportRegionPng` 增 `afterPaint` 回调叠加彩色框+编号标签（`_drawVisionMarkOverlay`）；
+  低置信标注改按 `customData.flowMuse.blockId == VLM 元素 id` 直查（fabricate 文档块
+  id 改用视觉元素 id，`-line-` 拆行前缀归组同标），删除"按转写文本回填"启发式；
+  mindmap 引擎重创作元素无单一来源块，**不参与校对标注**（收窄承诺，替代启发式）。
+- 已知限制：单页有效认领 <2 仍回退经典管线（既有护栏不变）；老服务端（只回 box）/
+  老客户端（不识 markIds）均静默回退经典管线，不崩溃。
+- 门禁：go vet/test 全绿；flutter analyze 0 error；vision 定向 17/17；全量
+  flutter test 664/664。真机验收点：①"薛之谦"类照片联想词是否消失（prompt 约束 +
+  编号引用双保险，仍错应出现橙色标注）②"总结/照片"旁无红框压字、应用后无残迹
+  ③编号标签在截图中清晰可读（导出最长边 1568）。
+
 ## 文档同步（完成后）
 
-接口设计（confidence/spec 字段与 critique mode）、项目需求第 8 条措辞、前端架构
-（design tokens 小节）、ai_usage 日志。
+接口设计（vision 段已改为 Set-of-Mark 协议）、项目需求第 8 条措辞（已同步）、ai_usage
+日志。前端架构（design tokens 小节）留待 R3a 落地时补。
