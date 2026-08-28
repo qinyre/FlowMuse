@@ -146,6 +146,7 @@ class FreedrawRenderer {
     double pressureSensitivity = 0.7,
     bool isComplete = true,
     required OutlineRenderMode outlineRenderMode,
+    BrushType brushType = BrushType.fountainPen,
   }) {
     final outlineWatch = Stopwatch()..start();
     final outline = buildOutline(
@@ -154,6 +155,7 @@ class FreedrawRenderer {
       pressures: pressures,
       pressureSensitivity: pressureSensitivity,
       isComplete: isComplete,
+      brushType: brushType,
     );
     final getStrokeDuration = (outlineWatch..stop()).elapsed;
     final pathWatch = Stopwatch()..start();

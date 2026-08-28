@@ -43,11 +43,16 @@ void main() {
 
     // Then: 非 null、PNG 8 字节签名、解码后最长边 ≤1568
     expect(bytes, isNotNull);
-    expect(
-      bytes!.sublist(0, 8),
-      [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
-      reason: '输出应为 PNG 格式',
-    );
+    expect(bytes!.sublist(0, 8), [
+      0x89,
+      0x50,
+      0x4E,
+      0x47,
+      0x0D,
+      0x0A,
+      0x1A,
+      0x0A,
+    ], reason: '输出应为 PNG 格式');
     final image = await _decodePng(bytes);
     addTearDown(image.dispose);
     expect(math.max(image.width, image.height), lessThanOrEqualTo(1568));
@@ -174,11 +179,14 @@ void main() {
     expect(bytesAfterPrewarm, isNotNull);
     final bytesA = bytesBeforePrewarm!;
     final bytesB = bytesAfterPrewarm!;
-    expect(listEquals(bytesA, bytesB), isFalse,
-        reason: '未预热时渲染占位图,预热后应渲染真实图片');
+    expect(listEquals(bytesA, bytesB), isFalse, reason: '未预热时渲染占位图,预热后应渲染真实图片');
     final image = await _decodePng(bytesB);
     addTearDown(image.dispose);
-    final (r, g, b) = await _pixelAt(image, image.width ~/ 2, image.height ~/ 2);
+    final (r, g, b) = await _pixelAt(
+      image,
+      image.width ~/ 2,
+      image.height ~/ 2,
+    );
     expect(r, greaterThan(200), reason: '中心像素应为红色 R 分量');
     expect(g, lessThan(60), reason: '中心像素应为红色 G 分量');
     expect(b, lessThan(60), reason: '中心像素应为红色 B 分量');
@@ -283,10 +291,16 @@ void main() {
     _expectRed(pageGapSample, '两页间隙不属于页并集,应为背景色');
 
     final insidePageSample = pixelAtScene(400, 300);
-    expect(insidePageSample.$2, greaterThan(200),
-        reason: '页内应为页面纸色（米白），绿色分量不是背景红色的 0');
-    expect(insidePageSample.$3, greaterThan(200),
-        reason: '页内应为页面纸色（米白），蓝色分量不是背景红色的 0');
+    expect(
+      insidePageSample.$2,
+      greaterThan(200),
+      reason: '页内应为页面纸色（米白），绿色分量不是背景红色的 0',
+    );
+    expect(
+      insidePageSample.$3,
+      greaterThan(200),
+      reason: '页内应为页面纸色（米白），蓝色分量不是背景红色的 0',
+    );
   });
 
   test('零尺寸/负尺寸返回 null', () async {
@@ -413,8 +427,7 @@ void main() {
 
     // Then: 缓存条目恰为 1，双方 peek 得同一 ui.Image 实例
     expect(failed, 0);
-    expect(controller.imageCache.length, 1,
-        reason: '同一 fileId 只应解码一次入缓存');
+    expect(controller.imageCache.length, 1, reason: '同一 fileId 只应解码一次入缓存');
     expect(imageAfterPrewarm, isNotNull);
     expect(imageAfterSettle, isNotNull);
     expect(
@@ -492,17 +505,29 @@ void main() {
     for (var i = 0; i < 100 && decodedCallbacks == 0; i++) {
       await Future.delayed(const Duration(milliseconds: 10));
     }
-    expect(decodedCallbacks, greaterThan(0),
-        reason: '并发预热全部结束后 onImageDecoded 回调应恢复生效');
+    expect(
+      decodedCallbacks,
+      greaterThan(0),
+      reason: '并发预热全部结束后 onImageDecoded 回调应恢复生效',
+    );
   });
 
   test('LRU 逐出后被逐出 id 经 getImage 能重新解码', () async {
     // Given: maxSize=2 的缓存，先解码 a、b 后对含已缓存 id 的集合 markDecoding
     final cache = ImageElementCache(maxSize: 2);
     addTearDown(cache.dispose);
-    final fileA = ImageFile(mimeType: 'image/png', bytes: await _makePng(2, 2, 0xFF0000FF));
-    final fileB = ImageFile(mimeType: 'image/png', bytes: await _makePng(2, 2, 0xFF00FF00));
-    final fileC = ImageFile(mimeType: 'image/png', bytes: await _makePng(2, 2, 0xFFFF0000));
+    final fileA = ImageFile(
+      mimeType: 'image/png',
+      bytes: await _makePng(2, 2, 0xFF0000FF),
+    );
+    final fileB = ImageFile(
+      mimeType: 'image/png',
+      bytes: await _makePng(2, 2, 0xFF00FF00),
+    );
+    final fileC = ImageFile(
+      mimeType: 'image/png',
+      bytes: await _makePng(2, 2, 0xFFFF0000),
+    );
     await cache.decodeAndWait('a', fileA);
     await cache.decodeAndWait('b', fileB);
 
@@ -514,16 +539,52 @@ void main() {
     // When: a 被 LRU 逐出后再次 getImage
     expect(cache.length, 2);
     expect(cache.contains('a'), isFalse, reason: 'maxSize=2 时 a 已被逐出');
-    expect(cache.getImage('a', fileA), isNull,
-        reason: '重新解码是异步的，首次 getImage 返回 null');
+    expect(
+      cache.getImage('a', fileA),
+      isNull,
+      reason: '重新解码是异步的，首次 getImage 返回 null',
+    );
     for (var i = 0; i < 100 && !cache.contains('a'); i++) {
       await Future.delayed(const Duration(milliseconds: 10));
     }
 
     // Then: 被逐出 id 能重新解码入缓存
-    expect(cache.contains('a'), isTrue,
-        reason: '被逐出的 id 经 getImage 应能重新解码');
+    expect(cache.contains('a'), isTrue, reason: '被逐出的 id 经 getImage 应能重新解码');
     expect(cache.peek('a'), isNotNull);
+  });
+
+  test('P6: 默认荧光笔全场景导出边界不含可视笔宽，PNG 必裁边（T6 修复）', () {
+    // Given: 默认荧光笔（strokeWidth=20，sizeScale=4.2 → 可视半宽约 42）
+    // 的水平笔迹，中心线 AABB 高度只有 4
+    final element = FreedrawElement(
+      id: const ElementId('freedraw-highlighter-export'),
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 4,
+      points: const [Point(0, 2), Point(100, 2), Point(200, 2)],
+      pressures: const [],
+      simulatePressure: true,
+      isComplete: true,
+      customData: customDataWithBrushType(null, BrushType.highlighter),
+      strokeColor: '#ffff00',
+      strokeWidth: 20,
+    );
+    final scene = Scene().addElement(element);
+
+    // When: 计算默认 padding=20 的导出边界
+    final bounds = ExportBounds.compute(scene);
+
+    // Then: 上缘 = 100 - 20 = 80，而可视上缘 = 100 + 2 - 42 = 60 ——
+    // 中心线 AABB + 固定 padding 不含 42px 可视半宽（缺陷证据）
+    expect(bounds, isNotNull);
+    expect(
+      bounds!.top,
+      lessThanOrEqualTo(80.0 + 0.001),
+      reason: '现状边界按中心线 AABB+20 padding 计算',
+    );
+    // 可视上缘在导出边界之外约 20px → 裁边
+    expect(bounds.top, greaterThan(60.0), reason: '可视上缘 60 在导出边界外，荧光笔上缘被裁（缺陷）');
   });
 }
 
@@ -574,7 +635,10 @@ void _expectRed((int, int, int) pixel, String reason) {
 /// 手写 PNG chunk 类型解析：跳过 8 字节签名，循环读 4B 长度 + 4B 类型。
 List<String> _pngChunkTypes(Uint8List bytes) {
   final types = <String>[];
-  final data = bytes.buffer.asByteData(bytes.offsetInBytes, bytes.lengthInBytes);
+  final data = bytes.buffer.asByteData(
+    bytes.offsetInBytes,
+    bytes.lengthInBytes,
+  );
   var offset = 8;
   while (offset + 8 <= bytes.length) {
     final length = data.getUint32(offset);
