@@ -18,6 +18,9 @@ import 'pencil_shader.dart';
 /// - 有真实压感(pressures 非空):simulatePressure=false,用真压感驱动宽度
 /// - 无压感(鼠标/触摸):simulatePressure=true,perfect_freehand 用速度模拟
 class FreedrawRenderer {
+  /// 铅笔纹理频率种子（T5 起按笔宽派生；此处先固定为 shader 原默认值）。
+  static const double _kPencilTextureFreq = 0.7;
+
   /// Builds a smooth [Path] through the given freehand [points] (等粗,
   /// 用于无压感退化或外部调用)。
   ///
@@ -234,16 +237,17 @@ class FreedrawRenderer {
         alpha: basePaint.color.a * brush.opacityScale,
       );
 
-    // 铅笔纹理：如果平台支持 shader，用 FragmentShader 叠加纸张纹理（参考 Saber）
-    if (brushType == BrushType.pencil && PencilShader.isAvailable) {
-      final shader = PencilShader.create()!;
-      final c = paint.color;
-      shader
-        ..setFloat(0, c.r)
-        ..setFloat(1, c.g)
-        ..setFloat(2, c.b);
-      paint.shader = shader;
-      paint.color = const Color(0xFFFFFFFF); // shader 负责着色
+    // 铅笔纹理：shader 可用时复用应用级单实例（每元素 set uniform 后立即
+    // drawPath；engine 逐 draw 快照 uniform，跨元素安全）。
+    if (brushType == BrushType.pencil) {
+      final shader = PencilShader.acquire();
+      final uniforms = PencilShader.uniforms();
+      if (shader != null && uniforms != null) {
+        final c = paint.color;
+        uniforms.apply(c, c.a, _kPencilTextureFreq);
+        paint.shader = shader;
+        paint.color = const Color(0xFFFFFFFF); // shader 负责着色
+      }
     }
 
     canvas.drawPath(path, paint);

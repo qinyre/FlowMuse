@@ -93,15 +93,16 @@ void main() {
   });
 
   group('T0 缺陷探针（复现证据，后续任务修复后反转）', () {
-    test('P1: pencil.frag 注册在 assets 段，shader 运行时不可用（T1 修复）', () async {
-      // Given/When: 测试环境加载当前注册方式的 shader 资产
+    test('P1(已修复): shaders 段注册后 test 环境加载成功（T1）', () async {
+      // Given/When: 测试环境加载 flutter.shaders 注册的编译产物
       await PencilShader.init();
 
-      // Then: assets 段只原样拷贝 GLSL 源文本，fromAsset 必然失败并降级
+      // Then: impellerc 编译产物可被 FragmentProgram.fromAsset 加载。
+      // 修复前注册在 assets 段（GLSL 源文本原样拷贝），加载必失败。
       expect(
         PencilShader.isAvailable,
-        isFalse,
-        reason: 'pencil.frag 注册在 flutter.assets（未编译），加载必失败',
+        isTrue,
+        reason: 'shaders 段产物应编译并可加载（原缺陷：assets 段死代码）',
       );
     });
 

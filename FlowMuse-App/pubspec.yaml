@@ -129,7 +129,11 @@ flutter:
     - assets/covers/notebooks/
     - assets/covers/tags/
     - assets/themes/
-    - shaders/
+
+  # 铅笔纹理 shader：必须注册在 shaders 段（构建期经 impellerc 编译），
+  # 不得放回 assets（assets 只原样拷贝 GLSL 源文本，运行时必然加载失败）。
+  shaders:
+    - shaders/pencil.frag
 
   fonts:
     - family: Excalifont
