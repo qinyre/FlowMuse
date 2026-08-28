@@ -40,8 +40,6 @@ const int _smartLayoutClientRecognitionConcurrency = 3;
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
 
-enum SmartLayoutRecognitionEngine { ai, myscript }
-
 Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
   if (!layout.isPaged) {
     return scene;
@@ -3254,22 +3252,15 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   Future<bool> runGlobalSmartLayout({
-    SmartLayoutRecognitionEngine engine = SmartLayoutRecognitionEngine.ai,
     void Function(int completed, int total)? onProgress,
   }) async {
     final layoutCallback = onSmartLayoutInk;
     final blockCallback = onRecognizeSmartLayoutBlock;
     final composeCallback = onComposeSmartLayout;
-    final myScriptCallback = onRecognizeInk;
     final canRecognizeWithAI =
         layoutCallback != null ||
         (blockCallback != null && composeCallback != null);
-    final canRecognizeWithMyScript =
-        myScriptCallback != null && composeCallback != null;
-    if ((engine == SmartLayoutRecognitionEngine.ai && !canRecognizeWithAI) ||
-        (engine == SmartLayoutRecognitionEngine.myscript &&
-            !canRecognizeWithMyScript) ||
-        _recognizingInk) {
+    if (!canRecognizeWithAI || _recognizingInk) {
       return false;
     }
     _recognizingInk = true;
@@ -3277,28 +3268,11 @@ class MarkdrawController extends ChangeNotifier {
       final inkGroups = _smartLayoutInkGroups();
       if (inkGroups.isEmpty) return false;
       if (_disposed) return false;
-      final request = await _buildSmartLayoutRequest(inkGroups, engine: engine);
+      final request = await _buildSmartLayoutRequest(inkGroups);
       if (_disposed || request.blocks.isEmpty) return false;
       SmartLayoutResponse response;
       try {
-        if (engine == SmartLayoutRecognitionEngine.myscript) {
-          final recognized = await _recognizeSmartLayoutBlocksInParallel(
-            request.blocks,
-            (block) {
-              final strokes = inkGroups[block.id] ?? const <FreedrawElement>[];
-              return _recognizeSmartLayoutBlockWithMyScript(
-                block,
-                strokes,
-                myScriptCallback!,
-              );
-            },
-            onProgress,
-          );
-          if (_disposed) return false;
-          response = await composeCallback!(
-            SmartLayoutComposeRequest(pages: request.pages, blocks: recognized),
-          );
-        } else if (blockCallback != null && composeCallback != null) {
+        if (blockCallback != null && composeCallback != null) {
           final recognized = await _recognizeSmartLayoutBlocksInParallel(
             request.blocks,
             blockCallback,
@@ -3360,7 +3334,6 @@ class MarkdrawController extends ChangeNotifier {
   /// 为指定页构建智能排版计划（方案二：只算计划、不落场景；确定性）。
   Future<SmartLayoutPlanResult> buildSmartLayoutPlan({
     required String pageId,
-    SmartLayoutRecognitionEngine engine = SmartLayoutRecognitionEngine.ai,
     SmartLayoutStyle? requestedStyle,
     void Function(int completed, int total)? onProgress,
   }) async {
@@ -3383,15 +3356,10 @@ class MarkdrawController extends ChangeNotifier {
     final layoutCallback = onSmartLayoutInk;
     final blockCallback = onRecognizeSmartLayoutBlock;
     final composeCallback = onComposeSmartLayout;
-    final myScriptCallback = onRecognizeInk;
     final canRecognizeWithAI =
         layoutCallback != null ||
         (blockCallback != null && composeCallback != null);
-    final canRecognizeWithMyScript =
-        myScriptCallback != null && composeCallback != null;
-    if ((engine == SmartLayoutRecognitionEngine.ai && !canRecognizeWithAI) ||
-        (engine == SmartLayoutRecognitionEngine.myscript &&
-            !canRecognizeWithMyScript)) {
+    if (!canRecognizeWithAI) {
       return const SmartLayoutPlanResult(error: '没有可用的识别引擎');
     }
     _recognizingInk = true;
@@ -3408,32 +3376,13 @@ class MarkdrawController extends ChangeNotifier {
       if (visionResult != null) {
         return visionResult;
       }
-      final request = await _buildSmartLayoutRequest(inkGroups, engine: engine);
+      final request = await _buildSmartLayoutRequest(inkGroups);
       if (_disposed || request.blocks.isEmpty) {
         return const SmartLayoutPlanResult();
       }
       SmartLayoutResponse response;
       try {
-        if (engine == SmartLayoutRecognitionEngine.myscript) {
-          final recognized = await _recognizeSmartLayoutBlocksInParallel(
-            request.blocks,
-            (block) {
-              final strokes = inkGroups[block.id] ?? const <FreedrawElement>[];
-              return _recognizeSmartLayoutBlockWithMyScript(
-                block,
-                strokes,
-                myScriptCallback!,
-              );
-            },
-            onProgress,
-          );
-          if (_disposed) {
-            return const SmartLayoutPlanResult(error: '编辑器已释放');
-          }
-          response = await composeCallback!(
-            SmartLayoutComposeRequest(pages: request.pages, blocks: recognized),
-          );
-        } else if (blockCallback != null && composeCallback != null) {
+        if (blockCallback != null && composeCallback != null) {
           final recognized = await _recognizeSmartLayoutBlocksInParallel(
             request.blocks,
             blockCallback,
@@ -3814,7 +3763,7 @@ class MarkdrawController extends ChangeNotifier {
 
     // 文本项转写：每个认领的笔迹簇合并后**先走 MyScript**（公式/手写体最稳），
     // 失败或无 MyScript 回调时回退 VLM 转写文本；两者皆无 → 该项进失败红区。
-    final visionTextResult = await _recognizeVisionTextBlocks(
+    final textBlocksByIndex = await _recognizeVisionTextBlocks(
       page,
       vision.elements,
       match.textClaims,
@@ -3822,8 +3771,6 @@ class MarkdrawController extends ChangeNotifier {
       clusterRects,
     );
     if (_disposed) return null;
-    final textBlocksByIndex = visionTextResult.blocks;
-    final inkFallbackIndexes = visionTextResult.inkFallbackIndexes;
     final textElementsByIndex = <int, TextElement>{};
     final textSourceByIndex = <int, ui.Rect>{};
     for (final entry in match.textClaims.entries) {
@@ -4093,12 +4040,7 @@ class MarkdrawController extends ChangeNotifier {
       }
       if (plan == null) return null;
       return SmartLayoutPlanResult(
-        plan: _attachVisionLowConfidence(
-          plan,
-          textElementsByIndex,
-          vision.elements,
-          inkFallbackIndexes,
-        ),
+        plan: _attachVisionLowConfidence(plan, textElementsByIndex, vision.elements),
         failures: failures,
       );
     } on StateError catch (error) {
@@ -4108,32 +4050,48 @@ class MarkdrawController extends ChangeNotifier {
     }
   }
 
-  /// 视觉装配收尾：把低置信文本项（VLM 自报把握不足 / 回落兜底转写）挂到计划上，
-  /// 供草稿态橙色高亮与校对编辑条。仅保留能在计划新增元素中按 id 定位的项
-  /// （PPT 家族引擎复用原元素 id；legacy/mindmap 引擎内部重建 id、暂无法定位）。
+  /// 视觉装配收尾：把低置信文本项（VLM 自报把握不足）挂到计划上，供草稿态
+  /// 橙色高亮与校对编辑条。PPT 家族引擎复用原元素 id，按 id 直接定位；
+  /// legacy/mindmap 引擎在内部重建元素，按原转写文本回填首个未占用的同文新增项。
   SmartLayoutPlan _attachVisionLowConfidence(
     SmartLayoutPlan plan,
     Map<int, TextElement> textElementsByIndex,
     List<SmartLayoutVisionElement> elements,
-    Set<int> inkFallbackIndexes,
   ) {
     final knownIds = {for (final element in plan.addElements) element.id};
-    final texts = <SmartLayoutLowConfidenceText>[
-      for (final index in textElementsByIndex.keys)
-        if (inkFallbackIndexes.contains(index) ||
-            elements[index].confidence < kSmartLayoutLowConfidenceThreshold)
-          if (textElementsByIndex[index] case final TextElement element?)
-            if (knownIds.contains(element.id))
-              SmartLayoutLowConfidenceText(
-                elementId: element.id,
-                confidence: inkFallbackIndexes.contains(index)
-                    ? 0
-                    : elements[index].confidence,
-                reason: inkFallbackIndexes.contains(index)
-                    ? 'ink-fallback'
-                    : 'vlm-low',
-              ),
-    ];
+    final usedIds = <ElementId>{};
+    final texts = <SmartLayoutLowConfidenceText>[];
+    void flag(ElementId id, double confidence) {
+      if (usedIds.add(id)) {
+        texts.add(
+          SmartLayoutLowConfidenceText(
+            elementId: id,
+            confidence: confidence,
+          ),
+        );
+      }
+    }
+
+    for (final entry in textElementsByIndex.entries) {
+      final vision = elements[entry.key];
+      if (vision.confidence >= kSmartLayoutLowConfidenceThreshold) continue;
+      final element = entry.value;
+      if (knownIds.contains(element.id)) {
+        flag(element.id, vision.confidence);
+        continue;
+      }
+      final needle = element.text.trim();
+      if (needle.isEmpty) continue;
+      for (final candidate in plan.addElements) {
+        if (candidate is! TextElement || usedIds.contains(candidate.id)) {
+          continue;
+        }
+        if (candidate.text.trim() == needle) {
+          flag(candidate.id, vision.confidence);
+          break;
+        }
+      }
+    }
     if (texts.isEmpty) return plan;
     return plan.withLowConfidenceTexts(texts);
   }
@@ -4241,24 +4199,18 @@ class MarkdrawController extends ChangeNotifier {
     );
   }
 
-  /// 视觉匹配到的文本项批量转写：合并认领笔迹后逐项走 MyScript，
-  /// 失败或无回调时以 VLM 转写文本兜底；合成块携带并集边界与元素引用 id。
-  /// 视觉路径逐文本项转写：整页 VLM 文本优先、MyScript 兜底；一并报告哪些项
-  /// 回落了兜底转写（低置信标注依据之一）。
-  Future<({Map<int, SmartLayoutRecognizedBlock> blocks,
-  Set<int> inkFallbackIndexes})>
-  _recognizeVisionTextBlocks(
+  /// 视觉路径逐文本项转写：统一整页 VLM 文本单引擎（智能排版不再使用 MyScript，
+  /// 其仅保留在独立"手写字迹识别"入口）；VLM 未给出文本的项按失败进红区。
+  Future<Map<int, SmartLayoutRecognizedBlock>> _recognizeVisionTextBlocks(
     CanvasPage page,
     List<SmartLayoutVisionElement> elements,
     Map<int, List<String>> textClaims,
     Map<String, List<FreedrawElement>> inkGroups,
     Map<String, ui.Rect> clusterRects,
   ) async {
-    final myScriptCallback = onRecognizeInk;
     final requests = <SmartLayoutInkBlockRequest>[];
     final unionsByRequestId = <String, ui.Rect>{};
     final indexByRequestId = <String, int>{};
-    final inkFallbackByRequestId = <String, bool>{};
     for (final entry in textClaims.entries) {
       final index = entry.key;
       var union = clusterRects[entry.value.first]!;
@@ -4303,13 +4255,11 @@ class MarkdrawController extends ChangeNotifier {
     ) async {
       final index = indexByRequestId[request.id]!;
       final visionElement = elements[index];
-      // 整页 VLM 文本优先：真机实测逐块 MyScript 对潦草连笔字误识率高
-      // （同一页面 VLM 整图读得准），且免去逐块网络请求；
-      // 仅当 VLM 未给出该元素文本时才回落逐块 MyScript 转写。
+      // 整页 VLM 单引擎：真机实测其对潦草连笔字的转写显著优于逐块 MyScript
+      // （且免逐块网络请求）；VLM 未给出文本的项直接按失败进红区。
       final vlmText = visionElement.text?.trim() ?? '';
-      SmartLayoutRecognizedBlock block;
+      final SmartLayoutRecognizedBlock block;
       if (vlmText.isNotEmpty) {
-        inkFallbackByRequestId[request.id] = false;
         block = SmartLayoutRecognizedBlock(
           id: request.id,
           pageId: page.id,
@@ -4319,41 +4269,14 @@ class MarkdrawController extends ChangeNotifier {
           startedAt: request.startedAt,
         );
       } else {
-        // VLM 未给出文本 → 回落逐块转写（该项进入低置信复核名单）。
-        inkFallbackByRequestId[request.id] = true;
-        if (myScriptCallback != null) {
-          final strokes = [
-            for (final key in textClaims[index]!)
-              ...(inkGroups[key] ?? const <FreedrawElement>[]),
-          ];
-          try {
-            block = await _recognizeSmartLayoutBlockWithMyScript(
-              request,
-              strokes,
-              myScriptCallback,
-            );
-          } catch (error) {
-            debugPrint('[$_logTag] 视觉排版 MyScript 兜底转写失败($request.id): $error');
-            block = SmartLayoutRecognizedBlock(
-              id: request.id,
-              pageId: page.id,
-              type: 'error',
-              bounds: request.bounds,
-              strokeBounds: request.strokeBounds,
-              startedAt: request.startedAt,
-              error: error.toString(),
-            );
-          }
-        } else {
-          block = SmartLayoutRecognizedBlock(
-            id: request.id,
-            pageId: page.id,
-            type: 'error',
-            bounds: request.bounds,
-            startedAt: request.startedAt,
-            error: 'no-myscript-callback',
-          );
-        }
+        block = SmartLayoutRecognizedBlock(
+          id: request.id,
+          pageId: page.id,
+          type: 'error',
+          bounds: request.bounds,
+          startedAt: request.startedAt,
+          error: 'vlm-no-text',
+        );
       }
       // 成功块统一：引用 id 用元素 id（mindmap 树引用一致）、边界用认领簇并集。
       final elementId = visionElement.id ?? 'e$index';
@@ -4382,16 +4305,10 @@ class MarkdrawController extends ChangeNotifier {
         null,
       );
     }
-    return (
-      blocks: {
-        for (var i = 0; i < requests.length; i++)
-          indexByRequestId[requests[i].id]!: results[i],
-      },
-      inkFallbackIndexes: {
-        for (final entry in inkFallbackByRequestId.entries)
-          if (entry.value) indexByRequestId[entry.key]!,
-      },
-    );
+    return {
+      for (var i = 0; i < requests.length; i++)
+        indexByRequestId[requests[i].id]!: results[i],
+    };
   }
 
   /// 页内可移动元素 → 版式图形单元（整组共用一个单元），供视觉匹配与模板移动。
@@ -5229,9 +5146,8 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   Future<SmartLayoutRequest> _buildSmartLayoutRequest(
-    Map<String, List<FreedrawElement>> inkGroups, {
-    SmartLayoutRecognitionEngine engine = SmartLayoutRecognitionEngine.ai,
-  }) async {
+    Map<String, List<FreedrawElement>> inkGroups,
+  ) async {
     final pages = _layout.ensurePage().pages.map((page) {
       final geometry = TemplateAnchorResolver.resolve(page);
       return SmartLayoutPageRequest(
@@ -5264,7 +5180,7 @@ class MarkdrawController extends ChangeNotifier {
       final block = await _smartLayoutInkBlockRequest(
         entry.key,
         entry.value,
-        includeImage: engine == SmartLayoutRecognitionEngine.ai,
+        includeImage: true,
         vertical: SmartLayoutInkClusterer.isVerticalColumn(entry.value),
       );
       if (block != null) {
@@ -5388,113 +5304,6 @@ class MarkdrawController extends ChangeNotifier {
       ],
       startedAt: _startedAtForStrokes(strokes),
       imageBase64: imageBytes == null ? '' : base64Encode(imageBytes),
-    );
-  }
-
-  Future<SmartLayoutRecognizedBlock> _recognizeSmartLayoutBlockWithMyScript(
-    SmartLayoutInkBlockRequest block,
-    List<FreedrawElement> strokes,
-    Future<InkRecognitionResult> Function(InkRecognitionRequest) recognize,
-  ) async {
-    final request = _buildInkRecognitionRequest(
-      block.id,
-      strokes,
-      hint: 'auto',
-    );
-    if (request == null) {
-      return SmartLayoutRecognizedBlock(
-        id: block.id,
-        pageId: block.pageId,
-        type: 'error',
-        bounds: block.bounds,
-        strokeBounds: block.strokeBounds,
-        startedAt: block.startedAt,
-        error: '没有可识别的笔迹点',
-      );
-    }
-    try {
-      final result = await recognize(request);
-      return _smartLayoutBlockFromInkRecognitionResult(block, result);
-    } catch (error) {
-      return SmartLayoutRecognizedBlock(
-        id: block.id,
-        pageId: block.pageId,
-        type: 'error',
-        bounds: block.bounds,
-        strokeBounds: block.strokeBounds,
-        startedAt: block.startedAt,
-        error: error.toString(),
-      );
-    }
-  }
-
-  SmartLayoutRecognizedBlock _smartLayoutBlockFromInkRecognitionResult(
-    SmartLayoutInkBlockRequest block,
-    InkRecognitionResult result,
-  ) {
-    final elements = result.elements.where((element) {
-      final text = (element.latex ?? element.text ?? '').trim();
-      return text.isNotEmpty;
-    }).toList();
-    if (elements.isEmpty) {
-      return SmartLayoutRecognizedBlock(
-        id: block.id,
-        pageId: block.pageId,
-        type: 'error',
-        bounds: block.bounds,
-        strokeBounds: block.strokeBounds,
-        startedAt: block.startedAt,
-        error: 'MyScript 未返回文字',
-      );
-    }
-    InkRecognizedElement? formula;
-    for (final element in elements) {
-      if (element.type == 'math' || (element.latex ?? '').trim().isNotEmpty) {
-        formula = element;
-        break;
-      }
-    }
-    if (formula != null) {
-      final latex = (formula.latex ?? formula.text ?? '').trim();
-      return SmartLayoutRecognizedBlock(
-        id: block.id,
-        pageId: block.pageId,
-        type: 'formula',
-        text: latex,
-        latex: latex,
-        bounds: block.bounds,
-        strokeBounds: block.strokeBounds,
-        startedAt: block.startedAt,
-      );
-    }
-    elements.sort((a, b) {
-      final byY = a.y.compareTo(b.y);
-      if (byY != 0) return byY;
-      return a.x.compareTo(b.x);
-    });
-    final text = elements
-        .map((element) => (element.text ?? element.latex ?? '').trim())
-        .where((value) => value.isNotEmpty)
-        .join('');
-    if (text.isEmpty) {
-      return SmartLayoutRecognizedBlock(
-        id: block.id,
-        pageId: block.pageId,
-        type: 'error',
-        bounds: block.bounds,
-        strokeBounds: block.strokeBounds,
-        startedAt: block.startedAt,
-        error: 'MyScript 未返回文字',
-      );
-    }
-    return SmartLayoutRecognizedBlock(
-      id: block.id,
-      pageId: block.pageId,
-      type: 'text',
-      text: text,
-      bounds: block.bounds,
-      strokeBounds: block.strokeBounds,
-      startedAt: block.startedAt,
     );
   }
 

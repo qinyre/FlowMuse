@@ -26,13 +26,21 @@ class SmartLayoutVisionMatch {
 }
 
 /// 视觉匹配器：0-1000 坐标 → 页面坐标后，
-/// - 文本项认领"簇中心落在其框内占比 ≥ minClusterCoverage"的所有笔迹簇
-///   （一个段落框可合并多个小簇，见计划 2026-08-26）；
+/// - 文本项认领"簇中心落在其框内（含容差）"或"簇在框内覆盖率 ≥ minClusterCoverage"
+///   的所有笔迹簇（一个段落框可合并多个小簇，见计划 2026-08-26）；
+/// - 二次合并扫描：主认领后仍未认领的簇，若与某已认领文本项的并集框重叠
+///   ≥ secondPassMergeRatio（治逐字拆簇导致的"半认半红"），并入该项；
 /// - 图形项按 interArea/min(面积) 最大且唯一者匹配场景元素/组单元；
 /// - 平局以更小的下标/key 破解，保证同输入同输出。
 abstract class SmartLayoutVisionMatcher {
   /// 簇面积的覆盖率阈值：簇在文本框内面积达到该比例即被该文本项认领。
   static const double minClusterCoverage = 0.35;
+
+  /// 簇中心点认领容差：中心点落在框外扩该像素数内也认领（治框略偏移）。
+  static const double centerClaimTolerance = 8.0;
+
+  /// 二次合并阈值：未认领簇与已认领文本项并集框的交叠 ≥ 簇面积该比例时并入。
+  static const double secondPassMergeRatio = 0.5;
 
   /// 图形与场景单元的交叠阈值：interArea / min(两者面积)。
   static const double minFigureOverlapRatio = 0.4;
@@ -51,6 +59,12 @@ abstract class SmartLayoutVisionMatcher {
     final figureClaims = <int, String>{};
     final claimedUnits = <String>{};
 
+    bool centerInside(Rect cluster, Rect rect) {
+      final center = cluster.center;
+      final outer = rect.inflate(centerClaimTolerance);
+      return outer.contains(center);
+    }
+
     for (var i = 0; i < elements.length; i++) {
       final element = elements[i];
       if (element.isFigure) continue;
@@ -58,9 +72,9 @@ abstract class SmartLayoutVisionMatcher {
       final scored = <(String, double)>[];
       for (final entry in inkClusters.entries) {
         if (claimedClusters.contains(entry.key)) continue;
-        final coverage =
-            _intersectionArea(entry.value, rect) / _area(entry.value);
-        if (coverage >= minClusterCoverage) {
+        final cluster = entry.value;
+        final coverage = _intersectionArea(cluster, rect) / _area(cluster);
+        if (coverage >= minClusterCoverage || centerInside(cluster, rect)) {
           scored.add((entry.key, coverage));
         }
       }
@@ -75,6 +89,31 @@ abstract class SmartLayoutVisionMatcher {
       if (claimKeys.isNotEmpty) {
         textClaims[i] = claimKeys;
       }
+    }
+
+    // 二次合并：未认领簇若大半落在某已认领文本项的并集框内，并入该项
+    // （模型框往往只罩住拆簇后的一部分，另一半会误入红区）。
+    for (var i = 0; i < elements.length; i++) {
+      final claimKeys = textClaims[i];
+      if (claimKeys == null || claimKeys.length >= maxClustersPerTextItem) {
+        continue;
+      }
+      var union = elementRect(i, elements, pageBounds);
+      for (final key in claimKeys) {
+        union = union.expandToInclude(inkClusters[key]!);
+      }
+      final merged = <String>[];
+      for (final entry in inkClusters.entries) {
+        if (claimedClusters.contains(entry.key)) continue;
+        final overlap = _intersectionArea(entry.value, union);
+        if (overlap / _area(entry.value) >= secondPassMergeRatio) {
+          merged.add(entry.key);
+        }
+      }
+      if (merged.isEmpty) continue;
+      merged.sort();
+      claimKeys.addAll(merged);
+      claimedClusters.addAll(merged);
     }
 
     for (var i = 0; i < elements.length; i++) {
@@ -109,6 +148,12 @@ abstract class SmartLayoutVisionMatcher {
       },
     );
   }
+
+  static Rect elementRect(
+    int index,
+    List<SmartLayoutVisionElement> elements,
+    Rect pageBounds,
+  ) => elements[index].sceneRectAsRect(pageBounds);
 
   static double _intersectionArea(Rect a, Rect b) {
     final left = a.left > b.left ? a.left : b.left;

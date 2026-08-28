@@ -4,8 +4,8 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flutter_test/flutter_test.dart';
 
 /// 视觉优先管线：模型解析、坐标映射/元素匹配纯函数、四风格分发与回退。
-/// 文字转写统一"整页 VLM 文本优先、逐块 MyScript 兜底"；
-/// VLM 无文本且未注入 onRecognizeInk 时该项按失败处理。
+/// 文字转写为整页 VLM 单引擎（智能排版不使用 MyScript）；
+/// VLM 无文本的项按失败进红区，低把握项进低置信校对清单。
 void main() {
   group('SmartLayoutVisionElement 模型', () {
     test('解析 box 并钳制到 0-1000、交换倒置坐标、携带引用 id', () {
@@ -121,6 +121,35 @@ void main() {
       expect(match.textClaims[0], ['a', 'b']);
       expect(match.unclaimedClusterKeys, {'c'});
       expect(match.matchedItemCount, 1);
+    });
+
+    test('中心点容差认领：覆盖率不足但簇中心落在框外扩 8pt 内也认领', () {
+      final match = SmartLayoutVisionMatcher.match(
+        elements: [elem('body', 0, 0, 500, 400)],
+        pageBounds: pageBounds,
+        inkClusters: {
+          'edge': const Rect.fromLTWH(490, 40, 30, 20),
+          'far': const Rect.fromLTWH(600, 40, 30, 20),
+        },
+        figureUnits: {},
+      );
+      expect(match.textClaims[0], ['edge']);
+      expect(match.unclaimedClusterKeys, {'far'});
+    });
+
+    test('二次合并：拆簇后大半落在已认领项并集框内的残簇并入同项', () {
+      final match = SmartLayoutVisionMatcher.match(
+        elements: [elem('body', 0, 0, 200, 100)],
+        pageBounds: pageBounds,
+        inkClusters: {
+          'a': const Rect.fromLTWH(10, 10, 180, 120),
+          'b': const Rect.fromLTWH(0, 90, 200, 80),
+          'other': const Rect.fromLTWH(800, 900, 50, 50),
+        },
+        figureUnits: {},
+      );
+      expect(match.textClaims[0], ['a', 'b']);
+      expect(match.unclaimedClusterKeys, {'other'});
     });
 
     test('图形项按 interArea/min 面积最大者唯一匹配场景单元', () {
@@ -401,7 +430,7 @@ void main() {
       expect(texts, contains('手写要点乙'));
     });
 
-    testWidgets('VLM 文本优先：可用时直接采用，缺失项回落 MyScript',
+    testWidgets('VLM 单引擎：有文本直接采用，无文本项进失败红区且不触发 MyScript',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 2400);
       tester.view.devicePixelRatio = 1.0;
@@ -412,16 +441,7 @@ void main() {
       var myScriptCalls = 0;
       controller.onRecognizeInk = (request) async {
         myScriptCalls++;
-        return InkRecognitionResult(elements: [
-          InkRecognizedElement(
-            type: 'text',
-            text: 'MyScript正文',
-            x: request.bounds.x,
-            y: request.bounds.y,
-            width: request.bounds.width,
-            height: request.bounds.height,
-          ),
-        ]);
+        throw StateError('智能排版不应调用 MyScript');
       };
       controller.onSmartLayoutInk = (request) async {
         throw StateError('不应回退');
@@ -445,9 +465,20 @@ void main() {
           .whereType<TextElement>()
           .map((e) => e.text)
           .toList();
-      expect(texts, contains('VLM正文'), reason: 'VLM 有文本时直接采用，不走逐块转写');
-      expect(texts, contains('MyScript正文'), reason: 'VLM 无文本项回落 MyScript 兜底');
-      expect(myScriptCalls, 1, reason: '仅 VLM 缺失文本的元素需要 MyScript 兜底');
+      expect(texts, contains('VLM正文'), reason: 'VLM 有文本时直接采用');
+      expect(texts, isNot(contains('MyScript正文')));
+      expect(myScriptCalls, 0, reason: '智能排版已完全摘除 MyScript');
+      expect(result.hasFailures, isTrue, reason: 'VLM 无文本项按失败进红区');
+      expect(
+        plan.failedStrokeIds.map((id) => id.value),
+        contains('k-s2'),
+        reason: '无文本项的原笔迹留在红区待用户处置',
+      );
+      expect(
+        plan.lowConfidenceTexts,
+        isEmpty,
+        reason: '失败项不属于低置信校对清单',
+      );
     });
 
     test('响应解析：元素 confidence 缺省 0.9 并钳制到 0-1', () {
@@ -521,7 +552,6 @@ void main() {
             ))!;
         final plan = result.plan!;
         expect(plan.lowConfidenceTexts, hasLength(1));
-        expect(plan.lowConfidenceTexts.single.reason, 'vlm-low');
         expect(plan.lowConfidenceTexts.single.confidence, 0.2);
         // 场景矩形可定位（PPT 家族保留原元素 id），且为有效矩形
         expect(plan.lowConfidenceRects, hasLength(1));
@@ -530,7 +560,7 @@ void main() {
       },
     );
 
-    testWidgets('低置信标注：VLM 无文本回落 MyScript → 该项标记兜底转写',
+    testWidgets('低置信标注：in_place 引擎重建元素后按文本回填校对清单',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 2400);
       tester.view.devicePixelRatio = 1.0;
@@ -538,49 +568,16 @@ void main() {
       final controller = _buildController();
       addTearDown(controller.dispose);
       _addStrokes(controller);
-      controller.applyResult(
-        AddElementResult(
-          ImageElement(
-            id: const ElementId('img-cat'),
-            x: 700,
-            y: 600,
-            width: 600,
-            height: 600,
-            fileId: 'file-cat',
-          ),
-        ),
-      );
-      controller.onRecognizeInk = (request) async {
-        return InkRecognitionResult(elements: [
-          InkRecognizedElement(
-            type: 'text',
-            text: 'MyScript标题',
-            x: request.bounds.x,
-            y: request.bounds.y,
-            width: request.bounds.width,
-            height: request.bounds.height,
-          ),
-        ]);
-      };
       controller.onSmartLayoutInk = (request) async {
         throw StateError('不应回退');
       };
       controller.onVisionSmartLayout = (request) async =>
           SmartLayoutVisionResponse(
-            style: SmartLayoutStyle.ppt,
-            confidence: 0.9,
+            style: SmartLayoutStyle.inPlace,
             elements: [
-              _boxCovering('title', '', 200, 150, 300, 60),
-              _boxCovering(
-                'caption',
-                '流水明细一整段',
-                250,
-                400,
-                280,
-                56,
-                pairId: 'pair-1',
-              ),
-              _boxCovering('figure', '', 700, 600, 600, 600, pairId: 'pair-1'),
+              _boxCovering('body', '零散字一', 200, 150, 300, 60,
+                  confidence: 0.2),
+              _boxCovering('body', '零散字二', 250, 400, 280, 56),
             ],
           );
       final SmartLayoutPlanResult result =
@@ -589,7 +586,10 @@ void main() {
           ))!;
       final plan = result.plan!;
       expect(plan.lowConfidenceTexts, hasLength(1));
-      expect(plan.lowConfidenceTexts.single.reason, 'ink-fallback');
+      expect(plan.lowConfidenceTexts.single.confidence, 0.2);
+      // legacy 引擎重建了元素 id：按原转写文本回填后仍能定位出场景矩形
+      expect(plan.lowConfidenceRects, hasLength(1));
+      expect(plan.lowConfidenceRects.single.isFinite, isTrue);
     });
 
     testWidgets('vision 接口抛异常 → 自动回退经典管线并成功', (tester) async {
