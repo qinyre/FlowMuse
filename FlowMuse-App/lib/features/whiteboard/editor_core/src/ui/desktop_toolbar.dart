@@ -170,13 +170,7 @@ class DesktopToolbar extends StatelessWidget {
                 cs: cs,
                 icon: Icons.document_scanner_outlined,
                 tooltip: '全局识别排版',
-                onPressed: () {
-                  if (onSmartLayoutPressed != null) {
-                    onSmartLayoutPressed!();
-                  } else {
-                    _runGlobalSmartLayout(context);
-                  }
-                },
+                onPressed: onSmartLayoutPressed,
               ),
               _toolbarDivider(context, vertical),
               _DockMenuButton(dock: dock, onDockChanged: onDockChanged),
@@ -233,70 +227,6 @@ class DesktopToolbar extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _runGlobalSmartLayout(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    bool changed;
-    Object? error;
-    try {
-      changed = await controller.runGlobalSmartLayout(
-        onProgress: (completed, total) {
-          if (!context.mounted) return;
-          _showSmartLayoutProgress(messenger, completed, total);
-        },
-      );
-    } catch (caught) {
-      changed = false;
-      error = caught;
-    }
-    messenger.removeCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          _smartLayoutMessage(changed: changed, error: error),
-          maxLines: 5,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    );
-  }
-
-  void _showSmartLayoutProgress(
-    ScaffoldMessengerState messenger,
-    int completed,
-    int total,
-  ) {
-    final progress = total <= 0 ? null : completed / total;
-    messenger.removeCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(days: 1),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('识别中 $completed/$total'),
-            const SizedBox(height: 8),
-            LinearProgressIndicator(value: progress),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _smartLayoutMessage({required bool changed, Object? error}) {
-    if (changed) return '智能排版已应用';
-    if (error == null) return '智能排版失败，场景未修改';
-    return '智能排版失败：${_readableError(error)}';
-  }
-
-  String _readableError(Object error) {
-    final text = error is StateError ? error.message : error.toString();
-    return text
-        .replaceFirst(RegExp(r'^Bad state:\s*'), '')
-        .replaceFirst(RegExp(r'^Exception:\s*'), '')
-        .trim();
   }
 }
 

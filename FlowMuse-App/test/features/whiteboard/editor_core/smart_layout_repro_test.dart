@@ -3,30 +3,16 @@ import 'dart:ui';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// 复现用户截图页面：标准页 1588x2246 + 4 行手写（同会话）+ 形状障碍 + 大图(620)。
-/// 分别以 in_place / article / ppt 三种风格构建计划，定位"空间不足"的真实路径。
+/// 复现用户截图页面：标准页 1588x2246 + 4 行手写（跨"会话"）+ 形状障碍 +
+/// 大图(620)。v2 视觉管线（去会话化全页聚类 + 模板预落位）下，
+/// 三张模板都不应误报"空间不足"。
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  MarkdrawController buildController() {
-    final controller = MarkdrawController(
-      config: MarkdrawEditorConfig(
-        initialLayout: CanvasLayout(
-          type: CanvasLayoutType.paged,
-          pages: const [
-            CanvasPage(
-              id: 'page-1',
-              index: 0,
-              bounds: Rect.fromLTWH(0, 0, 1588, 2246),
-              template: CanvasPageTemplate.blank,
-            ),
-          ],
-        ),
-      ),
-    );
-    addTearDown(controller.dispose);
-    controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
-    // 4 行手写（同一会话 s1，行距 45 ~ 同会话但不同行）
+  testWidgets('真机回归：多行手写 + 大图页面三模板均能落位', (tester) async {
+    tester.view.physicalSize = const Size(1600, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final controller = _buildController();
+    // 4 行手写（会话标记不再参与智能排版：v2 全页几何聚类）
     controller.applyResult(
       AddElementResult(_stroke('l1', 's1', 300, 150, 200, 28)),
     );
@@ -39,7 +25,7 @@ void main() {
     controller.applyResult(
       AddElementResult(_stroke('l4', 's1', 300, 360, 140, 28)),
     );
-    // 形状障碍（保持原位的普通元素：星/框/三角 用形状元素近似）
+    // 形状障碍（保持原位的普通元素）
     controller.applyResult(
       AddElementResult(
         RectangleElement(
@@ -48,17 +34,6 @@ void main() {
           y: 430,
           width: 70,
           height: 70,
-        ),
-      ),
-    );
-    controller.applyResult(
-      AddElementResult(
-        EllipseElement(
-          id: ElementId('shape-ellipse'),
-          x: 280,
-          y: 520,
-          width: 60,
-          height: 60,
         ),
       ),
     );
@@ -75,108 +50,68 @@ void main() {
         ),
       ),
     );
-    return controller;
-  }
-
-  SmartLayoutRecognizedBlock block(String id, String text, Bounds bounds) =>
-      SmartLayoutRecognizedBlock(
-        id: id,
-        type: 'text',
-        text: text,
-        pageId: 'page-1',
-        bounds: bounds,
-      );
-
-  test('in_place（旧服务端无 layout）不误报空间不足', () async {
-    final controller = buildController();
-    controller.onSmartLayoutInk = (request) async {
-      return SmartLayoutResponse(
-        document: const SmartLayoutDocument(
-          version: 1,
-          generatedAt: 1,
-          blocks: [],
-        ),
-        blocks: [
-          for (final rb in request.blocks)
-            block(rb.id, '这是第 ${rb.id} 句话', rb.bounds),
-        ],
-        pages: const [
-          SmartLayoutPageDecision(pageId: 'page-1', mode: 'in_place'),
+    controller.onVisionSmartLayout = (request) async {
+      // 阅读序编号：前 4 个编号是四行手写簇，其余是形状与大图
+      expect(request.marks.length, greaterThanOrEqualTo(6));
+      return SmartLayoutVisionResponse(
+        elements: [
+          for (var i = 0; i < 4; i++)
+            _visionElement('body', '这是第 $i 句话', request.marks[i]),
+          _visionElement('figure', '', request.marks.last, id: 'e-figure'),
         ],
       );
     };
-    final result = await controller.buildSmartLayoutPlan(pageId: 'page-1');
-    expect(result.plan, isNotNull, reason: 'in_place 应能构建计划');
-  });
-
-  test('article（旧服务端段流）不误报空间不足', () async {
-    final controller = buildController();
-    controller.onSmartLayoutInk = (request) async {
-      return SmartLayoutResponse(
-        document: SmartLayoutDocument(
-          version: 1,
-          generatedAt: 1,
-          blocks: [
-            for (var i = 0; i < request.blocks.length; i++)
-              SmartLayoutBlock(
-                id: 'doc-$i',
-                type: 'paragraph',
-                text: '这是第 $i 句话',
-                pageId: 'page-1',
-                order: i,
-              ),
-          ],
-        ),
-        blocks: [
-          for (final rb in request.blocks)
-            block(rb.id, '这是 ${rb.id} 句话', rb.bounds),
-        ],
-        pages: const [
-          SmartLayoutPageDecision(pageId: 'page-1', mode: 'article'),
-        ],
+    final preparation = (await tester.runAsync(
+      () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+    ))!;
+    for (final kind in SmartLayoutTemplateKind.values) {
+      expect(
+        preparation.layouts[kind],
+        isNotNull,
+        reason: '${kind.displayName} 不应误报空间不足',
       );
-    };
-    final result = await controller.buildSmartLayoutPlan(pageId: 'page-1');
-    expect(result.plan, isNotNull, reason: 'article 应能构建计划');
+    }
+    // 点选图文讲义：大图独占通栏、四句话按段落流落位
+    final plan = controller
+        .buildSmartLayoutPlanForTemplate(
+          preparation,
+          SmartLayoutTemplateKind.handout,
+        )
+        .plan;
+    expect(plan, isNotNull);
+    expect(
+      plan!.moveDeltas.keys.map((id) => id.value),
+      contains('img-cat'),
+    );
+    final texts = plan.addElements
+        .whereType<TextElement>()
+        .map((e) => e.text)
+        .toList();
+    for (var i = 0; i < 4; i++) {
+      expect(texts, contains('这是第 $i 句话'));
+    }
   });
+}
 
-  test('ppt（AI 判为图文）大图不误报空间不足', () async {
-    final controller = buildController();
-    controller.onSmartLayoutInk = (request) async {
-      return SmartLayoutResponse(
-        document: const SmartLayoutDocument(
-          version: 1,
-          generatedAt: 1,
-          blocks: [],
-        ),
-        blocks: [
-          for (final rb in request.blocks)
-            block(rb.id, '这是第 ${rb.id} 句话', rb.bounds),
-        ],
+MarkdrawController _buildController() {
+  final controller = MarkdrawController(
+    config: MarkdrawEditorConfig(
+      initialLayout: CanvasLayout(
+        type: CanvasLayoutType.paged,
         pages: const [
-          SmartLayoutPageDecision(pageId: 'page-1', mode: 'in_place'),
-        ],
-        layout: SmartLayoutLayoutDecision(
-          style: SmartLayoutStyle.ppt,
-          confidence: 0.9,
-          pptStructure: SmartLayoutPptStructure(
-            groups: [
-              SmartLayoutPptGroup(
-                role: 'body',
-                elementIds: [for (final rb in request.blocks) rb.id],
-              ),
-              const SmartLayoutPptGroup(
-                role: 'figure',
-                elementIds: ['img-cat'],
-              ),
-            ],
+          CanvasPage(
+            id: 'page-1',
+            index: 0,
+            bounds: Rect.fromLTWH(0, 0, 1588, 2246),
+            template: CanvasPageTemplate.blank,
           ),
-        ),
-      );
-    };
-    final result = await controller.buildSmartLayoutPlan(pageId: 'page-1');
-    expect(result.plan, isNotNull, reason: 'ppt 应能构建计划');
-  });
+        ],
+      ),
+    ),
+  );
+  addTearDown(controller.dispose);
+  controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
+  return controller;
 }
 
 FreedrawElement _stroke(
@@ -197,4 +132,16 @@ FreedrawElement _stroke(
     recognitionStrokeSessionKey: sessionId,
     'flowMuse': {'pageId': 'page-1'},
   },
+);
+
+SmartLayoutVisionElement _visionElement(
+  String role,
+  String text,
+  String markId, {
+  String? id,
+}) => SmartLayoutVisionElement(
+  id: id,
+  role: role,
+  text: text.isEmpty ? null : text,
+  markIds: [markId],
 );

@@ -71,10 +71,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.onVisibleSceneBoundsChanged,
     this.onDocumentRenamed,
     this.onRecognizeInk,
-    this.onSmartLayoutInk,
-    this.onRecognizeSmartLayoutBlock,
-    this.onComposeSmartLayout,
     this.onVisionSmartLayout,
+    this.onTranscribeCrop,
     this.canvasThemeBackground = '#ffffff',
     this.useFlatBackgrounds = false,
     this.onEyedropperPressed,
@@ -149,14 +147,11 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onDocumentRenamed;
   final Future<InkRecognitionResult> Function(InkRecognitionRequest)?
   onRecognizeInk;
-  final Future<SmartLayoutResponse> Function(SmartLayoutRequest)?
-  onSmartLayoutInk;
-  final Future<SmartLayoutRecognizedBlock> Function(SmartLayoutInkBlockRequest)?
-  onRecognizeSmartLayoutBlock;
-  final Future<SmartLayoutResponse> Function(SmartLayoutComposeRequest)?
-  onComposeSmartLayout;
   final Future<SmartLayoutVisionResponse> Function(SmartLayoutVisionRequest)?
   onVisionSmartLayout;
+  final Future<SmartLayoutTranscribeResponse> Function(
+  SmartLayoutTranscribeRequest)?
+  onTranscribeCrop;
   final String canvasThemeBackground;
   final bool useFlatBackgrounds;
   final SpeechRecognitionService? speechRecognitionService;
@@ -251,11 +246,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     _controller.onLiveInkChanged = widget.onLiveInkChanged;
     _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
     _controller.onRecognizeInk = widget.onRecognizeInk;
-    _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
-    _controller.onRecognizeSmartLayoutBlock =
-        widget.onRecognizeSmartLayoutBlock;
-    _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
     _controller.onVisionSmartLayout = widget.onVisionSmartLayout;
+    _controller.onTranscribeCrop = widget.onTranscribeCrop;
     _controller.onMindmapOperationError = _showMindmapOperationError;
     _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     _controller.restoreKeyboardFocusWhenStable();
@@ -280,11 +272,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _controller.onLiveInkChanged = widget.onLiveInkChanged;
       _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
       _controller.onRecognizeInk = widget.onRecognizeInk;
-      _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
-      _controller.onRecognizeSmartLayoutBlock =
-          widget.onRecognizeSmartLayoutBlock;
-      _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
       _controller.onVisionSmartLayout = widget.onVisionSmartLayout;
+      _controller.onTranscribeCrop = widget.onTranscribeCrop;
       _controller.onMindmapOperationError = _showMindmapOperationError;
       _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     } else if (widget.onRecognizeInk != oldWidget.onRecognizeInk) {
@@ -302,19 +291,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     if (widget.onLiveInkCancelled != oldWidget.onLiveInkCancelled) {
       _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
     }
-    if (widget.onSmartLayoutInk != oldWidget.onSmartLayoutInk) {
-      _controller.onSmartLayoutInk = widget.onSmartLayoutInk;
-    }
-    if (widget.onRecognizeSmartLayoutBlock !=
-        oldWidget.onRecognizeSmartLayoutBlock) {
-      _controller.onRecognizeSmartLayoutBlock =
-          widget.onRecognizeSmartLayoutBlock;
-    }
-    if (widget.onComposeSmartLayout != oldWidget.onComposeSmartLayout) {
-      _controller.onComposeSmartLayout = widget.onComposeSmartLayout;
-    }
     if (widget.onVisionSmartLayout != oldWidget.onVisionSmartLayout) {
       _controller.onVisionSmartLayout = widget.onVisionSmartLayout;
+    }
+    if (widget.onTranscribeCrop != oldWidget.onTranscribeCrop) {
+      _controller.onTranscribeCrop = widget.onTranscribeCrop;
     }
     if (widget.canvasThemeBackground != oldWidget.canvasThemeBackground) {
       _controller.setThemeCanvasBackground(widget.canvasThemeBackground);

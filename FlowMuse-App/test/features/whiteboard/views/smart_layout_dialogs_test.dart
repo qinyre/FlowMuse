@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 SmartLayoutPlan fakePlan({bool hasFailures = false}) => SmartLayoutPlan(
   pageId: 'p-1',
-  style: SmartLayoutStyle.mindmap,
+  style: SmartLayoutTemplateKind.handout,
   confidence: 0.9,
   description: '检测到头脑风暴内容',
   addElements: const [],
@@ -127,7 +127,7 @@ void main() {
         isMultiPage: true,
         onAction: (action) => tapped = action,
       )));
-      expect(find.textContaining('思维导图'), findsOneWidget);
+      expect(find.textContaining('图文讲义'), findsOneWidget);
       expect(find.text('应用'), findsOneWidget);
       expect(find.text('跳过本页'), findsOneWidget);
       expect(find.text('取消整个流程'), findsOneWidget);
