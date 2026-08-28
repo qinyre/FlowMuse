@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flow_muse/features/whiteboard/collaboration/collaboration_config.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/ink_recognition/ink_recognition_repository.dart';
@@ -74,6 +77,63 @@ void main() {
             isNot(contains('raw server detail')),
           ),
         ),
+      );
+    });
+  });
+
+  group('网络/通道异常 → 用户可读中文（断网/超时是演示最常见故障）', () {
+    final repository = buildRepository();
+
+    test('SocketException（服务未启动/断网）→ 无法连接提示', () {
+      expect(
+        () => repository.throwReadableNetworkError(
+          const SocketException('Connection refused'),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            '无法连接识别服务，请检查网络与服务地址',
+          ),
+        ),
+      );
+    });
+
+    test('TimeoutException（响应超时）→ 超时提示', () {
+      expect(
+        () => repository.throwReadableNetworkError(
+          TimeoutException('Future not completed'),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            '识别服务响应超时，请稍后重试',
+          ),
+        ),
+      );
+    });
+
+    test('PlatformException（鸿蒙通道）→ 通道异常提示且带 code', () {
+      expect(
+        () => repository.throwReadableNetworkError(
+          PlatformException(code: 'connect_fail', message: 'ohos net error'),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            '网络通道异常（connect_fail），请检查网络与服务地址',
+          ),
+        ),
+      );
+    });
+
+    test('未知异常原样抛出（保留既有语义）', () {
+      const unknown = FormatException('bad json');
+      expect(
+        () => repository.throwReadableNetworkError(unknown),
+        throwsA(same(unknown)),
       );
     });
   });

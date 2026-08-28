@@ -4048,6 +4048,8 @@ class MarkdrawController extends ChangeNotifier {
     }
     if (current == null) return false;
     final trimmed = newText.trim();
+    // 空文本会产出不可见的空文字元素（笔迹已删、橙框圈空盒），拒绝保存。
+    if (trimmed.isEmpty) return false;
     var candidate = current.copyWithText(text: trimmed);
     // 与创建/引擎一致的尺寸规则：竖排保持原稿窄长不重测；
     // 横排 max(现值, 测量) 只放不缩，避免改字后盒子跳动。

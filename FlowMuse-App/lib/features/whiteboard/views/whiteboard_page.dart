@@ -137,6 +137,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   OverlayEntry? _aiPanelEntry;
   bool _aiCaptureModeActive = false;
   bool _smartLayoutFlowActive = false;
+  // 用户已点取消但流程尚未收尾（在途请求返回前）：期间重入给出"正在结束"提示。
+  bool _smartLayoutCancelRequested = false;
   SmartLayoutPlan? _smartLayoutBarPlan;
   bool _smartLayoutBarMultiPage = false;
   Completer<SmartLayoutBarAction>? _smartLayoutBarHandler;
@@ -251,6 +253,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _markdrawController.onPrepareLocalResult = null;
     _markdrawController.removeListener(_onControllerNotifyForFocus);
     _markdrawController.removeListener(_onControllerNotifyForSmartLayoutGhost);
+    // 退出页面前中止在途的智能排版识别，避免其完成后回调已释放的通知器。
+    _markdrawController.cancelSmartLayoutPreparation();
     _smartLayoutRecognitionProgress.dispose();
     _focusTarget = null;
     _lastFocusEmpty = null;
@@ -833,9 +837,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   Future<void> _startSmartLayoutFlow({List<String>? initialPageIds}) async {
     if (_smartLayoutFlowActive) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          duration: Duration(seconds: 2),
-          content: Text('智能排版正在进行中'),
+        SnackBar(
+          duration: const Duration(seconds: 2),
+          content: Text(
+            // 取消不中断在途请求，上一轮流程要等响应返回才真正结束。
+            _smartLayoutCancelRequested ? '正在结束上次识别，请稍候' : '智能排版正在进行中',
+          ),
         ),
       );
       return;
@@ -879,17 +886,20 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       };
     }
     setState(() => _smartLayoutFlowActive = true);
+    _smartLayoutCancelRequested = false;
     final isMultiPage = selected.length > 1;
     var applied = 0;
     var skipped = 0;
     var failed = 0;
     var nothing = 0;
     try {
-      for (final pageId in selected) {
+      for (var i = 0; i < selected.length; i++) {
         if (!mounted) return;
+        final pageId = selected[i];
         final result = await _runSmartLayoutPage(
           pageId,
           isMultiPage: isMultiPage,
+          pageLabel: isMultiPage ? '第 ${i + 1}/${selected.length} 页' : null,
         );
         switch (result) {
           case _SmartLayoutPageOutcome.applied:
@@ -912,6 +922,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         }
       }
     } finally {
+      _smartLayoutCancelRequested = false;
       if (mounted) setState(() => _smartLayoutFlowActive = false);
     }
     final parts = <String>[
@@ -966,13 +977,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   Future<_SmartLayoutPageOutcome> _runSmartLayoutPage(
     String pageId, {
     required bool isMultiPage,
+    String? pageLabel,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
     // "重新识别"动作回到识别阶段重跑本页：用循环而非递归，防调用栈增长。
     while (true) {
       SmartLayoutTemplatePreparation? preparation;
       try {
-        preparation = await _prepareSmartLayoutWithProgress(pageId);
+        preparation = await _prepareSmartLayoutWithProgress(
+          pageId,
+          pageLabel: pageLabel,
+        );
       } on SmartLayoutCancelledException {
         // 用户主动取消识别：静默结束（不弹"失败"提示），停止整个流程。
         return _SmartLayoutPageOutcome.cancelled;
@@ -1046,29 +1061,39 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   /// 带进度浮层与取消的识别准备（首跑与"重新识别"共用）。
   /// 识别中浮层由 [_smartLayoutRecognitionProgress] 原位刷新；
   /// onProgress 在裁剪重问阶段逐块回调（total = 待转写文本块数）。
+  /// [pageLabel] 为多页流程的页码提示，随浮层文案展示。
   Future<SmartLayoutTemplatePreparation?> _prepareSmartLayoutWithProgress(
-    String pageId,
-  ) async {
+    String pageId, {
+    String? pageLabel,
+  }) async {
     _smartLayoutRecognitionProgress.value =
-        const SmartLayoutRecognitionProgress.page();
+        SmartLayoutRecognitionProgress.page(pageLabel: pageLabel);
     try {
       return await _markdrawController.prepareSmartLayoutTemplates(
         pageId: pageId,
         onProgress: (completed, total) {
+          if (!mounted) return;
           _smartLayoutRecognitionProgress.value =
               SmartLayoutRecognitionProgress.blocks(
                 completed: completed,
                 total: total,
+                pageLabel: pageLabel,
               );
         },
       );
     } finally {
-      _smartLayoutRecognitionProgress.value = null;
+      // 页面可能在识别途中退出（dispose 已释放通知器），置值前判 mounted。
+      if (mounted) {
+        _smartLayoutRecognitionProgress.value = null;
+      }
     }
   }
 
   /// 用户点击进度浮层上的"取消"：立即撤下浮层并通知控制器中止识别。
+  /// 取消不中断在途 HTTP 请求（响应返回后在检查点收尾），期间重入流程
+  /// 会被 [_startSmartLayoutFlow] 以"正在结束上次识别"提示。
   void _cancelSmartLayoutPreparation() {
+    _smartLayoutCancelRequested = true;
     _smartLayoutRecognitionProgress.value = null;
     try {
       _markdrawController.cancelSmartLayoutPreparation();

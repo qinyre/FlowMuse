@@ -160,16 +160,21 @@ class InkRecognitionRepository {
         )
         .toString();
     final token = await _readTokenForRequest();
-    final response = await NativeHttpClient.post(
-      url: url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: bodyJson,
-      connectTimeoutMs: _connectTimeoutMs,
-      readTimeoutMs: _smartLayoutReadTimeoutMs,
-    );
+    final NativeHttpResponse response;
+    try {
+      response = await NativeHttpClient.post(
+        url: url,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+        body: bodyJson,
+        connectTimeoutMs: _connectTimeoutMs,
+        readTimeoutMs: _smartLayoutReadTimeoutMs,
+      );
+    } on Exception catch (error) {
+      throwReadableNetworkError(error);
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwForNonSuccessStatus(response.statusCode, response.body, '视觉排版');
     }
@@ -189,16 +194,21 @@ class InkRecognitionRepository {
         )
         .toString();
     final token = await _readTokenForRequest();
-    final response = await NativeHttpClient.post(
-      url: url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: bodyJson,
-      connectTimeoutMs: _connectTimeoutMs,
-      readTimeoutMs: _smartLayoutReadTimeoutMs,
-    );
+    final NativeHttpResponse response;
+    try {
+      response = await NativeHttpClient.post(
+        url: url,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+        body: bodyJson,
+        connectTimeoutMs: _connectTimeoutMs,
+        readTimeoutMs: _smartLayoutReadTimeoutMs,
+      );
+    } on Exception catch (error) {
+      throwReadableNetworkError(error);
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwForNonSuccessStatus(response.statusCode, response.body, '单块转写');
     }
@@ -230,6 +240,28 @@ class InkRecognitionRepository {
       >= 500 && <= 599 => '识别服务异常（状态码 $statusCode），请稍后重试',
       _ => '识别服务请求失败（状态码 $statusCode）',
     });
+  }
+
+  /// 网络/通道异常统一转用户可读中文（服务未启动、断网、超时是演示现场最常见
+  /// 的故障形态，英文堆栈对用户毫无意义）。按 runtimeType 匹配而非直接 import
+  /// dart:io：SocketException/ClientException 在 Web 端不可用，共享代码不得引入；
+  /// TimeoutException（dart:async）与 PlatformException（flutter/services）可直接
+  /// 类型判断。无法识别的异常原样抛出（保留既有语义，由调用方兜底）。
+  @visibleForTesting
+  Never throwReadableNetworkError(Exception error) {
+    final typeName = error.runtimeType.toString();
+    final message = switch (typeName) {
+      'SocketException' => '无法连接识别服务，请检查网络与服务地址',
+      'TimeoutException' => '识别服务响应超时，请稍后重试',
+      'ClientException' => '网络请求失败，请检查网络与服务地址',
+      _ => error is PlatformException ? '网络通道异常（${error.code}），请检查网络与服务地址' : null,
+    };
+    // 日志脱敏：异常消息可能含 URL/系统错误详情，只记类型名。
+    debugPrint('[$_logTag] ❌ 网络请求异常 | ${error.runtimeType}');
+    if (message != null) {
+      throw StateError(message);
+    }
+    throw error;
   }
 
   String _summarizeTypes(InkRecognitionResult result) {

@@ -329,9 +329,10 @@ class _PageThumbnail extends StatelessWidget {
 enum SmartLayoutBarAction { apply, applyAndDrop, retry, skipPage, cancelAll }
 
 /// 识别进度状态：整页识别阶段（尚无逐块进度）或裁剪重问逐块阶段。
+/// [pageLabel] 为多页流程的页码提示（如"第 2/5 页"），单页为 null 不显示。
 @immutable
 class SmartLayoutRecognitionProgress {
-  const SmartLayoutRecognitionProgress.page()
+  const SmartLayoutRecognitionProgress.page({this.pageLabel})
     : isBlockStage = false,
       completed = 0,
       total = 0;
@@ -339,15 +340,21 @@ class SmartLayoutRecognitionProgress {
   const SmartLayoutRecognitionProgress.blocks({
     required this.completed,
     required this.total,
+    this.pageLabel,
   }) : isBlockStage = true;
 
   /// true = 裁剪重问逐块转写阶段；false = 整页识别阶段。
   final bool isBlockStage;
   final int completed;
   final int total;
+  final String? pageLabel;
 
-  String get label =>
-      !isBlockStage || total <= 0 ? '正在识别页面…' : '正在识别文字 $completed/$total';
+  String get label {
+    final stage = !isBlockStage || total <= 0
+        ? '正在识别页面…'
+        : '正在识别文字 $completed/$total';
+    return pageLabel == null ? stage : '$pageLabel · $stage';
+  }
 }
 
 /// 识别进行中的轻量浮层：进度文案 + 取消按钮。
@@ -578,6 +585,9 @@ class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
                   final saved = _savedIndexes.contains(index);
                   final changed =
                       controller.text.trim() != item.text.trim() && !saved;
+                  // 空文本禁用保存（会产生不可见的空文字元素）。
+                  final canSave =
+                      changed && controller.text.trim().isNotEmpty;
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     child: Row(
@@ -603,7 +613,7 @@ class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
                         ),
                         const SizedBox(width: 8),
                         FilledButton.tonal(
-                          onPressed: changed
+                          onPressed: canSave
                               ? () => _save(index, item.id)
                               : null,
                           child: const Text('保存'),

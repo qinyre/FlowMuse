@@ -192,6 +192,28 @@ void main() {
       );
     });
 
+    test('多页流程页码前缀；单页无页码不加前缀', () {
+      expect(
+        const SmartLayoutRecognitionProgress.page(
+          pageLabel: '第 2/5 页',
+        ).label,
+        '第 2/5 页 · 正在识别页面…',
+      );
+      expect(
+        const SmartLayoutRecognitionProgress.blocks(
+          completed: 1,
+          total: 4,
+          pageLabel: '第 2/5 页',
+        ).label,
+        '第 2/5 页 · 正在识别文字 1/4',
+      );
+      expect(
+        const SmartLayoutRecognitionProgress.page().label,
+        isNot(contains('页 ·')),
+        reason: '单页流程不带页码前缀',
+      );
+    });
+
     testWidgets('浮层渲染进度文案与取消按钮', (tester) async {
       var cancelled = false;
       await tester.pumpWidget(wrap(SmartLayoutProgressOverlay(
@@ -214,6 +236,37 @@ void main() {
       )));
       expect(find.text('正在识别页面…'), findsOneWidget);
       expect(find.text('取消'), findsNothing);
+    });
+  });
+
+  group('SmartLayoutProofreadSheet 校对编辑条', () {
+    FilledButton saveButton(WidgetTester tester) =>
+        tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, '保存'),
+        );
+
+    testWidgets('改字可保存，清空文本禁用保存（防空文字元素）', (tester) async {
+      String? revised;
+      await tester.pumpWidget(wrap(SmartLayoutProofreadSheet(
+        items: const [(id: ElementId('e1'), text: '先头小子')],
+        onRevise: (id, newText) {
+          revised = newText;
+          return true;
+        },
+      )));
+      // 初始未改字：保存禁用。
+      expect(saveButton(tester).onPressed, isNull);
+      // 改成新文字：保存可用。
+      await tester.enterText(find.byType(TextField), '先头小子已核对');
+      await tester.pump();
+      expect(saveButton(tester).onPressed, isNotNull);
+      await tester.tap(find.text('保存'));
+      expect(revised, '先头小子已核对');
+      // 清空文本：保存禁用（避免不可见空文字元素）。
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.pump();
+      expect(saveButton(tester).onPressed, isNull);
+      expect(tester.takeException(), isNull);
     });
   });
 }
