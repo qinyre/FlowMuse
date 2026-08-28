@@ -3,44 +3,47 @@ import 'dart:ui';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// 视觉优先管线：模型解析、坐标映射/元素匹配纯函数、四风格分发与回退。
-/// 文字转写统一"整页 VLM 文本优先、逐块 MyScript 兜底"；
-/// VLM 无文本且未注入 onRecognizeInk 时该项按失败处理。
+/// 视觉优先管线：模型解析、Set-of-Mark 编号直查匹配、四风格分发与回退。
+/// 文字转写为整页 VLM 单引擎（智能排版不使用 MyScript）；
+/// VLM 无文本的项按失败进红区，低把握项进低置信校对清单。
+///
+/// 标记编号约定（控制器按阅读序上→左编号）：仅 _addStrokes 时 m1=簇s1、
+/// m2=簇s2；再加 img-cat 时 m3=图片元素。
 void main() {
   group('SmartLayoutVisionElement 模型', () {
-    test('解析 box 并钳制到 0-1000、交换倒置坐标、携带引用 id', () {
+    test('解析 markIds 与引用 id；confidence 缺省 0.9 并钳制到 0-1', () {
       final element = SmartLayoutVisionElement.fromJson({
         'id': 'e2',
         'role': 'caption',
         'text': '小羊睡觉',
         'vertical': true,
         'pairId': 'pair-1',
-        'box': [-20, 1200, 500, 300],
+        'markIds': ['m3', 'm4'],
+        'confidence': 2.5,
       });
       expect(element.id, 'e2');
       expect(element.role, 'caption');
       expect(element.vertical, isTrue);
-      expect(element.x1, 0);
-      expect(element.y2, 1000);
-      // y 倒置交换后 y1 <= y2
-      expect(element.y1, lessThanOrEqualTo(element.y2));
+      expect(element.markIds, ['m3', 'm4']);
+      expect(element.confidence, 1);
+
+      final defaults = SmartLayoutVisionElement.fromJson({
+        'role': 'body',
+        'text': '缺省',
+      });
+      expect(defaults.markIds, isEmpty);
+      expect(defaults.confidence, 0.9);
     });
 
-    test('sceneRect 把归一化框映射进页面矩形', () {
-      const element = SmartLayoutVisionElement(
-        role: 'body',
-        text: '你好',
-        x1: 100,
-        y1: 50,
-        x2: 600,
-        y2: 250,
+    test('请求 toJson：marks 非空时携带编号列表', () {
+      const request = SmartLayoutVisionRequest(
+        pageId: 'p-1',
+        imageBase64: 'aGk=',
+        marks: ['m1', 'm2'],
       );
-      final pageBounds = Bounds.fromLTWH(0, 0, 1588, 2246);
-      final rect = element.sceneRect(pageBounds);
-      expect(rect.left, closeTo(158.8, 0.01));
-      expect(rect.top, closeTo(112.3, 0.01));
-      expect(rect.width, closeTo(1588 * 0.5, 0.01));
-      expect(rect.height, closeTo(2246 * 0.2, 0.01));
+      expect(request.toJson()['marks'], ['m1', 'm2']);
+      const empty = SmartLayoutVisionRequest(pageId: 'p-1', imageBase64: 'aGk=');
+      expect(empty.toJson().containsKey('marks'), isFalse);
     });
 
     test('响应解析：mindmap 结构树随 style 解析；非法树为 null', () {
@@ -57,8 +60,8 @@ void main() {
           },
         },
         'elements': [
-          {'id': 'e0', 'role': 'body', 'text': '主题', 'box': [0, 0, 10, 10]},
-          {'id': 'e1', 'role': 'body', 'text': '分支', 'box': [0, 20, 10, 30]},
+          {'id': 'e0', 'role': 'body', 'text': '主题', 'markIds': ['m1']},
+          {'id': 'e1', 'role': 'body', 'text': '分支', 'markIds': ['m2']},
         ],
       });
       expect(response.style, SmartLayoutStyle.mindmap);
@@ -86,74 +89,67 @@ void main() {
     });
   });
 
-  group('SmartLayoutVisionMatcher', () {
-    final pageBounds = Offset.zero & const Size(1000, 1000);
-
+  group('SmartLayoutVisionMatcher（Set-of-Mark 直查）', () {
     SmartLayoutVisionElement elem(
       String role,
-      double x1,
-      double y1,
-      double x2,
-      double y2, {
+      List<String> markIds, {
       String? text,
       String? pairId,
     }) => SmartLayoutVisionElement(
       role: role,
       text: text ?? (role == 'figure' ? null : '文字'),
-      x1: x1,
-      y1: y1,
-      x2: x2,
-      y2: y2,
+      markIds: markIds,
       pairId: pairId,
     );
 
-    test('归一化框按页面坐标映射后认领覆盖率达标的所有笔迹簇', () {
+    test('markIds 直查：文本项认领映射簇，未认领簇进红区', () {
       final match = SmartLayoutVisionMatcher.match(
-        elements: [elem('body', 0, 0, 1000, 400)],
-        pageBounds: pageBounds,
-        inkClusters: {
-          'a': const Rect.fromLTWH(100, 100, 200, 40),
-          'b': const Rect.fromLTWH(800, 380, 200, 40),
-          'c': const Rect.fromLTWH(850, 900, 100, 40),
-        },
-        figureUnits: {},
+        elements: [elem('body', ['m1', 'm2'])],
+        textMarks: {'m1': 'a', 'm2': 'b'},
+        figureMarks: {},
+        allClusterKeys: {'a', 'b', 'c'},
       );
       expect(match.textClaims[0], ['a', 'b']);
       expect(match.unclaimedClusterKeys, {'c'});
       expect(match.matchedItemCount, 1);
     });
 
-    test('图形项按 interArea/min 面积最大者唯一匹配场景单元', () {
+    test('同编号被多项引用时首占者赢，后项只认领剩余编号', () {
       final match = SmartLayoutVisionMatcher.match(
-        elements: [elem('figure', 0, 0, 600, 600)],
-        pageBounds: pageBounds,
-        inkClusters: {},
-        figureUnits: {
-          'img-a': const Rect.fromLTWH(0, 0, 600, 600),
-          'img-b': const Rect.fromLTWH(550, 550, 450, 450),
-        },
+        elements: [
+          elem('body', ['m1']),
+          elem('body', ['m1', 'm2']),
+        ],
+        textMarks: {'m1': 'a', 'm2': 'b'},
+        figureMarks: {},
+        allClusterKeys: {'a', 'b'},
+      );
+      expect(match.textClaims[0], ['a']);
+      expect(match.textClaims[1], ['b']);
+      expect(match.unclaimedClusterKeys, isEmpty);
+    });
+
+    test('图形与文本按映射表各归其位，未知编号忽略', () {
+      final match = SmartLayoutVisionMatcher.match(
+        elements: [
+          elem('figure', ['m9', 'm3']),
+          elem('body', ['m1']),
+        ],
+        textMarks: {'m1': 'a', 'm2': 'b'},
+        figureMarks: {'m3': 'img-a'},
+        allClusterKeys: {'a', 'b'},
       );
       expect(match.figureClaims[0], 'img-a');
-      final second = SmartLayoutVisionMatcher.match(
-        elements: [
-          elem('figure', 0, 0, 600, 600),
-          elem('figure', 10, 10, 700, 700),
-        ],
-        pageBounds: pageBounds,
-        inkClusters: {},
-        figureUnits: {'img-a': const Rect.fromLTWH(0, 0, 600, 600)},
-      );
-      expect(second.figureClaims.keys.toList(), [0]);
+      expect(match.textClaims[1], ['a']);
+      expect(match.unclaimedClusterKeys, {'b'});
     });
 
     test('认领与失败区互补：无匹配时全部簇进入失败集合', () {
       final match = SmartLayoutVisionMatcher.match(
         elements: [],
-        pageBounds: pageBounds,
-        inkClusters: {
-          'a': const Rect.fromLTWH(0, 0, 10, 10),
-        },
-        figureUnits: {},
+        textMarks: {'m1': 'a'},
+        figureMarks: {},
+        allClusterKeys: {'a'},
       );
       expect(match.matchedItemCount, 0);
       expect(match.unclaimedClusterKeys, {'a'});
@@ -187,39 +183,20 @@ void main() {
         throw StateError('不应回退');
       };
       controller.onVisionSmartLayout = (request) async {
+        expect(request.marks, hasLength(3), reason: '截图候选对象应编号发出');
         return SmartLayoutVisionResponse(
           style: SmartLayoutStyle.ppt,
           confidence: 0.92,
           elements: [
-            _boxCovering(
-              'title',
-              '手工记账',
-              200,
-              150,
-              300,
-              60,
-              id: 'e0',
-            ),
-            _boxCovering(
+            _visionElement('title', '手工记账', ['m1'], id: 'e0'),
+            _visionElement(
               'caption',
               '流水明细一整段',
-              250,
-              400,
-              280,
-              56,
+              ['m2'],
               id: 'e1',
               pairId: 'pair-1',
             ),
-            _boxCovering(
-              'figure',
-              '',
-              700,
-              600,
-              600,
-              600,
-              id: 'e2',
-              pairId: 'pair-1',
-            ),
+            _visionElement('figure', '', ['m3'], id: 'e2', pairId: 'pair-1'),
           ],
         );
       };
@@ -256,8 +233,8 @@ void main() {
             style: SmartLayoutStyle.ppt,
             confidence: 0.8,
             elements: [
-              _boxCovering('title', '手工记账', 200, 150, 300, 60),
-              _boxCovering('body', '流水明细一整段', 250, 400, 280, 56),
+              _visionElement('title', '手工记账', ['m1']),
+              _visionElement('body', '流水明细一整段', ['m2']),
             ],
           );
       final SmartLayoutPlanResult result =
@@ -293,8 +270,8 @@ void main() {
             style: SmartLayoutStyle.article,
             confidence: 0.85,
             elements: [
-              _boxCovering('title', '文章标题', 200, 150, 300, 60),
-              _boxCovering('body', '第一段内容', 250, 400, 280, 56),
+              _visionElement('title', '文章标题', ['m1']),
+              _visionElement('body', '第一段内容', ['m2']),
             ],
           );
       final SmartLayoutPlanResult result =
@@ -325,8 +302,8 @@ void main() {
             style: SmartLayoutStyle.inPlace,
             confidence: 0.6,
             elements: [
-              _boxCovering('body', '零散字一', 200, 150, 300, 60),
-              _boxCovering('body', '零散字二', 250, 400, 280, 56),
+              _visionElement('body', '零散字一', ['m1']),
+              _visionElement('body', '零散字二', ['m2']),
             ],
           );
       final SmartLayoutPlanResult result =
@@ -372,8 +349,8 @@ void main() {
               ],
             )),
             elements: [
-              _boxCovering('body', '手写要点甲', 200, 150, 300, 60, id: 'e0'),
-              _boxCovering('body', '手写要点乙', 250, 400, 280, 56, id: 'e1'),
+              _visionElement('body', '手写要点甲', ['m1'], id: 'e0'),
+              _visionElement('body', '手写要点乙', ['m2'], id: 'e1'),
             ],
           );
       final SmartLayoutPlanResult result =
@@ -401,7 +378,7 @@ void main() {
       expect(texts, contains('手写要点乙'));
     });
 
-    testWidgets('VLM 文本优先：可用时直接采用，缺失项回落 MyScript',
+    testWidgets('VLM 单引擎：有文本直接采用，无文本项进失败红区且不触发 MyScript',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 2400);
       tester.view.devicePixelRatio = 1.0;
@@ -412,16 +389,7 @@ void main() {
       var myScriptCalls = 0;
       controller.onRecognizeInk = (request) async {
         myScriptCalls++;
-        return InkRecognitionResult(elements: [
-          InkRecognizedElement(
-            type: 'text',
-            text: 'MyScript正文',
-            x: request.bounds.x,
-            y: request.bounds.y,
-            width: request.bounds.width,
-            height: request.bounds.height,
-          ),
-        ]);
+        throw StateError('智能排版不应调用 MyScript');
       };
       controller.onSmartLayoutInk = (request) async {
         throw StateError('不应回退');
@@ -430,8 +398,8 @@ void main() {
           SmartLayoutVisionResponse(
             style: SmartLayoutStyle.inPlace,
             elements: [
-              _boxCovering('body', 'VLM正文', 200, 150, 300, 60),
-              _boxCovering('body', '', 250, 400, 280, 56),
+              _visionElement('body', 'VLM正文', ['m1']),
+              _visionElement('body', '', ['m2']),
             ],
           );
       final SmartLayoutPlanResult result =
@@ -445,23 +413,72 @@ void main() {
           .whereType<TextElement>()
           .map((e) => e.text)
           .toList();
-      expect(texts, contains('VLM正文'), reason: 'VLM 有文本时直接采用，不走逐块转写');
-      expect(texts, contains('MyScript正文'), reason: 'VLM 无文本项回落 MyScript 兜底');
-      expect(myScriptCalls, 1, reason: '仅 VLM 缺失文本的元素需要 MyScript 兜底');
+      expect(texts, contains('VLM正文'), reason: 'VLM 有文本时直接采用');
+      expect(texts, isNot(contains('MyScript正文')));
+      expect(myScriptCalls, 0, reason: '智能排版已完全摘除 MyScript');
+      expect(result.hasFailures, isTrue, reason: 'VLM 无文本项按失败进红区');
+      expect(
+        plan.failedStrokeIds.map((id) => id.value),
+        contains('k-s2'),
+        reason: '无文本项的原笔迹留在红区待用户处置',
+      );
+      expect(
+        plan.lowConfidenceTexts,
+        isEmpty,
+        reason: '失败项不属于低置信校对清单',
+      );
     });
 
-    test('响应解析：元素 confidence 缺省 0.9 并钳制到 0-1', () {
-      final response = SmartLayoutVisionResponse.fromJson({
-        'style': 'in_place',
-        'elements': [
-          {'role': 'body', 'text': '未自报', 'box': [0, 0, 10, 10]},
-          {'role': 'body', 'text': '过分自信', 'box': [0, 20, 10, 30], 'confidence': 2.5},
-          {'role': 'body', 'text': '低把握', 'box': [0, 40, 10, 50], 'confidence': 0.25},
-        ],
-      });
-      expect(response.elements[0].confidence, 0.9);
-      expect(response.elements[1].confidence, 1);
-      expect(response.elements[2].confidence, 0.25);
+    testWidgets('引用未知编号的元素被忽略：对应簇留在红区且不回退经典管线',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: const ElementId('img-cat'),
+            x: 700,
+            y: 600,
+            width: 600,
+            height: 600,
+            fileId: 'file-cat',
+          ),
+        ),
+      );
+      var legacyCalled = false;
+      controller.onSmartLayoutInk = (request) async {
+        legacyCalled = true;
+        throw StateError('不应回退');
+      };
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            style: SmartLayoutStyle.ppt,
+            elements: [
+              _visionElement('figure', '', ['m3']),
+              _visionElement('body', '正常认领', ['m1']),
+              _visionElement('body', '编造编号', ['m99']),
+            ],
+          );
+      final SmartLayoutPlanResult result =
+          (await tester.runAsync(
+            () => controller.buildSmartLayoutPlan(pageId: 'page-1'),
+          ))!;
+      final plan = result.plan;
+      expect(plan, isNotNull);
+      expect(legacyCalled, isFalse);
+      expect(
+        plan!.failedStrokeIds.map((id) => id.value),
+        contains('k-s2'),
+        reason: '无有效认领的簇按未识别进红区',
+      );
+      expect(
+        plan.addElements.whereType<TextElement>().map((e) => e.text),
+        ['正常认领'],
+      );
     });
 
     testWidgets(
@@ -493,26 +510,15 @@ void main() {
               style: SmartLayoutStyle.ppt,
               confidence: 0.9,
               elements: [
-                _boxCovering('title', '手工记账', 200, 150, 300, 60),
-                _boxCovering(
+                _visionElement('title', '手工记账', ['m1']),
+                _visionElement(
                   'caption',
                   '流水明细一整段',
-                  250,
-                  400,
-                  280,
-                  56,
+                  ['m2'],
                   pairId: 'pair-1',
                   confidence: 0.2,
                 ),
-                _boxCovering(
-                  'figure',
-                  '',
-                  700,
-                  600,
-                  600,
-                  600,
-                  pairId: 'pair-1',
-                ),
+                _visionElement('figure', '', ['m3'], pairId: 'pair-1'),
               ],
             );
         final SmartLayoutPlanResult result =
@@ -521,7 +527,6 @@ void main() {
             ))!;
         final plan = result.plan!;
         expect(plan.lowConfidenceTexts, hasLength(1));
-        expect(plan.lowConfidenceTexts.single.reason, 'vlm-low');
         expect(plan.lowConfidenceTexts.single.confidence, 0.2);
         // 场景矩形可定位（PPT 家族保留原元素 id），且为有效矩形
         expect(plan.lowConfidenceRects, hasLength(1));
@@ -530,7 +535,7 @@ void main() {
       },
     );
 
-    testWidgets('低置信标注：VLM 无文本回落 MyScript → 该项标记兜底转写',
+    testWidgets('低置信标注：in_place 引擎重建元素后按 blockId 直查校对清单',
         (tester) async {
       tester.view.physicalSize = const Size(1600, 2400);
       tester.view.devicePixelRatio = 1.0;
@@ -538,49 +543,15 @@ void main() {
       final controller = _buildController();
       addTearDown(controller.dispose);
       _addStrokes(controller);
-      controller.applyResult(
-        AddElementResult(
-          ImageElement(
-            id: const ElementId('img-cat'),
-            x: 700,
-            y: 600,
-            width: 600,
-            height: 600,
-            fileId: 'file-cat',
-          ),
-        ),
-      );
-      controller.onRecognizeInk = (request) async {
-        return InkRecognitionResult(elements: [
-          InkRecognizedElement(
-            type: 'text',
-            text: 'MyScript标题',
-            x: request.bounds.x,
-            y: request.bounds.y,
-            width: request.bounds.width,
-            height: request.bounds.height,
-          ),
-        ]);
-      };
       controller.onSmartLayoutInk = (request) async {
         throw StateError('不应回退');
       };
       controller.onVisionSmartLayout = (request) async =>
           SmartLayoutVisionResponse(
-            style: SmartLayoutStyle.ppt,
-            confidence: 0.9,
+            style: SmartLayoutStyle.inPlace,
             elements: [
-              _boxCovering('title', '', 200, 150, 300, 60),
-              _boxCovering(
-                'caption',
-                '流水明细一整段',
-                250,
-                400,
-                280,
-                56,
-                pairId: 'pair-1',
-              ),
-              _boxCovering('figure', '', 700, 600, 600, 600, pairId: 'pair-1'),
+              _visionElement('body', '零散字一', ['m1'], confidence: 0.2),
+              _visionElement('body', '零散字二', ['m2']),
             ],
           );
       final SmartLayoutPlanResult result =
@@ -589,7 +560,40 @@ void main() {
           ))!;
       final plan = result.plan!;
       expect(plan.lowConfidenceTexts, hasLength(1));
-      expect(plan.lowConfidenceTexts.single.reason, 'ink-fallback');
+      expect(plan.lowConfidenceTexts.single.confidence, 0.2);
+      // legacy 引擎重建了元素 id：blockId 直查后仍能定位出场景矩形
+      expect(plan.lowConfidenceRects, hasLength(1));
+      expect(plan.lowConfidenceRects.single.isFinite, isTrue);
+    });
+
+    testWidgets('低置信标注：article 多行段落拆行后整段行元素一并标注',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      controller.onSmartLayoutInk = (request) async {
+        throw StateError('不应回退');
+      };
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            style: SmartLayoutStyle.article,
+            elements: [
+              _visionElement('body', '第一行内容\n第二行内容', ['m1'],
+                  confidence: 0.2),
+              _visionElement('body', '把握十足', ['m2']),
+            ],
+          );
+      final SmartLayoutPlanResult result =
+          (await tester.runAsync(
+            () => controller.buildSmartLayoutPlan(pageId: 'page-1'),
+          ))!;
+      final plan = result.plan!;
+      // "e0-line-0/-line-1" 两行元素都继承同一低置信来源，全部标注
+      expect(plan.lowConfidenceTexts, hasLength(2));
+      expect(plan.lowConfidenceRects, hasLength(2));
     });
 
     testWidgets('vision 接口抛异常 → 自动回退经典管线并成功', (tester) async {
@@ -676,14 +680,11 @@ void _addStrokes(MarkdrawController controller) {
   add('k-s2', 's2', 250, 400, 280, 56);
 }
 
-/// 由场景矩形反推 0-1000 归一化框（页面固定 1588x2246）。
-SmartLayoutVisionElement _boxCovering(
+/// Set-of-Mark 测试桩：直接以编号引用候选对象（m1=簇s1、m2=簇s2、m3=img-cat）。
+SmartLayoutVisionElement _visionElement(
   String role,
   String text,
-  double left,
-  double top,
-  double width,
-  double height, {
+  List<String> markIds, {
   String? id,
   String? pairId,
   double confidence = 0.9,
@@ -691,10 +692,7 @@ SmartLayoutVisionElement _boxCovering(
   id: id,
   role: role,
   text: text.isEmpty ? null : text,
-  x1: left / 1588 * 1000 - 5,
-  y1: top / 2246 * 1000 - 5,
-  x2: (left + width) / 1588 * 1000 + 5,
-  y2: (top + height) / 2246 * 1000 + 5,
+  markIds: markIds,
   pairId: pairId,
   confidence: confidence,
 );

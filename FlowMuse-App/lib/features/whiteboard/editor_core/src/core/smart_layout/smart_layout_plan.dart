@@ -15,14 +15,12 @@ class SmartLayoutLowConfidenceText {
   const SmartLayoutLowConfidenceText({
     required this.elementId,
     required this.confidence,
-    required this.reason,
   });
 
   final ElementId elementId;
-  final double confidence;
 
-  /// 'vlm-low'（VLM 自报把握不足）或 'ink-fallback'（回落逐块转写）。
-  final String reason;
+  /// VLM 对该项认字把握的自评分（< kSmartLayoutLowConfidenceThreshold）。
+  final double confidence;
 }
 
 /// 一次"确定"后的智能排版本页计划：所有坐标已由客户端算好，apply 不依赖网络。

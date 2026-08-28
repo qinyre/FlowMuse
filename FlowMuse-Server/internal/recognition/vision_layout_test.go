@@ -42,14 +42,15 @@ func sampleVisionRequest() VisionLayoutRequest {
 		NoteTitle:   "我的笔记",
 		ImageMime:   "image/png",
 		ImageBase64: "dGVzdA==",
+		Marks:       []string{"m1", "m2", "m3"},
 	}
 }
 
 func TestVisionLayoutParsesAndMapsPageID(t *testing.T) {
 	content := `{"style":"ppt","confidence":0.9,"elements":[` +
-		`{"role":"title","text":"手工记账","box":[100,50,800,150]},` +
-		`{"role":"figure","text":"","box":[100,300,500,700],"pairId":"pair-1"},` +
-		`{"role":"caption","text":"小羊睡觉","vertical":true,"box":[120,720,420,780],"pairId":"pair-1"}]}`
+		`{"role":"title","text":"手工记账","markIds":["m1"]},` +
+		`{"role":"figure","text":"","markIds":["m2"],"pairId":"pair-1"},` +
+		`{"role":"caption","text":"小羊睡觉","vertical":true,"markIds":["m3"],"pairId":"pair-1"}]}`
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
 	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
 	if err != nil {
@@ -69,27 +70,34 @@ func TestVisionLayoutParsesAndMapsPageID(t *testing.T) {
 	}
 }
 
-func TestVisionLayoutClampsOutOfRangeCoordinates(t *testing.T) {
-	content := `{"style":"ppt","elements":[{"role":"body","text":"越界","box":[-20,-30,1200,2000]}]}`
+func TestVisionLayoutMarkReferencesValidated(t *testing.T) {
+	content := `{"style":"in_place","elements":[` +
+		`{"role":"body","text":"未知编号","markIds":["m9"]},` + // 不在请求标记里 → 丢元素
+		`{"role":"body","text":"多项合并","markIds":["m2","m1","m99"]},` + // 剔除未知，保留 m2,m1
+		`{"role":"body","text":"重复引用","markIds":["m1"]},` + // m1 已被前项占用 → 剔空丢元素
+		`{"role":"body","text":"无引用","markIds":[]},` + // 空 → 丢元素
+		`{"role":"body","text":"正常单项","markIds":["m3"]}]}` // 透传
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
 	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
 	if err != nil {
 		t.Fatalf("VisionLayout error: %v", err)
 	}
-	box := response.Elements[0].Box
-	want := []float64{0, 0, 1000, 1000}
-	for i := range want {
-		if box[i] != want[i] {
-			t.Fatalf("box[%d] = %v, want %v", i, box[i], want[i])
-		}
+	if len(response.Elements) != 2 {
+		t.Fatalf("elements = %d, want 2", len(response.Elements))
+	}
+	if got := strings.Join(response.Elements[0].MarkIds, ","); got != "m2,m1" {
+		t.Fatalf("first element markIds = %q, want m2,m1", got)
+	}
+	if got := strings.Join(response.Elements[1].MarkIds, ","); got != "m3" {
+		t.Fatalf("second element markIds = %q, want m3", got)
 	}
 }
 
 func TestVisionLayoutElementConfidenceNormalized(t *testing.T) {
 	content := `{"style":"in_place","elements":[` +
-		`{"role":"body","text":"未自报把握","box":[10,10,200,80]},` + // 缺省 → 0.9
-		`{"role":"body","text":"潦草字","confidence":0.25,"box":[10,100,200,170]},` + // 透传
-		`{"role":"body","text":"过分自信","confidence":2.5,"box":[10,190,200,260]}]}` // 越界 → 1
+		`{"role":"body","text":"未自报把握","markIds":["m1"]},` + // 缺省 → 0.9
+		`{"role":"body","text":"潦草字","confidence":0.25,"markIds":["m2"]},` + // 透传
+		`{"role":"body","text":"过分自信","confidence":2.5,"markIds":["m3"]}]}` // 越界 → 1
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
 	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
 	if err != nil {
@@ -103,14 +111,12 @@ func TestVisionLayoutElementConfidenceNormalized(t *testing.T) {
 	}
 }
 
-func TestVisionLayoutDropsHallucinatedTextAndDegenerateBoxes(t *testing.T) {
+func TestVisionLayoutDropsHallucinatedTextAndNormalizesRoles(t *testing.T) {
 	content := `{"style":"in_place","elements":[` +
-		`{"role":"body","text":"","box":[10,10,200,80]},` + // 文字角色无文字 → 幻觉，丢弃
-		`{"role":"figure","text":"","box":[10,10,11,11]},` + // 退化框（1x1）→ 丢弃？不，>=1 合法
-		`{"role":"figure","text":"","box":[5,5,4,40]},` + // x2<x1 → 丢弃
-		`{"role":"unknown-role","text":"角色未知","box":[10,10,200,80]},` + // 归为 body 保留
-		`{"role":"title","text":"标题一","box":[0,0,900,60]},` +
-		`{"role":"title","text":"标题二","box":[0,70,900,130]}]}` // 第二个 title 降级 body
+		`{"role":"body","text":"","markIds":["m1"]},` + // 文字角色无文字 → 幻觉，丢弃
+		`{"role":"unknown-role","text":"角色未知","markIds":["m1"]},` + // 归为 body 保留
+		`{"role":"title","text":"标题一","markIds":["m2"]},` +
+		`{"role":"title","text":"标题二","markIds":["m3"]}]}` // 第二个 title 降级 body
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
 	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
 	if err != nil {
@@ -121,14 +127,14 @@ func TestVisionLayoutDropsHallucinatedTextAndDegenerateBoxes(t *testing.T) {
 		roles = append(roles, element.Role)
 	}
 	joined := strings.Join(roles, ",")
-	want := "figure,body,title,body"
+	want := "body,title,body"
 	if joined != want {
 		t.Fatalf("roles = %q (%d), want %q", joined, len(roles), want)
 	}
 }
 
 func TestVisionLayoutBadStyleFallsBackToInPlace(t *testing.T) {
-	content := `{"style":"diagram","elements":[{"role":"body","text":"内容","box":[1,1,99,99]}]}`
+	content := `{"style":"diagram","elements":[{"role":"body","text":"内容","markIds":["m1"]}]}`
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
 	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
 	if err != nil {
@@ -148,8 +154,8 @@ func TestVisionLayoutInvalidJSONReturnsError(t *testing.T) {
 
 func TestVisionLayoutAssignsElementIDs(t *testing.T) {
 	content := `{"style":"article","elements":[` +
-		`{"role":"title","text":"标题","box":[0,0,900,60]},` +
-		`{"role":"body","text":"正文","box":[10,100,700,160]}]}`
+		`{"role":"title","text":"标题","markIds":["m1"]},` +
+		`{"role":"body","text":"正文","markIds":["m2"]}]}`
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
 	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
 	if err != nil {
@@ -162,9 +168,9 @@ func TestVisionLayoutAssignsElementIDs(t *testing.T) {
 
 func TestVisionLayoutMindmapStructureValidated(t *testing.T) {
 	content := `{"style":"mindmap","confidence":0.9,"elements":[` +
-		`{"role":"body","text":"主题","box":[0,0,200,40]},` +
-		`{"role":"body","text":"分支一","box":[10,50,200,90]},` +
-		`{"role":"figure","box":[300,50,500,150]}],` +
+		`{"role":"body","text":"主题","markIds":["m1"]},` +
+		`{"role":"body","text":"分支一","markIds":["m2"]},` +
+		`{"role":"figure","markIds":["m3"]}],` +
 		`"structure":{"root":{"text":"","blockIds":["e0","e9"],"children":[` +
 		`{"text":"分支","blockIds":["e1"]}]}}}`
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
@@ -192,7 +198,7 @@ func TestVisionLayoutMindmapStructureValidated(t *testing.T) {
 
 func TestVisionLayoutMindmapDanglingRefsFallBackInPlace(t *testing.T) {
 	content := `{"style":"mindmap","elements":[` +
-		`{"role":"body","text":"主题","box":[0,0,200,40]}],` +
+		`{"role":"body","text":"主题","markIds":["m1"]}],` +
 		`"structure":{"root":{"text":"","blockIds":["e5"]}}}`
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
 	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
@@ -205,7 +211,7 @@ func TestVisionLayoutMindmapDanglingRefsFallBackInPlace(t *testing.T) {
 }
 
 func TestVisionLayoutNonMindmapClearsStructure(t *testing.T) {
-	content := `{"style":"ppt","elements":[{"role":"title","text":"T","box":[0,0,100,20]}],"structure":{"root":{}}}`
+	content := `{"style":"ppt","elements":[{"role":"title","text":"T","markIds":["m1"]}],"structure":{"root":{}}}`
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
 	response, err := layouter.VisionLayout(context.Background(), sampleVisionRequest())
 	if err != nil {

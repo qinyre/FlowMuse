@@ -19,15 +19,20 @@ type VisionLayouter interface {
 	VisionLayout(context.Context, VisionLayoutRequest) (VisionLayoutResponse, error)
 }
 
-// visionLayoutPrompt 是 VLM 的核心指令（0-1000 归一化坐标惯例见计划 2026-08-26）。
+// visionLayoutPrompt 是 VLM 的核心指令（Set-of-Mark：候选对象由客户端编号标出，
+// 模型只引用编号、不做坐标回归，见计划 2026-08-27 修订二）。
 const visionLayoutPrompt = `你是一个白板笔记智能排版引擎。给定一页白板的整页截图（可能附带笔记标题），请识别页面上的全部手写内容与图示，并给出版式结构。
 
+截图上的候选对象（手写笔迹簇、图片、图形等）已用彩色外框标出，每个外框左上角有一个
+编号标签（m1、m2、……）。你引用内容时只能使用这些编号，禁止编造截图上不存在的编号。
+
 工作方式：
-1. 先逐区域扫描（上→中→下，左→右），把每一块连续的文字/图形都找出来，再统一输出。
+1. 先逐区域扫描（上→中→下，左→右），读懂每个编号对象的内容与角色，再统一输出。
 2. 忠实转写认出的文字；看不清的字不要编造，尽力写下你最有把握的读法。
 3. 禁止发明页面上不存在的内容。
-
-坐标系：0-1000 归一化，左上角为原点。box=[x1,y1,x2,y2]，是该内容在截图中的外接框。
+4. 转写只能依据笔迹形状本身：禁止参考照片/插图内容来猜测文字（不要把图中人物、
+   场景、品牌猜成人名或词句）；没有把握的字符宁可在 confidence 里如实给低分，
+   也不要顺着画面联想。
 
 角色定义：
 - title：页面大标题（字号最大或位于顶部），最多 1 个。
@@ -36,6 +41,8 @@ const visionLayoutPrompt = `你是一个白板笔记智能排版引擎。给定�
 - figure：图片、插图、几何图形、图表等非文字内容（text 留空）。
 
 其他标注：
+- markIds：该项内容对应的编号列表。一句连续手写被外框拆成多个编号时，把这几个编号
+  都放进 markIds；其余情况通常只有一个编号。每个编号全局只能被一个项引用。
 - vertical：竖排文字（从上往下书写）置 true。
 - pairId：figure 与它的 caption 用相同的 pairId（如 "pair-1"）配对。
 - confidence：你对这项认字把握的自评分（0 到 1 小数）；看不清、连笔潦草时如实给低分。
@@ -47,7 +54,7 @@ style 判定：
 - in_place：内容零散，看不出上述风格。
 
 输出规则（严格 JSON，禁止任何额外文字或 Markdown 代码围栏）：
-{"style":"ppt|mindmap|article|in_place","confidence":0.0到1.0的小数,"elements":[{"role":"title|caption|body|figure","text":"...","vertical":false,"box":[x1,y1,x2,y2],"pairId":"...","confidence":0.0到1.0的小数}]}
+{"style":"ppt|mindmap|article|in_place","confidence":0.0到1.0的小数,"elements":[{"role":"title|caption|body|figure","text":"...","vertical":false,"markIds":["m1"],"pairId":"...","confidence":0.0到1.0的小数}]}
 
 structure（仅 style=mindmap 时输出，其他 style 省略或输出 {}）：
 {"root":{"text":"节点文字","blockIds":["e0","e3"],"children":[...]}}
@@ -98,14 +105,21 @@ func (l *OpenAICompatibleSmartLayouter) VisionLayout(
 		log.Printf("[smart-layout] vision parse failed: %v", err)
 		return VisionLayoutResponse{}, err
 	}
-	sanitizeVisionLayoutResponse(&response, request.PageID)
+	sanitizeVisionLayoutResponse(&response, request.PageID, request.Marks)
 	return response, nil
 }
 
-// sanitizeVisionLayoutResponse 校验并规范化 VLM 输出：角色白名单、坐标钳制 [0,1000]、
-// 文字角色必须有文字（幻觉过滤）、title 唯一、元素数上限；mindmap 结构树引用校验。
-func sanitizeVisionLayoutResponse(response *VisionLayoutResponse, pageID string) {
+// sanitizeVisionLayoutResponse 校验并规范化 VLM 输出：角色白名单、markIds 引用校验
+// （必须出自请求标记且全局不重复，剔空丢元素）、文字角色必须有文字（幻觉过滤）、
+// title 唯一、元素数上限；mindmap 结构树引用校验。
+func sanitizeVisionLayoutResponse(response *VisionLayoutResponse, pageID string, marks []string) {
 	response.PageID = pageID
+	validMarks := make(map[string]bool, len(marks))
+	for _, mark := range marks {
+		if id := strings.TrimSpace(mark); id != "" {
+			validMarks[id] = true
+		}
+	}
 	switch strings.ToLower(strings.TrimSpace(response.Style)) {
 	case layoutStylePPT:
 		response.Style = layoutStylePPT
@@ -123,6 +137,7 @@ func sanitizeVisionLayoutResponse(response *VisionLayoutResponse, pageID string)
 	}
 	normalized := make([]VisionLayoutElement, 0, len(response.Elements))
 	hasTitle := false
+	usedMarks := make(map[string]bool, len(validMarks))
 	for _, element := range response.Elements {
 		element.Role = strings.ToLower(strings.TrimSpace(element.Role))
 		switch element.Role {
@@ -144,11 +159,21 @@ func sanitizeVisionLayoutResponse(response *VisionLayoutResponse, pageID string)
 			// 幻觉过滤：文字角色没有可转写的文字则丢弃。
 			continue
 		}
-		box, ok := normalizeVisionBox(element.Box)
-		if !ok {
+		markIds := make([]string, 0, len(element.MarkIds))
+		for _, rawID := range element.MarkIds {
+			id := strings.TrimSpace(rawID)
+			if !validMarks[id] || usedMarks[id] {
+				// 编造的、请求里没有的、或已被前项引用的编号一律剔除。
+				continue
+			}
+			usedMarks[id] = true
+			markIds = append(markIds, id)
+		}
+		if len(markIds) == 0 {
+			// 无有效编号引用 = 无法绑定到场景对象，丢弃。
 			continue
 		}
-		element.Box = box
+		element.MarkIds = markIds
 		if element.Confidence <= 0 {
 			// 未自报把握时按宽松默认处理，避免老提示词输出被整体判为低置信。
 			element.Confidence = 0.9
@@ -266,24 +291,4 @@ func sanitizeVisionMindmapNode(
 func nodeText(value any) string {
 	s, _ := value.(string)
 	return s
-}
-
-// normalizeVisionBox 钳制每个坐标到 [0,1000] 并保证 x2>x1、y2>y1；退化框返回 false。
-func normalizeVisionBox(raw []float64) ([]float64, bool) {
-	if len(raw) != 4 {
-		return nil, false
-	}
-	clamped := make([]float64, 4)
-	for i, value := range raw {
-		if value < 0 {
-			value = 0
-		} else if value > 1000 {
-			value = 1000
-		}
-		clamped[i] = value
-	}
-	if clamped[2]-clamped[0] < 1 || clamped[3]-clamped[1] < 1 {
-		return nil, false
-	}
-	return clamped, true
 }

@@ -74,29 +74,30 @@ type SmartLayoutLayoutDecision struct {
 	Structure  map[string]any `json:"structure,omitempty"`
 }
 
-// VisionLayoutRequest 是视觉优先管线的请求：整页截图（+可选笔记标题），
-// VLM 一次调用完成认字、结构理解、图文配对与风格判定。
+// VisionLayoutRequest 是视觉优先管线的请求：整页截图（含编号标记，Set-of-Mark）
+// 与可选笔记标题，VLM 一次调用完成认字、结构理解、图文配对与风格判定。
 type VisionLayoutRequest struct {
-	PageID      string `json:"pageId"`
-	NoteTitle   string `json:"noteTitle,omitempty"`
-	ImageMime   string `json:"imageMime,omitempty"`
-	ImageBase64 string `json:"imageBase64"`
+	PageID      string   `json:"pageId"`
+	NoteTitle   string   `json:"noteTitle,omitempty"`
+	ImageMime   string   `json:"imageMime,omitempty"`
+	ImageBase64 string   `json:"imageBase64"`
+	Marks       []string `json:"marks,omitempty"` // 截图上已画出的编号标记（m1、m2...），输出引用必须出自这里
 }
 
 // VisionLayoutElement 是 VLM 对页面内一项内容的描述。
-// Box 为 0-1000 归一化坐标 [x1,y1,x2,y2]（左上原点，Qwen2-VL/Gemini 惯例）。
+// MarkIds 引用截图上的编号标记（客户端已确定性映射回场景对象），不做坐标回归。
 // ID 由服务端按输出顺序分配（"e0"、"e1"...），供 mindmap 结构树引用。
 type VisionLayoutElement struct {
-	ID         string    `json:"id,omitempty"`
-	Role       string    `json:"role"` // title | caption | body | figure
-	Text       string    `json:"text,omitempty"`
-	Vertical   bool      `json:"vertical,omitempty"`
-	Box        []float64 `json:"box"`
-	PairID     string    `json:"pairId,omitempty"`
-	Confidence float64   `json:"confidence,omitempty"`
+	ID         string   `json:"id,omitempty"`
+	Role       string   `json:"role"` // title | caption | body | figure
+	Text       string   `json:"text,omitempty"`
+	Vertical   bool     `json:"vertical,omitempty"`
+	MarkIds    []string `json:"markIds,omitempty"`
+	PairID     string   `json:"pairId,omitempty"`
+	Confidence float64  `json:"confidence,omitempty"`
 }
 
-// VisionLayoutResponse 是视觉排版的判定结果；坐标为粗位置，客户端模板精修落位。
+// VisionLayoutResponse 是视觉排版判定结果；客户端按 markIds 直查场景对象后模板精修落位。
 // Structure 仅在 style=mindmap 时有效：{"root":{"text","blockIds":["e0"...],"children"}}。
 type VisionLayoutResponse struct {
 	PageID     string                `json:"pageId,omitempty"`
