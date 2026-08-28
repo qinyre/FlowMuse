@@ -155,6 +155,24 @@
 - **R4（最后且可裁）**：critique mode 端到端 + 开关 + 超时回退用例（flag 默认关）。
 - 每轮结束：门禁全绿 → 本地提交（中文信息）→ 用户真机验收后再进下一轮。
 
+## 执行结果（R2 · 2026-08-27 第二次真机反馈驱动）
+
+真机反馈三问题 → 归因与处置：
+① 标题被转写成"薛之谦"（用户未写）= VLM 被照片内容带偏的幻觉 → prompt 加第 4 条
+   硬约束（只依据笔迹转写、禁止参考照片/插图猜人名词句、没把握如实给低 confidence）；
+② "校对 N 处"按钮没出现 = 该页判定为 in_place，legacy 引擎重建元素 id 使 R1 标注
+   失效（已知限制正好踩中）→ R2-D 跨引擎回填：按原转写文本匹配 plan.addElements
+   首个未占用同文 TextElement 回填 id（同文重复时单边漏标可接受）；
+③ "总结/照片已认出但原笔迹仍标红"= 拆簇后 VLM 框只罩住部分簇 → R2-C 匹配器增强：
+   中心点命中框（外扩 8pt）或覆盖率 ≥0.35 即认领 + 二次合并扫描（未认领簇与已认领
+   项并集框交叠 ≥50% 并入，治半认半红）。
+另按用户决定：**智能排版完全摘除 MyScript**（视觉路径 fallback、经典路径 myscript
+引擎分支、UI"选择识别模式"弹窗、SmartLayoutRecognitionEngine 枚举一并移除；
+onRecognizeInk 字段保留给独立"手写字迹识别"流程）；VLM 无文本项改为直接失败进红区。
+
+门禁：go test/vet 绿；flutter analyze 0 error；vision+placement 定向 22/22；全量
+flutter test 见提交说明。注意：服务端需重新部署（prompt 反幻觉约束）。
+
 ## 执行结果（R1 · 2026-08-27）
 
 - ①服务端：prompt 元素示例加 `confidence`（自评把握、连笔潦草如实低分）；sanitize
@@ -165,7 +183,7 @@
   （PPT 家族引擎 copyWith 保 id → 可定位；legacy/mindmap 内部重建 id → R1 暂不
   标注，已知限制）；Plan 新增 lowConfidenceTexts/lowConfidenceRects/
   withLowConfidenceTexts；GhostSpec.failures 增 lowConfidenceRects；painter 橙
-  #F08C00 虚线。
+  #F08C00 虚线。（历史注记：R2 已移除 inkFallback 机制并新增跨引擎回填，见上节。）
 - ④校对闭环：控制器登记草稿低置信 id 清单并暴露 proofreadItems /
   lowConfidenceRects / reviseSmartLayoutDraftText（UpdateElementResult 同 id 原位
   替换、TextRenderer 重测尺寸）；确认条"校对 N 处"按钮（无校对项时隐藏）→
