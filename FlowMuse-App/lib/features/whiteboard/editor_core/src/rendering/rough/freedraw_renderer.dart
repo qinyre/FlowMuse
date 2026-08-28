@@ -26,9 +26,6 @@ import 'pencil_shader.dart';
 /// 禁止给 StrokeOptions 传非默认 easing：压力烘焙等价性仅在 identity
 /// 下成立（见 BrushRenderProfile 文档）。
 class FreedrawRenderer {
-  /// 铅笔纹理频率种子（T5 起按笔宽派生；此处先固定为 shader 原默认值）。
-  static const double _kPencilTextureFreq = 0.7;
-
   /// Builds a smooth [Path] through the given freehand [points] (等粗,
   /// 用于无压感退化或外部调用)。
   ///
@@ -271,20 +268,47 @@ class FreedrawRenderer {
       // 不隐式创建 saveLayer。
       ..blendMode = _blendModeOf(profile);
 
-    // 铅笔纹理：shader 可用时复用应用级单实例（每元素 set uniform 后立即
-    // drawPath；engine 逐 draw 快照 uniform，跨元素安全）。
-    if (brushType == BrushType.pencil && profile.usesPencilTexture) {
+    // 铅笔纹理（T5）：
+    // - shader 可用：复用应用级单实例，纹理频率按“画布（场景）坐标 +
+    //   笔宽”派生（freq = 4/size，除以当前设备缩放，视口缩放不改变
+    //   场景内的颗粒尺度），每元素 set uniform 后立即 drawPath（engine
+    //   逐 draw 快照 uniform，跨元素安全），保持一次主要轮廓绘制；
+    // - shader 不可用：确定性降级——由首点坐标、笔宽和点序号派生的
+    //   伪随机扰动生成一条复合颗粒 Path，最多一次额外 drawPath，
+    //   同输入两次重绘逐笔一致，禁止每帧随机与逐点 draw。
+    final usePencilTexture =
+        brushType == BrushType.pencil && profile.usesPencilTexture;
+    var pencilShaderApplied = false;
+    if (usePencilTexture) {
       final shader = PencilShader.acquire();
       final uniforms = PencilShader.uniforms();
       if (shader != null && uniforms != null) {
         final c = paint.color;
-        uniforms.apply(c, c.a, _kPencilTextureFreq);
+        final deviceScale = _canvasScale(canvas);
+        uniforms.apply(c, c.a, 4.0 / size / deviceScale);
         paint.shader = shader;
         paint.color = const Color(0xFFFFFFFF); // shader 负责着色
+        pencilShaderApplied = true;
       }
     }
 
     canvas.drawPath(path, paint);
+
+    if (usePencilTexture && !pencilShaderApplied) {
+      final wholeLength = wholeStrokeRawLength ?? _polylineLength(points);
+      final grainPath = _buildPencilGrainPath(
+        points,
+        size,
+        skipStart: profile.startTaperDistance(style.strokeWidth, wholeLength),
+        skipEnd: profile.endTaperDistance(style.strokeWidth, wholeLength),
+      );
+      final grainPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = math.max(0.6, size / 8)
+        ..color = paint.color.withValues(alpha: paint.color.a * 0.5);
+      canvas.drawPath(grainPath, grainPaint);
+    }
+
     metricsSink?.onMetrics(
       StrokeRenderMetrics(
         outlinePointCount: outlineVectors.length,
@@ -292,6 +316,60 @@ class FreedrawRenderer {
         pathBuildDuration: pathBuildDuration,
       ),
     );
+  }
+
+  /// 当前画布的设备缩放（transform 的 X 轴向量模长），0 时兜底 1。
+  static double _canvasScale(Canvas canvas) {
+    final m = canvas.getTransform();
+    final scale = math.sqrt(m[0] * m[0] + m[1] * m[1]);
+    return scale <= 0 ? 1.0 : scale;
+  }
+
+  /// 降级铅笔颗粒：沿中心线按 size/3 步长布点，每点一条垂直短线，
+  /// 长度与切向偏移由 [PencilGrainHash] 派生（确定性：同输入同输出）。
+  /// 笔锋区间（[skipStart]/[skipEnd] 弧长）不布颗粒——轮廓在收锋区
+  /// 变窄，全宽颗粒会越出轮廓。所有线段并入一条 Path，绘制侧只产生
+  /// 一次额外 drawPath。
+  static Path _buildPencilGrainPath(
+    List<Point> points,
+    double size, {
+    double skipStart = 0,
+    double skipEnd = 0,
+  }) {
+    final path = Path();
+    if (points.length < 2) return path;
+    final stride = math.max(1, (size / 3).round());
+    final first = points.first;
+    final totalLength = _polylineLength(points);
+    var arc = 0.0;
+    for (var i = 0; i < points.length; i++) {
+      if (i > 0) {
+        final dx = points[i].x - points[i - 1].x;
+        final dy = points[i].y - points[i - 1].y;
+        arc += math.sqrt(dx * dx + dy * dy);
+      }
+      if (i % stride != 0) continue;
+      // 跳过笔锋区间
+      final remaining = totalLength - arc;
+      if (arc < skipStart || remaining < skipEnd) continue;
+      final prev = points[i > 0 ? i - 1 : i];
+      final next = points[i < points.length - 1 ? i + 1 : i];
+      var tx = next.x - prev.x;
+      var ty = next.y - prev.y;
+      final tLen = math.sqrt(tx * tx + ty * ty);
+      if (tLen < 1e-9) continue;
+      tx /= tLen;
+      ty /= tLen;
+      final h1 = PencilGrainHash.hash(first.x, first.y, size, i);
+      final h2 = PencilGrainHash.hash(first.y, size, first.x, i + 1);
+      final half = size / 2 * (0.3 + 0.6 * h1);
+      final shift = (h2 - 0.5) * stride * 0.5;
+      final cx = points[i].x + tx * shift;
+      final cy = points[i].y + ty * shift;
+      path.moveTo(cx - ty * half, cy + tx * half);
+      path.lineTo(cx + ty * half, cy - tx * half);
+    }
+    return path;
   }
 
   static List<PointVector> _asPointVectors(List<Offset> outline) => [

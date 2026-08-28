@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -116,5 +117,17 @@ class PencilShaderUniforms {
     _colorB.set(color.b);
     _opacity.set(alpha);
     _freq.set(freq);
+  }
+}
+
+/// 铅笔纹理降级路径的确定性伪随机（issue #5 T5）。
+///
+/// 由首点坐标、笔宽与点序号派生，不依赖 Random/时间——同输入两次重绘
+/// 逐笔一致；几何或宽度不同的笔迹纹理分布不同。
+abstract final class PencilGrainHash {
+  static double hash(double a, double b, double c, int index) {
+    final x = a * 12.9898 + b * 78.233 + c * 37.719 + index * 3.717;
+    final s = math.sin(x) * 43758.5453;
+    return s - s.floorToDouble();
   }
 }
