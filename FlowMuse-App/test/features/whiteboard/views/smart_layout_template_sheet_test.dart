@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/views/smart_layout_template_sheet.dart';
 import 'package:flutter/material.dart';
@@ -128,5 +126,37 @@ void main() {
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
     expect(picked.value, isNull);
+  });
+
+  testWidgets('窄视口：三卡纵向铺满、无溢出，首卡可见可点', (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final picked = await openSheet(tester, buildPreparation());
+    expect(tester.takeException(), isNull, reason: '窄视口不得溢出');
+    // 纵向铺满：缩略图宽度接近可用宽度（400 - 32 内边距），远大于横排均分
+    final thumbWidth = tester
+        .getSize(find.byKey(const ValueKey('template-thumb-handout')))
+        .width;
+    expect(thumbWidth, greaterThan(300));
+    // 首卡可见可点
+    expect(find.text('图文讲义'), findsOneWidget);
+    await tester.tap(find.text('图文讲义'));
+    await tester.pumpAndSettle();
+    expect(picked.value, SmartLayoutTemplateKind.handout);
+  });
+
+  testWidgets('窄视口：滚动后末卡可见可点（纵向滚动列表）', (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final picked = await openSheet(tester, buildPreparation());
+    await tester.drag(find.text('图文讲义'), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('原文整理'), findsOneWidget);
+    await tester.tap(find.text('原文整理'));
+    await tester.pumpAndSettle();
+    expect(picked.value, SmartLayoutTemplateKind.inplace);
   });
 }

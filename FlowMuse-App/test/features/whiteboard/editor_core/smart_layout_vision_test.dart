@@ -560,6 +560,110 @@ void main() {
       );
     });
 
+    testWidgets('识别中取消 → 抛取消异常；再次准备正常工作（状态重置）',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      // 模拟用户在 VLM 处理期间点取消：vision mock 内先取消、延迟后返回结果，
+      // prepare 应在检查点中止而不消费结果。
+      controller.onVisionSmartLayout = (request) {
+        controller.cancelSmartLayoutPreparation();
+        return Future<SmartLayoutVisionResponse>.delayed(
+          const Duration(milliseconds: 50),
+          () => SmartLayoutVisionResponse(
+            elements: [_visionElement('body', '不该被消费', ['m1'])],
+          ),
+        );
+      };
+      Object? caught;
+      await tester.runAsync(() async {
+        try {
+          await controller.prepareSmartLayoutTemplates(pageId: 'page-1');
+        } catch (error) {
+          caught = error;
+        }
+      });
+      expect(caught, isA<SmartLayoutCancelledException>());
+
+      // 取消状态在下一次准备开始时重置：正常识别可完整走通。
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            elements: [_visionElement('body', '正常文本', ['m1'])],
+          );
+      final preparation = await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      );
+      expect(preparation, isNotNull, reason: '取消后再次准备应正常工作');
+    });
+
+    testWidgets('全部文本被剥空且重问失败 → 提示重试（无空模板卡）', (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      // 服务端回显剥离后保留的空文本元素形态：认领了簇但无文字。
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            elements: [_visionElement('body', '', ['m1'])],
+          );
+      controller.onTranscribeCrop = (request) async =>
+          const SmartLayoutTranscribeResponse(text: '', confidence: 0);
+      Object? caught;
+      await tester.runAsync(() async {
+        try {
+          await controller.prepareSmartLayoutTemplates(pageId: 'page-1');
+        } catch (error) {
+          caught = error;
+        }
+      });
+      expect(caught, isA<StateError>());
+      expect(
+        (caught as StateError).message,
+        contains('未能识别出页面内容'),
+        reason: '退化页应直接提示重试，而不是给三张空模板卡',
+      );
+    });
+
+    testWidgets('figure-only 页（有图无字）不视为空内容', (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: const ElementId('img-only'),
+            x: 700,
+            y: 600,
+            width: 600,
+            height: 600,
+            fileId: 'file-only',
+          ),
+        ),
+      );
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            elements: [
+              // 两簇手写未被认领（进红区），仅图片被认领为图。
+              _visionElement('figure', '', ['m3']),
+            ],
+          );
+      final preparation = await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      );
+      expect(preparation, isNotNull, reason: '有图即可排版，不算空内容');
+      expect(preparation!.content.looseFigures, hasLength(1));
+      expect(preparation.failedStrokeIds, isNotEmpty);
+    });
+
     testWidgets('vision 接口抛异常 → 直接向上抛出（无经典管线回退）', (tester) async {
       tester.view.physicalSize = const Size(1600, 2400);
       tester.view.devicePixelRatio = 1.0;

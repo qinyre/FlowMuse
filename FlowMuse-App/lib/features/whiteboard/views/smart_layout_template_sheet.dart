@@ -8,6 +8,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 /// 模板选择卡：识别完成后展示三张模板卡，每卡用本页真实内容按该模板
 /// 预落位的结果渲染缩略图（所见即所得）；点选后进入既有草稿态，
 /// 关闭即取消（零残留）。放不下的模板置灰并标注。
+/// 窄屏（可用宽度 < 560）时三卡改纵向铺满列表，避免横排拥挤。
 Future<SmartLayoutTemplateKind?> showSmartLayoutTemplateSheet({
   required BuildContext context,
   required SmartLayoutTemplatePreparation preparation,
@@ -24,54 +25,77 @@ class SmartLayoutTemplateSheet extends StatelessWidget {
 
   final SmartLayoutTemplatePreparation preparation;
 
+  /// 横排三卡的最低可用宽度（每卡缩略图 + 间距 + 内边距）。
+  static const double _wideLayoutBreakpoint = 560;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '选择排版模板',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  tooltip: '取消',
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
-            Text(
-              'AI 已识别本页内容，点选一个模板进入预览（可拖动微调后再确认）。',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                for (final kind in SmartLayoutTemplateKind.values) ...[
+        // 窄屏下三卡纵向列表会超出弹层最大高度：整体可滚动，避免 RenderFlex 溢出。
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
                   Expanded(
-                    child: _TemplateCard(
-                      kind: kind,
-                      layout: preparation.layouts[kind],
-                      content: preparation.content,
+                    child: Text(
+                      '选择排版模板',
+                      style: theme.textTheme.titleMedium,
                     ),
                   ),
-                  if (kind != SmartLayoutTemplateKind.values.last)
-                    const SizedBox(width: 12),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: '取消',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
                 ],
-              ],
-            ),
-          ],
+              ),
+              Text(
+                'AI 已识别本页内容，点选一个模板进入预览（可拖动微调后再确认）。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cards = [
+                    for (final kind in SmartLayoutTemplateKind.values)
+                      _TemplateCard(
+                        kind: kind,
+                        layout: preparation.layouts[kind],
+                        content: preparation.content,
+                      ),
+                  ];
+                  // 窄屏断点：可用宽度放不下三卡横排时改纵向铺满列表，
+                  // 点选/置灰逻辑不变（卡本身自适应宽度）。
+                  if (constraints.maxWidth < _wideLayoutBreakpoint) {
+                    return Column(
+                      children: [
+                        for (var i = 0; i < cards.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 12),
+                          SizedBox(width: double.infinity, child: cards[i]),
+                        ],
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      for (var i = 0; i < cards.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 12),
+                        Expanded(child: cards[i]),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -93,23 +93,13 @@ class InkRecognitionRepository {
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        final snippet = response.body.isEmpty
-            ? '(空)'
-            : response.body.substring(0, response.body.length.clamp(0, 200));
-        debugPrint(
-          '[$_logTag] ❌ 请求失败 | HTTP ${response.statusCode} | 响应: $snippet',
-        );
         developer.log(
           '手写识别请求失败: HTTP ${response.statusCode}',
           name: _logTag,
           level: 1000,
           time: startTime,
         );
-        throw StateError(
-          response.body.isEmpty
-              ? '字迹识别失败：HTTP ${response.statusCode}'
-              : response.body,
-        );
+        _throwForNonSuccessStatus(response.statusCode, response.body, '手写识别');
       }
 
       final result = InkRecognitionResult.fromJson(
@@ -181,11 +171,7 @@ class InkRecognitionRepository {
       readTimeoutMs: _smartLayoutReadTimeoutMs,
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        response.body.isEmpty
-            ? '视觉排版失败：HTTP ${response.statusCode}'
-            : response.body,
-      );
+      _throwForNonSuccessStatus(response.statusCode, response.body, '视觉排版');
     }
     return SmartLayoutVisionResponse.fromJson(
       jsonDecode(response.body) as Map<String, Object?>,
@@ -214,11 +200,7 @@ class InkRecognitionRepository {
       readTimeoutMs: _smartLayoutReadTimeoutMs,
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        response.body.isEmpty
-            ? '单块转写失败：HTTP ${response.statusCode}'
-            : response.body,
-      );
+      _throwForNonSuccessStatus(response.statusCode, response.body, '单块转写');
     }
     return SmartLayoutTranscribeResponse.fromJson(
       jsonDecode(response.body) as Map<String, Object?>,
@@ -234,6 +216,20 @@ class InkRecognitionRepository {
     } catch (_) {
       return null;
     }
+  }
+
+  /// 非 2xx 统一转用户可读中文：原始响应体不进异常消息（可能含英文/JSON 摘要，
+  /// 也不排除回显内部信息）；日志只记录状态码与响应长度（脱敏，不落 body 内容）。
+  Never _throwForNonSuccessStatus(int statusCode, String body, String scenario) {
+    debugPrint(
+      '[$_logTag] ❌ $scenario失败 | HTTP $statusCode | 响应长度: ${body.length}',
+    );
+    throw StateError(switch (statusCode) {
+      401 || 403 => '识别服务鉴权失败，请检查服务配置',
+      404 => '识别服务版本过旧，请联系管理员升级服务端',
+      >= 500 && <= 599 => '识别服务异常（状态码 $statusCode），请稍后重试',
+      _ => '识别服务请求失败（状态码 $statusCode）',
+    });
   }
 
   String _summarizeTypes(InkRecognitionResult result) {

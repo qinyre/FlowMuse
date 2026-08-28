@@ -1,5 +1,4 @@
 import '../core/math/point.dart';
-import 'stroke_input_sample.dart';
 import 'stroke_input_modeler.dart';
 import 'stroke_recorder.dart';
 import 'stroke_render_metrics.dart';
