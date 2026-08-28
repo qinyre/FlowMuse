@@ -167,6 +167,7 @@ class ElementRenderer {
             brushTypeFromCustomData(element.customData),
             style,
             isComplete: element.isComplete,
+            pressureEncoded: pressureEncodingFromCustomData(element.customData),
           );
         }
       case 'text':

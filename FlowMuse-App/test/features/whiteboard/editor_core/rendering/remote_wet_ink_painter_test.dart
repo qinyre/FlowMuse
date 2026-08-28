@@ -414,6 +414,7 @@ class _RecordingAdapter implements RoughAdapter {
     BrushType brushType,
     DrawStyle style, {
     bool isComplete = true,
+    bool pressureEncoded = false,
   }) {
     calls++;
     totalPoints += points.length;

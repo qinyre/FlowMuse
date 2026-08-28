@@ -142,6 +142,7 @@ class _RecordingAdapter implements RoughAdapter {
     BrushType brushType,
     DrawStyle style, {
     bool isComplete = true,
+    bool pressureEncoded = false,
   }) {
     calls++;
     this.points = points;
@@ -164,6 +165,7 @@ class _SolidCanvasAdapter implements RoughAdapter {
     BrushType brushType,
     DrawStyle style, {
     bool isComplete = true,
+    bool pressureEncoded = false,
   }) {
     canvas.drawRect(
       const Rect.fromLTWH(0, 0, 40, 40),

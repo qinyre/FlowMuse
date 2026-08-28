@@ -145,7 +145,6 @@ class BrushOutlineMetrics {
   }
 
   static Point _tangentAtArcFraction(List<Point> polyline, double t) {
-    final p = _pointAtArcFraction(polyline, t);
     final q = _pointAtArcFraction(polyline, (t + 0.02).clamp(0.0, 1.0));
     final r = _pointAtArcFraction(polyline, (t - 0.02).clamp(0.0, 1.0));
     return Point(q.x - r.x, q.y - r.y);

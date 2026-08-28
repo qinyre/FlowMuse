@@ -135,6 +135,96 @@ void main() {
       expect(emitted.single.isComplete, isFalse);
     },
   );
+
+  test('controller 在创建时烘焙灵敏度并写入 pressureEncoding 标记（T2）', () async {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.switchTool(ToolType.freedraw);
+    controller.activeBrushType = BrushType.brushPen;
+    controller.pressureSensitivity = 0.5;
+
+    // Given/When: 手写笔划一笔
+    controller.onPointerDown(
+      const PointerDownEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset.zero,
+        pressure: 0.8,
+        timeStamp: Duration.zero,
+      ),
+    );
+    controller.onPointerMove(
+      const PointerMoveEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(30, 0),
+        pressure: 0.8,
+        timeStamp: Duration(milliseconds: 20),
+      ),
+    );
+    controller.onPointerUp(
+      const PointerUpEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(60, 0),
+        pressure: 0.8,
+        timeStamp: Duration(milliseconds: 40),
+      ),
+    );
+
+    // Then: 场景中的新元素 pressures 为编码值（不等于原始 0.8；模型器会
+    // 先把压力映射进 [0.18,0.82] 再编码，断言“非原始且在 0~1”最稳），
+    // customData 带 pressureEncoding=1 与 brushType。
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final strokes = controller.currentScene.elements
+        .whereType<FreedrawElement>()
+        .toList(growable: false);
+    expect(strokes, isNotEmpty);
+    final stroke = strokes.last;
+    expect(stroke.pressures, isNotEmpty);
+    expect(
+      stroke.pressures.every((p) => p != 0.8),
+      isTrue,
+      reason: '原始压力不应原样落盘',
+    );
+    expect(stroke.pressures.every((p) => p >= 0 && p <= 1), isTrue);
+    expect(pressureEncodingFromCustomData(stroke.customData), isTrue);
+    expect(brushTypeFromCustomData(stroke.customData), BrushType.brushPen);
+
+    // And: 圆珠笔忽略压力 —— pressures 为空（编码点返回 null）
+    final ballpointController = MarkdrawController();
+    addTearDown(ballpointController.dispose);
+    ballpointController.switchTool(ToolType.freedraw);
+    ballpointController.activeBrushType = BrushType.ballpoint;
+    ballpointController.onPointerDown(
+      const PointerDownEvent(
+        pointer: 2,
+        kind: PointerDeviceKind.stylus,
+        position: Offset.zero,
+        pressure: 0.9,
+        timeStamp: Duration.zero,
+      ),
+    );
+    ballpointController.onPointerUp(
+      const PointerUpEvent(
+        pointer: 2,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(20, 0),
+        pressure: 0.9,
+        timeStamp: Duration(milliseconds: 30),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final ballStrokes = ballpointController.currentScene.elements
+        .whereType<FreedrawElement>()
+        .toList(growable: false);
+    expect(
+      ballStrokes.last.pressures,
+      isEmpty,
+      reason: '圆珠笔应向工具传 null pressure',
+    );
+    expect(ballStrokes.last.simulatePressure, isTrue);
+  });
 }
 
 FreedrawElement _createdElement(ToolResult? result) {

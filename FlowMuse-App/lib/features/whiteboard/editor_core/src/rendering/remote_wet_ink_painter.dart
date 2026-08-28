@@ -395,5 +395,7 @@ void _drawSegment(
     BrushType.fromWireName(stroke.style.brushType),
     DrawStyle.fromElement(element),
     isComplete: false,
+    // 湿墨必为新笔迹：远端发来的 pressure 已在发送端编码。
+    pressureEncoded: true,
   );
 }

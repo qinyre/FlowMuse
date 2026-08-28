@@ -67,10 +67,8 @@ class BrushState {
   }) {
     return BrushState(
       strokeColor: clearStrokeColor ? null : (strokeColor ?? this.strokeColor),
-      strokeWidth:
-          clearStrokeWidth ? null : (strokeWidth ?? this.strokeWidth),
-      pressureSensitivity:
-          pressureSensitivity ?? this.pressureSensitivity,
+      strokeWidth: clearStrokeWidth ? null : (strokeWidth ?? this.strokeWidth),
+      pressureSensitivity: pressureSensitivity ?? this.pressureSensitivity,
       strokeWidthMin: strokeWidthMin ?? this.strokeWidthMin,
       strokeWidthMax: strokeWidthMax ?? this.strokeWidthMax,
       strokeWidthStep: strokeWidthStep ?? this.strokeWidthStep,
@@ -85,14 +83,8 @@ class BrushState {
       strokeWidthMin: 1,
       strokeWidthMax: 15,
     ),
-    BrushType.ballpoint: BrushState(
-      strokeColor: '#1e1e1e',
-      strokeWidth: 2,
-    ),
-    BrushType.fountainPen: BrushState(
-      strokeColor: '#1e1e1e',
-      strokeWidth: 2,
-    ),
+    BrushType.ballpoint: BrushState(strokeColor: '#1e1e1e', strokeWidth: 2),
+    BrushType.fountainPen: BrushState(strokeColor: '#1e1e1e', strokeWidth: 2),
     BrushType.brushPen: BrushState(
       strokeColor: '#1e1e1e',
       strokeWidth: 2,
@@ -110,6 +102,7 @@ class BrushState {
 
 const String flowMuseCustomDataKey = 'flowMuse';
 const String brushTypeCustomDataKey = 'brushType';
+const String pressureEncodingCustomDataKey = 'pressureEncoding';
 
 BrushType brushTypeFromCustomData(Map<String, Object?>? customData) {
   final flowMuse = customData?[flowMuseCustomDataKey];
@@ -123,6 +116,23 @@ BrushType brushTypeFromCustomData(Map<String, Object?>? customData) {
   return BrushType.fountainPen;
 }
 
+/// 是否为“创建时已烘焙灵敏度”的笔迹（pressureEncoding=1）。
+///
+/// - true：pressures 已按创建时灵敏度编码，渲染用 profile 最大 thinning；
+/// - false（旧元素）：pressures 为原始值，渲染用对应笔刷出厂默认灵敏度。
+/// 湿墨（本地/远端）恒为 true——新笔迹必编码，湿墨不可能是旧元素。
+bool pressureEncodingFromCustomData(Map<String, Object?>? customData) {
+  final flowMuse = customData?[flowMuseCustomDataKey];
+  Map? map;
+  if (flowMuse is Map<String, Object?>) {
+    map = flowMuse;
+  } else if (flowMuse is Map) {
+    map = flowMuse;
+  }
+  return map != null && map[pressureEncodingCustomDataKey] == 1;
+}
+
+/// 写入 brushType（保持既有行为，不写 pressureEncoding）。
 Map<String, Object?> customDataWithBrushType(
   Map<String, Object?>? customData,
   BrushType brushType,
@@ -135,6 +145,25 @@ Map<String, Object?> customDataWithBrushType(
       for (final entry in flowMuse.entries)
         if (entry.key is String) entry.key as String: entry.value,
     brushTypeCustomDataKey: brushType.wireName,
+  };
+  return next;
+}
+
+/// 新建自由笔画元素的 customData：brushType + pressureEncoding=1
+/// （嵌套合并 flowMuse，不覆盖 collaborationOwner、pageId 等已有键）。
+Map<String, Object?> customDataWithFreedrawRender(
+  Map<String, Object?>? customData,
+  BrushType brushType,
+) {
+  final next = {...?customData};
+  final flowMuse = next[flowMuseCustomDataKey];
+  next[flowMuseCustomDataKey] = {
+    if (flowMuse is Map<String, Object?>) ...flowMuse,
+    if (flowMuse is Map && flowMuse is! Map<String, Object?>)
+      for (final entry in flowMuse.entries)
+        if (entry.key is String) entry.key as String: entry.value,
+    brushTypeCustomDataKey: brushType.wireName,
+    pressureEncodingCustomDataKey: 1,
   };
   return next;
 }

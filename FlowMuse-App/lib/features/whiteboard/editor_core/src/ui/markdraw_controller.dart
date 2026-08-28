@@ -413,7 +413,8 @@ class MarkdrawController extends ChangeNotifier {
   double get pressureSensitivity => _pressureSensitivity;
   set pressureSensitivity(double value) {
     _pressureSensitivity = value.clamp(0.0, 1.0);
-    _adapter.pressureSensitivity = _pressureSensitivity;
+    // 灵敏度不再同步到渲染适配器：只影响后续新笔迹的创建时编码
+    // （pressureEncoded），历史笔迹渲染不受当前值影响。
     // 保存到当前笔形状态（参考 Saber 独立笔状态）
     _brushStates[_activeBrushType] = _brushStates[_activeBrushType]!.copyWith(
       pressureSensitivity: _pressureSensitivity,
@@ -423,6 +424,16 @@ class MarkdrawController extends ChangeNotifier {
       _brushStates[_activeBrushType]!,
     );
     notifyListeners();
+  }
+
+  /// 创建自由笔画时的唯一压力编码点：把当前笔刷与灵敏度烘焙进
+  /// pressure 值（此后 pressures/live-ink/元素数据全程携带已编码值）。
+  /// 圆珠笔与荧光笔忽略真实压感，恒返回 null（恒宽 + 速度模拟路径）。
+  double? _encodeStrokePressure(double? raw) {
+    if (raw == null) return null;
+    final profile = BrushRenderProfile.forType(_activeBrushType);
+    if (!profile.pressureEnabled) return null;
+    return profile.encodePressure(raw, _pressureSensitivity);
   }
 
   /// 轮廓渲染模式：polygon(直线段)或 quadratic(二次贝塞尔平滑)。
@@ -516,7 +527,6 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
     _pressureSensitivity = saved.pressureSensitivity;
-    _adapter.pressureSensitivity = _pressureSensitivity;
   }
 
   bool get inkRecognitionMode => _inkRecognitionMode;
@@ -2198,7 +2208,11 @@ class MarkdrawController extends ChangeNotifier {
       _sceneBeforeDrag = _editorState.scene;
       _startActivePreviewStroke();
       applyResult(
-        _activeTool.onPointerDown(point, toolContext, pressure: r.pressure),
+        _activeTool.onPointerDown(
+          point,
+          toolContext,
+          pressure: _encodeStrokePressure(r.pressure),
+        ),
       );
       _recordAcceptedActivePreviewPoint();
       _publishLocalWetInk();
@@ -2317,7 +2331,7 @@ class MarkdrawController extends ChangeNotifier {
           point,
           toolContext,
           screenDelta: event.delta,
-          pressure: r.pressure,
+          pressure: _encodeStrokePressure(r.pressure),
         ),
       );
       _recordAcceptedActivePreviewPoint();
@@ -2385,7 +2399,11 @@ class MarkdrawController extends ChangeNotifier {
         );
         final point = Point(sceneOffset.dx, sceneOffset.dy);
         applyResult(
-          _activeTool.onPointerMove(point, toolContext, pressure: r.pressure),
+          _activeTool.onPointerMove(
+            point,
+            toolContext,
+            pressure: _encodeStrokePressure(r.pressure),
+          ),
         );
         _recordAcceptedActivePreviewPoint();
         final activeView = (_activeTool as FreedrawTool).activeView;
@@ -2395,7 +2413,7 @@ class MarkdrawController extends ChangeNotifier {
         final finalResult = _activeTool.onPointerUp(
           point,
           toolContext,
-          pressure: r.pressure,
+          pressure: _encodeStrokePressure(r.pressure),
         );
         if (writingFlags.layeredWetInk) {
           localWetInkState.clear(notify: false);
@@ -3648,22 +3666,19 @@ class MarkdrawController extends ChangeNotifier {
 
   Scene _buildDraftScene(SmartLayoutPlan plan) {
     var temp = _editorState.scene;
-    temp = _applyResultsToScene(
-      temp,
-      [
-        for (final id in plan.removeIds) RemoveElementResult(id),
-        ...SmartLayoutMoveBuilder.buildResults(temp, plan.moveDeltas),
-        for (final element in plan.addElements)
-          AddElementResult(
-            element.copyWith(
-              customData: SmartLayoutUtils.mergePageCustomData(
-                element.customData,
-                plan.pageId,
-              ),
+    temp = _applyResultsToScene(temp, [
+      for (final id in plan.removeIds) RemoveElementResult(id),
+      ...SmartLayoutMoveBuilder.buildResults(temp, plan.moveDeltas),
+      for (final element in plan.addElements)
+        AddElementResult(
+          element.copyWith(
+            customData: SmartLayoutUtils.mergePageCustomData(
+              element.customData,
+              plan.pageId,
             ),
           ),
-      ],
-    );
+        ),
+    ]);
     return temp;
   }
 
@@ -3724,15 +3739,16 @@ class MarkdrawController extends ChangeNotifier {
     final figures = _smartLayoutFigureUnits(page.id);
     // Set-of-Mark：墨迹簇 + 页面可移动元素全部作为候选对象，按阅读序（上→左）
     // 编号 m1..mN，编号与对象的映射留在客户端，服务端/VLM 只见编号。
-    final markCandidates = <({String key, ui.Rect rect, bool isText})>[
-      for (final entry in clusterRects.entries)
-        (key: entry.key, rect: entry.value, isText: true),
-      for (final entry in figures.rects.entries)
-        (key: entry.key, rect: entry.value, isText: false),
-    ]..sort((a, b) {
-      final byTop = a.rect.top.compareTo(b.rect.top);
-      return byTop != 0 ? byTop : a.rect.left.compareTo(b.rect.left);
-    });
+    final markCandidates =
+        <({String key, ui.Rect rect, bool isText})>[
+          for (final entry in clusterRects.entries)
+            (key: entry.key, rect: entry.value, isText: true),
+          for (final entry in figures.rects.entries)
+            (key: entry.key, rect: entry.value, isText: false),
+        ]..sort((a, b) {
+          final byTop = a.rect.top.compareTo(b.rect.top);
+          return byTop != 0 ? byTop : a.rect.left.compareTo(b.rect.left);
+        });
     final textMarks = <String, String>{};
     final figureMarks = <String, String>{};
     final markLabels = <({String id, ui.Rect bounds})>[];
@@ -3750,8 +3766,12 @@ class MarkdrawController extends ChangeNotifier {
     try {
       png = await exportRegionPng(
         pageBounds,
-        afterPaint: (canvas, zoom) =>
-            _drawVisionMarkOverlay(canvas, zoom, pageBounds.topLeft, markLabels),
+        afterPaint: (canvas, zoom) => _drawVisionMarkOverlay(
+          canvas,
+          zoom,
+          pageBounds.topLeft,
+          markLabels,
+        ),
       );
     } catch (error) {
       debugPrint('[$_logTag] 视觉排版截图失败，回退经典管线: $error');
@@ -3785,9 +3805,7 @@ class MarkdrawController extends ChangeNotifier {
       allClusterKeys: clusterRects.keys.toSet(),
     );
     if (match.matchedItemCount < 2) {
-      debugPrint(
-        '[$_logTag] 视觉排版匹配项过少（${match.matchedItemCount}），回退经典管线',
-      );
+      debugPrint('[$_logTag] 视觉排版匹配项过少（${match.matchedItemCount}），回退经典管线');
       return null;
     }
 
@@ -3894,8 +3912,7 @@ class MarkdrawController extends ChangeNotifier {
         FigureTextPair(
           figure: figure,
           caption: caption,
-          figureAbove:
-              figure.sourceBounds.top <= caption.sourceBounds.top,
+          figureAbove: figure.sourceBounds.top <= caption.sourceBounds.top,
         ),
       );
       pairedTextIndexes.add(captionIndex);
@@ -3907,23 +3924,18 @@ class MarkdrawController extends ChangeNotifier {
       return byTop != 0 ? byTop : a.left.compareTo(b.left);
     }
 
-    final looseTexts =
-        [
-          for (final index in textElementsByIndex.keys)
-            if (index != titleIndex && !pairedTextIndexes.contains(index))
-              makeTextUnit(index),
-        ]..sort(
-          (a, b) => readingCompare(a.sourceBounds, b.sourceBounds),
-        );
+    final looseTexts = [
+      for (final index in textElementsByIndex.keys)
+        if (index != titleIndex && !pairedTextIndexes.contains(index))
+          makeTextUnit(index),
+    ]..sort((a, b) => readingCompare(a.sourceBounds, b.sourceBounds));
     final looseFigures = <LayoutUnit>[];
     for (final index in match.figureClaims.keys) {
       if (figureIndexByPair.containsValue(index)) continue;
       final unit = makeFigureUnit(index);
       if (unit != null) looseFigures.add(unit);
     }
-    looseFigures.sort(
-      (a, b) => readingCompare(a.sourceBounds, b.sourceBounds),
-    );
+    looseFigures.sort((a, b) => readingCompare(a.sourceBounds, b.sourceBounds));
 
     final content = SmartLayoutContent(
       pageId: page.id,
@@ -4041,7 +4053,17 @@ class MarkdrawController extends ChangeNotifier {
       SmartLayoutPlan? plan;
       switch (vision.style) {
         case SmartLayoutStyle.ppt:
-          plan = _layoutPpt(content, _visionContext(vision, failures, removeStrokeIds, failedStrokeIds, removalRects, failureRects));
+          plan = _layoutPpt(
+            content,
+            _visionContext(
+              vision,
+              failures,
+              removeStrokeIds,
+              failedStrokeIds,
+              removalRects,
+              failureRects,
+            ),
+          );
         case SmartLayoutStyle.article || SmartLayoutStyle.inPlace:
           plan = _legacyPlacementPlan(
             fabricateResponse(),
@@ -4072,7 +4094,11 @@ class MarkdrawController extends ChangeNotifier {
       }
       if (plan == null) return null;
       return SmartLayoutPlanResult(
-        plan: _attachVisionLowConfidence(plan, textElementsByIndex, vision.elements),
+        plan: _attachVisionLowConfidence(
+          plan,
+          textElementsByIndex,
+          vision.elements,
+        ),
         failures: failures,
       );
     } on StateError catch (error) {
@@ -4135,8 +4161,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// 草稿态低置信文本项快照（id + 当前文字），供校对编辑条构建。
   List<({ElementId id, String text})> get smartLayoutDraftProofreadItems {
-    if (!_smartLayoutDraftActive ||
-        _smartLayoutDraftLowConfidenceIds.isEmpty) {
+    if (!_smartLayoutDraftActive || _smartLayoutDraftLowConfidenceIds.isEmpty) {
       return const [];
     }
     final scene = _editorState.scene;
@@ -4154,8 +4179,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// 草稿态低置信文本矩形的实时快照（改字/拖动后重取，橙色高亮用）。
   List<ui.Rect> get smartLayoutDraftLowConfidenceRects {
-    if (!_smartLayoutDraftActive ||
-        _smartLayoutDraftLowConfidenceIds.isEmpty) {
+    if (!_smartLayoutDraftActive || _smartLayoutDraftLowConfidenceIds.isEmpty) {
       return const [];
     }
     final scene = _editorState.scene;
@@ -4326,8 +4350,12 @@ class MarkdrawController extends ChangeNotifier {
         latex: block.latex,
         bounds: unionRect == null
             ? request.bounds
-            : Bounds.fromLTWH(unionRect.left, unionRect.top, unionRect.width,
-                  unionRect.height),
+            : Bounds.fromLTWH(
+                unionRect.left,
+                unionRect.top,
+                unionRect.width,
+                unionRect.height,
+              ),
         strokeBounds: const [],
         startedAt: request.startedAt,
         error: block.error,
@@ -4349,8 +4377,12 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// 页内可移动元素 → 版式图形单元（整组共用一个单元），供视觉匹配与模板移动。
-  ({Map<String, Element> elements, Map<String, ui.Rect> rects,
-  Map<String, List<String>> memberIds}) _smartLayoutFigureUnits(String pageId) {
+  ({
+    Map<String, Element> elements,
+    Map<String, ui.Rect> rects,
+    Map<String, List<String>> memberIds,
+  })
+  _smartLayoutFigureUnits(String pageId) {
     final elements = <String, Element>{};
     final rects = <String, ui.Rect>{};
     final memberIds = <String, List<String>>{};
@@ -4366,9 +4398,7 @@ class MarkdrawController extends ChangeNotifier {
         union.size.width,
         union.size.height,
       );
-      memberIds[key] = [
-        for (final member in members) member.id.value,
-      ];
+      memberIds[key] = [for (final member in members) member.id.value];
     }
 
     for (final element in _smartLayoutPageElements(pageId)) {
@@ -5176,7 +5206,6 @@ class MarkdrawController extends ChangeNotifier {
         : _layoutTwoColumn(content, ctx);
   }
 
-
   Future<List<SmartLayoutRecognizedBlock>>
   _recognizeSmartLayoutBlocksInParallel(
     List<SmartLayoutInkBlockRequest> blocks,
@@ -5482,9 +5511,10 @@ class MarkdrawController extends ChangeNotifier {
       canvas.translate(image.height.toDouble(), 0);
       canvas.rotate(math.pi / 2);
       canvas.drawImage(image, ui.Offset.zero, ui.Paint());
-      final rotated = await recorder
-          .endRecording()
-          .toImage(image.height, image.width);
+      final rotated = await recorder.endRecording().toImage(
+        image.height,
+        image.width,
+      );
       final data = await rotated.toByteData(format: ui.ImageByteFormat.png);
       return data?.buffer.asUint8List();
     } catch (error) {

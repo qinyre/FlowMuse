@@ -35,23 +35,28 @@ void main() {
     expect(outline, isNotEmpty);
   });
 
-  // 缺陷复现证据（T2 修复后本用例反转为"轮廓不变"）：全局
-  // pressureSensitivity 参与渲染会让切换灵敏度改写历史笔迹。
-  test('pressure sensitivity changes the generated outline', () {
-    final low = FreedrawRenderer.buildOutline(
-      points,
+  // T2 冻结语义（原"全局 sensitivity 改变轮廓"缺陷的反转守护）：
+  // 渲染端不再接收灵敏度——新笔迹由创建时编码的 pressures + 最大
+  // thinning 决定，旧笔迹由笔刷出厂默认灵敏度决定。切换灵敏度不可能
+  // 改变同一 pressures 的渲染结果。
+  test('同一 pressures 的轮廓不再依赖任何当前灵敏度（冻结语义）', () {
+    final legacy = FreedrawRenderer.buildOutline(
+      pressureRamp.points,
       strokeWidth: 4,
-      pressures: const [0.2, 0.4, 0.7, 1.0],
-      pressureSensitivity: 0,
+      pressures: pressureRamp.pressures,
+      pressureEncoded: false,
     );
-    final high = FreedrawRenderer.buildOutline(
-      points,
+    final encoded = FreedrawRenderer.buildOutline(
+      pressureRamp.points,
       strokeWidth: 4,
-      pressures: const [0.2, 0.4, 0.7, 1.0],
-      pressureSensitivity: 1,
+      pressures: pressureRamp.pressures,
+      pressureEncoded: true,
     );
 
-    expect(high, isNot(equals(low)));
+    // 两种语义各自确定（同输入重复调用逐点一致，见基线组），
+    // 且互不等价（编码前后 thinning 不同）。冻结点在于：渲染入口
+    // 已无 sensitivity 参数可注入——切换笔刷/灵敏度不再改写历史笔迹。
+    expect(legacy, isNot(equals(encoded)));
   });
 
   group('T0 基线：五笔 × 五夹具', () {
@@ -106,7 +111,7 @@ void main() {
       );
     });
 
-    test('P4: 单点输入 + taper 笔型生成不可见退化环（T3 修复）', () {
+    test('P4: 单点输入可见性（T2 后 taper 暂关已可见；T3 引入 taper 后由 <3×size 门控保持）', () {
       for (final brush in [BrushType.pencil, BrushType.brushPen]) {
         final outline = FreedrawRenderer.buildOutline(
           [const Point(50, 50)],
@@ -114,44 +119,47 @@ void main() {
           pressures: const [0.5],
           brushType: brush,
         );
-        // 现状：单点返回 5 点退化环（半径钳 0.01），outline 非空导致
-        // renderer 的画圆兜底永不触发——点击不可见。
+        // 原缺陷：taper 开启时单点返回 5 点退化环（半径钳 0.01），
+        // outline 非空导致 renderer 画圆兜底永不触发——点击不可见。
+        // T2 收敛配置时 taper 暂关，单点走圆端帽自然可见；
+        // T3 重新引入 taper 后必须保持本断言（<3×size 门控）。
         expect(outline, isNotEmpty, reason: brush.name);
         final metrics = BrushOutlineMetrics.measure(outline);
+        final size = BrushRenderProfile.forType(brush).renderSize(4);
         expect(
           metrics.bounds.width,
-          lessThan(1.0),
-          reason: '${brush.name} 单点轮廓应退化为不可见（复现证据）',
+          greaterThan(size * 0.8),
+          reason: '${brush.name} 单点应画可见圆点',
         );
         expect(
           metrics.bounds.height,
-          lessThan(1.0),
-          reason: '${brush.name} 单点轮廓应退化为不可见（复现证据）',
+          greaterThan(size * 0.8),
+          reason: '${brush.name} 单点应画可见圆点',
         );
       }
     });
 
-    test('P2: 同一 pressures 用不同全局灵敏度渲染轮廓不同（T2 修复）', () {
-      final low = FreedrawRenderer.buildOutline(
+    test('P2(已修复): 渲染入口无灵敏度参数，历史笔迹不再漂移（T2）', () {
+      // 修复后：buildOutline 只接受 pressureEncoded 布尔语义；
+      // 旧元素用笔刷出厂默认灵敏度，两次调用（等价于两个不同当前
+      // 灵敏度的协作端）渲染同一 pressures 结果逐点一致。
+      final a = FreedrawRenderer.buildOutline(
         pressureRamp.points,
         strokeWidth: 4,
         pressures: pressureRamp.pressures,
-        pressureSensitivity: 0.1,
+        pressureEncoded: false,
       );
-      final high = FreedrawRenderer.buildOutline(
+      final b = FreedrawRenderer.buildOutline(
         pressureRamp.points,
         strokeWidth: 4,
         pressures: pressureRamp.pressures,
-        pressureSensitivity: 0.9,
+        pressureEncoded: false,
       );
-      final lowMetrics = BrushOutlineMetrics.measure(low);
-      final highMetrics = BrushOutlineMetrics.measure(high);
-      // 现状证据：bounds 逐边不同（面积差异即轮廓不同）
-      final differs =
-          (lowMetrics.bounds.left - highMetrics.bounds.left).abs() > 0.01 ||
-          (lowMetrics.bounds.top - highMetrics.bounds.top).abs() > 0.01 ||
-          lowMetrics.area != highMetrics.area;
-      expect(differs, isTrue, reason: '同一历史 pressures 被当前全局灵敏度改写渲染（缺陷）');
+      expect(
+        b.map((o) => '${o.dx},${o.dy}').toList(),
+        equals(a.map((o) => '${o.dx},${o.dy}').toList()),
+        reason: '两端当前灵敏度不同也不得改变同一元素的轮廓',
+      );
     });
 
     test('基线补充：measureStroke 按 brushType 输出五笔独立指标', () {
@@ -165,19 +173,24 @@ void main() {
         );
         expect(metrics.outlinePointCount, greaterThan(0), reason: brush.name);
       }
-      // 五笔指标不全等（现状 sizeScale/opacityScale 已有差异，T3 起差异
-      // 将显著拉大——此处只冻结"按笔型测量"能力本身）。
-      final sizes = {
+      // 五笔轮廓宽度不全等（sizeScale 0.72~4.2 直接决定可见宽度；
+      // 轮廓点数对参数不敏感，改用几何宽度作为“按笔型测量”的证据）。
+      final widths = {
         for (final brush in BrushType.values)
-          brush.name: FreedrawRenderer.measureStroke(
-            cornerPolyline.points,
-            strokeWidth: 4,
-            pressures: cornerPolyline.pressures,
-            outlineRenderMode: OutlineRenderMode.polygon,
-            brushType: brush,
-          ).outlinePointCount,
+          brush.name: BrushOutlineMetrics.measure(
+            FreedrawRenderer.buildOutline(
+              cornerPolyline.points,
+              strokeWidth: 4,
+              pressures: cornerPolyline.pressures,
+              brushType: brush,
+            ),
+          ).bounds.width,
       };
-      expect(sizes.values.toSet().length, greaterThan(1));
+      expect(
+        widths.values.toSet().length,
+        BrushType.values.length,
+        reason: '五笔 sizeScale 互不相同，轮廓宽度应全不同：$widths',
+      );
     });
   });
 }

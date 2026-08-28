@@ -83,6 +83,9 @@ abstract class RoughAdapter {
   );
 
   /// Draws a freehand path through the given points.
+  ///
+  /// [pressureEncoded]：pressures 是否已按创建时灵敏度烘焙（决定渲染端
+  /// thinning 语义，见 BrushRenderProfile；湿墨恒传 true）。
   void drawFreedraw(
     Canvas canvas,
     List<Point> points,
@@ -91,5 +94,6 @@ abstract class RoughAdapter {
     BrushType brushType,
     DrawStyle style, {
     bool isComplete = true,
+    bool pressureEncoded = false,
   });
 }

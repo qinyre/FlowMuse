@@ -710,10 +710,6 @@ class RoughCanvasAdapter implements RoughAdapter {
     return (a.x - b.x).abs() < eps && (a.y - b.y).abs() < eps;
   }
 
-  /// 压感灵敏度 (0.0–1.0)：控制压力对线条粗细的影响。
-  /// 由 [MarkdrawController.pressureSensitivity] 同步。
-  double pressureSensitivity = 0.7;
-
   /// 轮廓渲染模式：polygon(直线段)或 quadratic(二次贝塞尔平滑)。
   /// 由 [MarkdrawController.outlineRenderMode] 同步。
   OutlineRenderMode outlineRenderMode = OutlineRenderMode.quadratic;
@@ -727,16 +723,19 @@ class RoughCanvasAdapter implements RoughAdapter {
     BrushType brushType,
     DrawStyle style, {
     bool isComplete = true,
+    bool pressureEncoded = false,
   }) {
     // 仅当非 simulatePressure 且 pressures 非空时传给 renderer 做变粗渲染;
     // simulatePressure=true(鼠标/触摸)时 pressures 留空,退回等粗 Bezier。
+    // 压力灵敏度不再参与渲染：新笔迹已在创建时烘焙（pressureEncoded），
+    // 旧笔迹由 renderer 按笔刷出厂默认灵敏度确定性渲染。
     final usePressure = !simulatePressure && pressures.isNotEmpty;
     FreedrawRenderer.draw(
       canvas,
       points,
       style,
       pressures: usePressure ? pressures : null,
-      pressureSensitivity: pressureSensitivity,
+      pressureEncoded: pressureEncoded,
       isComplete: isComplete,
       outlineRenderMode: outlineRenderMode,
       brushType: brushType,

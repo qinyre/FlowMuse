@@ -1,9 +1,9 @@
-import 'dart:math' as dm;
 import 'dart:ui';
 
 import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
 
 import '../../core/math/math.dart';
+import '../../core/elements/brush_render_profile.dart';
 import '../../core/elements/brush_type.dart';
 import '../../input/outline_render_mode.dart';
 import '../../input/stroke_render_metrics.dart';
@@ -15,8 +15,15 @@ import 'pencil_shader.dart';
 /// 使用 perfect_freehand 的 outline-stroke 算法:把点序列+压感转成一条
 /// 变宽的闭合多边形轮廓,既平滑又自然变粗(Excalidraw/tldraw 同款)。
 ///
-/// - 有真实压感(pressures 非空):simulatePressure=false,用真压感驱动宽度
-/// - 无压感(鼠标/触摸):simulatePressure=true,perfect_freehand 用速度模拟
+/// 笔刷参数的唯一真源是 [BrushRenderProfile.forType]；本文件不保留第二
+/// 份配置。压力语义（issue #5 计划 §6.3）：
+/// - pressureEncoded=true：pressures 已在创建时按灵敏度烘焙，渲染用
+///   profile 最大 thinning（本地湿墨、远端湿墨、新元素）；
+/// - pressureEncoded=false（旧元素）：pressures 为原始值，渲染用对应
+///   笔刷出厂默认灵敏度的 effectiveThinning（确定性，不读当前状态）。
+///
+/// 禁止给 StrokeOptions 传非默认 easing：压力烘焙等价性仅在 identity
+/// 下成立（见 BrushRenderProfile 文档）。
 class FreedrawRenderer {
   /// 铅笔纹理频率种子（T5 起按笔宽派生；此处先固定为 shader 原默认值）。
   static const double _kPencilTextureFreq = 0.7;
@@ -51,17 +58,17 @@ class FreedrawRenderer {
     List<Point> points, {
     required double strokeWidth,
     List<double>? pressures,
-    double pressureSensitivity = 0.7,
+    bool pressureEncoded = false,
     bool isComplete = true,
     BrushType brushType = BrushType.fountainPen,
   }) {
     if (points.isEmpty) return const [];
 
-    final brush = _configFor(brushType);
+    final profile = BrushRenderProfile.forType(brushType);
     final hasRawPressure =
         pressures != null && pressures.length == points.length;
     // 当笔形关闭压感时，丢弃真实压感数据，始终走模拟（参考 Saber pressureEnabled）。
-    final hasPressure = hasRawPressure && brush.pressureEnabled;
+    final hasPressure = hasRawPressure && profile.pressureEnabled;
     final inputPoints = <PointVector>[
       for (var i = 0; i < points.length; i++)
         PointVector(
@@ -70,35 +77,19 @@ class FreedrawRenderer {
           hasPressure ? pressures[i] : null,
         ),
     ];
-    final sensitivity = pressureSensitivity.clamp(0.0, 1.0);
-    final simulatePressure = !hasPressure || brush.forceSimulatePressure;
     final options = StrokeOptions(
-      size: dm.max(strokeWidth * brush.sizeScale, 1.0),
+      size: profile.renderSize(strokeWidth),
       thinning: hasPressure
-          ? switch (brushType) {
-              // Keep the established fountain-pen response: a small base
-              // pressure term remains even at the lowest sensitivity.
-              BrushType.fountainPen => 0.05 + sensitivity * 0.9,
-              _ => brush.thinning * sensitivity,
-            }
-          : brush.simulatedThinning,
-      smoothing: brush.smoothing,
-      streamline: brush.streamline,
-      simulatePressure: simulatePressure,
+          ? (pressureEncoded
+                ? profile.maxThinning
+                : profile.effectiveThinning(
+                    profile.legacySensitivity(brushType),
+                  ))
+          : profile.simulatedThinning,
+      smoothing: profile.smoothing,
+      streamline: profile.streamline,
+      simulatePressure: !hasPressure || profile.forceSimulatePressure,
       isComplete: isComplete,
-      // 笔锋效果（参考 Saber pencil taper）
-      start: brush.taperEnabled
-          ? StrokeEndOptions.start(
-              taperEnabled: true,
-              customTaper: brush.customTaper,
-            )
-          : null,
-      end: brush.taperEnabled
-          ? StrokeEndOptions.end(
-              taperEnabled: true,
-              customTaper: brush.customTaper,
-            )
-          : null,
     );
 
     return getStroke(inputPoints, options: options);
@@ -146,7 +137,7 @@ class FreedrawRenderer {
     List<Point> points, {
     required double strokeWidth,
     List<double>? pressures,
-    double pressureSensitivity = 0.7,
+    bool pressureEncoded = false,
     bool isComplete = true,
     required OutlineRenderMode outlineRenderMode,
     BrushType brushType = BrushType.fountainPen,
@@ -156,7 +147,7 @@ class FreedrawRenderer {
       points,
       strokeWidth: strokeWidth,
       pressures: pressures,
-      pressureSensitivity: pressureSensitivity,
+      pressureEncoded: pressureEncoded,
       isComplete: isComplete,
       brushType: brushType,
     );
@@ -181,7 +172,7 @@ class FreedrawRenderer {
     List<Point> points,
     DrawStyle style, {
     List<double>? pressures,
-    double pressureSensitivity = 0.7,
+    bool pressureEncoded = false,
     bool isComplete = true,
     required OutlineRenderMode outlineRenderMode,
     StrokeRenderMetricsSink? metricsSink,
@@ -189,10 +180,10 @@ class FreedrawRenderer {
   }) {
     if (points.isEmpty) return;
 
-    final brush = _configFor(brushType);
+    final profile = BrushRenderProfile.forType(brushType);
     // perfect_freehand 的 size 是直径,而 DrawStyle.strokeWidth 在 freedraw 语境下
     // 是期望的笔迹宽度。直接用 strokeWidth 作为 size 基准。
-    final size = dm.max(style.strokeWidth * brush.sizeScale, 1.0);
+    final size = profile.renderSize(style.strokeWidth);
 
     Stopwatch? outlineWatch;
     if (metricsSink != null) {
@@ -202,7 +193,7 @@ class FreedrawRenderer {
       points,
       strokeWidth: style.strokeWidth,
       pressures: pressures,
-      pressureSensitivity: pressureSensitivity,
+      pressureEncoded: pressureEncoded,
       isComplete: isComplete,
       brushType: brushType,
     );
@@ -213,10 +204,11 @@ class FreedrawRenderer {
     // 单点(点击):outline 为空,画圆点
     if (outline.isEmpty) {
       final p = points[0];
-      final paint = style.toStrokePaint()
+      final basePaint = style.toStrokePaint();
+      final paint = basePaint
         ..style = PaintingStyle.fill
-        ..color = style.toStrokePaint().color.withValues(
-          alpha: style.toStrokePaint().color.a * brush.opacityScale,
+        ..color = basePaint.color.withValues(
+          alpha: basePaint.color.a * profile.opacityScale,
         );
       canvas.drawCircle(Offset(p.x, p.y), size / 2, paint);
       return;
@@ -234,12 +226,12 @@ class FreedrawRenderer {
     final paint = basePaint
       ..style = PaintingStyle.fill
       ..color = basePaint.color.withValues(
-        alpha: basePaint.color.a * brush.opacityScale,
+        alpha: basePaint.color.a * profile.opacityScale,
       );
 
     // 铅笔纹理：shader 可用时复用应用级单实例（每元素 set uniform 后立即
     // drawPath；engine 逐 draw 快照 uniform，跨元素安全）。
-    if (brushType == BrushType.pencil) {
+    if (brushType == BrushType.pencil && profile.usesPencilTexture) {
       final shader = PencilShader.acquire();
       final uniforms = PencilShader.uniforms();
       if (shader != null && uniforms != null) {
@@ -263,60 +255,6 @@ class FreedrawRenderer {
   static List<PointVector> _asPointVectors(List<Offset> outline) => [
     for (final o in outline) PointVector(o.dx, o.dy, 0),
   ];
-
-  static _BrushConfig _configFor(BrushType brushType) {
-    return switch (brushType) {
-      // 铅笔：半透明 + 笔锋 + 低延迟跟手(参考 Saber pencil:
-      // streamline=0.1, smoothing=0)
-      BrushType.pencil => const _BrushConfig(
-        sizeScale: 0.82,
-        opacityScale: 0.68,
-        thinning: 0.45,
-        simulatedThinning: 0.32,
-        smoothing: 0.2,
-        streamline: 0.15,
-        taperEnabled: true,
-        customTaper: 1.0,
-      ),
-      // 圆珠笔：极细均匀，关闭压感(参考 Saber ballpointPen)
-      BrushType.ballpoint => const _BrushConfig(
-        sizeScale: 0.72,
-        thinning: 0.08,
-        simulatedThinning: 0.02,
-        smoothing: 0.62,
-        streamline: 0.52,
-        pressureEnabled: false,
-      ),
-      // 钢笔：标准压感，无笔锋(默认笔形)
-      BrushType.fountainPen => _BrushConfig(
-        thinning: 0.9,
-        simulatedThinning: StrokeOptions.defaultThinning,
-        smoothing: StrokeOptions.defaultSmoothing,
-        streamline: StrokeOptions.defaultStreamline,
-      ),
-      // 毛笔：粗笔 + 强压感 + 微笔锋(参考 Saber taper 设计)
-      BrushType.brushPen => const _BrushConfig(
-        sizeScale: 1.15,
-        thinning: 1.0,
-        simulatedThinning: 0.82,
-        smoothing: 0.58,
-        streamline: 0.42,
-        taperEnabled: true,
-        customTaper: 0.5,
-      ),
-      // 荧光笔：特粗半透明，关闭压感(参考 Saber highlighter)
-      BrushType.highlighter => const _BrushConfig(
-        sizeScale: 4.2,
-        opacityScale: 0.32,
-        thinning: 0.05,
-        simulatedThinning: 0.02,
-        smoothing: 0.72,
-        streamline: 0.58,
-        forceSimulatePressure: true,
-        pressureEnabled: false,
-      ),
-    };
-  }
 
   /// Builds a smooth cubic Bezier path through 3+ points using
   /// Catmull-Rom to cubic Bezier conversion (等粗退化路径用)。
@@ -347,38 +285,5 @@ class FreedrawRenderer {
 /// size（brushPen thinning 1.0 时最大半径 = 1.15×strokeWidth，远小于
 /// 4.2 上界推导的 2.1×strokeWidth）；若未来新增"高 sizeScale(≥3) +
 /// thinning≈1.0"笔型，1.3 压感因子将不足，需把因子提到 2.0 或按笔型
-/// 精确计算。
+/// 精确计算。（issue #5 T6 将删除本常量，改由 profile.visualHalfWidth 派生。）
 const double kMaxBrushSizeScale = 4.2;
-
-class _BrushConfig {
-  const _BrushConfig({
-    this.sizeScale = 1.0,
-    this.opacityScale = 1.0,
-    required this.thinning,
-    required this.simulatedThinning,
-    required this.smoothing,
-    required this.streamline,
-    this.forceSimulatePressure = false,
-    this.pressureEnabled = true,
-    this.taperEnabled = false,
-    this.customTaper = 0.0,
-  });
-
-  final double sizeScale;
-  final double opacityScale;
-  final double thinning;
-  final double simulatedThinning;
-  final double smoothing;
-  final double streamline;
-  final bool forceSimulatePressure;
-
-  /// 是否启用真实压感。关闭后始终使用模拟压感（参考 Saber 设计）。
-  final bool pressureEnabled;
-
-  /// 是否启用笔锋（起笔/收笔变细效果）。
-  final bool taperEnabled;
-
-  /// 笔锋缩放比例，仅 [taperEnabled] 为 true 时生效。
-  /// 值越大笔锋越短，1.0 为 Saber 铅笔同款效果。
-  final double customTaper;
-}
