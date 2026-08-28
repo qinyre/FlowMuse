@@ -124,7 +124,7 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | 手写笔压感 | `editor_core/src/input/` | `InputPolicySelector` 按设备分策略 |
 | 敏感数据存储 | `flutter_secure_storage_ohos` facade + `flutter_secure_storage` 平台实现 | 鸿蒙 facade 负责识别 `ohos`；标准包继续为其他端注册实现 |
 | 文件/PDF | service 层抽象接口 | 鸿蒙 Platform Channel,其他 pdfx/file_picker |
-| shader | `PencilShader` | 不支持的平台静默降级 |
+| shader | `PencilShader`(构建期 impellerc 编译,pubspec `shaders:` 段) | 不支持的平台静默降级为确定性颗粒 Path |
 | fork 包 | `tool/vendor/` + `dependency_overrides` | code_assets 加 ohos 枚举,path_provider 含 ohos 支持 |
 
 **铁律**:共享代码(`lib/features/*`、`lib/shared/*`)禁止 `Platform.is*` 判断。详见 `conventions.md` 第 7 节。
@@ -205,6 +205,7 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `local_database.dart` schema | 全部读 DB 的 repository + 已装用户(迁移路径) |
 | `libraryIndexProvider` / `LibraryIndexNotifier` | library/notebooks/tags/search 四个 feature |
 | `Element` 基类字段 | 编辑器渲染 + 序列化 + 协作 reconciler + Excalidraw 兼容 |
+| `BrushRenderProfile` / `elementVisualBounds` | 五笔 Raster 渲染(含湿墨)+ SVG 导出 + 命中/导出边界(ADR-020) |
 | `CollaborationMessage` 协议 | 前端协作层 + 后端 `collab/events.go` |
 | `AccountUser` 模型 | 前端 account + 后端 `auth/` + 协作身份 |
 | `pubspec.yaml` 的 `dependency_overrides` | 全平台构建(尤其鸿蒙) |

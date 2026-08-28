@@ -313,3 +313,33 @@ v2 采用最小兼容方案：
 | 渲染几何 | **收敛（补 3 行后）** | A4 新判据按包公式验算通过（4×/6×size 种子下 43.75%/75%/42.13%/70.37% 对 65%/85% 判据均宽裕）；TaperPhase 消除段边界收针、块合并稳定、真笔尾恒有 taper；encodePressure 边界通过（clamp 承重：LiveInkPoint.fromJson 对越界直接 throw，非冗余）。必修 1 条 + 随行 2 条已写入 v3：整笔在尾段（无冻结块、tail 含 index 0）→ full；A4 fixture 采样间距 ≤0.5×size；远端 <3×size 门控长度来源 = 整条可见笔迹 |
 
 **第三轮终裁：三维度全部收敛，v3（含 v3.1 与第三轮补丁）进入执行。无需第四轮全文复审。**
+
+## 12. 执行结果审查（2026-08-28，T0–T9 落地后）
+
+### 12.1 第一轮三路审查
+
+| 维度 | 裁决 | 要点 |
+| --- | --- | --- |
+| 渲染引擎正确性 | 通过（P0=0 P1=0） | encodePressure 与渲染端重放经包源码验证严格互逆（easing=identity 前提成立）；TaperPhase 各相位可达、单点/两点兜底安全；无 Platform.is*/同步 I/O；undo/addToLibrary 保留 customData。P2×2：wholeVisibleRawLength 双重计入 pending 冻结点（湿墨期整笔长度虚高 → 收笔 taper 跳变）；铅笔冻结块离屏录制 canvas 恒等致颗粒频率与直接绘制不同源。P3×3：乱序回填桥接丢失（保守向）、荧光笔单点圆头（画布/SVG 一致，接受）、shader 异步加载首帧风格跳变（一次性，接受） |
+| 测试充分性（假绿猎手） | 需修复（P1×1） | 实测 785 全绿、analyze 29 info 基线零新增。P1：A14 未真逐点比对湿/干（只比 bounds 且 0.5px 容差偏松）。P2×6：A17/A18 同状态渲染两次属同义反复；A21 只测纯几何未真栅格化；性能门禁 0µs 时静默取 1.0 通过；A16 缺铅笔与颜色/宽度维度；2 条未用导入 warning；A16 已覆盖部分认可 |
+| 跨端一致性/导出/合规 | 需修复（P1×1） | darken 语义与画布一致；sanitizer 不误剥 pressureEncoding；customDataWithFreedrawRender 合并不覆盖他键；提交/分支规范、日志脱敏全过。P1：项目需求.md §4.8 四行未提交（留待 docs: 提交，内容核对一致）。P2×3：SVG 单点荧光笔缺 darken；铅笔 pattern tile 与 shader 频率不同源；_outlineToSvgPathData <3 点兜底输出非法 path data |
+
+### 12.2 修复落点（40253ec fix + d44fec8 test）
+
+1. 湿墨长度：`_frozenRawLength` 改为仅入块时按索引序累加（含跨块桥接、乱序回填按索引序补桥），pending 区由 tail 段（含 leading 桥接）统一计量；新增 store 回归守护（三包窗口算术对齐 frozenBlockPointCapacity=64 真实管线）。
+2. 铅笔冻结纹理：`FreedrawRenderer.draw`/`RoughAdapter.drawFreedraw` 新增可选 `deviceScale`，painter 在视口变换后取 `canvasScale(canvas)` 传入离屏录制；`deviceScale=null` 路径与旧行为逐字等价（本地湿墨/静态/SVG 不受影响）。
+3. SVG 三处：单点荧光笔补 `mix-blend-mode:darken`（画布端单点 drawCircle 同套 profile 混合，已一致）；pattern tile 与 shader 频率同源（freq=4/size → 间距 size/4）；`<3` 点兜底改合法 `M/L` 折线。
+4. 测试强化：A14 补湿墨侧逐点一致 + 三边断言界 0.4px（实测湿/干平滑噪声 ≤0.293px = brushPen w=20 top 收锋包络副作用，真实参数漂移为宽度比例级 ≥1px，由逐点一致断言拦截）；A17/A18 改真回归防线（两次渲染间真实切换灵敏度/活动笔形，渲染证据逐项一致 + 独立双客户端）；A16 五笔压力偏好互不串扰全量；A21 真实 exportRegionPng 栅格化（几何 AABB 外 3px 已着墨、可视带外背景的负控）；性能门禁删除 0µs 静默放宽。
+
+### 12.3 第二轮双路验证
+
+| 维度 | 裁决 | 要点 |
+| --- | --- | --- |
+| 修复核对 | 通过（P0=0 P1=0） | 11 项修复逐项核对落实；全量 788 复跑全绿、analyze 48=基线；painter 重排 save/restore 配平、deviceScale 链路无传丢、frozenRawLength 无第二消费者 |
+| 新眼回归猎手 | 通过（P0=0 P1=0） | 确认 pending 无半笔清空路径、tail 直绘不传 deviceScale 为正确设计、降级颗粒 Path 是场景几何无需缩放、A17/A18 equals 对 Rect 值等价有效、A21 clamp 假绿路径被负控拦截。唯一 P2：冻结块 Picture 按 revision 缓存，zoom 变化不重录 → deviceScale 修复在缩放后退化为频率失配。**裁定接受**：强制 zoom 重录会让协作热路径每次缩放全量重画长笔迹（违反高频路径不引入全量重扫铁律），换得的仅是亚像素级风格差，且提交后即恢复；记入移交观察项 |
+
+## 13. 视觉验收记录（2026-08-28）
+
+- **矩阵产物**：`brush_visual_matrix_test.dart` 同轨迹同名义笔宽渲染五行（BrushType.values 序：铅笔/圆珠笔/钢笔/毛笔/荧光笔），产物 `build/brush_visual_matrix/matrix.png|matrix.svg`；两两差异自动门禁（着墨差异占并集 >5%，共用管线回归塌缩即红）。
+- **子代理盲判**：视觉审查代理在不知道行序的前提下逐行判为 铅笔/圆珠笔/钢笔/毛笔/荧光笔——**五判全中**；区分度 5/5，无不可分辨对（最难 铅笔 vs 圆珠笔：灰色半透明+颗粒+柔边 vs 纯黑+光滑+锐边，并排一眼可分）。盲判标注的两处瑕疵（荧光笔边缘锯齿/颗粒越界）经 3× 放大复核为缩略图尺度下的抗锯齿误读：平头端帽清晰、边缘平滑、颗粒贴合包络无越界。
+- **浏览器 SVG 验收**：matrix.svg 内联页经 Chromium 实际渲染，五行俱全、darken 混合与铅笔 pattern 生效、荧光笔平头端帽与画布一致（截图 `build/brush_visual_matrix/matrix-svg-browser.png`）。过程发现并修正验收夹具两处问题（五元素未按行偏移；freedraw points 须相对元素原点的生产不变量），均属验收材料自身问题，非产物缺陷。

@@ -1046,20 +1046,20 @@ Windows、Web、HarmonyOS Profile 应分别执行：
 
 | 项目 | 实际结果 |
 | --- | --- |
-| 开发分支 | 待填写 |
+| 开发分支 | `feature/issue-5-pen-effects`（自 e747a15 切出） |
 | 起始提交 | e747a15 |
-| 最终提交 | 待填写 |
-| 最终 profile 参数 | 待填写 |
-| 自动化测试计数 | 待填写 |
-| shader 产物/加载结果 | 待填写 |
-| 新增 saveLayer 数 | 待填写 |
-| 历史压力兼容结果 | 待填写 |
-| 最大笔宽命中/导出结果 | 待填写 |
-| Windows 验收 | 待填写 |
-| Web 验收 | 待填写 |
-| HarmonyOS 真机验收 | 待填写 |
-| 已知降级 | 待填写 |
-| Issue/PR | 待填写 |
+| 最终提交 | c4eca09（65877e5 docs v3 → 2a5ad89 T0 → be731f3 T1 → bffb268 docs 三轮 → 3aed93a T2 → 8636cf5 T3 → cead827 T4 → b899b1f T5 → 145143b T6 → d3a97ca T7 → d745e19 T8 → b6dd7ae T9 测试 → 40253ec 审查修复 → d44fec8 测试强化 → c4eca09 视觉矩阵；docs 收口提交随后） |
+| 最终 profile 参数 | pencil sizeScale 0.82 / opacity 0.68 / thinning 0+0.45 / simulated 0.32 / taper 3×·4×；ballpoint 0.72 / 1 / 0（恒宽圆头）；fountainPen 1 / 1 / 0.05+0.9（默认灵敏度 0.5）；brushPen 1.15 / 1 / 0+1.0 / 0.82 / 6×·6×；highlighter 4.2 / 0.30 / flat + darken / forceSimulate |
+| 自动化测试计数 | 全仓 790 全绿 0 失败（本次新增约 60 例：T0 基线夹具、几何 A1–A4/A15/A19、荧光 8、铅笔 8、SVG 10、命中 A20、导出 A21+真实栅格、工具栏语义 6、集成 A14/A17/A18/roundtrip/性能、湿墨长度守护、视觉矩阵 2）；`flutter analyze` 48 条 = 基线零新增 |
+| shader 产物/加载结果 | `shaders/pencil.frag` 经 pubspec `shaders:` 段构建期 impellerc 编译（`flutter build web` 产物 unit_test_assets 内 6472B 编译产物实证）；PencilShader 三态缓存，不支持的端（含鸿蒙移植版）静默降级确定性颗粒 Path（收锋区跳过） |
+| 新增 saveLayer 数 | 0（荧光笔单笔渲染结构断言 drawCallCount==1、无 saveLayer；darken 可分离混合直接合成） |
+| 历史压力兼容 | 旧元素（无 pressureEncoding 标记）按出厂默认灵敏度确定性渲染；A17/A18 以真实状态切换（灵敏度 0.9→0.05、笔形切换）作回归防线，双客户端一致 |
+| 最大笔宽命中/导出 | elementVisualBounds 单一真源（size×(0.5+maxThinning×0.5)+2）贯通 Scene 命中/sceneBounds/ExportBounds/远端湿墨 margin；A20 命中双向断言；A21 真实 exportRegionPng 栅格化验证荧光笔几何 AABB 外 3px 已着墨、可视带外为背景 |
+| Windows 验收 | 未执行（本机无 Visual Studio，`build windows` 不可行）→ 移交 |
+| Web 验收 | `flutter build web` 成功；视觉矩阵盲判 5/5 五判全中（见审查记录 §13）；SVG 经 Chromium 实际渲染通过（darken/pattern/平头端帽与画布一致） |
+| HarmonyOS 真机验收 | 未执行（按用户指示跳过 hap 构建；构建链尚余 ohos/node_modules flutter-hvigor-plugin 坏链待 `npm install` 修复后 `PATH=…/ohpm/bin flutter build hap --no-codesign`）→ 移交 |
+| 已知降级 | shader 不可用端 → 颗粒 Path；深底荧光笔弱可见（darken 数学预期，不作特判）；SVG pattern 不被查看器支持时主体轮廓仍可见；远端冻结块纹理频率固化于录制时缩放，zoom 变化后与尾段可能短暂失配（提交后恢复，见审查记录 §12.3）；SVG 铅笔 pattern 为装饰性近似（size<6 有 1.5px 下限） |
+| Issue/PR | Issue #5；分支待推送、PR 待建（用户流程） |
 
 ## 17. 参考资料
 

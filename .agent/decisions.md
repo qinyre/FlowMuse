@@ -611,6 +611,37 @@ Issue #8 需要元素创建者分组视图（归属显示与聚焦）。游客�
 - 新增转换入口必须传 `applyDefaultStyle: false` 并传入源笔迹主导色，否则 sticky 样式会覆盖识别产物。
 - 服务端 JIIX 多元素相对坐标缺陷与智能排版路径同款 max 缺陷为已知问题，修复时需另行评审（见设计稿 §2）。
 
+## ADR-020:五种笔刷渲染差异收敛为 BrushRenderProfile 单一真源,压感灵敏度创建时烘焙
+
+- **状态**:已采纳
+- **日期**:2026-08-28
+- **关联**:Issue #5、`editor_core/src/core/elements/brush_render_profile.dart`、`editor_core/src/core/elements/element_visual_bounds.dart`、`editor_core/src/rendering/rough/freedraw_renderer.dart`、`markdraw_controller.dart`(`_encodeStrokePressure`)、`docs/研发记录/plans/2026-08-28-issue-5-pen-effects.md`
+
+### 背景
+
+五种笔刷此前共用同一 perfect_freehand 渲染管线,只有颜色/粗细不同,肉眼难辨(Issue #5);压感灵敏度是渲染期全局变量,改设置会改观已有笔迹,协作端之间还会漂移;命中/导出边界按几何 bbox 计算,宽笔(荧光笔)外缘选不中、导出裁边;Raster/SVG/边界三处各自维护宽度定义,已经漂移过。
+
+### 决策
+
+- 新增 `BrushRenderProfile.forType` 作为五笔渲染配置单一真源(sizeScale/opacityScale/thinningBase+Span/simulatedThinning/taper 距离/capStyle/compositeMode),Raster(含本地/远端湿墨)与 SVG 导出、命中边界共用。
+- 压感灵敏度在笔迹创建时由 `_encodeStrokePressure` 烘焙进点序列,`customData.flowMuse.pressureEncoding="1"` 标记;渲染端对带标记笔迹按全灵敏度重放,旧笔迹按出厂默认灵敏度;全局灵敏度的渲染依赖删除(工具栏滑块仅对压感笔形可见,偏好仍保留)。
+- 收锋(taper)按绝对距离判据(距端点 1×size 内 65%、2×size 内 85%),远端湿墨分段描边用 FreedrawTaperPhase(full/headOnly/tailOnly/none)保证整笔收针不被分段破坏。
+- 荧光笔用包原生平头端帽(StrokeEndOptions cap:false)+ BlendMode.darken(禁 multiply/modulate,其 alpha 语义会吞噬透明层);铅笔纹理走构建期编译的 Fragment Shader(pubspec `shaders:` 段),不支持的端降级为确定性颗粒 Path(收锋区跳过)。
+- 可视边界收敛 `elementVisualBounds`(size×(0.5+maxThinning×0.5)+2),Scene 命中/sceneBounds/ExportBounds/湿墨 margin 共用,删除 kMaxBrushSizeScale 第二套宽度表。
+
+### 理由
+
+- 单一真源避免 Raster/SVG/边界三处漂移(此前并存的三套宽度定义正是历史缺陷根源)。
+- 创建时烘焙把灵敏度从全局渲染态变为笔迹自身属性:历史笔迹观感稳定、跨端一致;编码/重放互逆性经包源码验算并有用例守护。
+- darken 在 Flutter/Canvas 与 SVG mix-blend-mode 两侧语义一致且 alpha 行为可控;深底变弱是混合数学的预期,不作特判。
+
+### 遗留约束
+
+- 新增笔形必须在 `BrushRenderProfile.forType` 补分支;渲染器/导出/边界层禁止按 brushType 写特判。
+- 改 thinning/taper/边界公式必须跑 `brush_geometry_test.dart`、`freedraw_svg_renderer_test.dart`、`scene_freedraw_hit_test.dart`、`brush_integration_test.dart`(A1–A4/A15/A19/A20/A21 断言)与视觉矩阵门禁 `brush_visual_matrix_test.dart`。
+- 压感编码只发生在 `MarkdrawController._encodeStrokePressure` 唯一入口;新增创建路径必须传编码后压力,不得在渲染端二次调制。
+- freedraw 的 `points` 相对元素原点 `(x,y)`(渲染/SVG 导出按 points+(x,y) 还原绝对坐标);构造元素时 bbox 字段必须与点位一致,否则导出被裁。
+
 ---
 
 做出重要技术决策(选型、架构变更、约束确立)时,追加一条:
