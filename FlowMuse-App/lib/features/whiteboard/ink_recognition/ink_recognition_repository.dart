@@ -159,98 +159,6 @@ class InkRecognitionRepository {
     }
   }
 
-  Future<SmartLayoutResponse> smartLayout(SmartLayoutRequest request) async {
-    final bodyJson = jsonEncode(request.toJson());
-    final url = _serverUri
-        .replace(path: _joinPath(_serverUri.path, '/api/ink/smart-layout'))
-        .toString();
-    final token = await _readTokenForRequest();
-    final response = await NativeHttpClient.post(
-      url: url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: bodyJson,
-      connectTimeoutMs: _connectTimeoutMs,
-      readTimeoutMs: _smartLayoutReadTimeoutMs,
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        response.body.isEmpty
-            ? '智能排版失败：HTTP ${response.statusCode}'
-            : response.body,
-      );
-    }
-    return SmartLayoutResponse.fromJson(
-      jsonDecode(response.body) as Map<String, Object?>,
-    );
-  }
-
-  Future<SmartLayoutRecognizedBlock> recognizeSmartLayoutBlock(
-    SmartLayoutInkBlockRequest block,
-  ) async {
-    final bodyJson = jsonEncode({'block': block.toJson()});
-    final url = _serverUri
-        .replace(
-          path: _joinPath(_serverUri.path, '/api/ink/smart-layout/block'),
-        )
-        .toString();
-    final token = await _readTokenForRequest();
-    final response = await NativeHttpClient.post(
-      url: url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: bodyJson,
-      connectTimeoutMs: _connectTimeoutMs,
-      readTimeoutMs: _smartLayoutReadTimeoutMs,
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        response.body.isEmpty
-            ? '智能识别失败：HTTP ${response.statusCode}'
-            : response.body,
-      );
-    }
-    return SmartLayoutRecognizedBlock.fromJson(
-      jsonDecode(response.body) as Map<String, Object?>,
-    );
-  }
-
-  Future<SmartLayoutResponse> composeSmartLayout(
-    SmartLayoutComposeRequest request,
-  ) async {
-    final bodyJson = jsonEncode(request.toJson());
-    final url = _serverUri
-        .replace(
-          path: _joinPath(_serverUri.path, '/api/ink/smart-layout/compose'),
-        )
-        .toString();
-    final token = await _readTokenForRequest();
-    final response = await NativeHttpClient.post(
-      url: url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: bodyJson,
-      connectTimeoutMs: _connectTimeoutMs,
-      readTimeoutMs: _smartLayoutReadTimeoutMs,
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        response.body.isEmpty
-            ? '智能排版失败：HTTP ${response.statusCode}'
-            : response.body,
-      );
-    }
-    return SmartLayoutResponse.fromJson(
-      jsonDecode(response.body) as Map<String, Object?>,
-    );
-  }
-
   /// 视觉优先智能排版：整页截图交由服务端 VLM 一次判定风格/内容/粗位置。
   Future<SmartLayoutVisionResponse> visionSmartLayout(
     SmartLayoutVisionRequest request,
@@ -280,6 +188,39 @@ class InkRecognitionRepository {
       );
     }
     return SmartLayoutVisionResponse.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
+  /// 低置信裁剪重问：单块局部截图无上下文转写（上下文隔离降幻觉）。
+  Future<SmartLayoutTranscribeResponse> transcribeCrop(
+    SmartLayoutTranscribeRequest request,
+  ) async {
+    final bodyJson = jsonEncode(request.toJson());
+    final url = _serverUri
+        .replace(
+          path: _joinPath(_serverUri.path, '/api/ink/smart-layout/transcribe'),
+        )
+        .toString();
+    final token = await _readTokenForRequest();
+    final response = await NativeHttpClient.post(
+      url: url,
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+      },
+      body: bodyJson,
+      connectTimeoutMs: _connectTimeoutMs,
+      readTimeoutMs: _smartLayoutReadTimeoutMs,
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        response.body.isEmpty
+            ? '单块转写失败：HTTP ${response.statusCode}'
+            : response.body,
+      );
+    }
+    return SmartLayoutTranscribeResponse.fromJson(
       jsonDecode(response.body) as Map<String, Object?>,
     );
   }

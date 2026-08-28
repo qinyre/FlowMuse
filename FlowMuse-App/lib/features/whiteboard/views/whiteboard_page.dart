@@ -58,6 +58,7 @@ import '../ai_assistant/models/ai_visual_attachment.dart';
 import '../speech_recognition/services/speech_recognition_service.dart';
 import 'collaboration_focus_target.dart';
 import 'smart_layout_dialogs.dart';
+import 'smart_layout_template_sheet.dart';
 import '../speech_recognition/services/speech_recognition_service_factory.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
@@ -955,12 +956,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     required bool isMultiPage,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
-    SmartLayoutPlanResult result;
+    SmartLayoutTemplatePreparation? preparation;
     try {
       messenger.showSnackBar(
         const SnackBar(duration: Duration(days: 1), content: Text('智能排版识别中…')),
       );
-      result = await _markdrawController.buildSmartLayoutPlan(pageId: pageId);
+      preparation = await _markdrawController.prepareSmartLayoutTemplates(
+        pageId: pageId,
+      );
     } catch (catchError) {
       messenger.removeCurrentSnackBar();
       messenger.showSnackBar(
@@ -971,42 +974,35 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return _SmartLayoutPageOutcome.failed;
     }
     messenger.removeCurrentSnackBar();
-    if (result.plan == null) {
-      if (result.hasFailures) {
-        // 失败红区可见：非模态底部条 + 画布红框
-        _markdrawController.setSmartLayoutGhost(
-          SmartLayoutGhostSpec.failures(
-            failureRects: [
-              for (final failure in result.failures) failure.bounds,
-            ],
-          ),
-        );
-        final action = await _awaitSmartLayoutBarAction(
-          failures: result.failures,
-          isMultiPage: isMultiPage,
-        );
-        _markdrawController.setSmartLayoutGhost(null);
-        return switch (action) {
-          SmartLayoutBarAction.retry => _runSmartLayoutPage(
-            pageId,
-            isMultiPage: isMultiPage,
-          ),
-          SmartLayoutBarAction.skipPage => _SmartLayoutPageOutcome.skipped,
-          SmartLayoutBarAction.cancelAll => _SmartLayoutPageOutcome.cancelled,
-          SmartLayoutBarAction.apply ||
-          SmartLayoutBarAction.applyAndDrop => _SmartLayoutPageOutcome.failed,
-        };
-      }
+    if (preparation == null) {
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            result.error != null ? '智能排版失败：${result.error}' : '本页没有可智能排版的手写内容',
-          ),
-        ),
+        const SnackBar(content: Text('本页没有可智能排版的手写内容')),
       );
       return _SmartLayoutPageOutcome.nothing;
     }
-    final plan = result.plan!;
+    // 模板选择卡：三张真实内容缩略图，点选后确定性落位；关闭 = 取消（零残留）。
+    if (!mounted) return _SmartLayoutPageOutcome.cancelled;
+    final kind = await showSmartLayoutTemplateSheet(
+      context: context,
+      preparation: preparation,
+    );
+    if (!mounted) return _SmartLayoutPageOutcome.cancelled;
+    if (kind == null) {
+      return _SmartLayoutPageOutcome.cancelled;
+    }
+    final result = _markdrawController.buildSmartLayoutPlanForTemplate(
+      preparation,
+      kind,
+    );
+    final plan = result.plan;
+    if (plan == null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('智能排版失败：${result.error ?? '未知错误'}'),
+        ),
+      );
+      return _SmartLayoutPageOutcome.failed;
+    }
     // 草稿编辑态：把排版结果渲染为可拖动的临时场景（蓝框=参与者选取框），
     // 红区以红框标注叠加；低置信文本以橙虚线标注，可经底部条"校对"就地改字。
     _markdrawController.enterSmartLayoutDraft(plan);
@@ -2556,18 +2552,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onRecognizeInk: (request) => ref
                       .read(inkRecognitionRepositoryProvider)
                       .recognize(request),
-                  onSmartLayoutInk: (request) => ref
-                      .read(inkRecognitionRepositoryProvider)
-                      .smartLayout(request),
-                  onRecognizeSmartLayoutBlock: (block) => ref
-                      .read(inkRecognitionRepositoryProvider)
-                      .recognizeSmartLayoutBlock(block),
-                  onComposeSmartLayout: (request) => ref
-                      .read(inkRecognitionRepositoryProvider)
-                      .composeSmartLayout(request),
                   onVisionSmartLayout: (request) => ref
                       .read(inkRecognitionRepositoryProvider)
                       .visionSmartLayout(request),
+                  onTranscribeCrop: (request) => ref
+                      .read(inkRecognitionRepositoryProvider)
+                      .transcribeCrop(request),
                   onAiPressed: _toggleAiAgent,
                   onSmartLayoutPressed: () => _startSmartLayoutFlow(),
                   onLiveFreedrawChanged: state.collaborating

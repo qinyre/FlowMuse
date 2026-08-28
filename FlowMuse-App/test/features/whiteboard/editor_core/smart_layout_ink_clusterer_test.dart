@@ -11,8 +11,18 @@ FreedrawElement stroke(String id, double x, double y, double h) =>
       points: const [Point(0, 0), Point(40, 20)],
     );
 
+/// 窄高单字（竖排场景，宽 30 高 40）。
+FreedrawElement char(String id, double x, double y) => FreedrawElement(
+  id: ElementId(id),
+  x: x,
+  y: y,
+  width: 30,
+  height: 40,
+  points: const [Point(0, 0), Point(30, 40)],
+);
+
 void main() {
-  group('SmartLayoutInkClusterer', () {
+  group('SmartLayoutInkClusterer（v2 全页纯几何聚类）', () {
     test('同一行的多笔合成一个簇', () {
       final clusters = SmartLayoutInkClusterer.cluster([
         stroke('a', 0, 100, 20),
@@ -32,13 +42,72 @@ void main() {
       expect(clusters.length, 3);
     });
 
-    test('同会话三句话（间隔 40）被拆为 3 簇', () {
+    test('跨会话同线相邻单字簇合并（去会话化的核心收益）', () {
+      // 现实场景："图1"被会话边界拆成两笔；v2 无会话概念，几何相邻即合并。
+      final clusters = SmartLayoutInkClusterer.cluster([
+        char('tu', 0, 100),
+        char('yi', 36, 104),
+      ]);
+      expect(clusters.length, 1);
+      expect(clusters.first.length, 2);
+    });
+
+    test('竖排窄高列整列不拆（"先头小子"场景）', () {
+      final clusters = SmartLayoutInkClusterer.cluster([
+        char('xian', 500, 100),
+        char('tou', 504, 148),
+        char('xiao', 498, 196),
+        char('zi', 502, 244),
+      ]);
+      expect(clusters.length, 1);
+      expect(clusters.first.length, 4);
+    });
+
+    test('多行横排（行宽远大于列宽）不误判为竖排列，按行拆分', () {
+      final clusters = SmartLayoutInkClusterer.cluster([
+        char('a', 300, 100),
+        char('b', 340, 102),
+        char('c', 300, 150),
+        char('d', 340, 152),
+      ]);
+      expect(clusters.length, 2);
+    });
+
+    test('带内远距（间隙超过一个字高）拆成两块', () {
+      final clusters = SmartLayoutInkClusterer.cluster([
+        stroke('left', 0, 100, 20),
+        stroke('right', 200, 100, 20), // 间隙 160 > max(24,28)
+      ]);
+      expect(clusters.length, 2);
+    });
+
+    test('杂散小笔画剔除：孤立的勾/点不产生簇', () {
+      final dot = FreedrawElement(
+        id: const ElementId('dot'),
+        x: 10,
+        y: 10,
+        width: 5,
+        height: 5,
+        points: const [Point(0, 0), Point(5, 5)],
+      );
+      expect(SmartLayoutInkClusterer.cluster([dot]), isEmpty);
+    });
+
+    test('杂散小笔画剔除：与大块同页也不混入聚类', () {
+      final dot = FreedrawElement(
+        id: const ElementId('dot'),
+        x: 46,
+        y: 108,
+        width: 5,
+        height: 5,
+        points: const [Point(0, 0), Point(5, 5)],
+      );
       final clusters = SmartLayoutInkClusterer.cluster([
         stroke('a', 0, 100, 20),
-        stroke('city', 0, 145, 20),
-        stroke('ppt', 0, 190, 20),
+        dot,
       ]);
-      expect(clusters.length, 3);
+      expect(clusters.length, 1);
+      expect(clusters.first.map((e) => e.id.value), ['a']);
     });
 
     test('单笔或空输入保持单簇', () {
