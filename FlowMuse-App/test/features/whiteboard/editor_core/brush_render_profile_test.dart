@@ -1,5 +1,4 @@
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/freedraw_renderer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:perfect_freehand/perfect_freehand.dart' hide Point;

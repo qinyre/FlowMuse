@@ -101,4 +101,34 @@ void main() {
       reason: '毛笔独立偏好',
     );
   });
+
+  test('A16 全量：五支笔压力偏好互不串扰且可恢复', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    final brushes = BrushType.values;
+    final expected = <BrushType, double>{
+      for (var i = 0; i < brushes.length; i++) brushes[i]: 0.1 + 0.15 * i,
+    };
+    // 逐笔设置不同的压力灵敏度（恒宽笔 setter 仍可写：偏好保留）
+    for (final brush in brushes) {
+      controller.activeBrushType = brush;
+      controller.pressureSensitivity = expected[brush]!;
+    }
+    // 依次切回：偏好按笔恢复（颜色/粗细走同一
+    // _rememberCurrentBrushState/_restoreBrushState 通道，此处一并回归）
+    for (final brush in brushes) {
+      controller.activeBrushType = brush;
+      expect(
+        controller.pressureSensitivity,
+        expected[brush]!,
+        reason: '${brush.name} 压力偏好不串扰',
+      );
+    }
+    // 恒宽笔（圆珠笔/荧光笔）UI 隐藏滑块，但历史偏好不丢
+    controller.activeBrushType = BrushType.ballpoint;
+    controller.pressureSensitivity = 0.4;
+    controller.activeBrushType = BrushType.highlighter;
+    controller.activeBrushType = BrushType.ballpoint;
+    expect(controller.pressureSensitivity, 0.4, reason: '恒宽笔偏好保留');
+  });
 }

@@ -129,6 +129,26 @@ void main() {
     expect(dot, contains('<circle'));
     expect(dot, contains('cx="5"'));
 
+    // 单点荧光笔与画布端一致：圆点同样带 darken 混合（审查 P2 修复）
+    final hlDot = SvgElementRenderer.render(
+      FreedrawElement(
+        id: const ElementId('dot-hl'),
+        x: 5,
+        y: 5,
+        width: 1,
+        height: 1,
+        points: const [Point(0, 0)],
+        pressures: const [0.5],
+        simulatePressure: false,
+        isComplete: true,
+        customData: customDataWithFreedrawRender(null, BrushType.highlighter),
+        strokeColor: '#ffff00',
+        strokeWidth: 20,
+      ),
+    );
+    expect(hlDot, contains('<circle'));
+    expect(hlDot, contains('mix-blend-mode:darken'), reason: '单点荧光笔 darken');
+
     final empty = SvgElementRenderer.render(
       FreedrawElement(
         id: const ElementId('empty-1'),

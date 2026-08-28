@@ -587,6 +587,75 @@ void main() {
     expect(bounds.top, lessThan(60.0), reason: '可视上缘 60 必须在界内');
     expect(bounds.bottom, greaterThan(160.0), reason: '下缘同理含可视半宽');
   });
+
+  test('A21 真实栅格：按 ExportBounds 区域导出，荧光笔可视外缘已着墨', () async {
+    // Given: 与 P6 相同的默认荧光笔水平笔迹（几何 AABB y∈[100,104]，
+    // 可视带 y∈[58,146]，半宽 44）；导出区域取 ExportBounds 真实产物。
+    // 若导出边界回退为几何 AABB，可视外缘像素落在区域之外，
+    // 本用例因取不到该像素行而失败——这是对 T6 的像素级防线。
+    final element = FreedrawElement(
+      id: const ElementId('freedraw-highlighter-raster'),
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 4,
+      points: const [Point(0, 2), Point(100, 2), Point(200, 2)],
+      pressures: const [],
+      simulatePressure: true,
+      isComplete: true,
+      customData: customDataWithBrushType(null, BrushType.highlighter),
+      strokeColor: '#ffff00',
+      strokeWidth: 20,
+    );
+    final scene = Scene().addElement(element);
+    final bounds = ExportBounds.compute(scene);
+    expect(bounds, isNotNull);
+    final region = Rect.fromLTRB(
+      bounds!.left,
+      bounds.top,
+      bounds.right,
+      bounds.bottom,
+    );
+
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.loadScene(scene);
+
+    // When: 真实走 exportRegionPng 栅格化
+    final bytes = await controller.exportRegionPng(region);
+    expect(bytes, isNotNull);
+    final image = await _decodePng(bytes!);
+    addTearDown(image.dispose);
+    final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    expect(data, isNotNull);
+    final pixels = data!.buffer.asUint8List();
+
+    // Then: 场景坐标 → 像素坐标换算（exportRegionPng 等比缩放整块区域）
+    final zoom = image.width / region.width;
+    int pixelOffset(double sceneX, double sceneY) {
+      final px = ((sceneX - region.left) * zoom).round().clamp(
+        0,
+        image.width - 1,
+      );
+      final py = ((sceneY - region.top) * zoom).round().clamp(
+        0,
+        image.height - 1,
+      );
+      return (py * image.width + px) * 4;
+    }
+
+    bool isInk(double sceneX, double sceneY) {
+      final o = pixelOffset(sceneX, sceneY);
+      final r = pixels[o], g = pixels[o + 1], b = pixels[o + 2];
+      return (255 - r) + (255 - g) + (255 - b) > 10; // 非纯白即着墨
+    }
+
+    // 几何 AABB 上缘外 3px（仍在可视带 58..146 内）→ 必须已着墨
+    expect(isInk(200, 97), isTrue, reason: '可视外缘（几何 AABB 外 3px）应已着墨');
+    expect(isInk(200, 107), isTrue, reason: '下侧外缘同理');
+    // 可视带上方 13px（region 内、着墨区外）→ 应为背景
+    expect(isInk(200, 45), isFalse, reason: '可视带外应为背景（方向校验）');
+  });
 }
 
 /// 用 PictureRecorder 合成指定尺寸的纯色 PNG。

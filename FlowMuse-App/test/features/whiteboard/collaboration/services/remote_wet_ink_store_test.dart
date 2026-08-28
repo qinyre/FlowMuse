@@ -46,6 +46,63 @@ void main() {
     expect(store.roomPointCount, RemoteWetInkStore.maxPointsPerStroke);
   });
 
+  test('frozenRawLength 只计已入块的点，pending 区由 tail 段计量', () {
+    // 回归防线（issue #5 执行结果审查 P2）：pending 点若在进入 pending
+    // 时就累入冻结长度，wholeVisibleRawLength 会经 tail 段（含 leading
+    // 桥接）重复计入，湿墨期整笔长度虚高 → <3×size 收锋门控提前翻转，
+    // 收笔瞬间笔锋跳变。冻结管线：点先进 tail 窗口，滑出窗口（被新点
+    // 挤出）才进 pending，满 frozenBlockPointCapacity 才入块。对角线
+    // 点列相邻段长恒为 √2。
+    final store = RemoteWetInkStore(autoCleanup: false);
+    addTearDown(store.dispose);
+    const sqrt2 = 1.4142135623730951;
+
+    // 第 1 包 0..63：全部在 tail 窗口内，无过期点
+    expect(
+      store.apply(_decoded('sender', 'stroke', count: 64)).accepted,
+      isTrue,
+    );
+    var snapshot = store.strokes.single;
+    expect(snapshot.frozenBlocks, isEmpty);
+    expect(snapshot.frozenRawLength, closeTo(0, 1e-6));
+
+    // 第 2 包 64..79：0..15 被挤出窗口进 pending（未满块容量），
+    // 旧实现在此已累加 15√2 —— 修复后 pending 不计入冻结长度
+    expect(
+      store
+          .apply(_decoded('sender', 'stroke', startIndex: 64, count: 16))
+          .accepted,
+      isTrue,
+    );
+    snapshot = store.strokes.single;
+    expect(snapshot.frozenBlocks, isEmpty);
+    expect(
+      snapshot.frozenRawLength,
+      closeTo(0, 1e-6),
+      reason: 'pending 区长度由 tail 段计量，不得提前计入冻结长度',
+    );
+
+    // 第 3 包 80..127：16..63 挤出后 pending 满 64 → 首块入块
+    expect(
+      store
+          .apply(_decoded('sender', 'stroke', startIndex: 80, count: 48))
+          .accepted,
+      isTrue,
+    );
+    snapshot = store.strokes.single;
+    expect(snapshot.frozenBlocks.single.pointCount, 64);
+    expect(
+      snapshot.frozenRawLength,
+      closeTo(63 * sqrt2, 1e-6),
+      reason: '块内 + 跨窗口桥接按索引序累加至最后入块点',
+    );
+    expect(
+      snapshot.tailSegments.first.leadingPoint,
+      isNotNull,
+      reason: 'tail 首段带冻结侧 leading 桥接（63→64）',
+    );
+  });
+
   test('room 65536 点边界后整包拒绝，重复包不增加计数', () {
     final store = RemoteWetInkStore(autoCleanup: false);
     addTearDown(store.dispose);

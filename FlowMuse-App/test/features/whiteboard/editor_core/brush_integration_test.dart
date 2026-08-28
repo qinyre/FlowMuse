@@ -2,13 +2,13 @@ import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/core/io/io.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/serialization/serialization.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/outline_render_mode.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/element_renderer.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/rough_canvas_adapter.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/rough_adapter.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/freedraw_renderer.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/ui/markdraw_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fixtures/brush_stroke_fixtures.dart';
@@ -57,28 +57,44 @@ void main() {
             equals(dryOutline.map((o) => '${o.dx},${o.dy}').toList()),
             reason: '${brush.name} 提交不换参数',
           );
+          final wetAgain = FreedrawRenderer.buildOutline(
+            slowArc.points,
+            strokeWidth: strokeWidth,
+            pressures: slowArc.pressures,
+            pressureEncoded: true,
+            isComplete: false,
+            brushType: brush,
+          );
+          expect(
+            wetAgain.map((o) => '${o.dx},${o.dy}').toList(),
+            equals(wetOutline.map((o) => '${o.dx},${o.dy}').toList()),
+            reason: '${brush.name} 湿墨重复渲染逐点一致',
+          );
 
           final wet = BrushOutlineMetrics.measure(wetOutline);
           final dry = BrushOutlineMetrics.measure(dryOutline);
+          // 计划 A14 口径：其余三边零漂移。湿/干平滑噪声实测 ≤0.293px（brushPen w=20 top，收锋包络副作用），
+          // 断言界 0.4px——真实参数漂移为宽度比例级（≥1px），由逐点一致断言拦截。
+          // 又不因 last-bit 浮点翻转假红。
           expect(
             (wet.bounds.left - dry.bounds.left).abs(),
-            lessThan(0.5),
-            reason: '${brush.name} w=$strokeWidth left',
+            lessThan(0.4),
+            reason: '${brush.name} w=$strokeWidth left 零漂移',
           );
           expect(
             (wet.bounds.top - dry.bounds.top).abs(),
-            lessThan(0.5),
-            reason: '${brush.name} w=$strokeWidth top',
+            lessThan(0.4),
+            reason: '${brush.name} w=$strokeWidth top 零漂移',
           );
           expect(
             (wet.bounds.bottom - dry.bounds.bottom).abs(),
-            lessThan(0.5),
-            reason: '${brush.name} w=$strokeWidth bottom',
+            lessThan(0.4),
+            reason: '${brush.name} w=$strokeWidth bottom 零漂移',
           );
           expect(
             (wet.bounds.right - dry.bounds.right).abs(),
             lessThan(4.0),
-            reason: '${brush.name} w=$strokeWidth 末端拖尾补全 ≤4px',
+            reason: '${brush.name} w=$strokeWidth 末端拖尾补全 ≤4px（常数、与宽度无关）',
           );
         }
       }
@@ -103,22 +119,45 @@ void main() {
         strokeWidth: 4,
       );
 
-      ui.Rect renderWith(RoughCanvasAdapter adapter) {
+      // 回归防线：两次渲染之间真实切换“曾经影响渲染”的控制器全局
+      // 状态（压感灵敏度/活动笔形）。历史元素渲染只取决于元素数据 +
+      // 笔刷出厂默认（BrushRenderProfile），对客户端状态完全冻结；
+      // 若未来把全局灵敏度接回渲染管线，本用例会立即变红。
+      List<List<Object?>> renderEvidence(
+        FreedrawElement e,
+        RoughAdapter adapter,
+      ) {
         final recorder = ui.PictureRecorder();
         final spy = SpyCanvas(ui.Canvas(recorder));
-        ElementRenderer.render(spy, element, adapter);
+        ElementRenderer.render(spy, e, adapter);
         recorder.endRecording().dispose();
-        return spy.pathOrder.first;
+        return [spy.pathOrder, spy.pathBlendModes, spy.pathAlphas];
       }
 
-      final a = renderWith(RoughCanvasAdapter());
-      final b = renderWith(RoughCanvasAdapter());
-      // 两个“当前灵敏度不同”的客户端（适配器已无灵敏度状态，历史
-      // 元素渲染只取决于元素数据 + 笔刷出厂默认）→ 完全一致。
-      expect(b, equals(a));
+      MarkdrawController client(double sensitivity, BrushType brush) {
+        final controller = MarkdrawController();
+        addTearDown(controller.dispose);
+        controller.pressureSensitivity = sensitivity;
+        controller.activeBrushType = brush;
+        return controller;
+      }
+
+      final controller = client(0.9, BrushType.brushPen);
+      final before = renderEvidence(element, controller.adapter);
+      // 状态真实变化（旧实现中两者都直接进入渲染管线）
+      controller.pressureSensitivity = 0.05;
+      controller.activeBrushType = BrushType.ballpoint;
+      expect(
+        renderEvidence(element, controller.adapter),
+        equals(before),
+        reason: '历史笔迹渲染不随客户端状态漂移',
+      );
+      // 独立客户端（不同状态）同样一致 → 双端一致
+      final other = client(0.05, BrushType.ballpoint);
+      expect(renderEvidence(element, other.adapter), equals(before));
     });
 
-    test('旧元素（无标记）也双端一致（出厂默认灵敏度确定性）', () {
+    test('旧元素（无标记）：状态切换前后仍按出厂默认灵敏度确定性渲染', () {
       final legacy = FreedrawElement(
         id: const ElementId('legacy-1'),
         x: 0,
@@ -132,24 +171,27 @@ void main() {
         customData: customDataWithBrushType(null, BrushType.pencil),
         strokeWidth: 6,
       );
-      final first = FreedrawRenderer.buildOutline(
-        [for (final p in legacy.points) Point(p.x + legacy.x, p.y + legacy.y)],
-        strokeWidth: legacy.strokeWidth,
-        pressures: legacy.pressures,
-        pressureEncoded: false,
-        brushType: BrushType.pencil,
-      );
-      final second = FreedrawRenderer.buildOutline(
-        [for (final p in legacy.points) Point(p.x + legacy.x, p.y + legacy.y)],
-        strokeWidth: legacy.strokeWidth,
-        pressures: legacy.pressures,
-        pressureEncoded: false,
-        brushType: BrushType.pencil,
-      );
+      List<List<Object?>> renderEvidence(RoughAdapter adapter) {
+        final recorder = ui.PictureRecorder();
+        final spy = SpyCanvas(ui.Canvas(recorder));
+        ElementRenderer.render(spy, legacy, adapter);
+        recorder.endRecording().dispose();
+        return [spy.pathOrder, spy.pathBlendModes, spy.pathAlphas];
+      }
+
+      final controller = MarkdrawController();
+      addTearDown(controller.dispose);
+      controller.pressureSensitivity = 0.95;
+      final before = renderEvidence(controller.adapter);
+      controller.pressureSensitivity = 0.05;
+      controller.activeBrushType = BrushType.pencil;
       expect(
-        second.map((o) => '${o.dx},${o.dy}').toList(),
-        equals(first.map((o) => '${o.dx},${o.dy}').toList()),
+        renderEvidence(controller.adapter),
+        equals(before),
+        reason: '旧元素按出厂默认灵敏度渲染，不受客户端状态影响',
       );
+      // 出厂默认灵敏度的确定性：与首次渲染逐项一致
+      expect(renderEvidence(controller.adapter), equals(before));
     });
   });
 
@@ -287,12 +329,21 @@ void main() {
         outlineRenderMode: OutlineRenderMode.quadratic,
         brushType: BrushType.brushPen,
       );
+      // 千点量级计时不可能为 0µs；为 0 时取 1.0 通过等于静默关闭门禁，
+      // 必须显式失败（审查 P2：快速机器上的假绿口子）
+      expect(
+        tSmall.getStrokeDuration.inMicroseconds,
+        greaterThan(0),
+        reason: '1k 轮廓计时不应为 0µs',
+      );
+      expect(
+        tLarge.getStrokeDuration.inMicroseconds,
+        greaterThan(0),
+        reason: '16k 轮廓计时不应为 0µs',
+      );
       final ratio =
-          tLarge.getStrokeDuration.inMicroseconds == 0 ||
-              tSmall.getStrokeDuration.inMicroseconds == 0
-          ? 1.0
-          : tLarge.getStrokeDuration.inMicroseconds /
-                tSmall.getStrokeDuration.inMicroseconds;
+          tLarge.getStrokeDuration.inMicroseconds /
+          tSmall.getStrokeDuration.inMicroseconds;
       expect(ratio, lessThan(20), reason: '16k/1k = $ratio（线性 16，计时噪声余量 20）');
     });
 
