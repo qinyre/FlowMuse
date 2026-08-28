@@ -3717,8 +3717,42 @@ class MarkdrawController extends ChangeNotifier {
       page.bounds.height,
     );
     Uint8List? png;
+    final clusterRects = <String, ui.Rect>{
+      for (final entry in inkGroups.entries)
+        entry.key: _inkGroupBounds(entry.value),
+    };
+    final figures = _smartLayoutFigureUnits(page.id);
+    // Set-of-Mark：墨迹簇 + 页面可移动元素全部作为候选对象，按阅读序（上→左）
+    // 编号 m1..mN，编号与对象的映射留在客户端，服务端/VLM 只见编号。
+    final markCandidates = <({String key, ui.Rect rect, bool isText})>[
+      for (final entry in clusterRects.entries)
+        (key: entry.key, rect: entry.value, isText: true),
+      for (final entry in figures.rects.entries)
+        (key: entry.key, rect: entry.value, isText: false),
+    ]..sort((a, b) {
+      final byTop = a.rect.top.compareTo(b.rect.top);
+      return byTop != 0 ? byTop : a.rect.left.compareTo(b.rect.left);
+    });
+    final textMarks = <String, String>{};
+    final figureMarks = <String, String>{};
+    final markLabels = <({String id, ui.Rect bounds})>[];
+    final markIds = <String>[];
+    for (var i = 0; i < markCandidates.length; i++) {
+      final markId = 'm${i + 1}';
+      markIds.add(markId);
+      markLabels.add((id: markId, bounds: markCandidates[i].rect));
+      if (markCandidates[i].isText) {
+        textMarks[markId] = markCandidates[i].key;
+      } else {
+        figureMarks[markId] = markCandidates[i].key;
+      }
+    }
     try {
-      png = await exportRegionPng(pageBounds);
+      png = await exportRegionPng(
+        pageBounds,
+        afterPaint: (canvas, zoom) =>
+            _drawVisionMarkOverlay(canvas, zoom, pageBounds.topLeft, markLabels),
+      );
     } catch (error) {
       debugPrint('[$_logTag] 视觉排版截图失败，回退经典管线: $error');
       return null;
@@ -3730,6 +3764,7 @@ class MarkdrawController extends ChangeNotifier {
         SmartLayoutVisionRequest(
           pageId: page.id,
           imageBase64: base64Encode(png),
+          marks: markIds,
         ),
       );
     } catch (error) {
@@ -3743,16 +3778,11 @@ class MarkdrawController extends ChangeNotifier {
       return null;
     }
 
-    final clusterRects = <String, ui.Rect>{
-      for (final entry in inkGroups.entries)
-        entry.key: _inkGroupBounds(entry.value),
-    };
-    final figures = _smartLayoutFigureUnits(page.id);
     final match = SmartLayoutVisionMatcher.match(
       elements: vision.elements,
-      pageBounds: pageBounds,
-      inkClusters: clusterRects,
-      figureUnits: figures.rects,
+      textMarks: textMarks,
+      figureMarks: figureMarks,
+      allClusterKeys: clusterRects.keys.toSet(),
     );
     if (match.matchedItemCount < 2) {
       debugPrint(
@@ -3970,7 +4000,9 @@ class MarkdrawController extends ChangeNotifier {
       final docBlocks = [
         for (final block in blocks)
           SmartLayoutBlock(
-            id: 'vb-${order}',
+            // 文档块沿用视觉元素 id：下游元素 customData.flowMuse.blockId
+            // 与 VLM 元素 id 全链路一致（低置信校对直查依赖）。
+            id: block.id,
             type: block.type == 'formula' ? 'math' : 'paragraph',
             text: block.text ?? '',
             latex: block.latex?.trim().isNotEmpty == true ? block.latex : null,
@@ -4051,23 +4083,38 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// 视觉装配收尾：把低置信文本项（VLM 自报把握不足）挂到计划上，供草稿态
-  /// 橙色高亮与校对编辑条。PPT 家族引擎复用原元素 id，按 id 直接定位；
-  /// legacy/mindmap 引擎在内部重建元素，按原转写文本回填首个未占用的同文新增项。
+  /// 橙色高亮与校对编辑条。视觉路径创建的元素都在 customData.flowMuse.blockId
+  /// 里带着来源块 id（== VLM 元素 id）：PPT 家族引擎原样保留元素，legacy 引擎
+  /// 经 _textElementFromRecognizedBlock / 文档块重建后 blockId 仍在——统一按
+  /// blockId 直查，无启发式。article 段落拆行时行元素 id 是 "e{i}-line-{k}"
+  /// 约定前缀，按前缀归组同标。mindmap 引擎从节点文字重创作元素（可能合并
+  /// 多块），无单一来源块，不做校对标注。
   SmartLayoutPlan _attachVisionLowConfidence(
     SmartLayoutPlan plan,
     Map<int, TextElement> textElementsByIndex,
     List<SmartLayoutVisionElement> elements,
   ) {
-    final knownIds = {for (final element in plan.addElements) element.id};
-    final usedIds = <ElementId>{};
+    const lineSuffix = '-line-';
+    final exactIds = <String, ElementId>{};
+    final lineIdsByBase = <String, List<ElementId>>{};
+    for (final element in plan.addElements) {
+      final blockId = _flowMuseData(element)?['blockId'] as String?;
+      if (blockId == null || blockId.isEmpty) continue;
+      final splitAt = blockId.indexOf(lineSuffix);
+      if (splitAt > 0) {
+        lineIdsByBase
+            .putIfAbsent(blockId.substring(0, splitAt), () => <ElementId>[])
+            .add(element.id);
+      } else {
+        exactIds[blockId] = element.id;
+      }
+    }
     final texts = <SmartLayoutLowConfidenceText>[];
+    final flagged = <ElementId>{};
     void flag(ElementId id, double confidence) {
-      if (usedIds.add(id)) {
+      if (flagged.add(id)) {
         texts.add(
-          SmartLayoutLowConfidenceText(
-            elementId: id,
-            confidence: confidence,
-          ),
+          SmartLayoutLowConfidenceText(elementId: id, confidence: confidence),
         );
       }
     }
@@ -4075,21 +4122,11 @@ class MarkdrawController extends ChangeNotifier {
     for (final entry in textElementsByIndex.entries) {
       final vision = elements[entry.key];
       if (vision.confidence >= kSmartLayoutLowConfidenceThreshold) continue;
-      final element = entry.value;
-      if (knownIds.contains(element.id)) {
-        flag(element.id, vision.confidence);
-        continue;
-      }
-      final needle = element.text.trim();
-      if (needle.isEmpty) continue;
-      for (final candidate in plan.addElements) {
-        if (candidate is! TextElement || usedIds.contains(candidate.id)) {
-          continue;
-        }
-        if (candidate.text.trim() == needle) {
-          flag(candidate.id, vision.confidence);
-          break;
-        }
+      final visionId = vision.id ?? 'e${entry.key}';
+      final exact = exactIds[visionId];
+      if (exact != null) flag(exact, vision.confidence);
+      for (final id in lineIdsByBase[visionId] ?? const <ElementId>[]) {
+        flag(id, vision.confidence);
       }
     }
     if (texts.isEmpty) return plan;
@@ -4346,6 +4383,66 @@ class MarkdrawController extends ChangeNotifier {
       addUnit(groupId, members);
     }
     return (elements: elements, rects: rects, memberIds: memberIds);
+  }
+
+  /// Set-of-Mark 叠加：把编号标记画进导出截图（场景坐标→导出像素坐标），
+  /// VLM 读图上编号输出 markIds，不做坐标回归。
+  void _drawVisionMarkOverlay(
+    Canvas canvas,
+    double zoom,
+    Offset sceneOrigin,
+    List<({String id, ui.Rect bounds})> marks,
+  ) {
+    const markColors = [
+      Color(0xFFE5484D),
+      Color(0xFF3B82F6),
+      Color(0xFF22C55E),
+      Color(0xFFF08C00),
+      Color(0xFF9333EA),
+      Color(0xFF0EA5E9),
+      Color(0xFFE11D8F),
+      Color(0xFF84CC16),
+    ];
+    for (var i = 0; i < marks.length; i++) {
+      final mark = marks[i];
+      final pixelRect = Rect.fromLTWH(
+        (mark.bounds.left - sceneOrigin.dx) * zoom,
+        (mark.bounds.top - sceneOrigin.dy) * zoom,
+        mark.bounds.width * zoom,
+        mark.bounds.height * zoom,
+      );
+      final color = markColors[i % markColors.length];
+      canvas.drawRect(
+        pixelRect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = color,
+      );
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: mark.id,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final labelRect = Rect.fromLTWH(
+        math.max(0.0, pixelRect.left),
+        math.max(0.0, pixelRect.top),
+        textPainter.width + 10,
+        textPainter.height + 6,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(labelRect, const Radius.circular(3)),
+        Paint()..color = color,
+      );
+      textPainter.paint(canvas, labelRect.topLeft + const Offset(5, 3));
+      textPainter.dispose();
+    }
   }
 
   SmartLayoutPlanResult _planForStyle(
@@ -7488,6 +7585,7 @@ class MarkdrawController extends ChangeNotifier {
   Future<Uint8List?> exportRegionPng(
     Rect sceneBounds, {
     double maxLongestSide = 1568,
+    void Function(Canvas canvas, double zoom)? afterPaint,
   }) async {
     if (sceneBounds.width <= 0 || sceneBounds.height <= 0) return null;
     final longest = maxLongestSide <= 0 ? 1568.0 : maxLongestSide;
@@ -7519,6 +7617,8 @@ class MarkdrawController extends ChangeNotifier {
       renderPageShadows: false,
       skipMathText: true,
     ).paint(canvas, pixelSize);
+    // Set-of-Mark 等叠加层：画在场景之上、导出像素坐标空间。
+    afterPaint?.call(canvas, zoom);
 
     final picture = recorder.endRecording();
     ui.Image? image;

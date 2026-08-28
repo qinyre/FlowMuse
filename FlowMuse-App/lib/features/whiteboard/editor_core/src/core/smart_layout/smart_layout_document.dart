@@ -608,13 +608,15 @@ class SmartLayoutResponse {
   }
 }
 
-/// 视觉优先管线请求：整页截图（+可选笔记标题），服务端调 VLM 一次判定。
+/// 视觉优先管线请求：整页截图（含编号标记，Set-of-Mark）+可选笔记标题，
+/// 服务端调 VLM 一次判定；marks 是客户端已画进截图的编号列表。
 class SmartLayoutVisionRequest {
   const SmartLayoutVisionRequest({
     required this.pageId,
     required this.imageBase64,
     this.noteTitle,
     this.imageMime = 'image/png',
+    this.marks = const [],
   });
 
   final String pageId;
@@ -622,26 +624,28 @@ class SmartLayoutVisionRequest {
   final String imageMime;
   final String imageBase64;
 
+  /// 截图上已画出的编号标记（"m1"、"m2"...），VLM 输出引用必须出自这里。
+  final List<String> marks;
+
   Map<String, Object?> toJson() => {
     'pageId': pageId,
     if (noteTitle != null && noteTitle!.isNotEmpty) 'noteTitle': noteTitle,
     'imageMime': imageMime,
     'imageBase64': imageBase64,
+    if (marks.isNotEmpty) 'marks': marks,
   };
 }
 
-/// VLM 对页面内一项内容的描述；box 为 0-1000 归一化 [x1,y1,x2,y2]。
+/// VLM 对页面内一项内容的描述；markIds 引用截图上的编号标记（Set-of-Mark，
+/// 客户端按编号直查场景对象，不做坐标回归）。
 @immutable
 class SmartLayoutVisionElement {
   const SmartLayoutVisionElement({
     required this.role,
-    required this.x1,
-    required this.y1,
-    required this.x2,
-    required this.y2,
     this.id,
     this.text,
     this.vertical = false,
+    this.markIds = const [],
     this.pairId,
     this.confidence = 0.9,
   });
@@ -653,63 +657,28 @@ class SmartLayoutVisionElement {
   final String role;
   final String? text;
   final bool vertical;
+
+  /// 引用的截图编号标记（服务端已校验出自请求 marks 且全局不重复）。
+  final List<String> markIds;
+
   final String? pairId;
 
   /// VLM 对该元素认字把握的自评分（0-1；服务端已钳制，缺省 0.9）。
   final double confidence;
 
-  /// 0-1000 归一化坐标（客户端已钳制并保证 x1<x2、y1<y2）。
-  final double x1;
-  final double y1;
-  final double x2;
-  final double y2;
-
   bool get isFigure => role == 'figure';
 
-  /// 映射到 [bounds]（页面场景坐标）内的矩形。
-  Rect sceneRect(Bounds bounds) {
-    return Rect.fromLTWH(
-      bounds.left + x1 / 1000 * bounds.size.width,
-      bounds.top + y1 / 1000 * bounds.size.height,
-      (x2 - x1) / 1000 * bounds.size.width,
-      (y2 - y1) / 1000 * bounds.size.height,
-    );
-  }
-
   factory SmartLayoutVisionElement.fromJson(Map<String, Object?> json) {
-    double clampCoord(Object? value) =>
-        ((value as num?)?.toDouble() ?? 0).clamp(0.0, 1000.0).toDouble();
-    var x1 = 0.0;
-    var y1 = 0.0;
-    var x2 = 0.0;
-    var y2 = 0.0;
-    final rawBox = json['box'];
-    if (rawBox is List && rawBox.length == 4) {
-      x1 = clampCoord(rawBox[0]);
-      y1 = clampCoord(rawBox[1]);
-      x2 = clampCoord(rawBox[2]);
-      y2 = clampCoord(rawBox[3]);
-    }
-    if (x2 < x1) {
-      final swap = x1;
-      x1 = x2;
-      x2 = swap;
-    }
-    if (y2 < y1) {
-      final swap = y1;
-      y1 = y2;
-      y2 = swap;
-    }
     return SmartLayoutVisionElement(
       id: json['id'] as String?,
       role: json['role'] as String? ?? 'body',
       text: json['text'] as String?,
       vertical: json['vertical'] == true,
+      markIds: [
+        for (final item in json['markIds'] as List<Object?>? ?? const [])
+          if (item is String) item,
+      ],
       pairId: json['pairId'] as String?,
-      x1: x1,
-      y1: y1,
-      x2: x2,
-      y2: y2,
       confidence:
           ((json['confidence'] as num?)?.toDouble() ?? 0.9)
               .clamp(0.0, 1.0)
@@ -718,7 +687,7 @@ class SmartLayoutVisionElement {
   }
 }
 
-/// 视觉排版判定结果（服务端已做过角色白名单/坐标钳制/幻觉过滤）。
+/// 视觉排版判定结果（服务端已做过角色白名单/编号引用校验/幻觉过滤）。
 class SmartLayoutVisionResponse {
   const SmartLayoutVisionResponse({
     required this.style,
