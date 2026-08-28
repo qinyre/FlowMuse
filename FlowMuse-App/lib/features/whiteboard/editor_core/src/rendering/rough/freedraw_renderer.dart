@@ -209,6 +209,7 @@ class FreedrawRenderer {
     BrushType brushType = BrushType.fountainPen,
     FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
     double? wholeStrokeRawLength,
+    double? deviceScale,
   }) {
     if (points.isEmpty) return;
 
@@ -284,8 +285,11 @@ class FreedrawRenderer {
       final uniforms = PencilShader.uniforms();
       if (shader != null && uniforms != null) {
         final c = paint.color;
-        final deviceScale = _canvasScale(canvas);
-        uniforms.apply(c, c.a, 4.0 / size / deviceScale);
+        // [deviceScale]：录制离屏 Picture（远端湿墨冻结块）时 canvas 是
+        // 恒等矩阵，由调用方传入真实回放缩放，保证 shader 颗粒频率与
+        // 直接绘制同源；直接绘制传 null，按当前 canvas 矩阵推算。
+        final effectiveScale = deviceScale ?? canvasScale(canvas);
+        uniforms.apply(c, c.a, 4.0 / size / effectiveScale);
         paint.shader = shader;
         paint.color = const Color(0xFFFFFFFF); // shader 负责着色
         pencilShaderApplied = true;
@@ -319,7 +323,7 @@ class FreedrawRenderer {
   }
 
   /// 当前画布的设备缩放（transform 的 X 轴向量模长），0 时兜底 1。
-  static double _canvasScale(Canvas canvas) {
+  static double canvasScale(Canvas canvas) {
     final m = canvas.getTransform();
     final scale = math.sqrt(m[0] * m[0] + m[1] * m[1]);
     return scale <= 0 ? 1.0 : scale;

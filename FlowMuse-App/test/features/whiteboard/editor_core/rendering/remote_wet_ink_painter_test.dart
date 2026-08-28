@@ -417,6 +417,7 @@ class _RecordingAdapter implements RoughAdapter {
     bool pressureEncoded = false,
     FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
     double? wholeStrokeRawLength,
+    double? deviceScale,
   }) {
     calls++;
     totalPoints += points.length;

@@ -354,11 +354,15 @@ class SvgElementRenderer {
     final opacity = element.opacity * profile.opacityScale;
     final size = profile.renderSize(element.strokeWidth);
 
-    // 单点：显式圆点（中性压力半径）。
+    // 单点：显式圆点（中性压力半径）。画布端单点 drawCircle 同样套
+    // profile 混合模式，darken（荧光笔）在此保持一致。
     if (absPoints.length == 1) {
       final p = absPoints[0];
       buf.write('<circle cx="${_n(p.x)}" cy="${_n(p.y)}" r="${_n(size / 2)}" ');
       buf.write('fill="${element.strokeColor}"');
+      if (profile.compositeMode == BrushCompositeMode.darken) {
+        buf.write(' style="mix-blend-mode:darken"');
+      }
       if (opacity < 1.0) {
         buf.write(' opacity="${_n(opacity)}"');
       }
@@ -379,8 +383,9 @@ class SvgElementRenderer {
 
     // 铅笔颗粒：小尺寸确定性 pattern（按元素 id 唯一，尺寸随笔宽），
     // 作为覆盖层叠加；查看器不支持 pattern 时主体轮廓仍可见。
+    // tile 与画布 shader 频率同源：freq = 4/size（场景坐标）→ 间距 size/4。
     if (profile.usesPencilTexture) {
-      final tile = math.max(3.0, size / 2);
+      final tile = math.max(1.5, size / 4);
       buf.write('<defs>');
       buf.write(
         '<pattern id="pencil-grain-${element.id.value}" '
@@ -423,7 +428,13 @@ class SvgElementRenderer {
   /// （buildOutlinePath 的 SVG 版本，无 Canvas 依赖）。
   static String _outlineToSvgPathData(List<Offset> outline) {
     if (outline.length < 3) {
-      return outline.map((o) => '${_n(o.dx)},${_n(o.dy)}').join(' ');
+      // 防御分支：不足三点无法构闭合贝塞尔，退化为合法的 M/L 折线。
+      final buf = StringBuffer();
+      for (var i = 0; i < outline.length; i++) {
+        buf.write(i == 0 ? 'M' : ' L');
+        buf.write('${_n(outline[i].dx)} ${_n(outline[i].dy)}');
+      }
+      return buf.toString();
     }
     final buf = StringBuffer();
     final n = outline.length;

@@ -507,19 +507,6 @@ class _RemoteWetInkStroke {
       _frozenBounds = _frozenBounds == null
           ? RemoteWetInkBounds(point.x, point.y, point.x, point.y)
           : _frozenBounds!.expandTo(point.x, point.y);
-      // 折线长度增量：索引前进时累加（跳号按直线桥接，与渲染的
-      // leading/trailing 桥接一致；乱序回填的旧点不重复计入）。
-      final lastIndex = _frozenLastIndex;
-      final lastPoint = _frozenLastPoint;
-      if (lastIndex != null && lastPoint != null && entry.key > lastIndex) {
-        final dx = point.x - lastPoint.x;
-        final dy = point.y - lastPoint.y;
-        _frozenRawLength += math.sqrt(dx * dx + dy * dy);
-      }
-      if (lastIndex == null || entry.key > lastIndex) {
-        _frozenLastIndex = entry.key;
-        _frozenLastPoint = point;
-      }
     }
     while (_pendingFrozen.length >=
         RemoteWetInkStore.frozenBlockPointCapacity) {
@@ -529,6 +516,7 @@ class _RemoteWetInkStroke {
       for (final entry in entries) {
         _pendingFrozen.remove(entry.key);
       }
+      _accumulateFrozenLength(entries);
       _insertBlock(
         RemoteWetInkBlock(
           level: 0,
@@ -540,6 +528,28 @@ class _RemoteWetInkStroke {
           )!,
         ),
       );
+    }
+  }
+
+  /// 折线长度增量：仅当点真正进入冻结块时累加（entries 已按索引升序，
+  /// 跳号按直线桥接，含块间跨界段；乱序回填在入块时按索引序补桥）。
+  /// pending 区不在此计长——它仍由 tail 段（含 leading 桥接）计量，
+  /// 否则 wholeVisibleRawLength 会双重计入 pending，湿墨期整笔长度虚高、
+  /// 收笔瞬间 taper 门控跳变。
+  void _accumulateFrozenLength(List<MapEntry<int, LiveInkPoint>> entries) {
+    for (final entry in entries) {
+      final lastIndex = _frozenLastIndex;
+      final lastPoint = _frozenLastPoint;
+      if (lastIndex != null && lastPoint != null && entry.key > lastIndex) {
+        final point = entry.value;
+        final dx = point.x - lastPoint.x;
+        final dy = point.y - lastPoint.y;
+        _frozenRawLength += math.sqrt(dx * dx + dy * dy);
+      }
+      if (lastIndex == null || entry.key > lastIndex) {
+        _frozenLastIndex = entry.key;
+        _frozenLastPoint = entry.value;
+      }
     }
   }
 

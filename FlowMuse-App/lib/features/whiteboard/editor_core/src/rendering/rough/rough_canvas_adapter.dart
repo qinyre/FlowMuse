@@ -726,6 +726,7 @@ class RoughCanvasAdapter implements RoughAdapter {
     bool pressureEncoded = false,
     FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
     double? wholeStrokeRawLength,
+    double? deviceScale,
   }) {
     // 仅当非 simulatePressure 且 pressures 非空时传给 renderer 做变粗渲染;
     // simulatePressure=true(鼠标/触摸)时 pressures 留空,退回等粗 Bezier。
@@ -743,6 +744,7 @@ class RoughCanvasAdapter implements RoughAdapter {
       brushType: brushType,
       taperPhase: taperPhase,
       wholeStrokeRawLength: wholeStrokeRawLength,
+      deviceScale: deviceScale,
     );
   }
 

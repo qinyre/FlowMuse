@@ -89,6 +89,8 @@ abstract class RoughAdapter {
   /// [taperPhase]/[wholeStrokeRawLength]：远端湿墨分段渲染时的笔锋相位
   /// 与整笔折线长度（taper 门控与分段收针控制，见 FreedrawTaperPhase）；
   /// 整笔渲染（本地湿墨/静态元素）使用默认值。
+  /// [deviceScale]：离屏录制（远端湿墨冻结块 Picture）时传入真实回放
+  /// 缩放，铅笔 shader 颗粒频率据此与直接绘制同源；直接绘制传 null。
   void drawFreedraw(
     Canvas canvas,
     List<Point> points,
@@ -100,5 +102,6 @@ abstract class RoughAdapter {
     bool pressureEncoded = false,
     FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
     double? wholeStrokeRawLength,
+    double? deviceScale,
   });
 }

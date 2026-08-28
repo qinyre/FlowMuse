@@ -62,7 +62,11 @@ class RemoteWetInkRenderCache {
               (1 << (pointIndex & 7))) !=
           0;
 
-  void sync(List<RemoteWetInkStrokeSnapshot> snapshots, RoughAdapter adapter) {
+  void sync(
+    List<RemoteWetInkStrokeSnapshot> snapshots,
+    RoughAdapter adapter, {
+    double? deviceScale,
+  }) {
     final activeIds = {for (final snapshot in snapshots) snapshot.strokeId};
     final removedIds = [
       for (final strokeId in _strokes.keys)
@@ -80,7 +84,11 @@ class RemoteWetInkRenderCache {
         snapshot.strokeId,
         _RemoteStrokePictureCache.new,
       );
-      recordedGeometryPointCount += cache.sync(snapshot, adapter);
+      recordedGeometryPointCount += cache.sync(
+        snapshot,
+        adapter,
+        deviceScale: deviceScale,
+      );
     }
   }
 
@@ -195,14 +203,24 @@ class RemoteWetInkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final strokes = store.strokes;
-    cache.sync(strokes, adapter);
-    if (strokes.isEmpty) return;
-
-    final focusActive = focusedCreatorKey != null || focusHistoricalContent;
     canvas.save();
     canvas.scale(viewport.zoom);
     canvas.translate(-viewport.offset.dx, -viewport.offset.dy);
     _clipToPages(canvas);
+    // 缓存同步/冻结块录制放在视口变换之后：录制离屏 Picture 时 canvas
+    // 是恒等矩阵，显式取真实回放缩放传入，铅笔 shader 颗粒频率与直接
+    // 绘制同源（缩放/像素密度不改变场景内颗粒尺度）。
+    cache.sync(
+      strokes,
+      adapter,
+      deviceScale: FreedrawRenderer.canvasScale(canvas),
+    );
+    if (strokes.isEmpty) {
+      canvas.restore();
+      return;
+    }
+
+    final focusActive = focusedCreatorKey != null || focusHistoricalContent;
     // 逐 stroke 调 paintStroke 时不再经过 cache.paint 的每帧重置，这里手动清零。
     cache.lastFrameTailPointCount = 0;
     for (final snapshot in strokes) {
@@ -325,7 +343,11 @@ class _RemoteStrokePictureCache {
           .map((block) => block.minStartIndex)
           .toList(growable: false);
 
-  int sync(RemoteWetInkStrokeSnapshot snapshot, RoughAdapter adapter) {
+  int sync(
+    RemoteWetInkStrokeSnapshot snapshot,
+    RoughAdapter adapter, {
+    double? deviceScale,
+  }) {
     var recordedPoints = 0;
     final activeLevels = {
       for (final block in snapshot.frozenBlocks) block.level,
@@ -357,6 +379,8 @@ class _RemoteStrokePictureCache {
               ? FreedrawTaperPhase.headOnly
               : FreedrawTaperPhase.none,
           wholeStrokeRawLength: wholeLength,
+          // 离屏录制 canvas 恒等：显式传回放缩放，铅笔颗粒频率与直接绘制同源。
+          deviceScale: deviceScale,
         );
       }
       final nextPicture = recorder.endRecording();
@@ -433,6 +457,7 @@ void _drawSegment(
   RoughAdapter adapter, {
   FreedrawTaperPhase taperPhase = FreedrawTaperPhase.none,
   double? wholeStrokeRawLength,
+  double? deviceScale,
 }) {
   if (segment.points.isEmpty) return;
   final renderedPoints = [
@@ -469,5 +494,6 @@ void _drawSegment(
     pressureEncoded: true,
     taperPhase: taperPhase,
     wholeStrokeRawLength: wholeStrokeRawLength,
+    deviceScale: deviceScale,
   );
 }
