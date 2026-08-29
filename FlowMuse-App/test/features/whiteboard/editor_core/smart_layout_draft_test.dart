@@ -44,7 +44,7 @@ void main() {
 
   SmartLayoutPlan draftPlan() => SmartLayoutPlan(
         pageId: 'page-1',
-        style: SmartLayoutStyle.ppt,
+        style: SmartLayoutTemplateKind.handout,
         confidence: 0.9,
         description: 'PPT 版式',
         addElements: [

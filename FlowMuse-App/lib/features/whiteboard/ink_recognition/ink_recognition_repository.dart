@@ -93,23 +93,13 @@ class InkRecognitionRepository {
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        final snippet = response.body.isEmpty
-            ? '(空)'
-            : response.body.substring(0, response.body.length.clamp(0, 200));
-        debugPrint(
-          '[$_logTag] ❌ 请求失败 | HTTP ${response.statusCode} | 响应: $snippet',
-        );
         developer.log(
           '手写识别请求失败: HTTP ${response.statusCode}',
           name: _logTag,
           level: 1000,
           time: startTime,
         );
-        throw StateError(
-          response.body.isEmpty
-              ? '字迹识别失败：HTTP ${response.statusCode}'
-              : response.body,
-        );
+        _throwForNonSuccessStatus(response.statusCode, response.body, '手写识别');
       }
 
       final result = InkRecognitionResult.fromJson(
@@ -159,98 +149,6 @@ class InkRecognitionRepository {
     }
   }
 
-  Future<SmartLayoutResponse> smartLayout(SmartLayoutRequest request) async {
-    final bodyJson = jsonEncode(request.toJson());
-    final url = _serverUri
-        .replace(path: _joinPath(_serverUri.path, '/api/ink/smart-layout'))
-        .toString();
-    final token = await _readTokenForRequest();
-    final response = await NativeHttpClient.post(
-      url: url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: bodyJson,
-      connectTimeoutMs: _connectTimeoutMs,
-      readTimeoutMs: _smartLayoutReadTimeoutMs,
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        response.body.isEmpty
-            ? '智能排版失败：HTTP ${response.statusCode}'
-            : response.body,
-      );
-    }
-    return SmartLayoutResponse.fromJson(
-      jsonDecode(response.body) as Map<String, Object?>,
-    );
-  }
-
-  Future<SmartLayoutRecognizedBlock> recognizeSmartLayoutBlock(
-    SmartLayoutInkBlockRequest block,
-  ) async {
-    final bodyJson = jsonEncode({'block': block.toJson()});
-    final url = _serverUri
-        .replace(
-          path: _joinPath(_serverUri.path, '/api/ink/smart-layout/block'),
-        )
-        .toString();
-    final token = await _readTokenForRequest();
-    final response = await NativeHttpClient.post(
-      url: url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: bodyJson,
-      connectTimeoutMs: _connectTimeoutMs,
-      readTimeoutMs: _smartLayoutReadTimeoutMs,
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        response.body.isEmpty
-            ? '智能识别失败：HTTP ${response.statusCode}'
-            : response.body,
-      );
-    }
-    return SmartLayoutRecognizedBlock.fromJson(
-      jsonDecode(response.body) as Map<String, Object?>,
-    );
-  }
-
-  Future<SmartLayoutResponse> composeSmartLayout(
-    SmartLayoutComposeRequest request,
-  ) async {
-    final bodyJson = jsonEncode(request.toJson());
-    final url = _serverUri
-        .replace(
-          path: _joinPath(_serverUri.path, '/api/ink/smart-layout/compose'),
-        )
-        .toString();
-    final token = await _readTokenForRequest();
-    final response = await NativeHttpClient.post(
-      url: url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: bodyJson,
-      connectTimeoutMs: _connectTimeoutMs,
-      readTimeoutMs: _smartLayoutReadTimeoutMs,
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        response.body.isEmpty
-            ? '智能排版失败：HTTP ${response.statusCode}'
-            : response.body,
-      );
-    }
-    return SmartLayoutResponse.fromJson(
-      jsonDecode(response.body) as Map<String, Object?>,
-    );
-  }
-
   /// 视觉优先智能排版：整页截图交由服务端 VLM 一次判定风格/内容/粗位置。
   Future<SmartLayoutVisionResponse> visionSmartLayout(
     SmartLayoutVisionRequest request,
@@ -262,24 +160,59 @@ class InkRecognitionRepository {
         )
         .toString();
     final token = await _readTokenForRequest();
-    final response = await NativeHttpClient.post(
-      url: url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-      },
-      body: bodyJson,
-      connectTimeoutMs: _connectTimeoutMs,
-      readTimeoutMs: _smartLayoutReadTimeoutMs,
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError(
-        response.body.isEmpty
-            ? '视觉排版失败：HTTP ${response.statusCode}'
-            : response.body,
+    final NativeHttpResponse response;
+    try {
+      response = await NativeHttpClient.post(
+        url: url,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+        body: bodyJson,
+        connectTimeoutMs: _connectTimeoutMs,
+        readTimeoutMs: _smartLayoutReadTimeoutMs,
       );
+    } on Exception catch (error) {
+      throwReadableNetworkError(error);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwForNonSuccessStatus(response.statusCode, response.body, '视觉排版');
     }
     return SmartLayoutVisionResponse.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
+  /// 低置信裁剪重问：单块局部截图无上下文转写（上下文隔离降幻觉）。
+  Future<SmartLayoutTranscribeResponse> transcribeCrop(
+    SmartLayoutTranscribeRequest request,
+  ) async {
+    final bodyJson = jsonEncode(request.toJson());
+    final url = _serverUri
+        .replace(
+          path: _joinPath(_serverUri.path, '/api/ink/smart-layout/transcribe'),
+        )
+        .toString();
+    final token = await _readTokenForRequest();
+    final NativeHttpResponse response;
+    try {
+      response = await NativeHttpClient.post(
+        url: url,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
+        body: bodyJson,
+        connectTimeoutMs: _connectTimeoutMs,
+        readTimeoutMs: _smartLayoutReadTimeoutMs,
+      );
+    } on Exception catch (error) {
+      throwReadableNetworkError(error);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwForNonSuccessStatus(response.statusCode, response.body, '单块转写');
+    }
+    return SmartLayoutTranscribeResponse.fromJson(
       jsonDecode(response.body) as Map<String, Object?>,
     );
   }
@@ -293,6 +226,42 @@ class InkRecognitionRepository {
     } catch (_) {
       return null;
     }
+  }
+
+  /// 非 2xx 统一转用户可读中文：原始响应体不进异常消息（可能含英文/JSON 摘要，
+  /// 也不排除回显内部信息）；日志只记录状态码与响应长度（脱敏，不落 body 内容）。
+  Never _throwForNonSuccessStatus(int statusCode, String body, String scenario) {
+    debugPrint(
+      '[$_logTag] ❌ $scenario失败 | HTTP $statusCode | 响应长度: ${body.length}',
+    );
+    throw StateError(switch (statusCode) {
+      401 || 403 => '识别服务鉴权失败，请检查服务配置',
+      404 => '识别服务版本过旧，请联系管理员升级服务端',
+      >= 500 && <= 599 => '识别服务异常（状态码 $statusCode），请稍后重试',
+      _ => '识别服务请求失败（状态码 $statusCode）',
+    });
+  }
+
+  /// 网络/通道异常统一转用户可读中文（服务未启动、断网、超时是演示现场最常见
+  /// 的故障形态，英文堆栈对用户毫无意义）。按 runtimeType 匹配而非直接 import
+  /// dart:io：SocketException/ClientException 在 Web 端不可用，共享代码不得引入；
+  /// TimeoutException（dart:async）与 PlatformException（flutter/services）可直接
+  /// 类型判断。无法识别的异常原样抛出（保留既有语义，由调用方兜底）。
+  @visibleForTesting
+  Never throwReadableNetworkError(Exception error) {
+    final typeName = error.runtimeType.toString();
+    final message = switch (typeName) {
+      'SocketException' => '无法连接识别服务，请检查网络与服务地址',
+      'TimeoutException' => '识别服务响应超时，请稍后重试',
+      'ClientException' => '网络请求失败，请检查网络与服务地址',
+      _ => error is PlatformException ? '网络通道异常（${error.code}），请检查网络与服务地址' : null,
+    };
+    // 日志脱敏：异常消息可能含 URL/系统错误详情，只记类型名。
+    debugPrint('[$_logTag] ❌ 网络请求异常 | ${error.runtimeType}');
+    if (message != null) {
+      throw StateError(message);
+    }
+    throw error;
   }
 
   String _summarizeTypes(InkRecognitionResult result) {

@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/views/smart_layout_dialogs.dart';
 import 'package:flutter/material.dart';
@@ -7,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 SmartLayoutPlan fakePlan({bool hasFailures = false}) => SmartLayoutPlan(
   pageId: 'p-1',
-  style: SmartLayoutStyle.mindmap,
+  style: SmartLayoutTemplateKind.handout,
   confidence: 0.9,
   description: '检测到头脑风暴内容',
   addElements: const [],
@@ -120,58 +118,155 @@ void main() {
   });
 
   group('SmartLayoutConfirmBar', () {
-    testWidgets('多页 + 无失败：显示 应用/跳过本页/取消整个流程', (tester) async {
+    testWidgets('多页 + 无失败：显示 应用/重新识别/跳过本页/取消整个流程', (tester) async {
       SmartLayoutBarAction? tapped;
       await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
         plan: fakePlan(),
         isMultiPage: true,
         onAction: (action) => tapped = action,
       )));
-      expect(find.textContaining('思维导图'), findsOneWidget);
+      expect(find.textContaining('图文讲义'), findsOneWidget);
       expect(find.text('应用'), findsOneWidget);
+      expect(find.text('重新识别'), findsOneWidget);
       expect(find.text('跳过本页'), findsOneWidget);
       expect(find.text('取消整个流程'), findsOneWidget);
       expect(find.text('删除未识别笔迹后应用'), findsNothing);
+      // 无红区时不显示红区说明
+      expect(find.textContaining('手写未识别成功'), findsNothing);
       await tester.tap(find.text('跳过本页'));
       expect(tapped, SmartLayoutBarAction.skipPage);
     });
 
-    testWidgets('单页 + 有失败：显示 应用/删除未识别后应用/取消，无跳过', (tester) async {
+    testWidgets('单页 + 有失败：红区计数说明 + 删除未识别后应用，无跳过', (tester) async {
+      SmartLayoutBarAction? tapped;
       await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
         plan: fakePlan(hasFailures: true),
         isMultiPage: false,
-        onAction: (_) {},
+        onAction: (action) => tapped = action,
       )));
+      expect(find.textContaining('1 处手写未识别成功'), findsOneWidget);
+      expect(find.textContaining('红色区域'), findsOneWidget);
       expect(find.text('删除未识别笔迹后应用'), findsOneWidget);
       expect(find.text('跳过本页'), findsNothing);
       expect(find.text('取消'), findsOneWidget);
       expect(find.text('取消整个流程'), findsNothing);
+      // 重新识别动作 → retry（取消当前草稿并自动重跑本页由页面层处理）
+      await tester.tap(find.text('重新识别'));
+      expect(tapped, SmartLayoutBarAction.retry);
+    });
+
+    testWidgets('窄宽度：动作区换行不溢出', (tester) async {
+      tester.view.physicalSize = const Size(480, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(hasFailures: true),
+        isMultiPage: true,
+        onAction: (_) {},
+      )));
+      expect(tester.takeException(), isNull, reason: '窄宽度不得溢出');
+      expect(find.text('应用'), findsOneWidget);
+      expect(find.text('重新识别'), findsOneWidget);
     });
   });
 
-  group('SmartLayoutFailureBar', () {
-    testWidgets('多页：显示失败数、重新识别/跳过本页/取消整个流程', (tester) async {
-      SmartLayoutBarAction? tapped;
-      await tester.pumpWidget(wrap(SmartLayoutFailureBar(
-        failures: [SmartLayoutFailureInfo(blockId: 'b1', bounds: Rect.fromLTWH(0, 0, 10, 10), error: 'HTTP 429'), SmartLayoutFailureInfo(blockId: 'b2', bounds: Rect.fromLTWH(0, 0, 10, 10))],
-        isMultiPage: true,
-        onAction: (action) => tapped = action,
-      )));
-      expect(find.textContaining("2 处手写未识别成功"), findsOneWidget);
-      expect(find.textContaining("HTTP 429"), findsOneWidget);
-      await tester.tap(find.text('重新识别'));
-      expect(tapped, SmartLayoutBarAction.retry);
-      expect(find.text('跳过本页'), findsOneWidget);
+  group('SmartLayoutProgressOverlay 与识别进度文案', () {
+    test('整页识别阶段文案；逐块 total=0 回落整页文案', () {
+      expect(const SmartLayoutRecognitionProgress.page().label, '正在识别页面…');
+      expect(
+        const SmartLayoutRecognitionProgress.blocks(
+          completed: 0,
+          total: 0,
+        ).label,
+        '正在识别页面…',
+      );
     });
 
-    testWidgets('单页：无跳过本页，取消文案为"取消"', (tester) async {
-      await tester.pumpWidget(wrap(SmartLayoutFailureBar(
-        failures: [SmartLayoutFailureInfo(blockId: 'b1', bounds: Rect.fromLTWH(0, 0, 10, 10))],
-        isMultiPage: false,
-        onAction: (_) {},
+    test('逐块转写阶段文案为 x/y', () {
+      expect(
+        const SmartLayoutRecognitionProgress.blocks(
+          completed: 3,
+          total: 7,
+        ).label,
+        '正在识别文字 3/7',
+      );
+    });
+
+    test('多页流程页码前缀；单页无页码不加前缀', () {
+      expect(
+        const SmartLayoutRecognitionProgress.page(
+          pageLabel: '第 2/5 页',
+        ).label,
+        '第 2/5 页 · 正在识别页面…',
+      );
+      expect(
+        const SmartLayoutRecognitionProgress.blocks(
+          completed: 1,
+          total: 4,
+          pageLabel: '第 2/5 页',
+        ).label,
+        '第 2/5 页 · 正在识别文字 1/4',
+      );
+      expect(
+        const SmartLayoutRecognitionProgress.page().label,
+        isNot(contains('页 ·')),
+        reason: '单页流程不带页码前缀',
+      );
+    });
+
+    testWidgets('浮层渲染进度文案与取消按钮', (tester) async {
+      var cancelled = false;
+      await tester.pumpWidget(wrap(SmartLayoutProgressOverlay(
+        progress: const SmartLayoutRecognitionProgress.blocks(
+          completed: 2,
+          total: 5,
+        ),
+        onCancel: () => cancelled = true,
       )));
-      expect(find.text('跳过本页'), findsNothing);
+      expect(find.text('正在识别文字 2/5'), findsOneWidget);
       expect(find.text('取消'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      expect(cancelled, isTrue);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('onCancel 为 null 时不显示取消按钮', (tester) async {
+      await tester.pumpWidget(wrap(SmartLayoutProgressOverlay(
+        progress: const SmartLayoutRecognitionProgress.page(),
+      )));
+      expect(find.text('正在识别页面…'), findsOneWidget);
+      expect(find.text('取消'), findsNothing);
+    });
+  });
+
+  group('SmartLayoutProofreadSheet 校对编辑条', () {
+    FilledButton saveButton(WidgetTester tester) =>
+        tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, '保存'),
+        );
+
+    testWidgets('改字可保存，清空文本禁用保存（防空文字元素）', (tester) async {
+      String? revised;
+      await tester.pumpWidget(wrap(SmartLayoutProofreadSheet(
+        items: const [(id: ElementId('e1'), text: '先头小子')],
+        onRevise: (id, newText) {
+          revised = newText;
+          return true;
+        },
+      )));
+      // 初始未改字：保存禁用。
+      expect(saveButton(tester).onPressed, isNull);
+      // 改成新文字：保存可用。
+      await tester.enterText(find.byType(TextField), '先头小子已核对');
+      await tester.pump();
+      expect(saveButton(tester).onPressed, isNotNull);
+      await tester.tap(find.text('保存'));
+      expect(revised, '先头小子已核对');
+      // 清空文本：保存禁用（避免不可见空文字元素）。
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.pump();
+      expect(saveButton(tester).onPressed, isNull);
+      expect(tester.takeException(), isNull);
     });
   });
 }

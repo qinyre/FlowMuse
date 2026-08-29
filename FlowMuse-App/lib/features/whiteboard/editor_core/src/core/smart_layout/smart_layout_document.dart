@@ -1,48 +1,9 @@
-import 'dart:ui';
-
 import 'package:flutter/foundation.dart';
 
 import '../elements/elements.dart';
-import '../layout/layout.dart';
 import '../math/math.dart';
-import '../../recognition/ink_recognition.dart';
 
 enum SmartLayoutExportFormat { markdown, latex }
-
-/// 智能排版自适应风格（v1 固定四种；后续新增样式只需扩展枚举与引擎分发）。
-enum SmartLayoutStyle {
-  ppt,
-  mindmap,
-  article,
-  inPlace;
-
-  static SmartLayoutStyle fromWire(
-    String? value, {
-    SmartLayoutStyle fallback = SmartLayoutStyle.inPlace,
-  }) {
-    return switch (value) {
-      'ppt' => SmartLayoutStyle.ppt,
-      'mindmap' => SmartLayoutStyle.mindmap,
-      'article' => SmartLayoutStyle.article,
-      'in_place' => SmartLayoutStyle.inPlace,
-      _ => fallback,
-    };
-  }
-
-  String get wireName => switch (this) {
-        SmartLayoutStyle.ppt => 'ppt',
-        SmartLayoutStyle.mindmap => 'mindmap',
-        SmartLayoutStyle.article => 'article',
-        SmartLayoutStyle.inPlace => 'in_place',
-      };
-
-  String get displayName => switch (this) {
-        SmartLayoutStyle.ppt => 'PPT 式排版',
-        SmartLayoutStyle.mindmap => '思维导图',
-        SmartLayoutStyle.article => '文章式阅读流',
-        SmartLayoutStyle.inPlace => '仅识别并转化手写字体',
-      };
-}
 
 class SmartLayoutDocument {
   const SmartLayoutDocument({
@@ -149,65 +110,6 @@ class SmartLayoutBlock {
   }
 }
 
-class SmartLayoutPageRequest {
-  const SmartLayoutPageRequest({
-    required this.id,
-    required this.index,
-    required this.bounds,
-    required this.template,
-    required this.anchors,
-  });
-
-  final String id;
-  final int index;
-  final Bounds bounds;
-  final CanvasPageTemplate template;
-  final List<Map<String, Object?>> anchors;
-
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'index': index,
-    'bounds': {
-      'x': bounds.left,
-      'y': bounds.top,
-      'width': bounds.size.width,
-      'height': bounds.size.height,
-    },
-    'template': template.name,
-    'anchors': anchors,
-  };
-}
-
-class SmartLayoutElementRequest {
-  const SmartLayoutElementRequest({
-    required this.id,
-    required this.type,
-    required this.bounds,
-    this.text,
-    this.points,
-  });
-
-  final String id;
-  final String type;
-  final Bounds bounds;
-  final String? text;
-  final List<InkRecognitionPoint>? points;
-
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'type': type,
-    'bounds': {
-      'x': bounds.left,
-      'y': bounds.top,
-      'width': bounds.size.width,
-      'height': bounds.size.height,
-    },
-    if (text != null) 'text': text,
-    if (points != null)
-      'points': points!.map((point) => point.toJson()).toList(),
-  };
-}
-
 class SmartLayoutInkBlockRequest {
   const SmartLayoutInkBlockRequest({
     required this.id,
@@ -249,18 +151,6 @@ class SmartLayoutInkBlockRequest {
     if (startedAt != null) 'startedAt': startedAt,
     'imageMime': imageMime,
     'imageBase64': imageBase64,
-  };
-}
-
-class SmartLayoutRequest {
-  const SmartLayoutRequest({required this.pages, required this.blocks});
-
-  final List<SmartLayoutPageRequest> pages;
-  final List<SmartLayoutInkBlockRequest> blocks;
-
-  Map<String, Object?> toJson() => {
-    'pages': pages.map((page) => page.toJson()).toList(),
-    'blocks': blocks.map((block) => block.toJson()).toList(),
   };
 }
 
@@ -354,260 +244,6 @@ class SmartLayoutRecognizedBlock {
   }
 }
 
-/// compose 请求中的"非笔迹元素"最小摘要（供 AI 判定整页布局，不含坐标之外的敏感数据）。
-class SmartLayoutElementRef {
-  const SmartLayoutElementRef({
-    required this.id,
-    required this.type,
-    required this.bounds,
-    this.pageId,
-    this.locked = false,
-    this.groupIds = const [],
-  });
-
-  final String id;
-  final String type;
-  final Bounds bounds;
-  final String? pageId;
-  final bool locked;
-  final List<String> groupIds;
-
-  Map<String, Object?> toJson() => {
-        'id': id,
-        'type': type,
-        'bounds': {
-          'x': bounds.left,
-          'y': bounds.top,
-          'width': bounds.size.width,
-          'height': bounds.size.height,
-        },
-        if (pageId != null) 'pageId': pageId,
-        if (locked) 'locked': true,
-        if (groupIds.isNotEmpty) 'groupIds': groupIds,
-      };
-}
-
-class SmartLayoutComposeRequest {
-  const SmartLayoutComposeRequest({
-    required this.pages,
-    required this.blocks,
-    this.elements = const [],
-    this.layoutHint,
-  });
-
-  final List<SmartLayoutPageRequest> pages;
-  final List<SmartLayoutRecognizedBlock> blocks;
-  final List<SmartLayoutElementRef> elements;
-  final SmartLayoutStyle? layoutHint;
-
-  Map<String, Object?> toJson() => {
-        'pages': pages.map((page) => page.toJson()).toList(),
-        'blocks': blocks.map((block) => block.toJson()).toList(),
-        if (elements.isNotEmpty)
-          'elements': elements.map((element) => element.toJson()).toList(),
-        if (layoutHint != null) 'layoutHint': layoutHint!.wireName,
-      };
-}
-
-/// 服务端布局判定（方案二：只判风格与语义结构，不返回坐标）。
-class SmartLayoutLayoutDecision {
-  const SmartLayoutLayoutDecision({
-    required this.style,
-    required this.confidence,
-    this.mindmapStructure,
-    this.pptStructure,
-  });
-
-  final SmartLayoutStyle style;
-  final double confidence;
-  final MindmapStructure? mindmapStructure;
-  final SmartLayoutPptStructure? pptStructure;
-
-  factory SmartLayoutLayoutDecision.fromJson(Map<String, Object?> json) {
-    final style = SmartLayoutStyle.fromWire(json['style'] as String?);
-    final confidence = ((json['confidence'] as num?)?.toDouble() ?? 0)
-        .clamp(0.0, 1.0);
-    final rawStructure = json['structure'];
-    final structure = rawStructure is Map
-        ? Map<String, Object?>.from(rawStructure)
-        : null;
-    return SmartLayoutLayoutDecision(
-      style: style,
-      confidence: confidence,
-      mindmapStructure: style == SmartLayoutStyle.mindmap && structure != null
-          ? MindmapStructure.fromJson(structure)
-          : null,
-      pptStructure: style == SmartLayoutStyle.ppt && structure != null
-          ? SmartLayoutPptStructure.fromJson(structure)
-          : null,
-    );
-  }
-}
-
-/// mindmap 语义结构（根节点 + children，节点文字来自识别块拼接或 AI 给定）。
-class MindmapStructure {
-  const MindmapStructure({required this.root});
-
-  final MindmapStructureNode root;
-
-  factory MindmapStructure.fromJson(Map<String, Object?> json) {
-    final root = json['root'];
-    if (root is! Map) {
-      throw const FormatException('mindmap structure 缺少 root');
-    }
-    return MindmapStructure(
-      root: MindmapStructureNode.fromJson(Map<String, Object?>.from(root)),
-    );
-  }
-
-  bool get isEmpty => root.text.trim().isEmpty && root.children.isEmpty;
-}
-
-class MindmapStructureNode {
-  const MindmapStructureNode({
-    required this.text,
-    required this.children,
-    this.blockIds = const [],
-  });
-
-  final String text;
-  final List<String> blockIds;
-  final List<MindmapStructureNode> children;
-
-  factory MindmapStructureNode.fromJson(Map<String, Object?> json) {
-    final rawChildren = json['children'] as List<Object?>? ?? const [];
-    return MindmapStructureNode(
-      text: json['text'] as String? ?? '',
-      blockIds: [
-        for (final item in json['blockIds'] as List<Object?>? ?? const [])
-          if (item is String) item,
-      ],
-      children: [
-        for (final child in rawChildren)
-          if (child is Map)
-            MindmapStructureNode.fromJson(Map<String, Object?>.from(child)),
-      ],
-    );
-  }
-}
-
-/// PPT 语义结构（有序分组，组内单元按视觉顺序）。
-class SmartLayoutPptStructure {
-  const SmartLayoutPptStructure({required this.groups});
-
-  final List<SmartLayoutPptGroup> groups;
-
-  factory SmartLayoutPptStructure.fromJson(Map<String, Object?> json) {
-    final rawGroups = json['groups'] as List<Object?>? ?? const [];
-    return SmartLayoutPptStructure(
-      groups: [
-        for (final group in rawGroups)
-          if (group is Map)
-            SmartLayoutPptGroup.fromJson(Map<String, Object?>.from(group)),
-      ],
-    );
-  }
-
-  bool get isEmpty => groups.isEmpty;
-}
-
-class SmartLayoutPptGroup {
-  const SmartLayoutPptGroup({required this.role, required this.elementIds});
-
-  final String role;
-  final List<String> elementIds;
-
-  factory SmartLayoutPptGroup.fromJson(Map<String, Object?> json) {
-    final role = json['role'] as String? ?? 'body';
-    final normalizedRole = switch (role) {
-      'title' => 'title',
-      'heading' => 'heading',
-      'figure' => 'figure',
-      _ => 'body',
-    };
-    return SmartLayoutPptGroup(
-      role: normalizedRole,
-      elementIds: [
-        for (final item in json['elementIds'] as List<Object?>? ?? const [])
-          if (item is String) item,
-      ],
-    );
-  }
-}
-
-class SmartLayoutPageDecision {
-  const SmartLayoutPageDecision({
-    required this.pageId,
-    required this.mode,
-    this.paragraphs = const [],
-  });
-
-  final String pageId;
-  final String mode;
-  final List<List<String>> paragraphs;
-
-  bool get isArticle => mode == 'article';
-
-  factory SmartLayoutPageDecision.fromJson(Map<String, Object?> json) {
-    final rawParagraphs = json['paragraphs'] as List<Object?>? ?? const [];
-    return SmartLayoutPageDecision(
-      pageId: json['pageId'] as String? ?? '',
-      mode: json['mode'] as String? ?? 'in_place',
-      paragraphs: [
-        for (final paragraph in rawParagraphs)
-          if (paragraph is List)
-            [
-              for (final item in paragraph)
-                if (item is String) item,
-            ],
-      ],
-    );
-  }
-}
-
-class SmartLayoutResponse {
-  const SmartLayoutResponse({
-    required this.document,
-    this.blocks = const [],
-    this.pages = const [],
-    this.layout,
-  });
-
-  final SmartLayoutDocument document;
-  final List<SmartLayoutRecognizedBlock> blocks;
-  final List<SmartLayoutPageDecision> pages;
-  final SmartLayoutLayoutDecision? layout;
-
-  factory SmartLayoutResponse.fromJson(Map<String, Object?> json) {
-    final rawDocument = json['document'];
-    final rawBlocks = json['blocks'] as List<Object?>? ?? const [];
-    final rawPages = json['pages'] as List<Object?>? ?? const [];
-    final rawLayout = json['layout'];
-    return SmartLayoutResponse(
-      document: rawDocument is Map
-          ? SmartLayoutDocument.fromJson(Map<String, Object?>.from(rawDocument))
-          : SmartLayoutDocument.fromJson(json),
-      blocks: [
-        for (final item in rawBlocks)
-          if (item is Map)
-            SmartLayoutRecognizedBlock.fromJson(
-              Map<String, Object?>.from(item),
-            ),
-      ],
-      pages: [
-        for (final item in rawPages)
-          if (item is Map)
-            SmartLayoutPageDecision.fromJson(Map<String, Object?>.from(item)),
-      ],
-      layout: rawLayout is Map
-          ? SmartLayoutLayoutDecision.fromJson(
-              Map<String, Object?>.from(rawLayout),
-            )
-          : null,
-    );
-  }
-}
-
 /// 视觉优先管线请求：整页截图（含编号标记，Set-of-Mark）+可选笔记标题，
 /// 服务端调 VLM 一次判定；marks 是客户端已画进截图的编号列表。
 class SmartLayoutVisionRequest {
@@ -647,7 +283,7 @@ class SmartLayoutVisionElement {
     this.vertical = false,
     this.markIds = const [],
     this.pairId,
-    this.confidence = 0.9,
+    this.confidence = 0.5,
   });
 
   /// 服务端按输出顺序分配的引用 id（"e0"、"e1"...），mindmap 树以此引用。
@@ -663,7 +299,9 @@ class SmartLayoutVisionElement {
 
   final String? pairId;
 
-  /// VLM 对该元素认字把握的自评分（0-1；服务端已钳制，缺省 0.9）。
+  /// VLM 对该元素认字把握的自评分（0-1；服务端已钳制）。
+  /// 未自报时视为存疑（0.5，与服务端 defaultVisionConfidence 一致），
+  /// 低于重问阈值会触发裁剪重问复核。
   final double confidence;
 
   bool get isFigure => role == 'figure';
@@ -680,42 +318,22 @@ class SmartLayoutVisionElement {
       ],
       pairId: json['pairId'] as String?,
       confidence:
-          ((json['confidence'] as num?)?.toDouble() ?? 0.9)
+          ((json['confidence'] as num?)?.toDouble() ?? 0.5)
               .clamp(0.0, 1.0)
               .toDouble(),
     );
   }
 }
 
-/// 视觉排版判定结果（服务端已做过角色白名单/编号引用校验/幻觉过滤）。
+/// 视觉识别结果（服务端已做过角色白名单/编号引用校验/幻觉过滤）：
+/// 只含认字与图文配对，版式由客户端模板卡片选择后确定性落位。
 class SmartLayoutVisionResponse {
-  const SmartLayoutVisionResponse({
-    required this.style,
-    required this.elements,
-    this.confidence = 0,
-    this.mindmapStructure,
-  });
+  const SmartLayoutVisionResponse({required this.elements});
 
-  final SmartLayoutStyle style;
   final List<SmartLayoutVisionElement> elements;
-  final double confidence;
-
-  /// style=mindmap 时的语义树（服务端已校验引用合法性）；null = 回退经典管线。
-  final MindmapStructure? mindmapStructure;
 
   factory SmartLayoutVisionResponse.fromJson(Map<String, Object?> json) {
-    final style = SmartLayoutStyle.fromWire(json['style'] as String?);
-    final rawStructure = json['structure'];
-    final structure = rawStructure is Map
-        ? Map<String, Object?>.from(rawStructure)
-        : null;
     return SmartLayoutVisionResponse(
-      style: style,
-      confidence:
-          ((json['confidence'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0),
-      mindmapStructure: style == SmartLayoutStyle.mindmap && structure != null
-          ? _tryParseMindmapStructure(structure)
-          : null,
       elements: [
         for (final item in json['elements'] as List<Object?>? ?? const [])
           if (item is Map)
@@ -723,14 +341,48 @@ class SmartLayoutVisionResponse {
       ],
     );
   }
+}
 
-  static MindmapStructure? _tryParseMindmapStructure(
-    Map<String, Object?> structure,
-  ) {
-    try {
-      return MindmapStructure.fromJson(structure);
-    } on FormatException {
-      return null;
-    }
+/// 低置信裁剪重问请求：从整页截图裁出的局部块（外扩 16pt），无上下文单块转写。
+/// hint 只允许笔记标题等中性提示，禁止传入原识别结果以免锚定模型。
+class SmartLayoutTranscribeRequest {
+  const SmartLayoutTranscribeRequest({
+    required this.imageBase64,
+    this.imageMime = 'image/png',
+    this.hint,
+  });
+
+  final String imageMime;
+  final String imageBase64;
+  final String? hint;
+
+  Map<String, Object?> toJson() => {
+    if (hint != null && hint!.isNotEmpty) 'hint': hint,
+    'imageMime': imageMime,
+    'imageBase64': imageBase64,
+  };
+}
+
+/// 单块转写结果；text 为空表示无法辨认（服务端保证此时 confidence 为 0）。
+@immutable
+class SmartLayoutTranscribeResponse {
+  const SmartLayoutTranscribeResponse({
+    required this.text,
+    this.confidence = 0,
+  });
+
+  final String text;
+
+  /// 模型对该块认字把握的自评分（0-1；服务端已钳制）。
+  final double confidence;
+
+  factory SmartLayoutTranscribeResponse.fromJson(Map<String, Object?> json) {
+    return SmartLayoutTranscribeResponse(
+      text: (json['text'] as String? ?? '').trim(),
+      confidence:
+          ((json['confidence'] as num?)?.toDouble() ?? 0)
+              .clamp(0.0, 1.0)
+              .toDouble(),
+    );
   }
 }

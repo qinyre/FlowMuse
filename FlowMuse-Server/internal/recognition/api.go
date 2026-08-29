@@ -48,6 +48,7 @@ func (api *HTTPAPI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/ink/smart-layout/block", api.smartLayoutBlock)
 	mux.HandleFunc("/api/ink/smart-layout/compose", api.smartLayoutCompose)
 	mux.HandleFunc("/api/ink/smart-layout/vision", api.smartLayoutVision)
+	mux.HandleFunc("/api/ink/smart-layout/transcribe", api.smartLayoutTranscribe)
 }
 
 func (api *HTTPAPI) recognize(w http.ResponseWriter, r *http.Request) {
@@ -191,6 +192,36 @@ func (api *HTTPAPI) smartLayoutVision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response, err := api.visionLayouter.VisionLayout(ctx, request)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+// smartLayoutTranscribe 处理低置信裁剪重问：单块局部截图无上下文转写。
+func (api *HTTPAPI) smartLayoutTranscribe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, "POST")
+		return
+	}
+	if api.visionLayouter == nil {
+		http.Error(w, "AI vision layout is not configured", http.StatusBadGateway)
+		return
+	}
+	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
+	defer cancel()
+	var request TranscribeRequest
+	r.Body = http.MaxBytesReader(w, r.Body, maxSmartLayoutBodyBytes)
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(request.ImageBase64) == "" {
+		http.Error(w, "image is required", http.StatusBadRequest)
+		return
+	}
+	response, err := api.visionLayouter.Transcribe(ctx, request)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return

@@ -5,9 +5,15 @@ import 'package:flutter/foundation.dart';
 import '../elements/elements.dart';
 import '../math/math.dart';
 import 'smart_layout_document.dart';
+import 'smart_layout_template_engine.dart';
 
 /// 视觉管线低置信阈值：低于该值的已识别文本在草稿态橙色高亮并可校对改字。
 const double kSmartLayoutLowConfidenceThreshold = 0.6;
+
+/// 裁剪重问触发阈值：整页识别把握低于该值（或无文本）的块，从整页截图裁出
+/// 无上下文单块转写，新结果把握更高才采用（比校对阈值高：先争取救回，
+/// 救不回再交人工校对）。
+const double kSmartLayoutTranscribeRetryThreshold = 0.7;
 
 /// 单个低置信文本项：elementId 用于从场景中定位最终矩形与改字。
 @immutable
@@ -43,7 +49,7 @@ class SmartLayoutPlan {
   });
 
   final String pageId;
-  final SmartLayoutStyle style;
+  final SmartLayoutTemplateKind style;
   final double confidence;
   final String description;
 

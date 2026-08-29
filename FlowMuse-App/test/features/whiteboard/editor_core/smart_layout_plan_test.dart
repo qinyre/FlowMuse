@@ -4,122 +4,37 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('SmartLayoutStyle', () {
-    test('fromWire 识别四种风格，未知回落 inPlace', () {
-      expect(SmartLayoutStyle.fromWire('ppt'), SmartLayoutStyle.ppt);
-      expect(SmartLayoutStyle.fromWire('mindmap'), SmartLayoutStyle.mindmap);
-      expect(SmartLayoutStyle.fromWire('article'), SmartLayoutStyle.article);
-      expect(SmartLayoutStyle.fromWire('in_place'), SmartLayoutStyle.inPlace);
-      expect(SmartLayoutStyle.fromWire('diagram'), SmartLayoutStyle.inPlace);
-      expect(SmartLayoutStyle.fromWire(null), SmartLayoutStyle.inPlace);
+  group('SmartLayoutTemplateKind', () {
+    test('三种模板显示名一一对应', () {
+      expect(SmartLayoutTemplateKind.handout.displayName, '图文讲义');
+      expect(SmartLayoutTemplateKind.outline.displayName, '要点清单');
+      expect(SmartLayoutTemplateKind.inplace.displayName, '原文整理');
     });
 
-    test('wireName 与 displayName 一一对应', () {
-      expect(SmartLayoutStyle.ppt.wireName, 'ppt');
-      expect(SmartLayoutStyle.mindmap.wireName, 'mindmap');
-      expect(SmartLayoutStyle.inPlace.wireName, 'in_place');
-      expect(SmartLayoutStyle.ppt.displayName, 'PPT 式排版');
-      expect(SmartLayoutStyle.mindmap.displayName, '思维导图');
+    test('枚举恰有三张模板卡', () {
+      expect(SmartLayoutTemplateKind.values, hasLength(3));
     });
   });
 
-  group('SmartLayoutComposeRequest', () {
-    test('toJson 包含 elements 与 layoutHint；缺省时不输出', () {
-      final request = SmartLayoutComposeRequest(
-        pages: const [],
-        blocks: const [],
-        elements: [
-          SmartLayoutElementRef(
-            id: 'img-1',
-            type: 'image',
-            bounds: Bounds.fromLTWH(0, 0, 10, 10),
-            pageId: 'p-1',
-            groupIds: const ['g-1'],
-          ),
-        ],
-        layoutHint: SmartLayoutStyle.ppt,
-      );
-      final json = request.toJson();
-      expect(json['layoutHint'], 'ppt');
-      final elements = json['elements'] as List;
-      final element = elements.first as Map;
-      expect(element['id'], 'img-1');
-      expect(element['type'], 'image');
-      expect(element['locked'], isNull); // 未设置不输出
-      expect(element['groupIds'], ['g-1']);
-
-      final plain = SmartLayoutComposeRequest(
-        pages: const [],
-        blocks: const [],
-      ).toJson();
-      expect(plain.containsKey('elements'), isFalse);
-      expect(plain.containsKey('layoutHint'), isFalse);
-    });
-  });
-
-  group('SmartLayoutLayoutDecision', () {
-    test('fromJson 解析 mindmap structure', () {
-      final decision = SmartLayoutLayoutDecision.fromJson({
-        'style': 'mindmap',
-        'confidence': 0.9,
-        'structure': {
-          'root': {
-            'text': '主题',
-            'blockIds': ['blk-1'],
-            'children': [
-              {'text': '分支', 'blockIds': ['blk-2'], 'children': []},
-            ],
-          },
-        },
+  group('SmartLayoutRecognizedBlock', () {
+    test('fromJson：isSuccess 由 error 决定；边界解析', () {
+      final ok = SmartLayoutRecognizedBlock.fromJson({
+        'id': 'e0',
+        'type': 'text',
+        'text': '正文',
+        'bounds': {'x': 1, 'y': 2, 'width': 30, 'height': 40},
       });
-      expect(decision.style, SmartLayoutStyle.mindmap);
-      expect(decision.confidence, closeTo(0.9, 0.001));
-      expect(decision.mindmapStructure, isNotNull);
-      expect(decision.mindmapStructure!.root.text, '主题');
-      expect(decision.mindmapStructure!.root.children.length, 1);
-      expect(decision.mindmapStructure!.root.blockIds, ['blk-1']);
-      expect(decision.pptStructure, isNull);
-    });
+      expect(ok.isSuccess, isTrue);
+      expect(ok.bounds.left, 1);
+      expect(ok.bounds.top, 2);
 
-    test('fromJson 解析 ppt structure 且未知 role 归为 body', () {
-      final decision = SmartLayoutLayoutDecision.fromJson({
-        'style': 'ppt',
-        'confidence': 2.0, // 钳制
-        'structure': {
-          'groups': [
-            {'role': 'title', 'elementIds': ['blk-1']},
-            {'role': 'unknown', 'elementIds': ['img-1']},
-          ],
-        },
+      final failed = SmartLayoutRecognizedBlock.fromJson({
+        'id': 'e1',
+        'type': 'error',
+        'error': 'vlm-no-text',
+        'bounds': {'x': 0, 'y': 0, 'width': 1, 'height': 1},
       });
-      expect(decision.confidence, 1.0);
-      expect(decision.pptStructure, isNotNull);
-      expect(decision.pptStructure!.groups.length, 2);
-      expect(decision.pptStructure!.groups[1].role, 'body');
-    });
-
-    test('未知 style 回落 inPlace 且结构为空', () {
-      final decision = SmartLayoutLayoutDecision.fromJson({
-        'style': 'diagram',
-        'structure': {'root': {'text': 'x'}},
-      });
-      expect(decision.style, SmartLayoutStyle.inPlace);
-      expect(decision.mindmapStructure, isNull);
-      expect(decision.pptStructure, isNull);
-    });
-  });
-
-  group('SmartLayoutResponse', () {
-    test('layout 缺失时解析为 null（旧服务端兼容）', () {
-      final response = SmartLayoutResponse.fromJson({
-        'document': {
-          'version': 1,
-          'generatedAt': 1,
-          'blocks': <Object?>[],
-        },
-        'pages': <Object?>[],
-      });
-      expect(response.layout, isNull);
+      expect(failed.isSuccess, isFalse);
     });
   });
 
