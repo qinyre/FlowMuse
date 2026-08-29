@@ -213,20 +213,27 @@ void main() {
       // 实测 OPD2404：起笔压力 0.5-1s 内 0.2 → 0.5+ 自然爬升，如实渲染
       // 会让压感笔形前段过细、压力到位瞬间整笔增宽（用户感知为闪变）。
       // 包络：窗口内输出 ≥ 攻击水位线性衰减到 pressureFloor。
-      test('低压起笔输出抬升至攻击水位，随窗口衰减，窗口后纯实测', () {
+      test('低压起笔输出抬升至攻击水位，随窗口缓释，窗口后纯实测', () {
+        // 窗口 1500ms 必须覆盖真机压力爬升期（实测 0.5-1.2s）：实测压力
+        // 在包络仍处高位时接管，避免 250ms 短窗时代偿先撤、实测未跟上
+        // 造成的"粗起笔收窄成尖"凹谷。
         final m = StrokeInputModeler(InputPolicy.stylus);
 
-        // down: p=0.2 → 映射 0.18+0.2*0.64≈0.31 < 水位 0.5 → 抬到 0.5
+        // down: p=0.2 → 映射 ≈0.31 < 水位 0.5 → 抬到 0.5
         final r0 = m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down));
         expect(r0.pressure!, closeTo(0.50, 0.01));
 
-        // 125ms（半窗）：包络 = lerp(0.5, 0.18, 0.5) = 0.34 > 0.31
+        // 125ms：包络 = 0.5-0.32*(125/1500) ≈ 0.473
         final r1 = m.process(s(2.0, 0, 125, p: 0.2));
-        expect(r1.pressure!, closeTo(0.34, 0.01));
+        expect(r1.pressure!, closeTo(0.47, 0.01));
 
-        // 300ms（窗口外）：纯实测映射 ≈ 0.31
+        // 300ms：包络 ≈ 0.436（实测仍在爬升，包络接管，无凹谷）
         final r2 = m.process(s(4.0, 0, 300, p: 0.2));
-        expect(r2.pressure!, closeTo(0.31, 0.01));
+        expect(r2.pressure!, closeTo(0.44, 0.01));
+
+        // 1600ms（窗口外）：纯实测映射 ≈ 0.31
+        final r3 = m.process(s(6.0, 0, 1600, p: 0.2));
+        expect(r3.pressure!, closeTo(0.31, 0.01));
       });
 
       test('真实压力高于包络时原样透传不被抬压', () {
@@ -239,16 +246,17 @@ void main() {
         expect(r1.pressure!, lessThanOrEqualTo(0.82));
       });
 
-      test('包络只抬输出不污染压力状态（窗口后延续实测值）', () {
+      test('包络只抬输出不污染压力状态（窗口外缺失值回到实测）', () {
         final m = StrokeInputModeler(InputPolicy.stylus);
-        m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down)); // 抬到 0.5
-        m.process(s(2.0, 0, 125, p: 0.2)); // 包络 0.34
-        // 500ms 窗口外：无新压力输入缺失路径，输出回到实测映射
-        final r = m.process(s(4.0, 0, 500, p: 0.2));
-        expect(r.pressure!, closeTo(0.31, 0.02));
-        // 偶发缺失沿用最后有效值（实测值，而非包络水位）
-        final missing = m.process(s(6.0, 0, 516, p: null));
-        expect(missing.pressure!, closeTo(0.31, 0.02));
+        m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down)); // 抬到 0.50
+        m.process(s(2.0, 0, 125, p: 0.2)); // 包络 ≈0.47
+        // 窗口内偶发缺失：输出 = max(实测 0.31, 包络 ≈0.39)
+        final missingInWindow = m.process(s(4.0, 0, 500, p: null));
+        expect(missingInWindow.pressure!, closeTo(0.39, 0.01));
+        // 窗口外缺失：输出回到实测映射 ≈0.31——证明 _lastPressure 从未
+        // 被包络污染（若污染会输出 0.5/0.47）
+        final missingAfterWindow = m.process(s(6.0, 0, 1600, p: null));
+        expect(missingAfterWindow.pressure!, closeTo(0.31, 0.02));
       });
 
       test('pressureAttackMs=0 关闭补偿（纯映射）', () {

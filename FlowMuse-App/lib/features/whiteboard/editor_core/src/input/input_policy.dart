@@ -29,6 +29,8 @@ class InputPolicy {
   /// 到 ~0.5+（自然发力过程），如实渲染会让压感笔形前段过细、压力到位
   /// 瞬间整笔增宽（用户感知为"闪变"）。窗口内输出压力不低于从
   /// [pressureAttackLevel] 线性衰减到 [pressureFloor] 的包络；0 = 关闭。
+  /// **窗口必须长于起笔压力爬升期**（实测 0.5-1.2s → 取 1500ms）：补偿
+  /// 先于实测压力到位而撤退，会在每笔产生"粗起笔收窄成尖"的凹谷。
   final int pressureAttackMs;
 
   /// 攻击水位（映射域 [pressureFloor, pressureCeiling] 内的取值）。
@@ -48,7 +50,7 @@ class InputPolicy {
     pressureCutoff: 50.0,
     pressureFloor: 0.18,
     pressureCeiling: 0.82,
-    pressureAttackMs: 250,
+    pressureAttackMs: 1500,
     pressureAttackLevel: 0.50,
     minDistance: 0.6,
     cornerProtectAngleRad: 0.9,
@@ -63,7 +65,7 @@ class InputPolicy {
     pressureCutoff: 50.0,
     pressureFloor: 0.18,
     pressureCeiling: 0.82,
-    pressureAttackMs: 250,
+    pressureAttackMs: 1500,
     pressureAttackLevel: 0.50,
     minDistance: 0.6,
     cornerProtectAngleRad: 2.1,
