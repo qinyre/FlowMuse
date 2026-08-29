@@ -3828,8 +3828,6 @@ class MarkdrawController extends ChangeNotifier {
       if (unit != null) figureUnitByIndex[index] = unit;
     }
 
-    LayoutUnit? makeFigureUnit(int index) => figureUnitByIndex[index];
-
     // title：第一个 role=title 且成功创建的文本项（仅 1 个，AI 侧已去重）。
     int? titleIndex;
     for (final index in match.textClaims.keys) {
@@ -3893,12 +3891,13 @@ class MarkdrawController extends ChangeNotifier {
         for (final index in match.textClaims.keys)
           if (index != titleIndex &&
               !pairedTextIndexes.contains(index) &&
-              textElementsByIndex.containsKey(index) &&
-              _isFigureLabelPairCandidate(vision.elements[index]))
-            index: (
-              bounds: textSourceByIndex[index]!,
-              maxGap: _figureLabelPairMaxGap(vision.elements[index]),
-            ),
+              textElementsByIndex.containsKey(index))
+            if (_figureLabelPairMaxGap(vision.elements[index])
+                case final maxGap?)
+              index: (
+                bounds: textSourceByIndex[index]!,
+                maxGap: maxGap,
+              ),
       },
       figures: {
         for (final index in match.figureClaims.keys)
@@ -3940,7 +3939,7 @@ class MarkdrawController extends ChangeNotifier {
     final looseFigures = <LayoutUnit>[];
     for (final index in match.figureClaims.keys) {
       if (pairedFigureIndexes.contains(index)) continue;
-      final unit = makeFigureUnit(index);
+      final unit = figureUnitByIndex[index];
       if (unit != null) looseFigures.add(unit);
     }
     looseFigures.sort(
@@ -4360,24 +4359,21 @@ class MarkdrawController extends ChangeNotifier {
   /// 去空白匹配（短标签判定用："图 1 介绍"与"图1介绍"同权）。
   static final RegExp _whitespacePattern = RegExp(r'\s');
 
-  /// 图旁标签配对候选：caption 角色、"图N"式短标签（≤6 字），或去空白
-  /// 不超过 10 字的短文本块（走查实况：上方"小懒羊睡觉"/下方"图1介绍"
-  /// 这类短标签 role=body 且非图N，也需要绑图，不再散落正文）。
-  static bool _isFigureLabelPairCandidate(SmartLayoutVisionElement element) {
-    if (element.role == 'caption') return true;
+  /// 图旁标签配对候选及其与图的包围盒间隙上限（null = 非候选）：caption
+  /// 角色、"图N"式短标签（≤6 字，间隙放宽到 kSmartLayoutFigureLabelPairMaxGap），
+  /// 或去空白不超过 10 字的短文本块（走查实况：上方"小懒羊睡觉"/下方
+  /// "图1介绍"这类短标签 role=body 且非图N，也需要绑图，不再散落正文；
+  /// 其余候选间隙 64pt）。
+  static double? _figureLabelPairMaxGap(SmartLayoutVisionElement element) {
     final text = element.text?.trim() ?? '';
-    if (text.isEmpty) return false;
-    return (text.length <= 6 && _figureLabelPattern.hasMatch(text)) ||
-        text.replaceAll(_whitespacePattern, '').length <= 10;
-  }
-
-  /// 候选标签与图的包围盒间隙上限："图N"式短标签用放宽档 96pt，其余
-  /// （caption 角色与短文本标签）用 64pt。
-  static double _figureLabelPairMaxGap(SmartLayoutVisionElement element) {
-    final text = element.text?.trim() ?? '';
-    return text.length <= 6 && _figureLabelPattern.hasMatch(text)
-        ? kSmartLayoutFigureLabelPairMaxGap
-        : kSmartLayoutCaptionPairMaxGap;
+    if (text.length <= 6 && _figureLabelPattern.hasMatch(text)) {
+      return kSmartLayoutFigureLabelPairMaxGap;
+    }
+    if (element.role == 'caption') return kSmartLayoutCaptionPairMaxGap;
+    if (text.isEmpty) return null;
+    return text.replaceAll(_whitespacePattern, '').length <= 10
+        ? kSmartLayoutCaptionPairMaxGap
+        : null;
   }
 
   /// 纯标点/纯符号转写判定：不含任何字母/数字/CJK（如"、"、"~"）的文本

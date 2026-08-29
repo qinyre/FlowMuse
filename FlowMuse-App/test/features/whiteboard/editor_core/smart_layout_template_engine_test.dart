@@ -224,6 +224,56 @@ void main() {
       }
     });
 
+    test('窄图 + 超长图注：标签块横向钳回内容区，previewRect 不越界', () {
+      // Given：两只窄图成行，图注宽 500（> 图宽 120，居中于图心会越出
+      // 内容区：左列图心 194 左缘 -56、右列图心 606 右缘 856）。
+      // When：handout 落位；Then：图注贴内容区边缘钳回，全部 previewRect
+      // ⊆ contentArea。
+      FigureTextPair wideCaptionPair(String figureKey, String captionKey, String text) =>
+          FigureTextPair(
+            figure: figureUnit(
+              figureKey,
+              const Size(120, 80),
+              source: Rect.fromLTWH(1000, 0, 120, 80),
+            ),
+            bottomTexts: [
+              textUnit(
+                captionKey,
+                text,
+                source: Rect.fromLTWH(1000, 90, 500, 40),
+                width: 500,
+              ),
+            ],
+          );
+
+      final result = SmartLayoutTemplateEngine.layout(
+        kind: SmartLayoutTemplateKind.handout,
+        content: SmartLayoutContent(
+          pageId: 'p1',
+          contentArea: area,
+          pairs: [
+            wideCaptionPair('f1', 'c1', '左列超长图注'),
+            wideCaptionPair('f2', 'c2', '右列超长图注'),
+          ],
+        ),
+      );
+      expect(result, isNotNull);
+      // 左列图心 halfWidth/2 = (800-24)/4 = 194：居中左缘 -56 越出 → 钳回
+      // 内容区左缘。右列图心 halfWidth + gap + halfWidth/2 = 606：居中右缘
+      // 856 越出 → 钳回内容区右缘（x = 区宽 - 500）。
+      final captions = result!.addElements.whereType<TextElement>().toList();
+      final c1 = captions.firstWhere((e) => e.text == '左列超长图注');
+      final c2 = captions.firstWhere((e) => e.text == '右列超长图注');
+      expect(c1.x, area.left, reason: '左列图注左缘钳回内容区左缘');
+      expect(c2.x + c2.width, closeTo(area.right, 0.01), reason: '右列图注右缘钳回内容区右缘');
+      for (final rect in result.previewRects) {
+        expect(rect.left, greaterThanOrEqualTo(area.left), reason: 'previewRect 不越内容区左缘');
+        expect(rect.right, lessThanOrEqualTo(area.right), reason: 'previewRect 不越内容区右缘');
+        expect(rect.top, greaterThanOrEqualTo(area.top), reason: 'previewRect 不越内容区顶缘');
+        expect(rect.bottom, lessThanOrEqualTo(area.bottom), reason: 'previewRect 不越内容区底缘');
+      }
+    });
+
     test('宽图（>60% 页宽）独占通栏行且水平居中', () {
       final result = SmartLayoutTemplateEngine.layout(
         kind: SmartLayoutTemplateKind.handout,
@@ -435,6 +485,93 @@ void main() {
           .whereType<TextElement>()
           .firstWhere((e) => e.text == '• 第一点');
       expect(bullet.y, greaterThan(caption.y));
+    });
+
+    test('独占行图 + 超长图注：标签块横向钳回内容区，previewRect 不越界', () {
+      // Given：宽 400 的独占行图（图贴左缘，图心 x=200）+ 宽 500 的图注
+      //（> 图宽，居中左缘 -50 越出内容区）；When：outline 落位；
+      // Then：图注钳回内容区左缘，全部 previewRect ⊆ contentArea。
+      final result = SmartLayoutTemplateEngine.layout(
+        kind: SmartLayoutTemplateKind.outline,
+        content: SmartLayoutContent(
+          pageId: 'p1',
+          contentArea: area,
+          pairs: [
+            FigureTextPair(
+              figure: figureUnit(
+                'f1',
+                const Size(400, 200),
+                source: const Rect.fromLTWH(0, 0, 400, 200),
+                memberIds: ['img-a'],
+              ),
+              bottomTexts: [
+                textUnit(
+                  'c1',
+                  '示意图',
+                  source: const Rect.fromLTWH(0, 210, 500, 30),
+                  width: 500,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      expect(result, isNotNull);
+      final caption = result!.addElements
+          .whereType<TextElement>()
+          .firstWhere((e) => e.text == '示意图');
+      expect(caption.x, area.left, reason: '独占行图注越出时钳回内容区左缘');
+      for (final rect in result.previewRects) {
+        expect(rect.left, greaterThanOrEqualTo(area.left), reason: 'previewRect 不越内容区左缘');
+        expect(rect.right, lessThanOrEqualTo(area.right), reason: 'previewRect 不越内容区右缘');
+        expect(rect.top, greaterThanOrEqualTo(area.top), reason: 'previewRect 不越内容区顶缘');
+        expect(rect.bottom, lessThanOrEqualTo(area.bottom), reason: 'previewRect 不越内容区底缘');
+      }
+    });
+
+    test('侧挂小图 + 超长图注：标签块横向钳回内容区，previewRect 不越界', () {
+      // Given：宽 300 小图挂靠条目行右侧（图心 x=650）+ 宽 500 的图注
+      //（> 图宽，居中右缘 900 越出内容区）；When：outline 落位；
+      // Then：图注右缘钳回内容区右缘，全部 previewRect ⊆ contentArea。
+      final result = SmartLayoutTemplateEngine.layout(
+        kind: SmartLayoutTemplateKind.outline,
+        content: SmartLayoutContent(
+          pageId: 'p1',
+          contentArea: area,
+          pairs: [
+            FigureTextPair(
+              figure: figureUnit(
+                'f1',
+                const Size(300, 200),
+                source: const Rect.fromLTWH(450, 20, 300, 200),
+                memberIds: ['img-a'],
+              ),
+              bottomTexts: [
+                textUnit(
+                  'c1',
+                  '示意图',
+                  source: const Rect.fromLTWH(460, 230, 500, 30),
+                  width: 500,
+                ),
+              ],
+            ),
+          ],
+          looseTexts: [
+            textUnit('t1', '第一点', source: const Rect.fromLTWH(0, 0, 200, 40)),
+          ],
+        ),
+      );
+      expect(result, isNotNull);
+      final caption = result!.addElements
+          .whereType<TextElement>()
+          .firstWhere((e) => e.text == '示意图');
+      expect(caption.x, closeTo(area.right - 500, 0.01), reason: '侧挂图注右缘钳回内容区右缘');
+      for (final rect in result.previewRects) {
+        expect(rect.left, greaterThanOrEqualTo(area.left), reason: 'previewRect 不越内容区左缘');
+        expect(rect.right, lessThanOrEqualTo(area.right), reason: 'previewRect 不越内容区右缘');
+        expect(rect.top, greaterThanOrEqualTo(area.top), reason: 'previewRect 不越内容区顶缘');
+        expect(rect.bottom, lessThanOrEqualTo(area.bottom), reason: 'previewRect 不越内容区底缘');
+      }
     });
 
     test('条目流超出内容区 → 返回 null', () {
