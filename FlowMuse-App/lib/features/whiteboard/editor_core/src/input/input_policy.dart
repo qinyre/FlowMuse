@@ -12,6 +12,8 @@ class InputPolicy {
     required this.pressureCutoff,
     this.pressureFloor = 0.0,
     this.pressureCeiling = 1.0,
+    this.pressureAttackMs = 0,
+    this.pressureAttackLevel = 0.0,
     required this.minDistance,
     required this.cornerProtectAngleRad,
   });
@@ -22,6 +24,16 @@ class InputPolicy {
   final double pressureCutoff;
   final double pressureFloor;
   final double pressureCeiling;
+
+  /// 起笔攻击补偿窗口（毫秒）。真机手写笔起笔 0.5-1s 内压力从 ~0.2 爬升
+  /// 到 ~0.5+（自然发力过程），如实渲染会让压感笔形前段过细、压力到位
+  /// 瞬间整笔增宽（用户感知为"闪变"）。窗口内输出压力不低于从
+  /// [pressureAttackLevel] 线性衰减到 [pressureFloor] 的包络；0 = 关闭。
+  final int pressureAttackMs;
+
+  /// 攻击水位（映射域 [pressureFloor, pressureCeiling] 内的取值）。
+  final double pressureAttackLevel;
+
   final double minDistance;
   final double cornerProtectAngleRad;
 
@@ -36,6 +48,8 @@ class InputPolicy {
     pressureCutoff: 50.0,
     pressureFloor: 0.18,
     pressureCeiling: 0.82,
+    pressureAttackMs: 250,
+    pressureAttackLevel: 0.50,
     minDistance: 0.6,
     cornerProtectAngleRad: 0.9,
   );
@@ -49,6 +63,8 @@ class InputPolicy {
     pressureCutoff: 50.0,
     pressureFloor: 0.18,
     pressureCeiling: 0.82,
+    pressureAttackMs: 250,
+    pressureAttackLevel: 0.50,
     minDistance: 0.6,
     cornerProtectAngleRad: 2.1,
   );

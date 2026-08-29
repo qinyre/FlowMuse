@@ -175,11 +175,20 @@ void main() {
     });
 
     test('明显曲线降低轻压输入以扩大粗细变化', () {
-      final standard = StrokeInputModeler(InputPolicy.stylus);
-      final firm = StrokeInputModeler(
-        InputPolicy.stylus,
-        pressureExponent: 1.35,
+      // 攻击包络会把起笔输出抬到水位之上，遮蔽指数曲线差异——本测试
+      // 只关心指数语义，显式关闭攻击窗口。
+      const attackOff = InputPolicy(
+        useRealPressure: true,
+        minCutoff: 8.0,
+        beta: 0.02,
+        pressureCutoff: 50.0,
+        pressureFloor: 0.18,
+        pressureCeiling: 0.82,
+        minDistance: 0.6,
+        cornerProtectAngleRad: 0.9,
       );
+      final standard = StrokeInputModeler(attackOff);
+      final firm = StrokeInputModeler(attackOff, pressureExponent: 1.35);
 
       final standardResult = standard.process(
         s(0, 0, 0, p: 0.25, phase: StrokePhase.down),
@@ -198,6 +207,65 @@ void main() {
 
       expect(spike.pressure, isNotNull);
       expect(spike.pressure!, lessThanOrEqualTo(0.85));
+    });
+
+    group('起笔攻击补偿（真机压力爬升闪变治理）', () {
+      // 实测 OPD2404：起笔压力 0.5-1s 内 0.2 → 0.5+ 自然爬升，如实渲染
+      // 会让压感笔形前段过细、压力到位瞬间整笔增宽（用户感知为闪变）。
+      // 包络：窗口内输出 ≥ 攻击水位线性衰减到 pressureFloor。
+      test('低压起笔输出抬升至攻击水位，随窗口衰减，窗口后纯实测', () {
+        final m = StrokeInputModeler(InputPolicy.stylus);
+
+        // down: p=0.2 → 映射 0.18+0.2*0.64≈0.31 < 水位 0.5 → 抬到 0.5
+        final r0 = m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down));
+        expect(r0.pressure!, closeTo(0.50, 0.01));
+
+        // 125ms（半窗）：包络 = lerp(0.5, 0.18, 0.5) = 0.34 > 0.31
+        final r1 = m.process(s(2.0, 0, 125, p: 0.2));
+        expect(r1.pressure!, closeTo(0.34, 0.01));
+
+        // 300ms（窗口外）：纯实测映射 ≈ 0.31
+        final r2 = m.process(s(4.0, 0, 300, p: 0.2));
+        expect(r2.pressure!, closeTo(0.31, 0.01));
+      });
+
+      test('真实压力高于包络时原样透传不被抬压', () {
+        final m = StrokeInputModeler(InputPolicy.stylus);
+        // p=0.8 → 映射 0.18+0.8*0.64≈0.69 > 水位 0.5 → 不抬压
+        final r0 = m.process(s(0, 0, 0, p: 0.8, phase: StrokePhase.down));
+        expect(r0.pressure!, closeTo(0.69, 0.01));
+        final r1 = m.process(s(2.0, 0, 100, p: 0.8));
+        expect(r1.pressure!, greaterThan(r0.pressure! - 0.05));
+        expect(r1.pressure!, lessThanOrEqualTo(0.82));
+      });
+
+      test('包络只抬输出不污染压力状态（窗口后延续实测值）', () {
+        final m = StrokeInputModeler(InputPolicy.stylus);
+        m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down)); // 抬到 0.5
+        m.process(s(2.0, 0, 125, p: 0.2)); // 包络 0.34
+        // 500ms 窗口外：无新压力输入缺失路径，输出回到实测映射
+        final r = m.process(s(4.0, 0, 500, p: 0.2));
+        expect(r.pressure!, closeTo(0.31, 0.02));
+        // 偶发缺失沿用最后有效值（实测值，而非包络水位）
+        final missing = m.process(s(6.0, 0, 516, p: null));
+        expect(missing.pressure!, closeTo(0.31, 0.02));
+      });
+
+      test('pressureAttackMs=0 关闭补偿（纯映射）', () {
+        const attackOff = InputPolicy(
+          useRealPressure: true,
+          minCutoff: 8.0,
+          beta: 0.02,
+          pressureCutoff: 50.0,
+          pressureFloor: 0.18,
+          pressureCeiling: 0.82,
+          minDistance: 0.6,
+          cornerProtectAngleRad: 0.9,
+        );
+        final m = StrokeInputModeler(attackOff);
+        final r = m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down));
+        expect(r.pressure!, closeTo(0.31, 0.01));
+      });
     });
 
     test(
