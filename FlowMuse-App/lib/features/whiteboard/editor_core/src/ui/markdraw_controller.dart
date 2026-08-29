@@ -3467,7 +3467,9 @@ class MarkdrawController extends ChangeNotifier {
     ];
     final tempScene = _buildDraftScene(plan);
     _smartLayoutDraftActive = true;
-    final viewport = _fitViewportToPage(plan.pageId);
+    // 适配框 = 页框 ∪ 预落位矩形（走查 #10：排版结果可能贴近/超出页缘，
+    // 只看页框会把新内容挤出视野；previewRects 与页框同为场景坐标）。
+    final viewport = _fitViewportToRects(plan.pageId, plan.previewRects);
     _editorState = _editorState.copyWith(
       scene: tempScene,
       selectedIds: _draftParticipants,
@@ -3615,7 +3617,9 @@ class MarkdrawController extends ChangeNotifier {
     return next;
   }
 
-  ViewportState? _fitViewportToPage(String pageId) {
+  /// 草稿进入视口适配：适配框 = 页框 ∪ [previewRects]（场景坐标并集）。
+  /// 页面不存在时返回 null（调用方保持当前视口）。
+  ViewportState? _fitViewportToRects(String pageId, List<ui.Rect> previewRects) {
     CanvasPage? page;
     for (final candidate in _layout.pages) {
       if (candidate.id == pageId) {
@@ -3624,14 +3628,13 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
     if (page == null) return null;
+    var union = page.bounds;
+    for (final rect in previewRects) {
+      union = union.expandToInclude(rect);
+    }
     final size = _lastCanvasSize ?? const ui.Size(800, 600);
     return _editorState.viewport.fitToBounds(
-      Bounds.fromLTWH(
-        page.bounds.left,
-        page.bounds.top,
-        page.bounds.width,
-        page.bounds.height,
-      ),
+      Bounds.fromLTWH(union.left, union.top, union.width, union.height),
       size,
       padding: 32,
     );
@@ -4122,6 +4125,29 @@ class MarkdrawController extends ChangeNotifier {
           items.add((id: id, text: element.text));
           break;
         }
+      }
+    }
+    return items;
+  }
+
+  /// 草稿态全文文本项快照（id + 当前文字 + 是否低置信），供"核对全文"构建。
+  /// 来源 = 草稿场景中带智能排版标记（flowMuse.smartLayout）的文本元素；
+  /// 低置信判定复用进入草稿时的 plan.lowConfidenceTexts 清单。
+  /// 保留手写草稿无新增文本元素（文本以墨迹移动）→ 空列表。
+  List<({ElementId id, String text, bool lowConfidence})>
+  get smartLayoutDraftAllTextItems {
+    if (!_smartLayoutDraftActive) return const [];
+    final items = <({ElementId id, String text, bool lowConfidence})>[];
+    for (final element in _editorState.scene.activeElements) {
+      if (element is TextElement &&
+          _flowMuseData(element)?['smartLayout'] == true) {
+        items.add((
+          id: element.id,
+          text: element.text,
+          lowConfidence: _smartLayoutDraftLowConfidenceIds.contains(
+            element.id,
+          ),
+        ));
       }
     }
     return items;

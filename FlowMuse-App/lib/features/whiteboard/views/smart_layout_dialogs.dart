@@ -409,6 +409,11 @@ class SmartLayoutConfirmBar extends StatelessWidget {
     required this.isMultiPage,
     required this.onAction,
     this.onProofread,
+    this.currentKind,
+    this.availableKinds = const [],
+    this.onTemplateSelected,
+    this.keepHandwriting = false,
+    this.onReviewAll,
   });
 
   final SmartLayoutPlan plan;
@@ -418,25 +423,99 @@ class SmartLayoutConfirmBar extends StatelessWidget {
   /// 低置信文本校对入口；为 null 表示本页没有可校对项（隐藏按钮）。
   final Future<void> Function()? onProofread;
 
+  /// 当前草稿模板；为 null 表示不显示模板切换 chips（向后兼容旧调用方）。
+  final SmartLayoutTemplateKind? currentKind;
+
+  /// 可切换的模板集合（当前模式下放得下的种类）；不在其中的 chip 置灰。
+  final List<SmartLayoutTemplateKind> availableKinds;
+
+  /// 点选其他模板 chip：由页面取消当前草稿并按新模板重建；当前模板点选无效。
+  final ValueChanged<SmartLayoutTemplateKind>? onTemplateSelected;
+
+  /// 保留手写模式：文本以墨迹移动占位，标题旁标注"保留手写"。
+  final bool keepHandwriting;
+
+  /// 全文核对入口（草稿全部智能排版文本项，不只低置信）；为 null 隐藏按钮。
+  final Future<void> Function()? onReviewAll;
+
   bool get _hasFailures =>
       plan.failedStrokeIds.isNotEmpty || plan.failureRects.isNotEmpty;
+
+  /// 模板切换 chips 行：三个模板横排，当前模板高亮、放不下的置灰。
+  Widget? _buildTemplateChips(BuildContext context) {
+    final onSelected = onTemplateSelected;
+    if (currentKind == null || onSelected == null) return null;
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: [
+        for (final kind in SmartLayoutTemplateKind.values)
+          ChoiceChip(
+            label: Text(kind.displayName),
+            selected: kind == currentKind,
+            visualDensity: VisualDensity.compact,
+            // 当前模板：保持高亮但点选无效；放不下的模板：置灰。
+            onSelected: (kind == currentKind || availableKinds.contains(kind))
+                ? (_) {
+                    if (kind != currentKind) onSelected(kind);
+                  }
+                : null,
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final lowConfidenceCount = plan.lowConfidenceTexts.length;
     final info = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '${plan.style.displayName} · 置信度 '
-          '${(plan.confidence * 100).round()}%',
-          style: theme.textTheme.titleSmall,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${plan.style.displayName} · 置信度 '
+              '${(plan.confidence * 100).round()}%',
+              style: theme.textTheme.titleSmall,
+            ),
+            if (keepHandwriting) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 1,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: theme.colorScheme.outline),
+                ),
+                child: Text('保留手写', style: theme.textTheme.labelSmall),
+              ),
+            ],
+          ],
         ),
         const SizedBox(height: 2),
         Text(
           plan.description,
           style: theme.textTheme.bodySmall,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        // 置信度可解释（走查 #6）：解释橙框含义，低置信为 0 时给正向确认。
+        Text(
+          lowConfidenceCount > 0
+              ? '有 $lowConfidenceCount 处内容识别把握较低（画布橙框标出），'
+                    '建议校对后再应用'
+              : '全部内容识别把握良好',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: lowConfidenceCount > 0
+                ? const Color(0xFFF08C00)
+                : null,
+          ),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -459,10 +538,17 @@ class SmartLayoutConfirmBar extends StatelessWidget {
       runSpacing: 4,
       children: [
         if (onProofread != null)
-          TextButton(
-            onPressed: onProofread,
-            child: Text('校对 ${plan.lowConfidenceTexts.length} 处'),
-          ),
+          lowConfidenceCount > 0
+              ? FilledButton.tonal(
+                  onPressed: onProofread,
+                  child: Text('校对 $lowConfidenceCount 处'),
+                )
+              : TextButton(
+                  onPressed: onProofread,
+                  child: Text('校对 $lowConfidenceCount 处'),
+                ),
+        if (onReviewAll != null)
+          TextButton(onPressed: onReviewAll, child: const Text('核对全文')),
         if (_hasFailures)
           TextButton(
             onPressed: () => onAction(SmartLayoutBarAction.applyAndDrop),
@@ -488,44 +574,62 @@ class SmartLayoutConfirmBar extends StatelessWidget {
       ],
     );
     // 宽度充足：说明在左、动作在右（原布局）；不足：上下两段、动作区换行。
+    Widget body = LayoutBuilder(
+      builder: (context, constraints) => constraints.maxWidth >= 720
+          ? Row(
+              children: [
+                Expanded(child: info),
+                const SizedBox(width: 12),
+                actions,
+              ],
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                info,
+                const SizedBox(height: 8),
+                actions,
+              ],
+            ),
+    );
+    final chips = _buildTemplateChips(context);
+    if (chips != null) {
+      body = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          chips,
+          const SizedBox(height: 8),
+          body,
+        ],
+      );
+    }
     return Card(
       elevation: 6,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: LayoutBuilder(
-          builder: (context, constraints) => constraints.maxWidth >= 720
-              ? Row(
-                  children: [
-                    Expanded(child: info),
-                    const SizedBox(width: 12),
-                    actions,
-                  ],
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    info,
-                    const SizedBox(height: 8),
-                    actions,
-                  ],
-                ),
-        ),
+        child: body,
       ),
     );
   }
 }
 
 /// 草稿态低置信文本校对编辑条：逐项展示并允许改字，保存即更新草稿场景。
+/// [headerNote] 覆盖默认说明文案（"核对全文"入口传全量模式的说明）。
 class SmartLayoutProofreadSheet extends StatefulWidget {
   const SmartLayoutProofreadSheet({
     super.key,
     required this.items,
     required this.onRevise,
+    this.headerNote,
   });
 
   final List<({ElementId id, String text})> items;
   final bool Function(ElementId id, String newText) onRevise;
+
+  /// 顶部说明文案；为 null 用低置信校对默认文案。
+  final String? headerNote;
 
   @override
   State<SmartLayoutProofreadSheet> createState() =>
@@ -573,7 +677,8 @@ class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
             Text('校对识别文字', style: theme.textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
-              '橙色虚线标注的文本识别把握不足，请核对或修正后应用。',
+              widget.headerNote ??
+                  '橙色虚线标注的文本识别把握不足，请核对或修正后应用。',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
