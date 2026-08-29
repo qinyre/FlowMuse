@@ -18,6 +18,7 @@ class LayoutUnit {
     this.textElement,
     this.element,
     this.vertical = false,
+    this.keepAsInk = false,
     this.memberIds = const [],
   });
 
@@ -37,10 +38,37 @@ class LayoutUnit {
   final Element? element;
   final bool vertical;
 
-  /// 成组单元的成员元素 id（非组为空）。
+  /// 保留手写：该文本单元以原稿墨迹整体占位（引擎用移动代替新增印刷体，
+  /// 槽位用 [size]；生产方构造 keepAsInk 变体时 size 取原稿包围盒尺寸）。
+  final bool keepAsInk;
+
+  /// 成组单元的成员元素 id（非组为空）；keepAsInk 文本单元为该块笔迹
+  /// 元素 id（随方案移动、从删除清单排除）。
   final List<String> memberIds;
 
   double get centerY => sourceBounds.center.dy;
+
+  LayoutUnit copyWith({
+    String? key,
+    Rect? sourceBounds,
+    Size? size,
+    LayoutUnitKind? kind,
+    TextElement? textElement,
+    Element? element,
+    bool? vertical,
+    bool? keepAsInk,
+    List<String>? memberIds,
+  }) => LayoutUnit(
+    key: key ?? this.key,
+    sourceBounds: sourceBounds ?? this.sourceBounds,
+    size: size ?? this.size,
+    kind: kind ?? this.kind,
+    textElement: textElement ?? this.textElement,
+    element: element ?? this.element,
+    vertical: vertical ?? this.vertical,
+    keepAsInk: keepAsInk ?? this.keepAsInk,
+    memberIds: memberIds ?? this.memberIds,
+  );
 }
 
 /// 图文配对：结构层绑定后版式层不拆散（LaTeX float / HTML figure 的共同经验）。
@@ -76,4 +104,29 @@ class SmartLayoutContent {
   final List<FigureTextPair> pairs;
   final List<LayoutUnit> looseTexts;
   final List<LayoutUnit> looseFigures;
+
+  /// 保留手写变体：全部文本单元改以原稿墨迹占位（keepAsInk），排版槽位
+  /// 用原稿包围盒尺寸（印刷体测量尺寸不再参与版式计算）；图/形/组不变。
+  /// 引擎据此用移动墨迹代替新增文本元素（"保留手写、仅重排位置"）。
+  SmartLayoutContent withTextAsInk() {
+    LayoutUnit inkText(LayoutUnit unit) => unit.copyWith(
+      keepAsInk: true,
+      size: Size(unit.sourceBounds.width, unit.sourceBounds.height),
+    );
+    return SmartLayoutContent(
+      pageId: pageId,
+      contentArea: contentArea,
+      title: title == null ? null : inkText(title!),
+      pairs: [
+        for (final pair in pairs)
+          FigureTextPair(
+            figure: pair.figure,
+            caption: inkText(pair.caption),
+            figureAbove: pair.figureAbove,
+          ),
+      ],
+      looseTexts: [for (final unit in looseTexts) inkText(unit)],
+      looseFigures: looseFigures,
+    );
+  }
 }

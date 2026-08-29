@@ -719,6 +719,366 @@ void main() {
       );
       expect(preparation, isNull);
     });
+
+    testWidgets('图注几何配对兜底：VLM 漏配的 caption 就近绑图，不再与图分家',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: const ElementId('img-cat'),
+            x: 700,
+            y: 600,
+            width: 600,
+            height: 600,
+            fileId: 'file-cat',
+          ),
+        ),
+      );
+      // 图注笔画紧贴图片下方（垂直间隙 50pt ≤ 64pt 阈值）。
+      _addStroke(controller, 'k-cap', 'cap', 720, 1250, 120, 40);
+      controller.onVisionSmartLayout = (request) async {
+        expect(request.marks, hasLength(4), reason: '两簇手写 + 图片 + 图注都编号');
+        return SmartLayoutVisionResponse(
+          elements: [
+            _visionElement('body', '正文一整段', ['m1']),
+            // caption 无 pairId——走查实况：VLM 漏配，靠几何兜底。
+            _visionElement('caption', '图注一', ['m4']),
+            _visionElement('figure', '', ['m3']),
+          ],
+        );
+      };
+      final preparation = (await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      ))!;
+      expect(preparation.content.pairs, hasLength(1), reason: '图注应兜底与图成组');
+      expect(preparation.content.pairs.single.caption.textElement!.text, '图注一');
+      expect(preparation.content.pairs.single.figure.key, 'img-cat');
+      expect(
+        preparation.content.pairs.single.figureAbove,
+        isTrue,
+        reason: 'figureAbove 沿用原稿几何规则（图在注上方）',
+      );
+      expect(
+        preparation.content.looseTexts.map((u) => u.textElement!.text),
+        ['正文一整段'],
+        reason: '图注不应再混进正文流',
+      );
+      expect(preparation.content.looseFigures, isEmpty);
+    });
+
+    testWidgets('"图N"式标签即使 role=body 也参与就近配对（间隙放宽到 96pt）',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: const ElementId('img-cat'),
+            x: 700,
+            y: 600,
+            width: 600,
+            height: 600,
+            fileId: 'file-cat',
+          ),
+        ),
+      );
+      // 标签距图片下缘 90pt：超过 caption 阈值 64、在标签放宽阈值 96 内。
+      _addStroke(controller, 'k-label', 'label', 720, 1290, 100, 40);
+      controller.onVisionSmartLayout = (request) async {
+        expect(request.marks, hasLength(2));
+        return SmartLayoutVisionResponse(
+          elements: [
+            _visionElement('figure', '', ['m1']),
+            _visionElement('body', '图 1', ['m2']),
+          ],
+        );
+      };
+      final preparation = (await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      ))!;
+      expect(preparation.content.pairs, hasLength(1));
+      expect(preparation.content.pairs.single.caption.textElement!.text, '图 1');
+      expect(preparation.content.looseTexts, isEmpty);
+    });
+
+    testWidgets('几何兜底不强绑：距离超阈值的图注留在正文流，图留在 looseFigures',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: const ElementId('img-cat'),
+            x: 700,
+            y: 600,
+            width: 600,
+            height: 600,
+            fileId: 'file-cat',
+          ),
+        ),
+      );
+      // 图注距图片下缘 300pt：远超兜底阈值，不强凑配对。
+      _addStroke(controller, 'k-cap', 'cap', 720, 1500, 120, 40);
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            elements: [
+              _visionElement('figure', '', ['m1']),
+              _visionElement('caption', '远处的图注', ['m2']),
+            ],
+          );
+      final preparation = (await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      ))!;
+      expect(preparation.content.pairs, isEmpty, reason: '兜底只补漏，不硬绑');
+      expect(
+        preparation.content.looseTexts.map((u) => u.textElement!.text),
+        contains('远处的图注'),
+      );
+      expect(preparation.content.looseFigures, hasLength(1));
+    });
+
+    testWidgets('竖排识别转写一律横排：不写 writingMode、按横排测量定尺寸',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      // 窄高单列笔迹：聚类阶段判为竖排列（整块识别），但转写必须横排。
+      _addStroke(controller, 'k-v', 'v', 300, 150, 40, 200);
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            elements: [
+              _visionElement('body', '先头小子', ['m1'], vertical: true),
+            ],
+          );
+      final preparation = (await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      ))!;
+      expect(preparation.content.looseTexts.single.vertical, isTrue,
+          reason: '竖排信息保留在识别/聚类阶段');
+      final plan = controller
+          .buildSmartLayoutPlanForTemplate(
+            preparation,
+            SmartLayoutTemplateKind.inplace,
+          )
+          .plan!;
+      final text = plan.addElements.whereType<TextElement>().single;
+      final flowMuse = text.customData?['flowMuse'] as Map<String, Object?>?;
+      expect(flowMuse?['writingMode'], isNull, reason: '不再产出竖排印刷体');
+      expect(
+        text.width,
+        greaterThan(100),
+        reason: '按横排测量撑宽（旧竖排窄长盒仅 40pt 宽）',
+      );
+    });
+
+    test('isPunctuationOnlyText：纯标点/纯符号判真，含字母/数字/汉字判假', () {
+      // Given：识别转写文本；When：纯标点判定；Then：只有无意义文本判真。
+      expect(MarkdrawController.isPunctuationOnlyText('、'), isTrue);
+      expect(MarkdrawController.isPunctuationOnlyText('~~~'), isTrue);
+      expect(MarkdrawController.isPunctuationOnlyText('！？。'), isTrue);
+      expect(MarkdrawController.isPunctuationOnlyText('图1'), isFalse);
+      expect(MarkdrawController.isPunctuationOnlyText('正文一段'), isFalse);
+      expect(MarkdrawController.isPunctuationOnlyText('abc'), isFalse);
+      expect(MarkdrawController.isPunctuationOnlyText('100%'), isFalse);
+      expect(
+        MarkdrawController.isPunctuationOnlyText(''),
+        isFalse,
+        reason: '空文本由失败红区路径处理，不在此改变归属',
+      );
+      expect(MarkdrawController.isPunctuationOnlyText(null), isFalse);
+    });
+
+    testWidgets('纯标点转写：不生成文本元素，笔迹并入 removeIds 静默删除',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            elements: [
+              _visionElement('body', '正文', ['m1']),
+              _visionElement('body', '、', ['m2']),
+            ],
+          );
+      final preparation = (await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      ))!;
+      expect(
+        preparation.content.looseTexts.map((u) => u.textElement!.text),
+        ['正文'],
+        reason: '纯标点不进排版流',
+      );
+      expect(
+        preparation.removeIds.map((id) => id.value),
+        contains('k-s2'),
+        reason: '纯标点笔迹随方案静默删除',
+      );
+      expect(
+        preparation.failedStrokeIds.map((id) => id.value),
+        isNot(contains('k-s2')),
+        reason: '与识别失败红区区分：不需要用户选择即删',
+      );
+      expect(preparation.failures, isEmpty);
+      final plan = controller
+          .buildSmartLayoutPlanForTemplate(
+            preparation,
+            SmartLayoutTemplateKind.inplace,
+          )
+          .plan!;
+      expect(
+        plan.addElements.whereType<TextElement>().map((e) => e.text),
+        isNot(contains('、')),
+      );
+    });
+
+    testWidgets('噪点笔画（<8×8pt）并入 removeIds：随方案删除且不产生簇',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      // 孤立小墨点（勾/点/污渍）。
+      _addStroke(controller, 'k-dot', 'dot', 900, 900, 5, 5);
+      controller.onVisionSmartLayout = (request) async {
+        expect(request.marks, hasLength(2), reason: '噪点不编号、不产生簇');
+        return SmartLayoutVisionResponse(
+          elements: [_visionElement('body', '正文', ['m1'])],
+        );
+      };
+      final preparation = (await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      ))!;
+      expect(
+        preparation.removeIds.map((id) => id.value),
+        contains('k-dot'),
+        reason: '噪点笔画消除"没排干净"的残留',
+      );
+      expect(
+        preparation.failedStrokeIds.map((id) => id.value),
+        isNot(contains('k-dot')),
+      );
+      final plan = controller
+          .buildSmartLayoutPlanForTemplate(
+            preparation,
+            SmartLayoutTemplateKind.handout,
+          )
+          .plan!;
+      expect(plan.removeIds.map((id) => id.value), contains('k-dot'));
+    });
+
+    testWidgets('保留手写：文本块笔迹不删、经 moveDeltas 移动并入选区；草稿墨迹仍在',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      controller.onVisionSmartLayout = (request) async =>
+          SmartLayoutVisionResponse(
+            elements: [
+              _visionElement('body', '零散字一', ['m1']),
+              _visionElement('body', '零散字二', ['m2']),
+            ],
+          );
+      final preparation = (await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      ))!;
+      for (final kind in SmartLayoutTemplateKind.values) {
+        expect(
+          preparation.layoutsKeepInk[kind],
+          isNotNull,
+          reason: '${kind.displayName} 应有保留手写预落位',
+        );
+      }
+      // 转写模式（默认）行为不变：笔迹整块删除、无移动。
+      final typed = controller
+          .buildSmartLayoutPlanForTemplate(
+            preparation,
+            SmartLayoutTemplateKind.handout,
+          )
+          .plan!;
+      expect(
+        typed.removeIds.map((id) => id.value),
+        containsAll(['k-s1', 'k-s2']),
+      );
+      expect(typed.moveDeltas, isEmpty);
+      // 保留手写：笔迹从删除清单排除、随 moveDeltas 移动、进 selectIds。
+      final ink = controller
+          .buildSmartLayoutPlanForTemplate(
+            preparation,
+            SmartLayoutTemplateKind.handout,
+            keepHandwriting: true,
+          )
+          .plan!;
+      expect(
+        ink.removeIds.map((id) => id.value),
+        isNot(contains('k-s1')),
+        reason: '文本块笔迹不删',
+      );
+      expect(ink.moveDeltas.keys, containsAll([const ElementId('k-s1'), const ElementId('k-s2')]));
+      expect(ink.selectIds, contains(const ElementId('k-s1')));
+      expect(ink.addElements.whereType<TextElement>(), isEmpty);
+      expect(
+        ink.removalRects,
+        isEmpty,
+        reason: '保留墨迹的簇矩形不再进灰区预览',
+      );
+      // 草稿态：墨迹仍在场景中并已按预览矩形落位。
+      controller.enterSmartLayoutDraft(ink);
+      final stroke = controller.editorState.scene.activeElements
+          .where((e) => e.id == const ElementId('k-s1'))
+          .single;
+      expect(stroke.x, ink.previewRects.first.left);
+      expect(stroke.y, ink.previewRects.first.top);
+      controller.cancelSmartLayoutDraft();
+    });
+
+    test('配对兜底纯函数：距离同分取图 top 更小者、一图至多一注、超阈不绑', () {
+      // Given：两个与图注等距（60pt）的候选图，top 不同；一个超阈远图。
+      // When：matchUnpairedCaptionsByGeometry。
+      // Then：绑 top 更小者；第二注绑次近图；远图不绑。
+      final figures = {
+        2: const Rect.fromLTWH(230, 570, 100, 100), // 距 caption10 30+30=60，top 570
+        5: const Rect.fromLTWH(-50, 550, 100, 100), // 距 caption10 50+10=60，top 550
+        9: const Rect.fromLTWH(2000, 0, 100, 100), // 超阈
+      };
+      final result = MarkdrawController.matchUnpairedCaptionsByGeometry(
+        captions: {
+          10: (
+            bounds: const Rect.fromLTWH(100, 500, 100, 40),
+            maxGap: kSmartLayoutCaptionPairMaxGap,
+          ),
+          11: (
+            bounds: const Rect.fromLTWH(230, 720, 80, 30),
+            maxGap: kSmartLayoutCaptionPairMaxGap,
+          ),
+        },
+        figures: figures,
+      );
+      expect(result[10], 5, reason: '距离同分取图 top 更小者（确定性）');
+      expect(result[11], 2, reason: '一图至多绑一注，第二注绑次近可用图');
+      expect(result.containsValue(9), isFalse, reason: '超阈不绑');
+    });
   });
 }
 
@@ -803,6 +1163,7 @@ SmartLayoutVisionElement _visionElement(
   String? id,
   String? pairId,
   double confidence = 0.9,
+  bool vertical = false,
 }) => SmartLayoutVisionElement(
   id: id,
   role: role,
@@ -810,4 +1171,33 @@ SmartLayoutVisionElement _visionElement(
   markIds: markIds,
   pairId: pairId,
   confidence: confidence,
+  vertical: vertical,
 );
+
+/// 添加单条手写笔画（page-1）。
+void _addStroke(
+  MarkdrawController controller,
+  String id,
+  String session,
+  double x,
+  double y,
+  double w,
+  double h,
+) {
+  controller.applyResult(
+    AddElementResult(
+      FreedrawElement(
+        id: ElementId(id),
+        x: x,
+        y: y,
+        width: w,
+        height: h,
+        points: const [Point(0, 0), Point(40, 20)],
+        customData: {
+          recognitionStrokeSessionKey: session,
+          'flowMuse': {'pageId': 'page-1'},
+        },
+      ),
+    ),
+  );
+}

@@ -3299,14 +3299,16 @@ class MarkdrawController extends ChangeNotifier {
     // 取消状态在下一次准备开始时重置（契约：取消只作用于当次准备）。
     _smartLayoutPrepareCancelled = false;
     try {
-      final inkGroups = _smartLayoutInkGroupsForPage(pageId);
-      if (inkGroups.isEmpty) {
+      final (:groups, noiseStrokeIds: pageNoiseIds) =
+          _smartLayoutInkGroupsForPage(pageId);
+      if (groups.isEmpty) {
         return null;
       }
       final preparation = await _prepareVisionRecognition(
         page,
-        inkGroups,
+        groups,
         onProgress,
+        noiseStrokeIds: pageNoiseIds,
       );
       if (_disposed) {
         throw StateError('编辑器已释放');
@@ -3337,19 +3339,32 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// 按用户点选的模板把准备结果装配成计划（确定性；随后进入既有草稿态）。
+  ///
+  /// [keepHandwriting]：保留手写模式——文本块笔迹不删除、经 moveDeltas 整体
+  /// 移动占位（布局源取 layoutsKeepInk，同一 content 的二次引擎调用产物，
+  /// 无额外 VLM 成本）。默认 false 行为不变（转写印刷体、笔迹删除）。
   SmartLayoutPlanResult buildSmartLayoutPlanForTemplate(
     SmartLayoutTemplatePreparation preparation,
-    SmartLayoutTemplateKind kind,
-  ) {
+    SmartLayoutTemplateKind kind, {
+    bool keepHandwriting = false,
+  }) {
+    final content = keepHandwriting
+        ? preparation.content.withTextAsInk()
+        : preparation.content;
+    final cachedLayouts = keepHandwriting
+        ? preparation.layoutsKeepInk
+        : preparation.layouts;
     final layout =
-        preparation.layouts[kind] ??
-        SmartLayoutTemplateEngine.layout(
-          kind: kind,
-          content: preparation.content,
-        );
+        cachedLayouts[kind] ??
+        SmartLayoutTemplateEngine.layout(kind: kind, content: content);
     if (layout == null) {
       return const SmartLayoutPlanResult(error: '内容过多，请分页后再试');
     }
+    // 保留手写：文本块笔迹从删除清单排除（引擎已把它们放进 moveDeltas
+    // 并计入 selectIds）；对应灰区矩形同步排除，避免幽灵预览盖住保留墨迹。
+    final keepInkStrokeIds = keepHandwriting
+        ? _textInkStrokeIds(preparation.content)
+        : const <ElementId>{};
     final plan = SmartLayoutPlan(
       pageId: preparation.pageId,
       style: kind,
@@ -3357,7 +3372,10 @@ class MarkdrawController extends ChangeNotifier {
       description: layout.description,
       addElements: layout.addElements,
       moveDeltas: layout.moveDeltas,
-      removeIds: preparation.removeIds,
+      removeIds: [
+        for (final id in preparation.removeIds)
+          if (!keepInkStrokeIds.contains(id)) id,
+      ],
       failedStrokeIds: preparation.failedStrokeIds,
       selectIds: {
         ...{for (final element in layout.addElements) element.id},
@@ -3365,13 +3383,31 @@ class MarkdrawController extends ChangeNotifier {
       },
       document: layout.document,
       previewRects: layout.previewRects,
-      removalRects: preparation.removalRects,
+      removalRects: keepHandwriting
+          ? [
+              for (final rect in preparation.removalRects)
+                if (!preparation.textClusterRects.contains(rect)) rect,
+            ]
+          : preparation.removalRects,
       failureRects: preparation.failureRects,
     );
     return SmartLayoutPlanResult(
       plan: _attachVisionLowConfidence(plan, preparation.confidenceByBlockId),
       failures: preparation.failures,
     );
+  }
+
+  /// 文本单元的墨迹笔迹 id（keepAsInk 时从删除清单排除、随 moveDeltas 移动）。
+  Set<ElementId> _textInkStrokeIds(SmartLayoutContent content) {
+    final textUnits = <LayoutUnit>[
+      if (content.title != null) content.title!,
+      for (final pair in content.pairs) pair.caption,
+      ...content.looseTexts,
+    ];
+    return {
+      for (final unit in textUnits)
+        ...[for (final id in unit.memberIds) ElementId(id)],
+    };
   }
 
   /// 应用计划：一次 History 提交（删除→移动→新增→文档→选区）。
@@ -3610,8 +3646,9 @@ class MarkdrawController extends ChangeNotifier {
   Future<SmartLayoutTemplatePreparation?> _prepareVisionRecognition(
     CanvasPage page,
     Map<String, List<FreedrawElement>> inkGroups,
-    void Function(int completed, int total)? onProgress,
-  ) async {
+    void Function(int completed, int total)? onProgress, {
+    List<ElementId> noiseStrokeIds = const [],
+  }) async {
     final visionCallback = onVisionSmartLayout;
     if (visionCallback == null) {
       throw StateError('没有可用的识别引擎');
@@ -3737,14 +3774,14 @@ class MarkdrawController extends ChangeNotifier {
     for (final entry in match.textClaims.entries) {
       final block = textBlocksByIndex[entry.key];
       if (block == null || !block.isSuccess) continue;
+      // 纯标点/纯符号转写（如"、"、"~"，无字母/数字/CJK）不生成文本元素、
+      // 不进排版流；其笔迹按成功结算（随方案静默删除，与失败红区区分）。
+      if (isPunctuationOnlyText(block.text)) continue;
       var union = clusterRects[entry.value.first]!;
       for (final key in entry.value.skip(1)) {
         union = union.expandToInclude(clusterRects[key]!);
       }
-      final textElement = _textElementFromRecognizedBlock(
-        block,
-        vertical: vision.elements[entry.key].vertical,
-      );
+      final textElement = _textElementFromRecognizedBlock(block);
       if (textElement == null) continue;
       textElementsByIndex[entry.key] = textElement;
       textSourceByIndex[entry.key] = union;
@@ -3759,10 +3796,20 @@ class MarkdrawController extends ChangeNotifier {
         kind: LayoutUnitKind.text,
         textElement: element,
         vertical: vision.elements[index].vertical,
+        // 该块笔迹元素 id：保留手写模式随方案移动、从删除清单排除；
+        // 转写模式（默认）仍整块删除。
+        memberIds: [
+          for (final key in match.textClaims[index] ?? const <String>[])
+            ...[
+              for (final stroke in inkGroups[key] ?? const <FreedrawElement>[])
+                stroke.id.value,
+            ],
+        ],
       );
     }
 
-    LayoutUnit? makeFigureUnit(int index) {
+    // 图形单元预先构建（VLM 配对、几何兜底与松散集合共用）。
+    LayoutUnit? buildFigureUnit(int index) {
       final unitKey = match.figureClaims[index];
       if (unitKey == null) return null;
       final rect = figures.rects[unitKey];
@@ -3779,6 +3826,14 @@ class MarkdrawController extends ChangeNotifier {
         memberIds: figures.memberIds[unitKey] ?? [unitKey],
       );
     }
+
+    final figureUnitByIndex = <int, LayoutUnit>{};
+    for (final index in match.figureClaims.keys) {
+      final unit = buildFigureUnit(index);
+      if (unit != null) figureUnitByIndex[index] = unit;
+    }
+
+    LayoutUnit? makeFigureUnit(int index) => figureUnitByIndex[index];
 
     // title：第一个 role=title 且成功创建的文本项（仅 1 个，AI 侧已去重）。
     int? titleIndex;
@@ -3812,6 +3867,7 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
     final pairedTextIndexes = <int>{};
+    final pairedFigureIndexes = <int>{};
     final pairs = <FigureTextPair>[];
     for (final entry in figureIndexByPair.entries) {
       final captionIndex = captionIndexByPair[entry.key];
@@ -3830,6 +3886,49 @@ class MarkdrawController extends ChangeNotifier {
         ),
       );
       pairedTextIndexes.add(captionIndex);
+      pairedFigureIndexes.add(entry.value);
+    }
+
+    // 客户端几何配对兜底：VLM pairId 漏配时（走查实况：图注与图分家成独立
+    // 正文条目），role=caption 的未配对文本与"图N"式短标签按包围盒间隙就近
+    // 绑图。VLM 已配对结果优先，兜底只补漏；确定性见
+    // matchUnpairedCaptionsByGeometry。
+    final fallbackPairs = matchUnpairedCaptionsByGeometry(
+      captions: {
+        for (final index in match.textClaims.keys)
+          if (index != titleIndex &&
+              !pairedTextIndexes.contains(index) &&
+              textElementsByIndex.containsKey(index) &&
+              _isCaptionPairCandidate(vision.elements[index]))
+            index: (
+              bounds: textSourceByIndex[index]!,
+              maxGap: _figureLabelPattern.hasMatch(
+                    vision.elements[index].text?.trim() ?? '',
+                  )
+                  ? kSmartLayoutFigureLabelPairMaxGap
+                  : kSmartLayoutCaptionPairMaxGap,
+            ),
+      },
+      figures: {
+        for (final index in match.figureClaims.keys)
+          if (!pairedFigureIndexes.contains(index) &&
+              figureUnitByIndex[index] != null)
+            index: figureUnitByIndex[index]!.sourceBounds,
+      },
+    );
+    for (final entry in fallbackPairs.entries) {
+      final figure = figureUnitByIndex[entry.value]!;
+      final caption = makeTextUnit(entry.key);
+      pairs.add(
+        FigureTextPair(
+          figure: figure,
+          caption: caption,
+          figureAbove:
+              figure.sourceBounds.top <= caption.sourceBounds.top,
+        ),
+      );
+      pairedTextIndexes.add(entry.key);
+      pairedFigureIndexes.add(entry.value);
     }
 
     // 松散项按阅读顺序（先上后左）排列——确定性。
@@ -3848,7 +3947,7 @@ class MarkdrawController extends ChangeNotifier {
         );
     final looseFigures = <LayoutUnit>[];
     for (final index in match.figureClaims.keys) {
-      if (figureIndexByPair.containsValue(index)) continue;
+      if (pairedFigureIndexes.contains(index)) continue;
       final unit = makeFigureUnit(index);
       if (unit != null) looseFigures.add(unit);
     }
@@ -3890,6 +3989,8 @@ class MarkdrawController extends ChangeNotifier {
       }
     });
     final removeStrokeIds = <ElementId>[
+      // 噪点笔画（<8×8pt）：识别不涉及，随方案静默删除，消除残留墨点。
+      ...noiseStrokeIds,
       for (final text in _pageScopedOldSmartText(page.id)) text.id,
     ];
     final failedStrokeIds = <ElementId>[];
@@ -3940,6 +4041,22 @@ class MarkdrawController extends ChangeNotifier {
       for (final kind in SmartLayoutTemplateKind.values)
         kind: SmartLayoutTemplateEngine.layout(kind: kind, content: content),
     };
+    // 保留手写变体：同一 content 把文本单元置 keepAsInk 后二次引擎调用
+    // （无额外 VLM 成本），"保留手写笔迹"开关与缩略图共用。
+    final layoutsKeepInk =
+        <SmartLayoutTemplateKind, SmartLayoutTemplateLayoutResult?>{
+          for (final kind in SmartLayoutTemplateKind.values)
+            kind: SmartLayoutTemplateEngine.layout(
+              kind: kind,
+              content: content.withTextAsInk(),
+            ),
+        };
+    // 成功识别文本块的来源簇矩形："保留手写"装配时从灰区排除（墨迹保留）。
+    final textClusterRects = <ui.Rect>[
+      for (final entry in match.textClaims.entries)
+        if (textElementsByIndex.containsKey(entry.key))
+          for (final key in entry.value) clusterRects[key]!,
+    ];
     final textConfidences = <double>[
       for (final index in textElementsByIndex.keys)
         recognition.confidences[index] ?? vision.elements[index].confidence,
@@ -3951,6 +4068,7 @@ class MarkdrawController extends ChangeNotifier {
       pageId: page.id,
       content: content,
       layouts: layouts,
+      layoutsKeepInk: layoutsKeepInk,
       removeIds: removeStrokeIds,
       failedStrokeIds: failedStrokeIds,
       removalRects: removalRects,
@@ -3958,6 +4076,7 @@ class MarkdrawController extends ChangeNotifier {
       failures: failures,
       confidence: confidence,
       confidenceByBlockId: confidenceByBlockId,
+      textClusterRects: textClusterRects,
     );
   }
 
@@ -4051,19 +4170,13 @@ class MarkdrawController extends ChangeNotifier {
     // 空文本会产出不可见的空文字元素（笔迹已删、橙框圈空盒），拒绝保存。
     if (trimmed.isEmpty) return false;
     var candidate = current.copyWithText(text: trimmed);
-    // 与创建/引擎一致的尺寸规则：竖排保持原稿窄长不重测；
-    // 横排 max(现值, 测量) 只放不缩，避免改字后盒子跳动。
-    final flowMuseData = current.customData?['flowMuse'];
-    final isVertical =
-        flowMuseData is Map<String, Object?> &&
-        flowMuseData['writingMode'] == 'vertical';
-    if (!isVertical) {
-      final (measuredWidth, measuredHeight) = TextRenderer.measure(candidate);
-      candidate = candidate.copyWith(
-        width: math.max(current.width, measuredWidth),
-        height: math.max(current.height, measuredHeight),
-      );
-    }
+    // 与创建/引擎一致的尺寸规则：横排 max(现值, 测量) 只放不缩，
+    // 避免改字后盒子跳动。（v2 转写一律横排，无竖排文本进草稿。）
+    final (measuredWidth, measuredHeight) = TextRenderer.measure(candidate);
+    candidate = candidate.copyWith(
+      width: math.max(current.width, measuredWidth),
+      height: math.max(current.height, measuredHeight),
+    );
     // 草稿场景内原位替换（同 id）；提交时按 id 采用草稿最终形态。
     applyResult(UpdateElementResult(candidate));
     return true;
@@ -4231,6 +4344,84 @@ class MarkdrawController extends ChangeNotifier {
   }) {
     return (text ?? '').trim().isEmpty ||
         confidence < kSmartLayoutTranscribeRetryThreshold;
+  }
+
+  /// "图N"式短标签（如"图1""图 2"）：即使 role 不是 caption 也参与
+  /// 就近配对（间隙阈值放宽到 kSmartLayoutFigureLabelPairMaxGap）。
+  static final RegExp _figureLabelPattern = RegExp(r'^图\s*\d*$');
+
+  /// 图注配对候选：role=caption，或"图N"式短标签（≤6 字）。
+  static bool _isCaptionPairCandidate(SmartLayoutVisionElement element) {
+    if (element.role == 'caption') return true;
+    final text = element.text?.trim() ?? '';
+    return text.isNotEmpty && text.length <= 6 && _figureLabelPattern.hasMatch(text);
+  }
+
+  /// 纯标点/纯符号转写判定：不含任何字母/数字/CJK（如"、"、"~"）的文本
+  /// 不生成文本元素，其笔迹随方案静默删除。空文本返回 false（由既有
+  /// 失败红区路径处理，不在此改变其归属）。
+  @visibleForTesting
+  static bool isPunctuationOnlyText(String? text) {
+    final trimmed = (text ?? '').trim();
+    if (trimmed.isEmpty) return false;
+    return !_meaningfulTextPattern.hasMatch(trimmed);
+  }
+
+  /// 有意义字符：ASCII 字母数字、拉丁扩展字母、假名/谚文/CJK 汉字
+  /// （CJK 标点 、。等在 \u3000-\u303F，不计入）。
+  static final RegExp _meaningfulTextPattern = RegExp(
+    r'[0-9A-Za-z\u00C0-\u024F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF'
+    r'\uAC00-\uD7AF\uF900-\uFAFF]',
+  );
+
+  /// 图注几何配对兜底（纯函数）：VLM pairId 配对失败时，把未配对的图注
+  /// 按包围盒间隙就近绑到未配对的图。间隙 = x 向净距 + y 向净距（相交方向
+  /// 记 0），超过该项 maxGap 不可配；一图至多绑一注；距离同分取图 top 更小
+  /// 者；caption 按 index 升序消费（确定性）。返回 captionIndex → figureIndex。
+  @visibleForTesting
+  static Map<int, int> matchUnpairedCaptionsByGeometry({
+    required Map<int, ({ui.Rect bounds, double maxGap})> captions,
+    required Map<int, ui.Rect> figures,
+  }) {
+    final result = <int, int>{};
+    final takenFigures = <int>{};
+    final figureIndexes = figures.keys.toList()..sort();
+    for (final captionIndex in captions.keys.toList()..sort()) {
+      final caption = captions[captionIndex]!;
+      int? bestFigure;
+      var bestDistance = double.infinity;
+      var bestTop = double.infinity;
+      for (final figureIndex in figureIndexes) {
+        if (takenFigures.contains(figureIndex)) continue;
+        final figureBounds = figures[figureIndex]!;
+        final distance = _boundingBoxGap(caption.bounds, figureBounds);
+        if (distance > caption.maxGap) continue;
+        if (distance < bestDistance ||
+            (distance == bestDistance && figureBounds.top < bestTop)) {
+          bestDistance = distance;
+          bestTop = figureBounds.top;
+          bestFigure = figureIndex;
+        }
+      }
+      if (bestFigure != null) {
+        result[captionIndex] = bestFigure;
+        takenFigures.add(bestFigure);
+      }
+    }
+    return result;
+  }
+
+  /// 两个包围盒的净间隙：x 向净距 + y 向净距（相交/重叠方向记 0）。
+  static double _boundingBoxGap(ui.Rect a, ui.Rect b) {
+    final dx = math.max(
+      0.0,
+      math.max(a.left, b.left) - math.min(a.right, b.right),
+    );
+    final dy = math.max(
+      0.0,
+      math.max(a.top, b.top) - math.min(a.bottom, b.bottom),
+    );
+    return dx + dy;
   }
 
   /// 低置信裁剪重问的择优规则：新结果有文字且把握严格更高才采用——与原文
@@ -4461,13 +4652,33 @@ class MarkdrawController extends ChangeNotifier {
     }
   }
 
-  Map<String, List<FreedrawElement>> _smartLayoutInkGroupsForPage(
-    String pageId,
-  ) {
-    return <String, List<FreedrawElement>>{
-      for (final entry in _smartLayoutInkGroups().entries)
-        if (entry.key.startsWith('$pageId:')) entry.key: entry.value,
-    };
+  /// 页内墨迹聚类 + 噪点账本：v2 全页纯几何聚类（会话维度不参与），
+  /// 竖排窄高列整列不拆；杂散小笔画（<8×8pt）不进聚类，其 id 经
+  /// [noiseStrokeIds] 返回、由调用方并入方案删除清单（应用时静默删除，
+  /// 消除"没排干净"的残留墨点；prepare 不改场景、取消零残留）。
+  /// 键形如 `<pageId>:c<N>`。
+  ({Map<String, List<FreedrawElement>> groups, List<ElementId> noiseStrokeIds})
+  _smartLayoutInkGroupsForPage(String pageId) {
+    final pageStrokes = [
+      for (final element in _smartLayoutInkElements())
+        if (_pageIdForElement(element) == pageId) element,
+    ];
+    final noiseStrokeIds = <ElementId>[];
+    final clustered = <FreedrawElement>[];
+    for (final stroke in pageStrokes) {
+      if (SmartLayoutInkClusterer.isNoiseStroke(stroke)) {
+        noiseStrokeIds.add(stroke.id);
+      } else {
+        clustered.add(stroke);
+      }
+    }
+    final clusters = SmartLayoutInkClusterer.cluster(clustered);
+    return (
+      groups: <String, List<FreedrawElement>>{
+        for (var i = 0; i < clusters.length; i++) '$pageId:c$i': clusters[i],
+      },
+      noiseStrokeIds: noiseStrokeIds,
+    );
   }
 
   List<TextElement> _pageScopedOldSmartText(String pageId) {
@@ -4600,26 +4811,6 @@ class MarkdrawController extends ChangeNotifier {
     ];
   }
 
-  /// 页内全部墨迹一次纯几何行列聚类（v2 去会话化）：会话维度不再参与
-  /// 智能排版，跨会话的连续笔迹几何相邻即合并；竖排窄高列整列不拆、
-  /// 杂散小笔画直接剔除（留在页面上，不进方案）。键形如 `<pageId>:c<N>`。
-  Map<String, List<FreedrawElement>> _smartLayoutInkGroups() {
-    final strokesByPage = <String, List<FreedrawElement>>{};
-    for (final element in _smartLayoutInkElements()) {
-      final pageId = _pageIdForElement(element);
-      if (pageId == null) continue;
-      strokesByPage.putIfAbsent(pageId, () => <FreedrawElement>[]).add(element);
-    }
-    final result = <String, List<FreedrawElement>>{};
-    for (final entry in strokesByPage.entries) {
-      final clusters = SmartLayoutInkClusterer.cluster(entry.value);
-      for (var i = 0; i < clusters.length; i++) {
-        result['${entry.key}:c$i'] = clusters[i];
-      }
-    }
-    return result;
-  }
-
   CanvasPage? _pageForElement(Element element) {
     if (!_layout.isPaged) {
       final pages = _layout.ensurePage().pages;
@@ -4698,10 +4889,12 @@ class MarkdrawController extends ChangeNotifier {
     return null;
   }
 
+  /// 识别文本块 → 排版文本元素。转写一律横排（TextRenderer.measure 定尺寸，
+  /// 不写 writingMode:'vertical'）——竖排信息只保留在聚类/识别阶段（竖排列
+  /// 整块识别防每字一块），走查实况：竖排印刷体观感如故障。
   TextElement? _textElementFromRecognizedBlock(
-    SmartLayoutRecognizedBlock block, {
-    bool vertical = false,
-  }) {
+    SmartLayoutRecognizedBlock block,
+  ) {
     final text = block.type == 'formula'
         ? (block.latex?.trim().isNotEmpty == true
               ? block.latex!.trim()
@@ -4725,18 +4918,10 @@ class MarkdrawController extends ChangeNotifier {
           'smartLayout': true,
           'blockId': block.id,
           if (block.type == 'formula') 'smartLayoutType': 'math',
-          if (vertical) 'writingMode': 'vertical',
         },
       },
     );
     final styled = _applySmartLayoutTextStyle(element);
-    if (vertical) {
-      // 竖排：保持原稿窄长尺寸（渲染按 writingMode:vertical）
-      return styled.copyWith(
-        width: math.max(block.bounds.size.width, 40),
-        height: math.max(block.bounds.size.height, 28),
-      );
-    }
     final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
     return styled.copyWith(
       width: math.max(styled.width, measuredWidth),

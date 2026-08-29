@@ -376,6 +376,171 @@ void main() {
     });
   });
 
+  group('保留手写（keepAsInk 墨迹占位）', () {
+    LayoutUnit inkTextUnit(
+      String key,
+      String text, {
+      Rect source = const Rect.fromLTWH(0, 0, 200, 40),
+      List<String> memberIds = const [],
+    }) => LayoutUnit(
+      key: key,
+      sourceBounds: source,
+      size: Size(source.width, source.height),
+      kind: LayoutUnitKind.text,
+      textElement: bodyText(key, text),
+      keepAsInk: true,
+      memberIds: memberIds,
+    );
+
+    SmartLayoutContent keepInkContent() => SmartLayoutContent(
+      pageId: 'p1',
+      contentArea: area,
+      title: inkTextUnit(
+        'title',
+        '标题',
+        source: const Rect.fromLTWH(10, 10, 120, 40),
+        memberIds: ['k-title'],
+      ),
+      pairs: [
+        FigureTextPair(
+          figure: figureUnit(
+            'f1',
+            const Size(200, 150),
+            source: const Rect.fromLTWH(1000, 0, 200, 150),
+            memberIds: ['img-a'],
+          ),
+          caption: inkTextUnit(
+            'c1',
+            '图注',
+            source: const Rect.fromLTWH(1010, 160, 80, 30),
+            memberIds: ['k-cap'],
+          ),
+          figureAbove: true,
+        ),
+      ],
+      looseTexts: [
+        inkTextUnit('t1', '第一句', source: const Rect.fromLTWH(0, 0, 160, 40), memberIds: ['k-t1']),
+      ],
+    );
+
+    Rect movedRect(LayoutUnit unit, Offset delta) => Rect.fromLTWH(
+      unit.sourceBounds.left + delta.dx,
+      unit.sourceBounds.top + delta.dy,
+      unit.size.width,
+      unit.size.height,
+    );
+
+    test('handout：标题墨迹居中置顶（不放大）、图注随图、正文左对齐流，全部走移动', () {
+      final result = SmartLayoutTemplateEngine.layout(
+        kind: SmartLayoutTemplateKind.handout,
+        content: keepInkContent(),
+      );
+      expect(result, isNotNull);
+      expect(
+        result!.addElements.whereType<TextElement>(),
+        isEmpty,
+        reason: '保留手写不新增任何印刷体文本',
+      );
+      final deltas = result.moveDeltas;
+      expect(deltas.keys.map((id) => id.value), containsAll([
+        'k-title',
+        'k-cap',
+        'k-t1',
+        'img-a',
+      ]));
+      // 标题墨迹居中置顶：目标中心 = 内容区中心，y = 顶。
+      final titleTarget = movedRect(
+        keepInkContent().title!,
+        deltas[const ElementId('k-title')]!,
+      );
+      expect(titleTarget.center.dx, closeTo(area.center.dx, 0.01));
+      expect(titleTarget.top, area.top);
+      // 图注墨迹随图下方；正文墨迹左对齐流。
+      final content0 = keepInkContent();
+      final captionTarget = movedRect(
+        content0.pairs.single.caption,
+        deltas[const ElementId('k-cap')]!,
+      );
+      final figureTarget = movedRect(
+        content0.pairs.single.figure,
+        deltas[const ElementId('img-a')]!,
+      );
+      expect(captionTarget.top, closeTo(figureTarget.bottom + 24, 0.01));
+      final bodyTarget = movedRect(
+        content0.looseTexts.single,
+        deltas[const ElementId('k-t1')]!,
+      );
+      expect(bodyTarget.left, area.left);
+      expect(bodyTarget.top, greaterThan(figureTarget.bottom));
+      // 预览矩形两两不重叠。
+      for (var i = 0; i < result.previewRects.length; i++) {
+        for (var j = i + 1; j < result.previewRects.length; j++) {
+          expect(
+            result.previewRects[i].overlaps(result.previewRects[j]),
+            isFalse,
+            reason: 'previewRect[$i] 与 [$j] 不应重叠',
+          );
+        }
+      }
+    });
+
+    test('outline：条目行墨迹左对齐、无"• "前缀，图注随图', () {
+      final result = SmartLayoutTemplateEngine.layout(
+        kind: SmartLayoutTemplateKind.outline,
+        content: keepInkContent(),
+      );
+      expect(result, isNotNull);
+      expect(
+        result!.addElements.whereType<TextElement>(),
+        isEmpty,
+        reason: '保留手写条目不加"• "前缀、不新增印刷体',
+      );
+      final deltas = result.moveDeltas;
+      final content0 = keepInkContent();
+      final titleTarget = movedRect(
+        content0.title!,
+        deltas[const ElementId('k-title')]!,
+      );
+      final bodyTarget = movedRect(
+        content0.looseTexts.single,
+        deltas[const ElementId('k-t1')]!,
+      );
+      expect(titleTarget.left, area.left, reason: '标题墨迹左对齐置顶');
+      expect(bodyTarget.left, area.left, reason: '条目墨迹左对齐');
+      // 小图（200 ≤ 40%×800）挂靠唯一条目行右侧，图注墨迹随图下方。
+      final figureTarget = movedRect(
+        content0.pairs.single.figure,
+        deltas[const ElementId('img-a')]!,
+      );
+      expect(figureTarget.left, area.right - 200);
+      final captionTarget = movedRect(
+        content0.pairs.single.caption,
+        deltas[const ElementId('k-cap')]!,
+      );
+      expect(captionTarget.top, closeTo(figureTarget.bottom + 8, 0.01));
+    });
+
+    test('inplace：文本墨迹完全不动（仅预览占位），结果可用', () {
+      final result = SmartLayoutTemplateEngine.layout(
+        kind: SmartLayoutTemplateKind.inplace,
+        content: keepInkContent(),
+      );
+      expect(result, isNotNull);
+      expect(result!.addElements, isEmpty);
+      expect(result.moveDeltas, isEmpty);
+      final content0 = keepInkContent();
+      expect(
+        result.previewRects.toSet(),
+        {
+          content0.title!.sourceBounds,
+          content0.pairs.single.caption.sourceBounds,
+          content0.looseTexts.single.sourceBounds,
+        },
+        reason: '墨迹不动，预览即原稿包围盒',
+      );
+    });
+  });
+
   group('确定性', () {
     test('同输入两次调用结果一致', () {
       SmartLayoutContent build() => SmartLayoutContent(
