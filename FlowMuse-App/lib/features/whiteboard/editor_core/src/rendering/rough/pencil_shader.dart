@@ -55,15 +55,27 @@ abstract class PencilShader {
   static FragmentShader? acquire() {
     final program = _program;
     if (program == null) return null;
-    return _instance ??= program.fragmentShader();
+    try {
+      return _instance ??= program.fragmentShader();
+    } catch (e) {
+      _loadFailed = true;
+      debugPrint('PencilShader: instance creation failed (${e.runtimeType})');
+      return null;
+    }
   }
 
-  /// 按名绑定的 uniform 槽位（对 uniform 重排序免疫）。
-  /// 与 [acquire] 返回的同一实例绑定一次后复用。
+  /// 与 [acquire] 返回的同一实例绑定一次后复用；绑定失败按不可用降级
+  /// （绘制路径走确定性颗粒），绝不让异常逃进绘制帧。
   static PencilShaderUniforms? uniforms() {
     final shader = acquire();
     if (shader == null) return null;
-    return _uniforms ??= PencilShaderUniforms.bind(shader);
+    try {
+      return _uniforms ??= PencilShaderUniforms.bind(shader);
+    } catch (e) {
+      _loadFailed = true;
+      debugPrint('PencilShader: uniform bind failed (${e.runtimeType})');
+      return null;
+    }
   }
 
   /// 测试结束释放：dispose 绘制实例并回到未初始化态。
@@ -79,44 +91,41 @@ abstract class PencilShader {
   }
 }
 
-/// pencil.frag 的 uniform 槽位集合（按名绑定，见 SDK UniformFloatSlot）。
+/// pencil.frag 的 uniform 槽位集合。
+///
+/// 按声明序下标绑定（setFloat），不按名：真机实测 Android 引擎产物
+/// 未填充按名查找所需的 uniform 元数据（Web 正常），按名绑定抛
+/// "No uniform named uColor" 并逐帧杀死整块画布。下标 = pencil.frag
+/// 的 uniform 声明序：uColor(vec3) 占 0-2、uOpacity=3、uFreq=4——
+/// 调整 shader 声明顺序必须同步修改此处。
 class PencilShaderUniforms {
-  PencilShaderUniforms._({
-    required UniformFloatSlot colorR,
-    required UniformFloatSlot colorG,
-    required UniformFloatSlot colorB,
-    required UniformFloatSlot opacity,
-    required UniformFloatSlot freq,
-  }) : _colorR = colorR,
-       _colorG = colorG,
-       _colorB = colorB,
-       _opacity = opacity,
-       _freq = freq;
+  PencilShaderUniforms._(this._shader)
+    : _colorR = 0,
+      _colorG = 1,
+      _colorB = 2,
+      _opacity = 3,
+      _freq = 4;
 
-  final UniformFloatSlot _colorR;
-  final UniformFloatSlot _colorG;
-  final UniformFloatSlot _colorB;
-  final UniformFloatSlot _opacity;
-  final UniformFloatSlot _freq;
+  final FragmentShader _shader;
+  final int _colorR;
+  final int _colorG;
+  final int _colorB;
+  final int _opacity;
+  final int _freq;
 
   static PencilShaderUniforms bind(FragmentShader shader) {
-    return PencilShaderUniforms._(
-      colorR: shader.getUniformFloat('uColor', 0),
-      colorG: shader.getUniformFloat('uColor', 1),
-      colorB: shader.getUniformFloat('uColor', 2),
-      opacity: shader.getUniformFloat('uOpacity', 0),
-      freq: shader.getUniformFloat('uFreq', 0),
-    );
+    return PencilShaderUniforms._(shader);
   }
 
   /// [color] 的 alpha 已包含元素 opacity 与笔刷 opacityScale；
   /// 输出保持预乘 alpha。
   void apply(Color color, double alpha, double freq) {
-    _colorR.set(color.r);
-    _colorG.set(color.g);
-    _colorB.set(color.b);
-    _opacity.set(alpha);
-    _freq.set(freq);
+    _shader
+      ..setFloat(_colorR, color.r)
+      ..setFloat(_colorG, color.g)
+      ..setFloat(_colorB, color.b)
+      ..setFloat(_opacity, alpha)
+      ..setFloat(_freq, freq);
   }
 }
 

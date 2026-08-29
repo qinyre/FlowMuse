@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../../markdraw.dart' hide TextAlign;
@@ -288,5 +287,8 @@ IconData _iconForBrush(BrushType brushType) => switch (brushType) {
   BrushType.ballpoint => Icons.mode_edit_outline,
   BrushType.fountainPen => Icons.draw,
   BrushType.brushPen => Icons.brush,
-  BrushType.highlighter => Symbols.ink_highlighter,
+  // 荧光笔不用 material_symbols_icons：其字形经 release 构建 tree-shake
+  // 后真机渲染为 .notdef 实心块（其余四笔同用 Material Icons 正常），
+  // 与四支笔保持同族图标。
+  BrushType.highlighter => Icons.highlight,
 };

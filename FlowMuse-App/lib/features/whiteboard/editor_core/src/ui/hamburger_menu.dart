@@ -2,7 +2,6 @@ library;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../../markdraw.dart' hide TextAlign;
@@ -202,7 +201,7 @@ class HamburgerMenu extends StatelessWidget {
             _menuItem(
               context,
               'export_smart_md',
-              Symbols.markdown,
+              Icons.text_snippet,
               '导出智能排版 Markdown',
               null,
               enabled: controller.canExportSmartLayout,
@@ -243,7 +242,7 @@ class HamburgerMenu extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  Symbols.markdown,
+                  Icons.text_snippet,
                   size: 18,
                   color: controller.showMarkdownPanel
                       ? cs.primary
