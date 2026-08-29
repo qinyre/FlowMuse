@@ -135,6 +135,200 @@ void main() {
       expect(emitted.single.isComplete, isFalse);
     },
   );
+
+  test('controller 在创建时烘焙灵敏度并写入 pressureEncoding 标记（T2）', () async {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.switchTool(ToolType.freedraw);
+    controller.activeBrushType = BrushType.brushPen;
+    controller.pressureSensitivity = 0.5;
+
+    // Given/When: 手写笔划一笔
+    controller.onPointerDown(
+      const PointerDownEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset.zero,
+        pressure: 0.8,
+        timeStamp: Duration.zero,
+      ),
+    );
+    controller.onPointerMove(
+      const PointerMoveEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(30, 0),
+        pressure: 0.8,
+        timeStamp: Duration(milliseconds: 20),
+      ),
+    );
+    controller.onPointerUp(
+      const PointerUpEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(60, 0),
+        pressure: 0.8,
+        timeStamp: Duration(milliseconds: 40),
+      ),
+    );
+
+    // Then: 场景中的新元素 pressures 为编码值（不等于原始 0.8；模型器会
+    // 先把压力映射进 [0.18,0.82] 再编码，断言“非原始且在 0~1”最稳），
+    // customData 带 pressureEncoding=1 与 brushType。
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final strokes = controller.currentScene.elements
+        .whereType<FreedrawElement>()
+        .toList(growable: false);
+    expect(strokes, isNotEmpty);
+    final stroke = strokes.last;
+    expect(stroke.pressures, isNotEmpty);
+    expect(
+      stroke.pressures.every((p) => p != 0.8),
+      isTrue,
+      reason: '原始压力不应原样落盘',
+    );
+    expect(stroke.pressures.every((p) => p >= 0 && p <= 1), isTrue);
+    expect(pressureEncodingFromCustomData(stroke.customData), isTrue);
+    expect(brushTypeFromCustomData(stroke.customData), BrushType.brushPen);
+
+    // And: 圆珠笔忽略压力 —— pressures 为空（编码点返回 null）
+    final ballpointController = MarkdrawController();
+    addTearDown(ballpointController.dispose);
+    ballpointController.switchTool(ToolType.freedraw);
+    ballpointController.activeBrushType = BrushType.ballpoint;
+    ballpointController.onPointerDown(
+      const PointerDownEvent(
+        pointer: 2,
+        kind: PointerDeviceKind.stylus,
+        position: Offset.zero,
+        pressure: 0.9,
+        timeStamp: Duration.zero,
+      ),
+    );
+    ballpointController.onPointerUp(
+      const PointerUpEvent(
+        pointer: 2,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(20, 0),
+        pressure: 0.9,
+        timeStamp: Duration(milliseconds: 30),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final ballStrokes = ballpointController.currentScene.elements
+        .whereType<FreedrawElement>()
+        .toList(growable: false);
+    expect(
+      ballStrokes.last.pressures,
+      isEmpty,
+      reason: '圆珠笔应向工具传 null pressure',
+    );
+    expect(ballStrokes.last.simulatePressure, isTrue);
+  });
+
+  test('P2-2: 书写中切笔/改灵敏度不影响本笔（pointer-down 冻结）', () async {
+    // 干净参照：全程毛笔 0.85 的笔画。
+    final reference = MarkdrawController();
+    addTearDown(reference.dispose);
+    reference.switchTool(ToolType.freedraw);
+    reference.activeBrushType = BrushType.brushPen;
+    reference.pressureSensitivity = 0.85;
+    _stroke(reference, pointer: 1);
+
+    // 干扰组：pointer-down 后、抬笔前切到铅笔并把灵敏度改成 0.1。
+    final disturbed = MarkdrawController();
+    addTearDown(disturbed.dispose);
+    disturbed.switchTool(ToolType.freedraw);
+    disturbed.activeBrushType = BrushType.brushPen;
+    disturbed.pressureSensitivity = 0.85;
+    disturbed.onPointerDown(
+      const PointerDownEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset.zero,
+        pressure: 0.8,
+        timeStamp: Duration.zero,
+      ),
+    );
+    disturbed.activeBrushType = BrushType.pencil;
+    disturbed.pressureSensitivity = 0.1;
+    disturbed.onPointerMove(
+      const PointerMoveEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(30, 0),
+        pressure: 0.8,
+        timeStamp: Duration(milliseconds: 20),
+      ),
+    );
+    disturbed.onPointerUp(
+      const PointerUpEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.stylus,
+        position: Offset(60, 0),
+        pressure: 0.8,
+        timeStamp: Duration(milliseconds: 40),
+      ),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final refStroke = reference.currentScene.elements
+        .whereType<FreedrawElement>()
+        .single;
+    final disturbedStroke = disturbed.currentScene.elements
+        .whereType<FreedrawElement>()
+        .single;
+    expect(
+      brushTypeFromCustomData(disturbedStroke.customData),
+      BrushType.brushPen,
+      reason: '最终元素笔型取 pointer-down 冻结值',
+    );
+    expect(disturbedStroke.pressures, refStroke.pressures,
+        reason: '压力编码须与全程未切笔的笔画逐点一致');
+    expect(disturbedStroke.points, refStroke.points);
+
+    // 抬笔后冻结解除：下一笔使用切换后的铅笔。
+    _stroke(disturbed, pointer: 2);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final nextStroke = disturbed.currentScene.elements
+        .whereType<FreedrawElement>()
+        .last;
+    expect(
+      brushTypeFromCustomData(nextStroke.customData),
+      BrushType.pencil,
+      reason: '笔画终止后恢复正常实时笔型',
+    );
+  });
+}
+
+void _stroke(MarkdrawController controller, {required int pointer}) {
+  controller.onPointerDown(
+    PointerDownEvent(
+      pointer: pointer,
+      kind: PointerDeviceKind.stylus,
+      position: Offset.zero,
+      pressure: 0.8,
+      timeStamp: Duration.zero,
+    ),
+  );
+  controller.onPointerMove(
+    PointerMoveEvent(
+      pointer: pointer,
+      kind: PointerDeviceKind.stylus,
+      position: const Offset(30, 0),
+      pressure: 0.8,
+      timeStamp: const Duration(milliseconds: 20),
+    ),
+  );
+  controller.onPointerUp(
+    PointerUpEvent(
+      pointer: pointer,
+      kind: PointerDeviceKind.stylus,
+      position: const Offset(60, 0),
+      pressure: 0.8,
+      timeStamp: const Duration(milliseconds: 40),
+    ),
+  );
 }
 
 FreedrawElement _createdElement(ToolResult? result) {

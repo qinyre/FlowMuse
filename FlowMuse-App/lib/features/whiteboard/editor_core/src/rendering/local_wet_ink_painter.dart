@@ -51,6 +51,8 @@ class LocalWetInkPainter extends CustomPainter {
     }
 
     final view = frame.view;
+    // 湿墨必为新笔迹：pressures 已编码，customData 带 pressureEncoding=1，
+    // 与提交后静态元素共用同一渲染判定。
     final base = FreedrawElement(
       id: view.strokeId,
       x: 0,
@@ -61,7 +63,7 @@ class LocalWetInkPainter extends CustomPainter {
       pressures: view.pressures,
       simulatePressure: view.simulatePressure,
       isComplete: false,
-      customData: customDataWithBrushType(null, view.brushType),
+      customData: customDataWithFreedrawRender(null, view.brushType),
     );
     final style = frame.style;
     final element = base.copyWith(

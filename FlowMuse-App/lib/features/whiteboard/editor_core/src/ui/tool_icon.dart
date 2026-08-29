@@ -1,7 +1,6 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import '../../markdraw.dart' hide TextAlign;
 
@@ -20,6 +19,12 @@ Widget iconWidgetFor(
         color: color ?? Colors.grey.shade800,
         filled: isActive,
       ),
+    );
+  }
+  if (type == ToolType.eraser) {
+    return CustomPaint(
+      size: Size(s, s),
+      painter: EraserIconPainter(color: color ?? Colors.grey.shade800),
     );
   }
   return Icon(
@@ -42,7 +47,12 @@ IconData iconFor(ToolType type, {bool isActive = false}) {
     ToolType.text => Icons.text_fields,
     ToolType.hand => Icons.pan_tool_outlined,
     ToolType.frame => Icons.crop_free,
-    ToolType.eraser => Symbols.ink_eraser,
+    // 橡皮由 [iconWidgetFor] 自绘（EraserIconPainter），此处仅兜底编译，
+    // 不会展示。不用 material_symbols_icons：该字体家族在本构建管线
+    // 不可靠——release tree-shaking 曾静默丢字形（ink_highlighter 包内
+    // 图标表与字体版本错位；ink_eraser 在增量构建中丢字形），真机渲染
+    // 为 .notdef 实心块。
+    ToolType.eraser => Icons.cleaning_services,
     ToolType.laser => Icons.flashlight_on,
     ToolType.mindmap => Icons.account_tree,
   };

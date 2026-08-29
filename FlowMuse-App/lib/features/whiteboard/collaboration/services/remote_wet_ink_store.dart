@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -115,6 +116,7 @@ class RemoteWetInkStrokeSnapshot {
     required this.pointIndexLog,
     required this.pointIndexLogEnd,
     this.frozenBounds,
+    this.frozenRawLength = 0,
   });
 
   final String senderSocketId;
@@ -132,6 +134,11 @@ class RemoteWetInkStrokeSnapshot {
   /// null = 尚无冻结点。painter 聚焦 dim 层据此计算 bounds，只另行扫描
   /// 有限的 tail 段，不重遍历冻结几何（评审 P1 修复）。
   final RemoteWetInkBounds? frozenBounds;
+
+  /// 已冻结部分的原始折线长度（索引跳跃按直线桥接，与渲染的
+  /// leading/trailing 桥接一致）。painter 与 tail 段长度相加得到整笔
+  /// 可见长度，用于笔锋 <3×size 门控（issue #5 T3）。
+  final double frozenRawLength;
 
   int get layerCount => frozenBlocks.length + (tailSegments.isEmpty ? 0 : 1);
 }
@@ -419,6 +426,9 @@ class _RemoteWetInkStroke {
   final SplayTreeMap<int, LiveInkPoint> _pendingFrozen = SplayTreeMap();
   List<RemoteWetInkSegment> tailSegments = const [];
   RemoteWetInkBounds? _frozenBounds;
+  double _frozenRawLength = 0;
+  int? _frozenLastIndex;
+  LiveInkPoint? _frozenLastPoint;
   int revision = 0;
   int _pointCount = 0;
   int _maxPointIndex = -1;
@@ -446,6 +456,7 @@ class _RemoteWetInkStroke {
       pointIndexLog: _pointIndexLog,
       pointIndexLogEnd: _pointIndexLog.length,
       frozenBounds: _frozenBounds,
+      frozenRawLength: _frozenRawLength,
     );
   }
 
@@ -505,6 +516,7 @@ class _RemoteWetInkStroke {
       for (final entry in entries) {
         _pendingFrozen.remove(entry.key);
       }
+      _accumulateFrozenLength(entries);
       _insertBlock(
         RemoteWetInkBlock(
           level: 0,
@@ -516,6 +528,28 @@ class _RemoteWetInkStroke {
           )!,
         ),
       );
+    }
+  }
+
+  /// 折线长度增量：仅当点真正进入冻结块时累加（entries 已按索引升序，
+  /// 跳号按直线桥接，含块间跨界段；乱序回填在入块时按索引序补桥）。
+  /// pending 区不在此计长——它仍由 tail 段（含 leading 桥接）计量，
+  /// 否则 wholeVisibleRawLength 会双重计入 pending，湿墨期整笔长度虚高、
+  /// 收笔瞬间 taper 门控跳变。
+  void _accumulateFrozenLength(List<MapEntry<int, LiveInkPoint>> entries) {
+    for (final entry in entries) {
+      final lastIndex = _frozenLastIndex;
+      final lastPoint = _frozenLastPoint;
+      if (lastIndex != null && lastPoint != null && entry.key > lastIndex) {
+        final point = entry.value;
+        final dx = point.x - lastPoint.x;
+        final dy = point.y - lastPoint.y;
+        _frozenRawLength += math.sqrt(dx * dx + dy * dy);
+      }
+      if (lastIndex == null || entry.key > lastIndex) {
+        _frozenLastIndex = entry.key;
+        _frozenLastPoint = entry.value;
+      }
     }
   }
 

@@ -22,7 +22,9 @@ class ExportBounds {
 
     Bounds? result;
     for (final e in elements) {
-      final b = Bounds.fromLTWH(e.x, e.y, e.width, e.height);
+      // 自由笔画用可视边界（含笔宽半径）再叠加普通导出 padding，
+      // 修复荧光笔等宽笔型的 PNG/SVG 裁边（issue #5 T6 / A21）。
+      final b = elementVisualBounds(e);
       result = result == null ? b : result.union(b);
     }
 

@@ -196,6 +196,11 @@ class MarkdrawController extends ChangeNotifier {
   bool _objectsSnapMode = false;
   double _pressureSensitivity = 0.7;
   BrushType _activeBrushType = BrushType.fountainPen;
+  // 书写中的笔型/灵敏度冻结（pointer-down 时快照）：书写中经第二指针
+  // 或快捷操作切笔时，湿墨、逐点压力编码与最终元素笔型必须取同一份
+  // 快照，否则已编码压力与最终 profile 错配（宽度/透明度跳变）。
+  BrushType? _strokeBrushTypeOverride;
+  double? _strokeSensitivityOverride;
   bool _hasSelectedBrush = false;
   bool _brushPaletteRequested = false;
   bool _inkRecognitionMode = false;
@@ -420,7 +425,8 @@ class MarkdrawController extends ChangeNotifier {
   double get pressureSensitivity => _pressureSensitivity;
   set pressureSensitivity(double value) {
     _pressureSensitivity = value.clamp(0.0, 1.0);
-    _adapter.pressureSensitivity = _pressureSensitivity;
+    // 灵敏度不再同步到渲染适配器：只影响后续新笔迹的创建时编码
+    // （pressureEncoded），历史笔迹渲染不受当前值影响。
     // 保存到当前笔形状态（参考 Saber 独立笔状态）
     _brushStates[_activeBrushType] = _brushStates[_activeBrushType]!.copyWith(
       pressureSensitivity: _pressureSensitivity,
@@ -430,6 +436,28 @@ class MarkdrawController extends ChangeNotifier {
       _brushStates[_activeBrushType]!,
     );
     notifyListeners();
+  }
+
+  /// 创建自由笔画时的唯一压力编码点：把当前笔刷与灵敏度烘焙进
+  /// pressure 值（此后 pressures/live-ink/元素数据全程携带已编码值）。
+  /// 圆珠笔与荧光笔忽略真实压感，恒返回 null（恒宽 + 速度模拟路径）。
+  /// 笔刷与灵敏度取 pointer-down 冻结快照，书写中切笔不改变本笔编码。
+  double? _encodeStrokePressure(double? raw) {
+    if (raw == null) return null;
+    final profile = BrushRenderProfile.forType(
+      _strokeBrushTypeOverride ?? _activeBrushType,
+    );
+    if (!profile.pressureEnabled) return null;
+    return profile.encodePressure(
+      raw,
+      _strokeSensitivityOverride ?? _pressureSensitivity,
+    );
+  }
+
+  /// 自由笔画开始（pointer-down 进入创建分支）时冻结笔型与灵敏度。
+  void _freezeStrokeBrush() {
+    _strokeBrushTypeOverride ??= _activeBrushType;
+    _strokeSensitivityOverride ??= _pressureSensitivity;
   }
 
   /// 轮廓渲染模式：polygon(直线段)或 quadratic(二次贝塞尔平滑)。
@@ -523,7 +551,6 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
     _pressureSensitivity = saved.pressureSensitivity;
-    _adapter.pressureSensitivity = _pressureSensitivity;
   }
 
   bool get inkRecognitionMode => _inkRecognitionMode;
@@ -626,6 +653,8 @@ class MarkdrawController extends ChangeNotifier {
   };
 
   /// Builds a [ToolContext] snapshot from current state for tool callbacks.
+  /// 书写进行中（[_strokeBrushTypeOverride] 非空）笔型取 pointer-down
+  /// 冻结值，保证整个笔画生命周期内的湿墨与元素提交一致。
   ToolContext get toolContext => ToolContext(
     scene: _editorState.scene,
     viewport: _editorState.viewport,
@@ -635,7 +664,7 @@ class MarkdrawController extends ChangeNotifier {
     isEditingLinear: _isEditingLinear,
     gridSize: _gridSize,
     objectsSnapMode: _objectsSnapMode,
-    brushType: _activeBrushType,
+    brushType: _strokeBrushTypeOverride ?? _activeBrushType,
     inkRecognitionMode: _inkRecognitionMode,
   );
 
@@ -2203,9 +2232,14 @@ class MarkdrawController extends ChangeNotifier {
       }
 
       _sceneBeforeDrag = _editorState.scene;
+      _freezeStrokeBrush();
       _startActivePreviewStroke();
       applyResult(
-        _activeTool.onPointerDown(point, toolContext, pressure: r.pressure),
+        _activeTool.onPointerDown(
+          point,
+          toolContext,
+          pressure: _encodeStrokePressure(r.pressure),
+        ),
       );
       _recordAcceptedActivePreviewPoint();
       _publishLocalWetInk();
@@ -2324,7 +2358,7 @@ class MarkdrawController extends ChangeNotifier {
           point,
           toolContext,
           screenDelta: event.delta,
-          pressure: r.pressure,
+          pressure: _encodeStrokePressure(r.pressure),
         ),
       );
       _recordAcceptedActivePreviewPoint();
@@ -2392,7 +2426,11 @@ class MarkdrawController extends ChangeNotifier {
         );
         final point = Point(sceneOffset.dx, sceneOffset.dy);
         applyResult(
-          _activeTool.onPointerMove(point, toolContext, pressure: r.pressure),
+          _activeTool.onPointerMove(
+            point,
+            toolContext,
+            pressure: _encodeStrokePressure(r.pressure),
+          ),
         );
         _recordAcceptedActivePreviewPoint();
         final activeView = (_activeTool as FreedrawTool).activeView;
@@ -2402,7 +2440,7 @@ class MarkdrawController extends ChangeNotifier {
         final finalResult = _activeTool.onPointerUp(
           point,
           toolContext,
-          pressure: r.pressure,
+          pressure: _encodeStrokePressure(r.pressure),
         );
         if (writingFlags.layeredWetInk) {
           localWetInkState.clear(notify: false);
@@ -2697,6 +2735,9 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   void _finishActivePreviewStroke(ActivePreviewTerminalReason reason) {
+    // 笔画终止：解除笔型/灵敏度冻结，恢复正常实时取值。
+    _strokeBrushTypeOverride = null;
+    _strokeSensitivityOverride = null;
     final strokeEpoch = _activePreviewStrokeEpoch;
     if (strokeEpoch != null) {
       activePreviewMetricsProbe?.finishStroke(strokeEpoch, reason);
@@ -3547,22 +3588,19 @@ class MarkdrawController extends ChangeNotifier {
 
   Scene _buildDraftScene(SmartLayoutPlan plan) {
     var temp = _editorState.scene;
-    temp = _applyResultsToScene(
-      temp,
-      [
-        for (final id in plan.removeIds) RemoveElementResult(id),
-        ...SmartLayoutMoveBuilder.buildResults(temp, plan.moveDeltas),
-        for (final element in plan.addElements)
-          AddElementResult(
-            element.copyWith(
-              customData: SmartLayoutUtils.mergePageCustomData(
-                element.customData,
-                plan.pageId,
-              ),
+    temp = _applyResultsToScene(temp, [
+      for (final id in plan.removeIds) RemoveElementResult(id),
+      ...SmartLayoutMoveBuilder.buildResults(temp, plan.moveDeltas),
+      for (final element in plan.addElements)
+        AddElementResult(
+          element.copyWith(
+            customData: SmartLayoutUtils.mergePageCustomData(
+              element.customData,
+              plan.pageId,
             ),
           ),
-      ],
-    );
+        ),
+    ]);
     return temp;
   }
 
@@ -3637,15 +3675,16 @@ class MarkdrawController extends ChangeNotifier {
     final figures = _smartLayoutFigureUnits(page.id);
     // Set-of-Mark：墨迹簇 + 页面可移动元素全部作为候选对象，按阅读序（上→左）
     // 编号 m1..mN，编号与对象的映射留在客户端，服务端/VLM 只见编号。
-    final markCandidates = <({String key, ui.Rect rect, bool isText})>[
-      for (final entry in clusterRects.entries)
-        (key: entry.key, rect: entry.value, isText: true),
-      for (final entry in figures.rects.entries)
-        (key: entry.key, rect: entry.value, isText: false),
-    ]..sort((a, b) {
-      final byTop = a.rect.top.compareTo(b.rect.top);
-      return byTop != 0 ? byTop : a.rect.left.compareTo(b.rect.left);
-    });
+    final markCandidates =
+        <({String key, ui.Rect rect, bool isText})>[
+          for (final entry in clusterRects.entries)
+            (key: entry.key, rect: entry.value, isText: true),
+          for (final entry in figures.rects.entries)
+            (key: entry.key, rect: entry.value, isText: false),
+        ]..sort((a, b) {
+          final byTop = a.rect.top.compareTo(b.rect.top);
+          return byTop != 0 ? byTop : a.rect.left.compareTo(b.rect.left);
+        });
     final textMarks = <String, String>{};
     final figureMarks = <String, String>{};
     final markLabels = <({String id, ui.Rect bounds})>[];
@@ -3825,8 +3864,7 @@ class MarkdrawController extends ChangeNotifier {
         FigureTextPair(
           figure: figure,
           caption: caption,
-          figureAbove:
-              figure.sourceBounds.top <= caption.sourceBounds.top,
+          figureAbove: figure.sourceBounds.top <= caption.sourceBounds.top,
         ),
       );
       pairedTextIndexes.add(captionIndex);
@@ -3838,23 +3876,18 @@ class MarkdrawController extends ChangeNotifier {
       return byTop != 0 ? byTop : a.left.compareTo(b.left);
     }
 
-    final looseTexts =
-        [
-          for (final index in textElementsByIndex.keys)
-            if (index != titleIndex && !pairedTextIndexes.contains(index))
-              makeTextUnit(index),
-        ]..sort(
-          (a, b) => readingCompare(a.sourceBounds, b.sourceBounds),
-        );
+    final looseTexts = [
+      for (final index in textElementsByIndex.keys)
+        if (index != titleIndex && !pairedTextIndexes.contains(index))
+          makeTextUnit(index),
+    ]..sort((a, b) => readingCompare(a.sourceBounds, b.sourceBounds));
     final looseFigures = <LayoutUnit>[];
     for (final index in match.figureClaims.keys) {
       if (figureIndexByPair.containsValue(index)) continue;
       final unit = makeFigureUnit(index);
       if (unit != null) looseFigures.add(unit);
     }
-    looseFigures.sort(
-      (a, b) => readingCompare(a.sourceBounds, b.sourceBounds),
-    );
+    looseFigures.sort((a, b) => readingCompare(a.sourceBounds, b.sourceBounds));
 
     final content = SmartLayoutContent(
       pageId: page.id,
@@ -3991,8 +4024,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// 草稿态低置信文本项快照（id + 当前文字），供校对编辑条构建。
   List<({ElementId id, String text})> get smartLayoutDraftProofreadItems {
-    if (!_smartLayoutDraftActive ||
-        _smartLayoutDraftLowConfidenceIds.isEmpty) {
+    if (!_smartLayoutDraftActive || _smartLayoutDraftLowConfidenceIds.isEmpty) {
       return const [];
     }
     final scene = _editorState.scene;
@@ -4010,8 +4042,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// 草稿态低置信文本矩形的实时快照（改字/拖动后重取，橙色高亮用）。
   List<ui.Rect> get smartLayoutDraftLowConfidenceRects {
-    if (!_smartLayoutDraftActive ||
-        _smartLayoutDraftLowConfidenceIds.isEmpty) {
+    if (!_smartLayoutDraftActive || _smartLayoutDraftLowConfidenceIds.isEmpty) {
       return const [];
     }
     final scene = _editorState.scene;
@@ -4191,8 +4222,12 @@ class MarkdrawController extends ChangeNotifier {
         text: isSuccess ? text : null,
         bounds: unionRect == null
             ? request.bounds
-            : Bounds.fromLTWH(unionRect.left, unionRect.top, unionRect.width,
-                  unionRect.height),
+            : Bounds.fromLTWH(
+                unionRect.left,
+                unionRect.top,
+                unionRect.width,
+                unionRect.height,
+              ),
         strokeBounds: const [],
         startedAt: request.startedAt,
         error: isSuccess ? null : 'vlm-no-text',
@@ -4324,8 +4359,12 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// 页内可移动元素 → 版式图形单元（整组共用一个单元），供视觉匹配与模板移动。
-  ({Map<String, Element> elements, Map<String, ui.Rect> rects,
-  Map<String, List<String>> memberIds}) _smartLayoutFigureUnits(String pageId) {
+  ({
+    Map<String, Element> elements,
+    Map<String, ui.Rect> rects,
+    Map<String, List<String>> memberIds,
+  })
+  _smartLayoutFigureUnits(String pageId) {
     final elements = <String, Element>{};
     final rects = <String, ui.Rect>{};
     final memberIds = <String, List<String>>{};
@@ -4341,9 +4380,7 @@ class MarkdrawController extends ChangeNotifier {
         union.size.width,
         union.size.height,
       );
-      memberIds[key] = [
-        for (final member in members) member.id.value,
-      ];
+      memberIds[key] = [for (final member in members) member.id.value];
     }
 
     for (final element in _smartLayoutPageElements(pageId)) {

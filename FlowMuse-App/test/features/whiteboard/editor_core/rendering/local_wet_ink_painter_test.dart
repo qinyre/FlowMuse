@@ -142,6 +142,10 @@ class _RecordingAdapter implements RoughAdapter {
     BrushType brushType,
     DrawStyle style, {
     bool isComplete = true,
+    bool pressureEncoded = false,
+    FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
+    double? wholeStrokeRawLength,
+    double? deviceScale,
   }) {
     calls++;
     this.points = points;
@@ -164,6 +168,10 @@ class _SolidCanvasAdapter implements RoughAdapter {
     BrushType brushType,
     DrawStyle style, {
     bool isComplete = true,
+    bool pressureEncoded = false,
+    FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
+    double? wholeStrokeRawLength,
+    double? deviceScale,
   }) {
     canvas.drawRect(
       const Rect.fromLTWH(0, 0, 40, 40),

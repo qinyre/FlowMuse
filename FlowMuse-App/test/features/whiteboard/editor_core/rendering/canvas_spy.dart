@@ -15,6 +15,12 @@ class SpyCanvas implements Canvas {
   final List<Rect> pathOrder = [];
   final List<Rect?> saveLayerBounds = [];
 
+  /// drawPath 的 Paint 证据（Issue #5 T0 扩展）：blendMode、颜色 alpha、
+  /// 是否挂 shader——荧光笔合成与铅笔纹理门禁的断言载体。
+  final List<BlendMode> pathBlendModes = [];
+  final List<double> pathAlphas = [];
+  int shaderPathCount = 0;
+
   @override
   void saveLayer(Rect? bounds, Paint paint) {
     saveLayerCount++;
@@ -26,6 +32,9 @@ class SpyCanvas implements Canvas {
   void drawPath(Path path, Paint paint) {
     drawCallCount++;
     pathOrder.add(path.getBounds());
+    pathBlendModes.add(paint.blendMode);
+    pathAlphas.add(paint.color.a);
+    if (paint.shader != null) shaderPathCount++;
     _inner.drawPath(path, paint);
   }
 

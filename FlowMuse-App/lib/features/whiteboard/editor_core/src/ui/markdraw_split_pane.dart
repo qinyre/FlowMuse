@@ -5,7 +5,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
@@ -617,7 +616,7 @@ class _TextPane extends StatelessWidget {
                 message: '复制为 Markdown',
                 child: IconButton(
                   icon: Icon(
-                    Symbols.markdown,
+                    Icons.text_snippet,
                     size: 20,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

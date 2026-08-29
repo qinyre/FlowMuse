@@ -42,7 +42,6 @@ dependencies:
   go_router: ^17.3.0
   google_fonts: ^6.2.1
   lucide_icons_flutter: ^3.1.14
-  material_symbols_icons: ^4.2815.0
   re_editor: ^0.8.0
   re_highlight: ^0.0.3
   record: ^6.1.2
@@ -129,7 +128,11 @@ flutter:
     - assets/covers/notebooks/
     - assets/covers/tags/
     - assets/themes/
-    - shaders/
+
+  # 铅笔纹理 shader：必须注册在 shaders 段（构建期经 impellerc 编译），
+  # 不得放回 assets（assets 只原样拷贝 GLSL 源文本，运行时必然加载失败）。
+  shaders:
+    - shaders/pencil.frag
 
   fonts:
     - family: Excalifont

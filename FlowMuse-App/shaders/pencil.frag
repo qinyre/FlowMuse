@@ -8,6 +8,12 @@
 /// Pencil color, represented as a vec3 of RGB values between 0 and 1.
 uniform vec3 uColor;
 
+/// Overall stroke opacity applied to the texture alpha (premultiplied output).
+uniform float uOpacity;
+
+/// Texture frequency (grain scale); higher = finer grain.
+uniform float uFreq;
+
 /// Output color at a given pixel.
 /// Represented as a vec4 of RGBA values between 0 and 1.
 out vec4 fragColor;
@@ -129,11 +135,11 @@ float easeInOutQuad(float x) {
 void main() {
     vec2 fragCoord = FlutterFragCoord().xy;
 
-    const float freq = 0.7;
+    float freq = uFreq;
     // The noise value remapped to be between 0.0 and 1.0
     float noise = NOISE(fragCoord * vec2(freq, freq * 0.5)) * 0.5 + 0.5;
 
     // Opacity limited to 0.7 to look more like a pencil stroke
-    float opacity = easeInOutQuad(noise) * 0.7;
+    float opacity = easeInOutQuad(noise) * 0.7 * uOpacity;
     fragColor = vec4(uColor * opacity, opacity);
 }

@@ -28,7 +28,9 @@ List<Element> cullElements(
     if (e.isDeleted) return false;
     if (e is core.TextElement && e.containerId != null) return false;
 
-    final elementBounds = Bounds.fromLTWH(e.x, e.y, e.width, e.height);
+    // 可视边界而非中心线 AABB：粗笔（如荧光笔 sizeScale 4.2）中心线
+    // 出视口而笔缘仍可见时，中心线 AABB 会整条误裁。
+    final elementBounds = elementVisualBounds(e);
     return expanded.intersects(elementBounds);
   }).toList();
 }

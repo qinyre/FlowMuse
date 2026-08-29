@@ -38,6 +38,42 @@ class DiamondIconPainter extends CustomPainter {
       old.color != color || old.filled != filled;
 }
 
+/// Eraser tool icon — slanted rounded bar with a tip band（ink_eraser 风格）。
+///
+/// 自绘而非字体图标：fork 的 Material Icons 无橡皮字形，且
+/// material_symbols_icons 字体在 release tree-shaking 下不可靠（见
+/// tool_icon.dart 注释）。
+class EraserIconPainter extends CustomPainter {
+  final Color color;
+  EraserIconPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeJoin = StrokeJoin.round;
+    final s = size.width;
+    canvas.save();
+    canvas.translate(s / 2, s / 2);
+    canvas.rotate(-math.pi / 4);
+    final w = s * 0.62;
+    final h = s * 0.34;
+    final rect = Rect.fromCenter(center: Offset.zero, width: w, height: h);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(2.5)),
+      paint,
+    );
+    final bandX = rect.left + w / 3;
+    canvas.drawLine(Offset(bandX, rect.top), Offset(bandX, rect.bottom), paint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(EraserIconPainter old) => old.color != color;
+}
+
 /// Diagonal red line for transparent color indicator.
 class DiagonalLinePainter extends CustomPainter {
   @override

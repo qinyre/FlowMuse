@@ -272,6 +272,13 @@
 - **我们改了什么**：新增 `InkTextSizing` 字号估算器（CJK 0.9/拉丁 0.72 插值、单字宽度兜底、clamp 12–400），`_measuredTextElement` 改为紧包裹 + 垂直居中 + 识别样式优先，`applyResult` 增加 `applyDefaultStyle` 参数供转换入口跳过二次样式化；math 与竖排按分支保护。
 - **验证证据**：15 例单测（含 freedraw 激活态自动路径回归）+ 572 例白板回归全绿；网页端 fake 识别服务实测，视觉审查确认大/小字迹转换后选中框紧贴文字（57px/23px 字号与笔迹高度相当）。
 
+## 笔刷差异化渲染（Issue #5）
+
+- **问了什么**：五种笔刷共用同一 perfect_freehand 管线观感难辨，如何在不分叉管线的前提下按笔形特调，并让 SVG/PNG 导出、命中边界、协作两端全部一致？
+- **AI 给了什么**：三轮三路对抗审查在设计阶段抓出绝对距离 taper 与按点比例判据不相容、远端湿墨分段描边会破坏整笔收针（FreedrawTaperPhase 补救）、鸿蒙移植版 FragmentProgram 可用性存疑需三态降级、无 Visual Studio 时 Windows 验证不可行、Raster/SVG/边界三套宽度表并存漂移等；执行结果两轮审查又抓出湿墨整笔长度双重计入 pending 冻结点（收笔 taper 跳变）、铅笔冻结块离屏录制颗粒频率失焦、A14/A17/A18/A21 多个测试断言不绑定生产路径（同义反复/未真栅格化/0µs 静默放宽）等。
+- **我们改了什么**：收敛 `BrushRenderProfile` 单一真源；压感灵敏度创建时烘焙（pressureEncoding 标记 + 唯一编码点）；`elementVisualBounds` 统一命中/导出边界；荧光笔平头+darken；铅笔构建期 shader+颗粒降级；SVG 导出重写为真实填充轮廓；新增五笔视觉矩阵与两两差异门禁。
+- **验证证据**：全仓 790 测试全绿、analyze 零新增、`flutter build web` 成功；视觉子代理盲判五行五判全中（区分度 5/5，无不可分辨对）；SVG 经 Chromium 实际渲染核对 darken/平头/pattern；两轮修复经第二轮双路验证 P0=P1=0。
+
 ---
 
 ## 反思结论

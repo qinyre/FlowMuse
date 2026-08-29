@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' show Offset;
 
 import 'package:rough_flutter/rough_flutter.dart';
 
@@ -345,31 +346,116 @@ class SvgElementRenderer {
 
   static void _renderFreedraw(StringBuffer buf, FreedrawElement element) {
     final absPoints = _absolutePoints(element.points, element.x, element.y);
+    if (absPoints.isEmpty) return;
     final brushType = brushTypeFromCustomData(element.customData);
-    final (widthScale, opacityScale) = switch (brushType) {
-      BrushType.pencil => (0.82, 0.68),
-      BrushType.ballpoint => (0.72, 1.0),
-      BrushType.fountainPen => (1.0, 1.0),
-      BrushType.brushPen => (1.15, 1.0),
-      BrushType.highlighter => (4.2, 0.32),
-    };
-    final d = SvgPathConverter.freedrawToPathData(
+    // 单一真源：宽度/透明度/taper/端帽全部读 BrushRenderProfile，
+    // 与画布渲染共用同一 outline（issue #5 T7）。
+    final profile = BrushRenderProfile.forType(brushType);
+    final opacity = element.opacity * profile.opacityScale;
+    final size = profile.renderSize(element.strokeWidth);
+
+    // 单点：显式圆点（中性压力半径）。画布端单点 drawCircle 同样套
+    // profile 混合模式，darken（荧光笔）在此保持一致。
+    if (absPoints.length == 1) {
+      final p = absPoints[0];
+      buf.write('<circle cx="${_n(p.x)}" cy="${_n(p.y)}" r="${_n(size / 2)}" ');
+      buf.write('fill="${element.strokeColor}"');
+      if (profile.compositeMode == BrushCompositeMode.darken) {
+        buf.write(' style="mix-blend-mode:darken"');
+      }
+      if (opacity < 1.0) {
+        buf.write(' opacity="${_n(opacity)}"');
+      }
+      buf.write('/>');
+      return;
+    }
+
+    final outline = FreedrawRenderer.buildOutline(
       absPoints,
-      element.strokeWidth * widthScale,
+      strokeWidth: element.strokeWidth,
+      pressures: element.simulatePressure ? null : element.pressures,
+      pressureEncoded: pressureEncodingFromCustomData(element.customData),
+      isComplete: element.isComplete,
+      brushType: brushType,
     );
-    if (d.isEmpty) return;
+    if (outline.isEmpty) return;
+    final d = _outlineToSvgPathData(outline);
+
+    // 铅笔颗粒：小尺寸确定性 pattern（按元素 id 唯一，尺寸随笔宽），
+    // 作为覆盖层叠加；查看器不支持 pattern 时主体轮廓仍可见。
+    // tile 与画布 shader 频率同源：freq = 4/size（场景坐标）→ 间距 size/4。
+    if (profile.usesPencilTexture) {
+      final tile = math.max(1.5, size / 4);
+      buf.write('<defs>');
+      buf.write(
+        '<pattern id="pencil-grain-${element.id.value}" '
+        'patternUnits="userSpaceOnUse" '
+        'width="${_n(tile)}" height="${_n(tile)}">',
+      );
+      buf.write(
+        '<circle cx="${_n(tile * 0.25)}" cy="${_n(tile * 0.25)}" '
+        'r="${_n(tile * 0.15)}" fill="${element.strokeColor}" '
+        'opacity="0.5"/>',
+      );
+      buf.write('</pattern>');
+      buf.write('</defs>');
+    }
 
     buf.write('<path d="$d" ');
-    buf.write('stroke="${element.strokeColor}" ');
-    buf.write('stroke-width="${_n(element.strokeWidth * widthScale)}" ');
-    buf.write('fill="none" ');
-    buf.write('stroke-linecap="round" ');
-    buf.write('stroke-linejoin="round"');
-    final opacity = element.opacity * opacityScale;
+    buf.write('fill="${element.strokeColor}" ');
+    if (profile.compositeMode == BrushCompositeMode.darken) {
+      // 荧光笔叠加加深：与画布 BlendMode.darken 同义；不支持的查看器
+      // 退化为普通半透明（语义降级，元素不消失）。
+      buf.write('style="mix-blend-mode:darken" ');
+    }
+    if (profile.usesPencilTexture) {
+      buf.write('stroke="none" ');
+    }
     if (opacity < 1.0) {
-      buf.write(' opacity="${_n(opacity)}"');
+      buf.write('opacity="${_n(opacity)}" ');
     }
     buf.write('/>');
+
+    if (profile.usesPencilTexture) {
+      // 纹理层透明度 = 基准 0.4 × 元素最终 opacity（与光栅路径一致：
+      // 光栅颗粒 paint 的 alpha = 元素色 alpha × 0.5，元素透明时颗粒
+      // 同步消失）。固定值会让透明铅笔元素导出后仍显示颗粒。
+      buf.write(
+        '<path d="$d" fill="url(#pencil-grain-${element.id.value})" '
+        'opacity="${_n(0.4 * opacity)}" stroke="none"/>',
+      );
+    }
+  }
+
+  /// 闭合轮廓 → SVG path d：与画布 quadratic 中点法逐段一致
+  /// （buildOutlinePath 的 SVG 版本，无 Canvas 依赖）。
+  static String _outlineToSvgPathData(List<Offset> outline) {
+    if (outline.length < 3) {
+      // 防御分支：不足三点无法构闭合贝塞尔，退化为合法的 M/L 折线。
+      final buf = StringBuffer();
+      for (var i = 0; i < outline.length; i++) {
+        buf.write(i == 0 ? 'M' : ' L');
+        buf.write('${_n(outline[i].dx)} ${_n(outline[i].dy)}');
+      }
+      return buf.toString();
+    }
+    final buf = StringBuffer();
+    final n = outline.length;
+    void mid(int a, int b) {
+      buf.write('${_n((outline[a].dx + outline[b].dx) / 2)} ');
+      buf.write('${_n((outline[a].dy + outline[b].dy) / 2)} ');
+    }
+
+    buf.write('M');
+    mid(0, 1);
+    for (var i = 1; i <= n; i++) {
+      final cur = i % n;
+      final next = (i + 1) % n;
+      buf.write('Q${_n(outline[cur].dx)} ${_n(outline[cur].dy)} ');
+      mid(cur, next);
+    }
+    buf.write('Z');
+    return buf.toString();
   }
 
   static void _renderText(StringBuffer buf, TextElement element) {
