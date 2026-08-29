@@ -366,3 +366,18 @@ v2 采用最小兼容方案：
 
 - 真机 UI 图标复核（荧光笔/橡皮/markdown 按钮）与双人协作盲测仍待用户日常使用确认；铅笔 shader 下标绑定依赖 pencil.frag 声明顺序，已在代码注释双向标注。
 - 本轮暴露的构建环境坑（Android 引擎按名 uniform 元数据缺失、material_symbols_icons 字体不可靠）已沉淀至项目记忆，后续任何分支引入 Symbols 字体图标都会在真机复现实心块问题。
+
+## 15. 外部复审与修复（2026-08-29，PR #20 评审意见）
+
+外部评审结论"主体成立、3 个 P1 修复后再复审、暂不宜合并"。逐条核实**六项全部属实**（含 P3 文档滞后），已全部修复（fix 提交 67e65bd）：
+
+| 级别 | 位置 | 核实结论 | 修复 |
+| --- | --- | --- | --- |
+| P1 | viewport_culling.dart:31 | 属实：裁剪用中心线 AABB，未接 elementVisualBounds；粗荧光笔可视半宽 ~107 远超 50/zoom 余量，中心线出视口即整条误裁 | 裁剪改用 elementVisualBounds；新增边缘保留/远处剔除双例（viewport_culling_test） |
+| P1 | pencil_shader.dart:122 + freedraw_renderer.dart:292 | 属实：uniforms() 的 try/catch 只包住不可能失败的构造，真正写入的 setFloat（apply）裸奔，异常仍会逐帧杀死画布 | apply() 收口为返回 bool 的安全方法，引擎层异常经 disablePermanently 永久清理实例转颗粒降级，绝不逐帧重试 |
+| P1 | freedraw_renderer.dart:345 | 属实：stride(size/3) 被当输入点下标步长（i % stride），颗粒密度随报点率/速度漂移；注释与实现不符 | 改沿折线累计弧长、插值到精确弧长位置布点（步长 size/3 场景距离）；补密度不变性/确定性/单点三例（pencil_grain_path_test） |
+| P2 | svg_element_renderer.dart:422 | 属实：纹理层固定 opacity=0.4，不乘元素透明度，opacity=0 仍泄漏颗粒 | 改为 0.4 × 元素最终 opacity（element.opacity × opacityScale，与光栅颗粒 alpha 口径一致）；补 0/0.25/1.0 三档（期望值 0/0.07/0.27） |
+| P2 | markdraw_controller._encodeStrokePressure | 属实：逐事件实时读 _activeBrushType/灵敏度，最终元素笔型取抬笔时 toolContext，中途切笔产生混合编码 | pointer-down 冻结笔型+灵敏度快照（toolContext 与编码共用），_finishActivePreviewStroke 解除；补中途切笔与未切笔逐点一致测试 |
+| P3 | 计划文档 | 属实：头部仍"待执行"、§16 最终提交/Issue 行过期 | 头部改"已执行完毕（PR #20 待合并）"；§16 提交链/Issue 行更新 |
+
+门禁：analyze 48=基线零新增，797 测试全绿（净增 7 例）。评审对核心路线（BrushRenderProfile/压力冻结/可视边界/湿墨 taper/darken/SVG 真实轮廓）与工程事实（790 测试、无新依赖、移除 material_symbols_icons）的正面确认与当日状态一致。
