@@ -216,8 +216,13 @@ void main() {
       test('低压起笔输出抬升至攻击水位，随窗口缓释，窗口后纯实测', () {
         // 窗口 1500ms 必须覆盖真机压力爬升期（实测 0.5-1.2s）：实测压力
         // 在包络仍处高位时接管，避免 250ms 短窗时代偿先撤、实测未跟上
-        // 造成的"粗起笔收窄成尖"凹谷。
-        final m = StrokeInputModeler(InputPolicy.stylus);
+        // 造成的"粗起笔收窄成尖"凹谷。补偿参数由控制器按笔形白名单
+        // （毛笔/铅笔）逐笔传入模型器，此处显式等价构造。
+        final m = StrokeInputModeler(
+          InputPolicy.stylus,
+          pressureAttackMs: 1500,
+          pressureAttackLevel: 0.50,
+        );
 
         // down: p=0.2 → 映射 ≈0.31 < 水位 0.5 → 抬到 0.5
         final r0 = m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down));
@@ -237,7 +242,11 @@ void main() {
       });
 
       test('真实压力高于包络时原样透传不被抬压', () {
-        final m = StrokeInputModeler(InputPolicy.stylus);
+        final m = StrokeInputModeler(
+          InputPolicy.stylus,
+          pressureAttackMs: 1500,
+          pressureAttackLevel: 0.50,
+        );
         // p=0.8 → 映射 0.18+0.8*0.64≈0.69 > 水位 0.5 → 不抬压
         final r0 = m.process(s(0, 0, 0, p: 0.8, phase: StrokePhase.down));
         expect(r0.pressure!, closeTo(0.69, 0.01));
@@ -247,7 +256,11 @@ void main() {
       });
 
       test('包络只抬输出不污染压力状态（窗口外缺失值回到实测）', () {
-        final m = StrokeInputModeler(InputPolicy.stylus);
+        final m = StrokeInputModeler(
+          InputPolicy.stylus,
+          pressureAttackMs: 1500,
+          pressureAttackLevel: 0.50,
+        );
         m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down)); // 抬到 0.50
         m.process(s(2.0, 0, 125, p: 0.2)); // 包络 ≈0.47
         // 窗口内偶发缺失：输出 = max(实测 0.31, 包络 ≈0.39)
@@ -259,7 +272,7 @@ void main() {
         expect(missingAfterWindow.pressure!, closeTo(0.31, 0.02));
       });
 
-      test('pressureAttackMs=0 关闭补偿（纯映射）', () {
+      test('未启用补偿（默认关闭）时纯映射（钢笔路径）', () {
         const attackOff = InputPolicy(
           useRealPressure: true,
           minCutoff: 8.0,
@@ -273,6 +286,22 @@ void main() {
         final m = StrokeInputModeler(attackOff);
         final r = m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down));
         expect(r.pressure!, closeTo(0.31, 0.01));
+      });
+
+      test('补偿开关在模型器构造上逐笔决定（同策略同输入，输出不同）', () {
+        // 回归背景：补偿按笔形白名单由控制器逐笔传入（钢笔关、毛笔/铅笔
+        // 开），因此参数挂在模型器而非设备策略——同一 InputPolicy 下两种
+        // 构造必须产生不同输出，否则白名单失效。
+        final on = StrokeInputModeler(
+          InputPolicy.stylus,
+          pressureAttackMs: 1500,
+          pressureAttackLevel: 0.50,
+        );
+        final off = StrokeInputModeler(InputPolicy.stylus);
+        final rOn = on.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down));
+        final rOff = off.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down));
+        expect(rOn.pressure!, closeTo(0.50, 0.01)); // 抬到攻击水位
+        expect(rOff.pressure!, closeTo(0.31, 0.01)); // 纯实测映射
       });
     });
 

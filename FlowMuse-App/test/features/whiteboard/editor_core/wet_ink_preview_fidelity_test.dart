@@ -38,11 +38,12 @@ void main() {
   PointerDownEvent downEvent(
     int pointer, {
     PointerDeviceKind kind = PointerDeviceKind.stylus,
+    double pressure = 0.8,
   }) => PointerDownEvent(
     pointer: pointer,
     kind: kind,
     position: Offset.zero,
-    pressure: 0.8,
+    pressure: pressure,
     timeStamp: Duration.zero,
   );
 
@@ -51,11 +52,12 @@ void main() {
     Offset at, {
     PointerDeviceKind kind = PointerDeviceKind.stylus,
     int ms = 20,
+    double pressure = 0.8,
   }) => PointerMoveEvent(
     pointer: pointer,
     kind: kind,
     position: at,
-    pressure: 0.8,
+    pressure: pressure,
     timeStamp: Duration(milliseconds: ms),
   );
 
@@ -261,5 +263,59 @@ void main() {
       {'brushType', 'pressureEncoding'},
       reason: 'recognition keys 只写提交元素（预览从不入场景）',
     );
+  });
+
+  group('起笔攻击补偿按笔形生效（钢笔不补偿）', () {
+    // 真机回归：攻击包络曾全局开启，轻力度写钢笔时 0.4-0.6s 短笔画全程
+    // 被 0.50 攻击水位压平，粗细变化消失（钢笔的粗细动态全靠压力）。补偿
+    // 改为控制器按笔形白名单传入模型器：仅毛笔/铅笔（低压起笔渲染为细线、
+    // 压力到位突然增宽的闪变笔形）开启，钢笔忠实透传实测压力。
+    //
+    // 断言依据：encodePressure 是 raw 的单调增仿射映射（0.5 + k*(raw-0.5)），
+    // 模型器域的抬压/不抬压在编码域保序。恒定轻压 0.35 经映射
+    // （floor 0.18 + 0.35×0.64）≈ 0.404：
+    // - 不抬压（钢笔）：模型器输出 < 0.50 → 编码后严格 < 0.5；
+    // - 抬压（毛笔/铅笔）：down 时刻包络恰为水位 0.50 → 编码后恰为 0.5。
+    Future<List<double>> strokePressures(
+      BrushType brush, {
+      double pressure = 0.35,
+    }) async {
+      final controller = controllerFor(brush);
+      addTearDown(controller.dispose);
+      controller.onPointerDown(downEvent(1, pressure: pressure));
+      controller.onPointerMove(
+        moveEvent(1, const Offset(30, 0), pressure: pressure),
+      );
+      await pumpModeler();
+      final overlay = (controller.activeTool as FreedrawTool).overlay!;
+      final preview =
+          controller.buildPreviewElement(overlay)! as FreedrawElement;
+      // 预览持有工具点列的活视图，抬笔即清空——读取前快照。
+      return List.of(preview.pressures);
+    }
+
+    test('钢笔：轻力度全程不被抬到攻击水位（粗细变化保留）', () async {
+      final pressures = await strokePressures(BrushType.fountainPen);
+      expect(pressures, isNotEmpty);
+      for (final p in pressures) {
+        expect(
+          p,
+          lessThan(0.5),
+          reason: '钢笔不得套攻击包络（轻力度粗细变化会被压平）: $pressures',
+        );
+      }
+    });
+
+    test('毛笔/铅笔：起笔输出抬到攻击水位（闪变治理保持）', () async {
+      for (final brush in [BrushType.brushPen, BrushType.pencil]) {
+        final pressures = await strokePressures(brush);
+        expect(pressures, isNotEmpty, reason: '$brush');
+        expect(
+          pressures.first,
+          closeTo(0.5, 0.001),
+          reason: '$brush 起笔应被包络抬到攻击水位（编码域 0.5）: $pressures',
+        );
+      }
+    });
   });
 }

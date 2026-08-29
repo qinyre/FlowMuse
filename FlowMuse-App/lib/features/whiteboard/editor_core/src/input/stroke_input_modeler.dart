@@ -43,6 +43,8 @@ class StrokeInputModeler {
     this.policy, {
     bool? useRealPressure,
     this.pressureExponent = 1.0,
+    this.pressureAttackMs = 0,
+    this.pressureAttackLevel = 0.0,
   }) : useRealPressure = useRealPressure ?? policy.useRealPressure;
 
   static const _maxSamplingGap = Duration(milliseconds: 200);
@@ -50,6 +52,16 @@ class StrokeInputModeler {
   final InputPolicy policy;
   final bool useRealPressure;
   final double pressureExponent;
+
+  /// 起笔攻击补偿窗口（毫秒），0 = 关闭。按笔形由调用方逐笔传入而非挂在
+  /// 设备策略上：低压起笔"闪变"的笔形（毛笔/铅笔）开启；粗细动态全靠
+  /// 压力的笔形（钢笔）必须关闭——窗口内 max(实测, 包络) 会压平轻力度
+  /// 书写的粗细变化（真机回归教训）。
+  final int pressureAttackMs;
+
+  /// 攻击水位（映射域 [InputPolicy.pressureFloor, pressureCeiling] 内取值），
+  /// 窗口起点的输出下限。
+  final double pressureAttackLevel;
 
   OneEuroFilter? _xFilter;
   OneEuroFilter? _yFilter;
@@ -245,14 +257,14 @@ class StrokeInputModeler {
     // _lastPressure 状态；真实压力高于包络时原样透传。窗口结束即纯实测。
     final downTime = _downTime;
     final now = _lastTime;
-    if (policy.pressureAttackMs <= 0 || downTime == null || now == null) {
+    if (pressureAttackMs <= 0 || downTime == null || now == null) {
       return out;
     }
     final elapsedMs = (now - downTime).inMilliseconds;
-    final t = (elapsedMs / policy.pressureAttackMs).clamp(0.0, 1.0);
+    final t = (elapsedMs / pressureAttackMs).clamp(0.0, 1.0);
     final envelope =
-        policy.pressureAttackLevel +
-        (policy.pressureFloor - policy.pressureAttackLevel) * t;
+        pressureAttackLevel +
+        (policy.pressureFloor - pressureAttackLevel) * t;
     return out > envelope ? out : envelope;
   }
 }

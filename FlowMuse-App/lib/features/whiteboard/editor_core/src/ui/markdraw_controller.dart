@@ -146,6 +146,12 @@ class MarkdrawController extends ChangeNotifier {
   bool _fingerDrawingEnabled = false;
   final bool _useUnifiedModeler = true;
 
+  // 起笔攻击补偿参数（仅毛笔/铅笔启用，见 onPointerDown 白名单）：真机
+  // 手写笔起笔 0.5-1.2s 内压力从 ~0.2 爬升到 ~0.5+，窗口必须覆盖爬升期——
+  // 补偿先于实测压力到位而撤退，会在每笔产生"粗起笔收窄成尖"的凹谷。
+  static const int _pressureAttackMs = 1500;
+  static const double _pressureAttackLevel = 0.50;
+
   // debug/test 录制器：null 时不录制（release 默认关闭）
   StrokeRecorder? _recorder;
   bool get isRecording => _recorder != null;
@@ -2206,10 +2212,20 @@ class MarkdrawController extends ChangeNotifier {
         viewportTransform: _viewportTransform,
       );
       _activeDrawPointerId = sample.pointerId;
+      // 攻击补偿按笔形白名单逐笔传入：毛笔/铅笔低压起笔渲染为细线、压力
+      // 到位突然增宽（真机闪变）；钢笔低压力渲染为宽线、收窄自然且粗细
+      // 动态全靠压力，包络会压平轻力度书写的变化（真机回归教训，窗口内
+      // max(实测, 包络) 对 0.4-0.6s 短笔画近乎恒抬）；圆珠笔/荧光笔宽度
+      // 与压力无关，无需补偿。
+      final strokeBrush = _strokeBrushTypeOverride ?? _activeBrushType;
+      final attackEnabled =
+          strokeBrush == BrushType.brushPen || strokeBrush == BrushType.pencil;
       _modeler = StrokeInputModeler(
         _policySelector.select(sample.kind),
         useRealPressure: _pressureEnabled,
         pressureExponent: _pressureExponent,
+        pressureAttackMs: attackEnabled ? _pressureAttackMs : 0,
+        pressureAttackLevel: _pressureAttackLevel,
       );
       final r = kReleaseMode
           ? _modeler!.process(sample)
