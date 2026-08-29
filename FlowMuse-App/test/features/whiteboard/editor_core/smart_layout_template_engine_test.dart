@@ -36,12 +36,13 @@ void main() {
     Rect source = const Rect.fromLTWH(0, 0, 200, 40),
     double fontSize = 20,
     double height = 40,
+    double width = 200,
   }) => LayoutUnit(
     key: key,
     sourceBounds: source,
     size: Size(source.width, source.height),
     kind: LayoutUnitKind.text,
-    textElement: bodyText(key, text, fontSize: fontSize, height: height),
+    textElement: bodyText(key, text, fontSize: fontSize, height: height, width: width),
   );
 
   LayoutUnit figureUnit(
@@ -58,16 +59,16 @@ void main() {
     memberIds: memberIds,
   );
 
+  /// 图下注配对（注原稿 top 与图同高 → bind 归下方栈）。
   FigureTextPair pair(
     String figureKey,
     Size figureSize,
     String captionKey,
     String captionText, {
     Rect? figureSource,
-  }) => FigureTextPair(
+  }) => FigureTextPair.bind(
     figure: figureUnit(figureKey, figureSize, source: figureSource),
-    caption: textUnit(captionKey, captionText),
-    figureAbove: true,
+    texts: [textUnit(captionKey, captionText)],
   );
 
   group('handout 图文讲义', () {
@@ -135,6 +136,94 @@ void main() {
       expect(c1.y, closeTo(f1.dy + 80 + gap, 0.01));
     });
 
+    test('孤行窄图整行居中（不再落左列）', () {
+      // Given：仅一只窄图（奇数对落单）；When：handout 落位；
+      // Then：图中心 = 内容区中心，不再偏左列。
+      final result = SmartLayoutTemplateEngine.layout(
+        kind: SmartLayoutTemplateKind.handout,
+        content: SmartLayoutContent(
+          pageId: 'p1',
+          contentArea: area,
+          pairs: [
+            pair('f1', const Size(120, 80), 'c1', '图一',
+                figureSource: const Rect.fromLTWH(1000, 0, 120, 80)),
+          ],
+        ),
+      );
+      expect(result, isNotNull);
+      final delta = result!.moveDeltas[const ElementId('f1')]!;
+      expect(
+        1000 + delta.dx + 60,
+        closeTo(area.center.dx, 0.01),
+        reason: '孤行图与标签栈以内容区中心水平居中',
+      );
+      // 图注随图居中于图。
+      final caption = result.addElements.whereType<TextElement>().single;
+      expect(
+        caption.x + caption.width / 2,
+        closeTo(area.center.dx, 0.01),
+      );
+      expect(caption.y, closeTo(delta.dy + 80 + 24, 0.01));
+    });
+
+    test('一图多标签：上栈 bottom 对齐图顶-gap、下栈 top 对齐图底+gap、栈内与图居中',
+        () {
+      // Given：一只窄图，上方一枚标签、下方两枚标签（多标签栈）。
+      // When：handout 落位（孤行居中）；Then：栈几何按契约排布。
+      final result = SmartLayoutTemplateEngine.layout(
+        kind: SmartLayoutTemplateKind.handout,
+        content: SmartLayoutContent(
+          pageId: 'p1',
+          contentArea: area,
+          pairs: [
+            FigureTextPair(
+              figure: figureUnit(
+                'f1',
+                const Size(200, 150),
+                source: const Rect.fromLTWH(0, 0, 200, 150),
+              ),
+              topTexts: [
+                textUnit(
+                  't-top',
+                  '上方标签',
+                  source: const Rect.fromLTWH(50, -60, 100, 40),
+                ),
+              ],
+              bottomTexts: [
+                textUnit('t-b1', '注一', source: const Rect.fromLTWH(30, 160, 80, 40)),
+                textUnit('t-b2', '注二', source: const Rect.fromLTWH(120, 210, 120, 40)),
+              ],
+            ),
+          ],
+        ),
+      );
+      expect(result, isNotNull);
+      const gap = 24.0;
+      final figDelta = result!.moveDeltas[const ElementId('f1')]!;
+      final figTop = figDelta.dy;
+      // 上方栈占据行顶（栈高 40），图整体下移：figTop = 栈高 + gap。
+      expect(figTop, closeTo(40 + gap, 0.01));
+      final elements = result.addElements.whereType<TextElement>().toList();
+      final topLabel = elements.firstWhere((e) => e.text == '上方标签');
+      expect(topLabel.y + topLabel.height, closeTo(figTop - gap, 0.01),
+          reason: '上栈 bottom 对齐图顶-gap');
+      expect(
+        topLabel.x + topLabel.width / 2,
+        closeTo(figDelta.dx + 100, 0.01),
+        reason: '栈内每块与图水平居中',
+      );
+      final b1 = elements.firstWhere((e) => e.text == '注一');
+      final b2 = elements.firstWhere((e) => e.text == '注二');
+      expect(b1.y, closeTo(figTop + 150 + gap, 0.01), reason: '下栈 top 对齐图底+gap');
+      expect(b2.y, closeTo(b1.y + 40, 0.01), reason: '栈内按阅读序紧邻堆叠');
+      expect(b1.x + b1.width / 2, closeTo(figDelta.dx + 100, 0.01));
+      expect(b2.x + b2.width / 2, closeTo(figDelta.dx + 100, 0.01));
+      // 行高计入标签栈：下栈之后才是内容区剩余空间（全部 ⊆ 内容区）。
+      for (final rect in result.previewRects) {
+        expect(rect.bottom, lessThanOrEqualTo(area.bottom));
+      }
+    });
+
     test('宽图（>60% 页宽）独占通栏行且水平居中', () {
       final result = SmartLayoutTemplateEngine.layout(
         kind: SmartLayoutTemplateKind.handout,
@@ -154,6 +243,7 @@ void main() {
 
     test('空间不足先压间距：默认档失败后 12 档成功', () {
       // gap 24 时总高 602 超区；gap 12 时 566 放得下。
+      // t2 槽宽 700：贪心装行放不进 t1 所在行（200+24+700 > 800），独占一行。
       final result = SmartLayoutTemplateEngine.layout(
         kind: SmartLayoutTemplateKind.handout,
         content: SmartLayoutContent(
@@ -175,8 +265,9 @@ void main() {
             textUnit(
               't2',
               '第二段',
-              source: const Rect.fromLTWH(0, 300, 200, 200),
+              source: const Rect.fromLTWH(0, 300, 700, 200),
               height: 200,
+              width: 700,
             ),
           ],
         ),
@@ -186,6 +277,37 @@ void main() {
       final t2 = result!.previewRects.last;
       expect(t2.top, 376);
       expect(t2.bottom, lessThanOrEqualTo(area.bottom));
+    });
+
+    test('looseTexts 贪心装行：放得下同行 top 对齐、放不下换行左对齐', () {
+      // Given：三块正文（200/200/600 槽宽）；When：handout 落位；
+      // Then：t1+t2 同行（200+24+200 ≤ 800），t3 放不下换行。
+      final result = SmartLayoutTemplateEngine.layout(
+        kind: SmartLayoutTemplateKind.handout,
+        content: SmartLayoutContent(
+          pageId: 'p1',
+          contentArea: area,
+          looseTexts: [
+            textUnit('t1', '甲', source: const Rect.fromLTWH(0, 0, 200, 40)),
+            textUnit('t2', '乙', source: const Rect.fromLTWH(0, 100, 200, 40)),
+            textUnit(
+              't3',
+              '丙',
+              source: const Rect.fromLTWH(0, 200, 600, 40),
+              width: 600,
+            ),
+          ],
+        ),
+      );
+      expect(result, isNotNull);
+      final elements = result!.addElements.whereType<TextElement>().toList();
+      final t1 = elements.firstWhere((e) => e.text == '甲');
+      final t2 = elements.firstWhere((e) => e.text == '乙');
+      final t3 = elements.firstWhere((e) => e.text == '丙');
+      expect(t2.y, t1.y, reason: '同行 top 对齐');
+      expect(t2.x, closeTo(t1.x + 200 + 24, 0.01), reason: '同行紧邻（间隙 24pt）');
+      expect(t3.x, area.left, reason: '换行后行整体左对齐');
+      expect(t3.y, closeTo(t1.y + 40 + 24, 0.01), reason: '行高取最高块 + 行距');
     });
 
     test('压缩到底仍放不下 → 返回 null（提示分页）', () {
@@ -225,7 +347,7 @@ void main() {
       expect(texts[0].x, area.left);
     });
 
-    test('小图（≤40% 条目宽）挂靠最近邻条目行右侧，caption 随图', () {
+    test('小图（≤40% 条目宽）挂靠最近邻条目行右侧，标签栈居中于图', () {
       final result = SmartLayoutTemplateEngine.layout(
         kind: SmartLayoutTemplateKind.outline,
         content: SmartLayoutContent(
@@ -239,12 +361,13 @@ void main() {
                 source: const Rect.fromLTWH(450, 20, 300, 200),
                 memberIds: ['img-a'],
               ),
-              caption: textUnit(
-                'c1',
-                '示意图',
-                source: const Rect.fromLTWH(460, 230, 100, 30),
-              ),
-              figureAbove: true,
+              bottomTexts: [
+                textUnit(
+                  'c1',
+                  '示意图',
+                  source: const Rect.fromLTWH(460, 230, 100, 30),
+                ),
+              ],
             ),
           ],
           looseTexts: [
@@ -262,11 +385,15 @@ void main() {
       final caption = result.addElements
           .whereType<TextElement>()
           .firstWhere((e) => e.text == '示意图');
-      expect(caption.x, area.right - 300);
+      expect(
+        caption.x + caption.width / 2,
+        closeTo(area.right - 300 + 150, 0.01),
+        reason: '标签与图水平居中',
+      );
       expect(caption.y, 56 + 200 + 8);
     });
 
-    test('大图独占通栏行（贴内容区左缘），caption 随图在下', () {
+    test('大图独占通栏行（贴内容区左缘），标签栈居中于图', () {
       final result = SmartLayoutTemplateEngine.layout(
         kind: SmartLayoutTemplateKind.outline,
         content: SmartLayoutContent(
@@ -280,8 +407,9 @@ void main() {
                 source: const Rect.fromLTWH(0, 0, 400, 200),
                 memberIds: ['img-a'],
               ),
-              caption: textUnit('c1', '示意图', source: const Rect.fromLTWH(0, 210, 100, 30)),
-              figureAbove: true,
+              bottomTexts: [
+                textUnit('c1', '示意图', source: const Rect.fromLTWH(0, 210, 100, 30)),
+              ],
             ),
           ],
           looseTexts: [
@@ -297,6 +425,11 @@ void main() {
           .whereType<TextElement>()
           .firstWhere((e) => e.text == '示意图');
       expect(caption.y, area.top + 200 + 8);
+      expect(
+        caption.x + caption.width / 2,
+        closeTo(area.left + 200, 0.01),
+        reason: '标签与图水平居中',
+      );
       // 阅读序：条目在图之后。
       final bullet = result.addElements
           .whereType<TextElement>()
@@ -336,12 +469,13 @@ void main() {
                 source: const Rect.fromLTWH(400, 100, 300, 200),
                 memberIds: ['img-a'],
               ),
-              caption: textUnit(
-                'c1',
-                '题注',
-                source: const Rect.fromLTWH(420, 310, 200, 30),
-              ),
-              figureAbove: true,
+              bottomTexts: [
+                textUnit(
+                  'c1',
+                  '题注',
+                  source: const Rect.fromLTWH(420, 310, 200, 30),
+                ),
+              ],
             ),
           ],
           looseTexts: [
@@ -411,13 +545,14 @@ void main() {
             source: const Rect.fromLTWH(1000, 0, 200, 150),
             memberIds: ['img-a'],
           ),
-          caption: inkTextUnit(
-            'c1',
-            '图注',
-            source: const Rect.fromLTWH(1010, 160, 80, 30),
-            memberIds: ['k-cap'],
-          ),
-          figureAbove: true,
+          bottomTexts: [
+            inkTextUnit(
+              'c1',
+              '图注',
+              source: const Rect.fromLTWH(1010, 160, 80, 30),
+              memberIds: ['k-cap'],
+            ),
+          ],
         ),
       ],
       looseTexts: [
@@ -460,7 +595,7 @@ void main() {
       // 图注墨迹随图下方；正文墨迹左对齐流。
       final content0 = keepInkContent();
       final captionTarget = movedRect(
-        content0.pairs.single.caption,
+        content0.pairs.single.bottomTexts.single,
         deltas[const ElementId('k-cap')]!,
       );
       final figureTarget = movedRect(
@@ -468,6 +603,11 @@ void main() {
         deltas[const ElementId('img-a')]!,
       );
       expect(captionTarget.top, closeTo(figureTarget.bottom + 24, 0.01));
+      expect(
+        captionTarget.center.dx,
+        closeTo(figureTarget.center.dx, 0.01),
+        reason: '墨迹标签与图水平居中',
+      );
       final bodyTarget = movedRect(
         content0.looseTexts.single,
         deltas[const ElementId('k-t1')]!,
@@ -523,10 +663,15 @@ void main() {
       );
       expect(figureTarget.left, area.right - 200);
       final captionTarget = movedRect(
-        content0.pairs.single.caption,
+        content0.pairs.single.bottomTexts.single,
         deltas[const ElementId('k-cap')]!,
       );
       expect(captionTarget.top, closeTo(figureTarget.bottom + 8, 0.01));
+      expect(
+        captionTarget.center.dx,
+        closeTo(figureTarget.center.dx, 0.01),
+        reason: '墨迹标签与图水平居中',
+      );
     });
 
     test('inplace：文本墨迹完全不动（仅预览占位），结果可用', () {
@@ -542,7 +687,7 @@ void main() {
         result.previewRects.toSet(),
         {
           content0.title!.sourceBounds,
-          content0.pairs.single.caption.sourceBounds,
+          content0.pairs.single.bottomTexts.single.sourceBounds,
           content0.looseTexts.single.sourceBounds,
         },
         reason: '墨迹不动，预览即原稿包围盒',
@@ -599,6 +744,35 @@ void main() {
       final blocks = result!.document.blocks;
       expect(blocks.map((b) => b.text), ['第一段', '第二段']);
       expect(blocks.map((b) => b.order), [0, 1]);
+    });
+  });
+
+  group('FigureTextPair.bind（标签分栈）', () {
+    test('原稿 top 小于图 top 归上栈，其余（含侧方）归下栈；各栈按阅读序', () {
+      // Given：一枚图与四枚标签（上、下、侧、再下）。
+      // When：bind；Then：上/下栈划分与排序确定。
+      final figure = figureUnit(
+        'f1',
+        const Size(200, 200),
+        source: const Rect.fromLTWH(100, 100, 200, 200),
+      );
+      final pair = FigureTextPair.bind(figure: figure, texts: [
+        textUnit('below1', '下注一', source: const Rect.fromLTWH(100, 310, 80, 30)),
+        textUnit('above1', '上标一', source: const Rect.fromLTWH(110, 40, 80, 30)),
+        textUnit('side1', '图1', source: const Rect.fromLTWH(310, 150, 60, 30)),
+        textUnit('above2', '上标二', source: const Rect.fromLTWH(30, 60, 60, 30)),
+      ]);
+      expect(
+        pair.topTexts.map((u) => u.key),
+        ['above1', 'above2'],
+        reason: '上栈按阅读序（top→left）',
+      );
+      expect(
+        pair.bottomTexts.map((u) => u.key),
+        ['side1', 'below1'],
+        reason: '侧方标签（top 不小于图 top）归下栈并按阅读序',
+      );
+      expect(pair.texts, hasLength(4), reason: 'texts 覆盖全部标签');
     });
   });
 }

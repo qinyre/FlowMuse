@@ -168,7 +168,7 @@ void main() {
     expect(
       {
         for (final pair in preparation.content.pairs)
-          pair.caption.textElement!.text: pair.figure.size,
+          for (final unit in pair.texts) unit.textElement!.text: pair.figure.size,
       },
       {
         '图1': const Size(900, 506),
@@ -275,6 +275,239 @@ void main() {
       );
       controller.cancelSmartLayoutDraft();
     }
+  });
+
+  testWidgets('走查复现：两图各带上/侧/下三标签+底部两句——六标签全部入对、孤行居中、栈随图',
+      (tester) async {
+    tester.view.physicalSize = const Size(1600, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final controller = _buildController();
+    // Given：用户实测场景——标题；宽图（图1：上方"小懒羊睡觉"、右侧"图1"、
+    // 下方"图1介绍"）；窄图（图2：上方"小猫"、左侧"图2"、下方"图2介绍"）；
+    // 底部两句正文。VLM 不返回任何 pairId（走查实况），逼出客户端多标签兜底。
+    void addStroke(String id, double x, double y, double w, double h) {
+      controller.applyResult(AddElementResult(_stroke(id, 's-$id', x, y, w, h)));
+    }
+
+    addStroke('l-title', 300, 150, 160, 44);
+    addStroke('l-above1', 380, 300, 240, 40); // 小懒羊睡觉（距图1顶 60pt）
+    addStroke('l-side1', 1130, 500, 60, 40); // 图1（距图1右缘 30pt）
+    addStroke('l-below1', 400, 950, 160, 40); // 图1介绍（距图1底 44pt）
+    addStroke('l-above2', 1200, 900, 80, 40); // 小猫（距图2顶 60pt）
+    addStroke('l-side2', 1020, 1100, 60, 40); // 图2（距图2左缘 20pt）
+    addStroke('l-below2', 1200, 1340, 160, 40); // 图2介绍（距图2底 40pt）
+    addStroke('l-end1', 300, 1900, 80, 40); // 结尾（远离两图）
+    addStroke('l-end2', 400, 1980, 300, 40); // 小猫和懒羊羊都懒（远离两图）
+    controller.applyResult(
+      AddElementResult(
+        ImageElement(
+          id: const ElementId('img-sheep'),
+          x: 200,
+          y: 400,
+          width: 900,
+          height: 506,
+          fileId: 'file-sheep',
+        ),
+      ),
+    );
+    controller.applyResult(
+      AddElementResult(
+        ImageElement(
+          id: const ElementId('img-cat'),
+          x: 1100,
+          y: 1000,
+          width: 400,
+          height: 300,
+          fileId: 'file-cat',
+        ),
+      ),
+    );
+    // 阅读序编号：m1 标题、m2 小懒羊睡觉、m3 图1(羊)、m4 图1、m5 小猫、
+    // m6 图1介绍、m7 图2(猫)、m8 图2、m9 图2介绍、m10 结尾、m11 结句。
+    controller.onVisionSmartLayout = (request) async {
+      expect(request.marks, hasLength(11), reason: '9 个手写簇 + 2 张图全部编号');
+      return SmartLayoutVisionResponse(
+        elements: [
+          _visionElement('title', '我的画作', request.marks[0]),
+          _visionElement('body', '小懒羊睡觉', request.marks[1]),
+          _visionElement('figure', '', request.marks[2]),
+          _visionElement('body', '图1', request.marks[3]),
+          _visionElement('body', '小猫', request.marks[4]),
+          _visionElement('body', '图1介绍', request.marks[5]),
+          _visionElement('figure', '', request.marks[6]),
+          _visionElement('body', '图2', request.marks[7]),
+          _visionElement('body', '图2介绍', request.marks[8]),
+          _visionElement('body', '结尾', request.marks[9]),
+          _visionElement('body', '小猫和懒羊羊都懒', request.marks[10]),
+        ],
+      );
+    };
+    // When：识别准备。
+    final preparation = (await tester.runAsync(
+      () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+    ))!;
+    // Then(1)：六个标签全部进对（一图收三标签），looseTexts 仅剩底部两句。
+    expect(preparation.content.pairs, hasLength(2));
+    final sheepPair = preparation.content.pairs[0];
+    final catPair = preparation.content.pairs[1];
+    expect(sheepPair.figure.key, 'img-sheep');
+    expect(sheepPair.topTexts.map((u) => u.textElement!.text), ['小懒羊睡觉']);
+    expect(sheepPair.bottomTexts.map((u) => u.textElement!.text), [
+      '图1',
+      '图1介绍',
+    ], reason: '侧标与下注归下栈、按原稿阅读序');
+    expect(catPair.figure.key, 'img-cat');
+    expect(catPair.topTexts.map((u) => u.textElement!.text), ['小猫']);
+    expect(catPair.bottomTexts.map((u) => u.textElement!.text), ['图2', '图2介绍']);
+    expect(
+      preparation.content.looseTexts.map((u) => u.textElement!.text),
+      ['结尾', '小猫和懒羊羊都懒'],
+      reason: '六枚图旁标签不再混进正文流',
+    );
+    expect(preparation.content.looseFigures, isEmpty);
+
+    final contentArea = preparation.content.contentArea;
+    // Then(2)：handout 孤行窄图整行居中（第四轮主诉"一张居中一张偏左"）。
+    final handout = preparation.layouts[SmartLayoutTemplateKind.handout];
+    expect(handout, isNotNull);
+    final catDelta = handout!.moveDeltas[const ElementId('img-cat')]!;
+    final catTarget = Rect.fromLTWH(
+      1100 + catDelta.dx,
+      1000 + catDelta.dy,
+      400,
+      300,
+    );
+    expect(
+      catTarget.center.dx,
+      closeTo(contentArea.center.dx, 0.01),
+      reason: '孤行图与标签栈以内容区中心水平居中',
+    );
+    final sheepDelta = handout.moveDeltas[const ElementId('img-sheep')]!;
+    final sheepTarget = Rect.fromLTWH(
+      200 + sheepDelta.dx,
+      400 + sheepDelta.dy,
+      900,
+      506,
+    );
+    expect(sheepTarget.center.dx, closeTo(contentArea.center.dx, 0.01));
+
+    // Then(3)：标签栈居中于图；上栈 bottom 对齐图顶-24、下栈 top 对齐图底+24。
+    TextElement textOf(String text) => handout.addElements
+        .whereType<TextElement>()
+        .firstWhere((element) => element.text == text);
+    final above2 = textOf('小猫');
+    expect(above2.y + above2.height, closeTo(catTarget.top - 24, 0.01));
+    expect(above2.x + above2.width / 2, closeTo(catTarget.center.dx, 0.01));
+    final side2 = textOf('图2');
+    expect(side2.y, closeTo(catTarget.bottom + 24, 0.01));
+    expect(side2.x + side2.width / 2, closeTo(catTarget.center.dx, 0.01));
+    final below2 = textOf('图2介绍');
+    expect(below2.y, closeTo(side2.y + side2.height, 0.01), reason: '下栈内紧邻堆叠');
+    final above1 = textOf('小懒羊睡觉');
+    expect(above1.y + above1.height, closeTo(sheepTarget.top - 24, 0.01));
+    expect(above1.x + above1.width / 2, closeTo(sheepTarget.center.dx, 0.01));
+    final side1 = textOf('图1');
+    expect(side1.y, closeTo(sheepTarget.bottom + 24, 0.01));
+    final below1 = textOf('图1介绍');
+    expect(below1.y, closeTo(side1.y + side1.height, 0.01));
+
+    // Then(4)：底部两句贪心装行——宽度允许时共一行（行内 top 对齐）。
+    final end1 = textOf('结尾');
+    final end2 = textOf('小猫和懒羊羊都懒');
+    expect(end2.y, end1.y, reason: '两句共一行');
+    expect(end2.x, closeTo(end1.x + end1.width + 24, 0.01));
+
+    // Then(5)：previewRect 两两不交、全部 ⊆ 内容区。
+    final rects = handout.previewRects;
+    for (var i = 0; i < rects.length; i++) {
+      for (var j = i + 1; j < rects.length; j++) {
+        expect(
+          rects[i].overlaps(rects[j]),
+          isFalse,
+          reason: 'previewRect[$i]=${rects[i]} 与 [$j]=${rects[j]} 不应重叠',
+        );
+      }
+    }
+    for (final rect in rects) {
+      final contained =
+          contentArea.left <= rect.left &&
+          rect.right <= contentArea.right &&
+          contentArea.top <= rect.top &&
+          rect.bottom <= contentArea.bottom;
+      expect(contained, isTrue, reason: '$rect 应在内容区 $contentArea 内');
+    }
+
+    // Then(6)：保留手写变体同断言——九块文本墨迹逐一移动、不误删、占位齐备。
+    final inkLayout = preparation.layoutsKeepInk[SmartLayoutTemplateKind.handout];
+    expect(inkLayout, isNotNull);
+    expect(
+      inkLayout!.inkSlotRects,
+      hasLength(9),
+      reason: '标题 + 六标签 + 底部两句的墨迹全部有占位矩形',
+    );
+    final inkPlan = controller
+        .buildSmartLayoutPlanForTemplate(
+          preparation,
+          SmartLayoutTemplateKind.handout,
+          keepHandwriting: true,
+        )
+        .plan!;
+    expect(
+      inkPlan.moveDeltas.keys.map((id) => id.value),
+      containsAll([
+        'img-sheep',
+        'img-cat',
+        'l-title',
+        'l-above1',
+        'l-side1',
+        'l-below1',
+        'l-above2',
+        'l-side2',
+        'l-below2',
+        'l-end1',
+        'l-end2',
+      ]),
+      reason: '图旁标签墨迹随图一起移动，不再被转写替换',
+    );
+    expect(
+      inkPlan.removeIds,
+      isEmpty,
+      reason: '保留手写模式不删除任何文本墨迹',
+    );
+    Rect movedRect(Rect source, Offset delta) => Rect.fromLTWH(
+      source.left + delta.dx,
+      source.top + delta.dy,
+      source.width,
+      source.height,
+    );
+    final inkCatDelta = inkLayout.moveDeltas[const ElementId('img-cat')]!;
+    final inkCatTarget = movedRect(
+      const Rect.fromLTWH(1100, 1000, 400, 300),
+      inkCatDelta,
+    );
+    expect(
+      inkCatTarget.center.dx,
+      closeTo(contentArea.center.dx, 0.01),
+      reason: '保留手写孤行同样整行居中',
+    );
+    final inkAbove2 = movedRect(
+      const Rect.fromLTWH(1200, 900, 80, 40),
+      inkLayout.moveDeltas[const ElementId('l-above2')]!,
+    );
+    expect(inkAbove2.bottom, closeTo(inkCatTarget.top - 24, 0.01));
+    expect(inkAbove2.center.dx, closeTo(inkCatTarget.center.dx, 0.01));
+    final inkSide2 = movedRect(
+      const Rect.fromLTWH(1020, 1100, 60, 40),
+      inkLayout.moveDeltas[const ElementId('l-side2')]!,
+    );
+    expect(inkSide2.top, closeTo(inkCatTarget.bottom + 24, 0.01));
+    expect(inkSide2.center.dx, closeTo(inkCatTarget.center.dx, 0.01));
+    final inkBelow2 = movedRect(
+      const Rect.fromLTWH(1200, 1340, 160, 40),
+      inkLayout.moveDeltas[const ElementId('l-below2')]!,
+    );
+    expect(inkBelow2.top, closeTo(inkSide2.bottom, 0.01), reason: '墨迹栈内紧邻');
   });
 }
 

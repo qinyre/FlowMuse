@@ -67,19 +67,49 @@ class LayoutUnit {
   );
 }
 
-/// 图文配对：结构层绑定后版式层不拆散（LaTeX float / HTML figure 的共同经验）。
+/// 图文配对：一图与其全部图旁标签（上方/下方/侧方）——结构层绑定后版式
+/// 层不拆散（LaTeX float / HTML figure 的共同经验）。一图可收多个标签、
+/// 一文本只归一图；侧方标签原稿 top 不小于图 top，归入下方栈。
 class FigureTextPair {
   const FigureTextPair({
     required this.figure,
-    required this.caption,
-    required this.figureAbove,
+    this.topTexts = const [],
+    this.bottomTexts = const [],
   });
 
   final LayoutUnit figure;
-  final LayoutUnit caption;
 
-  /// 原稿中图在文的上方 → 排版顺序 [图, 文]，否则 [文, 图]。
-  final bool figureAbove;
+  /// 原稿位于图上方的标签（阅读序 top→left）。
+  final List<LayoutUnit> topTexts;
+
+  /// 其余标签（下方/侧方；阅读序 top→left）。
+  final List<LayoutUnit> bottomTexts;
+
+  /// 全部图旁标签（上栈在前）。
+  List<LayoutUnit> get texts => [...topTexts, ...bottomTexts];
+
+  /// 从图与若干标签构造：原稿 top 严格小于图 top 归 [topTexts]、其余归
+  /// [bottomTexts]；各列表按原稿阅读序（top→left）排序（确定性）。
+  factory FigureTextPair.bind({
+    required LayoutUnit figure,
+    required Iterable<LayoutUnit> texts,
+  }) {
+    final sorted = texts.toList()..sort((a, b) {
+      final byTop = a.sourceBounds.top.compareTo(b.sourceBounds.top);
+      return byTop != 0 ? byTop : a.sourceBounds.left.compareTo(b.sourceBounds.left);
+    });
+    return FigureTextPair(
+      figure: figure,
+      topTexts: [
+        for (final unit in sorted)
+          if (unit.sourceBounds.top < figure.sourceBounds.top) unit,
+      ],
+      bottomTexts: [
+        for (final unit in sorted)
+          if (unit.sourceBounds.top >= figure.sourceBounds.top) unit,
+      ],
+    );
+  }
 }
 
 /// 一页排版的语义结构（结构层产物，版式模板只消费它）。
@@ -101,11 +131,11 @@ class SmartLayoutContent {
   final List<LayoutUnit> looseTexts;
   final List<LayoutUnit> looseFigures;
 
-  /// 全部文本单元（标题 + 图注 + 松散段落）——keepAsInk 变换、墨迹笔迹
-  /// id 收集等按"文本单元"遍历的场景共用这一次枚举。
+  /// 全部文本单元（标题 + 图旁标签 + 松散段落）——keepAsInk 变换、墨迹
+  /// 笔迹 id 收集等按"文本单元"遍历的场景共用这一次枚举。
   Iterable<LayoutUnit> get textUnits => [
     ?title,
-    for (final pair in pairs) pair.caption,
+    for (final pair in pairs) ...pair.texts,
     ...looseTexts,
   ];
 
@@ -128,8 +158,8 @@ class SmartLayoutContent {
         for (final pair in pairs)
           FigureTextPair(
             figure: pair.figure,
-            caption: inkUnits[pair.caption]!,
-            figureAbove: pair.figureAbove,
+            topTexts: [for (final unit in pair.topTexts) inkUnits[unit]!],
+            bottomTexts: [for (final unit in pair.bottomTexts) inkUnits[unit]!],
           ),
       ],
       looseTexts: [for (final unit in looseTexts) inkUnits[unit]!],

@@ -3841,7 +3841,7 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
 
-    // pairId 配对：同 ID 的 caption+figure 各取第一项；figureAbove 按原稿几何。
+    // pairId 配对：同 ID 的 caption+figure 各取第一项（VLM 主注先落）。
     final captionIndexByPair = <String, int>{};
     for (final index in match.textClaims.keys) {
       if (index == titleIndex) continue;
@@ -3861,76 +3861,73 @@ class MarkdrawController extends ChangeNotifier {
         figureIndexByPair[pairId] = index;
       }
     }
+    // 一图可收多个标签、一文本只归一图：先收 VLM 主注，几何兜底再补漏。
+    final pairTextsByFigureIndex = <int, List<LayoutUnit>>{};
     final pairedTextIndexes = <int>{};
     final pairedFigureIndexes = <int>{};
-    final pairs = <FigureTextPair>[];
+    void attachText(int figureIndex, int textIndex) {
+      (pairTextsByFigureIndex[figureIndex] ??= []).add(makeTextUnit(textIndex));
+      pairedTextIndexes.add(textIndex);
+      // 图已被配对消费：不再落入 looseFigures（Set 幂等，多标签只记一次）。
+      pairedFigureIndexes.add(figureIndex);
+    }
+
     for (final entry in figureIndexByPair.entries) {
       final captionIndex = captionIndexByPair[entry.key];
       if (captionIndex == null) continue;
-      final figure = makeFigureUnit(entry.value);
-      if (figure == null || !textElementsByIndex.containsKey(captionIndex)) {
+      if (figureUnitByIndex[entry.value] == null ||
+          !textElementsByIndex.containsKey(captionIndex)) {
         continue;
       }
-      final caption = makeTextUnit(captionIndex);
-      pairs.add(
-        FigureTextPair(
-          figure: figure,
-          caption: caption,
-          figureAbove:
-              figure.sourceBounds.top <= caption.sourceBounds.top,
-        ),
-      );
-      pairedTextIndexes.add(captionIndex);
+      attachText(entry.value, captionIndex);
       pairedFigureIndexes.add(entry.value);
     }
 
     // 客户端几何配对兜底：VLM pairId 漏配时（走查实况：图注与图分家成独立
-    // 正文条目），role=caption 的未配对文本与"图N"式短标签按包围盒间隙就近
-    // 绑图。VLM 已配对结果优先，兜底只补漏；确定性见
-    // matchUnpairedCaptionsByGeometry。
+    // 正文条目），图旁短标签（caption 角色 / "图N"式 / 去空白 ≤10 字）按
+    // 包围盒间隙就近绑图补漏。分配语义"一图可收多标签、一文只归最近图"：
+    // 图侧无容量上限，已收 VLM 主注的图仍是合法兜底目标（pairId 主注 +
+    // 兜底标签同图成组）。确定性见 matchUnpairedCaptionsByGeometry。
     final fallbackPairs = matchUnpairedCaptionsByGeometry(
       captions: {
         for (final index in match.textClaims.keys)
           if (index != titleIndex &&
               !pairedTextIndexes.contains(index) &&
               textElementsByIndex.containsKey(index) &&
-              _isCaptionPairCandidate(vision.elements[index]))
+              _isFigureLabelPairCandidate(vision.elements[index]))
             index: (
               bounds: textSourceByIndex[index]!,
-              maxGap: _figureLabelPattern.hasMatch(
-                    vision.elements[index].text?.trim() ?? '',
-                  )
-                  ? kSmartLayoutFigureLabelPairMaxGap
-                  : kSmartLayoutCaptionPairMaxGap,
+              maxGap: _figureLabelPairMaxGap(vision.elements[index]),
             ),
       },
       figures: {
         for (final index in match.figureClaims.keys)
-          if (!pairedFigureIndexes.contains(index) &&
-              figureUnitByIndex[index] != null)
+          if (figureUnitByIndex[index] != null)
             index: figureUnitByIndex[index]!.sourceBounds,
       },
     );
-    for (final entry in fallbackPairs.entries) {
-      final figure = figureUnitByIndex[entry.value]!;
-      final caption = makeTextUnit(entry.key);
-      pairs.add(
-        FigureTextPair(
-          figure: figure,
-          caption: caption,
-          figureAbove:
-              figure.sourceBounds.top <= caption.sourceBounds.top,
-        ),
-      );
-      pairedTextIndexes.add(entry.key);
-      pairedFigureIndexes.add(entry.value);
-    }
+    fallbackPairs.forEach((textIndex, figureIndex) {
+      attachText(figureIndex, textIndex);
+    });
 
     // 松散项按阅读顺序（先上后左）排列——确定性。
     int readingCompare(ui.Rect a, ui.Rect b) {
       final byTop = a.top.compareTo(b.top);
       return byTop != 0 ? byTop : a.left.compareTo(b.left);
     }
+
+    // 组装配对：每图一条 FigureTextPair（bind 按原稿几何分上/下标签栈），
+    // 配对按图原稿阅读序排序（不依赖 VLM 返回顺序，确定性）。
+    final pairs =
+        [
+          for (final entry in pairTextsByFigureIndex.entries)
+            FigureTextPair.bind(
+              figure: figureUnitByIndex[entry.key]!,
+              texts: entry.value,
+            ),
+        ]..sort(
+          (a, b) => readingCompare(a.figure.sourceBounds, b.figure.sourceBounds),
+        );
 
     final looseTexts =
         [
@@ -4360,11 +4357,27 @@ class MarkdrawController extends ChangeNotifier {
   /// 就近配对（间隙阈值放宽到 kSmartLayoutFigureLabelPairMaxGap）。
   static final RegExp _figureLabelPattern = RegExp(r'^图\s*\d*$');
 
-  /// 图注配对候选：role=caption，或"图N"式短标签（≤6 字）。
-  static bool _isCaptionPairCandidate(SmartLayoutVisionElement element) {
+  /// 去空白匹配（短标签判定用："图 1 介绍"与"图1介绍"同权）。
+  static final RegExp _whitespacePattern = RegExp(r'\s');
+
+  /// 图旁标签配对候选：caption 角色、"图N"式短标签（≤6 字），或去空白
+  /// 不超过 10 字的短文本块（走查实况：上方"小懒羊睡觉"/下方"图1介绍"
+  /// 这类短标签 role=body 且非图N，也需要绑图，不再散落正文）。
+  static bool _isFigureLabelPairCandidate(SmartLayoutVisionElement element) {
     if (element.role == 'caption') return true;
     final text = element.text?.trim() ?? '';
-    return text.isNotEmpty && text.length <= 6 && _figureLabelPattern.hasMatch(text);
+    if (text.isEmpty) return false;
+    return (text.length <= 6 && _figureLabelPattern.hasMatch(text)) ||
+        text.replaceAll(_whitespacePattern, '').length <= 10;
+  }
+
+  /// 候选标签与图的包围盒间隙上限："图N"式短标签用放宽档 96pt，其余
+  /// （caption 角色与短文本标签）用 64pt。
+  static double _figureLabelPairMaxGap(SmartLayoutVisionElement element) {
+    final text = element.text?.trim() ?? '';
+    return text.length <= 6 && _figureLabelPattern.hasMatch(text)
+        ? kSmartLayoutFigureLabelPairMaxGap
+        : kSmartLayoutCaptionPairMaxGap;
   }
 
   /// 纯标点/纯符号转写判定：不含任何字母/数字/CJK（如"、"、"~"）的文本
@@ -4384,25 +4397,25 @@ class MarkdrawController extends ChangeNotifier {
     r'\uAC00-\uD7AF\uF900-\uFAFF]',
   );
 
-  /// 图注几何配对兜底（纯函数）：VLM pairId 配对失败时，把未配对的图注
-  /// 按包围盒间隙就近绑到未配对的图。间隙 = x 向净距 + y 向净距（相交方向
-  /// 记 0），超过该项 maxGap 不可配；一图至多绑一注；距离同分取图 top 更小
-  /// 者；caption 按 index 升序消费（确定性）。返回 captionIndex → figureIndex。
+  /// 图旁标签几何配对兜底（纯函数）：VLM pairId 配对失败时，把未配对的
+  /// 图旁标签按包围盒间隙就近绑到未配对的图。分配语义"一图可收多标签、
+  /// 一文只归一图"：每个文本取（间隙, 图 top, 图 index）字典序最小且不超
+  /// 过该项 maxGap 的图——等价于对全部（文本，图）候选边按间隙升序做全局
+  /// 贪心（图侧无容量上限，文本间互不争用，同分图取 top 小者、文本按
+  /// index 升序消费）。确定性：同输入同输出。返回 textIndex → figureIndex。
   @visibleForTesting
   static Map<int, int> matchUnpairedCaptionsByGeometry({
     required Map<int, ({ui.Rect bounds, double maxGap})> captions,
     required Map<int, ui.Rect> figures,
   }) {
     final result = <int, int>{};
-    final takenFigures = <int>{};
     final figureIndexes = figures.keys.toList()..sort();
-    for (final captionIndex in captions.keys.toList()..sort()) {
-      final caption = captions[captionIndex]!;
+    for (final textIndex in captions.keys.toList()..sort()) {
+      final caption = captions[textIndex]!;
       int? bestFigure;
       var bestDistance = double.infinity;
       var bestTop = double.infinity;
       for (final figureIndex in figureIndexes) {
-        if (takenFigures.contains(figureIndex)) continue;
         final figureBounds = figures[figureIndex]!;
         final distance = _boundingBoxGap(caption.bounds, figureBounds);
         if (distance > caption.maxGap) continue;
@@ -4414,8 +4427,7 @@ class MarkdrawController extends ChangeNotifier {
         }
       }
       if (bestFigure != null) {
-        result[captionIndex] = bestFigure;
-        takenFigures.add(bestFigure);
+        result[textIndex] = bestFigure;
       }
     }
     return result;

@@ -757,12 +757,15 @@ void main() {
         () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
       ))!;
       expect(preparation.content.pairs, hasLength(1), reason: '图注应兜底与图成组');
-      expect(preparation.content.pairs.single.caption.textElement!.text, '图注一');
+      expect(
+        preparation.content.pairs.single.bottomTexts.single.textElement!.text,
+        '图注一',
+      );
       expect(preparation.content.pairs.single.figure.key, 'img-cat');
       expect(
-        preparation.content.pairs.single.figureAbove,
-        isTrue,
-        reason: 'figureAbove 沿用原稿几何规则（图在注上方）',
+        preparation.content.pairs.single.topTexts,
+        isEmpty,
+        reason: '原稿在图下方的图注归下方栈',
       );
       expect(
         preparation.content.looseTexts.map((u) => u.textElement!.text),
@@ -770,6 +773,69 @@ void main() {
         reason: '图注不应再混进正文流',
       );
       expect(preparation.content.looseFigures, isEmpty);
+    });
+
+    testWidgets('VLM pairId 主注 + 几何兜底标签同图成组：一图收多标签、各归上下栈',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: const ElementId('img-cat'),
+            x: 700,
+            y: 600,
+            width: 600,
+            height: 600,
+            fileId: 'file-cat',
+          ),
+        ),
+      );
+      // 兜底标签：上方短标签"小猫"（距图顶 60pt ≤ 64）、侧方"图1"
+      // （x 间隙 30pt ≤ 96 的图N 放宽档）；pairId 主注"流水明细"紧贴图下缘。
+      _addStroke(controller, 'k-top', 'top', 800, 500, 100, 40);
+      _addStroke(controller, 'k-side', 'side', 1330, 700, 60, 40);
+      _addStroke(controller, 'k-cap', 'cap', 720, 1250, 120, 40);
+      controller.onVisionSmartLayout = (request) async {
+        expect(request.marks, hasLength(6), reason: '两簇正文 + 上标签 + 图 + 侧标 + 图注');
+        // 阅读序：m1/m2 两簇正文、m3 上标签、m4 图、m5 侧标、m6 图注。
+        return SmartLayoutVisionResponse(
+          elements: [
+            _visionElement('body', '正文一段', ['m1']),
+            // 上方标签：role=body、无 pairId——靠几何兜底补充。
+            _visionElement('body', '小猫', ['m3']),
+            _visionElement('figure', '', ['m4'], pairId: 'pair-1'),
+            _visionElement('body', '图1', ['m5']),
+            // pairId 主注：紧贴图下缘的 caption。
+            _visionElement('caption', '流水明细', ['m6'], pairId: 'pair-1'),
+          ],
+        );
+      };
+      final preparation = (await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      ))!;
+      expect(preparation.content.pairs, hasLength(1), reason: '主注与兜底标签同图成组');
+      final pair = preparation.content.pairs.single;
+      expect(pair.figure.key, 'img-cat');
+      expect(
+        pair.topTexts.map((u) => u.textElement!.text),
+        ['小猫'],
+        reason: '原稿在图上方的兜底标签归上栈',
+      );
+      expect(
+        pair.bottomTexts.map((u) => u.textElement!.text),
+        ['图1', '流水明细'],
+        reason: '下栈含侧方图N与 pairId 主注，按原稿阅读序',
+      );
+      expect(
+        preparation.content.looseTexts.map((u) => u.textElement!.text),
+        ['正文一段'],
+        reason: '三枚标签都不再混进正文流',
+      );
     });
 
     testWidgets('"图N"式标签即使 role=body 也参与就近配对（间隙放宽到 96pt）',
@@ -806,7 +872,10 @@ void main() {
         () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
       ))!;
       expect(preparation.content.pairs, hasLength(1));
-      expect(preparation.content.pairs.single.caption.textElement!.text, '图 1');
+      expect(
+        preparation.content.pairs.single.bottomTexts.single.textElement!.text,
+        '图 1',
+      );
       expect(preparation.content.looseTexts, isEmpty);
     });
 
@@ -1051,10 +1120,12 @@ void main() {
       controller.cancelSmartLayoutDraft();
     });
 
-    test('配对兜底纯函数：距离同分取图 top 更小者、一图至多一注、超阈不绑', () {
-      // Given：两个与图注等距（60pt）的候选图，top 不同；一个超阈远图。
+    test('配对兜底纯函数：就近分配、一图可收多标签、同分取图 top 小者、超阈不绑',
+        () {
+      // Given：两个与图注10等距（60pt）的候选图（top 不同）、一个超阈远图，
+      // 以及两枚都贴图2的标签（多标签场景）。
       // When：matchUnpairedCaptionsByGeometry。
-      // Then：绑 top 更小者；第二注绑次近图；远图不绑。
+      // Then：图注10绑 top 更小者；两枚标签同图成组；远图不绑。
       final figures = {
         2: const Rect.fromLTWH(230, 570, 100, 100), // 距 caption10 30+30=60，top 570
         5: const Rect.fromLTWH(-50, 550, 100, 100), // 距 caption10 50+10=60，top 550
@@ -1070,11 +1141,16 @@ void main() {
             bounds: const Rect.fromLTWH(230, 720, 80, 30),
             maxGap: kSmartLayoutCaptionPairMaxGap,
           ),
+          12: (
+            bounds: const Rect.fromLTWH(235, 715, 80, 30),
+            maxGap: kSmartLayoutCaptionPairMaxGap,
+          ),
         },
         figures: figures,
       );
       expect(result[10], 5, reason: '距离同分取图 top 更小者（确定性）');
-      expect(result[11], 2, reason: '一图至多绑一注，第二注绑次近可用图');
+      expect(result[11], 2, reason: '距图2最近（50pt）');
+      expect(result[12], 2, reason: '一图可收多标签：同图收两注不互斥');
       expect(result.containsValue(9), isFalse, reason: '超阈不绑');
     });
   });
