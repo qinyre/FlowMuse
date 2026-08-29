@@ -380,4 +380,15 @@ v2 采用最小兼容方案：
 | P2 | markdraw_controller._encodeStrokePressure | 属实：逐事件实时读 _activeBrushType/灵敏度，最终元素笔型取抬笔时 toolContext，中途切笔产生混合编码 | pointer-down 冻结笔型+灵敏度快照（toolContext 与编码共用），_finishActivePreviewStroke 解除；补中途切笔与未切笔逐点一致测试 |
 | P3 | 计划文档 | 属实：头部仍"待执行"、§16 最终提交/Issue 行过期 | 头部改"已执行完毕（PR #20 待合并）"；§16 提交链/Issue 行更新 |
 
-门禁：analyze 48=基线零新增，797 测试全绿（净增 7 例）。评审对核心路线（BrushRenderProfile/压力冻结/可视边界/湿墨 taper/darken/SVG 真实轮廓）与工程事实（790 测试、无新依赖、移除 material_symbols_icons）的正面确认与当日状态一致。
+门禁：analyze 48=基线零新增，797 测试全绿（较上轮净增 7 例）。评审对核心路线（BrushRenderProfile/压力冻结/可视边界/湿墨 taper/darken/SVG 真实轮廓）与工程事实（无新依赖、移除 material_symbols_icons）的正面确认与当日状态一致。
+
+### 15.1 复审二轮（同日）：阻断项 P1×2 核实与修复
+
+评审确认一轮五类修复全部到位，另提 2 个 P1 阻断项，逐条核实**均属实**，已修复（fix 提交 e83618a）：
+
+| 级别 | 位置 | 核实结论 | 修复 |
+| --- | --- | --- | --- |
+| P1 | pencil_shader.dart acquire() | 属实：catch 只置 _loadFailed 未清 _program，acquire 不读该标志，下一帧仍重复 fragmentShader() 逐帧失败刷日志 | 实例创建失败与 uniform 失败并入同一条降级链：catch 统一走 disablePermanently 清空 program/instance/uniforms，永不重试；新增注入测试断言「多次 acquire 仅创建一次、isAvailable 转 false」 |
+| P1 | freedraw_renderer.dart buildPencilGrainPath | 属实：弧长采样后循环次数 ∝ totalLength/step，超长两点导入笔迹（长度百万级）会生成数十万子路径阻塞单帧 | 步长按总长动态扩大：effectiveStep = max(size/3, totalLength/4096)，子路径数有界（硬上限 maxGrainCount=4096 公开为测试常量）；新增超长两点笔迹数量有界测试；常规长度步长不受影响（密度测试守护） |
+
+门禁：analyze 48=基线零新增，**799 测试全绿**（较 §15 上轮净增 2 例）。文档数字已同步校准（计划 §16 最终提交链/测试计数）。
