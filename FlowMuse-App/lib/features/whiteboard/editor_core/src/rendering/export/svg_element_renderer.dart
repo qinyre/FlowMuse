@@ -417,9 +417,12 @@ class SvgElementRenderer {
     buf.write('/>');
 
     if (profile.usesPencilTexture) {
+      // 纹理层透明度 = 基准 0.4 × 元素最终 opacity（与光栅路径一致：
+      // 光栅颗粒 paint 的 alpha = 元素色 alpha × 0.5，元素透明时颗粒
+      // 同步消失）。固定值会让透明铅笔元素导出后仍显示颗粒。
       buf.write(
         '<path d="$d" fill="url(#pencil-grain-${element.id.value})" '
-        'opacity="0.4" stroke="none"/>',
+        'opacity="${_n(0.4 * opacity)}" stroke="none"/>',
       );
     }
   }

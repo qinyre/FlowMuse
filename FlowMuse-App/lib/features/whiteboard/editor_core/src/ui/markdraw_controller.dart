@@ -193,6 +193,11 @@ class MarkdrawController extends ChangeNotifier {
   bool _objectsSnapMode = false;
   double _pressureSensitivity = 0.7;
   BrushType _activeBrushType = BrushType.fountainPen;
+  // 书写中的笔型/灵敏度冻结（pointer-down 时快照）：书写中经第二指针
+  // 或快捷操作切笔时，湿墨、逐点压力编码与最终元素笔型必须取同一份
+  // 快照，否则已编码压力与最终 profile 错配（宽度/透明度跳变）。
+  BrushType? _strokeBrushTypeOverride;
+  double? _strokeSensitivityOverride;
   bool _hasSelectedBrush = false;
   bool _brushPaletteRequested = false;
   bool _inkRecognitionMode = false;
@@ -429,11 +434,23 @@ class MarkdrawController extends ChangeNotifier {
   /// 创建自由笔画时的唯一压力编码点：把当前笔刷与灵敏度烘焙进
   /// pressure 值（此后 pressures/live-ink/元素数据全程携带已编码值）。
   /// 圆珠笔与荧光笔忽略真实压感，恒返回 null（恒宽 + 速度模拟路径）。
+  /// 笔刷与灵敏度取 pointer-down 冻结快照，书写中切笔不改变本笔编码。
   double? _encodeStrokePressure(double? raw) {
     if (raw == null) return null;
-    final profile = BrushRenderProfile.forType(_activeBrushType);
+    final profile = BrushRenderProfile.forType(
+      _strokeBrushTypeOverride ?? _activeBrushType,
+    );
     if (!profile.pressureEnabled) return null;
-    return profile.encodePressure(raw, _pressureSensitivity);
+    return profile.encodePressure(
+      raw,
+      _strokeSensitivityOverride ?? _pressureSensitivity,
+    );
+  }
+
+  /// 自由笔画开始（pointer-down 进入创建分支）时冻结笔型与灵敏度。
+  void _freezeStrokeBrush() {
+    _strokeBrushTypeOverride ??= _activeBrushType;
+    _strokeSensitivityOverride ??= _pressureSensitivity;
   }
 
   /// 轮廓渲染模式：polygon(直线段)或 quadratic(二次贝塞尔平滑)。
@@ -629,6 +646,8 @@ class MarkdrawController extends ChangeNotifier {
   };
 
   /// Builds a [ToolContext] snapshot from current state for tool callbacks.
+  /// 书写进行中（[_strokeBrushTypeOverride] 非空）笔型取 pointer-down
+  /// 冻结值，保证整个笔画生命周期内的湿墨与元素提交一致。
   ToolContext get toolContext => ToolContext(
     scene: _editorState.scene,
     viewport: _editorState.viewport,
@@ -638,7 +657,7 @@ class MarkdrawController extends ChangeNotifier {
     isEditingLinear: _isEditingLinear,
     gridSize: _gridSize,
     objectsSnapMode: _objectsSnapMode,
-    brushType: _activeBrushType,
+    brushType: _strokeBrushTypeOverride ?? _activeBrushType,
     inkRecognitionMode: _inkRecognitionMode,
   );
 
@@ -2206,6 +2225,7 @@ class MarkdrawController extends ChangeNotifier {
       }
 
       _sceneBeforeDrag = _editorState.scene;
+      _freezeStrokeBrush();
       _startActivePreviewStroke();
       applyResult(
         _activeTool.onPointerDown(
@@ -2708,6 +2728,9 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   void _finishActivePreviewStroke(ActivePreviewTerminalReason reason) {
+    // 笔画终止：解除笔型/灵敏度冻结，恢复正常实时取值。
+    _strokeBrushTypeOverride = null;
+    _strokeSensitivityOverride = null;
     final strokeEpoch = _activePreviewStrokeEpoch;
     if (strokeEpoch != null) {
       activePreviewMetricsProbe?.finishStroke(strokeEpoch, reason);

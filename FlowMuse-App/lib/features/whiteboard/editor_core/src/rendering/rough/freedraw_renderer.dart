@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:perfect_freehand/perfect_freehand.dart' hide Point;
 
 import '../../core/math/math.dart';
@@ -289,10 +290,13 @@ class FreedrawRenderer {
         // 恒等矩阵，由调用方传入真实回放缩放，保证 shader 颗粒频率与
         // 直接绘制同源；直接绘制传 null，按当前 canvas 矩阵推算。
         final effectiveScale = deviceScale ?? canvasScale(canvas);
-        uniforms.apply(c, c.a, 4.0 / size / effectiveScale);
-        paint.shader = shader;
-        paint.color = const Color(0xFFFFFFFF); // shader 负责着色
-        pencilShaderApplied = true;
+        // apply 内部自捕获引擎层异常：失败返回 false 时实例已被永久
+        // 清理，本次与后续绘制都走下方确定性颗粒降级。
+        if (uniforms.apply(c, c.a, 4.0 / size / effectiveScale)) {
+          paint.shader = shader;
+          paint.color = const Color(0xFFFFFFFF); // shader 负责着色
+          pencilShaderApplied = true;
+        }
       }
     }
 
@@ -300,7 +304,7 @@ class FreedrawRenderer {
 
     if (usePencilTexture && !pencilShaderApplied) {
       final wholeLength = wholeStrokeRawLength ?? _polylineLength(points);
-      final grainPath = _buildPencilGrainPath(
+      final grainPath = buildPencilGrainPath(
         points,
         size,
         skipStart: profile.startTaperDistance(style.strokeWidth, wholeLength),
@@ -329,12 +333,15 @@ class FreedrawRenderer {
     return scale <= 0 ? 1.0 : scale;
   }
 
-  /// 降级铅笔颗粒：沿中心线按 size/3 步长布点，每点一条垂直短线，
-  /// 长度与切向偏移由 [PencilGrainHash] 派生（确定性：同输入同输出）。
-  /// 笔锋区间（[skipStart]/[skipEnd] 弧长）不布颗粒——轮廓在收锋区
-  /// 变窄，全宽颗粒会越出轮廓。所有线段并入一条 Path，绘制侧只产生
-  /// 一次额外 drawPath。
-  static Path _buildPencilGrainPath(
+  /// 降级铅笔颗粒：沿中心线折线按弧长等距布点——步长为 size/3 场景
+  /// 距离，位置插值到精确弧长处。输入链只有最小距离过滤、点距不均，
+  /// 按输入点下标取样会使颗粒密度随报点率/书写速度漂移，故必须按实际
+  /// 弧长。每点一条垂直短线，长度与切向偏移由 [PencilGrainHash] 派生
+  /// （确定性：同输入同输出）。笔锋区间（[skipStart]/[skipEnd] 弧长）
+  /// 不布颗粒——轮廓在收锋区变窄，全宽颗粒会越出轮廓。所有线段并入
+  /// 一条 Path，绘制侧只产生一次额外 drawPath。
+  @visibleForTesting
+  static Path buildPencilGrainPath(
     List<Point> points,
     double size, {
     double skipStart = 0,
@@ -342,36 +349,39 @@ class FreedrawRenderer {
   }) {
     final path = Path();
     if (points.length < 2) return path;
-    final stride = math.max(1, (size / 3).round());
+    final step = math.max(0.5, size / 3);
     final first = points.first;
     final totalLength = _polylineLength(points);
-    var arc = 0.0;
-    for (var i = 0; i < points.length; i++) {
-      if (i > 0) {
-        final dx = points[i].x - points[i - 1].x;
-        final dy = points[i].y - points[i - 1].y;
-        arc += math.sqrt(dx * dx + dy * dy);
+    var grainIndex = 0;
+    var segStartArc = 0.0;
+    var nextAt = 0.0;
+    for (var i = 0; i < points.length - 1; i++) {
+      final dx = points[i + 1].x - points[i].x;
+      final dy = points[i + 1].y - points[i].y;
+      final segLen = math.sqrt(dx * dx + dy * dy);
+      if (segLen < 1e-9) continue;
+      final segEndArc = segStartArc + segLen;
+      final tx = dx / segLen;
+      final ty = dy / segLen;
+      while (nextAt <= segEndArc && nextAt <= totalLength + 1e-9) {
+        final t = (nextAt - segStartArc) / segLen;
+        final cx = points[i].x + dx * t;
+        final cy = points[i].y + dy * t;
+        final remaining = totalLength - nextAt;
+        if (nextAt >= skipStart && remaining >= skipEnd) {
+          final h1 = PencilGrainHash.hash(first.x, first.y, size, grainIndex);
+          final h2 = PencilGrainHash.hash(first.y, size, first.x, grainIndex + 1);
+          final half = size / 2 * (0.3 + 0.6 * h1);
+          final shift = (h2 - 0.5) * step * 0.5;
+          final px = cx + tx * shift;
+          final py = cy + ty * shift;
+          path.moveTo(px - ty * half, py + tx * half);
+          path.lineTo(px + ty * half, py - tx * half);
+        }
+        grainIndex++;
+        nextAt += step;
       }
-      if (i % stride != 0) continue;
-      // 跳过笔锋区间
-      final remaining = totalLength - arc;
-      if (arc < skipStart || remaining < skipEnd) continue;
-      final prev = points[i > 0 ? i - 1 : i];
-      final next = points[i < points.length - 1 ? i + 1 : i];
-      var tx = next.x - prev.x;
-      var ty = next.y - prev.y;
-      final tLen = math.sqrt(tx * tx + ty * ty);
-      if (tLen < 1e-9) continue;
-      tx /= tLen;
-      ty /= tLen;
-      final h1 = PencilGrainHash.hash(first.x, first.y, size, i);
-      final h2 = PencilGrainHash.hash(first.y, size, first.x, i + 1);
-      final half = size / 2 * (0.3 + 0.6 * h1);
-      final shift = (h2 - 0.5) * stride * 0.5;
-      final cx = points[i].x + tx * shift;
-      final cy = points[i].y + ty * shift;
-      path.moveTo(cx - ty * half, cy + tx * half);
-      path.lineTo(cx + ty * half, cy - tx * half);
+      segStartArc = segEndArc;
     }
     return path;
   }

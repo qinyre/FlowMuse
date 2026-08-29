@@ -16,6 +16,7 @@ void main() {
     BrushType brush, {
     List<double>? pressures,
     double strokeWidth = 4,
+    double opacity = 1.0,
     String id = 'stroke-1',
     Map<String, Object?>? customData,
   }) => FreedrawElement(
@@ -30,6 +31,7 @@ void main() {
     pressures: pressures ?? pressureRamp.pressures,
     simulatePressure: false,
     isComplete: true,
+    opacity: opacity,
     customData: customDataWithFreedrawRender(customData, brush),
     strokeColor: brush == BrushType.highlighter ? '#ffff00' : '#1e1e1e',
     strokeWidth: strokeWidth,
@@ -108,6 +110,27 @@ void main() {
     expect(b, contains('id="pencil-grain-pencil-b"'), reason: '文档内唯一');
     // pattern 是轻量小 tile（不随点数线性膨胀）
     expect(a.length, lessThan(20000));
+  });
+
+  test('P2-1: 铅笔纹理层透明度继承元素最终 opacity（0 / 0.25 / 1.0）', () {
+    // 元素最终 opacity = element.opacity × profile.opacityScale（铅笔
+    // 0.68，与主体轮廓的写出口径一致）；纹理层再乘基准 0.4。
+    final full = SvgElementRenderer.render(
+      strokeOf(BrushType.pencil, id: 'tex-op-1'),
+    );
+    expect(full, contains('opacity="0.27"'));
+
+    final quarter = SvgElementRenderer.render(
+      strokeOf(BrushType.pencil, id: 'tex-op-25', opacity: 0.25),
+    );
+    expect(quarter, contains('opacity="0.07"'));
+
+    final zero = SvgElementRenderer.render(
+      strokeOf(BrushType.pencil, id: 'tex-op-0', opacity: 0),
+    );
+    // 透明元素的颗粒必须同步消失（此前固定 0.4 会泄漏颗粒）。
+    expect(zero, contains('opacity="0"'));
+    expect(zero, isNot(contains('opacity="0.4"')));
   });
 
   test('单点与空点的显式输出规则', () {

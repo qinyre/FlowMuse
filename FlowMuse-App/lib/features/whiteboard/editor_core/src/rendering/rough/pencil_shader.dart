@@ -72,10 +72,23 @@ abstract class PencilShader {
     try {
       return _uniforms ??= PencilShaderUniforms.bind(shader);
     } catch (e) {
-      _loadFailed = true;
+      disablePermanently(e);
       debugPrint('PencilShader: uniform bind failed (${e.runtimeType})');
       return null;
     }
+  }
+
+  /// 运行时失败（加载后的实例创建、uniform 绑定/写入等任何引擎层异常）
+  /// 的永久降级：清理实例与缓存，此后 [acquire]/[uniforms] 恒返回
+  /// null，绘制走确定性颗粒路径，不再逐帧重试。
+  static void disablePermanently(Object cause) {
+    _loadFailed = true;
+    _uniforms = null;
+    _instance?.dispose();
+    _instance = null;
+    _program = null;
+    debugPrint('PencilShader: runtime failure, fallback to grain path '
+        '(${cause.runtimeType})');
   }
 
   /// 测试结束释放：dispose 绘制实例并回到未初始化态。
@@ -117,15 +130,23 @@ class PencilShaderUniforms {
     return PencilShaderUniforms._(shader);
   }
 
-  /// [color] 的 alpha 已包含元素 opacity 与笔刷 opacityScale；
-  /// 输出保持预乘 alpha。
-  void apply(Color color, double alpha, double freq) {
-    _shader
-      ..setFloat(_colorR, color.r)
-      ..setFloat(_colorG, color.g)
-      ..setFloat(_colorB, color.b)
-      ..setFloat(_opacity, alpha)
-      ..setFloat(_freq, freq);
+  /// 写入 uniform（调用方随后立即 drawPath）。返回是否成功；任何引擎层
+  /// 异常（如槽位越界）都判定该平台 shader 运行时不可用：永久清理实例
+  /// 转入确定性颗粒降级并返回 false——异常绝不抛进绘制帧，也绝不逐帧
+  /// 重试。
+  bool apply(Color color, double alpha, double freq) {
+    try {
+      _shader
+        ..setFloat(_colorR, color.r)
+        ..setFloat(_colorG, color.g)
+        ..setFloat(_colorB, color.b)
+        ..setFloat(_opacity, alpha)
+        ..setFloat(_freq, freq);
+      return true;
+    } catch (e) {
+      PencilShader.disablePermanently(e);
+      return false;
+    }
   }
 }
 
