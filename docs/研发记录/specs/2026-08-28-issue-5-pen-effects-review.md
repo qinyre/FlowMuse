@@ -343,3 +343,26 @@ v2 采用最小兼容方案：
 - **矩阵产物**：`brush_visual_matrix_test.dart` 同轨迹同名义笔宽渲染五行（BrushType.values 序：铅笔/圆珠笔/钢笔/毛笔/荧光笔），产物 `build/brush_visual_matrix/matrix.png|matrix.svg`；两两差异自动门禁（着墨差异占并集 >5%，共用管线回归塌缩即红）。
 - **子代理盲判**：视觉审查代理在不知道行序的前提下逐行判为 铅笔/圆珠笔/钢笔/毛笔/荧光笔——**五判全中**；区分度 5/5，无不可分辨对（最难 铅笔 vs 圆珠笔：灰色半透明+颗粒+柔边 vs 纯黑+光滑+锐边，并排一眼可分）。盲判标注的两处瑕疵（荧光笔边缘锯齿/颗粒越界）经 3× 放大复核为缩略图尺度下的抗锯齿误读：平头端帽清晰、边缘平滑、颗粒贴合包络无越界。
 - **浏览器 SVG 验收**：matrix.svg 内联页经 Chromium 实际渲染，五行俱全、darken 混合与铅笔 pattern 生效、荧光笔平头端帽与画布一致（截图 `build/brush_visual_matrix/matrix-svg-browser.png`）。过程发现并修正验收夹具两处问题（五元素未按行偏移；freedraw points 须相对元素原点的生产不变量），均属验收材料自身问题，非产物缺陷。
+
+## 14. 安卓真机验收与缺陷修复（2026-08-29）
+
+安卓平板（OPPO 一加系，USB 调试）部署 release APK 实测，发现两枚缺陷并当场修复：
+
+### 14.1 P1：铅笔在 Android 上零输出且逐帧杀死整块画布
+
+- **现象**：切换铅笔书写后笔迹不可见（数据层已入库，saveScene 持续增长），且此后切换任何笔型均无法书写；logcat 每帧刷 `Another exception was thrown`。
+- **根因**：`PencilShaderUniforms` 按 `getUniformFloat('uColor', n)` 名字绑定 uniform。Android 引擎产物未按契约填充按名查找所需的 `_uniformInfo` 元数据（Web 引擎正常，故 Web 验收未暴露），首帧抛 `Invalid argument(s): No uniform named "uColor"`，异常发生在绘制帧内且绑定结果每帧重试，`StaticCanvasPainter.paint` 整帧失败——所有笔型连带失效。program 加载本身有降级保护，但 uniform 绑定这一环没有。
+- **修复**：①改为按声明序下标绑定（`setFloat`：uColor 占 0-2、uOpacity=3、uFreq=4，与 shader 声明顺序一一对应，全引擎一致）；②`acquire()`/`uniforms()` 全部补不抛异常保护，任何失败置 `_loadFailed` 返回 null，走确定性颗粒降级路径——兑现类注释"任何平台失败都不抛异常"的既有承诺。
+- **验证**：analyze 48=基线、790 测试全绿；真机铅笔可见、颗粒正常、其他笔型无回归（用户实测确认）。
+
+### 14.2 P2：荧光笔/橡皮/markdown 图标渲染为实心块
+
+- **现象**：笔盒中荧光笔图标位为青绿实心圆角块（.notdef 兜底字形被着色）；修复一后橡皮图标在增量构建中同样变实心块（冷构建时曾正常）。
+- **根因**：material_symbols_icons 字体家族在本构建管线不可靠，且两次机理不同——`ink_highlighter` 为包内图标表与打包字体版本错位（字形缺失）；`ink_eraser` 为 release tree-shaking 在增量构建中静默丢字形。Material Icons 同管线始终正常。
+- **修复**：lib 内清除全部 material_symbols_icons 引用（共 5 处）：荧光笔 `Icons.highlight`；橡皮新增自绘 `EraserIconPainter`（斜置圆角矩形+笔尖分隔带，沿 `DiamondIconPainter` 先例，fork 的 Material Icons 无任何橡皮字形）；markdown×3 → `Icons.text_snippet`；并从 pubspec 移除该依赖（连带减重：无引用时其三份字体整包入库约 33MB）。
+- **验证**：同上门禁全绿；APK 246.2MB → 231MB 级；图标真机复核见 §14.3。
+
+### 14.3 遗留与观察
+
+- 真机 UI 图标复核（荧光笔/橡皮/markdown 按钮）与双人协作盲测仍待用户日常使用确认；铅笔 shader 下标绑定依赖 pencil.frag 声明顺序，已在代码注释双向标注。
+- 本轮暴露的构建环境坑（Android 引擎按名 uniform 元数据缺失、material_symbols_icons 字体不可靠）已沉淀至项目记忆，后续任何分支引入 Symbols 字体图标都会在真机复现实心块问题。
