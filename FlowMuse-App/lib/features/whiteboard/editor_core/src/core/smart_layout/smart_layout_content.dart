@@ -17,7 +17,6 @@ class LayoutUnit {
     required this.kind,
     this.textElement,
     this.element,
-    this.vertical = false,
     this.keepAsInk = false,
     this.memberIds = const [],
   });
@@ -36,7 +35,6 @@ class LayoutUnit {
 
   /// kind != text 时的场景元素。
   final Element? element;
-  final bool vertical;
 
   /// 保留手写：该文本单元以原稿墨迹整体占位（引擎用移动代替新增印刷体，
   /// 槽位用 [size]；生产方构造 keepAsInk 变体时 size 取原稿包围盒尺寸）。
@@ -55,7 +53,6 @@ class LayoutUnit {
     LayoutUnitKind? kind,
     TextElement? textElement,
     Element? element,
-    bool? vertical,
     bool? keepAsInk,
     List<String>? memberIds,
   }) => LayoutUnit(
@@ -65,7 +62,6 @@ class LayoutUnit {
     kind: kind ?? this.kind,
     textElement: textElement ?? this.textElement,
     element: element ?? this.element,
-    vertical: vertical ?? this.vertical,
     keepAsInk: keepAsInk ?? this.keepAsInk,
     memberIds: memberIds ?? this.memberIds,
   );
@@ -105,27 +101,38 @@ class SmartLayoutContent {
   final List<LayoutUnit> looseTexts;
   final List<LayoutUnit> looseFigures;
 
+  /// 全部文本单元（标题 + 图注 + 松散段落）——keepAsInk 变换、墨迹笔迹
+  /// id 收集等按"文本单元"遍历的场景共用这一次枚举。
+  Iterable<LayoutUnit> get textUnits => [
+    ?title,
+    for (final pair in pairs) pair.caption,
+    ...looseTexts,
+  ];
+
   /// 保留手写变体：全部文本单元改以原稿墨迹占位（keepAsInk），排版槽位
   /// 用原稿包围盒尺寸（印刷体测量尺寸不再参与版式计算）；图/形/组不变。
   /// 引擎据此用移动墨迹代替新增文本元素（"保留手写、仅重排位置"）。
   SmartLayoutContent withTextAsInk() {
-    LayoutUnit inkText(LayoutUnit unit) => unit.copyWith(
-      keepAsInk: true,
-      size: Size(unit.sourceBounds.width, unit.sourceBounds.height),
-    );
+    final inkUnits = <LayoutUnit, LayoutUnit>{
+      for (final unit in textUnits)
+        unit: unit.copyWith(
+          keepAsInk: true,
+          size: Size(unit.sourceBounds.width, unit.sourceBounds.height),
+        ),
+    };
     return SmartLayoutContent(
       pageId: pageId,
       contentArea: contentArea,
-      title: title == null ? null : inkText(title!),
+      title: title == null ? null : inkUnits[title!],
       pairs: [
         for (final pair in pairs)
           FigureTextPair(
             figure: pair.figure,
-            caption: inkText(pair.caption),
+            caption: inkUnits[pair.caption]!,
             figureAbove: pair.figureAbove,
           ),
       ],
-      looseTexts: [for (final unit in looseTexts) inkText(unit)],
+      looseTexts: [for (final unit in looseTexts) inkUnits[unit]!],
       looseFigures: looseFigures,
     );
   }

@@ -77,25 +77,11 @@ void main() {
     };
   }
 
-  /// 图文讲义卡缩略图的 painter（通过 CustomPaint 观测绘制数据）。
-  CustomPainter handoutThumbPainter(WidgetTester tester) =>
-      tester
-          .widget<CustomPaint>(
-            find
-                .descendant(
-                  of: find.byKey(const ValueKey('template-thumb-handout')),
-                  matching: find.byType(CustomPaint),
-                )
-                .first,
-          )
-          .painter!;
-
   Future<ValueNotifier<SmartLayoutTemplateChoice?>> openSheet(
     WidgetTester tester,
     SmartLayoutTemplatePreparation preparation, {
     bool allowSkip = false,
     bool keepHandwriting = false,
-    ValueChanged<bool>? onKeepHandwritingChanged,
   }) async {
     final picked = ValueNotifier<SmartLayoutTemplateChoice?>(null);
     await tester.pumpWidget(
@@ -110,7 +96,6 @@ void main() {
                     preparation: preparation,
                     allowSkip: allowSkip,
                     keepHandwriting: keepHandwriting,
-                    onKeepHandwritingChanged: onKeepHandwritingChanged,
                   );
                 },
                 child: const Text('open'),
@@ -244,27 +229,44 @@ void main() {
     expect(find.text('仅转写文字，版式保持原样'), findsOneWidget);
   });
 
-  testWidgets('未提供保留手写回调时不显示模式开关（向后兼容）', (tester) async {
+  testWidgets('无保留手写变体时不显示模式开关', (tester) async {
     await openSheet(tester, buildPreparation());
     expect(find.text('转写为印刷体'), findsNothing);
     expect(find.text('保留手写笔迹'), findsNothing);
   });
 
-  testWidgets('保留手写开关：显示、点击回调新值、可来回切换', (tester) async {
-    final events = <bool>[];
-    await openSheet(
+  testWidgets('保留手写开关：弹层内切换模式，选卡随返回 keepHandwriting', (tester) async {
+    final picked = await openSheet(
       tester,
-      buildPreparation(layoutsKeepInk: buildKeepInkLayouts()),
-      onKeepHandwritingChanged: events.add,
+      buildPreparation(
+        layoutsKeepInk: buildKeepInkLayouts(
+          missingKinds: {SmartLayoutTemplateKind.outline},
+        ),
+      ),
     );
     expect(find.text('转写为印刷体'), findsOneWidget);
     expect(find.text('保留手写笔迹'), findsOneWidget);
+    // 切到保留手写（弹层内部状态，无需外部回调）：outline 放不下置灰。
     await tester.tap(find.text('保留手写笔迹'));
     await tester.pumpAndSettle();
-    expect(events, [true]);
+    expect(tester.takeException(), isNull);
+    expect(find.text('该模式下放不下'), findsOneWidget);
+    // 点置灰卡不返回（先滚动到卡片区）。
+    await tester.ensureVisible(find.text('要点清单'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('要点清单'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(picked.value, isNull);
+    // 切回印刷体模式恢复可选；选卡返回 keepHandwriting=false。
     await tester.tap(find.text('转写为印刷体'));
     await tester.pumpAndSettle();
-    expect(events, [true, false]);
+    expect(find.text('该模式下放不下'), findsNothing);
+    await tester.ensureVisible(find.text('要点清单'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('要点清单'));
+    await tester.pumpAndSettle();
+    expect(picked.value?.kind, SmartLayoutTemplateKind.outline);
+    expect(picked.value?.keepHandwriting, isFalse);
   });
 
   testWidgets('保留手写模式：缩略图切换 layoutsKeepInk 源，放不下的置灰', (tester) async {
@@ -275,32 +277,15 @@ void main() {
           missingKinds: {SmartLayoutTemplateKind.outline},
         ),
       ),
-      onKeepHandwritingChanged: (_) {},
     );
-    // 印刷体模式：全部放得下，缩略图绘制新增印刷体文本。
+    // 印刷体模式：全部放得下。
     expect(find.text('内容放不下'), findsNothing);
-    expect(
-      (handoutThumbPainter(tester) as dynamic).paintedOnScreenFontSizes as List<double>,
-      isNotEmpty,
-      reason: '印刷体模式缩略图绘制新增文本',
-    );
-    // 切到保留手写：outline 放不下置灰，缩略图不再画印刷体文本（墨迹占位）。
+    // 切到保留手写：outline 放不下置灰，缩略图切换为墨迹占位源。
     await tester.tap(find.text('保留手写笔迹'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('该模式下放不下'), findsOneWidget);
-    expect(
-      (handoutThumbPainter(tester) as dynamic).paintedOnScreenFontSizes as List<double>,
-      isEmpty,
-      reason: '保留手写模式无新增印刷体文本',
-    );
-    // 点置灰卡不返回（先滚动到卡片区）
-    await tester.ensureVisible(find.text('要点清单'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('要点清单'), warnIfMissed: false);
-    await tester.pumpAndSettle();
-    expect(picked.value, isNull);
-    // 切回印刷体模式恢复可选
+    // 切回印刷体模式恢复可选。
     await tester.tap(find.text('转写为印刷体'));
     await tester.pumpAndSettle();
     expect(find.text('该模式下放不下'), findsNothing);
@@ -316,7 +301,6 @@ void main() {
       tester,
       buildPreparation(layoutsKeepInk: buildKeepInkLayouts()),
       keepHandwriting: true,
-      onKeepHandwritingChanged: (_) {},
     );
     expect(tester.takeException(), isNull);
     expect(find.text('该模式下放不下'), findsNothing);
@@ -326,9 +310,35 @@ void main() {
     await tester.tap(find.text('原文整理'));
     await tester.pumpAndSettle();
     expect(picked.value?.kind, SmartLayoutTemplateKind.inplace);
+    expect(picked.value?.keepHandwriting, isTrue);
   });
 
-  testWidgets('缩略图字号下限：超小字号文本放大绘制并省略截断', (tester) async {
+  test('缩略图屏幕字号下限：换算后不足 9 逻辑像素放大到 9', () {
+    // Given：缩略图缩放比 0.25。
+    const scale = 0.25;
+    // When/Then：落位字号 2pt 换算到屏幕 0.5 → 放大到下限 9/scale。
+    expect(
+      smartLayoutThumbFontSize(2, scale),
+      kSmartLayoutThumbMinOnScreenFontSize / scale,
+    );
+    // 落位字号换算后已超过下限：原样保留，不放大。
+    expect(smartLayoutThumbFontSize(50, scale), 50);
+  });
+
+  test('缩略图行数上限：落位框高放得下为准，至少 1 行', () {
+    expect(
+      smartLayoutThumbMaxLines(slotHeight: 40, fontSize: 10, lineHeight: 1.5),
+      2,
+      reason: '40 / (10×1.5) ≈ 2.67 → 向下取整 2 行',
+    );
+    expect(
+      smartLayoutThumbMaxLines(slotHeight: 5, fontSize: 10, lineHeight: 1),
+      1,
+      reason: '框高不足一行时保底 1 行',
+    );
+  });
+
+  testWidgets('缩略图绘制超小字号内容不抛错（放大绘制与省略截断路径）', (tester) async {
     // Given：字号 2pt 的超小文本（默认缩放比约 0.27，屏幕字号远小于 9）。
     final content = SmartLayoutContent(
       pageId: 'p-1',
@@ -364,20 +374,7 @@ void main() {
     );
     // When：打开模板选择卡。
     await openSheet(tester, preparation);
-    // Then：绘制不抛错；所有文本屏幕字号 >= 9；放大后触发省略截断。
+    // Then：绘制（含字号放大与省略截断路径）不抛错。
     expect(tester.takeException(), isNull, reason: '放大绘制不得抛错');
-    final painter = handoutThumbPainter(tester) as dynamic;
-    final onScreenSizes = painter.paintedOnScreenFontSizes as List<double>;
-    expect(onScreenSizes, isNotEmpty);
-    expect(
-      onScreenSizes.every((size) => size >= 9 - 0.01),
-      isTrue,
-      reason: '缩略图屏幕字号不得小于 9 逻辑像素',
-    );
-    expect(
-      painter.paintedTruncatedTextCount as int,
-      greaterThan(0),
-      reason: '放大后文本超出落位框应触发省略截断',
-    );
   });
 }

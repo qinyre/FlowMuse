@@ -96,6 +96,8 @@ void main() {
       // 正文在标题之后。
       final body = result.addElements.last as TextElement;
       expect(body.y, greaterThan(title.y + title.height));
+      // 转写模式（非保留手写）无墨迹占位矩形。
+      expect(result.inkSlotRects, isEmpty, reason: 'typed 模式 inkSlotRects 为空');
     });
 
     test('窄图两两成行：图上图注下、格内居中，行高取两格较大者', () {
@@ -482,6 +484,13 @@ void main() {
           );
         }
       }
+      // 墨迹占位矩形 = 三块文本墨迹的移动目标（不含图 img-a），供缩略图
+      // 查表区分墨迹占位与图/形。
+      expect(result.inkSlotRects.toSet(), {
+        titleTarget,
+        captionTarget,
+        bodyTarget,
+      });
     });
 
     test('outline：条目行墨迹左对齐、无"• "前缀，图注随图', () {

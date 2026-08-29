@@ -1027,15 +1027,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _smartLayoutActivePreparation = preparation;
       // 模板选择卡：三张真实内容缩略图，点选后确定性落位；关闭 = 取消整个
       // 流程（零残留）；多页流程提供"跳过本页"继续后续页。
-      // 保留手写开关由页面持有：草稿态换模板 chips、确认条标注都沿用当前值。
+      // 保留手写开关是弹层内部状态，随选卡返回；确认条换模板 chips 沿用该值。
       final choice = await showSmartLayoutTemplateSheet(
         context: context,
         preparation: preparation,
         allowSkip: isMultiPage,
         keepHandwriting: _smartLayoutKeepHandwriting,
-        onKeepHandwritingChanged: (value) {
-          if (mounted) setState(() => _smartLayoutKeepHandwriting = value);
-        },
       );
       if (!mounted) return _SmartLayoutPageOutcome.cancelled;
       if (choice == null) {
@@ -1048,10 +1045,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       if (kind == null) {
         return _SmartLayoutPageOutcome.cancelled;
       }
+      _smartLayoutKeepHandwriting = choice.keepHandwriting;
       final result = _markdrawController.buildSmartLayoutPlanForTemplate(
         preparation,
         kind,
-        keepHandwriting: _smartLayoutKeepHandwriting,
+        keepHandwriting: choice.keepHandwriting,
       );
       final plan = result.plan;
       if (plan == null) {
@@ -1075,8 +1073,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             ? null
             : _showSmartLayoutProofreadSheet,
       );
-      // 换模板后草稿计划已被 chips 回调更换；提交必须用当前草稿对应的计划。
-      final draftPlan = _smartLayoutDraftPlan ?? plan;
+      // 换模板后草稿计划已被 chips 回调更换；提交必须用当前草稿对应的计划
+      // （进入草稿时必已写入 _smartLayoutDraftPlan，等待动作期间只会被换成新计划）。
+      final draftPlan = _smartLayoutDraftPlan!;
       switch (action) {
         case SmartLayoutBarAction.apply:
           return _commitSmartLayoutDraft(draftPlan, dropFailedBlocks: false);
@@ -1213,11 +1212,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   /// 先装配新计划、成功后才替换草稿——装配失败时当前草稿原样保留（不存在
   /// "有确认条无草稿"的中间态），SnackBar 提示后可继续校对/应用/再换其他模板。
   void _switchSmartLayoutTemplate(SmartLayoutTemplateKind newKind) {
-    final currentPlan = _smartLayoutDraftPlan ?? _smartLayoutBarPlan;
+    final currentPlan = _smartLayoutDraftPlan;
     final preparation = _smartLayoutActivePreparation;
     if (currentPlan == null || preparation == null) return;
-    // 与"重新识别"互斥：识别进行中不允许换模板（草稿等待期本无识别，防御）。
-    if (_smartLayoutRecognitionProgress.value != null) return;
     if (newKind == currentPlan.style) return; // 点当前模板：忽略
     final result = _markdrawController.buildSmartLayoutPlanForTemplate(
       preparation,
@@ -1263,7 +1260,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   /// 全文核对编辑条：草稿全部智能排版文本项（不只低置信）逐项核对改字。
-  /// 保留手写草稿无新增文本（文本以墨迹移动），入口在确认条上直接隐藏。
+  /// 保留手写草稿无新增文本（文本以墨迹移动）→ 清单为空，入口自动隐藏。
   Future<void> _showSmartLayoutFullReviewSheet() async {
     final items = _markdrawController.smartLayoutDraftAllTextItems;
     if (!mounted || items.isEmpty) return;
@@ -1271,7 +1268,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => SmartLayoutProofreadSheet(
-        items: [for (final item in items) (id: item.id, text: item.text)],
+        items: items,
         onRevise: _markdrawController.reviseSmartLayoutDraftText,
         headerNote: '全部识别文字如下，逐项核对或修正后应用。',
       ),
@@ -2851,11 +2848,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                         availableKinds: _smartLayoutAvailableKinds(),
                         onTemplateSelected: _switchSmartLayoutTemplate,
                         keepHandwriting: _smartLayoutKeepHandwriting,
-                        onReviewAll:
-                            !_smartLayoutKeepHandwriting &&
-                                _markdrawController
-                                    .smartLayoutDraftAllTextItems
-                                    .isNotEmpty
+                        // 保留手写草稿清单为空 → 入口自动隐藏，无需按模式特判。
+                        onReviewAll: _markdrawController
+                            .smartLayoutDraftAllTextItems
+                            .isNotEmpty
                             ? _showSmartLayoutFullReviewSheet
                             : null,
                       ),

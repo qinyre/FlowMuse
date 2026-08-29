@@ -13,18 +13,20 @@ import 'package:flow_muse/shared/widgets/app_spacing.dart';
 /// 分页提示。多页流程提供"跳过本页"（[allowSkip]），避免一页超容终止整单。
 /// 窄屏（可用宽度 < 560）时三卡改纵向铺满列表，避免横排拥挤。
 ///
-/// [onKeepHandwritingChanged] 非 null 时卡片区顶部展示"转写为印刷体 /
-/// 保留手写笔迹"分段开关：保留手写模式下缩略图切换为
-/// [SmartLayoutTemplatePreparation.layoutsKeepInk] 的预落位结果（缺项/
-/// 为 null = 该模板该模式下放不下，置灰标注"该模式下放不下"）。
-typedef SmartLayoutTemplateChoice = ({SmartLayoutTemplateKind? kind, bool skipped});
+/// 卡片区顶部展示"转写为印刷体 / 保留手写笔迹"分段开关（仅当
+/// [SmartLayoutTemplatePreparation.layoutsKeepInk] 非空，即存在保留手写
+/// 变体时）：保留手写模式下缩略图切换为 layoutsKeepInk 的预落位结果
+/// （缺项/为 null = 该模板该模式下放不下，置灰标注"该模式下放不下"）；
+/// 开关是弹层内部状态，最终值随选卡经
+/// [SmartLayoutTemplateChoice.keepHandwriting] 返回。
+typedef SmartLayoutTemplateChoice =
+    ({SmartLayoutTemplateKind? kind, bool skipped, bool keepHandwriting});
 
 Future<SmartLayoutTemplateChoice?> showSmartLayoutTemplateSheet({
   required BuildContext context,
   required SmartLayoutTemplatePreparation preparation,
   bool allowSkip = false,
   bool keepHandwriting = false,
-  ValueChanged<bool>? onKeepHandwritingChanged,
 }) {
   return showModalBottomSheet<SmartLayoutTemplateChoice>(
     context: context,
@@ -32,7 +34,6 @@ Future<SmartLayoutTemplateChoice?> showSmartLayoutTemplateSheet({
       preparation: preparation,
       allowSkip: allowSkip,
       keepHandwriting: keepHandwriting,
-      onKeepHandwritingChanged: onKeepHandwritingChanged,
     ),
   );
 }
@@ -50,7 +51,6 @@ class SmartLayoutTemplateSheet extends StatefulWidget {
     required this.preparation,
     this.allowSkip = false,
     this.keepHandwriting = false,
-    this.onKeepHandwritingChanged,
   });
 
   final SmartLayoutTemplatePreparation preparation;
@@ -58,11 +58,8 @@ class SmartLayoutTemplateSheet extends StatefulWidget {
   /// true = 多页流程：底栏提供"跳过本页"（本页不排版，继续下一页）。
   final bool allowSkip;
 
-  /// 初始是否保留手写笔迹（开关仅在 [onKeepHandwritingChanged] 非 null 时展示）。
+  /// 初始是否保留手写笔迹（开关仅在本页存在保留手写变体时展示）。
   final bool keepHandwriting;
-
-  /// 保留手写开关回调；null = 隐藏开关（向后兼容既有调用点）。
-  final ValueChanged<bool>? onKeepHandwritingChanged;
 
   @override
   State<SmartLayoutTemplateSheet> createState() =>
@@ -72,16 +69,20 @@ class SmartLayoutTemplateSheet extends StatefulWidget {
 class _SmartLayoutTemplateSheetState extends State<SmartLayoutTemplateSheet> {
   late bool _keepHandwriting = widget.keepHandwriting;
 
+  /// 是否展示"转写为印刷体 / 保留手写笔迹"开关：本页存在保留手写变体
+  /// （layoutsKeepInk 非空）才可切换。
+  bool get _showKeepInkSwitch => widget.preparation.layoutsKeepInk.isNotEmpty;
+
   /// 当前模式下的预落位结果：保留手写取 layoutsKeepInk，否则取 layouts。
   SmartLayoutTemplateLayoutResult? _layoutFor(SmartLayoutTemplateKind kind) =>
       _keepHandwriting
           ? widget.preparation.layoutsKeepInk[kind]
           : widget.preparation.layouts[kind];
 
+  /// 返回值携带当前开关状态，选卡后由调用方读取。
   void _handleKeepHandwritingChanged(bool value) {
     if (value == _keepHandwriting) return;
     setState(() => _keepHandwriting = value);
-    widget.onKeepHandwritingChanged?.call(value);
   }
 
   @override
@@ -131,7 +132,7 @@ class _SmartLayoutTemplateSheetState extends State<SmartLayoutTemplateSheet> {
                   ),
                 ),
               ],
-              if (widget.onKeepHandwritingChanged != null) ...[
+              if (_showKeepInkSwitch) ...[
                 const SizedBox(height: AppSpacing.controlGap),
                 SizedBox(
                   width: double.infinity,
@@ -158,6 +159,7 @@ class _SmartLayoutTemplateSheetState extends State<SmartLayoutTemplateSheet> {
                         layout: _layoutFor(kind),
                         content: widget.preparation.content,
                         disabledHint: disabledHint,
+                        keepHandwriting: _keepHandwriting,
                       ),
                   ];
                   // 窄屏断点：可用宽度放不下三卡横排时改纵向铺满列表，
@@ -186,9 +188,13 @@ class _SmartLayoutTemplateSheetState extends State<SmartLayoutTemplateSheet> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () => Navigator.of(
-                      context,
-                    ).pop((kind: null, skipped: true)),
+                    onPressed: () => Navigator.of(context).pop(
+                      (
+                        kind: null,
+                        skipped: true,
+                        keepHandwriting: _keepHandwriting,
+                      ),
+                    ),
                     child: const Text('跳过本页'),
                   ),
                 ),
@@ -209,6 +215,7 @@ class _TemplateCard extends StatelessWidget {
     required this.layout,
     required this.content,
     required this.disabledHint,
+    required this.keepHandwriting,
   });
 
   final SmartLayoutTemplateKind kind;
@@ -218,6 +225,9 @@ class _TemplateCard extends StatelessWidget {
   /// 放不下时缩略图占位文案（保留手写模式下为"该模式下放不下"）。
   final String disabledHint;
 
+  /// 选卡时随返回值带回的当前开关状态。
+  final bool keepHandwriting;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -225,7 +235,9 @@ class _TemplateCard extends StatelessWidget {
     final enabled = layout != null;
     return InkWell(
       onTap: enabled
-          ? () => Navigator.of(context).pop((kind: kind, skipped: false))
+          ? () => Navigator.of(context).pop(
+              (kind: kind, skipped: false, keepHandwriting: keepHandwriting),
+            )
           : null,
       borderRadius: BorderRadius.circular(12),
       child: Opacity(
@@ -283,12 +295,29 @@ class _TemplateCard extends StatelessWidget {
 /// 保留手写模式的墨迹占位（灰调、无角标——它是文字不是图）。
 enum _ThumbnailBoxKind { text, figure, inkText }
 
+/// 缩略图内文本/角标的屏幕字号下限（逻辑像素）。
+const double kSmartLayoutThumbMinOnScreenFontSize = 9;
+
+/// 缩略图文本屏幕字号：落位字号换算到屏幕不足下限时放大到下限（纯函数，
+/// 与 paint 同源，测试直测）。
+double smartLayoutThumbFontSize(double layoutFontSize, double scale) =>
+    math.max(layoutFontSize, kSmartLayoutThumbMinOnScreenFontSize / scale);
+
+/// 缩略图文本行数上限：落位框高在当前字号行高下"放得下为准"，
+/// 至少 1 行（纯函数，与 paint 同源，测试直测）。
+int smartLayoutThumbMaxLines({
+  required double slotHeight,
+  required double fontSize,
+  required double lineHeight,
+}) => math.max(1, slotHeight ~/ (fontSize * lineHeight));
+
 /// 模板卡缩略图：按预落位结果画文本实貌与图形容器（场景坐标 → 卡片缩放）。
 ///
 /// 几何与预落位结果严格同源（不重算布局）：落位框直接取 previewRects，
-/// 依"新增文本元素矩形（与 addElements 同几何）"差集区分文本框与移动类框。
-/// 文本字号设 9 逻辑像素下限：不足时放大绘制，宽度超出落位框省略截断、
-/// 行数以落位框放得下为准——内容过多时宁少画不糊。
+/// 新增文本元素矩形为文本框、结果自带的墨迹占位矩形（inkSlotRects）查表
+/// 得墨迹占位，其余为图/形/组。文本字号按 [smartLayoutThumbFontSize] 设
+/// 屏幕下限，宽度超出落位框省略截断、行数按 [smartLayoutThumbMaxLines]
+/// ——内容过多时宁少画不糊。
 class _TemplateThumbnailPainter extends CustomPainter {
   _TemplateThumbnailPainter({
     required this.layout,
@@ -297,66 +326,37 @@ class _TemplateThumbnailPainter extends CustomPainter {
          for (final element in layout.addElements)
            if (element is TextElement) element,
        ],
-       boxes = _classifyBoxes(layout, content);
-
-  /// 缩略图内文本/角标的屏幕字号下限（逻辑像素）。
-  static const double _minOnScreenFontSize = 9;
+       boxes = _classifyBoxes(layout);
 
   final SmartLayoutTemplateLayoutResult layout;
   final List<TextElement> texts;
   final SmartLayoutContent content;
   final List<(_ThumbnailBoxKind, Rect)> boxes;
 
-  /// 最近一次 paint 的观测值（各行屏幕字号 / 触发省略的文本数），仅供测试
-  /// 做几何断言，不参与渲染决策。
-  final List<double> paintedOnScreenFontSizes = [];
-  int paintedTruncatedTextCount = 0;
-
-  /// 落位框分类：新增文本元素矩形为文本框；移动类框按尺寸匹配 content
-  /// 文本单元原稿包围盒（保留手写变体的墨迹占位尺寸 == 原稿包围盒尺寸）
-  /// 区分为墨迹占位与图/形/组。
+  /// 落位框分类：新增文本元素矩形为文本框；结果自带的墨迹占位矩形
+  /// （inkSlotRects）为墨迹占位；其余为图/形/组。不做任何尺寸匹配猜测。
   static List<(_ThumbnailBoxKind, Rect)> _classifyBoxes(
     SmartLayoutTemplateLayoutResult layout,
-    SmartLayoutContent content,
   ) {
     final textRects = {
       for (final element in layout.addElements)
         if (element is TextElement)
           Rect.fromLTWH(element.x, element.y, element.width, element.height),
     };
-    final inkSlotSizes = [
-      for (final unit in _textUnitsOf(content))
-        Size(unit.sourceBounds.width, unit.sourceBounds.height),
-    ];
-    bool isInkSlot(Rect rect) => inkSlotSizes.any(
-      (size) =>
-          (size.width - rect.width).abs() < 0.5 &&
-          (size.height - rect.height).abs() < 0.5,
-    );
+    final inkSlotRects = layout.inkSlotRects.toSet();
     return [
       for (final rect in layout.previewRects)
         if (textRects.contains(rect))
           (_ThumbnailBoxKind.text, rect)
-        else if (isInkSlot(rect))
+        else if (inkSlotRects.contains(rect))
           (_ThumbnailBoxKind.inkText, rect)
         else
           (_ThumbnailBoxKind.figure, rect),
     ];
   }
 
-  static Iterable<LayoutUnit> _textUnitsOf(SmartLayoutContent content) sync* {
-    final title = content.title;
-    if (title != null) yield title;
-    yield* content.looseTexts;
-    for (final pair in content.pairs) {
-      yield pair.caption;
-    }
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
-    paintedOnScreenFontSizes.clear();
-    paintedTruncatedTextCount = 0;
     var bounds = content.contentArea;
     for (final (_, rect) in boxes) {
       bounds = bounds.expandToInclude(rect);
@@ -405,8 +405,7 @@ class _TemplateThumbnailPainter extends CustomPainter {
     for (final text in texts) {
       // 字号下限：落位字号换算到屏幕不足 9 逻辑像素时放大到 9；行数按
       // 落位框高"放得下为准"，宽度超出落位框省略截断（宁少画不糊）。
-      final fontSize = math.max(text.fontSize, _minOnScreenFontSize / scale);
-      final lineExtent = fontSize * text.lineHeight;
+      final fontSize = smartLayoutThumbFontSize(text.fontSize, scale);
       final maxWidth = math.max(text.width, 24.0);
       final painter = TextPainter(
         text: TextSpan(
@@ -419,15 +418,14 @@ class _TemplateThumbnailPainter extends CustomPainter {
           ),
         ),
         textDirection: TextDirection.ltr,
-        maxLines: math.max(1, text.height ~/ lineExtent),
+        maxLines: smartLayoutThumbMaxLines(
+          slotHeight: text.height,
+          fontSize: fontSize,
+          lineHeight: text.lineHeight,
+        ),
         ellipsis: '…',
       )..layout(maxWidth: maxWidth);
       painter.paint(canvas, Offset(text.x, text.y));
-      paintedOnScreenFontSizes.add(fontSize * scale);
-      // 截断观测：行数上限截断，或布局宽度贴满约束（超宽省略）。
-      if (painter.didExceedMaxLines || painter.width >= maxWidth - 0.001) {
-        paintedTruncatedTextCount++;
-      }
       painter.dispose();
     }
     for (final rect in figureRects) {
@@ -443,7 +441,7 @@ class _TemplateThumbnailPainter extends CustomPainter {
       text: TextSpan(
         text: '图',
         style: TextStyle(
-          fontSize: _minOnScreenFontSize / scale,
+          fontSize: kSmartLayoutThumbMinOnScreenFontSize / scale,
           height: 1,
           color: const Color(0xFF374151),
         ),

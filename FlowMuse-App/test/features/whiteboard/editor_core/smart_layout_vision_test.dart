@@ -867,8 +867,6 @@ void main() {
       final preparation = (await tester.runAsync(
         () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
       ))!;
-      expect(preparation.content.looseTexts.single.vertical, isTrue,
-          reason: '竖排信息保留在识别/聚类阶段');
       final plan = controller
           .buildSmartLayoutPlanForTemplate(
             preparation,

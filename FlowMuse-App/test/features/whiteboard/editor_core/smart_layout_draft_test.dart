@@ -285,7 +285,7 @@ void main() {
     );
   });
 
-  test('草稿全文文本项：仅含智能排版标记文本、低置信标记正确、退出后为空', () {
+  test('草稿全文文本项：仅含智能排版标记文本、退出后为空', () {
     final controller = buildController();
     // 基础场景里的普通文本（无智能排版标记）不进全文清单。
     controller.applyResult(
@@ -312,11 +312,10 @@ void main() {
       isNot(contains(ElementId('plain-text'))),
       reason: '无智能排版标记的文本不入清单',
     );
-    final lowItem = items.firstWhere((item) => item.id == ElementId('sl-text-2'));
-    expect(lowItem.text, '低置信句子');
-    expect(lowItem.lowConfidence, isTrue, reason: 'lowConfidenceTexts 命中的项标记低置信');
-    final okItem = items.firstWhere((item) => item.id == ElementId('sl-text-1'));
-    expect(okItem.lowConfidence, isFalse);
+    expect(
+      items.firstWhere((item) => item.id == ElementId('sl-text-2')).text,
+      '低置信句子',
+    );
 
     // 校对改字后，全文项跟随草稿场景更新（现有 reviseSmartLayoutDraftText 路径）。
     expect(

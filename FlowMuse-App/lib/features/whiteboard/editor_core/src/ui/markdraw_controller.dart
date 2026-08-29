@@ -3398,17 +3398,10 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// 文本单元的墨迹笔迹 id（keepAsInk 时从删除清单排除、随 moveDeltas 移动）。
-  Set<ElementId> _textInkStrokeIds(SmartLayoutContent content) {
-    final textUnits = <LayoutUnit>[
-      if (content.title != null) content.title!,
-      for (final pair in content.pairs) pair.caption,
-      ...content.looseTexts,
-    ];
-    return {
-      for (final unit in textUnits)
-        ...[for (final id in unit.memberIds) ElementId(id)],
-    };
-  }
+  Set<ElementId> _textInkStrokeIds(SmartLayoutContent content) => {
+    for (final unit in content.textUnits)
+      ...[for (final id in unit.memberIds) ElementId(id)],
+  };
 
   /// 应用计划：一次 History 提交（删除→移动→新增→文档→选区）。
   bool applySmartLayoutPlan(
@@ -3798,7 +3791,6 @@ class MarkdrawController extends ChangeNotifier {
         size: ui.Size(element.width, element.height),
         kind: LayoutUnitKind.text,
         textElement: element,
-        vertical: vision.elements[index].vertical,
         // 该块笔迹元素 id：保留手写模式随方案移动、从删除清单排除；
         // 转写模式（默认）仍整块删除。
         memberIds: [
@@ -4130,24 +4122,16 @@ class MarkdrawController extends ChangeNotifier {
     return items;
   }
 
-  /// 草稿态全文文本项快照（id + 当前文字 + 是否低置信），供"核对全文"构建。
-  /// 来源 = 草稿场景中带智能排版标记（flowMuse.smartLayout）的文本元素；
-  /// 低置信判定复用进入草稿时的 plan.lowConfidenceTexts 清单。
+  /// 草稿态全文文本项快照（id + 当前文字），供"核对全文"构建。
+  /// 来源 = 草稿场景中带智能排版标记（flowMuse.smartLayout）的文本元素。
   /// 保留手写草稿无新增文本元素（文本以墨迹移动）→ 空列表。
-  List<({ElementId id, String text, bool lowConfidence})>
-  get smartLayoutDraftAllTextItems {
+  List<({ElementId id, String text})> get smartLayoutDraftAllTextItems {
     if (!_smartLayoutDraftActive) return const [];
-    final items = <({ElementId id, String text, bool lowConfidence})>[];
+    final items = <({ElementId id, String text})>[];
     for (final element in _editorState.scene.activeElements) {
       if (element is TextElement &&
           _flowMuseData(element)?['smartLayout'] == true) {
-        items.add((
-          id: element.id,
-          text: element.text,
-          lowConfidence: _smartLayoutDraftLowConfidenceIds.contains(
-            element.id,
-          ),
-        ));
+        items.add((id: element.id, text: element.text));
       }
     }
     return items;
