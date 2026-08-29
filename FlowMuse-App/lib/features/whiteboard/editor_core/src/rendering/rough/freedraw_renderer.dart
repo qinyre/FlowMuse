@@ -336,12 +336,14 @@ class FreedrawRenderer {
   /// 降级铅笔颗粒：沿中心线折线按弧长等距布点——基础步长为 size/3
   /// 场景距离，位置插值到精确弧长处。输入链只有最小距离过滤、点距
   /// 不均，按输入点下标取样会使颗粒密度随报点率/书写速度漂移，故必
-  /// 须按实际弧长。超长笔迹（外部导入/无限画布）受 [_maxGrainCount]
-  /// 硬上限约束：步长按总长动态扩大，子路径数量有界，不会单帧卡死。
-  /// 每点一条垂直短线，长度与切向偏移由 [PencilGrainHash] 派生（确定
-  /// 性：同输入同输出）。笔锋区间（[skipStart]/[skipEnd] 弧长）不布
-  /// 颗粒——轮廓在收锋区变窄，全宽颗粒会越出轮廓。所有线段并入一条
-  /// Path，绘制侧只产生一次额外 drawPath。
+  /// 须按实际弧长。超长笔迹（外部导入/无限画布）受 [maxGrainCount]
+  /// 硬上限约束：步长按总长动态扩大且循环显式计数封顶，子路径数量
+  /// 有界，不会单帧卡死；非有限几何（极大坐标溢出/Infinity 输入）
+  /// 立即返回空 Path。每点一条垂直短线，长度与切向偏移由
+  /// [PencilGrainHash] 派生（确定性：同输入同输出）。笔锋区间
+  /// （[skipStart]/[skipEnd] 弧长）不布颗粒——轮廓在收锋区变窄，
+  /// 全宽颗粒会越出轮廓。所有线段并入一条 Path，绘制侧只产生一次
+  /// 额外 drawPath。
   @visibleForTesting
   static const int maxGrainCount = 4096;
 
@@ -355,6 +357,11 @@ class FreedrawRenderer {
     final path = Path();
     if (points.length < 2) return path;
     final totalLength = _polylineLength(points);
+    // 非有限几何守卫：合法但极大的坐标（如 JSON 可携带的 1e308）会在
+    // dx*dx 处溢出为 Infinity，totalLength/step 随之 Infinity，若继续
+    // 执行，首轮后 nextAt=Infinity 且 Infinity<=Infinity 恒真——死循环。
+    // 常规轨迹不受影响；Infinity/NaN 一律立即返回空 Path。
+    if (!totalLength.isFinite) return path;
     final step = math.max(
       math.max(0.5, size / 3),
       totalLength / maxGrainCount,
@@ -371,7 +378,11 @@ class FreedrawRenderer {
       final segEndArc = segStartArc + segLen;
       final tx = dx / segLen;
       final ty = dy / segLen;
-      while (nextAt <= segEndArc && nextAt <= totalLength + 1e-9) {
+      while (
+        grainIndex < maxGrainCount &&
+        nextAt <= segEndArc &&
+        nextAt <= totalLength + 1e-9
+      ) {
         final t = (nextAt - segStartArc) / segLen;
         final cx = points[i].x + dx * t;
         final cy = points[i].y + dy * t;

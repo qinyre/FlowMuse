@@ -54,13 +54,30 @@ void main() {
   test('P1: 超长两点笔迹颗粒数量有界（硬上限）', () {
     // 外部导入/无限画布可达的超长笔迹：两个点、长度 1,000,000。若
     // 步长固定为 size/3 会生成数十万子路径阻塞单帧；步长按总长扩大
-    // 后子路径数必须落在硬上限附近。
+    // 后子路径数必须不超过硬上限。
     final path = FreedrawRenderer.buildPencilGrainPath(
       const [Point(0, 0), Point(1000000, 0)],
       6,
     );
     final count = contourCount(path);
     expect(count, greaterThan(0));
-    expect(count, lessThanOrEqualTo(FreedrawRenderer.maxGrainCount + 1));
+    expect(count, lessThanOrEqualTo(FreedrawRenderer.maxGrainCount));
+  });
+
+  test('P1: 非有限几何（1e308 溢出 / Infinity 输入）立即返回空 Path', () {
+    // 1e308 是合法 double（外部 JSON 可携带）：dx*dx 计算溢出为
+    // Infinity → totalLength/step 均 Infinity，若不设守卫，首轮后
+    // nextAt=Infinity 且 Infinity<=Infinity 恒真——死循环。
+    final overflow = FreedrawRenderer.buildPencilGrainPath(
+      const [Point(0, 0), Point(1e308, 0)],
+      6,
+    );
+    expect(contourCount(overflow), 0);
+
+    final infinite = FreedrawRenderer.buildPencilGrainPath(
+      const [Point(0, 0), Point(double.infinity, 0)],
+      6,
+    );
+    expect(contourCount(infinite), 0);
   });
 }
