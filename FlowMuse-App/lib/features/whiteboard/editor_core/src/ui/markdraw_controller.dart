@@ -3106,6 +3106,14 @@ class MarkdrawController extends ChangeNotifier {
               overlay.creationPressures!.isEmpty,
           isComplete: false,
           seed: previewSeed,
+          // 预览与提交元素（freedraw_tool._buildElement）共用同一渲染
+          // 判定：缺 customData 时渲染端回退钢笔 profile，且把已编码压力
+          // 按 legacy thinning 解释（所见非所得）。笔型取落笔冻结值，
+          // 与 toolContext 同源，书写中切笔不改变本笔预览。
+          customData: customDataWithFreedrawRender(
+            null,
+            _strokeBrushTypeOverride ?? _activeBrushType,
+          ),
         ),
         _ => null,
       };
