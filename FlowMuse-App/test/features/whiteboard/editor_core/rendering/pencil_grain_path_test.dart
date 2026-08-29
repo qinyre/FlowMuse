@@ -50,4 +50,17 @@ void main() {
     );
     expect(contourCount(path), 0);
   });
+
+  test('P1: 超长两点笔迹颗粒数量有界（硬上限）', () {
+    // 外部导入/无限画布可达的超长笔迹：两个点、长度 1,000,000。若
+    // 步长固定为 size/3 会生成数十万子路径阻塞单帧；步长按总长扩大
+    // 后子路径数必须落在硬上限附近。
+    final path = FreedrawRenderer.buildPencilGrainPath(
+      const [Point(0, 0), Point(1000000, 0)],
+      6,
+    );
+    final count = contourCount(path);
+    expect(count, greaterThan(0));
+    expect(count, lessThanOrEqualTo(FreedrawRenderer.maxGrainCount + 1));
+  });
 }

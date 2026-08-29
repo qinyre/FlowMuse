@@ -120,6 +120,20 @@ void main() {
         reason: '主体轮廓不因纹理失控',
       );
     });
+
+    test('P1: 实例创建失败永久降级，不逐帧重试', () {
+      var calls = 0;
+      PencilShader.instanceFactoryForTesting = (program) {
+        calls++;
+        throw StateError('forced instance failure');
+      };
+      for (var i = 0; i < 3; i++) {
+        expect(PencilShader.acquire(), isNull);
+        expect(PencilShader.uniforms(), isNull);
+      }
+      expect(calls, 1, reason: '实例创建失败后不得再次尝试创建');
+      expect(PencilShader.isAvailable, isFalse, reason: 'program 已清空，永久降级');
+    });
   });
 
   group('降级路径（shader 强制失败）', () {

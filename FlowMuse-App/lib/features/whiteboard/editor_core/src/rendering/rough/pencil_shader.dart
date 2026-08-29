@@ -27,6 +27,12 @@ abstract class PencilShader {
   static Future<FragmentProgram> Function(String assetKey) loader =
       FragmentProgram.fromAsset;
 
+  /// 测试注入：替代 [FragmentProgram.fragmentShader] 的实例创建步骤，
+  /// 用于断言实例创建失败会永久降级、不逐帧重试。
+  @visibleForTesting
+  static FragmentShader Function(FragmentProgram program)?
+  instanceFactoryForTesting;
+
   /// 是否已成功加载 shader（未初始化与失败都返回 false）。
   static bool get isAvailable => _program != null;
 
@@ -56,10 +62,14 @@ abstract class PencilShader {
     final program = _program;
     if (program == null) return null;
     try {
-      return _instance ??= program.fragmentShader();
+      final factory = instanceFactoryForTesting;
+      return _instance ??= factory != null
+          ? factory(program)
+          : program.fragmentShader();
     } catch (e) {
-      _loadFailed = true;
-      debugPrint('PencilShader: instance creation failed (${e.runtimeType})');
+      // 实例创建失败与 uniform 失败同入一条降级链：清空 program/
+      // instance/uniforms 后 [acquire] 恒返回 null，绝不逐帧重试。
+      disablePermanently(e);
       return null;
     }
   }
@@ -101,6 +111,7 @@ abstract class PencilShader {
     _program = null;
     _loadFailed = false;
     _pending = null;
+    instanceFactoryForTesting = null;
   }
 }
 
