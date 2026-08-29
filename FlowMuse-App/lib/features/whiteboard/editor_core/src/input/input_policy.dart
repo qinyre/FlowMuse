@@ -22,6 +22,7 @@ class InputPolicy {
   final double pressureCutoff;
   final double pressureFloor;
   final double pressureCeiling;
+
   final double minDistance;
   final double cornerProtectAngleRad;
 

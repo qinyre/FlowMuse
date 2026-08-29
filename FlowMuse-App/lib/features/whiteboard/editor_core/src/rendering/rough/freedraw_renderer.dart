@@ -218,6 +218,10 @@ class FreedrawRenderer {
     // perfect_freehand 的 size 是直径,而 DrawStyle.strokeWidth 在 freedraw 语境下
     // 是期望的笔迹宽度。直接用 strokeWidth 作为 size 基准。
     final size = profile.renderSize(style.strokeWidth);
+    // 整条可见笔迹的原始折线长：本地/静态渲染即本列表弧长。draw 内算
+    // 一次供 buildOutline 与铅笔颗粒 skip 门共用（降级路径逐帧热路径，
+    // 避免同一 O(n) 扫描重复 3 次）；远端分段渲染传入的整笔长原样透传。
+    final visibleRawLength = wholeStrokeRawLength ?? _polylineLength(points);
 
     Stopwatch? outlineWatch;
     if (metricsSink != null) {
@@ -231,7 +235,7 @@ class FreedrawRenderer {
       isComplete: isComplete,
       brushType: brushType,
       taperPhase: taperPhase,
-      wholeStrokeRawLength: wholeStrokeRawLength,
+      wholeStrokeRawLength: visibleRawLength,
     );
     final getStrokeDuration = outlineWatch != null
         ? (outlineWatch..stop()).elapsed
@@ -303,7 +307,7 @@ class FreedrawRenderer {
     canvas.drawPath(path, paint);
 
     if (usePencilTexture && !pencilShaderApplied) {
-      final wholeLength = wholeStrokeRawLength ?? _polylineLength(points);
+      final wholeLength = visibleRawLength;
       final grainPath = buildPencilGrainPath(
         points,
         size,

@@ -43,6 +43,8 @@ class StrokeInputModeler {
     this.policy, {
     bool? useRealPressure,
     this.pressureExponent = 1.0,
+    this.pressureAttackMs = 0,
+    this.pressureAttackLevel = 0.0,
   }) : useRealPressure = useRealPressure ?? policy.useRealPressure;
 
   static const _maxSamplingGap = Duration(milliseconds: 200);
@@ -50,6 +52,16 @@ class StrokeInputModeler {
   final InputPolicy policy;
   final bool useRealPressure;
   final double pressureExponent;
+
+  /// 起笔攻击补偿窗口（毫秒），0 = 关闭。按笔形由调用方逐笔传入而非挂在
+  /// 设备策略上：低压起笔"闪变"的笔形（毛笔/铅笔）开启；粗细动态全靠
+  /// 压力的笔形（钢笔）必须关闭——窗口内 max(实测, 包络) 会压平轻力度
+  /// 书写的粗细变化（真机回归教训）。
+  final int pressureAttackMs;
+
+  /// 攻击水位（映射域 [InputPolicy.pressureFloor, pressureCeiling] 内取值），
+  /// 窗口起点的输出下限。
+  final double pressureAttackLevel;
 
   OneEuroFilter? _xFilter;
   OneEuroFilter? _yFilter;
@@ -59,6 +71,7 @@ class StrokeInputModeler {
   Point? _lastEmitted;
   double? _lastPressure; // 真实模式下沿用最后有效值
   Duration? _lastTime;
+  Duration? _downTime; // 起笔攻击包络的时间基准（仅 down 设置）
   Point? _lastDir; // 上一段方向向量（转角保护用）
 
   bool get _isActive => _ownerPointerId != null;
@@ -95,6 +108,7 @@ class StrokeInputModeler {
     _lastEmitted = null;
     _lastPressure = null;
     _lastTime = null;
+    _downTime = null;
     _lastDir = null;
   }
 
@@ -109,6 +123,7 @@ class StrokeInputModeler {
     _lastEmitted = Point(s.x, s.y);
     _lastPressure = useRealPressure ? s.pressure : null;
     _lastTime = s.time;
+    _downTime = s.time;
     _lastDir = null;
     // 种子滤波器：第一个 move 到达时已有状态，避免绕过滤波直出原始值。
     _xFilter!.filter(s.x, s.time);
@@ -141,8 +156,10 @@ class StrokeInputModeler {
       _yFilter!.filter(raw.y, s.time);
       _lastEmitted = raw;
       _lastDir = null;
-      final pressure = _pressureOut(s.pressure);
+      // 先推进时间基准再算压力：_pressureOut 的滤波时间戳与起笔攻击
+      // 包络都以 _lastTime 为时钟，滞后会导致包络窗口判定用旧时刻。
       _lastTime = s.time;
+      final pressure = _pressureOut(s.pressure);
       return StrokeModelResult.emitted(raw, pressure);
     }
     if (raw.distanceTo(last) < policy.minDistance) {
@@ -232,6 +249,22 @@ class StrokeInputModeler {
           policy.pressureFloor +
           curved * (policy.pressureCeiling - policy.pressureFloor);
     }
-    return _lastPressure; // 偶发缺失沿用最后有效值
+    final out = _lastPressure; // 偶发缺失沿用最后有效值
+    if (out == null) return null;
+    // 起笔攻击补偿：窗口内输出不低于"攻击水位 → pressureFloor"的线性
+    // 衰减包络（实测真机起笔压力 0.5-1s 内从 ~0.2 爬升至 ~0.5，低压起笔
+    // 会让压感笔形前段过细、压力到位瞬间整笔增宽）。包络只抬输出不改
+    // _lastPressure 状态；真实压力高于包络时原样透传。窗口结束即纯实测。
+    final downTime = _downTime;
+    final now = _lastTime;
+    if (pressureAttackMs <= 0 || downTime == null || now == null) {
+      return out;
+    }
+    final elapsedMs = (now - downTime).inMilliseconds;
+    final t = (elapsedMs / pressureAttackMs).clamp(0.0, 1.0);
+    final envelope =
+        pressureAttackLevel +
+        (policy.pressureFloor - pressureAttackLevel) * t;
+    return out > envelope ? out : envelope;
   }
 }
