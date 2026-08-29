@@ -7,71 +7,132 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 
 /// 模板选择卡：识别完成后展示三张模板卡，每卡用本页真实内容按该模板
 /// 预落位的结果渲染缩略图（所见即所得）；点选后进入既有草稿态，
-/// 关闭即取消（零残留）。放不下的模板置灰并标注。
-Future<SmartLayoutTemplateKind?> showSmartLayoutTemplateSheet({
+/// 关闭即取消（零残留）。放不下的模板置灰并标注；三卡全放不下时给出
+/// 分页提示。多页流程提供"跳过本页"（[allowSkip]），避免一页超容终止整单。
+/// 窄屏（可用宽度 < 560）时三卡改纵向铺满列表，避免横排拥挤。
+typedef SmartLayoutTemplateChoice = ({SmartLayoutTemplateKind? kind, bool skipped});
+
+Future<SmartLayoutTemplateChoice?> showSmartLayoutTemplateSheet({
   required BuildContext context,
   required SmartLayoutTemplatePreparation preparation,
+  bool allowSkip = false,
 }) {
-  return showModalBottomSheet<SmartLayoutTemplateKind>(
+  return showModalBottomSheet<SmartLayoutTemplateChoice>(
     context: context,
-    builder: (sheetContext) =>
-        SmartLayoutTemplateSheet(preparation: preparation),
+    builder: (sheetContext) => SmartLayoutTemplateSheet(
+      preparation: preparation,
+      allowSkip: allowSkip,
+    ),
   );
 }
 
 class SmartLayoutTemplateSheet extends StatelessWidget {
-  const SmartLayoutTemplateSheet({super.key, required this.preparation});
+  const SmartLayoutTemplateSheet({
+    super.key,
+    required this.preparation,
+    this.allowSkip = false,
+  });
 
   final SmartLayoutTemplatePreparation preparation;
+
+  /// true = 多页流程：底栏提供"跳过本页"（本页不排版，继续下一页）。
+  final bool allowSkip;
+
+  /// 横排三卡的最低可用宽度（每卡缩略图 + 间距 + 内边距）。
+  static const double _wideLayoutBreakpoint = 560;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final allDisabled = SmartLayoutTemplateKind.values.every(
+      (kind) => preparation.layouts[kind] == null,
+    );
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '选择排版模板',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  tooltip: '取消',
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
-            Text(
-              'AI 已识别本页内容，点选一个模板进入预览（可拖动微调后再确认）。',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                for (final kind in SmartLayoutTemplateKind.values) ...[
+        // 窄屏下三卡纵向列表会超出弹层最大高度：整体可滚动，避免 RenderFlex 溢出。
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
                   Expanded(
-                    child: _TemplateCard(
-                      kind: kind,
-                      layout: preparation.layouts[kind],
-                      content: preparation.content,
+                    child: Text(
+                      '选择排版模板',
+                      style: theme.textTheme.titleMedium,
                     ),
                   ),
-                  if (kind != SmartLayoutTemplateKind.values.last)
-                    const SizedBox(width: 12),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: '取消',
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
                 ],
+              ),
+              Text(
+                'AI 已识别本页内容，点选一个模板进入预览（可拖动微调后再确认）。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (allDisabled) ...[
+                const SizedBox(height: 8),
+                Text(
+                  allowSkip
+                      ? '本页内容超出所有模板的容量，请分页后再试，或点下方"跳过本页"继续后续页。'
+                      : '本页内容超出所有模板的容量，请分页后再试。',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
               ],
-            ),
-          ],
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cards = [
+                    for (final kind in SmartLayoutTemplateKind.values)
+                      _TemplateCard(
+                        kind: kind,
+                        layout: preparation.layouts[kind],
+                        content: preparation.content,
+                      ),
+                  ];
+                  // 窄屏断点：可用宽度放不下三卡横排时改纵向铺满列表，
+                  // 点选/置灰逻辑不变（卡本身自适应宽度）。
+                  if (constraints.maxWidth < _wideLayoutBreakpoint) {
+                    return Column(
+                      children: [
+                        for (var i = 0; i < cards.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 12),
+                          SizedBox(width: double.infinity, child: cards[i]),
+                        ],
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      for (var i = 0; i < cards.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 12),
+                        Expanded(child: cards[i]),
+                      ],
+                    ],
+                  );
+                },
+              ),
+              if (allowSkip)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pop((kind: null, skipped: true)),
+                    child: const Text('跳过本页'),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -95,7 +156,9 @@ class _TemplateCard extends StatelessWidget {
     final layout = this.layout;
     final enabled = layout != null;
     return InkWell(
-      onTap: enabled ? () => Navigator.of(context).pop(kind) : null,
+      onTap: enabled
+          ? () => Navigator.of(context).pop((kind: kind, skipped: false))
+          : null,
       borderRadius: BorderRadius.circular(12),
       child: Opacity(
         opacity: enabled ? 1 : 0.55,

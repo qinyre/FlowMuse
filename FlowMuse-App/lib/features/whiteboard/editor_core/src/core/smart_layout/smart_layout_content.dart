@@ -1,10 +1,8 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 
 import '../elements/elements.dart';
-import 'smart_layout_document.dart';
 
 /// 版式单元种类。
 enum LayoutUnitKind { text, image, shape, group }

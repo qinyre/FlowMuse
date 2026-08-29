@@ -328,8 +328,80 @@ class _PageThumbnail extends StatelessWidget {
 /// 底部条形按钮动作。
 enum SmartLayoutBarAction { apply, applyAndDrop, retry, skipPage, cancelAll }
 
+/// 识别进度状态：整页识别阶段（尚无逐块进度）或裁剪重问逐块阶段。
+/// [pageLabel] 为多页流程的页码提示（如"第 2/5 页"），单页为 null 不显示。
+@immutable
+class SmartLayoutRecognitionProgress {
+  const SmartLayoutRecognitionProgress.page({this.pageLabel})
+    : isBlockStage = false,
+      completed = 0,
+      total = 0;
+
+  const SmartLayoutRecognitionProgress.blocks({
+    required this.completed,
+    required this.total,
+    this.pageLabel,
+  }) : isBlockStage = true;
+
+  /// true = 裁剪重问逐块转写阶段；false = 整页识别阶段。
+  final bool isBlockStage;
+  final int completed;
+  final int total;
+  final String? pageLabel;
+
+  String get label {
+    final stage = !isBlockStage || total <= 0
+        ? '正在识别页面…'
+        : '正在识别文字 $completed/$total';
+    return pageLabel == null ? stage : '$pageLabel · $stage';
+  }
+}
+
+/// 识别进行中的轻量浮层：进度文案 + 取消按钮。
+/// 用 ValueNotifier 驱动原位刷新（SnackBar 不能改文案，逐条 hide/show 会抖动）。
+class SmartLayoutProgressOverlay extends StatelessWidget {
+  const SmartLayoutProgressOverlay({
+    super.key,
+    required this.progress,
+    this.onCancel,
+  });
+
+  final SmartLayoutRecognitionProgress progress;
+
+  /// null = 不显示取消按钮。
+  final VoidCallback? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 6,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Text(progress.label, style: theme.textTheme.bodyMedium),
+            if (onCancel != null) ...[
+              const SizedBox(width: 8),
+              TextButton(onPressed: onCancel, child: const Text('取消')),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// 非模态底部"预览确认"悬浮条（画布全程可见，红区/蓝框不被遮挡）。
-/// 风格由 AI 自主决定（不提供人工切换）；按钮随页数/失败情况显隐。
+/// 风格由 AI 自主决定（不提供人工切换）；按钮随页数/失败情况显隐，
+/// 可用宽度不足时动作区自动换行（不溢出）。
 class SmartLayoutConfirmBar extends StatelessWidget {
   const SmartLayoutConfirmBar({
     super.key,
@@ -352,126 +424,92 @@ class SmartLayoutConfirmBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      elevation: 6,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${plan.style.displayName} · 置信度 '
-                    '${(plan.confidence * 100).round()}%',
-                    style: theme.textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    plan.description,
-                    style: theme.textTheme.bodySmall,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            if (onProofread != null)
-              TextButton(
-                onPressed: onProofread,
-                child: Text('校对 ${plan.lowConfidenceTexts.length} 处'),
-              ),
-            if (_hasFailures)
-              TextButton(
-                onPressed: () => onAction(SmartLayoutBarAction.applyAndDrop),
-                child: const Text('删除未识别笔迹后应用'),
-              ),
-            if (isMultiPage)
-              TextButton(
-                onPressed: () => onAction(SmartLayoutBarAction.skipPage),
-                child: const Text('跳过本页'),
-              ),
-            TextButton(
-              onPressed: () => onAction(SmartLayoutBarAction.cancelAll),
-              child: Text(isMultiPage ? '取消整个流程' : '取消'),
-            ),
-            const SizedBox(width: 4),
-            FilledButton(
-              onPressed: () => onAction(SmartLayoutBarAction.apply),
-              child: const Text('应用'),
-            ),
-          ],
+    final info = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${plan.style.displayName} · 置信度 '
+          '${(plan.confidence * 100).round()}%',
+          style: theme.textTheme.titleSmall,
         ),
-      ),
+        const SizedBox(height: 2),
+        Text(
+          plan.description,
+          style: theme.textTheme.bodySmall,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (plan.failureRects.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            '${plan.failureRects.length} 处手写未识别成功（红色区域）：'
+            '应用将保留笔迹，可改用"删除未识别笔迹后应用"。',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ],
     );
-  }
-}
-
-/// 非模态底部"识别失败"悬浮条（红区可见；展示失败原因便于定位）。
-class SmartLayoutFailureBar extends StatelessWidget {
-  const SmartLayoutFailureBar({
-    super.key,
-    required this.failures,
-    required this.isMultiPage,
-    required this.onAction,
-  });
-
-  final List<SmartLayoutFailureInfo> failures;
-  final bool isMultiPage;
-  final ValueChanged<SmartLayoutBarAction> onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final firstError = failures.isEmpty ? null : failures.first.error;
+    final actions = Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: [
+        if (onProofread != null)
+          TextButton(
+            onPressed: onProofread,
+            child: Text('校对 ${plan.lowConfidenceTexts.length} 处'),
+          ),
+        if (_hasFailures)
+          TextButton(
+            onPressed: () => onAction(SmartLayoutBarAction.applyAndDrop),
+            child: const Text('删除未识别笔迹后应用'),
+          ),
+        TextButton(
+          onPressed: () => onAction(SmartLayoutBarAction.retry),
+          child: const Text('重新识别'),
+        ),
+        if (isMultiPage)
+          TextButton(
+            onPressed: () => onAction(SmartLayoutBarAction.skipPage),
+            child: const Text('跳过本页'),
+          ),
+        TextButton(
+          onPressed: () => onAction(SmartLayoutBarAction.cancelAll),
+          child: Text(isMultiPage ? '取消整个流程' : '取消'),
+        ),
+        FilledButton(
+          onPressed: () => onAction(SmartLayoutBarAction.apply),
+          child: const Text('应用'),
+        ),
+      ],
+    );
+    // 宽度充足：说明在左、动作在右（原布局）；不足：上下两段、动作区换行。
     return Card(
       elevation: 6,
-      color: theme.colorScheme.errorContainer,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${failures.length} 处手写未识别成功（红色区域），'
-                    '可修改字迹后重试，或删除后继续。',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  if (firstError != null && firstError.isNotEmpty)
-                    Text(
-                      '原因：$firstError',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onErrorContainer,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            if (isMultiPage)
-              TextButton(
-                onPressed: () => onAction(SmartLayoutBarAction.skipPage),
-                child: const Text('跳过本页'),
-              ),
-            TextButton(
-              onPressed: () => onAction(SmartLayoutBarAction.cancelAll),
-              child: Text(isMultiPage ? '取消整个流程' : '取消'),
-            ),
-            const SizedBox(width: 4),
-            FilledButton(
-              onPressed: () => onAction(SmartLayoutBarAction.retry),
-              child: const Text('重新识别'),
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) => constraints.maxWidth >= 720
+              ? Row(
+                  children: [
+                    Expanded(child: info),
+                    const SizedBox(width: 12),
+                    actions,
+                  ],
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    info,
+                    const SizedBox(height: 8),
+                    actions,
+                  ],
+                ),
         ),
       ),
     );
@@ -496,7 +534,9 @@ class SmartLayoutProofreadSheet extends StatefulWidget {
 
 class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
   final Map<int, TextEditingController> _controllers = {};
-  final Set<int> _savedIndexes = {};
+  // 每项最近一次已保存的文本：既是"已保存"标记，也是再次改动的比较基准
+  // （支持保存后继续修改再保存，而不是锁死）。
+  final Map<int, String> _savedTexts = {};
 
   @override
   void dispose() {
@@ -510,9 +550,9 @@ class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
       _controllers.putIfAbsent(index, () => TextEditingController(text: initial));
 
   void _save(int index, ElementId id) {
-    final ok = widget.onRevise(id, _controllers[index]!.text);
-    if (!ok) return;
-    setState(() => _savedIndexes.add(index));
+    final text = _controllers[index]!.text;
+    if (!widget.onRevise(id, text)) return;
+    setState(() => _savedTexts[index] = text);
   }
 
   @override
@@ -544,9 +584,15 @@ class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
                 itemBuilder: (context, index) {
                   final item = widget.items[index];
                   final controller = _controllerFor(index, item.text);
-                  final saved = _savedIndexes.contains(index);
+                  final baseline = _savedTexts[index] ?? item.text;
+                  final saved =
+                      _savedTexts.containsKey(index) &&
+                      controller.text.trim() == baseline.trim();
                   final changed =
-                      controller.text.trim() != item.text.trim() && !saved;
+                      controller.text.trim() != baseline.trim();
+                  // 空文本禁用保存（会产生不可见的空文字元素）。
+                  final canSave =
+                      changed && controller.text.trim().isNotEmpty;
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     child: Row(
@@ -572,7 +618,7 @@ class _SmartLayoutProofreadSheetState extends State<SmartLayoutProofreadSheet> {
                         ),
                         const SizedBox(width: 8),
                         FilledButton.tonal(
-                          onPressed: changed
+                          onPressed: canSave
                               ? () => _save(index, item.id)
                               : null,
                           child: const Text('保存'),

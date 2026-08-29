@@ -37,6 +37,9 @@ import '../input/stroke_recorder.dart';
 const String _logTag = 'InkRecognition';
 const int _smartLayoutClientRecognitionConcurrency = 3;
 
+/// 用户取消智能排版识别准备时抛出（UI 层捕获后静默处理，不弹失败提示）。
+class SmartLayoutCancelledException implements Exception {}
+
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
 
@@ -311,6 +314,10 @@ class MarkdrawController extends ChangeNotifier {
   Timer? _inkRecognitionTimer;
   String? _pendingInkSessionId;
   bool _recognizingInk = false;
+
+  // --- 智能排版识别准备（v2 视觉管线）取消状态 ---
+  bool _smartLayoutPrepareActive = false;
+  bool _smartLayoutPrepareCancelled = false;
 
   // --- 智能排版草稿编辑态（预览即编辑：可拖动、确认落地、取消零残留） ---
   bool _smartLayoutDraftActive = false;
@@ -3259,7 +3266,11 @@ class MarkdrawController extends ChangeNotifier {
   /// 模板选择准备（v2 模板卡片制）：识别（认字+图文配对+裁剪重问）完成后
   /// 预落位三张模板，交给模板选择卡展示真实内容缩略图。
   /// 返回 null = 本页无可排版手写内容；识别失败直接抛异常（无经典管线回退），
-  /// 由 UI 提示重试。
+  /// 由 UI 提示重试；用户取消则抛 [SmartLayoutCancelledException]（UI 静默处理）。
+  ///
+  /// [onProgress] 仅在裁剪重问（逐块转写）阶段回调：`completed` = 已完成块数
+  /// （无论重问结果是否被采用）、`total` = 待转写文本块数；阶段开始时先回调
+  /// 一次 (0, total)。整页截图与 VLM 整页识别阶段不回调。
   Future<SmartLayoutTemplatePreparation?> prepareSmartLayoutTemplates({
     required String pageId,
     void Function(int completed, int total)? onProgress,
@@ -3284,6 +3295,9 @@ class MarkdrawController extends ChangeNotifier {
       throw StateError('没有可用的识别引擎');
     }
     _recognizingInk = true;
+    _smartLayoutPrepareActive = true;
+    // 取消状态在下一次准备开始时重置（契约：取消只作用于当次准备）。
+    _smartLayoutPrepareCancelled = false;
     try {
       final inkGroups = _smartLayoutInkGroupsForPage(pageId);
       if (inkGroups.isEmpty) {
@@ -3300,6 +3314,25 @@ class MarkdrawController extends ChangeNotifier {
       return preparation;
     } finally {
       _recognizingInk = false;
+      _smartLayoutPrepareActive = false;
+    }
+  }
+
+  /// 请求取消进行中的智能排版识别准备（幂等；未在准备中时为空操作）。
+  ///
+  /// 取消后 [prepareSmartLayoutTemplates] 在下一个检查点抛
+  /// [SmartLayoutCancelledException]；已发出的截图/VLM 请求不强行中断 HTTP，
+  /// 待其返回后在检查点收尾。prepare 本就不修改场景，取消保证场景零残留；
+  /// 取消状态在下一次 prepare 开始时重置。
+  void cancelSmartLayoutPreparation() {
+    if (!_smartLayoutPrepareActive) return;
+    _smartLayoutPrepareCancelled = true;
+  }
+
+  /// 取消检查点：准备被用户取消时立即中止后续阶段。
+  void _throwIfSmartLayoutCancelled() {
+    if (_smartLayoutPrepareCancelled) {
+      throw SmartLayoutCancelledException();
     }
   }
 
@@ -3589,7 +3622,14 @@ class MarkdrawController extends ChangeNotifier {
       page.bounds.width,
       page.bounds.height,
     );
-    Uint8List? png;
+    // 导出区外扩一圈：SoM 徽章悬在簇框上方、裁剪重问外扩 16pt 都需要画布边缘有余量。
+    final exportMargin =
+        _visionExportMarginPx *
+        math.max(pageBounds.width, pageBounds.height) /
+        _visionExportLongestSide;
+    final exportBounds = pageBounds.inflate(exportMargin);
+    Uint8List? cleanPng;
+    Uint8List? markedPng;
     final clusterRects = <String, ui.Rect>{
       for (final entry in inkGroups.entries)
         entry.key: _inkGroupBounds(entry.value),
@@ -3621,28 +3661,41 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
     try {
-      png = await exportRegionPng(
-        pageBounds,
+      // 双导出：干净截图供裁剪重问（无标记，避免徽章被二次转写），
+      // 带标记截图只发 VLM 做编号引用。
+      cleanPng = await exportRegionPng(
+        exportBounds,
+        maxLongestSide: _visionExportLongestSide,
+      );
+      markedPng = await exportRegionPng(
+        exportBounds,
+        maxLongestSide: _visionExportLongestSide,
         afterPaint: (canvas, zoom) =>
-            _drawVisionMarkOverlay(canvas, zoom, pageBounds.topLeft, markLabels),
+            _drawVisionMarkOverlay(canvas, zoom, exportBounds, markLabels),
       );
     } catch (error) {
       debugPrint('[$_logTag] 视觉排版截图失败: $error');
       throw StateError('页面截图失败，请重试');
     }
-    if (png == null || png.isEmpty || _disposed) {
+    if (cleanPng == null ||
+        cleanPng.isEmpty ||
+        markedPng == null ||
+        markedPng.isEmpty ||
+        _disposed) {
       throw StateError('页面截图失败，请重试');
     }
+    _throwIfSmartLayoutCancelled(); // 检查点：截图两连导出后
     final vision = await visionCallback(
       SmartLayoutVisionRequest(
         pageId: page.id,
-        imageBase64: base64Encode(png),
+        imageBase64: base64Encode(markedPng),
         marks: markIds,
       ),
     );
     if (_disposed) {
       throw StateError('编辑器已释放');
     }
+    _throwIfSmartLayoutCancelled(); // 检查点：vision 回调返回后（已发出的请求不强行中断）
     // 无有效元素 = VLM 没认出任何内容（v2 无回退，直接提示重试）。
     if (vision.elements.isEmpty) {
       debugPrint('[$_logTag] 视觉排版无元素');
@@ -3659,6 +3712,7 @@ class MarkdrawController extends ChangeNotifier {
       debugPrint('[$_logTag] 视觉排版无匹配项');
       throw StateError('未能识别出页面内容，请重试');
     }
+    _throwIfSmartLayoutCancelled(); // 检查点：识别匹配与逐块转写阶段之间
 
     // 文本项转写：每个认领的笔迹簇合并后**先走整页 VLM 文本**；把握不足
     // （< kSmartLayoutTranscribeRetryThreshold）或无文本的块再走低置信裁剪
@@ -3669,12 +3723,14 @@ class MarkdrawController extends ChangeNotifier {
       match.textClaims,
       inkGroups,
       clusterRects,
-      png,
-      pageBounds,
+      cleanPng,
+      exportBounds,
+      onProgress: onProgress,
     );
     if (_disposed) {
       throw StateError('编辑器已释放');
     }
+    _throwIfSmartLayoutCancelled(); // 检查点：逐块转写全部返回后
     final textBlocksByIndex = recognition.blocks;
     final textElementsByIndex = <int, TextElement>{};
     final textSourceByIndex = <int, ui.Rect>{};
@@ -3813,6 +3869,17 @@ class MarkdrawController extends ChangeNotifier {
       looseTexts: looseTexts,
       looseFigures: looseFigures,
     );
+
+    _throwIfSmartLayoutCancelled(); // 检查点：结构层组装与模板预落位之间
+    // 全空内容（无标题、无配对、无松散图文）：VLM 认领了簇但文字全部未被
+    // 救回（如只回显编号被服务端剥空且重问失败）——退化页会组装出空模板卡，
+    // 没有意义，直接提示重试。figure-only 页（有图无字）不视为空。
+    if (content.title == null &&
+        content.pairs.isEmpty &&
+        content.looseTexts.isEmpty &&
+        content.looseFigures.isEmpty) {
+      throw StateError('未能识别出页面内容，请重试');
+    }
 
     // 成功/失败账本：每个簇按其归属文本项的转写结果分入删除或红区；未认领簇直接红区。
     final successByClusterKey = <String, bool>{};
@@ -3981,6 +4048,8 @@ class MarkdrawController extends ChangeNotifier {
     }
     if (current == null) return false;
     final trimmed = newText.trim();
+    // 空文本会产出不可见的空文字元素（笔迹已删、橙框圈空盒），拒绝保存。
+    if (trimmed.isEmpty) return false;
     var candidate = current.copyWithText(text: trimmed);
     // 与创建/引擎一致的尺寸规则：竖排保持原稿窄长不重测；
     // 横排 max(现值, 测量) 只放不缩，避免改字后盒子跳动。
@@ -4001,11 +4070,10 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   
-  /// 视觉路径逐文本项转写：统一整页 VLM 文本单引擎（智能排版不再使用 MyScript，
-  /// 其仅保留在独立"手写字迹识别"入口）；VLM 未给出文本的项按失败进红区。
-  /// 视觉路径逐文本项转写：整页 VLM 文本单引擎（智能排版不使用 MyScript，
+  /// 视觉路径逐文本项转写：整页 VLM 文本单引擎（智能排版不再使用 MyScript，
   /// 其仅保留在独立"手写字迹识别"入口）；把握不足或无文本的块走低置信裁剪
-  /// 重问。返回各项文本块与"有效把握"（重问后可能高于 VLM 自报值）。
+  /// 重问（裁剪自无标记干净截图）。返回各项文本块与"有效把握"
+  /// （重问后可能高于 VLM 自报值）。
   Future<
     ({Map<int, SmartLayoutRecognizedBlock> blocks, Map<int, double> confidences})
   >
@@ -4015,9 +4083,10 @@ class MarkdrawController extends ChangeNotifier {
     Map<int, List<String>> textClaims,
     Map<String, List<FreedrawElement>> inkGroups,
     Map<String, ui.Rect> clusterRects,
-    Uint8List? pagePng,
-    ui.Rect pageBounds,
-  ) async {
+    Uint8List? cleanPagePng,
+    ui.Rect exportBounds, {
+    void Function(int completed, int total)? onProgress,
+  }) async {
     final requests = <SmartLayoutInkBlockRequest>[];
     final unionsByRequestId = <String, ui.Rect>{};
     final indexByRequestId = <String, int>{};
@@ -4060,7 +4129,8 @@ class MarkdrawController extends ChangeNotifier {
         ),
       );
     }
-    // 整页截图延迟解码：只有存在待重问的块才解一次（并发 worker 共享）。
+    // 干净整页截图（无 SoM 标记）延迟解码：只有存在待重问的块才解一次
+    // （并发 worker 共享）。
     final retryRequestIds = <String>{
       for (final request in requests)
         if (shouldReAskTranscription(
@@ -4071,8 +4141,8 @@ class MarkdrawController extends ChangeNotifier {
     };
     Future<ui.Image?>? decodeFuture;
     Future<ui.Image?> pageImage() {
-      if (pagePng == null) return Future.value(null);
-      return decodeFuture ??= _decodeUiImage(pagePng);
+      if (cleanPagePng == null) return Future.value(null);
+      return decodeFuture ??= _decodeUiImage(cleanPagePng);
     }
 
     final effectiveConfidenceByIndex = <int, double>{};
@@ -4083,7 +4153,7 @@ class MarkdrawController extends ChangeNotifier {
       final visionElement = elements[index];
       var text = visionElement.text?.trim() ?? '';
       var confidence = visionElement.confidence;
-      // 低置信裁剪重问：从整页截图裁出该块（外扩 16pt），无上下文单块转写；
+      // 低置信裁剪重问：从干净整页截图裁出该块（外扩 16pt），无上下文单块转写；
       // 新结果有文字且把握更高才采用（KIE-HVQA：上下文隔离降幻觉）。
       if (retryRequestIds.contains(request.id) && onTranscribeCrop != null) {
         try {
@@ -4091,7 +4161,7 @@ class MarkdrawController extends ChangeNotifier {
           if (image != null) {
             final reAsk = await _transcribeCropFromImage(
               pageImage: image,
-              pageBounds: pageBounds,
+              pageBounds: exportBounds,
               blockRect: unionsByRequestId[request.id]!,
             );
             final adopted = adoptTranscription(
@@ -4134,10 +4204,16 @@ class MarkdrawController extends ChangeNotifier {
       results = await _recognizeSmartLayoutBlocksInParallel(
         requests,
         recognizeOne,
-        null,
+        onProgress,
       );
+    } else {
+      // 无待转写块：仍回调一次，让进度条以 total=0 直接完成。
+      onProgress?.call(0, 0);
     }
     await decodeFuture;
+    if (_smartLayoutPrepareCancelled) {
+      throw SmartLayoutCancelledException(); // 检查点：干净整页图解码返回后
+    }
     return (
       blocks: {
         for (var i = 0; i < requests.length; i++)
@@ -4157,8 +4233,10 @@ class MarkdrawController extends ChangeNotifier {
         confidence < kSmartLayoutTranscribeRetryThreshold;
   }
 
-  /// 低置信裁剪重问的择优规则：新结果有文字、与原文不同且把握严格更高才
-  /// 采用；端点失败、无文字（模型自认看不清）或把握不升 → 保留原结果。
+  /// 低置信裁剪重问的择优规则：新结果有文字且把握严格更高才采用——与原文
+  /// 不同 → 采用新文；与原文相同 → 采信原文并把把握提升到新值（两次独立
+  /// 读一致，清除存疑橙框）。端点失败、无文字（模型自认看不清）或把握
+  /// 不升 → 保留原结果。
   @visibleForTesting
   static ({String text, double confidence})? adoptTranscription({
     required String currentText,
@@ -4167,13 +4245,22 @@ class MarkdrawController extends ChangeNotifier {
   }) {
     if (reAsk == null) return null;
     final text = reAsk.text.trim();
-    if (text.isEmpty || text == currentText) return null;
+    if (text.isEmpty) return null;
     if (reAsk.confidence <= currentConfidence) return null;
+    if (text == currentText) {
+      return (text: currentText, confidence: reAsk.confidence);
+    }
     return (text: text, confidence: reAsk.confidence);
   }
 
   /// 裁剪重问的外扩边距（pt）：给识别留出上下文边缘，避免字被裁半。
   static const double _visionCropPadding = 16.0;
+
+  /// 智能排版整页导出的最长边像素（与 exportRegionPng 的默认值一致）。
+  static const double _visionExportLongestSide = 1568;
+
+  /// 导出区外扩的目标像素余量：SoM 徽章（约 22px 高）悬在簇框上方需要边距。
+  static const double _visionExportMarginPx = 28;
 
   Future<SmartLayoutTranscribeResponse?> _transcribeCropFromImage({
     required ui.Image pageImage,
@@ -4273,12 +4360,50 @@ class MarkdrawController extends ChangeNotifier {
     return (elements: elements, rects: rects, memberIds: memberIds);
   }
 
+  /// SoM 编号徽章落位：悬在簇框左上角上方（间隙 2px，不遮笔迹——VLM 曾把
+  /// 框内徽章当成手写内容抄进转写）；顶部余量不足退到框下方，底部也不足
+  /// （画布贴边）才回框内左上角；横向贴边时向内收。
+  @visibleForTesting
+  static Rect visionMarkLabelRect({
+    required Rect boxRect,
+    required Size labelSize,
+    required Size canvasSize,
+  }) {
+    const gap = 2.0;
+    final left = boxRect.left
+        .clamp(0.0, math.max(0.0, canvasSize.width - labelSize.width))
+        .toDouble();
+    if (boxRect.top >= labelSize.height + gap) {
+      return Rect.fromLTWH(
+        left,
+        boxRect.top - labelSize.height - gap,
+        labelSize.width,
+        labelSize.height,
+      );
+    }
+    if (boxRect.bottom + gap + labelSize.height <= canvasSize.height) {
+      return Rect.fromLTWH(
+        left,
+        boxRect.bottom + gap,
+        labelSize.width,
+        labelSize.height,
+      );
+    }
+    return Rect.fromLTWH(
+      left,
+      math.max(0.0, boxRect.top),
+      labelSize.width,
+      labelSize.height,
+    );
+  }
+
   /// Set-of-Mark 叠加：把编号标记画进导出截图（场景坐标→导出像素坐标），
-  /// VLM 读图上编号输出 markIds，不做坐标回归。
+  /// VLM 读图上编号输出 markIds，不做坐标回归。徽章悬在簇框外侧上方，
+  /// 不遮笔迹（见 visionMarkLabelRect）。
   void _drawVisionMarkOverlay(
     Canvas canvas,
     double zoom,
-    Offset sceneOrigin,
+    ui.Rect pageBounds,
     List<({String id, ui.Rect bounds})> marks,
   ) {
     const markColors = [
@@ -4291,11 +4416,15 @@ class MarkdrawController extends ChangeNotifier {
       Color(0xFFE11D8F),
       Color(0xFF84CC16),
     ];
+    final canvasSize = ui.Size(
+      pageBounds.width * zoom,
+      pageBounds.height * zoom,
+    );
     for (var i = 0; i < marks.length; i++) {
       final mark = marks[i];
       final pixelRect = Rect.fromLTWH(
-        (mark.bounds.left - sceneOrigin.dx) * zoom,
-        (mark.bounds.top - sceneOrigin.dy) * zoom,
+        (mark.bounds.left - pageBounds.left) * zoom,
+        (mark.bounds.top - pageBounds.top) * zoom,
         mark.bounds.width * zoom,
         mark.bounds.height * zoom,
       );
@@ -4318,11 +4447,10 @@ class MarkdrawController extends ChangeNotifier {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      final labelRect = Rect.fromLTWH(
-        math.max(0.0, pixelRect.left),
-        math.max(0.0, pixelRect.top),
-        textPainter.width + 10,
-        textPainter.height + 6,
+      final labelRect = visionMarkLabelRect(
+        boxRect: pixelRect,
+        labelSize: Size(textPainter.width + 10, textPainter.height + 6),
+        canvasSize: canvasSize,
       );
       canvas.drawRRect(
         RRect.fromRectAndRadius(labelRect, const Radius.circular(3)),
@@ -4413,13 +4541,16 @@ class MarkdrawController extends ChangeNotifier {
       while (true) {
         if (_disposed) return;
         if (firstError != null) return;
+        if (_smartLayoutPrepareCancelled) return; // 取消后不再领取新块
         final index = nextIndex;
         if (index >= blocks.length) return;
         nextIndex++;
         try {
           results[index] = await recognize(blocks[index]);
           completed++;
-          onProgress?.call(completed, blocks.length);
+          if (!_smartLayoutPrepareCancelled) {
+            onProgress?.call(completed, blocks.length);
+          }
         } catch (error, stackTrace) {
           firstError ??= error;
           firstStackTrace ??= stackTrace;
@@ -4433,6 +4564,11 @@ class MarkdrawController extends ChangeNotifier {
       blocks.length,
     );
     await Future.wait([for (var i = 0; i < workerCount; i++) worker()]);
+    if (_smartLayoutPrepareCancelled) {
+      // 已发出的块请求不强行中断（worker await 返回后到这里收尾），
+      // 取消以用户意图优先于"结果不完整"检查。
+      throw SmartLayoutCancelledException();
+    }
     final error = firstError;
     if (error != null) {
       Error.throwWithStackTrace(error, firstStackTrace ?? StackTrace.current);
@@ -4507,21 +4643,6 @@ class MarkdrawController extends ChangeNotifier {
     return page?.id;
   }
 
-  
-  Bounds? _boundsForElements(List<Element> elements) {
-    Bounds? result;
-    for (final element in elements) {
-      final bounds = Bounds.fromLTWH(
-        element.x,
-        element.y,
-        math.max(element.width, 1.0),
-        math.max(element.height, 1.0),
-      );
-      result = result == null ? bounds : result.union(bounds);
-    }
-    return result;
-  }
-
   Bounds _placementBoundsForElement(Element element) {
     final visual = AlignmentUtils.visualBounds(element);
     final minExtent = element is LineElement
@@ -4561,42 +4682,6 @@ class MarkdrawController extends ChangeNotifier {
     return startedAt;
   }
 
-  Future<Uint8List?> _renderInkBlockPng(List<FreedrawElement> strokes) {
-    var scene = Scene();
-    for (final stroke in strokes) {
-      scene = scene.addElement(stroke);
-    }
-    return PngExporter.export(
-      scene,
-      _adapter,
-      scale: 2,
-      backgroundColor: const Color(0xffffffff),
-      embedMarkdraw: false,
-    );
-  }
-
-  /// 将 PNG 顺时针旋转 90°（竖排笔迹图像转横排送识别）。
-  Future<Uint8List?> _rotatePng90(Uint8List bytes) async {
-    try {
-      final codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      final image = frame.image;
-      final recorder = ui.PictureRecorder();
-      final canvas = ui.Canvas(recorder);
-      canvas.translate(image.height.toDouble(), 0);
-      canvas.rotate(math.pi / 2);
-      canvas.drawImage(image, ui.Offset.zero, ui.Paint());
-      final rotated = await recorder
-          .endRecording()
-          .toImage(image.height, image.width);
-      final data = await rotated.toByteData(format: ui.ImageByteFormat.png);
-      return data?.buffer.asUint8List();
-    } catch (error) {
-      debugPrint("$_logTag 竖排图像旋转失败，按原图识别: $error");
-      return bytes;
-    }
-  }
-
   List<TextElement> _smartLayoutGeneratedTextElements() {
     return [
       for (final element in _editorState.scene.activeElements)
@@ -4604,92 +4689,6 @@ class MarkdrawController extends ChangeNotifier {
             _flowMuseData(element)?['smartLayout'] == true)
           element,
     ];
-  }
-
-  
-  List<Element>? _elementsFromSmartLayout(
-    SmartLayoutDocument document, {
-    Set<String> articlePageIds = const {},
-    bool useTemplateAnchors = false,
-    Map<String, List<Bounds>>? occupiedByPage,
-  }) {
-    final blocks = [...document.blocks]
-      ..sort((a, b) => a.order.compareTo(b.order));
-    final elements = <Element>[];
-    final occupied = occupiedByPage ?? <String, List<Bounds>>{};
-    final layoutIndexByPage = <String, int>{};
-    for (final block in blocks) {
-      if (articlePageIds.isNotEmpty &&
-          (block.pageId == null || !articlePageIds.contains(block.pageId))) {
-        continue;
-      }
-      if (block.text.trim().isEmpty) {
-        continue;
-      }
-      final pageKey = _layout.isPaged ? block.pageId ?? '' : '';
-      final pageLayoutIndex = layoutIndexByPage[pageKey] ?? 0;
-      final pageOccupied = occupied.putIfAbsent(pageKey, () => <Bounds>[]);
-      final blockElements = _textElementsFromSmartLayoutBlock(
-        block,
-        pageLayoutIndex,
-        pageOccupied,
-        useTemplateAnchors: useTemplateAnchors,
-      );
-      if (blockElements == null) return null;
-      for (final element in blockElements) {
-        elements.add(element);
-        pageOccupied.add(_placementBoundsForElement(element));
-      }
-      layoutIndexByPage[pageKey] =
-          pageLayoutIndex + _smartLayoutLineSpan(block.text);
-    }
-    return elements;
-  }
-
-  
-  CanvasPage? _pageForBounds(Bounds bounds) {
-    CanvasPage? best;
-    var bestArea = 0.0;
-    for (final page in _layout.pages) {
-      final overlap = page.bounds.intersect(
-        Rect.fromLTWH(
-          bounds.left,
-          bounds.top,
-          bounds.size.width,
-          bounds.size.height,
-        ),
-      );
-      final area = overlap.isEmpty ? 0.0 : overlap.width * overlap.height;
-      if (area > bestArea) {
-        bestArea = area;
-        best = page;
-      }
-    }
-    return best;
-  }
-
-  TextElement? _placeSmartLayoutElement(
-    TextElement element, {
-    required int layoutIndex,
-    required Map<String, List<Bounds>> occupiedByPage,
-  }) {
-    final pageId = _layout.isPaged ? element.pageId ?? '' : '';
-    final occupied = occupiedByPage.putIfAbsent(pageId, () => <Bounds>[]);
-    final bounds = _placementBoundsForElement(element);
-    final block = SmartLayoutBlock(
-      id: 'placement-${element.id.value}',
-      type: 'text',
-      text: element.text,
-      pageId: element.pageId,
-      bounds: bounds,
-      order: layoutIndex,
-      sourceIds: const [],
-    );
-    final placed = _nonOverlappingSmartLayoutBounds(bounds, block, occupied);
-    if (placed == null) return null;
-    final moved = element.copyWith(x: placed.left, y: placed.top);
-    occupied.add(_placementBoundsForElement(moved));
-    return moved;
   }
 
   Map<String, Object?>? _flowMuseData(Element element) {
@@ -4757,108 +4756,6 @@ class MarkdrawController extends ChangeNotifier {
     return math.max(12, math.min(estimatedLineHeight * 0.72, 48));
   }
 
-  List<TextElement>? _textElementsFromSmartLayoutBlock(
-    SmartLayoutBlock block,
-    int layoutIndex,
-    List<Bounds> occupied, {
-    bool useTemplateAnchors = false,
-  }) {
-    final lines = _smartLayoutDisplayLines(block.text);
-    if (lines.length <= 1) {
-      final element = _textElementFromSmartLayoutBlock(
-        block,
-        layoutIndex,
-        occupied,
-        useTemplateAnchors: useTemplateAnchors,
-      );
-      return element == null ? null : [element];
-    }
-    final elements = <TextElement>[];
-    final localOccupied = [...occupied];
-    final totalLineCount = math.max(lines.length, 1);
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      if (line.trim().isEmpty) {
-        continue;
-      }
-      final lineBlock = SmartLayoutBlock(
-        id: '${block.id}-line-$i',
-        type: block.type,
-        text: line,
-        latex: block.type == 'math' ? line : block.latex,
-        pageId: block.pageId,
-        bounds: _lineBoundsForSmartLayoutBlock(block, i, totalLineCount),
-        order: block.order,
-        writingMode: block.writingMode,
-        sourceIds: block.sourceIds,
-      );
-      final element = _textElementFromSmartLayoutBlock(
-        lineBlock,
-        layoutIndex + i,
-        localOccupied,
-        useTemplateAnchors: useTemplateAnchors,
-      );
-      if (element == null) return null;
-      elements.add(element);
-      localOccupied.add(
-        Bounds.fromLTWH(element.x, element.y, element.width, element.height),
-      );
-    }
-    return elements;
-  }
-
-  TextElement? _textElementFromSmartLayoutBlock(
-    SmartLayoutBlock block,
-    int layoutIndex,
-    List<Bounds> occupied, {
-    bool useTemplateAnchors = false,
-  }) {
-    final anchor = useTemplateAnchors
-        ? _templateAnchorForSmartLayoutBlock(block, layoutIndex)
-        : null;
-    final initialBounds = anchor == null
-        ? (block.bounds ?? _fallbackSmartLayoutBounds(block, layoutIndex))
-        : _smartLayoutBoundsForTemplateAnchor(anchor, block, layoutIndex);
-    final vertical =
-        anchor?.writingMode == TemplateWritingMode.vertical ||
-        block.writingMode == 'vertical';
-    final text = block.type == 'math' && block.latex?.trim().isNotEmpty == true
-        ? block.latex!.trim()
-        : _trimSmartLayoutDisplayText(block.text);
-    final element = TextElement(
-      id: ElementId.generate(),
-      x: initialBounds.left,
-      y: initialBounds.top,
-      width: math.max(initialBounds.size.width, vertical ? 28 : 80),
-      height: math.max(initialBounds.size.height, 28),
-      text: text,
-      fontSize: anchor?.fontSize ?? (block.type == 'heading' ? 28 : 20),
-      fontFamily: _defaultStyle.fontFamily ?? TextElement.defaultFontFamily,
-      lineHeight: _textLineHeightForTemplateAnchor(anchor),
-      customData: {
-        'flowMuse': {
-          if (block.pageId != null) 'pageId': block.pageId,
-          'smartLayout': true,
-          'blockId': block.id,
-          if (block.type == 'math') 'smartLayoutType': 'math',
-          if (vertical) 'writingMode': 'vertical',
-        },
-      },
-    );
-    final styled = _applySmartLayoutTextStyle(element);
-    final measured = _measureSmartLayoutText(styled, vertical: vertical);
-    final anchored = anchor == null
-        ? measured
-        : _alignSmartLayoutTextToAnchor(measured, anchor, vertical);
-    final placedBounds = _nonOverlappingSmartLayoutBounds(
-      Bounds.fromLTWH(anchored.x, anchored.y, anchored.width, anchored.height),
-      block,
-      occupied,
-    );
-    if (placedBounds == null) return null;
-    return anchored.copyWith(x: placedBounds.left, y: placedBounds.top);
-  }
-
   TextElement _applySmartLayoutTextStyle(TextElement element) {
     final styled = element.copyWith(
       strokeColor: _defaultStyle.strokeColor,
@@ -4876,35 +4773,6 @@ class MarkdrawController extends ChangeNotifier {
           ),
         )
         as TextElement;
-  }
-
-  TextElement _measureSmartLayoutText(
-    TextElement element, {
-    required bool vertical,
-  }) {
-    if (!vertical) {
-      final (measuredWidth, measuredHeight) = TextRenderer.measure(element);
-      return element.copyWith(
-        width: math.max(element.width, measuredWidth),
-        height: math.max(element.height, measuredHeight),
-      );
-    }
-    final chars = element.text.runes
-        .map((rune) => String.fromCharCode(rune))
-        .where((char) => char.trim().isNotEmpty)
-        .toList();
-    var measuredWidth = element.width;
-    for (final char in chars) {
-      final (charWidth, _) = TextRenderer.measure(
-        element.copyWithText(text: char),
-      );
-      measuredWidth = math.max(measuredWidth, charWidth);
-    }
-    final measuredHeight = math.max(
-      element.height,
-      chars.length * element.fontSize * element.lineHeight,
-    );
-    return element.copyWith(width: measuredWidth, height: measuredHeight);
   }
 
   TextElement _alignSmartLayoutTextToAnchor(
@@ -4932,149 +4800,6 @@ class MarkdrawController extends ChangeNotifier {
         ? anchor.crossAxis - firstLineBottom
         : anchor.crossAxis - firstLineHeight / 2;
     return element.copyWith(x: anchor.position.dx, y: y);
-  }
-
-  int _smartLayoutLineSpan(String text) {
-    final normalized = _trimSmartLayoutDisplayText(text);
-    if (normalized.isEmpty) {
-      return 1;
-    }
-    return math.max(1, normalized.split('\n').length);
-  }
-
-  List<String> _smartLayoutDisplayLines(String text) {
-    return _trimSmartLayoutDisplayText(
-      text,
-    ).replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
-  }
-
-  Bounds? _lineBoundsForSmartLayoutBlock(
-    SmartLayoutBlock block,
-    int lineIndex,
-    int lineCount,
-  ) {
-    final bounds = block.bounds;
-    if (bounds == null || lineCount <= 1) {
-      return bounds;
-    }
-    final lineHeight = math.max(bounds.size.height / lineCount, 1.0);
-    return Bounds.fromLTWH(
-      bounds.left,
-      bounds.top + lineHeight * lineIndex,
-      bounds.size.width,
-      lineHeight,
-    );
-  }
-
-  String _trimSmartLayoutDisplayText(String text) {
-    var normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-    while (normalized.startsWith('\n')) {
-      normalized = normalized.substring(1);
-    }
-    return normalized.replaceFirst(RegExp(r'[ \t\n]+$'), '');
-  }
-
-  TemplateAnchor? _templateAnchorForSmartLayoutBlock(
-    SmartLayoutBlock block,
-    int layoutIndex,
-  ) {
-    final page = _smartLayoutPageForBlock(block);
-    if (page == null) return null;
-    final anchors = TemplateAnchorResolver.resolve(page).anchors;
-    if (anchors.isEmpty) return null;
-    return anchors[math.min(layoutIndex, anchors.length - 1)];
-  }
-
-  Bounds _smartLayoutBoundsForTemplateAnchor(
-    TemplateAnchor anchor,
-    SmartLayoutBlock block,
-    int layoutIndex,
-  ) {
-    final page = _smartLayoutPageForBlock(block);
-    final content = page == null
-        ? null
-        : TemplateAnchorResolver.resolve(page).contentRect;
-    if (anchor.writingMode == TemplateWritingMode.vertical) {
-      return Bounds.fromLTWH(
-        anchor.position.dx,
-        anchor.position.dy,
-        math.max(anchor.fontSize * 1.2, 28),
-        content == null
-            ? math.max(block.bounds?.size.height ?? 240, anchor.lineHeight)
-            : math.max(content.bottom - anchor.position.dy, anchor.lineHeight),
-      );
-    }
-    return Bounds.fromLTWH(
-      anchor.position.dx,
-      anchor.position.dy,
-      content == null
-          ? math.max(block.bounds?.size.width ?? 320, anchor.lineHeight)
-          : math.max(content.right - anchor.position.dx, anchor.lineHeight),
-      anchor.lineHeight,
-    );
-  }
-
-  Bounds _fallbackSmartLayoutBounds(SmartLayoutBlock block, int layoutIndex) {
-    final page = _smartLayoutPageForBlock(block);
-    if (page == null) {
-      return Bounds.fromLTWH(0, layoutIndex * 40.0, 240, 32);
-    }
-    final geometry = TemplateAnchorResolver.resolve(page);
-    final content = geometry.contentRect;
-    if (block.writingMode == 'vertical') {
-      return Bounds.fromLTWH(
-        content.right - 36 - layoutIndex * 44.0,
-        content.top,
-        36,
-        math.min(240, content.height),
-      );
-    }
-    return Bounds.fromLTWH(
-      content.left,
-      content.top + layoutIndex * 40.0,
-      math.min(320, content.width),
-      32,
-    );
-  }
-
-  Bounds? _nonOverlappingSmartLayoutBounds(
-    Bounds candidate,
-    SmartLayoutBlock block,
-    List<Bounds> occupied,
-  ) {
-    final page = _smartLayoutPageForBlock(block);
-    final contentRect = page == null
-        ? null
-        : TemplateAnchorResolver.resolve(page).contentRect;
-    if (contentRect == null) {
-      return _findUnboundedInsertionBounds(candidate, occupied);
-    }
-    return _findStrictInsertionBounds(
-      contentRect,
-      candidate.size.width,
-      candidate.size.height,
-      occupied,
-      preferred: candidate,
-    );
-  }
-
-  CanvasPage? _smartLayoutPageForBlock(SmartLayoutBlock block) {
-    if (!_layout.isPaged) return null;
-    final pages = _layout.ensurePage().pages;
-    if (pages.isEmpty) return null;
-    final pageId = block.pageId;
-    if (pageId != null) {
-      for (final page in pages) {
-        if (page.id == pageId) {
-          return page;
-        }
-      }
-    }
-    final bounds = block.bounds;
-    if (bounds != null) {
-      return _layout.pageAt(Offset(bounds.center.x, bounds.center.y));
-    }
-    return pages.first;
   }
 
   bool get canConvertSelectionToText {
@@ -5651,38 +5376,6 @@ class MarkdrawController extends ChangeNotifier {
       height,
       occupied,
       preferred: preferred,
-    );
-  }
-
-  Bounds _findUnboundedInsertionBounds(
-    Bounds preferred,
-    List<Bounds> occupied,
-  ) {
-    const gap = 24.0;
-    final xCandidates = <double>{
-      preferred.left,
-      for (final bounds in occupied) bounds.right + gap,
-    };
-    final yCandidates = <double>{
-      preferred.top,
-      for (final bounds in occupied) bounds.bottom + gap,
-    };
-    for (final y in yCandidates) {
-      for (final x in xCandidates) {
-        final candidate = Bounds.fromLTWH(
-          x,
-          y,
-          preferred.size.width,
-          preferred.size.height,
-        );
-        if (!occupied.any(candidate.intersects)) return candidate;
-      }
-    }
-    return Bounds.fromLTWH(
-      xCandidates.last,
-      yCandidates.last,
-      preferred.size.width,
-      preferred.size.height,
     );
   }
 

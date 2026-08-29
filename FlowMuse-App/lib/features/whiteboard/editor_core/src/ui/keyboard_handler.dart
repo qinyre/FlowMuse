@@ -100,6 +100,16 @@ bool handleKeyEvent({
 
   final alt = HardwareKeyboard.instance.isAltPressed;
 
+  // 智能排版草稿（预览）态：拦截删除类快捷键——预览场景是临时态，删除只改
+  // 预览且 commit 会把被删元素按原计划复活（预览与结果自相矛盾）；
+  // Ctrl+Delete 更会把草稿临时场景清空并触发保存/协作广播。
+  if (controller.smartLayoutDraftActive &&
+      (key == LogicalKeyboardKey.delete ||
+          key == LogicalKeyboardKey.backspace ||
+          (ctrl && key == LogicalKeyboardKey.keyX))) {
+    return true;
+  }
+
   // Zen mode: Alt+Z
   if (alt && !ctrl && !shift && key == LogicalKeyboardKey.keyZ) {
     controller.toggleZenMode();
@@ -203,6 +213,7 @@ bool handleKeyEvent({
 
   // Reset canvas: Ctrl+Delete
   if (ctrl && !shift && key == LogicalKeyboardKey.delete) {
+    if (controller.smartLayoutDraftActive) return true;
     controller.resetCanvas();
     return true;
   }

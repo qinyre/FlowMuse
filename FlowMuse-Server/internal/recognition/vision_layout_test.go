@@ -92,7 +92,7 @@ func TestVisionLayoutMarkReferencesValidated(t *testing.T) {
 
 func TestVisionLayoutElementConfidenceNormalized(t *testing.T) {
 	content := `{"elements":[` +
-		`{"role":"body","text":"未自报把握","markIds":["m1"]},` + // 缺省 → 0.9
+		`{"role":"body","text":"未自报把握","markIds":["m1"]},` + // 缺省 → 存疑 0.5，客户端触发重问
 		`{"role":"body","text":"潦草字","confidence":0.25,"markIds":["m2"]},` + // 透传
 		`{"role":"body","text":"过分自信","confidence":2.5,"markIds":["m3"]}]}` // 越界 → 1
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
@@ -100,11 +100,75 @@ func TestVisionLayoutElementConfidenceNormalized(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VisionLayout error: %v", err)
 	}
-	want := []float64{0.9, 0.25, 1}
+	want := []float64{0.5, 0.25, 1}
 	for i, expected := range want {
 		if got := response.Elements[i].Confidence; got != expected {
 			t.Fatalf("elements[%d].confidence = %v, want %v", i, got, expected)
 		}
+	}
+}
+
+func TestVisionLayoutStripsMarkEcho(t *testing.T) {
+	content := `{"elements":[` +
+		`{"role":"body","text":"m6三月","confidence":0.95,"markIds":["m1"]},` + // 前缀回显 → "三月"+压 0.5
+		`{"role":"body","text":"m9","markIds":["m2"]},` + // 纯回显（真实编号）→ 空文本、把握 0
+		`{"role":"body","text":"m99","confidence":0.9,"markIds":["m3"]},` + // 纯回显（编造编号）→ 同上
+		`{"role":"body","text":"m6 U盘","confidence":0.9,"markIds":["m6"]},` + // 分隔符前缀 → "U盘"
+		`{"role":"body","text":"m3u8","confidence":0.9,"markIds":["m5"]},` + // 真实编号开头也剥离（重问可救回）
+		`{"role":"body","text":"正文内容","confidence":0.9,"markIds":["m4"]}]}` // 无回显 → 原样
+	request := sampleVisionRequest()
+	request.Marks = []string{"m1", "m2", "m3", "m4", "m5", "m6"}
+	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
+	response, err := layouter.VisionLayout(context.Background(), request)
+	if err != nil {
+		t.Fatalf("VisionLayout error: %v", err)
+	}
+	if len(response.Elements) != 6 {
+		t.Fatalf("elements = %d, want 6（纯回显剥成空文本的元素要保留，交客户端重问救回）", len(response.Elements))
+	}
+	wantText := []string{"三月", "", "", "U盘", "u8", "正文内容"}
+	wantConfidence := []float64{0.5, 0, 0, 0.5, 0.5, 0.9}
+	for i := range wantText {
+		if got := response.Elements[i].Text; got != wantText[i] {
+			t.Fatalf("elements[%d].text = %q, want %q", i, got, wantText[i])
+		}
+		if got := response.Elements[i].Confidence; got != wantConfidence[i] {
+			t.Fatalf("elements[%d].confidence = %v, want %v", i, got, wantConfidence[i])
+		}
+	}
+}
+
+func TestStripMarkEcho(t *testing.T) {
+	valid := map[string]bool{"m1": true, "m6": true, "m10": true}
+	cases := []struct {
+		name    string
+		in      string
+		text    string
+		changed bool
+	}{
+		{"纯单编号", "m6", "", true},
+		{"纯多编号带分隔与空白", "  m9，m10 ", "", true},
+		{"前缀紧接内容", "m6三月", "三月", true},
+		{"前缀+分隔符+内容", "m10：先头小子", "先头小子", true},
+		{"非本页编号前缀不动", "m3u8", "m3u8", false},
+		{"无编号", "正文内容", "正文内容", false},
+		{"空串（只去空白）", "   ", "", false},
+	}
+	for _, tc := range cases {
+		text, changed := stripMarkEcho(tc.in, valid)
+		if text != tc.text || changed != tc.changed {
+			t.Fatalf("%s: stripMarkEcho(%q) = (%q, %v), want (%q, %v)",
+				tc.name, tc.in, text, changed, tc.text, tc.changed)
+		}
+	}
+}
+
+func TestVisionPromptForbidsMarkEchoInText(t *testing.T) {
+	if !strings.Contains(visionLayoutPrompt, "严禁出现在") {
+		t.Fatal("vision prompt 应明确禁止编号标签进入 text 转写")
+	}
+	if !strings.Contains(transcribePrompt, "严禁转写进结果") {
+		t.Fatal("transcribe prompt 应明确忽略系统标注")
 	}
 }
 
@@ -238,7 +302,21 @@ func TestTranscribeParsesTextAndClampsConfidence(t *testing.T) {
 func TestTranscribeEmptyTextClearsConfidence(t *testing.T) {
 	content := `{"text":"   ","confidence":0.8}` // 整块无法辨认 → 空文本、把握清零
 	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
-	response, err := layouter.Transcribe(context.Background(), sampleTranscribeRequest())
+	response, err := layouter.Transcribe(context.Background(), TranscribeRequest{ImageBase64: "dGVzdA=="})
+	if err != nil {
+		t.Fatalf("Transcribe error: %v", err)
+	}
+	if response.Text != "" || response.Confidence != 0 {
+		t.Fatalf("response = %#v, want empty text / 0 confidence", response)
+	}
+}
+
+func TestTranscribePureMarkEchoTreatedAsUnrecognized(t *testing.T) {
+	// 干净裁剪图里不该有编号标签，纯编号回显即幻觉 → 视为未认出，
+	// 客户端择优时自然保留原结果。
+	content := `{"text":"m14","confidence":0.9}`
+	layouter := newTestSmartLayouter(fakeVisionServer(t, content, nil).URL)
+	response, err := layouter.Transcribe(context.Background(), TranscribeRequest{ImageBase64: "dGVzdA=="})
 	if err != nil {
 		t.Fatalf("Transcribe error: %v", err)
 	}

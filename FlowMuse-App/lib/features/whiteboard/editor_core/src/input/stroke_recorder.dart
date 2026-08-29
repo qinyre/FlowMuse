@@ -1,5 +1,4 @@
 // lib/features/whiteboard/editor_core/src/input/stroke_recorder.dart
-import 'dart:convert';
 import 'stroke_input_sample.dart';
 
 /// 一段录制：规范化样本序列 + viewport 元数据 + 构建信息。

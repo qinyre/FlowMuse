@@ -75,6 +75,8 @@ class NativeHttpClient {
         url: url,
         headers: headers,
         body: body,
+        connectTimeoutMs: connectTimeoutMs,
+        readTimeoutMs: readTimeoutMs,
         cancelToken: cancelToken,
       );
     } on PlatformException {
@@ -120,10 +122,16 @@ class NativeHttpClient {
   }
 
   /// Android / iOS / desktop: package:http Client (original behavior).
+  /// [connectTimeoutMs] 与 [readTimeoutMs] 此前未下传（package:http 的
+  /// client.post 无内建超时），导致非鸿蒙平台请求可无限挂起；现以读超时
+  /// 兜底整个请求（连接挂起同样受其约束），超时抛 TimeoutException 交
+  /// 上层映射为用户可读提示。
   static Future<NativeHttpResponse> _postViaHttpPackage({
     required String url,
     required Map<String, String> headers,
     required String body,
+    required int connectTimeoutMs,
+    required int readTimeoutMs,
     NativeHttpCancelToken? cancelToken,
   }) async {
     final client = http.Client();
@@ -131,6 +139,11 @@ class NativeHttpClient {
     try {
       final response = await client
           .post(Uri.parse(url), headers: headers, body: body)
+          .timeout(
+            Duration(
+              milliseconds: readTimeoutMs > 0 ? readTimeoutMs : 15000,
+            ),
+          )
           .catchError((Object error) {
             cancelToken?._throwIfCancelled();
             throw error;

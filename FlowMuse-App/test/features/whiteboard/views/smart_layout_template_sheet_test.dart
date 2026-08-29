@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/views/smart_layout_template_sheet.dart';
 import 'package:flutter/material.dart';
@@ -59,11 +57,12 @@ void main() {
     );
   }
 
-  Future<ValueNotifier<SmartLayoutTemplateKind?>> openSheet(
+  Future<ValueNotifier<SmartLayoutTemplateChoice?>> openSheet(
     WidgetTester tester,
-    SmartLayoutTemplatePreparation preparation,
-  ) async {
-    final picked = ValueNotifier<SmartLayoutTemplateKind?>(null);
+    SmartLayoutTemplatePreparation preparation, {
+    bool allowSkip = false,
+  }) async {
+    final picked = ValueNotifier<SmartLayoutTemplateChoice?>(null);
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -74,6 +73,7 @@ void main() {
                   picked.value = await showSmartLayoutTemplateSheet(
                     context: context,
                     preparation: preparation,
+                    allowSkip: allowSkip,
                   );
                 },
                 child: const Text('open'),
@@ -110,7 +110,7 @@ void main() {
     expect(picked.value, isNull);
     await tester.tap(find.text('要点清单'));
     await tester.pumpAndSettle();
-    expect(picked.value, SmartLayoutTemplateKind.outline);
+    expect(picked.value?.kind, SmartLayoutTemplateKind.outline);
   });
 
   testWidgets('放不下的模板置灰不可点，标注"内容放不下"', (tester) async {
@@ -128,5 +128,72 @@ void main() {
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
     expect(picked.value, isNull);
+  });
+
+  testWidgets('窄视口：三卡纵向铺满、无溢出，首卡可见可点', (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final picked = await openSheet(tester, buildPreparation());
+    expect(tester.takeException(), isNull, reason: '窄视口不得溢出');
+    // 纵向铺满：缩略图宽度接近可用宽度（400 - 32 内边距），远大于横排均分
+    final thumbWidth = tester
+        .getSize(find.byKey(const ValueKey('template-thumb-handout')))
+        .width;
+    expect(thumbWidth, greaterThan(300));
+    // 首卡可见可点
+    expect(find.text('图文讲义'), findsOneWidget);
+    await tester.tap(find.text('图文讲义'));
+    await tester.pumpAndSettle();
+    expect(picked.value?.kind, SmartLayoutTemplateKind.handout);
+  });
+
+  testWidgets('窄视口：滚动后末卡可见可点（纵向滚动列表）', (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final picked = await openSheet(tester, buildPreparation());
+    await tester.drag(find.text('图文讲义'), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('原文整理'), findsOneWidget);
+    await tester.tap(find.text('原文整理'));
+    await tester.pumpAndSettle();
+    expect(picked.value?.kind, SmartLayoutTemplateKind.inplace);
+  });
+
+  testWidgets('多页流程：跳过本页 → skipped=true，继续后续页', (tester) async {
+    final picked = await openSheet(tester, buildPreparation(), allowSkip: true);
+    expect(find.text('跳过本页'), findsOneWidget);
+    await tester.tap(find.text('跳过本页'));
+    await tester.pumpAndSettle();
+    expect(picked.value?.skipped, isTrue);
+    expect(picked.value?.kind, isNull);
+  });
+
+  testWidgets('单页流程不显示跳过按钮', (tester) async {
+    await openSheet(tester, buildPreparation());
+    expect(find.text('跳过本页'), findsNothing);
+  });
+
+  testWidgets('三卡全放不下 → 显示分页整体提示', (tester) async {
+    final preparation = buildPreparation();
+    final allDisabled = SmartLayoutTemplatePreparation(
+      pageId: preparation.pageId,
+      content: preparation.content,
+      layouts: {
+        for (final kind in SmartLayoutTemplateKind.values) kind: null,
+      },
+      removeIds: const [],
+      failedStrokeIds: const [],
+      removalRects: const [],
+      failureRects: const [],
+      failures: const [],
+      confidence: 0.9,
+      confidenceByBlockId: const {},
+    );
+    await openSheet(tester, allDisabled, allowSkip: true);
+    expect(find.textContaining('超出所有模板的容量'), findsOneWidget);
+    expect(find.text('跳过本页'), findsOneWidget);
   });
 }
