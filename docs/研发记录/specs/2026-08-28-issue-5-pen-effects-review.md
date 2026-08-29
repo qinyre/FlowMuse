@@ -392,3 +392,13 @@ v2 采用最小兼容方案：
 | P1 | freedraw_renderer.dart buildPencilGrainPath | 属实：弧长采样后循环次数 ∝ totalLength/step，超长两点导入笔迹（长度百万级）会生成数十万子路径阻塞单帧 | 步长按总长动态扩大：effectiveStep = max(size/3, totalLength/4096)，子路径数有界（硬上限 maxGrainCount=4096 公开为测试常量）；新增超长两点笔迹数量有界测试；常规长度步长不受影响（密度测试守护） |
 
 门禁：analyze 48=基线零新增，**799 测试全绿**（较 §15 上轮净增 2 例）。文档数字已同步校准（计划 §16 最终提交链/测试计数）。
+
+### 15.2 复审三轮（同日）：颗粒硬上限的可触发 P1 漏洞
+
+评审确认二轮 shader 阻断项修复到位，但指出颗粒上限仍有可触发漏洞，核实**属实**（fix 提交 9451fab）：
+
+| 级别 | 位置 | 核实结论 | 修复 |
+| --- | --- | --- | --- |
+| P1 | buildPencilGrainPath 循环 | 属实：合法但极大的坐标（JSON 可携带 1e308）使 dx*dx 溢出为 Infinity → totalLength/step 均 Infinity → 首轮后 nextAt=Infinity 且 Infinity<=Infinity 恒真，死循环；且上一轮有界测试允许 maxGrainCount+1，"硬上限"不严格 | totalLength.isFinite 守卫（Infinity/NaN 立即返回空 Path）+ while 循环显式 grainIndex < maxGrainCount 计数封顶；有界测试收紧为严格 <= maxGrainCount；新增 1e308 溢出与 Infinity 输入立即返回用例 |
+
+门禁：analyze 48=基线零新增，**800 测试全绿**（较 §15.1 净增 1 例）。计划 §16 最终提交链/测试计数已同步至本提交点。

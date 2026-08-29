@@ -1048,9 +1048,9 @@ Windows、Web、HarmonyOS Profile 应分别执行：
 | --- | --- |
 | 开发分支 | `feature/issue-5-pen-effects`（自 e747a15 切出） |
 | 起始提交 | e747a15 |
-| 最终提交 | e83618a（65877e5 docs v3 → 2a5ad89..b6dd7ae T0–T9 → 40253ec/d44fec8 审查修复 → c4eca09 视觉矩阵 → fc91746 docs 收口 → 829919c 真机修复 → 53f447d docs §14 → 67e65bd 外部复审修复一轮（视口裁剪/shader 收口/颗粒弧长采样/SVG 透明度/中途切笔冻结）→ 89ec435 docs §15 → e83618a 外部复审修复二轮（shader 实例失败入永久降级链 + 颗粒数量硬上限）） |
+| 最终提交 | 9451fab（65877e5 docs v3 → 2a5ad89..b6dd7ae T0–T9 → 40253ec/d44fec8 审查修复 → c4eca09 视觉矩阵 → fc91746 docs 收口 → 829919c 真机修复 → 53f447d docs §14 → 67e65bd 外部复审修复一轮（视口裁剪/shader 收口/颗粒弧长采样/SVG 透明度/中途切笔冻结）→ 89ec435 docs §15 → e83618a 外部复审修复二轮（shader 实例失败入永久降级链 + 颗粒数量硬上限）→ e30f91b docs §15.1 → 9451fab 外部复审修复三轮（非有限几何死循环守卫 + 颗粒上限收紧）） |
 | 最终 profile 参数 | pencil sizeScale 0.82 / opacity 0.68 / thinning 0+0.45 / simulated 0.32 / taper 3×·4×；ballpoint 0.72 / 1 / 0（恒宽圆头）；fountainPen 1 / 1 / 0.05+0.9（默认灵敏度 0.5）；brushPen 1.15 / 1 / 0+1.0 / 0.82 / 6×·6×；highlighter 4.2 / 0.30 / flat + darken / forceSimulate |
-| 自动化测试计数 | 全仓 799 全绿 0 失败（本分支累计新增约 70 例：T0 基线夹具、几何 A1–A4/A15/A19、荧光 8、铅笔 8+颗粒布点 4、SVG 10+透明度 1、命中 A20、导出 A21+真实栅格、工具栏语义 6、集成 A14/A17/A18/roundtrip/性能、湿墨长度守护、视觉矩阵 2、视口裁剪 2、压力冻结 1、shader 实例降级 1）；`flutter analyze` 48 条 = 基线零新增 |
+| 自动化测试计数 | 全仓 800 全绿 0 失败（本分支累计新增约 70 例：T0 基线夹具、几何 A1–A4/A15/A19、荧光 8、铅笔 8+颗粒布点 5、SVG 10+透明度 1、命中 A20、导出 A21+真实栅格、工具栏语义 6、集成 A14/A17/A18/roundtrip/性能、湿墨长度守护、视觉矩阵 2、视口裁剪 2、压力冻结 1、shader 实例降级 1）；`flutter analyze` 48 条 = 基线零新增 |
 | shader 产物/加载结果 | `shaders/pencil.frag` 经 pubspec `shaders:` 段构建期 impellerc 编译（`flutter build web` 产物 unit_test_assets 内 6472B 编译产物实证）；PencilShader 三态缓存，不支持的端（含鸿蒙移植版）静默降级确定性颗粒 Path（收锋区跳过） |
 | 新增 saveLayer 数 | 0（荧光笔单笔渲染结构断言 drawCallCount==1、无 saveLayer；darken 可分离混合直接合成） |
 | 历史压力兼容 | 旧元素（无 pressureEncoding 标记）按出厂默认灵敏度确定性渲染；A17/A18 以真实状态切换（灵敏度 0.9→0.05、笔形切换）作回归防线，双客户端一致 |
