@@ -42,9 +42,15 @@ class BrushPenStrokeRendererV2 {
     final abs = [
       for (final p in element.points) Point(p.x + element.x, p.y + element.y),
     ];
-    // T4-C 条件缓存：整笔静态渲染复用 Path；owned 分段/起收所有权
-    // 变化的调用（湿墨）不缓存。
-    final useCache = ownedEdgeStart == null && ownsStrokeHead && ownsStrokeTail;
+    // T4-C 条件缓存：整笔静态渲染复用 Path。绕过：owned 分段与起收
+    // 所有权让渡的调用（远端湿墨），以及 isComplete=false 的本地湿墨
+    // 帧（几何逐帧追加，入缓存会命中首帧 Picture 冻结活动笔迹；与
+    // 铅笔渲染器同判据，详见其注释）。
+    final useCache =
+        ownedEdgeStart == null &&
+        ownsStrokeHead &&
+        ownsStrokeTail &&
+        element.isComplete;
     final cacheKey = useCache
         ? NaturalMediaPathCache.keyFor(
             elementId: element.id.value,

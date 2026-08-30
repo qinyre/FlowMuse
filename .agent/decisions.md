@@ -659,7 +659,7 @@ T0 目标纸(用户确认)锁定 HB 铅笔与软头毛笔的自然介质质感:�
 - `strokeRendererFamilyFor` 是 core 层**纯枚举**(不 import 渲染);唯一像素 dispatch 在 rendering 层单点 `element_renderer.dart`:`pressures.isEmpty ? classicV1 : strokeRendererFamilyFor(customData)`——无压力点的笔迹(含存量 v2 元数据防御分支)永远走 v1。
 - v2 几何与种子的单一真源是 `NaturalMediaStrokeSampler`(fnv1a32/mul32/mix32 种子栈,源码禁 hashCode/Random);Canvas 渲染器、SVG 导出、本地/远端湿墨、命中 bounds 四链消费同一 plan,渲染器只做 plan→Path(v2 不申请 shader,鸿蒙无 FragmentProgram 的限制不波及 v2)。
 - 分块一致性(远端湿墨 64 点冻结块)用"边归属"而非段间协商:边 i 连接点 i−1→i 归较后段,桥接边归较后段,入界 join 补 from 边半宽,每边终点补边界顶点;v2 段携带 4 个 leading 点(桥接边 3 边滤波窗 + join from 切线窗)。LiveInkStyle 增 renderVersion(缺失=1 旧客户端兼容;非铅笔/毛笔强制回退 1)。
-- 性能门禁实测触发 T4-C 条件缓存 `NaturalMediaPathCache`:LRU 2048,缓存恒等矩阵 ui.Picture;键含 id/version/versionNonce/renderVersion/isComplete/strokeWidth/strokeColor/opacity/geometryVersion(paint 烘进的输入必须入键);湿墨 owned 分段调用自动绕过。1000 元素静态 v2/v1 由 4.14 收敛到 ≤3.0 门禁(实测 2.3~2.8,余量为颗粒栅格化本征成本)。
+- 性能门禁实测触发 T4-C 条件缓存 `NaturalMediaPathCache`:LRU 2048,缓存恒等矩阵 ui.Picture;键含 id/version/versionNonce/renderVersion/isComplete/strokeWidth/strokeColor/opacity/geometryVersion(paint 烘进的输入必须入键);湿墨调用全部绕过——远端 owned 分段由参数自动绕过,本地湿墨整笔帧(isComplete=false,几何逐帧追加)由缓存条件显式排除,否则第二帧命中首帧 Picture 会冻结活动笔迹。1000 元素静态 v2/v1 由 4.14 收敛到 ≤3.0 门禁(实测 2.3~2.8,余量为颗粒栅格化本征成本)。
 
 ### 理由
 
@@ -673,7 +673,7 @@ T0 目标纸(用户确认)锁定 HB 铅笔与软头毛笔的自然介质质感:�
 - 新增笔形走 v2 必须同时落六处:BrushRenderProfile 常数、sampler 分支、Canvas 渲染器、SVG `_render*V2`、elementVisualBounds 分支、LiveInkStyle renderVersion 白名单;缺一处即三处口径漂移。
 - 改几何/种子/曲线常数必须 bump `NaturalMediaPathCache.geometryVersion`,跑 natural_media 全套(687 测试,含 v1-lock)与验收矩阵;v1 任何像素变化都是回归。
 - `strokeSeedOf(strokeId)` 是笔迹视觉身份:live strokeId 必须等于最终 ElementId(`ToolOverlay.creationStrokeId` 通路),预览/提交/远端三链路不得各自造 id,否则同笔三帧颗粒不一致。
-- 缓存只对整笔静态渲染生效:调用方传 ownedEdgeStart 或让渡起收所有权即自动绕过;不得手工构造缓存键,键字段变更须同步 keyFor 与注释里的"烘进 Picture"清单。
+- 缓存只对整笔静态渲染(isComplete=true)生效:调用方传 ownedEdgeStart、让渡起收所有权或元素未完成即自动绕过;不得手工构造缓存键,键字段变更须同步 keyFor 与注释里的"烘进 Picture"清单。
 
 ---
 

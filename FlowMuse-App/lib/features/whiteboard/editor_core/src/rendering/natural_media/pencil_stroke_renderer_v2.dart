@@ -43,9 +43,13 @@ class PencilStrokeRendererV2 {
       for (final p in element.points) Point(p.x + element.x, p.y + element.y),
     ];
     // T4-C 条件缓存：整笔静态渲染复用 Path（键含 id/version/nonce/
-    // renderVersion/isComplete/宽度/几何版本）；owned 分段调用每帧
-    // 几何随范围变化，不缓存。
-    final useCache = ownedEdgeStart == null;
+    // renderVersion/isComplete/宽度/几何版本）。绕过两类调用：
+    // ① owned 分段（远端湿墨，每帧几何随 owned 范围变化）；
+    // ② isComplete=false（本地湿墨逐帧整笔调用，几何持续追加——若入
+    //   缓存，第二帧命中首帧 Picture 会把活动笔迹冻结在第一帧；此前
+    //   未冻结只因构造函数每帧随机 versionNonce 恰好换键，且每帧向
+    //   LRU 塞一次性 Picture 属纯浪费）。
+    final useCache = ownedEdgeStart == null && element.isComplete;
     final cacheKey = useCache
         ? NaturalMediaPathCache.keyFor(
             elementId: element.id.value,

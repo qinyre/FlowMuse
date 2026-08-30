@@ -4,9 +4,12 @@ import 'dart:ui' as ui;
 // 自然介质 plan/Path 有界缓存（计划 T4-C，2026-08-30 同机实测触发：
 // 1000 元素静态重绘 v2/v1 = 4.14 超过 1.20 门禁）。
 //
-// 只缓存整笔静态渲染的 Path（分段/湿墨 owned-range 调用不走缓存——
-// 每帧几何随 owned 范围变化）。缓存键包含 element id、version、
-// versionNonce、renderVersion、isComplete、strokeWidth 与
+// 只缓存整笔静态渲染（isComplete=true）的 Path。绕过两类调用：
+// owned 分段/湿墨 owned-range（每帧几何随 owned 范围变化），以及
+// isComplete=false 的整笔帧（本地湿墨逐帧追加几何——若入库，第二帧
+// 命中首帧 Picture 会把活动笔迹冻结在第一帧，且每帧向 LRU 塞一次性
+// Picture）。缓存键包含 element id、version、versionNonce、
+// renderVersion、isComplete、strokeWidth 与
 // [geometryVersion]（影响几何的 profile 曲线/常数版本，变更时 +1）。
 // LRU 上限 [maxEntries]，带命中/未命中计数探针；编辑元素（version
 // 或几何输入变化）产生新键，旧条目由 LRU 自然淘汰——不存在旧

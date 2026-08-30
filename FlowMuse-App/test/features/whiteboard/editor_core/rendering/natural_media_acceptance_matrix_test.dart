@@ -283,6 +283,36 @@ void main() {
     final d2 = await renderOf(brushElement);
     expect(d2, equals(d1), reason: '毛笔缓存命中与首绘逐字节一致');
     expect(NaturalMediaPathCache.hitCount, 2, reason: '毛笔第二次渲染应命中');
+
+    // 湿墨帧不入静态缓存（isComplete=false 几何逐帧追加）：同 id 两帧
+    // 既不命中也不入库，且第二帧像素必须反映新增点——防"冻结在首帧"
+    // 回归（此前仅靠每帧随机 versionNonce 换键才未冻结）。
+    final missBefore = NaturalMediaPathCache.missCount;
+    final hitBefore = NaturalMediaPathCache.hitCount;
+    final entriesBefore = NaturalMediaPathCache.entryCount;
+    final liveA = placedElement(
+      fitFixtureToCell(pencilMediumStroke),
+      pencilMediumStroke.pressures,
+      BrushType.pencil,
+      'cacheProbeLive',
+    ).copyWith(isComplete: false);
+    final liveB = liveA.copyWithFreedraw(
+      points: [...liveA.points, const Point(6, 6)],
+      pressures: [...liveA.pressures, 0.8],
+    );
+    final la = await renderOf(liveA);
+    final lb = await renderOf(liveB);
+    expect(lb, isNot(equals(la)), reason: '湿墨第二帧必须反映新增点，不得冻结');
+    expect(
+      NaturalMediaPathCache.entryCount,
+      entriesBefore,
+      reason: 'isComplete=false 不得写入缓存',
+    );
+    expect(
+      NaturalMediaPathCache.missCount + NaturalMediaPathCache.hitCount,
+      missBefore + hitBefore,
+      reason: '湿墨帧连 lookup 都不进（绕过缓存路径）',
+    );
   });
 
   test('N19：长笔线性 time(16k)/time(1k) ≤ 20', () {
