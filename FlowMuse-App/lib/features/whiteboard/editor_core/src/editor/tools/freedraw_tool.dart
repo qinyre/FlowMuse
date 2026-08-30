@@ -21,6 +21,7 @@ class ActiveFreedrawView {
     required this.pressures,
     required this.simulatePressure,
     required this.brushType,
+    this.renderVersion = BrushRenderVersion.classicV1,
     this.strokeLiveMode = false,
   });
 
@@ -29,6 +30,13 @@ class ActiveFreedrawView {
   final List<double> pressures;
   final bool simulatePressure;
   final BrushType brushType;
+
+  /// 落笔冻结的渲染版本（计划 T6 工作项 1）：与提交元素同源
+  ///（defaultRenderVersionForNewStroke），书写中切笔/改默认不改变本笔；
+  /// layered 湿墨 painter 据此走同一 renderer dispatch。
+  final BrushRenderVersion renderVersion;
+
+  /// 预测/协作实时笔画模式（终笔前不落场景元素）。
   final bool strokeLiveMode;
 }
 
@@ -91,6 +99,7 @@ class FreedrawTool implements Tool {
       pressures: _hasRealPressure ? _previewPressures : const [],
       simulatePressure: !_hasRealPressure,
       brushType: context.brushType,
+      renderVersion: defaultRenderVersionForNewStroke(context.brushType),
       strokeLiveMode: _nextStrokeLiveMode,
     );
     return null;
