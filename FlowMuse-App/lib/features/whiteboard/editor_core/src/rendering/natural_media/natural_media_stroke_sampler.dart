@@ -615,7 +615,8 @@ class NaturalMediaStrokeSampler {
       // 2) 内部相邻 owned 边对。
       if (oi == 0 && k > 0 && !owned.contains(k - 1)) {
         // 入界 join 与内部 join 同口径：hw 取 from 边（k-1）的接触
-        // 半宽，保证分块/整笔/合并三种路径的 join 逐值一致。
+        // 半宽，nextHw 取 to 边，保证分块/整笔/合并三种路径的 join
+        // 逐值一致。
         _emitBrushJoin(
           out,
           absorb,
@@ -628,11 +629,28 @@ class NaturalMediaStrokeSampler {
             edges[k - 1].pressure,
           ),
           tuning,
+          nextHw: NaturalMediaResponseCurves.brushContactHalfWidth(
+            strokeWidth,
+            e.pressure,
+          ),
         );
       }
       if (oi + 1 < owned.length) {
         final kn = owned[oi + 1];
-        _emitBrushJoin(out, absorb, e, edges[kn], f, filtered[kn], hw, tuning);
+        _emitBrushJoin(
+          out,
+          absorb,
+          e,
+          edges[kn],
+          f,
+          filtered[kn],
+          hw,
+          tuning,
+          nextHw: NaturalMediaResponseCurves.brushContactHalfWidth(
+            strokeWidth,
+            edges[kn].pressure,
+          ),
+        );
       }
 
       // 毫丝：hw 足够且（隔边采样或本边压力下行——出锋毫丝）时发射
@@ -682,6 +700,10 @@ class NaturalMediaStrokeSampler {
   /// 顶点 join：中转角受限 miter（笔肚，miterLimit 截断防尖刺），
   /// 锐转（> brushSharpTurnRad）圆弧 join（防偏移折叠自交）。
   /// [e]/[f] 为前一边与其滤波切线，[next]/[g] 为后一边；key 归 next。
+  /// [hw]/[nextHw] 为前后边接触半宽：真实笔迹折角两侧压力（宽度）
+  /// 几乎总不同，join 必须做梯形过渡——单宽 join 在变宽角会留月牙缝
+  ///（盲测实测：折角内侧楔形漏底 20-45% 笔宽）。端点（j=0/4）分别与
+  /// 前边边界顶点/后边首采样顶点重合，任何宽度差与转角都闭合。
   static void _emitBrushJoin(
     List<NaturalMediaPrimitive> out,
     void Function(ui.Rect) absorb,
@@ -690,29 +712,36 @@ class NaturalMediaStrokeSampler {
     Point f,
     Point g,
     double hw,
-    NaturalMediaTuning tuning,
-  ) {
+    NaturalMediaTuning tuning, {
+    required double nextHw,
+  }) {
+    // 统一用滤波切线（f→g）体系：包络顶点/边界顶点都按滤波切线偏移，
+    // join 端点必须与之同源，否则端点天然错位留缝。
+    final signed = _signedAngle(f, g);
+    // 锐转判定用原始边切线：滤波在转角保护下会拉平切线，90° 原始角
+    // 的滤波夹角可能低于阈值而误走 miter（转角尖刺测试锁定此行为）。
     final eTan = Point(_tx(e), _ty(e));
-    final turn = _signedAngle(eTan, next.tangent).abs();
-    if (turn > tuning.brushSharpTurnRad) {
-      final signed = _signedAngle(eTan, next.tangent);
-      for (var j = 1; j <= 3; j++) {
-        final a = signed * j / 4;
+    final rawTurn = _signedAngle(eTan, next.tangent).abs();
+    if (rawTurn > tuning.brushSharpTurnRad) {
+      for (var j = 0; j <= 4; j++) {
+        final t = j / 4;
+        final a = signed * t;
+        final radius = hw + (nextHw - hw) * t;
         final ca = math.cos(a);
         final sa = math.sin(a);
-        final rkx = _tx(e) * ca - _ty(e) * sa;
-        final rky = _tx(e) * sa + _ty(e) * ca;
+        final rkx = f.x * ca - f.y * sa;
+        final rky = f.x * sa + f.y * ca;
         for (var side = 0; side < 2; side++) {
           final sign = side == 0 ? 1.0 : -1.0;
-          final ox = e.to.x - rky * sign * hw;
-          final oy = e.to.y + rkx * sign * hw;
+          final ox = e.to.x - rky * sign * radius;
+          final oy = e.to.y + rkx * sign * radius;
           final r = ui.Rect.fromCircle(center: ui.Offset(ox, oy), radius: 0);
           absorb(r);
           out.add(
             NaturalMediaPrimitive(
               kind: NaturalMediaPrimitiveKind.brushJoin,
               edgeIndex: next.index,
-              ordinal: (side == 0 ? j - 1 : j + 2),
+              ordinal: (side == 0 ? j : j + 5),
               channel: NaturalMediaChannel.brushBody,
               paintBucket: 'brushJoinArc',
               bounds: r,
@@ -728,7 +757,17 @@ class NaturalMediaStrokeSampler {
         final sign = side == 0 ? 1.0 : -1.0;
         final n1 = Point(-f.y * sign, f.x * sign);
         final n2 = Point(-g.y * sign, g.x * sign);
-        final m = _clampedMiter(e.to, n1, n2, gTan, hw, tuning.miterLimit);
+        // 前后边界各用各宽度，两侧（内/外）交点精确求解；截断退化为
+        // 截断点而不丢点（丢点会在角点留豁口）。
+        final m = _clampedMiter(
+          e.to,
+          n1,
+          n2,
+          gTan,
+          hw,
+          nextHw,
+          tuning.miterLimit,
+        );
         if (m == null) continue;
         final r = ui.Rect.fromCircle(center: m, radius: 0);
         absorb(r);
@@ -748,18 +787,20 @@ class NaturalMediaStrokeSampler {
     }
   }
 
-  /// 两条偏移边界线的交点（受限 miter）：偏移线 A 过 v + n1·hw、方向
-  /// t；偏移线 B 过 v + n2·hw、方向 t。距顶点超 miterLimit×hw 截断。
+  /// 同侧前后偏移边界线的交点（受限 miter）：前边偏移点 v + n1·hw、
+  /// 后边偏移点 v + n2·hw2，沿后边切线 t 求过渡交点。距顶点超
+  /// miterLimit×max(hw, hw2) 截断（截断 = 退化为截断点，不丢点）。
   static ui.Offset? _clampedMiter(
     Point v,
     Point n1,
     Point n2,
     Point t,
     double hw,
+    double hw2,
     double miterLimit,
   ) {
-    final wx = (n2.x - n1.x) * hw;
-    final wy = (n2.y - n1.y) * hw;
+    final wx = n2.x * hw2 - n1.x * hw;
+    final wy = n2.y * hw2 - n1.y * hw;
     final tlen = math.sqrt(t.x * t.x + t.y * t.y);
     if (tlen < 1e-9) return null;
     final tx = t.x / tlen;
@@ -772,8 +813,9 @@ class NaturalMediaStrokeSampler {
     final iy = v.y + n1.y * hw + ty * a;
     final dist = math.sqrt((ix - v.x) * (ix - v.x) + (iy - v.y) * (iy - v.y));
     if (!dist.isFinite) return null;
-    if (dist <= miterLimit * hw) return ui.Offset(ix, iy);
-    final scale = miterLimit * hw / dist;
+    final reach = miterLimit * math.max(hw, hw2);
+    if (dist <= reach) return ui.Offset(ix, iy);
+    final scale = reach / dist;
     return ui.Offset(v.x + (ix - v.x) * scale, v.y + (iy - v.y) * scale);
   }
 }

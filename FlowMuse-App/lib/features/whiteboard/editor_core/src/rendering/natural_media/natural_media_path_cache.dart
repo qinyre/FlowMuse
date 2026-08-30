@@ -25,9 +25,9 @@ class NaturalMediaPathCache {
   static const int maxEntries = 2048;
 
   /// 影响几何的 profile 版本：铅笔/毛笔曲线、颗粒常数、包络常数任何
-  /// 变更时 +1（T4 冻结 1；T5 毛笔常数与可见下限合入时未启用缓存，
-  /// 自缓存启用起计数）。
-  static const int geometryVersion = 1;
+  /// 变更时 +1。1：T4 冻结至盲测修复前；2：2026-08-30 盲测修复
+  ///（毛笔 join 变宽梯形过渡 + 压力域扩张 brushV2PressureGain）。
+  static const int geometryVersion = 2;
 
   static final _lru = <String, CachedNaturalMediaPaths>{};
   static int hitCount = 0;

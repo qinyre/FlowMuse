@@ -100,8 +100,10 @@ class DirectionalBrushEnvelope {
           right.add(ui.Offset(c.x - n.x * hw, c.y - n.y * hw));
           lastVertex = p;
         case NaturalMediaPrimitiveKind.brushJoin:
+          // miter ordinal 0=左/1=右；锐转圆弧 ordinal 0-4=左/5-9=右
+          //（含两端与前后边界顶点重合的过渡端点，盲测修复后约定）。
           final side = p.paintBucket == 'brushJoinArc'
-              ? (p.ordinal < 3 ? left : right)
+              ? (p.ordinal < 5 ? left : right)
               : (p.ordinal == 0 ? left : right);
           side.add(ui.Offset(p.center!.x, p.center!.y));
         case NaturalMediaPrimitiveKind.brushStrand:
@@ -186,8 +188,9 @@ class DirectionalBrushEnvelope {
         right.add(ui.Offset(c.x - n.x * hw, c.y - n.y * hw));
         lastVertex = p;
       } else if (p.kind == NaturalMediaPrimitiveKind.brushJoin) {
+        // 与 build() 同约定：arc ordinal 0-4=左/5-9=右，miter 0/1。
         final side = p.paintBucket == 'brushJoinArc'
-            ? (p.ordinal < 3 ? left : right)
+            ? (p.ordinal < 5 ? left : right)
             : (p.ordinal == 0 ? left : right);
         side.add(ui.Offset(p.center!.x, p.center!.y));
       }

@@ -103,10 +103,28 @@ final class BrushRenderProfile {
   // 宽度仍可见"；下限只影响 p≲0.012 的极端轻压，不改变 N6 量程。
   static const double brushV2MinContactHalfWidth = 0.7;
 
-  double brushNaturalMediaContactHalfWidth(double base, double p) => math.max(
-    base * (0.16 + 1.34 * math.pow(p.clamp(0.0, 1.0), 0.72)) / 2,
-    brushV2MinContactHalfWidth,
-  );
+  /// 毛笔 v2 压力扩张指数（盲测修复 2026-08-30）：真实手写的压力
+  /// 活动集中在中段（中等力度 ±0.05），原曲线增益 ~0.6 下宽度摆动
+  /// 仅 ±6%（合成定量与平板实测 ±5-9% 吻合）——理想全量程压力的
+  /// 基线观感在真机上退化为等宽马克笔。中心对称凸扩张
+  /// q = 0.5 ± |2p−1|^γ/2：端点 0/1 与轻压段保持原量程语义
+  ///（p=0.2 → q≈0.14，N6/N7 端点不变），中段增益 ~3×（±0.05 →
+  /// 宽度摆动 ~21%）。中心导数大是有意设计：输入侧 OneEuro 压感
+  /// 滤波已先抑制高频噪声。改此值须 bump
+  /// NaturalMediaPathCache.geometryVersion。
+  static const double brushV2PressureGamma = 0.65;
+
+  double brushNaturalMediaContactHalfWidth(double base, double p) {
+    final c = p.clamp(0.0, 1.0);
+    final x = (2 * (c - 0.5)).abs();
+    final q = x < 1e-9
+        ? c
+        : 0.5 + (c < 0.5 ? -1.0 : 1.0) * math.pow(x, brushV2PressureGamma) / 2;
+    return math.max(
+      base * (0.16 + 1.34 * math.pow(q, 0.72)) / 2,
+      brushV2MinContactHalfWidth,
+    );
+  }
 
   // --- 毛笔 v2 绘制常数（T0 spike 校准，T5 冻结；§3.7 要求与
   // elementVisualBounds 共用，禁止 renderer 与 bounds 各写一份）---
