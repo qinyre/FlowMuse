@@ -172,6 +172,30 @@ func TestVisionPromptForbidsMarkEchoInText(t *testing.T) {
 	}
 }
 
+// 第七轮识别质量治理（真机走查：短语拆框成"冬"+"1"、竖排误读、标题漏标）。
+func TestVisionPromptGuidesMergeTitleCaptionVertical(t *testing.T) {
+	for prompt, phrase := range map[string]string{
+		visionLayoutPrompt: "必须合并为一个项输出",
+		transcribePrompt:   "不要只转写半句",
+	} {
+		if !strings.Contains(prompt, phrase) {
+			t.Fatalf("prompt 缺少关键指引 %q", phrase)
+		}
+	}
+	if !strings.Contains(visionLayoutPrompt, "严禁把同一短语按编号拆成多项") {
+		t.Fatal("vision prompt 应禁止短语按编号拆项")
+	}
+	if !strings.Contains(visionLayoutPrompt, "按从上到下的顺序逐字转写") {
+		t.Fatal("vision prompt 应给竖排读法指引")
+	}
+	if !strings.Contains(visionLayoutPrompt, "图1\"\"图2\"这类编号短标") {
+		t.Fatal("vision prompt 应把图N 短标指到 caption")
+	}
+	if !strings.Contains(transcribePrompt, "按从上到下的顺序逐字转写") {
+		t.Fatal("transcribe prompt 应给竖排读法指引")
+	}
+}
+
 func TestVisionLayoutDropsHallucinatedTextAndNormalizesRoles(t *testing.T) {
 	content := `{"elements":[` +
 		`{"role":"body","text":"","markIds":["m1"]},` + // 文字角色无文字 → 幻觉，丢弃

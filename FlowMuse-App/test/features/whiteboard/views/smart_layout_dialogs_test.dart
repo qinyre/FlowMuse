@@ -3,7 +3,10 @@ import 'package:flow_muse/features/whiteboard/views/smart_layout_dialogs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-SmartLayoutPlan fakePlan({bool hasFailures = false}) => SmartLayoutPlan(
+SmartLayoutPlan fakePlan({
+  bool hasFailures = false,
+  List<SmartLayoutLowConfidenceText> lowConfidence = const [],
+}) => SmartLayoutPlan(
   pageId: 'p-1',
   style: SmartLayoutTemplateKind.handout,
   confidence: 0.9,
@@ -16,6 +19,7 @@ SmartLayoutPlan fakePlan({bool hasFailures = false}) => SmartLayoutPlan(
   previewRects: const [],
   removalRects: const [],
   failureRects: hasFailures ? const [Rect.fromLTWH(0, 0, 10, 10)] : const [],
+  lowConfidenceTexts: lowConfidence,
 );
 
 List<CanvasPage> _pages(int count) => [
@@ -167,6 +171,163 @@ void main() {
       expect(tester.takeException(), isNull, reason: '窄宽度不得溢出');
       expect(find.text('应用'), findsOneWidget);
       expect(find.text('重新识别'), findsOneWidget);
+    });
+  });
+
+  group('SmartLayoutConfirmBar 模板切换与置信度说明', () {
+    testWidgets('chips：三个模板横排、当前高亮、放不下置灰、点选其他模板回调', (tester) async {
+      SmartLayoutTemplateKind? tapped;
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(),
+        isMultiPage: false,
+        onAction: (_) {},
+        currentKind: SmartLayoutTemplateKind.handout,
+        availableKinds: const [
+          SmartLayoutTemplateKind.handout,
+          SmartLayoutTemplateKind.outline,
+        ],
+        onTemplateSelected: (kind) => tapped = kind,
+      )));
+      final current = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, '图文讲义'),
+      );
+      expect(current.selected, isTrue, reason: '当前模板高亮');
+      final switchable = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, '要点清单'),
+      );
+      expect(switchable.selected, isFalse);
+      expect(switchable.onSelected, isNotNull, reason: '放得下的模板可点选');
+      final unavailable = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, '原文整理'),
+      );
+      expect(unavailable.onSelected, isNull, reason: '放不下的模板置灰');
+      await tester.tap(find.text('要点清单'));
+      expect(tapped, SmartLayoutTemplateKind.outline);
+      // 点当前模板：不回调（页面无需再忽略）。
+      tapped = null;
+      await tester.tap(find.text('图文讲义'));
+      expect(tapped, isNull);
+    });
+
+    testWidgets('currentKind 为 null（旧调用方）不显示 chips', (tester) async {
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(),
+        isMultiPage: false,
+        onAction: (_) {},
+      )));
+      expect(find.byType(ChoiceChip), findsNothing);
+    });
+
+    testWidgets('保留手写模式：标题旁标注"保留手写"', (tester) async {
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(),
+        isMultiPage: false,
+        onAction: (_) {},
+        currentKind: SmartLayoutTemplateKind.inplace,
+        availableKinds: SmartLayoutTemplateKind.values,
+        onTemplateSelected: (_) {},
+        keepHandwriting: true,
+      )));
+      expect(find.text('保留手写'), findsOneWidget);
+      // 关闭开关时不显示标注。
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(),
+        isMultiPage: false,
+        onAction: (_) {},
+      )));
+      expect(find.text('保留手写'), findsNothing);
+    });
+
+    testWidgets('置信度说明两态：有低置信解释橙框，无低置信给正向确认', (tester) async {
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(
+          lowConfidence: const [
+            SmartLayoutLowConfidenceText(
+              elementId: ElementId('t-1'),
+              confidence: 0.4,
+            ),
+            SmartLayoutLowConfidenceText(
+              elementId: ElementId('t-2'),
+              confidence: 0.5,
+            ),
+          ],
+        ),
+        isMultiPage: false,
+        onAction: (_) {},
+      )));
+      expect(find.textContaining('有 2 处内容识别把握较低'), findsOneWidget);
+      expect(find.textContaining('画布橙框标出'), findsOneWidget);
+      expect(find.text('全部内容识别把握良好'), findsNothing);
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(),
+        isMultiPage: false,
+        onAction: (_) {},
+      )));
+      expect(find.text('全部内容识别把握良好'), findsOneWidget);
+      expect(find.textContaining('把握较低'), findsNothing);
+    });
+
+    testWidgets('有红区且无低置信时，不再自相矛盾地给"全部把握良好"确认',
+        (tester) async {
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(hasFailures: true),
+        isMultiPage: false,
+        onAction: (_) {},
+      )));
+      expect(find.text('全部内容识别把握良好'), findsNothing);
+      expect(find.textContaining('手写未识别成功'), findsOneWidget);
+    });
+
+    testWidgets('核对全文按钮：onReviewAll 为 null 隐藏，非 null 可点', (tester) async {
+      var reviewed = false;
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(),
+        isMultiPage: false,
+        onAction: (_) {},
+        onReviewAll: () async {
+          reviewed = true;
+        },
+      )));
+      expect(find.text('核对全文'), findsOneWidget);
+      await tester.tap(find.text('核对全文'));
+      expect(reviewed, isTrue);
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(),
+        isMultiPage: false,
+        onAction: (_) {},
+      )));
+      expect(find.text('核对全文'), findsNothing);
+    });
+
+    testWidgets('校对按钮强调态：N>0 用 tonal 强调，N==0 用普通次要样式', (tester) async {
+      Future<void> pump(bool low) => tester.pumpWidget(
+        wrap(SmartLayoutConfirmBar(
+          plan: fakePlan(
+            lowConfidence: low
+                ? const [
+                    SmartLayoutLowConfidenceText(
+                      elementId: ElementId('t-1'),
+                      confidence: 0.4,
+                    ),
+                  ]
+                : const [],
+          ),
+          isMultiPage: false,
+          onAction: (_) {},
+          onProofread: () async {},
+        )),
+      );
+      // N>0：校对按钮用 FilledButton.tonal 强调。
+      await pump(true);
+      expect(
+        find.widgetWithText(FilledButton, '校对 1 处'),
+        findsOneWidget,
+        reason: '有低置信项时校对按钮强调（tonal）',
+      );
+      // N==0：校对按钮回落普通 TextButton 次要样式。
+      await pump(false);
+      expect(find.widgetWithText(FilledButton, '校对 0 处'), findsNothing);
+      expect(find.widgetWithText(TextButton, '校对 0 处'), findsOneWidget);
     });
   });
 

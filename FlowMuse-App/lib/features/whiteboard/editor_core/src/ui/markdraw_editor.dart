@@ -992,9 +992,12 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
             child: _buildDetachedControlGroups(),
           ),
         // Floating property panel — desktop left side
+        // 智能排版草稿态（参与者默认全选）不弹属性面板，避免与底部确认条互相遮挡；
+        // 提交/取消后草稿态结束，恢复常规显隐。
         if (showEditChrome &&
             !isCompact &&
             widget.config.showPropertyPanel &&
+            !_controller.smartLayoutDraftActive &&
             (_controller.selectedElements.isNotEmpty ||
                 _controller.isCreationTool))
           if (_propertyPanelCollapsed)

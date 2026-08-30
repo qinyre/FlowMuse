@@ -15,6 +15,14 @@ const double kSmartLayoutLowConfidenceThreshold = 0.6;
 /// 救不回再交人工校对）。
 const double kSmartLayoutTranscribeRetryThreshold = 0.7;
 
+/// 图注几何配对兜底：VLM 未配对的 caption 与最近图的包围盒间隙上限（pt）。
+/// 走查实况：VLM pairId 漏配时图注与图分家成独立正文条目，客户端按几何
+/// 就近绑图补漏（VLM 已配对结果优先，兜底只补漏）。
+const double kSmartLayoutCaptionPairMaxGap = 64.0;
+
+/// "图N"式短标签（role 非 caption）参与就近配对的放宽间隙上限（pt）。
+const double kSmartLayoutFigureLabelPairMaxGap = 96.0;
+
 /// 单个低置信文本项：elementId 用于从场景中定位最终矩形与改字。
 @immutable
 class SmartLayoutLowConfidenceText {

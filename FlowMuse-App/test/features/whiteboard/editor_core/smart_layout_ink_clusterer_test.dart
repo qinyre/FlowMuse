@@ -76,9 +76,31 @@ void main() {
     test('带内远距（间隙超过一个字高）拆成两块', () {
       final clusters = SmartLayoutInkClusterer.cluster([
         stroke('left', 0, 100, 20),
-        stroke('right', 200, 100, 20), // 间隙 160 > max(24,28)
+        stroke('right', 200, 100, 20), // 间隙 160 > max(16,20)
       ]);
       expect(clusters.length, 2);
+    });
+
+    test('同行两个短语间隙 1.1 倍字高拆成两块（阅读序 top→left 保序）', () {
+      // Given：同一行写"第1句话""第3句话"两个 4 字短语（字高 40），
+      // 组间刻意留白 44pt = 1.1×字高——旧阈值 1.2×字高（48）把两句并成
+      // 一块导致阅读序错乱（走查实况：1+3/2+4），新阈值 0.8×字高（32）
+      // 拆开；组内字符间隙仅 6pt 不得误拆。
+      // When：全页纯几何聚类。
+      // Then：拆成两块，块序 = 阅读序（左块在前，先 1 后 3）。
+      List<FreedrawElement> phrase(String prefix, double startX) => [
+        char('${prefix}1', startX, 100),
+        char('${prefix}2', startX + 36, 102),
+        char('${prefix}3', startX + 72, 99),
+        char('${prefix}4', startX + 108, 101),
+      ];
+      final clusters = SmartLayoutInkClusterer.cluster([
+        ...phrase('a', 0), // 右缘 138
+        ...phrase('b', 182), // 间隙 44 = 1.1×40（旧阈值 48 会误并）
+      ]);
+      expect(clusters.length, 2, reason: '同行的两个短语必须拆成两块');
+      expect(clusters.first.map((e) => e.id.value), ['a1', 'a2', 'a3', 'a4']);
+      expect(clusters.last.map((e) => e.id.value), ['b1', 'b2', 'b3', 'b4']);
     });
 
     test('杂散小笔画剔除：孤立的勾/点不产生簇', () {
