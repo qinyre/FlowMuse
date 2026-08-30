@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flow_muse/features/whiteboard/collaboration/models/live_ink_chunk.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart';
