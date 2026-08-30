@@ -1058,9 +1058,9 @@ flutter build web
 
 | 项目 | 实际结果 |
 | --- | --- |
-| 实施分支 | 待填写 |
+| 实施分支 | `feature/pencil-brush-natural-media-plan-v2` |
 | 起始提交 | `3eb2b97` |
-| 目标确认 | 待填写 |
+| 目标确认 | 2026-08-30 用户确认目标纸通过（"挺好的"），特别认可 spike v2 铅笔中压行（pencil_pencilMediumStroke 右列）的铅笔质感；HB 铅笔/软头毛笔目标按 §2 锁定 |
 | 最终提交 | 待填写 |
 | renderer 参数 | 待填写 |
 | 测试计数 | 待填写 |
