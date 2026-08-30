@@ -29,6 +29,7 @@ class SmartLayoutTemplatePreparation {
     required this.pageId,
     required this.content,
     required this.layouts,
+    this.layoutsKeepInk = const {},
     required this.removeIds,
     required this.failedStrokeIds,
     required this.removalRects,
@@ -36,6 +37,8 @@ class SmartLayoutTemplatePreparation {
     required this.failures,
     required this.confidence,
     required this.confidenceByBlockId,
+    this.textClusterRects = const [],
+    this.hasInkTextUnits = false,
   });
 
   final String pageId;
@@ -44,7 +47,13 @@ class SmartLayoutTemplatePreparation {
   /// 每种模板的预落位结果；null = 该模板放不下（选择卡置灰）。
   final Map<SmartLayoutTemplateKind, SmartLayoutTemplateLayoutResult?> layouts;
 
-  /// 识别成功的笔迹 + 旧智能排版文本（应用时删除）。
+  /// 保留手写变体的预落位结果：同一 content 把文本单元置 keepAsInk 后的
+  /// 二次引擎调用（无额外 VLM 成本）；"保留手写笔迹"开关消费这份结果。
+  /// 缺项时调用方可用 content.withTextAsInk() 现算。
+  final Map<SmartLayoutTemplateKind, SmartLayoutTemplateLayoutResult?>
+  layoutsKeepInk;
+
+  /// 识别成功的笔迹与打字文本（应用时删除，由引擎克隆/移动替换）。
   final List<ElementId> removeIds;
 
   /// 识别失败块的笔迹（用户选择"删除未识别笔迹"时删除）。
@@ -53,11 +62,19 @@ class SmartLayoutTemplatePreparation {
   final List<Rect> failureRects;
   final List<SmartLayoutFailureInfo> failures;
 
+  /// 识别成功文本块的来源簇矩形（与 removalRects 同值域）。
+  /// "保留手写"装配时从灰区/删除清单排除这些矩形对应的墨迹。
+  final List<Rect> textClusterRects;
+
   /// 文本项平均把握（重问后有效值；确认条展示用）。
   final double confidence;
 
   /// 低置信校对直查表：blockId（== VLM 元素 id）→ 有效把握。
   final Map<String, double> confidenceByBlockId;
+
+  /// 页内是否存在由手写转写而来的文本单元：决定"保留手写笔迹"开关是否
+  /// 展示（纯打字/纯图形页没有手写可保留，打字文本始终走模板重排）。
+  final bool hasInkTextUnits;
 }
 
 /// 模板引擎落位结果：几何已定（新增元素坐标/移动增量/预览框），
@@ -69,6 +86,7 @@ class SmartLayoutTemplateLayoutResult {
     required this.addElements,
     required this.moveDeltas,
     required this.previewRects,
+    this.inkSlotRects = const [],
     required this.description,
     required this.document,
   });
@@ -84,6 +102,10 @@ class SmartLayoutTemplateLayoutResult {
   /// 场景坐标：新增/移动后的包围盒（蓝色幽灵预览与模板卡缩略图共用）。
   final List<Rect> previewRects;
 
+  /// 保留手写模式的墨迹占位矩形（转写模式为空列表，与 previewRects 同
+  /// 值域）：模板卡缩略图按它区分墨迹占位与图/形/组，不做尺寸匹配猜测。
+  final List<Rect> inkSlotRects;
+
   final String description;
   final SmartLayoutDocument document;
 }
@@ -91,6 +113,16 @@ class SmartLayoutTemplateLayoutResult {
 /// v2 三模板落位引擎：固定区域填充，确定性（同输入同输出）。
 /// 空间不足时 handout 先压间距再缩字号（下限 12pt），仍放不下返回 null
 /// （控制器提示"内容过多，请分页"）；all-or-nothing，不做部分落位。
+
+/// outline 条目：文本条目（figure 为空）或图文条目（text 为空）。
+typedef _OutlineEntry =
+    ({
+      LayoutUnit? text,
+      LayoutUnit? figure,
+      List<LayoutUnit> topTexts,
+      List<LayoutUnit> bottomTexts,
+    });
+
 abstract final class SmartLayoutTemplateEngine {
   /// 小图判定：图宽不超过内容区该比例时，outline 允许其附于条目行右侧。
   static const double outlineSideFigureMaxWidthRatio = 0.4;
@@ -129,6 +161,58 @@ abstract final class SmartLayoutTemplateEngine {
 
   // ---------- 公共小件 ----------
 
+  /// 保留手写判定：文本单元以原稿墨迹整体占位——引擎用 _moveUnit 移动
+  /// 墨迹（memberIds 为该块笔迹 id）而不是新增印刷体文本元素。
+  static bool _isInkText(LayoutUnit unit) =>
+      unit.kind == LayoutUnitKind.text && unit.keepAsInk;
+
+  /// 文本单元排版槽高：墨迹用原稿包围盒高；印刷体用测量后的元素高；
+  /// null 单元（无图注等）为 0。
+  static double _textSlotHeight(LayoutUnit? unit, TextElement? measured) =>
+      unit == null
+      ? 0
+      : _isInkText(unit)
+      ? unit.size.height
+      : (measured?.height ?? 0);
+
+  /// 文本单元排版槽宽：墨迹用原稿包围盒宽；印刷体用测量后的元素宽。
+  static double _textSlotWidth(LayoutUnit unit, TextElement? measured) =>
+      _isInkText(unit) ? unit.size.width : (measured?.width ?? 0);
+
+  /// 标签栈总高：逐块槽高之和（栈内紧邻堆叠，不加额外间距）。
+  static double _textStackHeight(
+    List<LayoutUnit> texts,
+    double Function(LayoutUnit) heightOf,
+  ) => texts.fold(0.0, (height, unit) => height + heightOf(unit));
+
+  /// 标签栈堆叠：自 [top] 起按阅读序逐块向下排，每块水平居中于 [cx]；
+  /// 返回栈底 y。槽宽/槽高与落位由调用方注入（handout 正文缩放与 outline
+  /// 原尺寸共用同一堆叠规则）。[clampLeft]/[clampRight] 为横向可用范围
+  /// （内容区左右缘）：窄图 + 长 VLM 图注时块宽超过图宽会横向越出内容区，
+  /// 逐块把居中位钳回 [clampLeft, clampRight - 块宽]（宽于可用范围的块
+  /// 贴 [clampLeft]，不再越界）。
+  static double _placeTextStack(
+    List<LayoutUnit> texts,
+    double cx,
+    double top,
+    double Function(LayoutUnit) widthOf,
+    double Function(LayoutUnit) heightOf,
+    void Function(LayoutUnit unit, double x, double y) placeOne, {
+    double clampLeft = double.negativeInfinity,
+    double clampRight = double.infinity,
+  }) {
+    var y = top;
+    for (final unit in texts) {
+      final width = widthOf(unit);
+      placeOne(unit, math.max(
+        clampLeft,
+        math.min(cx - width / 2, clampRight - width),
+      ), y);
+      y += heightOf(unit);
+    }
+    return y;
+  }
+
   /// 标题样式：字号不足 28 时放大到 28 并按测量值撑宽（与旧引擎规则一致）。
   static TextElement _styledTitle(TextElement element) {
     if (element.fontSize >= 28) return element;
@@ -154,19 +238,24 @@ abstract final class SmartLayoutTemplateEngine {
     );
   }
 
+  /// 移动单元到目标位置（memberIds 全员同 delta）；保留手写文本单元的
+  /// 目标矩形顺手记入 [inkSlotRects]（缩略图区分墨迹占位与图/形用）。
   static void _moveUnit(
     LayoutUnit unit,
     double x,
     double y,
     Map<ElementId, Offset> moveDeltas,
     List<Rect> previewRects,
+    List<Rect> inkSlotRects,
   ) {
     final delta = Offset(x - unit.sourceBounds.left, y - unit.sourceBounds.top);
     final ids = unit.memberIds.isNotEmpty ? unit.memberIds : [unit.key];
     for (final id in ids) {
       moveDeltas[ElementId(id)] = delta;
     }
-    previewRects.add(Rect.fromLTWH(x, y, unit.size.width, unit.size.height));
+    final target = Rect.fromLTWH(x, y, unit.size.width, unit.size.height);
+    previewRects.add(target);
+    if (_isInkText(unit)) inkSlotRects.add(target);
   }
 
   static SmartLayoutDocument _documentOf(
@@ -190,8 +279,9 @@ abstract final class SmartLayoutTemplateEngine {
 
   // ---------- handout 图文讲义 ----------
 
-  /// 标题通栏置顶居中；pairs 网格（宽图单列、窄图两两成行，图上图注下）；
-  /// looseTexts 通栏段落流；looseFigures 依序附后。
+  /// 标题通栏置顶居中；pairs 网格（宽图单列、窄图两两成行、落单孤行整行
+  /// 居中；图旁标签按上/下栈堆叠、栈内与图水平居中）；looseTexts 按阅读序
+  /// 贪心装行（放得下同行、放不下换行、行整体左对齐）；looseFigures 依序附后。
   static SmartLayoutTemplateLayoutResult? _layoutHandout(
     SmartLayoutContent content,
   ) {
@@ -212,32 +302,121 @@ abstract final class SmartLayoutTemplateEngine {
     final addElements = <Element>[];
     final moveDeltas = <ElementId, Offset>{};
     final previewRects = <Rect>[];
+    final inkSlotRects = <Rect>[];
     TextElement? bodyTextOf(LayoutUnit unit) {
       final element = unit.textElement;
       return element == null ? null : _scaledBody(element, bodyScale);
     }
+
+    double slotWidthOf(LayoutUnit unit) =>
+        _textSlotWidth(unit, bodyTextOf(unit));
+    double slotHeightOf(LayoutUnit unit) =>
+        _textSlotHeight(unit, bodyTextOf(unit));
 
     void placeTextAt(TextElement element, double x, double y) {
       addElements.add(element.copyWith(x: x, y: y));
       previewRects.add(Rect.fromLTWH(x, y, element.width, element.height));
     }
 
+    /// 墨迹占位移动或新增印刷体文本（保留手写分支走 _moveUnit）。
+    void placeTextUnit(LayoutUnit unit, double x, double y) {
+      if (_isInkText(unit)) {
+        _moveUnit(unit, x, y, moveDeltas, previewRects, inkSlotRects);
+        return;
+      }
+      final text = bodyTextOf(unit);
+      if (text == null) return;
+      placeTextAt(text, x, y);
+    }
+
+    bool textUnitPlaceable(LayoutUnit unit) =>
+        _isInkText(unit) || bodyTextOf(unit) != null;
+
+    /// 标签栈的排版有效文本（不可落位的文本块跳过）。
+    List<LayoutUnit> placeableTexts(Iterable<LayoutUnit> texts) =>
+        [for (final unit in texts) if (textUnitPlaceable(unit)) unit];
+
+    /// 图文格高度：图高 + 上/下标签栈占用（栈与图之间留 gap；不可落位的
+    /// 文本块不计，与 placeCell 的过滤对称）。
+    double cellHeight(FigureTextPair pair) {
+      final topTexts = placeableTexts(pair.topTexts);
+      final bottomTexts = placeableTexts(pair.bottomTexts);
+      var height = pair.figure.size.height;
+      if (topTexts.isNotEmpty) {
+        height += gap + _textStackHeight(topTexts, slotHeightOf);
+      }
+      if (bottomTexts.isNotEmpty) {
+        height += gap + _textStackHeight(bottomTexts, slotHeightOf);
+      }
+      return height;
+    }
+
+    /// 放置一个图文格：图水平居中于 [cx]；上方栈贴行顶（bottom 对齐图顶
+    /// -gap）、下方栈贴图底+gap；栈内每块与图水平居中（越出内容区时钳回）。
+    void placeCell(FigureTextPair pair, double cx, double rowY) {
+      final topTexts = placeableTexts(pair.topTexts);
+      final bottomTexts = placeableTexts(pair.bottomTexts);
+      final figTop =
+          rowY +
+          (topTexts.isEmpty ? 0.0 : gap + _textStackHeight(topTexts, slotHeightOf));
+      _moveUnit(pair.figure, cx - pair.figure.size.width / 2, figTop,
+          moveDeltas, previewRects, inkSlotRects);
+      if (topTexts.isNotEmpty) {
+        _placeTextStack(
+          topTexts,
+          cx,
+          rowY,
+          slotWidthOf,
+          slotHeightOf,
+          placeTextUnit,
+          clampLeft: area.left,
+          clampRight: area.right,
+        );
+      }
+      if (bottomTexts.isNotEmpty) {
+        _placeTextStack(
+          bottomTexts,
+          cx,
+          figTop + pair.figure.size.height + gap,
+          slotWidthOf,
+          slotHeightOf,
+          placeTextUnit,
+          clampLeft: area.left,
+          clampRight: area.right,
+        );
+      }
+    }
+
     var y = area.top;
-    if (content.title != null) {
-      final title = _styledTitle(content.title!.textElement!);
-      placeTextAt(title, centerX - title.width / 2, y);
-      y += title.height + gap;
+    final titleUnit = content.title;
+    if (titleUnit != null) {
+      if (_isInkText(titleUnit)) {
+        // 保留手写：标题墨迹居中置顶（不做 28pt 放大）。
+        if (y + titleUnit.size.height > area.bottom) return null;
+        _moveUnit(
+          titleUnit,
+          centerX - titleUnit.size.width / 2,
+          y,
+          moveDeltas,
+          previewRects,
+          inkSlotRects,
+        );
+        y += titleUnit.size.height + gap;
+      } else {
+        final title = _styledTitle(titleUnit.textElement!);
+        placeTextAt(title, centerX - title.width / 2, y);
+        y += title.height + gap;
+      }
     }
     if (y > area.bottom) return null;
 
-    // 行规划：宽图独占通栏行；窄图两两成行（行高取两格较大者）。
-    // 行记录恰有一格语义：wide 非空 = 通栏行；否则 left 必非空。
+    // 行规划：宽图独占通栏行；窄图两两成行、落单孤行整行居中。
+    // 行记录恰有一格语义：wide 非空 = 通栏行；否则 left 必非空（right 空 = 孤行）。
     final halfWidth = (area.width - gap) / 2;
     final rows =
         <({FigureTextPair? wide, FigureTextPair? left, FigureTextPair? right})>[];
     FigureTextPair? pending;
     for (final pair in content.pairs) {
-      if (bodyTextOf(pair.caption) == null) continue;
       final wide =
           pair.figure.size.width > area.width * handoutWideFigureRatio ||
           pair.figure.size.width > halfWidth;
@@ -254,84 +433,75 @@ abstract final class SmartLayoutTemplateEngine {
       rows.add((wide: null, left: pending, right: null));
     }
 
-    double cellHeight(FigureTextPair pair) {
-      final caption = bodyTextOf(pair.caption);
-      if (caption == null) return pair.figure.size.height;
-      return pair.figure.size.height + gap + caption.height;
-    }
-
     for (final row in rows) {
       final widePair = row.wide;
       if (widePair != null) {
-        final caption = bodyTextOf(widePair.caption)!;
         final rowHeight = cellHeight(widePair);
         if (y + rowHeight > area.bottom) return null;
-        _moveUnit(
-          widePair.figure,
-          centerX - widePair.figure.size.width / 2,
-          y,
-          moveDeltas,
-          previewRects,
-        );
-        placeTextAt(
-          caption,
-          centerX - caption.width / 2,
-          y + widePair.figure.size.height + gap,
-        );
+        placeCell(widePair, centerX, y);
         y += rowHeight + gap;
       } else {
         final left = row.left!;
         final right = row.right;
-        final leftCaption = bodyTextOf(left.caption)!;
         var rowHeight = cellHeight(left);
-        final rightCaption = right == null ? null : bodyTextOf(right.caption);
-        if (right != null && rightCaption != null) {
+        if (right != null) {
           rowHeight = math.max(rowHeight, cellHeight(right));
         }
         if (y + rowHeight > area.bottom) return null;
-        final leftCenter = area.left + halfWidth / 2;
-        final rightCenter = area.left + halfWidth + gap + halfWidth / 2;
-        _moveUnit(
-          left.figure,
-          leftCenter - left.figure.size.width / 2,
-          y,
-          moveDeltas,
-          previewRects,
-        );
-        placeTextAt(
-          leftCaption,
-          leftCenter - leftCaption.width / 2,
-          y + left.figure.size.height + gap,
-        );
-        if (right != null && rightCaption != null) {
-          _moveUnit(
-            right.figure,
-            rightCenter - right.figure.size.width / 2,
-            y,
-            moveDeltas,
-            previewRects,
-          );
-          placeTextAt(
-            rightCaption,
-            rightCenter - rightCaption.width / 2,
-            y + right.figure.size.height + gap,
-          );
+        if (right == null) {
+          // 孤行：图与标签栈以内容区中心水平居中（与宽图/散图一致），
+          // 不再落左列。
+          placeCell(left, centerX, y);
+        } else {
+          placeCell(left, area.left + halfWidth / 2, y);
+          placeCell(right, area.left + halfWidth + gap + halfWidth / 2, y);
         }
         y += rowHeight + gap;
       }
     }
 
-    // 通栏段落流：looseTexts 左对齐；looseFigures 居中附后。
+    // 通栏段落流：looseTexts 按阅读序贪心装行——当前行宽 + 行内间隙
+    // （取当前压缩档 gap，首档 24pt）+ 下一块槽宽 ≤ 区宽则同行（行内
+    // top 对齐、行高取最高块），否则换行；行整体左对齐。looseFigures
+    // 居中附后。
+    final lines = <List<LayoutUnit>>[];
+    var currentLine = <LayoutUnit>[];
+    var currentWidth = 0.0;
     for (final unit in content.looseTexts) {
-      final text = bodyTextOf(unit);
-      if (text == null) continue;
-      if (y + text.height > area.bottom) return null;
-      placeTextAt(text, area.left, y);
-      y += text.height + gap;
+      if (!textUnitPlaceable(unit)) continue;
+      final width = slotWidthOf(unit);
+      if (currentLine.isNotEmpty && currentWidth + gap + width > area.width) {
+        lines.add(currentLine);
+        currentLine = <LayoutUnit>[];
+        currentWidth = 0;
+      }
+      currentLine.add(unit);
+      currentWidth += currentLine.length == 1 ? width : gap + width;
+    }
+    if (currentLine.isNotEmpty) lines.add(currentLine);
+    for (final line in lines) {
+      var lineHeight = 0.0;
+      for (final unit in line) {
+        lineHeight = math.max(lineHeight, slotHeightOf(unit));
+      }
+      if (y + lineHeight > area.bottom) return null;
+      var x = area.left;
+      for (final unit in line) {
+        placeTextUnit(unit, x, y);
+        x += slotWidthOf(unit) + gap;
+      }
+      y += lineHeight + gap;
     }
     for (final unit in content.looseFigures) {
       if (y + unit.size.height > area.bottom) return null;
-      _moveUnit(unit, centerX - unit.size.width / 2, y, moveDeltas, previewRects);
+      _moveUnit(
+        unit,
+        centerX - unit.size.width / 2,
+        y,
+        moveDeltas,
+        previewRects,
+        inkSlotRects,
+      );
       y += unit.size.height + gap;
     }
 
@@ -340,6 +510,7 @@ abstract final class SmartLayoutTemplateEngine {
       addElements: addElements,
       moveDeltas: moveDeltas,
       previewRects: previewRects,
+      inkSlotRects: inkSlotRects,
       description:
           '图文讲义：标题 ${content.title == null ? 0 : 1} 处、'
           '图文 ${content.pairs.length} 组、正文 ${content.looseTexts.length} 段、'
@@ -350,8 +521,9 @@ abstract final class SmartLayoutTemplateEngine {
 
   // ---------- outline 要点清单 ----------
 
-  /// 标题置顶；文本条目按阅读序排列表（"• "前缀 + 固定行距，v1 无层级缩进）；
-  /// 小图（≤ 条目宽 40%）附于最近邻条目行右侧（caption 随图），大图独占通栏行。
+  /// 标题置顶；文本条目按阅读序排列表（"• "前缀 + 固定行距，v1 无层级缩进；
+  /// 保留手写条目为墨迹左对齐、无前缀）；小图（≤ 条目宽 40%）附于最近邻
+  /// 条目行右侧（图旁标签栈居中堆叠于图上/下），大图独占通栏行。
   /// 图片不缩放（保持原尺寸，不扩 move 协议）。
   static SmartLayoutTemplateLayoutResult? _layoutOutline(
     SmartLayoutContent content,
@@ -360,24 +532,83 @@ abstract final class SmartLayoutTemplateEngine {
     final addElements = <Element>[];
     final moveDeltas = <ElementId, Offset>{};
     final previewRects = <Rect>[];
+    final inkSlotRects = <Rect>[];
+
+    double slotWidthOf(LayoutUnit unit) =>
+        _isInkText(unit) ? unit.size.width : (unit.textElement?.width ?? 0);
+    double slotHeightOf(LayoutUnit unit) =>
+        _isInkText(unit) ? unit.size.height : (unit.textElement?.height ?? 0);
+
+    /// outline 文本可落位判定（与 handout placeableTexts 同语义）：保留
+    /// 手写走移动，印刷体需有文本元素；不可落位的标签不入标签栈
+    /// （不占行高、不产生空栈间隙）。
+    bool textUnitPlaceable(LayoutUnit unit) =>
+        _isInkText(unit) || unit.textElement != null;
+
+    /// outline 文本落位：保留手写走移动，印刷体新增元素（含预览矩形）。
+    void placeTextUnit(LayoutUnit unit, double x, double y) {
+      if (_isInkText(unit)) {
+        _moveUnit(unit, x, y, moveDeltas, previewRects, inkSlotRects);
+        return;
+      }
+      final element = unit.textElement;
+      if (element == null) return;
+      addElements.add(element.copyWith(x: x, y: y));
+      previewRects.add(Rect.fromLTWH(x, y, element.width, element.height));
+    }
 
     var y = area.top;
     if (content.title != null) {
-      final title = _styledTitle(content.title!.textElement!);
-      addElements.add(title.copyWith(x: area.left, y: y));
-      previewRects.add(Rect.fromLTWH(area.left, y, title.width, title.height));
-      y += title.height + outlineRowGap;
+      final titleUnit = content.title!;
+      if (_isInkText(titleUnit)) {
+        // 保留手写：标题墨迹左对齐置顶（不做字号放大）。
+        if (y + titleUnit.size.height > area.bottom) return null;
+        _moveUnit(
+          titleUnit,
+          area.left,
+          y,
+          moveDeltas,
+          previewRects,
+          inkSlotRects,
+        );
+        y += titleUnit.size.height + outlineRowGap;
+      } else {
+        final title = _styledTitle(content.title!.textElement!);
+        addElements.add(title.copyWith(x: area.left, y: y));
+        previewRects.add(Rect.fromLTWH(area.left, y, title.width, title.height));
+        y += title.height + outlineRowGap;
+      }
     }
     if (y > area.bottom) return null;
 
     // 阅读序条目流：文本条目与图文组按原稿 top 排序。
-    final entries = <({LayoutUnit? text, LayoutUnit? figure, LayoutUnit? caption})>[
+    final entries = <_OutlineEntry>[
       for (final unit in content.looseTexts)
-        (text: unit, figure: null, caption: null),
+        (
+          text: unit,
+          figure: null,
+          topTexts: const <LayoutUnit>[],
+          bottomTexts: const <LayoutUnit>[],
+        ),
       for (final pair in content.pairs)
-        (text: null, figure: pair.figure, caption: pair.caption),
+        (
+          text: null,
+          figure: pair.figure,
+          topTexts: [
+            for (final unit in pair.topTexts) if (textUnitPlaceable(unit)) unit,
+          ],
+          bottomTexts: [
+            for (final unit in pair.bottomTexts)
+              if (textUnitPlaceable(unit)) unit,
+          ],
+        ),
       for (final unit in content.looseFigures)
-        (text: null, figure: unit, caption: null),
+        (
+          text: null,
+          figure: unit,
+          topTexts: const <LayoutUnit>[],
+          bottomTexts: const <LayoutUnit>[],
+        ),
     ]..sort((a, b) {
       final aBounds = (a.text ?? a.figure)!.sourceBounds;
       final bBounds = (b.text ?? b.figure)!.sourceBounds;
@@ -418,31 +649,28 @@ abstract final class SmartLayoutTemplateEngine {
       final entry = entries[e];
       final text = entry.text;
       if (text != null) {
-        final element0 = text.textElement;
-        if (element0 == null) continue;
-        final bullet = element0.copyWithText(text: '• ${element0.text}');
-        final (mw, mh) = TextRenderer.measure(bullet);
-        final bulletElement = bullet.copyWith(
-          width: math.max(bullet.width, mw),
-          height: math.max(bullet.height, mh),
-        );
-        var rowHeight = bulletElement.height;
+        // 印刷体条目加"• "前缀；保留手写条目为墨迹左对齐、无前缀。
+        final bulletElement = _isInkText(text) ? null : _outlineBullet(text);
+        if (!_isInkText(text) && bulletElement == null) continue;
+        final rowTextHeight = bulletElement?.height ?? text.size.height;
         final sideIndex = sideFigureByText[e];
+        var rowHeight = rowTextHeight;
         if (sideIndex != null) {
-          final side = entries[sideIndex];
           rowHeight = math.max(
             rowHeight,
-            side.figure!.size.height +
-                8 +
-                (side.caption?.textElement?.height ?? 0),
+            _sideCellHeight(entries[sideIndex], slotHeightOf),
           );
         }
         if (y + rowHeight > area.bottom) return null;
-        addElements.add(bulletElement.copyWith(x: area.left, y: y));
-        previewRects.add(
-          Rect.fromLTWH(area.left, y, bulletElement.width, bulletElement.height),
-        );
-        var rowBottom = y + bulletElement.height;
+        if (bulletElement != null) {
+          addElements.add(bulletElement.copyWith(x: area.left, y: y));
+          previewRects.add(
+            Rect.fromLTWH(area.left, y, bulletElement.width, bulletElement.height),
+          );
+        } else {
+          placeTextUnit(text, area.left, y);
+        }
+        var rowBottom = y + rowTextHeight;
         if (sideIndex != null) {
           rowBottom = math.max(
             rowBottom,
@@ -450,9 +678,12 @@ abstract final class SmartLayoutTemplateEngine {
               entries[sideIndex],
               y,
               area,
-              addElements,
+              slotWidthOf,
+              slotHeightOf,
+              placeTextUnit,
               moveDeltas,
               previewRects,
+              inkSlotRects,
             ),
           );
         }
@@ -460,23 +691,42 @@ abstract final class SmartLayoutTemplateEngine {
       } else {
         if (attachedFigures.contains(e)) continue; // 已挂靠条目行
         final figure = entry.figure!;
-        if (y + figure.size.height > area.bottom) return null;
-        _moveUnit(figure, area.left, y, moveDeltas, previewRects);
-        var rowBottom = y + figure.size.height;
-        final caption = entry.caption;
-        if (caption?.textElement != null) {
-          final captionElement = caption!.textElement!;
-          final captionY = rowBottom + 8;
-          addElements.add(captionElement.copyWith(x: area.left, y: captionY));
-          previewRects.add(
-            Rect.fromLTWH(
-              area.left,
-              captionY,
-              captionElement.width,
-              captionElement.height,
+        final topTexts = entry.topTexts;
+        final bottomTexts = entry.bottomTexts;
+        final topHeight = _textStackHeight(topTexts, slotHeightOf);
+        // 行占用与挂靠小图共用同一格高规则（图高 + 上/下栈，栈与图间隙 8pt）。
+        final cellHeight = _sideCellHeight(entry, slotHeightOf);
+        if (y + cellHeight > area.bottom) return null;
+        final figTop = y + (topTexts.isEmpty ? 0.0 : 8 + topHeight);
+        _moveUnit(figure, area.left, figTop, moveDeltas, previewRects, inkSlotRects);
+        var rowBottom = figTop + figure.size.height;
+        final figureCenterX = area.left + figure.size.width / 2;
+        if (topTexts.isNotEmpty) {
+          _placeTextStack(
+            topTexts,
+            figureCenterX,
+            y,
+            slotWidthOf,
+            slotHeightOf,
+            placeTextUnit,
+            clampLeft: area.left,
+            clampRight: area.right,
+          );
+        }
+        if (bottomTexts.isNotEmpty) {
+          rowBottom = math.max(
+            rowBottom,
+            _placeTextStack(
+              bottomTexts,
+              figureCenterX,
+              figTop + figure.size.height + 8,
+              slotWidthOf,
+              slotHeightOf,
+              placeTextUnit,
+              clampLeft: area.left,
+              clampRight: area.right,
             ),
           );
-          rowBottom = captionY + captionElement.height;
         }
         y = rowBottom + outlineRowGap;
       }
@@ -487,6 +737,7 @@ abstract final class SmartLayoutTemplateEngine {
       addElements: addElements,
       moveDeltas: moveDeltas,
       previewRects: previewRects,
+      inkSlotRects: inkSlotRects,
       description:
           '要点清单：标题 ${content.title == null ? 0 : 1} 处、'
           '条目 ${content.looseTexts.length} 条、配图 ${content.pairs.length + content.looseFigures.length} 张',
@@ -494,68 +745,136 @@ abstract final class SmartLayoutTemplateEngine {
     );
   }
 
-  /// 条目行右侧放置小图（右对齐内容区），caption 随图在下；返回行底 y。
-  static double _placeSideFigure(
-    ({LayoutUnit? text, LayoutUnit? figure, LayoutUnit? caption}) entry,
-    double rowY,
-    Rect area,
-    List<Element> addElements,
-    Map<ElementId, Offset> moveDeltas,
-    List<Rect> previewRects,
+  /// outline 印刷体条目的"• "前缀元素（按测量值撑宽）。
+  static TextElement? _outlineBullet(LayoutUnit unit) {
+    final element0 = unit.textElement;
+    if (element0 == null) return null;
+    final bullet = element0.copyWithText(text: '• ${element0.text}');
+    final (mw, mh) = TextRenderer.measure(bullet);
+    return bullet.copyWith(
+      width: math.max(bullet.width, mw),
+      height: math.max(bullet.height, mh),
+    );
+  }
+
+  /// outline 挂靠小图的行占用：图高 + 上/下标签栈（栈与图间隙 8pt）。
+  static double _sideCellHeight(
+    _OutlineEntry entry,
+    double Function(LayoutUnit) heightOf,
   ) {
     final figure = entry.figure!;
+    var height = figure.size.height;
+    if (entry.topTexts.isNotEmpty) {
+      height += 8 + _textStackHeight(entry.topTexts, heightOf);
+    }
+    if (entry.bottomTexts.isNotEmpty) {
+      height += 8 + _textStackHeight(entry.bottomTexts, heightOf);
+    }
+    return height;
+  }
+
+  /// 条目行右侧放置小图（右对齐内容区）：上方标签栈贴行顶（bottom 对齐
+  /// 图顶-8）、下方标签栈贴图底+8，栈内每块与图水平居中（越出内容区时
+  /// 钳回内容区横向范围）；返回行底 y。
+  static double _placeSideFigure(
+    _OutlineEntry entry,
+    double rowY,
+    Rect area,
+    double Function(LayoutUnit) widthOf,
+    double Function(LayoutUnit) heightOf,
+    void Function(LayoutUnit unit, double x, double y) placeOne,
+    Map<ElementId, Offset> moveDeltas,
+    List<Rect> previewRects,
+    List<Rect> inkSlotRects,
+  ) {
+    final figure = entry.figure!;
+    final topTexts = entry.topTexts;
+    final bottomTexts = entry.bottomTexts;
+    final topHeight = _textStackHeight(topTexts, heightOf);
+    final figureY = rowY + (topTexts.isEmpty ? 0.0 : 8 + topHeight);
     final figureX = area.right - figure.size.width;
-    _moveUnit(figure, figureX, rowY, moveDeltas, previewRects);
-    var rowBottom = rowY + figure.size.height;
-    final caption = entry.caption;
-    if (caption?.textElement != null) {
-      final captionElement = caption!.textElement!;
-      final captionY = rowBottom + 8;
-      addElements.add(captionElement.copyWith(x: figureX, y: captionY));
-      previewRects.add(
-        Rect.fromLTWH(
-          figureX,
-          captionY,
-          captionElement.width,
-          captionElement.height,
+    _moveUnit(figure, figureX, figureY, moveDeltas, previewRects, inkSlotRects);
+    var rowBottom = figureY + figure.size.height;
+    final figureCenterX = figureX + figure.size.width / 2;
+    if (topTexts.isNotEmpty) {
+      _placeTextStack(
+        topTexts,
+        figureCenterX,
+        rowY,
+        widthOf,
+        heightOf,
+        placeOne,
+        clampLeft: area.left,
+        clampRight: area.right,
+      );
+    }
+    if (bottomTexts.isNotEmpty) {
+      rowBottom = math.max(
+        rowBottom,
+        _placeTextStack(
+          bottomTexts,
+          figureCenterX,
+          figureY + figure.size.height + 8,
+          widthOf,
+          heightOf,
+          placeOne,
+          clampLeft: area.left,
+          clampRight: area.right,
         ),
       );
-      rowBottom = captionY + captionElement.height;
     }
     return rowBottom;
   }
 
   // ---------- inplace 原文整理 ----------
 
-  /// 文本以原稿并集框中心原位替换（零风险兜底）；图/形/组一律不动。
+  /// 文本以原稿并集框中心原位替换（零风险兜底）；保留手写时文本墨迹完全
+  /// 不动（仅预览占位）；图/形/组一律不动。
   static SmartLayoutTemplateLayoutResult? _layoutInPlace(
     SmartLayoutContent content,
   ) {
     final addElements = <Element>[];
     final previewRects = <Rect>[];
+    final inkSlotRects = <Rect>[];
+    final keepInk = content.textUnits.any(_isInkText);
+    var placedTextCount = 0;
     void replaceInPlace(LayoutUnit unit) {
+      if (_isInkText(unit)) {
+        // 保留手写：文本墨迹完全不动，仅预览其占位。
+        previewRects.add(unit.sourceBounds);
+        inkSlotRects.add(unit.sourceBounds);
+        placedTextCount++;
+        return;
+      }
       final text = unit.textElement;
       if (text == null) return;
       final x = unit.sourceBounds.center.dx - text.width / 2;
       final y = unit.sourceBounds.center.dy - text.height / 2;
       addElements.add(text.copyWith(x: x, y: y));
       previewRects.add(Rect.fromLTWH(x, y, text.width, text.height));
+      placedTextCount++;
     }
 
     if (content.title != null) replaceInPlace(content.title!);
     for (final pair in content.pairs) {
-      replaceInPlace(pair.caption);
+      for (final unit in pair.texts) {
+        replaceInPlace(unit);
+      }
     }
     for (final unit in content.looseTexts) {
       replaceInPlace(unit);
     }
-    if (addElements.isEmpty) return null;
+    if (addElements.isEmpty && previewRects.isEmpty) return null;
     return SmartLayoutTemplateLayoutResult(
       kind: SmartLayoutTemplateKind.inplace,
       addElements: addElements,
       moveDeltas: const {},
       previewRects: previewRects,
-      description: '原文整理：转写 ${addElements.length} 处文字，图与形保持原位',
+      inkSlotRects: inkSlotRects,
+      // 保留手写模式无转写：文字保持手写原样，仅整页说明。
+      description: keepInk
+          ? '原文整理：手写原样保留，图与形保持原位'
+          : '原文整理：转写 $placedTextCount 处文字，图与形保持原位',
       document: _documentOf('inplace', addElements, content.pageId),
     );
   }

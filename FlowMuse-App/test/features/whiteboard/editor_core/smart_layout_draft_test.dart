@@ -243,6 +243,116 @@ void main() {
       isEmpty,
     );
   });
+
+  test('进入草稿视口适配 = 页框 ∪ previewRects 并集（超出页缘的内容也在视野内）', () {
+    final controller = buildController();
+    // 预落位矩形超出页框底部（页高 2246）：旧逻辑只适配页框时它会被挤出视野。
+    const overflowRect = Rect.fromLTWH(100, 2300, 600, 200);
+    const pageRect = Rect.fromLTWH(0, 0, 1588, 2246);
+    final plan = draftPlan();
+    controller.enterSmartLayoutDraft(
+      SmartLayoutPlan(
+        pageId: plan.pageId,
+        style: plan.style,
+        confidence: plan.confidence,
+        description: plan.description,
+        addElements: plan.addElements,
+        moveDeltas: plan.moveDeltas,
+        removeIds: plan.removeIds,
+        failedStrokeIds: plan.failedStrokeIds,
+        selectIds: plan.selectIds,
+        previewRects: [overflowRect],
+        removalRects: plan.removalRects,
+        failureRects: plan.failureRects,
+      ),
+    );
+    expect(controller.smartLayoutDraftActive, isTrue);
+    // 控制器未挂画布：fit 用默认画布尺寸 800×600。
+    final visible = controller.editorState.viewport.visibleRect(
+      const Size(800, 600),
+    );
+    expect(visible.contains(pageRect.topLeft), isTrue, reason: '页框左上角可见');
+    expect(
+      visible.contains(pageRect.bottomRight),
+      isTrue,
+      reason: '页框右下角可见',
+    );
+    expect(
+      visible.contains(overflowRect.topLeft) &&
+          visible.contains(overflowRect.bottomRight),
+      isTrue,
+      reason: '页框外的预落位内容并集后也在视野内',
+    );
+  });
+
+  test('草稿全文文本项：仅含智能排版标记文本、退出后为空', () {
+    final controller = buildController();
+    // 基础场景里的普通文本（无智能排版标记）不进全文清单。
+    controller.applyResult(
+      AddElementResult(
+        TextElement(
+          id: ElementId('plain-text'),
+          x: 10,
+          y: 10,
+          width: 100,
+          height: 24,
+          text: '普通文本',
+        ),
+      ),
+    );
+    controller.enterSmartLayoutDraft(draftPlanWithSmartTexts());
+
+    final items = controller.smartLayoutDraftAllTextItems;
+    expect(
+      items.map((item) => item.id),
+      containsAll([ElementId('sl-text-1'), ElementId('sl-text-2')]),
+    );
+    expect(
+      items.map((item) => item.id),
+      isNot(contains(ElementId('plain-text'))),
+      reason: '无智能排版标记的文本不入清单',
+    );
+    expect(
+      items.firstWhere((item) => item.id == ElementId('sl-text-2')).text,
+      '低置信句子',
+    );
+
+    // 校对改字后，全文项跟随草稿场景更新（现有 reviseSmartLayoutDraftText 路径）。
+    expect(
+      controller.reviseSmartLayoutDraftText(ElementId('sl-text-1'), '改后的句子'),
+      isTrue,
+    );
+    expect(
+      controller.smartLayoutDraftAllTextItems
+          .firstWhere((item) => item.id == ElementId('sl-text-1'))
+          .text,
+      '改后的句子',
+    );
+
+    controller.cancelSmartLayoutDraft();
+    expect(controller.smartLayoutDraftAllTextItems, isEmpty);
+  });
+
+  test('保留手写草稿无新增文本元素（文本以墨迹移动）：全文项为空', () {
+    final controller = buildController();
+    final plan = draftPlan();
+    controller.enterSmartLayoutDraft(
+      SmartLayoutPlan(
+        pageId: plan.pageId,
+        style: plan.style,
+        confidence: plan.confidence,
+        description: '保留手写版式',
+        addElements: const [],
+        moveDeltas: {ElementId('shape-1'): const Offset(50, 100)},
+        removeIds: const [ElementId('stroke-1')],
+        selectIds: {ElementId('shape-1')},
+        previewRects: const [],
+        removalRects: const [],
+        failureRects: const [],
+      ),
+    );
+    expect(controller.smartLayoutDraftAllTextItems, isEmpty);
+  });
 }
 
 FreedrawElement _stroke(String id, String sessionId, double x, double y, double w, double h) =>
@@ -258,3 +368,44 @@ FreedrawElement _stroke(String id, String sessionId, double x, double y, double 
         'flowMuse': {'pageId': 'page-1'},
       },
     );
+
+/// 带智能排版标记的文本元素（v2 识别产物形态：flowMuse.smartLayout + blockId）。
+/// 字体用打包的 Excalifont，避免测试里触发 google_fonts 在线取字。
+TextElement _smartText(String id, String text, double x, double y) =>
+    TextElement(
+      id: ElementId(id),
+      x: x,
+      y: y,
+      width: 160,
+      height: 28,
+      text: text,
+      fontFamily: 'Excalifont',
+      customData: {
+        'flowMuse': {'smartLayout': true, 'blockId': id, 'pageId': 'page-1'},
+      },
+    );
+
+/// 含两个智能排版文本的草稿计划：sl-text-2 为低置信项。
+SmartLayoutPlan draftPlanWithSmartTexts() {
+  final text1 = _smartText('sl-text-1', '识别正确的句子', 100, 2600);
+  final text2 = _smartText('sl-text-2', '低置信句子', 100, 2700);
+  return SmartLayoutPlan(
+    pageId: 'page-1',
+    style: SmartLayoutTemplateKind.handout,
+    confidence: 0.9,
+    description: 'PPT 版式',
+    addElements: [text1, text2],
+    moveDeltas: const {},
+    removeIds: const [ElementId('stroke-1')],
+    selectIds: {ElementId('sl-text-1'), ElementId('sl-text-2')},
+    previewRects: const [],
+    removalRects: const [],
+    failureRects: const [],
+    lowConfidenceTexts: const [
+      SmartLayoutLowConfidenceText(
+        elementId: ElementId('sl-text-2'),
+        confidence: 0.4,
+      ),
+    ],
+  );
+}

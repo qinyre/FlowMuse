@@ -549,7 +549,9 @@ class _EditorCanvasState extends State<EditorCanvas>
                 if (controller.editingFrameLabelId != null)
                   _FrameLabelEditingOverlay(controller: controller),
                 // Compact property panel trigger
+                // 智能排版草稿态全选参与者，不显示属性入口（与确认条互不遮挡）。
                 if (controller.isCompact &&
+                    !controller.smartLayoutDraftActive &&
                     controller.selectedElements.isNotEmpty)
                   Positioned(
                     bottom: 72,
