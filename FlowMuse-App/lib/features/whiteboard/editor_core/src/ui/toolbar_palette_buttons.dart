@@ -211,11 +211,11 @@ class _BrushPalette extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                if (pressureEnabled)
+                if (pressureEnabled) ...[
                   Row(
                     children: [
                       Text(
-                        '压感',
+                        pressureLabelFor(controller.activeBrushType),
                         style: TextStyle(
                           fontSize: 12,
                           color: colors.onSurfaceVariant,
@@ -235,8 +235,21 @@ class _BrushPalette extends StatelessWidget {
                       ),
                       const Text('极强', style: TextStyle(fontSize: 11)),
                     ],
-                  )
-                else
+                  ),
+                  if (simulatedPressureCaptionFor(
+                    controller.activeBrushType,
+                  ).isNotEmpty)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        simulatedPressureCaptionFor(controller.activeBrushType),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: colors.onSurfaceVariant.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ),
+                ] else
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     child: Row(
@@ -267,6 +280,21 @@ class _BrushPalette extends StatelessWidget {
     );
   }
 }
+
+/// 压力滑块标签（T10）：v2 笔形按响应语义命名——铅笔压力主要控制
+/// 石墨浓淡、毛笔主要控制笔肚提按宽度；其余笔保持"压感"既有语义。
+String pressureLabelFor(BrushType brushType) => switch (brushType) {
+  BrushType.pencil => '浓淡响应',
+  BrushType.brushPen => '提按响应',
+  _ => '压感',
+};
+
+/// v2 笔形（无手写笔时按书写速度模拟压力）的可解释文案。
+String simulatedPressureCaptionFor(BrushType brushType) => switch (brushType) {
+  BrushType.pencil => '无手写笔时按书写速度模拟浓淡',
+  BrushType.brushPen => '无手写笔时按书写速度模拟提按',
+  _ => '',
+};
 
 AnchoredPopupPlacement _placementForDock(ToolbarDock dock) => switch (dock) {
   ToolbarDock.top => AnchoredPopupPlacement.below,
