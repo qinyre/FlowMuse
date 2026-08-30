@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/element_renderer.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/rough_canvas_adapter.dart';
 
 import '../fixtures/brush_stroke_fixtures.dart';
 import 'canvas_spy.dart';
@@ -49,6 +51,7 @@ FreedrawElement placedElement(
   BrushType brush,
   String idSeed, {
   BrushRenderVersion? renderVersion,
+  double opacity = 1.0,
 }) {
   final xs = placed.map((p) => p.x);
   final ys = placed.map((p) => p.y);
@@ -72,6 +75,7 @@ FreedrawElement placedElement(
       renderVersion: renderVersion ?? defaultRenderVersionForNewStroke(brush),
     ),
     strokeWidth: kNominalWidth,
+    opacity: opacity,
   );
 }
 
@@ -94,6 +98,10 @@ class PlacedRender {
 
 /// 白底契约渲染 [placed] 轨迹；[repeat] 为同元素叠加次数（重复覆盖）。
 /// SpyCanvas 转发的就是契约 paintScene，计数与像素同源。
+///
+/// [opacity] 走元素字段（ElementRenderer → DrawStyle.fromElement 的
+/// 生产低透明度路径）；[dimWrap] 复刻 static_canvas_painter 的聚焦 dim
+/// 三明治（saveLayer 白 0.22 包裹元素，渲染器本身无感知）。
 Future<PlacedRender> renderPlaced(
   List<Point> placed,
   List<double> pressures,
@@ -101,6 +109,8 @@ Future<PlacedRender> renderPlaced(
   String idSeed, {
   int repeat = 1,
   BrushRenderVersion? renderVersion,
+  double opacity = 1.0,
+  bool dimWrap = false,
 }) async {
   final element = placedElement(
     placed,
@@ -108,16 +118,32 @@ Future<PlacedRender> renderPlaced(
     brush,
     idSeed,
     renderVersion: renderVersion,
+    opacity: opacity,
   );
   final elements = List<FreedrawElement>.filled(repeat, element);
 
   final recorder = ui.PictureRecorder();
   final spy = SpyCanvas(ui.Canvas(recorder));
-  NaturalMediaSheetRenderer.paintScene(
-    spy,
-    ui.Size(kCellWidth, kCellHeight),
-    elements,
-  );
+  if (dimWrap) {
+    spy.drawRect(
+      ui.Offset.zero & const ui.Size(kCellWidth, kCellHeight),
+      ui.Paint()..color = const ui.Color(0xFFFFFFFF),
+    );
+    spy.saveLayer(
+      null,
+      ui.Paint()..color = const ui.Color.fromRGBO(255, 255, 255, 0.22),
+    );
+    for (final e in elements) {
+      ElementRenderer.render(spy, e, RoughCanvasAdapter());
+    }
+    spy.restore();
+  } else {
+    NaturalMediaSheetRenderer.paintScene(
+      spy,
+      ui.Size(kCellWidth, kCellHeight),
+      elements,
+    );
+  }
   final picture = recorder.endRecording();
   final image = await picture.toImage(kCellWidth.round(), kCellHeight.round());
   picture.dispose();
