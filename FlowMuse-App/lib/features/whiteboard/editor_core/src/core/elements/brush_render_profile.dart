@@ -132,6 +132,33 @@ final class BrushRenderProfile {
   // 三个密度桶颗粒各自恒定 alpha，压力→密度经颗粒间距表达。
   double get pencilV2BaseAlpha => 0.30;
 
+  // --- 铅笔 v2 颗粒几何常数（T8：sampler 与 bounds 共用真源）---
+  // 颗粒半长/半厚/法向散布的系数；NaturalMediaTuning 的默认值引用
+  // 这里，渲染器与 elementVisualBounds 不得各自维护（§3.6）。
+  static const double pencilV2ScatterRatio = 0.225;
+  static const double pencilV2GrainHalfLenBase = 0.30;
+  static const double pencilV2GrainHalfLenSpan = 0.22;
+  static const double pencilV2GrainHalfThickBase = 0.10;
+  static const double pencilV2GrainHalfThickAbs = 0.25;
+
+  /// 铅笔 v2 可视半宽（解析上界，T8）：wobble 基底 1.15×半宽、颗粒
+  /// 外缘（散布 + 半厚）与笔端沿切向外伸（半长 + 半厚）三者取大，
+  /// 再加 AA 余量。
+  double pencilV2VisualHalfWidth(double base) {
+    final wMax = base * 1.08; // 0.82 + 0.26（宽度曲线满压）
+    final baseSide = wMax / 2 * 1.15; // 基底 wobble 上界
+    final grainSide =
+        wMax * (pencilV2ScatterRatio + pencilV2GrainHalfThickBase) +
+        pencilV2GrainHalfThickAbs;
+    final endAlong =
+        wMax * (pencilV2GrainHalfLenBase + pencilV2GrainHalfLenSpan) +
+        wMax * pencilV2GrainHalfThickBase +
+        pencilV2GrainHalfThickAbs;
+    var half = baseSide > grainSide ? baseSide : grainSide;
+    if (endAlong > half) half = endAlong;
+    return half + 1.0; // AA
+  }
+
   // channel 编号是协议级常量（rendering/natural_media/
   // deterministic_stroke_seed.dart 的 NaturalMediaChannel，跨端冻结）；
   // core 不反向 import rendering，故此处用字面值并对齐注释。

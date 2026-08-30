@@ -31,7 +31,7 @@ class NaturalMediaTuning {
     this.sampleCap = 100000,
     this.stencilWeights = const [0.5, 0.3, 0.2],
     this.miterLimit = 1.5,
-    this.pencilScatterRatio = 0.225,
+    this.pencilScatterRatio = BrushRenderProfile.pencilV2ScatterRatio,
     this.pencilGrainBuckets = defaultPencilGrainBuckets,
     this.brushStrandMinHalfWidth = 2.6,
     this.brushSharpTurnRad = 75 * math.pi / 180.0,
@@ -474,11 +474,16 @@ class NaturalMediaStrokeSampler {
           final cy = e.from.y + t.y * sJit + ny * normalOffset;
           final halfLen = math.max(
             0.55,
-            w * (0.30 + 0.22 * rand01(gseed, 0x33)),
+            w *
+                (BrushRenderProfile.pencilV2GrainHalfLenBase +
+                    BrushRenderProfile.pencilV2GrainHalfLenSpan *
+                        rand01(gseed, 0x33)),
           );
           final halfThick = math.max(
             0.45,
-            0.10 * w + 0.25 * rand01(gseed, 0x44),
+            BrushRenderProfile.pencilV2GrainHalfThickBase * w +
+                BrushRenderProfile.pencilV2GrainHalfThickAbs *
+                    rand01(gseed, 0x44),
           );
           final r = ui.Rect.fromLTRB(
             cx - halfLen - halfThick,

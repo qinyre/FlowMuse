@@ -290,9 +290,19 @@ class RemoteWetInkPainter extends CustomPainter {
     // visualHalfWidth = size×(0.5+maxThinning×0.5)+AA 余量，覆盖
     // thinning/平头/抗锯齿）。禁止退回名义 strokeWidth/2 或手写
     // kMaxBrushSizeScale 常量（v4 §8.2 明令禁止）。
-    final margin = BrushRenderProfile.forType(
-      BrushType.fromWireName(snapshot.style.brushType),
-    ).visualHalfWidth(snapshot.style.strokeWidth);
+    // T8：v2 style 用自然介质上界（与 elementVisualBounds 同一真源）；
+    // 与 v1 公式取大——v2 style 缺压感时分发端回 v1，bounds 保守覆盖。
+    final brushType = BrushType.fromWireName(snapshot.style.brushType);
+    final profile = BrushRenderProfile.forType(brushType);
+    final width = snapshot.style.strokeWidth;
+    var margin = profile.visualHalfWidth(width);
+    if (snapshot.style.renderVersion == 2 &&
+        (brushType == BrushType.pencil || brushType == BrushType.brushPen)) {
+      final v2Margin = brushType == BrushType.brushPen
+          ? profile.brushV2VisualHalfWidth(width)
+          : profile.pencilV2VisualHalfWidth(width);
+      if (v2Margin > margin) margin = v2Margin;
+    }
     return Rect.fromLTRB(
       minX - margin,
       minY - margin,
