@@ -1069,5 +1069,5 @@ flutter build web
 | Windows Profile/协作 | 待填写 |
 | HarmonyOS Profile | 待填写，不得默认通过 |
 | 盲测结果 | 待填写 |
-| 已知降级 | 待填写 |
+| 已知降级 | ①flutter test --platform chrome 在本机 dwds 浏览器通道挂起（后台与交互式两跑各 20+ 分钟停在 +0）：§7 种子跨端门禁改由 tool/natural_media_hash_web_check/run.ps1 执行——同一冻结向量清单（hash_vectors.dart 单点维护）经 dart2js 编译后用 node（V8）实跑生产 deterministic_stroke_seed.dart 本体，VM（flutter test）与 V8（node）双侧逐值一致；T12 Web Profile 仍按计划在真实 Chrome 跑整应用；②P-03 见 NOTES-v1（"边缘不规则度不足"未获实测支持，冻结下限 0.05 转为 v2 防退化门） |
 | Issue/PR | 待填写 |
