@@ -40,6 +40,7 @@ void main() {
     bool handoutFits = true,
     Map<SmartLayoutTemplateKind, SmartLayoutTemplateLayoutResult?>
     layoutsKeepInk = const {},
+    bool hasInkTextUnits = true,
   }) {
     final content = buildContent();
     final layouts = <SmartLayoutTemplateKind, SmartLayoutTemplateLayoutResult?>{
@@ -61,6 +62,7 @@ void main() {
       failures: const [],
       confidence: 0.9,
       confidenceByBlockId: const {},
+      hasInkTextUnits: hasInkTextUnits,
     );
   }
 
@@ -231,6 +233,18 @@ void main() {
 
   testWidgets('无保留手写变体时不显示模式开关', (tester) async {
     await openSheet(tester, buildPreparation());
+    expect(find.text('转写为印刷体'), findsNothing);
+    expect(find.text('保留手写笔迹'), findsNothing);
+  });
+
+  testWidgets('纯打字页（无手写转写文本）不显示模式开关', (tester) async {
+    await openSheet(
+      tester,
+      buildPreparation(
+        layoutsKeepInk: buildKeepInkLayouts(),
+        hasInkTextUnits: false,
+      ),
+    );
     expect(find.text('转写为印刷体'), findsNothing);
     expect(find.text('保留手写笔迹'), findsNothing);
   });

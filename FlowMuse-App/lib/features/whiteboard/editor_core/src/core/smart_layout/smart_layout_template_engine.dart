@@ -38,6 +38,7 @@ class SmartLayoutTemplatePreparation {
     required this.confidence,
     required this.confidenceByBlockId,
     this.textClusterRects = const [],
+    this.hasInkTextUnits = false,
   });
 
   final String pageId;
@@ -52,7 +53,7 @@ class SmartLayoutTemplatePreparation {
   final Map<SmartLayoutTemplateKind, SmartLayoutTemplateLayoutResult?>
   layoutsKeepInk;
 
-  /// 识别成功的笔迹 + 旧智能排版文本（应用时删除）。
+  /// 识别成功的笔迹与打字文本（应用时删除，由引擎克隆/移动替换）。
   final List<ElementId> removeIds;
 
   /// 识别失败块的笔迹（用户选择"删除未识别笔迹"时删除）。
@@ -70,6 +71,10 @@ class SmartLayoutTemplatePreparation {
 
   /// 低置信校对直查表：blockId（== VLM 元素 id）→ 有效把握。
   final Map<String, double> confidenceByBlockId;
+
+  /// 页内是否存在由手写转写而来的文本单元：决定"保留手写笔迹"开关是否
+  /// 展示（纯打字/纯图形页没有手写可保留，打字文本始终走模板重排）。
+  final bool hasInkTextUnits;
 }
 
 /// 模板引擎落位结果：几何已定（新增元素坐标/移动增量/预览框），

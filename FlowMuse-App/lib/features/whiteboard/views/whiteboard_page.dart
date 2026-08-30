@@ -1019,7 +1019,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       if (!mounted) return _SmartLayoutPageOutcome.cancelled;
       if (preparation == null) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('本页没有可智能排版的手写内容')),
+          const SnackBar(content: Text('本页没有可智能排版的内容')),
         );
         return _SmartLayoutPageOutcome.nothing;
       }
@@ -1312,7 +1312,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       );
       final page = _markdrawController.pageForVisibleRect(visible);
       if (page == null) {
-        throw StateError('当前画布没有可智能排版的手写内容');
+        throw StateError('当前画布没有可智能排版的内容');
       }
       await _startSmartLayoutFlow(initialPageIds: [page.id]);
       return;

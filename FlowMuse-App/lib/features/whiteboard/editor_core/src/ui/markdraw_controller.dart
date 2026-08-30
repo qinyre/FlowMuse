@@ -3301,7 +3301,9 @@ class MarkdrawController extends ChangeNotifier {
     try {
       final (:groups, noiseStrokeIds: pageNoiseIds) =
           _smartLayoutInkGroupsForPage(pageId);
-      if (groups.isEmpty) {
+      // 门控放宽（第六轮）：手写簇、打字文本、图形任一存在即可发起，
+      // 纯打字/纯图形页与手写页走同一条视觉管线；全空才拒绝。
+      if (groups.isEmpty && _smartLayoutPageElements(pageId).isEmpty) {
         return null;
       }
       final preparation = await _prepareVisionRecognition(
@@ -3668,11 +3670,28 @@ class MarkdrawController extends ChangeNotifier {
         entry.key: _inkGroupBounds(entry.value),
     };
     final figures = _smartLayoutFigureUnits(page.id);
-    // Set-of-Mark：墨迹簇 + 页面可移动元素全部作为候选对象，按阅读序（上→左）
-    // 编号 m1..mN，编号与对象的映射留在客户端，服务端/VLM 只见编号。
+    // 打字文本（第六轮）：自由 TextElement 与手写簇同为文本标记候选——
+    // 印刷体内容已在场景，免转写；VLM 照常认字/配对/定角色。键按原稿
+    // 阅读序编号（确定性），映射留在客户端直查回元素。
+    final typedTextEntries = <({TextElement element, ui.Rect rect})>[
+      for (final element in _smartLayoutTypedTexts(page.id))
+        (element: element, rect: _placementRectForElement(element)),
+    ]..sort((a, b) {
+      final byTop = a.rect.top.compareTo(b.rect.top);
+      return byTop != 0 ? byTop : a.rect.left.compareTo(b.rect.left);
+    });
+    final typedTextByKey = <String, ({TextElement element, ui.Rect rect})>{
+      for (var i = 0; i < typedTextEntries.length; i++)
+        '${page.id}:t${i + 1}': typedTextEntries[i],
+    };
+    // Set-of-Mark：墨迹簇 + 打字文本 + 页面可移动元素全部作为候选对象，
+    // 按阅读序（上→左）编号 m1..mN，编号与对象的映射留在客户端，
+    // 服务端/VLM 只见编号。
     final markCandidates = <({String key, ui.Rect rect, bool isText})>[
       for (final entry in clusterRects.entries)
         (key: entry.key, rect: entry.value, isText: true),
+      for (final entry in typedTextByKey.entries)
+        (key: entry.key, rect: entry.value.rect, isText: true),
       for (final entry in figures.rects.entries)
         (key: entry.key, rect: entry.value, isText: false),
     ]..sort((a, b) {
@@ -3745,6 +3764,24 @@ class MarkdrawController extends ChangeNotifier {
       debugPrint('[$_logTag] 视觉排版无匹配项');
       throw StateError('未能识别出页面内容，请重试');
     }
+    // 认领分流（第六轮）：文本项认领的键可能是手写簇（需转写）或打字文本
+    // 标记（印刷体已在场景，免转写）。转写、成功账本与墨迹 memberIds 只看
+    // 墨迹侧；打字键单独装配。同项同时认领两侧时墨迹优先，未消费的打字
+    // 元素原地保留，绝不静默删除。
+    final inkClaimsByIndex = <int, List<String>>{
+      for (final entry in match.textClaims.entries)
+        entry.key: [
+          for (final key in entry.value)
+            if (clusterRects.containsKey(key)) key,
+        ],
+    }..removeWhere((_, keys) => keys.isEmpty);
+    final typedKeysByIndex = <int, List<String>>{
+      for (final entry in match.textClaims.entries)
+        entry.key: [
+          for (final key in entry.value)
+            if (typedTextByKey.containsKey(key)) key,
+        ],
+    }..removeWhere((_, keys) => keys.isEmpty);
     _throwIfSmartLayoutCancelled(); // 检查点：识别匹配与逐块转写阶段之间
 
     // 文本项转写：每个认领的笔迹簇合并后**先走整页 VLM 文本**；把握不足
@@ -3753,7 +3790,7 @@ class MarkdrawController extends ChangeNotifier {
     final recognition = await _recognizeVisionTextBlocks(
       page,
       vision.elements,
-      match.textClaims,
+      inkClaimsByIndex,
       inkGroups,
       clusterRects,
       cleanPng,
@@ -3767,7 +3804,7 @@ class MarkdrawController extends ChangeNotifier {
     final textBlocksByIndex = recognition.blocks;
     final textElementsByIndex = <int, TextElement>{};
     final textSourceByIndex = <int, ui.Rect>{};
-    for (final entry in match.textClaims.entries) {
+    for (final entry in inkClaimsByIndex.entries) {
       final block = textBlocksByIndex[entry.key];
       if (block == null || !block.isSuccess) continue;
       // 纯标点/纯符号转写（如"、"、"~"，无字母/数字/CJK）不生成文本元素、
@@ -3794,13 +3831,49 @@ class MarkdrawController extends ChangeNotifier {
         // 该块笔迹元素 id：保留手写模式随方案移动、从删除清单排除；
         // 转写模式（默认）仍整块删除。
         memberIds: [
-          for (final key in match.textClaims[index] ?? const <String>[])
+          for (final key in inkClaimsByIndex[index] ?? const <String>[])
             ...[
               for (final stroke in inkGroups[key] ?? const <FreedrawElement>[])
                 stroke.id.value,
             ],
         ],
       );
+    }
+
+    // 打字文本单元（第六轮）：内容取自场景现有元素（免转写），默认模式由
+    // 引擎克隆重排（模板样式全量生效），原件随账本删除；保留手写模式经
+    // memberIds 整体移动。已生成单元的键记入 consumedTypedKeys 供账本结算。
+    final consumedTypedKeys = <String>{};
+    LayoutUnit? makeTypedUnit(String key) {
+      final typed = typedTextByKey[key];
+      if (typed == null) return null;
+      consumedTypedKeys.add(key);
+      return LayoutUnit(
+        key: key,
+        sourceBounds: typed.rect,
+        size: ui.Size(typed.element.width, typed.element.height),
+        kind: LayoutUnitKind.text,
+        textElement: typed.element,
+        memberIds: [typed.element.id.value],
+      );
+    }
+
+    // 文本项 → 排版单元/原稿矩形的统一入口：有转写产物的走墨迹单元，
+    // 否则认领了打字标记的走打字单元（取首个键，确定性）。
+    LayoutUnit? unitForTextIndex(int index) {
+      if (textElementsByIndex.containsKey(index)) return makeTextUnit(index);
+      final keys = typedKeysByIndex[index];
+      return keys == null || keys.isEmpty ? null : makeTypedUnit(keys.first);
+    }
+
+    ui.Rect? sourceRectForTextIndex(int index) {
+      if (textElementsByIndex.containsKey(index)) {
+        return textSourceByIndex[index];
+      }
+      final keys = typedKeysByIndex[index];
+      return keys == null || keys.isEmpty
+          ? null
+          : typedTextByKey[keys.first]?.rect;
     }
 
     // 图形单元预先构建（VLM 配对、几何兜底与松散集合共用）。
@@ -3828,11 +3901,14 @@ class MarkdrawController extends ChangeNotifier {
       if (unit != null) figureUnitByIndex[index] = unit;
     }
 
-    // title：第一个 role=title 且成功创建的文本项（仅 1 个，AI 侧已去重）。
+    // title：第一个 role=title 且能生成单元的文本项（墨迹或打字，仅 1 个，
+    // AI 侧已去重）。
     int? titleIndex;
+    LayoutUnit? titleUnit;
     for (final index in match.textClaims.keys) {
       if (vision.elements[index].role == 'title') {
-        if (textElementsByIndex.containsKey(index)) {
+        titleUnit = unitForTextIndex(index);
+        if (titleUnit != null) {
           titleIndex = index;
         }
         break;
@@ -3863,8 +3939,8 @@ class MarkdrawController extends ChangeNotifier {
     final pairTextsByFigureIndex = <int, List<LayoutUnit>>{};
     final pairedTextIndexes = <int>{};
     final pairedFigureIndexes = <int>{};
-    void attachText(int figureIndex, int textIndex) {
-      (pairTextsByFigureIndex[figureIndex] ??= []).add(makeTextUnit(textIndex));
+    void attachText(int figureIndex, int textIndex, LayoutUnit unit) {
+      (pairTextsByFigureIndex[figureIndex] ??= []).add(unit);
       pairedTextIndexes.add(textIndex);
       // 图已被配对消费：不再落入 looseFigures（Set 幂等，多标签只记一次）。
       pairedFigureIndexes.add(figureIndex);
@@ -3873,12 +3949,10 @@ class MarkdrawController extends ChangeNotifier {
     for (final entry in figureIndexByPair.entries) {
       final captionIndex = captionIndexByPair[entry.key];
       if (captionIndex == null) continue;
-      if (figureUnitByIndex[entry.value] == null ||
-          !textElementsByIndex.containsKey(captionIndex)) {
-        continue;
-      }
-      attachText(entry.value, captionIndex);
-      pairedFigureIndexes.add(entry.value);
+      if (figureUnitByIndex[entry.value] == null) continue;
+      final captionUnit = unitForTextIndex(captionIndex);
+      if (captionUnit == null) continue;
+      attachText(entry.value, captionIndex, captionUnit);
     }
 
     // 客户端几何配对兜底：VLM pairId 漏配时（走查实况：图注与图分家成独立
@@ -3891,13 +3965,11 @@ class MarkdrawController extends ChangeNotifier {
         for (final index in match.textClaims.keys)
           if (index != titleIndex &&
               !pairedTextIndexes.contains(index) &&
-              textElementsByIndex.containsKey(index))
-            if (_figureLabelPairMaxGap(vision.elements[index])
-                case final maxGap?)
-              index: (
-                bounds: textSourceByIndex[index]!,
-                maxGap: maxGap,
-              ),
+              sourceRectForTextIndex(index) != null)
+            if (sourceRectForTextIndex(index) case final rect?)
+              if (_figureLabelPairMaxGap(vision.elements[index])
+                  case final maxGap?)
+                index: (bounds: rect, maxGap: maxGap),
       },
       figures: {
         for (final index in match.figureClaims.keys)
@@ -3906,7 +3978,7 @@ class MarkdrawController extends ChangeNotifier {
       },
     );
     fallbackPairs.forEach((textIndex, figureIndex) {
-      attachText(figureIndex, textIndex);
+      attachText(figureIndex, textIndex, unitForTextIndex(textIndex)!);
     });
 
     // 松散项按阅读顺序（先上后左）排列——确定性。
@@ -3930,9 +4002,9 @@ class MarkdrawController extends ChangeNotifier {
 
     final looseTexts =
         [
-          for (final index in textElementsByIndex.keys)
+          for (final index in match.textClaims.keys)
             if (index != titleIndex && !pairedTextIndexes.contains(index))
-              makeTextUnit(index),
+              ?unitForTextIndex(index),
         ]..sort(
           (a, b) => readingCompare(a.sourceBounds, b.sourceBounds),
         );
@@ -3954,7 +4026,7 @@ class MarkdrawController extends ChangeNotifier {
         page.bounds.width - 144,
         page.bounds.height - 144,
       ),
-      title: titleIndex == null ? null : makeTextUnit(titleIndex),
+      title: titleUnit,
       pairs: pairs,
       looseTexts: looseTexts,
       looseFigures: looseFigures,
@@ -3973,7 +4045,7 @@ class MarkdrawController extends ChangeNotifier {
 
     // 成功/失败账本：每个簇按其归属文本项的转写结果分入删除或红区；未认领簇直接红区。
     final successByClusterKey = <String, bool>{};
-    match.textClaims.forEach((index, keys) {
+    inkClaimsByIndex.forEach((index, keys) {
       final success = textBlocksByIndex[index]?.isSuccess ?? false;
       for (final key in keys) {
         successByClusterKey[key] = success;
@@ -3982,7 +4054,10 @@ class MarkdrawController extends ChangeNotifier {
     final removeStrokeIds = <ElementId>[
       // 噪点笔画（<8×8pt）：识别不涉及，随方案静默删除，消除残留墨点。
       ...noiseStrokeIds,
-      for (final text in _pageScopedOldSmartText(page.id)) text.id,
+      // 打字文本（第六轮）：生成单元的元素随方案删除（引擎克隆替换原件）；
+      // 未认领的打字文本原地保留。旧智能排版产出不再无条件清场——它们作为
+      // 普通打字文本重新参与排版（重跑安全，杜绝重跑丢字）。
+      for (final key in consumedTypedKeys) typedTextByKey[key]!.element.id,
     ];
     final failedStrokeIds = <ElementId>[];
     final removalRects = <ui.Rect>[];
@@ -4019,6 +4094,11 @@ class MarkdrawController extends ChangeNotifier {
     for (final key in match.unclaimedClusterKeys) {
       account(key);
     }
+    // 打字文本原元素的原稿矩形：默认模式灰区（克隆替换后原位空出）；
+    // 保留手写装配时经 textClusterRects 排除（原元素随方案移动而非删除）。
+    for (final key in consumedTypedKeys) {
+      removalRects.add(typedTextByKey[key]!.rect);
+    }
 
     // 低置信校对直查表：blockId（== VLM 元素 id）→ 重问后的有效把握。
     final confidenceByBlockId = <String, double>{
@@ -4044,9 +4124,10 @@ class MarkdrawController extends ChangeNotifier {
         };
     // 成功识别文本块的来源簇矩形："保留手写"装配时从灰区排除（墨迹保留）。
     final textClusterRects = <ui.Rect>[
-      for (final entry in match.textClaims.entries)
+      for (final entry in inkClaimsByIndex.entries)
         if (textElementsByIndex.containsKey(entry.key))
           for (final key in entry.value) clusterRects[key]!,
+      for (final key in consumedTypedKeys) typedTextByKey[key]!.rect,
     ];
     final textConfidences = <double>[
       for (final index in textElementsByIndex.keys)
@@ -4068,6 +4149,7 @@ class MarkdrawController extends ChangeNotifier {
       confidence: confidence,
       confidenceByBlockId: confidenceByBlockId,
       textClusterRects: textClusterRects,
+      hasInkTextUnits: textElementsByIndex.isNotEmpty,
     );
   }
 
@@ -4556,6 +4638,9 @@ class MarkdrawController extends ChangeNotifier {
     }
 
     for (final element in _smartLayoutPageElements(pageId)) {
+      // 自由打字文本不充当图形（第六轮）：作为文本标记参与 VLM 认字/配对，
+      // 与手写簇同待遇；容器绑定文本随容器单元整体搬运，维持现状。
+      if (element is TextElement && element.containerId == null) continue;
       final groupId = GroupUtils.outermostGroupId(element);
       if (groupId == null) {
         addUnit(element.id.value, [element]);
@@ -4567,6 +4652,26 @@ class MarkdrawController extends ChangeNotifier {
       addUnit(groupId, members);
     }
     return (elements: elements, rects: rects, memberIds: memberIds);
+  }
+
+  /// 页内自由打字文本（容器绑定文本随容器走，不在此列）→ 文本标记候选。
+  /// 第六轮：打字文本与手写簇同待遇参与 VLM 认字/配对，键形如 `<pageId>:t<N>`。
+  List<TextElement> _smartLayoutTypedTexts(String pageId) {
+    return [
+      for (final element in _smartLayoutPageElements(pageId))
+        if (element is TextElement && element.containerId == null) element,
+    ];
+  }
+
+  /// 元素占位包围盒的 ui.Rect 形式（图形单元与打字文本标记共用）。
+  ui.Rect _placementRectForElement(Element element) {
+    final bounds = _placementBoundsForElement(element);
+    return ui.Rect.fromLTWH(
+      bounds.left,
+      bounds.top,
+      bounds.size.width,
+      bounds.size.height,
+    );
   }
 
   /// SoM 编号徽章落位：悬在簇框左上角上方（间隙 2px，不遮笔迹——VLM 曾把
@@ -4697,13 +4802,6 @@ class MarkdrawController extends ChangeNotifier {
       },
       noiseStrokeIds: noiseStrokeIds,
     );
-  }
-
-  List<TextElement> _pageScopedOldSmartText(String pageId) {
-    return [
-      for (final element in _smartLayoutGeneratedTextElements())
-        if (_pageIdForElement(element) == pageId) element,
-    ];
   }
 
   List<Element> _smartLayoutPageElements(String pageId) {
@@ -4889,15 +4987,6 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
     return startedAt;
-  }
-
-  List<TextElement> _smartLayoutGeneratedTextElements() {
-    return [
-      for (final element in _editorState.scene.activeElements)
-        if (element is TextElement &&
-            _flowMuseData(element)?['smartLayout'] == true)
-          element,
-    ];
   }
 
   Map<String, Object?>? _flowMuseData(Element element) {

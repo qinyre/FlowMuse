@@ -1154,6 +1154,205 @@ void main() {
       expect(result.containsValue(9), isFalse, reason: '超阈不绑');
     });
   });
+  group('打字文本走同一管线（第六轮）', () {
+    testWidgets('纯打字页：打字文本作为文本标记参与识别，计划克隆重排',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addTypedText(controller, 't-title', '机器标题', 100, 100);
+      _addTypedText(controller, 't-body', '机器正文段落', 100, 300);
+      controller.onVisionSmartLayout = (request) async {
+        expect(request.marks, hasLength(2), reason: '打字文本应与手写簇一样编号发出');
+        return SmartLayoutVisionResponse(
+          elements: [
+            _visionElement('title', '', ['m1'], id: 'e0'),
+            _visionElement('body', '', ['m2'], id: 'e1'),
+          ],
+        );
+      };
+      final preparation = await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      );
+      expect(preparation, isNotNull, reason: '无手写簇也有打字文本，不应拒绝');
+      expect(preparation!.content.title!.textElement!.text, '机器标题');
+      expect(
+        preparation.content.looseTexts.single.textElement!.text,
+        '机器正文段落',
+      );
+      expect(preparation.hasInkTextUnits, isFalse, reason: '无手写转写文本');
+
+      final result = controller.buildSmartLayoutPlanForTemplate(
+        preparation,
+        SmartLayoutTemplateKind.handout,
+      );
+      expect(result.error, isNull);
+      final plan = result.plan!;
+      final addedTexts = plan.addElements.whereType<TextElement>().toList();
+      expect(
+        addedTexts.map((e) => e.text),
+        containsAll(['机器标题', '机器正文段落']),
+      );
+      expect(
+        addedTexts.firstWhere((e) => e.text == '机器标题').fontSize,
+        28,
+        reason: '克隆版享受模板样式（标题放大到 28）',
+      );
+      expect(
+        plan.removeIds.map((id) => id.value),
+        containsAll(['t-title', 't-body']),
+        reason: '默认模式原件随方案删除（克隆替换）',
+      );
+      expect(plan.moveDeltas, isEmpty, reason: '打字文本无墨迹可移动');
+      expect(plan.removalRects, isNotEmpty, reason: '原件原位进灰区');
+
+      // 保留手写变体：打字原元素整体移动而非删除。
+      final keepResult = controller.buildSmartLayoutPlanForTemplate(
+        preparation,
+        SmartLayoutTemplateKind.handout,
+        keepHandwriting: true,
+      );
+      expect(keepResult.error, isNull);
+      expect(
+        keepResult.plan!.removeIds.map((id) => id.value),
+        isEmpty,
+        reason: '保留手写模式下打字原件从删除清单排除',
+      );
+      expect(
+        keepResult.plan!.moveDeltas.keys.map((id) => id.value),
+        containsAll(['t-title', 't-body']),
+      );
+      expect(
+        keepResult.plan!.removalRects,
+        isEmpty,
+        reason: '保留手写模式灰区排除移动中的原件',
+      );
+    });
+
+    testWidgets('混合页：打字图注与图片按 pairId 配对成组', (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addTypedText(controller, 't-cap', '图1', 700, 500, width: 60, height: 30);
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: const ElementId('img-1'),
+            x: 700,
+            y: 600,
+            width: 300,
+            height: 300,
+            fileId: 'file-1',
+          ),
+        ),
+      );
+      controller.onVisionSmartLayout = (request) async {
+        return SmartLayoutVisionResponse(
+          elements: [
+            _visionElement('caption', '', ['m1'], id: 'e0', pairId: 'p1'),
+            _visionElement('figure', '', ['m2'], id: 'e1', pairId: 'p1'),
+          ],
+        );
+      };
+      final preparation = await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      );
+      expect(preparation, isNotNull);
+      expect(preparation!.content.pairs, hasLength(1));
+      expect(
+        preparation.content.pairs.first.texts.single.textElement!.text,
+        '图1',
+      );
+      expect(
+        preparation.content.pairs.first.figure.element,
+        isA<ImageElement>(),
+      );
+      expect(preparation.content.looseTexts, isEmpty);
+    });
+
+    testWidgets('未认领的打字文本原地保留，不进红区也不删', (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addTypedText(controller, 't-a', '被认领的文本', 100, 100);
+      _addTypedText(controller, 't-b', '被忽略的文本', 100, 300);
+      controller.onVisionSmartLayout = (request) async {
+        return SmartLayoutVisionResponse(
+          elements: [_visionElement('title', '', ['m1'], id: 'e0')],
+        );
+      };
+      final preparation = await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      );
+      expect(preparation, isNotNull);
+      expect(preparation!.failureRects, isEmpty, reason: '打字文本不进失败红区');
+      expect(
+        preparation.failedStrokeIds.map((id) => id.value),
+        isEmpty,
+      );
+      expect(preparation.content.title!.textElement!.text, '被认领的文本');
+      expect(
+        preparation.content.looseTexts,
+        isEmpty,
+        reason: '未认领打字文本不参与排版',
+      );
+      final result = controller.buildSmartLayoutPlanForTemplate(
+        preparation,
+        SmartLayoutTemplateKind.handout,
+      );
+      expect(
+        result.plan!.removeIds.map((id) => id.value),
+        ['t-a'],
+        reason: '只有被认领的原件被克隆替换，未认领原件原地保留',
+      );
+    });
+
+    testWidgets('重跑安全：上次智能排版产出按普通打字文本重新参与排版',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addTypedText(
+        controller,
+        't-old',
+        '上次排版的标题',
+        100,
+        100,
+        flowMuse: {'pageId': 'page-1', 'smartLayout': true},
+      );
+      controller.onVisionSmartLayout = (request) async {
+        return SmartLayoutVisionResponse(
+          elements: [_visionElement('title', '', ['m1'], id: 'e0')],
+        );
+      };
+      final preparation = await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      );
+      expect(preparation, isNotNull);
+      expect(preparation!.content.title!.textElement!.text, '上次排版的标题');
+      final result = controller.buildSmartLayoutPlanForTemplate(
+        preparation,
+        SmartLayoutTemplateKind.handout,
+      );
+      expect(
+        result.plan!.addElements.whereType<TextElement>().map((e) => e.text),
+        contains('上次排版的标题'),
+        reason: '旧产出重新排版后内容不丢',
+      );
+      expect(
+        result.plan!.removeIds.map((id) => id.value),
+        ['t-old'],
+      );
+    });
+  });
 }
 
 MarkdrawController _buildController() {
@@ -1275,3 +1474,34 @@ void _addStroke(
     ),
   );
 }
+
+/// 添加打字文本元素（page-1）。
+void _addTypedText(
+  MarkdrawController controller,
+  String id,
+  String text,
+  double x,
+  double y, {
+  double width = 200,
+  double height = 40,
+  double fontSize = 20,
+  Map<String, Object?>? flowMuse,
+}) {
+  controller.applyResult(
+    AddElementResult(
+      TextElement(
+        id: ElementId(id),
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        text: text,
+        fontSize: fontSize,
+        // 捆绑字体，避免测试环境触发 Google Fonts 异步加载。
+        fontFamily: 'Excalifont',
+        customData: flowMuse == null ? null : {'flowMuse': flowMuse},
+      ),
+    ),
+  );
+}
+

@@ -13,9 +13,10 @@ import 'package:flow_muse/shared/widgets/app_spacing.dart';
 /// 分页提示。多页流程提供"跳过本页"（[allowSkip]），避免一页超容终止整单。
 /// 窄屏（可用宽度 < 560）时三卡改纵向铺满列表，避免横排拥挤。
 ///
-/// 卡片区顶部展示"转写为印刷体 / 保留手写笔迹"分段开关（仅当
-/// [SmartLayoutTemplatePreparation.layoutsKeepInk] 非空，即存在保留手写
-/// 变体时）：保留手写模式下缩略图切换为 layoutsKeepInk 的预落位结果
+/// 卡片区顶部展示"转写为印刷体 / 保留手写笔迹"分段开关（仅当本页存在
+/// 手写转写文本 [SmartLayoutTemplatePreparation.hasInkTextUnits] 且有保留
+/// 手写变体 [SmartLayoutTemplatePreparation.layoutsKeepInk] 时）：保留手写
+/// 模式下缩略图切换为 layoutsKeepInk 的预落位结果
 /// （缺项/为 null = 该模板该模式下放不下，置灰标注"该模式下放不下"）；
 /// 开关是弹层内部状态，最终值随选卡经
 /// [SmartLayoutTemplateChoice.keepHandwriting] 返回。
@@ -58,7 +59,7 @@ class SmartLayoutTemplateSheet extends StatefulWidget {
   /// true = 多页流程：底栏提供"跳过本页"（本页不排版，继续下一页）。
   final bool allowSkip;
 
-  /// 初始是否保留手写笔迹（开关仅在本页存在保留手写变体时展示）。
+  /// 初始是否保留手写笔迹（开关仅在本页存在手写转写文本时展示）。
   final bool keepHandwriting;
 
   @override
@@ -69,9 +70,11 @@ class SmartLayoutTemplateSheet extends StatefulWidget {
 class _SmartLayoutTemplateSheetState extends State<SmartLayoutTemplateSheet> {
   late bool _keepHandwriting = widget.keepHandwriting;
 
-  /// 是否展示"转写为印刷体 / 保留手写笔迹"开关：本页存在保留手写变体
-  /// （layoutsKeepInk 非空）才可切换。
-  bool get _showKeepInkSwitch => widget.preparation.layoutsKeepInk.isNotEmpty;
+  /// 是否展示"转写为印刷体 / 保留手写笔迹"开关：本页存在手写转写文本且
+  /// 有保留手写变体才可切换（纯打字/纯图形页没有手写可保留）。
+  bool get _showKeepInkSwitch =>
+      widget.preparation.hasInkTextUnits &&
+      widget.preparation.layoutsKeepInk.isNotEmpty;
 
   /// 当前模式下的预落位结果：保留手写取 layoutsKeepInk，否则取 layouts。
   SmartLayoutTemplateLayoutResult? _layoutFor(SmartLayoutTemplateKind kind) =>
