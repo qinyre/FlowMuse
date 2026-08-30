@@ -574,6 +574,27 @@ class SketchLineParser {
     // Default true; legacy 'simulate-pressure' flag also accepted
     final simulatePressure = !props.hasFlag('no-simulate-pressure');
     final common = props.commonProperties;
+    // pressure-encoded：pressures 已按创建时灵敏度编码（缺失=legacy 原始值，
+    // 不补写）。render：v2 显式标记；未知值走 ParseWarning 并回退 v1，
+    // 不抛整文档异常。
+    final pressureEncoded = props.hasFlag('pressure-encoded');
+    var renderVersion = BrushRenderVersion.classicV1;
+    final warnings = <ParseWarning>[];
+    final renderRaw = props.namedString('render');
+    if (renderRaw != null && renderRaw != 'v1') {
+      if (renderRaw == 'v2') {
+        renderVersion = BrushRenderVersion.naturalMediaV2;
+      } else {
+        warnings.add(
+          ParseWarning(
+            line: lineNumber,
+            message: 'Unknown freedraw render value: $renderRaw, '
+                'fallback to v1',
+            context: line,
+          ),
+        );
+      }
+    }
 
     final elementId = ElementId(id ?? _generateId());
     _registerAlias(id, elementId.value);
@@ -602,10 +623,15 @@ class SketchLineParser {
       frameId: common.frameId,
       groupIds: common.groupIds,
       link: common.link,
-      customData: customDataWithBrushType(null, brushType),
+      customData: customDataWithFreedrawRender(
+        null,
+        brushType,
+        pressureEncoded: pressureEncoded,
+        renderVersion: renderVersion,
+      ),
     );
 
-    return ParseResult(value: element);
+    return ParseResult(value: element, warnings: warnings);
   }
 
   // ── Helpers ──

@@ -1,6 +1,7 @@
 export 'arrow_element.dart';
 export 'arrow_type.dart';
 export 'brush_render_profile.dart';
+export 'brush_render_version.dart';
 export 'brush_type.dart';
 export 'diamond_element.dart';
 export 'element.dart';

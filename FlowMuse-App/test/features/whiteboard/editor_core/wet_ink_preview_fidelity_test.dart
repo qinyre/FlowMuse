@@ -252,15 +252,18 @@ void main() {
     }
   });
 
-  test('A8: 预览 customData 只含笔型标记，不携带 recognition keys', () async {
+  test('A8: 预览 customData 只含笔型/渲染标记，不携带 recognition keys', () async {
     final controller = controllerFor(BrushType.pencil);
     addTearDown(controller.dispose);
     final preview = await previewMidStroke(controller);
     final flowMuse = preview.customData?[flowMuseCustomDataKey];
     expect(flowMuse, isA<Map>());
+    // T1 起预览与提交元素共用渲染判定：pencil/brushPen 预览额外携带
+    // brushRenderVersion=2（计划 §3.10/§3.1），仍是渲染标记而非
+    // recognition key。
     expect(
       (flowMuse! as Map).keys.toSet(),
-      {'brushType', 'pressureEncoding'},
+      {'brushType', 'pressureEncoding', 'brushRenderVersion'},
       reason: 'recognition keys 只写提交元素（预览从不入场景）',
     );
   });

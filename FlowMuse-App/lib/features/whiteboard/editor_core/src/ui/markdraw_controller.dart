@@ -3129,6 +3129,9 @@ class MarkdrawController extends ChangeNotifier {
           customData: customDataWithFreedrawRender(
             null,
             _strokeBrushTypeOverride ?? _activeBrushType,
+            renderVersion: defaultRenderVersionForNewStroke(
+              _strokeBrushTypeOverride ?? _activeBrushType,
+            ),
           ),
         ),
         _ => null,
