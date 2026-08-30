@@ -98,8 +98,35 @@ final class BrushRenderProfile {
       0.18 + 0.72 * math.pow(p.clamp(0.0, 1.0), 0.85);
 
   // 毛笔：压力主要控制笔肚接触宽度；0.16 底保证轻压可见。
-  double brushNaturalMediaContactHalfWidth(double base, double p) =>
-      base * (0.16 + 1.34 * math.pow(p.clamp(0.0, 1.0), 0.72)) / 2;
+  // T5 追加可见下限 0.7px：p→0 时公式全宽仅 ~0.96px，斜向 AA 下会
+  // 断成虚线（T5 视觉审查 S 曲线负压段实测），违反 §3.5"最低有效
+  // 宽度仍可见"；下限只影响 p≲0.012 的极端轻压，不改变 N6 量程。
+  static const double brushV2MinContactHalfWidth = 0.7;
+
+  double brushNaturalMediaContactHalfWidth(double base, double p) => math.max(
+    base * (0.16 + 1.34 * math.pow(p.clamp(0.0, 1.0), 0.72)) / 2,
+    brushV2MinContactHalfWidth,
+  );
+
+  // --- 毛笔 v2 绘制常数（T0 spike 校准，T5 冻结；§3.7 要求与
+  // elementVisualBounds 共用，禁止 renderer 与 bounds 各写一份）---
+
+  /// 毫丝复合 Path 的绘制 alpha（主体方向性包络为不透明 1.0）。
+  double get brushV2StrandAlpha => 0.50;
+
+  /// 收笔楔形单位上限（× 尾缘接触半宽；公式 min(units, 6×drop)）。
+  static const double brushV2TailTaperUnits = 4.0;
+
+  /// 收笔楔形绝对上限（× base）：真实压力回放的出锋实测 ≤ ~1.55×base，
+  /// 冻结 1.6，同时约束 elementVisualBounds 的侧向外扩。
+  static const double brushV2TailTaperBaseCap = 1.6;
+
+  /// 毛笔 v2 可视半宽：最大接触半宽 + 出锋上限 + AA 余量（teardrop
+  /// 的 1.3×放大与 1.4×尾锋均已被出锋上限覆盖）。
+  double brushV2VisualHalfWidth(double base) =>
+      brushNaturalMediaContactHalfWidth(base, 1.0) +
+      brushV2TailTaperBaseCap * base +
+      2.0;
 
   // 铅笔 v2 绘制 alpha（T0 spike 校准，T4 冻结）：低透明连续基底 +
   // 三个密度桶颗粒各自恒定 alpha，压力→密度经颗粒间距表达。

@@ -371,13 +371,15 @@ final brushPressureRamp = BrushStrokeFixture(
 /// 毛笔 S 曲线：连续两个反向弯，验证方向滞后无振荡。
 final brushSCurve = BrushStrokeFixture(
   name: 'brushSCurve',
-  description: 'S 曲线 33 点，压力 0.30+0.40·sin(2πt)',
+  description: 'S 曲线 33 点，压力 0.35+0.35·sin(2πt)',
   points: [
     for (var i = 0; i <= 32; i++)
       Point(11.0 * i, 26 * math.sin(2 * math.pi * i / 32)),
   ],
+  // T5 修正：原 0.30+0.40·sin 在 t=0.75 处产生负压 −0.10（编码范围
+  // 只有 [0,1]）；改为 0.35+0.35·sin，峰值 0.70 不变、谷值 0.00。
   pressures: [
-    for (var i = 0; i <= 32; i++) 0.30 + 0.40 * math.sin(2 * math.pi * i / 32),
+    for (var i = 0; i <= 32; i++) 0.35 + 0.35 * math.sin(2 * math.pi * i / 32),
   ],
 );
 

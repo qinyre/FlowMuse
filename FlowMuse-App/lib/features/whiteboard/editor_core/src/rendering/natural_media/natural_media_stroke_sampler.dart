@@ -297,17 +297,49 @@ class NaturalMediaStrokeSampler {
         );
       }
     } else if (brushType == BrushType.brushPen) {
-      _emitBrush(
-        primitives,
-        absorb,
-        seed,
-        edges,
-        filtered,
-        owned,
-        ownEndExclusive,
-        strokeWidth,
-        tuning,
-      );
+      // 短线退化（§3.7：短划专门 teardrop，不做单边包络+帽子）。
+      // 尺寸按整笔平均压力（短点无起收可言），1.3× 放大形成笔肚感。
+      final totalLen = edges.fold<double>(0.0, (a, e) => a + e.length);
+      if (totalLen < 2 * strokeWidth) {
+        final pAvg = (edges.first.pressure + edges.last.pressure) / 2;
+        final hw =
+            NaturalMediaResponseCurves.brushContactHalfWidth(
+              strokeWidth,
+              pAvg,
+            ) *
+            1.3;
+        final c = Point(
+          (edges.first.from.x + edges.last.to.x) / 2,
+          (edges.first.from.y + edges.last.to.y) / 2,
+        );
+        final r = ui.Rect.fromCircle(center: ui.Offset(c.x, c.y), radius: hw);
+        absorb(r);
+        primitives.add(
+          NaturalMediaPrimitive(
+            kind: NaturalMediaPrimitiveKind.brushTeardrop,
+            edgeIndex: edges.first.index,
+            ordinal: 0,
+            channel: NaturalMediaChannel.brushBody,
+            paintBucket: 'brushTeardrop',
+            bounds: r,
+            center: c,
+            halfLength: hw,
+            tangent: edges.last.tangent,
+          ),
+        );
+      } else {
+        _emitBrush(
+          primitives,
+          absorb,
+          seed,
+          edges,
+          filtered,
+          owned,
+          ownEndExclusive,
+          strokeWidth,
+          tuning,
+        );
+      }
     } else if (brushType == BrushType.pencil) {
       hitParticleCap = _emitPencil(
         primitives,
@@ -566,76 +598,26 @@ class NaturalMediaStrokeSampler {
         s += tuning.sampleStepPx;
       }
 
-      // 顶点 join（较后 edge 拥有）：中转角受限 miter（笔肚），
-      // 锐转（> brushSharpTurnRad）圆弧 join（防偏移折叠自交）。
+      // 顶点 join（§3.4 较后 edge 拥有）：
+      // 1) 块首边与前一非 owned 边的入口 join——归本边（否则前块不
+      //    发（无下一 owned 边）、后块不发（join 不在其内部邻接对里），
+      //    并集会缺 key）；
+      // 2) 内部相邻 owned 边对。
+      if (oi == 0 && k > 0 && !owned.contains(k - 1)) {
+        _emitBrushJoin(
+          out,
+          absorb,
+          edges[k - 1],
+          e,
+          filtered[k - 1],
+          f,
+          hw,
+          tuning,
+        );
+      }
       if (oi + 1 < owned.length) {
         final kn = owned[oi + 1];
-        final next = edges[kn];
-        final turn = _signedAngle(
-          Point(_tx(edges[k]), _ty(edges[k])),
-          next.tangent,
-        ).abs();
-        if (turn > tuning.brushSharpTurnRad) {
-          for (var j = 1; j <= 3; j++) {
-            final a =
-                _signedAngle(
-                  Point(_tx(edges[k]), _ty(edges[k])),
-                  next.tangent,
-                ) *
-                j /
-                4;
-            final ca = math.cos(a);
-            final sa = math.sin(a);
-            final rkx = _tx(edges[k]) * ca - _ty(edges[k]) * sa;
-            final rky = _tx(edges[k]) * sa + _ty(edges[k]) * ca;
-            for (var side = 0; side < 2; side++) {
-              final sign = side == 0 ? 1.0 : -1.0;
-              final ox = e.to.x - rky * sign * hw;
-              final oy = e.to.y + rkx * sign * hw;
-              final r = ui.Rect.fromCircle(
-                center: ui.Offset(ox, oy),
-                radius: 0,
-              );
-              absorb(r);
-              out.add(
-                NaturalMediaPrimitive(
-                  kind: NaturalMediaPrimitiveKind.brushJoin,
-                  edgeIndex: next.index,
-                  ordinal: (side == 0 ? j - 1 : j + 2),
-                  channel: NaturalMediaChannel.brushBody,
-                  paintBucket: 'brushJoinArc',
-                  bounds: r,
-                  center: Point(ox, oy),
-                  tangent: Point(rkx, rky),
-                ),
-              );
-            }
-          }
-        } else {
-          final g = filtered[kn];
-          final gTan = next.tangent;
-          for (var side = 0; side < 2; side++) {
-            final sign = side == 0 ? 1.0 : -1.0;
-            final n1 = Point(-f.y * sign, f.x * sign);
-            final n2 = Point(-g.y * sign, g.x * sign);
-            final m = _clampedMiter(e.to, n1, n2, gTan, hw, tuning.miterLimit);
-            if (m == null) continue;
-            final r = ui.Rect.fromCircle(center: m, radius: 0);
-            absorb(r);
-            out.add(
-              NaturalMediaPrimitive(
-                kind: NaturalMediaPrimitiveKind.brushJoin,
-                edgeIndex: next.index,
-                ordinal: side,
-                channel: NaturalMediaChannel.brushBody,
-                paintBucket: 'brushJoinMiter',
-                bounds: r,
-                center: Point(m.dx, m.dy),
-                tangent: gTan,
-              ),
-            );
-          }
-        }
+        _emitBrushJoin(out, absorb, e, edges[kn], f, filtered[kn], hw, tuning);
       }
 
       // 毫丝：hw 足够且（隔边采样或本边压力下行——出锋毫丝）时发射
@@ -678,6 +660,75 @@ class NaturalMediaStrokeSampler {
             ),
           );
         }
+      }
+    }
+  }
+
+  /// 顶点 join：中转角受限 miter（笔肚，miterLimit 截断防尖刺），
+  /// 锐转（> brushSharpTurnRad）圆弧 join（防偏移折叠自交）。
+  /// [e]/[f] 为前一边与其滤波切线，[next]/[g] 为后一边；key 归 next。
+  static void _emitBrushJoin(
+    List<NaturalMediaPrimitive> out,
+    void Function(ui.Rect) absorb,
+    NaturalMediaEdge e,
+    NaturalMediaEdge next,
+    Point f,
+    Point g,
+    double hw,
+    NaturalMediaTuning tuning,
+  ) {
+    final eTan = Point(_tx(e), _ty(e));
+    final turn = _signedAngle(eTan, next.tangent).abs();
+    if (turn > tuning.brushSharpTurnRad) {
+      final signed = _signedAngle(eTan, next.tangent);
+      for (var j = 1; j <= 3; j++) {
+        final a = signed * j / 4;
+        final ca = math.cos(a);
+        final sa = math.sin(a);
+        final rkx = _tx(e) * ca - _ty(e) * sa;
+        final rky = _tx(e) * sa + _ty(e) * ca;
+        for (var side = 0; side < 2; side++) {
+          final sign = side == 0 ? 1.0 : -1.0;
+          final ox = e.to.x - rky * sign * hw;
+          final oy = e.to.y + rkx * sign * hw;
+          final r = ui.Rect.fromCircle(center: ui.Offset(ox, oy), radius: 0);
+          absorb(r);
+          out.add(
+            NaturalMediaPrimitive(
+              kind: NaturalMediaPrimitiveKind.brushJoin,
+              edgeIndex: next.index,
+              ordinal: (side == 0 ? j - 1 : j + 2),
+              channel: NaturalMediaChannel.brushBody,
+              paintBucket: 'brushJoinArc',
+              bounds: r,
+              center: Point(ox, oy),
+              tangent: Point(rkx, rky),
+            ),
+          );
+        }
+      }
+    } else {
+      final gTan = next.tangent;
+      for (var side = 0; side < 2; side++) {
+        final sign = side == 0 ? 1.0 : -1.0;
+        final n1 = Point(-f.y * sign, f.x * sign);
+        final n2 = Point(-g.y * sign, g.x * sign);
+        final m = _clampedMiter(e.to, n1, n2, gTan, hw, tuning.miterLimit);
+        if (m == null) continue;
+        final r = ui.Rect.fromCircle(center: m, radius: 0);
+        absorb(r);
+        out.add(
+          NaturalMediaPrimitive(
+            kind: NaturalMediaPrimitiveKind.brushJoin,
+            edgeIndex: next.index,
+            ordinal: side,
+            channel: NaturalMediaChannel.brushBody,
+            paintBucket: 'brushJoinMiter',
+            bounds: r,
+            center: Point(m.dx, m.dy),
+            tangent: gTan,
+          ),
+        );
       }
     }
   }

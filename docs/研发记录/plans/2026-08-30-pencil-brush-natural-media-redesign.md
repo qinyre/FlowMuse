@@ -1061,7 +1061,7 @@ flutter build web
 | 实施分支 | `feature/pencil-brush-natural-media-plan-v2` |
 | 起始提交 | `3eb2b97` |
 | 目标确认 | 2026-08-30 用户确认目标纸通过（"挺好的"），特别认可 spike v2 铅笔中压行（pencil_pencilMediumStroke 右列）的铅笔质感；HB 铅笔/软头毛笔目标按 §2 锁定 |
-| 进度 | T0～T3：732fa68/4719264/c2aca40/9902924/69320bf；T4（铅笔 v2 渲染器 + family 分发）见下一条提交。T4 为满足 §3.2 B1/B2 同入参预览=提交门禁，提前落地 T6 工作项 6 的通路与断言：`ToolOverlay.creationStrokeId` 携带 live element id → `buildPreviewElement` freedraw 预览元素用该 id（与 `_buildElement` 提交元素同 id 同种子），fidelity A5 断言"live strokeId 与最终 ElementId 必须相同"；另修 `customDataWithFreedrawRender` classicV1 显式移除 v2 标记（此前 spread 保残留导致显式降级无效） |
+| 进度 | T0～T3：732fa68/4719264/c2aca40/9902924/69320bf；T4：5fbc93a（+26505be 补 bounds/opacity/dim 验收、4dd3d90 lint）。T4 为满足 §3.2 B1/B2 同入参预览=提交门禁，提前落地 T6 工作项 6 的通路与断言：`ToolOverlay.creationStrokeId` 携带 live element id → `buildPreviewElement` freedraw 预览元素用该 id（与 `_buildElement` 提交元素同 id 同种子），fidelity A5 断言"live strokeId 与最终 ElementId 必须相同"；另修 `customDataWithFreedrawRender` classicV1 显式移除 v2 标记（此前 spread 保残留导致显式降级无效）。T5：见下一条提交（方向包络/毫丝/teardrop/分发换 v2/bounds v2 分支/10 项验收）。T5 期间发现并修复：①分块交界 join(k−1→k) 两块都不发（并集缺 key）——按 §3.4"较后 edge 拥有"补块首入口 join 并以测试锁定；②轻压可见下限 0.7px（视觉审查抓到 S 曲线负压段 0.96px 全宽在斜向 AA 下断线成 6 列白点，违反 §3.5"最低有效宽度仍可见"；冻结曲线测试同步更新，只影响 p≲0.012）；③brushSCurve fixture 压力 0.30+0.40·sin 谷值 −0.10 越界，改 0.35+0.35·sin（峰值不变）。T5 有意偏差：圆帽用对称 4 点近似替代 spike 的单侧近似；转角尖刺验收以 plan 级 join 突出度断言（像素法向扫描在 90° 转角沿另一条腿读到假宽度 76px）；远端 segment ≤2 drawPath 验收顺延 T7（远端 `_drawSegment` 直调 adapter.drawFreedraw 不经分发，仍 v1，无中间态破坏） |
 | 最终提交 | 待填写 |
 | renderer 参数 | 待填写 |
 | 测试计数 | 待填写 |

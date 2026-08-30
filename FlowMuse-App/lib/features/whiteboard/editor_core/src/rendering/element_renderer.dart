@@ -3,6 +3,7 @@ import 'dart:ui';
 import '../core/elements/elements.dart' as core show Element, TextElement;
 import '../core/elements/elements.dart' hide Element, TextElement;
 import '../core/math/math.dart';
+import 'natural_media/brush_pen_stroke_renderer_v2.dart';
 import 'natural_media/pencil_stroke_renderer_v2.dart';
 import 'rough/draw_style.dart';
 import 'rough/rough_adapter.dart';
@@ -165,8 +166,7 @@ class ElementRenderer {
             case StrokeRendererFamily.pencilV2:
               PencilStrokeRendererV2.draw(canvas, element, style);
             case StrokeRendererFamily.brushPenV2:
-              // T5 落地前的分支内过渡：毛笔 v2 元素暂走 v1 渲染。
-              _drawFreedrawClassic(canvas, element, style, adapter);
+              BrushPenStrokeRendererV2.draw(canvas, element, style);
             case StrokeRendererFamily.classicV1:
               _drawFreedrawClassic(canvas, element, style, adapter);
           }

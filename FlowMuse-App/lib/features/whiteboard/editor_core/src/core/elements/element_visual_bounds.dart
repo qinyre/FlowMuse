@@ -11,7 +11,17 @@ Bounds elementVisualBounds(Element element) {
   if (element is FreedrawElement) {
     final brushType = brushTypeFromCustomData(element.customData);
     final profile = BrushRenderProfile.forType(brushType);
-    final half = profile.visualHalfWidth(element.strokeWidth);
+    // §3.7：毛笔 v2 边界直接由 v2 绘制常数给出（包络接触半宽 + 出锋
+    // 上限），不再复用 classic thinning 公式；缺 pressures 的 v2 元数据
+    // 按 v1 渲染（与 element_renderer 分发一致），故同样用 v1 边界。
+    final isBrushV2 =
+        brushType == BrushType.brushPen &&
+        element.pressures.isNotEmpty &&
+        brushRenderVersionFromCustomData(element.customData) ==
+            BrushRenderVersion.naturalMediaV2;
+    final half = isBrushV2
+        ? profile.brushV2VisualHalfWidth(element.strokeWidth)
+        : profile.visualHalfWidth(element.strokeWidth);
     return Bounds.fromLTWH(
       element.x - half,
       element.y - half,

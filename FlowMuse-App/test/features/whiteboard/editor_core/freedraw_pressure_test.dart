@@ -41,8 +41,10 @@ void main() {
       expect(hwHeavy / hwLight, greaterThan(2.2), reason: 'N6 提按量程');
       expect(
         brush.brushNaturalMediaContactHalfWidth(6, 0.0),
-        closeTo(6 * 0.16 / 2, 1e-9),
-        reason: '0.16×base 宽度底',
+        closeTo(BrushRenderProfile.brushV2MinContactHalfWidth, 1e-9),
+        reason:
+            'T5 可见下限：p→0 时公式全宽 ~0.96px 在斜向 AA 下断线，'
+            '冻结下限 0.7px（§3.5 最低有效宽度仍可见）',
       );
     });
 
