@@ -23,6 +23,8 @@ class DirectionalBrushEnvelope {
     NaturalMediaStrokePlan plan,
     double strokeWidth, {
     required bool isComplete,
+    bool ownsStrokeHead = true,
+    bool ownsStrokeTail = true,
   }) {
     final body = ui.Path();
     final strands = ui.Path();
@@ -64,15 +66,40 @@ class DirectionalBrushEnvelope {
     // 3-5=右，与 sampler 的发射约定一致）。
     final left = <ui.Offset>[];
     final right = <ui.Offset>[];
+    // 分块边界连续性：每条 owned 边的最后一个顶点后补边终点顶点
+    //（用该顶点的法向/半宽），使前一分块的多边形到达边端点、后一分块
+    // 从端点起笔——整笔与分块渲染都含同样的边界顶点，两侧逐值一致。
+    final edgeByIndex = {for (final e in plan.edges) e.index: e};
+    NaturalMediaPrimitive? lastVertex;
+    void appendBoundary(int edgeIndex) {
+      final last = lastVertex;
+      if (last == null) return;
+      final e = edgeByIndex[edgeIndex];
+      if (e == null) return;
+      final t = last.tangent!;
+      final n = Point(-t.y, t.x);
+      final hw = last.halfThickness!;
+      left.add(ui.Offset(e.to.x + n.x * hw, e.to.y + n.y * hw));
+      right.add(ui.Offset(e.to.x - n.x * hw, e.to.y - n.y * hw));
+    }
+
+    var currentEdge = -1;
+    var sawVertex = false;
     for (final p in plan.primitives) {
       switch (p.kind) {
         case NaturalMediaPrimitiveKind.brushEnvelopeVertex:
+          if (sawVertex && p.edgeIndex != currentEdge) {
+            appendBoundary(currentEdge);
+          }
+          currentEdge = p.edgeIndex;
+          sawVertex = true;
           final t = p.tangent!;
           final n = Point(-t.y, t.x);
           final c = p.center!;
           final hw = p.halfThickness!;
           left.add(ui.Offset(c.x + n.x * hw, c.y + n.y * hw));
           right.add(ui.Offset(c.x - n.x * hw, c.y - n.y * hw));
+          lastVertex = p;
         case NaturalMediaPrimitiveKind.brushJoin:
           final side = p.paintBucket == 'brushJoinArc'
               ? (p.ordinal < 3 ? left : right)
@@ -91,6 +118,7 @@ class DirectionalBrushEnvelope {
           break;
       }
     }
+    if (sawVertex) appendBoundary(currentEdge);
     if (left.isEmpty) {
       return (body: body, strands: strands, hasStrands: hasStrands);
     }
@@ -108,9 +136,13 @@ class DirectionalBrushEnvelope {
     for (final e in edges) {
       if (e.pressure > pMax) pMax = e.pressure;
     }
-    final startSharp = firstEdge.pressure < 0.35;
+    final startSharp = ownsStrokeHead && firstEdge.pressure < 0.35;
     final tailDrop =
-        isComplete && lastEdge.pressure < 0.30 * math.max(pMax, 1e-9);
+        ownsStrokeTail &&
+        isComplete &&
+        lastEdge.pressure < 0.30 * math.max(pMax, 1e-9);
+    final endCap = ownsStrokeTail;
+    final startCap = ownsStrokeHead;
 
     body.moveTo(left.first.dx, left.first.dy);
     for (final o in left.skip(1)) {
@@ -131,7 +163,7 @@ class DirectionalBrushEnvelope {
       );
       final t = lastEdge.tangent;
       body.lineTo(lastPt.x + t.x * taper, lastPt.y + t.y * taper);
-    } else {
+    } else if (endCap) {
       final hwLast = profile.brushNaturalMediaContactHalfWidth(
         strokeWidth,
         lastEdge.pressure,
@@ -151,7 +183,9 @@ class DirectionalBrushEnvelope {
     for (final o in right.reversed) {
       body.lineTo(o.dx, o.dy);
     }
-    if (startSharp) {
+    if (!startCap) {
+      // 分块边界：直接闭到起点（边界弦），由较后 edge 的 join 补楔。
+    } else if (startSharp) {
       // 轻入笔：垂直切线的窄入口（自然起笔，不出装饰性顿笔）。
       body.lineTo(firstPt.x, firstPt.y);
     } else {

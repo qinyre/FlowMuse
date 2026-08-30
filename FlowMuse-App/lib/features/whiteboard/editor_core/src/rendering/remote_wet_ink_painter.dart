@@ -9,6 +9,8 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_
 import '../core/elements/elements.dart';
 import '../core/layout/layout.dart';
 import '../core/math/math.dart';
+import 'natural_media/brush_pen_stroke_renderer_v2.dart';
+import 'natural_media/pencil_stroke_renderer_v2.dart';
 import 'rough/draw_style.dart';
 import 'rough/freedraw_renderer.dart';
 import 'rough/rough_adapter.dart';
@@ -123,6 +125,7 @@ class RemoteWetInkRenderCache {
         adapter,
         taperPhase: _tailTaperPhase(snapshot, i),
         wholeStrokeRawLength: wholeLength,
+        ownsStrokeTail: i == snapshot.tailSegments.length - 1,
       );
     }
     _lastPaintedMaxPointIndex[snapshot.strokeId] = snapshot.maxPointIndex;
@@ -369,18 +372,28 @@ class _RemoteStrokePictureCache {
         final segment = block.segments[i];
         recordedPoints += segment.points.length;
         // 冻结块是笔迹中段：只有包含笔迹起点的首块首段带起笔 taper
-        // （headOnly），永不带收笔 taper（段边界不收针）。
+        // （headOnly），永不带收笔 taper（段边界不收针）；v2 同口径
+        // 以 ownsStrokeHead 表达。
+        final ownsHead = i == 0 && segment.startIndex == 0;
+        // 无 tail 时末块拥有笔尖（v2 端帽随最后冻结点；后续点到达会
+        // 冻结新块并重录，帽位随笔尖推进）。
+        final ownsTail =
+            snapshot.tailSegments.isEmpty &&
+            i == block.segments.length - 1 &&
+            segment.startIndex + segment.points.length > snapshot.maxPointIndex;
         _drawSegment(
           canvas,
           segment,
           snapshot,
           adapter,
-          taperPhase: i == 0 && segment.startIndex == 0
+          taperPhase: ownsHead
               ? FreedrawTaperPhase.headOnly
               : FreedrawTaperPhase.none,
           wholeStrokeRawLength: wholeLength,
           // 离屏录制 canvas 恒等：显式传回放缩放，铅笔颗粒频率与直接绘制同源。
           deviceScale: deviceScale,
+          ownsStrokeHead: ownsHead,
+          ownsStrokeTail: ownsTail,
         );
       }
       final nextPicture = recorder.endRecording();
@@ -458,8 +471,12 @@ void _drawSegment(
   FreedrawTaperPhase taperPhase = FreedrawTaperPhase.none,
   double? wholeStrokeRawLength,
   double? deviceScale,
+  bool ownsStrokeHead = false,
+  bool ownsStrokeTail = false,
 }) {
   if (segment.points.isEmpty) return;
+  // v1 输入列表保持既有单 leading 桥接口径（验收：v1 incoming 摘要
+  // 不变）；v2 分支另组双 leading context 列表。
   final renderedPoints = [
     if (segment.leadingPoint != null) segment.leadingPoint!,
     ...segment.points,
@@ -482,6 +499,69 @@ void _drawSegment(
     strokeWidth: stroke.style.strokeWidth,
     opacity: stroke.style.opacity / 100,
   );
+  final brushType = BrushType.fromWireName(stroke.style.brushType);
+  // v2 自然介质（计划 T7 工作项 2）：双 leading context + 段点，按段
+  // 渲染 owned 边，全局索引对齐（offset = 段起点 − leading 数），起收
+  // 只归首/末段；v1 与无压感输入保持既有 adapter 路径（工作项 9）。
+  final v2List = [
+    ...segment.leadingPoints.reversed,
+    ...segment.points,
+    if (segment.trailingPoint != null) segment.trailingPoint!,
+  ];
+  final v2Pressures = v2List.every((point) => point.pressure != null)
+      ? [for (final point in v2List) point.pressure!]
+      : const <double>[];
+  final isV2 = stroke.style.renderVersion == 2 && v2Pressures.isNotEmpty;
+  if (isV2) {
+    final v2Element = FreedrawElement(
+      id: ElementId(stroke.strokeId),
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      points: [for (final point in v2List) Point(point.x, point.y)],
+      pressures: v2Pressures,
+      simulatePressure: false,
+      isComplete: false,
+      strokeColor: stroke.style.strokeColor,
+      strokeWidth: stroke.style.strokeWidth,
+      opacity: stroke.style.opacity / 100,
+    );
+    final leadingCount = segment.leadingPoints.length;
+    final ownsHead = ownsStrokeHead || segment.startIndex == 0;
+    final style = DrawStyle.fromElement(v2Element);
+    // §3.4"交界归较后 edge"：桥接边（连前段末点→本段首点）归本段
+    //（有 leading context 时把 ownedStart 扩到 startIndex），否则两段
+    // 都不拥有它，冻结边界会缺失 primitive。段首无 leading（笔迹起点）
+    // 从首边 1 起。
+    final ownedStart = leadingCount == 0
+        ? segment.startIndex + 1
+        : segment.startIndex;
+    final ownedEnd = segment.startIndex + segment.points.length;
+    final offset = segment.startIndex - leadingCount;
+    if (brushType == BrushType.brushPen) {
+      BrushPenStrokeRendererV2.draw(
+        canvas,
+        v2Element,
+        style,
+        ownedEdgeStart: ownedStart,
+        ownedEdgeEndExclusive: ownedEnd,
+        edgeIndexOffset: offset,
+        ownsStrokeHead: ownsHead,
+        ownsStrokeTail: ownsStrokeTail,
+      );
+    } else {
+      PencilStrokeRendererV2.draw(
+        canvas,
+        v2Element,
+        style,
+        ownedEdgeStart: ownedStart,
+        ownedEdgeEndExclusive: ownedEnd,
+        edgeIndexOffset: offset,
+      );
+    }
+    return;
+  }
   adapter.drawFreedraw(
     canvas,
     element.points,

@@ -25,7 +25,18 @@ class BrushPenStrokeRendererV2 {
   /// 测试用复位。
   static void resetPlanBuildCountForTest() => planBuildCount = 0;
 
-  static void draw(ui.Canvas canvas, FreedrawElement element, DrawStyle style) {
+  /// 远端湿墨分段渲染：owned 边范围 + 全局索引偏移 + 起收所有权
+  ///（§3.4；中段分块不带起收帽，边界由 join 与终点顶点衔接）。
+  static void draw(
+    ui.Canvas canvas,
+    FreedrawElement element,
+    DrawStyle style, {
+    int? ownedEdgeStart,
+    int? ownedEdgeEndExclusive,
+    int edgeIndexOffset = 0,
+    bool ownsStrokeHead = true,
+    bool ownsStrokeTail = true,
+  }) {
     final profile = BrushRenderProfile.forType(BrushType.brushPen);
     final abs = [
       for (final p in element.points) Point(p.x + element.x, p.y + element.y),
@@ -38,12 +49,17 @@ class BrushPenStrokeRendererV2 {
       strokeWidth: style.strokeWidth,
       brushType: BrushType.brushPen,
       isComplete: element.isComplete,
+      ownedEdgeStart: ownedEdgeStart,
+      ownedEdgeEndExclusive: ownedEdgeEndExclusive,
+      edgeIndexOffset: edgeIndexOffset,
     );
 
     final paths = DirectionalBrushEnvelope.build(
       plan,
       style.strokeWidth,
       isComplete: element.isComplete,
+      ownsStrokeHead: ownsStrokeHead,
+      ownsStrokeTail: ownsStrokeTail,
     );
     canvas.drawPath(paths.body, _paint(style, 1.0));
     if (paths.hasStrands) {

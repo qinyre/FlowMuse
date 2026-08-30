@@ -34,14 +34,23 @@ class RemoteWetInkSegment {
   const RemoteWetInkSegment({
     required this.startIndex,
     required this.points,
-    this.leadingPoint,
+    this.leadingPoints = const [],
     this.trailingPoint,
   });
 
   final int startIndex;
   final List<LiveInkPoint> points;
-  final LiveInkPoint? leadingPoint;
+
+  /// leading context 点（§3.4：只参与导数）。最多 4 个（s-1…s-4，近端
+  /// 在前），仅收录先于本段首点到达的点——v2 桥接边（归本段）自身的
+  /// 滤波切线需要前 2 边，其入界 join 的 from 切线再深 2 边。
+  final List<LiveInkPoint> leadingPoints;
+
   final LiveInkPoint? trailingPoint;
+
+  /// 兼容旧调用方：最近的单个 leading 点。
+  LiveInkPoint? get leadingPoint =>
+      leadingPoints.isEmpty ? null : leadingPoints.first;
 
   bool containsIndex(int index) =>
       index >= startIndex && index < startIndex + points.length;
@@ -378,6 +387,7 @@ class RemoteWetInkStore extends ChangeNotifier {
     return left.brushType == right.brushType &&
         left.strokeColor == right.strokeColor &&
         left.strokeWidth == right.strokeWidth &&
+        left.renderVersion == right.renderVersion &&
         left.opacity == right.opacity;
   }
 
@@ -605,14 +615,26 @@ class _RemoteWetInkStroke {
     final endIndex = startIndex + points.length - 1;
     final firstOrder = _arrivalOrder[startIndex]!;
     final lastOrder = _arrivalOrder[endIndex]!;
-    final leadingIndex = startIndex - 1;
+    // leading context：s-1…s-4 中先于本段首点到达的连续前缀（§3.4；
+    // 深度 4 = 桥接边滤波窗口 3 边 + 入界 join 的 from 切线窗口）。
+    final leading = <LiveInkPoint>[];
+    for (final leadingIndex in [
+      startIndex - 1,
+      startIndex - 2,
+      startIndex - 3,
+      startIndex - 4,
+    ]) {
+      final order = _arrivalOrder[leadingIndex];
+      if (order == null || order >= firstOrder) break;
+      final point = _allPoints[leadingIndex];
+      if (point == null) break;
+      leading.add(point);
+    }
     final trailingIndex = endIndex + 1;
     return RemoteWetInkSegment(
       startIndex: startIndex,
       points: List.unmodifiable(points),
-      leadingPoint: (_arrivalOrder[leadingIndex] ?? firstOrder) < firstOrder
-          ? _allPoints[leadingIndex]
-          : null,
+      leadingPoints: List.unmodifiable(leading),
       trailingPoint: (_arrivalOrder[trailingIndex] ?? lastOrder) < lastOrder
           ? _allPoints[trailingIndex]
           : null,
@@ -634,7 +656,7 @@ class _RemoteWetInkStroke {
           merged[merged.length - 1] = RemoteWetInkSegment(
             startIndex: previous.startIndex,
             points: List.unmodifiable([...previous.points, ...segment.points]),
-            leadingPoint: previous.leadingPoint,
+            leadingPoints: previous.leadingPoints,
             trailingPoint: segment.trailingPoint,
           );
           continue;

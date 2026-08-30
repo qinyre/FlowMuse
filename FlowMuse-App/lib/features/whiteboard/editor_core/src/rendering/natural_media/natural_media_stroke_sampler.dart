@@ -118,6 +118,8 @@ class NaturalMediaStrokeSampler {
   ///（绝对或相对一致即可）；[ownedEdgeStart]/[ownedEdgeEndExclusive]
   /// 以原始边索引（第 i 条边连接 points[i-1]→points[i]，i 从 1 起）
   /// 指定本分段拥有的边范围，范围外的点仅作 stencil context。
+  /// [edgeIndexOffset]：远端分段渲染把边索引平移到全局笔迹索引
+  ///（offset = 段起点 − leading 点数），使 primitive key 与整笔一致。
   static NaturalMediaStrokePlan sample({
     required String strokeId,
     required List<Point> points,
@@ -127,6 +129,7 @@ class NaturalMediaStrokeSampler {
     bool isComplete = true,
     int? ownedEdgeStart,
     int? ownedEdgeEndExclusive,
+    int edgeIndexOffset = 0,
     NaturalMediaTuning tuning = const NaturalMediaTuning(),
   }) {
     final seed = strokeSeedOf(strokeId);
@@ -165,7 +168,7 @@ class NaturalMediaStrokeSampler {
       if (len < 1e-9) continue;
       edges.add(
         NaturalMediaEdge(
-          index: valid[i],
+          index: valid[i] + edgeIndexOffset,
           from: a,
           to: b,
           length: len,
@@ -299,8 +302,10 @@ class NaturalMediaStrokeSampler {
     } else if (brushType == BrushType.brushPen) {
       // 短线退化（§3.7：短划专门 teardrop，不做单边包络+帽子）。
       // 尺寸按整笔平均压力（短点无起收可言），1.3× 放大形成笔肚感。
+      // 仅整笔调用：远端分段的"leading+少量点"列表可能很短，中途
+      // 冻结成 teardrop 会在后续点到达时跳变；分段恒走包络路径。
       final totalLen = edges.fold<double>(0.0, (a, e) => a + e.length);
-      if (totalLen < 2 * strokeWidth) {
+      if (totalLen < 2 * strokeWidth && ownedEdgeStart == null) {
         final pAvg = (edges.first.pressure + edges.last.pressure) / 2;
         final hw =
             NaturalMediaResponseCurves.brushContactHalfWidth(
@@ -604,6 +609,8 @@ class NaturalMediaStrokeSampler {
       //    并集会缺 key）；
       // 2) 内部相邻 owned 边对。
       if (oi == 0 && k > 0 && !owned.contains(k - 1)) {
+        // 入界 join 与内部 join 同口径：hw 取 from 边（k-1）的接触
+        // 半宽，保证分块/整笔/合并三种路径的 join 逐值一致。
         _emitBrushJoin(
           out,
           absorb,
@@ -611,7 +618,10 @@ class NaturalMediaStrokeSampler {
           e,
           filtered[k - 1],
           f,
-          hw,
+          NaturalMediaResponseCurves.brushContactHalfWidth(
+            strokeWidth,
+            edges[k - 1].pressure,
+          ),
           tuning,
         );
       }

@@ -26,7 +26,17 @@ class PencilStrokeRendererV2 {
   /// 测试用复位。
   static void resetPlanBuildCountForTest() => planBuildCount = 0;
 
-  static void draw(ui.Canvas canvas, FreedrawElement element, DrawStyle style) {
+  /// 远端湿墨分段渲染：[ownedEdgeStart]/[ownedEdgeEndExclusive] 以全局
+  /// 边索引指定本段 owned 边（§3.4，context 点不拥有绘制权），
+  /// [edgeIndexOffset] 把边索引对齐到全局笔迹索引（段起点 − leading 数）。
+  static void draw(
+    ui.Canvas canvas,
+    FreedrawElement element,
+    DrawStyle style, {
+    int? ownedEdgeStart,
+    int? ownedEdgeEndExclusive,
+    int edgeIndexOffset = 0,
+  }) {
     final profile = BrushRenderProfile.forType(BrushType.pencil);
     final abs = [
       for (final p in element.points) Point(p.x + element.x, p.y + element.y),
@@ -39,6 +49,9 @@ class PencilStrokeRendererV2 {
       strokeWidth: style.strokeWidth,
       brushType: BrushType.pencil,
       isComplete: element.isComplete,
+      ownedEdgeStart: ownedEdgeStart,
+      ownedEdgeEndExclusive: ownedEdgeEndExclusive,
+      edgeIndexOffset: edgeIndexOffset,
     );
 
     // 基底：沿采样槽的抖动偏移多边形（wobble 种子 (edge, ordinal, base)，
@@ -79,7 +92,7 @@ class PencilStrokeRendererV2 {
     final profile = BrushRenderProfile.forType(BrushType.pencil);
     final left = <ui.Offset>[];
     final right = <ui.Offset>[];
-    for (final s in plan.samples) {
+    void appendSample(NaturalMediaSample s) {
       final n = s.filteredNormal;
       final wobble =
           0.85 +
@@ -97,6 +110,51 @@ class PencilStrokeRendererV2 {
           profile.pencilNaturalMediaLocalWidth(base, s.pressure) / 2 * wobble;
       left.add(ui.Offset(s.position.x + n.x * hw, s.position.y + n.y * hw));
       right.add(ui.Offset(s.position.x - n.x * hw, s.position.y - n.y * hw));
+    }
+
+    // 分块边界连续性：每条 owned 边的最后一个采样后补边终点顶点
+    //（用该采样的法向/半宽），整笔与分块渲染含同样的边界顶点，
+    // 前块多边形到达边端点、后块从端点起笔，无白缝（§3.4）。
+    final edgeByIndex = {for (final e in plan.edges) e.index: e};
+    double halfWidthOf(NaturalMediaSample s) {
+      final wobble =
+          0.85 +
+          0.30 *
+              rand01(
+                mix32(
+                  plan.strokeSeed,
+                  s.edgeIndex,
+                  s.ordinal,
+                  NaturalMediaChannel.base,
+                ),
+                0x55,
+              );
+      return profile.pencilNaturalMediaLocalWidth(base, s.pressure) /
+          2 *
+          wobble;
+    }
+
+    void appendEdgeEndpoint(int edgeIndex, NaturalMediaSample last) {
+      final e = edgeByIndex[edgeIndex];
+      if (e == null) return;
+      final n = last.filteredNormal;
+      final hw = halfWidthOf(last);
+      left.add(ui.Offset(e.to.x + n.x * hw, e.to.y + n.y * hw));
+      right.add(ui.Offset(e.to.x - n.x * hw, e.to.y - n.y * hw));
+    }
+
+    NaturalMediaSample? lastSample;
+    var currentEdge = plan.samples.first.edgeIndex;
+    for (final s in plan.samples) {
+      if (lastSample != null && s.edgeIndex != currentEdge) {
+        appendEdgeEndpoint(currentEdge, lastSample);
+        currentEdge = s.edgeIndex;
+      }
+      appendSample(s);
+      lastSample = s;
+    }
+    if (lastSample != null) {
+      appendEdgeEndpoint(currentEdge, lastSample);
     }
     path.moveTo(left.first.dx, left.first.dy);
     for (final o in left.skip(1)) {
