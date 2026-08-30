@@ -642,6 +642,39 @@ Issue #8 需要元素创建者分组视图（归属显示与聚焦）。游客�
 - 压感编码只发生在 `MarkdrawController._encodeStrokePressure` 唯一入口;新增创建路径必须传编码后压力,不得在渲染端二次调制。
 - freedraw 的 `points` 相对元素原点 `(x,y)`(渲染/SVG 导出按 points+(x,y) 还原绝对坐标);构造元素时 bbox 字段必须与点位一致,否则导出被裁。
 
+## ADR-021:笔刷渲染双版本 BrushRenderVersion,family 为 core 纯枚举,自然介质 v2 走独立共享采样渲染链
+
+- **状态**:已采纳
+- **日期**:2026-08-30
+- **关联**:计划 `docs/研发记录/plans/2026-08-30-pencil-brush-natural-media-redesign.md`、`editor_core/src/core/elements/brush_type.dart`(BrushRenderVersion/strokeRendererFamilyFor)、`editor_core/src/rendering/element_renderer.dart`(唯一 dispatch)、`editor_core/src/rendering/natural_media/*`(sampler/渲染器/缓存)、`rendering/export/svg_element_renderer.dart`、`collaboration/models/live_ink_chunk.dart`(LiveInkStyle.renderVersion)、分支 `feature/pencil-brush-natural-media-plan-v2`(732fa68…059bed0)
+
+### 背景
+
+T0 目标纸(用户确认)锁定 HB 铅笔与软头毛笔的自然介质质感:颗粒、浓淡、提按、毫丝、墨落,v1 perfect_freehand 管线原理上给不出。但圆珠笔/钢笔/荧光笔观感已被接受,v1 像素有冻结测试锁,存量文档与混合版本协作要求 v1 一个像素都不能动;同时 ADR-020 刚把五笔差异收敛到 BrushRenderProfile 单一真源,不能被第二条渲染链稀释成两套口径。
+
+### 决策
+
+- `customData.flowMuse.brushRenderVersion` 持久化双版本(classicV1/naturalMediaV2),缺失即 classicV1;仅铅笔/毛笔创建时默认写 v2(`defaultRenderVersionForNewStroke`),显式降级必须移除标记(`customDataWithFreedrawRender`)。
+- **ADR-020 仍管 classic**:BrushRenderProfile 继续作为两种版本共用真源——classic 管线照旧消费它,v2 的密度/透明度/可见下限等常数(brushV2*/pencilV2* 族)同样收在 profile,不另立宽度表。
+- `strokeRendererFamilyFor` 是 core 层**纯枚举**(不 import 渲染);唯一像素 dispatch 在 rendering 层单点 `element_renderer.dart`:`pressures.isEmpty ? classicV1 : strokeRendererFamilyFor(customData)`——无压力点的笔迹(含存量 v2 元数据防御分支)永远走 v1。
+- v2 几何与种子的单一真源是 `NaturalMediaStrokeSampler`(fnv1a32/mul32/mix32 种子栈,源码禁 hashCode/Random);Canvas 渲染器、SVG 导出、本地/远端湿墨、命中 bounds 四链消费同一 plan,渲染器只做 plan→Path(v2 不申请 shader,鸿蒙无 FragmentProgram 的限制不波及 v2)。
+- 分块一致性(远端湿墨 64 点冻结块)用"边归属"而非段间协商:边 i 连接点 i−1→i 归较后段,桥接边归较后段,入界 join 补 from 边半宽,每边终点补边界顶点;v2 段携带 4 个 leading 点(桥接边 3 边滤波窗 + join from 切线窗)。LiveInkStyle 增 renderVersion(缺失=1 旧客户端兼容;非铅笔/毛笔强制回退 1)。
+- 性能门禁实测触发 T4-C 条件缓存 `NaturalMediaPathCache`:LRU 2048,缓存恒等矩阵 ui.Picture;键含 id/version/versionNonce/renderVersion/isComplete/strokeWidth/strokeColor/opacity/geometryVersion(paint 烘进的输入必须入键);湿墨 owned 分段调用自动绕过。1000 元素静态 v2/v1 由 4.14 收敛到 ≤3.0 门禁(实测 2.3~2.8,余量为颗粒栅格化本征成本)。
+
+### 理由
+
+- 双版本而非改写 v1:v1 像素冻结(N1 摘要锁)是存量兼容的硬约束,重写等于无条件回归;版本字段让新笔迹渐进获得新质感、旧笔迹永不变样。
+- family 纯枚举放 core、dispatch 放 rendering:core 不得依赖 dart:ui 渲染器;渲染链选择是像素语义,单点 dispatch 防止分叉在 SVG/湿墨/bounds 各处开花(SVG 与湿墨各自有同语义分支,但都读同一 family 枚举)。
+- 分块用无状态边归属而非协商:乱序到达、块合并重放、与整笔渲染逐值一致,由 63/64/65 边界 key 并集测试与 90% mask 像素门双锁。
+- 缓存 Picture 而非 Path:Path 重放仍需逐子路径录制,Picture 一次录制直接 drawPicture;miss 与命中重放同一 Picture 对象,逐字节一致由测试锁(曾因 miss 分支只录不绘丢毫丝/基底双绘被 N13 远端对照抓到,已改为"录制→存→立即重放"单一路径)。
+
+### 遗留约束
+
+- 新增笔形走 v2 必须同时落六处:BrushRenderProfile 常数、sampler 分支、Canvas 渲染器、SVG `_render*V2`、elementVisualBounds 分支、LiveInkStyle renderVersion 白名单;缺一处即三处口径漂移。
+- 改几何/种子/曲线常数必须 bump `NaturalMediaPathCache.geometryVersion`,跑 natural_media 全套(687 测试,含 v1-lock)与验收矩阵;v1 任何像素变化都是回归。
+- `strokeSeedOf(strokeId)` 是笔迹视觉身份:live strokeId 必须等于最终 ElementId(`ToolOverlay.creationStrokeId` 通路),预览/提交/远端三链路不得各自造 id,否则同笔三帧颗粒不一致。
+- 缓存只对整笔静态渲染生效:调用方传 ownedEdgeStart 或让渡起收所有权即自动绕过;不得手工构造缓存键,键字段变更须同步 keyFor 与注释里的"烘进 Picture"清单。
+
 ---
 
 做出重要技术决策(选型、架构变更、约束确立)时,追加一条:

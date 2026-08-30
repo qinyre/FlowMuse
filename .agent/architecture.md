@@ -103,7 +103,7 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `editor_core/src/editor/` | `EditorState` + Tool 体系,按 Tool、ToolResult、状态折叠组织 |
 | `editor_core/src/input/` | 手写笔输入管线,包括 OneEuro 滤波、压感、转角保护 |
 | `editor_core/src/recognition/` | 识别结果模型与 `InkTextSizing`(由笔迹包围盒反推排版字号,见 ADR-019) |
-| `editor_core/src/rendering/` | `StaticCanvasPainter`、交互层、rough 手绘风格 |
+| `editor_core/src/rendering/` | `StaticCanvasPainter`、交互层、rough 手绘风格、`natural_media/` 自然介质 v2 渲染链(铅笔/毛笔双版本 dispatch 见 ADR-021) |
 | `editor_core/src/ui/` | `MarkdrawController` 对外控制器 |
 
 ### 关键设计模式
@@ -205,7 +205,8 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `local_database.dart` schema | 全部读 DB 的 repository + 已装用户(迁移路径) |
 | `libraryIndexProvider` / `LibraryIndexNotifier` | library/notebooks/tags/search 四个 feature |
 | `Element` 基类字段 | 编辑器渲染 + 序列化 + 协作 reconciler + Excalidraw 兼容 |
-| `BrushRenderProfile` / `elementVisualBounds` | 五笔 Raster 渲染(含湿墨)+ SVG 导出 + 命中/导出边界(ADR-020) |
+| `BrushRenderProfile` / `elementVisualBounds` | 五笔 Raster 渲染(含湿墨)+ SVG 导出 + 命中/导出边界(ADR-020;v2 常数族 brushV2*/pencilV2* 同源,ADR-021) |
+| `NaturalMediaStrokeSampler` / 种子栈 / 缓存 `geometryVersion` | 铅笔/毛笔 v2 的 Canvas/SVG/本地/远端湿墨/bounds 四链像素(ADR-021);改几何或常数须跑 natural_media 全套并 bump geometryVersion |
 | `CollaborationMessage` 协议 | 前端协作层 + 后端 `collab/events.go` |
 | `AccountUser` 模型 | 前端 account + 后端 `auth/` + 协作身份 |
 | `pubspec.yaml` 的 `dependency_overrides` | 全平台构建(尤其鸿蒙) |
