@@ -4,6 +4,7 @@ import '../../core/elements/elements.dart';
 import '../../core/math/math.dart';
 import '../rough/draw_style.dart';
 import 'directional_brush_envelope.dart';
+import 'natural_media_path_cache.dart';
 import 'natural_media_stroke_sampler.dart';
 
 // ---------------------------------------------------------------------------
@@ -41,6 +42,29 @@ class BrushPenStrokeRendererV2 {
     final abs = [
       for (final p in element.points) Point(p.x + element.x, p.y + element.y),
     ];
+    // T4-C 条件缓存：整笔静态渲染复用 Path；owned 分段/起收所有权
+    // 变化的调用（湿墨）不缓存。
+    final useCache = ownedEdgeStart == null && ownsStrokeHead && ownsStrokeTail;
+    final cacheKey = useCache
+        ? NaturalMediaPathCache.keyFor(
+            elementId: element.id.value,
+            version: element.version,
+            versionNonce: element.versionNonce,
+            renderVersion: BrushRenderVersion.naturalMediaV2.index,
+            isComplete: element.isComplete,
+            strokeWidth: style.strokeWidth,
+            strokeColor: style.strokeColor,
+            opacity: style.opacity,
+          )
+        : null;
+    final cached = cacheKey == null
+        ? null
+        : NaturalMediaPathCache.lookup(cacheKey);
+    if (cached != null) {
+      canvas.drawPicture(cached.picture);
+      return;
+    }
+
     planBuildCount++;
     final plan = NaturalMediaStrokeSampler.sample(
       strokeId: element.id.value,
@@ -61,10 +85,34 @@ class BrushPenStrokeRendererV2 {
       ownsStrokeHead: ownsStrokeHead,
       ownsStrokeTail: ownsStrokeTail,
     );
+    if (useCache) {
+      // miss：恒等矩阵画布录制一次 Picture（主体 + 毫丝），存缓存后
+      // 立即 drawPicture 重放——miss 与命中像素逐字节一致（同一
+      // Picture 对象），也避免直绘/录制两份分支漂移。
+      final recorder = ui.PictureRecorder();
+      final cached = ui.Canvas(recorder);
+      cached.drawPath(paths.body, _paint(style, 1.0));
+      if (paths.hasStrands) {
+        // 毫丝是开放线段：fill 语义下零面积不可见（T9 修正），按描边
+        // 细线渲染（round cap，~0.8px，与 SVG stroke 同口径）。
+        cached.drawPath(
+          paths.strands,
+          _paint(style, profile.brushV2StrandAlpha)
+            ..style = ui.PaintingStyle.stroke
+            ..strokeWidth = 0.8
+            ..strokeCap = ui.StrokeCap.round,
+        );
+      }
+      final picture = recorder.endRecording();
+      NaturalMediaPathCache.store(
+        cacheKey!,
+        CachedNaturalMediaPaths(picture: picture),
+      );
+      canvas.drawPicture(picture);
+      return;
+    }
     canvas.drawPath(paths.body, _paint(style, 1.0));
     if (paths.hasStrands) {
-      // 毫丝是开放线段：fill 语义下零面积不可见（T9 修正），按描边
-      // 细线渲染（round cap，~0.8px，与 SVG stroke 同口径）。
       canvas.drawPath(
         paths.strands,
         _paint(style, profile.brushV2StrandAlpha)

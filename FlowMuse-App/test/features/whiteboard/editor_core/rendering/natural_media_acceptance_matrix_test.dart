@@ -14,6 +14,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/ro
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/viewport_state.dart';
 
 import '../fixtures/brush_stroke_fixtures.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/natural_media/natural_media_path_cache.dart';
 import 'natural_media/natural_media_image_metrics.dart';
 import 'natural_media_visual_sheet_support.dart';
 
@@ -218,6 +219,70 @@ void main() {
       lessThanOrEqualTo(0.02),
       reason: 'N13 远端 35% 透明度像素差 $diff 应 ≤2%（无加重带）',
     );
+  });
+
+  test('T4-C 缓存：命中/失效计数与编辑后不回放旧 Picture', () async {
+    final placed = fitFixtureToCell(pencilMediumStroke);
+    final element = placedElement(
+      placed,
+      pencilMediumStroke.pressures,
+      BrushType.pencil,
+      'cacheProbe',
+    );
+    Future<List<int>> renderOf(FreedrawElement e) async {
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      canvas.drawRect(
+        ui.Offset.zero & const ui.Size(kCellWidth, kCellHeight),
+        ui.Paint()..color = const ui.Color(0xFFFFFFFF),
+      );
+      ElementRenderer.render(canvas, e, RoughCanvasAdapter());
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(
+        kCellWidth.round(),
+        kCellHeight.round(),
+      );
+      picture.dispose();
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return bytes!.buffer.asUint8List();
+    }
+
+    // 复位必须放在首次渲染之前：放在两次渲染之间会把 b 本应命中的
+    // 条目连同计数一起清掉（曾因此误报 hitCount=0）。
+    NaturalMediaPathCache.resetForTesting();
+    // 两次同元素渲染：第二次命中缓存且像素一致。
+    final a = await renderOf(element);
+    final b = await renderOf(element);
+    expect(b, equals(a), reason: '缓存命中路径必须与首次渲染逐字节一致');
+    expect(NaturalMediaPathCache.hitCount, 1, reason: '第二次渲染应命中');
+    expect(NaturalMediaPathCache.missCount, 1, reason: '首次渲染为 miss');
+
+    // 编辑（version++ 且压力变化）：不得回放旧 Picture。
+    final edited = element
+        .copyWithFreedraw(
+          pressures: [
+            for (final p in pencilMediumStroke.pressures)
+              (p * 0.5).clamp(0.05, 1.0),
+          ],
+        )
+        .copyWith(version: element.version + 1);
+    final c = await renderOf(edited);
+    expect(c, isNot(equals(a)), reason: '编辑后的元素不得回放旧缓存');
+    expect(NaturalMediaPathCache.missCount, 2, reason: '编辑产生新键为 miss');
+
+    // 毛笔同样锁定：首绘（miss，录制后立即重放）与第二次（命中重放）
+    // 逐字节一致——毛笔曾因 miss 分支只录不绘丢毫丝，正是此对照暴露。
+    final brushElement = placedElement(
+      fitFixtureToCell(brushSCurve),
+      brushSCurve.pressures,
+      BrushType.brushPen,
+      'cacheProbeBrush',
+    );
+    final d1 = await renderOf(brushElement);
+    final d2 = await renderOf(brushElement);
+    expect(d2, equals(d1), reason: '毛笔缓存命中与首绘逐字节一致');
+    expect(NaturalMediaPathCache.hitCount, 2, reason: '毛笔第二次渲染应命中');
   });
 
   test('N19：长笔线性 time(16k)/time(1k) ≤ 20', () {

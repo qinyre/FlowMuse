@@ -4,6 +4,7 @@ import '../../core/elements/elements.dart';
 import '../../core/math/math.dart';
 import '../rough/draw_style.dart';
 import 'deterministic_stroke_seed.dart';
+import 'natural_media_path_cache.dart';
 import 'natural_media_stroke_plan.dart';
 import 'natural_media_stroke_sampler.dart';
 
@@ -41,6 +42,30 @@ class PencilStrokeRendererV2 {
     final abs = [
       for (final p in element.points) Point(p.x + element.x, p.y + element.y),
     ];
+    // T4-C 条件缓存：整笔静态渲染复用 Path（键含 id/version/nonce/
+    // renderVersion/isComplete/宽度/几何版本）；owned 分段调用每帧
+    // 几何随范围变化，不缓存。
+    final useCache = ownedEdgeStart == null;
+    final cacheKey = useCache
+        ? NaturalMediaPathCache.keyFor(
+            elementId: element.id.value,
+            version: element.version,
+            versionNonce: element.versionNonce,
+            renderVersion: BrushRenderVersion.naturalMediaV2.index,
+            isComplete: element.isComplete,
+            strokeWidth: style.strokeWidth,
+            strokeColor: style.strokeColor,
+            opacity: style.opacity,
+          )
+        : null;
+    final cached = cacheKey == null
+        ? null
+        : NaturalMediaPathCache.lookup(cacheKey);
+    if (cached != null) {
+      canvas.drawPicture(cached.picture);
+      return;
+    }
+
     planBuildCount++;
     final plan = NaturalMediaStrokeSampler.sample(
       strokeId: element.id.value,
@@ -57,7 +82,6 @@ class PencilStrokeRendererV2 {
     // 基底：沿采样槽的抖动偏移多边形（wobble 种子 (edge, ordinal, base)，
     // 分块/整笔一致），端部方帽。
     final base = _buildBasePath(plan, style.strokeWidth);
-    canvas.drawPath(base, _paint(style, profile.pencilV2BaseAlpha));
 
     // 颗粒：按 channel 分桶合成复合 Path（≤3 桶）。
     final bucketPaths = <int, ui.Path>{};
@@ -73,6 +97,28 @@ class PencilStrokeRendererV2 {
       );
     }
     final channels = bucketPaths.keys.toList()..sort();
+    if (useCache) {
+      // miss：恒等矩阵画布录制一次 Picture（基底 + 颗粒桶，透明底只含
+      // 本笔），存缓存后立即 drawPicture 重放——miss 与命中重放同一
+      // Picture 对象，像素逐字节一致（v2 无 shader，缩放无关）。
+      final recorder = ui.PictureRecorder();
+      final cached = ui.Canvas(recorder);
+      cached.drawPath(base, _paint(style, profile.pencilV2BaseAlpha));
+      for (final channel in channels) {
+        cached.drawPath(
+          bucketPaths[channel]!,
+          _paint(style, profile.pencilV2GrainAlpha(channel)),
+        );
+      }
+      final picture = recorder.endRecording();
+      NaturalMediaPathCache.store(
+        cacheKey!,
+        CachedNaturalMediaPaths(picture: picture),
+      );
+      canvas.drawPicture(picture);
+      return;
+    }
+    canvas.drawPath(base, _paint(style, profile.pencilV2BaseAlpha));
     for (final channel in channels) {
       canvas.drawPath(
         bucketPaths[channel]!,
