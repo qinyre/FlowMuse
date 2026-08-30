@@ -10,6 +10,57 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('T3：v2 响应曲线收进 BrushRenderProfile 单一真源', () {
+    final pencil = BrushRenderProfile.forType(BrushType.pencil);
+    final brush = BrushRenderProfile.forType(BrushType.brushPen);
+
+    test('铅笔宽度响应温和：p .2→.8 宽度比 ≤1.35（理论 1.18，留量化余量）', () {
+      final wLight = pencil.pencilNaturalMediaLocalWidth(6, 0.2);
+      final wHeavy = pencil.pencilNaturalMediaLocalWidth(6, 0.8);
+      // 0.26 宽度项（T4 冻结）：N3 的 1px 法向扫描量化余量。
+      expect(wLight, closeTo(6 * (0.82 + 0.26 * 0.2), 1e-9));
+      expect(wHeavy / wLight, lessThanOrEqualTo(1.35));
+    });
+
+    test('铅笔密度响应单调且覆盖目标量程（p=.8 比 p=.2 深 ≥35%）', () {
+      var prev = -1.0;
+      for (var p = 0.0; p <= 1.0 + 1e-9; p += 0.05) {
+        final d = pencil.pencilNaturalMediaDensity(p);
+        expect(d, greaterThan(prev), reason: '单调 p=$p');
+        prev = d;
+      }
+      final light = pencil.pencilNaturalMediaDensity(0.2);
+      final heavy = pencil.pencilNaturalMediaDensity(0.8);
+      expect(heavy, greaterThan(light * 1.35), reason: 'N2 曲线量程');
+    });
+
+    test('毛笔接触宽度：p .2→.8 比 ≥2.2 且轻压可见（≥0.16 底）', () {
+      final hwLight = brush.brushNaturalMediaContactHalfWidth(6, 0.2);
+      final hwHeavy = brush.brushNaturalMediaContactHalfWidth(6, 0.8);
+      expect(hwLight, greaterThan(0), reason: '轻压不消失');
+      expect(hwHeavy / hwLight, greaterThan(2.2), reason: 'N6 提按量程');
+      expect(
+        brush.brushNaturalMediaContactHalfWidth(6, 0.0),
+        closeTo(BrushRenderProfile.brushV2MinContactHalfWidth, 1e-9),
+        reason:
+            'T5 可见下限：p→0 时公式全宽 ~0.96px 在斜向 AA 下断线，'
+            '冻结下限 0.7px（§3.5 最低有效宽度仍可见）',
+      );
+    });
+
+    test('压力越界钳制 [0,1]，曲线对非法输入安全', () {
+      expect(
+        pencil.pencilNaturalMediaLocalWidth(6, 1.7),
+        pencil.pencilNaturalMediaLocalWidth(6, 1.0),
+      );
+      expect(
+        brush.brushNaturalMediaContactHalfWidth(6, -0.5),
+        brush.brushNaturalMediaContactHalfWidth(6, 0.0),
+      );
+      expect(pencil.pencilNaturalMediaDensity(2.0), closeTo(0.18 + 0.72, 1e-9));
+    });
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
   late ToolContext context;
 
@@ -283,8 +334,11 @@ void main() {
       BrushType.brushPen,
       reason: '最终元素笔型取 pointer-down 冻结值',
     );
-    expect(disturbedStroke.pressures, refStroke.pressures,
-        reason: '压力编码须与全程未切笔的笔画逐点一致');
+    expect(
+      disturbedStroke.pressures,
+      refStroke.pressures,
+      reason: '压力编码须与全程未切笔的笔画逐点一致',
+    );
     expect(disturbedStroke.points, refStroke.points);
 
     // 抬笔后冻结解除：下一笔使用切换后的铅笔。

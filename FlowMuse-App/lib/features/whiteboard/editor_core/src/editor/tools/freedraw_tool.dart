@@ -21,6 +21,7 @@ class ActiveFreedrawView {
     required this.pressures,
     required this.simulatePressure,
     required this.brushType,
+    this.renderVersion = BrushRenderVersion.classicV1,
     this.strokeLiveMode = false,
   });
 
@@ -29,6 +30,13 @@ class ActiveFreedrawView {
   final List<double> pressures;
   final bool simulatePressure;
   final BrushType brushType;
+
+  /// 落笔冻结的渲染版本（计划 T6 工作项 1）：与提交元素同源
+  ///（defaultRenderVersionForNewStroke），书写中切笔/改默认不改变本笔；
+  /// layered 湿墨 painter 据此走同一 renderer dispatch。
+  final BrushRenderVersion renderVersion;
+
+  /// 预测/协作实时笔画模式（终笔前不落场景元素）。
   final bool strokeLiveMode;
 }
 
@@ -91,6 +99,7 @@ class FreedrawTool implements Tool {
       pressures: _hasRealPressure ? _previewPressures : const [],
       simulatePressure: !_hasRealPressure,
       brushType: context.brushType,
+      renderVersion: defaultRenderVersionForNewStroke(context.brushType),
       strokeLiveMode: _nextStrokeLiveMode,
     );
     return null;
@@ -201,6 +210,9 @@ class FreedrawTool implements Tool {
     return ToolOverlay(
       creationPoints: _previewPoints,
       creationPressures: _hasRealPressure ? _previewPressures : const [],
+      // v2 自然介质按 strokeId 播种：预览元素带 live element id，与
+      // _buildElement 提交元素同 id（同种子），预览/提交所见即所得。
+      creationStrokeId: _liveElementId,
       creationIsComplete: false,
       showCreationPreviewLine: false,
     );
@@ -238,8 +250,13 @@ class FreedrawTool implements Tool {
     final maxX = _points.map((p) => p.x).reduce(math.max);
     final maxY = _points.map((p) => p.y).reduce(math.max);
     // 新笔迹 pressures 已在 controller 侧按灵敏度编码；customData 写入
-    // pressureEncoding=1（嵌套合并，不覆盖归属/页面等已有键）。
-    var customData = customDataWithFreedrawRender(null, context.brushType);
+    // pressureEncoding=1 + 新笔默认渲染版本（pencil/brushPen=v2，其余
+    // v1 不落字段；嵌套合并，不覆盖归属/页面等已有键）。
+    var customData = customDataWithFreedrawRender(
+      null,
+      context.brushType,
+      renderVersion: defaultRenderVersionForNewStroke(context.brushType),
+    );
     if (_sessionId != null) {
       customData = {
         ...customData,

@@ -316,8 +316,7 @@ class MarkdrawController extends ChangeNotifier {
   onVisionSmartLayout;
 
   /// 低置信裁剪重问：整页识别后把握不足的块裁出局部图无上下文转写。
-  Future<SmartLayoutTranscribeResponse> Function(
-  SmartLayoutTranscribeRequest)?
+  Future<SmartLayoutTranscribeResponse> Function(SmartLayoutTranscribeRequest)?
   onTranscribeCrop;
   ValueChanged<String>? onMindmapOperationError;
   void Function(bool enabled)? onInkRecognitionModeChanged;
@@ -2218,14 +2217,24 @@ class MarkdrawController extends ChangeNotifier {
       // max(实测, 包络) 对 0.4-0.6s 短笔画近乎恒抬）；圆珠笔/荧光笔宽度
       // 与压力无关，无需补偿。
       final strokeBrush = _strokeBrushTypeOverride ?? _activeBrushType;
+      // T3：按新笔默认渲染版本分流压力管线——pencil/brushPen（v2）走
+      // 起笔稳定器（相邻值插值，轻写可见），关闭 v1 攻击包络；其余笔
+      // 保持 v1 白名单语义（毛笔/铅笔历史白名单仅在新笔默认被临时切回
+      // v1 时经 defaultRenderVersionForNewStroke 复活，§8 回退规则）。
+      final isV2Stroke =
+          defaultRenderVersionForNewStroke(strokeBrush) ==
+          BrushRenderVersion.naturalMediaV2;
       final attackEnabled =
-          strokeBrush == BrushType.brushPen || strokeBrush == BrushType.pencil;
+          !isV2Stroke &&
+          (strokeBrush == BrushType.brushPen ||
+              strokeBrush == BrushType.pencil);
       _modeler = StrokeInputModeler(
         _policySelector.select(sample.kind),
         useRealPressure: _pressureEnabled,
         pressureExponent: _pressureExponent,
         pressureAttackMs: attackEnabled ? _pressureAttackMs : 0,
         pressureAttackLevel: _pressureAttackLevel,
+        pressureStabilizeV2: isV2Stroke,
       );
       final r = kReleaseMode
           ? _modeler!.process(sample)
@@ -3110,7 +3119,10 @@ class MarkdrawController extends ChangeNotifier {
           endArrowhead: Arrowhead.arrow,
         ),
         ToolType.freedraw => FreedrawElement(
-          id: previewId,
+          // v2 自然介质按 strokeId 播种：用工具的 live element id 而非
+          // '__preview__' 哨兵，保证预览与提交元素同种子（§3.3/计划
+          // T6「live strokeId 与最终 ElementId 必须相同」）。
+          id: overlay.creationStrokeId ?? previewId,
           x: minX,
           y: minY,
           width: maxX - minX,
@@ -3129,6 +3141,9 @@ class MarkdrawController extends ChangeNotifier {
           customData: customDataWithFreedrawRender(
             null,
             _strokeBrushTypeOverride ?? _activeBrushType,
+            renderVersion: defaultRenderVersionForNewStroke(
+              _strokeBrushTypeOverride ?? _activeBrushType,
+            ),
           ),
         ),
         _ => null,
@@ -3323,7 +3338,6 @@ class MarkdrawController extends ChangeNotifier {
     smartInkLayoutMode = !_smartInkLayoutMode;
   }
 
-  
   /// 智能排版幽灵预览状态（画布层监听；null = 关闭）。
   final ValueNotifier<SmartLayoutGhostSpec?> smartLayoutGhost =
       ValueNotifier<SmartLayoutGhostSpec?>(null);
@@ -4349,13 +4363,15 @@ class MarkdrawController extends ChangeNotifier {
     return true;
   }
 
-  
   /// 视觉路径逐文本项转写：整页 VLM 文本单引擎（智能排版不再使用 MyScript，
   /// 其仅保留在独立"手写字迹识别"入口）；把握不足或无文本的块走低置信裁剪
   /// 重问（裁剪自无标记干净截图）。返回各项文本块与"有效把握"
   /// （重问后可能高于 VLM 自报值）。
   Future<
-    ({Map<int, SmartLayoutRecognizedBlock> blocks, Map<int, double> confidences})
+    ({
+      Map<int, SmartLayoutRecognizedBlock> blocks,
+      Map<int, double> confidences,
+    })
   >
   _recognizeVisionTextBlocks(
     CanvasPage page,
@@ -4658,9 +4674,7 @@ class MarkdrawController extends ChangeNotifier {
       math.max(cropRect.height * zoom, 1.0),
     );
     final recorder = ui.PictureRecorder();
-    ui.Canvas(
-      recorder,
-    ).drawImageRect(
+    ui.Canvas(recorder).drawImageRect(
       pageImage,
       src,
       Rect.fromLTWH(0, 0, src.width, src.height),
@@ -4907,8 +4921,6 @@ class MarkdrawController extends ChangeNotifier {
     return role == 'mindmap-node' || role == 'mindmap-edge';
   }
 
-  
-  
   ui.Rect _inkGroupBounds(List<FreedrawElement> strokes) {
     var bounds = _placementBoundsForElement(strokes.first);
     for (final stroke in strokes.skip(1)) {
@@ -4921,12 +4933,6 @@ class MarkdrawController extends ChangeNotifier {
       bounds.size.height,
     );
   }
-
-  
-  
-  
-  
-  
 
   Future<List<SmartLayoutRecognizedBlock>>
   _recognizeSmartLayoutBlocksInParallel(
@@ -5001,7 +5007,6 @@ class MarkdrawController extends ChangeNotifier {
     return SmartLayoutExporter.export(document, format);
   }
 
-  
   List<FreedrawElement> _smartLayoutInkElements() {
     return [
       for (final element in _editorState.scene.activeElements)

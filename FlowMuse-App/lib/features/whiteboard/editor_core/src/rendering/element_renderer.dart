@@ -3,6 +3,8 @@ import 'dart:ui';
 import '../core/elements/elements.dart' as core show Element, TextElement;
 import '../core/elements/elements.dart' hide Element, TextElement;
 import '../core/math/math.dart';
+import 'natural_media/brush_pen_stroke_renderer_v2.dart';
+import 'natural_media/pencil_stroke_renderer_v2.dart';
 import 'rough/draw_style.dart';
 import 'rough/rough_adapter.dart';
 import 'rough/rough_canvas_adapter.dart';
@@ -154,21 +156,20 @@ class ElementRenderer {
         }
       case 'freedraw':
         if (element is FreedrawElement) {
-          final absPoints = _absolutePoints(
-            element.points,
-            element.x,
-            element.y,
-          );
-          adapter.drawFreedraw(
-            canvas,
-            absPoints,
-            element.pressures,
-            element.simulatePressure,
-            brushTypeFromCustomData(element.customData),
-            style,
-            isComplete: element.isComplete,
-            pressureEncoded: pressureEncodingFromCustomData(element.customData),
-          );
+          // 唯一 renderer family 分发点（ADR-021）：v2 走自然介质
+          // 渲染器，v1/降级路径保持既有 FreedrawRenderer。缺 pressures
+          // 的 v2 元数据按 v1 渲染（防御：v2 语义依赖已编码压力）。
+          final family = element.pressures.isEmpty
+              ? StrokeRendererFamily.classicV1
+              : strokeRendererFamilyFor(element.customData);
+          switch (family) {
+            case StrokeRendererFamily.pencilV2:
+              PencilStrokeRendererV2.draw(canvas, element, style);
+            case StrokeRendererFamily.brushPenV2:
+              BrushPenStrokeRendererV2.draw(canvas, element, style);
+            case StrokeRendererFamily.classicV1:
+              _drawFreedrawClassic(canvas, element, style, adapter);
+          }
         }
       case 'text':
         if (element is core.TextElement) {
@@ -283,6 +284,25 @@ class ElementRenderer {
   }
 
   /// Converts relative points to absolute by adding the element's origin.
+  static void _drawFreedrawClassic(
+    Canvas canvas,
+    FreedrawElement element,
+    DrawStyle style,
+    RoughAdapter adapter,
+  ) {
+    final absPoints = _absolutePoints(element.points, element.x, element.y);
+    adapter.drawFreedraw(
+      canvas,
+      absPoints,
+      element.pressures,
+      element.simulatePressure,
+      brushTypeFromCustomData(element.customData),
+      style,
+      isComplete: element.isComplete,
+      pressureEncoded: pressureEncodingFromCustomData(element.customData),
+    );
+  }
+
   static List<Point> _absolutePoints(List<Point> points, double x, double y) {
     return points.map((p) => Point(p.x + x, p.y + y)).toList();
   }

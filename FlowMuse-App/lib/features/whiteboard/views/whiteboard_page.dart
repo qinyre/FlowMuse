@@ -924,9 +924,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(
-                    applied > 0 ? '已取消，完成 $applied 页' : '已取消智能排版',
-                  ),
+                  content: Text(applied > 0 ? '已取消，完成 $applied 页' : '已取消智能排版'),
                 ),
               );
             }
@@ -1054,9 +1052,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       final plan = result.plan;
       if (plan == null) {
         messenger.showSnackBar(
-          SnackBar(
-            content: Text('智能排版失败：${result.error ?? '未知错误'}'),
-          ),
+          SnackBar(content: Text('智能排版失败：${result.error ?? '未知错误'}')),
         );
         return _SmartLayoutPageOutcome.failed;
       }
@@ -1102,8 +1098,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     String pageId, {
     String? pageLabel,
   }) async {
-    _smartLayoutRecognitionProgress.value =
-        SmartLayoutRecognitionProgress.page(pageLabel: pageLabel);
+    _smartLayoutRecognitionProgress.value = SmartLayoutRecognitionProgress.page(
+      pageLabel: pageLabel,
+    );
     try {
       return await _markdrawController.prepareSmartLayoutTemplates(
         pageId: pageId,
@@ -1135,9 +1132,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _markdrawController.cancelSmartLayoutPreparation();
     } catch (error) {
       // 取消是尽力而为的降级操作：失败不打断流程（识别完成照常走模板卡）。
-      debugPrint(
-        '[FlowMuseSmartLayout] 取消识别请求未生效: ${error.runtimeType}',
-      );
+      debugPrint('[FlowMuseSmartLayout] 取消识别请求未生效: ${error.runtimeType}');
     }
   }
 
@@ -1157,8 +1152,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (target == null || !_markdrawController.smartLayoutDraftActive) {
       return;
     }
-    final lowConfidenceRects = _markdrawController
-        .smartLayoutDraftLowConfidenceRects;
+    final lowConfidenceRects =
+        _markdrawController.smartLayoutDraftLowConfidenceRects;
     if (target.failureRects.isEmpty && lowConfidenceRects.isEmpty) return;
     if (!force &&
         identical(target, _smartLayoutGhostPlan) &&
@@ -1285,9 +1280,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     )) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            dropFailedBlocks ? '智能排版已落地（未识别笔迹已删除）' : '智能排版已落地',
-          ),
+          content: Text(dropFailedBlocks ? '智能排版已落地（未识别笔迹已删除）' : '智能排版已落地'),
         ),
       );
       return _SmartLayoutPageOutcome.applied;
@@ -2135,6 +2128,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           strokeColor: style.strokeColor ?? '#1e1e1e',
           strokeWidth: style.strokeWidth ?? 2,
           opacity: ((style.opacity ?? 1) * 100).clamp(0, 100).toDouble(),
+          // 计划 T7 工作项 1：style 显式携带渲染版本（落笔冻结值，
+          // 与提交元素 customData 同源）。
+          renderVersion: view.renderVersion == BrushRenderVersion.naturalMediaV2
+              ? 2
+              : 1,
         ),
       );
     }
@@ -2863,18 +2861,19 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   left: 48,
                   right: 48,
                   bottom: 24,
-                  child: ValueListenableBuilder<SmartLayoutRecognitionProgress?>(
-                    valueListenable: _smartLayoutRecognitionProgress,
-                    builder: (context, progress, _) {
-                      if (progress == null) return const SizedBox.shrink();
-                      return Center(
-                        child: SmartLayoutProgressOverlay(
-                          progress: progress,
-                          onCancel: _cancelSmartLayoutPreparation,
-                        ),
-                      );
-                    },
-                  ),
+                  child:
+                      ValueListenableBuilder<SmartLayoutRecognitionProgress?>(
+                        valueListenable: _smartLayoutRecognitionProgress,
+                        builder: (context, progress, _) {
+                          if (progress == null) return const SizedBox.shrink();
+                          return Center(
+                            child: SmartLayoutProgressOverlay(
+                              progress: progress,
+                              onCancel: _cancelSmartLayoutPreparation,
+                            ),
+                          );
+                        },
+                      ),
                 ),
               ],
             ),

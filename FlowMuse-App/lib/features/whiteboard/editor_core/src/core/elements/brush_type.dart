@@ -1,3 +1,5 @@
+import 'brush_render_version.dart';
+
 enum BrushType {
   pencil('pencil'),
   ballpoint('ballpoint'),
@@ -149,21 +151,36 @@ Map<String, Object?> customDataWithBrushType(
   return next;
 }
 
-/// 新建自由笔画元素的 customData：brushType + pressureEncoding=1
-/// （嵌套合并 flowMuse，不覆盖 collaborationOwner、pageId 等已有键）。
+/// 新建/重建自由笔画元素的 customData：brushType + 可选 pressureEncoding=1
+/// + 可选 brushRenderVersion（嵌套合并 flowMuse，不覆盖
+/// collaborationOwner、pageId 等已有键）。
+///
+/// - [pressureEncoded]：文件解析路径按 `pressure-encoded` 标记传入；
+///   创建路径默认 true（新笔迹必编码）。
+/// - [renderVersion]：仅 naturalMediaV2 落 `brushRenderVersion: 2`，
+///   classicV1 显式移除该字段（§3.1"缺失即 v1"）；null 保持既有值
+///   （重刷笔型标记不降级已有 v2 元素）。
 Map<String, Object?> customDataWithFreedrawRender(
   Map<String, Object?>? customData,
-  BrushType brushType,
-) {
+  BrushType brushType, {
+  bool pressureEncoded = true,
+  BrushRenderVersion? renderVersion,
+}) {
   final next = {...?customData};
   final flowMuse = next[flowMuseCustomDataKey];
-  next[flowMuseCustomDataKey] = {
+  final merged = {
     if (flowMuse is Map<String, Object?>) ...flowMuse,
     if (flowMuse is Map && flowMuse is! Map<String, Object?>)
       for (final entry in flowMuse.entries)
         if (entry.key is String) entry.key as String: entry.value,
     brushTypeCustomDataKey: brushType.wireName,
-    pressureEncodingCustomDataKey: 1,
+    if (pressureEncoded) pressureEncodingCustomDataKey: 1,
   };
+  if (renderVersion == BrushRenderVersion.naturalMediaV2) {
+    merged[brushRenderVersionCustomDataKey] = 2;
+  } else if (renderVersion == BrushRenderVersion.classicV1) {
+    merged.remove(brushRenderVersionCustomDataKey);
+  }
+  next[flowMuseCustomDataKey] = merged;
   return next;
 }

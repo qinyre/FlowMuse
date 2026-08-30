@@ -45,6 +45,7 @@ class StrokeInputModeler {
     this.pressureExponent = 1.0,
     this.pressureAttackMs = 0,
     this.pressureAttackLevel = 0.0,
+    this.pressureStabilizeV2 = false,
   }) : useRealPressure = useRealPressure ?? policy.useRealPressure;
 
   static const _maxSamplingGap = Duration(milliseconds: 200);
@@ -62,6 +63,18 @@ class StrokeInputModeler {
   /// 攻击水位（映射域 [InputPolicy.pressureFloor, pressureCeiling] 内取值），
   /// 窗口起点的输出下限。
   final double pressureAttackLevel;
+
+  /// v2 起笔稳定器（计划 §3.5）：只处理前 [_v2StabilizeMaxSamples] 个
+  /// 有效样本或 [_v2StabilizeMaxMs] 内的样本，输出限制在相邻两有效值
+  /// 的插值（均值）内——禁止把真实低压抬到固定水位（那是 v1 攻击
+  /// 包络的语义，两者互斥：v2 开启时包络必须关闭）。
+  final bool pressureStabilizeV2;
+
+  static const int _v2StabilizeMaxSamples = 3;
+  static const int _v2StabilizeMaxMs = 80;
+
+  int _v2Emitted = 0;
+  double? _v2PrevOutput;
 
   OneEuroFilter? _xFilter;
   OneEuroFilter? _yFilter;
@@ -110,6 +123,8 @@ class StrokeInputModeler {
     _lastTime = null;
     _downTime = null;
     _lastDir = null;
+    _v2Emitted = 0;
+    _v2PrevOutput = null;
   }
 
   void _initialize(StrokeInputSample s) {
@@ -251,6 +266,9 @@ class StrokeInputModeler {
     }
     final out = _lastPressure; // 偶发缺失沿用最后有效值
     if (out == null) return null;
+    if (pressureStabilizeV2) {
+      return _stabilizeV2(out, _lastTime);
+    }
     // 起笔攻击补偿：窗口内输出不低于"攻击水位 → pressureFloor"的线性
     // 衰减包络（实测真机起笔压力 0.5-1s 内从 ~0.2 爬升至 ~0.5，低压起笔
     // 会让压感笔形前段过细、压力到位瞬间整笔增宽）。包络只抬输出不改
@@ -263,8 +281,30 @@ class StrokeInputModeler {
     final elapsedMs = (now - downTime).inMilliseconds;
     final t = (elapsedMs / pressureAttackMs).clamp(0.0, 1.0);
     final envelope =
-        pressureAttackLevel +
-        (policy.pressureFloor - pressureAttackLevel) * t;
+        pressureAttackLevel + (policy.pressureFloor - pressureAttackLevel) * t;
     return out > envelope ? out : envelope;
+  }
+
+  /// v2 起笔稳定：首样本透传；窗口内输出 = 相邻两有效输出的均值
+  ///（严格落在两者之间，不抬不压）；窗口外原样输出。状态记录真实
+  /// 输出值，窗口结束不回跳。
+  double _stabilizeV2(double out, Duration? now) {
+    final prev = _v2PrevOutput;
+    final emitted = _v2Emitted;
+    _v2Emitted++;
+    _v2PrevOutput = out;
+    if (prev == null || emitted == 0) {
+      return out;
+    }
+    final down = _downTime;
+    final elapsedMs = now == null || down == null
+        ? null
+        : (now - down).inMilliseconds;
+    final withinSamples = emitted + 1 <= _v2StabilizeMaxSamples;
+    final withinTime = elapsedMs == null || elapsedMs <= _v2StabilizeMaxMs;
+    if (withinSamples && withinTime) {
+      return (prev + out) / 2;
+    }
+    return out;
   }
 }

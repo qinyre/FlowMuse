@@ -18,8 +18,6 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const previewIdValue = '__preview__';
-
   // 模型器为异步批处理（对齐既有节流用例 100ms 口径，取 150ms 留裕量）。
   Future<void> pumpModeler() =>
       Future<void>.delayed(const Duration(milliseconds: 150));
@@ -80,7 +78,9 @@ void main() {
     PointerDeviceKind kind = PointerDeviceKind.stylus,
   }) async {
     controller.onPointerDown(downEvent(pointer, kind: kind));
-    controller.onPointerMove(moveEvent(pointer, const Offset(30, 0), kind: kind));
+    controller.onPointerMove(
+      moveEvent(pointer, const Offset(30, 0), kind: kind),
+    );
     await pumpModeler();
     final overlay = (controller.activeTool as FreedrawTool).overlay!;
     return controller.buildPreviewElement(overlay)! as FreedrawElement;
@@ -91,7 +91,12 @@ void main() {
       final controller = controllerFor(brush);
       addTearDown(controller.dispose);
       final preview = await previewMidStroke(controller);
-      expect(preview.id.value, previewIdValue, reason: '$brush');
+      final tool = controller.activeTool as FreedrawTool;
+      expect(
+        preview.id,
+        tool.activeView!.strokeId,
+        reason: '$brush 预览带 live strokeId（v2 按其播种）',
+      );
       expect(
         brushTypeFromCustomData(preview.customData),
         brush,
@@ -144,7 +149,11 @@ void main() {
       );
       expect(preview.pressures, isEmpty, reason: '$brush 无压感预览 pressures 应为空');
       expect(preview.simulatePressure, isTrue, reason: '$brush 无压感预览走速度模拟');
-      expect(brushTypeFromCustomData(preview.customData), brush, reason: '$brush');
+      expect(
+        brushTypeFromCustomData(preview.customData),
+        brush,
+        reason: '$brush',
+      );
     }
   });
 
@@ -160,11 +169,12 @@ void main() {
     expect(preview, isNull, reason: '单点不崩溃也不产出预览');
   });
 
-  test('A5: 预览 id 恒定、连续构建互不污染、抬笔不入场景', () async {
+  test('A5: 预览 id 恒定、连续构建互不污染、抬笔后 id 与提交元素相同', () async {
     final controller = controllerFor(BrushType.fountainPen);
     addTearDown(controller.dispose);
     final p1Live = await previewMidStroke(controller, pointer: 4);
-    expect(p1Live.id.value, previewIdValue);
+    final liveId = (controller.activeTool as FreedrawTool).activeView!.strokeId;
+    expect(p1Live.id, liveId);
     // 预览持工具 _points 活视图（抬笔即清空），先拍快照再继续输入。
     final p1 = p1Live.copyWithFreedraw(
       points: List.of(p1Live.points),
@@ -175,25 +185,28 @@ void main() {
     await pumpModeler();
     final overlay = (controller.activeTool as FreedrawTool).overlay!;
     final p2 = controller.buildPreviewElement(overlay)! as FreedrawElement;
-    expect(p2.id.value, previewIdValue);
+    expect(p2.id, liveId, reason: '同一笔内连续构建 id 恒定');
     expect(
       p2.points.length,
       greaterThan(p1.points.length),
       reason: '第二次构建必须反映最新点位（连续构建互不污染）',
     );
 
-    controller.onPointerUp(upEvent(4, const Offset(60, 0)));
-    await pumpModeler();
+    // 抬笔前 live id 不在场景（预览从不入库）。
     expect(
-      controller.currentScene.elements.any((e) => e.id.value == previewIdValue),
+      controller.currentScene.elements.any((e) => e.id == liveId),
       isFalse,
       reason: '预览元素从不入场景',
     );
-    expect(
-      controller.currentScene.elements.whereType<FreedrawElement>(),
-      isNotEmpty,
-      reason: '提交元素正常入库',
-    );
+
+    controller.onPointerUp(upEvent(4, const Offset(60, 0)));
+    await pumpModeler();
+    final committed = controller.currentScene.elements
+        .whereType<FreedrawElement>()
+        .last;
+    // 计划 T6：live strokeId 与最终 ElementId 必须相同并以测试断言，
+    // 否则提交会重播种（v2 颗粒在抬笔瞬间跳变）。
+    expect(committed.id, liveId, reason: '提交元素必须沿用 live strokeId（同种子，预览=终稿）');
   });
 
   test('A6: 协作实况广播元素仍自带笔型 customData（R4 波及锁）', () async {
@@ -238,11 +251,7 @@ void main() {
           : controller.buildPreviewElement(overlay);
       expect(preview, isNotNull, reason: '${entry.key} 应有创建预览');
       expect(preview!.runtimeType, entry.value, reason: '${entry.key} 预览类不变');
-      expect(
-        preview.customData,
-        isNull,
-        reason: '${entry.key} 形状预览不带笔型标记',
-      );
+      expect(preview.customData, isNull, reason: '${entry.key} 形状预览不带笔型标记');
     }
     for (final toolType in [ToolType.eraser, ToolType.laser]) {
       final controller = MarkdrawController();
@@ -252,17 +261,20 @@ void main() {
     }
   });
 
-  test('A8: 预览 customData 只含笔型标记，不携带 recognition keys', () async {
+  test('A8: 预览 customData 只含笔型/渲染标记，不携带 recognition keys', () async {
     final controller = controllerFor(BrushType.pencil);
     addTearDown(controller.dispose);
     final preview = await previewMidStroke(controller);
     final flowMuse = preview.customData?[flowMuseCustomDataKey];
     expect(flowMuse, isA<Map>());
-    expect(
-      (flowMuse! as Map).keys.toSet(),
-      {'brushType', 'pressureEncoding'},
-      reason: 'recognition keys 只写提交元素（预览从不入场景）',
-    );
+    // T1 起预览与提交元素共用渲染判定：pencil/brushPen 预览额外携带
+    // brushRenderVersion=2（计划 §3.10/§3.1），仍是渲染标记而非
+    // recognition key。
+    expect((flowMuse! as Map).keys.toSet(), {
+      'brushType',
+      'pressureEncoding',
+      'brushRenderVersion',
+    }, reason: 'recognition keys 只写提交元素（预览从不入场景）');
   });
 
   group('起笔攻击补偿按笔形生效（钢笔不补偿）', () {
@@ -298,23 +310,26 @@ void main() {
       final pressures = await strokePressures(BrushType.fountainPen);
       expect(pressures, isNotEmpty);
       for (final p in pressures) {
-        expect(
-          p,
-          lessThan(0.5),
-          reason: '钢笔不得套攻击包络（轻力度粗细变化会被压平）: $pressures',
-        );
+        expect(p, lessThan(0.5), reason: '钢笔不得套攻击包络（轻力度粗细变化会被压平）: $pressures');
       }
     });
 
-    test('毛笔/铅笔：起笔输出抬到攻击水位（闪变治理保持）', () async {
+    test('毛笔/铅笔（v2）：起笔不再抬到固定水位（轻写可见）', () async {
+      // T3：新笔默认 renderVersion=2 → 攻击包络关闭、起笔稳定器只在
+      // 相邻值间插值。恒定轻压 0.35 全程不得被抬到 0.5（编码域同序）。
+      // v1 的"抬到攻击水位"语义由 stroke_input_modeler_test 的
+      // 显式构造（pressureAttackMs: 1500）继续锁定（§8 回退规则）。
       for (final brush in [BrushType.brushPen, BrushType.pencil]) {
         final pressures = await strokePressures(brush);
         expect(pressures, isNotEmpty, reason: '$brush');
         expect(
           pressures.first,
-          closeTo(0.5, 0.001),
-          reason: '$brush 起笔应被包络抬到攻击水位（编码域 0.5）: $pressures',
+          lessThan(0.5),
+          reason: '$brush v2 起笔应保持真实轻压（不被抬到 0.5）: $pressures',
         );
+        for (final p in pressures) {
+          expect(p, lessThan(0.5), reason: '$brush v2 恒轻压全程: $pressures');
+        }
       }
     });
   });

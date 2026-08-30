@@ -36,8 +36,7 @@ void main() {
     await PencilShader.init();
   });
   tearDown(() {
-    PencilShader.loader =
-        (assetKey) => throw StateError('forced unavailable');
+    PencilShader.loader = (assetKey) => throw StateError('forced unavailable');
     PencilShader.resetForTesting();
     PencilShader.loader = ui.FragmentProgram.fromAsset;
   });
@@ -137,9 +136,7 @@ void main() {
       spy.shaderPathCount,
       spy.pathBlendModes.toList(),
       spy.pathAlphas.toList(),
-      spy.pathOrder
-          .map((r) => [r.left, r.top, r.right, r.bottom])
-          .toList(),
+      spy.pathOrder.map((r) => [r.left, r.top, r.right, r.bottom]).toList(),
     ];
     return (digest: digest, spy: spy);
   }
@@ -155,7 +152,9 @@ void main() {
     final picture = recorder.endRecording();
     final image = await picture.toImage(300, 200);
     picture.dispose();
-    final data = await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
+    final data = await image.toByteData(
+      format: ui.ImageByteFormat.rawStraightRgba,
+    );
     image.dispose();
     return data!.buffer.asUint8List();
   }
@@ -167,10 +166,12 @@ void main() {
       final r2 = renderCommands(pair.committedAtPreviewInputs);
       expect(r1.digest, r2.digest, reason: '$brush 同入参下预览与提交管线必须一致');
       if (brush == BrushType.pencil) {
+        // T4 起 pencil 走 v2：基底+最多三密度桶 ≤4 draw、0 saveLayer。
+        // v1 的 shader/颗粒互斥分支由 C2 显式锁 classicV1。
         expect(
           r2.spy.drawCallCount,
-          lessThanOrEqualTo(2),
-          reason: '铅笔主绘+可选颗粒互斥，不得叠加',
+          lessThanOrEqualTo(4),
+          reason: '铅笔 v2 主要 draw 预算',
         );
         expect(r2.spy.saveLayerCount, 0);
       }
@@ -278,9 +279,28 @@ void main() {
     }
   });
 
-  test('C2: 铅笔渲染分支互斥门禁（shader 可用=1 次；强制降级=主绘+颗粒 2 次）', () async {
+  test('C2: v1 铅笔渲染分支互斥门禁（classicV1：shader 可用=1 次；降级=2 次）', () async {
+    // 锁定 v1 FreedrawRenderer 的 shader 分支（v1 元素永远走 classic，
+    // §3.1）。T4 起新 pencil 元素为 v2（无 shader、≤4 Path），由
+    // pencil_stroke_renderer_v2_test 断言。
+    v1StrokePair() async {
+      final pair = await strokePair(BrushType.pencil);
+      FreedrawElement toV1(FreedrawElement e) => e.copyWith(
+        customData: customDataWithFreedrawRender(
+          e.customData,
+          BrushType.pencil,
+          renderVersion: BrushRenderVersion.classicV1,
+        ),
+      );
+      return (
+        preview: toV1(pair.preview),
+        committed: toV1(pair.committed),
+        committedAtPreviewInputs: toV1(pair.committedAtPreviewInputs),
+      );
+    }
+
     // shader 可用：主绘挂 shader，无颗粒第二 path、无 saveLayer。
-    final onPair = await strokePair(BrushType.pencil);
+    final onPair = await v1StrokePair();
     final on = renderCommands(onPair.preview);
     expect(on.spy.shaderPathCount, 1, reason: 'shader 可用时主绘挂 shader');
     expect(on.spy.drawCallCount, 1, reason: '互斥：不触发颗粒 Path');
@@ -289,7 +309,7 @@ void main() {
     // 强制降级：主绘 + 一次颗粒 drawPath，无 shader。
     PencilShader.loader = (assetKey) => throw StateError('forced unavailable');
     PencilShader.resetForTesting();
-    final offPair = await strokePair(BrushType.pencil);
+    final offPair = await v1StrokePair();
     final off = renderCommands(offPair.preview);
     expect(off.spy.shaderPathCount, 0);
     expect(off.spy.drawCallCount, 2, reason: '主绘 + 一次颗粒 drawPath');

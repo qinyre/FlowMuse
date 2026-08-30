@@ -87,6 +87,106 @@ final class BrushRenderProfile {
 
   /// perfect_freehand 包默认（stroke_options.dart：0.5/0.5/0.5），
   /// 钢笔保持既有默认手感。
+  // --- v2 自然介质响应曲线与绘制常数（计划 §3.5；T4 冻结）---
+  // 铅笔：压力主要控制石墨密度，宽度只随压力温和变化。宽度项取
+  // 0.26（而非 spike 的 0.28）：理论轻重宽度比 1.18，给 N3 的 1.35
+  // 门禁留 1px 法向扫描量化余量（T0 记录的提醒）。
+  double pencilNaturalMediaLocalWidth(double base, double p) =>
+      base * (0.82 + 0.26 * p.clamp(0.0, 1.0));
+
+  double pencilNaturalMediaDensity(double p) =>
+      0.18 + 0.72 * math.pow(p.clamp(0.0, 1.0), 0.85);
+
+  // 毛笔：压力主要控制笔肚接触宽度；0.16 底保证轻压可见。
+  // T5 追加可见下限 0.7px：p→0 时公式全宽仅 ~0.96px，斜向 AA 下会
+  // 断成虚线（T5 视觉审查 S 曲线负压段实测），违反 §3.5"最低有效
+  // 宽度仍可见"；下限只影响 p≲0.012 的极端轻压，不改变 N6 量程。
+  static const double brushV2MinContactHalfWidth = 0.7;
+
+  /// 毛笔 v2 压力扩张指数（盲测修复 2026-08-30）：真实手写的压力
+  /// 活动集中在中段（中等力度 ±0.05），原曲线增益 ~0.6 下宽度摆动
+  /// 仅 ±6%（合成定量与平板实测 ±5-9% 吻合）——理想全量程压力的
+  /// 基线观感在真机上退化为等宽马克笔。中心对称凸扩张
+  /// q = 0.5 ± |2p−1|^γ/2：端点 0/1 与轻压段保持原量程语义
+  ///（p=0.2 → q≈0.14，N6/N7 端点不变），中段增益 ~3×（±0.05 →
+  /// 宽度摆动 ~21%）。中心导数大是有意设计：输入侧 OneEuro 压感
+  /// 滤波已先抑制高频噪声。改此值须 bump
+  /// NaturalMediaPathCache.geometryVersion。
+  static const double brushV2PressureGamma = 0.65;
+
+  double brushNaturalMediaContactHalfWidth(double base, double p) {
+    final c = p.clamp(0.0, 1.0);
+    final x = (2 * (c - 0.5)).abs();
+    final q = x < 1e-9
+        ? c
+        : 0.5 + (c < 0.5 ? -1.0 : 1.0) * math.pow(x, brushV2PressureGamma) / 2;
+    return math.max(
+      base * (0.16 + 1.34 * math.pow(q, 0.72)) / 2,
+      brushV2MinContactHalfWidth,
+    );
+  }
+
+  // --- 毛笔 v2 绘制常数（T0 spike 校准，T5 冻结；§3.7 要求与
+  // elementVisualBounds 共用，禁止 renderer 与 bounds 各写一份）---
+
+  /// 毫丝复合 Path 的绘制 alpha（主体方向性包络为不透明 1.0）。
+  double get brushV2StrandAlpha => 0.50;
+
+  /// 收笔楔形单位上限（× 尾缘接触半宽；公式 min(units, 6×drop)）。
+  static const double brushV2TailTaperUnits = 4.0;
+
+  /// 收笔楔形绝对上限（× base）：真实压力回放的出锋实测 ≤ ~1.55×base，
+  /// 冻结 1.6，同时约束 elementVisualBounds 的侧向外扩。
+  static const double brushV2TailTaperBaseCap = 1.6;
+
+  /// 毛笔 v2 可视半宽：最大接触半宽 + 出锋上限 + AA 余量（teardrop
+  /// 的 1.3×放大与 1.4×尾锋均已被出锋上限覆盖）。
+  double brushV2VisualHalfWidth(double base) =>
+      brushNaturalMediaContactHalfWidth(base, 1.0) +
+      brushV2TailTaperBaseCap * base +
+      2.0;
+
+  // 铅笔 v2 绘制 alpha（T0 spike 校准，T4 冻结）：低透明连续基底 +
+  // 三个密度桶颗粒各自恒定 alpha，压力→密度经颗粒间距表达。
+  double get pencilV2BaseAlpha => 0.30;
+
+  // --- 铅笔 v2 颗粒几何常数（T8：sampler 与 bounds 共用真源）---
+  // 颗粒半长/半厚/法向散布的系数；NaturalMediaTuning 的默认值引用
+  // 这里，渲染器与 elementVisualBounds 不得各自维护（§3.6）。
+  static const double pencilV2ScatterRatio = 0.225;
+  static const double pencilV2GrainHalfLenBase = 0.30;
+  static const double pencilV2GrainHalfLenSpan = 0.22;
+  static const double pencilV2GrainHalfThickBase = 0.10;
+  static const double pencilV2GrainHalfThickAbs = 0.25;
+
+  /// 铅笔 v2 可视半宽（解析上界，T8）：wobble 基底 1.15×半宽、颗粒
+  /// 外缘（散布 + 半厚）与笔端沿切向外伸（半长 + 半厚）三者取大，
+  /// 再加 AA 余量。
+  double pencilV2VisualHalfWidth(double base) {
+    final wMax = base * 1.08; // 0.82 + 0.26（宽度曲线满压）
+    final baseSide = wMax / 2 * 1.15; // 基底 wobble 上界
+    final grainSide =
+        wMax * (pencilV2ScatterRatio + pencilV2GrainHalfThickBase) +
+        pencilV2GrainHalfThickAbs;
+    final endAlong =
+        wMax * (pencilV2GrainHalfLenBase + pencilV2GrainHalfLenSpan) +
+        wMax * pencilV2GrainHalfThickBase +
+        pencilV2GrainHalfThickAbs;
+    var half = baseSide > grainSide ? baseSide : grainSide;
+    if (endAlong > half) half = endAlong;
+    return half + 1.0; // AA
+  }
+
+  // channel 编号是协议级常量（rendering/natural_media/
+  // deterministic_stroke_seed.dart 的 NaturalMediaChannel，跨端冻结）；
+  // core 不反向 import rendering，故此处用字面值并对齐注释。
+  double pencilV2GrainAlpha(int channel) => switch (channel) {
+    1 => 0.20, // pencilLow
+    2 => 0.28, // pencilMedium
+    3 => 0.38, // pencilHeavy
+    _ => 0.20,
+  };
+
   static const double _kDefaultThinning = 0.5;
   static const double _kDefaultSmoothing = 0.5;
   static const double _kDefaultStreamline = 0.5;

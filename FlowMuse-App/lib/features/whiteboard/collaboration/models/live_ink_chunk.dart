@@ -33,7 +33,12 @@ class LiveInkStyle {
     required this.strokeColor,
     required this.strokeWidth,
     required this.opacity,
+    this.renderVersion = 1,
   });
+
+  /// 渲染版本（计划 §3.9）：1=v1（缺失即 1，旧客户端兼容），2=自然介质。
+  /// 只影响预览渲染选择，不改 protocolVersion=2 的外层结构。
+  final int renderVersion;
 
   static const allowedBrushTypes = {
     'pencil',
@@ -56,6 +61,8 @@ class LiveInkStyle {
     'strokeColor': strokeColor,
     'strokeWidth': strokeWidth,
     'opacity': opacity,
+    // v1 省略字段：旧客户端按缺失=v1 处理（混合版本协作契约）。
+    if (renderVersion == 2) 'renderVersion': 2,
   };
 
   factory LiveInkStyle.fromJson(Map<String, Object?> json) {
@@ -75,11 +82,28 @@ class LiveInkStyle {
     if (opacity < 0 || opacity > 100) {
       throw const FormatException('Invalid live ink opacity');
     }
+    // renderVersion：缺失取 1；存在但不是 num == 1/2 时拒绝该 chunk
+    //（禁止裸 is int——dart2js 下 1.0 不是 int）。v2 只对自然介质笔形
+    // 有效，非法 brush/version 组合安全回退 1 而不是丢整段协作数据。
+    var renderVersion = 1;
+    final renderValue = json['renderVersion'];
+    if (renderValue != null) {
+      if (renderValue is num && renderValue == 2) {
+        renderVersion = 2;
+      } else if (!(renderValue is num && renderValue == 1)) {
+        throw const FormatException('Invalid live ink renderVersion');
+      }
+    }
+    if (renderVersion == 2 &&
+        !(brushType == 'pencil' || brushType == 'brushPen')) {
+      renderVersion = 1;
+    }
     return LiveInkStyle(
       brushType: brushType,
       strokeColor: strokeColor,
       strokeWidth: strokeWidth,
       opacity: opacity,
+      renderVersion: renderVersion,
     );
   }
 }

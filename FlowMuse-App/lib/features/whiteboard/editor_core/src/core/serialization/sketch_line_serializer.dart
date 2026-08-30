@@ -317,6 +317,15 @@ class SketchLineSerializer {
     if (brushType != BrushType.fountainPen) {
       parts.add('brush=${brushType.wireName}');
     }
+    // 仅当 pressureEncoding==1 时写 pressure-encoded；仅当
+    // renderVersion==2 时写 render=v2；v1 省略（旧文本语义不变）。
+    if (pressureEncodingFromCustomData(element.customData)) {
+      parts.add('pressure-encoded');
+    }
+    if (brushRenderVersionFromCustomData(element.customData) ==
+        BrushRenderVersion.naturalMediaV2) {
+      parts.add('render=v2');
+    }
     _addCommonProperties(parts, element);
     return parts.join(' ');
   }
