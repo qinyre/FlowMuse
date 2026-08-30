@@ -87,8 +87,22 @@ class PencilStrokeRendererV2 {
     );
 
   static ui.Path _buildBasePath(NaturalMediaStrokePlan plan, double base) {
+    final polygon = basePolygon(plan, base);
     final path = ui.Path();
-    if (plan.samples.isEmpty) return path;
+    if (polygon.isEmpty) return path;
+    path.moveTo(polygon.first.dx, polygon.first.dy);
+    for (final o in polygon.skip(1)) {
+      path.lineTo(o.dx, o.dy);
+    }
+    path.close();
+    return path;
+  }
+
+  /// 基底多边形点列（left 链 + right 逆序；Canvas 与 SVG 导出共用
+  /// 真源，T9）：逐采样槽抖动偏移，每条 owned 边末补边终点顶点
+  ///（分块边界连续性，§3.4）。
+  static List<ui.Offset> basePolygon(NaturalMediaStrokePlan plan, double base) {
+    if (plan.samples.isEmpty) return const [];
     final profile = BrushRenderProfile.forType(BrushType.pencil);
     final left = <ui.Offset>[];
     final right = <ui.Offset>[];
@@ -156,16 +170,7 @@ class PencilStrokeRendererV2 {
     if (lastSample != null) {
       appendEdgeEndpoint(currentEdge, lastSample);
     }
-    path.moveTo(left.first.dx, left.first.dy);
-    for (final o in left.skip(1)) {
-      path.lineTo(o.dx, o.dy);
-    }
-    path.lineTo(right.last.dx, right.last.dy);
-    for (final o in right.reversed) {
-      path.lineTo(o.dx, o.dy);
-    }
-    path.close();
-    return path;
+    return [...left, ...right.reversed];
   }
 
   static const _kappa = 0.5522847498307936;

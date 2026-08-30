@@ -63,7 +63,15 @@ class BrushPenStrokeRendererV2 {
     );
     canvas.drawPath(paths.body, _paint(style, 1.0));
     if (paths.hasStrands) {
-      canvas.drawPath(paths.strands, _paint(style, profile.brushV2StrandAlpha));
+      // 毫丝是开放线段：fill 语义下零面积不可见（T9 修正），按描边
+      // 细线渲染（round cap，~0.8px，与 SVG stroke 同口径）。
+      canvas.drawPath(
+        paths.strands,
+        _paint(style, profile.brushV2StrandAlpha)
+          ..style = ui.PaintingStyle.stroke
+          ..strokeWidth = 0.8
+          ..strokeCap = ui.StrokeCap.round,
+      );
     }
   }
 

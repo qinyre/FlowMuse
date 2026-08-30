@@ -4,6 +4,11 @@ import 'dart:ui' show Offset;
 
 import 'package:rough_flutter/rough_flutter.dart';
 
+import '../natural_media/directional_brush_envelope.dart';
+import '../natural_media/natural_media_stroke_plan.dart';
+import '../natural_media/natural_media_stroke_sampler.dart';
+import '../natural_media/pencil_stroke_renderer_v2.dart';
+
 import '../../core/elements/elements.dart';
 import '../../core/math/math.dart';
 import '../rough/rough.dart';
@@ -348,6 +353,21 @@ class SvgElementRenderer {
     final absPoints = _absolutePoints(element.points, element.x, element.y);
     if (absPoints.isEmpty) return;
     final brushType = brushTypeFromCustomData(element.customData);
+    // v2 自然介质（T9）：消费共享 primitive plan/多边形（与 Canvas 同
+    // 真源，不复制 sampler/seed/方向滤波），输出真实 <path> 节点
+    //（铅笔 ≤4：基底+密度桶；毛笔 ≤2：包络+毫丝）。缺 pressures 的
+    // v2 元数据按 v1 导出（与 element_renderer 分发一致）。
+    final family = element.pressures.isEmpty
+        ? StrokeRendererFamily.classicV1
+        : strokeRendererFamilyFor(element.customData);
+    if (family == StrokeRendererFamily.pencilV2) {
+      _renderPencilV2(buf, element, absPoints);
+      return;
+    }
+    if (family == StrokeRendererFamily.brushPenV2) {
+      _renderBrushV2(buf, element, absPoints);
+      return;
+    }
     // 单一真源：宽度/透明度/taper/端帽全部读 BrushRenderProfile，
     // 与画布渲染共用同一 outline（issue #5 T7）。
     final profile = BrushRenderProfile.forType(brushType);
@@ -425,6 +445,155 @@ class SvgElementRenderer {
         'opacity="${_n(0.4 * opacity)}" stroke="none"/>',
       );
     }
+  }
+
+  /// 铅笔 v2 SVG：基底多边形 + ≤3 密度桶复合 path（颗粒为旋转四边形，
+  /// 1~3px 尺度下与椭圆不可分辨，字节量约为四段三次贝塞尔的 1/3）。
+  static void _renderPencilV2(
+    StringBuffer buf,
+    FreedrawElement element,
+    List<Point> absPoints,
+  ) {
+    final profile = BrushRenderProfile.forType(BrushType.pencil);
+    final plan = _v2Plan(element, absPoints, BrushType.pencil);
+    final polygon = PencilStrokeRendererV2.basePolygon(
+      plan,
+      element.strokeWidth,
+    );
+    if (polygon.isEmpty) return;
+    _writeV2FillPath(
+      buf,
+      // SVG 抽稀（不要求逐像素相同，§T9）：顶点上限 8000，稳定等步长
+      // 取样并保留末点，16k 点预算内字节量随点数线性。
+      _polygonPathData(_decimate(polygon, 8000)),
+      fill: element.strokeColor,
+      opacity: profile.pencilV2BaseAlpha * element.opacity,
+    );
+    // 颗粒总上限 4000（跨桶均摊），等步长跳过、不重排。
+    final grains = plan.primitives
+        .where((p) => p.kind == NaturalMediaPrimitiveKind.pencilGrain)
+        .toList();
+    final grainStep = math.max(1, (grains.length / 4000).ceil());
+    final bucketData = <int, StringBuffer>{};
+    var grainKept = 0;
+    for (final p in grains) {
+      if (grainKept % grainStep != grainStep - 1 && grains.length > 4000) {
+        continue;
+      }
+      grainKept++;
+      final b = bucketData.putIfAbsent(p.channel, StringBuffer.new);
+      final t = p.tangent!;
+      final c = p.center!;
+      final ux = t.x * p.halfLength!;
+      final uy = t.y * p.halfLength!;
+      final vx = -t.y * p.halfThickness!;
+      final vy = t.x * p.halfThickness!;
+      b.write('M${_n(c.x + ux + vx)},${_n(c.y + uy + vy)}');
+      b.write('L${_n(c.x - ux + vx)},${_n(c.y - uy + vy)}');
+      b.write('L${_n(c.x - ux - vx)},${_n(c.y - uy - vy)}');
+      b.write('L${_n(c.x + ux - vx)},${_n(c.y + uy - vy)}Z');
+    }
+    final channels = bucketData.keys.toList()..sort();
+    for (final channel in channels) {
+      _writeV2FillPath(
+        buf,
+        bucketData[channel]!.toString(),
+        fill: element.strokeColor,
+        opacity: profile.pencilV2GrainAlpha(channel) * element.opacity,
+      );
+    }
+  }
+
+  /// 毛笔 v2 SVG：主体包络多边形 + 毫丝描边细线（与 Canvas stroke
+  /// 口径一致：round cap、0.8px、brushV2StrandAlpha）。
+  static void _renderBrushV2(
+    StringBuffer buf,
+    FreedrawElement element,
+    List<Point> absPoints,
+  ) {
+    final profile = BrushRenderProfile.forType(BrushType.brushPen);
+    final plan = _v2Plan(element, absPoints, BrushType.brushPen);
+    final polygon = DirectionalBrushEnvelope.bodyPolygon(
+      plan,
+      element.strokeWidth,
+      isComplete: element.isComplete,
+    );
+    if (polygon.isEmpty) return;
+    _writeV2FillPath(
+      buf,
+      _polygonPathData(_decimate(polygon, 8000)),
+      fill: element.strokeColor,
+      opacity: element.opacity,
+    );
+    final strandList = plan.primitives
+        .where((p) => p.kind == NaturalMediaPrimitiveKind.brushStrand)
+        .toList();
+    final strandStep = math.max(1, (strandList.length / 2000).ceil());
+    final strands = StringBuffer();
+    var hasStrands = false;
+    for (var i = 0; i < strandList.length; i++) {
+      if (i % strandStep != 0 && strandList.length > 2000) continue;
+      final p = strandList[i];
+      hasStrands = true;
+      final t = p.tangent!;
+      final c = p.center!;
+      final hl = p.halfLength!;
+      strands.write('M${_n(c.x - t.x * hl)},${_n(c.y - t.y * hl)}');
+      strands.write('L${_n(c.x + t.x * hl)},${_n(c.y + t.y * hl)}');
+    }
+    if (hasStrands) {
+      buf.write('<path d="${strands.toString()}" ');
+      buf.write('fill="none" stroke="${element.strokeColor}" ');
+      buf.write('stroke-width="0.8" stroke-linecap="round" ');
+      buf.write(
+        'opacity="${_n(profile.brushV2StrandAlpha * element.opacity)}"/>',
+      );
+    }
+  }
+
+  static NaturalMediaStrokePlan _v2Plan(
+    FreedrawElement element,
+    List<Point> absPoints,
+    BrushType brushType,
+  ) => NaturalMediaStrokeSampler.sample(
+    strokeId: element.id.value,
+    points: absPoints,
+    pressures: element.pressures,
+    strokeWidth: element.strokeWidth,
+    brushType: brushType,
+    isComplete: element.isComplete,
+  );
+
+  /// 确定性抽稀：等步长保留 [maxPoints] 内的点，末点必留（闭合不缺
+  /// 角）。≤maxPoints 时原样返回。
+  static List<Offset> _decimate(List<Offset> polygon, int maxPoints) {
+    if (polygon.length <= maxPoints) return polygon;
+    final step = (polygon.length / maxPoints).ceil();
+    return [
+      for (var i = 0; i < polygon.length; i += step) polygon[i],
+      if ((polygon.length - 1) % step != 0) polygon.last,
+    ];
+  }
+
+  static String _polygonPathData(List<Offset> polygon) {
+    final b = StringBuffer('M${_n(polygon.first.dx)},${_n(polygon.first.dy)}');
+    for (final o in polygon.skip(1)) {
+      b.write('L${_n(o.dx)},${_n(o.dy)}');
+    }
+    return '${b.toString()}Z';
+  }
+
+  static void _writeV2FillPath(
+    StringBuffer buf,
+    String d, {
+    required String fill,
+    required double opacity,
+  }) {
+    buf.write('<path d="$d" fill="$fill" ');
+    if (opacity < 1.0) {
+      buf.write('opacity="${_n(opacity)}" ');
+    }
+    buf.write('/>');
   }
 
   /// 闭合轮廓 → SVG path d：与画布 quadratic 中点法逐段一致

@@ -29,7 +29,6 @@ class DirectionalBrushEnvelope {
     final body = ui.Path();
     final strands = ui.Path();
     var hasStrands = false;
-    final profile = BrushRenderProfile.forType(BrushType.brushPen);
 
     // 退化：单点/短线 teardrop。无方向（单点）= 圆点；有方向 = 笔肚
     // 椭圆 + 沿末向的小尾锋。
@@ -123,11 +122,83 @@ class DirectionalBrushEnvelope {
       return (body: body, strands: strands, hasStrands: hasStrands);
     }
 
+    final polygon = bodyPolygon(
+      plan,
+      strokeWidth,
+      isComplete: isComplete,
+      ownsStrokeHead: ownsStrokeHead,
+      ownsStrokeTail: ownsStrokeTail,
+    );
+    if (polygon.isEmpty) {
+      return (body: body, strands: strands, hasStrands: hasStrands);
+    }
+    body.moveTo(polygon.first.dx, polygon.first.dy);
+    for (final o in polygon.skip(1)) {
+      body.lineTo(o.dx, o.dy);
+    }
+    body.close();
+    return (body: body, strands: strands, hasStrands: hasStrands);
+  }
+
+  /// 主体多边形点列（Canvas 与 SVG 导出共用真源，T9）：left 链 →
+  /// 尾帽/收锋 → right 逆序 → 起帽。段模式（ownsHead/Tail=false）下
+  /// 边界侧不加帽（由 join 与边界顶点衔接）。
+  static List<ui.Offset> bodyPolygon(
+    NaturalMediaStrokePlan plan,
+    double strokeWidth, {
+    required bool isComplete,
+    bool ownsStrokeHead = true,
+    bool ownsStrokeTail = true,
+  }) {
+    final profile = BrushRenderProfile.forType(BrushType.brushPen);
+    final edges = plan.edges;
+    if (edges.isEmpty) return const [];
+    final left = <ui.Offset>[];
+    final right = <ui.Offset>[];
+    final edgeByIndex = {for (final e in plan.edges) e.index: e};
+    NaturalMediaPrimitive? lastVertex;
+    void appendBoundary(int edgeIndex) {
+      final last = lastVertex;
+      if (last == null) return;
+      final e = edgeByIndex[edgeIndex];
+      if (e == null) return;
+      final t = last.tangent!;
+      final n = Point(-t.y, t.x);
+      final hw = last.halfThickness!;
+      left.add(ui.Offset(e.to.x + n.x * hw, e.to.y + n.y * hw));
+      right.add(ui.Offset(e.to.x - n.x * hw, e.to.y - n.y * hw));
+    }
+
+    var currentEdge = -1;
+    var sawVertex = false;
+    for (final p in plan.primitives) {
+      if (p.kind == NaturalMediaPrimitiveKind.brushEnvelopeVertex) {
+        if (sawVertex && p.edgeIndex != currentEdge) {
+          appendBoundary(currentEdge);
+        }
+        currentEdge = p.edgeIndex;
+        sawVertex = true;
+        final t = p.tangent!;
+        final n = Point(-t.y, t.x);
+        final c = p.center!;
+        final hw = p.halfThickness!;
+        left.add(ui.Offset(c.x + n.x * hw, c.y + n.y * hw));
+        right.add(ui.Offset(c.x - n.x * hw, c.y - n.y * hw));
+        lastVertex = p;
+      } else if (p.kind == NaturalMediaPrimitiveKind.brushJoin) {
+        final side = p.paintBucket == 'brushJoinArc'
+            ? (p.ordinal < 3 ? left : right)
+            : (p.ordinal == 0 ? left : right);
+        side.add(ui.Offset(p.center!.x, p.center!.y));
+      }
+    }
+    if (sawVertex) appendBoundary(currentEdge);
+    if (left.isEmpty) return const [];
+
     // 起收形状（真实压力驱动，§3.7）：轻入笔（首边压力 < 0.35）窄入
     // 口；完整笔画且尾部降压（< 0.30×pMax）形成楔形收束，长度
     // min(units×尾半宽, 6×尾半宽×衰减, baseCap×base)，无降压时对称
     // 圆帽（不生成统一长矛尖）。
-    final edges = plan.edges;
     final firstEdge = edges.first;
     final lastEdge = edges.last;
     final firstPt = firstEdge.from;
@@ -144,10 +215,6 @@ class DirectionalBrushEnvelope {
     final endCap = ownsStrokeTail;
     final startCap = ownsStrokeHead;
 
-    body.moveTo(left.first.dx, left.first.dy);
-    for (final o in left.skip(1)) {
-      body.lineTo(o.dx, o.dy);
-    }
     if (tailDrop) {
       final hwPrev = profile.brushNaturalMediaContactHalfWidth(
         strokeWidth,
@@ -162,7 +229,7 @@ class DirectionalBrushEnvelope {
         BrushRenderProfile.brushV2TailTaperBaseCap * strokeWidth,
       );
       final t = lastEdge.tangent;
-      body.lineTo(lastPt.x + t.x * taper, lastPt.y + t.y * taper);
+      left.add(ui.Offset(lastPt.x + t.x * taper, lastPt.y + t.y * taper));
     } else if (endCap) {
       final hwLast = profile.brushNaturalMediaContactHalfWidth(
         strokeWidth,
@@ -170,24 +237,30 @@ class DirectionalBrushEnvelope {
       );
       final t = lastEdge.tangent;
       final n = Point(-t.y, t.x);
-      body.lineTo(
-        lastPt.x + n.x * hwLast * 0.72 + t.x * hwLast * 0.62,
-        lastPt.y + n.y * hwLast * 0.72 + t.y * hwLast * 0.62,
-      );
-      body.lineTo(lastPt.x + t.x * hwLast, lastPt.y + t.y * hwLast);
-      body.lineTo(
-        lastPt.x - n.x * hwLast * 0.72 + t.x * hwLast * 0.62,
-        lastPt.y - n.y * hwLast * 0.72 + t.y * hwLast * 0.62,
-      );
+      left
+        ..add(
+          ui.Offset(
+            lastPt.x + n.x * hwLast * 0.72 + t.x * hwLast * 0.62,
+            lastPt.y + n.y * hwLast * 0.72 + t.y * hwLast * 0.62,
+          ),
+        )
+        ..add(ui.Offset(lastPt.x + t.x * hwLast, lastPt.y + t.y * hwLast))
+        ..add(
+          ui.Offset(
+            lastPt.x - n.x * hwLast * 0.72 + t.x * hwLast * 0.62,
+            lastPt.y - n.y * hwLast * 0.72 + t.y * hwLast * 0.62,
+          ),
+        );
     }
+    final polygon = <ui.Offset>[...left];
     for (final o in right.reversed) {
-      body.lineTo(o.dx, o.dy);
+      polygon.add(o);
     }
     if (!startCap) {
-      // 分块边界：直接闭到起点（边界弦），由较后 edge 的 join 补楔。
+      // 分块边界：直接闭合（边界弦），由较后 edge 的 join 补楔。
     } else if (startSharp) {
       // 轻入笔：垂直切线的窄入口（自然起笔，不出装饰性顿笔）。
-      body.lineTo(firstPt.x, firstPt.y);
+      polygon.add(ui.Offset(firstPt.x, firstPt.y));
     } else {
       final hwFirst = profile.brushNaturalMediaContactHalfWidth(
         strokeWidth,
@@ -195,18 +268,22 @@ class DirectionalBrushEnvelope {
       );
       final t = firstEdge.tangent;
       final n = Point(-t.y, t.x);
-      body.lineTo(
-        firstPt.x - n.x * hwFirst * 0.72 - t.x * hwFirst * 0.62,
-        firstPt.y - n.y * hwFirst * 0.72 - t.y * hwFirst * 0.62,
-      );
-      body.lineTo(firstPt.x - t.x * hwFirst, firstPt.y - t.y * hwFirst);
-      body.lineTo(
-        firstPt.x + n.x * hwFirst * 0.72 - t.x * hwFirst * 0.62,
-        firstPt.y + n.y * hwFirst * 0.72 - t.y * hwFirst * 0.62,
-      );
+      polygon
+        ..add(
+          ui.Offset(
+            firstPt.x - n.x * hwFirst * 0.72 - t.x * hwFirst * 0.62,
+            firstPt.y - n.y * hwFirst * 0.72 - t.y * hwFirst * 0.62,
+          ),
+        )
+        ..add(ui.Offset(firstPt.x - t.x * hwFirst, firstPt.y - t.y * hwFirst))
+        ..add(
+          ui.Offset(
+            firstPt.x + n.x * hwFirst * 0.72 - t.x * hwFirst * 0.62,
+            firstPt.y + n.y * hwFirst * 0.72 - t.y * hwFirst * 0.62,
+          ),
+        );
     }
-    body.close();
-    return (body: body, strands: strands, hasStrands: hasStrands);
+    return polygon;
   }
 
   static void _addRotatedEllipse(
