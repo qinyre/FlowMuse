@@ -92,16 +92,23 @@ class PencilGrainBucket {
       math.max(minSpacing, spacingA - spacingB * pressure);
 }
 
-/// §3.5 候选响应曲线（宽度只随压力温和变化；密度/接触宽度主导）。
+/// §3.5 响应曲线入口：定义单点维护在 BrushRenderProfile（T3 收编），
+/// 本处仅按笔形选曲线并缓存 profile 实例（热路径避免逐点 forType）。
 abstract final class NaturalMediaResponseCurves {
-  static double pencilLocalWidth(double base, double p) =>
-      base * (0.82 + 0.28 * p.clamp(0.0, 1.0));
+  static final BrushRenderProfile _pencil = BrushRenderProfile.forType(
+    BrushType.pencil,
+  );
+  static final BrushRenderProfile _brushPen = BrushRenderProfile.forType(
+    BrushType.brushPen,
+  );
 
-  static double pencilDensity(double p) =>
-      0.18 + 0.72 * math.pow(p.clamp(0.0, 1.0), 0.85);
+  static double pencilLocalWidth(double base, double p) =>
+      _pencil.pencilNaturalMediaLocalWidth(base, p);
+
+  static double pencilDensity(double p) => _pencil.pencilNaturalMediaDensity(p);
 
   static double brushContactHalfWidth(double base, double p) =>
-      base * (0.16 + 1.34 * math.pow(p.clamp(0.0, 1.0), 0.72)) / 2;
+      _brushPen.brushNaturalMediaContactHalfWidth(base, p);
 }
 
 class NaturalMediaStrokeSampler {

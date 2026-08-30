@@ -87,6 +87,19 @@ final class BrushRenderProfile {
 
   /// perfect_freehand 包默认（stroke_options.dart：0.5/0.5/0.5），
   /// 钢笔保持既有默认手感。
+  // --- v2 自然介质响应曲线（计划 §3.5，T0 spike 校准值；T4/T5 渲染、
+  // bounds 与采样器共用，禁止在 renderer 另写一份）---
+  // 铅笔：压力主要控制石墨密度，宽度只随压力温和变化。
+  double pencilNaturalMediaLocalWidth(double base, double p) =>
+      base * (0.82 + 0.28 * p.clamp(0.0, 1.0));
+
+  double pencilNaturalMediaDensity(double p) =>
+      0.18 + 0.72 * math.pow(p.clamp(0.0, 1.0), 0.85);
+
+  // 毛笔：压力主要控制笔肚接触宽度；0.16 底保证轻压可见。
+  double brushNaturalMediaContactHalfWidth(double base, double p) =>
+      base * (0.16 + 1.34 * math.pow(p.clamp(0.0, 1.0), 0.72)) / 2;
+
   static const double _kDefaultThinning = 0.5;
   static const double _kDefaultSmoothing = 0.5;
   static const double _kDefaultStreamline = 0.5;

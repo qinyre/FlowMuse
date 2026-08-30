@@ -272,6 +272,138 @@ void main() {
         expect(missingAfterWindow.pressure!, closeTo(0.31, 0.02));
       });
 
+      group('v2 起笔稳定器（自然介质，相邻值插值）', () {
+        final v2 = StrokeInputModeler(
+          const InputPolicy(
+            useRealPressure: true,
+            minCutoff: 8.0,
+            beta: 0.02,
+            pressureCutoff: 50.0,
+            pressureFloor: 0.18,
+            pressureCeiling: 0.82,
+            minDistance: 0.6,
+            cornerProtectAngleRad: 0.9,
+          ),
+          pressureStabilizeV2: true,
+        );
+
+        test('轻压 0.2 在 1.5 秒内不被抬到 0.5（N22）', () {
+          final m = v2;
+          final r0 = m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down));
+          expect(r0.pressure!, lessThan(0.40), reason: '首样本透传映射值');
+          for (var t = 100; t <= 1500; t += 100) {
+            final r = m.process(s(2.0 + t / 100, 0, t, p: 0.2));
+            expect(
+              r.pressure!,
+              lessThan(0.40),
+              reason: 't=$t 恒轻压不得被抬（实测 ${r.pressure}）',
+            );
+          }
+        });
+
+        test('窗口内相邻值插值：不越相邻值上界', () {
+          final m = StrokeInputModeler(
+            const InputPolicy(
+              useRealPressure: true,
+              minCutoff: 8.0,
+              beta: 0.02,
+              pressureCutoff: 50.0,
+              pressureFloor: 0.18,
+              pressureCeiling: 0.82,
+              minDistance: 0.6,
+              cornerProtectAngleRad: 0.9,
+            ),
+            pressureStabilizeV2: true,
+          );
+          final r0 = m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down));
+          final p0 = r0.pressure!;
+          // 30ms 内压力 0.2→0.8：输出 = (p0 + 实测映射)/2，严格介于两者。
+          final r1 = m.process(s(2.0, 0, 30, p: 0.8));
+          final mapped08 = 0.18 + 0.82 * 0.64 * (0.8 - 0.18) / 0.64; // ≈0.69
+          expect(r1.pressure!, greaterThan(p0));
+          expect(
+            r1.pressure!,
+            lessThan(mapped08 + 1e-9),
+            reason: '插值不得超出相邻值上界',
+          );
+        });
+
+        test('慢爬序列无单帧 >15% 相对跳变（OPD2404 回放形态）', () {
+          final m = StrokeInputModeler(
+            const InputPolicy(
+              useRealPressure: true,
+              minCutoff: 8.0,
+              beta: 0.02,
+              pressureCutoff: 50.0,
+              pressureFloor: 0.18,
+              pressureCeiling: 0.82,
+              minDistance: 0.6,
+              cornerProtectAngleRad: 0.9,
+            ),
+            pressureStabilizeV2: true,
+          );
+          double? prev;
+          var t = 0;
+          for (var p = 0.2; p <= 0.55; p += 0.035, t += 100) {
+            final r = t == 0
+                ? m.process(s(0, 0, 0, p: p, phase: StrokePhase.down))
+                : m.process(s(2.0 + t / 100, 0, t, p: p));
+            final cur = r.pressure!;
+            if (prev != null) {
+              final jump = (cur - prev).abs() / prev;
+              expect(
+                jump,
+                lessThan(0.15),
+                reason: 't=$t p=$p 相邻输出相对跳变 ${jump * 100}%',
+              );
+            }
+            prev = cur;
+          }
+        });
+
+        test('窗口外（>80ms 或 >3 样本）原样输出', () {
+          final m = StrokeInputModeler(
+            const InputPolicy(
+              useRealPressure: true,
+              minCutoff: 8.0,
+              beta: 0.02,
+              pressureCutoff: 50.0,
+              pressureFloor: 0.18,
+              pressureCeiling: 0.82,
+              minDistance: 0.6,
+              cornerProtectAngleRad: 0.9,
+            ),
+            pressureStabilizeV2: true,
+          );
+          m.process(s(0, 0, 0, p: 0.2, phase: StrokePhase.down));
+          m.process(s(2.0, 0, 30, p: 0.3));
+          m.process(s(4.0, 0, 60, p: 0.4));
+          // 第 4 个样本：窗口结束，0.8 直接透传（无均值减半）。
+          final r = m.process(s(6.0, 0, 200, p: 0.8));
+          expect(r.pressure!, greaterThan(0.60), reason: '窗口外不再插值');
+        });
+
+        test('模拟压力模式（鼠标）确定性：恒 null，交 perfect_freehand', () {
+          final m = StrokeInputModeler(
+            const InputPolicy(
+              useRealPressure: false,
+              minCutoff: 8.0,
+              beta: 0.02,
+              pressureCutoff: 50.0,
+              pressureFloor: 0.18,
+              pressureCeiling: 0.82,
+              minDistance: 0.6,
+              cornerProtectAngleRad: 0.9,
+            ),
+            pressureStabilizeV2: true,
+          );
+          final down = m.process(s(0, 0, 0, phase: StrokePhase.down));
+          expect(down.pressure, isNull);
+          final move = m.process(s(2.0, 0, 16));
+          expect(move.pressure, isNull);
+        });
+      });
+
       test('未启用补偿（默认关闭）时纯映射（钢笔路径）', () {
         const attackOff = InputPolicy(
           useRealPressure: true,

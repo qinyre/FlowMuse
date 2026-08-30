@@ -80,7 +80,9 @@ void main() {
     PointerDeviceKind kind = PointerDeviceKind.stylus,
   }) async {
     controller.onPointerDown(downEvent(pointer, kind: kind));
-    controller.onPointerMove(moveEvent(pointer, const Offset(30, 0), kind: kind));
+    controller.onPointerMove(
+      moveEvent(pointer, const Offset(30, 0), kind: kind),
+    );
     await pumpModeler();
     final overlay = (controller.activeTool as FreedrawTool).overlay!;
     return controller.buildPreviewElement(overlay)! as FreedrawElement;
@@ -144,7 +146,11 @@ void main() {
       );
       expect(preview.pressures, isEmpty, reason: '$brush 无压感预览 pressures 应为空');
       expect(preview.simulatePressure, isTrue, reason: '$brush 无压感预览走速度模拟');
-      expect(brushTypeFromCustomData(preview.customData), brush, reason: '$brush');
+      expect(
+        brushTypeFromCustomData(preview.customData),
+        brush,
+        reason: '$brush',
+      );
     }
   });
 
@@ -238,11 +244,7 @@ void main() {
           : controller.buildPreviewElement(overlay);
       expect(preview, isNotNull, reason: '${entry.key} 应有创建预览');
       expect(preview!.runtimeType, entry.value, reason: '${entry.key} 预览类不变');
-      expect(
-        preview.customData,
-        isNull,
-        reason: '${entry.key} 形状预览不带笔型标记',
-      );
+      expect(preview.customData, isNull, reason: '${entry.key} 形状预览不带笔型标记');
     }
     for (final toolType in [ToolType.eraser, ToolType.laser]) {
       final controller = MarkdrawController();
@@ -261,11 +263,11 @@ void main() {
     // T1 起预览与提交元素共用渲染判定：pencil/brushPen 预览额外携带
     // brushRenderVersion=2（计划 §3.10/§3.1），仍是渲染标记而非
     // recognition key。
-    expect(
-      (flowMuse! as Map).keys.toSet(),
-      {'brushType', 'pressureEncoding', 'brushRenderVersion'},
-      reason: 'recognition keys 只写提交元素（预览从不入场景）',
-    );
+    expect((flowMuse! as Map).keys.toSet(), {
+      'brushType',
+      'pressureEncoding',
+      'brushRenderVersion',
+    }, reason: 'recognition keys 只写提交元素（预览从不入场景）');
   });
 
   group('起笔攻击补偿按笔形生效（钢笔不补偿）', () {
@@ -301,23 +303,26 @@ void main() {
       final pressures = await strokePressures(BrushType.fountainPen);
       expect(pressures, isNotEmpty);
       for (final p in pressures) {
-        expect(
-          p,
-          lessThan(0.5),
-          reason: '钢笔不得套攻击包络（轻力度粗细变化会被压平）: $pressures',
-        );
+        expect(p, lessThan(0.5), reason: '钢笔不得套攻击包络（轻力度粗细变化会被压平）: $pressures');
       }
     });
 
-    test('毛笔/铅笔：起笔输出抬到攻击水位（闪变治理保持）', () async {
+    test('毛笔/铅笔（v2）：起笔不再抬到固定水位（轻写可见）', () async {
+      // T3：新笔默认 renderVersion=2 → 攻击包络关闭、起笔稳定器只在
+      // 相邻值间插值。恒定轻压 0.35 全程不得被抬到 0.5（编码域同序）。
+      // v1 的"抬到攻击水位"语义由 stroke_input_modeler_test 的
+      // 显式构造（pressureAttackMs: 1500）继续锁定（§8 回退规则）。
       for (final brush in [BrushType.brushPen, BrushType.pencil]) {
         final pressures = await strokePressures(brush);
         expect(pressures, isNotEmpty, reason: '$brush');
         expect(
           pressures.first,
-          closeTo(0.5, 0.001),
-          reason: '$brush 起笔应被包络抬到攻击水位（编码域 0.5）: $pressures',
+          lessThan(0.5),
+          reason: '$brush v2 起笔应保持真实轻压（不被抬到 0.5）: $pressures',
         );
+        for (final p in pressures) {
+          expect(p, lessThan(0.5), reason: '$brush v2 恒轻压全程: $pressures');
+        }
       }
     });
   });
