@@ -4017,6 +4017,25 @@ class MarkdrawController extends ChangeNotifier {
     looseFigures.sort(
       (a, b) => readingCompare(a.sourceBounds, b.sourceBounds),
     );
+    // 标题兜底（第七轮）：VLM 漏标 title 时，把最上方的短散文本提升为标题
+    // （原稿最顶部、独立于图示的完整短句大概率是标题；走查实况：标题被当
+    // 正文排进底部行，页面层级全失）。仅当页面有足够结构（图文组+散文本
+    // +散图 ≥ 3 个单元）且候选足够短才提升，避免把普通段落误抬成标题。
+    if (titleUnit == null && looseTexts.isNotEmpty) {
+      final candidate = looseTexts.first;
+      final candidateText = candidate.textElement?.text.trim() ?? '';
+      final structured =
+          pairs.length +
+          looseTexts.length +
+          looseFigures.length >=
+          3;
+      if (structured &&
+          candidateText.isNotEmpty &&
+          candidateText.length <= 12) {
+        titleUnit = candidate;
+        looseTexts.remove(candidate);
+      }
+    }
 
     final content = SmartLayoutContent(
       pageId: page.id,

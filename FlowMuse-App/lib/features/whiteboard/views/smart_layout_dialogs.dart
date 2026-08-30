@@ -506,19 +506,22 @@ class SmartLayoutConfirmBar extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         // 置信度可解释（走查 #6）：解释橙框含义，低置信为 0 时给正向确认。
-        Text(
-          lowConfidenceCount > 0
-              ? '有 $lowConfidenceCount 处内容识别把握较低（画布橙框标出），'
-                    '建议校对后再应用'
-              : '全部内容识别把握良好',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: lowConfidenceCount > 0
-                ? const Color(0xFFF08C00)
-                : null,
+        // 红区存在时"全部内容识别把握良好"与红区提示自相矛盾（第七轮），
+        // 只在无红区时显示正向确认。
+        if (lowConfidenceCount > 0 || plan.failureRects.isEmpty)
+          Text(
+            lowConfidenceCount > 0
+                ? '有 $lowConfidenceCount 处内容识别把握较低（画布橙框标出），'
+                      '建议校对后再应用'
+                : '全部内容识别把握良好',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: lowConfidenceCount > 0
+                  ? const Color(0xFFF08C00)
+                  : null,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
         if (plan.failureRects.isNotEmpty) ...[
           const SizedBox(height: 2),
           Text(

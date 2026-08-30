@@ -1353,6 +1353,73 @@ void main() {
       );
     });
   });
+
+  group('标题兜底（第七轮）', () {
+    testWidgets('VLM 漏标 title：最上方短散文本提升为标题，不再掉进正文行',
+        (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStrokes(controller);
+      controller.applyResult(
+        AddElementResult(
+          ImageElement(
+            id: const ElementId('img-cat'),
+            x: 700,
+            y: 600,
+            width: 600,
+            height: 600,
+            fileId: 'file-cat',
+          ),
+        ),
+      );
+      controller.onVisionSmartLayout = (request) async {
+        return SmartLayoutVisionResponse(
+          elements: [
+            _visionElement('body', '页面主标题啊', ['m1'], id: 'e0'),
+            _visionElement('body', '正文一', ['m2'], id: 'e1'),
+            _visionElement('figure', '', ['m3'], id: 'e2'),
+          ],
+        );
+      };
+      final preparation = await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      );
+      expect(preparation, isNotNull);
+      expect(
+        preparation!.content.title?.textElement?.text,
+        '页面主标题啊',
+        reason: '最上方短散文本应兜底为标题',
+      );
+      expect(
+        preparation.content.looseTexts.map((u) => u.textElement?.text),
+        ['正文一'],
+        reason: '被提升的文本移出散文本',
+      );
+    });
+
+    testWidgets('单元太少不兜底：孤立短文本不误抬成标题', (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final controller = _buildController();
+      addTearDown(controller.dispose);
+      _addStroke(controller, 'k-solo', 's1', 200, 150, 300, 60);
+      controller.onVisionSmartLayout = (request) async {
+        return SmartLayoutVisionResponse(
+          elements: [_visionElement('body', '唯一的文字', ['m1'], id: 'e0')],
+        );
+      };
+      final preparation = await tester.runAsync(
+        () => controller.prepareSmartLayoutTemplates(pageId: 'page-1'),
+      );
+      expect(preparation, isNotNull);
+      expect(preparation!.content.title, isNull);
+      expect(preparation.content.looseTexts, hasLength(1));
+    });
+  });
 }
 
 MarkdrawController _buildController() {

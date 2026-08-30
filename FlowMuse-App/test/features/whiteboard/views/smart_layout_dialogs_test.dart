@@ -267,6 +267,17 @@ void main() {
       expect(find.textContaining('把握较低'), findsNothing);
     });
 
+    testWidgets('有红区且无低置信时，不再自相矛盾地给"全部把握良好"确认',
+        (tester) async {
+      await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
+        plan: fakePlan(hasFailures: true),
+        isMultiPage: false,
+        onAction: (_) {},
+      )));
+      expect(find.text('全部内容识别把握良好'), findsNothing);
+      expect(find.textContaining('手写未识别成功'), findsOneWidget);
+    });
+
     testWidgets('核对全文按钮：onReviewAll 为 null 隐藏，非 null 可点', (tester) async {
       var reviewed = false;
       await tester.pumpWidget(wrap(SmartLayoutConfirmBar(
