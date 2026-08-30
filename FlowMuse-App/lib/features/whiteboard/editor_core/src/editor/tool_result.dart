@@ -131,6 +131,12 @@ class ToolOverlay {
   final Bounds? marqueeRect;
   final Bounds? bindTargetBounds;
 
+  /// Stable stroke identity for creation overlays that render deterministically
+  /// per stroke (v2 natural media seeds on strokeId). Freedraw sets it to the
+  /// live element id so the preview and the committed element share one seed;
+  /// shape/line overlays keep null and stay on the transient preview id.
+  final ElementId? creationStrokeId;
+
   /// Rotation angle of the binding target element, so the indicator can be
   /// drawn rotated to match.
   final double bindTargetAngle;
@@ -162,6 +168,7 @@ class ToolOverlay {
     this.creationBounds,
     this.creationPoints,
     this.creationPressures,
+    this.creationStrokeId,
     this.marqueeRect,
     this.bindTargetBounds,
     this.bindTargetAngle = 0.0,

@@ -47,8 +47,9 @@ FreedrawElement placedElement(
   List<Point> placed,
   List<double> pressures,
   BrushType brush,
-  String idSeed,
-) {
+  String idSeed, {
+  BrushRenderVersion? renderVersion,
+}) {
   final xs = placed.map((p) => p.x);
   final ys = placed.map((p) => p.y);
   final minX = xs.reduce(math.min);
@@ -63,7 +64,13 @@ FreedrawElement placedElement(
     pressures: List<double>.from(pressures),
     simulatePressure: false,
     isComplete: true,
-    customData: customDataWithFreedrawRender(null, brush),
+    // 对齐生产创建语义（freedraw_tool._buildElement）：默认按笔形写
+    // v2；显式传 classicV1 用于 v1 基线锁定。
+    customData: customDataWithFreedrawRender(
+      null,
+      brush,
+      renderVersion: renderVersion ?? defaultRenderVersionForNewStroke(brush),
+    ),
     strokeWidth: kNominalWidth,
   );
 }
@@ -93,8 +100,15 @@ Future<PlacedRender> renderPlaced(
   BrushType brush,
   String idSeed, {
   int repeat = 1,
+  BrushRenderVersion? renderVersion,
 }) async {
-  final element = placedElement(placed, pressures, brush, idSeed);
+  final element = placedElement(
+    placed,
+    pressures,
+    brush,
+    idSeed,
+    renderVersion: renderVersion,
+  );
   final elements = List<FreedrawElement>.filled(repeat, element);
 
   final recorder = ui.PictureRecorder();

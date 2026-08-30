@@ -12,7 +12,10 @@ enum BrushRenderVersion { classicV1, naturalMediaV2 }
 const String brushRenderVersionCustomDataKey = 'brushRenderVersion';
 
 /// v2 renderer family 仅对这两支笔有效，其他组合安全回退 v1。
-const Set<BrushType> naturalMediaV2Brushes = {BrushType.pencil, BrushType.brushPen};
+const Set<BrushType> naturalMediaV2Brushes = {
+  BrushType.pencil,
+  BrushType.brushPen,
+};
 
 /// 从 customData.flowMuse 读取渲染版本。
 ///
@@ -58,4 +61,20 @@ BrushRenderVersion defaultRenderVersionForNewStroke(BrushType brushType) {
   return naturalMediaV2Brushes.contains(brushType)
       ? BrushRenderVersion.naturalMediaV2
       : BrushRenderVersion.classicV1;
+}
+
+/// 渲染器 family（计划 §3.2 / ADR-021）：core 层纯枚举，不持有
+/// renderer 实例、不 import rendering。唯一 dispatch switch 位于
+/// rendering 层元素渲染入口（element_renderer.dart），调用方不得
+/// 重新散落 brushType 特判。
+enum StrokeRendererFamily { classicV1, pencilV2, brushPenV2 }
+
+StrokeRendererFamily strokeRendererFamilyFor(Map<String, Object?>? customData) {
+  if (effectiveBrushRenderVersion(customData) ==
+      BrushRenderVersion.naturalMediaV2) {
+    return brushTypeFromCustomData(customData) == BrushType.brushPen
+        ? StrokeRendererFamily.brushPenV2
+        : StrokeRendererFamily.pencilV2;
+  }
+  return StrokeRendererFamily.classicV1;
 }

@@ -18,8 +18,6 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const previewIdValue = '__preview__';
-
   // 模型器为异步批处理（对齐既有节流用例 100ms 口径，取 150ms 留裕量）。
   Future<void> pumpModeler() =>
       Future<void>.delayed(const Duration(milliseconds: 150));
@@ -93,7 +91,12 @@ void main() {
       final controller = controllerFor(brush);
       addTearDown(controller.dispose);
       final preview = await previewMidStroke(controller);
-      expect(preview.id.value, previewIdValue, reason: '$brush');
+      final tool = controller.activeTool as FreedrawTool;
+      expect(
+        preview.id,
+        tool.activeView!.strokeId,
+        reason: '$brush 预览带 live strokeId（v2 按其播种）',
+      );
       expect(
         brushTypeFromCustomData(preview.customData),
         brush,
@@ -166,11 +169,12 @@ void main() {
     expect(preview, isNull, reason: '单点不崩溃也不产出预览');
   });
 
-  test('A5: 预览 id 恒定、连续构建互不污染、抬笔不入场景', () async {
+  test('A5: 预览 id 恒定、连续构建互不污染、抬笔后 id 与提交元素相同', () async {
     final controller = controllerFor(BrushType.fountainPen);
     addTearDown(controller.dispose);
     final p1Live = await previewMidStroke(controller, pointer: 4);
-    expect(p1Live.id.value, previewIdValue);
+    final liveId = (controller.activeTool as FreedrawTool).activeView!.strokeId;
+    expect(p1Live.id, liveId);
     // 预览持工具 _points 活视图（抬笔即清空），先拍快照再继续输入。
     final p1 = p1Live.copyWithFreedraw(
       points: List.of(p1Live.points),
@@ -181,25 +185,28 @@ void main() {
     await pumpModeler();
     final overlay = (controller.activeTool as FreedrawTool).overlay!;
     final p2 = controller.buildPreviewElement(overlay)! as FreedrawElement;
-    expect(p2.id.value, previewIdValue);
+    expect(p2.id, liveId, reason: '同一笔内连续构建 id 恒定');
     expect(
       p2.points.length,
       greaterThan(p1.points.length),
       reason: '第二次构建必须反映最新点位（连续构建互不污染）',
     );
 
-    controller.onPointerUp(upEvent(4, const Offset(60, 0)));
-    await pumpModeler();
+    // 抬笔前 live id 不在场景（预览从不入库）。
     expect(
-      controller.currentScene.elements.any((e) => e.id.value == previewIdValue),
+      controller.currentScene.elements.any((e) => e.id == liveId),
       isFalse,
       reason: '预览元素从不入场景',
     );
-    expect(
-      controller.currentScene.elements.whereType<FreedrawElement>(),
-      isNotEmpty,
-      reason: '提交元素正常入库',
-    );
+
+    controller.onPointerUp(upEvent(4, const Offset(60, 0)));
+    await pumpModeler();
+    final committed = controller.currentScene.elements
+        .whereType<FreedrawElement>()
+        .last;
+    // 计划 T6：live strokeId 与最终 ElementId 必须相同并以测试断言，
+    // 否则提交会重播种（v2 颗粒在抬笔瞬间跳变）。
+    expect(committed.id, liveId, reason: '提交元素必须沿用 live strokeId（同种子，预览=终稿）');
   });
 
   test('A6: 协作实况广播元素仍自带笔型 customData（R4 波及锁）', () async {

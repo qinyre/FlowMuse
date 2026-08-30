@@ -87,11 +87,12 @@ final class BrushRenderProfile {
 
   /// perfect_freehand 包默认（stroke_options.dart：0.5/0.5/0.5），
   /// 钢笔保持既有默认手感。
-  // --- v2 自然介质响应曲线（计划 §3.5，T0 spike 校准值；T4/T5 渲染、
-  // bounds 与采样器共用，禁止在 renderer 另写一份）---
-  // 铅笔：压力主要控制石墨密度，宽度只随压力温和变化。
+  // --- v2 自然介质响应曲线与绘制常数（计划 §3.5；T4 冻结）---
+  // 铅笔：压力主要控制石墨密度，宽度只随压力温和变化。宽度项取
+  // 0.26（而非 spike 的 0.28）：理论轻重宽度比 1.18，给 N3 的 1.35
+  // 门禁留 1px 法向扫描量化余量（T0 记录的提醒）。
   double pencilNaturalMediaLocalWidth(double base, double p) =>
-      base * (0.82 + 0.28 * p.clamp(0.0, 1.0));
+      base * (0.82 + 0.26 * p.clamp(0.0, 1.0));
 
   double pencilNaturalMediaDensity(double p) =>
       0.18 + 0.72 * math.pow(p.clamp(0.0, 1.0), 0.85);
@@ -99,6 +100,20 @@ final class BrushRenderProfile {
   // 毛笔：压力主要控制笔肚接触宽度；0.16 底保证轻压可见。
   double brushNaturalMediaContactHalfWidth(double base, double p) =>
       base * (0.16 + 1.34 * math.pow(p.clamp(0.0, 1.0), 0.72)) / 2;
+
+  // 铅笔 v2 绘制 alpha（T0 spike 校准，T4 冻结）：低透明连续基底 +
+  // 三个密度桶颗粒各自恒定 alpha，压力→密度经颗粒间距表达。
+  double get pencilV2BaseAlpha => 0.30;
+
+  // channel 编号是协议级常量（rendering/natural_media/
+  // deterministic_stroke_seed.dart 的 NaturalMediaChannel，跨端冻结）；
+  // core 不反向 import rendering，故此处用字面值并对齐注释。
+  double pencilV2GrainAlpha(int channel) => switch (channel) {
+    1 => 0.20, // pencilLow
+    2 => 0.28, // pencilMedium
+    3 => 0.38, // pencilHeavy
+    _ => 0.20,
+  };
 
   static const double _kDefaultThinning = 0.5;
   static const double _kDefaultSmoothing = 0.5;

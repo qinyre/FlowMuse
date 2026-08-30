@@ -1061,6 +1061,7 @@ flutter build web
 | 实施分支 | `feature/pencil-brush-natural-media-plan-v2` |
 | 起始提交 | `3eb2b97` |
 | 目标确认 | 2026-08-30 用户确认目标纸通过（"挺好的"），特别认可 spike v2 铅笔中压行（pencil_pencilMediumStroke 右列）的铅笔质感；HB 铅笔/软头毛笔目标按 §2 锁定 |
+| 进度 | T0～T3：732fa68/4719264/c2aca40/9902924/69320bf；T4（铅笔 v2 渲染器 + family 分发）见下一条提交。T4 为满足 §3.2 B1/B2 同入参预览=提交门禁，提前落地 T6 工作项 6 的通路与断言：`ToolOverlay.creationStrokeId` 携带 live element id → `buildPreviewElement` freedraw 预览元素用该 id（与 `_buildElement` 提交元素同 id 同种子），fidelity A5 断言"live strokeId 与最终 ElementId 必须相同"；另修 `customDataWithFreedrawRender` classicV1 显式移除 v2 标记（此前 spread 保残留导致显式降级无效） |
 | 最终提交 | 待填写 |
 | renderer 参数 | 待填写 |
 | 测试计数 | 待填写 |

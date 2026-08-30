@@ -158,7 +158,8 @@ Map<String, Object?> customDataWithBrushType(
 /// - [pressureEncoded]：文件解析路径按 `pressure-encoded` 标记传入；
 ///   创建路径默认 true（新笔迹必编码）。
 /// - [renderVersion]：仅 naturalMediaV2 落 `brushRenderVersion: 2`，
-///   classicV1/ null 不写字段（§3.1"首版建议不写"，缺失即 v1）。
+///   classicV1 显式移除该字段（§3.1"缺失即 v1"）；null 保持既有值
+///   （重刷笔型标记不降级已有 v2 元素）。
 Map<String, Object?> customDataWithFreedrawRender(
   Map<String, Object?>? customData,
   BrushType brushType, {
@@ -167,15 +168,19 @@ Map<String, Object?> customDataWithFreedrawRender(
 }) {
   final next = {...?customData};
   final flowMuse = next[flowMuseCustomDataKey];
-  next[flowMuseCustomDataKey] = {
+  final merged = {
     if (flowMuse is Map<String, Object?>) ...flowMuse,
     if (flowMuse is Map && flowMuse is! Map<String, Object?>)
       for (final entry in flowMuse.entries)
         if (entry.key is String) entry.key as String: entry.value,
     brushTypeCustomDataKey: brushType.wireName,
     if (pressureEncoded) pressureEncodingCustomDataKey: 1,
-    if (renderVersion == BrushRenderVersion.naturalMediaV2)
-      brushRenderVersionCustomDataKey: 2,
   };
+  if (renderVersion == BrushRenderVersion.naturalMediaV2) {
+    merged[brushRenderVersionCustomDataKey] = 2;
+  } else if (renderVersion == BrushRenderVersion.classicV1) {
+    merged.remove(brushRenderVersionCustomDataKey);
+  }
+  next[flowMuseCustomDataKey] = merged;
   return next;
 }

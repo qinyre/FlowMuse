@@ -52,7 +52,14 @@ void main() {
     BrushType brush,
   ) async {
     final placed = fitFixtureToCell(f);
-    final render = await renderPlaced(placed, f.pressures, brush, f.name);
+    // v1 基线：T4 分发生效后显式锁 classicV1（默认创建语义是 v2）。
+    final render = await renderPlaced(
+      placed,
+      f.pressures,
+      brush,
+      f.name,
+      renderVersion: BrushRenderVersion.classicV1,
+    );
     writeCellPng('$kOutRoot/cells/${brush.name}_${f.name}.png', render);
     return render;
   }
@@ -468,7 +475,7 @@ void main() {
       }
       final svg = controller.exportSvg(selectedOnly: false);
       expect(svg, isNotNull);
-      File('$kOutRoot/v1_brush_strokes.svg').writeAsStringSync(svg!);
+      File('$kOutRoot/v1_brush_strokes.svg').writeAsStringSync(svg);
     });
   });
 

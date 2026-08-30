@@ -201,6 +201,9 @@ class FreedrawTool implements Tool {
     return ToolOverlay(
       creationPoints: _previewPoints,
       creationPressures: _hasRealPressure ? _previewPressures : const [],
+      // v2 自然介质按 strokeId 播种：预览元素带 live element id，与
+      // _buildElement 提交元素同 id（同种子），预览/提交所见即所得。
+      creationStrokeId: _liveElementId,
       creationIsComplete: false,
       showCreationPreviewLine: false,
     );

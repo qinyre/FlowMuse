@@ -3119,7 +3119,10 @@ class MarkdrawController extends ChangeNotifier {
           endArrowhead: Arrowhead.arrow,
         ),
         ToolType.freedraw => FreedrawElement(
-          id: previewId,
+          // v2 自然介质按 strokeId 播种：用工具的 live element id 而非
+          // '__preview__' 哨兵，保证预览与提交元素同种子（§3.3/计划
+          // T6「live strokeId 与最终 ElementId 必须相同」）。
+          id: overlay.creationStrokeId ?? previewId,
           x: minX,
           y: minY,
           width: maxX - minX,

@@ -14,10 +14,11 @@ void main() {
     final pencil = BrushRenderProfile.forType(BrushType.pencil);
     final brush = BrushRenderProfile.forType(BrushType.brushPen);
 
-    test('铅笔宽度响应温和：p .2→.8 宽度比 ≤1.35（理论 1.34）', () {
+    test('铅笔宽度响应温和：p .2→.8 宽度比 ≤1.35（理论 1.18，留量化余量）', () {
       final wLight = pencil.pencilNaturalMediaLocalWidth(6, 0.2);
       final wHeavy = pencil.pencilNaturalMediaLocalWidth(6, 0.8);
-      expect(wLight, closeTo(6 * (0.82 + 0.28 * 0.2), 1e-9));
+      // 0.26 宽度项（T4 冻结）：N3 的 1px 法向扫描量化余量。
+      expect(wLight, closeTo(6 * (0.82 + 0.26 * 0.2), 1e-9));
       expect(wHeavy / wLight, lessThanOrEqualTo(1.35));
     });
 
