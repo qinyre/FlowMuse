@@ -1,0 +1,72 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "annotation-manual",
+ "task": "V3-002C",
+ "title": "智能排版 v3 双代理盲标手册（合成池场景标签）",
+ "input_contract": {
+  "projection": "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/projections/scenes-projection.json",
+  "element_fields": "i=eNN 编号（按场景元素顺序，从 e01 起）；t=类型（stroke/text/shape/image/decorative_line/binding）；b=[x,y,w,h] 包围盒（左上角+宽高，像素）；x=类型附加字段（text→chars，shape→shape_kind，其余可忽略）",
+  "derived_geometry": "center_x=b[0]+b[2]/2；center_y=b[1]+b[3]/2；欧氏距离=√((Δcenter_x)²+(Δcenter_y)²)"
+ },
+ "label_schema": {
+  "per_sample": {
+   "sample_id": "照抄投影 sample_id",
+   "reading_order": "内容元素 eNN 的阅读顺序数组",
+   "roles": "每个元素的 eNN→角色 映射（含全部元素）",
+   "relations": "关系数组 {type,from,to}（from/to 为 eNN）"
+  },
+  "role_vocabulary": ["title", "paragraph", "handwriting", "figure", "image", "divider", "annotation"],
+  "relation_vocabulary": ["caption_of", "belongs_to"]
+ },
+ "rules": {
+  "R1_reading_order": {
+   "scope": "只含内容元素：t ∈ {text, shape, image}；stroke/decorative_line/binding 不进入阅读顺序。",
+   "ordering": "按 (row, x, id) 升序：row = floor(center_y / 64)；同 row 按 b[0]（左边缘 x）升序；再按 eNN 字典序。row 基于元素几何中心。"
+  },
+  "R2_roles": {
+   "text": "title=该样本 center_y 最小的 text 元素，且该样本 text 元素数 ≥2；平局取 b[0] 小者、再取 eNN 小者。其余 text 一律 paragraph。text 元素数 <2 时全部为 paragraph。",
+   "shape": "figure",
+   "image": "image",
+   "stroke": "handwriting",
+   "decorative_line": "divider",
+   "binding": "annotation"
+  },
+  "R3_relations": {
+   "caption_of": "对每个 figure 元素 f（t=shape 或 image）：候选 text t 需同时满足 t.center_y > f.center_y 且 t.center_y - f.center_y ≤ 80 且 t.center_x ∈ [f.b[0], f.b[0]+f.b[2]]；取 center_y 最小者（平局取 center_x 小者、再取 eNN 小者）；每 figure 至多一条 caption_of。",
+   "belongs_to": "对每个 stroke 元素 s：取欧氏中心距离最近的 text 元素 t；若距离 ≤ 120 则记 {type:'belongs_to', from:s, to:t}；否则 s 无 belongs_to。"
+  },
+  "R4_output": {
+   "coverage": "85 个样本全部标注；roles 覆盖该样本全部元素；无多余字段。",
+   "independence": "标注代理不得读取另一标注者输出、任何期望标签、评测代码或任务证据；只读手册与投影文件。"
+  }
+ },
+ "preregistered_thresholds": {
+  "pre_arbitration": {
+   "reading_order_rate_min": 0.80,
+   "roles_rate_min": 0.85,
+   "role_slots_exact_rate_min": 0.95,
+   "relations_rate_min": 0.80
+  },
+  "post_arbitration": {
+   "all_disagreements_resolved": true,
+   "note": "仲裁后分歧项必须为 0（LabelAdjudicatedSet.hasErrors=false），否则冻结失败。"
+  },
+  "below_floor_behavior": "仲裁前低于阈值不自动作废；须在 annotation-report 记录低于阈值的字段并调查手册缺陷（区分规则歧义 vs 标注失误）。"
+ },
+ "arbitration_protocol": {
+  "eligibility": "两标注者输出不一致的 reading_order / roles:<eNN> / relations 字段（LabelDisagreementItem）逐一交第三代理裁决。",
+  "arbiter_input": "分歧清单 + 双方标签 + 本手册 + 涉事样本投影切片；不得看两标注者身份与 run id。",
+  "arbiter_rules": "只按手册规则重算并选边或给出第三结论；每项裁决给出一句话依据（引用规则条款与数值）。",
+  "finality": "裁决为最终标签；裁决后仍有分歧 → 冻结失败（R8 单发判定约束：冻结清单在全部分歧裁决后一次性生成）。"
+ },
+ "disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "两名标注者与仲裁者均为上下文隔离的 GLM-5.3 Max AI 代理；本标注集与一致性统计是 AI surrogate 证据，不代表真人标注者一致性或人工研究。"
+ },
+ "provenance": {
+  "author_run": "executor(agent) V3-002C e7c2df17-6616-4504-95e0-ef8b88545d18",
+  "consumers": "V3-003A 基线评测、V3-004A EvaluationSpec、Gate 评测 runner（经 FrozenLabelAccessGuard）"
+ }
+}

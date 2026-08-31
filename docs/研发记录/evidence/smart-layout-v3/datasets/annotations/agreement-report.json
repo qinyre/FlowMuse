@@ -1,0 +1,48 @@
+{
+  "status": "passed",
+  "agreement": {
+    "samples": 85,
+    "reading_order_exact": 85,
+    "reading_order_rate": 1.0,
+    "roles_exact": 85,
+    "roles_rate": 1.0,
+    "role_slots": 2759,
+    "role_slots_exact_rate": 1.0,
+    "relations_exact": 80,
+    "relations_rate": 0.9411764705882353,
+    "disagreement_items": [
+      {
+        "sample_id": "syn-p2-anno-mixe-hig-des-1056",
+        "field": "relations",
+        "a": null,
+        "b": null
+      },
+      {
+        "sample_id": "syn-p2-anno-mixe-hig-mob-v-1059",
+        "field": "relations",
+        "a": null,
+        "b": null
+      },
+      {
+        "sample_id": "syn-p2-anno-mixe-low-des-v-1047",
+        "field": "relations",
+        "a": null,
+        "b": null
+      },
+      {
+        "sample_id": "syn-p2-anno-mixe-med-des-v-1052",
+        "field": "relations",
+        "a": null,
+        "b": null
+      },
+      {
+        "sample_id": "syn-p2-anno-mixe-med-web-1055",
+        "field": "relations",
+        "a": null,
+        "b": null
+      }
+    ],
+    "errors": []
+  },
+  "errors": []
+}

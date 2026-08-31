@@ -104,6 +104,10 @@ class AnnotationAgreementCalculator {
   }) {
     final report = calculate(raterA, raterB);
     final errors = List<String>.of(report.errors);
+    if (report.hasErrors) {
+      // 样本集合不一致等前置错误：不产出裁决结果，错误原样上抛（不崩溃）。
+      return AdjudicatedSet(report: report, ratings: const [], conservativeApplied: 0, errors: errors);
+    }
     final rulingByItem = <String, ArbitrationRuling>{};
     for (final ruling in rulings) {
       rulingByItem['${ruling.sampleId}|${ruling.dimension ?? ''}|${ruling.kind}'] = ruling;
@@ -147,9 +151,14 @@ class AnnotationAgreementCalculator {
           scores[dim] = av < bv ? av : bv;
         }
       }
-      final codeRuling = rulingByItem['$id||code_set_difference'];
-      if (codeRuling != null && codeRuling.finalCodes != null) {
-        codes = codeRuling.finalCodes!.toSet();
+      if (!_sameCodeSet(a.codes, b.codes)) {
+        final codeRuling = rulingByItem['$id||code_set_difference'];
+        if (codeRuling == null || codeRuling.finalCodes == null) {
+          // DG4：code 集分歧必须仲裁，缺失即报错，不静默并集。
+          errors.add('arbitration_missing:$id||code_set_difference');
+        } else {
+          codes = codeRuling.finalCodes!.toSet();
+        }
       }
       final overall = scores.isEmpty ? null : scores.values.reduce((x, y) => x < y ? x : y);
       finalRatings.add(FinalRating(
@@ -168,6 +177,165 @@ class AnnotationAgreementCalculator {
       errors: errors,
     );
   }
+
+
+  // ---- V3-002C 标签级双盲标注：reading_order / roles / relations ----
+
+  /// 计算两套标签标注的一致性。样本集合必须一致（annotation_set_mismatch）。
+  static LabelAgreementReport calculateLabelAgreement(LabelAnnotationSet raterA, LabelAnnotationSet raterB) {
+    final errors = <String>[];
+    final idsA = raterA.annotations.map((a) => a.sampleId).toSet();
+    final idsB = raterB.annotations.map((a) => a.sampleId).toSet();
+    if (idsA.length != raterA.annotations.length || idsB.length != raterB.annotations.length) {
+      errors.add('duplicate_sample_annotation');
+    }
+    if (!idsA.containsAll(idsB) || !idsB.containsAll(idsA)) {
+      errors.add('annotation_set_mismatch');
+    }
+    final byA = {for (final a in raterA.annotations) a.sampleId: a};
+    final byB = {for (final a in raterB.annotations) a.sampleId: a};
+    final items = <LabelDisagreementItem>[];
+    var samples = 0, readingOrderExact = 0, rolesExact = 0, relationsExact = 0;
+    var roleSlots = 0, roleSlotsExact = 0;
+    for (final id in idsA.intersection(idsB).toList()..sort()) {
+      samples++;
+      final a = byA[id]!, b = byB[id]!;
+      final roEqual = listEquals(a.readingOrder, b.readingOrder);
+      if (roEqual) {
+        readingOrderExact++;
+      } else {
+        items.add(LabelDisagreementItem(sampleId: id, field: 'reading_order'));
+      }
+      final roleKeys = {...a.roles.keys, ...b.roles.keys}.toList()..sort();
+      var rolesMatch = true;
+      for (final key in roleKeys) {
+        roleSlots++;
+        if (a.roles[key] == b.roles[key]) {
+          roleSlotsExact++;
+        } else {
+          rolesMatch = false;
+          items.add(LabelDisagreementItem(sampleId: id, field: 'roles:$key', valueA: a.roles[key], valueB: b.roles[key]));
+        }
+      }
+      if (rolesMatch) rolesExact++;
+      final relA = canonicalRelations(a.relations).toSet();
+      final relB = canonicalRelations(b.relations).toSet();
+      if (relA.length == relB.length && relA.containsAll(relB)) {
+        relationsExact++;
+      } else {
+        items.add(LabelDisagreementItem(sampleId: id, field: 'relations'));
+      }
+    }
+    return LabelAgreementReport(
+      raterAId: raterA.raterId,
+      raterBId: raterB.raterId,
+      samples: samples,
+      readingOrderExact: readingOrderExact,
+      rolesExact: rolesExact,
+      relationsExact: relationsExact,
+      roleSlots: roleSlots,
+      roleSlotsExact: roleSlotsExact,
+      disagreements: items,
+      errors: errors,
+    );
+  }
+
+  /// 合并标签仲裁：字段一致直接采用；不一致必须有裁决，缺失即 arbitration_missing。
+  static LabelAdjudicatedSet applyLabelArbitration({
+    required LabelAnnotationSet raterA,
+    required LabelAnnotationSet raterB,
+    required List<LabelRuling> rulings,
+  }) {
+    final report = calculateLabelAgreement(raterA, raterB);
+    final errors = List<String>.of(report.errors);
+    if (report.hasErrors) {
+      return LabelAdjudicatedSet(report: report, annotations: const [], errors: errors);
+    }
+    final rulingByItem = <String, LabelRuling>{};
+    for (final ruling in rulings) {
+      rulingByItem['${ruling.sampleId}|${ruling.field}'] = ruling;
+    }
+    final byA = {for (final a in raterA.annotations) a.sampleId: a};
+    final byB = {for (final a in raterB.annotations) a.sampleId: a};
+    final out = <LabelAnnotation>[];
+    for (final id in byA.keys.toList()..sort()) {
+      final a = byA[id]!, b = byB[id]!;
+      // List 的 == 是引用比较，须走 listEquals 内容比较；裁决载荷缺失即报错，不静默回退。
+      final List<String> readingOrder;
+      if (listEquals(a.readingOrder, b.readingOrder)) {
+        readingOrder = a.readingOrder;
+      } else {
+        final ruling = rulingByItem['$id|reading_order'];
+        if (ruling == null) {
+          errors.add('arbitration_missing:$id|reading_order');
+          readingOrder = a.readingOrder;
+        } else if (ruling.readingOrder == null) {
+          errors.add('arbitration_payload_missing:$id|reading_order');
+          readingOrder = a.readingOrder;
+        } else {
+          readingOrder = ruling.readingOrder!;
+        }
+      }
+      final roles = <String, String>{};
+      for (final key in {...a.roles.keys, ...b.roles.keys}.toList()..sort()) {
+        // 角色分歧的裁决必须携带 roleValue 载荷，缺失即报错。
+        if (a.roles[key] == b.roles[key]) {
+          roles[key] = a.roles[key] ?? b.roles[key] ?? '';
+          continue;
+        }
+        final ruling = rulingByItem['$id|roles:$key'];
+        if (ruling == null) {
+          errors.add('arbitration_missing:$id|roles:$key');
+          roles[key] = a.roles[key] ?? '';
+        } else if (ruling.roleValue == null) {
+          errors.add('arbitration_payload_missing:$id|roles:$key');
+          roles[key] = a.roles[key] ?? '';
+        } else {
+          roles[key] = ruling.roleValue!;
+        }
+      }
+      final relA = canonicalRelations(a.relations).toSet();
+      final relB = canonicalRelations(b.relations).toSet();
+      List<LabelRelation> relations;
+      if (relA.length == relB.length && relA.containsAll(relB)) {
+        relations = a.relations;
+      } else {
+        final ruling = rulingByItem['$id|relations'];
+        if (ruling == null) {
+          errors.add('arbitration_missing:$id|relations');
+          relations = a.relations;
+        } else if (ruling.relations == null) {
+          // 载荷缺失与空列表不同：空列表是合法裁决值，缺失必须报错。
+          errors.add('arbitration_payload_missing:$id|relations');
+          relations = a.relations;
+        } else {
+          relations = ruling.relations!;
+        }
+      }
+      out.add(LabelAnnotation(
+        sampleId: id, readingOrder: readingOrder, roles: roles, relations: relations));
+    }
+    return LabelAdjudicatedSet(report: report, annotations: out, errors: errors);
+  }
+
+  static List<String> canonicalRelations(List<LabelRelation> relations) {
+    final sorted = List<LabelRelation>.of(relations)
+      ..sort((x, y) => '${x.type}|${x.from}|${x.to}'.compareTo('${y.type}|${y.from}|${y.to}'));
+    return [for (final r in sorted) '${r.type}|${r.from}|${r.to}'];
+  }
+
+  static bool _sameCodeSet(List<String> a, List<String> b) {
+    final setA = a.toSet(), setB = b.toSet();
+    return setA.length == setB.length && setA.containsAll(setB);
+  }
+}
+
+bool listEquals<T>(List<T> a, List<T> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 /// 一名评分者对一套样本的标注。
@@ -334,4 +502,158 @@ class AdjudicatedSet {
         ],
         'errors': errors,
       };
+}
+
+/// 一名标注者的标签集合（V3-002C）。
+class LabelAnnotationSet {
+  const LabelAnnotationSet({required this.raterId, required this.annotations});
+  final String raterId;
+  final List<LabelAnnotation> annotations;
+
+  /// 标注者输出文件的解析契约（annotator-*.json）。
+  static LabelAnnotationSet fromJson(Map<String, Object?> raw) {
+    final annotations = <LabelAnnotation>[];
+    for (final entry in raw['annotations'] as List) {
+      final m = entry as Map<String, Object?>;
+      annotations.add(LabelAnnotation(
+        sampleId: m['sample_id'] as String,
+        readingOrder: [for (final e in m['reading_order'] as List) e as String],
+        roles: {
+          for (final e in (m['roles'] as Map<String, Object?>).entries) e.key: e.value as String,
+        },
+        relations: [
+          for (final r in (m['relations'] as List? ?? const []))
+            LabelRelation(
+              type: (r as Map<String, Object?>)['type'] as String,
+              from: r['from'] as String,
+              to: r['to'] as String,
+            ),
+        ],
+      ));
+    }
+    return LabelAnnotationSet(raterId: raw['annotator'] as String? ?? '?', annotations: annotations);
+  }
+}
+
+/// 单样本标签：阅读顺序、逐元素角色、关系三元组。
+class LabelAnnotation {
+  const LabelAnnotation({
+    required this.sampleId,
+    required this.readingOrder,
+    required this.roles,
+    required this.relations,
+  });
+  final String sampleId;
+  final List<String> readingOrder;
+  final Map<String, String> roles;
+  final List<LabelRelation> relations;
+}
+
+class LabelRelation {
+  const LabelRelation({required this.type, required this.from, required this.to});
+  final String type;
+  final String from;
+  final String to;
+}
+
+class LabelDisagreementItem {
+  const LabelDisagreementItem({
+    required this.sampleId,
+    required this.field,
+    this.valueA,
+    this.valueB,
+  });
+  final String sampleId;
+  final String field;
+  final String? valueA;
+  final String? valueB;
+}
+
+class LabelRuling {
+  const LabelRuling({
+    required this.sampleId,
+    required this.field,
+    this.readingOrder,
+    this.roleValue,
+    this.relations,
+  });
+  final String sampleId;
+  final String field;
+  final List<String>? readingOrder;
+  final String? roleValue;
+
+  /// null=未提供载荷（报错）；空列表是合法裁决值（例如裁决为无关系）。
+  final List<LabelRelation>? relations;
+
+  /// 仲裁输出文件的解析契约（arbitration-rulings.json）。
+  /// 裁决字段名：reading_order / role_value / final_relations。
+  static LabelRuling fromJson(Map<String, Object?> raw) => LabelRuling(
+        sampleId: raw['sample_id'] as String,
+        field: raw['field'] as String,
+        readingOrder: (raw['reading_order'] as List?)?.cast<String>(),
+        roleValue: raw['role_value'] as String?,
+        relations: raw.containsKey('final_relations')
+            ? [
+                for (final r in (raw['final_relations'] as List))
+                  LabelRelation(
+                    type: (r as Map<String, Object?>)['type'] as String,
+                    from: r['from'] as String,
+                    to: r['to'] as String,
+                  ),
+              ]
+            : null,
+      );
+}
+
+class LabelAgreementReport {
+  const LabelAgreementReport({
+    required this.raterAId,
+    required this.raterBId,
+    required this.samples,
+    required this.readingOrderExact,
+    required this.rolesExact,
+    required this.relationsExact,
+    required this.roleSlots,
+    required this.roleSlotsExact,
+    required this.disagreements,
+    required this.errors,
+  });
+  final String raterAId;
+  final String raterBId;
+  final int samples;
+  final int readingOrderExact;
+  final int rolesExact;
+  final int relationsExact;
+  final int roleSlots;
+  final int roleSlotsExact;
+  final List<LabelDisagreementItem> disagreements;
+  final List<String> errors;
+
+  bool get hasErrors => errors.isNotEmpty;
+
+  Map<String, Object?> toJson() => {
+        'samples': samples,
+        'reading_order_exact': readingOrderExact,
+        'reading_order_rate': samples == 0 ? null : readingOrderExact / samples,
+        'roles_exact': rolesExact,
+        'roles_rate': samples == 0 ? null : rolesExact / samples,
+        'role_slots': roleSlots,
+        'role_slots_exact_rate': roleSlots == 0 ? null : roleSlotsExact / roleSlots,
+        'relations_exact': relationsExact,
+        'relations_rate': samples == 0 ? null : relationsExact / samples,
+        'disagreement_items': [
+          for (final d in disagreements)
+            {'sample_id': d.sampleId, 'field': d.field, 'a': d.valueA, 'b': d.valueB},
+        ],
+        'errors': errors,
+      };
+}
+
+class LabelAdjudicatedSet {
+  const LabelAdjudicatedSet({required this.report, required this.annotations, required this.errors});
+  final LabelAgreementReport report;
+  final List<LabelAnnotation> annotations;
+  final List<String> errors;
+
+  bool get hasErrors => errors.isNotEmpty;
 }

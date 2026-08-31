@@ -1,0 +1,346 @@
+{
+ "arbiter_run_id": "b329f701-c089-4ed0-ba67-45bf68e66402",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "inputs_read": {
+  "manual_sha256": "1826391e18a5ca2d6174a209929eeea4d4644c3940b6797ef18511f243205983",
+  "arbitration_input_sha256": "3b9538f980ed5e4ca613a471acaf57d55c030bb23046de494cad2cebd7d31ac1"
+ },
+ "rulings": [
+  {
+   "sample_id": "syn-p2-anno-mixe-hig-des-1056",
+   "field": "relations",
+   "winner": "Y",
+   "final_relations": [
+    {
+     "type": "belongs_to",
+     "from": "e03",
+     "to": "e70"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e05",
+     "to": "e60"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e07",
+     "to": "e63"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e10",
+     "to": "e61"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e11",
+     "to": "e61"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e17",
+     "to": "e66"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e26",
+     "to": "e69"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e32",
+     "to": "e69"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e40",
+     "to": "e62"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e41",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e44",
+     "to": "e57"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e45",
+     "to": "e61"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e53",
+     "to": "e69"
+    }
+   ],
+   "reason": "R3 caption_of：三 figure（e71 center_y=1070/[403,601]、e72 102/[669,1004]、e73 754.5/[226,455]）下方横向范围内均无 Δcenter_y≤80 的 text，e64 因 cx=450.5∉[669,1004] 不构成 e72 的 caption，X 的 caption_of e64→e72 应删；belongs_to 重算 13 条（最近 text 距 13.83–103.15≤120）与 Y 完全一致。"
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-hig-mob-v-1059",
+   "field": "relations",
+   "winner": "Y",
+   "final_relations": [
+    {
+     "type": "belongs_to",
+     "from": "e02",
+     "to": "e60"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e03",
+     "to": "e61"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e06",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e08",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e10",
+     "to": "e66"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e11",
+     "to": "e69"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e12",
+     "to": "e68"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e14",
+     "to": "e70"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e20",
+     "to": "e64"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e21",
+     "to": "e60"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e22",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e23",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e24",
+     "to": "e57"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e26",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e27",
+     "to": "e65"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e29",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e30",
+     "to": "e66"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e31",
+     "to": "e65"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e33",
+     "to": "e64"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e34",
+     "to": "e64"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e36",
+     "to": "e63"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e37",
+     "to": "e67"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e39",
+     "to": "e70"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e42",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e44",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e45",
+     "to": "e65"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e47",
+     "to": "e57"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e48",
+     "to": "e66"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e50",
+     "to": "e68"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e51",
+     "to": "e63"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e52",
+     "to": "e69"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e53",
+     "to": "e60"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e55",
+     "to": "e67"
+    }
+   ],
+   "reason": "R3 caption_of：e71（109.5/[563,773]）、e72（755/[154,246]）、e73（842.5/[68,151]）下方横向范围内均无 Δcenter_y≤80 的 text（e68 距 e73 为 96.5>80，e58 cx=287.5∉[563,773]），X 的 caption_of e58→e71 应删；belongs_to 重算 33 条（≤120）与 Y 完全一致。"
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-low-des-v-1047",
+   "field": "relations",
+   "winner": "Y",
+   "final_relations": [
+    {
+     "type": "caption_of",
+     "from": "e11",
+     "to": "e13"
+    }
+   ],
+   "reason": "R3 caption_of：e13（center_y=847，x∈[153,473]）唯一合格候选为 e11（Δcenter_y=48，cx=422.5），e14/e15 无候选；belongs_to：8 个 stroke 最近 text 距离均>120（最小 202.96），故 relations 仅 1 条 caption_of e11→e13，Y 正确、X 漏标。"
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-med-des-v-1052",
+   "field": "relations",
+   "winner": "Y",
+   "final_relations": [
+    {
+     "type": "caption_of",
+     "from": "e29",
+     "to": "e33"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e02",
+     "to": "e30"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e05",
+     "to": "e28"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e17",
+     "to": "e29"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e18",
+     "to": "e32"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e19",
+     "to": "e30"
+    }
+   ],
+   "reason": "R3 caption_of：e33（center_y=615，x∈[591,924]）唯一候选 e29（Δcenter_y=11.5，cx=864.5），X 的 e27→e34 因 cx=556.5∉[1102,1246] 不成立；belongs_to 重算 5 条（111.01/119.27/114.58/31.14/33.87 均≤120）与双方一致，Y 正确。"
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-med-web-1055",
+   "field": "relations",
+   "winner": "Y",
+   "final_relations": [
+    {
+     "type": "caption_of",
+     "from": "e29",
+     "to": "e35"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e05",
+     "to": "e30"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e06",
+     "to": "e29"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e19",
+     "to": "e26"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e22",
+     "to": "e30"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e24",
+     "to": "e30"
+    }
+   ],
+   "reason": "R3 caption_of：e35（center_y=340.5，x∈[666,1003]）唯一候选 e29（Δcenter_y=42，cx=865.5），X 的 e27→e35 因 cx=633∉[666,1003] 不成立，e33/e34 无候选；belongs_to 重算 5 条（40.80–114.83≤120）与双方一致，Y 正确。"
+  }
+ ]
+}

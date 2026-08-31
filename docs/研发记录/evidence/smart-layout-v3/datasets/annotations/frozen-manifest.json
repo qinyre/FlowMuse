@@ -1,0 +1,69 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "frozen-label-manifest",
+ "task": "V3-002C",
+ "frozen_version": "1.0.1",
+ "created_at_utc": "2026-08-31T00:00:00Z",
+ "split": "frozen_holdout",
+ "sample_count": 19,
+ "sample_ids": [
+  "syn-p2-anno-mixe-low-des-1046",
+  "syn-p2-anno-mixe-low-des-v-1047",
+  "syn-p2-brai-hand-hig-web-1045",
+  "syn-p2-meet-hand-low-des-1001",
+  "syn-p2-meet-hand-low-des-v-1002",
+  "syn-p2-meet-mixe-low-mob-1018",
+  "syn-p2-meet-mixe-low-mob-v-1019",
+  "syn-p2-meet-mixe-med-mob-1023",
+  "syn-p2-meet-mixe-med-mob-v-1024",
+  "syn-p2-type-mixe-hig-mob-1083",
+  "syn-p2-type-mixe-hig-mob-v-1084",
+  "syn-p2-type-mixe-low-mob-1073",
+  "syn-p2-type-mixe-low-mob-v-1074",
+  "syn-p2-type-mixe-med-mob-1078",
+  "syn-p2-type-mixe-med-mob-v-1079",
+  "syn-p2-type-type-low-des-1066",
+  "syn-p2-type-type-low-des-v-1067",
+  "syn-p2-type-type-low-mob-1068",
+  "syn-p2-type-type-low-mob-v-1069"
+ ],
+ "labels": {
+  "path": "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/frozen-labels.json",
+  "sha256": "e963a8d88174a91637ced280b6077b9175b6eb286d3db70a26170aff437578d0",
+  "single_shot_rule": "R8：frozen 每套只允许一次正式判定；任何标签变化必须升 frozen_version 并重新冻结。"
+ },
+ "voided_history": [
+  {
+   "frozen_version": "1.0.0",
+   "voided_reason": "annotation_cli 解析裁决字段名错误（relations vs final_relations）导致 5 项裁决未落地，frozen 样本 syn-p2-anno-mixe-low-des-v-1047 的 relations 被污染为空；该版本从未被下游消费，按 R8 作废并在修复 CLI+全量重跑后重新冻结。",
+   "voided_by_review": "V3-002C 第二轮独立复审（rejected, R2C-1/R2C-2）"
+  }
+ ],
+ "upstream_hashes": {
+  "annotation_manual_sha256": "1826391e18a5ca2d6174a209929eeea4d4644c3940b6797ef18511f243205983",
+  "scenes_projection_sha256": "a8cf3f3caebe1dddf221d4f99927eed875a2a7af1399424f56a9c5806dcb739e",
+  "adjudicated_labels_sha256": "75194877153d5e9d3e20a4be5cff23995f6c5b65ab92662078b4c3ba795c6eb7",
+  "split_coverage_report_sha256": "eebf4b4a1b8e11ab38100b7489cb1ee3dac0fd2ad26ef8e149c43469db2f7d7b",
+  "frozen_split_manifest_sha256": "8d08d8028da86c94d72541e09f626d1014c5574d5b5f4359a81cbf6fb5e9739d"
+ },
+ "access_policy": {
+  "guard": "FlowMuse-App/tool/smart_layout_v3/dataset/frozen_label_access_guard.dart",
+  "allowed_roles": [
+   "evaluation",
+   "gate",
+   "annotation_freeze"
+  ],
+  "denied_roles_example": [
+   "tuning",
+   "training",
+   "development"
+  ],
+  "enforcement": "任何加载器在返回 frozen 标签前必须经 FrozenLabelAccessGuard.check(accessorRole, split)；调参/训练角色被拒绝（frozen_label_access_denied）。"
+ },
+ "panel_disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "两名标注者与仲裁者均为上下文隔离的 GLM-5.3 Max AI 代理；本标注集与一致性统计是 AI surrogate 证据，不代表真人标注者一致性或人工研究。"
+ }
+}
