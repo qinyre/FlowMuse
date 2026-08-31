@@ -1,0 +1,508 @@
+{
+  "page": {
+    "width": 1240,
+    "height": 1754
+  },
+  "elements": [
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-stroke-001",
+      "type": "stroke",
+      "bbox": [
+        170,
+        1414,
+        352,
+        112
+      ],
+      "rotation": 90,
+      "points": [
+        [
+          132,
+          192
+        ],
+        [
+          132,
+          237
+        ],
+        [
+          206,
+          240
+        ],
+        [
+          94,
+          186
+        ]
+      ],
+      "pressure": [
+        0.59,
+        0.237,
+        0.205,
+        0.21
+      ]
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-stroke-002",
+      "type": "stroke",
+      "bbox": [
+        669,
+        384,
+        262,
+        85
+      ],
+      "rotation": 0,
+      "points": [
+        [
+          328,
+          135
+        ],
+        [
+          48,
+          169
+        ],
+        [
+          370,
+          56
+        ],
+        [
+          95,
+          235
+        ],
+        [
+          277,
+          140
+        ],
+        [
+          129,
+          207
+        ],
+        [
+          144,
+          220
+        ],
+        [
+          169,
+          96
+        ],
+        [
+          37,
+          289
+        ],
+        [
+          157,
+          247
+        ],
+        [
+          87,
+          172
+        ],
+        [
+          5,
+          282
+        ]
+      ],
+      "pressure": [
+        0.913,
+        0.137,
+        0.45,
+        0.769
+      ]
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-stroke-003",
+      "type": "stroke",
+      "bbox": [
+        456,
+        1306,
+        45,
+        100
+      ],
+      "rotation": 90,
+      "points": [
+        [
+          307,
+          92
+        ],
+        [
+          37,
+          120
+        ],
+        [
+          114,
+          69
+        ],
+        [
+          63,
+          31
+        ],
+        [
+          228,
+          138
+        ],
+        [
+          270,
+          49
+        ],
+        [
+          226,
+          18
+        ]
+      ],
+      "pressure": [
+        0.649,
+        0.699,
+        0.193,
+        0.633
+      ]
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-stroke-004",
+      "type": "stroke",
+      "bbox": [
+        848,
+        88,
+        260,
+        159
+      ],
+      "rotation": 0,
+      "points": [
+        [
+          230,
+          1
+        ],
+        [
+          237,
+          156
+        ],
+        [
+          279,
+          13
+        ],
+        [
+          153,
+          102
+        ]
+      ],
+      "pressure": [
+        0.998,
+        0.675,
+        0.257,
+        0.811
+      ]
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-stroke-005",
+      "type": "stroke",
+      "bbox": [
+        332,
+        574,
+        215,
+        141
+      ],
+      "rotation": 0,
+      "points": [
+        [
+          236,
+          275
+        ],
+        [
+          146,
+          141
+        ],
+        [
+          379,
+          113
+        ],
+        [
+          107,
+          122
+        ]
+      ],
+      "pressure": [
+        0.196,
+        0.646,
+        0.617,
+        0.482
+      ]
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-stroke-006",
+      "type": "stroke",
+      "bbox": [
+        148,
+        568,
+        84,
+        126
+      ],
+      "rotation": 90,
+      "points": [
+        [
+          368,
+          148
+        ],
+        [
+          355,
+          280
+        ],
+        [
+          364,
+          32
+        ],
+        [
+          367,
+          31
+        ],
+        [
+          139,
+          278
+        ],
+        [
+          236,
+          58
+        ],
+        [
+          391,
+          32
+        ],
+        [
+          209,
+          34
+        ],
+        [
+          135,
+          64
+        ],
+        [
+          211,
+          102
+        ],
+        [
+          99,
+          100
+        ],
+        [
+          253,
+          161
+        ]
+      ],
+      "pressure": [
+        0.984,
+        0.684,
+        0.685,
+        0.898
+      ]
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-stroke-007",
+      "type": "stroke",
+      "bbox": [
+        58,
+        125,
+        344,
+        60
+      ],
+      "rotation": 0,
+      "points": [
+        [
+          273,
+          72
+        ],
+        [
+          39,
+          235
+        ],
+        [
+          347,
+          234
+        ],
+        [
+          166,
+          82
+        ],
+        [
+          147,
+          52
+        ],
+        [
+          385,
+          109
+        ],
+        [
+          259,
+          11
+        ]
+      ],
+      "pressure": [
+        0.745,
+        0.276,
+        0.71,
+        0.182
+      ]
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-stroke-008",
+      "type": "stroke",
+      "bbox": [
+        893,
+        435,
+        292,
+        107
+      ],
+      "rotation": 0,
+      "points": [
+        [
+          171,
+          265
+        ],
+        [
+          335,
+          119
+        ],
+        [
+          331,
+          273
+        ],
+        [
+          338,
+          255
+        ],
+        [
+          110,
+          247
+        ]
+      ],
+      "pressure": [
+        0.329,
+        0.191,
+        0.917,
+        0.688
+      ]
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-line-001",
+      "type": "decorative_line",
+      "bbox": [
+        724,
+        1273,
+        369,
+        158
+      ],
+      "rotation": 0,
+      "style": "solid"
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-line-002",
+      "type": "decorative_line",
+      "bbox": [
+        487,
+        209,
+        206,
+        139
+      ],
+      "rotation": 0,
+      "style": "solid"
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-binding-001",
+      "type": "binding",
+      "bbox": [
+        616,
+        945,
+        221,
+        175
+      ],
+      "rotation": 0,
+      "target_kind": "text",
+      "offset": [
+        18,
+        -20
+      ]
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-text-002",
+      "type": "text",
+      "bbox": [
+        24.0,
+        24,
+        363,
+        80
+      ],
+      "rotation": 0,
+      "text_kind": "typed",
+      "chars": "段落2段落2"
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-shape-001",
+      "type": "shape",
+      "bbox": [
+        24.0,
+        116,
+        320,
+        18
+      ],
+      "rotation": 0,
+      "shape_kind": "ellipse"
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-text-003",
+      "type": "text",
+      "bbox": [
+        24.0,
+        146,
+        353,
+        32
+      ],
+      "rotation": 90,
+      "text_kind": "typed",
+      "chars": "段落3段落3"
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-text-004",
+      "type": "text",
+      "bbox": [
+        24.0,
+        190,
+        313,
+        136
+      ],
+      "rotation": 0,
+      "text_kind": "typed",
+      "chars": "段落4段落4段落4"
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-image-001",
+      "type": "image",
+      "bbox": [
+        24.0,
+        338,
+        132,
+        151
+      ],
+      "rotation": 0,
+      "asset_seed": 1227
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-shape-002",
+      "type": "shape",
+      "bbox": [
+        24.0,
+        501,
+        333,
+        53
+      ],
+      "rotation": 0,
+      "shape_kind": "rect"
+    },
+    {
+      "id": "syn-p2-anno-mixe-low-des-v-1047-text-001",
+      "type": "text",
+      "bbox": [
+        24.0,
+        566,
+        54,
+        137
+      ],
+      "rotation": 0,
+      "text_kind": "typed",
+      "chars": "段落1段落1段落1段落1段落1"
+    }
+  ]
+}

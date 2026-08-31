@@ -1,0 +1,34 @@
+{
+  "page": {
+    "width": 1440,
+    "height": 900
+  },
+  "elements": [
+    {
+      "id": "syn-p2-type-type-non-web-1065-text-001",
+      "type": "text",
+      "bbox": [
+        776,
+        222,
+        356,
+        26
+      ],
+      "rotation": 0,
+      "text_kind": "typed",
+      "chars": "段落1段落1"
+    },
+    {
+      "id": "syn-p2-type-type-non-web-1065-text-002",
+      "type": "text",
+      "bbox": [
+        1220,
+        207,
+        281,
+        35
+      ],
+      "rotation": 0,
+      "text_kind": "typed",
+      "chars": "段落2段落2段落2段落2段落2"
+    }
+  ]
+}

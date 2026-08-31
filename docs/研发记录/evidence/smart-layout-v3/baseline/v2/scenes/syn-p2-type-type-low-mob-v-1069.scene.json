@@ -1,0 +1,245 @@
+{
+  "page": {
+    "width": 720,
+    "height": 1280
+  },
+  "elements": [
+    {
+      "id": "syn-p2-type-type-low-mob-v-1069-stroke-001",
+      "type": "stroke",
+      "bbox": [
+        459,
+        865,
+        85,
+        55
+      ],
+      "rotation": 90,
+      "points": [
+        [
+          368,
+          77
+        ],
+        [
+          303,
+          258
+        ],
+        [
+          251,
+          32
+        ],
+        [
+          62,
+          259
+        ],
+        [
+          95,
+          253
+        ],
+        [
+          249,
+          98
+        ],
+        [
+          220,
+          75
+        ],
+        [
+          279,
+          231
+        ]
+      ],
+      "pressure": [
+        0.149,
+        0.321,
+        0.136,
+        0.264
+      ]
+    },
+    {
+      "id": "syn-p2-type-type-low-mob-v-1069-stroke-002",
+      "type": "stroke",
+      "bbox": [
+        25,
+        46,
+        129,
+        103
+      ],
+      "rotation": 0,
+      "points": [
+        [
+          19,
+          55
+        ],
+        [
+          43,
+          57
+        ],
+        [
+          167,
+          110
+        ],
+        [
+          223,
+          166
+        ],
+        [
+          65,
+          61
+        ],
+        [
+          196,
+          279
+        ],
+        [
+          129,
+          176
+        ],
+        [
+          148,
+          90
+        ]
+      ],
+      "pressure": [
+        0.802,
+        0.651,
+        0.124,
+        0.584
+      ]
+    },
+    {
+      "id": "syn-p2-type-type-low-mob-v-1069-stroke-003",
+      "type": "stroke",
+      "bbox": [
+        39,
+        850,
+        173,
+        133
+      ],
+      "rotation": 90,
+      "points": [
+        [
+          18,
+          291
+        ],
+        [
+          240,
+          290
+        ],
+        [
+          206,
+          231
+        ],
+        [
+          229,
+          85
+        ],
+        [
+          9,
+          51
+        ],
+        [
+          12,
+          300
+        ],
+        [
+          109,
+          272
+        ],
+        [
+          184,
+          95
+        ],
+        [
+          184,
+          274
+        ],
+        [
+          149,
+          96
+        ],
+        [
+          305,
+          195
+        ],
+        [
+          60,
+          47
+        ]
+      ],
+      "pressure": [
+        0.268,
+        0.631,
+        0.354,
+        0.154
+      ]
+    },
+    {
+      "id": "syn-p2-type-type-low-mob-v-1069-binding-001",
+      "type": "binding",
+      "bbox": [
+        283,
+        223,
+        69,
+        21
+      ],
+      "rotation": 0,
+      "target_kind": "text",
+      "offset": [
+        -10,
+        -6
+      ]
+    },
+    {
+      "id": "syn-p2-type-type-low-mob-v-1069-text-003",
+      "type": "text",
+      "bbox": [
+        24.0,
+        24,
+        86,
+        84
+      ],
+      "rotation": 0,
+      "text_kind": "typed",
+      "chars": "段落3段落3段落3段落3"
+    },
+    {
+      "id": "syn-p2-type-type-low-mob-v-1069-text-002",
+      "type": "text",
+      "bbox": [
+        24.0,
+        120,
+        46,
+        31
+      ],
+      "rotation": 0,
+      "text_kind": "typed",
+      "chars": "段落2段落2段落2段落2段落2"
+    },
+    {
+      "id": "syn-p2-type-type-low-mob-v-1069-text-004",
+      "type": "text",
+      "bbox": [
+        24.0,
+        163,
+        231,
+        29
+      ],
+      "rotation": 90,
+      "text_kind": "typed",
+      "chars": "段落4段落4段落4段落4"
+    },
+    {
+      "id": "syn-p2-type-type-low-mob-v-1069-text-001",
+      "type": "text",
+      "bbox": [
+        24.0,
+        204,
+        114,
+        62
+      ],
+      "rotation": 0,
+      "text_kind": "typed",
+      "chars": "段落1段落1段落1"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "baseline-summary-report",
+ "task": "V3-003A",
+ "policy_disclosure": {
+  "no_op": "输出=输入（整洁页非劣的参照端点）。",
+  "v2_naive_reflow": "v2 代表策略=确定性单列自上而下重排（margin 24px/段间距 12px，参数冻结于策略定义）；这是 v2 行为特征的 dev 线近似，不是生产 v2 输出的复刻，不用于宣称生产对比结论。"
+ },
+ "repeatability": {
+  "method": "同一 CLI 对池双跑：scenes/pngs/指标产物逐字节一致，run_hash 相等（资源数据单独记录不入 hash）。",
+  "no_op_double_run_identical": true,
+  "v2_naive_reflow_double_run_identical": true
+ },
+ "honest_failure_accounting": "缺候选/崩溃/解析失败一律记 status=failed 并使 CLI exit 非零（测试覆盖损坏样本路径），绝不计作成功；本次两策略 85/85 全 ok。",
+ "baselines": {
+  "no_op": {
+   "policy": "no_op",
+   "dir": "docs/研发记录/evidence/smart-layout-v3/baseline/no-op",
+   "status": "ok",
+   "ok_samples": 85,
+   "failed_samples": 0,
+   "run_hash": "277e9b3289a4c4e3ac79412591e8d17365e3b12ce4e0c9ae1f712fa56eb4ed6f",
+   "run_json_sha256": "cbc94e64ab79776eb333800f1126e89b6be128ea3a40780b3f2efead2b255d4a",
+   "resource": {
+    "total_elapsed_us": 234727,
+    "peak_rss_kb": 220744,
+    "note": "资源数据不进入 run_hash（确定性产物只含 Scene/PNG/指标）。"
+   },
+   "aggregate": {
+    "oob_total": 49,
+    "overlap_pair_total": 117,
+    "source_recall_min": 1.0,
+    "samples_with_failure_codes": 47,
+    "code_distribution": {
+     "M-LAYOUT-OOB": 37,
+     "M-LAYOUT-OVERLAP": 32
+    }
+   }
+  },
+  "v2_naive_reflow": {
+   "policy": "v2_naive_reflow",
+   "dir": "docs/研发记录/evidence/smart-layout-v3/baseline/v2",
+   "status": "ok",
+   "ok_samples": 85,
+   "failed_samples": 0,
+   "run_hash": "e458b48e5e1384c7db5365b5eff97d4a0d17acb157dbefd5bf9f5b0c1e6b05d8",
+   "run_json_sha256": "8e2a0f29e7949a1b109af9947fe68f0aba9a746a1fc4928de5a7b818e74ef1ab",
+   "resource": {
+    "total_elapsed_us": 240018,
+    "peak_rss_kb": 226352,
+    "note": "资源数据不进入 run_hash（确定性产物只含 Scene/PNG/指标）。"
+   },
+   "aggregate": {
+    "oob_total": 32,
+    "overlap_pair_total": 0,
+    "source_recall_min": 1.0,
+    "samples_with_failure_codes": 11,
+    "code_distribution": {
+     "M-LAYOUT-OOB": 11
+    }
+   }
+  }
+ },
+ "panel_disclosure": {
+  "panel_type": "ai_synthetic_development",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "基线为确定性策略的机器产物；不包含真人整理基线（V3-003B 另立），不宣称生产 v2 等价性。"
+ }
+}
