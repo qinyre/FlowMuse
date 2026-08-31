@@ -1,0 +1,24 @@
+{
+ "task_id": "V3-004B",
+ "run_id": "1c682724-8c38-4709-878a-5097b2e7511b",
+ "summary": "统计、rubric 与 golden 变更控制（automated 校验，无 AI panel）。(1) EvaluationSpec 决策程序可执行演练（tasks/V3-004B/artifacts/spec_decision.py + drill_runner.py + drill-report.json，sha256=6e370fa87bb464ab845ed1f3a2e6961bdf1698b910aa9cce07b450769b723ed1）：python 参考实现严格由冻结 spec（content_sha256=83dc663e…，只读引用未改动）运行时驱动——阈值（T2 margin/T3 margin/T4 boundary）/样本数/预算行/B=10000/seed=20260831/Holm α 全部运行时读自 spec 不复制常量；实现 T1 critical=0 硬规则（先于统计）、T2/T3/T4 F1 族 bootstrap 单侧 p（splitmix64 流 E1→E2→E3→T6 不重置）+Holm step-down（含点估计条件同向联判）、T5 预算确定性、T6 Spearman ρ（平均秩并列处理）+全零退化 construct_check_indeterminate 分支、RR-1~6 前置（missing/insufficient 判定）+对照系向量缺失守卫（缺任一必需向量→missing evaluation_inputs_missing，不抛异常）。合成结果演练 6 场景四态结论全匹配：pass（T2 p=0.0032/RD=0.0208<0.10、T3/T4 established、T6 ρ=−1.0 supported）、pass+t6_indeterminate（全零失败码退化分支）、reject×2（critical=1 硬规则路径；12/48 major 统计路径 T2 p=0.9978 fail）、insufficient（n=47≠D_SAMPLES 48）、missing（bench env hash 不符 RR-3 与向量缺失两路，error_codes 记录）；场景设计经边界校准（2/48 时 p=0.0501 恰压 Holm 线已注释并取 1/48 远离边界）。(2) golden 审批与变更审计（gates/G0/golden-ledger.json，deliverable，sha256=6bf7ae7d69ac93a642138f428e7c1ac04d00292b5a82e5aee5ff751e804a6621）：登记 4 条目——rubric v1.0.0(9408c037，只允许 V3-000B 版本，v1.0.1 拒绝)、evaluation-spec v1.0.0(83dc663e/e1598624，指回 preregistration 3 轮 panel)、golden three-baseline-report(8b8cf415)、golden frozen-manifest v1.0.1(afc4e451)，各含 approved_by 指回对应任务 commit 与 panel/复审证据；amendments 空表+policy 条款（无记录变更视为未发生，评估按旧版判定报 RR-6）。(3) 变更审计演练（gates/G0/change-control-drill.json，sha256=b5760517fddbf0bd274da8029ecf9f5d776fb8e3aa926b6aaa7685fe4e80e2f8，校验器含真实 RR-6 规则：evaluation_spec 条目 content_sha256 与磁盘文件内部声明比对，冒充已登记版本被真实拒绝）：5 项演练全过——ledger 基线校验（4 条目与磁盘逐字节 hash 相等）、golden 篡改检测（一字段之差 hash 变且被拒）、spec 变异检测（margin 0.10→0.12 canonical hash 变 83dc663e→3fb79834 且 post_hoc_amendment 真实拒绝）、rubric 版本闸（v1.0.1 拒绝）、未审批条目闸（缺 approved_by 拒绝）；全部变异仅内存不写回。(4) score-AI-surrogate 相关性：T6 演练含 supported 与 indeterminate 两分支；drill-report 披露明确『score–AI-surrogate 失败计数相关性（合成数据演练），不得外推为 score-human 相关性；真实相关性按 spec 属 G3 报告』。(5) 确定性：两 drill 双跑输出逐字节一致；canonical 哈希实现 vendored 自包含（artifacts/canonical.py，对拍 benchmark-spec 内部 content_sha256=1db65ecd… 验证一致，不依赖仓库外文件）。目标符号说明：EvaluationSpec/GateZeroEvaluator Dart 消费方按 manifest 无代码路径任务（004 系列均无），本任务交付其可执行演练与控制台账（python 参考实现位于 tasks/V3-004B/artifacts/）。测试：flutter test tool/smart_layout_v3 97 全绿（本任务无 Dart 改动）；全部验证为程序化断言（6 场景四态+5 项审计演练+双跑确定性+守卫边界探针）。复审 8 项发现中 F1（仓库外依赖）/F2（恒真断言）/F3（向量缺失守卫）/F4（T4 边界与 α 字面量）/F5（ledger 证据路径笔误）已全部于提交前修复并复跑。披露：human_validation_performed=false；HUMAN_VALIDATION_NOT_PERFORMED；PRODUCTION_RELEASE_NOT_AUTHORIZED。",
+ "changed_paths": [
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/golden-ledger.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/change-control-drill.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004B/artifacts/spec_decision.py",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004B/artifacts/drill_runner.py",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004B/artifacts/drill-report.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004B/artifacts/change_control_drill.py",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004B/artifacts/canonical.py",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004B/result.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004B/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004B/review.json"
+ ],
+ "artifacts": [
+  {
+   "key": "v3_004b_deliverable",
+   "path": "docs/研发记录/evidence/smart-layout-v3/gates/G0/golden-ledger.json",
+   "sha256": "6bf7ae7d69ac93a642138f428e7c1ac04d00292b5a82e5aee5ff751e804a6621"
+  }
+ ]
+}

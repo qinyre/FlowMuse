@@ -1,0 +1,265 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "evaluation-spec-decision-drill",
+ "task": "V3-004B",
+ "driver": {
+  "implementation": "tasks/V3-004B/artifacts/spec_decision.py（python 参考实现；Dart EvaluationSpec/GateZeroEvaluator 消费方按 manifest 归属后续任务）",
+  "spec_content_sha256": "83dc663e5f7eee107c40f528df555a45e86a52c2a097bf4afa908171635ef303",
+  "spec_file_sha256": "e159862495f2b70116a38fbdd4a17e8f863ea16ae307b95d35a6617454210b1f",
+  "bootstrap": "E1/E2/E3 的配对差用样本聚类 bootstrap：B=10000，seed=20260831，按样本有放回重采样，重算差值，取百分位；双侧报 [2.5%, 97.5%]，单侧界报 5%（下界）/95%（上界）。",
+  "prng": "splitmix64(seed=20260831)，由 evaluation runner 单一实现，规格固定序列号流（先 E1 后 E2 后 E3，同一 split 内一次生成不重置）。",
+  "stream_order": "E1→E2→E3→T6（同一 splitmix64 流不重置）",
+  "holm_family": [
+   "T2",
+   "T3",
+   "T4"
+  ]
+ },
+ "outcome_taxonomy": {
+  "pass": "T1 硬规则 ∧ F1(Holm) ∧ T5 预算 全部成立",
+  "reject": "进入统计但任一不成立（critical>0 / Holm 或点估计失败 / 预算超限）",
+  "insufficient": "输入可载入但注册前提不成立（样本数≠D_SAMPLES 登记值等）",
+  "missing": "必需输入缺失或被 RR-1~6 拒绝（无统计；error_codes 记录 RR 码）"
+ },
+ "runs": [
+  {
+   "scenario": "pass_expected",
+   "expected_outcome": "pass",
+   "expected_t6_status": null,
+   "actual_outcome": "pass",
+   "match": true,
+   "tests": {
+    "T1": {
+     "family": "hard_rule",
+     "critical_total": 0,
+     "pass": true
+    },
+    "T2": {
+     "family": "F1",
+     "estimand": "E1",
+     "point": 0.020833333333333332,
+     "p": 0.0032,
+     "point_ok": true,
+     "holm_pass": true,
+     "established": true
+    },
+    "T4": {
+     "family": "F1",
+     "estimand": "E2",
+     "point": -0.125,
+     "p": 0.002,
+     "point_ok": true,
+     "holm_pass": true,
+     "established": true
+    },
+    "T3": {
+     "family": "F1",
+     "estimand": "E3",
+     "point": -0.020833333333333332,
+     "p": 0.0,
+     "point_ok": true,
+     "holm_pass": true,
+     "established": true
+    },
+    "T5": {
+     "family": "perf",
+     "pass": true
+    },
+    "T6": {
+     "family": "construct",
+     "rho": -1.0,
+     "p": 0.0,
+     "supported": true,
+     "status": "supported"
+    }
+   },
+   "error_codes": []
+  },
+  {
+   "scenario": "pass_t6_indeterminate",
+   "expected_outcome": "pass",
+   "expected_t6_status": "construct_check_indeterminate",
+   "actual_outcome": "pass",
+   "match": true,
+   "tests": {
+    "T1": {
+     "family": "hard_rule",
+     "critical_total": 0,
+     "pass": true
+    },
+    "T2": {
+     "family": "F1",
+     "estimand": "E1",
+     "point": 0.020833333333333332,
+     "p": 0.0032,
+     "point_ok": true,
+     "holm_pass": true,
+     "established": true
+    },
+    "T4": {
+     "family": "F1",
+     "estimand": "E2",
+     "point": -0.125,
+     "p": 0.002,
+     "point_ok": true,
+     "holm_pass": true,
+     "established": true
+    },
+    "T3": {
+     "family": "F1",
+     "estimand": "E3",
+     "point": 0.0,
+     "p": 0.0,
+     "point_ok": true,
+     "holm_pass": true,
+     "established": true
+    },
+    "T5": {
+     "family": "perf",
+     "pass": true
+    },
+    "T6": {
+     "family": "construct",
+     "status": "construct_check_indeterminate",
+     "note": "失败码计数全并列（如全 0）→ ρ 无定义（spec degenerate 条款）"
+    }
+   },
+   "error_codes": []
+  },
+  {
+   "scenario": "reject_critical",
+   "expected_outcome": "reject",
+   "expected_t6_status": null,
+   "actual_outcome": "reject",
+   "match": true,
+   "tests": {
+    "T1": {
+     "family": "hard_rule",
+     "critical_total": 1,
+     "pass": false
+    },
+    "T2": {
+     "family": "F1",
+     "estimand": "E1",
+     "point": 0.020833333333333332,
+     "p": 0.0032,
+     "point_ok": true,
+     "holm_pass": true,
+     "established": true
+    },
+    "T4": {
+     "family": "F1",
+     "estimand": "E2",
+     "point": -0.125,
+     "p": 0.002,
+     "point_ok": true,
+     "holm_pass": true,
+     "established": true
+    },
+    "T3": {
+     "family": "F1",
+     "estimand": "E3",
+     "point": -0.10416666666666667,
+     "p": 0.0841,
+     "point_ok": true,
+     "holm_pass": false,
+     "established": false
+    },
+    "T5": {
+     "family": "perf",
+     "pass": true
+    },
+    "T6": {
+     "family": "construct",
+     "rho": -0.9997736276145304,
+     "p": 0.0,
+     "supported": true,
+     "status": "supported"
+    }
+   },
+   "error_codes": []
+  },
+  {
+   "scenario": "reject_statistical",
+   "expected_outcome": "reject",
+   "expected_t6_status": null,
+   "actual_outcome": "reject",
+   "match": true,
+   "tests": {
+    "T1": {
+     "family": "hard_rule",
+     "critical_total": 0,
+     "pass": true
+    },
+    "T2": {
+     "family": "F1",
+     "estimand": "E1",
+     "point": 0.25,
+     "p": 0.9978,
+     "point_ok": false,
+     "holm_pass": false,
+     "established": false
+    },
+    "T4": {
+     "family": "F1",
+     "estimand": "E2",
+     "point": 0.10416666666666667,
+     "p": 0.9411,
+     "point_ok": false,
+     "holm_pass": false,
+     "established": false
+    },
+    "T3": {
+     "family": "F1",
+     "estimand": "E3",
+     "point": -0.25,
+     "p": 0.5505,
+     "point_ok": false,
+     "holm_pass": false,
+     "established": false
+    },
+    "T5": {
+     "family": "perf",
+     "pass": true
+    },
+    "T6": {
+     "family": "construct",
+     "rho": -1.0,
+     "p": 0.0,
+     "supported": true,
+     "status": "supported"
+    }
+   },
+   "error_codes": []
+  },
+  {
+   "scenario": "insufficient_samples",
+   "expected_outcome": "insufficient",
+   "expected_t6_status": null,
+   "actual_outcome": "insufficient",
+   "match": true,
+   "tests": {},
+   "error_codes": [
+    "denominator_not_fixed"
+   ]
+  },
+  {
+   "scenario": "missing_env_rejected",
+   "expected_outcome": "missing",
+   "expected_t6_status": null,
+   "actual_outcome": "missing",
+   "match": true,
+   "tests": {},
+   "error_codes": [
+    "benchmark_environment_mismatch"
+   ]
+  }
+ ],
+ "status": "passed",
+ "disclosure": {
+  "panel_type": "ai_synthetic",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "本演练全部使用合成结果，仅验证 EvaluationSpec 决策程序的四态结论与注册规则执行；不构成任何系统真实评估结论。T6 相关性为 score–AI-surrogate 失败计数相关性（合成数据演练），不得外推为 score-human 相关性；真实相关性按 spec 属 G3 报告。"
+ }
+}
