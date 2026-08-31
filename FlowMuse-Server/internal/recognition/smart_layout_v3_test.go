@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -321,5 +322,232 @@ func TestV3ChannelIndependentFromV2(t *testing.T) {
 func TestNewV3AnalyzerNilProvider(t *testing.T) {
 	if NewV3Analyzer(nil, DefaultV3RequestLimits()) != nil {
 		t.Fatal("nil provider 必须返回 nil analyzer（通道关闭）")
+	}
+}
+
+// ---- V3-201B：传输健壮性与 live-route ----
+
+func newV3TestServer(t *testing.T, analyzer *V3Analyzer) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	RegisterSmartLayoutV3(mux, analyzer)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	return server
+}
+
+func v3FullRequestBytes(t *testing.T) []byte {
+	t.Helper()
+	requestBytes, err := json.Marshal(map[string]any{
+		"protocolVersion": 3,
+		"pageId":          "page-42",
+		"sceneRevision":   map[string]any{"epoch": 2, "revision": 17, "fingerprint": "0123456789abcdef"},
+		"assets": []map[string]any{
+			{"key": "clean|page", "kind": "clean", "fingerprint": "0123456789abcdef"},
+			{"key": "annotated|page", "kind": "annotated", "fingerprint": "0123456789abcdef"},
+			{"key": "crop|r1", "kind": "crop", "fingerprint": "0123456789abcdef"},
+		},
+		"marks":      []map[string]any{{"markId": "m1", "label": "m1", "assetKey": "annotated|page", "sourceId": "r1"}},
+		"exactTexts": []map[string]any{{"sourceId": "text-1", "text": "标题：会议纪要"}, {"sourceId": "text-2", "text": "第二行"}},
+		"sourceRefs": []string{"r1", "r2", "text-1", "text-2", "ink-3"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return requestBytes
+}
+
+func TestV3LiveRouteSmoke(t *testing.T) {
+	var seen *SmartLayoutV3Request
+	var mu sync.Mutex
+	analyzer := NewV3Analyzer(func(ctx context.Context, req *SmartLayoutV3Request) ([]byte, error) {
+		mu.Lock()
+		seen = req
+		mu.Unlock()
+		return v3ValidResponseJSON(), nil
+	}, DefaultV3RequestLimits())
+	server := newV3TestServer(t, analyzer)
+
+	resp, err := http.Post(server.URL+"/api/ink/smart-layout/analyze/v3",
+		"application/json", bytes.NewReader(v3FullRequestBytes(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("live-route smoke 状态码 %d: %s", resp.StatusCode, body)
+	}
+	var payload struct {
+		ProtocolVersion int `json:"protocolVersion"`
+		Regions         []struct {
+			ID           string   `json:"id"`
+			Role         string   `json:"role"`
+			SourceIDs    []string `json:"sourceIds"`
+			ReadingOrder *int     `json:"readingOrder"`
+			Confidence   *float64 `json:"confidence"`
+		} `json:"regions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ProtocolVersion != 3 || len(payload.Regions) != 3 {
+		t.Fatalf("响应不完整: %+v", payload)
+	}
+	if payload.Regions[0].ReadingOrder == nil || payload.Regions[0].Confidence == nil {
+		t.Fatal("必填字段缺失")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if seen == nil || seen.PageID != "page-42" || len(seen.ExactTexts) != 2 {
+		t.Fatalf("provider 未收到完整请求: %+v", seen)
+	}
+}
+
+func TestV3ClientCancellationPropagates(t *testing.T) {
+	providerSawCancel := make(chan struct{})
+	analyzer := NewV3Analyzer(func(ctx context.Context, req *SmartLayoutV3Request) ([]byte, error) {
+		<-ctx.Done()
+		close(providerSawCancel)
+		return nil, ctx.Err()
+	}, DefaultV3RequestLimits())
+	server := newV3TestServer(t, analyzer)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
+		server.URL+"/api/ink/smart-layout/analyze/v3",
+		bytes.NewReader(v3FullRequestBytes(t)))
+	client := &http.Client{}
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		cancel()
+	}()
+	_, _ = client.Do(req) // 客户端主动取消，读取错误是预期行为
+	select {
+	case <-providerSawCancel:
+	case <-time.After(2 * time.Second):
+		t.Fatal("客户端取消未传播到 provider ctx")
+	}
+}
+
+func TestV3RequestTimeoutAborts(t *testing.T) {
+	limits := V3RequestLimits{RequestTimeout: 50 * time.Millisecond, ProviderTimeout: 40 * time.Millisecond}
+	analyzer := NewV3Analyzer(func(ctx context.Context, req *SmartLayoutV3Request) ([]byte, error) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(5 * time.Second):
+			return v3ValidResponseJSON(), nil
+		}
+	}, limits)
+	server := newV3TestServer(t, analyzer)
+
+	start := time.Now()
+	resp, err := http.Post(server.URL+"/api/ink/smart-layout/analyze/v3",
+		"application/json", bytes.NewReader(v3FullRequestBytes(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	elapsed := time.Since(start)
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("请求级超时应 502，got %d", resp.StatusCode)
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("超时未及时中断: %v", elapsed)
+	}
+}
+
+func TestV3ErrorCodeToStatusMapping(t *testing.T) {
+	cases := []struct {
+		name     string
+		provider []byte
+		status   int
+	}{
+		{"残缺输出→502", []byte("{"), http.StatusBadGateway},
+		{"悬空 sourceRef→400", []byte(`{"protocolVersion":3,"regions":[{"id":"g1","role":"body","sourceIds":["ghost"],"readingOrder":0,"confidence":0.5,"relations":[]}],"warnings":[]}`), http.StatusBadRequest},
+		{"重叠认领→400", []byte(`{"protocolVersion":3,"regions":[{"id":"g1","role":"body","sourceIds":["r1"],"readingOrder":0,"confidence":0.5,"relations":[]},{"id":"g2","role":"body","sourceIds":["r1"],"readingOrder":1,"confidence":0.5,"relations":[]}],"warnings":[]}`), http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := newV3TestServer(t, NewV3Analyzer(func(ctx context.Context, req *SmartLayoutV3Request) ([]byte, error) {
+				return tc.provider, nil
+			}, DefaultV3RequestLimits()))
+			resp, err := http.Post(server.URL+"/api/ink/smart-layout/analyze/v3",
+				"application/json", bytes.NewReader(v3FullRequestBytes(t)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != tc.status {
+				t.Fatalf("状态映射不符: got %d want %d", resp.StatusCode, tc.status)
+			}
+			var envelope map[string]SmartLayoutV3Error
+			if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+				t.Fatal(err)
+			}
+			if envelope["error"].Code == "" {
+				t.Fatal("错误 envelope 缺 code")
+			}
+		})
+	}
+}
+
+// 旧端点不串线：v2 请求打 v3 端点、v3 请求打 v2 端点都必须被各自
+// 校验拒绝；两通道同时启用互不影响。
+type stubV2Layouter struct{}
+
+func (stubV2Layouter) Layout(ctx context.Context, request SmartLayoutRequest) (SmartLayoutResponse, error) {
+	return SmartLayoutResponse{}, nil
+}
+
+func (stubV2Layouter) RecognizeBlock(ctx context.Context, block SmartLayoutInkBlock) (SmartLayoutRecognizedBlock, error) {
+	return SmartLayoutRecognizedBlock{}, nil
+}
+
+func (stubV2Layouter) Compose(ctx context.Context, request SmartLayoutComposeRequest) (SmartLayoutResponse, error) {
+	return SmartLayoutResponse{}, nil
+}
+
+func TestV2V3NoCrosstalk(t *testing.T) {
+	v2Payload := []byte(`{"pages":[],"blocks":[]}`)
+	layouter := stubV2Layouter{}
+	api := NewHTTPAPI(nil, time.Second, layouter).
+		WithV3Analyzer(NewV3Analyzer(func(ctx context.Context, req *SmartLayoutV3Request) ([]byte, error) {
+			return v3ValidResponseJSON(), nil
+		}, DefaultV3RequestLimits()))
+	mux := http.NewServeMux()
+	api.Register(mux)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	// v3 payload 打 v2 端点：v2 自身校验拒绝（不串线成 v3 语义）。
+	respCross, err := http.Post(server.URL+"/api/ink/smart-layout", "application/json", bytes.NewReader(v3FullRequestBytes(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respCross.Body.Close()
+	if respCross.StatusCode == http.StatusOK {
+		t.Fatal("v3 payload 不得被 v2 端点当有效请求处理")
+	}
+
+	// v2 payload 打 v3 端点：v3 严格解析拒绝。
+	respCross2, err := http.Post(server.URL+"/api/ink/smart-layout/analyze/v3", "application/json", bytes.NewReader(v2Payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respCross2.Body.Close()
+	if respCross2.StatusCode != http.StatusBadRequest {
+		t.Fatalf("v2 payload 打 v3 端点应 400，got %d", respCross2.StatusCode)
+	}
+
+	// v3 端点仍正常。
+	respV3, err := http.Post(server.URL+"/api/ink/smart-layout/analyze/v3", "application/json", bytes.NewReader(v3FullRequestBytes(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer respV3.Body.Close()
+	if respV3.StatusCode != http.StatusOK {
+		t.Fatalf("v3 端点被 v2 干扰: %d", respV3.StatusCode)
 	}
 }

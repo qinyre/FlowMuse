@@ -137,6 +137,9 @@ func (a *V3Analyzer) Analyze(ctx context.Context, req *SmartLayoutV3Request) (*V
 		if errors.Is(pErr, context.DeadlineExceeded) {
 			return nil, v3err(V3ErrInternal, "", "provider 超时")
 		}
+		if errors.Is(pErr, context.Canceled) {
+			return nil, v3err(V3ErrInternal, "", "客户端取消请求")
+		}
 		return nil, v3err(V3ErrInternal, "", "provider 失败: %v", pErr)
 	}
 	// 严格 decode（schema/未知字段/枚举/上限/环/悬空 targetRegion 全在此）。
