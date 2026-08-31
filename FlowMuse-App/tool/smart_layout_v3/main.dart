@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'src/benchmark_spec.dart';
 import 'src/determinism_harness.dart';
+import 'src/fixture_runner.dart';
 import 'src/smart_layout_fixture_runner.dart';
 
 /// 智能排版 v3 fixture manifest 校验与确定性 CLI（V3-001A/B）。
@@ -30,18 +31,66 @@ void main(List<String> args) {
       _determinism(options);
     case 'determinism-once':
       _determinismOnce(options);
+    case 'run':
+      _runBatch(options);
     default:
       usage();
   }
 }
 
 Never usage() {
-  stderr.writeln('usage: main.dart {validate|benchmark-hash|determinism|determinism-once} [options]');
+  stderr.writeln(
+      'usage: main.dart {validate|benchmark-hash|determinism|determinism-once|run} [options]');
   stderr.writeln('  validate --manifest {path} [--repo-root {dir}]');
   stderr.writeln('  benchmark-hash [--spec {path}]');
   stderr.writeln('  determinism --manifest {path} --repo-root {dir} [--spec {path}] [--runs N]');
   stderr.writeln('  determinism-once --manifest {path} --repo-root {dir} [--spec {path}]');
+  stderr.writeln('  run --manifest {path} --repo-root {dir} [--spec {path}] [--output {dir}]');
   exit(64);
+}
+
+/// 批量执行（V3-001C）：准入→政策→环境→回放→产物五层，写分层报告，
+/// 失败保留；机器退出码 0=全部通过 / 2=存在失败或拒绝。
+void _runBatch(Map<String, String> options) {
+  final manifestPath = options['manifest'];
+  final repoRoot = options['repo-root'];
+  if (manifestPath == null || repoRoot == null) usage();
+  final specPath = options['spec'];
+  final specFile = specPath == null ? File(_defaultSpecPath()) : File(specPath);
+  if (!specFile.existsSync()) {
+    _emit({'ok': false, 'errors': ['benchmark spec 不存在：${specFile.path}']}, exitCode: 2);
+  }
+  final specLoad = BenchmarkSpec.load(jsonDecode(specFile.readAsStringSync()));
+  if (!specLoad.ok) {
+    _emit({'ok': false, 'errors': specLoad.errors}, exitCode: 2);
+  }
+  final admission = SmartLayoutFixtureRunner(repoRoot: repoRoot).loadAndAdmit(manifestPath);
+  if (!admission.admitted) {
+    _emit({
+      'ok': false,
+      'stage': 'admission',
+      'errors': [for (final e in admission.errors) e.toJson()],
+    }, exitCode: 2);
+  }
+  final manifest = admission.manifest!;
+  final runner = FixtureRunner(
+    repoRoot: repoRoot,
+    spec: specLoad.spec!,
+    outputRoot: options['output'] ?? 'build/smart-layout-v3-runs',
+  );
+  final batch = runner.runBatch(manifest);
+  _emit({
+    'ok': batch.ok,
+    'manifest': manifest.name,
+    'fixture_count': batch.fixtureReports.length,
+    'passed': batch.fixtureReports.where((r) => r.status == 'passed').length,
+    'failed': batch.fixtureReports.where((r) => r.status == 'failed').length,
+    'rejected': batch.fixtureReports.where((r) => r.status == 'rejected').length,
+    'content_sha256': batch.contentHash,
+    'fixtures': [
+      for (final r in batch.fixtureReports) {'fixture_id': r.fixtureId, 'status': r.status},
+    ],
+  }, exitCode: batch.ok ? 0 : 2);
 }
 
 Map<String, String> _parseOptions(List<String> rest) {

@@ -139,13 +139,14 @@ class DeterminismHarness {
       _decodeJson(sceneBytes),
     );
     final normalizedGoldenHash = CanonicalArtifacts.canonicalPngSha256(goldenBytes);
-    // 固定推进若干 tick：任何依赖时钟的逻辑（超时计数、排序）在同一环境下
-    // 走到相同状态。
-    for (var i = 0; i < spec.timeoutTicks; i++) {
+    // 固定推进若干 tick：任何依赖时钟的逻辑（排序、阶段计数）在同一环境
+    // 下走到相同状态；真实管线的超时判定由 V3-001C runner 按 spec 执行。
+    const ticksPerRun = 16;
+    for (var i = 0; i < ticksPerRun; i++) {
       clock.tick();
     }
     if (clock.timedOut(spec.timeoutTicks)) {
-      policyErrors.add('clock reached timeout ticks within a single run');
+      policyErrors.add('clock budget exhausted: ticks=$ticksPerRun >= timeout_ticks=${spec.timeoutTicks}');
     }
     return DeterminismRunReport(
       fixtureId: fixture.id,

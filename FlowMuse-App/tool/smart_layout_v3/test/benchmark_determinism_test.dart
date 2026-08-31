@@ -9,6 +9,7 @@ import '../src/canonical_artifacts.dart';
 import '../src/determinism_harness.dart';
 import '../src/deterministic_execution_environment.dart';
 import '../src/fixture_manifest.dart';
+import 'benchmark_determinism_test_helpers.dart';
 
 /// V3-001B 确定性与 benchmark 环境测试。
 void main() {
@@ -64,7 +65,7 @@ void main() {
       List<int> u32(int v) => [(v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff];
       final ihdr = [...u32(1), ...u32(1), 8, 0, 0, 0, 0];
       return [
-        ...CanonicalArtifactsPngSignature.bytes,
+        ...pngSignature,
         ...chunk('IHDR', ihdr),
         if (withAncillary) ...chunk('tEXt', utf8.encode('Comment\x00made-by')),
         if (withAncillary) ...chunk('tIME', [7, 230, 8, 31, 12, 0, 0]),
@@ -86,7 +87,7 @@ void main() {
 
     test('非 PNG / 截断 PNG 抛 FormatException', () {
       expect(() => CanonicalArtifacts.canonicalPng([1, 2, 3]), throwsFormatException);
-      expect(() => CanonicalArtifacts.canonicalPng([...CanonicalArtifactsPngSignature.bytes, 0, 0, 0, 5]),
+      expect(() => CanonicalArtifacts.canonicalPng([...pngSignature, 0, 0, 0, 5]),
           throwsFormatException);
     });
   });
@@ -156,7 +157,7 @@ void main() {
 
     setUp(() {
       tempRoot = Directory.systemTemp.createTempSync('smart_layout_v3_001b_');
-      manifestJson = _buildAdmissibleManifest(tempRoot);
+      manifestJson = buildAdmissibleManifest(tempRoot);
     });
 
     tearDown(() {
@@ -174,7 +175,7 @@ void main() {
       expect(again.identityHash, okFreeze.identityHash);
 
       // 篡改字体文件 → 哈希不匹配。
-      _writeFile(tempRoot, 'fonts/Roboto.ttf', utf8.encode('tampered'));
+      writeFile(tempRoot, 'fonts/Roboto.ttf', utf8.encode('tampered'));
       final bad = harness.freezeEnvironment(fixture);
       expect(bad.ok, isFalse);
       expect(bad.errors.join(), contains('字体哈希不匹配'));
@@ -188,7 +189,7 @@ void main() {
 
       // 001A 层已拦 synthetic manifest 携带真实录制；政策的独立拦截面是
       // 边界完整、可解析的 authorized_real manifest（V3-002A 前仍只许合成）。
-      final authorized = _authorizedRealManifest(tempRoot);
+      final authorized = authorizedRealManifest(tempRoot);
       final authorizedManifest = _parseOrFail(authorized);
       expect(harness.checkDataPolicy(authorizedManifest, spec), isNotEmpty,
           reason: 'synthetic_only 政策必须拒绝 authorized_real 录制');
@@ -213,11 +214,11 @@ void main() {
     test('determinism CLI 三次隔离子进程一致性哈希相等且 exit 0', () {
       final tempRoot = Directory.systemTemp.createTempSync('smart_layout_v3_001b_iso_');
       addTearDown(() => tempRoot.deleteSync(recursive: true));
-      final manifestJson = _buildAdmissibleManifest(tempRoot);
+      final manifestJson = buildAdmissibleManifest(tempRoot);
       final manifestPath = '${tempRoot.path}${Platform.pathSeparator}manifest.json';
       File(manifestPath).writeAsStringSync(jsonEncode(manifestJson));
 
-      final dart = _findDart();
+      final dart = findDart();
       final appRoot = Directory.current.path;
       final result = Process.runSync(dart, [
         'run',
@@ -239,7 +240,7 @@ void main() {
   });
 }
 
-String _findDart() {
+String findDart() {
   final suffix = Platform.isWindows ? '.exe' : '';
   final resolved = Platform.resolvedExecutable;
   if (resolved.toLowerCase().endsWith('dart$suffix')) return resolved;
@@ -278,8 +279,8 @@ BenchmarkSpec _repoSpecWithPolicy(String policy) {
   return BenchmarkSpec.load({...raw, 'data_policy': policy}).spec!;
 }
 
-Map<String, Object?> _authorizedRealManifest(Directory root) {
-  final base = _buildAdmissibleManifest(root);
+Map<String, Object?> authorizedRealManifest(Directory root) {
+  final base = buildAdmissibleManifest(root);
   final boundary = base['data_boundary'] as Map<String, Object?>;
   boundary['origin'] = 'authorized_real';
   boundary['consent'] = <String, Object?>{
@@ -305,23 +306,23 @@ Map<String, Object?> _authorizedRealManifest(Directory root) {
   return base;
 }
 
-void _writeFile(Directory root, String relativePath, List<int> bytes) {
+void writeFile(Directory root, String relativePath, List<int> bytes) {
   final file = File('${root.path}${Platform.pathSeparator}${relativePath.replaceAll('/', Platform.pathSeparator)}');
   file.parent.createSync(recursive: true);
   file.writeAsBytesSync(bytes);
 }
 
-Map<String, Object?> _buildAdmissibleManifest(Directory root) {
+Map<String, Object?> buildAdmissibleManifest(Directory root) {
   final sceneBytes = utf8.encode('{"z":1,"a":{"b":[1,2.0]}}');
   final sceneSha = crypto.sha256.convert(sceneBytes).toString();
-  final goldenBytes = _minimalPng();
+  final goldenBytes = minimalPng();
   final goldenSha = crypto.sha256.convert(goldenBytes).toString();
   final fontBytes = utf8.encode('fake-regular');
   final fontSha = crypto.sha256.convert(fontBytes).toString();
-  _writeFile(root, 'artifacts/scene.json', sceneBytes);
-  _writeFile(root, 'artifacts/golden.png', goldenBytes);
-  _writeFile(root, 'fonts/Roboto.ttf', fontBytes);
-  _writeFile(root, 'replay/vlm_overview.json', utf8.encode('{"synthetic":true}'));
+  writeFile(root, 'artifacts/scene.json', sceneBytes);
+  writeFile(root, 'artifacts/golden.png', goldenBytes);
+  writeFile(root, 'fonts/Roboto.ttf', fontBytes);
+  writeFile(root, 'replay/vlm_overview.json', utf8.encode('{"synthetic":true}'));
   return <String, Object?>{
     'schema_version': '1.0.0',
     'manifest_kind': 'smart-layout-v3-fixture-manifest',
@@ -408,7 +409,7 @@ DeterministicExecutionEnvironment _testEnvironment({required int seed}) {
   });
 }
 
-List<int> _minimalPng() {
+List<int> minimalPng() {
   List<int> u32(int v) => [(v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff];
   List<int> chunk(String type, List<int> data) {
     int crc = 0xffffffff;
@@ -427,14 +428,11 @@ List<int> _minimalPng() {
 
   final ihdr = [...u32(1), ...u32(1), 8, 0, 0, 0, 0];
   return [
-    ...CanonicalArtifactsPngSignature.bytes,
+    ...pngSignature,
     ...chunk('IHDR', ihdr),
     ...chunk('IDAT', [9, 9, 9]),
     ...chunk('IEND', const []),
   ];
 }
 
-class CanonicalArtifactsPngSignature {
-  static const List<int> bytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-}
 

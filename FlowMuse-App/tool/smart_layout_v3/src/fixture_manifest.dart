@@ -392,7 +392,7 @@ class FixtureManifest {
         final kind = response.enumString('kind', const {'vlm_overview', 'vlm_crop', 'ocr', 'other_network'});
         final contentOrigin = response.enumString('content_origin', const {'synthetic', 'authorized_real'});
         final path = response.nonEmptyString('path');
-        response.patternString('sha256', sha256Pattern, 'SHA-256', code: 'invalid_sha256');
+        final responseSha = response.patternString('sha256', sha256Pattern, 'SHA-256', code: 'invalid_sha256');
         response.checkKeys({'name', 'kind', 'content_origin', 'path', 'sha256'});
         if (boundary != null && contentOrigin == 'authorized_real' && boundary.origin != 'authorized_real') {
           errors.add(response.error(
@@ -401,8 +401,14 @@ class FixtureManifest {
             'synthetic manifest 不得携带 authorized_real 录制响应（数据授权前 record/replay 只接受合成内容）',
           ));
         }
-        if (name != null && kind != null && contentOrigin != null && path != null) {
-          responses.add(RecordedResponse(name: name, kind: kind, contentOrigin: contentOrigin, path: path));
+        if (name != null && kind != null && contentOrigin != null && path != null && responseSha != null) {
+          responses.add(RecordedResponse(
+            name: name,
+            kind: kind,
+            contentOrigin: contentOrigin,
+            path: path,
+            sha256: responseSha,
+          ));
         }
       }
     }
@@ -808,11 +814,18 @@ class ElementIntegrity {
 }
 
 class RecordedResponse {
-  const RecordedResponse({required this.name, required this.kind, required this.contentOrigin, required this.path});
+  const RecordedResponse({
+    required this.name,
+    required this.kind,
+    required this.contentOrigin,
+    required this.path,
+    required this.sha256,
+  });
   final String name;
   final String kind;
   final String contentOrigin;
   final String path;
+  final String sha256;
 }
 
 class ExpectedRelation {

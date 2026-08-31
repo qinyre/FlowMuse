@@ -1,0 +1,100 @@
+{
+  "task_id": "V3-001C",
+  "run_id": "555292fa-9137-49b2-a3ab-267c0a89fc40",
+  "executor_run_id": "940a3de9-4503-4dce-9d64-ccaf36f48f85",
+  "model": "glm-5.3",
+  "reasoning_effort": "max",
+  "verdict": "approved",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "pass",
+      "summary": "flutter test tool/smart_layout_v3/ 实测 46 项全绿（fixture_manifest_test 29 项 V3-001A 既有 + benchmark_determinism_test 12 项 V3-001B + fixture_runner_test 5 项新增），输出 'All tests passed!' +46。",
+      "evidence": "cd FlowMuse-App && flutter test tool/smart_layout_v3/ → '+46 All tests passed!'；grep 统计三测试文件 test() 数为 29/12/5。"
+    },
+    {
+      "id": "F2",
+      "severity": "pass",
+      "summary": "flutter analyze tool/smart_layout_v3 实测 'No issues found! (ran in 1.4s)'，exit 0。",
+      "evidence": "cd FlowMuse-App && flutter analyze tool/smart_layout_v3 → No issues found! EXIT=0。"
+    },
+    {
+      "id": "F3",
+      "severity": "pass",
+      "summary": "CLI 三次运行验收：按 benchmark_determinism_test_helpers.dart 用 python 等价构造临时 fixture（scene/golden PNG/fonts/replay 文件与 sha256 齐全），dart run tool/smart_layout_v3/main.dart run --manifest <tmp> --repo-root <tmp> --output runs-out 三次均 exit 0、ok:true、passed:1，content_sha256 三次同为 3dadba2bb842a3ab0e99959c4a5a7c40322d5e14772bde7eaf28588504e49fa9（三次运行 hash 一致成立）；<repoRoot>/runs-out/f-det/report.json 与 batch-report.json 均落盘。",
+      "evidence": "三次 run 输出解析：ok=True passed=1 content_sha256=3dadba2b…；set(hashes) 长度 1。"
+    },
+    {
+      "id": "F4",
+      "severity": "pass",
+      "summary": "故意失败验收：篡改 replay/vlm_overview.json 后 run 一次 → exit 2、ok:false、failed:1；失败报告无条件保留在 <repoRoot>/runs-out/f-det/report.json，status=failed，replay 层 errors 含 'replay_hash_mismatch: … 声明 a8198524… 实际 14469a67…'（声明/实际哈希都给出）；batch content_sha256 由 3dadba2b… 变为 f902a84f…，证明失败改变产物 hash。",
+      "evidence": "写入 '{\"tampered\":true}' 到 replay 文件后 run → exit=2；report.json 解析 status=failed、layers.replay.ok=false。"
+    },
+    {
+      "id": "F5",
+      "severity": "pass",
+      "summary": "真实录制机器拒绝三条路径在 run CLI 全部真实可达（本人独立构造五个 fixture 实测，均 exit 2）：a) authorized_real 缺 consent/anonymization/deletion → stage=admission，错误码 data_boundary_missing_consent / data_boundary_missing_anonymization / data_boundary_missing_deletion（另有 checkKeys 的 field_missing 附加）；b) 边界完整+authorized_real 录制 → 准入通过、runner data_policy 层拒绝：fixture status=rejected、报告落盘、errors 含 synthetic_only；c) synthetic manifest 混入 authorized_real 录制 → 001A parse 层 real_recording_requires_authorized_origin。",
+      "evidence": "五次 run CLI 实测 exit=2；解析输出 stage/codes 与 runs-out/f-det/report.json 的 data_policy 层逐项如上。"
+    },
+    {
+      "id": "F6",
+      "severity": "pass",
+      "summary": "受控回放无网络路径：整个 tool/smart_layout_v3 目录 grep HttpClient/WebSocket/Socket/Uri.parse/package:http/package:dio 零匹配；controlled_replay.dart 仅 import dart:io(File)+crypto+fixture_manifest。fail-closed 四条件齐备：未声明响应名→replay_response_not_declared（禁止网络回退）、文件缺失→replay_file_missing、哈希不匹配→replay_hash_mismatch、network_mode 非 offline_replay→replay_network_mode_invalid（parse 层强校验后的运行时复核）；fetchAll 对 manifest.recordedResponses 逐一 fetch 覆盖全部声明响应，无静默空回退。",
+      "evidence": "grep -rnE 'HttpClient|WebSocket|Socket|Uri.parse|package:http|package:dio' tool/smart_layout_v3 → exit 1（无匹配）；源码 controlled_replay.dart:19-48。"
+    },
+    {
+      "id": "F7",
+      "severity": "pass",
+      "summary": "五层报告与产物 hash 语义正确：admission→data_policy→environment→replay→artifacts 顺序执行，任一层失败即 early return（admission/policy 失败→rejected，environment/replay 失败→failed，全过→passed）；_finish 在全部五条退出路径上都被调用且无条件 _writeJson（失败保留真无条件，非仅成功路径）；fixture contentHash=canonicalJsonSha256(toJson())（默认剥离易变键；报告本身不含任何墙钟/时间戳键，三次一致实测）；batch contentHash=逐 fixture contentHash 排序后 '|' 拼接再 sha256（顺序无关、任一 fixture 变化必改 hash，F4 实测变化）。",
+      "evidence": "fixture_runner.dart:46-121、163-216 源码；F3/F4 实测哈希。"
+    },
+    {
+      "id": "F8",
+      "severity": "pass",
+      "summary": "顺带修复的前轮 F13 自洽且未破坏 001B：恒真探针（tick 恰好 spec.timeoutTicks 次再判 >=）改为固定 ticksPerRun=16 的真实预算校验；旧字符串 'clock reached timeout' 已消失；误配置实测会真实触发（自造 timeout_ticks=8 的 spec：errors=['clock budget exhausted: ticks=16 >= timeout_ticks=8']），仓库冻结 spec（timeout_ticks=100000）下静默；46 项全绿含 001B 全部 12 项（含隔离子进程三次一致验收）。",
+      "evidence": "determinism_harness.dart:143-150 源码；determinism-once 与 run --spec <tight> 实测输出；git diff --cached 该文件。"
+    },
+    {
+      "id": "F9",
+      "severity": "pass",
+      "summary": "顺带的 fixture_manifest.dart 改动自洽：RecordedResponse 补存 parse 层已校验的 sha256（唯一构造点是解析器；sha256Pattern 强校验不变、001A 语义不变——准入层对录制响应仍只核存在性，完整性哈希由 001C replay 层执行，此分工在 fixture_runner_test 注释中明确且被 F4 实测覆盖；29 项 001A 测试全绿）。",
+      "evidence": "git diff --cached fixture_manifest.dart；smart_layout_fixture_runner.dart:154-163（存在性校验）；46 全绿。"
+    },
+    {
+      "id": "F10",
+      "severity": "pass",
+      "summary": "范围合规：git diff --cached 共 10 个路径（8 个 FlowMuse-App/tool/smart_layout_v3/** + 2 个 evidence/tasks/V3-001C/**），全部落在 allowed_paths 内；fixture_manifest.dart 与 determinism_harness.dart 属共用 tool 路径 allowlist；未越界 V3-002A（无样本清单/审计脚本）与 V3-003A（无基线生成/指标统计）；未暂存的 agent-execution-manifest.json 改动仅是 orchestrator generated_at_utc 时间戳刷新，任务定义未被篡改。",
+      "evidence": "git diff --cached --stat（10 files）；git diff 未暂存 manifest 仅一行时间戳。"
+    },
+    {
+      "id": "F11",
+      "severity": "pass",
+      "summary": "证据真实性：commands.json 的 command 与 Manifest V3-001C commands[0] 逐字符一致（python == 为 True）、exit_code 0；本人复跑该命令 exit 0 输出 'V3-001C artifact contract valid.'；result.json artifact sha256 a04e62aa1140f18dab8fd745825ac3e46d55b09501f7670828f41abd8598de50 与本人用 hashlib 独立重算的 fixture_runner.dart 原始字节哈希完全一致；summary 关键声称（46 测试/三次一致/非零退出/analyze 零问题/F13 修复）逐项复现相符。",
+      "evidence": "本 finding 所列各命令实测输出与哈希重算。"
+    },
+    {
+      "id": "F12",
+      "severity": "pass",
+      "summary": "无投机：src/ 与 main.dart 无硬编码 64 位十六进制常量（grep 无匹配，sha256Pattern 正则除外）；CLI 退出码经 exit() 直达（成功 0/失败拒绝 2/用法 64，实测 0 与 2）；无静默 fallback——所有失败都以带机器码的 errors 呈现并写盘。",
+      "evidence": "grep -rnE '[0-9a-f]{64}' src/ main.dart → 无匹配；F3-F5 各 exit 码实测。"
+    },
+    {
+      "id": "F13",
+      "severity": "minor",
+      "summary": "次要残留（不阻塞，前轮 F13 两个可选补救实现了'真实探针'一半）：DeterminismRunReport.ok 仍不并入 policyErrors——用手造 spec（timeout_ticks=8）实测：environment 层 errors=['clock budget exhausted…'] 却 ok=true、fixture status=passed、CLI exit 0。错误在报告与 determinism-once 输出中可见（非静默），且触发需绕过冻结 spec 手工传 --spec（仓库冻结 spec timeout_ticks=100000 不触发；spec 哈希校验由 benchmark-hash 承担）。恒真告警确已消除，探针已有意义；建议后续把 environment 层 ok 改为 ok=determinism.ok && errors.isEmpty。",
+      "evidence": "run --spec <timeout_ticks=8 spec> 实测：environment ok=True errors=['clock budget exhausted: ticks=16 >= timeout_ticks=8']、status=passed、exit=0。"
+    },
+    {
+      "id": "F14",
+      "severity": "minor",
+      "summary": "次要观察（不阻塞）：recorded_responses 的 name 缺少去重校验（fixture id 有 seenIds 去重，响应名没有）；同名两条声明时 fetch(name) 恒取第一条，第二条文件既不被哈希核对也不会被按名返回。因所有消费都按声明名解析且解析到的条目必被核验，未验证内容无法流入执行层，风险受控；建议 001A parse 层补 duplicate_recorded_response_name 校验。",
+      "evidence": "fixture_manifest.dart:382-414（无 seen-set）与 controlled_replay.dart:20-27（where().first）。"
+    },
+    {
+      "id": "F15",
+      "severity": "minor",
+      "summary": "次要观察（不阻塞）：a) 001A 文件 smart_layout_fixture_runner.dart 头部注释称录制内容哈希'由 V3-001B 环境层冻结'，实际由 V3-001C replay 层执行（001B 只冻结字体）——注释措辞过时，功能分工本身正确且有测试；b) result.json 的 changed_paths 预列了 review.json（执行时尚不存在，由本轮写入），无害的簿记噪声。",
+      "evidence": "源码注释与 result.json changed_paths 对比。"
+    }
+  ]
+}
