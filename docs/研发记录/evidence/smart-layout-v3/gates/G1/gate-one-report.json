@@ -1,0 +1,54 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "gate-one-report",
+ "task": "V3-206A",
+ "components": {
+  "quality-development.json": "a29bf07b379f8385118fe10c43117071ba87df7958dff6755565794efb0ff369",
+  "quality-validation.json": "5578cb0d0762adaba29082c46199d2ba1cf06eb97a965468e0b0fd06880b75cd",
+  "latency-development.json": "5defe37cf1a586fd63c308b5804ac1415444f951aaadf0df66e47166d3c10455",
+  "prerequisites.json": "3af6b709a387e7ad359b6f13b040c7ad75ad40aaf055d77943cd24e17393243f"
+ },
+ "measured": {
+  "development": {
+   "evaluated_samples": 48,
+   "pair_precision": 0.2344,
+   "pair_recall": 0.9811,
+   "pair_f1": 0.3784,
+   "merge_errors": 0,
+   "split_errors": 6,
+   "stroke_loss_samples": 0
+  },
+  "validation": {
+   "evaluated_samples": 18,
+   "pair_precision": 0.2171,
+   "pair_recall": 1.0,
+   "pair_f1": 0.3567,
+   "merge_errors": 0,
+   "split_errors": 0,
+   "stroke_loss_samples": 0
+  },
+  "latency_development": {
+   "p50_ms": 0.67,
+   "p95_ms": 5.09,
+   "max_ms": 6.74,
+   "timeout_seconds": 300
+  },
+  "calibration_drift_pair_f1": 0.0217
+ },
+ "machine_verdicts": {
+  "prerequisites": "pass",
+  "schema_hash_pinned": "pass",
+  "pipeline_hashes_recorded": "pass",
+  "live_route": "pass",
+  "frozen_isolation": "pass",
+  "dev_validation_separated": "pass",
+  "stroke_conservation_dev": "pass",
+  "stroke_conservation_validation": "pass",
+  "latency_budget": "pass",
+  "low_sample_rule": "pass"
+ },
+ "gate_decision": "development_gate_reported",
+ "quality_threshold_disclosure": "分割质量阈值未在 Gate 0 预注册（SR-2 禁止事后设阈）；本报告以 dev/validation 实测值作为后续迭代的回归地板记录，不声明质量达标。frozen holdout 未参与本评测（SR-4）。",
+ "human_validation_performed": false,
+ "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED；PRODUCTION_RELEASE_NOT_AUTHORIZED"
+}
