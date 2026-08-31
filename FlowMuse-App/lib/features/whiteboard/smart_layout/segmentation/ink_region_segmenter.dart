@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
+import 'region_classifier.dart';
 import 'region_segment.dart';
 import 'segmentation_policy.dart';
 import 'spatial_grid_index.dart';
@@ -13,9 +14,12 @@ import 'spatial_grid_index.dart';
 ///（不是跨页面固定 pt）；3000 笔画页经 [SpatialGridIndex] 避免
 /// O(N²) 全配对。
 class InkRegionSegmenter {
-  InkRegionSegmenter({this.policy = SegmentationPolicy.development});
-
   final SegmentationPolicy policy;
+
+  final RegionClassifier _classifier;
+
+  InkRegionSegmenter({this.policy = SegmentationPolicy.development})
+    : _classifier = RegionClassifier(policy: policy);
 
   int _lastEvaluationCount = 0;
 
@@ -173,6 +177,15 @@ class InkRegionSegmenter {
           : width > height * policy.horizontalAspectThreshold
           ? SegmentLineDirection.horizontal
           : SegmentLineDirection.mixed;
+      final localScale = _median([
+        for (final box in group) localScaleById[box.id]!,
+      ]);
+      final semantic = _classifier.semanticOf(
+        group,
+        direction: direction,
+        localScale: localScale,
+        pageScale: medianHeight,
+      );
       segments.add(
         RegionSegment(
           id: 'seg-$i',
@@ -186,9 +199,10 @@ class InkRegionSegmenter {
           lineDirection: direction,
           columnIndex: columnOfGroup[group] ?? 0,
           skewRadians: skew,
-          localScale: _median([
-            for (final box in group) localScaleById[box.id]!,
-          ]),
+          localScale: localScale,
+          regionClass: semantic.type,
+          classificationConfidence: semantic.confidence,
+          preservedReason: semantic.preservedReason,
         ),
       );
     }

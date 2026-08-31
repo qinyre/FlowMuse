@@ -1,0 +1,16 @@
+{
+ "task_id": "V3-103B",
+ "run_id": "1f71b1ad-b58f-417d-bacc-bfce7cdc4224",
+ "summary": "区域分类、防误并拆与参数冻结（合并原 V3-103D～F）。(1) RegionClassifier 确定性语义分类：尺度锚=全页中位笔画高（孤笔画区域局部尺度退化为自身高度不能当锚，首轮 line 误判 emphasis 后修正）；文本笔画=高∈[0.4,2.5]×页尺度，装饰笔画=长薄（宽>6×且高<0.5×）或巨形（maxDim>6×）；规则优先级 emphasis（装饰为主且文本<3 笔）→table（≥2行×≥2列×网格覆盖≥0.6，≥4 笔）→formula（≥4 笔且 x 重叠堆叠对≥max(2,n×0.25)）→line（≥2 笔单行且高≤2×局部尺度）→unknown(0.35)；置信度为规则边际确定性打分（0.9/0.8 动态/0.7/0.6/0.35），非概率模型输出。preserved 语义：竖排无条件 preserved(verticalWriting)（保留模式），置信<0.55 冻结阈值 preserved(lowConfidence)；不确定区域不自动替换。(2) RegionSegment 增 regionClass/classificationConfidence/preservedReason 字段（默认值兼容），membership 完全不变——分类在连通分量之后纯标注；103A 全部 9 用例原样回归通过（双栏/倾斜/oracle 等价/3000 性能）。(3) RegionMembershipGuard merge/split 防护：合并阻断跨列/preserved 任一方/成员重叠/外来笔画，拆分要求≥2 非空子集、完整覆盖、无重复、无外来（丢笔返回 stroke-loss(n) 确定性原因）；高风险反例（散点乱排 7 笔确定性随机）逐区域命中 preserved 或 emphasis 语义且全页零丢笔。(4) 参数冻结：SegmentationPolicy 增分类参数 5 项（preserveConfidence/rowTolerance/oversizedFactor/tableGridCoverage/formulaStackRatio）+paramsCanonicalHash（14 字段按名字典序+canonical 数值文本+fingerprint64 钉定，任一字段变化即变哈希）+frozenValidationV1 冻结实例（validation 单轮选择结论=与 development 数值一致，如实记录无上调依据；冻结后只读，frozen holdout 只用于 Gate 1 一次性判定——数据集级最差分组指标归 V3-206A Gate 1 测量）。(5) 测试 13 用例（目录累计 22 全绿）：line/emphasis 孤立装饰线不并文本/table 3×3/竖排 preserved/散点反例零丢笔全 preserved/membership 不变回归/守卫合并 4 路阻断+放行/拆分 6 路/冻结哈希稳定+敏感+冻结驱动管线同结果；analyze 零 issue。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/segmentation/segmentation_policy.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/segmentation/region_segment.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/segmentation/region_classifier.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/segmentation/membership_guard.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/segmentation/ink_region_segmenter.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/segmentation/region_classification_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-103B/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-103B/result.json"
+ ],
+ "artifacts": {}
+}
