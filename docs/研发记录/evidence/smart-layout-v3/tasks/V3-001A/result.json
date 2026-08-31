@@ -1,0 +1,25 @@
+{
+  "task_id": "V3-001A",
+  "run_id": "5df0f627-93be-4b35-8e55-40a7154c2a19",
+  "summary": "建立 FixtureManifest 契约：JSON Schema（draft-07，含 model_reference〔§5.1 schema/model hash，V3-201x 填写〕）覆盖 manifest 元信息与版本字段、来源组、授权/脱敏/删除数据边界（authorized_real 强制 consent granted+anonymization+deletion+user_isolation_key_hash，来源组级隔离键字段必须存在可 null）、页面特征、确定性环境（DPR/locale/时区/固定时钟/随机种子/字体哈希/六平台/offline_replay）、元素完整性、录制响应与期望产物。Dart 严格解析器与 schema 双向对齐：_Obj 访问器全字段类型检查（required/enum/pattern/数值界/additionalProperties 全部机器执行），数组字段给出但非数组产生 field_not_array（不再静默跳过），未知字段产生 unknown_field，畸形输入全走机器错误码不抛异常；content_origin 枚举强校验；taxonomy 路径 const 锁定规范路径；整数 dpr 合法准入。SmartLayoutFixtureRunner 准入层（scene/image/golden 哈希校验、录制响应存在性〔内容哈希与字体由 V3-001B 冻结〕、taxonomy 哈希与失败码成员校验、边界元数据先于产物校验）+ validate CLI（退出码 0/2/64 实测）。测试 29 项全绿：正例、契约负例、数据边界负例、复审两轮回归（枚举伪装/taxonomy 路径伪造/畸形 relations/数值界/非数组字段/隔离键缺失/未知字段）、准入层、环境往返。CLI 攻击复测 12 项全部 admitted:false（content_origin 大小写、自造 taxonomy 路径、非数组 relations/reading_order/recorded_responses/failure_codes、隔离键缺失、未知字段等）。flutter analyze 零问题。",
+  "changed_paths": [
+    "FlowMuse-App/tool/smart_layout_v3/src/deterministic_execution_environment.dart",
+    "FlowMuse-App/tool/smart_layout_v3/src/fixture_manifest.dart",
+    "FlowMuse-App/tool/smart_layout_v3/src/smart_layout_fixture_runner.dart",
+    "FlowMuse-App/tool/smart_layout_v3/main.dart",
+    "FlowMuse-App/tool/smart_layout_v3/test/fixture_manifest_test.dart",
+    "FlowMuse-App/tool/smart_layout_v3/test/fixtures/positive_synthetic.json",
+    "FlowMuse-App/tool/smart_layout_v3/test/fixtures/positive_authorized_real.json",
+    "docs/研发记录/specs/smart-layout-v3/fixture-manifest.schema.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001A/review.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_001a_deliverable",
+      "path": "docs/研发记录/specs/smart-layout-v3/fixture-manifest.schema.json",
+      "sha256": "a0915545243b8284690406f5c8c21e19748500788cc438c1ad7129a2d2415a91"
+    }
+  ]
+}

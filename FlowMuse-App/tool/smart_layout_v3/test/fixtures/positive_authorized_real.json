@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_kind": "smart-layout-v3-fixture-manifest",
+  "manifest": {
+    "name": "authorized-real-sample",
+    "version": "1.0.0",
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "generator": "hand-authored fixture for V3-001A contract tests",
+    "split": "development",
+    "failure_taxonomy_reference": {
+      "path": "docs/研发记录/specs/smart-layout-v3/failure-taxonomy.json",
+      "sha256": "e0dd0ad6a5d5094e4605e8fec6813e008cf0712fa151414418c8aaa9679428f4"
+    }
+  },
+  "data_boundary": {
+    "origin": "authorized_real",
+    "source_groups": [
+      {
+        "id": "authorized-group-a",
+        "origin": "authorized_real",
+        "user_isolation_key_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "sample_count": 1,
+        "collected_at_utc": "2026-08-30T00:00:00Z",
+        "reference": "consent-ticket-001（不含用户正文的授权记录引用）"
+      }
+    ],
+    "consent": {
+      "status": "granted",
+      "granted_at_utc": "2026-08-30T00:00:00Z",
+      "scope": "智能排版 v3 评测；仅限脱敏后使用",
+      "reference": "consent-ticket-001"
+    },
+    "anonymization": {
+      "status": "applied",
+      "method": "手写与截图内容脱敏；文本替换为脱敏副本",
+      "applied_at_utc": "2026-08-30T00:00:00Z"
+    },
+    "deletion": {
+      "policy_id": "policy-2026-08",
+      "retention_until_utc": "2027-08-30T00:00:00Z",
+      "verified_at_utc": "2026-08-30T00:00:00Z",
+      "reference": "deletion-log-001"
+    },
+    "user_isolation_key_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+    "forbidden_uses": ["禁止回流训练", "禁止跨 split 复用", "禁止逐页人工查看 frozen 答案"]
+  },
+  "fixtures": [
+    {
+      "id": "authorized-known-failure-page",
+      "source_group_id": "authorized-group-a",
+      "features": {
+        "content_kind": "handwritten_only",
+        "stroke_count": 3100,
+        "pressure_stress": true,
+        "known_failure_page": true,
+        "scattered_page": true
+      },
+      "scene": { "path": "artifacts/real_scene.json", "sha256": "7777777777777777777777777777777777777777777777777777777777777777" },
+      "environment": {
+        "dpr": 3.0,
+        "locale": "zh-CN",
+        "timezone": "Asia/Shanghai",
+        "clock": { "mode": "fixed", "fixed_at_utc": "2026-08-31T00:00:00Z" },
+        "random_seed": 99,
+        "fonts": [
+          { "family": "HarmonyOS Sans", "file": "fonts/HarmonyOS_Sans.ttf", "sha256": "8888888888888888888888888888888888888888888888888888888888888888" }
+        ],
+        "platform": "ohos",
+        "network_mode": "offline_replay"
+      },
+      "element_integrity": {
+        "element_ids_sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+        "version_nonce_seed": 11
+      },
+      "expected": {
+        "coverage": { "min_source_recall": 1.0 },
+        "renderer_golden": { "path": "artifacts/real_golden.png", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "failure_codes": ["M-LAYOUT-OVERLAP"]
+      }
+    }
+  ]
+}
