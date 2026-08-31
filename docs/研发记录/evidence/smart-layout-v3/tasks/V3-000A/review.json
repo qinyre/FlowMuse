@@ -1,0 +1,38 @@
+{
+  "task_id": "V3-000A",
+  "run_id": "591d1ba7-3d7a-4e03-85fe-927e71d12917",
+  "executor_run_id": "731d1442-85be-48f2-a37c-5f4c77a15f2b",
+  "model": "glm-5.3",
+  "reasoning_effort": "max",
+  "verdict": "approved",
+  "findings": [
+    {
+      "id": "RF3-1",
+      "severity": "low",
+      "blocking": false,
+      "location": "failure_codes.C-SESSION-CRASH-HANG.negative_example；rubric_anchor_set.ANCH-17-runner-timeout.rationale；failure_codes.m-PERF-BUDGET.predicate",
+      "issue": "“预算”一词两指：C-SESSION-CRASH-HANG 负例称“在 benchmark 预算内正常完成，只是耗时偏长（记 m-PERF-BUDGET）”、ANCH-17 rationale 称“预算内慢但完成记 m-PERF-BUDGET”，而 m-PERF-BUDGET predicate 要求“P50/P95/峰值内存任一超过 Gate 0 冻结预算”才登记。字面上“预算内（未超标）却记超标码”矛盾；实际意图为前两处的“预算”指 runner 超时上限、后一处指性能阈值，两条线不同。权威 predicate 判定唯一，不构成同一证据两种结论，但同词两义易误读。"
+    },
+    {
+      "id": "RF3-2",
+      "severity": "low",
+      "blocking": false,
+      "location": "failure_codes.M-LAYOUT-CLIP.predicate 第二分支 vs C-SNAPSHOT-TYPED-TEXT-LOST 与 ANCH-04-typed-text-truncated",
+      "issue": "M-LAYOUT-CLIP predicate 含“或字符流在渲染层丢失”分支，使 ANCH-04 场景（末两字渲染层截断、字符流丢失）字面同时命中 major 裁字与 critical 字符流丢失两码，而 ANCH-04 钦定单记 {critical:1, major:0}。因 R2 管辖“多重失败（多事件）”、R3 管辖“因果升级”，单一事件落双码域时按判例取最高级单记可自洽，但该“单事件去重”原则未明文化，机械套用 R2 “不互相吞并”会得出与锚点不同的计数。"
+    },
+    {
+      "id": "RF3-3",
+      "severity": "low",
+      "blocking": false,
+      "location": "forbidden_patterns.FP-7-denominator-shrink.pattern vs failure_codes.M-CAND-FALSE-NO-CANDIDATE.predicate",
+      "issue": "FP-7 括号例子“遗漏页面（含不出结果页、崩溃超时页）”与其 maps_to 目标 M-CAND-FALSE-NO-CANDIDATE predicate 的“统计分母必须含全部页面（崩溃超时除外，另记 C-SESSION-CRASH-HANG）”字面相反：崩溃页不进 no-candidate 分母在 predicate 是明示允许，在 FP-7 括号字面是禁止模式。合理解读为 FP-7 禁止的是“无任何记账的遗漏（用缩小分母规避失败）”，已另记 C-SESSION-CRASH-HANG（critical）的剔除不构成规避，且 C-SESSION-CRASH-HANG 定义“不得计入 no-candidate 规避失败”支持此读；但建议在 FP-7 措辞中写明“另记 C-SESSION-CRASH-HANG 后不进分母不算遗漏”以消除循环字面冲突。"
+    },
+    {
+      "id": "RF3-4",
+      "severity": "low",
+      "blocking": false,
+      "location": "failure_codes.m-LAYOUT-FONTSIZE-BAND.predicate",
+      "issue": "谓词“font size ∈ (hard_floor, preferred_band) 之外但在硬界内”区间记号不严谨：preferred_band 未定义为区间，字面只能推出“高于偏好带上界”一侧，与其 positive_example“正文整体降 2pt”（低于偏好带下限）方向不符。definition（“在硬下限之上但偏离偏好带宽”）与正反例可无歧义恢复意图，建议改为“字号 ≥ hard_floor 且不在 preferred_band 区间内”之类的显式区间表述。"
+    }
+  ]
+}

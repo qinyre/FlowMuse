@@ -1,0 +1,26 @@
+{
+  "task_id": "V3-000A",
+  "runs": [
+    {
+      "command_id": "artifact-contract",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smart-layout-v3/AgentExecution.ps1 -Action VerifyArtifacts -TaskId V3-000A",
+      "exit_code": 0,
+      "started_at_utc": "2026-08-31T05:50:32Z",
+      "finished_at_utc": "2026-08-31T05:50:33Z"
+    },
+    {
+      "command_id": "artifact-contract",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smart-layout-v3/AgentExecution.ps1 -Action VerifyArtifacts -TaskId V3-000A",
+      "exit_code": 0,
+      "started_at_utc": "2026-08-31T06:01:08Z",
+      "finished_at_utc": "2026-08-31T06:01:09Z"
+    },
+    {
+      "command_id": "artifact-contract",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smart-layout-v3/AgentExecution.ps1 -Action VerifyArtifacts -TaskId V3-000A",
+      "exit_code": 0,
+      "started_at_utc": "2026-08-31T06:11:55Z",
+      "finished_at_utc": "2026-08-31T06:11:56Z"
+    }
+  ]
+}
