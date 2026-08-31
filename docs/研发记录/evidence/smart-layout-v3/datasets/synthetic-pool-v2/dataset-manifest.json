@@ -1,0 +1,4681 @@
+{
+ "schema_version": "1.0.0",
+ "dataset_kind": "smart-layout-v3-dataset-manifest",
+ "dataset": {
+  "name": "synthetic-pool-v2",
+  "version": "1.0.0",
+  "generated_at_utc": "2026-08-31T00:00:00Z",
+  "lane": "ai_synthetic_development",
+  "split": "pooled",
+  "admission_policy": {
+   "admitted_kinds": [
+    "synthetic",
+    "licensed"
+   ],
+   "rejected_kinds": [
+    "real_user_content"
+   ],
+   "rejection_directive": "real_user_content 保持隔离并推迟到 V3-700A 授权包（数据授权/脱敏/同意批准）"
+  }
+ },
+ "samples": [
+  {
+   "sample_id": "syn-p2-meet-hand-low-des-1001",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1001,
+     "params_sha256": "9443e9533f45c236efd06559a1489cc0f11a1497da0da249f3ee5d4620f53394",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-low-des-1001.scene.json",
+    "sha256": "a40c39911c3a331a05af7602a68e590e84a095d78dbbe047b46374859102ca5b"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-low-des-v-1002",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1002,
+     "params_sha256": "607f9dd7dc644ab9cce34dad6879f5762c09d51f38ea092ffe383e5cc21306ae",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-hand-low-des-1001"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-low-des-v-1002.scene.json",
+    "sha256": "92e76b300485c7f24a0033a734be31105931e3a866e5837a5b198b0d019891fd"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-low-mob-1003",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1003,
+     "params_sha256": "651138a648ba3d7794b90e1a1e87b6701899251023f29f0a0387f31f76f59ebf",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-low-mob-1003.scene.json",
+    "sha256": "ad8509a7658e55013b5f2035248f4ed83b161ba24884ce0f3a4f0be5a59d2e66"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-low-mob-v-1004",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1004,
+     "params_sha256": "c738379863a9eaf59e8b39dde8b659c88f4df43fad9659ad4c69f1eb07a94d47",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-hand-low-mob-1003"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-low-mob-v-1004.scene.json",
+    "sha256": "c11226c33b7cf2e628e6f309826be8cb8cc098f05fea0568232f56ed7f9a53bf"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-low-web-1005",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1005,
+     "params_sha256": "aa739d6464e6897c9d5ea4d5380f79d6fc45db5bb10cd4d2de988a6d71a2f5ff",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-low-web-1005.scene.json",
+    "sha256": "46f5900e13dff6e7f7a78fb64e40b5e3e1bfa30a7a1918cac1583c24a4979db3"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-med-des-1006",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1006,
+     "params_sha256": "d154d29fe14be287d3c4304276a59d56638b7fee88283e5c86816dd9079ad9fc",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-med-des-1006.scene.json",
+    "sha256": "dac3063dd9191152b55edc966299c92d8d4a4780bc4154468e734ac1665af28e"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-med-des-v-1007",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1007,
+     "params_sha256": "72951af4e36542fccc84a58732dff2a1b4b5c82f7ebc475f50edcdd8a28c3951",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-hand-med-des-1006"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-med-des-v-1007.scene.json",
+    "sha256": "8865aeddf8a926f817a4862e4835aa0ed7bb1cd8b40fd3feff0bcd5f66571bb5"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-med-mob-1008",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1008,
+     "params_sha256": "2a03b8aecf94a3e976edbbb8de8dc5398d8155c5be59e3f5560678e2f84d5b9a",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-med-mob-1008.scene.json",
+    "sha256": "10cda915dffef4bbc09cede2b9d8811fd33720c4ba4e6915be18b5561d0577ee"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-med-mob-v-1009",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1009,
+     "params_sha256": "60f2d7f83b89d8b695ccb243b28d1a7b61a442c6c1c2b24c74bfd9172e6b0a03",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-hand-med-mob-1008"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-med-mob-v-1009.scene.json",
+    "sha256": "72202739280ca0acc72cf820d8094e995d5f197746b12deabe162542aa7a4823"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-med-web-1010",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1010,
+     "params_sha256": "7e82bfed0bca176e14cefc6055cba6489a9ded7eaf5f54345f26259b1bd4f33e",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-med-web-1010.scene.json",
+    "sha256": "10655c2957a44bfa56c98823d2623a5e1c6e54df86c93d5ce42b1c45f378f366"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-hig-des-1011",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1011,
+     "params_sha256": "30acd69f47f1e435977d349a9d0b268ad465ab60165ced95cf4d4b6d83db839b",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-hig-des-1011.scene.json",
+    "sha256": "7d559031d6221559a90005eb3daffe691009476df8bd845f5ee3bfcf0d22eeb8"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": true
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-hig-des-v-1012",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1012,
+     "params_sha256": "d5f2c7535bcca6cb941850e1312c711e1614ecab498faca75615303e9483a2b1",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-hand-hig-des-1011"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-hig-des-v-1012.scene.json",
+    "sha256": "23213fdd45e5cb075f16f9f369abfc277a8f89f728428c363fafb4e24ce4f062"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": true
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-hig-mob-1013",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1013,
+     "params_sha256": "078ee866a15f471d1ea6f4c517cec185e769b4229b7ec93db2ed4a53221f19f9",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-hig-mob-1013.scene.json",
+    "sha256": "fda7432e3a0b678b82127711d0da16f9a8dc6d6c1609a17a727420c746f21e8f"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": true,
+    "known_failure_page": true
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-hig-mob-v-1014",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1014,
+     "params_sha256": "0d07a33e24e737a1b5ad9556b28b096f8a24e9e7e850a9757dc594bc6f82e00d",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-hand-hig-mob-1013"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-hig-mob-v-1014.scene.json",
+    "sha256": "d099513184ec1d988260d6988382172bdef78dbc38c29cb215167c84852cf154"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": true,
+    "known_failure_page": true
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-hig-web-1015",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1015,
+     "params_sha256": "5bdfa4ad5c517bd281518c0c49bd1fbceb614cc5c3465fa5e9ccd71d183ea071",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-hand-hig-web-1015.scene.json",
+    "sha256": "399a67cd54275cddd217bed82387151a53311923f06274b98d53e2d8c9f2c412"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": true
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-low-des-1016",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1016,
+     "params_sha256": "018bc686e057c7a9589c03180d2f539275d119b0e611fcdde24e1c3ba39fde3f",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-low-des-1016.scene.json",
+    "sha256": "470d0e0a86217d78fd205b273e82cf8a3990012feed421c6686a4915557730c7"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-low-des-v-1017",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1017,
+     "params_sha256": "cc67830a531f7440c0aa029a6baae73a53daddf89105195cb145b38b1121f835",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-mixe-low-des-1016"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-low-des-v-1017.scene.json",
+    "sha256": "459a14223acf2c19746b96a2eeaf7f943aece507747ff50380311a1cc215a3d3"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-low-mob-1018",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1018,
+     "params_sha256": "2f7e27271d59ad1997be2c2603a5f005ef7e7eb1f3e09b3479ffc65957eb7945",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-low-mob-1018.scene.json",
+    "sha256": "f6ee58bc56f48a9bbd2b4ec9ab29edfc479f19f9a758405922af9e65c5357fc7"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-low-mob-v-1019",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1019,
+     "params_sha256": "d53233828eb4c9090ae2505d6a45681ba1202143955a00c1ad510712f4b2af56",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-mixe-low-mob-1018"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-low-mob-v-1019.scene.json",
+    "sha256": "7e88dc861b16f890c0a6a86af5293cec5388a0073473f2128f3c85c95f012c92"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-low-web-1020",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1020,
+     "params_sha256": "f7d61aa314f3b40d4a37bf8d801d161625ece8bca7add35713fa75e703fdb65d",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-low-web-1020.scene.json",
+    "sha256": "74ac48e63ea2d062f582f99b70847ce3a8b31328c0d2ffbb5b5ee993298d4e75"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-med-des-1021",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1021,
+     "params_sha256": "54a15f23f0616d0e086ea7caee09c85851c3e6b9a19897ae08aa0bd063086aae",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-med-des-1021.scene.json",
+    "sha256": "652e32408ab8c1d3e1e58a15c65ce049f23ff92eaad98d4eadbf85da4cdd22cc"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-med-des-v-1022",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1022,
+     "params_sha256": "94f1d59aa95a04d54db30ece8d9e28d2701482606dca86d8a7ad978c89c1dcef",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-mixe-med-des-1021"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-med-des-v-1022.scene.json",
+    "sha256": "9c996a128cbed16a193b0778c2224d9f7ed46b9b647f05f114cde86db2e14208"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-med-mob-1023",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1023,
+     "params_sha256": "6a95c98fd45baa79eea6af73e266c3984a72b0a923ff9bbc1567e8c0bb4a5815",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-med-mob-1023.scene.json",
+    "sha256": "98732e6601e505e4241b4fc7cd9c1cd5e2c07ef6894939eaba1163bcbc3b9077"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-med-mob-v-1024",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1024,
+     "params_sha256": "6bb1d2afd09af8e95272365c39ceb22ed644b56ebd037322159a13a62bec4296",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-mixe-med-mob-1023"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-med-mob-v-1024.scene.json",
+    "sha256": "775f9a79b393aa3727f350fe0f4bf61aa176079019c004b677de72fc6630712f"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-med-web-1025",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1025,
+     "params_sha256": "23c42ec0033489fdf545ebf5bb375a34492a9847c6c386e04ff675f67abdc8cd",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-med-web-1025.scene.json",
+    "sha256": "ca331ce5305039bd85409e5c5c487e2ad27e0e79b44a683e9443243f6753d4fc"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-hig-des-1026",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1026,
+     "params_sha256": "554f886f17213b263db9cb0fbe28944090bf4dc5de8604767cbe4a329df9bbb6",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-hig-des-1026.scene.json",
+    "sha256": "83022f0a9aba2b14584a5c1e5162bcf4fd9ca149d34fe3b802269b2cbbb09a4c"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": true
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-hig-des-v-1027",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1027,
+     "params_sha256": "858712132bd1e01bbf9c775ac2c266a2280b71a825a48c8be7cdc9384ec858e9",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-mixe-hig-des-1026"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-hig-des-v-1027.scene.json",
+    "sha256": "3ff842ae2e4af3af2b777720e57954bcc85ba71d3dcd80356c6328f29032e88a"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": true
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-hig-mob-1028",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1028,
+     "params_sha256": "9ab3928b0aca2e03abbff850188a9f36ee25dd9b1b7728c3d9ff5ed6627c16fb",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-hig-mob-1028.scene.json",
+    "sha256": "2d6d946fec516c78bc1fe7a7bc4b3ba4894bc053291b76994337ae5c0b48ccc8"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": true,
+    "known_failure_page": true
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-hig-mob-v-1029",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1029,
+     "params_sha256": "ab8ae2659de1bfab277e2175104b6b0cd4b373e6a433fd21379086ef4381cfa3",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-meet-mixe-hig-mob-1028"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-hig-mob-v-1029.scene.json",
+    "sha256": "2191c9c0170acc85490efea231a0bc5a0c6d2efe7a8435dfee84eaefdaaaf4f6"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": true,
+    "known_failure_page": true
+   }
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-hig-web-1030",
+   "kind": "synthetic",
+   "scene_family": "meeting-notes",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1030,
+     "params_sha256": "ceb5862b6e795ed69dd403d2fdb7c887edc424de79319cc0837f1a7af7bff437",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-meet-mixe-hig-web-1030.scene.json",
+    "sha256": "ed9bd33f4c7f453b1e4a0947310eaa067c3657b4f0a7a8ed604a69b93867d7d4"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": true
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-low-des-1031",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1031,
+     "params_sha256": "9650dae66eb9d63c59b363e924ac88feeb2f3e2788df3811719347b1f43e9756",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-low-des-1031.scene.json",
+    "sha256": "8ae627eb79a8017ed50e3b3e7917a119306865fca8205a91cd6164126779e209"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-low-des-v-1032",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1032,
+     "params_sha256": "455c7d5e2139f770c80841c09942e80b5929413674cc79b0076bf19e7027332a",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-brai-hand-low-des-1031"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-low-des-v-1032.scene.json",
+    "sha256": "6e518a0960850c4e34e2e1b2cfda733c37fea3639d77c33c3d30da8e8c618cfa"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-low-mob-1033",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1033,
+     "params_sha256": "666fbba27700012867857831d9483e598aed8fef263b6f3757ee74e5ce3c477a",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-low-mob-1033.scene.json",
+    "sha256": "73315e7a8c3ce91f688b6e1fe6dc7f3598685794d8e4974cf9bf2353c07f73ed"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-low-mob-v-1034",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1034,
+     "params_sha256": "c22612300dddda4279a48993325b79f66c5b842ccd94b90209e305ae91f53827",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-brai-hand-low-mob-1033"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-low-mob-v-1034.scene.json",
+    "sha256": "b6521628f2d32dd8273d885fefbaff26648fbf368f951ff0963318eaf6884f1b"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-low-web-1035",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1035,
+     "params_sha256": "db708ed6c0bc3e578dee2fb99031739cf8854e5fa0024c082b42adc9bfe447a6",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-low-web-1035.scene.json",
+    "sha256": "cf68c6893df0f52144ac0d35f72711a7562726d249576941ac12a99d99aad992"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-med-des-1036",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1036,
+     "params_sha256": "4b99294f82329c07aada55759cfe196511e093282412056ad08bc74fceccc751",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-med-des-1036.scene.json",
+    "sha256": "c56042cc87af305f1d2473cb227e17d46f08688e34b04d0f999edc5216280821"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-med-des-v-1037",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1037,
+     "params_sha256": "61f107737dc199f07591f8ace8d8246961a1492231583c02dca4f9518220d7fc",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-brai-hand-med-des-1036"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-med-des-v-1037.scene.json",
+    "sha256": "86bcccb5c0af8cbb3a703c967ec47eb40d0abaa754f637e4c92e4721a8368b5f"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-med-mob-1038",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1038,
+     "params_sha256": "251dd52d33bb9ae921cdef5adf5f4fd5a6fa8dea125e05ca109e0dbdec6f7447",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-med-mob-1038.scene.json",
+    "sha256": "958e321e6eebbc445ae0c99f1c1ea761d6c0914e3cab661b021e604ddc7706e0"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-med-mob-v-1039",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1039,
+     "params_sha256": "9d52faabce8a4435077521a587beb940f6915d969af89b486463a8a2e77e8990",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-brai-hand-med-mob-1038"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-med-mob-v-1039.scene.json",
+    "sha256": "7bf2929d1f0f2821ff2c36a16e7e4bb3fb8872eb4988273a0ec2fa690de9d54d"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-med-web-1040",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1040,
+     "params_sha256": "4534baf02f2a198531393328fb8b11bb75d39e27200e8f4ecb708896eabc835d",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-med-web-1040.scene.json",
+    "sha256": "d323fadb5582e2cde3560a0e329df7edb488751a895dbb118dc37a203ef12c7a"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-hig-des-1041",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1041,
+     "params_sha256": "649163b8c20cd2e0edfdb0667f70d2c235ca38805e609b0a06e1b86d1ac53606",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-hig-des-1041.scene.json",
+    "sha256": "9fdca14690746f2f72766368df66172598d826eead70bfe32ceb4effcfaec16d"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-hig-des-v-1042",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1042,
+     "params_sha256": "ffa5d63582d3516384bba856abc9477628b0fa6d60d47b267f5e0112392b8828",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-brai-hand-hig-des-1041"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-hig-des-v-1042.scene.json",
+    "sha256": "0d61b375c93d282b3224636c1fa7482f9708fcc73890667914bcc4bad8219663"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-hig-mob-1043",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1043,
+     "params_sha256": "a8fd02f22b71d9156d9c8f6ba952fc1d9f35d0ec875d6f956b579ed326c8c892",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-hig-mob-1043.scene.json",
+    "sha256": "cafe0168ea9094507d08e5bcc7a5d49e649f148de4b131dfe9376eb178f3446a"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": true,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-hig-mob-v-1044",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1044,
+     "params_sha256": "4c0b882cf96e64644de74e3fad993b5961774eab0260b2b92061721fce292a2c",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-brai-hand-hig-mob-1043"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-hig-mob-v-1044.scene.json",
+    "sha256": "dfdc479e54a6d5402e075209b45d3161741a6024050b9654c8e753dfe397ca88"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": true,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-hig-web-1045",
+   "kind": "synthetic",
+   "scene_family": "brainstorm-board",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1045,
+     "params_sha256": "65ab88b472da90fccb925bed01f5c10ad56da3fefab639a5f2462a53de261f15",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-brai-hand-hig-web-1045.scene.json",
+    "sha256": "d7a086b7b6c8b57a5d855a3a5ad68f696a9188b927e2a0b5afac756a28afbf85"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-low-des-1046",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1046,
+     "params_sha256": "87818dd93905862f21c16482c007dc4d3294d7c4ed54cc0f2860c9f3edd92afe",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-low-des-1046.scene.json",
+    "sha256": "d1756bd9e09e0402fef126c49f729ed9ea148a01118fedc2b7cdc5a45fcbc331"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-low-des-v-1047",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1047,
+     "params_sha256": "d1f227f419634e3bf6287b2b804db806fc54c3f17a5c27f8b2afc3a34cc9a583",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-anno-mixe-low-des-1046"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-low-des-v-1047.scene.json",
+    "sha256": "0f13d8dadad40d0ff68ca3579ec70ce24f7d8237b82831598cbb0ce63c6880ce"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-low-mob-1048",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1048,
+     "params_sha256": "13ac102b8ed0571b62b6ce5c82b765d3ade10f4fa04d1966dadf292c45d3455f",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-low-mob-1048.scene.json",
+    "sha256": "e94ec68bf521a8b99e8f1e269fcbb128ce7e18f1bf6261651dedddccdd608a97"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-low-mob-v-1049",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1049,
+     "params_sha256": "e3d264685d628a896b0616fac61d84d522b8462e54aa237d6f3c81ab1f979fe3",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-anno-mixe-low-mob-1048"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-low-mob-v-1049.scene.json",
+    "sha256": "b07fcd9cbc46c2c94cf0cfbbed7ea25a74a7ea37c4f1757d220d5510e071d62b"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-low-web-1050",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1050,
+     "params_sha256": "46ac2e47417a0c1204112ce2841f9877d8505ee1afa7381f46cb0f00b30e0963",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-low-web-1050.scene.json",
+    "sha256": "38bcc56593e24b098d9886e41722593878945b4ca1df31a60bbb7bbf5158db5c"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-med-des-1051",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1051,
+     "params_sha256": "8890f0f7cc7f4de1f0991169a582b03c672b2371e440bc3b284bfda81c20db06",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-med-des-1051.scene.json",
+    "sha256": "97533ad29015e78e90f382331e31a8e9b3ccdd0bcb0342be03dfc06c5c83c253"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-med-des-v-1052",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1052,
+     "params_sha256": "332db6f48fb1a3f7712e214c35e79fc4ab5cf560b8b081db79c37b9c11a4d84e",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-anno-mixe-med-des-1051"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-med-des-v-1052.scene.json",
+    "sha256": "68158009d0b08d5780491e8ae9016cb4b13ec11d841811bd57ea93a9c8e14b5f"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-med-mob-1053",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1053,
+     "params_sha256": "5e31521f1d65dc1127cba0ab859e44ec50f3a24e8b8d5a97fca868ee8ad57c0b",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-med-mob-1053.scene.json",
+    "sha256": "f8cf2a1bf6b16697a63a04c801d846f0307e93141af0917b4e62673f2fc71b5c"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-med-mob-v-1054",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1054,
+     "params_sha256": "0d5c527e7efacd03f1b35749c85758a8a165067a1d46f07eb844d9d31ff494aa",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-anno-mixe-med-mob-1053"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-med-mob-v-1054.scene.json",
+    "sha256": "f91ef659c9e824e1043834e7b0e646e6a73ef9a35cd6ddd36f127918eb6a2848"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-med-web-1055",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1055,
+     "params_sha256": "5d796e1f31d39b8b05f70fcae67c7311e6adf7e606ca6c61fc3c094fe31eaedf",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-med-web-1055.scene.json",
+    "sha256": "ad918cc57c5fd72c11559b8ee1b36f0469eed3e9c0f7b1d9ae18402d57eabe34"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-hig-des-1056",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1056,
+     "params_sha256": "a4bf157e7bec86822d1344053ced1257c8d571c252a5326ca03c918a726b1c11",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-hig-des-1056.scene.json",
+    "sha256": "97b055b5af05c3c2943c4bd412d92a04320a602bd353b04829234b5f26963dd3"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-hig-des-v-1057",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1057,
+     "params_sha256": "7b057c41bed1ba7b505eda5958c46a8feae497c5af0428709077944d60960f9d",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-anno-mixe-hig-des-1056"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-hig-des-v-1057.scene.json",
+    "sha256": "cfb874f757123d3cdcc6932b982d389977ae86191dadb24ef5cf6d3b16c78d81"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-hig-mob-1058",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1058,
+     "params_sha256": "1b46f01ba39346975596b648c935ba844a1763df4d964b276bd7dcb3fdd02a93",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-hig-mob-1058.scene.json",
+    "sha256": "f888e5dae6f8704728bc3bb3d86d2d1699decac89786431f3f8014c09e9cc3f3"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": true,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-hig-mob-v-1059",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1059,
+     "params_sha256": "b6e61b4266751c514112c0266030a2025a4c5da52fd254f2258afd6e91539ac7",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-anno-mixe-hig-mob-1058"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-hig-mob-v-1059.scene.json",
+    "sha256": "fd83ef15639b5cf2d06fd51e30c823aac1bbc90601a8b7103d6d2e23f834883b"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": true,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-hig-web-1060",
+   "kind": "synthetic",
+   "scene_family": "annotated-diagram",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1060,
+     "params_sha256": "6146df510317185b6a9ff72225f0124eef90bb8c909c85723fd88ea317d326de",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-anno-mixe-hig-web-1060.scene.json",
+    "sha256": "69814fd3131c84b125b89b2cd6deadaed88a92ba9a63da2164ad413acb4f2045"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-type-non-des-1061",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1061,
+     "params_sha256": "a430aaa8324ed1c197afbecc4ec327e5c103b7bf5061c59f494ff61587c11a1a",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-type-non-des-1061.scene.json",
+    "sha256": "ddd9370668b6dd208563c04e539093b5196baff2d81b48a9e1ba44c17c8bd859"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-type-non-des-v-1062",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1062,
+     "params_sha256": "4ea6744d75afb2f7736c628dd2a3e6aa9cd11a6d3a5b996feefbb96c4e820941",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-type-type-non-des-1061"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-type-non-des-v-1062.scene.json",
+    "sha256": "12fa47c1cc39b90f7bc3abcc16ead0a53920cc441114ceb00efbe30058a8b43c"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-type-non-mob-1063",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1063,
+     "params_sha256": "696a3e8326ebc4c07de5010d3fa1e21d6c9ea5f884963f651ae8991dacc17101",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-type-non-mob-1063.scene.json",
+    "sha256": "f9432454dc31602bc8bb598c7aff629dd7743b4fae8bda5f2fea5584e89413b2"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-type-non-mob-v-1064",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1064,
+     "params_sha256": "973db32b65cdcf749f3b769eef4810697abdd85c2aba73fc006101174062c7c9",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-type-type-non-mob-1063"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-type-non-mob-v-1064.scene.json",
+    "sha256": "429607a742b49201dc6b4354270e1322da4d46362cedd2d6099eb1b9a055fd73"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-type-non-web-1065",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1065,
+     "params_sha256": "cc666a435bd2522fc5f7c16c929e87772ce57232929e44780e0db4ed40efe517",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-type-non-web-1065.scene.json",
+    "sha256": "9f922e33de8cefb75be757f7e95a7a92416324a916bba5f27f750e4cd367d34e"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-type-low-des-1066",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1066,
+     "params_sha256": "89a021a530b5405917a990d66e2b0ac800b9e349391cecf7e2a287e355bc7de5",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-type-low-des-1066.scene.json",
+    "sha256": "002a7a0df4e28cb1a57332caa392b8ed5b360048ee2189ed5ff67c028e475d59"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-type-low-des-v-1067",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1067,
+     "params_sha256": "fee0dcda1f62f5a95e74a387bd467216d127d87969fc7f1fb65b35e0a4c8e8b0",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-type-type-low-des-1066"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-type-low-des-v-1067.scene.json",
+    "sha256": "efddb593f84a66c44f58c69c88bd4049de8d31079893da050ba0c8f613960614"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-type-low-mob-1068",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1068,
+     "params_sha256": "a65ed427ccd97b564d42d173c17d2f08eb26e3659556073d19b56157db02a064",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-type-low-mob-1068.scene.json",
+    "sha256": "bd5f8429baa6703d01dbaa2a2b8f3ddbb7e7d87d5c3a7aa6b8a292c076835859"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-type-low-mob-v-1069",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1069,
+     "params_sha256": "3398f619d14ab5caf709430a7e16c029a57971693eb3fdee6f74d97282717b36",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-type-type-low-mob-1068"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-type-low-mob-v-1069.scene.json",
+    "sha256": "456e1dfb48aea6325399a4c12b61e8292589b942a94358c02d2a5bdcf2b3efa2"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-type-low-web-1070",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1070,
+     "params_sha256": "34e9ba4412ad0c2535c9bf8125182e7f34c2f0d156116645f6b1f1560179cda9",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-type-low-web-1070.scene.json",
+    "sha256": "5bb3f7a59f790179d937fca3532c12ecaaf99c5876ea16ad44abccb8a0339771"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-low-des-1071",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1071,
+     "params_sha256": "8aeb7dfb7286dcd315ff2a1b0eb285a71b3b87331f3a6231e0887e9e2b17b6e9",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-low-des-1071.scene.json",
+    "sha256": "167c36993f4c2f68e34ec9607663e7eb6d64c542947ee5752cab950edbc5cc00"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-low-des-v-1072",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1072,
+     "params_sha256": "2890d6214690e17a8cf8c5751c87dc47c557a3b69bd75b6e8f2360f9e88d30d8",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-type-mixe-low-des-1071"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-low-des-v-1072.scene.json",
+    "sha256": "7822ebaf3150e4c3f8d44fdf55e5c5a7a24c418c427b87986e9118618806b86e"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-low-mob-1073",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1073,
+     "params_sha256": "6ced0be2e605a62d179cdd02281960f4f681dfa94b4c964a86d38b2883b43935",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-low-mob-1073.scene.json",
+    "sha256": "e370a0563e51878cfd4f9e177baae95e901e0d195746fc31908776edca384d94"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-low-mob-v-1074",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1074,
+     "params_sha256": "ed2722402eb1c499c7f2fe33441e4c5b4c0912fd5d5c31b26096199f5593937c",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-type-mixe-low-mob-1073"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-low-mob-v-1074.scene.json",
+    "sha256": "fde1bc71d2073866adad4cd7a75b965457879ef6dd87bce0e67e4164ecd3eca8"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-low-web-1075",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1075,
+     "params_sha256": "4d5f59f569bbb8adaec31b50156a23f202ef0c06bd313bbade5b30e0962a467b",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-low-web-1075.scene.json",
+    "sha256": "4d1c812062e87a76a41fcb1d74a0db8c2379158d6d730efdbf76f3123e417b35"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 8,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-med-des-1076",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1076,
+     "params_sha256": "4762c9c5cd8f2d696a857b5138576a6003cb05df0e2f8caacabed8668540fdb5",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-med-des-1076.scene.json",
+    "sha256": "655462768889922e201028be8039f42c7e9fe29f922ae362c705d2d2f41ee768"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-med-des-v-1077",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1077,
+     "params_sha256": "013ee9cc0ea5a821b5f118a5106163b84893fb7567115b7ce5e2f094787ba464",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-type-mixe-med-des-1076"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-med-des-v-1077.scene.json",
+    "sha256": "5c23cf5f30122f93635ce7cdf753ad0ae377b99889788794996b255293b57230"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-med-mob-1078",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1078,
+     "params_sha256": "eab2ef3ec1e7836ec89f1cc0f42ca72d92c96f0cb48c2dcb78b9a4cdc6bca637",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-med-mob-1078.scene.json",
+    "sha256": "1b16cac89ab5915cf1bd012662b908011de57fef476bd0dc3efbfda407824fba"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-med-mob-v-1079",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1079,
+     "params_sha256": "0c08162cc01dfe4be868045a7684501e3f1d6aaeb4d33000601516f824ab26c1",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-type-mixe-med-mob-1078"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-med-mob-v-1079.scene.json",
+    "sha256": "2cb270bb3b91e07385c79bb76f1cbc079edc45cb809dfd70bfda579a7a7415d8"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-med-web-1080",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1080,
+     "params_sha256": "7a31bfe2c5686bf2c47905177150b2578d7d1678ffd073302c49c1bd096f5693",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-med-web-1080.scene.json",
+    "sha256": "e85719333dc8f51ba5abd913447d0bbdf6161c6d54f76a812b82f906ba29b43b"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 24,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-hig-des-1081",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1081,
+     "params_sha256": "9e95df43104d485dc9f72e8ce135e674f45ce33da3d0f7c32c7a2490643522fe",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-hig-des-1081.scene.json",
+    "sha256": "07c257349df5dfaf67fd2bfd694a350e5751c7f7897f0bba249164184ad24769"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-hig-des-v-1082",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "desktop",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1082,
+     "params_sha256": "cc2bdfe6cc1228b4e97e03a484e0398527a531c051645765d4765836694f49c5",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-type-mixe-hig-des-1081"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-hig-des-v-1082.scene.json",
+    "sha256": "968c9498d4c899729fa3052846c16c0cecb939df69ffaf592f2197b74942311f"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-hig-mob-1083",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1083,
+     "params_sha256": "94970c22abc8aafb13e69aa04a0d47d20c30f1b504548fac86b41f7af3c7024c",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-hig-mob-1083.scene.json",
+    "sha256": "49886c2fc2a6542e61ec5c59ad60f0fde82f5767d4144173cf24130274339b0d"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": true,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-hig-mob-v-1084",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "mobile",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1084,
+     "params_sha256": "0439484bcebf59f970755e5c9a6bda39db71699dd9d12e2f1b6719c989d9bbe0",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": [
+     "syn-p2-type-mixe-hig-mob-1083"
+    ]
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-hig-mob-v-1084.scene.json",
+    "sha256": "c23a3bc943a45f90a7e60f7d02b601c2ea849cac770fe951388841a7d9cb5e7a"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": true,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-hig-web-1085",
+   "kind": "synthetic",
+   "scene_family": "typed-report",
+   "platform_profile": "web",
+   "origin": {
+    "generator": {
+     "name": "stratified-scene-composer",
+     "version": "1.0.0",
+     "seed": 1085,
+     "params_sha256": "d28483706a77a804c80bd0c4fdbcf421f9174b2c9560e7799c92f5813ce4ec5a",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-p2-type-mixe-hig-web-1085.scene.json",
+    "sha256": "d35fc616657c50182b98e6066ce345027b454003fa6c82e35e0d463c9ba59b41"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 56,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  }
+ ]
+}

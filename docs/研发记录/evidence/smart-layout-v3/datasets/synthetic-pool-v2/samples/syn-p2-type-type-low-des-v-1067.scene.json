@@ -1,0 +1,197 @@
+{
+ "page": {
+  "width": 1240,
+  "height": 1754
+ },
+ "elements": [
+  {
+   "id": "syn-p2-type-type-low-des-v-1067-stroke-001",
+   "type": "stroke",
+   "bbox": [
+    965,
+    616,
+    266,
+    173
+   ],
+   "rotation": 0,
+   "points": [
+    [
+     145,
+     198
+    ],
+    [
+     89,
+     153
+    ],
+    [
+     341,
+     286
+    ]
+   ],
+   "pressure": [
+    0.388,
+    0.532,
+    0.218,
+    0.434
+   ]
+  },
+  {
+   "id": "syn-p2-type-type-low-des-v-1067-stroke-002",
+   "type": "stroke",
+   "bbox": [
+    515,
+    261,
+    141,
+    60
+   ],
+   "rotation": 90,
+   "points": [
+    [
+     297,
+     22
+    ],
+    [
+     195,
+     94
+    ],
+    [
+     347,
+     38
+    ],
+    [
+     249,
+     105
+    ]
+   ],
+   "pressure": [
+    0.76,
+    0.827,
+    0.682,
+    0.54
+   ]
+  },
+  {
+   "id": "syn-p2-type-type-low-des-v-1067-stroke-003",
+   "type": "stroke",
+   "bbox": [
+    391,
+    336,
+    326,
+    92
+   ],
+   "rotation": 0,
+   "points": [
+    [
+     82,
+     77
+    ],
+    [
+     193,
+     249
+    ],
+    [
+     151,
+     232
+    ],
+    [
+     381,
+     90
+    ],
+    [
+     27,
+     21
+    ],
+    [
+     163,
+     281
+    ],
+    [
+     211,
+     170
+    ],
+    [
+     41,
+     204
+    ],
+    [
+     134,
+     117
+    ]
+   ],
+   "pressure": [
+    0.251,
+    0.712,
+    0.622,
+    0.241
+   ]
+  },
+  {
+   "id": "syn-p2-type-type-low-des-v-1067-text-001",
+   "type": "text",
+   "bbox": [
+    1047,
+    674,
+    172,
+    86
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落1段落1"
+  },
+  {
+   "id": "syn-p2-type-type-low-des-v-1067-text-002",
+   "type": "text",
+   "bbox": [
+    889,
+    224,
+    239,
+    130
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落2段落2段落2"
+  },
+  {
+   "id": "syn-p2-type-type-low-des-v-1067-text-003",
+   "type": "text",
+   "bbox": [
+    941,
+    1118,
+    386,
+    65
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落3段落3"
+  },
+  {
+   "id": "syn-p2-type-type-low-des-v-1067-text-004",
+   "type": "text",
+   "bbox": [
+    194,
+    467,
+    348,
+    166
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落4段落4段落4段落4"
+  },
+  {
+   "id": "syn-p2-type-type-low-des-v-1067-binding-001",
+   "type": "binding",
+   "bbox": [
+    652,
+    650,
+    353,
+    214
+   ],
+   "rotation": 0,
+   "target_kind": "text",
+   "offset": [
+    -20,
+    6
+   ]
+  }
+ ]
+}

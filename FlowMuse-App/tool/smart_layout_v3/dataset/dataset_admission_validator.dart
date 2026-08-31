@@ -31,6 +31,12 @@ class DatasetAdmissionValidator {
   static const Set<String> allowedKinds = {'synthetic', 'licensed', 'real_user_content'};
   static const Set<String> allowedContentKinds = {'handwritten_only', 'typed_only', 'mixed'};
 
+  /// 与 fixture-manifest 的 split 枚举对齐（V3-002B 分层切分产物使用）。
+  static const Set<String> allowedSplitValues = {
+    'pooled', 'development', 'validation', 'frozen_holdout',
+  };
+  static const Set<String> allowedPlatformProfiles = {'desktop', 'mobile', 'web'};
+
   /// 校验 dataset manifest。返回全部错误（空 = 准入通过）。
   static AdmissionOutcome validate(Object? json, {required DatasetFileResolver resolveFile}) {
     final errors = <AdmissionError>[];
@@ -66,10 +72,20 @@ class DatasetAdmissionValidator {
         message: 'dataset 元信息缺失',
       ));
     } else {
-      dataset.checkKeys({'name', 'version', 'generated_at_utc', 'lane', 'admission_policy'});
+      dataset.checkKeys({
+        'name', 'version', 'generated_at_utc', 'lane', 'admission_policy',
+        // V3-002B 起可选：分层切分元数据（未切分的池 manifest 可省略）。
+        'split', 'content_root',
+      });
       dataset.nonEmptyString('name');
       dataset.patternString('version', semverPattern, 'semver 版本号');
       dataset.patternString('generated_at_utc', utcPattern, 'UTC 时刻');
+      if (dataset.fieldPresent('split')) {
+        dataset.enumString('split', allowedSplitValues);
+      }
+      if (dataset.fieldPresent('content_root')) {
+        dataset.nonEmptyString('content_root');
+      }
       lane = dataset.nonEmptyString('lane');
       if (lane != null && lane != 'ai_synthetic_development') {
         errors.add(dataset.error('lane_not_development', 'lane',
@@ -163,7 +179,17 @@ class DatasetAdmissionValidator {
     DatasetFileResolver resolveFile,
     List<AdmissionError> errors,
   ) {
-    sample.checkKeys({'sample_id', 'kind', 'origin', 'rights', 'content', 'features'});
+    sample.checkKeys({
+      'sample_id', 'kind', 'origin', 'rights', 'content', 'features',
+      // V3-002B 起可选：分层轴（场景族与平台特征；池样本可省略）。
+      'scene_family', 'platform_profile',
+    });
+    if (sample.fieldPresent('scene_family')) {
+      sample.patternString('scene_family', sampleIdPattern, '场景族 id');
+    }
+    if (sample.fieldPresent('platform_profile')) {
+      sample.enumString('platform_profile', allowedPlatformProfiles);
+    }
     final sampleId = sample.patternString('sample_id', sampleIdPattern, '样本 id');
     final kind = sample.enumString('kind', allowedKinds, code: 'unknown_sample_kind');
 

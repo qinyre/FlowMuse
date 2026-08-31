@@ -1,0 +1,1034 @@
+{
+  "schema_version": "1.0.0",
+  "artifact": "dataset-split-coverage-report",
+  "task": "V3-002B",
+  "status": "passed",
+  "pool": {
+    "name": "synthetic-pool-v2",
+    "manifest_sha256": "8aa328ca43459c831e6782969ce747b7fd4e7a11af53b085087d456d96178898",
+    "sample_count": 85
+  },
+  "config": {
+    "path": "../docs/研发记录/evidence/smart-layout-v3/datasets/splits/split-config.json",
+    "sha256": "19ffe7d056d03c5c200e688b812824466511571103526731242a9c6ec3eb30b5",
+    "seed": 20260831,
+    "weights": {
+      "development": 0.6,
+      "validation": 0.2,
+      "frozen_holdout": 0.2
+    },
+    "min_quotas": {
+      "development": {
+        "per_scene_family": 2,
+        "per_content_kind": 2,
+        "per_platform_profile": 2
+      },
+      "validation": {
+        "per_scene_family": 1,
+        "per_content_kind": 1,
+        "per_platform_profile": 1
+      },
+      "frozen_holdout": {
+        "per_scene_family": 1,
+        "per_content_kind": 1,
+        "per_platform_profile": 1
+      }
+    },
+    "isolation": {
+      "rules": [
+        "derivation_chain",
+        "same_generator_identity"
+      ]
+    }
+  },
+  "coverage": {
+    "development": {
+      "component_count": 31,
+      "sample_count": 48,
+      "per_axis": {
+        "scene_family": {
+          "annotated-diagram": 7,
+          "brainstorm-board": 7,
+          "meeting-notes": 12,
+          "typed-report": 5
+        },
+        "content_kind": {
+          "handwritten_only": 14,
+          "mixed": 15,
+          "typed_only": 2
+        },
+        "complexity_band": {
+          "high": 10,
+          "low": 8,
+          "medium": 11,
+          "none": 2
+        },
+        "platform_profile": {
+          "desktop": 7,
+          "mobile": 10,
+          "web": 14
+        }
+      }
+    },
+    "validation": {
+      "component_count": 10,
+      "sample_count": 18,
+      "per_axis": {
+        "scene_family": {
+          "annotated-diagram": 1,
+          "brainstorm-board": 1,
+          "meeting-notes": 3,
+          "typed-report": 5
+        },
+        "content_kind": {
+          "handwritten_only": 2,
+          "mixed": 6,
+          "typed_only": 2
+        },
+        "complexity_band": {
+          "high": 3,
+          "low": 3,
+          "medium": 2,
+          "none": 2
+        },
+        "platform_profile": {
+          "desktop": 7,
+          "mobile": 1,
+          "web": 2
+        }
+      }
+    },
+    "frozen_holdout": {
+      "component_count": 10,
+      "sample_count": 19,
+      "per_axis": {
+        "scene_family": {
+          "annotated-diagram": 1,
+          "brainstorm-board": 1,
+          "meeting-notes": 3,
+          "typed-report": 5
+        },
+        "content_kind": {
+          "handwritten_only": 2,
+          "mixed": 6,
+          "typed_only": 2
+        },
+        "complexity_band": {
+          "high": 2,
+          "low": 4,
+          "medium": 2,
+          "none": 2
+        },
+        "platform_profile": {
+          "desktop": 3,
+          "mobile": 6,
+          "web": 1
+        }
+      }
+    }
+  },
+  "quota_checks": [
+    {
+      "split": "development",
+      "axis": "scene_family",
+      "value": "annotated-diagram",
+      "required": 2,
+      "actual": 7,
+      "pass": true
+    },
+    {
+      "split": "development",
+      "axis": "scene_family",
+      "value": "brainstorm-board",
+      "required": 2,
+      "actual": 7,
+      "pass": true
+    },
+    {
+      "split": "development",
+      "axis": "scene_family",
+      "value": "meeting-notes",
+      "required": 2,
+      "actual": 12,
+      "pass": true
+    },
+    {
+      "split": "development",
+      "axis": "scene_family",
+      "value": "typed-report",
+      "required": 2,
+      "actual": 5,
+      "pass": true
+    },
+    {
+      "split": "development",
+      "axis": "content_kind",
+      "value": "handwritten_only",
+      "required": 2,
+      "actual": 14,
+      "pass": true
+    },
+    {
+      "split": "development",
+      "axis": "content_kind",
+      "value": "mixed",
+      "required": 2,
+      "actual": 15,
+      "pass": true
+    },
+    {
+      "split": "development",
+      "axis": "content_kind",
+      "value": "typed_only",
+      "required": 2,
+      "actual": 2,
+      "pass": true
+    },
+    {
+      "split": "development",
+      "axis": "platform_profile",
+      "value": "desktop",
+      "required": 2,
+      "actual": 7,
+      "pass": true
+    },
+    {
+      "split": "development",
+      "axis": "platform_profile",
+      "value": "mobile",
+      "required": 2,
+      "actual": 10,
+      "pass": true
+    },
+    {
+      "split": "development",
+      "axis": "platform_profile",
+      "value": "web",
+      "required": 2,
+      "actual": 14,
+      "pass": true
+    },
+    {
+      "split": "validation",
+      "axis": "scene_family",
+      "value": "annotated-diagram",
+      "required": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "split": "validation",
+      "axis": "scene_family",
+      "value": "brainstorm-board",
+      "required": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "split": "validation",
+      "axis": "scene_family",
+      "value": "meeting-notes",
+      "required": 1,
+      "actual": 3,
+      "pass": true
+    },
+    {
+      "split": "validation",
+      "axis": "scene_family",
+      "value": "typed-report",
+      "required": 1,
+      "actual": 5,
+      "pass": true
+    },
+    {
+      "split": "validation",
+      "axis": "content_kind",
+      "value": "handwritten_only",
+      "required": 1,
+      "actual": 2,
+      "pass": true
+    },
+    {
+      "split": "validation",
+      "axis": "content_kind",
+      "value": "mixed",
+      "required": 1,
+      "actual": 6,
+      "pass": true
+    },
+    {
+      "split": "validation",
+      "axis": "content_kind",
+      "value": "typed_only",
+      "required": 1,
+      "actual": 2,
+      "pass": true
+    },
+    {
+      "split": "validation",
+      "axis": "platform_profile",
+      "value": "desktop",
+      "required": 1,
+      "actual": 7,
+      "pass": true
+    },
+    {
+      "split": "validation",
+      "axis": "platform_profile",
+      "value": "mobile",
+      "required": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "split": "validation",
+      "axis": "platform_profile",
+      "value": "web",
+      "required": 1,
+      "actual": 2,
+      "pass": true
+    },
+    {
+      "split": "frozen_holdout",
+      "axis": "scene_family",
+      "value": "annotated-diagram",
+      "required": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "split": "frozen_holdout",
+      "axis": "scene_family",
+      "value": "brainstorm-board",
+      "required": 1,
+      "actual": 1,
+      "pass": true
+    },
+    {
+      "split": "frozen_holdout",
+      "axis": "scene_family",
+      "value": "meeting-notes",
+      "required": 1,
+      "actual": 3,
+      "pass": true
+    },
+    {
+      "split": "frozen_holdout",
+      "axis": "scene_family",
+      "value": "typed-report",
+      "required": 1,
+      "actual": 5,
+      "pass": true
+    },
+    {
+      "split": "frozen_holdout",
+      "axis": "content_kind",
+      "value": "handwritten_only",
+      "required": 1,
+      "actual": 2,
+      "pass": true
+    },
+    {
+      "split": "frozen_holdout",
+      "axis": "content_kind",
+      "value": "mixed",
+      "required": 1,
+      "actual": 6,
+      "pass": true
+    },
+    {
+      "split": "frozen_holdout",
+      "axis": "content_kind",
+      "value": "typed_only",
+      "required": 1,
+      "actual": 2,
+      "pass": true
+    },
+    {
+      "split": "frozen_holdout",
+      "axis": "platform_profile",
+      "value": "desktop",
+      "required": 1,
+      "actual": 3,
+      "pass": true
+    },
+    {
+      "split": "frozen_holdout",
+      "axis": "platform_profile",
+      "value": "mobile",
+      "required": 1,
+      "actual": 6,
+      "pass": true
+    },
+    {
+      "split": "frozen_holdout",
+      "axis": "platform_profile",
+      "value": "web",
+      "required": 1,
+      "actual": 1,
+      "pass": true
+    }
+  ],
+  "isolation_proof": {
+    "rules": [
+      "derivation_chain",
+      "same_generator_identity"
+    ],
+    "component_count": 51,
+    "components_crossing_splits": 0,
+    "components": {
+      "syn-p2-meet-hand-low-des-1001": {
+        "members": [
+          "syn-p2-meet-hand-low-des-1001",
+          "syn-p2-meet-hand-low-des-v-1002"
+        ],
+        "split": "frozen_holdout",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "handwritten_only",
+          "complexity_band": "low",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-meet-hand-low-mob-1003": {
+        "members": [
+          "syn-p2-meet-hand-low-mob-1003",
+          "syn-p2-meet-hand-low-mob-v-1004"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "handwritten_only",
+          "complexity_band": "low",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-meet-hand-low-web-1005": {
+        "members": [
+          "syn-p2-meet-hand-low-web-1005"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "handwritten_only",
+          "complexity_band": "low",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-meet-hand-med-des-1006": {
+        "members": [
+          "syn-p2-meet-hand-med-des-1006",
+          "syn-p2-meet-hand-med-des-v-1007"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "handwritten_only",
+          "complexity_band": "medium",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-meet-hand-med-mob-1008": {
+        "members": [
+          "syn-p2-meet-hand-med-mob-1008",
+          "syn-p2-meet-hand-med-mob-v-1009"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "handwritten_only",
+          "complexity_band": "medium",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-meet-hand-med-web-1010": {
+        "members": [
+          "syn-p2-meet-hand-med-web-1010"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "handwritten_only",
+          "complexity_band": "medium",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-meet-hand-hig-des-1011": {
+        "members": [
+          "syn-p2-meet-hand-hig-des-1011",
+          "syn-p2-meet-hand-hig-des-v-1012"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "handwritten_only",
+          "complexity_band": "high",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-meet-hand-hig-mob-1013": {
+        "members": [
+          "syn-p2-meet-hand-hig-mob-1013",
+          "syn-p2-meet-hand-hig-mob-v-1014"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "handwritten_only",
+          "complexity_band": "high",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-meet-hand-hig-web-1015": {
+        "members": [
+          "syn-p2-meet-hand-hig-web-1015"
+        ],
+        "split": "validation",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "handwritten_only",
+          "complexity_band": "high",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-meet-mixe-low-des-1016": {
+        "members": [
+          "syn-p2-meet-mixe-low-des-1016",
+          "syn-p2-meet-mixe-low-des-v-1017"
+        ],
+        "split": "validation",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "mixed",
+          "complexity_band": "low",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-meet-mixe-low-mob-1018": {
+        "members": [
+          "syn-p2-meet-mixe-low-mob-1018",
+          "syn-p2-meet-mixe-low-mob-v-1019"
+        ],
+        "split": "frozen_holdout",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "mixed",
+          "complexity_band": "low",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-meet-mixe-low-web-1020": {
+        "members": [
+          "syn-p2-meet-mixe-low-web-1020"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "mixed",
+          "complexity_band": "low",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-meet-mixe-med-des-1021": {
+        "members": [
+          "syn-p2-meet-mixe-med-des-1021",
+          "syn-p2-meet-mixe-med-des-v-1022"
+        ],
+        "split": "validation",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "mixed",
+          "complexity_band": "medium",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-meet-mixe-med-mob-1023": {
+        "members": [
+          "syn-p2-meet-mixe-med-mob-1023",
+          "syn-p2-meet-mixe-med-mob-v-1024"
+        ],
+        "split": "frozen_holdout",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "mixed",
+          "complexity_band": "medium",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-meet-mixe-med-web-1025": {
+        "members": [
+          "syn-p2-meet-mixe-med-web-1025"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "mixed",
+          "complexity_band": "medium",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-meet-mixe-hig-des-1026": {
+        "members": [
+          "syn-p2-meet-mixe-hig-des-1026",
+          "syn-p2-meet-mixe-hig-des-v-1027"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "mixed",
+          "complexity_band": "high",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-meet-mixe-hig-mob-1028": {
+        "members": [
+          "syn-p2-meet-mixe-hig-mob-1028",
+          "syn-p2-meet-mixe-hig-mob-v-1029"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "mixed",
+          "complexity_band": "high",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-meet-mixe-hig-web-1030": {
+        "members": [
+          "syn-p2-meet-mixe-hig-web-1030"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "meeting-notes",
+          "content_kind": "mixed",
+          "complexity_band": "high",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-brai-hand-low-des-1031": {
+        "members": [
+          "syn-p2-brai-hand-low-des-1031",
+          "syn-p2-brai-hand-low-des-v-1032"
+        ],
+        "split": "validation",
+        "stratum": {
+          "scene_family": "brainstorm-board",
+          "content_kind": "handwritten_only",
+          "complexity_band": "low",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-brai-hand-low-mob-1033": {
+        "members": [
+          "syn-p2-brai-hand-low-mob-1033",
+          "syn-p2-brai-hand-low-mob-v-1034"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "brainstorm-board",
+          "content_kind": "handwritten_only",
+          "complexity_band": "low",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-brai-hand-low-web-1035": {
+        "members": [
+          "syn-p2-brai-hand-low-web-1035"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "brainstorm-board",
+          "content_kind": "handwritten_only",
+          "complexity_band": "low",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-brai-hand-med-des-1036": {
+        "members": [
+          "syn-p2-brai-hand-med-des-1036",
+          "syn-p2-brai-hand-med-des-v-1037"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "brainstorm-board",
+          "content_kind": "handwritten_only",
+          "complexity_band": "medium",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-brai-hand-med-mob-1038": {
+        "members": [
+          "syn-p2-brai-hand-med-mob-1038",
+          "syn-p2-brai-hand-med-mob-v-1039"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "brainstorm-board",
+          "content_kind": "handwritten_only",
+          "complexity_band": "medium",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-brai-hand-med-web-1040": {
+        "members": [
+          "syn-p2-brai-hand-med-web-1040"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "brainstorm-board",
+          "content_kind": "handwritten_only",
+          "complexity_band": "medium",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-brai-hand-hig-des-1041": {
+        "members": [
+          "syn-p2-brai-hand-hig-des-1041",
+          "syn-p2-brai-hand-hig-des-v-1042"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "brainstorm-board",
+          "content_kind": "handwritten_only",
+          "complexity_band": "high",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-brai-hand-hig-mob-1043": {
+        "members": [
+          "syn-p2-brai-hand-hig-mob-1043",
+          "syn-p2-brai-hand-hig-mob-v-1044"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "brainstorm-board",
+          "content_kind": "handwritten_only",
+          "complexity_band": "high",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-brai-hand-hig-web-1045": {
+        "members": [
+          "syn-p2-brai-hand-hig-web-1045"
+        ],
+        "split": "frozen_holdout",
+        "stratum": {
+          "scene_family": "brainstorm-board",
+          "content_kind": "handwritten_only",
+          "complexity_band": "high",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-anno-mixe-low-des-1046": {
+        "members": [
+          "syn-p2-anno-mixe-low-des-1046",
+          "syn-p2-anno-mixe-low-des-v-1047"
+        ],
+        "split": "frozen_holdout",
+        "stratum": {
+          "scene_family": "annotated-diagram",
+          "content_kind": "mixed",
+          "complexity_band": "low",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-anno-mixe-low-mob-1048": {
+        "members": [
+          "syn-p2-anno-mixe-low-mob-1048",
+          "syn-p2-anno-mixe-low-mob-v-1049"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "annotated-diagram",
+          "content_kind": "mixed",
+          "complexity_band": "low",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-anno-mixe-low-web-1050": {
+        "members": [
+          "syn-p2-anno-mixe-low-web-1050"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "annotated-diagram",
+          "content_kind": "mixed",
+          "complexity_band": "low",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-anno-mixe-med-des-1051": {
+        "members": [
+          "syn-p2-anno-mixe-med-des-1051",
+          "syn-p2-anno-mixe-med-des-v-1052"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "annotated-diagram",
+          "content_kind": "mixed",
+          "complexity_band": "medium",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-anno-mixe-med-mob-1053": {
+        "members": [
+          "syn-p2-anno-mixe-med-mob-1053",
+          "syn-p2-anno-mixe-med-mob-v-1054"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "annotated-diagram",
+          "content_kind": "mixed",
+          "complexity_band": "medium",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-anno-mixe-med-web-1055": {
+        "members": [
+          "syn-p2-anno-mixe-med-web-1055"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "annotated-diagram",
+          "content_kind": "mixed",
+          "complexity_band": "medium",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-anno-mixe-hig-des-1056": {
+        "members": [
+          "syn-p2-anno-mixe-hig-des-1056",
+          "syn-p2-anno-mixe-hig-des-v-1057"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "annotated-diagram",
+          "content_kind": "mixed",
+          "complexity_band": "high",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-anno-mixe-hig-mob-1058": {
+        "members": [
+          "syn-p2-anno-mixe-hig-mob-1058",
+          "syn-p2-anno-mixe-hig-mob-v-1059"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "annotated-diagram",
+          "content_kind": "mixed",
+          "complexity_band": "high",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-anno-mixe-hig-web-1060": {
+        "members": [
+          "syn-p2-anno-mixe-hig-web-1060"
+        ],
+        "split": "validation",
+        "stratum": {
+          "scene_family": "annotated-diagram",
+          "content_kind": "mixed",
+          "complexity_band": "high",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-type-type-non-des-1061": {
+        "members": [
+          "syn-p2-type-type-non-des-1061",
+          "syn-p2-type-type-non-des-v-1062"
+        ],
+        "split": "validation",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "typed_only",
+          "complexity_band": "none",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-type-type-non-mob-1063": {
+        "members": [
+          "syn-p2-type-type-non-mob-1063",
+          "syn-p2-type-type-non-mob-v-1064"
+        ],
+        "split": "validation",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "typed_only",
+          "complexity_band": "none",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-type-type-non-web-1065": {
+        "members": [
+          "syn-p2-type-type-non-web-1065"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "typed_only",
+          "complexity_band": "none",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-type-type-low-des-1066": {
+        "members": [
+          "syn-p2-type-type-low-des-1066",
+          "syn-p2-type-type-low-des-v-1067"
+        ],
+        "split": "frozen_holdout",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "typed_only",
+          "complexity_band": "none",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-type-type-low-mob-1068": {
+        "members": [
+          "syn-p2-type-type-low-mob-1068",
+          "syn-p2-type-type-low-mob-v-1069"
+        ],
+        "split": "frozen_holdout",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "typed_only",
+          "complexity_band": "none",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-type-type-low-web-1070": {
+        "members": [
+          "syn-p2-type-type-low-web-1070"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "typed_only",
+          "complexity_band": "none",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-type-mixe-low-des-1071": {
+        "members": [
+          "syn-p2-type-mixe-low-des-1071",
+          "syn-p2-type-mixe-low-des-v-1072"
+        ],
+        "split": "validation",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "mixed",
+          "complexity_band": "low",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-type-mixe-low-mob-1073": {
+        "members": [
+          "syn-p2-type-mixe-low-mob-1073",
+          "syn-p2-type-mixe-low-mob-v-1074"
+        ],
+        "split": "frozen_holdout",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "mixed",
+          "complexity_band": "low",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-type-mixe-low-web-1075": {
+        "members": [
+          "syn-p2-type-mixe-low-web-1075"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "mixed",
+          "complexity_band": "low",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-type-mixe-med-des-1076": {
+        "members": [
+          "syn-p2-type-mixe-med-des-1076",
+          "syn-p2-type-mixe-med-des-v-1077"
+        ],
+        "split": "validation",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "mixed",
+          "complexity_band": "medium",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-type-mixe-med-mob-1078": {
+        "members": [
+          "syn-p2-type-mixe-med-mob-1078",
+          "syn-p2-type-mixe-med-mob-v-1079"
+        ],
+        "split": "frozen_holdout",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "mixed",
+          "complexity_band": "medium",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-type-mixe-med-web-1080": {
+        "members": [
+          "syn-p2-type-mixe-med-web-1080"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "mixed",
+          "complexity_band": "medium",
+          "platform_profile": "web"
+        }
+      },
+      "syn-p2-type-mixe-hig-des-1081": {
+        "members": [
+          "syn-p2-type-mixe-hig-des-1081",
+          "syn-p2-type-mixe-hig-des-v-1082"
+        ],
+        "split": "validation",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "mixed",
+          "complexity_band": "high",
+          "platform_profile": "desktop"
+        }
+      },
+      "syn-p2-type-mixe-hig-mob-1083": {
+        "members": [
+          "syn-p2-type-mixe-hig-mob-1083",
+          "syn-p2-type-mixe-hig-mob-v-1084"
+        ],
+        "split": "frozen_holdout",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "mixed",
+          "complexity_band": "high",
+          "platform_profile": "mobile"
+        }
+      },
+      "syn-p2-type-mixe-hig-web-1085": {
+        "members": [
+          "syn-p2-type-mixe-hig-web-1085"
+        ],
+        "split": "development",
+        "stratum": {
+          "scene_family": "typed-report",
+          "content_kind": "mixed",
+          "complexity_band": "high",
+          "platform_profile": "web"
+        }
+      }
+    }
+  },
+  "split_manifest_sha256": {
+    "development": "1419710948c5199e332427185fda94c3d823d2c93e102d2004732099c9e2a63d",
+    "validation": "152c9a0e1691c49ccb484f1eeba1250fd29d8769c957f10f4ea7bf1d4f18f983",
+    "frozen_holdout": "8d08d8028da86c94d72541e09f626d1014c5574d5b5f4359a81cbf6fb5e9739d"
+  },
+  "errors": []
+}

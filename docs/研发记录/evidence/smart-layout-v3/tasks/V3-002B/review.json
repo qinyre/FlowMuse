@@ -1,0 +1,52 @@
+{
+ "task_id": "V3-002B",
+ "run_id": "1e93c091-e443-447c-87db-82452912f91f",
+ "executor_run_id": "ca6f8019-6ff8-4203-ac89-a3f1e2b1d40e",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "findings": [
+  {
+   "id": "RF1",
+   "severity": "low",
+   "blocking": false,
+   "location": "FlowMuse-App/tool/smart_layout_v3/dataset/split_cli.dart:_writeCoverageReport; docs/研发记录/evidence/smart-layout-v3/datasets/splits/coverage-report.json:pool.manifest_sha256",
+   "issue": "coverage-report 中 pool.manifest_sha256（8aa328ca…）是 CLI 对池 manifest 的 Dart 2 空格规范化重序列化的 hash，而非磁盘文件字节 hash（文件为 Python 1 空格缩进，实测文件 hash d062a8e8…）。自洽且内容绑定，但字段名易被误读为文件 hash；split_manifest_sha256 则是真实文件 hash（已逐个实测匹配）。建议注明序列化规范或改用文件字节 hash。"
+  },
+  {
+   "id": "RF2",
+   "severity": "low",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/tools/generate_pool.py:104-106,177; samples syn-p2-type-type-low-1066..1070",
+   "issue": "5 个 typed_only/low 样本的 features.stroke_count=0，但其场景文件实测含 3 个 stroke 元素（compose_scene 对 typed_only/low 写入 3 笔迹而 make_sample 将特征清零）。导致这些样本 complexity_band 归为 none 而设计单元格为 low。不影响隔离与配额（complexity_band 无配额、过程确定性、双跑一致），属池元数据保真度瑕疵。"
+  },
+  {
+   "id": "RF3",
+   "severity": "low",
+   "blocking": false,
+   "location": "FlowMuse-App/tool/smart_layout_v3/dataset/dataset_split_planner.dart:270-295（阶段一配额压力贪心）",
+   "issue": "贪心对紧可行（supply 恰等于 demand）实例无完备性保证，构造性推演存在可使其以 quota_not_met 拒绝的可满足配置——但该失败方向为 fail-closed 假阴性（CLI exit 2、不产切分），绝不会假通过；本池配额已由复审从三 manifest 独立重算证实全满足。可接受，如后续扩池可在文档标注该限制。"
+  },
+  {
+   "id": "RF4",
+   "severity": "low",
+   "blocking": false,
+   "location": "FlowMuse-App/tool/smart_layout_v3/dataset/dataset_admission_test.dart",
+   "issue": "validator 新增字段校验（dataset.split 枚举、sample.platform_profile 枚举、scene_family pattern、content_root 非空）仅有正路径覆盖（池/切分产物准入测试），缺负路径测试（如 split:'garbage'、platform_profile:'tablet' 应拒）。代码路径经实读确认存在且生效，属测试覆盖缺口而非缺陷。"
+  },
+  {
+   "id": "RF5",
+   "severity": "low",
+   "blocking": false,
+   "location": "仓库工作树（docs/研发记录/plans/**、FlowMuse-App/{linux,macos,windows}/flutter/generated_*）",
+   "issue": "git status 含 allowed_paths 之外的改动：plans backlog 措辞更新、agent-execution-manifest.json 重生成、自动生成的插件注册文件。均为跨任务/harness 簿记及工具自动生成物，未列入 result.json changed_paths（其 100 项全部在允许范围内），且提交闸门 one_task_only+路径匹配会排除；信息性记录，非本任务越界。"
+  },
+  {
+   "id": "RF6",
+   "severity": "low",
+   "blocking": false,
+   "location": "FlowMuse-App/tool/smart_layout_v3/dataset/split_cli.dart:_relativePath",
+   "issue": "content_root 相对路径计算在输出目录与池不同盘/远端时产出混合形式（实测输出 ../../../../../../../../../D:/Program/… 的盘符拼接）；仓库内布局（splits 与池同级）产出正确的 ../../synthetic-pool-v2 且 manifest 逐字节可复现。仅影响异构用法，非本任务产物缺陷。"
+  }
+ ]
+}
