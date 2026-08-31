@@ -1,0 +1,13 @@
+{
+ "task_id": "V3-105A",
+ "run_id": "1b224fc4-87ed-435e-bef0-5d39676aa214",
+ "summary": "clean/annotated/crop 资产与资源生命周期（合并原 V3-105A～B）。(1) PagePixelTransform：pixel=(page+offset)×scale 确定性变换，pageRectToPixel/pixelRectToPage 往返一致，pixelRectToRaster 半开区间取整（floor 左上/ceil 右下）。(2) AssetFingerprint：kind+sourceKey+栅格几何+scale+内容字节（fnv1a32 逐字节）双车道 fingerprint64，相同输入稳定、内容/几何/sourceKey/kind 任一变化即变。(3) SmartLayoutRenderAssets 资产包：三类资产 clean|page/annotated|page/crop|<sourceKey>（键规范固定）、SmartLayoutRenderAsset 只存编码字节+元数据+指纹（不持活体图像）、SmartLayoutMarkLedgerEntry mark 账本（markId/label/pageRect/pixelRect/assetKey，source 可追踪）。(4) SmartLayoutAssetBuilder：clean=调用方干净页栅格（builder 不持有不释放）；annotated=页副本画编号徽章（白圆+居中 Paragraph），账本与绘制同源；crop=只从 clean 源 drawImageRect 裁剪——标记按构造不进 OCR crop；codec 注入（默认 PNG，测试 rawRgba 逐字节对拍+故障注入）；有界并行 _mapBounded（maxConcurrency，事件循环内取号无竞态）；AssetBuildCancelToken 协作取消（clean 后/annotated 后/每 crop 写入前二次检查，迟到续作不得写入）；越界明确（crop/mark 像素矩形须完全在页栅格内，否则 crop-out-of-bounds(key)/mark-out-of-bounds(id)）；所有中间图像 try/finally dispose，activeResourceCount 全路径归零（成功/取消/codec 失败/异常）。(5) 测试 7 用例全绿（flutter_test 软件光栅真实渲染）：成功构建三类资产+账本+资源归零+指纹可由参数与内容重算；crop 与独立手动裁剪 rawRgba 逐字节一致（标记零泄漏，测试期定位并修复了双重 dispose）；变换往返+DPR2+取整边界（0.2,0.8,10.3,20.9→(0,0,11,22)）；越界双形态；构建前取消 failed(cancelled) 零资源；codec 第 2 次调用失败→整体 codec-failed、资源归零、无部分资产包；指纹四象限敏感；analyze 零 issue。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/assets/smart_layout_render_assets.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/assets/smart_layout_asset_builder.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/assets/smart_layout_asset_builder_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-105A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-105A/result.json"
+ ],
+ "artifacts": {}
+}
