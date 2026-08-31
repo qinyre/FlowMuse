@@ -1,0 +1,49 @@
+{
+ "task_id": "V3-004C",
+ "run_id": "55590563-3451-4ed0-a72d-b346d0ee3cff",
+ "executor_run_id": "e604af3f-2157-47da-8519-004d6b78d80f",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "findings": [
+  {
+   "id": "F1",
+   "severity": "low",
+   "blocking": false,
+   "location": "gates/G0/build_gate_zero_report.py:82-83,92-94",
+   "issue": "16 条组件中 4 条未钉定 expected_sha256（no_op_run、v2_naive_reflow_run、preregistration、spec_validation）。G0 目录内文件属自引用防循环设计可接受，但 no-op/v2 baseline-run.json 本可钉定；其内容漂移不会触发 broken。缓解：报告仍记录其 sha256（重建 diff 可见漂移），且两条 run_hash 被已钉定的 three-baseline-report（8b8cf415…）replay_check 交叉覆盖。〔执行者决定：接受现状不改——修改构建器会使双盲 panel 已审的 gate-zero-report.json hash（8b1d833c…）失效需全量重panel，收益/成本不匹配；两 baseline-run 的钉定可在下次需重建报告的变更时顺带补上。已在 result.json 如实披露。〕"
+  },
+  {
+   "id": "F2",
+   "severity": "low",
+   "blocking": false,
+   "location": "gate-zero-report.json builder 字段",
+   "issue": "『本文件所在目录清空后可一条命令重建』措辞过头：清空整个 G0 目录会连带删除构建器自身与 golden-ledger 等输入；真实口径为仅移走 gate-zero-report.json 后单命令重建（实测成立）。〔执行者已按此在 result.json 修正措辞；builder 内文本不动以保持 panel 已审 hash。〕"
+  },
+  {
+   "id": "F3",
+   "severity": "info",
+   "blocking": false,
+   "location": "tasks/V3-004C/result.json changed_paths",
+   "issue": "changed_paths 列出 review.json 为本复审输出的预留槽位（与 V3-003B/004A/004B 同约定），落盘后自洽。"
+  },
+  {
+   "id": "F4",
+   "severity": "info",
+   "blocking": false,
+   "location": "golden-ledger.json panel_disclosure.panel_type",
+   "issue": "golden-ledger 用 ai_synthetic 而报告用 ai_surrogate 措辞（语义同为 AI 代理，三要素各自完整），不构成披露冲突。"
+  }
+ ],
+ "verification_log": [
+  "重建演练：移走 gate-zero-report.json 后运行构建器 exit 0、status=frozen、重建文件与原件逐字节一致（8b1d833cc18ef26f…）；正则扫描全文无时间戳等易变字段，双跑字节一致。",
+  "引用实测：components 16 条 path 全部存在，逐一重算 sha256 与 claimed 及全部 expected 钉定值完全相等，零失配。",
+  "双 hash：evaluation-spec file=e1598624…/content=83dc663e…（canonical 独立重算）与 preregistration/golden-ledger/spec-validation 四点一致；benchmark-spec content 1db65ecd… 独立重算一致。",
+  "三基线与 splits：no_op 47/85、v2 11/85（by_split.development 7/48）、ai 0/85 修改 480 与 three-baseline-report.json 逐字相符；splits 48/18/19、pool 85。",
+  "覆盖完整：objective 六类组件与 7 条复现命令齐备，所引 CLI/脚本/commands.json 全部真实存在。",
+  "panel 审计：两 rater 5/5 adequate、inputs_read hash 与实测一致、run_id 互异且≠执行者、零分歧仲裁未触发、panel-report 与 rater 文件对拍无误。",
+  "披露：三要素逐字；gate_decision 只授权继续开发、明确拒绝生产发布/上架/真实用户数据；无人工验证或生产授权声称。",
+  "破坏性探测（TEMP 沙箱）：rubric 追加 1 字节 → 构建器 status=broken、exit 2、resolved=false——resolved 判定逻辑真实非恒真；仓库未动。",
+  "路径纪律：本任务改动全在 gates/G0/** 与 tasks/V3-004C/**；其余脏文件 mtime 早于本任务窗口，非本任务所改。"
+ ]
+}

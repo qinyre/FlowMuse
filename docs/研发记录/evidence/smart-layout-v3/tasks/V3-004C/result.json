@@ -1,0 +1,22 @@
+{
+ "task_id": "V3-004C",
+ "run_id": "e604af3f-2157-47da-8519-004d6b78d80f",
+ "summary": "Gate 0 开发证据包汇总并冻结。(1) 确定性构建器（gates/G0/build_gate_zero_report.py）：移走 gate-zero-report.json 后一条命令重建（python docs/研发记录/evidence/smart-layout-v3/gates/G0/build_gate_zero_report.py；G0 目录其余输入文件不动——复审 F2 措辞澄清），gate-zero-report.json（deliverable，sha256=8b1d833cc18ef26feb417ea07bd968c52bd3d7e1f32f3b6ad1848308e81ad12c，无时间戳，删除后重建逐字节一致，双跑确定）；任何组件 hash 漂移即 status=broken+exit 2。(2) 证据包组件（全部 resolved=true；13/16 条 expected 钉定实测相符，no-op/v2 baseline-run 两件未钉定 expected 但 sha 记录在案且其 run_hash 被已钉定的 three-baseline-report replay_check 交叉覆盖——复审 F1 保留意见，preregistration/spec-validation 属 G0 目录自引用不钉定防循环）：AI rubric v1.0.0(9408c037)；EvaluationSpec v1.0.0(file e1598624/content 83dc663e 双 hash 校验)；benchmark-spec(file dbc00bc4+content 1db65ecd)；合成/许可数据版本（pool synthetic-pool-v2 85 样本 d062a8e8、splits 48/18/19 三 manifest hash、frozen-manifest v1.0.1 afc4e451）；三基线（no-op 与 v2 baseline-run run_hash、three-baseline-report 8b8cf415，数字钉定 no_op 47/85 违规、v2 11/85（dev split 7/48）、ai_surrogate 0/85 修改 480）；golden-ledger(6bf7ae7d 4 条目)；preregistration+spec-validation(40 checks)+决策四态演练(6e370fa8)+变更审计演练(b5760517)。(3) 复现命令七条（reproduction_commands：数据准入/切分、双盲标注/仲裁、两自动基线、AI surrogate 整理+并表、spec 校验、决策与审计演练、Gate 0 重建）。(4) gate_decision：development_gate_frozen——只授权继续 Phase 1+ 开发（按预注册口径），明确不授权生产发布/上架/真实用户数据接入。(5) AI surrogate 盲审（gates/G0/panel-004c/）：双隔离代理（3781934b/979ef195）各 5/5 adequate（C1 引用 hash 逐条实测/C2 亲自删除重建对拍逐字节一致/C3 组件覆盖与三基线数字/C4 披露逐字/C5 冻结语义），零分歧仲裁未触发，run_id 互异且≠执行者（组装程序断言）。修复记录：构建器初版 frozen_holdout 期望 hash 抄录漏 2 字符被构建器自身 resolved 校验捕获并修正——hash 钉定机制即为此设计。披露：human_validation_performed=false；HUMAN_VALIDATION_NOT_PERFORMED；PRODUCTION_RELEASE_NOT_AUTHORIZED（生产发布需 V3-700A 外部批准包与 FINAL）。",
+ "changed_paths": [
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/build_gate_zero_report.py",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/gate-zero-report.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel-004c/rater-a.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel-004c/rater-b.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel-004c/panel-report.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004C/result.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004C/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004C/review.json"
+ ],
+ "artifacts": [
+  {
+   "key": "v3_004c_deliverable",
+   "path": "docs/研发记录/evidence/smart-layout-v3/gates/G0/gate-zero-report.json",
+   "sha256": "8b1d833cc18ef26feb417ea07bd968c52bd3d7e1f32f3b6ad1848308e81ad12c"
+  }
+ ]
+}
