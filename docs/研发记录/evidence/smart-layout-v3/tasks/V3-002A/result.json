@@ -1,0 +1,30 @@
+{
+ "task_id": "V3-002A",
+ "run_id": "d7036bac-932e-475e-af31-83ea1ff23a53",
+ "summary": "建立开发线数据集准入边界与种子数据集。(1) DatasetAdmissionValidator（tool/smart_layout_v3/dataset/dataset_admission_validator.dart）：dataset-manifest 机器契约——只接收 synthetic（生成器名/版本/seed/params_sha256/deterministic=true 齐备）与 licensed（license_id+许可文档路径+sha256 实测+scope）两类样本；real_user_content 一律机器拒绝（real_user_content_not_admissible，错误消息指向 V3-700A 授权包）；每样本强制记录来源/派生链/权利/删除流程/禁止用途；内容与许可文件经注入式 DatasetFileResolver 按 SHA-256 实测，不可解析或 hash 不匹配即拒（file_unresolvable/hash_mismatch）；派生链闭合+无环（unknown_derivation_parent/derivation_cycle，菱形派生合法）；admission_policy 必须显式拒绝 real_user_content；lane 必须是 ai_synthetic_development；features 全字段类型校验（V3-002B 分层输入）。(2) AnnotationAgreementCalculator：两评分者逐样本×逐维度槽一致性（exact/Δ1/Δ≥2/insufficient 翻转/code 集分歧），分歧处理与 V3-000B rubric DG3/DG4 一致（Δ=1 保守取低不需仲裁；Δ≥2/翻转/code 分歧强制仲裁，缺裁决报 arbitration_missing 并降 insufficient）；overall=有分数维度最小值。(3) 种子数据集 synthetic-seed-v1：8 个确定性合成样本（特征覆盖整洁/散乱/混合/纯打字/长文/压力/锁定竖排/已知失败），vendored 生成器 tools/generate.py 三次重跑字节级一致（10 文件 hash 全等）；manifest 记录每样本 generator(seed,params_sha256,deterministic)/派生链(全部根样本)/rights(license=null+禁止用途3条+regenerable_no_retention 删除策略)/content sha256/features；无任何真实用户内容或许可声明。测试：flutter test tool/smart_layout_v3 全部 67 通过（新增 21：准入正例 2、拒绝路径 13、一致性计算 6）；flutter analyze tool/smart_layout_v3/dataset 0 问题。披露：human_validation_performed=false；HUMAN_VALIDATION_NOT_PERFORMED；PRODUCTION_RELEASE_NOT_AUTHORIZED（开发线数据边界，不宣称真人或生产验证）。",
+ "changed_paths": [
+  "FlowMuse-App/tool/smart_layout_v3/dataset/dataset_admission_validator.dart",
+  "FlowMuse-App/tool/smart_layout_v3/dataset/annotation_agreement_calculator.dart",
+  "FlowMuse-App/tool/smart_layout_v3/dataset/dataset_admission_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/dataset-manifest.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/tools/generate.py",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/samples\\syn-seed-0001.scene.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/samples\\syn-seed-0002.scene.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/samples\\syn-seed-0003.scene.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/samples\\syn-seed-0004.scene.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/samples\\syn-seed-0005.scene.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/samples\\syn-seed-0006.scene.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/samples\\syn-seed-0007.scene.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/samples\\syn-seed-0008.scene.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002A/result.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002A/review.json"
+ ],
+ "artifacts": [
+  {
+   "key": "v3_002a_deliverable",
+   "path": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/dataset-manifest.json",
+   "sha256": "d2b6e8c2d14f35e439254cfa22302bf20255662713d6fc2542ebacb4352e2814"
+  }
+ ]
+}
