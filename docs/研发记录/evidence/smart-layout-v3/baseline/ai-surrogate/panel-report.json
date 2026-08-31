@@ -1,0 +1,649 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "ai-surrogate-panel-report",
+ "task": "V3-003B",
+ "status": "passed",
+ "executor_run_id": "2b9200c1-4382-4908-9bad-d9b48da7417a",
+ "panel": {
+  "agent_a_run_id": "c1bfe884-c461-455c-a6da-600a3c120cb2",
+  "agent_b_run_id": "9a85dc72-cc52-438d-a0be-54a71324905f",
+  "model": "glm-5.3",
+  "reasoning_effort": "max",
+  "isolation": "两个全新上下文子代理，互不可见，执行者不兼任"
+ },
+ "input_hashes": {
+  "protocol_sha256": "1d6977b864293d1e9b12e08d15087d7147ee4777a83ddfe05f60533a2d8f3b49",
+  "blind_input_sha256": "a0d33070be7b3c7f7a5d6b3a8209d9d8f642ee2b33490632e73e2f30396d9d67",
+  "agent_a_json_sha256": "df50240403d71101e73bbb447c8ba3ffb883c63880c5bb1c47f4d0cebb6ceb45",
+  "agent_b_json_sha256": "1e3d9ebbaa3c9ecc6e40792eaac9b3c3f0a623105f89174220180f2b5bea0a3a"
+ },
+ "replay_check": {
+  "status": "passed",
+  "method": "EditorProtocol machine replay per protocol.json replayability clause",
+  "samples_replayed": 85,
+  "per_agent": {
+   "A": {
+    "run_id": "c1bfe884-c461-455c-a6da-600a3c120cb2",
+    "replay_mismatches": 0,
+    "notes_count": 9
+   },
+   "B": {
+    "run_id": "9a85dc72-cc52-438d-a0be-54a71324905f",
+    "replay_mismatches": 0,
+    "notes_count": 9
+   }
+  },
+  "inter_agent": {
+   "identical_samples": 85,
+   "disagreements": 0,
+   "disagreement_blind_ids": [],
+   "arbiter_invoked": false,
+   "arbiter_note": "双代理产物逐样本完全一致，零分歧，无需第三仲裁代理（协议未触发）。"
+  }
+ },
+ "modification_count_total": 480,
+ "samples": [
+  {
+   "blind_id": "BL-001",
+   "sample_id": "syn-p2-brai-hand-hig-mob-v-1044",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "b85edf6cf5f96cfd12e80dc771205e43f10654ad11776f0036becad352b9ea53"
+  },
+  {
+   "blind_id": "BL-002",
+   "sample_id": "syn-p2-meet-mixe-low-des-v-1017",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "12c039e374d5a57305f11acf5c86d79bae14eae4b4bd64458d1eec2230b8156b"
+  },
+  {
+   "blind_id": "BL-003",
+   "sample_id": "syn-p2-meet-hand-med-web-1010",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "9225098c66e8c21db3fa65c5da9bced583e4c9c019d0aae2e8595a086486ff6b"
+  },
+  {
+   "blind_id": "BL-004",
+   "sample_id": "syn-p2-meet-mixe-med-mob-v-1024",
+   "columns": 1,
+   "modification_count": 8,
+   "png_sha256": "3386c4adaf135220c34f6baaf4682534c196d1a253850baa07f77afd4c0268f1"
+  },
+  {
+   "blind_id": "BL-005",
+   "sample_id": "syn-p2-meet-mixe-low-mob-1018",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "cc27d68538859e9fa31bbacb22eee0e0c8ed42076f4da983d6afe1c4023652e1"
+  },
+  {
+   "blind_id": "BL-006",
+   "sample_id": "syn-p2-meet-hand-med-des-1006",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "1ec991d570b1ba97dbda50419f4db076141056461cebad25e530bd5f5d05bbe7"
+  },
+  {
+   "blind_id": "BL-007",
+   "sample_id": "syn-p2-meet-mixe-med-mob-1023",
+   "columns": 1,
+   "modification_count": 8,
+   "png_sha256": "59946d28a1a7330a1efc8b1823e2cec42a8b1a0fcb3232d89d2215d66b6e0e01"
+  },
+  {
+   "blind_id": "BL-008",
+   "sample_id": "syn-p2-type-mixe-low-mob-v-1074",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "2437b6671af4206ccc8649017d2bf513716938584499bc25e2ccb69b20e7ad50"
+  },
+  {
+   "blind_id": "BL-009",
+   "sample_id": "syn-p2-brai-hand-med-des-v-1037",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "b6154691352f292c25c8351886007fc9724d8957e6d30a876cf01eb71b0d0fa9"
+  },
+  {
+   "blind_id": "BL-010",
+   "sample_id": "syn-p2-meet-hand-low-mob-v-1004",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "19394862b680214c1bb267721ab4a183223cb3f0b08ba4ae733c20ba9dac20d9"
+  },
+  {
+   "blind_id": "BL-011",
+   "sample_id": "syn-p2-anno-mixe-hig-des-1056",
+   "columns": 1,
+   "modification_count": 17,
+   "png_sha256": "47c7ee051b937e6cc36ec11b75f9d11bd1707527977cd7b7865b8cc1b6de4164"
+  },
+  {
+   "blind_id": "BL-012",
+   "sample_id": "syn-p2-brai-hand-low-des-v-1032",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "6cb25ca0b90609528daaad42c67c1e11607fc2e37b29460a2be5d3e2cf226be2"
+  },
+  {
+   "blind_id": "BL-013",
+   "sample_id": "syn-p2-type-type-low-web-1070",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "a8e80c8b5d86c1320a9298d4ae23fd5724bf0e5d0dda63f085d3b2fee3fb36c6"
+  },
+  {
+   "blind_id": "BL-014",
+   "sample_id": "syn-p2-meet-mixe-low-mob-v-1019",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "d4b759a8c96af7e1d6e55b91462cdb2e903ce9a800ab7582aeb8816130905a18"
+  },
+  {
+   "blind_id": "BL-015",
+   "sample_id": "syn-p2-anno-mixe-hig-web-1060",
+   "columns": 2,
+   "modification_count": 17,
+   "png_sha256": "fd577526e0029ca111506d9fa8e635bc994de775008c2f9863ba44bc67d8fcec"
+  },
+  {
+   "blind_id": "BL-016",
+   "sample_id": "syn-p2-anno-mixe-med-web-1055",
+   "columns": 1,
+   "modification_count": 11,
+   "png_sha256": "c7f8560d2e75a5fada58bd8d69f89d351798326e9a6047873ed29185f8525c00"
+  },
+  {
+   "blind_id": "BL-017",
+   "sample_id": "syn-p2-brai-hand-med-mob-v-1039",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "f7096fc0e3f68104c001f78a19be8a5a9dd049bfdb687c2d7367a16bd154908f"
+  },
+  {
+   "blind_id": "BL-018",
+   "sample_id": "syn-p2-meet-hand-low-des-1001",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "d5703263191f19cf7b4f49db5e9234412058036be301cdee6e6b751fbc4398c5"
+  },
+  {
+   "blind_id": "BL-019",
+   "sample_id": "syn-p2-meet-mixe-hig-des-v-1027",
+   "columns": 2,
+   "modification_count": 14,
+   "png_sha256": "fadb6ecc4a8419a4655573b7d70a6d524b6514ed02284472e916f7bec5308780"
+  },
+  {
+   "blind_id": "BL-020",
+   "sample_id": "syn-p2-type-mixe-low-web-1075",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "3f10b1fba69d50f1033b4e1be1b532d021f979ab507389235a5e1f53b1c74979"
+  },
+  {
+   "blind_id": "BL-021",
+   "sample_id": "syn-p2-meet-hand-hig-des-v-1012",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "ef6b90c79a5604fb1328c6f088855006d96bdb58edc486bef40c540923fa87b5"
+  },
+  {
+   "blind_id": "BL-022",
+   "sample_id": "syn-p2-brai-hand-hig-web-1045",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "1e167892a17db8ebc8829d184695a5edd55f6c9952286c080a174017e84879b8"
+  },
+  {
+   "blind_id": "BL-023",
+   "sample_id": "syn-p2-meet-hand-low-web-1005",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "6fd0cea10340b251fdb1a46cb597e95cbf942004e2581dfc13fb42553cecfd80"
+  },
+  {
+   "blind_id": "BL-024",
+   "sample_id": "syn-p2-brai-hand-med-des-1036",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "dd2b31cfec1121dd3f8d98a3b24b31a045a16b597ee64fcf8d804755f6b6ed16"
+  },
+  {
+   "blind_id": "BL-025",
+   "sample_id": "syn-p2-meet-hand-low-mob-1003",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "15cbcaa470939ba767e32b780397736857829497bf6b37ac61553af226b71720"
+  },
+  {
+   "blind_id": "BL-026",
+   "sample_id": "syn-p2-type-type-non-mob-1063",
+   "columns": 1,
+   "modification_count": 2,
+   "png_sha256": "d6d16cdafbf2d92faa740ad8fee1db492c98246a82d8613474ae07928ecc6c97"
+  },
+  {
+   "blind_id": "BL-027",
+   "sample_id": "syn-p2-type-mixe-med-mob-v-1079",
+   "columns": 1,
+   "modification_count": 8,
+   "png_sha256": "afa25321ab7b17e4a61f23da49b5cd6f41694b0f5ac6f8ee8df76ec3a5444610"
+  },
+  {
+   "blind_id": "BL-028",
+   "sample_id": "syn-p2-type-mixe-hig-des-1081",
+   "columns": 2,
+   "modification_count": 14,
+   "png_sha256": "7065972f87f67a9abd355603788f5844fb2ebdc9d990d38c5989a80c6928162f"
+  },
+  {
+   "blind_id": "BL-029",
+   "sample_id": "syn-p2-anno-mixe-low-des-1046",
+   "columns": 1,
+   "modification_count": 7,
+   "png_sha256": "64790fad253baa29915ba749abb4188129e170d87d5ca6d78d76767a4fdb203f"
+  },
+  {
+   "blind_id": "BL-030",
+   "sample_id": "syn-p2-brai-hand-hig-mob-1043",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "dfbd9c21e045165738f03868566386c3f9de0b4d6f0c9cff0313059d14b79177"
+  },
+  {
+   "blind_id": "BL-031",
+   "sample_id": "syn-p2-brai-hand-low-mob-1033",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "00a50344233728c3562b69593a1ca1d6af5592085eb6c4d303e69efdf5f451b3"
+  },
+  {
+   "blind_id": "BL-032",
+   "sample_id": "syn-p2-meet-mixe-low-des-1016",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "7ec484e1e9e21254c3b6d4749436287a6392b9960d40998248c8d068000e4990"
+  },
+  {
+   "blind_id": "BL-033",
+   "sample_id": "syn-p2-type-type-low-mob-v-1069",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "9af0b75c183e9ac513ba143263f413d600e2b9ed785438f1cb2d41ab92c0e22c"
+  },
+  {
+   "blind_id": "BL-034",
+   "sample_id": "syn-p2-meet-mixe-med-des-1021",
+   "columns": 1,
+   "modification_count": 8,
+   "png_sha256": "88737e50455e59ec09f9f6c80a273c03417422d7ed32cef7baee4aebcaa6346a"
+  },
+  {
+   "blind_id": "BL-035",
+   "sample_id": "syn-p2-meet-mixe-hig-mob-1028",
+   "columns": 1,
+   "modification_count": 14,
+   "png_sha256": "98fd8deae5b852a40ed961cfec78b834206de5946863ccfd8de8251a4ff72e87"
+  },
+  {
+   "blind_id": "BL-036",
+   "sample_id": "syn-p2-brai-hand-low-des-1031",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "3bebe987aa068874430ad4fdeb14bcb1562c077239b88dc020cc2441390bcf91"
+  },
+  {
+   "blind_id": "BL-037",
+   "sample_id": "syn-p2-meet-hand-hig-mob-v-1014",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "e576bde7333caff94a607902757f02192b741bb823677e9c0d621e66d2317561"
+  },
+  {
+   "blind_id": "BL-038",
+   "sample_id": "syn-p2-type-mixe-med-des-v-1077",
+   "columns": 1,
+   "modification_count": 8,
+   "png_sha256": "6a04158809be7e1ce351af9df585d0c38bd5f780c185c199b13c84444dfdbd26"
+  },
+  {
+   "blind_id": "BL-039",
+   "sample_id": "syn-p2-meet-mixe-hig-mob-v-1029",
+   "columns": 2,
+   "modification_count": 14,
+   "png_sha256": "42d27d7b7060ecb0a7cf143ad8108285628c598d94d75a6ba5983fc28990354e"
+  },
+  {
+   "blind_id": "BL-040",
+   "sample_id": "syn-p2-type-mixe-med-mob-1078",
+   "columns": 1,
+   "modification_count": 8,
+   "png_sha256": "2941db13accd6519e0cfebc66b9f37f6462047262f6227f2a30c28046cc67687"
+  },
+  {
+   "blind_id": "BL-041",
+   "sample_id": "syn-p2-type-type-low-mob-1068",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "4a0ca43cdc2406ed778a4f5df5baa1842e4d3f9c0a9c2a95fe7db19b74c85a1c"
+  },
+  {
+   "blind_id": "BL-042",
+   "sample_id": "syn-p2-type-mixe-hig-mob-v-1084",
+   "columns": 2,
+   "modification_count": 14,
+   "png_sha256": "f448c11c598311124bcece46b41255b7a5eccb3ac3d29b6c77249ea22e7af142"
+  },
+  {
+   "blind_id": "BL-043",
+   "sample_id": "syn-p2-type-type-low-des-v-1067",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "4f8eba7a3076eb9a473fc6a030c751171aa208a50cd0019b16871bb8ad0f2065"
+  },
+  {
+   "blind_id": "BL-044",
+   "sample_id": "syn-p2-type-type-non-des-v-1062",
+   "columns": 1,
+   "modification_count": 2,
+   "png_sha256": "f4f06e8dd8adc8edf1ef37ebc15851fd72790c0100fa50ef76b08677dc5a83c9"
+  },
+  {
+   "blind_id": "BL-045",
+   "sample_id": "syn-p2-type-mixe-hig-web-1085",
+   "columns": 2,
+   "modification_count": 14,
+   "png_sha256": "71cc0a7601e87e1b9c564376d10dbfcd4df82e0cb4fe67eb219fcb594d96cb50"
+  },
+  {
+   "blind_id": "BL-046",
+   "sample_id": "syn-p2-type-mixe-low-des-1071",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "037adc395638fee8ca42fe48477184e704c18d841186cdf83af49be6723fda97"
+  },
+  {
+   "blind_id": "BL-047",
+   "sample_id": "syn-p2-meet-hand-med-mob-1008",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "36dd269eb75221f0fc36b12aa6d7f9017d9c28e4d2a5019a096f3f09c631555d"
+  },
+  {
+   "blind_id": "BL-048",
+   "sample_id": "syn-p2-meet-mixe-med-des-v-1022",
+   "columns": 1,
+   "modification_count": 8,
+   "png_sha256": "f3dabc2613d0e87d62b71fd24a649568d6d9b7c7ee78193a812d6d9186c98570"
+  },
+  {
+   "blind_id": "BL-049",
+   "sample_id": "syn-p2-anno-mixe-hig-mob-1058",
+   "columns": 2,
+   "modification_count": 17,
+   "png_sha256": "0c231f02b943e10797bd66ce54c40e6f8a3df22d643acab8fb7153ae7a9c1627"
+  },
+  {
+   "blind_id": "BL-050",
+   "sample_id": "syn-p2-anno-mixe-low-mob-1048",
+   "columns": 1,
+   "modification_count": 7,
+   "png_sha256": "2fc541b4b4a1b0ef9f64f38be522f1601e80fc11feca1e4bff1c2b92492eea74"
+  },
+  {
+   "blind_id": "BL-051",
+   "sample_id": "syn-p2-anno-mixe-med-des-v-1052",
+   "columns": 1,
+   "modification_count": 11,
+   "png_sha256": "43133df216c1267f56935e8fb1e774f011e540188096a37c090081359529843f"
+  },
+  {
+   "blind_id": "BL-052",
+   "sample_id": "syn-p2-anno-mixe-low-web-1050",
+   "columns": 1,
+   "modification_count": 7,
+   "png_sha256": "4afa5e0be8c52bbc6c82ca3c8d696822473da3d2590970063a2b4cff35b7c89f"
+  },
+  {
+   "blind_id": "BL-053",
+   "sample_id": "syn-p2-brai-hand-hig-des-v-1042",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "8569833c69cd1bea7da914ca8ce1e87364dbc4d35aa12071e5ec82e245040200"
+  },
+  {
+   "blind_id": "BL-054",
+   "sample_id": "syn-p2-type-mixe-hig-des-v-1082",
+   "columns": 1,
+   "modification_count": 14,
+   "png_sha256": "1371af8069bb0dd50dafe8ef876eb3eafc0f5a9bb3d2827d013d753d29210835"
+  },
+  {
+   "blind_id": "BL-055",
+   "sample_id": "syn-p2-meet-hand-hig-mob-1013",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "dc551a90e3d9211a06e49ecaf9c87985603989fac44f945dfe3052f87ceff152"
+  },
+  {
+   "blind_id": "BL-056",
+   "sample_id": "syn-p2-meet-hand-low-des-v-1002",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "31e7f4bd7e872dea780afd6d9144f2f1c34e570ba22a9580650d5f42cdc3b933"
+  },
+  {
+   "blind_id": "BL-057",
+   "sample_id": "syn-p2-type-type-non-des-1061",
+   "columns": 1,
+   "modification_count": 2,
+   "png_sha256": "7e308cb66d4b77376d719d09febe6206d4e1c6dedd2923889bc43a4e62418929"
+  },
+  {
+   "blind_id": "BL-058",
+   "sample_id": "syn-p2-anno-mixe-med-des-1051",
+   "columns": 1,
+   "modification_count": 11,
+   "png_sha256": "f67bc72805f612d7608e480e85b9869d6c024998709f7a58d01ef9e49a7425cf"
+  },
+  {
+   "blind_id": "BL-059",
+   "sample_id": "syn-p2-meet-hand-hig-web-1015",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "2fcb715df2b60234a5c02e9d2d024cb1c1ee813500da882e5784cbf450cf0435"
+  },
+  {
+   "blind_id": "BL-060",
+   "sample_id": "syn-p2-brai-hand-med-web-1040",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "99e4e8c9b3931ed1c2413a1ad6308b1bb03b24ddfe7fd9fedade80332d445902"
+  },
+  {
+   "blind_id": "BL-061",
+   "sample_id": "syn-p2-type-mixe-med-des-1076",
+   "columns": 1,
+   "modification_count": 8,
+   "png_sha256": "d33ff6733afef1241bc6f2d90920970b0e834f5671f1296780f2072df1c7fa99"
+  },
+  {
+   "blind_id": "BL-062",
+   "sample_id": "syn-p2-type-type-non-mob-v-1064",
+   "columns": 1,
+   "modification_count": 2,
+   "png_sha256": "ad6883f16f8cb807bc3f7590bda19b37407de4254da5a63545c469f07c6d2961"
+  },
+  {
+   "blind_id": "BL-063",
+   "sample_id": "syn-p2-meet-hand-med-mob-v-1009",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "52e6223b1246d3f979aeb168d4523ef5c1314ee5f449491fdaf99135a5c67da3"
+  },
+  {
+   "blind_id": "BL-064",
+   "sample_id": "syn-p2-meet-hand-med-des-v-1007",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "8a09cf47d0b7015c2f50718c9b78eb60f4c23029ddc6ab376286fee9a1ba43bd"
+  },
+  {
+   "blind_id": "BL-065",
+   "sample_id": "syn-p2-anno-mixe-low-mob-v-1049",
+   "columns": 1,
+   "modification_count": 7,
+   "png_sha256": "9bb66060960f29110fc4da6dfb538f8976233d700201a3af6e66a800b6b9933f"
+  },
+  {
+   "blind_id": "BL-066",
+   "sample_id": "syn-p2-brai-hand-low-web-1035",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "a03c1c409fa3a4dfee85bc1905505fded85c4bb6df12973fd8cb3f643c30ce80"
+  },
+  {
+   "blind_id": "BL-067",
+   "sample_id": "syn-p2-meet-mixe-low-web-1020",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "546363a50f8a18dd79154d6f45a0dc7aff22e9d3a6fe52f4cdc4de2429c9b6a9"
+  },
+  {
+   "blind_id": "BL-068",
+   "sample_id": "syn-p2-type-mixe-hig-mob-1083",
+   "columns": 2,
+   "modification_count": 14,
+   "png_sha256": "b99ae51c87c18c8c9298ea7ba73c1a4b6cb626fef5929e30e2c90510d613b7d7"
+  },
+  {
+   "blind_id": "BL-069",
+   "sample_id": "syn-p2-brai-hand-low-mob-v-1034",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "893ee81486914da896f3c865193b373832cb18231eaf34e1f8f36fcc3a6701a3"
+  },
+  {
+   "blind_id": "BL-070",
+   "sample_id": "syn-p2-anno-mixe-med-mob-v-1054",
+   "columns": 1,
+   "modification_count": 11,
+   "png_sha256": "e2d2c921b34779177b0e103996642947426dac6b885f50bb714d849f1dcb2085"
+  },
+  {
+   "blind_id": "BL-071",
+   "sample_id": "syn-p2-meet-mixe-hig-web-1030",
+   "columns": 2,
+   "modification_count": 14,
+   "png_sha256": "bff0f07748b9847b59167eccfda2da9c61cc7081ff997ef932c1daa745ca75c2"
+  },
+  {
+   "blind_id": "BL-072",
+   "sample_id": "syn-p2-type-type-non-web-1065",
+   "columns": 1,
+   "modification_count": 2,
+   "png_sha256": "1a51ff8b3665816227abaaead4ca2616ecd05d1f640599ead654ff4148414497"
+  },
+  {
+   "blind_id": "BL-073",
+   "sample_id": "syn-p2-brai-hand-hig-des-1041",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "6aa331e034dc67626d44c0cd7383fd1ffa6582292000fd9887a279bd61e4a8a9"
+  },
+  {
+   "blind_id": "BL-074",
+   "sample_id": "syn-p2-anno-mixe-low-des-v-1047",
+   "columns": 1,
+   "modification_count": 7,
+   "png_sha256": "b938cedddde764d9d78e477549b2fba038f16f575330999dd12addd0f26d09ca"
+  },
+  {
+   "blind_id": "BL-075",
+   "sample_id": "syn-p2-type-mixe-med-web-1080",
+   "columns": 1,
+   "modification_count": 8,
+   "png_sha256": "dc6cc588835f819c622205e89cc3b34dc67fc40ae8520f4b674cb49051771793"
+  },
+  {
+   "blind_id": "BL-076",
+   "sample_id": "syn-p2-anno-mixe-med-mob-1053",
+   "columns": 1,
+   "modification_count": 11,
+   "png_sha256": "82dc6fc735cb8fd7458a87ec078faa53dd44058e2d4abfba8bf86724b4528268"
+  },
+  {
+   "blind_id": "BL-077",
+   "sample_id": "syn-p2-type-mixe-low-mob-1073",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "104cb6bc087bf4cb842881773499673686f37014ec4a63dbb93418670923584c"
+  },
+  {
+   "blind_id": "BL-078",
+   "sample_id": "syn-p2-type-mixe-low-des-v-1072",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "11773970d561556356d857b4c1834ad53ce1c03a27a1eaae4edbd8f6e2d6ef77"
+  },
+  {
+   "blind_id": "BL-079",
+   "sample_id": "syn-p2-anno-mixe-hig-des-v-1057",
+   "columns": 2,
+   "modification_count": 17,
+   "png_sha256": "cf28d9bdc12e6c65325a71269d4b5a7c22594eff12fa4d6a45e089462e0f98f6"
+  },
+  {
+   "blind_id": "BL-080",
+   "sample_id": "syn-p2-meet-hand-hig-des-1011",
+   "columns": 1,
+   "modification_count": 0,
+   "png_sha256": "b103231e945457656066a0c46504df61c5e5550e40b3eb78f52870cfec41dd7f"
+  },
+  {
+   "blind_id": "BL-081",
+   "sample_id": "syn-p2-anno-mixe-hig-mob-v-1059",
+   "columns": 2,
+   "modification_count": 17,
+   "png_sha256": "d00811f19f8a7c8ded5158e55368b2d3f9dac6836cd3f882141eb0fb750b1310"
+  },
+  {
+   "blind_id": "BL-082",
+   "sample_id": "syn-p2-brai-hand-med-mob-1038",
+   "columns": 1,
+   "modification_count": 1,
+   "png_sha256": "722c7884d15112c1696e5bfbc9b340357da92d7df238699d6592428dbbd77ec3"
+  },
+  {
+   "blind_id": "BL-083",
+   "sample_id": "syn-p2-type-type-low-des-1066",
+   "columns": 1,
+   "modification_count": 4,
+   "png_sha256": "8a29e675b1cac170258caf0859ef31057e3a4c24277f05c0b9eeb7f1f17d98bd"
+  },
+  {
+   "blind_id": "BL-084",
+   "sample_id": "syn-p2-meet-mixe-med-web-1025",
+   "columns": 1,
+   "modification_count": 8,
+   "png_sha256": "4f125afe04a6a01e2219d7cb0648d8b2b40127be215ad52861338daf40023a0a"
+  },
+  {
+   "blind_id": "BL-085",
+   "sample_id": "syn-p2-meet-mixe-hig-des-1026",
+   "columns": 2,
+   "modification_count": 14,
+   "png_sha256": "626113a88676c2914cae2a26e9f070396e095d6e781a8a24931fcacf67df2ca8"
+  }
+ ],
+ "errors": [],
+ "panel_disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "两名整理者为上下文隔离的 GLM-5.3 Max AI 代理，产物仅构成 AI surrogate 整理基线，不代表真人整理效率；两代理输出均与机器重放一致方可入表。"
+ }
+}

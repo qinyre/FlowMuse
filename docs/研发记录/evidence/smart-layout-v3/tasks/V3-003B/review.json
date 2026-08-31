@@ -1,0 +1,50 @@
+{
+ "task_id": "V3-003B",
+ "run_id": "0bf01d7f-bcf4-46f6-9eed-a46f3aa49ddc",
+ "executor_run_id": "2b9200c1-4382-4908-9bad-d9b48da7417a",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "findings": [
+  {
+   "id": "F1",
+   "severity": "high",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/baseline/ai-surrogate/blind-input.json（全部 2759 个元素 id）；对照 result.json summary『剥离 sample_id』声明",
+   "issue": "盲化被打穿：元素 id 形如 syn-p2-brai-hand-hig-mob-v-1044-stroke-001，逐字内嵌完整 sample_id（含场景族/复杂度带/设备档），读包即可恢复全部映射，blind-mapping.json『代理不可读』的保护实际失效；result.json『剥离 sample_id』仅在顶层字段层面成立，与方法学声明不符。因协议确定性输出已由两代理+机器重放+本人独立实现三方逐字节对拍，全部数字不受影响，未达 blocking 标准（非伪造/非数字不实/非重放失败/非披露缺失/测试全绿），但须在后续任务把元素 id 重编号为盲化形式或修正盲化声明。〔执行者已按此在提交前修正 result.json 盲化声明为准确表述。〕"
+  },
+  {
+   "id": "F2",
+   "severity": "info",
+   "blocking": false,
+   "location": "agent-a.json / agent-b.json 隔离性证据",
+   "issue": "双代理『全新上下文、互不可见』只能以自报 run_id 与 tool_log 佐证，无法从产物密码学证明；支持性证据充分：run_id 互异且≠执行者、tool_log 风格与条数（12/7）不同、notes 措辞与侧重不同、交叉统计（2759 元素=2279 原位+480 内容、12 个 2 列样本、页面尺寸分布 34/34/17）均经本人独立复核为真。属设计固有限制，非伪造迹象。"
+  },
+  {
+   "id": "F3",
+   "severity": "low",
+   "blocking": false,
+   "location": "FlowMuse-App/tool/smart_layout_v3/baseline/editor_protocol.dart doc 注释与 R2 循环",
+   "issue": "doc 注释称列数『依次扩到 2/3/ceil(总高/可用高) 列』，与协议及代码（逐 1 自增直到条件满足）表述不一致（仅注释不精确，代码与协议逐条一致）；另 R2 在列宽≤0 时提前停止自增属协议未定义边界，本数据集（最大 N=2）未触发。〔执行者已按此在提交前修正 doc 注释为逐 1 自增表述。〕"
+  },
+  {
+   "id": "F4",
+   "severity": "info",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-003B/result.json changed_paths 末项 review.json；commands.json",
+   "issue": "changed_paths 声明的 review.json 于复审后写入（单 commit 快照前落盘，路径在 allowed_paths 内）；commands.json 仅记录 artifact-contract 一条（与 V3-003A 等前序任务同约定，Manifest 仅要求该命令），summary 中引用的 panel_cli/测试/analyze 运行未逐条入 commands.json。"
+  }
+ ],
+ "verification_log": [
+  "hash 链实测：protocol=1d6977b8…、blind-input=a0d33070…、agent-a=df502404…、agent-b=1e3d9ebb…、three-baseline=8b8cf415…（=result.json deliverable）、panel-report=cbcfd2f7…，与两 agent inputs_read、panel-report input_hashes、result.json 声明全部一致，证明 protocol/blind-input 事后未被改动。",
+  "隔离性实测：c1bfe884…与9a85dc72…互异且均≠执行者2b9200c1…；两 agent 均 model=glm-5.3/reasoning_effort=max，tool_log 12/7 条非空；A 文件无 B run_id、B 文件无 A run_id、均无执行者 run_id；blind-input 无 sample_id 字段（但元素 id 内嵌 sample_id，见 F1）。",
+  "独立重放：复审代理用 Python+Fraction 从 protocol.json 文字独立实现 R1~R6（margin24/gap12/gutter16/band64，精确算术），全 85 样本对拍 agent-a/agent-b/panel-report 的 target_scene 元素序+bbox、steps(element_id/from/to)、modification_count、columns 全部 0 失配（覆盖 12 个 2 列样本与 15 个纯笔迹样本）；深检 0 违规：原位元素逐字节一致（含键序）、内容元素除 bbox 外字段一致、steps.from==输入 bbox、id 集合守恒、modification_count==len(steps)；A/B 深度 JSON 全等 0 分歧。",
+  "editor_protocol.dart 逐条核对协议：排序键(floor((y+h/2)/64),x,id)、列数自增条件（N 从 1 起、上限 100、总高/N≤可用高）、换列条件 cursorY+h>pageH-margin 且 colIdx+1<columns、宽截断 min(w,列宽) 高不变、原位集合 stroke/decorative_line/binding、R6 先原位后内容——全部一致（doc 注释小瑕疵见 F3）。",
+  "数字复核：85 样本/总修改 480/A、B 重放失配 0/分歧 0/arbiter_invoked=false 均在两报告读出且独立重算一致；no_op 47 违规/OOB 49/重叠 117、v2 11 违规/OOB 32/重叠 0 从 baseline/no-op 与 baseline/v2 的 baseline-run.json 独立重算一致；ai_surrogate 0/0/0/480 连同 split/family/band 全部 strata 由复审代理从盲化输入+池清单独立评测精确复现。",
+  "可重放实测：运行 panel_cli.dart exit 0、status=passed、errors 空；重跑后 87 个产物（panel-report、three-baseline-report、85 张 PNG）hash 与跑前逐字节一致且 PNG sha256 逐张等于 panel-report 记录、全部非空（146~601B）。",
+  "测试与静态检查实测：flutter test tool/smart_layout_v3 97 全过（editor_protocol 7 + comparator 2 为新增实质契约测试），dart analyze tool/smart_layout_v3 0 问题。",
+  "披露合规实测：protocol/panel-report/three-baseline-report 三处 panel_disclosure 均含 panel_type=ai_surrogate、human_validation_performed=false、HUMAN_VALIDATION_NOT_PERFORMED 逐字；全量 grep 确认所有『真人/人工』字样均为否认式声明，无任何人工效率/人工验证声称。",
+  "路径纪律实测：git status 中本任务相关改动（5 个代码文件、ai-surrogate 证据目录、tasks/V3-003B）全部落在三条 allowed_paths 内；工作区其余未提交改动属前序任务/生成文件，与 V3-003B 无关；复审过程仅产生确定性重写（0 字节变更）。",
+  "验收核对：盲化编号 BL-001..085+双向映射齐全（F1 泄漏保留意见）、完整工具日志齐全、三基线四层报告齐全且数字全部独立复现、机器重放确定性验证通过、全程仅称 AI surrogate baseline——五项均有实物证据支撑。"
+ ]
+}
