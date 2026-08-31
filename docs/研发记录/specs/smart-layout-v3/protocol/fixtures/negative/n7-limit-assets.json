@@ -1,0 +1,346 @@
+{
+ "kind": "request",
+ "expect": "reject",
+ "payload": {
+  "protocolVersion": 3,
+  "pageId": "page-1",
+  "sceneRevision": {
+   "epoch": 0,
+   "revision": 1,
+   "fingerprint": "0123456789abcdef"
+  },
+  "assets": [
+   {
+    "key": "a0",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a1",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a2",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a3",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a4",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a5",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a6",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a7",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a8",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a9",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a10",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a11",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a12",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a13",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a14",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a15",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a16",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a17",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a18",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a19",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a20",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a21",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a22",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a23",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a24",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a25",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a26",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a27",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a28",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a29",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a30",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a31",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a32",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a33",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a34",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a35",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a36",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a37",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a38",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a39",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a40",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a41",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a42",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a43",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a44",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a45",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a46",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a47",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a48",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a49",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a50",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a51",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a52",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a53",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a54",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a55",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a56",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a57",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a58",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a59",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a60",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a61",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a62",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a63",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "a64",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   }
+  ],
+  "marks": [],
+  "exactTexts": [],
+  "sourceRefs": [
+   "r1"
+  ]
+ },
+ "expectedErrorCode": "limit_exceeded"
+}

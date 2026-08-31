@@ -1,0 +1,52 @@
+{
+ "task_id": "V3-200A",
+ "run_id": "d5a8d3cc-eafd-4738-8f6d-ff67bb774d11",
+ "executor_run_id": "a224fb7c-b66b-434c-9c1b-1b6a7d2a3454",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "review_rounds": 2,
+ "round_history": [
+  {
+   "round": 1,
+   "verdict": "rejected",
+   "blocking_findings": [
+    "F1: Go 对必填集合字段缺失/显式 null 静默容忍（缺 assets/marks/exactTexts/sourceRefs 键、marks:null、exactTexts 项缺 text、响应缺 regions/warnings、region 缺 relations 均被接受而 Dart 拒绝）",
+    "F2: 缺失枚举/引用标量错误码类分歧（缺 kind/role/type → Go unknown_enum vs Dart invalid_request；缺 assetKey/targetRegionId → Go dangling_reference vs Dart invalid_request）"
+   ],
+   "resolution": "执行者修复：Go 增全层级必需键预检（requireKeys/requireArrayElementKeys/rawObjectOf + requireRequestKeys/requireResponseKeys），缺失或 null 一律 invalid_request；新增 n13-n17 五个负例与 p4 CJK 正例锁定；F3 rune 计量、F4 尾随内容 decoder.More、F5 Dart 根层 field 指针一并修复"
+  }
+ ],
+ "findings": [
+  {
+   "id": "R1-1",
+   "severity": "low",
+   "blocking": false,
+   "location": "FlowMuse-Server/internal/recognition/smart_layout_v3_types.go:408-431 vs smart_layout_v3_request.dart 惰性遍历",
+   "issue": "复合多违例输入的错误码可能双端分歧（Go DisallowUnknownFields 全文档优先，Dart 按字段访问序）。protocol.md 已声明 fixtures 每负例只违反一条且冻结顺序规则未覆盖跨子树优先级，不构成验收违例；建议后续明确复合违例优先级或声明未定义。〔未修复，记录在案〕"
+  },
+  {
+   "id": "R1-2",
+   "severity": "low",
+   "blocking": false,
+   "location": "smart_layout_v3_types.go:313,422-423",
+   "issue": "Go unknown_field 的 field 指针只有裸键名无嵌套路径（Dart 给全路径 'marks[0].bogusKey'）。错误码类一致、message/field 非空，符合验收，仅指针精度差异。〔未修复，记录在案〕"
+  },
+  {
+   "id": "R1-3",
+   "severity": "info",
+   "blocking": false,
+   "location": "smart_layout_v3_json_reader.dart:31-41 vs smart_layout_v3_types.go:347-353",
+   "issue": "根为 null/数组/字符串时 Dart field 为 null、Go 合成 'protocolVersion'。双端均 invalid_request 结构化错误无 panic。"
+  }
+ ],
+ "verification_log": [
+  "git show --name-only c6c8b77：31 文件逐条匹配六条 allowlist 模式零越界；sha256(protocol.md)=b2a42556…与 result.json artifacts 一致；changed_paths 与 commit 逐一相符。",
+  "F1/F2 修复核实：requireRequestKeys 覆盖请求 7 顶层键+sceneRevision 3+assets[*]3+marks[*]4+exactTexts[*]2；requireResponseKeys 覆盖响应 3 顶层+regions[*]6+relations[*]2；缺失与显式 null 均 invalid_request；protocol.md L9 冻结必需键先于枚举/引用。",
+  "双端实测：go test -count=1 ./internal/recognition/ ok；flutter test test/features/whiteboard/smart_layout → +142 All tests passed!。",
+  "仓库外对抗探针 19 用例双端 code 全一致：缺失键五形态→invalid_request；缺 kind vs bogus kind→invalid_request vs unknown_enum；CJK pageId 100/128 接受、129→limit_exceeded 双端；尾随垃圾/双对象双端拒绝；n10 环→reference_cycle。",
+  "21 fixtures（4 正 17 负）逐个双端探针比对全部同码且与 expect 一致。",
+  "typed text：双端响应 DTO 均无 text 字段，text 仅在请求 exactTexts。",
+  "环境披露核实：result.json 如实记录 Go 工具链为本机新装 D:\\Program\\Go。"
+ ]
+}

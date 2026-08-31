@@ -1,0 +1,33 @@
+{
+ "kind": "request",
+ "expect": "reject",
+ "payload": {
+  "protocolVersion": 3,
+  "pageId": "page-1",
+  "sceneRevision": {
+   "epoch": 0,
+   "revision": 1,
+   "fingerprint": "0123456789abcdef"
+  },
+  "assets": [
+   {
+    "key": "clean|page",
+    "kind": "clean",
+    "fingerprint": "0123456789abcdef"
+   }
+  ],
+  "marks": [
+   {
+    "markId": "m1",
+    "label": "m1",
+    "assetKey": "annotated|page",
+    "sourceId": "r1"
+   }
+  ],
+  "exactTexts": [],
+  "sourceRefs": [
+   "r1"
+  ]
+ },
+ "expectedErrorCode": "dangling_reference"
+}

@@ -1,0 +1,26 @@
+{
+ "kind": "request",
+ "expect": "reject",
+ "payload": {
+  "protocolVersion": 3,
+  "pageId": "page-1",
+  "sceneRevision": {
+   "epoch": 0,
+   "revision": 1,
+   "fingerprint": "0123456789abcdef"
+  },
+  "assets": [
+   {
+    "key": "a",
+    "kind": "thumbnail",
+    "fingerprint": "0123456789abcdef"
+   }
+  ],
+  "marks": [],
+  "exactTexts": [],
+  "sourceRefs": [
+   "r1"
+  ]
+ },
+ "expectedErrorCode": "unknown_enum"
+}

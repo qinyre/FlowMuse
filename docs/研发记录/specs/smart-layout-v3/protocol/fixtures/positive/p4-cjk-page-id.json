@@ -1,0 +1,19 @@
+{
+ "kind": "request",
+ "expect": "accept",
+ "payload": {
+  "protocolVersion": 3,
+  "pageId": "页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页页",
+  "sceneRevision": {
+   "epoch": 0,
+   "revision": 1,
+   "fingerprint": "0123456789abcdef"
+  },
+  "assets": [],
+  "marks": [],
+  "exactTexts": [],
+  "sourceRefs": [
+   "r1"
+  ]
+ }
+}

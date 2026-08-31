@@ -1,0 +1,29 @@
+{
+ "kind": "request",
+ "expect": "reject",
+ "payload": {
+  "protocolVersion": 3,
+  "pageId": "page-1",
+  "sceneRevision": {
+   "epoch": 0,
+   "revision": 1,
+   "fingerprint": "0123456789abcdef"
+  },
+  "assets": [
+   {
+    "key": "clean|page",
+    "kind": "clean",
+    "fingerprint": "0123456789abcdef"
+   }
+  ],
+  "marks": [],
+  "exactTexts": [],
+  "sourceRefs": [
+   "r1"
+  ],
+  "extraNoise": {
+   "oops": true
+  }
+ },
+ "expectedErrorCode": "unknown_field"
+}

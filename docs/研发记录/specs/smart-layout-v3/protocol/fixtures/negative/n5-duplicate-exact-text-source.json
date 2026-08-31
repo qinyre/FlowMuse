@@ -1,0 +1,35 @@
+{
+ "kind": "request",
+ "expect": "reject",
+ "payload": {
+  "protocolVersion": 3,
+  "pageId": "page-1",
+  "sceneRevision": {
+   "epoch": 0,
+   "revision": 1,
+   "fingerprint": "0123456789abcdef"
+  },
+  "assets": [
+   {
+    "key": "clean|page",
+    "kind": "clean",
+    "fingerprint": "0123456789abcdef"
+   }
+  ],
+  "marks": [],
+  "exactTexts": [
+   {
+    "sourceId": "r1",
+    "text": "a"
+   },
+   {
+    "sourceId": "r1",
+    "text": "b"
+   }
+  ],
+  "sourceRefs": [
+   "r1"
+  ]
+ },
+ "expectedErrorCode": "duplicate_reference"
+}
