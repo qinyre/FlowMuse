@@ -1,0 +1,13 @@
+{
+ "task_id": "V3-204A",
+ "run_id": "e44b3af9-75ff-4804-b38e-5de099af24f3",
+ "summary": "SemanticDocument、ledger 与持久化映射（合并原 V3-204A～C，semantics/）。(1) SemanticDocument：不可变语义文档——formatVersion（current=1/minSupported=1）、pageId+revision 三元组、blocks（SemanticBlock：id/role 8 枚举/sourceIds/orderIndex/confidence/text?/extras 未知字段保留区）、SemanticReadingOrder（orderedBlockIds+consecutivePairs 供 order pair 指标）、conflicts（V3-202A 冲突语义投影）、consumed/preserved 终态集合、ledgerHash（fingerprint64 全量参与）、ledgerConserved 守恒检查（无重复、无跨态交集）；toJson/fromJson 版本映射：异版可读并记录 readVersion、未知字段（文档级+块级）收进 extras 原样回写不误删、过老版本 FormatException 拒绝；深度 == 全字段。(2) SemanticDocumentAssembler：从 LayoutPageSnapshot+SmartLayoutV3Response 装配——region→block（typed text 只回填自快照 exactText，绝不来自模型）；悬空 source（快照不存在）装配即败不产半文档；终态集合先算全去重（unknown 块 source 一律进 preserved——unknown 默认 preserved；未认领对象/笔迹 preserved；consumed∩preserved 非空即双终态冲突 StateError）再单次推进唯一 ledger（markConsumed→markPreserved），未闭合（有 pending）即败；文档侧集合与 ledger 推进结果重算对拍不一致即败；阅读序按 orderIndex 稳定排序（id 决胜）；冲突留档经 RawConflict 原样进文档。(3) 测试 7 用例全绿：真 Scene→快照→装配链（text 回填'会议纪要标题'/consumed=[shape-1,text-1]/preserved=[frame-1,ink-1] 含 unknown 块与未认领 frame/ledger 闭合/hash 一致/阅读序+相邻对）、双重装配幂等（文档==与 ledgerHash 稳定）、悬空 source 拒绝、冲突留档、current 版 round-trip 深度等价、异版（v2+futureTopField+块级 futureBlockField）可读且 extras 保留原样回写+过老版本拒绝、ledger 守恒破坏可检测（双终态→ledgerConserved=false 且 hash 变化）；analyze 零 issue。开发中修复：ledger 推进重复标记（unknown 源双列表）改为去重终态集单次推进。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/semantics/semantic_document.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/semantics/semantic_document_assembler.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/semantics/semantic_document_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-204A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-204A/result.json"
+ ],
+ "artifacts": {}
+}
