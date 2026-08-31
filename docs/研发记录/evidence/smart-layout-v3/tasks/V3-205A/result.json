@@ -1,0 +1,12 @@
+{
+ "task_id": "V3-205A",
+ "run_id": "7d7235b3-73e7-4623-abcb-c0140e90ca03",
+ "summary": "可逆语义纠错与局部重分析（合并原 V3-205A～C，correction/）。(1) SemanticCorrectionPatch sealed 族（SemanticRevisionRef 前置=epoch/revision/fingerprint 三元组匹配）：SetSemanticRolePatch（fromRole 必须匹配当前值——过期检测）、ReorderSemanticPatch（newOrder 必须是现有块排列+oldOrder 快照一致）、SetSemanticRelationsPatch（目标块必须存在）、PreserveSemanticSourcesPatch（toPreserved 布尔双向：consumed↔preserved，逆=同 ids 翻转标志——独立逆类会破坏 sealed 穷尽性，首版踩坑后收敛为单类双态）。(2) SemanticPatchValidator：stale-revision→unknown-block→role-mismatch/order-mismatch/not-a-permutation/dangling-relation/unknown-source/not-consumed/not-preserved 确定性拒绝序，一切拦截先于重建（文档不可变=零副作用结构性保证）。(3) SemanticPatchApplier：校验→重建（revision 单调 +1，不回滚计数）→逆 patch（baseRevision 指向新文档）；preserve 重建双向移动集合并保持 ledgerConserved。(4) SemanticRerunScope：coalesce 连续同块同种类修正只保留最后一次（不同块/不同种类互不吞并——'连续修正只提交最后一次 operation'）；resolve 把块集合展开为稳定 source key（排序只读列表，preserve patch 直接并入）。(5) 测试 9 用例（目录累计 17 全绿）：role 往返+revision 单调+mismatch/ghost 拒绝、stale-revision 零副作用、reorder 合法往返+非排列/order 快照不符拒绝、relations 放行/悬空拒绝、preserve 双向往返+ledger 守恒+not-consumed/not-preserved 拒绝、coalesce 三 patch 收敛两（末次语义）、scope 稳定 key 排序+preserve 展开+与全量 diff 受影响块精确等价（逐 patch 基线重建后应用、变化块集合对拍）；analyze 零 issue。开发教训：dart format 后的替换目标必须现场核对（本轮三次静默未命中均为格式漂移），assert count==1 已强制。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/correction/semantic_correction.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/correction/semantic_correction_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-205A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-205A/result.json"
+ ],
+ "artifacts": {}
+}
