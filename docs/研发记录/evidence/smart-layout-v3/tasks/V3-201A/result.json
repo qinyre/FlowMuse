@@ -1,0 +1,13 @@
+{
+ "task_id": "V3-201A",
+ "run_id": "d4b3a5e3-4c86-418d-a598-afe1931c2f2d",
+ "summary": "V3Analyzer、strict decode 与 sanitize（合并原 V3-201A～B，服务端）。(1) V3RequestLimits：body 2MiB/并发 8/请求 60s/provider 55s（normalized 兜底零值与 ProviderTimeout>RequestTimeout 收敛）；V3Analyzer 信号量限流（acquire/release 带 in-flight 观测，ctx 取消时稳定拒绝）。(2) V3Analyzer.Analyze 编排：provider seam（V3ProviderFunc 注入，真实视觉 provider 后续接入、测试确定性 fake）→ 复用 V3-200A ParseSmartLayoutV3Response 严格 decode（未知字段/枚举/上限/环/悬空 target 全覆盖）→ sanitizeV3Analysis 跨消息校验：①引用——region.sourceIds 必须 ⊆ 请求 sourceRefs（dangling_reference）；②基数——sourceRef 至多被一个 region 认领（duplicate_reference，区域不相交）；③order——readingOrder 必须是 0..n-1 排列（重复/越界均 invalid_request）；④typed text 回填——region 的 text sourceIds 按序拼接进 RegionTexts（手写区域无文本；绝不从模型往返）；⑤preserved——未被认领 sourceRefs 排序输出原位保留。全部通过才构造 V3AnalysisDocument——provider 超时/失败/恶意/残缺输出只产生完整已校验文档或稳定结构化错误（internal 码+provider.output 指针），绝不部分信任。(3) RegisterSmartLayoutV3：POST /api/ink/smart-layout/analyze/v3 独立注册（nil mux/analyzer 防御不注册）；handler 链=方法 405→MaxBytesReader 413+limit_exceeded envelope→ParseRequest 400+冻结 envelope→Analyze（internal→502/其余→400）→200 冻结响应 schema（无 error 字段、无 text 字段）。(4) api.go 最小适配：HTTPAPI 增 v3Analyzer 字段+WithV3Analyzer 链式注入，Register 仅在注入时挂 v3 路由——v2/v3 完全独立启停（未注入 404、v2 行为零改动）。(5) 测试 7 组全绿（go test ./internal/recognition/... ok）：合法链路文档完整+text 回填 g1+preserved=[text-2]、恶意 provider 七形态（残缺 JSON/schema 未知字段/悬空 sourceRef/重叠认领/order 重复/order 越界/关系环）逐一稳定错误码且文档为 nil、provider 失败与 30ms 超时稳定错误、并发上限 1×4 goroutine 峰值不破限+in-flight 归零、httptest 全链（200 正常/400 envelope/405 GET/413 超限/502 provider 失败）、独立启停（未注入 404、注入后 200、nil 防御）；go vet ./... 零告警（依赖经 goproxy.cn 拉取）。",
+ "changed_paths": [
+  "FlowMuse-Server/internal/recognition/smart_layout_v3.go",
+  "FlowMuse-Server/internal/recognition/smart_layout_v3_test.go",
+  "FlowMuse-Server/internal/recognition/api.go",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-201A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-201A/result.json"
+ ],
+ "artifacts": {}
+}
