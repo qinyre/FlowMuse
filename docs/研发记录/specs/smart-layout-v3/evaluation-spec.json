@@ -1,0 +1,492 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "smart-layout-v3-evaluation-spec",
+ "task": "V3-004A",
+ "status": "preregistered",
+ "registered_at_utc": "2026-08-31T15:29:11Z",
+ "upstream_contracts": {
+  "failure_taxonomy": {
+   "path": "docs/研发记录/specs/smart-layout-v3/failure-taxonomy.json",
+   "sha256": "e0dd0ad6a5d5094e4605e8fec6813e008cf0712fa151414418c8aaa9679428f4"
+  },
+  "rubric_v1": {
+   "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/rubric.json",
+   "sha256": "9408c03728adbbbfa91c72c1f605d4755a44641ec1e5aee804bc264c814e0060"
+  },
+  "benchmark_spec": {
+   "path": "FlowMuse-App/tool/smart_layout_v3/benchmark/benchmark-spec.json",
+   "sha256": "dbc00bc413ec02f80339ffd87a33dbc98d265c5518833a012da7ef9eb24be42f"
+  },
+  "three_baseline_report": {
+   "path": "docs/研发记录/evidence/smart-layout-v3/baseline/ai-surrogate/three-baseline-report.json",
+   "sha256": "8b8cf4158bb8d42a5911a020903f9ac3340f059cea6dbac488f22b0f2d4e61df"
+  },
+  "dataset_pool_manifest": {
+   "path": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/dataset-manifest.json",
+   "sha256": "d062a8e839da318cdb3edf29dc03009f3608bf27d332d08fa81d03d68b5a2158"
+  },
+  "split_development": {
+   "path": "docs/研发记录/evidence/smart-layout-v3/datasets/splits/development/manifest.json",
+   "sha256": "1419710948c5199e332427185fda94c3d823d2c93e102d2004732099c9e2a63d"
+  },
+  "split_validation": {
+   "path": "docs/研发记录/evidence/smart-layout-v3/datasets/splits/validation/manifest.json",
+   "sha256": "152c9a0e1691c49ccb484f1eeba1250fd29d8769c957f10f4ea7bf1d4f18f983"
+  },
+  "split_frozen_holdout": {
+   "path": "docs/研发记录/evidence/smart-layout-v3/datasets/splits/frozen_holdout/manifest.json",
+   "sha256": "8d08d8028da86c94d72541e09f626d1014c5574d5b5f4359a81cbf6fb5e9739d"
+  }
+ },
+ "cluster_unit": {
+  "unit": "sample(scene)",
+  "definition": "一个样本（场景/页）为一个聚类单位；同一样本内的全部观测（多元素/多码/多操作）先在样本内聚合成每样本统计量，再进入跨样本推断；任何跨样本比较一律按同一样本配对（同一合成样本在不同系统/策略下成对产出）。",
+  "rationale": "合成池样本由 stratified-scene-composer 按种子确定性生成，元素级观测在同一样本内强相关，不满足独立性；以样本为聚类单位是最高粒度的保守选择。"
+ },
+ "splits": {
+  "development": {
+   "n": 48,
+   "usage": "主分析（G0~G3 全部预注册检验）"
+  },
+  "validation": {
+   "n": 18,
+   "usage": "G4 复核（同套检验、不调参）"
+  },
+  "frozen_holdout": {
+   "n": 19,
+   "usage": "仅 FINAL 一次评估，用后作废"
+  },
+  "total": 85,
+  "pinning": "三个 split 的样本清单以 upstream_contracts.split_* 的 sha256 冻结；评估 runner 须拒绝样本清单 hash 不符的运行（RR-4）。"
+ },
+ "registered_metrics": [
+  {
+   "id": "crit_violation_rate",
+   "direction": "lower_better",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "split 内含 ≥1 个 C- 码样本占比",
+   "codes": "C-*",
+   "tier": "primary_hard"
+  },
+  {
+   "id": "maj_violation_rate",
+   "direction": "lower_better",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "split 内含 ≥1 个 M- 码样本占比",
+   "codes": "M-*",
+   "tier": "primary"
+  },
+  {
+   "id": "min_violation_rate",
+   "direction": "lower_better",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "split 内含 ≥1 个 m- 码样本占比",
+   "codes": "m-*",
+   "tier": "secondary"
+  },
+  {
+   "id": "crit_count_per_sample",
+   "direction": "lower_better",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "每样本 C- 码计数",
+   "tier": "secondary"
+  },
+  {
+   "id": "oob_count_per_sample",
+   "direction": "lower_better",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "每样本内容元素越界计数",
+   "tier": "secondary"
+  },
+  {
+   "id": "overlap_pair_count_per_sample",
+   "direction": "lower_better",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "每样本内容元素两两重叠对计数",
+   "tier": "secondary"
+  },
+  {
+   "id": "source_recall",
+   "direction": "higher_better",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "每样本源元素召回（输出含输入 id 比例）的均值",
+   "tier": "primary"
+  },
+  {
+   "id": "typed_text_loss_rate",
+   "direction": "lower_better",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "split 内 text 字符流丢失样本占比",
+   "tier": "primary"
+  },
+  {
+   "id": "rubric_overall",
+   "direction": "higher_better",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "每样本 8 维最小分（rubric v1.0.0 定义）的均值",
+   "tier": "primary"
+  },
+  {
+   "id": "rubric_dim_scores",
+   "direction": "higher_better",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "每维每样本分数的均值（8 维逐维报告）",
+   "tier": "secondary"
+  },
+  {
+   "id": "modification_count",
+   "direction": "context_only",
+   "denominator_key": "D_SAMPLES",
+   "aggregation": "AI surrogate 编辑协议每样本修改次数均值；仅为上下文基线描述，永不进入通过判定",
+   "tier": "context"
+  },
+  {
+   "id": "bench_p50_ms",
+   "direction": "lower_better",
+   "denominator_key": "D_BENCH_OPS",
+   "aggregation": "按 benchmark-spec nearest_rank",
+   "tier": "primary_perf"
+  },
+  {
+   "id": "bench_p95_ms",
+   "direction": "lower_better",
+   "denominator_key": "D_BENCH_OPS",
+   "aggregation": "按 benchmark-spec nearest_rank",
+   "tier": "primary_perf"
+  },
+  {
+   "id": "bench_peak_rss_mb",
+   "direction": "lower_better",
+   "denominator_key": "D_BENCH_OPS",
+   "aggregation": "进程峰值 RSS",
+   "tier": "primary_perf"
+  }
+ ],
+ "denominators": {
+  "D_SAMPLES": {
+   "values": {
+    "development": 48,
+    "validation": 18,
+    "frozen_holdout": 19,
+    "total": 85
+   },
+   "pinning": "以 split manifest sha256 冻结，评估时实测样本数必须逐 split 相等"
+  },
+  "D_BENCH_OPS": {
+   "values": {
+    "repetitions_per_operation": 3,
+    "percentile_method": "nearest_rank",
+    "cache_policy": "cold_process"
+   },
+   "pinning": "以 benchmark-spec content_sha256 冻结"
+  },
+  "D_CONTENT_ELEMENTS": {
+   "values": "每样本内容元素数",
+   "pinning": "仅用于上下文描述性指标，永不用于通过判定"
+  },
+  "D_TYPED_CHARS": {
+   "values": "每样本输入 text 字符数",
+   "pinning": "仅用于上下文描述性指标，永不用于通过判定"
+  },
+  "rule": "任何比率/均值类指标必须显式引用本表 denominator_key；引用未登记分母 → RR-2 拒绝。"
+ },
+ "estimands": [
+  {
+   "id": "E1",
+   "name": "RD_major_ai",
+   "definition": "P(maj_violation_rate | system=v3) − P(maj_violation_rate | system=ai_surrogate)，development split，同样本配对",
+   "effect_size": "配对风险差（主）+ Cohen h（辅，报告用）"
+  },
+  {
+   "id": "E2",
+   "name": "RD_major_v2",
+   "definition": "P(maj_violation_rate | system=v3) − P(maj_violation_rate | system=v2_naive_reflow)，development split，同样本配对",
+   "effect_size": "配对风险差（主）+ Cohen h（辅）"
+  },
+  {
+   "id": "E3",
+   "name": "delta_rubric_ai",
+   "definition": "mean(rubric_overall(v3) − rubric_overall(ai_surrogate))，development split，同样本配对差均值",
+   "effect_size": "配对均值差（主）+ Cohen dz（辅）"
+  },
+  {
+   "id": "E4",
+   "name": "bench_budget_ratio",
+   "definition": "各场景阶段 bench_p50_ms/bench_p95_ms/bench_peak_rss_mb 相对预算表上限的比值",
+   "effect_size": "确定性比值（无 CI；环境由 benchmark-spec 锁定）"
+  }
+ ],
+ "confidence_intervals": {
+  "proportion_arm": "各臂比例报 Wilson score 95% 双侧（仅描述）。",
+  "paired_diff": "E1/E2/E3 的配对差用样本聚类 bootstrap：B=10000，seed=20260831，按样本有放回重采样，重算差值，取百分位；双侧报 [2.5%, 97.5%]，单侧界报 5%（下界）/95%（上界）。",
+  "prng": "splitmix64(seed=20260831)，由 evaluation runner 单一实现，规格固定序列号流（先 E1 后 E2 后 E3，同一 split 内一次生成不重置）。",
+  "degenerate": "若差值经验分布全为同一常数 c，则 CI=[c,c]。",
+  "spearman": "score 相关性 ρ 的 95% CI 用同一 bootstrap 过程（B=10000，seed=20260831）。"
+ },
+ "direction_convention": {
+  "lower_better": "改善 = 差值(v3−对照) < 0（违规率/耗时/内存越小越好）",
+  "higher_better": "改善 = 差值(v3−对照) > 0（rubric 分越大越好）",
+  "rule": "T1~T6 的 H1 一律取改善方向；点估计条件与 p 值条件必须同向同时满足"
+ },
+ "hypothesis_tests": [
+  {
+   "id": "T1",
+   "family": "hard_rule",
+   "hypothesis": "无任何 C- 码",
+   "procedure": "全样本 critical 计数（含缺失 worst-case 映射）恒等式判定，无统计",
+   "decision": "critical 总数=0 → T1 通过；任何 >0 → 该系统在该 Gate 直接 fail（先于一切统计）"
+  },
+  {
+   "id": "T2",
+   "family": "F1",
+   "hypothesis": "H0: RD_major_ai ≥ +0.10 vs H1: < +0.10（非劣）",
+   "procedure": "单侧 p = bootstrap 分布中 RD_boot ≥ 0.10 的比例",
+   "decision": "Holm 校正后 p<0.05 且点估计 RD<0.10 → 非劣成立"
+  },
+  {
+   "id": "T3",
+   "family": "F1",
+   "hypothesis": "H0: delta_rubric_ai ≤ −0.25 vs H1: > −0.25（非劣）",
+   "procedure": "单侧 p = bootstrap 分布中 Δ_boot ≤ −0.25 的比例",
+   "decision": "Holm 校正后 p<0.05 且点估计 Δ>−0.25 → 非劣成立"
+  },
+  {
+   "id": "T4",
+   "family": "F1",
+   "hypothesis": "H0: RD_major_v2 ≥ 0 vs H1: RD_major_v2 < 0（优效：v3 违规率低于在任 v2）",
+   "procedure": "单侧 p = bootstrap 分布中 RD_boot ≥ 0 的比例",
+   "decision": "Holm 校正后 p<0.05 且点估计 RD<0 → 优效成立"
+  },
+  {
+   "id": "T5",
+   "family": "perf",
+   "hypothesis": "全部场景阶段在预算内",
+   "procedure": "确定性逐项比较预算表上限",
+   "decision": "任一项超限 → T5 fail；超 timeout_seconds/timeout_ticks → run failed（RR-3 之外另计缺失 worst-case）"
+  },
+  {
+   "id": "T6",
+   "family": "construct",
+   "hypothesis": "H0: ρ ≥ 0 vs H1: ρ < 0（ρ=Spearman(rubric_overall, 每样本失败码计数)，负相关=构念效度支持）",
+   "procedure": "单侧 p = bootstrap 分布中 ρ_boot ≥ 0 的比例；bootstrap 在 PRNG 流中位于 E1/E2/E3 之后（同一 split 一次生成不重置）",
+   "decision": "p<0.05 且点估计 ρ<0 → 构念效度支持；否则记录 caveat 不判 fail（G3 报告披露）",
+   "degenerate": "每样本失败码计数全相等（如全 0）→ ρ 无定义 → 记 construct_check_indeterminate（不判 fail，G3 披露）"
+  }
+ ],
+ "multiple_comparisons": {
+  "family_F1_members": [
+   "T2",
+   "T3",
+   "T4"
+  ],
+  "correction": "Holm-Bonferroni，族错误率 α=0.05（单侧）；p 值升序与 0.05/(m−k+1) 比较",
+  "outside_family": "T1 硬规则不参与校正；T5 确定性判定不参与；T6 构念性描述不参与；secondary 指标只报 95% CI 不做通过判定"
+ },
+ "power": {
+  "design": "固定 n（development=48），不因结果追加样本",
+  "reporting": "每次 Gate 报告必须给出 T2/T3/T4 在观测到的原假设边界处的事后功效与 MDE，由预注册 Monte-Carlo（B=20000，seed=20260831，与 CI 同一 PRNG 流继续）计算；功效数字仅披露、不反馈修改阈值",
+  "honesty_rule": "禁止用功效不足为由事后放宽 margin（走 amendment_policy）"
+ },
+ "missing_data": {
+  "principle": "失败绝不计成功；无插补、无事后剔除",
+  "worst_case_mapping": [
+   {
+    "situation": "样本运行崩溃/解析失败/输出缺失",
+    "mapping": "该样本在全部 primary 指标记最差值：crit/maj/min_violation=违规，source_recall=0，rubric_overall=1，typed_text_loss=违规"
+   },
+   {
+    "situation": "benchmark 单操作超时/预算违规",
+    "mapping": "该操作计 failed，bench 指标记超预算值；run 状态 failed"
+   },
+   {
+    "situation": "环境 hash 与 pinning 不符",
+    "mapping": "整个 run 拒绝（RR-3/RR-4），不产生任何统计"
+   },
+   {
+    "situation": "frozen_holdout 标签被非 FINAL 角色访问",
+    "mapping": "违规事件（RR-5），评估中止上报"
+   }
+  ]
+ },
+ "critical_zero_rule": {
+  "rule": "critical 计数类指标阈值恒为 0：任何评估样本出现任一 C- 码 → 该系统该 Gate 直接 fail，与一切均值、CI、多重比较无关",
+  "precedence": "T1 先于 F1 族执行；F1 全过而 T1 fail 时 Gate 仍为 fail"
+ },
+ "noninferiority_thresholds": [
+  {
+   "test": "T2",
+   "metric": "maj_violation_rate",
+   "margin_rd": 0.1,
+   "justification": "对照目标=AI surrogate 整理基线（池内 0/85 违规）；margin 0.10 与在任 v2 的池内违规率 11/85≈0.129 同量级——即 v3 对目标基线的劣化不得超过在任系统自身缺陷水平；n=48 下可达（0/48 单侧 95% 上界≈0.060<0.10，两臂全零时 bootstrap CI=[0,0] 判过）"
+  },
+  {
+   "test": "T3",
+   "metric": "rubric_overall",
+   "margin_mean": -0.25,
+   "justification": "rubric 1~5 整数量表 8 维最小分，0.25=1/4 个等级；小于该差不可由单维单分噪声区分"
+  }
+ ],
+ "superiority_thresholds": [
+  {
+   "test": "T4",
+   "metric": "maj_violation_rate",
+   "boundary": 0,
+   "direction": "优效 = RD_major_v2 < 0（v3 违规率严格低于 v2）",
+   "justification": "在任 v2_naive_reflow development split 违规 7/48≈0.146（评审实测），v3 目标 0/48 → 预期 RD≈−0.146<0；n=48 配对下 McNemar/bootstrap 可检"
+  }
+ ],
+ "score_correlation_gate": {
+  "metric": "Spearman ρ(rubric_overall, 每样本失败码计数)",
+  "threshold": "bootstrap 单侧 95% 上界 < 0（显著负相关，T6）",
+  "target": "点估计 ≤ −0.3（披露性目标，不判 fail）",
+  "consumed_by": "V3-004B 实现，G3 报告披露"
+ },
+ "benchmark_budget": {
+  "environment_pinning": {
+   "benchmark_spec_file_sha256": "dbc00bc413ec02f80339ffd87a33dbc98d265c5518833a012da7ef9eb24be42f",
+   "benchmark_spec_content_sha256": "1db65ecd86164231edf535c56476050b95941efd8b75cbbd2de92951722c64a7",
+   "note": "file=文件字节 SHA-256（upstream_contracts 同一口径）；content=benchmark-spec.json 内部 content_sha256 字段（CanonicalArtifacts canonicalJsonSha256 去自身字段语义，BenchmarkSpec.verifyFileHash 校验即此）；两者皆须相符（RR-3）"
+  },
+  "hard_caps_from_benchmark_spec": {
+   "timeout_seconds_per_operation": 300,
+   "timeout_ticks": 100000,
+   "cache_policy": "cold_process",
+   "repetitions": 3,
+   "network": "offline_replay_only",
+   "data_policy": "synthetic_only"
+  },
+  "stage_budgets": [
+   {
+    "scenario": "S-3000-STROKES（3000 笔画/100 block）",
+    "stage": "snapshot",
+    "p50_ms_max": 80,
+    "p95_ms_max": 250
+   },
+   {
+    "scenario": "S-3000-STROKES",
+    "stage": "segmentation",
+    "p50_ms_max": 100,
+    "p95_ms_max": 300
+   },
+   {
+    "scenario": "S-3000-STROKES",
+    "stage": "planner",
+    "p50_ms_max": 120,
+    "p95_ms_max": 400
+   },
+   {
+    "scenario": "S-LONG-PAGE（长页）",
+    "stage": "full_pipeline",
+    "p50_ms_max": 500,
+    "p95_ms_max": 1500
+   },
+   {
+    "scenario": "S-MULTI-CAND（多候选）",
+    "stage": "planner",
+    "p50_ms_max": 150,
+    "p95_ms_max": 450
+   },
+   {
+    "scenario": "all",
+    "stage": "any",
+    "peak_rss_mb_max": 512
+   }
+  ],
+  "rationale": "设备档=benchmark-spec environment_requirements（≥4 核/8GB）；预算在 V3-301C/V3-604A 首次测量前预注册（先于测量），只许收紧不许放宽（amendment_policy）",
+  "consumed_by": "V3-301C（S-3000-STROKES oracle/索引）、V3-604A（全场景阶段耗时/内存）"
+ },
+ "stopping_rules": [
+  {
+   "id": "SR-1",
+   "rule": "固定设计：每次 Gate 一次性全量分析其注册 split；禁止 interim look、early stopping、因结果追加样本"
+  },
+  {
+   "id": "SR-2",
+   "rule": "Gate fail → 按 failure_return_to 回对应任务修复后整 split 重测；禁止以统计理由改阈值；改阈值只能走 amendment_policy"
+  },
+  {
+   "id": "SR-3",
+   "rule": "benchmark 单 run 超时/预算违规即 failed；同一 scenario 连续 3 次 failed run 判环境故障，排查后重测；不得放宽预算"
+  },
+  {
+   "id": "SR-4",
+   "rule": "frozen_holdout 仅 FINAL 一次评估；评估完成后该 split 永久作废，不得再用于任何决策"
+  },
+  {
+   "id": "SR-5",
+   "rule": "同一任务连续 2 轮复审 rejected → 任务 blocked 上报；不得通过修改本 spec 规避复审"
+  }
+ ],
+ "frozen_holdout_usage": {
+  "guard": "FlowMuse-App/tool/smart_layout_v3/dataset/frozen_label_access_guard.dart（V3-002C 冻结；frozenReaderRoles={evaluation, gate, annotation_freeze}）",
+  "allowed_roles": [
+   "evaluation"
+  ],
+  "role_alignment": "allowed_roles 取 guard 词表内的 evaluation（=FINAL 评估读取角色）；annotation_freeze 仅指 V3-002C 冻结时点历史用途；guard 词表内的 gate 角色对本 split 的读取在本 spec 生效期间一律按 RR-5 拒绝并上报（本 spec 语义严于 guard 默认）",
+  "one_shot": true,
+  "denied_roles": [
+   "tuning",
+   "training",
+   "development",
+   "review_panel_tuning",
+   "gate"
+  ]
+ },
+ "golden_change_control": {
+  "ledger": "docs/研发记录/evidence/smart-layout-v3/gates/G0/golden-ledger.json（V3-004B 建立并维护）",
+  "rules": [
+   "rubric 引用恒为 upstream_contracts.rubric_v1 的 sha256（V3-000B rubric v1.0.0）",
+   "golden 变更须版本+前后 hash+审批记录入 ledger；无记录变更视为未发生（评估按旧 golden 判定并报 RR-6）"
+  ]
+ },
+ "rejection_rules": [
+  {
+   "id": "RR-1",
+   "error_code": "metric_not_registered",
+   "rule": "runner 必须拒绝请求/报告任何未列入 registered_metrics 的指标"
+  },
+  {
+   "id": "RR-2",
+   "error_code": "denominator_not_fixed",
+   "rule": "runner 必须拒绝分母未在 denominators 登记或与登记值不符的比率"
+  },
+  {
+   "id": "RR-3",
+   "error_code": "benchmark_environment_mismatch",
+   "rule": "runner 必须拒绝满足任一条件的运行：(a) benchmark-spec.json 文件字节 SHA-256 ≠ environment_pinning.benchmark_spec_file_sha256；(b) 该文件内部 content_sha256 字段值 ≠ environment_pinning.benchmark_spec_content_sha256；(c) 该字段与文件内容自校验不符（BenchmarkSpec.verifyFileHash 语义）"
+  },
+  {
+   "id": "RR-4",
+   "error_code": "split_manifest_mismatch",
+   "rule": "runner 必须拒绝 split 样本清单 hash 与 upstream_contracts.split_* 不符的评估"
+  },
+  {
+   "id": "RR-5",
+   "error_code": "frozen_access_violation",
+   "rule": "runner 必须拒绝并上报非 FINAL 角色对 frozen_holdout 标签的访问"
+  },
+  {
+   "id": "RR-6",
+   "error_code": "post_hoc_amendment",
+   "rule": "runner 必须拒绝把『所依赖参数已在修订中变更』的旧版本测量结果计入 Gate；修订未触及的参数，其旧测量仍有效。收紧（tightening）：被触及参数覆盖的全部测量须重测后方可计入；放宽（loosening）：另行适用 amendment_policy.loosening 的全量重测"
+  }
+ ],
+ "amendment_policy": {
+  "versioning": "spec_version 语义化升级；content_sha256 随之变化并重新预注册",
+  "tightening": "收紧预算/加严阈值：允许，版本升级+变更记录（004B 审计）+panel 复审",
+  "loosening": "放宽（margin 增大/预算放宽/白名单加指标）：仅当发生在任何使用该参数的测量之前（以 Gate 运行记录时间为证），且须版本升级+全量披露+panel 复审+受影响测量全部重测",
+  "prohibited": "看见测量结果之后的任何放宽（RR-6 强制）"
+ },
+ "production_release_note": {
+  "development_gates": "G0~G5 全部为 development Gate，通过不授权生产发布",
+  "production_requires": "V3-700A 外部批准包（真实外部输入），本 spec 不构成生产批准",
+  "disclosure": "PRODUCTION_RELEASE_NOT_AUTHORIZED"
+ },
+ "panel_disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "本 spec 的预注册盲审由两个上下文隔离的 GLM-5.3 Max AI 代理执行，分歧由第三代理仲裁；不构成统计学家的真人同行评审，生产决策仍需 V3-700A 外部批准包。"
+ },
+ "content_sha256": "83dc663e5f7eee107c40f528df555a45e86a52c2a097bf4afa908171635ef303"
+}

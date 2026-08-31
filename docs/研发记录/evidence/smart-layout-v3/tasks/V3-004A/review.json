@@ -1,0 +1,55 @@
+{
+ "task_id": "V3-004A",
+ "run_id": "54e10617-9599-4452-9a20-ea4d7c1049ec",
+ "executor_run_id": "50c5697e-f431-4575-a826-1617e55fd88d",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "findings": [
+  {
+   "id": "F1",
+   "severity": "low",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004A/result.json summary 末段 vs agent-execution-manifest.json",
+   "issue": "result.json 原表述称 EvaluationSpec/GateZeroEvaluator 的 Dart 消费方在 V3-206A。manifest 中 V3-206A 的 allowed_paths 确含 tool/smart_layout_v3/evaluation/**（路径归属一致），但其 title/target_symbols 为『分析指标与最差分组报告』/RecognitionQualityEvaluator+RecognitionLatencyEvaluator（G1 识别域）；全 manifest 无任何任务同时拥有 EvaluationSpec/GateZeroEvaluator target_symbols 与代码路径（004A/B/C 有 symbols 无代码路径）。属规划层归属表述不精确，非本任务缺陷，不阻塞；建议后续在 backlog 厘清 G0 runner 的落点任务。〔执行者已按此在提交前修正 result.json 表述。〕"
+  },
+  {
+   "id": "F2",
+   "severity": "low",
+   "blocking": false,
+   "location": "FlowMuse-App/{linux,macos,windows}/flutter/generated_*（7 文件，git status M）",
+   "issue": "git status 显示 7 个 Flutter 生成文件被修改，实测 git diff 内容字节数=0（仅 core.autocrlf 引起的 EOL 状态漂移，无内容改动、非 Dart）。非本任务产物，不构成路径越界。"
+  },
+  {
+   "id": "F3",
+   "severity": "info",
+   "blocking": false,
+   "location": "gates/G0/panel/{rater-a,rater-b}.json 与 round-1/*",
+   "issue": "round-1 的 packet 与 rater 文件缺 round 字段（round-2 起才有）；且 round-2/round-3 packet 的 role 文本向评审披露了本轮修订内容清单。修复验证型预注册评审中披露 changelog 属常规做法；盲评隔离（评审互不可见、禁读 panel 其他文件、run_id 互异）均成立，仅记录在案。"
+  },
+  {
+   "id": "F4",
+   "severity": "info",
+   "blocking": false,
+   "location": "gates/G0/spec-validation.json",
+   "issue": "40 项校验的执行脚本本体未随证据持久化（commands.json 仅记录 artifact-contract 命令）；但复审代理以独立实现复算抽验（content_sha256、8 上游 hash、方向断言、frozen 词表、F1 族、split 计数、RR-3/RR-6）全部复现一致，结果可信、可复现。"
+  },
+  {
+   "id": "F5",
+   "severity": "info",
+   "blocking": false,
+   "location": "gates/G0/arbiters/round-2-C12.json",
+   "issue": "仲裁 rationale 引用的 spec-validation.json 为 round-2 时点中间值（238f06b8…/770f91bb…），该文件后被终版（83dc663e…/e1598624…）覆盖；与『每轮修订后重跑校验』流程一致，历史记录自洽，非篡改。另 result.json changed_paths 预列了复审后写入的 review.json（manifest 证据契约标准路径）。"
+  }
+ ],
+ "verification_log": [
+  "hash 链独立实测通过：evaluation-spec.json 文件字节 SHA-256=e1598624…b1f 与 result.json deliverable 一致；复审代理按 canonical_artifacts.dart 语义复刻 canonical 序列化，先对拍 benchmark-spec.json 内部 content_sha256 复现 1db65ecd…（复刻校准），再复算 evaluation-spec.json 得 83dc663e… 与声明值逐位相等。",
+  "上游 8 pin 实测通过：failure-taxonomy(e0dd0ad6)/rubric(9408c037)/benchmark-spec(dbc00bc4)/three-baseline-report(8b8cf415)/dataset-manifest(d062a8e8)/dev-split(14197109)/val-split(152c9a0e)/frozen-split(8d08d802) 全部 sha256 实测与 spec.upstream_contracts 及 preregistration.json 逐位一致；split 48/18/19=85 与 D_SAMPLES 一致。",
+  "spec 完整性通过：objective 13 项均有结构化条款；registered_metrics 14 项 id 唯一且分母引用闭合；T2/T3/T4/T6 的 H1、p 值方向与 decision 点估计条件均与 direction_convention 同向；RR-1~6 均含 error_code+机器条件（RR-3 file/content 双口径三条件，双哈希实测均真实存在且互不等价）；amendment_policy 堵死事后放宽；三要素披露+V3-700A 生产边界齐备。",
+  "上游数值交叉验证：benchmark-spec 实测 timeout=300s/100000 ticks/cold_process/repetitions=3/nearest_rank/offline_replay_only 与 hard_caps 一致；frozen guard 实测 frozenReaderRoles={evaluation,gate,annotation_freeze}，spec allowed_roles=[evaluation]⊆词表且显式拒绝 gate；spec 引用三基线数字（ai 0/85、v2 池内 11/85、v2 dev split 7/48）与 three-baseline-report.json by_split 实测一致。",
+  "panel 完整性与隔离通过：3 轮记录齐全；三轮 packet 文件 SHA-256 实测（47547c25/659fc584/27ed536f）与 panel-report 一致；各轮内嵌 spec content_sha256（684d805f/238f06b8/83dc663e）独立复算自洽，round-3 内嵌 spec 与磁盘终版逐键相等；7 个 run_id 两两互异且均≠执行者 50c5697e；round-3 双评 12/12 adequate 且 inputs_read hash 与实测一致；round-2 仲裁 verdict=inadequate；跨轮 spec 差异与各轮 finding 逐项吻合（T4 方向/T6 方向与退化/RR-3 双口径/RR-6 范围/frozen 词表），修复真实发生。",
+  "spec-validation.json 实测：40 项 checks 全 ok、status=passed；复审代理独立抽验 15+ 项全部复现。preregistration.json status=preregistered_frozen，双 hash 与实测一致，freeze+gate_scope 生产边界在位。",
+  "路径纪律通过：本任务产物全部落在三条 allowed_paths 内；工作区零 Dart 改动（7 个生成文件 diff 字节数=0 仅 EOL 漂移）；scripts/ 与 plans/ 其他改动属编排器基础设施及前序任务产物；文件 mtime 时间线与各文件内 UTC 时间戳自洽。",
+  "验收映射通过：四项 acceptance 各有实物证据；未发现伪造证据、hash 不实、panel 记录缺失、方向错误未修、披露缺失或路径越界，无阻塞发现。"
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "task_id": "V3-004A",
+ "runs": [
+  {
+   "command_id": "artifact-contract",
+   "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smart-layout-v3/AgentExecution.ps1 -Action VerifyArtifacts -TaskId V3-004A",
+   "exit_code": 0,
+   "started_at_utc": "2026-08-31T15:47:12Z",
+   "finished_at_utc": "2026-08-31T15:47:13Z"
+  }
+ ]
+}

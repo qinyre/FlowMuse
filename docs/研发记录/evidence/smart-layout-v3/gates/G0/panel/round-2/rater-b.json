@@ -1,0 +1,84 @@
+{
+ "run_id": "8c2c4973-fcd9-4a32-a39f-890430034c42",
+ "rater": "B",
+ "round": 2,
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "inputs_read": {
+  "blind_packet_sha256": "659fc58480763b090a78b7dcb8f44729ed4018e64e5e40c97e968ee98ea0957a"
+ },
+ "verdicts": [
+  {
+   "id": "C1",
+   "verdict": "adequate",
+   "reason": "cluster_unit=样本级聚类+同样本配对，bootstrap 按样本有放回重采样与之一致；实测三 split 48/18/19 两两不相交且并集=池 85 个唯一 sample_id，three-baseline-report by_split 各臂 n 与 split 逐一对应，配对可实现。"
+  },
+  {
+   "id": "C2",
+   "verdict": "adequate",
+   "reason": "E1/E2/E3 分别绑定已登记指标 maj_violation_rate/rubric_overall、固定 development split、同样本配对差，主效应量（配对 RD/均值差）与辅助（Cohen h/dz，仅报告）分清；E4 为确定性比值无 CI，与 T5 确定性判定一致，无歧义引用。"
+  },
+  {
+   "id": "C3",
+   "verdict": "adequate",
+   "reason": "配对差 cluster bootstrap 定死 B=10000、seed=20260831、splitmix64、固定 E1→E2→E3 单一流不重置、退化分布 CI=[c,c]，臂比例仅 Wilson 描述不进门禁；唯 splitmix64 输出→样本索引映射与 Spearman bootstrap 的流位置留由 runner 单一实现兜底，不影响门禁 CI 的确定性。"
+  },
+  {
+   "id": "C4",
+   "verdict": "inadequate",
+   "reason": "T6 假设文本『rubric_overall 与失败码计数负相关』与其判定『bootstrap 单侧 95% 下界>0』及 score_correlation_gate 目标『点估计≥0.3』方向相反（ρ 定义为 rubric_overall×失败码计数，构念效度应要求显著负相关/上界<0），直接违反 direction_convention『T1~T6 的 H1 一律取改善方向』；且当每样本失败码计数恒为 0（v3 目标 0 违规、ai 实测已 0/85）时 Spearman ρ 无定义，T6 无零事件/退化分支——而本项明文要求『含零事件/退化分支；H1 一律为改善方向』；T1~T5 方向与分支均闭合（T4 已正确修正为 H1: RD<0、p=P(RD_boot≥0)、判定含点估计 RD<0）。"
+  },
+  {
+   "id": "C5",
+   "verdict": "adequate",
+   "reason": "四类缺失情境全部确定性映射：崩溃/解析失败→全部 primary 指标最差值（rubric_overall=1 与实测量表 range [1,5] 一致、source_recall=0、违规类=违规）；bench 超时/超预算→failed+超预算值+run failed；环境 hash 不符→整 run 拒绝；frozen 越权→RR-5 中止，明文无插补无事后剔除；唯一未明写的 rubric R7 insufficient 情形由固定分母 D_SAMPLES+RR-2 失闭兜底（剔除样本即分母不符被拒）。"
+  },
+  {
+   "id": "C6",
+   "verdict": "adequate",
+   "reason": "族成员恰为 F1={T2,T3,T4}，单侧 Holm-Bonferroni α=0.05 按 p 升序与 0.05/(m−k+1) 比较（m=3，标准步降），T1 硬规则/T5 确定性/T6 构念描述/secondary 只报 CI 均明文排除族外，与 critical_zero_rule 的 T1 先行无冲突。"
+  },
+  {
+   "id": "C7",
+   "verdict": "adequate",
+   "reason": "固定 n=48 禁止追加样本与 interim look（SR-1），T2/T3/T4 事后功效与 MDE 由预注册 MC（B=20000、seed=20260831 同流续算）仅作披露、明文不反馈修改阈值，且禁止以功效不足为由放宽 margin（只能走 amendment_policy），无反向定制通道。"
+  },
+  {
+   "id": "C8",
+   "verdict": "adequate",
+   "reason": "14 个登记指标全部显式引用 D_SAMPLES 或 D_BENCH_OPS 且 RR-2 拒绝未登记分母；实测 D_SAMPLES=48/18/19 与三个 split manifest 逐 split 相等，D_BENCH_OPS（repetitions=3/nearest_rank/cold_process）与 benchmark-spec.json 逐项相符，D_CONTENT_ELEMENTS/D_TYPED_CHARS 明文仅限上下文永不进门禁。"
+  },
+  {
+   "id": "C9",
+   "verdict": "adequate",
+   "reason": "critical_zero_rule 阈值恒 0、任何 C- 码即该系统该 Gate 直接 fail 且与均值/CI/多重比较无关，T1 明文『先于一切统计』并单列于 F1 族外，『F1 全过而 T1 fail 时 Gate 仍 fail』与 failure-taxonomy critical gate_semantics 一票否决实测一致。"
+  },
+  {
+   "id": "C10",
+   "verdict": "adequate",
+   "reason": "T2 margin +0.10（lower_better 符号正确；实测 ai 0/85、v2 11/85=0.1294 且 baseline-report code_distribution 显示 v2 全为 M-LAYOUT-OOB 即纯 major 口径与 maj_violation_rate 一致、3/48=0.0625≈0.060 可达性成立、两臂全零退化判过）；T3 margin −0.25（higher_better 符号正确，量表实测 [1,5]、0.25=1/4 等级）；T4 边界 0 且优效=RD<0（实测 v2 development 7/48=0.1458，0/48 对 7/48 时 bootstrap p≈(41/48)^48≈0.0005 可检）。"
+  },
+  {
+   "id": "C11",
+   "verdict": "adequate",
+   "reason": "hard_caps 六项与 benchmark-spec.json 逐字相符（300s/100000 ticks/cold_process/3 reps/offline_replay_only/synthetic_only），stage_budgets 含逐阶段 p50/p95 与全局 RSS 512MB 且先于 V3-301C/V3-604A 预注册只许收紧，SR-1~5 完备互恰（SR-2↔amendment_policy、SR-4↔frozen_holdout_usage one_shot）；但 environment_pinning 把原始文件 hash dbc00bc4…误标为『benchmark-spec content_sha256』（该字段真值 1db65ecd…，V3-001B review 已确立两口径『各自正确』），属必改勘误——任何读法均失闭无放宽通道，故仍判 adequate。"
+  },
+  {
+   "id": "C12",
+   "verdict": "adequate",
+   "reason": "RR-1/2/4/5/6 语义与触发条件确定可机执行（RR-4/5 有三份 split manifest hash 与 FlowMuse-App/tool/smart_layout_v3/dataset/frozen_label_access_guard.dart 实体支撑，RR-6 以测量时间对 spec 生效时间判定），披露如实：PRODUCTION_RELEASE_NOT_AUTHORIZED、HUMAN_VALIDATION_NOT_PERFORMED、G0~G5 明文不授权生产、需 V3-700A 外部批准；RR-3 因上述 content_sha256 误标存在字面读法拒绝一切运行（失闭），同样需勘误但无放行漏洞。"
+  }
+ ],
+ "overall": "fail",
+ "notes": [
+  "8 个上游 hash 全部实测复核一致：failure_taxonomy e0dd0ad6…、rubric_v1 9408c037…、benchmark_spec dbc00bc41…（原始文件字节哈希）、three_baseline_report 8b8cf415…、dataset_pool_manifest d062a8e8…、split development/validation/frozen_holdout 14197109…/152c9a0e…/8d08d802…。",
+  "三基线数字实测核验：no_op 47/85、v2_naive_reflow 11/85、ai_surrogate 0/85（overall 层）；v2 development split 7/48=0.1458；baseline-report.json 的 code_distribution（v2 仅 M-LAYOUT-OOB×11，no_op M-LAYOUT-OOB×37+M-LAYOUT-OVERLAP×32）证明这些计数为纯 major 口径，spec 用作 maj_violation_rate 锚点口径一致；rubric 实测恰 8 维（D1~D8）、量表 [1,5]、overall=min 与 rubric_overall 聚合定义一致。",
+  "split 完整性实测：48/18/19 两两交集为空、并集恰为池 85 个唯一 sample_id；blind-packet 内嵌 spec 与 docs/研发记录/specs/smart-layout-v3/evaluation-spec.json 完全相等（dict 相等），spec 根部 content_sha256=238f06b8… 独立复现成功（剥离该字段后 sort_keys+compact+UTF-8 规范化哈希）。",
+  "T2/T3/T4 方向逐项核验：T2 H0:RD≥+0.10/H1:<+0.10、p=P(RD_boot≥0.10)、判定 Holm p<0.05 ∧ 点估计 RD<0.10；T3 H0:Δ≤−0.25/H1:>−0.25、p=P(Δ_boot≤−0.25)、判定 ∧ Δ>−0.25；T4 H0:RD≥0/H1:RD<0、p=P(RD_boot≥0)、判定 ∧ RD<0——三者与 lower_better/higher_better 及 direction_convention 全部互恰，第 1 轮 T4 反转已修复；percentile 单侧 p 在 α=0.05 下渐近等价于 CI 反转的非劣/优效判定，程序自洽。",
+  "C4 判 inadequate 的完整依据：(a) T6 方向自相矛盾——hypothesis 文本『负相关』与 procedure/decision『下界>0』、score_correlation_gate『下界>0、点估计≥0.3』三处操作化规则方向相反（对 ρ(rubric_overall,失败码计数) 要求显著正相关即失败越多分越高，恰与构念相反）；(b) T6 无零事件分支——v3 若达成 0 违规（既定目标，ai 已 0/85），每样本失败码计数恒 0，Spearman ρ 无定义，退化条款仅覆盖配对差 CI。虽 T6 不判 fail 仅记 caveat，但本项明文要求 T1~T6 含零事件/退化分支且 H1 一律改善方向，故不豁免。",
+  "必改勘误（不影响 adequate 判定但须在 V3-004B 实现 runner 前修正）：environment_pinning/D_BENCH_OPS.pinning/RR-3 把原始文件哈希 dbc00bc4…标注为『benchmark-spec content_sha256』，而该字段真值为 1db65ecd…（V3-001B review.json 明文『content_sha256 是剥离该字段后的规范化 JSON 哈希、artifact sha256 是原始文件哈希，二者口径不同』）；同一文档对自身根字段 content_sha256 又用规范化口径（238f06b8…≠文件哈希 770f91bb…），一词两义。穷举三种 runner 读法（读字段值/重算规范化哈希/哈希原始文件）均无篡改放行向量，仅字面读法会拒绝一切运行（失闭），故 C11/C12 维持 adequate。",
+  "次要观察：splitmix64 输出→重采样索引的离散化映射与 Spearman bootstrap 在 PRNG 流中的位置（power MC 明文『同一 PRNG 流继续』而 Spearman 只说『同一 bootstrap 过程』）未完全钉死，交由 runner 单一实现；均不影响门禁检验（E1~E3 CI 流已钉死）。",
+  "次要观察：stage_budgets 引用的 S-3000-STROKES/S-LONG-PAGE/S-MULTI-CAND 场景目前仅存在于本 spec（benchmark-spec.json 无场景清单），场景参数靠行名内嵌（3000 笔画/100 block 等）；T5 时间预算仅覆盖表列场景阶段，全局仅 RSS 512MB 兜底——完备性依赖 V3-301C/V3-604A 恰好实现这些场景，建议场景清单随实现 hash 冻结。",
+  "其余交叉引用闭合核验：golden-ledger.json 尚不存在但 spec 明文『V3-004B 建立并维护』故非违规；frozen_label_access_guard.dart 实测存在且角色集 {evaluation,gate,annotation_freeze} 与 spec 的 allowed_roles=[final_evaluation] 命名略异但 spec 更严；amendment_policy（收紧可走版本升级+复审、放宽须证明先于一切受影响测量+全量重测+panel 复审，事后放宽 RR-6 拒绝）有效堵死事后放宽；upstream 任务目录仅至 V3-003B，故不存在先于预注册的 v3 测量，预注册时序干净（三基线为上游固定参照数据，以其设定 margin 不构成偷看 v3 结果）。"
+ ]
+}

@@ -1,0 +1,213 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "evaluation-spec-validation",
+ "task": "V3-004A",
+ "spec_path": "docs/研发记录/specs/smart-layout-v3/evaluation-spec.json",
+ "spec_content_sha256": "83dc663e5f7eee107c40f528df555a45e86a52c2a097bf4afa908171635ef303",
+ "spec_file_sha256": "e159862495f2b70116a38fbdd4a17e8f863ea16ae307b95d35a6617454210b1f",
+ "status": "passed",
+ "checks": [
+  {
+   "check": "content_sha256_recompute",
+   "ok": true,
+   "detail": "declared=83dc663e5f7e"
+  },
+  {
+   "check": "upstream_failure_taxonomy",
+   "ok": true,
+   "detail": "docs/研发记录/specs/smart-layout-v3/failure-taxonomy.json"
+  },
+  {
+   "check": "upstream_rubric_v1",
+   "ok": true,
+   "detail": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/rubric.json"
+  },
+  {
+   "check": "upstream_benchmark_spec",
+   "ok": true,
+   "detail": "FlowMuse-App/tool/smart_layout_v3/benchmark/benchmark-spec.json"
+  },
+  {
+   "check": "upstream_three_baseline_report",
+   "ok": true,
+   "detail": "docs/研发记录/evidence/smart-layout-v3/baseline/ai-surrogate/three-baseline-report.json"
+  },
+  {
+   "check": "upstream_dataset_pool_manifest",
+   "ok": true,
+   "detail": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-pool-v2/dataset-manifest.json"
+  },
+  {
+   "check": "upstream_split_development",
+   "ok": true,
+   "detail": "docs/研发记录/evidence/smart-layout-v3/datasets/splits/development/manifest.json"
+  },
+  {
+   "check": "upstream_split_validation",
+   "ok": true,
+   "detail": "docs/研发记录/evidence/smart-layout-v3/datasets/splits/validation/manifest.json"
+  },
+  {
+   "check": "upstream_split_frozen_holdout",
+   "ok": true,
+   "detail": "docs/研发记录/evidence/smart-layout-v3/datasets/splits/frozen_holdout/manifest.json"
+  },
+  {
+   "check": "metric_ids_unique",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "metric_denominators_registered",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "metric_directions_valid",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "test_ids_unique",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "family_F1_consistent",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "family_refs_exist",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "rejection_rules_complete",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "rejection_rules_fields",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "stopping_rules_complete",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "split_ns_sum",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "denominator_samples_match",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "ni_tests_exist",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "sup_tests_exist",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "budget_env_pin",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "budget_rows_have_caps",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "disclosure_triple",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "production_note",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "objective_sections_present",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "direction_convention_present",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "T4_h1_improvement_direction",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "T4_decision_consistent",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "T2_h1_improvement_direction",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "T3_h1_improvement_direction",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "T4_threshold_direction_field",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "T6_h1_negative_direction",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "T6_degenerate_branch",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "score_gate_negative",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "RR3_dual_hash_pinning",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "RR3_rule_references_both",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "RR6_scoped_to_changed_params",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "frozen_roles_align_guard",
+   "ok": true,
+   "detail": ""
+  }
+ ],
+ "errors": [],
+ "validated_at_utc": "2026-08-31T15:29:31Z"
+}
