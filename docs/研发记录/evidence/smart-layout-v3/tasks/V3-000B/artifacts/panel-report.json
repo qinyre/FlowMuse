@@ -1,0 +1,137 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "ai-surrogate-panel-report",
+ "task": "V3-000B",
+ "rubric_reference": {
+  "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/rubric.json",
+  "rubric_version": "1.0.0",
+  "sha256": "9408c03728adbbbfa91c72c1f605d4755a44641ec1e5aee804bc264c814e0060"
+ },
+ "panel_disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "两名评分者与仲裁规则均为 GLM-5.3 Max AI 代理；本报告只证明 AI surrogate 评分的一致性与 rubric 可应用性，不构成真人评审、目标用户研究或人工签字。"
+ },
+ "blinded_inputs": {
+  "design": "两名评分者收到完全相同的盲评输入：评分仪器（不含 anchor_expectations/provenance 的 blind-rubric.json）与仅含 id+场景输入的锚点包（剥离 expected_verdict/rationale/polarity）。两者互不可见对方上下文与结果；执行者（rubric 作者）不参与评分。",
+  "blind_rubric": {
+   "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel/blind-rubric.json",
+   "sha256": "ccf0418139e41b427ceac68e1384a4e2ba67f14375255504d095b5ca9b63e498"
+  },
+  "anchor_packet": {
+   "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel/blind-anchor-packet.json",
+   "sha256": "8bae5d7d7bc8c0f2c3c38aa006aee1eb48d758fb28e15a9a380b10ada83049fb"
+  },
+  "taxonomy": {
+   "path": "docs/研发记录/specs/smart-layout-v3/failure-taxonomy.json",
+   "sha256": "e0dd0ad6a5d5094e4605e8fec6813e008cf0712fa151414418c8aaa9679428f4"
+  }
+ },
+ "raters": [
+  {
+   "role": "rater-A",
+   "run_id": "3bdbcb33-54ec-4f1b-a128-d14c2a9bba32",
+   "model": "glm-5.3",
+   "reasoning_effort": "max",
+   "spawn_reference": "agent_74d3fc3d-be44-40c5-adf6-496b98f7a3b1",
+   "raw_scores": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel/rater-A.json"
+  },
+  {
+   "role": "rater-B",
+   "run_id": "5e5a9e77-02a9-4cc6-8a66-0a93b36ade7e",
+   "model": "glm-5.3",
+   "reasoning_effort": "max",
+   "spawn_reference": "agent_371cc059-5aec-4fb1-a611-04babfa593c0",
+   "raw_scores": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel/rater-B.json"
+  }
+ ],
+ "agreement_statistics": {
+  "unit": "anchor × dimension slot",
+  "slots": 192,
+  "exact_agreement": 192,
+  "exact_rate": 1.0,
+  "within_1": 192,
+  "delta_ge2": 0,
+  "insufficient_flips": 0,
+  "code_set_differences": 0,
+  "overall_agreement": "24/24 anchors overall 一致",
+  "per_dimension": {
+   "D1": {
+    "slots": 24,
+    "exact": 24,
+    "delta_1": 0,
+    "delta_ge2": 0,
+    "insufficient_flips": 0
+   },
+   "D2": {
+    "slots": 24,
+    "exact": 24,
+    "delta_1": 0,
+    "delta_ge2": 0,
+    "insufficient_flips": 0
+   },
+   "D3": {
+    "slots": 24,
+    "exact": 24,
+    "delta_1": 0,
+    "delta_ge2": 0,
+    "insufficient_flips": 0
+   },
+   "D4": {
+    "slots": 24,
+    "exact": 24,
+    "delta_1": 0,
+    "delta_ge2": 0,
+    "insufficient_flips": 0
+   },
+   "D5": {
+    "slots": 24,
+    "exact": 24,
+    "delta_1": 0,
+    "delta_ge2": 0,
+    "insufficient_flips": 0
+   },
+   "D6": {
+    "slots": 24,
+    "exact": 24,
+    "delta_1": 0,
+    "delta_ge2": 0,
+    "insufficient_flips": 0
+   },
+   "D7": {
+    "slots": 24,
+    "exact": 24,
+    "delta_1": 0,
+    "delta_ge2": 0,
+    "insufficient_flips": 0
+   },
+   "D8": {
+    "slots": 24,
+    "exact": 24,
+    "delta_1": 0,
+    "delta_ge2": 0,
+    "insufficient_flips": 0
+   }
+  }
+ },
+ "disagreement_items": {
+  "count": 0,
+  "items": []
+ },
+ "arbitration": {
+  "required": false,
+  "reason": "按 rubric DG4，强制仲裁触发条件为任一维度 Δ≥2、insufficient 翻转或 code 集分歧导致分数分歧；本次盲评三项均为 0，无分歧项可仲裁，第三仲裁代理未被调用。",
+  "arbiter_run_id": null,
+  "rulings": []
+ },
+ "validity_check": {
+  "method": "将两名评分者的分数与 rubric.json 预注册 anchor_expectations 逐槽对比（评分者不可见期望值）。",
+  "dimension_slot_mismatches": 0,
+  "overall_mismatches": 0,
+  "mismatches": [],
+  "conclusion": "两评分者 192/192 维度槽与 24/24 overall 均与预注册期望一致，rubric 机械推导规则在隔离上下文间可复现。"
+ },
+ "conclusion": "rubric v1.0.0 在两个上下文隔离的 GLM-5.3 Max 盲评代理间达到 100% 完全一致（192/192 槽），与预注册期望零偏差；分歧仲裁未触发（零分歧项）。rubric 可作为 V3-002C/V3-003B/V3-004A/B/V3-404B/V3-606A 的冻结引用版本。",
+ "generated_at_utc": "2026-08-31T10:56:07Z"
+}

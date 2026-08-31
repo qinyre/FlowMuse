@@ -1,0 +1,222 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "ai-surrogate-rubric",
+ "rubric_version": "1.0.0",
+ "title": "智能排版 v3 AI 代理评分 rubric：1~5 分量表、逐维评分表、每档锚点与分歧处理规则",
+ "parent_work_package": "V3-000",
+ "task": "V3-000B",
+ "source_plan": [
+  "docs/研发记录/plans/2026-08-30-smart-layout-v3-architecture-refactor.md §5.2 指标分层/§5.3 开发门禁/V3-000 工作包",
+  "docs/研发记录/plans/2026-08-31-smart-layout-v3-execution-backlog.md V3-000B",
+  "docs/研发记录/specs/smart-layout-v3/failure-taxonomy.json schema_version 1.0.0"
+ ],
+ "purpose": "为开发线（ai_synthetic_development）的 AI 代理评测提供唯一的 1~5 分质量评分仪器：把失败分类账的 code 事实机械映射为逐维分数，供 V3-002C 双盲标注校准、V3-003B AI surrogate 基线、V3-004A/B EvaluationSpec 与 V3-404B 目标 profile、V3-606A frozen 实验按本版本 hash 引用。评分是观测 code 事实的纯函数（taxonomy R1），低分档与 critical/major 事实一一映射（taxonomy field_constraints.consumers 对 V3-000B 的要求）。",
+ "taxonomy_reference": {
+  "path": "docs/研发记录/specs/smart-layout-v3/failure-taxonomy.json",
+  "sha256": "e0dd0ad6a5d5094e4605e8fec6813e008cf0712fa151414418c8aaa9679428f4",
+  "schema_version": "1.0.0",
+  "failure_code_count": 34,
+  "anchor_count": 24,
+  "binding_rule": "每个 taxonomy code 按其 layer 字段恰好绑定到一个维度；anchor_expectations 完全由 scoring_rules 从 taxonomy 锚点 expected_verdict.codes 机械推导。"
+ },
+ "panel_disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "本 rubric 由执行代理（GLM-5.3 Max）起草，经两个上下文隔离的 GLM-5.3 Max 盲评代理独立应用、第三个全新仲裁代理只裁决分歧项；全部为 AI surrogate 证据，不代表真人评审、目标用户偏好、原作者判断或任何人工签字。生产发布前必须按 V3-700A 重新获得真实批准。"
+ },
+ "scale": {
+  "range": [
+   1,
+   5
+  ],
+  "levels": {
+   "1": "灾难性：该维度存在 critical 失败事实（taxonomy C-* 码）。",
+   "2": "严重：该维度存在 ≥2 个互异 major 失败事实。",
+   "3": "明显：该维度存在恰 1 个 major 失败事实。",
+   "4": "轻微：该维度无 critical/major，存在 minor 失败事实（m-*）。",
+   "5": "达标：该维度无任何失败事实且证据完整。"
+  },
+  "insufficient": "维度证据缺失时记 insufficient（无分数）：不计通过、不计失败、不进入任何分母（taxonomy R7）；触发审计并追补证据。"
+ },
+ "dimensions": [
+  {
+   "id": "D1",
+   "key": "snapshot",
+   "name": "源保留（snapshot）",
+   "question": "源内容（手写笔迹、图形、typed text、保护对象）是否完整进入最终结果且未受损？",
+   "level_anchors": {
+    "1": "12 元素页最终 Scene 仅含 11 个元素，缺失的手写笔迹组未出现在 preserved[]（C-SNAPSHOT-LOST-SOURCE；ANCH-02 形态）。",
+    "2": "互异两个 major 并存：如一个硬约束组被拆散（M-HARD-GROUP-BREAK）且锁定签名对象被移动（M-SNAPSHOT-PROTECTED-DAMAGE）同页发生。",
+    "3": "恰一个 major：锁定签名对象被移动到新位置（M-SNAPSHOT-PROTECTED-DAMAGE 单独出现，ANCH-22 形态），源对象集合仍完整。",
+    "4": "无 critical/major、仅 minor 失败。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "5": "整洁页：源对象 100% 保留、typed text 字符流逐字一致（仅折行差异）、保护对象原位（ANCH-01/ANCH-03 形态）。"
+   },
+   "code_bindings": [
+    "C-SNAPSHOT-LOST-SOURCE",
+    "C-SNAPSHOT-TYPED-TEXT-LOST",
+    "M-HARD-GROUP-BREAK",
+    "M-SNAPSHOT-PROTECTED-DAMAGE"
+   ]
+  },
+  {
+   "id": "D2",
+   "key": "segmentation",
+   "name": "分割正确性（segmentation）",
+   "question": "笔迹区域切分是否与内容的真实边界一致（无错误合并/拆分）？",
+   "level_anchors": {
+    "1": "分割层直接造成源丢失或字符流丢失时按 R3 升级登记到 snapshot 层 critical 码并归 D1；本维度自身无 critical 码。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "2": "互异两个 major：如同页既发生一次错误合并又发生一次错误拆分且登记为两个互异事实。当前 taxonomy 仅定义一个 major 码，本档需两个互异 major；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "3": "恰一个 major：相邻两个独立文本块被合并为一个区域（M-SEG-MERGE-SPLIT-ERROR 单独出现）。",
+    "4": "仅 minor 失败。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "5": "全部区域边界与冻结标注一致，merge/split 错误为 0。"
+   },
+   "code_bindings": [
+    "M-SEG-MERGE-SPLIT-ERROR"
+   ]
+  },
+  {
+   "id": "D3",
+   "key": "analysis",
+   "name": "语义正确性（analysis）",
+   "question": "识别出的文本、结构角色、阅读顺序与关系是否忠实于源内容？",
+   "level_anchors": {
+    "1": "本层无 critical 码；未脱敏内容被提交等场景按 R3 升级登记 C-TX-PREVIEW-COMMIT-MISMATCH 归 D6。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "2": "互异两个 major：阅读顺序断裂（M-HARD-ORDER-BREAK）与图注关系断裂（M-HARD-RELATION-BREAK）同页并存（ANCH-20 的 analysis 侧）。",
+    "3": "恰一个 major：段落角色被误判为标题（M-SEMANTIC-ROLE-ERROR，ANCH-23 形态），或图注与图形分栏（ANCH-08 形态）。",
+    "4": "仅 minor 失败。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "5": "OCR、角色、阅读顺序、关系全部在 Gate 0 冻结阈值内，无语义 hidden rule 触发。"
+   },
+   "code_bindings": [
+    "M-HARD-ORDER-BREAK",
+    "M-HARD-RELATION-BREAK",
+    "M-OCR-EXCEEDS-THRESHOLD",
+    "M-SEMANTIC-HIDDEN-RULE",
+    "M-SEMANTIC-ROLE-ERROR",
+    "M-SEMANTIC-UNSANITIZED"
+   ]
+  },
+  {
+   "id": "D4",
+   "key": "candidate",
+   "name": "候选生成与诚实性（candidate）",
+   "question": "候选集合是否可行解覆盖、无投机、无静默降级、无崩溃，且拒绝行为诚实？",
+   "level_anchors": {
+    "1": "排版会话崩溃或挂起无法继续（C-SESSION-CRASH-HANG，ANCH-17 形态）。",
+    "2": "互异两个 major：投机 no-op 进入 Top 3（M-CAND-ANTI-GAMING）且可行页被误报无解（M-CAND-FALSE-NO-CANDIDATE）同批并存。",
+    "3": "恰一个 major：散乱页输出近似原稿的投机 no-op 且位居 Top 3（ANCH-09/ANCH-10 形态），或未渲染 draft 直接估分入 Top 3（ANCH-24 形态）。",
+    "4": "仅 minor 失败。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "5": "候选全部经 renderer 实测、可行解覆盖达标、无投机无静默降级；硬约束不可满足时明示拒绝并计入 no-candidate 分母（ANCH-13 形态）。"
+   },
+   "code_bindings": [
+    "C-SESSION-CRASH-HANG",
+    "M-CAND-ANTI-GAMING",
+    "M-CAND-FALSE-NO-CANDIDATE",
+    "M-CAND-SILENT-FALLBACK",
+    "M-CAND-UNVALIDATED",
+    "M-HARD-COVERAGE"
+   ]
+  },
+  {
+   "id": "D5",
+   "key": "layout",
+   "name": "布局质量（layout）",
+   "question": "最终布局是否无越界、重叠、裁切、字号硬下限、比例硬区间违规，且对齐/间距/密度达标？",
+   "level_anchors": {
+    "1": "本层无 critical 码；字符流在渲染层丢失按 R3/单事件去重升级记 C-SNAPSHOT-TYPED-TEXT-LOST 归 D1（ANCH-04 形态）。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "2": "互异两个 major：文本块越界（M-LAYOUT-OOB）与两块重叠（M-LAYOUT-OVERLAP）同页并存。",
+    "3": "恰一个 major：文本块与图片包围盒相交 10% 且无豁免关系（M-LAYOUT-OVERLAP，ANCH-07 形态），或字号低于硬下限（ANCH-21 形态）。",
+    "4": "无 critical/major、仅 minor：卡片列未对齐/节奏不一致（m-LAYOUT-ALIGN-RHYTHM，ANCH-18 形态），或间距/密度/字号带轻微失衡。",
+    "5": "无越界/重叠/裁字/字号/比例/图片裁切违规，对齐、间距、密度与排版节奏全部达标。"
+   },
+   "code_bindings": [
+    "M-LAYOUT-ASPECT-HARD",
+    "M-LAYOUT-CLIP",
+    "M-LAYOUT-FONT-FLOOR",
+    "M-LAYOUT-IMAGE-CLIP",
+    "M-LAYOUT-OOB",
+    "M-LAYOUT-OVERLAP",
+    "m-LAYOUT-ALIGN-RHYTHM",
+    "m-LAYOUT-ASPECT",
+    "m-LAYOUT-DENSITY-BLANK",
+    "m-LAYOUT-FONTSIZE-BAND",
+    "m-LAYOUT-SPACING"
+   ]
+  },
+  {
+   "id": "D6",
+   "key": "transaction",
+   "name": "事务一致性（transaction）",
+   "question": "预览与提交是否一致、并发写是否零脏写、撤销/重做是否完整？",
+   "level_anchors": {
+    "1": "落库 Scene 与最后 preview 差一个 margin 偏移、三元组 hash 不一致（C-TX-PREVIEW-COMMIT-MISMATCH，ANCH-05 形态），或对过期 revision 覆盖写入（ANCH-15 形态）。",
+    "2": "本层当前仅定义一个 major 码，无法凑齐两个互异 major；出现任何 critical 时直接取 1，本档不可达。",
+    "3": "恰一个 major：迟到的排版响应未及时丢弃、短暂呈现过期布局（M-TX-LATE-RESPONSE 单独出现，未造成覆盖写入；对照负例 ANCH-16：及时丢弃判 5）。",
+    "4": "仅 minor 失败。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "5": "preview=commit 三元组 hash 一致、CAS 零写入、undo/redo 完整、迟到响应正确丢弃（ANCH-06/ANCH-16 形态）。"
+   },
+   "code_bindings": [
+    "C-TX-CAS-DIRTY-WRITE",
+    "C-TX-PREVIEW-COMMIT-MISMATCH",
+    "C-TX-UNDO-REDO-BROKEN",
+    "M-TX-LATE-RESPONSE"
+   ]
+  },
+  {
+   "id": "D7",
+   "key": "experience",
+   "name": "体验与效率（experience）",
+   "question": "到可接受结果的成本是否在 Gate 0 冻结的性能预算内？本维度只做预算内/外判定，不与基线比较。",
+   "level_anchors": {
+    "1": "体验层无 critical 码；由体验问题造成的覆盖写入按 R3 升级记 C-TX-CAS-DIRTY-WRITE 归 D6（ANCH-15 形态）。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "2": "本层当前仅定义一个 minor 码，无 major 码。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "3": "本层无 major 码。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "4": "P50/P95/峰值内存任一超过 Gate 0 冻结预算（m-PERF-BUDGET）；注意与 runner 超时上限（C-SESSION-CRASH-HANG，归 D4）区分。",
+    "5": "时间与内存全部在冻结预算内。到可接受结果时间/操作步数与基线的比较属 V3-003B/V3-606A 证据链，不由本维度评分。"
+   },
+   "code_bindings": [
+    "m-PERF-BUDGET"
+   ]
+  },
+  {
+   "id": "D8",
+   "key": "privacy",
+   "name": "隐私合规（privacy）",
+   "question": "原始笔迹图像、OCR 文本或 prompt 是否泄漏到白名单外的日志、网络或遥测目的地？",
+   "level_anchors": {
+    "1": "原始笔迹图像被写入未授权导出或日志（C-PRIVACY-RAW-LEAK）；出现即 overall=1 且该页判失败，与渲染质量无关。",
+    "2": "本层仅定义一个 critical 码，无 major 码。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "3": "本层无 major 码。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "4": "本层无 minor 码。当前 taxonomy 未在本层定义可触发本档的 code；本档按 scoring_rules 通式处理，新增 code 后自动可达。",
+    "5": "无任何原始内容外泄；instrumentation 字段白名单（V3-700D 前置的开发线自检形态）。"
+   },
+   "code_bindings": [
+    "C-PRIVACY-RAW-LEAK"
+   ]
+  }
+ ],
+ "scoring_rules": {
+  "derivation": "先按 taxonomy 判定该页/该样本观测到的失败 code 集合；再按 code_bindings 归维；维度分数 = f(该维度绑定 code 集合)：含 ≥1 个 critical → 1；否则 ≥2 个互异 major → 2；恰 1 个 major → 3；否则 ≥1 个 minor → 4；否则 5。",
+  "code_counting": "同一 code 在同一样本多次发生计 1 个互异 code（rubric 只定档）；发生次数按 taxonomy R2 保留在失败账本计数，不由 rubric 承担。",
+  "overall": "overall = min(全部有分数维度)。任一维度 insufficient 时 overall 附加 insufficient 标记，该样本不计入通过/失败分母（R7）。",
+  "critical_floor": "任一维度得 1 则 overall=1；privacy 维度违规同样强制 overall=1，即使其余维度满分。",
+  "escalation_and_dedup": "跨层升级（R3）与单事件去重按 taxonomy 判例处理：升级后双登记（两码各归其层，ANCH-15）；单一事件同时落入双码域时取最高级单记（ANCH-04 判例）。",
+  "not_scored_here": "到可接受结果时间/操作步数与基线的相对比较（§5.3-7/8）属 EvaluationSpec 与 V3-606A 证据链；rubric 的 experience 维度只做预算内/外（m-PERF-BUDGET）判定。"
+ },
+ "coverage": {
+  "failure_codes_bound": 34,
+  "anchors_mapped": 24,
+  "closure": "failure_codes 34 码每码恰好绑定一个维度（按 layer 字段）；rubric_anchor_set 24 锚点全部给出期望逐维分数；本断言由构建时程序校验。"
+ },
+ "disagreement_rules": {
+  "DG1_dual_blind": "每样本每维度由两名互不可见、上下文隔离的 AI 代理独立评分；评分输入不得包含对方分数、rubric 期望分数（anchor_expectations）或执行者身份。",
+  "DG2_exact": "Δ=0 且 code 集一致 → 直接采用。",
+  "DG3_adjacent": "Δ=1 且无 insufficient 翻转、无 code 集分歧 → 保守取低分，记 soft_disagreement，不需仲裁。",
+  "DG4_mandatory_arbitration": "出现以下任一情形必须交第三代理（全新上下文）仲裁：任一维度 Δ≥2；insufficient 与有分数之间的翻转；双方识别的 code 集不同导致分数分歧。仲裁只收到分歧项、双方立场与 rubric/taxonomy 文本，逐项裁决并给出引用规则的理由，裁决分数为最终分数。",
+  "DG5_arbiter_limits": "仲裁不得改写 rubric；若仲裁认定 rubric 文本歧义是根因，标记 rubric_defect、按升版流程修订并重跑受影响样本（R8 单发判定约束）。",
+  "DG6_overall_derived": "overall 由维度分数推导，不独立评分、不独立仲裁。",
+  "DG7_agreement_stats": "按维度与总体报告 exact 一致数/率、within-1（Δ≤1）数/率、Δ≥2 计数、insufficient 翻转计数、code 集分歧计数、仲裁项数；这些统计只描述 AI 代理间一致性，不得外推为真人评分者一致性。",
+  "DG8_single_shot": "frozen 样本正式判定每套只有一次（R8）；判定中发现的规则缺陷按作废-修订-重判流程处理，保留作废记录。"
+ },
+ "note_to_rater": "本文件是评分仪器全文。请仅依据本 rubric 与 failure-taxonomy.json 对给定样本逐维评分（1~5 或 insufficient），并给出识别到的失败 code 集合；overall 由维度分推导，不独立评分。"
+}

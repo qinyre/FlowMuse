@@ -1,0 +1,23 @@
+{
+ "task_id": "V3-000B",
+ "run_id": "6889a192-756c-4320-b7c7-a7a117723aed",
+ "summary": "建立智能排版 v3 AI 代理评分 rubric v1.0.0（artifact=rubric.json，sha256=9408c03728ad…）：1~5 分量表（1=含 critical 事实；2=≥2 互异 major；3=恰 1 major；4=仅 minor；5=无失败且证据完整；证据缺失记 insufficient 不入分母）；8 个维度逐一对应 taxonomy 8 层（snapshot/segmentation/analysis/candidate/layout/transaction/experience/privacy），34 个失败码按 layer 字段闭合绑定（每码恰一维，程序校验）；每维度 5 档均给出最小正例锚点，含不可达档的诚实标注；anchor_expectations 对 24 个 taxonomy 锚点全部给出期望逐维分数，由 scoring_rules 从 expected_verdict.codes 机械推导（R3 升级双登记、ANCH-04 单事件去重判例、R4 insufficient 分工均已编码）；8 条分歧处理规则 DG1~DG8（双盲独立、Δ=1 保守取低、Δ≥2/insufficient 翻转/code 集分歧强制仲裁、仲裁不改 rubric、overall 推导不独立评分、一致性统计口径、R8 单发判定）。AI surrogate panel 实测：两个上下文隔离的 GLM-5.3 Max 盲评代理（run 3bdbcb33…/5e5a9e77…，输入 hash 相同且经独立复核）对剥离期望分数的盲评包独立评分，192/192 维度槽完全一致（exact 100%，Δ1=0，Δ≥2=0，insufficient 翻转=0，code 集分歧=0），且与预注册期望零偏差；按 DG4 无强制仲裁项，第三仲裁代理未调用（零分歧项，如实记录）；panel-report.json 含盲化输入 hash、双 rater run id、逐维一致性统计、有效性核对与 ai_surrogate 披露。全程 human_validation_performed=false、HUMAN_VALIDATION_NOT_PERFORMED，不宣称真人验证。",
+ "changed_paths": [
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/rubric.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel/blind-rubric.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel/blind-anchor-packet.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel/rater-A.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel/rater-B.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel-report.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/result.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/review.json"
+ ],
+ "artifacts": [
+  {
+   "key": "v3_000b_deliverable",
+   "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/rubric.json",
+   "sha256": "9408c03728adbbbfa91c72c1f605d4755a44641ec1e5aee804bc264c814e0060"
+  }
+ ]
+}
