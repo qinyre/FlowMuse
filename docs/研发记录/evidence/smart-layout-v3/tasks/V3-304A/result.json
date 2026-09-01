@@ -1,0 +1,30 @@
+{
+  "task_id": "V3-304A",
+  "run_id": "31003357-9980-4209-bb72-027514f9b0f7",
+  "summary": "helper 迁移前快照与最小适配边界（合并原 V3-304A~B）。(1) GeometryCompatibilityFixture：数值级冻结实际触及 helper 行为——荧光笔可视半宽 renderSize(sw)=sw×4.2×0.5+2.0（恒宽+抗锯齿余量 2.0，实探 65 修正直觉 63 的文档直觉差）、旋转外扩 (w+h)·|cos(rad)|、angle=0 恒等、fountain 默认与 v1 回退语义；调用者计数快照（口径=带括号真实调用排除定义与注释：scene.dart 2/export_bounds 1/viewport_culling 1，brush_render_profile 与 remote_wet_ink_painter 仅注释提及）；editor_core 对 v3 feature 反向依赖扫描=0（不导出通用 kernel 的机器验证）。(2) ConditionalAdapterAllowlist：五条硬条件（接口确实不足/feature-private/薄直连/不迁移调用者/报告同步登记）+ 登记清单（唯一既有条目 V3-300A text_measure_adapter→font_resolver，理由=真实测量必须与 renderer 同字体路径且 barrel 未导出）+ 深路径 import 扫描守卫（登记外深 import 即测试失败）。(3) 结论：V3-301A/302A 证明现有 SnapshotBounds/conservativeVisualBounds/elementVisualBounds 接口足够，本任务零新增 adapter、零 allowlist 外改动、零所有权迁移；后续 V3-303A/503A 触碰 helper 前必须先更新本 allowlist 与报告（快照先于适配的执行顺序已固化在 fixture 测试）。6 用例全绿+analyze 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/test/features/whiteboard/smart_layout/compatibility/geometry_compatibility_fixture_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/compatibility/v3-304a-deliverable.json",
+    "docs/研发记录/evidence/smart-layout-v3/compatibility/geometry-compatibility-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/compatibility/adapter-allowlist.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-304A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-304A/result.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_304a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/compatibility/v3-304a-deliverable.json",
+      "sha256": "18a0f9af4f6b07f98c702b155b8e84372b379c403e90f0f9cb2e3d2a598369a9"
+    },
+    {
+      "key": "geometry_compatibility_report",
+      "path": "docs/研发记录/evidence/smart-layout-v3/compatibility/geometry-compatibility-report.json",
+      "sha256": "d23c00120b3d40387c7673b15c2e155fc5cf83f23c585257237d06afe2f73041"
+    },
+    {
+      "key": "adapter_allowlist",
+      "path": "docs/研发记录/evidence/smart-layout-v3/compatibility/adapter-allowlist.json",
+      "sha256": "7708f52fa1fffbb329f01a6cdcf60443ac88e0b4da7dae5941103964d7232e8d"
+    }
+  ]
+}
