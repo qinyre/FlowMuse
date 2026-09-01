@@ -1,0 +1,13 @@
+{
+  "task_id": "V3-504A",
+  "run_id": "77edb55b-d76d-4a21-8285-216c21120fa5",
+  "summary": "真实 metrics 与 HardConstraintValidator 落地于 validation/ 两件：reduced_scene_metrics_extractor.dart（ReducedSceneMetricsExtractor + SemanticRelationExpectation/ReadingOrderExpectation + reducedSceneDigestOf canonical digest）与 hard_constraint_validator.dart（HardConstraintValidator + HardConstraintKind 十一类 + HardConstraintViolation/Report）。提取器只从 reducer+renderer 真实产物构造 SceneMetricsExtraction（V3-405A 契约）：coverage 以归约后真实在场性判定（consumed=移除或在场/preserved=在场且未被写/其余 missing），页界违规按渲染层真实几何对页内容区计数，关系满足表（captionOf=水平重叠+垂直紧随容差内/keepWith=阅读序不逆转）与阅读序相邻对（真实渲染位置先上后下同高先左）全部从渲染层几何计算；digest 由层 canonical 重算（id 排序+全几何+资源状态+missing），placement 零引用源码门禁测试钉死（目录扫描断言无 placement 路径/类型）。HardConstraintValidator 十一类硬约束全 fail closed：provenance（metrics revision/digest 与真实产物重算断链即败）、coverageLost（missingSourceIds）、ledgerConservation（复用 500B checkLedgerConservation）、relation/readingOrder（compliance/accuracy<1）、textClipping（真实墨迹盒 vs 元素盒 clipTolerance）、aspectRatio（crop 感知内在比例 aspectTolerance，缺内在尺寸如实跳过）、relationIntegrityTampered（非写入元素 group/frame/binding 静默改动逐项比对 base）、relationIntegrityDangling（渲染后 frameId/containerId/boundElements 对活动元素解析，含基线遗留软删 frame 也 fail closed）、pageBounds（层几何出页）+metricUnderreport（自报页界计数与实测不一致即败）。11 用例：真实管线全绿 + 每类约束一个 adversarial fixture（ghost 源/preserved 被写/caption 远离+序逆转/30px 盒裁字/1:1 显示 80:40/group 篡改/软删 frame 孤儿/x=5000 越界+自报 0/他份渲染 digest 冒充）+ 源码门禁。analyze smart_layout 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/validation/reduced_scene_metrics_extractor.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/validation/hard_constraint_validator.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/validation/hard_constraint_validator_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-504A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-504A/commands.json"
+  ],
+  "artifacts": []
+}
