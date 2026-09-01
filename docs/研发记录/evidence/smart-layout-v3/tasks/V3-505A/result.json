@@ -1,0 +1,15 @@
+{
+  "task_id": "V3-505A",
+  "run_id": "b5936a3e-f533-4271-9539-e18d8b54279c",
+  "summary": "Session ViewModel 与用户操作编排落地：session/smart_layout_session_view_model.dart（SmartLayoutSessionViewModel=Riverpod Notifier + SmartLayoutSessionUiState 不可变状态 + SmartLayoutSessionDependencies 注入束 + provider 对）与 views/ 两件（SmartLayoutSessionView 相位驱动会话视图 + SmartLayoutCandidateView 候选卡）。编排覆盖八操作：范围选择（addScopeSource/removeScopeSource/clearScope 排序去重）、保护标记（toggleProtection，编排态语义消费在分析/生成链）、分析（startAnalysis→session.beginOperation 签票→V3AnalysisRepository.analyze 真实调用，成功停 analyzing 等生成链 completeGeneration 回调，失败按 AnalysisFailureKind 稳定分类可重试性 network/timeout/badStatus=true 其余 false）、生成（completeGeneration analyzing→reviewing，空候选如实入 reviewing、默认选首候选确定）、review（chooseCandidate 未知 id no-op）、commit（applySelectedCandidate 经 session.completeApply 唯一入口四检，AddElementResult 场景可见落地，守卫拒绝→failure(stage=apply) 零 Scene 副作用）、取消（cancel 同步推进会话 cancelled+清 draft 候选/选择/响应，不等待在途 future；迟到结果按票据 identical 判旧丢弃；取消后守卫拒绝不升级 failure；幂等）、重试（retry=reset→同 scope startAnalysis，VM 尝试计数递增，仅可重试失败开放，仓库内部有限重试语义保留）。验收：UI 零业务 bool/completer（视图纯 watch/read ViewModel，启用条件唯一来自 UiState 的 can* 判定）；取消立即终止+清 draft（同步路径测试钉住）；重复点击/重试/恢复确定（相位守卫 no-op、同票据同计数、重建容器回 initial）。依赖真实链：MarkdrawController→gateway→tracker→session→http(fake post)→repository 全真实接线仅传输可编程注入；requestBuilder/commitResultBuilder 为注入点（真实快照链/ValidatedCandidate 链归 V3-505C 接线，provider 未覆盖时显式 UnimplementedError 不提供 fake 默认）。11 测试：VM 8（初始/全链/重复点击/同步取消迟到丢弃/重试/不可重试/apply 冲突零副作用/复位与恢复）+视图 3（idle 禁启启、reviewing 点选经 VM、取消终态复位）；smart_layout 全套 360 用例全绿，analyze 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_session_view_model.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_view.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_candidate_view.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/session/smart_layout_session_view_model_test.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/views/smart_layout_session_view_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-505A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-505A/commands.json"
+  ],
+  "artifacts": []
+}
