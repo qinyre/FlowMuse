@@ -1,0 +1,13 @@
+{
+  "task_id": "V3-401B",
+  "run_id": "d5f4a378-6e1d-4f2e-b013-a5fecdeec543",
+  "summary": "硬下界剪枝与全枚举差分 oracle（合并原 V3-401D~E）。(1) 唯一剪枝规则=硬高度下界超限，附证明：任何合法摆放中每块高度≥其栏宽真实测量高（测量即精确换行高，栏内摆放不会更矮）、图片等比高、块间距≥compactGapFloor(token 下限)，LB=Σ块高+(n-1)·compactGapFloor，多栏摊倍 k（twoColumn/mainSide=2），可行必要条件 LB≤k·contentHeight——单调硬下界只剪必然不可行。(2) 反例 fixture×2：a) 间距下界若收紧为 paragraphSpacing(24) 会误剪 Σh+8(n-1)≤H<Σh+24(n-1) 的真实可行例（128≤130 存活/128>127 正确剪除固化）；b) 双栏摊倍若错误取 1 会误剪 h=700 的 twoColumn。(3) 差分 oracle：独立实现（测试内不复用 pruner）逐候选按栏数检查紧凑下界，5 组 fixture（高余量/极小/双块/图文混合/紧凑边界）双向差分剪枝集==oracle 不可行集（误剪或漏剪即失败）。(4) 输入封闭性：BlockFootprint/prune 签名只含几何事实（编译期无软分/排名/profile 通道，测试固化）。(5) enumeratePruned 扩展：被剪候选全量留档（verdict+lowerBound+contentLimit）、结构级拒绝透传、全剪除时候选空且 conservative 同规（四结构一视同仁，NoFeasible 分型归 V3-403A）。8 用例：零剪枝/单栏剪双栏留/差分 5 fixture/两反例/封闭性/全剪除留档/结构拒绝叠加；composition 累计 25 用例+analyze 零 issue。 复审修复轮(rejected→修复):[F1 blocking] gap 项修正为 max(0,n-k)·compactGapFloor(跨栏并排不消耗垂直间隙;复审反例 twoColumn 两块 600/H=603 固化为测试,旧公式 1208>1206 误剪、正确 1200≤1206 存活);[F2] oracle 重写为真 ground truth——块→栏指派全枚举(columns^n)+heightsPerColumn 块高按所在栏取值,与 pruner 公式完全独立;[F3] 高度回调改按候选分派(textHeightsOf/figureHeightsOf 接收完整 candidate,pruner 语义=每块最小可能栏高 min over 栏宽);[F4] 删除死代码 BlockFootprint/figureHeightAt;差分改两层:第一层零误剪(pruned⊆oracle 不可行集,10 fixture 全量机器验证'误剪任何硬可行结构直接失败')+第二层可行集等价(5 个无栏竞争 fixture 双向差分为空;LB 松弛带(栏容量竞争)如实文档化,欠剪候选由 V3-402A 真实流式排版终审)。修复后 composition 累计 27 用例+analyze 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/composition/hard_feasibility_pruning.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/composition/hard_feasibility_pruning_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-401B/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-401B/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-401B/review.json"
+  ],
+  "artifacts": {}
+}

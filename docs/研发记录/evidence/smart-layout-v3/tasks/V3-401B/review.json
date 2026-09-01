@@ -1,0 +1,57 @@
+{
+  "task_id": "V3-401B",
+  "run_id": "21692ace-5425-4f4e-a504-6038b553f126",
+  "executor_run_id": "d5f4a378-6e1d-4f2e-b013-a5fecdeec543",
+  "model": "glm-5.3",
+  "reasoning_effort": "max",
+  "verdict": "rejected",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "blocking",
+      "location": "FlowMuse-App/lib/features/whiteboard/smart_layout/composition/hard_feasibility_pruning.dart:101-109",
+      "detail": "多栏(k≥2)下界证明不成立:LB 取 Σh+(n-1)·compactGapFloor,但按实现自述模型(\"每个文本块必须整体出现在某栏\"),合法多栏摆放把块分入 c≥2 栏时块间垂直间隙只有 n-c 个——跨栏块对并排而非上下堆叠,不消耗垂直间距;可行只能推出 Σh+max(0,n-k)·g ≤ k·contentHeight,推不出 Σh+(n-1)·g ≤ k·contentHeight。具体误剪反例(全部用被审 API 自身输入形态,与交付测试 '极小内容高' 同形):contentWidth=1200 的 twoColumn(栏宽 588,结构适用 588≥240),textHeightOf=(s)=>600、figureHeights=[600](两块均按 588 栏宽合法测得)、contentHeight=603:LB=600+600+8=1208 > 1206=2×603 → 被剪为 hardHeightLowerBoundExceeded;但每栏单块(600≤603)是合法摆放,硬可行结构被误剪。误剪带宽度 (k-1)·g=8px(即 contentHeight∈[Σh/2,(Σh+8)/2) 的双栏候选),k=1(单栏/conservative)不受影响。5 组差分 fixture(含边界 95/60/20)均未落入该带,故未被差分暴露。修复方向:gap 项改为 max(0, n-k)·compactGapFloor(k=1 时与现实现等价,只放宽多栏,严格更安全)。违反 acceptance \"误剪任何硬可行结构直接失败\" 与 \"每条剪枝有证明\"(证明对 k≥2 无效)。"
+    },
+    {
+      "id": 2,
+      "severity": "minor",
+      "location": "FlowMuse-App/test/features/whiteboard/smart_layout/composition/hard_feasibility_pruning_test.dart:19-40",
+      "detail": "差分 oracle 是同式重写而非独立 ground truth:oracleInfeasibleIds 未复用 pruner 代码(代码级独立成立),但复刻了完全相同的数学模型——同一 (n-1) 间距计数、同一 skeleton→栏数 switch、同一 1e-9 epsilon、硬编码 8。硬编码 8 本身是刻意的常量钉死(compactGapFloor 改值会 fail loudly,可检测 token 漂移),不构成代码复用式独立性破坏;但 oracle 因此只能发现实现漂移、不能发现模型错误——正是 finding 1 未被差分暴露的原因。任务标题为 \"全枚举 oracle\":若按字面实现为枚举块→栏指派(n≤3、k≤2 时至多 8 种指派,逐栏检查堆叠高≤contentHeight),即可廉价获得真正独立的可行集 ground truth 并直接抓住 finding 1。建议改写为指派枚举式 oracle。"
+    },
+    {
+      "id": 3,
+      "severity": "minor",
+      "location": "FlowMuse-App/lib/features/whiteboard/smart_layout/composition/hard_feasibility_pruning.dart:125-126",
+      "detail": "enumeratePruned 的 API 无法按候选真实栏宽取下界:textHeightOf 只按 LayoutSkeleton 分派,而 mainSide 六档候选主栏宽 936/776/616(@contentWidth=1200)共享同一枚举值,回调收不到 candidate.params;figureHeights 更是全部候选共享一份、零分派(图片高依栏宽 min(naturalWidth, colWidth)/ratio 变化)。若未来调用方按较宽栏(或自然宽)测高传给较窄栏候选,LB 高估 → 集成期误剪;API 无任何机制强制\"按候选(最窄)栏宽测高\"的调用纪律,仅靠注释约定。建议签名改为 double Function(CompositionCandidate) 或按 candidate.params.mainColumnWidth 传宽。当前无生产调用方,属潜伏风险,故记 minor。"
+    },
+    {
+      "id": 4,
+      "severity": "minor",
+      "location": "FlowMuse-App/lib/features/whiteboard/smart_layout/composition/hard_feasibility_pruning.dart:7-35",
+      "detail": "BlockFootprint 为死代码:prune/enumeratePruned 均不消费该类型,keepTogether 字段与 figureHeightAt 方法全仓库零调用(grep 证实,keepTogether 命中均为 V3-400A LayoutBlock);\"封闭性\"测试仅构造后读两个字段,无行为覆盖。figureHeightAt 的\"宽≤栏宽不放大\"(naturalWidth≤width 分支)语义未经任何测试或调用方固化——该语义恰是图片侧下界成立的前提,目前悬空。应接线消费或删除,并让封闭性断言落在真实剪枝路径上。"
+    },
+    {
+      "id": 5,
+      "severity": "note",
+      "location": "FlowMuse-App/lib/features/whiteboard/smart_layout/composition/hard_feasibility_pruning.dart:81-87",
+      "detail": "封闭性(不读软分/排名/profile)在编译期/数据结构级成立:prune 签名只收 candidate/textHeights/figureHeights/contentHeight/tokens,模块仅 import planner 与 design tokens,无任何 scoring/ranking/profile 模块引用;CompositionCandidate 与 SmartLayoutDesignTokens 字段亦不含软分。运行时唯一通道是调用方闭包 textHeightOf(可在外部读软分后影响高度),封闭性强度止于调用方纪律——与代码注释\"数据结构级保证\"的自我声明一致,不判违规。"
+    },
+    {
+      "id": 6,
+      "severity": "note",
+      "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-401B/commands.json:5-19",
+      "detail": "证据核对通过:commands.json 两条命令与本次独立重跑一致(flutter test composition 25 用例全过 exit 0;flutter analyze 两目录 No issues exit 0);result.json run_id=d5f4a378-…、changed_paths 与 git show f467edb --stat 完全一致,4 文件均在 allowed_paths 内,无混入。瑕疵:两条命令记录 started_at==finished_at(2026-09-01T07:40:08Z,恰等于 commit 时间戳),时间戳系提交时刻回填而非实测区间,无实质影响。"
+    }
+  ],
+  "verified_commands": [
+    {
+      "command": "cd FlowMuse-App && flutter test test/features/whiteboard/smart_layout/composition",
+      "exit_code": 0
+    },
+    {
+      "command": "cd FlowMuse-App && flutter analyze lib/features/whiteboard/smart_layout test/features/whiteboard/smart_layout",
+      "exit_code": 0
+    }
+  ],
+  "summary": "独立复审 rejected(1 blocking)。范围与证据:commit f467edb 仅改 4 文件且全部在 allowed_paths 内;测试(composition 25 例)与 analyze 独立重跑均 exit 0,与 commands.json/result.json 一致;封闭性在编译期/数据结构级成立(prune 签名只收几何输入,无软分/profile 引用)。阻断项:唯一剪枝规则的下界证明对多栏(k≥2)不成立——LB 用 (n-1)·compactGapFloor 计块间距,但合法多栏摆放把块分入多栏后跨栏块对不消耗垂直间隙,可行只能推出 Σh+max(0,n-k)·g ≤ k·contentHeight;构造了用被审 API 自身输入形态的硬可行误剪反例(twoColumn@1200,textHeightOf=600、figureHeights=[600]、contentHeight=603:LB=1208>1206 被剪,而每栏单块 600≤603 合法),误剪带 8px,现有 5 组 fixture 均未覆盖该带。次要:差分 oracle 是同式重写(复刻同一 (n-1) 间距计数/栏数映射/epsilon,硬编码 8 属刻意钉定),只能查实现漂移不能查模型错误,建议改为块→栏指派的全枚举 oracle(≤8 种指派)即可独立裁定并暴露 blocking 项;textHeightOf 按 skeleton 分派无法区分 mainSide 六档栏宽、figureHeights 全候选共享,调用方按宽栏测高即高估窄栏候选 LB(潜伏);BlockFootprint/keepTogether/figureHeightAt 为死代码。修复建议:gap 项改 max(0,n-k)·compactGapFloor(k=1 行为不变),oracle 改指派枚举,回调签名改按 candidate 传栏宽。"
+}
