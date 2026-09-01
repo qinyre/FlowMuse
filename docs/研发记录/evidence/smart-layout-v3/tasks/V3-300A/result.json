@@ -1,0 +1,16 @@
+{
+ "task_id": "V3-300A",
+ "run_id": "9b82b344-5345-42da-801f-3f10c1e548a4",
+ "summary": "Design tokens、真实测量与边界语种冻结（合并原 V3-300A～C）。(1) SmartLayoutDesignTokens：冻结计划 §4.7 全部令牌类别（字号层级/最小正文/行距/段距/栏沟/页边距/snap/行长/孤行/图文距离/密度目标），v1 值逐项锚定现有基线——TextElement 默认（正文 20/行距 1.25）、模板引擎规则（标题下限 28/正文下限 12/handout 首档 gap 24 与压缩下限 8/outline 行距 16/半栏沟=首档 gap/图文 gap=首档），页边距 48=2×首档段距、snap 8=压缩下限、行长 240~560（正文 20pt 下约 12~28 个全宽 CJK 字）、孤行 2/2 与密度 0.6 为文档化惯例初始值待 validation 校准；冻结机制=tokenVersion 'design-tokens/v1' + canonicalJson（键字母序）+ 双通道 FNV canonicalHash，测试固定指纹 b0879098413fd0bf，任何数值静默改动被拦截、变值必须 bump 版本。(2) TextMeasureAdapter/TextMeasureResult：与 TextRenderer.buildTextPainter 同一构造路径（同 FontResolver.resolve 基样式、同 TextSpan/textAlign/textDirection 配置），宽度/高度一致性由 3 字体族×3 字号×3 宽度×3 文本矩阵逐项核对（closeTo 1e-6）；行数经 computeLineMetrics 暴露给孤行/寡行规则；诚实宽度= max(TextPainter.width, 最宽 LineMetrics.width)——实探发现 TextPainter.width 会被 maxWidth 钳制（约束值即返回值），原子字素簇过宽时取真实行宽并置 overflows=true，超长词由引擎词内断行如实反映为多行且不溢出；无字符数估算、无 ellipsis/maxLines/截断（源码门禁测试剥注释匹配拦截）；RTL 显式 direction 参数（默认 ltr 与 renderer 现行为一致）。(3) TextMeasureCache：有界 LRU（默认 256），键=字体族前缀+全参数规范串（字号/行距/宽度/方向/文本全进键，null 与 ∞ 归一），命中重排、超容逐出、clear 全量失效、invalidateFamily 按字体族失效（字体异步加载后旧回退度量作废），hits/misses 可观测。(4) 边界语种覆盖测试全绿：CJK 窄宽换行无溢出、超长词词内断行、原子簇（大字号单 CJK 字）如实溢出且宽度与不限宽测量一致（不截断）、emoji 代理对+ZWJ 序列、阿拉伯/希伯来 RTL 双语、公式符号（上标/求和/根号）、缺字体未知族回退不抛异常、空文本零尺寸、非法参数（fontSize≤0/lineHeight≤0/maxWidth≤0）ArgumentError。(5) 环境适配披露：测试环境无网络，GoogleFonts 族（默认 Nunito）异步抓取失败会记到已完成用例头上——测试设 allowRuntimeFetching=false 且一致性矩阵改用 Excalifont/Virgil（bundled 两档）+NoSuchFontXYZ（未知回退一档），GoogleFonts 路径与 TextRenderer 共用同一 FontResolver.resolve 调用点结构一致；Ahem 度量下全断言确定。20 用例+analyze 零 issue。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/design/smart_layout_design_tokens.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/design/text_measure_cache.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/design/text_measure_result.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/design/text_measure_adapter.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/design/smart_layout_design_tokens_test.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/design/text_measure_adapter_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-300A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-300A/result.json"
+ ],
+ "artifacts": {}
+}
