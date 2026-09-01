@@ -1,0 +1,20 @@
+{
+  "task_id": "V3-406A",
+  "run_id": "fd7ff2f5-0d6e-43c4-9182-f2859978b1d4",
+  "summary": "Gate 3 Planner 质量评估器与证据包落地于 tool/smart_layout_v3/planner/（planner_quality_evaluator.dart + planner_quality_cli_test.dart，经 flutter test 执行生成 gates/G3/{planner-quality-report,gate-three-report}.json）。完整生成链（401A 枚举→403A 硬 preflight→402B 栏平衡放置→405A 结构签名去重）跑 5 个确定性 fixture（图文混排+caption 原子组+preserved / protected 障碍绕置 / 长文超容量 / 不可解紧页 / 宽松全骨架），与独立 oracle（对全部域候选直接放置）对照。汇总八项：漏解（oracle 可行但被 preflight 拒=误剪）全 0；误判（宣称无解但 oracle 有解）全 0；结构多样性 per-skeleton 单独报告（single 1/twoColumn 3/mainSide 3/conservativeLayout 2，unique=4）；确定性双跑 canonical 相等全过；最差分组三维留档（most_rejections=infeasible-tight、most_placement_failures=lowest_diversity=long-two-column）；性能=确定性放置尝试计数 103≤冻结预算 300（墙钟仅记录不参与判定）；契约版本（design_tokens v1/metric_contract v1/rubric 1.0.0 D5/structure_signature v1/planner_quota 12/prune_verdicts）；复现命令（cli test + Gate G3 invoke）。机器判定全局冻结：missed==0 && falseNoFeasible==0 && determinismFailures==0 && uniqueSkeletons>=4 && attempts<=budget → pass（禁止单张 fixture 调参绕过，判定规则字符串随报告落盘）。诚实留档两处：mixed/loose fixture 的 single#0 被拒是精确几何（全宽 1200 下 figure 等比高 800+正文必超页）；long fixture 命中 401B LB 松弛带——screen 接受、放置聚合溢出全败（402A 缩档只对单块溢出触发，聚合溢出=columnsExhausted 稳定码）、oracle 一致全败故零误剪零误判，scenario 标签如实改为'LB 带内接受、放置稳定失败、oracle 一致'。",
+  "changed_paths": [
+    "FlowMuse-App/tool/smart_layout_v3/planner/planner_quality_evaluator.dart",
+    "FlowMuse-App/tool/smart_layout_v3/planner/planner_quality_cli_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/gates/G3/planner-quality-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/gates/G3/gate-three-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-406A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-406A/commands.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_406a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/gates/G3/planner-quality-report.json",
+      "sha256": "f97bd6db35b35b8adaaf20b37111ad31b410c9d18c20a2e15f3643590c832404"
+    }
+  ]
+}

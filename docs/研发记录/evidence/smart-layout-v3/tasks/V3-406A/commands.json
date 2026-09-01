@@ -1,0 +1,21 @@
+{
+  "task_id": "V3-406A",
+  "runs": [
+    {
+      "command_id": "planner-quality-cli-test",
+      "command": "flutter test tool/smart_layout_v3/planner/planner_quality_cli_test.dart",
+      "cwd": "FlowMuse-App",
+      "exit_code": 0,
+      "started_at_utc": "2026-09-01T11:32:04Z",
+      "finished_at_utc": "2026-09-01T11:32:10Z"
+    },
+    {
+      "command_id": "artifact-contract",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smart-layout-v3/AgentExecution.ps1 -Action VerifyArtifacts -TaskId V3-406A",
+      "cwd": ".",
+      "exit_code": 0,
+      "started_at_utc": "2026-09-01T11:33:00Z",
+      "finished_at_utc": "2026-09-01T11:33:01Z"
+    }
+  ]
+}
