@@ -1,0 +1,13 @@
+{
+  "task_id": "V3-400A",
+  "run_id": "6476cb4f-d886-4733-bec4-26b080a8e00c",
+  "summary": "LayoutBlock、文本/图像/保留原语（合并原 V3-400A~C）。(1) LayoutBlock：不可变排版块（kind=title/paragraph/list/caption/figure/formula/table/preserved/protected；id=语义块 id 确定性透传；sourceRefs 守恒载体；keepTogether 块级原子；extras 未知字段原样保留不丢失）；TextBlockSpec（真实测量全参数：文本/字体/字号/行距/方向 RTL 显式）；FigureBlockSpec（fileId+displayAspectRatio+missingAsset 事实，比例=intrinsic.w·crop.w/(intrinsic.h·crop.h)，内在尺寸缺失用显示 bounds 事实兜底不猜内在值）。(2) BlockRelationship：captionOf（caption 绑阅读序最近前驱 figure）与 keepWith（title 绑后继首块=section 语义）；atomicGroups=关系连通分量∪keepTogether 块（并查集），流式排版 keep 输入。(3) LayoutBlockAssembler：role→kind 全映射（unknown→preserved 不参与自动重排）；文本三态 typed（快照 exactText）/transcribed（extras['transcribedText'] 如实标注）/无文本不造数据不删块；排版字体族冻结 kLayoutFontFamily=Excalifont（FontResolver bundled 资产，测量与渲染任何环境同步同路径；GoogleFonts 离线不可用不得进测量链路）；真实测量接入——typed/transcribed 块 intrinsic（不限宽）经注入 TextMeasureAdapter 计算（禁止估算，宽度/高度/行数真实）；protected=快照 protectedObstacle 投影为绕置障碍块（ledger 必须 preserved 态否则 StateError fail closed，携带 bounds/kind）；ledger 守恒复核：块 sourceRefs 总并集==文档 ledger、无重叠无遗漏、preservedLike 块⊆preservedSet、消费块⊆consumedSet，违例抛错；关系端点存在性校验；阅读序缺失时按 orderIndex 追加不静默丢块。9 用例：role 全映射+阅读序、文本三态、真实测量接入（宽>0+缓存一致）、图片比例 crop×intrinsic+资产缺失事实、caption/keepWith 关系与原子组、protected 投影+consumed fail closed、守恒重叠/遗漏抛、unknown extras 透传、formula/table 原子（含无文本分支）；analyze 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/composition/layout_block.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/composition/layout_block_assembler.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/composition/layout_block_assembler_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-400A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-400A/result.json"
+  ],
+  "artifacts": {}
+}
