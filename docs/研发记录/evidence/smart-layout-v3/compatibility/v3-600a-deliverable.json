@@ -1,0 +1,63 @@
+{
+  "task_id": "V3-600A",
+  "suite": "AdjacentFeatureCompatibilitySuite",
+  "merged_from": [
+    "V3-600A",
+    "V3-600B",
+    "V3-600C"
+  ],
+  "scope": "Excalidraw reader/writer、old/new Scene、LWW/index/versionNonce、关系/file/document 并发、collaborationHash",
+  "acceptance": {
+    "round_trip_no_key_field_loss": "S1/S2",
+    "dual_end_convergence": "S3/S5",
+    "conflict_does_not_clobber_unrelated_edits": "S3/S4",
+    "no_protocol_lww_codec_refactor": "本任务零 lib 改动（commit diff 仅测试与证据）"
+  },
+  "cases": [
+    {
+      "id": "S1-reader-writer-roundtrip",
+      "title": "reader/writer round-trip 无关键字段丢失",
+      "passed": true,
+      "check_count": 26,
+      "failure": null
+    },
+    {
+      "id": "S2-old-new-scene-payloads",
+      "title": "old/new Scene 协作 payload 双型保真",
+      "passed": true,
+      "check_count": 10,
+      "failure": null
+    },
+    {
+      "id": "S3-dual-end-lww-convergence",
+      "title": "双端 LWW/index/versionNonce 收敛",
+      "passed": true,
+      "check_count": 12,
+      "failure": null
+    },
+    {
+      "id": "S4-relation-file-document-concurrency",
+      "title": "关系/file/document 并发合并",
+      "passed": true,
+      "check_count": 17,
+      "failure": null
+    },
+    {
+      "id": "S5-collaboration-hash-contract",
+      "title": "collaborationHash 确定性与敏感性",
+      "passed": true,
+      "check_count": 5,
+      "failure": null
+    }
+  ],
+  "frozen_facts": {
+    "lww_rule": "version 高者胜；version 相等取 versionNonce 较小者（SceneReconciler._shouldKeepLocal，方向无关）",
+    "tie_local_keep_index_note": "同 version+nonce 的平局元素保本地副本：装载期 documentToScene 的 index 重生成是无版本副作用的规范化（老 writer \"a1\" vs 重生成 \"V\"），平局元素两端 index 字符串可不同；异源 index 体系下平局元素层序亦可异——内容字段收敛，层序收敛由同源基线保证，index 分歧随下一次版本推进自愈",
+    "index_rule": "fractional index 升序输出；缺失/重复 index 按序分配 8 位 fallback（SceneReconciler._withValidIndex，同输入双端同值）；无 index 元素垫尾",
+    "collaboration_hash": "sha256(toCollaborationContent())：同内容确定、内容敏感、双端 reconcile 收敛后相等（同源基线时 index 亦一致）",
+    "old_reader_lossy_note": "Excalidraw 老格式 binding focus/gap 为非关键字段，本 codec 读写口径=elementId+fixedPoint+mode；filesToJson 每次序列化刷新 created 时间戳，字节级比较须在 parsed ImageFile 层进行",
+    "bound_arrow_load_note": "documentToScene 装载即按 BindingUtils.resolveBindingPoint 重推绑定箭头端点并 bumpVersion（nonce/updated 编辑器域生成）；v3 patch 写入的闭包箭头几何与该公式一致故几何稳定，跨装载等价口径排除 version/versionNonce/updated 三字段",
+    "document_concurrency": "SmartLayoutDocument 只经 v3 patch documentOp 单写者通道；旧客户端 appState 无 flowMuse 键不构成冲突"
+  },
+  "all_passed": true
+}

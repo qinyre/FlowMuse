@@ -1,0 +1,18 @@
+{
+  "task_id": "V3-600A",
+  "run_id": "cb0f30bd-25db-417f-a935-0de4077477d7",
+  "summary": "邻近功能兼容矩阵（合并原 V3-600A~C）。AdjacentFeatureCompatibilitySuite 五场景 70 项检查全绿+analyze 零 issue，全程只读消费现有实现（ExcalidrawJsonCodec/SceneDocumentConverter/SceneReconciler/ExcalidrawScene/v3 patchBuilder+reducer），零协议/LWW/codec 架构改动（lib 零改动）。S1 reader/writer round-trip：老内容(frame/group/binding/container/image/file/软删/无index freedraw)→parse→documentToScene→v3 真实 patch(builder 全量操作+PatchInvariant+reducer 折叠)→serialize→parse 逐元素 elementToJson 深度一致(含 patch 确定性 nonce 9001/9004/9005 保真)；cycle2 不动点(绑定箭头按 resolveBindingPoint 公式重推端点，闭包几何与 v3 负载一致故几何稳定，跨装载排除 version/versionNonce/updated 三字段——装载即 bumpVersion 为既有编辑器域行为)；regenerateIndices=false 保真路径保留老 index 字符串。S2 old/new payload：Map/List 双型协作 payload 零丢失，非法 payload 拒收。S3 双端 LWW：同源基线双向 reconcile canonical 一致(version 高者胜/平局 nonce 小者胜方向无关/无关编辑存活/index 唯一+无index垫尾 fallback 双端同值/getSceneVersion 一致/合并结果 collaborationHash 相等)。S4 关系/file/document 并发：A(已应用 v3，协作口径 includeDeleted=true 删除标记传播) vs B(旧基线+无关编辑+自带新文件)；内容收敛(除平局元素 index 字符串——documentToScene index 重生成是无版本副作用规范化，老 a 系 vs 再生 V 系平局保本地副本)、异源 index 层序可异但随版本推进自愈、关系零悬空(frameId/containerId/binding/boundElements 全解析)、v3 派生文件与 peer 文件 id 不相交并集完整字节保真、SmartLayoutDocument 单写者存活、v3 输出零非标准元素字段(旧 reader 无损读)。S5 collaborationHash：同内容确定/内容敏感/新旧可分。冻结事实七条入 deliverable。",
+  "changed_paths": [
+    "FlowMuse-App/test/features/whiteboard/smart_layout/compatibility/adjacent_feature_compatibility_suite_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/compatibility/v3-600a-deliverable.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-600A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-600A/commands.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_600a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/compatibility/v3-600a-deliverable.json",
+      "sha256": "077769ea492639a329f9392372075157c2524fb6cd3d83e38f5c9961d150c67e"
+    }
+  ]
+}
