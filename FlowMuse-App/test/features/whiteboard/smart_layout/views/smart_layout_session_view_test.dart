@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
@@ -8,6 +9,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/gateways/smart_layout
 import 'package:flow_muse/features/whiteboard/smart_layout/gateways/smart_layout_http_gateway.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/protocol/smart_layout_v3_request.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_session.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_session_state.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_session_view_model.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block_assembler.dart';
@@ -228,6 +230,167 @@ void main() {
     for (final c in cards) {
       c.dispose();
     }
+  });
+
+  group('V3-505C 无鼠标/可访问性闭环', () {
+    Widget hostWithRestore(ProviderContainer container, FocusNode restore) =>
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Focus(
+                focusNode: restore,
+                child: const SingleChildScrollView(
+                  child: SmartLayoutSessionView(
+                    restoreFocusNode: null,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('键盘全流程：Enter 开始 → Escape 取消 → Enter 复位并归还焦点', (
+      tester,
+    ) async {
+      final container = setUpContainer();
+      final restoreNode = FocusNode();
+      addTearDown(restoreNode.dispose);
+      container
+          .read(smartLayoutSessionViewModelProvider.notifier)
+          .addScopeSource('s1');
+      await tester.pumpWidget(hostWithRestore(container, restoreNode));
+
+      // 焦点在开始按钮（autofocus）：Enter 触发开始分析。
+      expect(find.text('开始智能排版'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(
+        container.read(smartLayoutSessionViewModelProvider).phase,
+        SmartLayoutSessionPhase.analyzing,
+        reason: 'Enter 无鼠标启动分析',
+      );
+
+      // Escape：立即取消（不等待在途）。
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.textContaining('已取消'), findsOneWidget);
+
+      // Enter：完成（复位）——焦点归还宿主节点。
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(find.text('开始智能排版'), findsOneWidget);
+      expect(restoreNode.hasFocus, isTrue, reason: '会话结束焦点恢复');
+    });
+
+    testWidgets('reviewing 键盘：方向键切换候选、Enter 应用所选', (tester) async {
+      final container = setUpContainer();
+      final restoreNode = FocusNode();
+      addTearDown(restoreNode.dispose);
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier)
+        ..addScopeSource('s1');
+      await tester.pumpWidget(hostWithRestore(container, restoreNode));
+      await vm.startAnalysis();
+      await tester.pump();
+      vm.completeGeneration(const [
+        SmartLayoutCandidateSummary(candidateId: 'c1', structureLabel: '单栏'),
+        SmartLayoutCandidateSummary(candidateId: 'c2', structureLabel: '双栏'),
+      ]);
+      await tester.pump();
+
+      // 下方向键：c1 → c2；上方向键回 c1。
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        container.read(smartLayoutSessionViewModelProvider).selectedCandidateId,
+        'c2',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(
+        container.read(smartLayoutSessionViewModelProvider).selectedCandidateId,
+        'c1',
+      );
+
+      // Enter：应用所选（焦点在应用按钮）。
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(find.textContaining('排版已应用'), findsOneWidget);
+      expect(
+        container.read(smartLayoutSessionViewModelProvider).phase,
+        SmartLayoutSessionPhase.applied,
+      );
+    });
+
+    testWidgets('无解分支：空候选呈现 + 重新分析按钮触发重走', (tester) async {
+      final container = setUpContainer();
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier)
+        ..addScopeSource('s1');
+      await tester.pumpWidget(host(container));
+      await vm.startAnalysis();
+      await tester.pump();
+      vm.completeGeneration(const []);
+      await tester.pump();
+
+      expect(find.text('本次分析没有可用的排版候选'), findsOneWidget);
+      expect(find.text('重新分析'), findsOneWidget);
+      expect(find.text('关闭'), findsOneWidget);
+
+      await tester.tap(find.text('重新分析'));
+      await tester.pump();
+      expect(
+        container.read(smartLayoutSessionViewModelProvider).phase,
+        SmartLayoutSessionPhase.analyzing,
+        reason: '重新分析重走完整链（无 candidateChain 的手动路径停 analyzing）',
+      );
+    });
+
+    testWidgets('Semantics：相位 liveRegion 播报随状态迁移更新', (tester) async {
+      final handle = tester.ensureSemantics();
+      final container = setUpContainer();
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier)
+        ..addScopeSource('s1');
+      await tester.pumpWidget(host(container));
+      expect(find.bySemanticsLabel(RegExp('待开始')), findsOneWidget);
+
+      await vm.startAnalysis();
+      await tester.pump();
+      expect(find.bySemanticsLabel(RegExp('正在分析')), findsOneWidget);
+
+      vm.cancel();
+      await tester.pump();
+      expect(find.bySemanticsLabel(RegExp('已取消')), findsOneWidget);
+      handle.dispose();
+    });
+
+    testWidgets('零 modal：各相位有界泵全部收敛（无弹层残留）', (tester) async {
+      final container = setUpContainer();
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier)
+        ..addScopeSource('s1');
+      await tester.pumpWidget(host(container));
+
+      await vm.startAnalysis();
+      await tester.pump(const Duration(milliseconds: 50));
+      vm.completeGeneration(const [
+        SmartLayoutCandidateSummary(candidateId: 'c1', structureLabel: '单栏'),
+      ]);
+      await tester.pump(const Duration(milliseconds: 50));
+      await vm.applySelectedCandidate();
+      // applying→applied 在微任务内完成；有界泵避免忙指示器无限动画
+      // 导致 pumpAndSettle 超时（进度动画 ≠ 模态死锁）。
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(
+        container.read(smartLayoutSessionViewModelProvider).phase,
+        SmartLayoutSessionPhase.applied,
+      );
+      expect(
+        find.byType(Dialog),
+        findsNothing,
+        reason: '会话面板非模态：全程无 dialog',
+      );
+    });
   });
 }
 

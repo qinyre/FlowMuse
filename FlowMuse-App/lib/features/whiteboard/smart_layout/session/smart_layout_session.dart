@@ -147,4 +147,55 @@ class SmartLayoutSession {
     );
     return const SmartLayoutGuardAllowed();
   }
+
+  /// 唯一提交入口（V3-505C 委托版）：与 [completeApply] 相同的状态迁移
+  /// 与四检，但 Scene 提交委托给 [commit]——供
+  /// ValidatedCandidateCommitGateway 在同一临界区语义下执行
+  /// compare-and-commit（复核→CAS→applyResult，内部已走
+  /// editor.commitValidated）。[commit] 返回 null（事务被拒，零副作用）
+  /// 时按 applyFailed 收敛；返回的 ToolResult 仅作完整性断言载体，
+  /// 本方法不再重复提交。
+  SmartLayoutGuardDecision completeApplyDelegated(
+    SmartLayoutOperationTicket ticket, {
+    required String candidateId,
+    required ToolResult? Function() commit,
+  }) {
+    if (_state.phase == SmartLayoutSessionPhase.reviewing) {
+      advance(
+        SmartLayoutSessionEvent(
+          SmartLayoutSessionEventKind.candidateChosen,
+          candidateId: candidateId,
+        ),
+      );
+    }
+    if (_state.phase != SmartLayoutSessionPhase.applying) {
+      return const SmartLayoutGuardRejected('session-not-applying');
+    }
+    final decision = checkContinuation(ticket);
+    if (decision is SmartLayoutGuardRejected) {
+      advance(
+        SmartLayoutSessionEvent(
+          SmartLayoutSessionEventKind.applyFailed,
+          reason: decision.reason,
+        ),
+      );
+      return decision;
+    }
+    if (commit() == null) {
+      advance(
+        const SmartLayoutSessionEvent(
+          SmartLayoutSessionEventKind.applyFailed,
+          reason: 'commit-rejected',
+        ),
+      );
+      return const SmartLayoutGuardRejected('commit-rejected');
+    }
+    advance(
+      SmartLayoutSessionEvent(
+        SmartLayoutSessionEventKind.applySucceeded,
+        candidateId: candidateId,
+      ),
+    );
+    return const SmartLayoutGuardAllowed();
+  }
 }

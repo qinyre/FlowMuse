@@ -5,6 +5,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 
 import '../analysis/analysis_retry_policy.dart';
 import '../analysis/smart_layout_analysis_repository.dart';
+import '../commit/validated_candidate_commit_gateway.dart';
 import '../correction/correction_patch_applier.dart' show AffectedSourceSet;
 import '../snapshot/source_coverage_ledger.dart';
 import '../metrics/layout_profile.dart';
@@ -249,6 +250,20 @@ class SmartLayoutSessionDependencies {
   final Future<List<ValidatedCandidate>> Function(Set<String> affectedSourceIds)
   rerunChain;
 
+  /// 候选生成链（V3-505C 真实接线）：分析成功后以响应+当次票据运行
+  /// 客户端候选链（semantic→assembly→planner→preflight→放置→物化→
+  /// 完整门禁）。null = 编排方手动 complete 路径（V3-505A/B 测试）。
+  final Future<List<ValidatedCandidate>> Function(
+    SmartLayoutV3Response response,
+    SmartLayoutOperationTicket ticket,
+  )?
+  candidateChain;
+
+  /// 验证候选提交网关（V3-505C 真实提交路径）：review 卡绑定候选时
+  /// 走 compare-and-commit 事务（V3-502A）。null = 回落
+  /// [commitResultBuilder]（V3-505A 测试路径）。
+  final ValidatedCandidateCommitGateway? commitGateway;
+
   final String? bearerToken;
 
   const SmartLayoutSessionDependencies({
@@ -258,6 +273,8 @@ class SmartLayoutSessionDependencies {
     required this.commitResultBuilder,
     this.correctionHandler = _emptyCorrection,
     this.rerunChain = _emptyRerun,
+    this.candidateChain,
+    this.commitGateway,
     this.bearerToken,
   });
 
@@ -316,9 +333,23 @@ final smartLayoutSessionViewModelProvider =
 ///
 /// 不引入额外策略门禁或确认流程：除状态机与四检守卫外无新增审批位。
 class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
+  /// 当前由本会话持有渲染资源的候选（发布卡同源；离页/取消/复位
+  /// 释放）。onDispose 阶段不可读 state（Riverpod 生命周期断言），
+  /// 故以字段持有。
+  List<ValidatedCandidate> _ownedCandidates = const [];
+
   @override
-  SmartLayoutSessionUiState build() =>
-      const SmartLayoutSessionUiState.initial();
+  SmartLayoutSessionUiState build() {
+    // 离页防线（V3-505C）：provider 作用域销毁（页面离开/重建）时
+    // 释放已绑定候选的渲染资源——候选图片归候选所有，不得悬挂泄漏。
+    ref.onDispose(() {
+      for (final candidate in _ownedCandidates) {
+        candidate.dispose();
+      }
+      _ownedCandidates = const [];
+    });
+    return const SmartLayoutSessionUiState.initial();
+  }
 
   SmartLayoutSessionDependencies get _deps =>
       ref.read(smartLayoutSessionDependenciesProvider);
@@ -389,8 +420,34 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
     if (!identical(state.activeTicket, ticket)) return;
     switch (outcome) {
       case SmartLayoutAnalysisSucceeded():
-        // 保持 analyzing 相位，等待生成链完成（completeGeneration）。
         state = state.copyWith(lastAnalysisResponse: outcome.response);
+        // 真实链（V3-505C）：分析成功即在同票据下运行候选生成链；
+        // 缺省（测试编排路径）保持 analyzing 等待手动 complete。
+        final chain = _deps.candidateChain;
+        if (chain == null) return;
+        List<ValidatedCandidate> candidates;
+        try {
+          candidates = await chain(outcome.response, ticket);
+        } on StateError catch (error) {
+          // 生成链 fail closed（契约破坏/内部错误/测量依赖失败）：
+          // reason 透传；测量依赖失败按可重试收敛。
+          _recordAnalysisFailure(
+            'generation',
+            error.message,
+            error.message == 'measurement-dependency',
+            attempt,
+            ticket,
+          );
+          return;
+        }
+        if (!identical(state.activeTicket, ticket)) {
+          // 迟到判旧：候选从未发布，立即释放其渲染资源（零泄漏）。
+          for (final candidate in candidates) {
+            candidate.dispose();
+          }
+          return;
+        }
+        completeGenerationFromValidated(candidates);
       case SmartLayoutAnalysisFailed(:final kind, :final detail):
         if (kind == AnalysisFailureKind.cancelled) {
           // 取消已同步推进会话；这里只保证视图状态一致。
@@ -506,6 +563,7 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
         ),
       );
     }
+    _ownedCandidates = List.unmodifiable(candidates);
     state = state.copyWith(
       sessionState: _session.state,
       candidates: [
@@ -549,11 +607,45 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
 
   /// 提交所选候选：经会话唯一入口四检后 commit。合法相位 reviewing
   /// （或 applying 的重复调用 no-op）。
+  ///
+  /// V3-505C 真实路径：选中卡绑定 [ValidatedCandidate] 且依赖注入
+  /// [SmartLayoutSessionDependencies.commitGateway] 时走
+  /// compare-and-commit 事务（复核→CAS→applyResult，Scene 提交在
+  /// 事务内一次完成）；否则回落 [SmartLayoutSessionDependencies.
+  /// commitResultBuilder] 构建负载的 505A 路径。
   Future<void> applySelectedCandidate() async {
     if (!state.canApply) return;
     final ticket = state.activeTicket;
     if (ticket == null) return;
     final candidateId = state.selectedCandidateId!;
+    final validated = state.selectedValidatedCandidate;
+    final gateway = _deps.commitGateway;
+    if (validated != null && gateway != null) {
+      final decision = _session.completeApplyDelegated(
+        ticket,
+        candidateId: candidateId,
+        commit: () {
+          final result = gateway.commit(validated);
+          return result is HistoryCommitted
+              ? result.reduced.commitResult
+              : null;
+        },
+      );
+      if (decision is SmartLayoutGuardRejected) {
+        state = state.copyWith(
+          sessionState: _session.state,
+          failure: SmartLayoutSessionFailure(
+            stage: 'apply',
+            reason: decision.reason,
+            retryable: false,
+            attempt: state.attemptCount,
+          ),
+        );
+        return;
+      }
+      state = state.copyWith(sessionState: _session.state, failure: null);
+      return;
+    }
     final result = _deps.commitResultBuilder(candidateId);
     final decision = _session.completeApply(
       ticket,
@@ -577,10 +669,22 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
 
   /// 立即取消：同步推进会话 cancelled 并清理 draft（候选/选择/响应），
   /// 不等待在途分析；迟到结果由票据判旧丢弃。幂等。
+  ///
+  /// V3-505C：取消即释放已绑定候选的渲染资源（卡不再展示，旧候选
+  /// 不得再被提交/预览引用——与纠错失效同口径）。
   void cancel({String reason = 'user-cancel'}) {
     if (!state.canCancel) return;
+    _releaseValidatedCards();
     _session.cancelOperation(reason: reason);
     _clearDraft();
+  }
+
+  void _releaseValidatedCards() {
+    for (final candidate in _ownedCandidates) {
+      candidate.dispose();
+    }
+    _ownedCandidates = const [];
+    state = state.copyWith(validatedCards: const []);
   }
 
   void _clearDraft() {
@@ -603,8 +707,11 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
   }
 
   /// 复位到 idle：清 draft 与失败信息，保留范围/保护（用户准备数据）。
+  ///
+  /// V3-505C：复位释放已绑定候选的渲染资源（终态卡不再展示）。
   void reset() {
     if (!state.canReset) return;
+    _releaseValidatedCards();
     _session.reset();
     state = state.copyWith(
       sessionState: _session.state,
@@ -615,5 +722,15 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
       lastAnalysisResponse: null,
       attemptCount: 0,
     );
+  }
+
+  /// 无解重分析（V3-505C）：reviewing 无候选时以同 scope 重新走完整
+  /// 分析（cancel→reset→startAnalysis 既有迁移的组合，不新增迁移）。
+  void restartAnalysis() {
+    if (state.phase != SmartLayoutSessionPhase.reviewing) return;
+    if (state.candidates.isNotEmpty) return;
+    cancel(reason: 'restart-analysis');
+    reset();
+    startAnalysis();
   }
 }

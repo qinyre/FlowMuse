@@ -59,6 +59,9 @@ import '../speech_recognition/services/speech_recognition_service.dart';
 import 'collaboration_focus_target.dart';
 import 'smart_layout_dialogs.dart';
 import 'smart_layout_template_sheet.dart';
+import '../smart_layout/session/smart_layout_real_wiring.dart';
+import '../smart_layout/views/smart_layout_session_panel.dart';
+import '../collaboration/collaboration_config.dart';
 import '../speech_recognition/services/speech_recognition_service_factory.dart';
 
 class WhiteboardPage extends ConsumerStatefulWidget {
@@ -156,6 +159,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   // 草稿态橙框去重缓存：同一方案且低置信矩形未变时跳过幽灵刷新。
   SmartLayoutPlan? _smartLayoutGhostPlan;
   List<Rect> _smartLayoutGhostLowConfidenceRects = const [];
+
+  // V3 智能排版会话（V3-505C 真实入口）：真实依赖装配 + 非模态面板。
+  SmartLayoutRealSessionScope? _smartLayoutV3Scope;
+  bool _smartLayoutV3PanelVisible = false;
   Completer<AiVisualAttachment?>? _regionCaptureCompleter;
   bool _aiSpeechInputActive = false;
   late final SpeechRecognitionService _speechRecognitionService;
@@ -262,6 +269,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _markdrawController.removeListener(_onControllerNotifyForSmartLayoutGhost);
     // 退出页面前中止在途的智能排版识别，避免其完成后回调已释放的通知器。
     _markdrawController.cancelSmartLayoutPreparation();
+    _smartLayoutV3Scope?.dispose();
+    _smartLayoutV3Scope = null;
     _smartLayoutRecognitionProgress.dispose();
     _focusTarget = null;
     _lastFocusEmpty = null;
@@ -839,6 +848,40 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
     final index = pages.indexWhere((page) => page.bounds.contains(center));
     return index < 0 ? 0 : index;
+  }
+
+  /// V3 智能排版入口（V3-505C）：以当前页建立真实会话装配（真实
+  /// editor/HTTP/分析仓库/生成链/CAS 提交网关，无 fake provider），
+  /// 打开非模态面板。再次打开时若已换页则同步活页（离页防线）。
+  void _openSmartLayoutV3Panel() {
+    final pages = _markdrawController.layout.pages;
+    if (pages.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前笔记没有页面')));
+      return;
+    }
+    final visible = _markdrawController.editorState.viewport.visibleRect(
+      _markdrawController.canvasSize,
+    );
+    final currentPage =
+        _markdrawController.pageForVisibleRect(visible) ?? pages.first;
+    var scope = _smartLayoutV3Scope;
+    if (scope == null || scope.isDisposed) {
+      scope = SmartLayoutRealSessionScope.build(
+        controller: _markdrawController,
+        serverUri: Uri.parse(CollaborationConfig.fromEnvironment.serverUrl),
+        pageId: currentPage.id,
+      );
+      _smartLayoutV3Scope = scope;
+    } else {
+      scope.setActivePage(currentPage.id);
+    }
+    setState(() => _smartLayoutV3PanelVisible = true);
+  }
+
+  void _closeSmartLayoutV3Panel() {
+    setState(() => _smartLayoutV3PanelVisible = false);
   }
 
   Future<void> _startSmartLayoutFlow({List<String>? initialPageIds}) async {
@@ -2852,6 +2895,38 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                             .isNotEmpty
                             ? _showSmartLayoutFullReviewSheet
                             : null,
+                      ),
+                    ),
+                  ),
+                // V3 智能排版入口（V3-505C 真实接线）：角落按钮 + 非模态
+                // 面板（真实 server→候选→commit 会话，无 fake provider）。
+                Positioned(
+                  right: 16,
+                  bottom: 88,
+                  child: Semantics(
+                    button: true,
+                    label: '打开智能排版 v3 面板',
+                    child: FloatingActionButton.small(
+                      heroTag: 'smart-layout-v3-entry',
+                      tooltip: '智能排版 v3（实时候选预览）',
+                      onPressed: _openSmartLayoutV3Panel,
+                      child: const Icon(Icons.auto_awesome_outlined),
+                    ),
+                  ),
+                ),
+                if (_smartLayoutV3PanelVisible &&
+                    _smartLayoutV3Scope != null)
+                  Positioned(
+                    left: 48,
+                    right: 48,
+                    bottom: 24,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 560),
+                        child: SmartLayoutSessionPanel(
+                          scope: _smartLayoutV3Scope!,
+                          onClose: _closeSmartLayoutV3Panel,
+                        ),
                       ),
                     ),
                   ),
