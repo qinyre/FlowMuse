@@ -9,7 +9,18 @@ import 'package:flow_muse/features/whiteboard/smart_layout/gateways/smart_layout
 import 'package:flow_muse/features/whiteboard/smart_layout/protocol/smart_layout_v3_request.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_session.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_session_view_model.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block_assembler.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/geometry/layout_rect.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/metrics/anti_gaming_veto.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/metrics/layout_metric_contract.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/metrics/layout_profile.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/patch/smart_layout_scene_patch_builder.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/placement/flow_placer.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_revision.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/source_coverage_ledger.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/validation/validated_candidate.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/validation/validated_candidate_pipeline.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/views/smart_layout_session_view.dart';
 
 const _okBody = '''
@@ -42,8 +53,7 @@ void main() {
               connectTimeoutMs = 8000,
               readTimeoutMs = 15000,
               cancelToken,
-            }) async =>
-                NativeHttpResponse(statusCode: 200, body: _okBody),
+            }) async => NativeHttpResponse(statusCode: 200, body: _okBody),
       ),
       session: session,
     );
@@ -53,27 +63,26 @@ void main() {
           SmartLayoutSessionDependencies(
             session: session,
             repository: repo,
-            requestBuilder: (ticket) async => SmartLayoutV3Request.fromJson(
-              const {
-                'protocolVersion': 3,
-                'pageId': 'page-1',
-                'sceneRevision': {
-                  'epoch': 0,
-                  'revision': 1,
-                  'fingerprint': '0123456789abcdef',
-                },
-                'assets': [
-                  {
-                    'key': 'clean|page',
-                    'kind': 'clean',
+            requestBuilder: (ticket) async =>
+                SmartLayoutV3Request.fromJson(const {
+                  'protocolVersion': 3,
+                  'pageId': 'page-1',
+                  'sceneRevision': {
+                    'epoch': 0,
+                    'revision': 1,
                     'fingerprint': '0123456789abcdef',
                   },
-                ],
-                'marks': [],
-                'exactTexts': [],
-                'sourceRefs': ['s1'],
-              },
-            ),
+                  'assets': [
+                    {
+                      'key': 'clean|page',
+                      'kind': 'clean',
+                      'fingerprint': '0123456789abcdef',
+                    },
+                  ],
+                  'marks': [],
+                  'exactTexts': [],
+                  'sourceRefs': ['s1'],
+                }),
             commitResultBuilder: (id) => AddElementResult(
               RectangleElement(
                 id: ElementId('view-applied-$id'),
@@ -126,8 +135,7 @@ void main() {
     expect(find.textContaining('排版范围 1 项'), findsOneWidget);
   });
 
-  testWidgets('reviewing：候选卡渲染、点选切换经 ViewModel、应用可点',
-      (tester) async {
+  testWidgets('reviewing：候选卡渲染、点选切换经 ViewModel、应用可点', (tester) async {
     final container = setUpContainer();
     final vm = container.read(smartLayoutSessionViewModelProvider.notifier)
       ..addScopeSource('s1');
@@ -182,4 +190,173 @@ void main() {
     await tester.pump();
     expect(find.text('开始智能排版'), findsOneWidget);
   });
+
+  testWidgets('验证候选卡：真实缩略图/评分解释/结构差异/账本核对渲染', (tester) async {
+    final container = setUpContainer();
+    final vm = container.read(smartLayoutSessionViewModelProvider.notifier)
+      ..addScopeSource('s1');
+    await tester.pumpWidget(host(container));
+    await vm.startAnalysis();
+    await tester.pump();
+
+    // 经真实管线构建候选并发布（渲染快照来自 DraftSceneRenderer）。
+    final cards = await _buildValidatedCards(container);
+    vm.completeGenerationFromValidated(cards);
+    await tester.pump();
+
+    expect(find.byType(RawImage), findsNWidgets(2), reason: '每张卡一枚真实渲染缩略图');
+    expect(find.textContaining('第 1 名'), findsOneWidget);
+    expect(find.textContaining('第 2 名'), findsOneWidget);
+    expect(find.textContaining('基准结构'), findsOneWidget);
+    expect(find.textContaining('结构不同'), findsOneWidget);
+    expect(find.textContaining('评分 '), findsNWidgets(2));
+    expect(find.textContaining('构成：'), findsNWidgets(2), reason: '评分解释可还原分解');
+    expect(
+      find.textContaining('已消费'),
+      findsAtLeastNWidgets(1),
+      reason: '账本核对逐源呈现',
+    );
+    expect(find.text('合并所选区域'), findsOneWidget, reason: '纠错入口');
+
+    await tester.tap(find.textContaining('第 2 名'));
+    await tester.pump();
+    expect(
+      container.read(smartLayoutSessionViewModelProvider).selectedCandidateId,
+      'c2',
+      reason: '切换经 ViewModel，不写权威 Scene',
+    );
+    for (final c in cards) {
+      c.dispose();
+    }
+  });
+}
+
+/// 经完整门禁流水线构建两个真实验证候选（结构键不同）。
+Future<List<ValidatedCandidate>> _buildValidatedCards(
+  ProviderContainer container,
+) async {
+  final controller = MarkdrawController();
+  addTearDown(controller.dispose);
+  controller.applyResult(
+    AddElementResult(
+      RectangleElement(
+        id: ElementId('s1'),
+        x: 10,
+        y: 10,
+        width: 40,
+        height: 40,
+        seed: 7,
+        versionNonce: 11,
+        updated: 1000,
+      ),
+    ),
+  );
+  controller.applyResult(
+    AddElementResult(
+      TextElement(
+        id: ElementId('t1'),
+        x: 20,
+        y: 40,
+        width: 200,
+        height: 28,
+        text: '正文内容',
+        fontSize: 20,
+        fontFamily: 'Excalifont',
+        seed: 7,
+        versionNonce: 11,
+        updated: 1000,
+      ),
+    ),
+  );
+  final editor = SmartLayoutEditorGateway(controller);
+  final tracker = SceneRevisionTracker(editor: editor);
+  addTearDown(tracker.dispose);
+  final base = controller.currentScene;
+
+  Future<ValidatedCandidate> build(String id, String key) async {
+    final patch =
+        (SmartLayoutScenePatchBuilder(
+              baseScene: base,
+              baseRevision: tracker.current,
+              sourceCoverage: SourceCoverageLedger.pending(const [
+                's1',
+                't1',
+              ]).markConsumed(const ['s1', 't1']),
+            )..updateElement(
+              TextElement(
+                id: ElementId('t1'),
+                x: 100,
+                y: 40,
+                width: 220,
+                height: 28,
+                text: '正文内容',
+                fontSize: 20,
+                fontFamily: 'Excalifont',
+                seed: 7,
+                versionNonce: 11,
+                updated: 1000,
+                version: 2,
+              ),
+              baseVersion: 1,
+            ))
+            .build();
+    final result = await ValidatedCandidatePipeline.run(
+      baseScene: base,
+      pageContentBounds: Bounds.fromLTWH(0, 0, 800, 600),
+      candidates: [
+        CandidateGateInput(
+          candidateId: id,
+          diversityKey: key,
+          patch: patch,
+          metricInput: LayoutMetricInput(
+            assembly: LayoutBlockAssembly(
+              blocks: [
+                LayoutBlock(
+                  id: 'b1',
+                  kind: LayoutBlockKind.paragraph,
+                  sourceRefs: const ['t1'],
+                  orderIndex: 0,
+                  keepTogether: false,
+                  text: const TextBlockSpec(
+                    text: '正文内容',
+                    fontFamily: 'Excalifont',
+                    fontSize: 20,
+                    lineHeight: 1.25,
+                  ),
+                ),
+              ],
+              relationships: const [],
+              atomicGroups: const [],
+              documentConsumedSourceIds: const ['t1'],
+              documentPreservedSourceIds: const ['s1'],
+            ),
+            placed: [
+              PlacedBlock(
+                blockId: 'b1',
+                rect: LayoutRect(left: 100, top: 40, width: 220, height: 28),
+                columnIndex: 0,
+                lineCount: 1,
+                appliedFontSize: 20,
+                shrunk: false,
+              ),
+            ],
+            columnRects: [
+              LayoutRect(left: 40, top: 40, width: 360, height: 500),
+            ],
+            preservedRects: const {},
+            originalBounds: {
+              'b1': LayoutRect(left: 20, top: 40, width: 200, height: 28),
+            },
+            contentHeight: 500,
+            hardValidated: true,
+          ),
+          veto: const VetoVerdict(kinds: [], reasons: []),
+        ),
+      ],
+      profile: LayoutProfile.readability,
+    );
+    return result.top.single;
+  }
+
+  return [await build('c1', 'single'), await build('c2', 'two-column')];
 }

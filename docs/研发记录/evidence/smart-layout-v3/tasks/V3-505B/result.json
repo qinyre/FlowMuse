@@ -1,0 +1,15 @@
+{
+  "task_id": "V3-505B",
+  "run_id": "e45bd2d5-2c38-42e9-98ec-b4a5a97bcc33",
+  "summary": "纠错核对与真实候选比较落地：session/smart_layout_session_view_model.dart 扩展（ValidatedCandidateCard 每张卡绑定当前 ValidatedCandidate——rank/structureLabel/structureDiffLabel(基准结构/同结构/结构不同)/score+scoreEntries 可还原分解/thumbnail=candidate.snapshot.image 真实 renderer 缩略图非估算；UiState 增 validatedCards 与 ledgerReview 逐源账本核对投影+selectedValidatedCandidate；completeGenerationFromValidated 支持 analyzing→reviewing 与纠错后 reviewing 原地刷新两相位；applyRegionCorrection(RegionCorrectionIntent)=correctionHandler→AffectedSourceSet→CorrectionRerunCoordinator(旧候选全失效释放渲染资源)→rerunChain 以受影响源为 scope 最小重跑→新候选发布，无产出时空卡 reviewing 无解如实呈现不复活已释放候选；deps 增 correctionHandler/rerunChain 注入点带空默认，真实接线归 505C）。views/smart_layout_candidate_view.dart 升级（RawImage 真实缩略图+rank/结构差异/评分与构成分解+Semantics selected/button/label）；views/smart_layout_session_view.dart review 面升级（_LedgerReview 全文账本逐源 consumed/preserved+Semantics 汇总、验证卡渲染、合并所选区域纠错入口、无验证卡回落普通摘要卡保持 505A 兼容）。验收：切换候选经 ViewModel 零权威 Scene 写入（场景实例 identical 测试钉住）；修正触发最小重跑（scope={i1} 断言）旧候选失效（卡替换为 c1-rerun）；每卡绑定 ValidatedCandidate（same 断言）。4 新用例（卡绑定全要素+切换零写入/纠错重跑 scope+失效+发布/无产出空卡/视图 RawImage×2+第N名+基准结构+结构不同+评分构成+已消费+合并入口），smart_layout 全套 397 用例全绿+analyze 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_session_view_model.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_candidate_view.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_view.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/session/session_candidate_binding_test.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/views/smart_layout_session_view_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-505B/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-505B/commands.json"
+  ],
+  "artifacts": []
+}

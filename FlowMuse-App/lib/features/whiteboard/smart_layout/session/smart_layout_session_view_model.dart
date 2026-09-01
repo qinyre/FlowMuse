@@ -1,9 +1,16 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import '../analysis/analysis_retry_policy.dart';
 import '../analysis/smart_layout_analysis_repository.dart';
+import '../correction/correction_patch_applier.dart' show AffectedSourceSet;
+import '../snapshot/source_coverage_ledger.dart';
+import '../metrics/layout_profile.dart';
 import '../protocol/smart_layout_v3_request.dart';
+import '../validation/correction_rerun_coordinator.dart';
+import '../validation/validated_candidate.dart';
 import 'smart_layout_operation_guard.dart';
 import 'smart_layout_session.dart';
 import 'smart_layout_session_state.dart';
@@ -22,6 +29,33 @@ class SmartLayoutCandidateSummary {
   @override
   String toString() =>
       'SmartLayoutCandidateSummary($candidateId, $structureLabel)';
+}
+
+/// 验证候选卡（V3-505B）：review 阶段每张卡绑定当前
+/// [ValidatedCandidate]——真实渲染缩略图（snapshot.image）、可还原
+/// 评分解释（ProfileScore.entries）、结构代表与差异标签。
+/// 卡数据与候选同生命周期：候选被纠错重跑失效时卡片一并重建。
+class ValidatedCandidateCard {
+  const ValidatedCandidateCard({
+    required this.candidate,
+    required this.rank,
+    required this.structureLabel,
+    required this.structureDiffLabel,
+  });
+
+  final ValidatedCandidate candidate;
+  final int rank;
+  final String structureLabel;
+
+  /// 与首名候选的结构差异摘要（首名为基准）。
+  final String structureDiffLabel;
+
+  String get candidateId => candidate.candidateId;
+  double get score => candidate.score.score;
+  List<MetricContribution> get scoreEntries => candidate.score.entries;
+
+  /// 真实 renderer 缩略图（归候选所有；卡片不得 dispose）。
+  ui.Image get thumbnail => candidate.snapshot.image;
 }
 
 /// 会话失败的稳定描述：阶段 + 原因 + 是否可重试 + 第几次尝试。
@@ -55,6 +89,7 @@ class SmartLayoutSessionUiState {
     required this.scopeSourceIds,
     required this.protectedSourceIds,
     required this.candidates,
+    required this.validatedCards,
     required this.selectedCandidateId,
     required this.failure,
     required this.attemptCount,
@@ -68,6 +103,7 @@ class SmartLayoutSessionUiState {
         scopeSourceIds: const [],
         protectedSourceIds: const {},
         candidates: const [],
+        validatedCards: const [],
         selectedCandidateId: null,
         failure: null,
         attemptCount: 0,
@@ -79,6 +115,10 @@ class SmartLayoutSessionUiState {
   final List<String> scopeSourceIds;
   final Set<String> protectedSourceIds;
   final List<SmartLayoutCandidateSummary> candidates;
+
+  /// 验证候选卡（每张绑定当前 ValidatedCandidate；空 = 未进入验证
+  /// 候选路径，review 面回落到普通摘要卡）。
+  final List<ValidatedCandidateCard> validatedCards;
   final String? selectedCandidateId;
   final SmartLayoutSessionFailure? failure;
 
@@ -109,6 +149,25 @@ class SmartLayoutSessionUiState {
   bool get canChooseCandidate =>
       phase == SmartLayoutSessionPhase.reviewing && candidates.isNotEmpty;
 
+  /// 当前选中卡绑定的验证候选（无验证卡路径为 null）。
+  ValidatedCandidate? get selectedValidatedCandidate {
+    final id = selectedCandidateId;
+    if (id == null) return null;
+    for (final card in validatedCards) {
+      if (card.candidateId == id) return card.candidate;
+    }
+    return null;
+  }
+
+  /// 账本核对投影：当前选中候选的唯一账本逐源状态（id 排序）。
+  List<(String, SourceCoverageStatus)> get ledgerReview {
+    final candidate = selectedValidatedCandidate;
+    if (candidate == null) return const [];
+    final entries = candidate.patch.sourceCoverage.statuses.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return [for (final entry in entries) (entry.key, entry.value)];
+  }
+
   bool get canApply =>
       phase == SmartLayoutSessionPhase.reviewing && selectedCandidateId != null;
 
@@ -124,6 +183,7 @@ class SmartLayoutSessionUiState {
     List<String>? scopeSourceIds,
     Set<String>? protectedSourceIds,
     List<SmartLayoutCandidateSummary>? candidates,
+    List<ValidatedCandidateCard>? validatedCards,
     Object? selectedCandidateId = _sentinel,
     Object? failure = _sentinel,
     int? attemptCount,
@@ -137,6 +197,7 @@ class SmartLayoutSessionUiState {
         protectedSourceIds ?? this.protectedSourceIds,
       ),
       candidates: List.unmodifiable(candidates ?? this.candidates),
+      validatedCards: List.unmodifiable(validatedCards ?? this.validatedCards),
       selectedCandidateId: identical(selectedCandidateId, _sentinel)
           ? this.selectedCandidateId
           : selectedCandidateId as String?,
@@ -165,14 +226,6 @@ class SmartLayoutSessionUiState {
 
 /// ViewModel 依赖束（真实接线归 V3-505C；测试经 provider 覆盖注入）。
 class SmartLayoutSessionDependencies {
-  const SmartLayoutSessionDependencies({
-    required this.session,
-    required this.repository,
-    required this.requestBuilder,
-    required this.commitResultBuilder,
-    this.bearerToken,
-  });
-
   final SmartLayoutSession session;
   final V3AnalysisRepository repository;
 
@@ -184,7 +237,56 @@ class SmartLayoutSessionDependencies {
   /// V3-502A/505C 接线）。
   final ToolResult Function(String candidateId) commitResultBuilder;
 
+  /// 纠错修正处理：应用 region/role/order/relation 修正并返回受影响源
+  /// 集（真实链：V3-205A CorrectionPatchApplier.affectedSources，
+  /// V3-505C 接线；缺省返回空影响集——无修正语义时重跑为全量链的
+  /// 一次调用）。
+  final AffectedSourceSet Function(RegionCorrectionIntent intent)
+  correctionHandler;
+
+  /// 最小重跑链：以受影响源为 scope 重跑 planner→patch→render→gate→
+  /// score 并返回新验证候选（真实链 V3-504B/505C 接线）。
+  final Future<List<ValidatedCandidate>> Function(Set<String> affectedSourceIds)
+  rerunChain;
+
   final String? bearerToken;
+
+  const SmartLayoutSessionDependencies({
+    required this.session,
+    required this.repository,
+    required this.requestBuilder,
+    required this.commitResultBuilder,
+    this.correctionHandler = _emptyCorrection,
+    this.rerunChain = _emptyRerun,
+    this.bearerToken,
+  });
+
+  static AffectedSourceSet _emptyCorrection(RegionCorrectionIntent intent) =>
+      AffectedSourceSet(
+        regionIds: const {},
+        strokeSourceIds: const {},
+        renderAssetKeys: const {},
+        cropKeys: const {},
+      );
+
+  static Future<List<ValidatedCandidate>> _emptyRerun(
+    Set<String> affectedSourceIds,
+  ) async => const [];
+}
+
+/// 用户修正意图（region/role/order/relation 修正的统一表达；语义
+/// 解析归真实链 V3-205A/505C）。
+class RegionCorrectionIntent {
+  const RegionCorrectionIntent({
+    required this.kind,
+    required this.subjectIds,
+    this.detail = '',
+  });
+
+  /// merge | split | role | order | relation。
+  final String kind;
+  final List<String> subjectIds;
+  final String detail;
 }
 
 final smartLayoutSessionDependenciesProvider =
@@ -372,6 +474,70 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
           ? null
           : candidates.first.candidateId,
     );
+  }
+
+  /// 以验证候选完成生成（V3-505B 真实候选路径）：进入 reviewing，
+  /// 每张卡绑定当前 ValidatedCandidate（真实缩略图/评分解释/结构差异）。
+  /// 与 [completeGeneration] 共用同一相位契约。
+  void completeGenerationFromValidated(List<ValidatedCandidate> candidates) {
+    if (state.phase == SmartLayoutSessionPhase.analyzing) {
+      _session.advance(
+        SmartLayoutSessionEvent(
+          SmartLayoutSessionEventKind.analysisSucceeded,
+          candidateCount: candidates.length,
+        ),
+      );
+    } else if (state.phase != SmartLayoutSessionPhase.reviewing) {
+      return;
+    }
+    final cards = <ValidatedCandidateCard>[];
+    for (var i = 0; i < candidates.length; i++) {
+      final candidate = candidates[i];
+      cards.add(
+        ValidatedCandidateCard(
+          candidate: candidate,
+          rank: i + 1,
+          structureLabel: candidate.diversityKey,
+          structureDiffLabel: i == 0
+              ? '基准结构'
+              : (candidate.diversityKey == candidates.first.diversityKey
+                    ? '同结构'
+                    : '结构不同'),
+        ),
+      );
+    }
+    state = state.copyWith(
+      sessionState: _session.state,
+      candidates: [
+        for (final card in cards)
+          SmartLayoutCandidateSummary(
+            candidateId: card.candidateId,
+            structureLabel: card.structureLabel,
+          ),
+      ],
+      validatedCards: cards,
+      selectedCandidateId: cards.isEmpty ? null : cards.first.candidateId,
+    );
+  }
+
+  /// 纠错修正（V3-505B）：应用修正 → 受影响源集 → 旧候选全失效
+  ///（CorrectionRerunCoordinator 释放其渲染资源）→ 以受影响源为
+  /// scope 最小重跑 → 新验证候选发布。仅 reviewing 相位合法。
+  ///
+  /// 修正期间锁定 reviewing 交互（isCorrecting 派生态）；
+  /// 重跑无候选产出时保持 reviewing 并清空卡（无解如实呈现）。
+  Future<void> applyRegionCorrection(RegionCorrectionIntent intent) async {
+    if (state.phase != SmartLayoutSessionPhase.reviewing) return;
+    final affected = _deps.correctionHandler(intent);
+    final previous = [for (final card in state.validatedCards) card.candidate];
+    final coordinator = CorrectionRerunCoordinator(chain: _deps.rerunChain);
+    // 旧候选由 coordinator 释放（渲染资源归零）；随后立即发布新候选，
+    // 重跑无产出时进入空卡 reviewing（无解如实呈现，不复活已释放候选）。
+    final rerun = await coordinator.rerun(
+      previousCandidates: previous,
+      affected: affected,
+    );
+    completeGenerationFromValidated(rerun.newCandidates);
   }
 
   /// 选择候选（review 阶段）。非法相位或未知 id 为 no-op。

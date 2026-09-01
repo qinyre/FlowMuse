@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../session/smart_layout_session_state.dart';
 import '../session/smart_layout_session_view_model.dart';
+import '../snapshot/source_coverage_ledger.dart';
 import 'smart_layout_candidate_view.dart';
 
 /// 智能排版会话视图（V3-505A 骨架）：按会话 sealed 相位渲染——
@@ -42,6 +43,7 @@ class SmartLayoutSessionView extends ConsumerWidget {
             onChoose: viewModel.chooseCandidate,
             onApply: viewModel.applySelectedCandidate,
             onCancel: viewModel.cancel,
+            onCorrect: viewModel.applyRegionCorrection,
           ),
           SmartLayoutSessionPhase.applying => _BusyPane(
             message: '正在应用排版…',
@@ -131,12 +133,14 @@ class _ReviewPane extends StatelessWidget {
     required this.onChoose,
     required this.onApply,
     required this.onCancel,
+    required this.onCorrect,
   });
 
   final SmartLayoutSessionUiState state;
   final ValueChanged<String> onChoose;
   final Future<void> Function() onApply;
   final VoidCallback onCancel;
+  final Future<void> Function(RegionCorrectionIntent intent) onCorrect;
 
   @override
   Widget build(BuildContext context) {
@@ -152,15 +156,40 @@ class _ReviewPane extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final candidate in state.candidates)
+        // 全文 ledger 核对：当前候选唯一账本逐源状态（consumed/preserved）。
+        if (state.ledgerReview.isNotEmpty) _LedgerReview(state: state),
+        for (final card in state.validatedCards)
           SmartLayoutCandidateView(
-            candidateId: candidate.candidateId,
-            structureLabel: candidate.structureLabel,
-            selected: candidate.candidateId == state.selectedCandidateId,
+            candidateId: card.candidateId,
+            structureLabel: card.structureLabel,
+            selected: card.candidateId == state.selectedCandidateId,
+            rank: card.rank,
+            structureDiffLabel: card.structureDiffLabel,
+            score: card.score,
+            scoreEntries: [
+              for (final entry in card.scoreEntries)
+                (
+                  metricId: entry.id.name,
+                  value: entry.value,
+                  weight: entry.weight,
+                  contribution: entry.contribution,
+                ),
+            ],
+            thumbnail: card.thumbnail,
             onChoose: state.canChooseCandidate
-                ? () => onChoose(candidate.candidateId)
+                ? () => onChoose(card.candidateId)
                 : null,
           ),
+        if (state.validatedCards.isEmpty)
+          for (final candidate in state.candidates)
+            SmartLayoutCandidateView(
+              candidateId: candidate.candidateId,
+              structureLabel: candidate.structureLabel,
+              selected: candidate.candidateId == state.selectedCandidateId,
+              onChoose: state.canChooseCandidate
+                  ? () => onChoose(candidate.candidateId)
+                  : null,
+            ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -169,10 +198,52 @@ class _ReviewPane extends StatelessWidget {
               child: const Text('应用所选排版'),
             ),
             const SizedBox(width: 8),
+            if (state.validatedCards.isNotEmpty)
+              TextButton(
+                onPressed: () => onCorrect(
+                  const RegionCorrectionIntent(kind: 'merge', subjectIds: []),
+                ),
+                child: const Text('合并所选区域'),
+              ),
             TextButton(onPressed: onCancel, child: const Text('取消')),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// 账本核对区：全部源逐一呈现 consumed/preserved（无丢失、无含糊）。
+class _LedgerReview extends StatelessWidget {
+  const _LedgerReview({required this.state});
+
+  final SmartLayoutSessionUiState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label:
+          '账本核对：${state.ledgerReview.length} 个源，'
+          '${state.ledgerReview.where((e) => e.$2 == SourceCoverageStatus.consumed).length} 已消费，'
+          '${state.ledgerReview.where((e) => e.$2 == SourceCoverageStatus.preserved).length} 保留',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (id, status) in state.ledgerReview.take(8))
+              Text(
+                '$id · ${status == SourceCoverageStatus.consumed ? '已消费' : '保留'}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            if (state.ledgerReview.length > 8)
+              Text(
+                '… 共 ${state.ledgerReview.length} 个源',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
