@@ -1,0 +1,13 @@
+{
+  "task_id": "V3-501A",
+  "run_id": "97171de3-e9ff-4e79-bfe9-200a85e637f4",
+  "summary": "SceneReducer、preview 与既有 History bridge 落地于 reducer/ 两件：smart_layout_scene_reducer.dart（SmartLayoutSceneReducer 纯归约 + ReducedScene + SceneReduceFailure 三稳定失败码）与 smart_layout_preview_adapter.dart（SmartLayoutPreviewAdapter.draft=同一 reducer 的 Draft 入口，零权威 Scene/History/revision/协作副作用）。固定操作序折叠：remove 软删（upsert 语义，patch 的 baseVersion→newVersion+versionNonce 契约原样生效，无编辑器随机 bump）→update 完整负载原样替换→add 追加置顶→file add→document replace/clear；selection 意图经 ReducedScene.selectionIds 暴露不进 Scene。失败原子：目标失配（remove/update 目标缺失或已软删、add id 冲突）在产出前整体失败零部分结果；输入不可变（base/patch 全程只读）。Draft 可重放：同一 patch 在写集完好的远端无关变更后 base 上重放成功（无关元素不受影响、写集元素按契约落地），写集元素被删后重放显式失败不静默跳过。History bridge：ReducedScene.commitResult=单一 CompoundResult 固定序 files→document→remove→update→add→selection，经既有 gateway.commitValidated（pushHistory+applyResult）落地——update 元素以 baseVersion 传入使编辑器统一 bump 落到契约 baseVersion+1；versionNonce/updated 归编辑器提交域，preview=commit 等价口径=元素负载排除 (versionNonce,updated) 深度等价（ExcalidrawJsonCodec 全字段投影逐键比对）+version 数字一致+files/document/selection 一致，真实 controller 提交测试钉住；undo/redo 精确无重复 push（单 CompoundResult=单事务，一次 undo 指纹级回到提交前、redo 回提交后）；无旁路 commit、无新 History 框架、不改协作通道。6 用例全绿+analyze smart_layout 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/reducer/smart_layout_scene_reducer.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/reducer/smart_layout_preview_adapter.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/reducer/smart_layout_scene_reducer_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-501A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-501A/commands.json"
+  ],
+  "artifacts": []
+}
