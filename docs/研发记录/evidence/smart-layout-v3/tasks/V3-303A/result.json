@@ -1,0 +1,14 @@
+{
+  "task_id": "V3-303A",
+  "run_id": "88f41807-8e14-4f70-8164-ca4c90f27954",
+  "summary": "原子 Scene 变换、依赖重算与 gateway 接入（合并原 V3-303A~C）。(1) TransformSemantics：排版只产生平移/绕点旋转/轴对齐缩放三类（det=1 正交/轴对齐判定，斜切与含旋转缩放抛 UnsupportedError 确定性失败，不吞成业务拒绝）。(2) StrokeTransformAdapter：freedraw 语义对齐渲染器（points 局部坐标渲染时 +x+y、angle 由画布表达）——平移/旋转只动 x/y/angle，缩放时包围盒与 points 按 (sx,sy) 同步缩放；TextTransformAdapter：只动几何，text/containerId 不变。(3) SmartLayoutSceneTransformer：闭包展开（目标+同组末级组成员+frame 成员+容器文本，BFS）→ 预检全有或全无（mobility 推断与 SnapshotExtractor 同语义：isCanvasPage/isPdfBackground→background、locked→protectedObstacle；任一拒绝即 SceneTransformFailure 带稳定码+首个拒绝源，原 Scene 零触碰）→ members 同变换 → containers（整体变换下包含关系自动保持，无额外重算）→ bindings（非主体的绑定箭头经编辑器 BindingUtils.updateBoundArrowEndpoints 重新采样，与拖拽路径同语义；barrel 导出零深路径，V3-304A allowlist 守卫同步核实无需增补）→ indexesAndVersion（fractional index/version 不动，upsertRemoteElements 语义，version 由提交入口统一 bump）。(4) SceneTransformSuccess 携带新 Scene+有序 updatedElements+commitResult(CompoundResult[UpdateElementResult])，gateway captureDraftBase→transform→commitValidated 直通（测试验证落地 x/y、版本推进、草稿基线隔离）。验收：identity 逐字段等值且 SceneFingerprint 不变；inverse 1e-9 还原（含 points）；两步平移=合成平移；旋转中心数学核对（θ=0.5 绕 (50,50)）；缩放 points 同步；嵌套组闭包+真实快照提取路径 TransformInvariant 零违规；frame 成员/容器文本跟随；绑定箭头端点贴合 box 右缘中点（v1 同语义 150,125）；锁定/背景/未知类型(-10 future-widget)/负 resize 目标全部原子拒绝且 fingerprint 不变；editor_core 全量 625 测试（Excalidraw codec/LWW 协作回归）全绿；geometry 目录累计 61 用例+analyze 零 issue。不导出通用 API：transformer 留在 feature 内，editor_core 零改动（V3-304A 反向依赖守卫继续覆盖）。 复审修复轮(d35aaff1 rejected→修复):[F1] TransformSemantics 分类顺序改为 平移→正交旋转(det≈1 先于缩放判定)→轴对齐正缩放(m00>0 且 m11>0),π 旋转不再误入 axisScale 产生负尺寸,负/镜像缩放确定性抛出(新增 π 旋转/负缩放测试);[F2] 新增 LineLikeTransformAdapter,line/arrow 缩放时局部 points 与包围盒同步缩放(copyWithLine 链,绑定保持;新增 arrow/line points 缩放测试);[F3] 组闭包改任一 groupId 相交(contains 语义,与编辑器组选择一致,交叉嵌套组不拆;新增 g1/g1,g2 用例);[F4] 预检覆盖绑定跟随箭头(锁定箭头使整批原子拒绝)+软删元素跳过(目标含软删 id 零触碰;新增测试);[F5] 已旋转元素×轴对齐缩放(局部系≠世界系)在 transformBaseGeometry 统一入口确定性抛出(防 TransformInvariant 世界系期望失配);修复后 geometry 66 用例+analyze 零 issue+editor_core 625 回归全绿。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/geometry/stroke_transform_adapter.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/geometry/smart_layout_scene_transformer.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/geometry/scene_transformer_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-303A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-303A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-303A/review.json"
+  ],
+  "artifacts": {}
+}
