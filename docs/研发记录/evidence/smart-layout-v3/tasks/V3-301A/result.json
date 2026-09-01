@@ -1,0 +1,18 @@
+{
+  "task_id": "V3-301A",
+  "run_id": "1558200f-ec73-4692-90ba-35ad5bb4111c",
+  "summary": "feature-local 几何内核（合并原 V3-301A~C）。(1) LayoutRect：不可变 AABB 原语，闭盒相交（共享边/角即相交）、contain、点包含、轴向欧氏间隙（相交为 0）、union/intersectOrNull、inflate/insets 外内扩（过度收缩 ArgumentError 显式失败）、fromSnapshotBounds 复用 V3-102A SnapshotBounds 不建第二套投影、零尺寸（点/线）为一等形态不漏报。(2) LayoutInsets：四向边距，zero/all，inflate/deflate 双向。(3) OrientedLayoutRect（OBB）：中心+半宽高+弧度，四角与保守 AABB（恒⊇本体，零漏检来源），SAT 分离轴定理相交（4 轴投影，epsilon 只向更易相交偏置，端点接触不因浮点抖动漏检；轴对齐走快路径退化 AABB 精确闭盒）。(4) LayoutObstacle：保护对象双形态投影（conservativeBounds=快照 visualBounds 含笔刷包络与旋转外扩；obb=原始 bounds 绕中心旋转的精确 OBB，笔迹不旋转直接取 visualBounds），构造断言 obb⊆保守盒（1e-9 容差吸收两条浮点路径 ulp 差）。(5) SmartLayoutGeometryKernel：AABB/OBB/间隙纯判定、obbIntersectsRect、pageContainsRect（页界 contain 含 insets 内容区与容差）、overlapsAnyObstacleAabb/Obb 线性保护命中、buildIndex 空间索引。(6) LayoutObstacleIndex 均匀网格：插入覆盖盒跨越的全部 cell（不是只插四角——中部 cell 查询会漏检），cellSize 默认障碍最大边，查询闭盒含零尺寸、queryWithinGap 半径邻域、queryIntersectingObb 保守预筛+SAT 精判；结果按 id 确定性排序；evaluationCount 确定性评估计数（不依赖墙上时钟）。零漏检 oracle：真实 Scene（荧光笔包络外扩/45° 旋转/嵌套对/零宽笔迹/锁定保护对象）经 SnapshotExtractor 真实路径提取，renderer oracle 全配对闭盒求交 ground truth，索引逐源查询覆盖全部 oracle 对（漏检=0）；间隙查询同构零漏检。预算：3000 笔画×100 块确定性 LCG 页，总评估 2854（全配对 300000 的 0.95%，平均 28.5 次/查询）且逐块暴力 oracle 零漏检；1500 笔画密集 600×600 压力同构全绿。27 用例 + analyze 零 issue；不导出通用 kernel（geometry/ 全部 feature-local，editor_core 零改动）。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/geometry/layout_rect.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/geometry/layout_insets.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/geometry/oriented_layout_rect.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/geometry/layout_obstacle.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/geometry/smart_layout_geometry_kernel.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/geometry/layout_primitives_test.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/geometry/geometry_kernel_oracle_test.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/geometry/geometry_budget_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-301A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-301A/result.json"
+  ],
+  "artifacts": {}
+}
