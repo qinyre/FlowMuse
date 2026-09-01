@@ -1,0 +1,12 @@
+{
+  "task_id": "V3-401A",
+  "run_id": "6cb90105-1954-409c-b4c5-1fdc2791b336",
+  "summary": "Planner 契约、skeleton、token 域与结构配额（合并原 V3-401A~C）。(1) LayoutSkeleton 四结构：single/twoColumn/mainSide/conservativeLayout（保守结构是真实重排几何 clamp 栏宽，与 V3-403A preserveFallback 零修改分型概念独立）。(2) CompositionConstraint：结构级适用性只依赖内容区宽+冻结 tokens（single=内容区≥minLineLength；twoColumn=扣沟半栏≥minLineLength；mainSide=主栏≥minLineLength；conservative 恒适用）；稳定拒绝码三枚（contentBelowMinLine/columnBelowMinLine/sideColumnInfeasible）。(3) CompositionParams：全部数值可溯源 token（columnGutter/pageMargin 直取；主/侧栏宽由内容区几何+token 行长界推导；侧栏三档=min/中点/max 行长界×左右方向）；canonical 串数字最短表示。(4) CompositionCandidate：确定性 id=结构线名+域内全局序号（宽页域 single#0/twoColumn#1/mainSide#2..7/conservativeLayout#8 共 9 项≤配额 12）；structureHash=fingerprint64(结构+参数 canonical) 双跑稳定、随左右方向变化。(5) LayoutCompositionPlanner.enumerate：域定义顺序冻结，拒绝格同样入域留档（PlanEnumeration.rejected 零静默跳过）；配额（默认 12）按结构轮转公平截断——quota=4 时四结构各留 1 代表不饿死。8 用例：宽页全结构/窄页 480 twoColumn+mainSide 部分拒绝且主栏全部≥240/极窄 200 single 拒绝 conservative 恒适用/双跑同序同 id 同 hash 且左右候选 hash 不同/配额 4 与 2 轮转/conservative 主栏 clamp 560 非 fallback/参数溯源 token 逐字段/域序号连续；composition 累计 17 用例+analyze 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/composition/layout_composition_planner.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/composition/layout_composition_planner_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-401A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-401A/result.json"
+  ],
+  "artifacts": {}
+}
