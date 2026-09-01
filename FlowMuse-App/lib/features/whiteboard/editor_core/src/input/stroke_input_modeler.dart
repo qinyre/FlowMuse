@@ -13,26 +13,27 @@ class StrokeModelResult {
   final StrokeModelDecision decision;
   final String? reason;
 
+  // ignore: unused_element
   const StrokeModelResult._({
+    // ignore: unused_element_parameter
     this.point,
+    // ignore: unused_element_parameter
     this.pressure,
     required this.decision,
+    // ignore: unused_element_parameter
     this.reason,
   });
-  const StrokeModelResult.emitted(Point point, double? pressure)
-    : point = point,
-      pressure = pressure,
-      decision = StrokeModelDecision.emitted,
+  const StrokeModelResult.emitted(this.point, this.pressure)
+    : decision = StrokeModelDecision.emitted,
       reason = null;
   const StrokeModelResult.dropped(String this.reason)
     : point = null,
       pressure = null,
       decision = StrokeModelDecision.dropped;
-  const StrokeModelResult.reset({String? reason})
+  const StrokeModelResult.reset({this.reason})
     : point = null,
       pressure = null,
-      decision = StrokeModelDecision.reset,
-      this.reason = reason;
+      decision = StrokeModelDecision.reset;
 }
 
 /// 平台无关输入建模器：OneEuro 位置滤波 + 独立 pressure 滤波 + 转角保护 + 终点 flush。

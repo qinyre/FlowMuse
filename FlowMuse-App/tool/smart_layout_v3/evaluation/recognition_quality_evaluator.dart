@@ -8,8 +8,10 @@ import 'g1_inputs.dart';
 /// - 低样本明确：可用样本 < [minSamples]（默认 10）→ verdict=insufficient；
 /// - 全部机器判定，无人工评分项。
 class RecognitionQualityEvaluator {
-  RecognitionQualityEvaluator({this.minSamples = 10, double? worstGroupFloor})
-    : worstGroupFloor = worstGroupFloor;
+  RecognitionQualityEvaluator({
+    this.minSamples = 10,
+    this.worstGroupFloor,
+  });
 
   /// 低样本下限：低于该值不下质量结论。
   final int minSamples;

@@ -401,6 +401,7 @@ class MarkdrawController extends ChangeNotifier {
 
   Size get canvasSize => _canvasSize;
 
+  // ignore: unnecessary_getters_setters
   Offset get canvasGlobalOffset => _canvasGlobalOffset;
 
   bool get isPagedViewport => _layout.isPaged && _layout.pages.isNotEmpty;

@@ -824,6 +824,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                         const Duration(milliseconds: 50),
                         () {
                           if (mounted) {
+                            // ignore: use_build_context_synchronously
                             FocusScope.of(context)
                                 .requestFocus(_instructionFocusNode);
                           }
@@ -1178,6 +1179,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                     const Duration(milliseconds: 50),
                                     () {
                                       if (mounted) {
+                                        // ignore: use_build_context_synchronously
                                         FocusScope.of(context)
                                             .requestFocus(node);
                                       }

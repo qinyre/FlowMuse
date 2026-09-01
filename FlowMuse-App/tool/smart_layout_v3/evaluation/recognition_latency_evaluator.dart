@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart' show visibleForTesting;
-
 import 'g1_inputs.dart';
 
 /// 识别延迟评测器（V3-206A 目标符号）。

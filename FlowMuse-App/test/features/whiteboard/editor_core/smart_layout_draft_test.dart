@@ -111,7 +111,7 @@ void main() {
     expect(controller.editorState.activeToolType, ToolType.select);
     // 进入草稿不触发 onSceneChanged（保存/广播）
     var sceneChanges = 0;
-    controller.onSceneChanged = (_, __) => sceneChanges++;
+    controller.onSceneChanged = (_, _) => sceneChanges++;
     simulateDrag(controller, ElementId('shape-1'), const Offset(10, 10));
     expect(sceneChanges, 0);
     controller.onSceneChanged = null;
@@ -125,7 +125,7 @@ void main() {
     simulateDrag(controller, ElementId('new-text-1'), const Offset(0, 20));
 
     var sceneChanges = 0;
-    controller.onSceneChanged = (_, __) => sceneChanges++;
+    controller.onSceneChanged = (_, _) => sceneChanges++;
     expect(
       controller.commitSmartLayoutDraft(draftPlan()),
       isTrue,

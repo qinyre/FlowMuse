@@ -147,9 +147,11 @@ class _MoveToNotebookDialogState extends State<MoveToNotebookDialog> {
                 RadioListTile<String>(
                   title: const Text('未归入笔记本'),
                   value: _unfiledNotebookId,
+                  // ignore: deprecated_member_use
                   groupValue: _selectedNotebookId == null
                       ? _unfiledNotebookId
                       : _selectedNotebookId!,
+                  // ignore: deprecated_member_use
                   onChanged: (value) {
                     setState(() => _selectedNotebookId = null);
                   },
@@ -164,9 +166,11 @@ class _MoveToNotebookDialogState extends State<MoveToNotebookDialog> {
                       return RadioListTile<String>(
                         title: Text(notebook.name),
                         value: notebook.id,
+                        // ignore: deprecated_member_use
                         groupValue: _selectedNotebookId == null
                             ? _unfiledNotebookId
                             : _selectedNotebookId!,
+                        // ignore: deprecated_member_use
                         onChanged: (value) {
                           setState(() => _selectedNotebookId = notebook.id);
                         },

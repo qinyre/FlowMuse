@@ -199,6 +199,7 @@ class CompactToolbar extends StatelessWidget {
     );
   }
 
+  // ignore: unused_element
   Widget _toolbarDivider(ColorScheme cs, bool vertical) {
     return Padding(
       padding: vertical

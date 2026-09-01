@@ -1,3 +1,4 @@
+// ignore_for_file: avoid_print
 // tool/natural_media_hash_web_check/main.dart
 //
 // §3.3 种子跨端门禁的 JS 侧入口：
