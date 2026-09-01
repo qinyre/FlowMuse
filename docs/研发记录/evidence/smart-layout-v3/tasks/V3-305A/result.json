@@ -1,0 +1,21 @@
+{
+  "task_id": "V3-305A",
+  "run_id": "ec85b853-568a-40f2-922a-7c59a621e3f1",
+  "summary": "Gate 2 变换矩阵、性能与证据包（合并原 V3-305A~B）。TransformInvariantRunner 批量执行 47 格矩阵：A 支持基线 9 kind×3 op 全 pass（每格 TransformInvariant 关系零违规 + Excalidraw serialize/parse round-trip 保持，27 格全覆盖）；B 拒绝矩阵 11 格全稳定拒绝码（locked×3/background×3/unknown×3/负 resize 目标/间接锁定绑定箭头，原子拒绝原 Scene 零触碰）+ 软删零触碰格；C unsupported 4 格确定性 UnsupportedError（负缩放/镜像/已旋转元素缩放/斜切，非静默）；D 关系场景 4 格（嵌套组 g2⊂g1 三成员/frame+成员+容器文本/旋转 frame Δθ 协变/绑定箭头端点贴合 BindingUtils 同语义）；E 不变量 4/4（identity 指纹不变/平移逆 1e-9/旋转逆还原 angle 归零/组合等价）；F 零漏检 oracle（真实元素含荧光笔包络/45° 旋转/嵌套/零宽笔迹，oracle 对 2 漏检 0，完整 3000 预算见 geometry 测试）；G 性能预算 3000 笔画/100 块确定性评估 2854 < 24000（全配对 300000 的 0.95%）逐块 oracle 零漏检。机器判定 verdict=pass（unexpected=0/silentSkips=0（预期格数 47 守卫：矩阵维度缩水显性化为 silentSkips）/漏检=0/预算内/round-trip 失败=0）。复审 approved（2 minor 已修：预期格数守卫替代恒 0 常量、删除 fingerprint 自比较装饰文本；2 note 记录：D 计数笔误更正、时间戳口径）。产出 gates/G2/transform-invariant-matrix.json + gate-two-report.json（含复现命令）；报告路径修正为仓库根（../docs）。CLI 测试断言 exit 0。",
+  "changed_paths": [
+    "FlowMuse-App/tool/smart_layout_v3/transform/transform_invariant_runner.dart",
+    "FlowMuse-App/tool/smart_layout_v3/transform/transform_runner_cli_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/gates/G2/transform-invariant-matrix.json",
+    "docs/研发记录/evidence/smart-layout-v3/gates/G2/gate-two-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-305A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-305A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-305A/review.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_305a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/gates/G2/gate-two-report.json",
+      "sha256": "653f53b83fea580020d3c5a0a7b8209ea1fcba683e0004fde20f960fa69a4254"
+    }
+  ]
+}

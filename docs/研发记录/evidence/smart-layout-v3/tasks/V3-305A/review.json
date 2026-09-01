@@ -1,0 +1,59 @@
+{
+  "task_id": "V3-305A",
+  "run_id": "ce5eb520-59ba-4c5f-8ca6-c19fe22595b3",
+  "executor_run_id": "ec85b853-568a-40f2-922a-7c59a621e3f1",
+  "model": "glm-5.3",
+  "reasoning_effort": "max",
+  "verdict": "approved",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "minor",
+      "location": "FlowMuse-App/tool/smart_layout_v3/transform/transform_invariant_runner.dart:86,479-484",
+      "detail": "silentSkips 是恒 0 常量:MatrixSummary.silentSkips 全文件从未被递增,verdict 条件 summary.silentSkips == 0 永真,且机器判定未比对预期总格数(如 total==47)。当前矩阵的『零静默跳过』实际由『每格无条件 record + 任一偏差计为 unexpected』结构性保证(47 格全部落位),但若未来 supportByKind 因回归丢失 kind,A 区格数会静默缩水而 verdict 仍 pass。建议在 verdict 中加入 total 与按 contract 推导的期望格数比对,使 silentSkips 判定非形式化。"
+    },
+    {
+      "id": 2,
+      "severity": "minor",
+      "location": "FlowMuse-App/tool/smart_layout_v3/transform/transform_invariant_runner.dart:208-209",
+      "detail": "B 拒绝格 detail 中的『Scene fingerprint 自稳』是自比较:SceneFingerprint.of(scene) == SceneFingerprint.of(scene) 恒真,不构成原子拒绝零触碰的证据(真正的零触碰由 Scene 不可变性与 V3-303A scene_transformer_test『锁定元素拒绝:Scene 引用与 fingerprint 不变』覆盖)。仅影响 detail 展示文本,不影响 status 与 verdict,但该文本有误导性。"
+    },
+    {
+      "id": 3,
+      "severity": "note",
+      "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-305A/result.json:4",
+      "detail": "result.json summary 与 commit message 均声称『D 关系场景 5 格』,实际 D 区为 4 格(D-nested-group/D-frame-follow/D-rotated-frame/D-binding-chain);报告 total=47=27A+12B(11 rejected+1 软删 pass)+4C+4D 自洽,属文字计数笔误。"
+    },
+    {
+      "id": 4,
+      "severity": "note",
+      "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-305A/commands.json:9-10,17-18",
+      "detail": "commands.json 两条记录 started_at_utc == finished_at_utc 同秒(07:04:51Z),而报告 generated_at_utc=07:04:17Z 早于记录的测试开始时刻 34 秒,物理上 flutter test 不可能在记录的同一秒内完成,推断时间戳为事后记录时刻而非真实起止。数值真实性已经由本复审独立复跑验证(复跑产物与提交版除时间戳外逐字节一致),故仅 note。"
+    },
+    {
+      "id": 5,
+      "severity": "note",
+      "location": "FlowMuse-App/tool/smart_layout_v3/transform/transform_invariant_runner.dart:789-813",
+      "detail": "A 基线格几何断言为弱化形态:期望映射为空 → TransformInvariant.checkObjects 对无期望映射的对象跳过全部几何校验,故 A 格实际验证『成功 + 结构不变量(源集/mobility/group/frame/绑定/z 序)+ serialize/parse round-trip 保持』,不逐格校验几何数值。代码注释已明示委托给 V3-303A 测试;委托大体成立(scene_transformer_test 对 move/rotate/resize 几何语义含 line/arrow points 缩放有代表性数值断言,geometry 66 用例本复审实跑通过),但『每 kind×op 逐格几何数值』在仓库中无字面全覆盖(如 diamond-rotate 无独立数值用例,依赖共享变换路径),若未来某 kind 走独立适配器且几何回归,G2 矩阵可能不报警。非投机:commit message 对 A 格的表述(关系零违规+round-trip)与实际断言一致,未夸大。"
+    }
+  ],
+  "verified_commands": [
+    {
+      "command": "git show 2029d9ea --stat / --name-only",
+      "exit_code": 0
+    },
+    {
+      "command": "powershell Get-FileHash -Algorithm SHA256 docs/研发记录/evidence/smart-layout-v3/gates/G2/gate-two-report.json",
+      "exit_code": 0
+    },
+    {
+      "command": "cd FlowMuse-App && flutter test tool/smart_layout_v3/transform/transform_runner_cli_test.dart",
+      "exit_code": 0
+    },
+    {
+      "command": "cd FlowMuse-App && flutter test test/features/whiteboard/smart_layout/geometry",
+      "exit_code": 0
+    }
+  ],
+  "summary": "独立复审 V3-305A(commit 2029d9ea)裁决 approved,无 blocking。(1) 范围合规:6 个改动文件全部位于 allowed_paths(tool/smart_layout_v3/transform/** 与 gates/G2、tasks/V3-305A evidence),无计划/state/Manifest 混入。(2) 覆盖完整:47 格矩阵 = A 支持 9kind×3op 全 pass(枚举自 SmartLayoutTransformContract.supportByKind,真实执行 SmartLayoutSceneTransformer.apply)+ B 拒绝 11 格稳定码(locked/background/unknown×3、负 resize、间接锁定绑定箭头;软删零触碰为独立 pass 格)+ C unsupported 4 格(负缩放/镜像/已旋转元素缩放/斜切,经生产代码 TransformSemantics.of 与 _assertComposableWithRotation 真实抛出,非同源硬编码)+ D 关系 4 格(嵌套组/frame 跟随/旋转 frame Δθ 协变/绑定箭头端点贴合,均以期望仿射做几何校验)+ E 不变量 4/4 + F 零漏检 oracle(obstacles=5,oracle_pairs=2,misses=0)+ G 性能预算(确定性 LCG,2854<24000,oracle_misses=0)+ 兼容(round-trip 27/27,失败 0)。(3) 机器判定真实:verdict 条件覆盖 unexpected/silentSkips/不变量/漏检/预算/round-trip;本复审复跑 CLI 测试 exit 0,再生成的 gate-two-report.json 与 transform-invariant-matrix.json 与提交版除 generated_at_utc 外逐字节一致,且 geometry_budget_test 独立复现 evaluations=2854/oracleHits=1696,证明证据数值来自真实确定性执行;sha256(f5798145…)与 result.json 登记一致。CLI 测试为 expect(code, 0) 严格断言(非 anyOf)。(4) 投机风险检查:A 基线格几何断言为弱化形态(空期望映射跳过几何,注释已声明委托 V3-303A,后者有代表性数值用例且 66 用例实跑通过),B/C 拒绝与抛出均比对生产行为,非恒真;D 关系格带期望仿射可真实失败。遗留 2 minor(silentSkips 恒 0 常量且无期望总格数比对、B 格 fingerprint『自稳』为自比较装饰文本)与 3 note(D 格计数笔误 5→4、commands.json 时间戳粗糙、A 格几何委托边界),均不构成 blocking。两命令实跑退出码 0;复审过程除 review.json 外零改动(复跑再生的 G2 报告已恢复为提交版)。"
+}
