@@ -55,7 +55,7 @@ const List<PlatformRecipe> platformRecipes = [
     availabilityHint: 'Windows 宿主 + Visual Studio（C++ 桌面开发工作负载）',
     recovery: '安装 Visual Studio 2022（含"使用 C++ 的桌面开发"工作负载）后重跑',
     host: 'windows',
-    artifactPath: 'build/windows/x64/runner/Release',
+    artifactPath: 'build/windows/x64/runner/Release/FlowMuse.exe',
   ),
   PlatformRecipe(
     id: 'ohos',
@@ -64,7 +64,7 @@ const List<PlatformRecipe> platformRecipes = [
     recovery: '安装 HarmonyOS SDK 并设 HOS_SDK_HOME（DevEco Studio），'
         '使用 OHOS Flutter 分支后重跑 flutter build hap --debug',
     host: 'any',
-    artifactPath: 'build/ohos/outputs/default',
+    artifactPath: 'build/ohos/hap/entry-default-signed.hap',
   ),
   PlatformRecipe(
     id: 'ios',
@@ -72,7 +72,7 @@ const List<PlatformRecipe> platformRecipes = [
     availabilityHint: 'macOS 宿主 + Xcode',
     recovery: '在 macOS 宿主安装 Xcode 命令行工具后重跑',
     host: 'macos',
-    artifactPath: 'build/ios/iphoneos',
+    artifactPath: 'build/ios/iphoneos/Runner.app/Runner',
   ),
   PlatformRecipe(
     id: 'macos',
@@ -80,7 +80,8 @@ const List<PlatformRecipe> platformRecipes = [
     availabilityHint: 'macOS 宿主 + Xcode',
     recovery: '在 macOS 宿主安装 Xcode 后重跑',
     host: 'macos',
-    artifactPath: 'build/macos/Build/Products/Debug',
+    artifactPath:
+        'build/macos/Build/Products/Release/FlowMuse.app/Contents/MacOS/FlowMuse',
   ),
 ];
 
@@ -190,10 +191,22 @@ class PlatformBuildMatrix {
         }
         return null;
       case 'ohos':
+        if (!File('ohos/build-profile.json5').existsSync()) {
+          return 'OHOS 工程缺少项目级 build-profile.json5（无可构建 entry module）';
+        }
         final hos = Platform.environment['HOS_SDK_HOME'];
         final line = _doctorLine(doctor, 'HarmonyOS');
         final doctorOk = line != null && line.contains('√');
-        if ((hos == null || hos.isEmpty) && !doctorOk) {
+        if (hos != null && hos.isNotEmpty) {
+          final sdkDirectory = Directory(hos);
+          final hasSdkFiles = sdkDirectory.existsSync() &&
+              sdkDirectory
+                  .listSync(recursive: true, followLinks: false)
+                  .any((entry) => entry is File);
+          if (!hasSdkFiles) {
+            return 'HOS_SDK_HOME 未包含可用 SDK 文件';
+          }
+        } else if (!doctorOk) {
           return 'HOS_SDK_HOME 未设置且 flutter doctor HarmonyOS toolchain 不可用';
         }
         return null;
