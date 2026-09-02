@@ -470,6 +470,23 @@ void main() {
           ),
         ),
       );
+      // 噪点笔画（<8×8pt）：不进聚类、无 SoM 标记，v2 口径随方案
+      // 静默删除——v3 适配器应把它认领进最近转写块一并清除。
+      controller.applyResult(
+        AddElementResult(
+          FreedrawElement(
+            id: const ElementId('k-n1'),
+            x: 210,
+            y: 300,
+            width: 6,
+            height: 6,
+            points: const [Point(0, 0), Point(4, 4)],
+            customData: {
+              'flowMuse': {'pageId': pageId},
+            },
+          ),
+        ),
+      );
       return controller;
     }
 
@@ -553,6 +570,13 @@ void main() {
       );
       expect(
         applied.elements.where(
+          (e) => e.id.value == 'k-n1' && !e.isDeleted,
+        ),
+        isEmpty,
+        reason: '噪点笔画随方案静默删除（v2 同口径，无残留墨点）',
+      );
+      expect(
+        applied.elements.where(
           (e) => e is TextElement && !e.isDeleted && e.text == '手工记账流水',
         ),
         isNotEmpty,
@@ -577,6 +601,11 @@ void main() {
       expect(
         undone.elements.firstWhere((e) => e.id.value == 'k-s1').x,
         beforeStroke.x,
+      );
+      expect(
+        undone.elements.where((e) => e.id.value == 'k-n1' && !e.isDeleted),
+        isNotEmpty,
+        reason: 'undo 恢复噪点笔画（单事务完整回滚）',
       );
     }, timeout: const Timeout(Duration(seconds: 90)));
 

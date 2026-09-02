@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import '../analysis/analysis_retry_policy.dart';
@@ -95,6 +97,12 @@ abstract final class SmartLayoutRealCandidateChain {
         reason: 'empty-page',
         retryable: false,
       );
+    }
+    if (response.regions.isEmpty && layoutObjects.isEmpty) {
+      // 视觉适配器口径：无 movable 对象且零 region = prepare 门控全空
+      // （页内仅余噪点等非排版源，不构成内容）——无解空候选收敛，
+      // 不进守恒校验。有内容对象时零认领仍是契约破坏（fail closed）。
+      return const RealGenerationSucceeded(candidates: []);
     }
     final layoutSnapshot = LayoutPageSnapshot(
       pageId: snapshot.pageId,
@@ -364,6 +372,7 @@ class _RegionDraft {
     required this.sortTop,
     required this.sortLeft,
     required this.sortKey,
+    required this.bounds,
     this.transcribedText,
   });
 
@@ -373,6 +382,9 @@ class _RegionDraft {
   final double sortTop;
   final double sortLeft;
   final String sortKey;
+
+  /// 认领源在原稿中的包围盒（噪点最近邻认领用）。
+  final Rect bounds;
   final String? transcribedText;
 }
 
@@ -664,6 +676,8 @@ class SmartLayoutRealSessionScope {
   ///   跳过认领（保持 protected obstacle）；
   /// - 未认领的 movable 对象/笔迹 → 显式 unknown region（进 preserved，
   ///   不静默删除）；background 与 protectedObstacle 不生成 region；
+  ///   噪点笔画（removeIds 交集）例外——认领进最近转写文本块随应用
+  ///   删除（v2"随方案静默删除"同口径，消除残留墨点）；
   /// - readingOrder 重建为连续 0..N-1：title 优先，其余按原稿
   ///   top/left/稳定 key；图文组内 figure 后接其 captions；
   /// - 置信度：单块值（blockId 直查）优先，缺省用页面整体值，clamp
@@ -744,6 +758,7 @@ class SmartLayoutRealSessionScope {
         sortTop: unit.sourceBounds.top,
         sortLeft: unit.sourceBounds.left,
         sortKey: unit.key,
+        bounds: unit.sourceBounds,
         transcribedText: handwritten
             ? (unit.textElement?.text.trim() ?? '')
             : null,
@@ -760,6 +775,7 @@ class SmartLayoutRealSessionScope {
         sortTop: unit.sourceBounds.top,
         sortLeft: unit.sourceBounds.left,
         sortKey: unit.key,
+        bounds: unit.sourceBounds,
       );
     }
 
@@ -832,6 +848,7 @@ class SmartLayoutRealSessionScope {
             sortTop: top,
             sortLeft: left,
             sortKey: sourceId,
+            bounds: Rect.fromLTWH(left, top, 0, 0),
           ),
         ],
       ));
@@ -846,8 +863,51 @@ class SmartLayoutRealSessionScope {
         object.visualBounds.left,
       );
     }
+    // 噪点笔画（<8×8pt，v2 口径"随方案静默删除，消除残留墨点"）：
+    // 不进 preserved——认领进最近的转写文本块（transcribed 变换整组
+    // 删除源笔迹，应用时一并清除）；页面无转写块时回落 preserved
+    // （未发生 ink→text 转换，噪点保留不算残留）。
+    final noiseSourceIds = {
+      for (final id in preparation.removeIds) id.value,
+    };
+    final textDraftsForNoise = [
+      for (final draft in titleDrafts)
+        if (draft.transcribedText != null) draft,
+      for (final group in groups)
+        for (final draft in group.drafts)
+          if (draft.transcribedText != null) draft,
+    ];
+    double distanceToDraft(Rect strokeBounds, _RegionDraft draft) {
+      final strokeCenter = strokeBounds.center;
+      final draftCenter = draft.bounds.center;
+      final dx = strokeCenter.dx - draftCenter.dx;
+      final dy = strokeCenter.dy - draftCenter.dy;
+      return dx * dx + dy * dy;
+    }
+
     for (final stroke in snapshot.inkStrokes) {
       if (claimed.contains(stroke.sourceId)) continue;
+      if (noiseSourceIds.contains(stroke.sourceId) &&
+          textDraftsForNoise.isNotEmpty) {
+        final strokeRect = Rect.fromLTWH(
+          stroke.visualBounds.left,
+          stroke.visualBounds.top,
+          stroke.visualBounds.width,
+          stroke.visualBounds.height,
+        );
+        _RegionDraft nearest = textDraftsForNoise.first;
+        var nearestDistance = distanceToDraft(strokeRect, nearest);
+        for (final draft in textDraftsForNoise.skip(1)) {
+          final distance = distanceToDraft(strokeRect, draft);
+          if (distance < nearestDistance) {
+            nearest = draft;
+            nearestDistance = distance;
+          }
+        }
+        nearest.sourceIds.add(stroke.sourceId);
+        claimed.add(stroke.sourceId);
+        continue;
+      }
       addUnknown(
         stroke.sourceId,
         stroke.visualBounds.top,
