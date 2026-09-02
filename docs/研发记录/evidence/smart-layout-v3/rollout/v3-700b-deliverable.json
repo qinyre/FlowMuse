@@ -1,0 +1,29 @@
+{
+  "task_id": "V3-700B",
+  "merged_from": [
+    "V3-700B",
+    "V3-700C",
+    "V3-700D"
+  ],
+  "target_symbols": [
+    "SmartLayoutCapability",
+    "SmartLayoutKillSwitch",
+    "SmartLayoutObservability"
+  ],
+  "scope": "capability 默认/过期/故障 off、kill switch、版本化指标、dashboard/alert 和本地 synthetic sink（预部署，合成输入验证）",
+  "implementation": {
+    "capability": "lib/features/whiteboard/smart_layout/rollout/smart_layout_capability.dart——无缓存=defaultOff/阳性未过期=cachedPositive/到期或阴性=expired/损坏=malformed；任何故障路径不产 on",
+    "kill_switch": "smart_layout_kill_switch.dart——只关不换（类型面无 v2 回退），trip/reset/maxTripCount 锁定（人工介入口径），combine 与 capability 组合判定",
+    "observability": "smart_layout_observability.dart——metricsSchemaVersion=1 版本化事件/失败率滑动窗口告警规则（阈值+窗口+最小样本去抖）/LocalSyntheticMetricsSink 进程内零网络（生产端点归 V3-700A 外部输入）/告警回调闭环 kill switch"
+  },
+  "tests": {
+    "rollout": "13 用例全绿（capability 6/kill switch 3/observability 4，含合成指标→告警→关闭闭环与关闭后零请求断言）",
+    "server": "go test ./internal/recognition/... 全绿（server 零改动——capability 生产服务归 V3-700A）"
+  },
+  "acceptance": {
+    "no_service_zero_requests": "defaultOff/malformed/expired/kill-tripped 判定下入口门禁直接返回不放行（请求计数断言 0 增量）",
+    "no_v2_fallback": "断网/配置故障只降 off：kill switch 类型面无任何 v2 回退 API，trip 仅关闭",
+    "synthetic_metrics_alert_and_close": "合成 4 请求 3 失败（0.75≥0.5，样本≥4）→ AlertEvent → kill switch trip 闭环断言"
+  },
+  "disclosure": "预部署机制层；生产 capability 服务/观测端点/仪表盘接入为 V3-700A 外部输入（platform-certification/observability-endpoints-ready）"
+}

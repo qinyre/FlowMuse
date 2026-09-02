@@ -1,0 +1,31 @@
+{
+  "task_id": "V3-700B",
+  "runs": [
+    {
+      "command_id": "rollout-contract-tests",
+      "command": "flutter test test/features/whiteboard/smart_layout/rollout",
+      "cwd": "FlowMuse-App",
+      "exit_code": 0,
+      "started_at_utc": "2026-09-02T01:55:15Z",
+      "finished_at_utc": "2026-09-02T01:55:15Z",
+      "note": "13 用例全绿"
+    },
+    {
+      "command_id": "server-contract-tests",
+      "command": "go test ./internal/recognition/...",
+      "cwd": "FlowMuse-Server",
+      "exit_code": 0,
+      "started_at_utc": "2026-09-02T01:55:15Z",
+      "finished_at_utc": "2026-09-02T01:55:15Z",
+      "note": "全绿（server 零改动）"
+    },
+    {
+      "command_id": "artifact-contract",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smart-layout-v3/AgentExecution.ps1 -Action VerifyArtifacts -TaskId V3-700B",
+      "cwd": ".",
+      "exit_code": 0,
+      "started_at_utc": "2026-09-02T01:55:15Z",
+      "finished_at_utc": "2026-09-02T01:55:15Z"
+    }
+  ]
+}
