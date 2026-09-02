@@ -939,5 +939,70 @@ void main() {
         reason: '重试链路完整走通',
       );
     }, timeout: const Timeout(Duration(seconds: 90)));
+
+    testWidgets('面板重开复用 scope：终态会话复位，重开面板可直接再开始', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final controller = visionController();
+      addTearDown(controller.dispose);
+
+      var visionCalls = 0;
+      controller.onVisionSmartLayout = (request) async {
+        visionCalls++;
+        return SmartLayoutVisionResponse(
+          elements: [
+            SmartLayoutVisionElement(
+              id: 'e0',
+              role: 'body',
+              text: '重开后的手写',
+              markIds: const ['m1'],
+              confidence: 0.95,
+            ),
+          ],
+        );
+      };
+      controller.onTranscribeCrop = (request) async {
+        return const SmartLayoutTranscribeResponse(text: '', confidence: 0);
+      };
+
+      final scope = SmartLayoutRealSessionScope.build(
+        controller: controller,
+        serverUri: Uri.parse('http://127.0.0.1:9'),
+        pageId: pageId,
+      );
+      addTearDown(scope.dispose);
+
+      // 在途会话不被 setActivePage 复位（终态才复位）。
+      scope.session.beginOperation();
+      scope.setActivePage(pageId);
+      expect(scope.session.state.phase, SmartLayoutSessionPhase.analyzing);
+      scope.session.cancelOperation();
+
+      // 模拟重开面板（关闭时 onClose 先取消 → 终态 cancelled；生产
+      // 路径复用 scope 并走 setActivePage）：必须复位为 idle，否则新
+      // 面板的初始 idle 视图与状态机终态错位，点开始将在
+      // beginOperation 静默抛非法迁移（零反馈死按钮）。
+      expect(scope.session.state.phase, SmartLayoutSessionPhase.cancelled);
+      scope.setActivePage(pageId);
+      expect(scope.session.state.phase, SmartLayoutSessionPhase.idle);
+
+      final container = ProviderContainer(
+        overrides: [
+          smartLayoutSessionDependenciesProvider.overrideWithValue(
+            scope.dependencies,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+      await tester.runAsync(vm.startAnalysis);
+      final state = container.read(smartLayoutSessionViewModelProvider);
+      expect(state.phase, SmartLayoutSessionPhase.reviewing);
+      expect(visionCalls, 1, reason: '重开面板的首次分析真实走通视觉链');
+    }, timeout: const Timeout(Duration(seconds: 90)));
   });
 }

@@ -159,6 +159,26 @@ void main() {
     expect(state.canStartAnalysis, isTrue);
   });
 
+  test('VM 初始相位对齐底层 session：终态不回放伪 idle（防点开始静默死）', () {
+    final (container, _, session) = setUpContainer(
+      _TransportScript(const [_TransportStep.ok()]).invoke,
+    );
+    // 面板重开复用 scope：上一轮会话已取消（关闭面板时先取消的口径），
+    // 新 provider 作用域的 VM 若回放硬编码 idle，点开始将在
+    // beginOperation 抛非法迁移且零 UI 反馈。
+    session.beginOperation();
+    session.cancelOperation();
+
+    final state = stateOf(container);
+    expect(
+      state.phase,
+      SmartLayoutSessionPhase.cancelled,
+      reason: 'VM 初始态必须对齐真实 session 相位',
+    );
+    expect(state.canStartAnalysis, isFalse, reason: '终态不可直接开始');
+    expect(state.canReset, isTrue, reason: '终态可复位到 idle 再开始');
+  });
+
   test('全链：分析→生成→review→选择→应用（真实 session 提交路径）', () async {
     final (container, controller, session) = setUpContainer(
       _TransportScript(const [_TransportStep.ok()]).invoke,

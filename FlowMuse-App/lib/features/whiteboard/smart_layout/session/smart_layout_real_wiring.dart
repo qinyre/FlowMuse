@@ -29,6 +29,7 @@ import '../validation/validated_candidate.dart';
 import '../validation/validated_candidate_pipeline.dart';
 import 'smart_layout_operation_guard.dart';
 import 'smart_layout_session.dart';
+import 'smart_layout_session_state.dart';
 import 'smart_layout_session_view_model.dart';
 
 /// 真实候选生成链结果（V3-505C）：成功 = 验证候选（可能为空——
@@ -973,11 +974,26 @@ class SmartLayoutRealSessionScope {
   /// 用户切换页面（离页防线）：scope 改指新页（截图、视觉识别、候选
   /// 重跑都作用于新页号）并作废未完成的捕获与转写缓存（旧票据续作由
   /// 会话守卫拒绝）。
+  ///
+  /// 面板重开复用本 scope：终态会话（applied/cancelled/failed）在此
+  /// 复位为 idle——新面板的 VM 初始相位与状态机若错位，点开始将在
+  /// beginOperation 静默抛非法迁移（零反馈死按钮）。在途态不动。
   void setActivePage(String pageId) {
     _pageId = pageId;
     _lastCapture = null;
     _lastResponse = null;
     _lastTranscribedTextByRegion = null;
+    switch (session.state.phase) {
+      case SmartLayoutSessionPhase.applied:
+      case SmartLayoutSessionPhase.cancelled:
+      case SmartLayoutSessionPhase.failed:
+        session.reset();
+      case SmartLayoutSessionPhase.idle:
+      case SmartLayoutSessionPhase.analyzing:
+      case SmartLayoutSessionPhase.reviewing:
+      case SmartLayoutSessionPhase.applying:
+        break;
+    }
     session.setActivePage(pageId);
   }
 

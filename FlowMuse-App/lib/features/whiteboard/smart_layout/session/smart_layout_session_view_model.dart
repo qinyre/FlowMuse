@@ -371,7 +371,12 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
       }
       _ownedCandidates = const [];
     });
-    return const SmartLayoutSessionUiState.initial();
+    // 初始相位对齐底层 session：面板重开（新 provider 作用域）复用既有
+    // scope 时真实相位可能是终态——回放硬编码 initial（伪 idle）会让
+    // "开始"点击在 beginOperation 静默抛非法迁移（零 UI 反馈）。
+    return const SmartLayoutSessionUiState.initial().copyWith(
+      sessionState: _deps.session.state,
+    );
   }
 
   SmartLayoutSessionDependencies get _deps =>
