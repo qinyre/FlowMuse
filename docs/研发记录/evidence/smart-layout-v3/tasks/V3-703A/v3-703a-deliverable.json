@@ -1,0 +1,67 @@
+{
+  "task": "V3-703A",
+  "kind": "client_v2_isolation_deliverable",
+  "scope": "客户端 v2 隔离与保留说明（比赛交付口径：隔离验证而非删除/迁移/census）",
+  "checks": [
+    {
+      "id": "public-surface-zero-v2-symbols",
+      "passed": true,
+      "scanned_files": 20,
+      "offenders": []
+    },
+    {
+      "id": "v3-lib-zero-v2-imports",
+      "passed": true,
+      "scanned_files": 91,
+      "offenders": []
+    },
+    {
+      "id": "single-v3-endpoint-string",
+      "passed": true,
+      "v3_endpoint_files": 1,
+      "legacy_endpoint_offenders": []
+    },
+    {
+      "id": "v2-private-in-place",
+      "passed": true,
+      "lib_files": [
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_content.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_document.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_exporter.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_ink_clusterer.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_move_builder.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_plan.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_template_engine.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_vision_matcher.dart"
+      ],
+      "lib_file_count": 9,
+      "test_files": [
+        "test/features/whiteboard/editor_core/smart_layout_draft_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_ink_clusterer_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_move_builder_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_plan_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_repro_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_template_engine_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_transcribe_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_vision_test.dart"
+      ],
+      "test_file_count": 8,
+      "note": "比赛版本兼容保留：原位不删除、不迁移、不新增兼容 wrapper"
+    }
+  ],
+  "retention_note": "v2 私有实现（editor_core/src/core/smart_layout/**，9 个 lib 文件）与 8 个既有测试原位保留；公开入口仅到达 v3 Session；不新增兼容 wrapper。",
+  "test_evidence": {
+    "v3_smart_layout_suite": "flutter test test/features/whiteboard/smart_layout -> 452 passed",
+    "legacy_v2_tests": "flutter test test/features/whiteboard/editor_core/smart_layout_{draft,ink_clusterer,move_builder,plan,repro,template_engine,transcribe,vision}_test.dart -> 113 passed",
+    "analyze": "flutter analyze lib/features/whiteboard/smart_layout test/features/whiteboard/smart_layout -> No issues found"
+  },
+  "reports": [
+    {
+      "category": "client_isolation_matrix",
+      "path": "docs/研发记录/evidence/smart-layout-v3/competition/v3-703a-client-isolation.json",
+      "sha256": "9b7bf02fdda6de35a8f77659dfff416f57fe95372d124125e89b4fad2c9e7811"
+    }
+  ],
+  "no_compat_wrapper_added": true
+}
