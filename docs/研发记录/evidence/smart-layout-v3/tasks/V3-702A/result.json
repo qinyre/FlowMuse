@@ -1,0 +1,20 @@
+{
+  "task_id": "V3-702A",
+  "run_id": "083edce0-4abd-4e2d-a580-d53027fdcb04",
+  "summary": "合成稳定性与故障注入结论（比赛交付口径，不等待生产指标窗口）。SyntheticStabilityEvaluator（tool/smart_layout_v3/competition/）：复用既有冻结实验 48 dev 样本（datasets/splits/development/manifest.json，splitmix64 seed=20260902 固定洗牌，样本集 sha256=308f65305a3e3f3f… 入报告）×SmartLayoutFaultInjectionMatrix 8 类故障全矩阵 384 次重放，全部经真实客户端链（真实 MarkdrawController+SmartLayoutSession 四检守卫+V3AnalysisRepository 默认重试策略+HTTP 网关错误映射，仅传输层注入）。结果：critical=0（无未捕获异常/Scene 零触碰/无结果逃逸三检）；offline/timeout→network/timeout 重试耗尽 failed attempts=2；429/500/503→badStatus 可重试耗尽 failed attempts=2；bad-schema→200 非合约体 badSchema 稳定失败 attempts=1；cancel/late-callback→在途取消与迟到回调均 late-guard 拒绝 attempts=1（系统语义修正：取消针对在途操作，beginOperation 复位取消标记，发起前取消对本层是无操作——初版误设零请求口径被矩阵当场证伪后按真实语义修正）。汇总：错误率 1.0（全注入矩阵）、拒绝率 0.25、逐故障耗时 min/median/p95/max（offline 中位 0.31ms）。失败样本不排除（384 全量入报告 runs 数组）。证据一次性生成 competition/v3-702a-stability-report.json 常规只读校验。24 flutter 用例+go recognition 全绿+analyze（rollout+competition）零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/tool/smart_layout_v3/competition/synthetic_stability_evaluator.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/rollout/synthetic_stability_evaluator_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/competition/v3-702a-stability-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-702A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-702A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-702A/v3-702a-deliverable.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_702a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-702A/v3-702a-deliverable.json",
+      "sha256": "407a952d5fbda3609519ffde6ac4350b81933d37b95be95c0d8927714fa1bfee"
+    }
+  ]
+}
