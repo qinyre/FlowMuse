@@ -1,0 +1,48 @@
+{
+  "task_id": "V3-602A",
+  "merged_from": [
+    "V3-602A",
+    "V3-602B"
+  ],
+  "target_symbols": [
+    "SmartLayoutCiMatrix",
+    "DeterminismCiCheck"
+  ],
+  "scope": "固定 runner/字体/fixture server/replay/cache/workdir，归档机器报告、退出码、版本和失败产物",
+  "tooling": {
+    "matrix": "FlowMuse-App/tool/smart_layout_v3/ci/smart_layout_ci_matrix.dart（SmartLayoutCiMatrix：stage 模型/聚合退出码/失败产物归档/仓库根脱敏/缓存指纹含目录/replay canonical 对照/--only 过滤/--sabotage 注入）",
+    "determinism": "FlowMuse-App/tool/smart_layout_v3/ci/determinism_ci_check.dart（DeterminismCiCheck：flutter test --machine 事件流解析+确定性测试集双跑漂移检测）",
+    "sabotage_probe": "FlowMuse-App/tool/smart_layout_v3/ci/sabotage_probe.dart（受控失败探针，仓库根自脚本位置推导）",
+    "workflow": ".github/workflows/smart-layout-v3-ci.yml（OpenHarmony Flutter 分支钉死与 quality.yml 同源；报告/失败归档 upload-artifact）",
+    "self_tests": "tool/smart_layout_v3/ci/*_test.dart 11 用例（fake executor 零子进程）"
+  },
+  "fixed_environment": {
+    "runner": "GitHub Actions ubuntu-latest + Flutter 3.41.10-ohos-0.0.1-canary1（gitcode CPF-Flutter 分支克隆，与 quality.yml 同一钉死方式）",
+    "fonts": "仓库捆绑（Excalifont 等）零网络下载",
+    "fixture_server": "测试内自建 loopback HttpServer（V3-506A 矩阵同源），无外部依赖",
+    "workdir": ".dart_tool/smart_layout_v3_ci（仓库内，路径策略禁绝对路径与 ..）"
+  },
+  "real_run": {
+    "report": "docs/研发记录/evidence/smart-layout-v3/ci/matrix-report-latest.json",
+    "all_passed": true,
+    "aggregate_exit_code": 0,
+    "stages": [
+      "analyze-smart-layout",
+      "test-smart-layout-core",
+      "test-smart-layout-transaction",
+      "determinism-double-run",
+      "ci-tool-self-test"
+    ]
+  },
+  "sabotage_proof": {
+    "report": "docs/研发记录/evidence/smart-layout-v3/ci/sabotage/sabotage-matrix-report.json",
+    "blocked": true,
+    "true_exit_code": 1,
+    "diagnostics_preserved": "stderr_tail 含探针失败说明；失败产物复制进 workdir failures/sabotage-probe/",
+    "probe_artifact": "docs/研发记录/evidence/smart-layout-v3/ci/sabotage/probe-artifacts/sabotage-diagnostic.json"
+  },
+  "acceptance": {
+    "new_clone_runnable_no_machine_paths": "全部配置/报告路径仓库相对（CiPathPolicy 强制）；诊断与版本串经 redactRepoRoot 脱敏；实测报告零盘符路径（仅 loopback http URL）",
+    "sabotage_blocks_with_diagnostics": "aggregate_exit_code=1 阻断 + stderr 诊断 + 失败产物归档"
+  }
+}

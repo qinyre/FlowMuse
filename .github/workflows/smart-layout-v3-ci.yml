@@ -1,0 +1,78 @@
+name: Smart Layout V3 CI
+
+on:
+  push:
+    paths:
+      - "FlowMuse-App/lib/features/whiteboard/smart_layout/**"
+      - "FlowMuse-App/test/features/whiteboard/smart_layout/**"
+      - "FlowMuse-App/tool/smart_layout_v3/ci/**"
+      - ".github/workflows/smart-layout-v3-ci.yml"
+  pull_request:
+    paths:
+      - "FlowMuse-App/lib/features/whiteboard/smart_layout/**"
+      - "FlowMuse-App/test/features/whiteboard/smart_layout/**"
+      - "FlowMuse-App/tool/smart_layout_v3/ci/**"
+      - ".github/workflows/smart-layout-v3-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-layout-v3-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    name: Reproducible smart-layout v3 matrix
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FlowMuse-App
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up OpenHarmony Flutter (pinned, same as quality.yml)
+        run: |
+          cloned=false
+          for attempt in 1 2 3; do
+            if git -c http.version=HTTP/1.1 clone --depth 1 --branch 3.41.10-ohos-0.0.1-canary1 https://gitcode.com/CPF-Flutter/flutter_flutter.git "$RUNNER_TEMP/flutter"; then
+              cloned=true
+              break
+            fi
+            rm -rf "$RUNNER_TEMP/flutter"
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 5))
+            fi
+          done
+          if [ "$cloned" != true ]; then
+            echo "OpenHarmony Flutter mirror clone failed after 3 attempts" >&2
+            exit 1
+          fi
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Provide HarmonyOS SDK layout for checks
+        run: |
+          mkdir -p "$RUNNER_TEMP/hos-sdk/hmscore" "$RUNNER_TEMP/hos-sdk/openharmony"
+          echo "HOS_SDK_HOME=$RUNNER_TEMP/hos-sdk" >> "$GITHUB_ENV"
+      - run: flutter pub get
+      - name: Run reproducible CI matrix
+        # 字体=仓库捆绑（Excalifont 等）零网络；fixture server=测试内自建
+        # loopback；workdir/报告均在 clone 内（仓库相对，策略禁 ..），
+        # 报告零本机绝对路径。
+        run: |
+          dart run tool/smart_layout_v3/ci/smart_layout_ci_matrix.dart \
+            --workdir .dart_tool/smart_layout_v3_ci \
+            --report .dart_tool/smart_layout_v3_ci/matrix-report.json
+      - name: Archive matrix report (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-layout-v3-ci-report
+          path: .dart_tool/smart_layout_v3_ci/matrix-report.json
+          if-no-files-found: warn
+      - name: Archive failure diagnostics (failure only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-layout-v3-ci-failures
+          path: .dart_tool/smart_layout_v3_ci/failures
+          if-no-files-found: warn
