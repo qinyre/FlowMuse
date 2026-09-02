@@ -1,0 +1,66 @@
+{
+    "ends":  {
+                 "go":  4,
+                 "flutter":  5
+             },
+    "findings":  [
+
+                 ],
+    "jobs":  [
+                 {
+                     "scope":  "Go 全部包测试（含 smart-layout v3 analyzer/route 与旧端点）",
+                     "read_only":  true,
+                     "id":  "go-test",
+                     "cwd":  "FlowMuse-Server"
+                 },
+                 {
+                     "scope":  "Go 静态检查全部包",
+                     "read_only":  true,
+                     "id":  "go-vet",
+                     "cwd":  "FlowMuse-Server"
+                 },
+                 {
+                     "scope":  "v3 协议 conformance fixtures 正/负全量重放（Go 与 Dart 同一 fixtures）",
+                     "read_only":  true,
+                     "id":  "schema-conformance-replay",
+                     "cwd":  "FlowMuse-Server"
+                 },
+                 {
+                     "scope":  "旧端点（v2 decide-layout）fixture 保持绿",
+                     "read_only":  true,
+                     "id":  "legacy-endpoint-fixtures",
+                     "cwd":  "FlowMuse-Server"
+                 },
+                 {
+                     "scope":  "智能排版作用域 format 漂移计数（冻结基线 62，只拦新增漂移；--output=none 只读）",
+                     "read_only":  true,
+                     "id":  "dart-format-nonregression",
+                     "cwd":  "FlowMuse-App"
+                 },
+                 {
+                     "scope":  "Flutter 全仓 analyze 零诊断（G4 基线，不新增 analyzer error）",
+                     "read_only":  true,
+                     "id":  "flutter-analyze",
+                     "cwd":  "FlowMuse-App"
+                 },
+                 {
+                     "scope":  "智能排版 focused 全目录测试",
+                     "read_only":  true,
+                     "id":  "smart-layout-focused-tests",
+                     "cwd":  "FlowMuse-App"
+                 },
+                 {
+                     "scope":  "真实渲染 golden 逐字节校验（只读，不带 --update-goldens）",
+                     "read_only":  true,
+                     "id":  "golden-job",
+                     "cwd":  "FlowMuse-App"
+                 },
+                 {
+                     "scope":  "Flutter 全仓测试（G5 口径）",
+                     "read_only":  true,
+                     "id":  "flutter-all-tests",
+                     "cwd":  "FlowMuse-App"
+                 }
+             ],
+    "passed":  true
+}
