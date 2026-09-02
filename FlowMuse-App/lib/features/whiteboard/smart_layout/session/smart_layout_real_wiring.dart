@@ -380,8 +380,8 @@ class _RegionDraft {
 /// compare-and-commit 提交网关。无 fake provider；[post] 仅供测试注入
 /// 传输（生产为 null，走真实 NativeHttpClient）。
 ///
-/// 生命周期：一个页面一个 scope；[dispose] 在页面离开时释放
-/// revision tracker 并作废捕获缓存。
+/// 生命周期：scope 可跨页复用（[setActivePage] 改指新页）；[dispose]
+/// 在页面离开时释放 revision tracker 并作废捕获缓存。
 class SmartLayoutRealSessionScope {
   SmartLayoutRealSessionScope._({
     required String pageId,
@@ -402,7 +402,9 @@ class SmartLayoutRealSessionScope {
        _tokens = tokens,
        _profile = profile;
 
-  final String _pageId;
+  /// 当前作用页（截图/视觉识别/候选重跑共用）；[setActivePage] 切页时
+  /// 随会话一并改指新页。
+  String _pageId;
   final SmartLayoutSession session;
   final V3AnalysisRepository repository;
   final ValidatedCandidateCommitGateway commitGateway;
@@ -469,6 +471,9 @@ class SmartLayoutRealSessionScope {
       analysisRunner: useVisionAnalysis
           ? (ticket) => scope._analyzeWithVision(ticket)
           : null,
+      // 取消回调（生产视觉链）：VM 取消 → 控制器中止在途整页识别，
+      // 释放识别锁（幂等；未在准备中为空操作）。
+      onCancelAnalysis: () => controller.cancelSmartLayoutPreparation(),
       requestBuilder: (ticket) async => scope._buildRequest(ticket),
       commitResultBuilder: (candidateId) =>
           throw StateError('真实路径走 commitGateway（compare-and-commit）'),
@@ -965,9 +970,11 @@ class SmartLayoutRealSessionScope {
     }
   }
 
-  /// 用户切换页面（离页防线）：更新会话活页并作废未完成的捕获与
-  /// 转写缓存（旧票据续作由会话守卫拒绝）。
+  /// 用户切换页面（离页防线）：scope 改指新页（截图、视觉识别、候选
+  /// 重跑都作用于新页号）并作废未完成的捕获与转写缓存（旧票据续作由
+  /// 会话守卫拒绝）。
   void setActivePage(String pageId) {
+    _pageId = pageId;
     _lastCapture = null;
     _lastResponse = null;
     _lastTranscribedTextByRegion = null;

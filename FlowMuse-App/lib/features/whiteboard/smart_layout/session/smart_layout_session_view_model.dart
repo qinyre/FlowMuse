@@ -139,8 +139,9 @@ class SmartLayoutSessionUiState {
       phase == SmartLayoutSessionPhase.analyzing ||
       phase == SmartLayoutSessionPhase.applying;
 
-  bool get canStartAnalysis =>
-      phase == SmartLayoutSessionPhase.idle && scopeSourceIds.isNotEmpty;
+  /// 整页视觉模式：分析对象是当前页全量内容（视觉链按页截图识别），
+  /// 不依赖 scope 手工圈选——idle 即可启动；scope 仅作展示/保护数据。
+  bool get canStartAnalysis => phase == SmartLayoutSessionPhase.idle;
 
   bool get canCancel =>
       phase == SmartLayoutSessionPhase.analyzing ||
@@ -245,6 +246,11 @@ class SmartLayoutSessionDependencies {
   /// （实验/测试基础设施）。
   final SmartLayoutAnalysisRunner? analysisRunner;
 
+  /// 取消在途分析的底层回调（生产视觉链：控制器
+  /// cancelSmartLayoutPreparation——在途整页识别在下一检查点中止并
+  /// 释放识别锁）；null = 无底层可取消（票据判旧兜底）。幂等。
+  final void Function()? onCancelAnalysis;
+
   /// 以当次票据构建分析请求（真实链：快照提取 + 资产编码，V3-505C 接线）。
   final Future<SmartLayoutV3Request> Function(SmartLayoutOperationTicket ticket)
   requestBuilder;
@@ -287,6 +293,7 @@ class SmartLayoutSessionDependencies {
     required this.requestBuilder,
     required this.commitResultBuilder,
     this.analysisRunner,
+    this.onCancelAnalysis,
     this.correctionHandler = _emptyCorrection,
     this.rerunChain = _emptyRerun,
     this.candidateChain,
@@ -697,6 +704,9 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
   /// 不得再被提交/预览引用——与纠错失效同口径）。
   void cancel({String reason = 'user-cancel'}) {
     if (!state.canCancel) return;
+    // 先请底层中止在途整页识别（幂等）：请求返回后在检查点退出并释放
+    // 识别锁——取消后立即重试不撞“智能排版进行中”。
+    _deps.onCancelAnalysis?.call();
     _releaseValidatedCards();
     _session.cancelOperation(reason: reason);
     _clearDraft();
