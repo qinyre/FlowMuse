@@ -1,0 +1,24 @@
+{
+  "task_id": "V3-606A",
+  "run_id": "8e051899-a681-4c65-a4e7-3d484e5b6f17",
+  "summary": "frozen AI 双盲、效果统计与 Gate 5（合并原 V3-606A~B）。FrozenExperimentRunner 落库 tool/smart_layout_v3/experiment/：prepare=RR-3/RR-4 上游 8 契约 hash 全验证(不符即 refused 零统计)+ai_surrogate 协议机器重放+v3_flow_policy 确定性产出(v3 放置语义代表策略:阅读序多栏流式+行带原子组 keep+禁裁字等比缩放+fail-closed 缩放不拆不丢+笔迹原位,与 v2/surrogate 同处理级别 dev 线限制披露)+自动失败码(复用 003A 检查器)+机械 rubric(rubric R1 code 纯函数:维度分=1 critical/2 双 major/3 单 major/4 minor/5 无,overall=min)+96 盲化输出(双盲混洗 seed=20260831)。双 persona 盲评(上下文隔离 GLM-5.3 Max,run_id 9340cf7c/d914d4a1 互异):96/96 零分歧(0 soft/0 mandatory→未启用仲裁),与机械 rubric 逐样本 max|Δ|=0(校准完美)。finalize 统计(splitmix64 seed=20260831 B=10000 bootstrap+Holm T2/T3/T4):T1 critical=0 过;T2 对 ai_surrogate 非劣 RD=0<0.10 过;T3 rubric Δ=0>-0.25 过;T4 对 v2 优效 RD=-0.1458(7/48 vs 0/48,与 spec 预注册预测 -0.146 精确一致) p_holm=0.0005 过;T5 性能预算消费 604A 报告过;T6 v3 失败码全 0→construct_check_indeterminate(不判 fail 披露)。操作成本代理 v3 mods=270(dev 48) vs surrogate 钉定 480。Gate 5 机器判定 passed(退出码 0)。frozen_holdout 未触碰(SR-4);披露 HUMAN_VALIDATION_NOT_PERFORMED+PRODUCTION_RELEASE_NOT_AUTHORIZED。",
+  "changed_paths": [
+    "FlowMuse-App/tool/smart_layout_v3/experiment/frozen_experiment_runner.dart",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/v3-arm-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/blind-input.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/blind-mapping.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/persona-a.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/persona-b.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/gate-5-experiment-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/v3-606a-deliverable.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-606A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-606A/commands.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_606a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/experiments/v3-606a-deliverable.json",
+      "sha256": "1e723249af43b71d22d5eab83faf8d716a39daaf8c13ebc650b242430bfcf816"
+    }
+  ]
+}

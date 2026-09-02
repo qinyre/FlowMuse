@@ -1,0 +1,980 @@
+{
+  "schema_version": "1.0.0",
+  "task": "V3-606A",
+  "stage": "prepare",
+  "status": "prepared",
+  "spec_pinning_verified": true,
+  "split": {
+    "name": "development",
+    "n": 48
+  },
+  "v3_policy_disclosure": [
+    "v3_flow_policy 为 v3 放置语义确定性代表策略（阅读序多栏流式+行带原子组+禁裁字等比缩放+fail-closed 缩放不拆不丢+笔迹原位）",
+    "与 v2_naive_reflow / ai_surrogate 同一处理级别，非生产 v3 全管线复刻（dev 线限制）"
+  ],
+  "per_sample": [
+    {
+      "sample_id": "syn-p2-meet-hand-low-mob-1003",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "bff797180217eb37f9e05a0b450d3a61714c2700cb5f195cc6c049bd8dc5422a"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "bff797180217eb37f9e05a0b450d3a61714c2700cb5f195cc6c049bd8dc5422a"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-low-mob-v-1004",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "8778c21921ac115ee22daedba3cd39e109365c295a1d4c61ed2fc6beb0d5e18b"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "8778c21921ac115ee22daedba3cd39e109365c295a1d4c61ed2fc6beb0d5e18b"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-low-web-1005",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "a749c808240a5e0f7c732a964edb990f478e493a9ea4d0ca117be20a6f203e71"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "a749c808240a5e0f7c732a964edb990f478e493a9ea4d0ca117be20a6f203e71"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-med-des-1006",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "9352f0e3cbb9ee357aa04cb1311a652e64dbd4c4b93e034e890b4cc757705004"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "9352f0e3cbb9ee357aa04cb1311a652e64dbd4c4b93e034e890b4cc757705004"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-med-des-v-1007",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "2bb5a7796b6d155d8747ff6a2ad657c06d0e7f538d71a56f321a277aa97112f9"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "2bb5a7796b6d155d8747ff6a2ad657c06d0e7f538d71a56f321a277aa97112f9"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-med-mob-1008",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "0cb4cfa511460ad78eaf424d59ce62d96213712ede8e4ff69df58ea051cf7bc1"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "0cb4cfa511460ad78eaf424d59ce62d96213712ede8e4ff69df58ea051cf7bc1"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-med-mob-v-1009",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "b37b54b2975c98ec703156c36bf9b1b6634cbefd2c8d41320e5296f5fb75c7c8"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "b37b54b2975c98ec703156c36bf9b1b6634cbefd2c8d41320e5296f5fb75c7c8"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-med-web-1010",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "984c265ed3d40e54ee2826780d0115e42f014f6af200853455853c6432aa491a"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "984c265ed3d40e54ee2826780d0115e42f014f6af200853455853c6432aa491a"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-hig-des-1011",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "cac6d71f353d1feff38c25237a6b29b8385a1514b0501288a8ca1966b804bf4c"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "cac6d71f353d1feff38c25237a6b29b8385a1514b0501288a8ca1966b804bf4c"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-hig-des-v-1012",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "eaa857ec2103310aa40b3e5201f6e5da34c2eff9cd22b1e7a11ebf55e6aa69b1"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "eaa857ec2103310aa40b3e5201f6e5da34c2eff9cd22b1e7a11ebf55e6aa69b1"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-hig-mob-1013",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "37373cac110137789cb0495817a831391ed86dad2932741042d2746929273ec4"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "37373cac110137789cb0495817a831391ed86dad2932741042d2746929273ec4"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-hand-hig-mob-v-1014",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "ecffebb2cac68a8ecc94c4b38b6c4e64041056e8dae302f1e1cf51e53367114d"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 0,
+        "scene_sha256": "ecffebb2cac68a8ecc94c4b38b6c4e64041056e8dae302f1e1cf51e53367114d"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-mixe-low-web-1020",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 4,
+        "scene_sha256": "ad4bd17b99aa6cd7331f19056856dfed0a018dd089ce975306d3aa106da450bc"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 4,
+        "scene_sha256": "ad4bd17b99aa6cd7331f19056856dfed0a018dd089ce975306d3aa106da450bc"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-mixe-med-web-1025",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 8,
+        "scene_sha256": "2197d5683f0001c7eaa028039f9dc9e2826582096ea8629f51026e57ea112b7c"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 8,
+        "scene_sha256": "9e217735ec8e3fdd5cd368204666c89472f3501b5e1ff078a287f1bc467d32f9"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-mixe-hig-des-1026",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "23b52e1b1ab2eb0fd88a7b83d8f7e2f415cc77fcfce3b9a99c53c32165d350a1"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "e20a8c752381758324364d4aef8d1035214a8f9add5bd205461dce746a4d9414"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-mixe-hig-des-v-1027",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "7c2afb95fbd6bfb48d171bd5a4bef5febecbfec52c4a839ccbf8ca5121a61b72"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "158fa79ead4bff0f7fb6a44e57154085a375b6f71b07b796cd93b8a10fd0681d"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-mixe-hig-mob-1028",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "778c570291b7e7e6ecf446d33340ac55a6829d66b0db1bc5add0b60e03495abc"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "d7230626845647d04fdb02c5af4d7d3a8fcf6264f7cb80afaccc580c1a00f26f"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-mixe-hig-mob-v-1029",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "9b874b54f6fd354af0d4db586ceb480891f7774ccc6377a823dd4c26f081df79"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "74c0240b29ece0f1a751ebcea424402a0718057b5b20d69a51211e1d722cf994"
+      }
+    },
+    {
+      "sample_id": "syn-p2-meet-mixe-hig-web-1030",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "b1ddae299f0470a93c74cb9da4da652b962eb7d93f55e32a853101ccda3ca32f"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "1312e759cfc22920823ed740307111ba956918a3e33514ad692b005964ddb9b4"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-low-mob-1033",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "d272fddfd9d0c273e1892b2879d2589557cc38a25d5d37ab124efe34a0e3c6b4"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "d272fddfd9d0c273e1892b2879d2589557cc38a25d5d37ab124efe34a0e3c6b4"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-low-mob-v-1034",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "515551a15d9ce25eb2f094e55e648afdc583a8311165c94e12c125bbf001a6eb"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "515551a15d9ce25eb2f094e55e648afdc583a8311165c94e12c125bbf001a6eb"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-low-web-1035",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "034b1a76b8452845c54bf568b4289a81b562daf438824ef48f3a08f314465b80"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "034b1a76b8452845c54bf568b4289a81b562daf438824ef48f3a08f314465b80"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-med-des-1036",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "72bd5841023644e236dc69523c71367bd099840f1098a632a1524e9c35e78e2b"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "72bd5841023644e236dc69523c71367bd099840f1098a632a1524e9c35e78e2b"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-med-des-v-1037",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "47fb898b0e8aea3a0d1b537fc118c6df434b3862531472a82ecdb2bf2ed33f35"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "47fb898b0e8aea3a0d1b537fc118c6df434b3862531472a82ecdb2bf2ed33f35"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-med-mob-1038",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "b101d68e911dc8bf9d73c0a3bc76f172ea802e2a9efcadfcbd9bea41311f845b"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "b101d68e911dc8bf9d73c0a3bc76f172ea802e2a9efcadfcbd9bea41311f845b"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-med-mob-v-1039",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "a3c9c2ca040927a80b1575e4bf05e67f5b4188d55206a1304a5ce24900486ebf"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "a3c9c2ca040927a80b1575e4bf05e67f5b4188d55206a1304a5ce24900486ebf"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-med-web-1040",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "4f6f1d10788cdace4acf49a4a8dd47fa6b0cd3453a89af5029a5ec14921f9031"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "4f6f1d10788cdace4acf49a4a8dd47fa6b0cd3453a89af5029a5ec14921f9031"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-hig-des-1041",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "b21e150213347504079b3e73e53b261799f626aaddafcb09b6a507baf1ce1ef7"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "b21e150213347504079b3e73e53b261799f626aaddafcb09b6a507baf1ce1ef7"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-hig-des-v-1042",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "14d028035e720789b4d4b3a23a097277902de0d19300efc7e6e4a537872575bc"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "14d028035e720789b4d4b3a23a097277902de0d19300efc7e6e4a537872575bc"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-hig-mob-1043",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "36a2c1d6216a317a78fb89d7bb4c61168990412fde905c82f5ca8b6cb2c85942"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "36a2c1d6216a317a78fb89d7bb4c61168990412fde905c82f5ca8b6cb2c85942"
+      }
+    },
+    {
+      "sample_id": "syn-p2-brai-hand-hig-mob-v-1044",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "ab7a68caadefa997fbf0a7452069c6aa4ea7a353bf8d35115c9f115f5380c0e3"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 1,
+        "scene_sha256": "ab7a68caadefa997fbf0a7452069c6aa4ea7a353bf8d35115c9f115f5380c0e3"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-low-mob-1048",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 7,
+        "scene_sha256": "09fa622baeb4306d962bb819697a856779cf5b8b02e4f78aafaea59a08c614f7"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 7,
+        "scene_sha256": "30ffe11d6f341d20ef8db5d8b9190c8b2a8a878bbd75cf0a6c966a822b84c9c5"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-low-mob-v-1049",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 7,
+        "scene_sha256": "2be36dbfa7ee6568af876f17fc20ea20a72f62bcacfe81452cb6e1db5ad579fc"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 7,
+        "scene_sha256": "2f132afe272e01e63cb348a1408d6c85ec6c66c9790654e93d1577cc8fc08371"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-low-web-1050",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 7,
+        "scene_sha256": "589ed2c35874848bc2e28864fe4a369fa8b18f2fa12f03c7dbb671a886ab5b19"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 7,
+        "scene_sha256": "ee91bf1c88c3765ab7d5c0a35d8d16d79a656ae288c9746257531eea938ae88b"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-med-des-1051",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 11,
+        "scene_sha256": "c6a7e565f8e5ce997632879ffaa73d419702dd98f7fc5960eb9aa15212faa0bb"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 11,
+        "scene_sha256": "c6010b9f864b90d7dc5fffcd9e5e1b5cb4f03b776b4ddfbbc5fa650add58d3ce"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-med-des-v-1052",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 11,
+        "scene_sha256": "4c99f528bda303c4e19068db92e5785b655efbfb197cb6eae7d515a4fd07d531"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 11,
+        "scene_sha256": "f23d5403916be2ca5e413d054fdbc124e2a6ac78b8a2628414f9e14db136a871"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-med-mob-1053",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 11,
+        "scene_sha256": "3cacbd16fee1fab0c614c67407d7d3fc26d0ee6052fc3b259046425b5e675338"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 11,
+        "scene_sha256": "d608b9b722e667bf3d3846dd9fc3834e8f3963195c354a6effb95502042e30f9"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-med-mob-v-1054",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 11,
+        "scene_sha256": "abb0864a362a5e0edcc7c7d3b1738cfe591ca97db92e6370a5e03590517b417f"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 11,
+        "scene_sha256": "7f07ceeb9b54da3d023fd96d4a431e513398d5bba8d8ea1b9c24b9c0d8fd5ae5"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-med-web-1055",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 11,
+        "scene_sha256": "d55806c08d647861a29704f2f5a8052f210f9310938101cf7cb13a9a03520d11"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 11,
+        "scene_sha256": "87d6a4eba7137809f5fa392842974bb8edfa226743f17cddfe8f1ecf3648f6d9"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-hig-des-1056",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 17,
+        "scene_sha256": "416f3ec428aa24a9cc0a0c5d1f4d628609b18c41ee25dedd69d861adb4082b79"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 17,
+        "scene_sha256": "21f05ba26869c6d6c3b2532896b87fe7552341cbc63ced2cee54d363cafa947c"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-hig-des-v-1057",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 17,
+        "scene_sha256": "0e667301fc3f5eac10759dead7a3c326b3dc71babc493dbd33f579b0457ac69b"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 17,
+        "scene_sha256": "2554aada9f56e84d001d959be2f90358c860274383a65c662b276cc3fd6e7939"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-hig-mob-1058",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 17,
+        "scene_sha256": "e15c7922e390bd31eaa6997c7c3e900d5daffcd4a492cdb078fbf3cfbdd5aecd"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 17,
+        "scene_sha256": "95ffa476d318f1612cd7ba221a1e124c9391a21c834d5fe393cf3fad30feb63e"
+      }
+    },
+    {
+      "sample_id": "syn-p2-anno-mixe-hig-mob-v-1059",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 17,
+        "scene_sha256": "bb2c16fdbf2bd4206fca44d7e33922a966e57dfb43dac87715c698bb19cf427b"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 17,
+        "scene_sha256": "0ac0555d01983b179c143bd3002d9c65e2035509dd43e2f4a21255f5e81d1b39"
+      }
+    },
+    {
+      "sample_id": "syn-p2-type-type-non-web-1065",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 2,
+        "scene_sha256": "ce75872a0a3e89eeb458f8915c373f6669b90eddf78819538c512a1bc0c7de69"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 2,
+        "scene_sha256": "7646a79bd48754b9883550dddb1654663cf8c81041d5d6b0aadcd1f8eb389d8d"
+      }
+    },
+    {
+      "sample_id": "syn-p2-type-type-low-web-1070",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 4,
+        "scene_sha256": "db9ddd2853e61080f5a18669127efb9634d0909d4034a99c51511999d1860edc"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 4,
+        "scene_sha256": "db9ddd2853e61080f5a18669127efb9634d0909d4034a99c51511999d1860edc"
+      }
+    },
+    {
+      "sample_id": "syn-p2-type-mixe-low-web-1075",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 4,
+        "scene_sha256": "555790e12438f0f9289fd42f8bfe27426202fb5e4f845e9e9fdb2691a5a2f7da"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 4,
+        "scene_sha256": "101d762e8fac60be1bdad08260a33e8c9b09f669cc8da402aea303ed5e00ef05"
+      }
+    },
+    {
+      "sample_id": "syn-p2-type-mixe-med-web-1080",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 8,
+        "scene_sha256": "771aa9ed2fff33dffb452fd2669ba2f053f6de7cdb794129a5b13763a52064b1"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 8,
+        "scene_sha256": "161d0c5ddde6c212565da80ecc0caebed00512940e2c85c72daa573c041a1f69"
+      }
+    },
+    {
+      "sample_id": "syn-p2-type-mixe-hig-web-1085",
+      "v3": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "60a02d65511f18c3b7719f2fd6057bbc00f7317f77149aba73fb33b4a1838da1"
+      },
+      "ai_surrogate": {
+        "codes": [],
+        "critical_count": 0,
+        "major_count": 0,
+        "rubric_overall": 5,
+        "modification_count": 14,
+        "scene_sha256": "d8f619d4a6cc7fa502754d2ed30b8a4de9490b7435203b85f119e08c9578697f"
+      }
+    }
+  ],
+  "v2_major_flags": {
+    "syn-p2-meet-hand-low-mob-1003": false,
+    "syn-p2-meet-hand-low-mob-v-1004": false,
+    "syn-p2-meet-hand-low-web-1005": false,
+    "syn-p2-meet-hand-med-des-1006": false,
+    "syn-p2-meet-hand-med-des-v-1007": false,
+    "syn-p2-meet-hand-med-mob-1008": false,
+    "syn-p2-meet-hand-med-mob-v-1009": false,
+    "syn-p2-meet-hand-med-web-1010": false,
+    "syn-p2-meet-hand-hig-des-1011": false,
+    "syn-p2-meet-hand-hig-des-v-1012": false,
+    "syn-p2-meet-hand-hig-mob-1013": false,
+    "syn-p2-meet-hand-hig-mob-v-1014": false,
+    "syn-p2-meet-mixe-low-web-1020": false,
+    "syn-p2-meet-mixe-med-web-1025": false,
+    "syn-p2-meet-mixe-hig-des-1026": true,
+    "syn-p2-meet-mixe-hig-des-v-1027": false,
+    "syn-p2-meet-mixe-hig-mob-1028": false,
+    "syn-p2-meet-mixe-hig-mob-v-1029": true,
+    "syn-p2-meet-mixe-hig-web-1030": true,
+    "syn-p2-brai-hand-low-mob-1033": false,
+    "syn-p2-brai-hand-low-mob-v-1034": false,
+    "syn-p2-brai-hand-low-web-1035": false,
+    "syn-p2-brai-hand-med-des-1036": false,
+    "syn-p2-brai-hand-med-des-v-1037": false,
+    "syn-p2-brai-hand-med-mob-1038": false,
+    "syn-p2-brai-hand-med-mob-v-1039": false,
+    "syn-p2-brai-hand-med-web-1040": false,
+    "syn-p2-brai-hand-hig-des-1041": false,
+    "syn-p2-brai-hand-hig-des-v-1042": false,
+    "syn-p2-brai-hand-hig-mob-1043": false,
+    "syn-p2-brai-hand-hig-mob-v-1044": false,
+    "syn-p2-anno-mixe-low-mob-1048": false,
+    "syn-p2-anno-mixe-low-mob-v-1049": false,
+    "syn-p2-anno-mixe-low-web-1050": false,
+    "syn-p2-anno-mixe-med-des-1051": false,
+    "syn-p2-anno-mixe-med-des-v-1052": false,
+    "syn-p2-anno-mixe-med-mob-1053": false,
+    "syn-p2-anno-mixe-med-mob-v-1054": false,
+    "syn-p2-anno-mixe-med-web-1055": false,
+    "syn-p2-anno-mixe-hig-des-1056": false,
+    "syn-p2-anno-mixe-hig-des-v-1057": true,
+    "syn-p2-anno-mixe-hig-mob-1058": true,
+    "syn-p2-anno-mixe-hig-mob-v-1059": true,
+    "syn-p2-type-type-non-web-1065": false,
+    "syn-p2-type-type-low-web-1070": false,
+    "syn-p2-type-mixe-low-web-1075": false,
+    "syn-p2-type-mixe-med-web-1080": false,
+    "syn-p2-type-mixe-hig-web-1085": true
+  },
+  "blind_count": 96
+}

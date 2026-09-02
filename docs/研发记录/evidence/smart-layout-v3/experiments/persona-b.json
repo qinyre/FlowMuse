@@ -1,0 +1,1352 @@
+{
+  "persona": "B",
+  "run_id": "d914d4a1-c0d1-4b54-a6ab-f7ea144351a3",
+  "model": "glm-5.3",
+  "reasoning_effort": "max",
+  "ratings": {
+    "FX-001": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-002": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-003": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-004": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-005": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-006": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-007": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-008": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-009": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-010": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-011": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-012": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-013": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-014": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-015": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-016": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-017": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-018": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-019": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-020": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-021": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-022": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-023": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-024": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-025": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-026": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-027": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-028": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-029": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-030": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-031": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-032": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-033": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-034": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-035": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-036": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-037": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-038": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-039": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-040": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-041": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-042": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-043": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-044": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-045": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-046": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-047": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-048": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-049": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-050": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-051": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-052": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-053": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-054": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-055": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-056": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-057": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-058": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-059": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-060": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-061": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-062": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-063": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-064": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-065": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-066": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-067": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-068": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-069": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-070": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-071": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-072": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-073": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-074": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-075": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-076": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-077": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-078": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-079": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-080": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-081": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-082": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-083": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-084": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-085": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-086": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-087": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-088": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-089": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-090": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-091": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-092": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-093": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-094": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-095": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    },
+    "FX-096": {
+      "codes_observed": [],
+      "dimensions": {
+        "D1": 5,
+        "D2": 5,
+        "D3": 5,
+        "D4": 5,
+        "D5": 5,
+        "D6": 5,
+        "D7": 5,
+        "D8": 5
+      },
+      "overall": 5
+    }
+  }
+}

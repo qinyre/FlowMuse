@@ -1,0 +1,69 @@
+{
+  "task_id": "V3-606A",
+  "merged_from": [
+    "V3-606A",
+    "V3-606B"
+  ],
+  "target_symbols": [
+    "FrozenExperimentRunner"
+  ],
+  "tooling": {
+    "runner": "FlowMuse-App/tool/smart_layout_v3/experiment/frozen_experiment_runner.dart",
+    "stages": "prepare（RR-3/RR-4 上游 hash 验证→ai_surrogate 协议机器重放→v3_flow_policy 确定性产出→自动失败码（复用 003A 检查器）→机械 rubric→96 盲化包）/ finalize（DG1~DG4 合成→splitmix64 seed=20260831 B=10000 bootstrap→Holm→T1~T6→Gate 5 机器判定）"
+  },
+  "experiment": {
+    "split": "development n=48（spec 钉定）",
+    "arms": "v3_flow_policy（v3 放置语义确定性代表策略，与 v2/surrogate 同处理级别，dev 线限制披露） vs ai_surrogate（协议重放） vs v2_naive_reflow（重算）",
+    "panel": "两个上下文隔离 GLM-5.3 Max persona 盲评 96 输出（双盲混洗 seed=20260831），run_id 互异，零分歧（0 soft/0 mandatory）→ 未启用仲裁",
+    "calibration": "panel 合成分与机械 rubric（code 纯函数，rubric R1 预注册口径）逐样本 max |Δ|=0"
+  },
+  "gate5_decision": {
+    "status": "passed",
+    "T1_critical_zero": {
+      "v3_critical_samples": 0,
+      "pass": true
+    },
+    "T2_noninferiority_ai": {
+      "rd": 0.0,
+      "margin": 0.1,
+      "pass": true
+    },
+    "T3_rubric_noninferiority": {
+      "delta": 0.0,
+      "margin": -0.25,
+      "pass": true
+    },
+    "T4_superiority_v2": {
+      "rd": -0.14583333333333334,
+      "p_holm": 0.0005,
+      "v2_major_samples": 7,
+      "pass": true
+    },
+    "T5_perf_budgets": {
+      "source": "V3-604A 报告",
+      "pass": true
+    },
+    "T6_construct": {
+      "indeterminate": true,
+      "note": "v3 臂失败码全 0 → construct_check_indeterminate（不判 fail，披露）"
+    },
+    "operational_cost_proxy": {
+      "v3_mods_dev": 270,
+      "surrogate_pinned_total": 480
+    }
+  },
+  "acceptance": {
+    "frozen_no_backflow": "上游 8 份契约 hash 全验证（RR-3/RR-4），不符即 refused 零统计；frozen_holdout 未触碰（SR-4）",
+    "critical_case_audit": "T1 恒等式判定 0 critical；失败/拒绝不排除（worst-case 映射为 spec 条款）",
+    "machine_judged_gate5": "gate-5-experiment-report.json 机器判定 passed（退出码 0）",
+    "non_human_disclosure": "HUMAN_VALIDATION_NOT_PERFORMED + PRODUCTION_RELEASE_NOT_AUTHORIZED（G0~G5 全为 development Gate）"
+  },
+  "evidence": [
+    "docs/研发记录/evidence/smart-layout-v3/experiments/v3-arm-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/blind-input.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/blind-mapping.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/persona-a.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/persona-b.json",
+    "docs/研发记录/evidence/smart-layout-v3/experiments/gate-5-experiment-report.json"
+  ]
+}
