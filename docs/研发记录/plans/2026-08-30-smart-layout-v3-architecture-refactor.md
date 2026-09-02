@@ -86,7 +86,7 @@ Scene
 5. 支持目标栏宽换行、图片 contain 等比缩放、图文原子块、列表/公式/保留手写块。
 6. 所有展示候选先经过真实 Scene 硬门禁，再按可审计指标排序。
 7. 预览、确认、History 和协作投影来自同一不可变 `ScenePatch`。
-8. 效果由 no-op、v2、人工整理三基线和冻结双盲任务实验共同证明。
+8. 效果由 no-op、v2、AI 专家代理整理三基线和冻结双盲任务实验共同证明。
 
 ### 3.2 非目标
 
@@ -103,7 +103,7 @@ Scene
 | 层级 | 本计划包含 | 边界 |
 | --- | --- | --- |
 | 核心重构 | 智能排版的 Snapshot、分割、v3 分析协议、语义文档、候选生成、真实渲染评分、feature-private Patch/Reducer、Session、排版 UI、服务端 v3 路由与切流 | 可以替换 v2 智能排版实现，但不得借机改造相邻产品能力 |
-| 交付与验证 | 数据集/基线、EvaluationSpec、fixture/CI、性能、六端智能排版 smoke、frozen 实验、部署/观测/回滚和文档 | 可以新增测试、报告和 v3 运维配置；不能因为门禁失败就顺手重构范围外生产模块 |
+| 交付与验证 | 数据集/基线、EvaluationSpec、fixture/CI、性能、可用平台 smoke、frozen 实验、演示/回滚和文档 | 可以新增测试、报告和演示配置；不能因为门禁失败就顺手重构范围外模块 |
 | 兼容验证 | 现有 Scene/History、渲染器、Excalidraw codec、LWW/reconcile、文档持久化/既有导出、六端壳层，以及任何现有智能排版入口调用者 | 默认只复用稳定接口并补回归；只有 v3 无法正确运行时才做最小适配 |
 | 明确不做 | AI 助手模型/prompt/action/UI、思维导图布局、SelectTool 交互、通用 editor 架构、协作协议、数据库 schema、全局设计系统、新导出格式及无关平台问题 | 不创建迁移任务，不清理其代码，不以“共享能力”为由扩大所有权 |
 
@@ -113,7 +113,7 @@ Scene
 2. `editor_core` 只允许增加或复用智能排版所需的最小读 Scene、生成 Draft、提交既有事务 gateway；不重写 SelectTool、History、LWW、renderer 或序列化架构。
 3. 触及相邻模块时，任务卡必须写明“为何无法通过既有接口完成”、精确文件和回归证据；否则任务保持 blocked 并退回 feature 内实现。
 4. 删除 v2 时，发现被其他功能消费的符号就保留原位；本项目不负责迁移该消费者，也不为删除目录制造新的公共抽象。
-5. 每个 Gate 审计相对基线的生产文件清单；范围外目录必须零 diff，条件式修改必须能映射到一张已批准任务卡，否则 Gate 失败。
+5. 每个 Gate 审计相对基线的生产文件清单；范围外目录必须零 diff，条件式修改必须能映射到一张任务卡，否则 Gate 失败。
 
 ### 3.4 产品与数据硬约束
 
@@ -127,7 +127,7 @@ Scene
 - preview 与 commit 不等价，revision 冲突仍产生 Scene/History/广播。
 - 取消、离页、旧响应或远端更新污染新会话。
 
-只有用户明确确认忽略的装饰可以标记 `ignored-with-user-approval`；它仍进入 source coverage 账本。噪点笔画默认保留。
+不提供主观忽略分支：无法可靠消费的装饰、噪点和不确定笔画统一进入 `preserved`，避免为了“用户确认”增加状态和 UI。
 
 ## 4. 目标架构与关键契约
 
@@ -141,7 +141,7 @@ Scene
 | `repositories/` | v3 HTTP、解析、错误翻译、取消 | 布局坐标、Scene 修改 |
 | `services/` | snapshot、segmentation、assembler、planner、validator、scorer | UI 状态、SnackBar |
 | `view_models/` | Session 状态机和用户动作 | Canvas、协议 JSON 拼装 |
-| `views/` | 范围、意图、校对、候选、无解、确认 | 识别规则和布局算法 |
+| `views/` | 范围、校对、候选、无解、确认 | 识别规则和布局算法 |
 
 `GeometryKernel`、`SceneTransformContract`、`ScenePatch`、`SceneReducer` 和 `DraftSceneRenderer` 默认是智能排版 feature 内部组件，不因名称看起来通用就迁入 `editor_core`。`editor_core` 只暴露最小 gateway，并复用已有 Scene、`ToolResult/CompoundResult`、History 和 renderer；VLM/OCR/排版目标与 Session 状态不得继续进入 `MarkdrawController`。
 
@@ -161,7 +161,7 @@ inkStrokes[] / renderAssets / sourceCoverage
 
 `SceneRevision` 由页面级单调 revision、既有协作变更信号和规范化 fingerprint 组成。通过现有 editor change/reconcile/load/reset 边界观察变化，不重写 History 或 LWW 流程；fingerprint 覆盖元素、文件、文档元数据和绑定，只用于智能排版完整性校验，不替代 CAS。
 
-typed text 始终来自 `exactText`。Snapshot 创建唯一不可变的 `SourceCoverageLedger`；后续 SemanticDocument、LayoutBlock、ScenePatch、Draft Scene 和 metrics 只透传并校验同一 ledger/hash，不创建第二套 source 状态。每个源对象任一时刻只能处于 pending、consumed、preserved、ignored-with-user-approval 之一；最后一类必须携带用户批准来源和策略版本。
+typed text 始终来自 `exactText`。Snapshot 创建唯一不可变的 `SourceCoverageLedger`；后续 SemanticDocument、LayoutBlock、ScenePatch、Draft Scene 和 metrics 只透传并校验同一 ledger/hash，不创建第二套 source 状态。处理中允许 pending，最终每个源对象只能是 consumed 或 preserved。
 
 ### 4.3 笔迹区域分割
 
@@ -177,7 +177,7 @@ typed text 始终来自 `exactText`。Snapshot 创建唯一不可变的 `SourceC
 
 若区域不确定且用户不修正，原 stroke 保留原位，不自动替换。
 
-### 4.4 v3 分析协议与隐私
+### 4.4 v3 分析协议
 
 端点：`POST /api/ink/smart-layout/analyze/v3`。服务端以独立 `V3Analyzer/RegisterV3` 实现，不让旧 `SmartLayouter` 兼任新协议。
 
@@ -192,18 +192,7 @@ sanitize 必须保证引用合法、readingOrder 完整、关系无环、typed t
 
 Dart/Go 必须消费同一组 positive/negative fixtures；除 handler contract 外，还要启动真实 server/mux 和 `V3Analyzer/RegisterV3`，对完整路径做 synthetic live-route smoke，覆盖 body limit、能力、超时、取消、错误映射和响应 schema。fake provider 不能替代真实路由或客户端—服务端联调证据。
 
-复核必须改变输入或识别路径：总览负责 role/order/relation，高清 crop 负责 OCR/公式；不能原图原提示词原模型重复询问。
-
-隐私规则：
-
-- 分析请求必须使用 TLS；客户端隐私说明明确告知页面内容会发送到模型服务并取得适用同意。
-- 服务端和反向代理禁止记录请求体；模型供应方的保留策略、训练使用边界和删除能力必须形成 ADR。
-- 生产环境默认不保存原始图像、OCR 文本、prompt 或模型响应。
-- record/replay 只允许在开发/测试环境使用合成数据或明确同意且已脱敏的样本。
-- 线上只记录不可逆 hash、模型/schema 版本、耗时、错误码和分层指标。
-- 如未来确需生产诊断，必须另立安全评审，补用户同意、访问控制、加密、保留期限和删除审计后才能开启。
-
-同意不是发布末尾的文案检查，而是 repository 前的 `ConsentPolicyGate`：未接受、已撤回、策略版本升级、供应方强制条件不满足或 capability off 时，capture、upload 和 retry 的请求数必须为 0。接受只存非敏感的 policy version；撤回立即取消并清理待发数据。
+复核必须改变输入或识别路径：总览负责 role/order/relation，高清 crop 负责 OCR/公式；不能原图原提示词原模型重复询问。网络层复用现有 `NativeHttpClient` 和部署基础设施，不在智能排版范围内新增政策、审批或独立安全框架。
 
 ### 4.5 语义文档与纠错
 
@@ -284,7 +273,7 @@ idle → capturing → segmenting → analyzing → generating
 reviewing ↔ generating  // 纠错、换目标、调整排版
 ```
 
-每次会话携带 operationId、pageId、baseSceneRevision、consent policy state 和 cancellation token。任何 capture/upload transition 先通过 `ConsentPolicyGate`；任何 async continuation 更新状态前检查 operation/page/revision/disposed。
+每次会话携带 operationId、pageId、baseSceneRevision 和 cancellation token。任何 async continuation 更新状态前检查 operation/page/revision/disposed。
 
 Draft 内候选切换、拖动和选择只修改本地 patch，不修改权威 Scene、History、revision 或协作状态。
 
@@ -294,21 +283,23 @@ Draft 内候选切换、拖动和选择只修改本地 patch，不修改权威 S
 
 ## 5. 效果评测与发布门禁
 
+评测采用两条连续工程线。`ai_synthetic_development` 用确定性合成数据和独立 GLM-5.3 Max 代理盲审驱动实现，证明自动契约和 AI 代理裁判下的候选质量；`competition_delivery` 用当前可用环境的端到端 smoke、合成故障注入和隔离测试证明项目可稳定演示。比赛交付不等待六端设备、生产流量、消费者 census 或外部运维输入。
+
 ### 5.1 数据集
 
-- development：至少 30 页，可用于调试。
-- validation：至少 30 页，按用户/笔记来源与 development 隔离，只允许有限次数参数选择。
-- frozen holdout：60-72 页、20-24 个独立用户、每用户约 3 页；实现者不可查看逐页答案。
+- development：至少 30 页确定性合成页面，可用于调试。
+- validation：至少 30 页，按生成种子/原稿/派生链与 development 隔离，只允许有限次数参数选择。
+- frozen holdout：60-72 页合成页面，按场景族聚类；实现者不可查看逐页答案。
 
 覆盖纯手写、纯打字、混合文本、图文交错、长文、列表、公式、形状、组、frame、绑定、锁定、整洁页、散点页、竖排保留模式、装饰线、3000 笔画压力页和当前已知失败页。
 
-validation/frozen 的 region、role、order、relation 由双人独立标注，第三人仲裁；一致性未达门槛的样本不进入发布指标。frozen 每套只允许一次正式判定。
+validation/frozen 的 region、role、order、relation 由两个上下文隔离的 GLM-5.3 Max 代理盲标，第三个独立代理只仲裁分歧；所有 run id、盲化输入、原始输出和一致性统计留档。该结果标记 `ai_surrogate`，一致性未达门槛的样本不进入开发指标。frozen 每套只允许一次正式判定。
 
 FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机种子、元素 id/versionNonce、schema/model hash、录制响应、期望 coverage/relations 和 renderer golden。自动测试不访问真实网络。
 
 ### 5.2 三条基线和分层指标
 
-必须同时对比：no-op 原稿、v2、人工整理。
+开发线必须同时对比：no-op 原稿、v2、AI 专家代理整理；AI 基线不产生真人完成时间或真人偏好结论。本计划不增加真人偏好研究或相关审批任务。
 
 | 层 | 指标 |
 | --- | --- |
@@ -320,7 +311,9 @@ FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机�
 | transaction | preview=commit、CAS 零写入、undo/redo、late response、LWW |
 | experience | 到可接受结果时间、纠错次数、后续修改、撤销/放弃、盲选偏好 |
 
-### 5.3 发布门禁
+### 5.3 开发门禁与比赛交付门禁
+
+Gate 0～5 使用 AI/synthetic 证据决定是否继续实现；下列质量条件中的 rubric/基线/偏好均解释为 AI surrogate。通过后生成默认关闭的比赛候选版本，V3-700A～V3-705A 再完成本地/演示 smoke、合成稳定性、v2 隔离证明和最终交付审计。
 
 所有条件必须同时满足：
 
@@ -328,37 +321,37 @@ FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机�
 2. typed text 100%；segmentation/OCR/role/order/relation 达 Gate 0 冻结阈值，并报告最差分组。
 3. 展示候选硬约束违规为 0；no-candidate 统计包含全部页面，不能用不出结果规避失败。
 4. no-op、极缩、隐藏文本、大空白、单对象、全标题化等投机样本不能进入 Top 3。
-5. 自动 score 与人工 rubric 达冻结相关性；否则 scorer 只能过滤，不能标“推荐”。
-6. 目标用户/原作者完成任务实验；第三方只做视觉双盲。统计以用户/笔记为聚类单位，不把页面和评分者当独立样本。
-7. v3 相对 no-op/v2 显著减少到可接受结果时间和修改次数；相对人工基线差距在预注册容忍区间。
+5. 自动 score 与 AI surrogate rubric 达冻结相关性；否则 scorer 只能过滤，不能标“推荐”。真人相关性属于发布后续证据。
+6. 两个独立 AI persona 完成盲评，第三代理仲裁；不得称作目标用户、原作者或第三方真人研究。
+7. v3 相对 no-op/v2 减少代理操作步骤和修改次数；相对 AI surrogate baseline 的差距在预注册容忍区间，不推断真人耗时。
 8. 整洁页相对 no-op 非劣；frozen v3 对 v2 偏好目标不低于 70%，预注册 95% 区间下界高于 50%。
-9. Flutter/Go/协议/兼容/性能全绿，Android、iOS、macOS、Windows、Web、OHOS 六平台完成对应构建和冒烟。
+9. Flutter/Go/协议/兼容/性能全绿；当前可用平台实际构建，其他平台保留 deferred matrix，不阻断比赛交付。
 
 ## 6. 任务分解
 
-共 8 个阶段、52 个唯一工作包。任务以 Gate 而非日期推进；每项必须有产物、自动验证和退出条件。153 个可执行叶子任务、直接依赖、S/M/L 工程量与完成证据见配套计划 `2026-08-31-smart-layout-v3-execution-backlog.md`；本节编号保持为稳定的上层工作包。
+共 8 个阶段、52 个唯一工作包。任务以 Gate 而非日期推进；每项必须有产物、自动验证和退出条件。配套计划将 Phase 0 已完成的 13 项原样保留，并把后续工作按内聚实现/验证边界合并为 56 项，共 69 个可执行任务；目标能力、硬约束和 Gate 均不减少。本节编号保持为稳定的上层工作包。
 
 ### Phase 0：冻结质量协议
 
-#### V3-000 失败分类与人工 rubric
+#### V3-000 失败分类与 AI 代理 rubric
 - 产物：critical/major/minor、允许关系、禁止模式、1-5 分 rubric。
-- 退出：产品、算法、编辑器三方签字。
+- 退出：两个隔离代理盲评、第三代理仲裁，证据明确非真人评审。
 
 #### V3-001 FixtureManifest 与确定性 runner
-- 固定字体、DPR、时钟、随机、规范化 patch 和 benchmark 的主机/OS、warm-up、缓存、并发、P50/P95、峰值内存与超时口径；数据授权前 record/replay 只用合成内容。
+- 固定字体、DPR、时钟、随机、规范化 patch 和 benchmark 的主机/OS、warm-up、缓存、并发、P50/P95、峰值内存与超时口径；record/replay 只用合成内容。
 - 退出：种子 fixture 连跑三次 hash 一致。
 
 #### V3-002 建立 development/validation/frozen 数据集
-- 按用户/来源隔离，完成双标、仲裁、授权和脱敏。
+- 开发线只使用确定性合成样本，按生成种子/原稿/派生链隔离，完成双代理盲标和仲裁。
 - 退出：类别覆盖和标注一致性达标。
 
-#### V3-003 测量 no-op、v2、人工整理基线
+#### V3-003 测量 no-op、v2、AI surrogate 整理基线
 - 输出分层指标、操作时间、修改次数和最终 Scene/PNG。
 - 退出：同一 runner 可重复生成报告。
 
 #### V3-004 预注册阈值、统计和 golden 审批
 - 用机器可读 `EvaluationSpec` 冻结估计量/效应量、聚类分析单位、CI/检验、缺失和多重比较、功效、分母、停止规则、benchmark 预算、frozen 一次性使用和 score 相关性门槛；rubric、spec、benchmark 和 golden 全部有版本/hash。
-- Gate 0：未签字不得调 planner/scorer。
+- Gate 0：AI 盲审、仲裁、spec/hash 未冻结不得调 planner/scorer；通过只代表开发质量协议已冻结。
 
 ### Phase 1：Snapshot、分割与会话隔离
 
@@ -390,13 +383,13 @@ FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机�
 - 固定完整端点和关联 page/revision/fingerprint、assets/marks/exactText/source refs/hash 的 canonical request；Dart/Go 消费同一 positive/negative fixtures，核心协议无动态 map。
 
 #### V3-201 独立 V3Analyzer 与 strict sanitize
-- typed text 回填、引用/基数/环/长度校验；先冻结供应方隐私 ADR 和策略版本，再实现 TLS/日志/raw record 门禁与真实 server/mux live-route smoke。
+- typed text 回填、引用/基数/环/长度校验；接入现有 HTTP 基础设施，实现请求限制、超时、取消、错误映射与真实 server/mux live-route smoke。
 
 #### V3-202 总览 + crop 分级复核
 - 总览做 role/order/relation，crop 做 OCR/formula；保存冲突而不静默择一。
 
 #### V3-203 可取消 AnalysisRepository
-- 复用 NativeHttpClient；每个 continuation 四检后才能更新状态；repository 前置 `ConsentPolicyGate`，并以真实 synthetic server 完成端到端联调。
+- 复用 NativeHttpClient；每个 continuation 四检后才能更新状态，并以真实 synthetic server 完成端到端联调；capability off 时不发请求。
 
 #### V3-204 SemanticDocumentAssembler 与持久化 schema
 - 只投影并校验 Snapshot 的唯一 source ledger，unknown/unassigned preserved；冻结 SmartLayoutDocument 版本映射。
@@ -467,8 +460,8 @@ FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机�
 #### V3-504 真实场景硬门禁与最终评分
 - Reducer/Renderer 后提取 metrics，先 source 守恒和其他硬约束/否决线，再 profile 排序 Top 3；纠错后重跑受影响 planner 到 scorer 全链并使旧候选失效。
 
-#### V3-505 意图、校对、候选和无解 UI
-- 将同意披露/撤回、纠错/全文核对、真实候选比较、无解/取消和可访问性拆卡，并在 Gate 4 前接入真实智能排版编辑器入口；公开调用签名保持稳定，范围外调用者不改。
+#### V3-505 校对、候选和无解 UI
+- 覆盖范围选择、纠错/全文核对、真实候选比较、无解/取消和可访问性，并在 Gate 4 前接入真实智能排版编辑器入口；公开调用签名保持稳定，范围外调用者不改。
 
 #### V3-506 事务与体验 Gate 4
 - preview=commit、undo/redo、cancel/late、draft 拖动、local/remote 冲突、重跑全绿。
@@ -476,7 +469,7 @@ FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机�
 ### Phase 6：完整验证
 
 #### V3-600 Excalidraw/协作兼容验证
-- 用 old/new reader-writer、双端 LWW、index/versionNonce、group/frame/binding、sanitizer fixture 验证 v3 输出；不修改协议、LWW 或 codec 架构。
+- 用 old/new reader-writer、双端 LWW、index/versionNonce、group/frame/binding fixture 验证 v3 输出；不修改协议、LWW 或 codec 架构。
 
 #### V3-601 文档持久化与既有导出兼容
 - 验证旧 Scene 读取、新 Scene 写入和现有 Markdown/LaTeX 出口；不新增格式、不重构 exporter，只对 v3 新文档映射做最小适配。
@@ -490,33 +483,34 @@ FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机�
 #### V3-604 性能、资源和压力
 - 3000 笔画、100 块、长页、PNG 内存、取消/离页资源释放。
 
-#### V3-605 六平台构建与冒烟
-- Android、iOS、macOS、Windows、Web、OHOS 只验证智能排版链路；执行 `flutter build hap` 和鸿蒙真机事务清单，不顺手修复无关平台问题。
+#### V3-605 可用平台构建与冒烟
+- 固化 Android、iOS、macOS、Windows、Web、OHOS 构建/设备协议；当前可用目标实际执行，不可用目标写 `release_deferred` 和恢复命令，不顺手修复无关平台问题。比赛交付接受不可用平台的明确边界。
 
 #### V3-606 frozen 双盲任务实验与 Gate 5
-- 兼容/sanitizer、既有导出回归、CI 证据、全门禁、性能和六平台完成后才执行；原作者任务实验、第三方视觉盲评、整洁页非劣、人工基线、score 相关性全部达 §5.3。
+- 兼容、既有导出回归、CI、性能和可用平台证据完成后执行；两个隔离 AI persona 盲评、第三代理仲裁、整洁页非劣、AI surrogate baseline 和 score 相关性达到开发门禁。不得冒充原作者或第三方真人。
 
-### Phase 7：部署、切流和清理
+### Phase 7：比赛演示与交付
 
-#### V3-700 fail-closed capability 与 v3 服务部署
+#### V3-700 fail-closed capability 与演示环境 smoke
 - 无缓存或缓存过期默认 off；服务端确认 v3 可用后才开启。kill switch 关闭入口，不回退 v2。
-- 验证 TLS、请求体日志关闭、供应方保留策略和隐私说明后才允许真实页面请求。
-- instrumentation、指标 schema、dashboard、alert 和 kill-switch 信号必须在切流前用合成事件验证，禁止生产观测盲窗。
+- capability/kill switch 和观测代码先用合成输入完成；客户端入口可切到 v3 实现但默认关闭。
+- V3-700A 在 V3-701A 后启动本地或演示环境，运行入口→候选→commit→undo→reopen smoke，并覆盖 capability off/on、kill switch 和服务故障。
+- instrumentation、指标 schema、告警和 kill-switch 信号用合成事件验证，不额外建设生产观测环境。
 
 #### V3-701 客户端 v3 单路切流
-- 智能排版公开入口走新 Session，保留其稳定调用签名；现有调用者无需迁移，生产实现不可达 v2，并保留整体 Git 回滚点。
+- 智能排版公开入口代码走新 Session，保留其稳定调用签名；现有调用者无需迁移，保留整体 Git 回滚点。演示显式开启前 capability 默认 off、请求为 0。
 
-#### V3-702 稳定性观测
-- 使用切流前已验证的不可逆指标采集生产窗口，以 Gate 0 预注册的会话数/错误率/critical=0 为证据，不用日历等待替代质量。
+#### V3-702 合成稳定性与故障注入
+- 固定样本、种子和 runner，注入 offline、timeout、429、5xx、坏 schema、取消与迟到回调，以错误率、拒绝率、阶段耗时和 critical=0 为证据。
 
-#### V3-703 删除客户端 v2
-- 先做 v2 符号消费者清单；只删除智能排版私有模板、聚类、旧 UI 和测试，被其他功能消费的 helper 保留原位且不在本项目迁移。
+#### V3-703 客户端 v2 隔离与保留
+- 静态扫描与自动测试证明公开入口只到达 v3 Session；v2 私有实现原位保留作为比赛项目的参考与回退边界，不做消费者普查、迁移或删除。
 
-#### V3-704 服务端旧端点退役
-- 以带查询/hash/签字的不可变消费者 census 记录端点、客户端版本/来源、unknown、最低版本、410 阶段和采样窗口；unknown、样本不足或仍有受支持消费者时不得删除。
+#### V3-704 服务端旧端点隔离与保留
+- 用路由矩阵和 Go 测试证明旧端点与 v3 端点独立、无路径冲突；旧端点保留，不做消费者 census、410 或实现删除。
 
-#### V3-705 文档与交付审计
-- 同步接口/前端架构/需求/ADR/模型使用记录和范围偏差；列明责任人、审查人、测试、设备和回滚点。
+#### V3-705 比赛交付包和最终审计
+- 同步接口/前端架构/需求、模型使用记录和范围偏差；汇总测试、演示步骤、已知平台边界和回滚点，由机器检查链接与任务状态。
 
 ## 7. 依赖关系
 
@@ -524,7 +518,7 @@ FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机�
 000 → 001 → 002 → 003 → 004 (Gate 0)
 
 100 → 101 → 102 → {103 → 104, 105, 106}
-200 → {201 → 202, 203(consent + real server)} → 204 → 205 → 206 (Gate 1)
+200 → {201 → 202, 203(real server integration)} → 204 → 205 → 206 (Gate 1)
                                                    104 ───────┘
 
 300; 304A(touched-helper baseline); 301 → 302 → 303(core)
@@ -536,18 +530,18 @@ FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机�
 {106,203,205,502,504} → 505(real smart-layout entry) → 506 (Gate 4)
 
 {501,506} → {600 → 601, 602 → 603, 604, 605}
-{600,601,602,603,604,605} → 606 (Gate 5)
-606 → 700(deploy + observability ready) → 701 → 702 → 703 → 704(census + retire) → 705
+{600,601,602,603,604,605} → 606 (development Gate 5)
+606 → 700B(capability + observability) → 701(default-off code switch + rollback)
+701A → 700A(demo smoke) → 702(fault injection) → 703(client isolation) → 704(server isolation) → 705
 ```
 
 任务卡中的直接依赖为权威；上图只表达主链。热点文件 `markdraw_controller.dart`、`whiteboard_page.dart`、协议 schema、design tokens、评分公式和 golden 必须单负责人串行。
 
 ## 8. 切流与回滚
 
-- v3 服务先部署，capability 默认 off；端到端 smoke 与 Gate 5 通过后开启。
-- 客户端切流和删除 v2 分成独立提交。已安装版本异常时远程关闭智能排版入口，不回退旧算法。
-- 删除 v2 前必须证明生产入口无引用；被任何相邻功能消费的 helper 保留原位，不在本项目迁移消费者。
-- 服务端旧端点按消费者事实退役，不与客户端切流同批删除。
+- capability、观测和入口代码先以默认 off 完成；只在本地或演示环境显式开启。
+- 客户端公开入口保持单路 v3；异常时关闭智能排版入口，不自动回退旧算法。
+- v2 客户端代码和服务端旧端点原位保留；隔离测试防止公开入口误接旧实现。
 - 每个 Gate 对应一个可回退提交边界；不得恢复零散旧类形成第三种混合架构。
 
 ## 9. 关键风险与应对
@@ -555,29 +549,27 @@ FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机�
 | 风险 | 应对 |
 | --- | --- |
 | 分割参数过拟合 | 参数先校准后冻结；来源隔离 validation/frozen；报告最差分组 |
-| 指标好但页面仍难看 | 真实 renderer、人工 rubric、任务时间和双盲共同门禁 |
-| no-op/极缩骗分 | 硬约束、否决线、反投机 fixture、score-human 相关性 |
+| 指标好但页面仍难看 | 用真实 renderer、AI surrogate rubric、操作成本代理、隔离盲审和比赛演示页共同检查 |
+| no-op/极缩骗分 | 硬约束、否决线、反投机 fixture、开发期 score-AI-surrogate 相关性；不得写成 score-human |
 | 保守 fallback 被当成成功 | fallback 单独标记，不计入合格候选和 no-candidate 成功率 |
 | preview/commit 不一致 | 单一 ScenePatch/Reducer、深度等价、一次 History |
 | 协作覆盖用户编辑 | revision+epoch+CAS、写集相交检测、LWW fixture |
-| raw VLM 数据泄露 | 生产不录 raw；开发仅合成/授权脱敏；日志只存不可逆指标 |
 | kill switch 在故障时失效 | capability 无缓存 fail-closed，缓存过期后明确提示不可用 |
-| 旧客户端断流 | 能力协商、访问观测、最低版本、410、归零后删除 |
+| 公开入口误走旧算法 | 静态扫描、入口测试和 v2/v3 路由隔离；旧实现保留但不可由公开入口到达 |
 | 跨端字体和渲染差异 | 共享逻辑无平台判断；规范化 Scene 跨端一致，平台 golden 分开维护 |
 
 ## 10. 最终完成定义
 
-只有同时满足以下条件，才可声明 v3 完成：
+核心代码在 Gate 5 与 V3-701A 通过后视为开发完成；V3-700A～V3-705A 满足以下条件后可声明 `competition_delivery_complete`：
 
 1. §5.3 全部发布门禁通过，frozen critical error 为 0。
 2. 真实场景硬约束和反投机测试全绿；没有合格候选时明确拒绝。
 3. preview/commit/undo/redo/协作/重开深度一致，CAS 冲突零写入。
 4. Excalidraw、LWW、old/new reader-writer、既有导出和持久化兼容回归全绿，且未修改其架构或协议。
-5. 六平台构建/冒烟完成，鸿蒙 HAP 与真机验收有设备和报告。
-6. 生产 raw record 默认关闭，隐私、日志、访问控制和删除策略通过审查。
-7. 客户端生产入口只走 v3，v2 客户端代码和确认无消费者的服务端旧实现已删除。
-8. 智能排版校验、协作兼容和跨端同步均有明确责任人、审查记录和可运行的测试证据。
-9. 架构、接口、需求、ADR、AI 使用记录和本计划执行结果同步完成。
+5. 当前可用平台构建/冒烟完成，不可用平台边界记录清楚且不阻断比赛演示。
+6. 客户端公开入口只走 v3，v2 客户端代码与服务端旧端点保持隔离并原位保留。
+7. 智能排版校验、协作兼容和跨端同步均有可运行的测试证据。
+8. 架构、接口、需求、AI 使用记录和本计划执行结果同步完成。
 
 ## 11. 已关闭的计划缺口
 
@@ -586,29 +578,27 @@ FixtureManifest 固定 Scene、图像、字体、DPR、locale、时钟、随机�
 | Scorer 位于 ScenePatch 前 | 全文统一为 Patch→Reducer→Renderer→Hard Gate→Score |
 | `V3-704` 悬空和复合编号 | 52 个上层工作包全部使用唯一三位编号；叶子任务在配套实施计划中使用 A/B/... 后缀，且经过唯一性与父项覆盖检查 |
 | 比赛期限、人力容量、夜间和降档主导架构 | 全部删除，只按 Gate 推进 |
-| 一期只做 3 项评分、二期再补质量 | 七项指标、完整 frozen 和六平台均为正式完成条件 |
+| 一期只做 3 项评分、二期再补质量 | 七项指标和完整 frozen 是开发完成条件；比赛交付只要求当前可用环境 smoke 和明确的 deferred matrix |
 | “保守骨架任意页面恒可行” | 分离会改写布局且必须过门禁的 `conservative-layout` 与零修改 `preserveFallback`；后者不是候选 |
 | capability 无缓存默认 on | 改为 fail-closed 默认 off |
-| 生产保存用户笔迹 30 天 | 改为生产不记录 raw，诊断需另立安全评审 |
 | presence 扩字段却声称不改协议 | 删除该扩展，复用现有冲突机制 |
 | 分割常量未经证据即冻结 | 改为 development/validation 校准后冻结 |
 | 多轮审查只有自述结论 | 最终以任务编号检查、Gate 报告和可运行命令为审计证据 |
 | 语义纠错停在局部文档 | 新增 Phase 5 纠错重跑协调任务，从 affected source keys 重跑候选、Patch、真实渲染、门禁和评分，并使旧候选失效 |
 | 预览 adapter 可绕过真实门禁直接提交 | commit API 只接受带 revision 与 renderer/metrics/ledger hash 的 `ValidatedCandidate`；原始 patch 在类型层不可提交 |
 | 生产入口和真实服务只在切流时验证 | Gate 1 加真实 server/mux live-route 与客户端联调，Gate 4 前接真实智能排版编辑器入口；范围外调用者保持不变 |
-| 同意与供应方策略只有最终审计 | 增加供应方隐私 ADR、运行时 `ConsentPolicyGate` 和接受/撤回 UI，未满足时 capture/upload 请求数为 0 |
 | 切流后才建立观测 | instrumentation、dashboard、alert 和 kill-switch 信号在切流前用合成事件验收 |
-| 旧端点按模糊“访问归零”删除 | 删除必须绑定不可变消费者 census/hash；unknown、样本不足或仍有受支持版本访问均阻断 |
+| 比赛阶段强制退役旧端点 | 改为自动证明 v2/v3 路由隔离并保留旧端点，避免无收益的迁移和删除风险 |
 | 智能排版重构扩张到 AI 助手、SelectTool 和通用 editor | 新增三层范围；组件默认 feature-private，相邻能力只做最小兼容回归，其他消费者不迁移 |
 
 ## 12. 实施第一步
 
-第一批只执行 V3-000A 至 V3-004C：建立 rubric、fixture runner、来源隔离语料和三条基线，冻结发布门槛；具体依赖顺序以配套实施计划为准，不修改生产排版。
+当前 V3-000A 至 V3-701A 共 64 项及 Gate 0～5 已完成。后续从 V3-700A 继续比赛交付，不回滚或重做已完成证据。
 
 Gate 0 通过前不得实现页面专用规则、调整 scorer 权重或把单张截图当成功证据。后续每个阶段都必须回答：**哪一层变好了、最终任务是否减少人工、失败是否被安全拒绝。**
 
 ## 13. Agent 执行层
 
-配套实施计划的 153 项叶子任务已生成机器可读的 [Agent Execution Manifest](smart-layout-v3-agent/agent-execution-manifest.json)，使用方法和证据格式见 [执行说明](smart-layout-v3-agent/README.md)。该执行层不改变本架构范围，只把任务依赖、执行者类型、路径/符号边界、命令、退出码、外部输入、独立复审、单任务提交、失败回退和 Gate 变成可机器拒绝的约束。
+配套实施计划的 69 项执行任务已生成机器可读的 [Agent Execution Manifest](smart-layout-v3-agent/agent-execution-manifest.json)，使用方法和证据格式见 [执行说明](smart-layout-v3-agent/README.md)。该执行层不改变本架构范围，只把任务依赖、路径/符号边界、命令、退出码、必要复审、单任务提交、失败回退和 Gate 变成可机器检查的约束。
 
-`scripts/smart-layout-v3/AgentExecution.ps1` 是唯一状态转换和 Gate 入口。外部数据、人工签字或平台环境不存在时必须自动 `blocked`；模型不得用占位文件、推断结论或文字自述代替真实证据。
+`scripts/smart-layout-v3/AgentExecution.ps1` 是唯一状态转换和 Gate 入口。剩余比赛任务不声明外部事实依赖，凭真实代码路径命令、hash 和提交边界验收；V3-700A～V3-705A 均为自动复审模式，不再派通用子代理。已完成的独立复审和效果面板证据保持原样。
