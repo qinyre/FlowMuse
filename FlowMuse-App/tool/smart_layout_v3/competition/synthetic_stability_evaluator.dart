@@ -16,7 +16,6 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
@@ -58,55 +57,90 @@ abstract final class SmartLayoutFaultInjectionMatrix {
   static SmartLayoutHttpPost postFor(String faultId) {
     switch (faultId) {
       case 'offline':
-        return ({required String url, Map<String, String> headers = const {}, required String body, connectTimeoutMs = 0, readTimeoutMs = 0, cancelToken}) =>
-            Future.error(const io.SocketException('synthetic offline'));
+        return ({
+          required String url,
+          Map<String, String> headers = const {},
+          required String body,
+          connectTimeoutMs = 0,
+          readTimeoutMs = 0,
+          cancelToken,
+        }) => Future.error(const io.SocketException('synthetic offline'));
       case 'timeout':
         // 真实传输边界把 TimeoutException 包成 network(detail=toString)；
         // 仓库按 detail 含 "TimeoutException" 归类 timeout，此处同口径。
-        return ({required String url, Map<String, String> headers = const {}, required String body, connectTimeoutMs = 0, readTimeoutMs = 0, cancelToken}) =>
-            Future.error(
-              const SmartLayoutHttpException.network(
-                'TimeoutException: synthetic timeout after 5000ms',
-              ),
-            );
+        return ({
+          required String url,
+          Map<String, String> headers = const {},
+          required String body,
+          connectTimeoutMs = 0,
+          readTimeoutMs = 0,
+          cancelToken,
+        }) => Future.error(
+          const SmartLayoutHttpException.network(
+            'TimeoutException: synthetic timeout after 5000ms',
+          ),
+        );
       case 'http-429':
       case 'http-500':
       case 'http-503':
         final status = int.parse(faultId.split('-')[1]);
-        return ({required String url, Map<String, String> headers = const {}, required String body, connectTimeoutMs = 0, readTimeoutMs = 0, cancelToken}) =>
-            Future.error(
-              SmartLayoutHttpException.badStatus(status, 'synthetic $status'),
-            );
+        return ({
+          required String url,
+          Map<String, String> headers = const {},
+          required String body,
+          connectTimeoutMs = 0,
+          readTimeoutMs = 0,
+          cancelToken,
+        }) => Future.error(
+          SmartLayoutHttpException.badStatus(status, 'synthetic $status'),
+        );
       case 'bad-schema':
-        return ({required String url, Map<String, String> headers = const {}, required String body, connectTimeoutMs = 0, readTimeoutMs = 0, cancelToken}) =>
-            Future.value(
-              NativeHttpResponse(
-                statusCode: 200,
-                body:
-                    '{"protocolVersion":3,"regions":"not-a-list","warnings":[]}',
-              ),
-            );
+        return ({
+          required String url,
+          Map<String, String> headers = const {},
+          required String body,
+          connectTimeoutMs = 0,
+          readTimeoutMs = 0,
+          cancelToken,
+        }) => Future.value(
+          NativeHttpResponse(
+            statusCode: 200,
+            body: '{"protocolVersion":3,"regions":"not-a-list","warnings":[]}',
+          ),
+        );
       case 'cancel':
-        return ({required String url, Map<String, String> headers = const {}, required String body, connectTimeoutMs = 0, readTimeoutMs = 0, cancelToken}) =>
-            Future.value(
-              NativeHttpResponse(
-                statusCode: 200,
-                body:
-                    '{"protocolVersion":3,"requestId":"cancel","regions":[],'
-                    '"warnings":[]}',
-              ),
-            );
+        return ({
+          required String url,
+          Map<String, String> headers = const {},
+          required String body,
+          connectTimeoutMs = 0,
+          readTimeoutMs = 0,
+          cancelToken,
+        }) => Future.value(
+          NativeHttpResponse(
+            statusCode: 200,
+            body:
+                '{"protocolVersion":3,"requestId":"cancel","regions":[],'
+                '"warnings":[]}',
+          ),
+        );
       case 'late-callback':
-        return ({required String url, Map<String, String> headers = const {}, required String body, connectTimeoutMs = 0, readTimeoutMs = 0, cancelToken}) =>
-            Future.delayed(
-              const Duration(milliseconds: 50),
-              () => NativeHttpResponse(
-                statusCode: 200,
-                body:
-                    '{"protocolVersion":3,"requestId":"late","regions":[],'
-                    '"warnings":[]}',
-              ),
-            );
+        return ({
+          required String url,
+          Map<String, String> headers = const {},
+          required String body,
+          connectTimeoutMs = 0,
+          readTimeoutMs = 0,
+          cancelToken,
+        }) => Future.delayed(
+          const Duration(milliseconds: 50),
+          () => NativeHttpResponse(
+            statusCode: 200,
+            body:
+                '{"protocolVersion":3,"requestId":"late","regions":[],'
+                '"warnings":[]}',
+          ),
+        );
       default:
         throw ArgumentError.value(faultId, 'faultId', '未知故障');
     }
@@ -174,8 +208,8 @@ class SyntheticStabilityEvaluator {
       'development/manifest.json',
     );
     final ids = [
-      for (final s in (manifest['samples'] as List)
-          .cast<Map<String, Object?>>())
+      for (final s
+          in (manifest['samples'] as List).cast<Map<String, Object?>>())
         s['sample_id'] as String,
     ];
     final samples = <String, Map<String, Object?>>{};
@@ -184,8 +218,10 @@ class SyntheticStabilityEvaluator {
       final path =
           '$repoRoot/docs/研发记录/evidence/smart-layout-v3/datasets/'
           'synthetic-pool-v2/samples/$id.scene.json';
-      final bytes = io.File(path).readAsBytesSync();
-      hashes.add(_sha256Bytes(bytes));
+      final normalized = io.File(
+        path,
+      ).readAsStringSync().replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+      hashes.add(_sha256String(normalized));
       samples[id] = _readJson(path);
     }
     final ordered = _shuffle(ids, seed);
@@ -218,9 +254,7 @@ class SyntheticStabilityEvaluator {
       'assets': <Object?>[],
       'marks': <Object?>[],
       'exactTexts': exactTexts,
-      'sourceRefs': [
-        for (final e in elements) e['id'] as String,
-      ],
+      'sourceRefs': [for (final e in elements) e['id'] as String],
     });
   }
 
@@ -317,16 +351,12 @@ class SyntheticStabilityEvaluator {
     final (orderedSamples, samples, samplesHash) = loadSamples();
     final outcomes = <StabilityRunOutcome>[];
     var done = 0;
-    final total = orderedSamples.length *
-        SmartLayoutFaultInjectionMatrix.faultIds.length;
+    final total =
+        orderedSamples.length * SmartLayoutFaultInjectionMatrix.faultIds.length;
     for (final id in orderedSamples) {
       for (final fault in SmartLayoutFaultInjectionMatrix.faultIds) {
         outcomes.add(
-          await runOne(
-            sampleId: id,
-            sample: samples[id]!,
-            faultId: fault,
-          ),
+          await runOne(sampleId: id, sample: samples[id]!, faultId: fault),
         );
         done++;
         onProgress?.call(done, total);
@@ -348,7 +378,9 @@ class SyntheticStabilityEvaluator {
     for (final fault in SmartLayoutFaultInjectionMatrix.faultIds) {
       final runs = outcomes.where((o) => o.faultId == fault).toList();
       final failed = runs.where((o) => o.outcomeKind == 'failed').length;
-      final rejected = runs.where((o) => o.outcomeKind == 'guardRejected').length;
+      final rejected = runs
+          .where((o) => o.outcomeKind == 'guardRejected')
+          .length;
       final succeeded = runs.where((o) => o.outcomeKind == 'succeeded').length;
       final critical = runs.where((o) => o.critical).length;
       final latencies = runs.map((o) => o.elapsedMs).toList()..sort();
@@ -370,17 +402,19 @@ class SyntheticStabilityEvaluator {
         'latency_ms': {
           'min': latencies.first,
           'median': latencies[latencies.length ~/ 2],
-          'p95': latencies[
-              ((latencies.length * 0.95).floor())
-                  .clamp(0, latencies.length - 1)
-          ],
+          'p95':
+              latencies[((latencies.length * 0.95).floor()).clamp(
+                0,
+                latencies.length - 1,
+              )],
           'max': latencies.last,
         },
       };
     }
     final failed = outcomes.where((o) => o.outcomeKind == 'failed').length;
-    final rejected =
-        outcomes.where((o) => o.outcomeKind == 'guardRejected').length;
+    final rejected = outcomes
+        .where((o) => o.outcomeKind == 'guardRejected')
+        .length;
     final critical = outcomes.where((o) => o.critical).length;
     return {
       'task': 'V3-702A',
@@ -399,14 +433,11 @@ class SyntheticStabilityEvaluator {
         'runs': outcomes.length,
         'failed': failed,
         'guard_rejected': rejected,
-        'succeeded':
-            outcomes.where((o) => o.outcomeKind == 'succeeded').length,
+        'succeeded': outcomes.where((o) => o.outcomeKind == 'succeeded').length,
         'error_rate': outcomes.isEmpty
             ? null
             : (failed + rejected) / outcomes.length,
-        'rejection_rate': outcomes.isEmpty
-            ? null
-            : rejected / outcomes.length,
+        'rejection_rate': outcomes.isEmpty ? null : rejected / outcomes.length,
         'critical': critical,
         'failed_samples_excluded': false,
       },
@@ -424,8 +455,6 @@ Map<String, Object?> _readJson(String path) {
   return jsonDecode(utf8.decode(bytes, allowMalformed: false))
       as Map<String, Object?>;
 }
-
-String _sha256Bytes(Uint8List bytes) => crypto.sha256.convert(bytes).toString();
 
 String _sha256String(String value) =>
     crypto.sha256.convert(utf8.encode(value)).toString();
