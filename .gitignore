@@ -75,3 +75,10 @@ docs/参赛文档/
 
 # SDD workspaces (review artifacts, ledgers)
 .superpowers/
+
+# Smart-layout v3 executor runtime
+/docs/研发记录/plans/smart-layout-v3-agent/agent-execution-state.json
+/docs/研发记录/evidence/smart-layout-v3/agent-preflight.json
+/docs/研发记录/evidence/smart-layout-v3/tasks/*/commit.json
+/docs/研发记录/evidence/smart-layout-v3/tasks/*/review.json
+/docs/研发记录/evidence/smart-layout-v3/gates/*/gate-result.json
