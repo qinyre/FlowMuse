@@ -1,0 +1,13 @@
+{
+  "task_id": "V3-701A",
+  "run_id": "a19dff27-80d5-456c-83bf-9f56fd3f1dfe",
+  "summary": "公开入口默认关闭切换、回滚与关闭行为（合并原 V3-701A~B）。SmartLayoutRolloutEntryGate（独立复审发现命名冲突后由 SmartLayoutPublicEntry 改名；V3-100A 唯一页面层公开入口 gateways/SmartLayoutPublicEntry 保持零改动，分层契约 gateways 最底层不 import rollout 由架构守卫测试继续锁定）：默认关（无缓存→disabled 且会话工厂零调用=零请求零 Draft 的机制保证）/服务不可用（损坏/过期/阴性缓存）不能开启（工厂抛错兜底断言零调用）/阳性未过期+kill 未跳闸才创建真实会话/kill 跳闸阳性也不放行/close 后 entryClosed+缓存清空重开回默认关（kill 状态保留）/closeSession 委托关闭。入口代码不可达 v2：源码守卫测试（rollout 四文件零 v2 reflow/fallbackToV2/routeToV2/legacyV2 符号）。SmartLayoutRollbackPolicy：独立切流提交 allowlist 机器判定（混入 whiteboard_page.dart 等业务文件即拒绝）/回滚完整性（残余 diff 为空=恰为切流提交逆集）/关闭重开四条检查单。调用者源码不迁移：whiteboard_page.dart 与 markdraw_controller.dart 零改动（allowlist 备而未用）。22 用例全绿+analyze smart_layout 全树零 issue+gateways 套件 28 用例全绿（分层守卫回绿）。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/rollout/smart_layout_rollout_entry_gate.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/rollout/smart_layout_rollback_policy.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/rollout/smart_layout_rollout_entry_gate_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-701A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-701A/commands.json"
+  ],
+  "artifacts": []
+}
