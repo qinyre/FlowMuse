@@ -1,0 +1,136 @@
+{
+  "task": "V3-700A",
+  "kind": "demo_smoke_report",
+  "all_passed": true,
+  "scenarios": [
+    {
+      "id": "default-off",
+      "passed": true,
+      "detail": "open=disabled(defaultOff) factory_calls=0",
+      "factory_calls": 0,
+      "request_count": 0
+    },
+    {
+      "id": "enabled-full-chain",
+      "passed": true,
+      "detail": "真实链 reviewing→applied→undo 精确→reopen 深度一致；analyzer 请求 1 次",
+      "factory_calls": 1,
+      "request_count": 1
+    },
+    {
+      "id": "kill-switch",
+      "passed": true,
+      "detail": "open=disabled(cachedPositive) factory_calls=0",
+      "factory_calls": 0,
+      "request_count": 0
+    },
+    {
+      "id": "service-failure",
+      "passed": true,
+      "detail": "analyzer 500 → failed（fail closed，Scene 零副作用）；请求 2 次；告警 1 条（失败率 0.6666666666666666）kill_tripped=true reopen=disabled(cachedPositive)",
+      "factory_calls": 1,
+      "request_count": 2
+    }
+  ],
+  "synthetic_observability": {
+    "schema_version": 1,
+    "event_count": 11,
+    "alert_count": 1,
+    "failure_rate_rule": {
+      "rule_id": "demo-failure-rate",
+      "threshold": 0.5,
+      "window_ms": 600000,
+      "min_samples": 2
+    },
+    "events": [
+      {
+        "schema_version": 1,
+        "kind": "capabilityDecision",
+        "at_ms": 1800000000000,
+        "attributes": {
+          "scenario": "default-off",
+          "enabled": false,
+          "reason": "defaultOff"
+        }
+      },
+      {
+        "schema_version": 1,
+        "kind": "capabilityDecision",
+        "at_ms": 1800000000000,
+        "attributes": {
+          "scenario": "enabled-full-chain",
+          "enabled": true,
+          "reason": "cachedPositive"
+        }
+      },
+      {
+        "schema_version": 1,
+        "kind": "request",
+        "at_ms": 1800000000000,
+        "attributes": {}
+      },
+      {
+        "schema_version": 1,
+        "kind": "success",
+        "at_ms": 1800000000000,
+        "attributes": {
+          "scenario": "enabled-full-chain"
+        }
+      },
+      {
+        "schema_version": 1,
+        "kind": "killSwitch",
+        "at_ms": 1800000000000,
+        "attributes": {
+          "scenario": "kill-switch",
+          "tripped": true
+        }
+      },
+      {
+        "schema_version": 1,
+        "kind": "capabilityDecision",
+        "at_ms": 1800000000001,
+        "attributes": {
+          "scenario": "service-failure",
+          "enabled": true,
+          "reason": "cachedPositive"
+        }
+      },
+      {
+        "schema_version": 1,
+        "kind": "request",
+        "at_ms": 1800000000001,
+        "attributes": {}
+      },
+      {
+        "schema_version": 1,
+        "kind": "failure",
+        "at_ms": 1800000000001,
+        "attributes": {
+          "scenario": "service-failure"
+        }
+      },
+      {
+        "schema_version": 1,
+        "kind": "request",
+        "at_ms": 1800000000001,
+        "attributes": {}
+      },
+      {
+        "schema_version": 1,
+        "kind": "failure",
+        "at_ms": 1800000000001,
+        "attributes": {
+          "scenario": "service-failure"
+        }
+      },
+      {
+        "schema_version": 1,
+        "rule_id": "demo-failure-rate",
+        "detail": "窗口失败率 0.6666666666666666 ≥ 0.5（2/3，窗口 600000ms，样本 ≥2）",
+        "at_ms": 1800000000002,
+        "observed_failure_rate": 0.6666666666666666
+      }
+    ]
+  }
+}

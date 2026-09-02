@@ -1,0 +1,19 @@
+{
+  "endpoint": "/api/ink/smart-layout/analyze/v3",
+  "fail_closed_path": {
+    "code": "invalid_request",
+    "status": 400
+  },
+  "generated_at_unix": 1788321513,
+  "happy_path": {
+    "latency_ms": 1,
+    "protocol_version": 3,
+    "region_count": 2,
+    "sources_fully_used": true,
+    "status": 200
+  },
+  "kind": "demo_smoke_report",
+  "side": "server",
+  "started": true,
+  "task": "V3-700A"
+}

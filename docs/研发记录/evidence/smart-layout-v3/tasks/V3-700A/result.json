@@ -1,0 +1,22 @@
+{
+  "task_id": "V3-700A",
+  "run_id": "9c22a36a-7b89-4c64-a765-cd73195c4e89",
+  "summary": "比赛演示环境启动与端到端 smoke（比赛交付范围，无外部输入）。SmartLayoutDemoSmoke（lib/rollout）：四场景合成演示复用 700B capability/kill switch/observability 本地配置——1) 默认关闭：无缓存 open=disabled(defaultOff) 且会话工厂零调用（零请求零 Draft 机制保证）；2) 阳性开启：未过期阳性缓存+kill 未跳闸 → enabled → 真实全链（真实 MarkdrawController canvas 页框+typed 文本 → SmartLayoutRealSessionScope 无 fake provider → loopback analyzer 冻结 v3 响应 fixture → 候选 reviewing → compare-and-commit applied（typed 文本移入页内容区 inset 48）→ 一次 undo 精确回提交前 → redo 序列化新控制器重开：提交元素全数存活+内容字段深度一致（版本域/index 装载规范化与页面工件除外，600A 口径））；3) kill 跳闸：阳性也不放行（只关不换）；4) 服务故障闭环：analyzer 500 → 分析 fail closed Scene 零副作用（请求 2 次=自动重试）→ 按真实请求计数入 failure 事件 → 失败率滑动窗口 0.667≥0.5 告警 → onAlert 关闭 kill switch → 重开 disabled 工厂仍零调用。服务端 smart_layout_v3_demo_smoke_test.go：httptest 启动真实 RegisterSmartLayoutV3+V3Analyzer（确定性 demo provider 逐 exactText 合成 body region 全额认领）→ 合成请求 200+protocolVersion 3+2 regions 引用全落 sourceRefs；非法请求 400+冻结错误 envelope（fail closed 可重复演示）。分层零违规：lib/rollout 不触碰编辑器控制器/HTTP 传输（gateways 最底层守卫），真实链经注入执行器与会话工厂由测试侧提供。证据一次性生成（FLOWMUSE_GENERATE_V3_700A_EVIDENCE=1）competition/v3-700a-demo-smoke.json+server-smoke.json，常规测试只读校验。23 flutter 用例+go recognition 全包全绿+analyze smart_layout 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/rollout/smart_layout_demo_smoke.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/rollout/smart_layout_demo_smoke_test.dart",
+    "FlowMuse-Server/internal/recognition/smart_layout_v3_demo_smoke_test.go",
+    "docs/研发记录/evidence/smart-layout-v3/competition/v3-700a-demo-smoke.json",
+    "docs/研发记录/evidence/smart-layout-v3/competition/v3-700a-server-smoke.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-700A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-700A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-700A/v3-700a-deliverable.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_700a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-700A/v3-700a-deliverable.json",
+      "sha256": "e6f27f2fbd702cc822f10449993800dcf6c1063e958f5aaf98df0af84e0118a3"
+    }
+  ]
+}
