@@ -176,6 +176,11 @@ void main() {
         (sent['exactTexts'] as List).single,
         {'sourceId': 'text-1', 'text': '正文内容文本'},
       );
+      final mark = (sent['marks'] as List).single as Map<String, Object?>;
+      expect(mark['sourceId'], 'text-1');
+      expect(mark['assetKey'], 'clean|page-1');
+      expect(mark['label'], contains('kind=text'));
+      expect(mark['label'], contains('bounds=200.0,300.0,320.0,40.0'));
       expect(
         (sent['sourceRefs'] as List).toSet(),
         {'page-frame', 'text-1'},

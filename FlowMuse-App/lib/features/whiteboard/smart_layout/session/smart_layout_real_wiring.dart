@@ -456,6 +456,42 @@ class SmartLayoutRealSessionScope {
       snapshot: snapshot,
       ticket: ticket,
     );
+    final assetKey = 'clean|${snapshot.pageId}';
+    var markNumber = 0;
+    final marks = <SmartLayoutV3Mark>[];
+    void addMark(String sourceId, String label) {
+      marks.add(
+        SmartLayoutV3Mark(
+          markId: 'm${++markNumber}',
+          label: label,
+          assetKey: assetKey,
+          sourceId: sourceId,
+        ),
+      );
+    }
+    for (final object in snapshot.objects) {
+      if (object.mobility != SnapshotMobility.movable) continue;
+      final b = object.visualBounds;
+      addMark(
+        object.sourceId,
+        'kind=${object.kind};bounds=${b.left.toStringAsFixed(1)},'
+        '${b.top.toStringAsFixed(1)},${b.width.toStringAsFixed(1)},'
+        '${b.height.toStringAsFixed(1)};z=${object.zIndex};'
+        'groups=${object.groupIds.join(',')};frame=${object.frameId ?? ''};'
+        'bindings=${object.bindingRefs.join(',')}',
+      );
+    }
+    for (final stroke in snapshot.inkStrokes) {
+      final b = stroke.visualBounds;
+      addMark(
+        stroke.sourceId,
+        'kind=ink;bounds=${b.left.toStringAsFixed(1)},'
+        '${b.top.toStringAsFixed(1)},${b.width.toStringAsFixed(1)},'
+        '${b.height.toStringAsFixed(1)};z=${stroke.zIndex};'
+        'points=${stroke.pointCount};groups=${stroke.groupIds.join(',')};'
+        'frame=${stroke.frameId ?? ''}',
+      );
+    }
     return SmartLayoutV3Request(
       pageId: snapshot.pageId,
       sceneRevision: SmartLayoutV3SceneRevision(
@@ -465,12 +501,12 @@ class SmartLayoutRealSessionScope {
       ),
       assets: [
         SmartLayoutV3AssetRef(
-          key: 'clean|${snapshot.pageId}',
+          key: assetKey,
           kind: SmartLayoutV3AssetKind.clean,
           fingerprint: revision.fingerprint.value,
         ),
       ],
-      marks: const [],
+      marks: marks,
       exactTexts: [
         for (final object in snapshot.objects)
           if (object.exactText != null)
