@@ -1,0 +1,20 @@
+{
+  "task_id": "V3-604A",
+  "run_id": "bad32f7f-1b4d-42ed-8799-ef27608a6be2",
+  "summary": "性能、取消与资源压力（合并原 V3-604A~B）。SmartLayoutPerformanceRunner 落库 tool/smart_layout_v3/performance/（flutter test 真实 ui codec 形态+env 门控一次性证据+常规只读一致性校验）：负载=3000 笔画+25 图(含 5 crop)+3 文本长页(800×20000)+100 块 patch(200 consumed 软删+100 sl3 新增)+3 候选连续渲染(1080×1528)+10 轮截图循环。六阶段逐段归因预算全达标(实测/预算 ms)：snapshot-extract 7/200、patch-build 100/600(3000 源账本+全量不变量)、reduce 2/100、render-candidates 502/5000(含 PNG codec)、metrics-extract 4/200(真实渲染层 coverage/关系/阅读序)、hard-constraint-validate 3/200(十一类全量复核)。资源五检查全绿：候选渲染活资源归零/并发取消(DraftRenderCancelled 代际作废+零迟到写入)/离页 dispose 拒绝+归零/失败注入(缺文件占位降级 hasMissingResources 如实+零泄漏)/内存趋势(10 轮逐轮归零)。预算=debug 实测中位 5-9× 容机器方差(CI 稳定口径)；零 lib 改动纯压测消费既有管线。",
+  "changed_paths": [
+    "FlowMuse-App/tool/smart_layout_v3/performance/smart_layout_performance_runner.dart",
+    "FlowMuse-App/tool/smart_layout_v3/performance/smart_layout_performance_runner_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/performance/v3-604a-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/performance/v3-604a-deliverable.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-604A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-604A/commands.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_604a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/performance/v3-604a-deliverable.json",
+      "sha256": "ba16c9bf59c2a115b56c42c1d16cef2b03e83cfbe2c420a601578da86be1fae0"
+    }
+  ]
+}
