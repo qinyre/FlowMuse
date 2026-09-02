@@ -256,7 +256,12 @@ class SmartLayoutCiMatrix {
       ),
       capturedArtifacts: captured,
     );
-    _writeCache(cacheFile, fingerprint, result);
+    try {
+      _writeCache(cacheFile, fingerprint, result);
+    } on FileSystemException {
+      // 未启用缓存时，缓存预热失败不应让实际检查结果变红。
+      if (useCache) rethrow;
+    }
     return result;
   }
 

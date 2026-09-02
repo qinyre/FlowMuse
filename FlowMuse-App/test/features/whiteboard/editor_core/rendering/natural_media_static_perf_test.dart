@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -127,6 +128,9 @@ void main() {
             'v2=${v2.toStringAsFixed(1)}ms，含条件缓存收益 4.1→2.8）',
       );
     },
+    skip: Platform.environment['CI'] == 'true'
+        ? '共享 CI runner 不适合执行计时微基准'
+        : false,
     timeout: const Timeout(Duration(minutes: 4)),
   );
 }
