@@ -1,0 +1,181 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "annotation-panel-report",
+ "task": "V3-002C",
+ "status": "passed",
+ "panel_disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "两名标注者与仲裁者均为上下文隔离的 GLM-5.3 Max AI 代理；本报告只证明 AI surrogate 标注协议的一致性与可审计性，不代表真人标注者一致性或人工研究。"
+ },
+ "annotators": [
+  {
+   "role": "annotator-a",
+   "run_id": "dec8844e-4f36-40a0-adb4-46591150b460",
+   "model": "glm-5.3",
+   "reasoning_effort": "max",
+   "spawn_reference": "agent_2e9c5234-c6a6-45f5-a570-65fe39d9e407",
+   "raw": "annotator-a.json",
+   "notes": [
+    "R1/R2 的 'eNN 字典序' 按字面实现为字符串字典序（如 e10 < e9），非数字序。",
+    "R3 belongs_to 未规定最近距离平局的决胜规则，按与其他条款一致的字面延伸取 eNN 字典序最小者。",
+    "手册未规定 relations 数组内部顺序；按 caption_of（figure 的 eNN 升序）在前、belongs_to（stroke 的 eNN 升序）在后输出。",
+    "距离阈值 ≤120 与 center 的 .5 半像素精度用整数半像素单位精确计算（d_half² ≤ 240²），避免浮点边界误差，与手册公式数学等价。"
+   ]
+  },
+  {
+   "role": "annotator-b",
+   "run_id": "c1660c12-612f-430a-ac1a-52a56a3af034",
+   "model": "glm-5.3",
+   "reasoning_effort": "max",
+   "spawn_reference": "agent_49db5a7b-3a0c-4f96-9c8a-bda4445802d7",
+   "raw": "annotator-b.json",
+   "notes": [
+    "R3 caption_of 手册未明示 from/to 方向；按关系名字面读法 X caption_of Y = X 是 Y 的 caption，取 from=text、to=figure。",
+    "R3 belongs_to 最近 text 出现距离平局时手册未给 tie-break；按 eNN 字典序取最小。",
+    "R1/R2 中 eNN 比较按字面采用字符串字典序（如 e10 < e2）。"
+   ]
+  }
+ ],
+ "blinded_inputs": {
+  "design": "两名标注者收到完全相同的输入（手册 + 场景投影）；互不可见对方上下文与结果；执行者不参与标注；两名标注者与仲裁者声明的输入 hash 已逐一与实际文件核对一致（组装时程序断言），且手册 hash 与标注时一致（未被事后改动）。",
+  "manual_sha256": "1826391e18a5ca2d6174a209929eeea4d4644c3940b6797ef18511f243205983",
+  "projection_sha256": "a8cf3f3caebe1dddf221d4f99927eed875a2a7af1399424f56a9c5806dcb739e"
+ },
+ "agreement": {
+  "samples": 85,
+  "reading_order_exact": 85,
+  "reading_order_rate": 1.0,
+  "roles_exact": 85,
+  "roles_rate": 1.0,
+  "role_slots": 2759,
+  "role_slots_exact_rate": 1.0,
+  "relations_exact": 80,
+  "relations_rate": 0.9411764705882353,
+  "disagreement_items": [
+   {
+    "sample_id": "syn-p2-anno-mixe-hig-des-1056",
+    "field": "relations",
+    "a": null,
+    "b": null
+   },
+   {
+    "sample_id": "syn-p2-anno-mixe-hig-mob-v-1059",
+    "field": "relations",
+    "a": null,
+    "b": null
+   },
+   {
+    "sample_id": "syn-p2-anno-mixe-low-des-v-1047",
+    "field": "relations",
+    "a": null,
+    "b": null
+   },
+   {
+    "sample_id": "syn-p2-anno-mixe-med-des-v-1052",
+    "field": "relations",
+    "a": null,
+    "b": null
+   },
+   {
+    "sample_id": "syn-p2-anno-mixe-med-web-1055",
+    "field": "relations",
+    "a": null,
+    "b": null
+   }
+  ],
+  "errors": []
+ },
+ "threshold_checks": [
+  {
+   "field": "reading_order_rate",
+   "actual": 1.0,
+   "min": 0.8,
+   "pass": true
+  },
+  {
+   "field": "roles_rate",
+   "actual": 1.0,
+   "min": 0.85,
+   "pass": true
+  },
+  {
+   "field": "role_slots_exact_rate",
+   "actual": 1.0,
+   "min": 0.95,
+   "pass": true
+  },
+  {
+   "field": "relations_rate",
+   "actual": 0.9411764705882353,
+   "min": 0.8,
+   "pass": true
+  }
+ ],
+ "disagreement_items_count": 5,
+ "arbitration": {
+  "required": true,
+  "arbiter_run_id": "b329f701-c089-4ed0-ba67-45bf68e66402",
+  "arbiter_model": "glm-5.3",
+  "arbiter_spawn_reference": "agent_cbf3b31c-8a34-4d56-af1d-f919b3683c6e",
+  "arbitration_input": {
+   "path": "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/arbitration-input.json",
+   "sha256": "3b9538f980ed5e4ca613a471acaf57d55c030bb23046de494cad2cebd7d31ac1",
+   "blinding": "仲裁输入以 X/Y 匿名呈现双方标签，不含标注者身份或 run id。"
+  },
+  "rulings_file": "arbitration-rulings.json",
+  "disputed_items": 5,
+  "resolved_items": 5,
+  "rulings_landed_verification": "组装时程序断言：每条裁决 final_relations 与 adjudicated 对应样本 relations 集合相等（防 CLI 解析缺陷回归）。",
+  "post_arbitration_status": "passed",
+  "rulings_summary": [
+   {
+    "sample_id": "syn-p2-anno-mixe-hig-des-1056",
+    "winner": "Y",
+    "final_relations_count": 13,
+    "reason": "R3 caption_of：三 figure（e71 center_y=1070/[403,601]、e72 102/[669,1004]、e73 754.5/[226,455]）下方横向范围内均无 Δcenter_y≤80 的 text，e64 因 cx=450.5∉[669,1004] 不构成 e72 的 caption，X 的 caption_of e64→e72 应删；belongs_to 重算 13 条（最近 text 距 13.83–103.15≤120）与 Y 完全一致。"
+   },
+   {
+    "sample_id": "syn-p2-anno-mixe-hig-mob-v-1059",
+    "winner": "Y",
+    "final_relations_count": 33,
+    "reason": "R3 caption_of：e71（109.5/[563,773]）、e72（755/[154,246]）、e73（842.5/[68,151]）下方横向范围内均无 Δcenter_y≤80 的 text（e68 距 e73 为 96.5>80，e58 cx=287.5∉[563,773]），X 的 caption_of e58→e71 应删；belongs_to 重算 33 条（≤120）与 Y 完全一致。"
+   },
+   {
+    "sample_id": "syn-p2-anno-mixe-low-des-v-1047",
+    "winner": "Y",
+    "final_relations_count": 1,
+    "reason": "R3 caption_of：e13（center_y=847，x∈[153,473]）唯一合格候选为 e11（Δcenter_y=48，cx=422.5），e14/e15 无候选；belongs_to：8 个 stroke 最近 text 距离均>120（最小 202.96），故 relations 仅 1 条 caption_of e11→e13，Y 正确、X 漏标。"
+   },
+   {
+    "sample_id": "syn-p2-anno-mixe-med-des-v-1052",
+    "winner": "Y",
+    "final_relations_count": 6,
+    "reason": "R3 caption_of：e33（center_y=615，x∈[591,924]）唯一候选 e29（Δcenter_y=11.5，cx=864.5），X 的 e27→e34 因 cx=556.5∉[1102,1246] 不成立；belongs_to 重算 5 条（111.01/119.27/114.58/31.14/33.87 均≤120）与双方一致，Y 正确。"
+   },
+   {
+    "sample_id": "syn-p2-anno-mixe-med-web-1055",
+    "winner": "Y",
+    "final_relations_count": 6,
+    "reason": "R3 caption_of：e35（center_y=340.5，x∈[666,1003]）唯一候选 e29（Δcenter_y=42，cx=865.5），X 的 e27→e35 因 cx=633∉[666,1003] 不成立，e33/e34 无候选；belongs_to 重算 5 条（40.80–114.83≤120）与双方一致，Y 正确。"
+   }
+  ]
+ },
+ "freeze": {
+  "frozen_version": "1.0.1",
+  "frozen_manifest_sha256": "afc4e451957d6bb703bc838926eff4954eb7dcad344c804d891b9187e04585a4",
+  "frozen_labels_sha256": "e963a8d88174a91637ced280b6077b9175b6eb286d3db70a26170aff437578d0",
+  "frozen_sample_count": 19,
+  "voided_versions": [
+   "1.0.0（裁决落地缺陷，未消费即作废，详见 frozen-manifest.voided_history）"
+  ],
+  "single_shot": "R8 冻结一次性生成；1.0.0 作废记录保留。"
+ },
+ "tooling": {
+  "agreement_cli": "FlowMuse-App/tool/smart_layout_v3/dataset/annotation_cli.dart",
+  "calculator": "FlowMuse-App/tool/smart_layout_v3/dataset/annotation_agreement_calculator.dart",
+  "frozen_guard": "FlowMuse-App/tool/smart_layout_v3/dataset/frozen_label_access_guard.dart"
+ },
+ "generated_at_utc": "2026-08-31T00:00:00Z"
+}

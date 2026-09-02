@@ -1,0 +1,556 @@
+{
+ "page": {
+  "width": 720,
+  "height": 1280
+ },
+ "elements": [
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-stroke-001",
+   "type": "stroke",
+   "bbox": [
+    130,
+    1147,
+    164,
+    72
+   ],
+   "rotation": 0,
+   "points": [
+    [
+     231,
+     31
+    ],
+    [
+     121,
+     244
+    ],
+    [
+     171,
+     281
+    ],
+    [
+     133,
+     296
+    ],
+    [
+     91,
+     26
+    ],
+    [
+     7,
+     46
+    ],
+    [
+     58,
+     157
+    ],
+    [
+     60,
+     99
+    ],
+    [
+     106,
+     10
+    ],
+    [
+     177,
+     202
+    ],
+    [
+     320,
+     298
+    ],
+    [
+     307,
+     294
+    ]
+   ],
+   "pressure": [
+    0.715,
+    0.798,
+    0.882,
+    0.58
+   ]
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-stroke-002",
+   "type": "stroke",
+   "bbox": [
+    182,
+    1099,
+    119,
+    77
+   ],
+   "rotation": 0,
+   "points": [
+    [
+     309,
+     173
+    ],
+    [
+     178,
+     208
+    ],
+    [
+     333,
+     174
+    ],
+    [
+     356,
+     6
+    ],
+    [
+     60,
+     33
+    ],
+    [
+     67,
+     169
+    ],
+    [
+     289,
+     219
+    ],
+    [
+     328,
+     146
+    ]
+   ],
+   "pressure": [
+    0.953,
+    0.411,
+    0.973,
+    0.119
+   ]
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-stroke-003",
+   "type": "stroke",
+   "bbox": [
+    590,
+    339,
+    54,
+    90
+   ],
+   "rotation": 0,
+   "points": [
+    [
+     91,
+     141
+    ],
+    [
+     13,
+     186
+    ],
+    [
+     38,
+     14
+    ],
+    [
+     340,
+     117
+    ],
+    [
+     281,
+     255
+    ],
+    [
+     293,
+     45
+    ],
+    [
+     123,
+     245
+    ],
+    [
+     253,
+     178
+    ]
+   ],
+   "pressure": [
+    0.203,
+    0.618,
+    0.76,
+    0.322
+   ]
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-stroke-004",
+   "type": "stroke",
+   "bbox": [
+    555,
+    273,
+    195,
+    31
+   ],
+   "rotation": 90,
+   "points": [
+    [
+     204,
+     255
+    ],
+    [
+     264,
+     297
+    ],
+    [
+     10,
+     216
+    ],
+    [
+     162,
+     271
+    ],
+    [
+     170,
+     1
+    ],
+    [
+     201,
+     210
+    ],
+    [
+     193,
+     16
+    ],
+    [
+     203,
+     118
+    ],
+    [
+     289,
+     112
+    ]
+   ],
+   "pressure": [
+    0.293,
+    0.308,
+    0.751,
+    0.622
+   ]
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-stroke-005",
+   "type": "stroke",
+   "bbox": [
+    131,
+    747,
+    219,
+    25
+   ],
+   "rotation": 90,
+   "points": [
+    [
+     357,
+     86
+    ],
+    [
+     362,
+     175
+    ],
+    [
+     162,
+     188
+    ],
+    [
+     187,
+     20
+    ],
+    [
+     247,
+     37
+    ],
+    [
+     385,
+     256
+    ],
+    [
+     66,
+     108
+    ],
+    [
+     173,
+     38
+    ],
+    [
+     193,
+     102
+    ],
+    [
+     261,
+     247
+    ],
+    [
+     216,
+     252
+    ]
+   ],
+   "pressure": [
+    0.412,
+    0.229,
+    0.462,
+    0.409
+   ]
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-stroke-006",
+   "type": "stroke",
+   "bbox": [
+    577,
+    1146,
+    230,
+    44
+   ],
+   "rotation": 0,
+   "points": [
+    [
+     134,
+     43
+    ],
+    [
+     126,
+     113
+    ],
+    [
+     87,
+     188
+    ],
+    [
+     223,
+     170
+    ],
+    [
+     217,
+     191
+    ],
+    [
+     204,
+     134
+    ],
+    [
+     235,
+     98
+    ],
+    [
+     185,
+     214
+    ],
+    [
+     103,
+     12
+    ],
+    [
+     102,
+     118
+    ],
+    [
+     324,
+     6
+    ]
+   ],
+   "pressure": [
+    0.275,
+    0.42,
+    0.258,
+    0.475
+   ]
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-stroke-007",
+   "type": "stroke",
+   "bbox": [
+    531,
+    399,
+    40,
+    125
+   ],
+   "rotation": 0,
+   "points": [
+    [
+     204,
+     258
+    ],
+    [
+     264,
+     76
+    ],
+    [
+     232,
+     84
+    ]
+   ],
+   "pressure": [
+    0.588,
+    0.321,
+    0.542,
+    0.203
+   ]
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-stroke-008",
+   "type": "stroke",
+   "bbox": [
+    555,
+    635,
+    46,
+    135
+   ],
+   "rotation": 0,
+   "points": [
+    [
+     275,
+     95
+    ],
+    [
+     151,
+     80
+    ],
+    [
+     109,
+     241
+    ],
+    [
+     356,
+     228
+    ],
+    [
+     122,
+     122
+    ]
+   ],
+   "pressure": [
+    0.394,
+    0.763,
+    0.331,
+    0.756
+   ]
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-text-001",
+   "type": "text",
+   "bbox": [
+    31,
+    606,
+    221,
+    87
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落1段落1段落1"
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-text-002",
+   "type": "text",
+   "bbox": [
+    23,
+    635,
+    72,
+    147
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落2段落2段落2段落2段落2"
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-text-003",
+   "type": "text",
+   "bbox": [
+    588,
+    640,
+    140,
+    146
+   ],
+   "rotation": 90,
+   "text_kind": "typed",
+   "chars": "段落3段落3段落3段落3段落3"
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-text-004",
+   "type": "text",
+   "bbox": [
+    63,
+    382,
+    212,
+    106
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落4段落4段落4段落4段落4"
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-shape-001",
+   "type": "shape",
+   "bbox": [
+    147,
+    671,
+    80,
+    62
+   ],
+   "rotation": 0,
+   "shape_kind": "ellipse"
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-shape-002",
+   "type": "shape",
+   "bbox": [
+    103,
+    28,
+    207,
+    76
+   ],
+   "rotation": 90,
+   "shape_kind": "ellipse"
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-image-001",
+   "type": "image",
+   "bbox": [
+    148,
+    1073,
+    224,
+    119
+   ],
+   "rotation": 90,
+   "asset_seed": 8965
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-line-001",
+   "type": "decorative_line",
+   "bbox": [
+    235,
+    1090,
+    136,
+    119
+   ],
+   "rotation": 0,
+   "style": "solid"
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-line-002",
+   "type": "decorative_line",
+   "bbox": [
+    237,
+    791,
+    78,
+    118
+   ],
+   "rotation": 0,
+   "style": "solid"
+  },
+  {
+   "id": "syn-p2-anno-mixe-low-mob-v-1049-binding-001",
+   "type": "binding",
+   "bbox": [
+    273,
+    538,
+    107,
+    48
+   ],
+   "rotation": 0,
+   "target_kind": "text",
+   "offset": [
+    -20,
+    -16
+   ]
+  }
+ ]
+}

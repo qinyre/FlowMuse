@@ -1,4 +1,3 @@
-import 'dart:ui';
 
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dart';

@@ -1,0 +1,73 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "smart-layout-v3-golden-ledger",
+ "task": "V3-004B",
+ "policy": {
+  "rule": "任何 spec/rubric/golden 变更必须产生新版本号+新 hash+审批记录并登记为新条目；无记录的变更视为未发生，评估按旧版本判定并报 post_hoc_amendment（RR-6）",
+  "rubric_source": "只允许 V3-000B rubric v1.0.0（sha256=9408c03728adbbbfa91c72c1f605d4755a44641ec1e5aee804bc264c814e0060）；其余 rubric 版本一律拒绝登记",
+  "spec_amendment": "evaluation-spec 变更走其 amendment_policy（收紧须审计+复审；放宽仅限测量前且全量重测）；本 ledger 只登记生效版本",
+  "validator": "tasks/V3-004B/artifacts/change_control_drill.py（validates every entry against file bytes on disk）"
+ },
+ "entries": [
+  {
+   "kind": "rubric",
+   "name": "ai-rubric",
+   "version": "1.0.0",
+   "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/rubric.json",
+   "file_sha256": "9408c03728adbbbfa91c72c1f605d4755a44641ec1e5aee804bc264c814e0060",
+   "approved_by": {
+    "task": "V3-000B",
+    "commit": "6d109ee",
+    "evidence": "tasks/V3-000B/artifacts/panel-report.json（双盲评 192/192 一致零仲裁）"
+   },
+   "registered_by_task": "V3-004B"
+  },
+  {
+   "kind": "evaluation_spec",
+   "name": "evaluation-spec",
+   "version": "1.0.0",
+   "path": "docs/研发记录/specs/smart-layout-v3/evaluation-spec.json",
+   "file_sha256": "e159862495f2b70116a38fbdd4a17e8f863ea16ae307b95d35a6617454210b1f",
+   "content_sha256": "83dc663e5f7eee107c40f528df555a45e86a52c2a097bf4afa908171635ef303",
+   "approved_by": {
+    "task": "V3-004A",
+    "commit": "4c414a6",
+    "evidence": "gates/G0/preregistration.json（3 轮双盲 panel R3 12/12 通过）"
+   },
+   "registered_by_task": "V3-004B"
+  },
+  {
+   "kind": "golden",
+   "name": "three-baseline-report",
+   "version": "1.0.0",
+   "path": "docs/研发记录/evidence/smart-layout-v3/baseline/ai-surrogate/three-baseline-report.json",
+   "file_sha256": "8b8cf4158bb8d42a5911a020903f9ac3340f059cea6dbac488f22b0f2d4e61df",
+   "approved_by": {
+    "task": "V3-003B",
+    "commit": "6321f18",
+    "evidence": "baseline/ai-surrogate/panel-report.json（双代理零分歧零重放失配）"
+   },
+   "registered_by_task": "V3-004B"
+  },
+  {
+   "kind": "golden",
+   "name": "frozen-label-manifest",
+   "version": "1.0.1",
+   "path": "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/frozen-manifest.json",
+   "file_sha256": "afc4e451957d6bb703bc838926eff4954eb7dcad344c804d891b9187e04585a4",
+   "approved_by": {
+    "task": "V3-002C",
+    "commit": "2aec880",
+    "evidence": "datasets/annotations/annotation-report.json（v1.0.0 作废记录见 voided_history）"
+   },
+   "registered_by_task": "V3-004B"
+  }
+ ],
+ "amendments": [],
+ "panel_disclosure": {
+  "panel_type": "ai_synthetic",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "本 ledger 由 AI 执行代理建立；条目审批记录引用对应任务的双盲 AI panel 与独立复审证据，不含任何真人审批。"
+ }
+}

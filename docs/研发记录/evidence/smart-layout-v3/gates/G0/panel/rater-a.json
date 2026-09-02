@@ -1,0 +1,84 @@
+{
+ "run_id": "3e6677cc-3cab-4892-95cf-5fa0b53d29a4",
+ "rater": "A",
+ "round": 3,
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "inputs_read": {
+  "blind_packet_sha256": "27ed536f8f3b31aa7ee7f01c856d094247b7707684520dade4913949c146832e"
+ },
+ "verdicts": [
+  {
+   "id": "C1",
+   "verdict": "adequate",
+   "reason": "cluster_unit=sample(scene) 规定先样本内聚合再跨样本同样本配对，与数据结构一致：实测 split manifest 为 48/18/19（pool 85），全部比率类指标分母均为样本数，且合成池逐样本生成、元素级观测确属样本内相关，配对设计同一合成样本跨系统成对。"
+  },
+  {
+   "id": "C2",
+   "verdict": "adequate",
+   "reason": "E1~E4 均显式固定总体（development split）、同样本配对、主效应量（配对风险差/配对均值差/确定性预算比值）与辅效应量（Cohen h/dz 仅报告），指标引用 registered_metrics（maj_violation_rate、rubric_overall、bench_*）且方向声明一致，无歧义。"
+  },
+  {
+   "id": "C3",
+   "verdict": "adequate",
+   "reason": "CI 程序全冻结：B=10000、seed=20260831、splitmix64、按样本有放回重采样、百分位法（双侧 [2.5%,97.5%] 与单侧 5%/95% 界）、PRNG 流顺序 E1→E2→E3→T6→功效 Monte-Carlo 不重置，退化分布 CI=[c,c] 有定义，由 evaluation runner 单一实现，可复现。"
+  },
+  {
+   "id": "C4",
+   "verdict": "adequate",
+   "reason": "T2(H1 RD<+0.10)/T3(H1 Δ>−0.25)/T4(H1 RD<0)/T6(H1 ρ<0) 的 H1 全为改善方向且单侧 p 公式与点估计条件同向（实测逐式核对），T6 含全等计数退化分支（indeterminate 不判 fail），T2 两臂全零分支在 justification 明示判过，T1 恒等式先于统计，bootstrap p 与 Holm 升序步降比较相容。"
+  },
+  {
+   "id": "C5",
+   "verdict": "adequate",
+   "reason": "4 类缺失情形逐一 worst-case 映射（崩溃/解析失败→全部 primary 最差值并使 T1 恒等式 fail）且明文『无插补、无事后剔除』；rubric insufficient 状态由 RR-2（分母必须逐 split 等于 48/18/19）+SR-2 整 split 重测强制走审计追补，无分析者自由度。"
+  },
+  {
+   "id": "C6",
+   "verdict": "adequate",
+   "reason": "F1 族={T2,T3,T4} 明确，Holm-Bonferroni 单侧 α=0.05 步降式比较（p 升序 vs 0.05/(m−k+1)，m=3），T1 硬规则、T5 确定性判定、T6 构念性描述、secondary 指标均明文排除在族外。"
+  },
+  {
+   "id": "C7",
+   "verdict": "adequate",
+   "reason": "固定 n=48 禁止追加样本与 interim look（SR-1），事后功效/MDE 由预注册 Monte-Carlo（B=20000、seed=20260831、与 CI 同一 PRNG 流继续）计算且仅披露，honesty_rule+amendment_policy.prohibited+RR-6 三重堵死以功效不足为由的事后放宽。"
+  },
+  {
+   "id": "C8",
+   "verdict": "adequate",
+   "reason": "实测核对：14 个注册指标全部引用 D_SAMPLES/D_BENCH_OPS，D_SAMPLES 48/18/19/85 与三个 split manifest 及 pool（85）逐一相等，D_BENCH_OPS 的 repetitions=3/nearest_rank/cold_process 与 benchmark-spec.json 字段完全一致，D_CONTENT_ELEMENTS/D_TYPED_CHARS 明文仅描述性，未登记分母→RR-2 拒绝。"
+  },
+  {
+   "id": "C9",
+   "verdict": "adequate",
+   "reason": "critical_zero_rule 阈值恒为 0 且 precedence 明文『T1 先于 F1 执行；F1 全过而 T1 fail 时 Gate 仍为 fail』，崩溃样本的 worst-case 映射同样计入 critical 计数，硬规则与统计规则关系无歧义。"
+  },
+  {
+   "id": "C10",
+   "verdict": "adequate",
+   "reason": "实测复算：ai_surrogate 池内 0/85、v2 11/85≈0.129 且我核验 v2 全部 11 个（dev 7 个）失败样本均含 M- 码故恰等于 maj_violation_rate 基线值、v2 dev 7/48=0.1458、0/48 单侧 95% 精确上界=1−0.05^(1/48)=0.0605<0.10，T3 −0.25=1~5 整数量表的 1/4 等级，T4 边界 0、优效=RD<0 与 lower_better 方向一致。"
+  },
+  {
+   "id": "C11",
+   "verdict": "adequate",
+   "reason": "环境锁定双口径我均独立复算相符（文件字节 SHA-256=dbc00bc4…、内部 content_sha256=1db65ecd…，且后者与 CanonicalArtifacts.canonicalJsonSha256 去自身字段语义（BenchmarkSpec.verifyFileHash）逐一吻合），hard_caps 六项（300s/100000 ticks/cold_process/3 reps/offline_replay_only/synthetic_only）与 benchmark-spec.json 完全一致，阶段预算表含全部场景 p50/p95 与全局峰值 RSS 上限并声明先于 V3-301C/V3-604A 测量预注册且只许收紧，SR-1~SR-5 完备（含连续失败环境排查、frozen 单发作废、2 轮 rejected blocked 上报）。"
+  },
+  {
+   "id": "C12",
+   "verdict": "adequate",
+   "reason": "RR-1~6 均有 error_code+可机判条件，RR-3 的 (a)(b)(c) 三条件我以独立 Python 复算全部可执行且两口径同时锁定，frozen 词表与 frozen_label_access_guard.dart 实测 {evaluation,gate,annotation_freeze} 对齐且本 spec 更严（gate 亦拒）并如实披露差异，披露边界正确（PRODUCTION_RELEASE_NOT_AUTHORIZED、HUMAN_VALIDATION_NOT_PERFORMED、panel_type=ai_surrogate，与 backlog V3-004A 验收一致）。"
+  }
+ ],
+ "overall": "pass",
+ "notes": [
+  "独立实测：blind-packet.json 文件 SHA-256=27ed536f8f3b31aa7ee7f01c856d094247b7707684520dade4913949c146832e；8 个 upstream_contracts 哈希逐一 sha256sum 复算全部相符（failure-taxonomy e0dd0ad6…、rubric 9408c037…、benchmark-spec dbc00bc4…、three-baseline 8b8cf415…、pool d062a8e8…、split dev 14197109…/val 152c9a0e…/frozen 8d08d802…）。",
+  "盲包内嵌 spec 与 docs/研发记录/specs/smart-layout-v3/evaluation-spec.json 逐键完全一致（含 content_sha256=83dc663e…，我用独立 Python 复刻 canonicalJsonSha256（递归键序、无空白、整数去 .0、剥离 content_sha256、stripVolatile=false）复算该值精确吻合）。",
+  "benchmark-spec 双口径复算：文件字节 dbc00bc4…；内部声明 1db65ecd… 与按 canonical_artifacts.dart/benchmark_spec.dart verifyFileHash 语义（Map 移除 content_sha256 后 canonicalJsonSha256）复算值相等，RR-3 三个子条件均可机器执行，无口径混用。",
+  "三基线数字实测：three-baseline-report overall no_op 47/85、v2 11/85、ai 0/85；dev split v2 7/48。进一步核验 v2/no-op 逐样本 failure_codes：v2 全部 11（dev 7）个失败样本、no-op 全部 47 个失败样本均含 M- 码（无仅 minor 或 critical 混入），故 spec 引用的『违规率』恰为 maj_violation_rate 口径的基线值，T2/T4 justification 数字无误。",
+  "rubric v1.0.0 实测 8 维（D1~D8）、1~5 整数量表、overall=min(有分数维度)、34 码全绑定，与 spec 的 rubric_overall 聚合定义及 T3 margin 0.25=1/4 等级的论证一致；failure-taxonomy 实测 34 码=7 C-*/21 M-*/6 m-*，与 registered_metrics 的 codes 前缀一致。",
+  "FrozenLabelAccessGuard 实测 frozenReaderRoles={evaluation,gate,annotation_freeze}；spec allowed_roles=[evaluation]⊂词表、denied_roles 含 gate 并声明『严于 guard 默认、按 RR-5 拒绝并上报』，词表不对齐问题已闭合且差异如实披露。",
+  "minor（不构成 inadequate）：(1) rubric R7 的 insufficient 维度『不进入分母』与 spec 固定 D_SAMPLES 存在表面张力，但 rubric 规定 insufficient 触发审计追补证据、RR-2 强制分母=48、SR-2 强制整 split 重测，实践中无插补/剔除自由度；(2) bootstrap p 在极端情形可取 0（如两臂全零），B=10000 下离散性可忽略且程序已预注册冻结；(3) score_correlation_gate 用『单侧 95% 上界<0』措辞与 T6 的『p<0.05 且点估计<0』在 p=0.05 边界并列处可能有并列并列差异，二者决策语义一致；(4) golden-ledger.json 与 S-3000-STROKES 等场景基建尚未存在，但均被声明的 V3-004B/V3-301C/V3-604A 后续任务消费且预注册时点先于测量，属正常预注册时序。",
+  "交叉引用闭合：V3-004A/B、V3-301C、V3-602A、V3-604A、V3-700A 均在执行 backlog 中存在且验收描述与本 spec 一致；gates/G0/spec-validation.json（允许读取范围）machine 校验 38 项全 passed，与我的独立复算互相印证。",
+  "合规声明：仅读取 blind-packet.json 及仓库上游文件；未读取 gates/G0/panel/ 下其他文件（round-1/round-2/）与 gates/G0/arbiters/（grep -l 仅列出路径未读内容）；除输出 rater-a.json 外未修改任何文件（哈希复算脚本写在仓库外的系统临时目录）。"
+ ]
+}

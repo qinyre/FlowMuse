@@ -1,0 +1,43 @@
+{
+ "run_id": "979ef195-1519-485c-bdc8-4deec287f691",
+ "rater": "B",
+ "task": "V3-004C",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "inputs_read": {
+  "report_sha256": "8b1d833cc18ef26feb417ea07bd968c52bd3d7e1f32f3b6ad1848308e81ad12c"
+ },
+ "verdicts": [
+  {
+   "id": "C1",
+   "verdict": "adequate",
+   "reason": "实测 16/16 条 component path 文件存在且文件字节 sha256 与报告值及全部 expected_sha256 钉定值逐一相符；用官方 canonical.py 独立重算 evaluation-spec（去掉 content_sha256 字段）得 83dc663e5f7eee107c40f528df555a45e86a52c2a097bf4afa908171635ef303，与 golden-ledger evaluation_spec 条目、spec-validation 及报告一致；golden-ledger 4 条目 file_sha256（9408c037/e1598624/8b8cf415/afc4e451）均与本人实测对拍一致，benchmark-spec content_sha256=1db65ecd… 亦重算一致。"
+  },
+  {
+   "id": "C2",
+   "verdict": "adequate",
+   "reason": "将 gate-zero-report.json 备份至仓库外并删除后从仓库根运行 python docs/研发记录/evidence/smart-layout-v3/gates/G0/build_gate_zero_report.py：exit_code=0、stdout status=frozen、重建文件与原件 cmp 逐字节一致（双方 sha256 均 8b1d833cc18ef26feb417ea07bd968c52bd3d7e1f32f3b6ad1848308e81ad12c），已恢复原件（恢复后 sha256 复核相同）且删除临时备份，未留修改痕迹。"
+  },
+  {
+   "id": "C3",
+   "verdict": "adequate",
+   "reason": "objective 六类齐备：components 含 rubric、evaluation_spec、benchmark_spec、dataset_pool+splits（development/validation/frozen_holdout）+annotations_frozen_manifest、baselines（no_op_run+v2_naive_reflow_run+three_baseline_report），reproduction_commands 共 7 条覆盖数据/标注/基线/spec 校验/演练/本报告；三基线数字与 three-baseline-report.json 实测一致（no_op samples_with_failure_codes=47/85、v2=11/85 且 development split=7/48、ai_surrogate=0/85 且 modification_count_total=480），pool 85=48+18+19。"
+  },
+  {
+   "id": "C4",
+   "verdict": "adequate",
+   "reason": "panel_disclosure 三要素逐字相符（panel_type=\"ai_surrogate\"、human_validation_performed=false（JSON 布尔）、disclosure=\"HUMAN_VALIDATION_NOT_PERFORMED\"）；gate_decision.decision=development_gate_frozen、authorizes 仅继续 Phase 1+ 开发、does_not_authorize=生产发布、应用商店上架、真实用户数据接入；全文无人工验证或生产授权的肯定性声称（真人验证/生产发布字样仅出现于否定句）。"
+  },
+  {
+   "id": "C5",
+   "verdict": "adequate",
+   "reason": "status=frozen 且 16 个 resolved 标志全部 true、content_sha256_ok=true；全文无时间戳键与 ISO 日期值（正则扫描为空），删除重建双跑逐字节一致本身即证明无可变字段。"
+  }
+ ],
+ "overall": "pass",
+ "notes": [
+  "报告 builder 字段表述「本文件所在目录清空后可一条命令重建」按字面读有过头之嫌：清空整个 G0 目录会连带删除构建器自身与 golden-ledger/preregistration/spec-validation/change-control-drill 等输入文件；按任务卡 C2 的操作口径（仅移走 gate-zero-report.json 后重建）完全成立，属措辞问题非功能缺陷。",
+  "no_op_run、v2_naive_reflow_run、preregistration、spec_validation 四条未钉定 expected_sha256（值为 null），但其 sha256 均经本人实测与文件字节一致且已记录在案；两条 baseline run 另附 run_hash 并被 three-baseline-report 的 replay_check（85/85 零失配）覆盖。",
+  "重建实验全程备份于仓库外临时目录并在恢复后删除，仓库内除新增本评审输出文件外无任何改动。"
+ ]
+}

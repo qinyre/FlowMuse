@@ -1,0 +1,30 @@
+{
+  "task": "V3-700A",
+  "kind": "competition_demo_smoke_deliverable",
+  "scope": "比赛交付范围（无外部输入）：本地/演示环境 v3 analyzer 启动 + 入口→候选→commit→undo→reopen 合成 smoke + 门控行为可重复演示",
+  "single_command_demo": {
+    "client": "flutter test test/features/whiteboard/smart_layout/rollout",
+    "client_cwd": "FlowMuse-App",
+    "server": "go test ./internal/recognition/...",
+    "server_cwd": "FlowMuse-Server"
+  },
+  "reports": [
+    {
+      "category": "demo_smoke_report",
+      "path": "docs/研发记录/evidence/smart-layout-v3/competition/v3-700a-demo-smoke.json",
+      "sha256": "bda5a8ff905c51d6ddbf4da9ee2c3f7d623e02b0d2f216cb79b6c39979b3c134"
+    },
+    {
+      "category": "synthetic_observability_report",
+      "path": "docs/研发记录/evidence/smart-layout-v3/competition/v3-700a-server-smoke.json",
+      "sha256": "b20b30239be67829d9aad59ff05d8f75d812b1883eabac5cb1daab22ea61e130"
+    }
+  ],
+  "scenario_outcomes": {
+    "default-off": "disabled(defaultOff) factory_calls=0",
+    "enabled-full-chain": "reviewing→applied→undo 精确→reopen 深度一致, requests=1",
+    "kill-switch": "disabled factory_calls=0（只关不换）",
+    "service-failure": "fail closed Scene 零副作用 requests=2 → 失败率 0.667≥0.5 告警 → kill 关闭 → reopen disabled"
+  },
+  "no_real_production_claim": true
+}

@@ -1,0 +1,21 @@
+{
+  "task_id": "V3-304A",
+  "conditions": [
+    "现有 editor_core 公开接口确实不足（缺失，而非不便）",
+    "adapter 是 feature-private（位于 smart_layout 内，不进 editor_core）",
+    "薄适配：单一职责直连，禁止 wrapper 链",
+    "不迁移既有调用者，不改变公共 API 行为",
+    "在 compatibility report 同步登记理由与冻结日期"
+  ],
+  "registered_adapters": [
+    {
+      "consumer": "smart_layout/design/text_measure_adapter.dart",
+      "target": "editor_core/src/rendering/font_resolver.dart",
+      "reason": "真实文本测量必须与 renderer 同字体解析路径；公共 barrel 未导出 font_resolver",
+      "frozen_at": "2026-08-31",
+      "introduced_by": "V3-300A"
+    }
+  ],
+  "current_status": "除既有 font_resolver 一条外零适配；V3-301A/302A 经 barrel+SnapshotBounds 复用现有接口",
+  "guard_test": "geometry_compatibility_fixture_test.dart：深路径 import 与登记一一对应"
+}

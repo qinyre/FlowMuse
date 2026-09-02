@@ -1,0 +1,25 @@
+{
+  "task_id": "V3-001C",
+  "run_id": "940a3de9-4503-4dce-9d64-ccaf36f48f85",
+  "summary": "Runner、受控 replay、报告与 hash：FixtureRunner 单页/批量执行器（admission→data_policy→environment→replay→artifacts 五层，任何一层失败即停止；串行执行遵循冻结 spec concurrency=1；报告一律写盘=失败保留）；ControlledReplay 受控网络回放（唯一响应来源：manifest 声明的录制文件存在性+SHA-256 完整性+offline_replay 模式复核；未声明响应 fail-closed 拒绝，无任何网络回退路径；RecordedResponse 模型补存 sha256）；FixtureRunReport/BatchRunReport 分层报告（fixture 级 contentHash=规范化报告哈希，批量 contentHash=逐 fixture 哈希排序拼接；同输入三次运行必一致——CLI 实测三次 content_sha256 相同）；CLI run 命令机器退出码 0=全过/2=失败或拒绝。验收实测：三次运行 hash 一致（测试循环 3 次 exit 0 哈希单一）；故意失败退出非零（篡改回放文件→replay 层 replay_hash_mismatch、exit 非零、失败报告保留在盘）；未授权/未脱敏/无删除策略的真实录制被机器拒绝（缺 deletion→data_boundary_missing_deletion 准入拒；边界完整+authorized_real 录制→data_policy 层 synthetic_only 拒）。顺带修复 V3-001B 复审 F13：恒真超时探针改为真实预算校验（ticks=16 vs spec.timeout_ticks，误配置会如实报错）。测试 46 项全绿（新增 5 项：五层全过/故意失败保留/受控回放 fail-closed/真实录制双层拒绝/CLI 三次一致+非零退出），flutter analyze 零问题。共享测试助手库消除 001B/001C 重复。",
+  "changed_paths": [
+    "FlowMuse-App/tool/smart_layout_v3/src/controlled_replay.dart",
+    "FlowMuse-App/tool/smart_layout_v3/src/fixture_runner.dart",
+    "FlowMuse-App/tool/smart_layout_v3/src/fixture_manifest.dart",
+    "FlowMuse-App/tool/smart_layout_v3/src/determinism_harness.dart",
+    "FlowMuse-App/tool/smart_layout_v3/main.dart",
+    "FlowMuse-App/tool/smart_layout_v3/test/fixture_runner_test.dart",
+    "FlowMuse-App/tool/smart_layout_v3/test/benchmark_determinism_test.dart",
+    "FlowMuse-App/tool/smart_layout_v3/test/benchmark_determinism_test_helpers.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001C/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001C/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001C/review.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_001c_deliverable",
+      "path": "FlowMuse-App/tool/smart_layout_v3/src/fixture_runner.dart",
+      "sha256": "a04e62aa1140f18dab8fd745825ac3e46d55b09501f7670828f41abd8598de50"
+    }
+  ]
+}

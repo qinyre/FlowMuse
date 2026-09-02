@@ -1,0 +1,25 @@
+{
+  "task_id": "V3-304A",
+  "frozen_at_utc": "2026-09-01T06:20:00Z",
+  "principle": "快照先于适配：先冻结实际触及 helper 的行为与调用者，再判断是否需要薄 adapter；现有接口足够时零适配",
+  "timeline": [
+    {
+      "step": "V3-301A/302A 复用验证",
+      "result": "SnapshotBounds / conservativeVisualBounds / elementVisualBounds 现有接口足够，geometry 包零深路径 import、零新 adapter"
+    },
+    {
+      "step": "V3-304A 冻结",
+      "result": "行为快照（荧光笔半宽 sw×4.2×0.5+2、旋转外扩 (w+h)·|cos|）+ 调用者计数快照（3 文件 4 调用点）+ 零反向依赖"
+    },
+    {
+      "step": "后续任务（V3-303A/503A 等）",
+      "guard": "触碰 helper 或新增深路径 import 前必须先更新 ConditionalAdapterAllowlist 与本目录报告，否则 fixture 测试失败"
+    }
+  ],
+  "acceptance": {
+    "zero_changes_outside_allowlist": true,
+    "snapshot_before_adapter": true,
+    "neighbor_caller_regression": "flutter test test/features/whiteboard/smart_layout/compatibility 全绿（6 用例）",
+    "no_wrapper_chain_or_ownership_migration": true
+  }
+}

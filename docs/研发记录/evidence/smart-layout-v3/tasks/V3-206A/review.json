@@ -1,0 +1,59 @@
+{
+ "task_id": "V3-206A",
+ "run_id": "8d4c9db7-38b5-4779-b09a-8111f777806b",
+ "executor_run_id": "4d3d46a4-4ba4-4765-8b19-cec8d286e680",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "review_rounds": 1,
+ "findings": [
+  {
+   "id": "F1",
+   "severity": "minor",
+   "blocking": false,
+   "location": "commit message / result.json summary",
+   "issue": "文案滞后：commit message 称 p95=4.35ms（工件 5.09ms，多次测量波动后文案未同步终值）；result.json summary drift=0.0177（工件 0.0217，笔误）。以工件为准且工件内部自洽，非验收项。"
+  },
+  {
+   "id": "F2",
+   "severity": "info",
+   "blocking": false,
+   "location": "build_gate_one_report.py:9",
+   "issue": "docstring 声称 hash 漂移→broken+exit 2，实际脚本只检测组件缺失，components sha256 仅记录不与 pin 对拍（对拍在 g1_runner 前置检查完成）。措辞问题，非行为缺陷。"
+  },
+  {
+   "id": "F3",
+   "severity": "info",
+   "blocking": false,
+   "location": "g1_runner_cli_test.dart",
+   "issue": "CLI 测试真跑全链并就地重写 gates/G1 证据 JSON（测试对已提交证据工件有写副作用）。建议后续改为输出临时目录。"
+  },
+  {
+   "id": "F4",
+   "severity": "info",
+   "blocking": false,
+   "location": "g1_runner.dart:168-174",
+   "issue": "frozen_holdout/manifest.json 读取无 existsSync 保护，文件缺失时异常崩溃而非 blocked exit 2。当前仓库该文件存在、路径不可达，且崩溃不会被误当成功。"
+  },
+  {
+   "id": "F5",
+   "severity": "info",
+   "blocking": false,
+   "location": "recognition_latency_evaluator.dart",
+   "issue": "延迟指标仅覆盖 Dart 分割段（字段名 latency_development 如实，不冒充端到端）；Go 侧由 live-route smoke 验证可运行性，正式 gate 留待 AgentExecution 执行。"
+  }
+ ],
+ "verification_log": [
+  "git show --name-only 8c65294：14 文件全部命中三条 allowlist 模式（tool/evaluation/**、gates/G1/**、tasks/V3-206A/**），全为新增无夹带。",
+  "沙箱副本连跑两次 build_gate_one_report.py：输出逐字节一致且与已提交 gate-one-report.json 完全一致（utf-8/LF）；sha256=9d11d3f5...ed0a6 与声称值及 result.json 登记值一致。",
+  "flutter test tool/smart_layout_v3/evaluation/{g1_evaluator_test,g1_runner_cli_test}.dart：7 用例全绿（含 blocked→exit 2 全链用例）。",
+  "重跑 flutter test test/features/whiteboard/smart_layout → 167 用例全绿；go test ./internal/recognition/... → ok；commands.json 两条 Gate 命令声称可信；result.json changed_paths 与 14 文件一致、v3_206a_deliverable sha256 与实际文件 hash 一致。",
+  "A 确定性键：pairKey 排序字符串拼接（recognition_quality_evaluator.dart:140-141），无 hashCode/裸整数；重跑时质量 JSON 逐字节复现实证跨运行确定。",
+  "B 分离只读：dev 48/validation 18/frozen 19 两两交集为空、池 85；G1Inputs 只读装载；frozen_holdout manifest 只读用于交集检查（g1_runner.dart:167-186），SR-4 无违反。",
+  "C insufficient：evaluated<minSamples→verdicts['quality']='insufficient'（recognition_quality_evaluator.dart:102-104）有单测；除零均有保护。",
+  "D exit 2：return blocked?2:0（g1_runner.dart:73）；block_reasons 七类覆盖；blocked 时 machine_verdicts.prerequisites=blocked 且 gate_decision=prerequisites_failed，不冒充通过。",
+  "E 标注链：先 e-id→真实 id 映射再 stroke 过滤（recognition_quality_evaluator.dart:46-53）；空阅读序按角色聚类回退且 keys 排序确定（g1_inputs.dart:201-207）；虚 FP 如实拉低 precision 并以 worst_grouping 显式呈现。",
+  "F live-route：Dart 段直调生产 InkRegionSegmenter；Go 段 TestV3LiveRouteSmoke 起真实 httptest 服务器走生产 handler/V3Analyzer/DefaultV3RequestLimits，非录制回放。",
+  "G SR-2：gate_decision=development_gate_reported（build_gate_one_report.py:99）；quality_threshold_disclosure 明确阈值未预注册、以回归地板记录、不声明达标；10 项 machine_verdicts 全部由测量 JSON 计算（62-97 行），drift 自洽。"
+ ]
+}

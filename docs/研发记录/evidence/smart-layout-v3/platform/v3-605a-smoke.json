@@ -1,0 +1,28 @@
+{
+  "task_id": "V3-605A",
+  "suite": "PlatformSmokeSuite",
+  "host": "windows",
+  "steps": [
+    {
+      "id": "entry-load",
+      "passed": true,
+      "detail": "真实控制器 loadFromContent：active=2"
+    },
+    {
+      "id": "commit-applyResult",
+      "passed": true,
+      "detail": "v3 patch 经 502A 同通道提交：active=[rect-1, sl3-smoke-1] doc=true"
+    },
+    {
+      "id": "undo-restore",
+      "passed": true,
+      "detail": "undo 后 fingerprint 回到提交前"
+    },
+    {
+      "id": "reopen-equiv",
+      "passed": true,
+      "detail": "重开元素集+内容字段深度一致（版本域/index 规范化除外）；document 存活=true"
+    }
+  ],
+  "all_passed": true
+}

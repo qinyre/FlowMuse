@@ -1,0 +1,12 @@
+{
+  "task_id": "V3-402B",
+  "run_id": "7d560c8e-8758-4c53-b086-8210f7eb8914",
+  "summary": "栏平衡/contain/障碍绕置/密度/golden 全量落地于 BalancedFlowPlacer：双栏按阅读序枚举放置单元切分点 k，两侧各自在障碍切割段流上放置（子装配保留原子组 compact 间距与不拆组语义），以栏填充深度（最深块底-栏顶）为目标最小化两栏最大值（并列取更早 k，确定）；单个 k 不可行仅跳过、全部不可行才报首个失败（k=n 顺序流稳定原因）。ColumnRegionBuilder 切割段与 protected 障碍间留 1e-6 亚像素间隙——V3-301A 冻结闭盒相交语义（共边即相交），贴边即硬碰撞，必须严格分离。页界 contain 用 kernel.pageContainsRect（闭盒+容差），防御性碰撞复核仅针对 protected 障碍（preserved 投影不参与重排、不构成绕置约束）。preserved/protected 原位坐标进入 preservedRects（键=块 id）与 golden canonical（fingerprint64）。8 项测试全绿：平衡优于 402A 顺序流基线、阅读序跨栏单调、页界 contain、障碍零硬碰撞、全覆盖栏 columnsExhausted、figure 等比+caption 栈+双跑 golden、preserved 原位不重排、综合 fixture（6 段+figure+protected+preserved 双栏）零碰撞且 golden 确定。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/placement/balanced_flow_placer.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/placement/balanced_flow_placer_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-402B/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-402B/commands.json"
+  ],
+  "artifacts": []
+}

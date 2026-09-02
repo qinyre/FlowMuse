@@ -1,0 +1,21 @@
+{
+  "task_id": "V3-700B",
+  "run_id": "6e7f9b80-0fd3-4515-be36-f81c2e043fc5",
+  "summary": "fail-closed capability 与可观测性预部署（合并原 V3-700B~D）。smart_layout/rollout/ 三符号机制层：SmartLayoutCapability(无缓存 defaultOff/阳性未过期 cachedPositive/到期或阴性 expired/损坏 malformed——任何故障路径不产 on,拉取失败语义=无新阳性信号自然衰减)+SmartLayoutKillSwitch(只关不换:类型面无 v2 回退 API,断网/配置故障只降 off;trip/reset/maxTripCount 锁定人工介入口径;combine 组合判定)+SmartLayoutObservability(metricsSchemaVersion=1 版本化事件/失败率滑动窗口告警规则阈值+窗口+最小样本去抖/LocalSyntheticMetricsSink 进程内零网络生产端点归 700A/告警回调闭环)。13 用例全绿含:capability 六态矩阵/kill trip 后入口零请求增量/合成 4 请求 3 失败 0.75≥0.5 样本≥4→AlertEvent→kill trip 闭环/样本不足与窗外事件去抖。server 零改动 go test 全绿(capability 生产服务归 V3-700A 外部输入)。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/rollout/smart_layout_capability.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/rollout/smart_layout_kill_switch.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/rollout/smart_layout_observability.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/rollout/smart_layout_rollout_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/rollout/v3-700b-deliverable.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-700B/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-700B/commands.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_700b_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/rollout/v3-700b-deliverable.json",
+      "sha256": "81bbb71302bed50e43b5a05480678ccbb96b5f876e6d7ba35de8ca93fb8eeca5"
+    }
+  ]
+}

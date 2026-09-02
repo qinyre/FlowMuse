@@ -1,0 +1,66 @@
+{
+ "kind": "request",
+ "expect": "accept",
+ "payload": {
+  "protocolVersion": 3,
+  "pageId": "page-42",
+  "sceneRevision": {
+   "epoch": 2,
+   "revision": 17,
+   "fingerprint": "0123456789abcdef"
+  },
+  "assets": [
+   {
+    "key": "clean|page",
+    "kind": "clean",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "annotated|page",
+    "kind": "annotated",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "crop|r1",
+    "kind": "crop",
+    "fingerprint": "0123456789abcdef"
+   },
+   {
+    "key": "crop|r2",
+    "kind": "crop",
+    "fingerprint": "fedcba9876543210"
+   }
+  ],
+  "marks": [
+   {
+    "markId": "m1",
+    "label": "m1",
+    "assetKey": "annotated|page",
+    "sourceId": "r1"
+   },
+   {
+    "markId": "m2",
+    "label": "m2",
+    "assetKey": "annotated|page",
+    "sourceId": "r2"
+   }
+  ],
+  "exactTexts": [
+   {
+    "sourceId": "text-1",
+    "text": "标题：会议纪要"
+   },
+   {
+    "sourceId": "text-2",
+    "text": ""
+   }
+  ],
+  "sourceRefs": [
+   "r1",
+   "r2",
+   "text-1",
+   "text-2",
+   "ink-3"
+  ]
+ }
+}

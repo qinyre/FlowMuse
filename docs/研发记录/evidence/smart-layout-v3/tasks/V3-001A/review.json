@@ -1,0 +1,73 @@
+{
+  "task_id": "V3-001A",
+  "run_id": "370dab2a-eb0c-404c-ab5a-04f4184d7358",
+  "executor_run_id": "5df0f627-93be-4b35-8e55-40a7154c2a19",
+  "model": "glm-5.3",
+  "reasoning_effort": "max",
+  "verdict": "approved",
+  "findings": [
+    {
+      "id": "RV3-1",
+      "severity": "low",
+      "category": "schema-dart-drift (residual, non-blocking)",
+      "title": "可选描述性字段的类型/格式校验仍是 schema 严、Dart 松（5 个残留点）",
+      "detail": "以下 5 个变体 Dart 准入（exit 0 admitted:true），而用 jsonschema Draft7Validator 对同一文件校验 fixture-manifest.schema.json 全部 INVALID：(1) synthetic manifest 的 data_boundary.user_isolation_key_hash='not-a-hash'（schema sha256 pattern 恒生效；Dart 仅在 origin=authorized_real 时校验，fixture_manifest.dart:273）；(2) features.has_images='yes'；(3) features.long_form=1（schema type:boolean，Dart checkKeys 只查键名不查值类型）；(4) fixture.description=123（schema type:string）；(5) source_groups[].reference=123（schema type:string，Dart 从不读取该字段）。全部为可选描述性字段，不影响数据边界闸门（authorized_real 四件套、组级隔离键字段存在性/pattern、content_origin 隔离均两侧强制且实测拒绝），方向为 schema 严/Dart 松，无越权准入路径。建议在 V3-001B/C 或 V3-002A 收敛。",
+      "evidence": [
+        "CLI：d1_synthetic_bad_toplevel_hash/d2_features_bool_string/d3_description_number/d4_group_reference_number/d5_features_bool_int -> exit=0 admitted=true",
+        "jsonschema（本机安装）：同 5 文件全部 INVALID（pattern/type 错误如 \"'not-a-hash' does not match '^[0-9a-f]{64}$'\"、\"123 is not of type 'string'\"）",
+        "组级对照：source_groups[].user_isolation_key_hash 缺字段 -> field_missing（任意 origin）；非法字符串 -> field_invalid_format；collected_at_utc 非法 -> 拒绝（两侧一致，无漂移）"
+      ],
+      "location": "FlowMuse-App/tool/smart_layout_v3/src/fixture_manifest.dart:273,301-305,525-548; docs/研发记录/specs/smart-layout-v3/fixture-manifest.schema.json:109,138-160,252"
+    },
+    {
+      "id": "RV3-2",
+      "severity": "low",
+      "category": "evidence-precision",
+      "title": "result.json summary 措辞『_Obj 访问器全字段类型检查…全部机器执行』较实测略有夸大",
+      "detail": "summary 称 Dart 解析器与 schema『双向对齐：_Obj 访问器全字段类型检查（required/enum/pattern/数值界/additionalProperties 全部机器执行）』。required/enum/数值界/additionalProperties 逐节点实测属实（20 个 schema 节点属性集与 Dart checkKeys 集合逐一比对一致，含 model_reference）；pattern 对全部必填字段属实；但 RV3-1 的 5 个可选字段（含 synthetic 侧 manifest 级隔离键 pattern）未机器执行，『全字段/全部』表述过强。所有量化声称（29 测试、analyze 零问题、12 项攻击 admitted:false、退出码 0/2/64、model_reference 已入 schema、组级隔离键字段存在可 null、整数 dpr 合法）逐项核实为真，非虚假证据。",
+      "evidence": [
+        "flutter test tool/smart_layout_v3/test/fixture_manifest_test.dart -> +29 All tests passed!",
+        "flutter analyze tool/smart_layout_v3 -> No issues found!",
+        "schema sha256 实算 a0915545243b8284690406f5c8c21e19748500788cc438c1ad7129a2d2415a91 == result.json artifacts[0].sha256",
+        "R2 五项逐一复核为已修复（见 RV3-5）"
+      ],
+      "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001A/result.json:4"
+    },
+    {
+      "id": "RV3-3",
+      "severity": "info",
+      "category": "future-scope",
+      "title": "boundary.origin='synthetic' 与 source_groups[].origin='authorized_real' 混合声明两侧均准入（非漂移）",
+      "detail": "b11 变体（boundary.origin=synthetic、来源组 origin=authorized_real、组隔离键 null）Dart exit 0 准入；jsonschema 对同一文件亦 VALID（schema 无此跨字段规则）——两侧行为等价，不构成 schema↔Dart 漂移，也不绕过真实录制闸门（recorded_responses.content_origin=authorized_real + boundary.origin!=authorized_real 仍被 real_recording_requires_authorized_origin 拒绝，实测 b7）。样本来源一致性归 V3-002A『样本清单与数据边界』（acceptance：无授权或来源不明样本无法进入 manifest）。",
+      "evidence": [
+        "b11_mixed_group_origin -> exit=0 admitted=true；jsonschema 同文件 VALID",
+        "b7_synthetic_real_recording -> exit=2 real_recording_requires_authorized_origin"
+      ],
+      "location": "docs/研发记录/specs/smart-layout-v3/fixture-manifest.schema.json:44-117; FlowMuse-App/tool/smart_layout_v3/src/fixture_manifest.dart:397-403"
+    },
+    {
+      "id": "RV3-4",
+      "severity": "info",
+      "category": "scope-verified",
+      "title": "范围、证据与符号核验通过",
+      "detail": "git diff --cached 恰 10 个文件，全部落在 allowed_paths（FlowMuse-App/tool/smart_layout_v3/** 7 个 + schema + V3-001A evidence 2 个）；pubspec.yaml 未在 staged/unstaged 中（crypto 为既有依赖）。未 staged 的改动仅为 flutter 工具再生的 generated_plugin_registrant/GeneratedPluginRegistrant 与 manifest 时间戳重生成，不进入本任务 commit。commands.json 3 个 run 的 command 与 manifest 任务命令逐字符相等且均 exit 0，最新 run 2026-08-31T07:20:54Z；本人复跑 VerifyArtifacts -> 'V3-001A artifact contract valid.' exit=0。target_symbols 三符号（FixtureManifest、SmartLayoutFixtureRunner、DeterministicExecutionEnvironment）均为真实类；无 V3-001B（benchmark hash/warm-up/规范化）与 V3-001C（批量/报告）越界实现（identityFields 仅为文档声明的 V3-001B 钩子且被测试使用）。CLI 边缘：无参数/错误动作/缺 --manifest -> exit 64；文件不存在 -> exit 2 manifest_file_missing；非法 JSON -> exit 2 manifest_json_invalid；baseline -> exit 0 admitted:true。",
+      "evidence": [
+        "git diff --cached --name-only（10 文件）；git status 确认 pubspec 未动",
+        "python 逐字符比较 commands.json 与 manifest command：3/3 相等；VerifyArtifacts 复跑 exit=0"
+      ],
+      "location": "仓库根"
+    },
+    {
+      "id": "RV3-5",
+      "severity": "info",
+      "category": "verified-fixed",
+      "title": "R2 五项 rejection 逐项复核为真修复；新一轮等价变体探测未发现越权准入",
+      "detail": "RV2-1：expected.relations/reading_order、fixture.recorded_responses/failure_codes 为字符串 -> exit 2 field_not_array；等价新变体（数字 42/3.14、对象、布尔 True 代替数组，共 8 个）全部 exit 2 field_not_array。RV2-2：schema manifest.model_reference 已补（name/version 必填、hash 可选 sha256，additionalProperties:false），Dart checkKeys/必填一致，含正反例测试。RV2-3：summary 的 model_reference 表述与磁盘 schema 一致（实存 schema 第 22-32 行）。RV2-4：runner 注释改为『录制响应文件的存在性（录制内容哈希与字体文件由 V3-001B 环境层冻结，此处不校验）』，与 _verifyFixtureArtifacts 实现精确相符（scene/image/golden 存在性+SHA-256，录制响应仅存在性，无字体文件检查）。RV2-5：来源组 user_isolation_key_hash 字段存在性对任意 origin 强制（缺字段 -> field_missing，b5 实测 exit 2）；组级非法 hash -> field_invalid_format；全 20 节点 unknown_field 实测（root/manifest/model_reference/来源组/clock/font/expected/fixture 等 6 处抽查 + 测试内 2 处）。数据边界闸门重测：authorized_real 缺 consent/anonymization/deletion/user_isolation_key_hash、组级隔离键缺失、consent=not_required、synthetic 携真实录制、origin 大小写/数字/null、authorized_real 顶层隔离键非法 -> 全部 exit 2 对应错误码。schema 本体 Draft7Validator check_schema 通过；两个正例 fixture 对 schema 均 VALID。未发现 exit 0/255/崩溃于任何攻击输入。",
+      "evidence": [
+        "36 个类型/结构变体 + 21 个边界/漂移变体 + 6 个未知字段变体 + 5 个 CLI 边缘：攻击面 0 个 exit 0，0 个 255，0 个无 JSON 崩溃输出",
+        "flutter test +29 All tests passed!；flutter analyze -> No issues found!"
+      ],
+      "location": "FlowMuse-App/tool/smart_layout_v3/; docs/研发记录/specs/smart-layout-v3/fixture-manifest.schema.json"
+    }
+  ]
+}

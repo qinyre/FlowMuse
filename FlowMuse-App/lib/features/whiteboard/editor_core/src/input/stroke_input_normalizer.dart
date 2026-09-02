@@ -34,6 +34,7 @@ class StrokeInputNormalizer {
       case PointerDeviceKind.touch:
       case PointerDeviceKind.trackpad:
       case PointerDeviceKind.unknown:
+      // ignore: unreachable_switch_default
       default:
         return null;
     }

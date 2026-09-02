@@ -1,0 +1,14 @@
+{
+  "task_id": "V3-500A",
+  "run_id": "6bf7f559-4cc4-4413-9275-ed28d840b2c1",
+  "summary": "ScenePatch 模型、归一化与完整 write set 落地于 lib/features/whiteboard/smart_layout/patch/（smart_layout_scene_patch.dart + patch_invariant.dart + smart_layout_scene_patch_builder.dart）。模型：SmartLayoutScenePatch 不可变事务对象覆盖 element add/update/remove、file add、SmartLayoutDocument replace/clear 与 selection intent（空集=清空选择），携带 baseRevision（epoch:revision:fingerprint）与唯一 SourceCoverageLedger 透传（构建期要求已终结，全部 consumed/preserved），不持有 Scene；操作规范序冻结为 remove→update→add，各列表按 id 排序且 List.unmodifiable。update/add 负载为完整元素（位置/尺寸/角度/样式/文本/points 与 groupIds/frameId/boundElements/index/version/versionNonce 全显式），update 显式携带期望 baseVersion（CAS 语义），remove 显式携带 baseVersion→newVersion(+1 推导)与 versionNonce（构建期不随机）。PatchInvariant 为唯一校验权威：16 类稳定违反码全量收集并按（类型序,subjectId,detail）确定性排序——重复/悬空 add/update/remove、软删目标、baseVersion 错配、add version!=1、update/remove delta!=+1、关系正向悬空（frameId/containerId/boundElements 需在 base∪adds∖removes 解析）、关系反向悬空（remove 后 base 未处理元素的引用悬空）、selection 悬空、fileAdd 与 base 冲突/重复、baseRevision 指纹与 base Scene 实际指纹错配、账本未终结、零副作用空 patch；builder build() 违反即整体 StateError 零部分结果，可多次 build 结果一致。精确读写集：ScenePatchWriteSet 枚举全部副作用（elementIds/fileIds/touchesDocument/touchesSelection + intersects 供 V3-502 冲突/重派判定），ScenePatchReadSet=update/remove 目标∪指向 base 的关系引用（patch 内新增互引不计）。11 用例覆盖全量构建/规范排序/不可变/读写集精确性/相交五通道/悬空与冲突拒绝/version 契约/正反向关系完整性/指纹错配/账本未终结/空 patch/确定性双跑一致。flutter analyze smart_layout 全目录零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/patch/smart_layout_scene_patch.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/patch/patch_invariant.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/patch/smart_layout_scene_patch_builder.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/patch/smart_layout_scene_patch_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-500A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-500A/commands.json"
+  ],
+  "artifacts": []
+}

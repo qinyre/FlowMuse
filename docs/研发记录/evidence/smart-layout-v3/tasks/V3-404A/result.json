@@ -1,0 +1,15 @@
+{
+  "task_id": "V3-404A",
+  "run_id": "df8261f6-1504-40cc-ba35-b49057e85ed0",
+  "summary": "七类软指标/三 profile/反投机否决/可解释分解落地于 metrics/ 四文件。layout_metric_contract.dart：LayoutMetricContract v1 冻结七类指标（层级/顺序/图文亲和/对齐节奏/密度留白/视觉平衡/改动成本，统一方向值大=优、界 [0,1]，validateVector 拒绝 NaN/越界/缺失/多余）+ LayoutMetricVector（factsFingerprint 钉来源几何）+ LayoutMetricInput（纯几何事实，无软分/排名/profile 通道）；溯源引用不复制——rubricVersion 1.0.0(D5)/EvaluationSpec content_sha256 常数，测试重读 rubric.json/evaluation-spec.json 钉死单一来源。layout_metric_calculator.dart：LayoutMetricCalculator 硬软隔离（hardValidated=false → MetricsHardRejected，软分不存在故不可抵消硬失败）；七指标实现全部单调有界确定性（层级=title 生效字号 vs 正文中位；顺序=相邻放置对栏序单调+同栏纵向有序；亲和=captionOf 关系对同栏且紧贴下方 gap≤paragraphSpacing+compactGapFloor；对齐节奏=左缘对齐(snapStep 线性衰减)×间距变异系数各半；密度=各栏填充均值健康带 [0.30,0.85] 带外线性衰减；平衡=多栏两极填充差/单栏面积加权质心偏移；成本=中心欧氏距/对角线均值取补）。anti_gaming_veto.dart：六类否决线全部由事实谓词判定（noOp 均值移动<1e-3、extremeShrink ≥2 个文本块且全部最小字号、hiddenText 文本盒<最小行高或非正、excessiveWhitespace ≥3块填充<0.20、duplicateContent 重复 id/相同盒、costFraud 交叉核对宣称 cost>0.995 vs 事实移动>0.05 不信任向量自述）。layout_profile.dart：三 profile（readability/structurePreservation/figureEmphasis，权重和恒 1，测试钉住）共用同一向量与硬约束仅权重不同；LayoutProfileScorer.rank 否决优先（投机样本三 profile 全拒、不能进 Top3），ProfileScore score=Σentries.contribution 恰好可还原（1e-12 钉住）。10 项测试：契约冻结校验、rubric/spec 引用、硬软隔离、干净 fixture 全界内+方向正确+双跑指纹一致、单调性（移动远→成本低、栏失衡→平衡低）、层级/亲和违规降分、顺序逆序降分、六类投机全否决+干净零否决+三 profile 全拒投机、score 可还原、三 profile 排序偏好翻转（可读性选层级高者、保留结构选成本低者）。独立复审一轮 approved（0 blocking，1 minor+6 note）：minor（factsCanonical 未含 originalBounds 宽高）与两处 note 文案/摘要已修复并入本提交，命令重跑后更新时间戳。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/metrics/layout_metric_contract.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/metrics/layout_metric_calculator.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/metrics/anti_gaming_veto.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/metrics/layout_profile.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/metrics/layout_metrics_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-404A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-404A/commands.json"
+  ],
+  "artifacts": []
+}

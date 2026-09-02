@@ -1,0 +1,343 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "three-baseline-report",
+ "task": "V3-003B",
+ "layers": {
+  "overall": {
+   "samples": 85,
+   "no_op": {
+    "samples_with_metrics": 85,
+    "oob_total": 49.0,
+    "overlap_pair_total": 117.0,
+    "min_source_recall": 1.0,
+    "samples_with_failure_codes": 47
+   },
+   "v2_naive_reflow": {
+    "samples_with_metrics": 85,
+    "oob_total": 32.0,
+    "overlap_pair_total": 0.0,
+    "min_source_recall": 1.0,
+    "samples_with_failure_codes": 11
+   },
+   "ai_surrogate": {
+    "samples_with_metrics": 85,
+    "oob_total": 0.0,
+    "overlap_pair_total": 0.0,
+    "min_source_recall": 1.0,
+    "samples_with_failure_codes": 0,
+    "modification_count_total": 480
+   }
+  },
+  "by_split": {
+   "development": {
+    "samples": 48,
+    "no_op": {
+     "samples_with_metrics": 48,
+     "oob_total": 31.0,
+     "overlap_pair_total": 74.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 25
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 48,
+     "oob_total": 22.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 7
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 48,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 270
+    }
+   },
+   "frozen_holdout": {
+    "samples": 19,
+    "no_op": {
+     "samples_with_metrics": 19,
+     "oob_total": 9.0,
+     "overlap_pair_total": 16.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 11
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 19,
+     "oob_total": 2.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 2
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 19,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 107
+    }
+   },
+   "validation": {
+    "samples": 18,
+    "no_op": {
+     "samples_with_metrics": 18,
+     "oob_total": 9.0,
+     "overlap_pair_total": 27.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 11
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 18,
+     "oob_total": 8.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 2
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 18,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 103
+    }
+   }
+  },
+  "by_scene_family": {
+   "annotated-diagram": {
+    "samples": 15,
+    "no_op": {
+     "samples_with_metrics": 15,
+     "oob_total": 20.0,
+     "overlap_pair_total": 56.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 14
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 15,
+     "oob_total": 20.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 4
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 15,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 175
+    }
+   },
+   "brainstorm-board": {
+    "samples": 15,
+    "no_op": {
+     "samples_with_metrics": 15,
+     "oob_total": 3.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 3
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 15,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 15,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 15
+    }
+   },
+   "meeting-notes": {
+    "samples": 30,
+    "no_op": {
+     "samples_with_metrics": 30,
+     "oob_total": 8.0,
+     "overlap_pair_total": 31.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 13
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 30,
+     "oob_total": 7.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 3
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 30,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 130
+    }
+   },
+   "typed-report": {
+    "samples": 25,
+    "no_op": {
+     "samples_with_metrics": 25,
+     "oob_total": 18.0,
+     "overlap_pair_total": 30.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 17
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 25,
+     "oob_total": 5.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 4
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 25,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 160
+    }
+   }
+  },
+  "by_complexity_band": {
+   "high": {
+    "samples": 25,
+    "no_op": {
+     "samples_with_metrics": 25,
+     "oob_total": 19.0,
+     "overlap_pair_total": 82.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 15
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 25,
+     "oob_total": 32.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 11
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 25,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 230
+    }
+   },
+   "low": {
+    "samples": 25,
+    "no_op": {
+     "samples_with_metrics": 25,
+     "oob_total": 9.0,
+     "overlap_pair_total": 6.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 11
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 25,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 25,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 80
+    }
+   },
+   "medium": {
+    "samples": 25,
+    "no_op": {
+     "samples_with_metrics": 25,
+     "oob_total": 16.0,
+     "overlap_pair_total": 28.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 15
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 25,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 25,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 140
+    }
+   },
+   "none": {
+    "samples": 10,
+    "no_op": {
+     "samples_with_metrics": 10,
+     "oob_total": 5.0,
+     "overlap_pair_total": 1.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 6
+    },
+    "v2_naive_reflow": {
+     "samples_with_metrics": 10,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0
+    },
+    "ai_surrogate": {
+     "samples_with_metrics": 10,
+     "oob_total": 0.0,
+     "overlap_pair_total": 0.0,
+     "min_source_recall": 1.0,
+     "samples_with_failure_codes": 0,
+     "modification_count_total": 30
+    }
+   }
+  }
+ },
+ "replay_check": {
+  "status": "passed",
+  "method": "EditorProtocol machine replay per protocol.json replayability clause",
+  "samples_replayed": 85,
+  "per_agent": {
+   "A": {
+    "run_id": "c1bfe884-c461-455c-a6da-600a3c120cb2",
+    "replay_mismatches": 0,
+    "notes_count": 9
+   },
+   "B": {
+    "run_id": "9a85dc72-cc52-438d-a0be-54a71324905f",
+    "replay_mismatches": 0,
+    "notes_count": 9
+   }
+  },
+  "inter_agent": {
+   "identical_samples": 85,
+   "disagreements": 0,
+   "disagreement_blind_ids": [],
+   "arbiter_invoked": false,
+   "arbiter_note": "双代理产物逐样本完全一致，零分歧，无需第三仲裁代理（协议未触发）。"
+  }
+ },
+ "panel_disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "第三条基线是两个上下文隔离 GLM-5.3 Max 代理按固定编辑协议生成的 AI surrogate 整理基线；修改次数/操作步骤是协议产物，不代表真人整理效率（类名 HumanBaselineComparator 沿用任务卡符号表，语义以本披露为准）。"
+ }
+}

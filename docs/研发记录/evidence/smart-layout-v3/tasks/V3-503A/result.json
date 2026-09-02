@@ -1,0 +1,14 @@
+{
+  "task_id": "V3-503A",
+  "run_id": "f98b3f99-e865-4be5-ba15-a9cdbf1d135b",
+  "summary": "真实 DraftSceneRenderer 落地于 rendering/draft_scene_renderer.dart（DraftSceneRenderer + DraftRenderLayer + DraftRenderSnapshot + DraftResourceStatus 三态 + DraftRenderCancelled）。复用编辑器真实渲染链：StaticCanvasPainter（viewport 同式变换 scale(zoom)→translate(-offset)、orderedElements z 序、culling、ElementRenderer 全类型派发）+ RoughCanvasAdapter（真实 rough 绘制）+ 真实图片 codec（instantiateImageCodec 串行解码限制峰值，codec 取帧后立即释放）；文本/公式边界采集走 TextMeasureAdapter（V3-300A 同一 TextPainter/FontResolver 路径，真实墨迹盒=实测最宽行宽×实测高，非元素盒估算）；图片边界=最终绘制盒+resolved/missing 资源事实；位图=PictureRecorder→toImage 真实绘制产物（非估算缩略图），归调用方所有（snapshot.dispose 幂等）。缺资源明确降级：引用缺失/解码失败按编辑器占位语义（灰框 X）绘制并如实记录 layer.missing + snapshot.missingFileIds，不删块不造数据。资源归零：liveResourceCount 可观测——解码图光栅化后全部释放、picture finally 释放、cancelCurrent 代际作废在检查点抛 DraftRenderCancelled 且零残留、dispose 拒绝后续渲染；测试钉住连续 3 次渲染后归零、取消在途零残留、取消后可继续渲染。平台 golden：形状+真实 1x1 PNG 图片场景（Excalifont 为 bundled 字体零网络）逐字节 golden（goldens/draft_render_shape_image.png）双跑稳定；文本用 bundled Excalifont 规避 google_fonts 网络（与既有 V3-300A 测试同法）。5 用例全绿+analyze smart_layout 全目录零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/rendering/draft_scene_renderer.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/rendering/draft_scene_renderer_test.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/rendering/flow_muse_test_scene.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/rendering/goldens/draft_render_shape_image.png",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-503A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-503A/commands.json"
+  ],
+  "artifacts": []
+}

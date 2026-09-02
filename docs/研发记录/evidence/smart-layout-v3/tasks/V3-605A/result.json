@@ -1,0 +1,23 @@
+{
+  "task_id": "V3-605A",
+  "run_id": "d91e38f0-4708-4ec8-b8cf-7928a50d5dcc",
+  "summary": "可用平台构建、OHOS 边界与跨端 smoke（合并原 V3-605A~C）。(1) PlatformBuildMatrix（dart CLI）：六端配方冻结(android apk --debug/web/windows/ohos hap --debug/ios --no-codesign/macos)+宿主门+工具链探测(flutter doctor 解析+ANDROID_HOME/HOS_SDK_HOME)+可用端实构建(android 32.6s 缓存后/web 50.0s,产物 fnv1a64 哈希+字节数入证据,生成文件不入提交)+不可用端如实 release_deferred(windows=VS 缺失/ohos=SDK 缺失/ios+macos=宿主门)逐端 runner/缺失依赖/恢复命令。发现并解决真实构建阻塞：本机全局 FLUTTER_STORAGE_BASE_URL=CN 镜像对 OHOS fork 引擎 jar 403(pom 200)，CLI env 覆盖主站后 android 实构建成功(首建 1172.7s)，零工程改动。(2) PlatformSmokeSuite（flutter test 跨端同套件）：入口(真实 MarkdrawController loadFromContent)→commit(真实 v3 patch pushHistory+applyResult 与 502A 同通道)→undo(fingerprint 精确回基线)→reopen(serializeScene→新控制器重开,元素集+内容字段深度一致[版本域/index 装载规范化除外,600A 口径],SmartLayoutDocument 存活)四段全绿。(3) workflow smart-layout-v3-platform.yml 三类宿主矩阵跑 smoke+构建矩阵。六端结论：2 built+4 release_deferred(all_available_built=true)；生产六端认证归 V3-700A。",
+  "changed_paths": [
+    "FlowMuse-App/tool/smart_layout_v3/platform/platform_build_matrix.dart",
+    "FlowMuse-App/tool/smart_layout_v3/platform/platform_smoke_suite.dart",
+    "FlowMuse-App/tool/smart_layout_v3/platform/platform_smoke_suite_test.dart",
+    ".github/workflows/smart-layout-v3-platform.yml",
+    "docs/研发记录/evidence/smart-layout-v3/platform/v3-605a-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/platform/v3-605a-smoke.json",
+    "docs/研发记录/evidence/smart-layout-v3/platform/v3-605a-deliverable.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-605A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-605A/commands.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_605a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/platform/v3-605a-deliverable.json",
+      "sha256": "1ba58664e6d1f5b40f8be64b98ab6895414dbd753e4555be8a8f9f1f51dec9b1"
+    }
+  ]
+}

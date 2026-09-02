@@ -1,0 +1,49 @@
+{
+ "kind": "response",
+ "expect": "accept",
+ "payload": {
+  "protocolVersion": 3,
+  "requestId": "req-1",
+  "regions": [
+   {
+    "id": "g1",
+    "role": "title",
+    "sourceIds": [
+     "text-1"
+    ],
+    "readingOrder": 0,
+    "confidence": 0.9,
+    "relations": []
+   },
+   {
+    "id": "g2",
+    "role": "figure",
+    "sourceIds": [
+     "r2"
+    ],
+    "readingOrder": 1,
+    "confidence": 0.8,
+    "relations": []
+   },
+   {
+    "id": "g3",
+    "role": "caption",
+    "sourceIds": [
+     "r1",
+     "ink-3"
+    ],
+    "readingOrder": 2,
+    "confidence": 0.7,
+    "relations": [
+     {
+      "type": "captionOf",
+      "targetRegionId": "g2"
+     }
+    ]
+   }
+  ],
+  "warnings": [
+   "低置信区域 1 个"
+  ]
+ }
+}

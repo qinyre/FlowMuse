@@ -95,7 +95,7 @@ void main() {
   test('窗口内无变更不触发flush', () async {
     final accumulator = ChangeAccumulator();
     var flushCount = 0;
-    accumulator.onFlush = (_, __) async { flushCount++; };
+    accumulator.onFlush = (_, _) async { flushCount++; };
     await Future.delayed(const Duration(milliseconds: 100));
     expect(flushCount, 0);
   });
@@ -132,6 +132,7 @@ Map<String, Object?> _element({
     'updated': DateTime.now().millisecondsSinceEpoch,
     'isDeleted': isDeleted,
     'index': 'a0',
+    // ignore: use_null_aware_elements
     if (x != null) 'x': x,
     'y': 0,
     'width': 100,

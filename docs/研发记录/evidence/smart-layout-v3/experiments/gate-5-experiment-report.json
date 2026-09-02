@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0.0",
+  "task": "V3-606A",
+  "stage": "finalize",
+  "gate": "G5",
+  "status": "passed",
+  "machine_decision": {
+    "T1_critical_zero": {
+      "v3_critical_samples": 0,
+      "pass": true
+    },
+    "T2_noninferiority_ai": {
+      "rd_major": 0.0,
+      "p_one_sided_holm": 0.0,
+      "margin": 0.1,
+      "pass": true,
+      "v3_major_samples": 0,
+      "surrogate_major_samples": 0,
+      "n": 48
+    },
+    "T3_rubric_noninferiority": {
+      "delta_rubric": 0.0,
+      "p_one_sided_holm": 0.0,
+      "margin": -0.25,
+      "pass": true
+    },
+    "T4_superiority_v2": {
+      "rd_major_v2": -0.14583333333333334,
+      "p_one_sided_holm": 0.0005,
+      "pass": true,
+      "v2_major_samples": 7
+    },
+    "T5_perf_budgets": {
+      "source": "performance/v3-604a-report.json",
+      "pass": true
+    },
+    "T6_construct": {
+      "spearman_rho": null,
+      "indeterminate": true,
+      "note": "每样本失败码计数全 0 → construct_check_indeterminate（不判 fail，披露口径）"
+    }
+  },
+  "operational_cost_proxy": {
+    "v3_modification_total_dev": 270,
+    "ai_surrogate_modification_total_pinned": 480,
+    "note": "v3 代表策略操作步数（development 48 样本）vs ai_surrogate 钉定全池 480（three-baseline 口径，披露性对照）"
+  },
+  "panel": {
+    "agent_a_run_id": "9340cf7c-5241-4965-9a23-044d302c9f5d",
+    "agent_b_run_id": "d914d4a1-c0d1-4b54-a6ab-f7ea144351a3",
+    "isolation": "两个全新上下文子代理，互不可见，执行者不兼任",
+    "soft_disagreements": 0,
+    "mandatory_arbitration": 0,
+    "arbiter_used": false,
+    "calibration": {
+      "max_abs_delta_vs_mechanical": 0,
+      "note": "机械 rubric（code 纯函数）与盲评合成分逐样本偏差（校准披露）"
+    }
+  },
+  "panel_disclosure": {
+    "panel_type": "ai_surrogate",
+    "human_validation_performed": false,
+    "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+    "statement": "本实验双盲盲评由两个上下文隔离的 GLM-5.3 Max AI 代理执行，分歧才启用第三仲裁；不构成真人同行评审。"
+  },
+  "production_release_note": {
+    "development_gates": "G0~G5 全部为 development Gate，通过不授权生产发布",
+    "disclosure": "PRODUCTION_RELEASE_NOT_AUTHORIZED"
+  },
+  "v3_policy_disclosure": [
+    "v3_flow_policy 为 v3 放置语义确定性代表策略（阅读序多栏流式+行带原子组+禁裁字等比缩放+fail-closed 缩放不拆不丢+笔迹原位）",
+    "与 v2_naive_reflow / ai_surrogate 同一处理级别，非生产 v3 全管线复刻（dev 线限制）"
+  ]
+}

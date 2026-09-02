@@ -1,0 +1,33 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "gate-zero-report-panel",
+ "task": "V3-004C",
+ "panel_type": "ai_surrogate",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "rounds": [
+  {
+   "round": 1,
+   "raters": {
+    "A": "3781934b-e274-49f8-8dc1-05ab782c7b98",
+    "B": "979ef195-1519-485c-bdc8-4deec287f691"
+   },
+   "verdicts_adequate": {
+    "A": 5,
+    "B": 5
+   },
+   "inter_rater_disagreements": [],
+   "arbiter_invoked": false,
+   "verdict": "pass"
+  }
+ ],
+ "final_verdict": "pass",
+ "errors": [],
+ "isolation": "两名全新上下文隔离代理互不可见；执行者不兼任",
+ "panel_disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "Gate 0 证据包盲审由 GLM-5.3 Max AI 代理执行；development Gate，不授权生产发布。"
+ }
+}

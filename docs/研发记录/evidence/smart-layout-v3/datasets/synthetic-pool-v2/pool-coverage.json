@@ -1,0 +1,75 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "dataset-pool-coverage",
+ "task": "V3-002B",
+ "axes": {
+  "scene_family": [
+   "meeting-notes",
+   "brainstorm-board",
+   "annotated-diagram",
+   "typed-report"
+  ],
+  "content_kind": [
+   "handwritten_only",
+   "typed_only",
+   "mixed"
+  ],
+  "complexity_band": [
+   "none",
+   "low",
+   "medium",
+   "high"
+  ],
+  "platform_profile": [
+   "desktop",
+   "mobile",
+   "web"
+  ]
+ },
+ "sample_count": 85,
+ "skipped_cells": [
+  {
+   "family": "meeting-notes",
+   "content_kind": "handwritten_only",
+   "complexity": "none",
+   "reason": "含手写内容的单元 complexity=none 矛盾"
+  },
+  {
+   "family": "meeting-notes",
+   "content_kind": "mixed",
+   "complexity": "none",
+   "reason": "含手写内容的单元 complexity=none 矛盾"
+  },
+  {
+   "family": "brainstorm-board",
+   "content_kind": "handwritten_only",
+   "complexity": "none",
+   "reason": "含手写内容的单元 complexity=none 矛盾"
+  },
+  {
+   "family": "annotated-diagram",
+   "content_kind": "mixed",
+   "complexity": "none",
+   "reason": "含手写内容的单元 complexity=none 矛盾"
+  },
+  {
+   "family": "typed-report",
+   "content_kind": "typed_only",
+   "complexity": "medium",
+   "reason": "typed_only 只有少量签名/批注笔迹，medium/high 笔画带与内容类型矛盾"
+  },
+  {
+   "family": "typed-report",
+   "content_kind": "typed_only",
+   "complexity": "high",
+   "reason": "typed_only 只有少量签名/批注笔迹，medium/high 笔画带与内容类型矛盾"
+  },
+  {
+   "family": "typed-report",
+   "content_kind": "mixed",
+   "complexity": "none",
+   "reason": "含手写内容的单元 complexity=none 矛盾"
+  }
+ ],
+ "derivation_variants": 34
+}

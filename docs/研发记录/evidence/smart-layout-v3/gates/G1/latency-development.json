@@ -1,0 +1,12 @@
+{
+ "evaluated_samples": 48,
+ "p50_ms": 0.67,
+ "p95_ms": 5.09,
+ "max_ms": 6.74,
+ "timeout_seconds": 300,
+ "repetitions": 3,
+ "percentile_method": "nearest_rank",
+ "verdicts": {
+  "latency": "pass"
+ }
+}

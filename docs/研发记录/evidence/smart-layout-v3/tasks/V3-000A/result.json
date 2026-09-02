@@ -1,0 +1,18 @@
+{
+  "task_id": "V3-000A",
+  "run_id": "731d1442-85be-48f2-a37c-5f4c77a15f2b",
+  "summary": "建立智能排版 v3 失败分类账：critical/major/minor 三级定义与发布门禁语义；34 个失败码（7C/21M/6m）覆盖 8 层（snapshot/segmentation/analysis/candidate/layout/transaction/experience/privacy，层注册表显式定义），每码含谓词、最小正反例与证据要求；阻断级硬约束齐备（字号硬下限、比例硬区间、图片裁切、保护对象损坏、未验证候选、role 判错）；allowed_relations 注册表（caption_of/keep_together/belongs_to）及全局约束；9 条禁止模式；6 类反投机案例含检测谓词与硬/软分界；24 条锚点样例（18 正 6 负）三视角一致，含 insufficient 极性、R3 双登记升级（ANCH-15）、多重失败分账锚点；10 条裁决规则。两轮独立复审 findings 已全部修复：初审批码与口径澄清；二审修复 R3/M-TX-LATE-RESPONSE/ANCH-15 升级双登记矛盾、FP-6→M-CAND-UNVALIDATED 与 R4 insufficient 分工、ANCH-10/21 输入前提完备化、补 M-SEMANTIC-ROLE-ERROR。自检通过：severities 恰三键、前缀-严重度-层注册一致、锚点计数与 codes 数量一致、交叉引用闭合。",
+  "changed_paths": [
+    "docs/研发记录/specs/smart-layout-v3/failure-taxonomy.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000A/review.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_000a_deliverable",
+      "path": "docs/研发记录/specs/smart-layout-v3/failure-taxonomy.json",
+      "sha256": "e0dd0ad6a5d5094e4605e8fec6813e008cf0712fa151414418c8aaa9679428f4"
+    }
+  ]
+}

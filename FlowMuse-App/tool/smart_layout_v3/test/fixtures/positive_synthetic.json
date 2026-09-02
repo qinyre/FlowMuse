@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_kind": "smart-layout-v3-fixture-manifest",
+  "manifest": {
+    "name": "synthetic-smoke",
+    "version": "1.0.0",
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "generator": "hand-authored fixture for V3-001A contract tests",
+    "split": "synthetic"
+  },
+  "data_boundary": {
+    "origin": "synthetic",
+    "source_groups": [
+      {
+        "id": "synthetic-group-a",
+        "origin": "synthetic",
+        "user_isolation_key_hash": null,
+        "sample_count": 1
+      }
+    ],
+    "forbidden_uses": ["禁止回流训练", "禁止作为 frozen 逐页答案查看"]
+  },
+  "fixtures": [
+    {
+      "id": "synthetic-mixed-page",
+      "description": "合成混合页：手写批注 + typed 段落 + 图片",
+      "source_group_id": "synthetic-group-a",
+      "features": {
+        "content_kind": "mixed",
+        "stroke_count": 42,
+        "has_images": true,
+        "has_list": true
+      },
+      "scene": { "path": "artifacts/scene.json", "sha256": "1111111111111111111111111111111111111111111111111111111111111111" },
+      "environment": {
+        "dpr": 2.0,
+        "locale": "zh-CN",
+        "timezone": "Asia/Shanghai",
+        "clock": { "mode": "fixed", "fixed_at_utc": "2026-08-31T00:00:00Z" },
+        "random_seed": 20260831,
+        "fonts": [
+          { "family": "Roboto", "file": "fonts/Roboto-Regular.ttf", "sha256": "2222222222222222222222222222222222222222222222222222222222222222" }
+        ],
+        "platform": "windows",
+        "network_mode": "offline_replay"
+      },
+      "element_integrity": {
+        "element_ids_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "version_nonce_seed": 7
+      },
+      "recorded_responses": [
+        {
+          "name": "vlm-overview",
+          "kind": "vlm_overview",
+          "content_origin": "synthetic",
+          "path": "replay/vlm_overview.json",
+          "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+        }
+      ],
+      "expected": {
+        "coverage": { "min_source_recall": 1.0 },
+        "relations": [
+          { "type": "caption_of", "from": ["text-1"], "to": ["image-1"], "confidence": 0.9 }
+        ],
+        "reading_order": ["text-1", "image-1"],
+        "renderer_golden": { "path": "artifacts/golden.png", "sha256": "5555555555555555555555555555555555555555555555555555555555555555" },
+        "failure_codes": []
+      }
+    }
+  ]
+}

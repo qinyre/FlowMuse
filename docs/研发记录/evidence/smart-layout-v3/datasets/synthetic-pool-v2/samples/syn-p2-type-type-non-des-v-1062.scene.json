@@ -1,0 +1,50 @@
+{
+ "page": {
+  "width": 1240,
+  "height": 1754
+ },
+ "elements": [
+  {
+   "id": "syn-p2-type-type-non-des-v-1062-text-001",
+   "type": "text",
+   "bbox": [
+    474,
+    742,
+    301,
+    200
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落1段落1"
+  },
+  {
+   "id": "syn-p2-type-type-non-des-v-1062-text-002",
+   "type": "text",
+   "bbox": [
+    959,
+    163,
+    68,
+    149
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落2段落2"
+  },
+  {
+   "id": "syn-p2-type-type-non-des-v-1062-binding-001",
+   "type": "binding",
+   "bbox": [
+    750,
+    1058,
+    225,
+    124
+   ],
+   "rotation": 0,
+   "target_kind": "text",
+   "offset": [
+    -16,
+    5
+   ]
+  }
+ ]
+}

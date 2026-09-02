@@ -1,0 +1,18 @@
+{
+  "task_id": "V3-505C",
+  "run_id": "c3b69a66-973c-4c7e-8671-12918c42f60e",
+  "summary": "真实入口、错误取消与可访问性闭环。session/smart_layout_real_wiring.dart（重写）：SmartLayoutRealCandidateChain.run 全真实候选生成链（剥离 background 页框/PDF 底图出布局 ledger——它们只贡献 pageBounds 不成为块，请求侧保留全源清单；SemanticDocumentAssembler→LayoutBlockAssembler→LayoutCompositionPlanner→LayoutPreflight.screen 四型分派→BalancedPlacement 栏平衡放置→SmartLayoutCandidateMaterializer 物化（snapshot.sourceCoverage 直传）→AntiGamingVetoDetector→ValidatedCandidatePipeline 完整门禁；pageContentBounds=整页框口径、放置域=边距 inset 内容区；RealGenerationOutcome sealed：无解类（no-feasible-layout/no-placeable-candidate/empty-page）空候选呈现、可重试 measurement-dependency、契约破坏 fail closed）；SmartLayoutRealSessionScope.build（真实 editor/HTTP/repo/commitGateway/measure 装配，无 fake provider；_buildRequest 快照级请求+捕获 scene/snapshot/ticket 同源；candidateChain 票据失配 StateError；rerunChain=当前 Scene 重提取+最后响应全链重跑（V3-205A 局部≡全量）；setActivePage 离页作废捕获；dispose 释放 tracker）。session/smart_layout_session.dart：completeApplyDelegated 委托提交入口（同四检+迁移，Scene 提交委托 compare-and-commit 事务闭包，被拒零副作用进 failed）。view_model：deps 增 candidateChain/commitGateway 注入点（null=505A/B 手动路径保持兼容）；分析成功自动运行生成链（迟到票据判旧并 dispose 候选零泄漏；StateError reason 透传、measurement-dependency 可重试）；applySelectedCandidate 真实 CAS 路径（selectedValidatedCandidate+commitGateway→completeApplyDelegated→HistoryCommitted.reduced.commitResult 单事务）；cancel/reset/_releaseValidatedCards 释放候选渲染资源（_ownedCandidates 字段持有，onDispose 只释资源不写 state 避开 Riverpod 生命周期断言）；restartAnalysis=cancel→reset→startAnalysis 组合（不新增迁移）。views/smart_layout_session_view.dart：CallbackShortcuts 无鼠标全键盘流程（Enter 开始/应用/完成、Escape 取消/复位、上下方向键候选间移动）；各相位首要控件 autofocus；_resetAndRestoreFocus 焦点归还 restoreFocusNode；Semantics liveRegion 相位播报（仅语义通道不重复可见文案）；无解分支（空候选+重新分析+关闭）。views/smart_layout_session_panel.dart（新增）：独立 ProviderScope 注入真实依赖束的非模态面板宿主（关闭前在途先取消，卸载即作用域销毁→候选资源释放，零 modal 死锁/残留）。whiteboard_page.dart：V3 真实入口（角落 FAB 打开面板，当前页建立/复用 scope，离页 setActivePage；页面 dispose 释放 scope）。验收测试：test/session/smart_layout_real_wiring_test.dart 7 用例（loopback 真实 HttpServer+真实 NativeHttpClient+HttpOverrides 摘除复原：真实 server→候选→commit 全链含 Scene 变更断言（typed 文本移入页内容区+版本前进）+请求体快照装配断言+History 一次 undo 精确回滚；锁定障碍吃满栏→NoFeasibleLayout 空候选+移除后重新分析产出真候选；零认领响应→semantic-contract-broken fail closed；取消在途立即终止+迟到响应票据判旧零残留；离页守卫拒绝零 Scene 副作用；500→可重试失败→服务恢复 retry 全链成功；链票据失配 StateError）；views 测试 +5 用例（键盘全流程 Enter/Escape/焦点恢复、reviewing 方向键+Enter 应用、无解分支、liveRegion 语义播报、零 modal 有界泵收敛）。smart_layout 全套 409 用例全绿+analyze 零 issue；whiteboard_page analyze 零 issue；范围外源码 diff 零（既有格式漂移/受保护差异未触碰）。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_real_wiring.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_session.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_session_view_model.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_panel.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_view.dart",
+    "FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/session/smart_layout_real_wiring_test.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/views/smart_layout_session_view_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-505C/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-505C/commands.json"
+  ],
+  "artifacts": []
+}

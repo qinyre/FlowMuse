@@ -1,0 +1,26 @@
+{
+  "task_id": "V3-602A",
+  "run_id": "3ba0e299-b936-4037-a506-7c61c8f33372",
+  "summary": "可复制 CI、失败报告与证据归档（合并原 V3-602A~B）。工具链落库 tool/smart_layout_v3/ci/（持久化+自测 11 用例 fake executor 零子进程+analyze 零 issue）：(1) SmartLayoutCiMatrix——stage 模型(命令/仓库相对工作目录/输入指纹含目录联合哈希/失败产物清单)+机器报告(schema_version/tool_version/environment.flutter/逐 stage 命令退出码时长诊断尾部)+聚合退出码(任一非零即阻断取首个失败码)+CiPathPolicy(绝对路径与 .. 拒绝+诊断仓库根脱敏——实测报告零盘符路径仅 loopback http URL)+缓存(指纹命中零执行,输入内容变化自动失效)+replay canonical 投影对照(剥时间戳时长)+--only/--sabotage CLI。(2) DeterminismCiCheck——flutter test --machine 事件流解析(testStart/testDone 逐测试映射,hidden 剔除,error 脱敏截断)+patch/snapshot/document 确定性测试集双跑漂移检测(结果集与失败详情一致才 deterministic)。(3) sabotage_probe 受控失败探针(仓库根自脚本位置推导不依赖 CWD)。workflow smart-layout-v3-ci.yml 与 quality.yml 同源钉死 OpenHarmony Flutter 分支,报告/失败产物 upload-artifact。真实本机矩阵跑 5 stage 全绿 aggregate=0(analyze 6.6s/core 10.4s/transaction 5.4s/determinism 双跑 14.1s/自测 4.8s,报告归档 matrix-report-latest.json)；破坏验证 --only sabotage-probe 真退出码 1 阻断+stderr 诊断保留+失败产物复制进 failures 归档(报告归档 sabotage/)。acceptance 双条落证：新 clone 可运行(全路径仓库相对,策略强制)与故意破坏阻断且保留诊断。",
+  "changed_paths": [
+    "FlowMuse-App/tool/smart_layout_v3/ci/smart_layout_ci_matrix.dart",
+    "FlowMuse-App/tool/smart_layout_v3/ci/determinism_ci_check.dart",
+    "FlowMuse-App/tool/smart_layout_v3/ci/sabotage_probe.dart",
+    "FlowMuse-App/tool/smart_layout_v3/ci/smart_layout_ci_matrix_test.dart",
+    "FlowMuse-App/tool/smart_layout_v3/ci/determinism_ci_check_test.dart",
+    ".github/workflows/smart-layout-v3-ci.yml",
+    "docs/研发记录/evidence/smart-layout-v3/ci/matrix-report-latest.json",
+    "docs/研发记录/evidence/smart-layout-v3/ci/sabotage/sabotage-matrix-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/ci/sabotage/probe-artifacts/sabotage-diagnostic.json",
+    "docs/研发记录/evidence/smart-layout-v3/ci/v3-602a-deliverable.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-602A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-602A/commands.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_602a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/ci/v3-602a-deliverable.json",
+      "sha256": "7a29c102659172909f3b3112b7244b6ee759aee8edcf6714ea5c6784ff5af0b3"
+    }
+  ]
+}

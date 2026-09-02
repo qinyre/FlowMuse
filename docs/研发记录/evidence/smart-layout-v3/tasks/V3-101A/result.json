@@ -1,0 +1,16 @@
+{
+ "task_id": "V3-101A",
+ "run_id": "633b1465-6d3c-4043-8f15-f26c92eb7590",
+ "summary": "SceneRevision、fingerprint 与变化接线（合并原 V3-101A～C）。(1) deterministic_hash.dart：vendored 自然介质种子同款 mul32/fnv1a32（16 位拆分+toUnsigned(32) 保证 VM/dart2js 逐位一致，公开向量空串=0x811c9dc5、\"abc\"=0x1a47e90b 固定测试），fingerprint64 双域分隔 32 位车道拼 16 hex 字符。(2) SceneFingerprint：canonical 负载=元素按 StableElementIdentity(id) 排序（远端 upsert 顺序无关）+ExcalidrawJsonCodec.elementToJson 全字段投影（键排序+数字归一）+files 按 id 排序（mimeType|length|FNV 逐字节内容哈希，Expando 按 ImageFile 实例缓存避免大图重算）+smartLayout 文档全量；canonicalNum 显式处理 VM/dart2js 分叉点（整值 double 统一十进制整数形态、0/-0.0 归一、非整值最短往返、NaN/Inf 哨兵），字符串一律 jsonEncode 转义防分隔符注入。指纹只用于智能排版完整性校验，不写入持久化协议。(3) SceneRevisionTracker 双路接线（不改 History/LWW/协作协议）：editor gateway 的 sceneChangeListeners（带源标签 userEdit/undo/redo/remoteApply/reset/restore）+changes ChangeNotifier 兜底（覆盖 loadScene/clear/applyScene 等只 notifyListeners 的替换路径）；fingerprint 变化才递增 revision（视口/选择/同内容远端重放不递增），reset/restore 同时递增 epoch，load/clear 兜底路径只递增 revision（无源标签可辨，文档化为既定口径），undo 回到旧内容同样递增（单调变更计数）；dispose 幂等冻结。(4) 测试 21 用例全绿：哈希公开向量/域分隔、canonicalNum 全分叉形态、键序无关、元素顺序无关、位移/软删/换 id/files 三要素/smartLayout 任一变化均变指纹、真控制器接线（本地编辑/undo/redo（经 commitValidated 压栈语义）/远端元素更新/applyRemoteScene 递增、视口/选择/同内容重放不递增、reset epoch+1、load/clear 兜底递增、双 tracker 指纹一致、dispose 冻结、值语义）；analyze 零 issue。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/snapshot/deterministic_hash.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/snapshot/stable_element_identity.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/snapshot/scene_fingerprint.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/snapshot/scene_revision.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/snapshot/scene_fingerprint_test.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/snapshot/scene_revision_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-101A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-101A/result.json"
+ ],
+ "artifacts": {}
+}

@@ -1,0 +1,26 @@
+{
+ "kind": "request",
+ "expect": "accept",
+ "payload": {
+  "protocolVersion": 3,
+  "pageId": "page-1",
+  "sceneRevision": {
+   "epoch": 0,
+   "revision": 5,
+   "fingerprint": "0123456789abcdef"
+  },
+  "assets": [
+   {
+    "key": "clean|page",
+    "kind": "clean",
+    "fingerprint": "0123456789abcdef"
+   }
+  ],
+  "marks": [],
+  "exactTexts": [],
+  "sourceRefs": [
+   "r1",
+   "ink-2"
+  ]
+ }
+}

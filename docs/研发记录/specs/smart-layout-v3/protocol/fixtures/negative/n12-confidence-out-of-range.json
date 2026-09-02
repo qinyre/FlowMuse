@@ -1,0 +1,21 @@
+{
+ "kind": "response",
+ "expect": "reject",
+ "payload": {
+  "protocolVersion": 3,
+  "regions": [
+   {
+    "id": "g1",
+    "role": "body",
+    "sourceIds": [
+     "r1"
+    ],
+    "readingOrder": 0,
+    "confidence": 1.5,
+    "relations": []
+   }
+  ],
+  "warnings": []
+ },
+ "expectedErrorCode": "invalid_request"
+}

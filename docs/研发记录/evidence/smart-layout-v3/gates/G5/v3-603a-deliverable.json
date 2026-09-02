@@ -1,0 +1,115 @@
+{
+  "task_id": "V3-603A",
+  "merged_from": [
+    "V3-603A",
+    "V3-603B"
+  ],
+  "target_symbols": [
+    "SmartLayoutGateRunner",
+    "ScopeAudit"
+  ],
+  "scope": "Go test/vet、schema conformance/replay、Dart format、Flutter analyze/focused/all tests 与 golden job",
+  "runner": {
+    "script": "scripts/smart-layout-v3/GateRunner.ps1",
+    "usage": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smart-layout-v3/GateRunner.ps1（-ListJobs 干跑 scope 审计）",
+    "execution": "Start-Process 参数数组（引用安全），stderr 走临时文件不触发 ErrorRecord；报告/审计 UTF-8 无 BOM"
+  },
+  "jobs": [
+    {
+      "id": "go-test",
+      "end": "go",
+      "command": "go test ./..."
+    },
+    {
+      "id": "go-vet",
+      "end": "go",
+      "command": "go vet ./..."
+    },
+    {
+      "id": "schema-conformance-replay",
+      "end": "go",
+      "command": "go test ./internal/recognition -run 'TestPositiveFixturesRoundTrip|TestNegativeFixturesRejectedWithSameCode|TestSmartLayoutV3ErrorEnvelope|TestParseRejectsMalformedJson' -count=1 -v"
+    },
+    {
+      "id": "legacy-endpoint-fixtures",
+      "end": "go",
+      "command": "go test ./internal/recognition -run 'TestDecideLayout' -count=1 -v"
+    },
+    {
+      "id": "dart-format-nonregression",
+      "end": "flutter",
+      "command": "dart format --output=none lib/features/whiteboard/smart_layout test/features/whiteboard/smart_layout tool/smart_layout_v3/ci",
+      "note": "历史存量漂移 62 不改写（超路径权限），冻结基线只拦新增漂移"
+    },
+    {
+      "id": "flutter-analyze",
+      "end": "flutter",
+      "command": "flutter analyze",
+      "note": "全仓零诊断（G4 基线保持）"
+    },
+    {
+      "id": "smart-layout-focused-tests",
+      "end": "flutter",
+      "command": "flutter test test/features/whiteboard/smart_layout"
+    },
+    {
+      "id": "golden-job",
+      "end": "flutter",
+      "command": "flutter test test/features/whiteboard/smart_layout/rendering/draft_scene_renderer_test.dart",
+      "note": "只读 golden 校验（禁 --update-goldens 由 ScopeAudit 强制）"
+    },
+    {
+      "id": "flutter-all-tests",
+      "end": "flutter",
+      "command": "flutter test",
+      "note": "全仓测试（G5 口径）"
+    }
+  ],
+  "scope_audit": {
+    "rules": [
+      "双端覆盖（Go>=1 + Flutter>=1）",
+      "每 job 带 scope 说明",
+      "dart format 必须 --output=none",
+      "golden 禁 --update-goldens"
+    ],
+    "result": {
+      "passed": true,
+      "ends": {
+        "go": 4,
+        "flutter": 5
+      }
+    }
+  },
+  "real_run": {
+    "report": "docs/研发记录/evidence/smart-layout-v3/gates/G5/aggregate-gate-report.json",
+    "audit": "docs/研发记录/evidence/smart-layout-v3/gates/G5/scope-audit.json",
+    "all_passed": true,
+    "aggregate_exit_code": 0,
+    "environment": {
+      "go": "go1.25.0 windows/amd64",
+      "flutter": "Flutter 3.41.10-ohos-0.0.1-canary1"
+    },
+    "durations_ms": {
+      "go-test": 1041,
+      "go-vet": 1022,
+      "schema-conformance-replay": 1012,
+      "legacy-endpoint-fixtures": 1017,
+      "dart-format-nonregression": 2035,
+      "flutter-analyze": 7056,
+      "smart-layout-focused-tests": 21169,
+      "golden-job": 5056,
+      "flutter-all-tests": 61481
+    },
+    "format_drift": {
+      "count": 62,
+      "baseline": 62,
+      "verdict": "零新增漂移"
+    }
+  },
+  "acceptance": {
+    "dual_end_independently_green": "Go 4 job（test/vet/conformance 重放/旧端点 fixture）与 Flutter 5 job（format 基线/analyze 零诊断/focused/golden/全仓）全部独立退出码 0",
+    "legacy_endpoint_fixtures_kept": "TestDecideLayout 全组保持绿（v2 旧端点 fixture 未破坏）",
+    "commands_copyable_from_repo": "报告逐 job 记录逐字命令；GateRunner.ps1 在 scripts/smart-layout-v3/ 随仓库提交",
+    "no_new_analyzer_error": "flutter analyze 全仓零诊断（G4 基线保持，实测 No issues found）"
+  }
+}

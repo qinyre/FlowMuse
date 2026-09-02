@@ -1,0 +1,47 @@
+{
+  "task": "V3-704A",
+  "kind": "server_route_isolation_deliverable",
+  "scope": "服务端旧端点隔离与保留说明（比赛交付口径：不做 census、不返 410、不删除）",
+  "matrix": {
+    "legacy_routes": [
+      "/api/ink/recognize",
+      "/api/ink/smart-layout",
+      "/api/ink/smart-layout/block",
+      "/api/ink/smart-layout/compose",
+      "/api/ink/smart-layout/vision",
+      "/api/ink/smart-layout/transcribe"
+    ],
+    "v3_route": "/api/ink/smart-layout/analyze/v3",
+    "no_path_conflict": true,
+    "probe_get_405": {
+      "/api/ink/recognize": 405,
+      "/api/ink/smart-layout": 405,
+      "/api/ink/smart-layout/analyze/v3": 405,
+      "/api/ink/smart-layout/block": 405,
+      "/api/ink/smart-layout/compose": 405,
+      "/api/ink/smart-layout/transcribe": 405,
+      "/api/ink/smart-layout/vision": 405
+    },
+    "probe_post": {
+      "/api/ink/smart-layout": 502,
+      "/api/ink/smart-layout/analyze/v3": 200,
+      "/api/ink/smart-layout/block": 502,
+      "/api/ink/smart-layout/compose": 502,
+      "/api/ink/smart-layout/transcribe": 502,
+      "/api/ink/smart-layout/vision": 502
+    },
+    "v3_smoke": {
+      "bad_request_status": 400,
+      "protocol_version": 3,
+      "status": 200
+    }
+  },
+  "retention_note": "旧端点仅为比赛版本兼容保留：原位不删除、不做 census、不返 410；v3 与旧端点在同一 mux 独立服务",
+  "reports": [
+    {
+      "category": "route_isolation_matrix",
+      "path": "docs/研发记录/evidence/smart-layout-v3/competition/v3-704a-route-isolation.json",
+      "sha256": "d9ccf99f13cdd78e2a6330319a1c578e227c1e210748520ac4825bc0b9e2e01a"
+    }
+  ]
+}

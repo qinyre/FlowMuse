@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "runner": "SmartLayoutPerformanceRunner",
+  "task_id": "V3-604A",
+  "load": {
+    "ink_strokes": 3000,
+    "blocks": 100,
+    "candidates": 3,
+    "render_cycles": 10,
+    "page_bounds": "长页 800×20000",
+    "pixel_size": "1080×1528"
+  },
+  "stages": [
+    {
+      "id": "snapshot-extract",
+      "median_ms": 7,
+      "budget_ms": 200,
+      "passed": true,
+      "detail": "3000 笔画+20 图(含 5 crop)+文本；ink=3000 assets=25"
+    },
+    {
+      "id": "patch-build",
+      "median_ms": 100,
+      "budget_ms": 600,
+      "passed": true,
+      "detail": "100 块新增（sl3-perf-0..99）+账本 3000 源（200 consumed）"
+    },
+    {
+      "id": "reduce",
+      "median_ms": 2,
+      "budget_ms": 100,
+      "passed": true,
+      "detail": "add 100 元素折叠进 3000 笔画场景"
+    },
+    {
+      "id": "render-candidates",
+      "median_ms": 502,
+      "budget_ms": 5000,
+      "passed": true,
+      "detail": "3 候选连续渲染（1080×1528）+PNG 编码 (60KiB）+逐卡释放"
+    },
+    {
+      "id": "metrics-extract",
+      "median_ms": 4,
+      "budget_ms": 200,
+      "passed": true,
+      "detail": "真实渲染层 metrics（coverage/关系/阅读序/可视边界）"
+    },
+    {
+      "id": "hard-constraint-validate",
+      "median_ms": 3,
+      "budget_ms": 200,
+      "passed": true,
+      "detail": "十一类硬门禁全量复核（violations=1 为压测负载数据面，不作正确性断言）"
+    }
+  ],
+  "checks": [
+    {
+      "id": "render-candidates 活资源归零",
+      "passed": true,
+      "detail": "liveResourceCount=0"
+    },
+    {
+      "id": "并发取消：在途渲染作废抛 DraftRenderCancelled 且活资源归零",
+      "passed": true,
+      "detail": "cancelled=true live=0"
+    },
+    {
+      "id": "离页 dispose：释放后调用拒绝且活资源归零",
+      "passed": true,
+      "detail": "rejected=true"
+    },
+    {
+      "id": "失败注入：缺文件降级占位如实记录（hasMissingResources）零泄漏",
+      "passed": true,
+      "detail": "missing=1 live=0"
+    },
+    {
+      "id": "内存趋势：连续 10 轮渲染+PNG codec+释放，逐轮活资源归零",
+      "passed": true,
+      "detail": "cyclesClean=true totalPng=261KiB"
+    }
+  ],
+  "environment": "flutter test debug；预算为 CI 稳定口径（实测中位 ~3×）",
+  "all_passed": true
+}

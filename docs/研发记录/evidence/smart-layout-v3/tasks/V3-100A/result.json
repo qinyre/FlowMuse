@@ -1,0 +1,18 @@
+{
+ "task_id": "V3-100A",
+ "run_id": "1302ea59-f086-4f29-bf69-11ec765a6834",
+ "summary": "feature 骨架与最小 gateways（合并原 V3-100A～C）。(1) 新建 FlowMuse-App/lib/features/whiteboard/smart_layout/gateways/ 三个边界符号：SmartLayoutHttpGateway（薄封装既有 NativeHttpClient.post，typedef 注入 fake 传输，URL 拼接/Bearer 头/超时默认 8s+130s 对齐 v2/NativeHttpCancelToken 透传，传输错误二分类 SmartLayoutHttpException network|badStatus + 独立 SmartLayoutHttpCancelledException，不做语义解析或重试——归 V3-203A）；SmartLayoutEditorGateway（对 MarkdrawController 的窄接口：currentScene/isDisposed/changes Listenable/serializeScene/captureDraftBase 不可变草稿基线/commitValidated=pushHistory+applyResult 与 v2 落地顺序一致/sceneChangeListeners 订阅，dispose 后零副作用抛 StateError）；SmartLayoutPublicEntry（页面层唯一入口，fromEditor 工厂组装两 gateway，dispose 幂等）。(2) markdraw_controller.dart 最小适配（11 hunks，25+/8-，无顺手格式化）：新增公共 isDisposed getter、多方 sceneChangeListeners 注册表与 _notifySceneChanged 统一通知（快照遍历防回调内增删），8 个既有 onSceneChanged?.call 调用点 1:1 换入统一通知，onSceneChanged 单槽语义与既有调用顺序不变——旧公开入口签名与 v2 行为不变（既有 smart_layout_draft_test 8 用例复跑全绿）。whiteboard_page.dart 零改动（v3 真实接线归 V3-505C）。(3) 架构/import 边界测试固化五层边界契约：gateways/ 之外禁止 import markdraw_controller.dart 与 native_http_client.dart；全 feature 禁 package:http/dio/dart:io（不引入第二套 client）；gateways/ 保持最底层（禁 widgets/material/rendering、禁 smart_layout 其他子包、禁 whiteboard_page）且仅 editor gateway 与 public entry 可引用 MarkdrawController。(4) fake gateway 测试 28 用例全绿：http 侧 URL 拼接/头/体/超时/取消令牌透传断言、429→badStatus、SocketException/TimeoutException→network、取消映射、130s 默认；editor 侧真 controller 装配（Scene 同一性、监听增删/自移除安全、不抢 onSceneChanged 单槽、commitValidated 后 undo 可还原提交前场景、dispose 后提交零副作用）；entry 侧工厂装配/fake post 直达/dispose 幂等/v2 API 可用性。flutter analyze 零 issue。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/gateways/smart_layout_editor_gateway.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/gateways/smart_layout_http_gateway.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/gateways/smart_layout_public_entry.dart",
+  "FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/gateways/smart_layout_architecture_test.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/gateways/smart_layout_editor_gateway_test.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/gateways/smart_layout_http_gateway_test.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/gateways/smart_layout_public_entry_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-100A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-100A/result.json"
+ ],
+ "artifacts": {}
+}

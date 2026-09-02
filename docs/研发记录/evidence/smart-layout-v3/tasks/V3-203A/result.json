@@ -1,0 +1,14 @@
+{
+ "task_id": "V3-203A",
+ "run_id": "477498ef-1652-4a2d-9121-cdbb83189ec2",
+ "summary": "Repository、取消重试与真实联调（合并原 V3-203A～D，Dart analysis/）。(1) AnalysisRetryPolicy：有限重试 maxAttempts=2（含首次），只对 network/timeout 与 429/500/502/503/504 重试（初版漏 500 被测试捕获补齐）；badSchema/cancelled/guardRejected/capabilityOff 立即终止。(2) AnalysisOperationGuard：复用 V3-106A 四检（operation/page/revision/disposed+cancel 固定序）为仓库统一入口——发送前/每次重试前/响应解码落地前三类检查点。(3) V3AnalysisRepository：复用 SmartLayoutHttpGateway（即 NativeHttpClient 唯一封装，不引第二套 client；cancel token 类型不越出 gateways——架构边界测试持续拦截）；取消为协作式（v2 同语义：session.cancelOperation 后检查点拒绝，HTTP 不强行中断，迟到响应由落地前 late-guard 丢弃）；capabilityEnabled=false 直接 capabilityOff 稳定失败且 requestCount=0（请求数为 0 验收）；requestCount 只计真实 HTTP 尝试；outcome 三态 sealed（Succeeded{response,attempts}/Failed{kind,detail,attempts}/GuardRejected{reason,attempts}），仓库零跨调用可变状态——timeout/offline/429/5xx/badSchema/迟到响应全部不污染状态（测试断言 session 相位仍在 analyzing）。(4) 测试 9 用例全绿：capability off 请求数 0/成功单次解析/429 重试一次成功/超时+500+offline 三形态两耗尽稳定失败且 session 不动/400 与 badSchema 不重试（请求数恰 1）/迟到响应（fake 传输在响应前注入 applyRemoteElements → revision-changed 守卫拒绝+零污染）/协作取消（发送前取消 → 守卫拒绝+请求数 0）/离页前置拒绝请求数 0/真实 synthetic server 联调——dart:io HttpServer 绑定 loopback 随机端口实现冻结端点契约，post=null 走真实 NativeHttpClient（测试进程回退 package:http 真实 socket），临时摘除 flutter_test 假 HttpOverrides 并 finally 复原，断言服务端收到路径=冻结端点、请求字节与客户端序列化逐字节一致、双方 fnv hash 相等（双方 hash 一致验收）；analyze 零 issue。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/analysis/analysis_retry_policy.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/analysis/analysis_operation_guard.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/analysis/smart_layout_analysis_repository.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/analysis/smart_layout_analysis_repository_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-203A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-203A/result.json"
+ ],
+ "artifacts": {}
+}

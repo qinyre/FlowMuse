@@ -1,0 +1,37 @@
+{
+  "kind": "route_isolation_matrix",
+  "legacy_routes": [
+    "/api/ink/recognize",
+    "/api/ink/smart-layout",
+    "/api/ink/smart-layout/block",
+    "/api/ink/smart-layout/compose",
+    "/api/ink/smart-layout/vision",
+    "/api/ink/smart-layout/transcribe"
+  ],
+  "no_path_conflict": true,
+  "probe_get_405": {
+    "/api/ink/recognize": 405,
+    "/api/ink/smart-layout": 405,
+    "/api/ink/smart-layout/analyze/v3": 405,
+    "/api/ink/smart-layout/block": 405,
+    "/api/ink/smart-layout/compose": 405,
+    "/api/ink/smart-layout/transcribe": 405,
+    "/api/ink/smart-layout/vision": 405
+  },
+  "probe_post": {
+    "/api/ink/smart-layout": 502,
+    "/api/ink/smart-layout/analyze/v3": 200,
+    "/api/ink/smart-layout/block": 502,
+    "/api/ink/smart-layout/compose": 502,
+    "/api/ink/smart-layout/transcribe": 502,
+    "/api/ink/smart-layout/vision": 502
+  },
+  "retention_note": "旧端点仅为比赛版本兼容保留：原位不删除、不做 census、不返 410；v3 与旧端点在同一 mux 独立服务",
+  "task": "V3-704A",
+  "v3_route": "/api/ink/smart-layout/analyze/v3",
+  "v3_smoke": {
+    "bad_request_status": 400,
+    "protocol_version": 3,
+    "status": 200
+  }
+}

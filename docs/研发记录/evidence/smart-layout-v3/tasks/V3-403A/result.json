@@ -1,0 +1,12 @@
+{
+  "task_id": "V3-403A",
+  "run_id": "f27eb5f9-3df3-4acd-b44a-be7c3736b43a",
+  "summary": "生成期硬 preflight 与四型分型落地于 preflight_layout.dart：LayoutPreflight.screen 只做单调硬检查（冻结优先级 textual > protected 覆栏 > 最窄栏原子簇宽 > 401B 硬高度下界，复用 HardFeasibilityPruner 与 ColumnRegionBuilder 同源判定），sealed GenerationOutcome 稳定分型——LayoutGenerationScreened / NoFeasibleLayout（全部候选硬拒绝，含 fromPlacementFailures 放置期兜底工厂）/ RetryableGenerationFailure（测量依赖异常，_MeasurementDependencyFailure 标记与程序缺陷分离）/ InternalGenerationError（空候选域、ledger 不守恒、悬空原子组、参数违例）/ PreserveFallback（零修改保留：emptyDocument 或 allCandidatesInfeasible 伴随无解，非 NoFeasibleLayout 替身）。PreserveFallback 不是 CompositionCandidate——无 score/skeleton/params/structureHash 字段，不进 scorer/结构配额/合格率/Top3（源码门禁测试钉住 import 与类体字段）；拒绝原因（4 枚举）与放置失败稳定码（4 枚举）均确定性映射 LayoutSuggestion（splitIntoPages/widenColumns/reduceProtectedZones/fixSourceContent），映射完备性由枚举遍历测试冻结。11 项测试：全拒无解+双跑确定性、LB 分型钉子（k=2 摊倍收/single 拒）、宽簇部分拒绝、protected 全栏覆盖优先于 LB、无 spec 源缺陷、空文档零修改、测量不可用可重试、程序缺陷内部错误、scorer 隔离源码扫描、建议映射完备、放置失败工厂与 fallback 不进候选域。实测确认 TextPainter 会折断长英文词（80 字符 960px 在 588 栏宽 2 行零溢出），原子簇宽于栏宽仅发生在不可断簇——fake 按适配器契约钉住该分支。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/placement/preflight_layout.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/placement/preflight_layout_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-403A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-403A/commands.json"
+  ],
+  "artifacts": []
+}

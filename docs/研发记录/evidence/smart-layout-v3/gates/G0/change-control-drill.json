@@ -1,0 +1,59 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "golden-change-control-drill",
+ "task": "V3-004B",
+ "ledger": {
+  "path": "gates/G0/golden-ledger.json",
+  "file_sha256": "6bf7ae7d69ac93a642138f428e7c1ac04d00292b5a82e5aee5ff751e804a6621",
+  "entries": 4
+ },
+ "acceptance_mapping": {
+  "任何 spec/rubric/golden 变化都会改 hash": "drill 2/3：golden 一字段之差与 spec margin 一字之差均实测改变 hash 且被 ledger 拒绝",
+  "只引用 V3-000B rubric 版本": "drill 4：rubric v1.0.1 登记被 policy 拒绝（仅允许 9408c037@1.0.0）",
+  "golden 审批": "drill 5：无 approved_by 的条目拒绝；既有条目审批记录指回 V3-000B/004A/003B/002C 任务证据"
+ },
+ "runs": [
+  {
+   "drill": "ledger_baseline_validation",
+   "expected": "valid",
+   "actual": "valid",
+   "pass": true
+  },
+  {
+   "drill": "golden_tamper_detection",
+   "path": "docs/研发记录/evidence/smart-layout-v3/baseline/ai-surrogate/three-baseline-report.json",
+   "original_sha256": "8b8cf4158bb8d42a",
+   "tampered_sha256": "7dbe5a22547cfd5d",
+   "hash_changed": true,
+   "ledger_rejected": true,
+   "pass": true
+  },
+  {
+   "drill": "spec_mutation_detection",
+   "path": "docs/研发记录/specs/smart-layout-v3/evaluation-spec.json",
+   "registered_content_sha256": "83dc663e5f7eee10",
+   "mutated_content_sha256": "3fb7983457e28ecf",
+   "hash_changed": true,
+   "ledger_rejected": true,
+   "pass": true
+  },
+  {
+   "drill": "rubric_version_gate",
+   "attempted_version": "1.0.1",
+   "rejected": true,
+   "pass": true
+  },
+  {
+   "drill": "unapproved_entry_gate",
+   "rejected": true,
+   "pass": true
+  }
+ ],
+ "status": "passed",
+ "disclosure": {
+  "panel_type": "ai_synthetic",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "全部审批记录均指回 AI 代理任务的 panel/复审证据；不含真人审批。"
+ }
+}

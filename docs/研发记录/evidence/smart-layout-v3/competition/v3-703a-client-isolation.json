@@ -1,0 +1,54 @@
+{
+  "task": "V3-703A",
+  "kind": "client_isolation_matrix",
+  "all_passed": true,
+  "checks": [
+    {
+      "id": "public-surface-zero-v2-symbols",
+      "passed": true,
+      "scanned_files": 20,
+      "offenders": []
+    },
+    {
+      "id": "v3-lib-zero-v2-imports",
+      "passed": true,
+      "scanned_files": 91,
+      "offenders": []
+    },
+    {
+      "id": "single-v3-endpoint-string",
+      "passed": true,
+      "v3_endpoint_files": 1,
+      "legacy_endpoint_offenders": []
+    },
+    {
+      "id": "v2-private-in-place",
+      "passed": true,
+      "lib_files": [
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_content.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_document.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_exporter.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_ink_clusterer.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_move_builder.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_plan.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_template_engine.dart",
+        "lib/features/whiteboard/editor_core/src/core/smart_layout/smart_layout_vision_matcher.dart"
+      ],
+      "lib_file_count": 9,
+      "test_files": [
+        "test/features/whiteboard/editor_core/smart_layout_draft_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_ink_clusterer_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_move_builder_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_plan_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_repro_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_template_engine_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_transcribe_test.dart",
+        "test/features/whiteboard/editor_core/smart_layout_vision_test.dart"
+      ],
+      "test_file_count": 8,
+      "note": "比赛版本兼容保留：原位不删除、不迁移、不新增兼容 wrapper"
+    }
+  ],
+  "retention_note": "v2 私有实现（editor_core/src/core/smart_layout/**，9 个 lib 文件）与 8 个既有测试原位保留；公开入口仅到达 v3 Session；不新增兼容 wrapper。"
+}

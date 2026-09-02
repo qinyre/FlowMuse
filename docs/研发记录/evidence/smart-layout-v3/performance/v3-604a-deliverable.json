@@ -1,0 +1,66 @@
+{
+  "task_id": "V3-604A",
+  "merged_from": [
+    "V3-604A",
+    "V3-604B"
+  ],
+  "target_symbols": [
+    "SmartLayoutPerformanceRunner"
+  ],
+  "scope": "3000笔画/100block/长页/多候选阶段预算，连续截图/crop/render、并发取消、离页/dispose、失败注入和内存趋势",
+  "tooling": {
+    "runner": "FlowMuse-App/tool/smart_layout_v3/performance/smart_layout_performance_runner.dart",
+    "entry": "flutter test tool/smart_layout_v3/performance（FLOWMUSE_GENERATE_V3_604A_EVIDENCE=1 一次性生成证据）",
+    "real_pipeline": "SnapshotExtractor→PatchBuilder(账本+不变量)→Reducer→DraftSceneRenderer(真实 codec)→ReducedSceneMetricsExtractor→SceneMetricsContract→HardConstraintValidator"
+  },
+  "load": {
+    "ink_strokes": 3000,
+    "images": 25,
+    "crop_images": 5,
+    "blocks": 100,
+    "candidates": 3,
+    "render_cycles": 10,
+    "page": "800×20000 长页",
+    "pixel_size": "1080×1528"
+  },
+  "stage_budgets_ms": {
+    "snapshot-extract": [
+      7,
+      200
+    ],
+    "patch-build": [
+      100,
+      600
+    ],
+    "reduce": [
+      2,
+      100
+    ],
+    "render-candidates": [
+      502,
+      5000
+    ],
+    "metrics-extract": [
+      4,
+      200
+    ],
+    "hard-constraint-validate": [
+      3,
+      200
+    ]
+  },
+  "checks": [
+    "render-candidates 活资源归零（多候选连续渲染+PNG codec+逐卡释放）",
+    "并发取消：在途渲染作废抛 DraftRenderCancelled 且活资源归零（零迟到写入）",
+    "离页 dispose：释放后调用拒绝且活资源归零",
+    "失败注入：缺文件按编辑器占位语义降级如实记录（hasMissingResources）零泄漏",
+    "内存趋势：连续 10 轮渲染+PNG codec+释放逐轮活资源归零"
+  ],
+  "evidence": "docs/研发记录/evidence/smart-layout-v3/performance/v3-604a-report.json",
+  "all_passed": true,
+  "acceptance": {
+    "performance_attributable_within_budget": "六阶段逐段归因（快照/构建/折叠/渲染/metrics/硬校验），预算=debug 实测中位 5-9× 容机器方差，全达标",
+    "resources_back_within_tolerance": "活资源精确归零（容差=0）：候选渲染后/取消后/dispose 后/失败注入后/10 轮循环逐轮",
+    "no_leaks_or_late_writes": "零 handle/codec 泄漏（liveResourceCount 逐检查点断言）；取消作废代际零迟到写入；dispose 后调用拒绝"
+  }
+}

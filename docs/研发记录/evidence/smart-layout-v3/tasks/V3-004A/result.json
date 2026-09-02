@@ -1,0 +1,31 @@
+{
+ "task_id": "V3-004A",
+ "run_id": "50c5697e-f431-4575-a826-1617e55fd88d",
+ "summary": "EvaluationSpec v1.0.0 预注册并冻结。(1) 机器可读 spec（docs/研发记录/specs/smart-layout-v3/evaluation-spec.json，content_sha256=83dc663e5f7eee107c40f528df555a45e86a52c2a097bf4afa908171635ef303，文件 sha256=e159862495f2b70116a38fbdd4a17e8f863ea16ae307b95d35a6617454210b1f）：覆盖任务卡 objective 全部 13 项——聚类单位（sample 级、配对设计）、split 固定（dev 48/val 18/frozen 19=85，manifest hash 钉死）、registered_metrics 14 项白名单（direction/denominator/aggregation/tier）、denominators 四表（D_SAMPLES 数值钉死）、estimands E1~E4（配对 RD/均值差/Cohen 辅助）、CI（Wilson+样本聚类 bootstrap B=10000 seed=20260831 splitmix64 流序规定+退化分支）、hypothesis_tests T1~T6（T1 critical=0 硬规则先于统计；T2 非劣 margin RD≤0.10；T3 非劣 Δ>−0.25；T4 优效 RD<0；T5 预算确定性；T6 构念效度 ρ<0+全零退化 construct_check_indeterminate）、multiple_comparisons（F1={T2,T3,T4} Holm α=0.05 单侧）、power（固定 n、事后披露、禁止反向定制）、missing_data（失败=最差值、无插补无剔除、四情形映射表）、benchmark_budget（benchmark-spec 双口径哈希钉死：file=dbc00bc4…/content=1db65ecd…；硬帽+六行阶段预算表，先于 V3-301C/V3-604A 测量注册）、stopping_rules SR-1~5（固定 n/Gate fail 回修/连续 3 failed=环境故障/frozen 一次用后作废/两轮 rejected 上报）、frozen_holdout_usage（allowed_roles=[evaluation] 对齐 FrozenLabelAccessGuard 词表，gate 角色按 RR-5 拒绝）、rejection_rules RR-1~6（metric_not_registered/denominator_not_fixed/benchmark_environment_mismatch 三条件/split_manifest_mismatch/frozen_access_violation/post_hoc_amendment 限定被修订参数）、amendment_policy（收紧须审计+复审；放宽仅限测量前且全量重测）、direction_convention（H1 一律改善方向）。(2) 程序化自校验 gates/G0/spec-validation.json：40 项断言全过（content_sha256 复算、8 上游 hash 实测、指标/分母/检验/规则交叉闭合、T2~T6 方向断言、RR-3 双口径与实测一致、RR-6 范围、frozen 词表对齐）。(3) AI surrogate 预注册盲审 3 轮收敛（gates/G0/panel/** 与 panel-report.json）：R1 双评一致 fail（C4/C10——T4 优效方向反转 H1 应为 RD<0，已修+新增 direction_convention）；R2 fail（C4 共识：T6 构念效度方向反转+全零退化缺失+PRNG 位次未指明，已修；C12 分歧经第三仲裁代理 9356341b… 维持 inadequate：RR-3 哈希口径混用/RR-6×tightening 未闭合/frozen 角色脱离 guard 词表，均已修）；R3 双评 12/12 adequate 零分歧仲裁未触发——7 个 panel 参与 run_id 两两互异且均≠执行者（组装脚本断言）。(4) gates/G0/preregistration.json 冻结预注册态：spec 双 hash 钉死+上游 8 pin+机器校验+panel 结论+freeze 声明；此后修改只能走 amendment_policy。(5) 目标符号说明：本任务交付 EvaluationSpec/GateZeroEvaluator 的机器契约本体与拒绝规则条款（RR-1~6 可机器判定的 error_code+条件）；全 manifest 尚无任务同时拥有这两个 target_symbols 与代码路径（tool/smart_layout_v3/evaluation/** 归 V3-206A/B/C，其符号为识别域评估器）——G0 runner 的实现落点需后续 backlog 厘清（复审 F1 保留意见）。测试：本任务无新增 Dart 代码（allowed_paths 不含代码路径）；全部验证为程序化断言（40 项）+双盲 panel（3 轮 25 项裁决）+仲裁（1 项）。披露：human_validation_performed=false；HUMAN_VALIDATION_NOT_PERFORMED；PRODUCTION_RELEASE_NOT_AUTHORIZED（生产发布仍需 V3-700A 外部批准包）。",
+ "changed_paths": [
+  "docs/研发记录/specs/smart-layout-v3/evaluation-spec.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/arbiters/round-2-C12.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel-report.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/preregistration.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/spec-validation.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel/blind-packet.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel/rater-a.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel/rater-b.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel/round-1/blind-packet.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel/round-1/rater-a.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel/round-1/rater-b.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel/round-2/blind-packet.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel/round-2/rater-a.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G0/panel/round-2/rater-b.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004A/result.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004A/review.json"
+ ],
+ "artifacts": [
+  {
+   "key": "v3_004a_deliverable",
+   "path": "docs/研发记录/specs/smart-layout-v3/evaluation-spec.json",
+   "sha256": "e159862495f2b70116a38fbdd4a17e8f863ea16ae307b95d35a6617454210b1f"
+  }
+ ]
+}

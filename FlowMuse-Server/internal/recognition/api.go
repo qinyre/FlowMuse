@@ -21,6 +21,7 @@ type HTTPAPI struct {
 	recognizer     Recognizer
 	layouter       SmartLayouter
 	visionLayouter VisionLayouter
+	v3Analyzer     *V3Analyzer
 	requestTimeout time.Duration
 }
 
@@ -42,6 +43,13 @@ func (api *HTTPAPI) WithVisionLayouter(visionLayouter VisionLayouter) *HTTPAPI {
 	return api
 }
 
+// WithV3Analyzer 注入 v3 分析通道（可选；未注入时 v3 端点不注册——
+// 与 v2 通道完全独立启停，V3-201A）。
+func (api *HTTPAPI) WithV3Analyzer(analyzer *V3Analyzer) *HTTPAPI {
+	api.v3Analyzer = analyzer
+	return api
+}
+
 func (api *HTTPAPI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/ink/recognize", api.recognize)
 	mux.HandleFunc("/api/ink/smart-layout", api.smartLayout)
@@ -49,6 +57,9 @@ func (api *HTTPAPI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/ink/smart-layout/compose", api.smartLayoutCompose)
 	mux.HandleFunc("/api/ink/smart-layout/vision", api.smartLayoutVision)
 	mux.HandleFunc("/api/ink/smart-layout/transcribe", api.smartLayoutTranscribe)
+	if api.v3Analyzer != nil {
+		RegisterSmartLayoutV3(mux, api.v3Analyzer)
+	}
 }
 
 func (api *HTTPAPI) recognize(w http.ResponseWriter, r *http.Request) {

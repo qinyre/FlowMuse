@@ -1,0 +1,102 @@
+{
+ "packet_type": "blind_anchor_scoring_packet",
+ "note": "以下 24 个锚点样例仅含 id 与场景输入描述。请依据 blind-rubric.json 与 failure-taxonomy.json 对每个锚点逐维评分。",
+ "anchors": [
+  {
+   "id": "ANCH-01-clean-tidy-noop",
+   "input": "整洁页：元素已对齐、无重叠、关系完整；v3 输出与原稿近似（no-op 位居 Top 1）。"
+  },
+  {
+   "id": "ANCH-02-lost-stroke-group",
+   "input": "12 元素页，最终 Scene 仅含 11 个元素；缺失的手写笔迹组未出现在 preserved[]。"
+  },
+  {
+   "id": "ANCH-03-preserved-unknown",
+   "input": "一个语义 unknown 的涂鸦按策略 preserved 原位保留，不与正文重叠，审计记录在案。"
+  },
+  {
+   "id": "ANCH-04-typed-text-truncated",
+   "input": "typed text 段落末两字在渲染层被截断，字符流丢失。"
+  },
+  {
+   "id": "ANCH-05-commit-drifts-from-preview",
+   "input": "落库 Scene 与最后 preview 的归一化坐标差一个 margin 偏移，renderer/metrics/ledger hash 不一致。"
+  },
+  {
+   "id": "ANCH-06-redispatch-after-remote",
+   "input": "提交临界区发现远端不相交写集变更：零写入，先应用远端，按新 revision 重派并重新 preview，用户再确认提交。"
+  },
+  {
+   "id": "ANCH-07-overlap-beyond-tolerance",
+   "input": "文本块与图片包围盒相交 10% 面积，二者无任何豁免关系。"
+  },
+  {
+   "id": "ANCH-08-caption-separated",
+   "input": "图注与图形分属两栏，不相邻；frozen 标注确认 caption_of 关系成立。"
+  },
+  {
+   "id": "ANCH-09-noop-on-messy-page",
+   "input": "散乱页（多组未满足布局意图），与原稿近似的 no-op 候选被排 Top 1 并标『推荐』。"
+  },
+  {
+   "id": "ANCH-10-hidden-text-behind-image",
+   "input": "一段 typed text 完整存在于 Scene，但渲染时被不透明图片完全遮盖（可见字形面积 0）；该候选已完成全链渲染验证并进入 Top 3 展示。"
+  },
+  {
+   "id": "ANCH-11-unmarked-fallback",
+   "input": "服务端超时降级为原样保留的候选，无 fallback 标记，被 scorer 计入合格候选。"
+  },
+  {
+   "id": "ANCH-12-marked-fallback",
+   "input": "同 ANCH-11 的候选，但带显式 fallback 标记，仅原样展示，不计入合格候选与成功率。"
+  },
+  {
+   "id": "ANCH-13-correct-rejection",
+   "input": "保护对象使硬约束不可满足，系统明确拒绝并给出原因，页面计入 no-candidate 分母。"
+  },
+  {
+   "id": "ANCH-14-feasible-page-rejected",
+   "input": "普通图文页存在人工仲裁确认的可行解，但系统报告无候选（贪心 preflight 误杀）。"
+  },
+  {
+   "id": "ANCH-15-stale-revision-write",
+   "input": "远端已提交新 revision，本地迟到响应未过 revision 校验直接写权威 Scene，覆盖用户一行输入（四检失效与覆盖写入同时成立）。"
+  },
+  {
+   "id": "ANCH-16-late-response-discarded",
+   "input": "用户取消会话后迟到的分割响应被 operation/page/revision/disposed 四检拦截丢弃。"
+  },
+  {
+   "id": "ANCH-17-runner-timeout",
+   "input": "3000 笔画压力页触发死循环，runner 按预算超时杀进程；该页未被计入成功分母。"
+  },
+  {
+   "id": "ANCH-18-misaligned-cards",
+   "input": "三个并列卡片左缘参差 6px，其余约束全部满足。"
+  },
+  {
+   "id": "ANCH-19-insufficient-evidence",
+   "input": "某页候选缺 renderer 实测指标（管线中断），无法判定 OOB/重叠/裁字。"
+  },
+  {
+   "id": "ANCH-20-multi-failure-accounting",
+   "input": "同一页同时发生：段落重叠 12%（M-LAYOUT-OVERLAP）与图注分离（M-HARD-RELATION-BREAK）。"
+  },
+  {
+   "id": "ANCH-21-font-below-hard-floor",
+   "input": "正文整体降到 7pt 以塞进半栏消除重叠（hard_floor=9pt，中位字号低于 hard_floor）；该候选已完成全链渲染验证、硬约束自评声明全过，并进入 Top 3 展示。"
+  },
+  {
+   "id": "ANCH-22-locked-signature-moved",
+   "input": "用户锁定的手写签名被 v3 移动 40px 并与正文对齐；无用户发起的解锁或移动。"
+  },
+  {
+   "id": "ANCH-23-role-structure-error",
+   "input": "章节标题被整体判为正文（对照 frozen 标注），层级结构丢失；该候选进入 Top 3。"
+  },
+  {
+   "id": "ANCH-24-unvalidated-candidate-scored",
+   "input": "scorer 对未渲染的 draft patch 直接估分并排入 Top 3（renderer/metrics/ledger hash 不齐全）。"
+  }
+ ]
+}

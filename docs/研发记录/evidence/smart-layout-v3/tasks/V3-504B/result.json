@@ -1,0 +1,15 @@
+{
+  "task_id": "V3-504B",
+  "run_id": "c4631d41-a9a2-459d-8bcc-360c48f1d32e",
+  "summary": "Scorer、Top3、ValidatedCandidate 与纠错重跑落地于 validation/ 四件：validated_candidate.dart（ValidatedCandidate 唯一工厂 assemble 强制三重 fail closed——硬门禁 passed、七指标齐全且有限（LayoutMetricVector 构造层拒 NaN/缺指标，assemble 复核）、provenance 三件套同轮一致+reduced.patch 同一性；候选持有渲染快照资源 dispose 契约）、layout_scorer.dart（LayoutScorer=404A LayoutProfileScorer profile 排序+反投机否决分流淘汰+diversityKey 互异 Top3 分高优先/id 字典序破平确定性+不足 3 不补；Top3Result.allRejected 携带 InfeasibleExplanation 聚合原因码不伪装成功）、validated_candidate_pipeline.dart（ValidatedCandidatePipeline 全链编排：reducer 失败原子→DraftSceneRenderer 真实渲染→ReducedSceneMetricsExtractor+SceneMetricsContract→HardConstraintValidator 硬门禁→LayoutMetricCalculator 软指标（MetricsHardRejected 分流）→否决分流→Top3 封装；未入选存活的候选立即释放渲染资源；reducer/render/metrics/hard 各段失败全部进淘汰记录）、correction_rerun_coordinator.dart（CorrectionRerunCoordinator：V3-205A AffectedSourceSet→CorrectionRerunPlan（受影响源/资产/crop 键+旧候选全失效清单）→先失效释放旧候选再以 affectedSourceIds 为 scope 重跑注入链 planner→patch→render→gate→score，无双重有效窗口）。6 新用例：完整门禁 Top 封装/多样性同结构去重与不足3不补（1 与 2 候选两向）/硬失败+否决进入淘汰与无解解释/ag fail closed 两防线（他轮 revision 真构造 metrics）/scorer 破平确定性/rerun 旧候选失效释放+scope 传递。validation 套件累计 17 用例全绿，analyze 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/validation/validated_candidate.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/validation/layout_scorer.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/validation/validated_candidate_pipeline.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/validation/correction_rerun_coordinator.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/validation/validated_candidate_pipeline_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-504B/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-504B/commands.json"
+  ],
+  "artifacts": []
+}

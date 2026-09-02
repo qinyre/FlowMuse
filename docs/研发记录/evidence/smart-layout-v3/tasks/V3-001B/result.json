@@ -1,0 +1,23 @@
+{
+  "task_id": "V3-001B",
+  "run_id": "b775b336-3601-4563-975b-a48e16406588",
+  "summary": "确定性与 benchmark 环境：CanonicalArtifacts（Scene JSON 规范化——递归键序/易变键剥离/数字规范格式化；PNG 规范化——8 字节签名与 chunk 结构校验、仅保留关键 chunk 白名单、重算 CRC，剥离 tIME/tEXt 等元数据后哈希）；DeterministicClock（固定时钟+显式 tick，超时判定不依赖墙钟）与 SeededRandom（种子随机源+序列指纹）；DeterminismHarness（字体冻结=逐文件存在性+SHA-256 核对、环境身份哈希、单次确定性运行报告=时钟/随机指纹+规范化 scene/golden 哈希的 consistency_hash）；BenchmarkSpec（冻结 os/arch/环境要求/warmup=1/cold_process/concurrency=1/repetitions>=3/metrics=p50,p95,peak_rss_mb/nearest_rank/process_peak_rss/timeout 300s+100000 ticks；content_sha256 自校验，任何字段篡改必改 hash，实测篡改 timeout_seconds 即不一致；data_policy=synthetic_only——V3-002A 前 record/replay 拒绝 authorized_real 录制，实测 authorized_real manifest 被 harness 政策拦截、governed_real 政策下放行）。冻结 spec 文件 benchmark-spec.json 携带 content_sha256=1db65ecd…，CLI benchmark-hash 校验 ok:true。CLI determinism 命令在 N（默认 3）个隔离子进程（独立 dart VM）各跑一次并比对一致性哈希——验收测试实测 3 次隔离子进程 consistency 哈希相等 exit 0。测试 41 项全绿（新增 12 项：规范化/时钟随机/字体冻结/spec 哈希防篡改/数据政策/进程内一致/隔离子进程一致），flutter analyze 零问题。",
+  "changed_paths": [
+    "FlowMuse-App/tool/smart_layout_v3/src/canonical_artifacts.dart",
+    "FlowMuse-App/tool/smart_layout_v3/src/determinism_harness.dart",
+    "FlowMuse-App/tool/smart_layout_v3/src/benchmark_spec.dart",
+    "FlowMuse-App/tool/smart_layout_v3/benchmark/benchmark-spec.json",
+    "FlowMuse-App/tool/smart_layout_v3/main.dart",
+    "FlowMuse-App/tool/smart_layout_v3/test/benchmark_determinism_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001B/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001B/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001B/review.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_001b_deliverable",
+      "path": "FlowMuse-App/tool/smart_layout_v3/benchmark/benchmark-spec.json",
+      "sha256": "dbc00bc413ec02f80339ffd87a33dbc98d265c5518833a012da7ef9eb24be42f"
+    }
+  ]
+}

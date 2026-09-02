@@ -1,0 +1,14 @@
+{
+  "task_id": "V3-601A",
+  "run_id": "97ed2087-5660-4e57-b16a-b33f99217f85",
+  "summary": "文档重开与既有导出兼容（合并原 V3-601A~B）。新增 feature-private smart_layout/document/ 两符号零新增框架：(1) SmartLayoutDocumentV3Mapper——版本策略(version 缺失=legacy 0/1 native 读入归一，>current 未来版前向兼容可读，负数与非数值 FormatException 拒绝)+确定性默认注入(generatedAt 缺失=0、块 id 缺失按序 legacy-block-N，先于既有 SmartLayoutDocument.fromJson 委托注入杜绝其随机 id/DateTime.now 默认)+文档级/块级未知字段捕获与 writeJson 原样合并(旧读新写零丢失，写回恒归一 currentVersion=1，结构与既有 toJson 全兼容仅 version 键显式)+deepEquals canonical 判别(块文本/order 差异可判)。editor_core smart_layout_document.dart 零改动(序列化框架不变)。(2) SmartLayoutDocumentCompatibility——重开 reopenRoundTrip(write→read→write 深度等价)；undo/redo=文档通道事务经真实 SmartLayoutScenePatchBuilder documentOp(replace/clear)+SmartLayoutSceneReducer 折叠(replace→replace→undo→redo 全链状态精确往返+clear 回 null 基线+元素通道全程未触碰，与 pushHistory 同粒度不建第二套 History)；reconcile=元素通道经既有 Scene.upsertRemoteElements 合并 smartLayout 原样保留+patchTouchesDocumentChannel 读自 writeSet(documentOp 唯一文档通道入口，纯元素 patch false)。既有 SmartLayoutExporter 复用验证导出：markdown/latex 精确字符(order 排序序非列表序/heading # 映射/math $$+latex 优先原文回退/LaTeX 特殊字符逐个转义)+多版本 fixture 同逻辑内容导出一致(版本/未知字段不影响)。16 用例全绿+analyze smart_layout 全树零 issue+compatibility 守卫(barrel-only import)全绿。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/document/smart_layout_document_v3_mapper.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/document/smart_layout_document_compatibility.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/document/smart_layout_document_v3_mapper_test.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/document/smart_layout_document_compatibility_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-601A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-601A/commands.json"
+  ],
+  "artifacts": []
+}

@@ -1,0 +1,38 @@
+{
+ "task_id": "V3-003A",
+ "run_id": "b2d83445-291f-4f9d-a7a0-ed7105780136",
+ "executor_run_id": "f5321379-c1bf-49f5-aa1b-0415fb88138e",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "findings": [
+  {
+   "id": "F1",
+   "severity": "low",
+   "blocking": false,
+   "location": "任务卡 target_symbols vs 交付",
+   "issue": "target_symbol HumanBaselineComparator 未在本任务实现且未在 result 声明偏差。该符号与 V3-003B 共享（父工作包符号表），V3-003A 的 objective/deliverable 只要求自动基线，人工/AI 对比基线属 V3-003B 范畴（baseline-report 亦声明『真人整理基线 V3-003B 另立』），非范围缺失；建议 V3-003B 完成该符号。"
+  },
+  {
+   "id": "F2",
+   "severity": "low",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/baseline/baseline-report.json run_json_sha256 字段",
+   "issue": "run_json_sha256 是对整个 baseline-run.json（含 resource 段）的字节 hash，因 resource 含耗时/RSS 每次运行必然不同，该字段不可跨运行复现；本次作为提交内容指纹与文件实测一致，可重复性由 run_hash（排除 resource）正确承担且已实测。建议后续命名澄清两者语义。"
+  },
+  {
+   "id": "F3",
+   "severity": "info",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-003A/result.json changed_paths",
+   "issue": "changed_paths 预声明了复审阶段才写入的 review.json（路径在 allowed_paths 内，amend 后成立）；任务全生命周期预声明与单 commit 快照的正常差异。"
+  },
+  {
+   "id": "F4",
+   "severity": "info",
+   "blocking": false,
+   "location": "baseline/v2/scenes/*.scene.json bbox 序列化",
+   "issue": "v2 重排后内容元素 bbox 序列化为 [24.0, int, int, int]（Dart double margin 与 int round() 混合），与输入全 int 表示不同；数值语义正确且确定性可复现（已逐字节验证），下游解析时知悉即可。"
+  }
+ ]
+}

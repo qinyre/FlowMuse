@@ -1,0 +1,12 @@
+{
+  "task_id": "V3-502A",
+  "run_id": "dceb7b49-639a-4be3-b91c-27a5bf1b6575",
+  "summary": "compare-and-commit 唯一入口落地于 commit/validated_candidate_commit_gateway.dart（ValidatedCandidateCommitGateway + SmartLayoutCommitTransaction 语义并入同步临界区 + HistoryCommitResult sealed：HistoryCommitted(reduced/baseRevision/redispatched)/HistoryCommitRejected 五稳定码）。类型门禁：commit 只接受 ValidatedCandidate（504B assemble 已强制本轮完整门禁），原始 SmartLayoutScenePatch 无提交路径。同步临界区（无 await）复核序：editor disposed → 证据完整性（reducedSceneDigestOf 重算候选快照 digest vs metrics.renderedSceneDigest，防装配后篡改）→ tracker disposed → 基线比较：fingerprint 相同走直接路径（SmartLayoutScenePatchValidator.validate+checkLedgerConservation 全量复核→零违反经既有 gateway.commitValidated pushHistory+applyResult 提交，preview=commit 由 501A 同一 reduced.commitResult 保证）；fingerprint 不同走写集判定：以当前 revision 重构 rebased patch（同操作集新基线）→validate 复核，通过=远端变化与写集不相交→重派恰好一次（重归约后提交，HistoryCommitted.redispatched），失败=写集相交→writeSetConflict 拒绝（要求重新分析），冲突路径零 Scene/History/广播副作用（测试钉住场景实例不变+undo 空栈 no-op 无空事务）。LWW/消息/reconcile 协议零改动：不触碰协作代码，提交走既有 commitValidated 通道（markdraw_controller.dart 未修改，diff 零命中该热点文件）。5 用例：直接提交 preview=commit+History 精确一次 undo/写集相交拒绝零副作用（场景实例 identical+undo no-op）/不相交重派一次成功（远端 s1 与排版 t1 双在场，基线=远端后 revision）/editorDisposed（控制器手动释放）/证据断链（不相交改动后重建候选产生真实不同 digest 的快照冒充→provenanceBroken，确定性本身保证同输入同 digest 不可伪造差异）。commit 套件 5 用例全绿+analyze 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/commit/validated_candidate_commit_gateway.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/commit/validated_candidate_commit_gateway_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-502A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-502A/commands.json"
+  ],
+  "artifacts": []
+}

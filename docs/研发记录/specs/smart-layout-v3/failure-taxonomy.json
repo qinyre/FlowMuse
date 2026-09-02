@@ -1,0 +1,713 @@
+{
+  "schema_version": "1.0.0",
+  "artifact": "failure-taxonomy",
+  "title": "智能排版 v3 失败分类账",
+  "parent_work_package": "V3-000",
+  "source_plan": "docs/研发记录/plans/2026-08-30-smart-layout-v3-architecture-refactor.md §4.8/§5/§9；docs/研发记录/plans/2026-08-31-smart-layout-v3-execution-backlog.md V3-000A",
+  "purpose": "为智能排版 v3 的评测、基线、门禁与生产稳定性判定提供唯一的失败分级词汇表。任何 runner、EvaluationSpec、rubric、gate 与生产指标任务引用失败分级时必须引用本文件的 code 与 severity，不得另行发明同级词汇。",
+  "invariants": [
+    "分级是观测证据的纯函数：同一证据经产品、算法、编辑器任一视角套用本规则必须得到同一结论；视角差异只能补充证据，不能改变判定。",
+    "severity 只有 critical/major/minor 三级，且 critical 语义在任何 gate、任何数据集、任何阶段保持一票否决。",
+    "typed text 与 source 元素完整性属于不可让渡约束：丢失即 critical，与页面难易、候选多少、阈值松紧无关。",
+    "证据不足记 insufficient，不得默认为通过，也不得默认为失败；insufficient 不计入任何一方的分母抵扣（见 adjudication_rules.R7）。",
+    "fallback 必须显式标记；标记后的 fallback 不计入合格候选，也不计入 no-candidate 成功率，不构成失败（见 adjudication_rules.R6）。"
+  ],
+  "layers": {
+    "snapshot": "source 召回、typed text、group/frame/binding 完整性（§5.2 snapshot 层）",
+    "segmentation": "region 划分与合并/拆分（§5.2 segmentation 层）",
+    "analysis": "OCR/角色/顺序/关系语义（§5.2 analysis 层）",
+    "candidate": "候选生成、可行解、反投机、会话完整性（§5.2 candidate 层及会话级事实）",
+    "layout": "越界/重叠/裁字/字号/比例/对齐/间距/密度（§5.2 layout 层）",
+    "transaction": "preview=commit、CAS、undo/redo、迟到响应、LWW（§5.2 transaction 层）",
+    "experience": "到可接受结果时间与性能预算（§5.2 experience 层）",
+    "privacy": "raw 数据与日志白名单（跨层安全事实，独立归因）"
+  },
+  "severities": {
+    "critical": {
+      "rank": 3,
+      "definition": "造成用户内容不可逆丢失或损坏、破坏事务/协作完整性、危及隐私安全，或使会话在授权 fixture 环境内崩溃挂死的失败。",
+      "gate_semantics": "frozen 与生产窗口中必须为 0；出现任意一个即阻断发布（§5.3-1、§5.3-3）。不可用阈值放宽、样本剔除或重新预注册来消化。",
+      "disposition": "逐一审计个案根因；修复并以回归 fixture 固化后方可再次判定。"
+    },
+    "major": {
+      "rank": 2,
+      "definition": "不丢失用户数据，但违反硬约束、语义契约或反投机否决线，用户可感知排版结果错误或承诺错误的失败。",
+      "gate_semantics": "按 Gate 0 冻结的分层阈值判定（§5.3-2/3/4）；超阈值阻断。统计必须以用户/笔记为聚类单位。",
+      "disposition": "按层归因（snapshot/segmentation/analysis/candidate/layout/transaction），报告最差分组。"
+    },
+    "minor": {
+      "rank": 1,
+      "definition": "用户内容完整、硬约束满足，但软指标（字号带宽、比例、对齐节奏、间距、密度留白等）超出偏好区间的质量瑕疵。",
+      "gate_semantics": "进入软分聚合与人工 rubric 相关性校验（§5.3-5）；不单独阻断，但影响排名与盲评。",
+      "disposition": "由 scorer 聚合；自动分与人工分相关性不达冻结阈值时，scorer 降级为只能过滤不能推荐。"
+    }
+  },
+  "failure_codes": {
+    "C-SNAPSHOT-LOST-SOURCE": {
+      "severity": "critical",
+      "layer": "snapshot",
+      "definition": "最终 Scene 或任一展示候选遗漏了 base scene 中未被用户删除且未被 preserve 策略豁免的 source 元素（source recall < 100%）。",
+      "predicate": "∀ e ∈ sourceElements(未删除, 未豁免): e 出现在最终 Scene 的 sourceCoverage 中，且非 preserved 原位保留之外的丢失均视为违规。",
+      "positive_example": "一页 12 个元素，v3 输出 Scene 仅含 11 个，缺失的为一段手写笔迹组，未出现在 preserved[] 中。",
+      "negative_example": "某元素缺失，但它属于用户标记的 protected/preserved 且在 preserved[] 中原位保留审计记录里。",
+      "evidence": "base scene hash、最终 scene hash、sourceCoverage 差集清单。"
+    },
+    "C-SNAPSHOT-TYPED-TEXT-LOST": {
+      "severity": "critical",
+      "layer": "snapshot",
+      "definition": "typed text 未逐字保留：最终展示文本与服务器回填原文出现增删改（typed text 100% 约束被破坏）。",
+      "predicate": "typedText(final) ≡ typedText(source)（逐字符相等；排版引起的换行折行不算差异，字符流必须相等）。",
+      "positive_example": "段落末尾两字在候选渲染中被截断省略，字符流丢失。",
+      "negative_example": "段落重排后换行位置变化，但字符流与原文完全一致。",
+      "evidence": "字符流 diff。"
+    },
+    "C-TX-PREVIEW-COMMIT-MISMATCH": {
+      "severity": "critical",
+      "layer": "transaction",
+      "definition": "compare-and-commit 落库的 Scene 与用户最后确认的 preview 不深度等价（preview=commit 破坏）。",
+      "predicate": "normalize(commitScene) deep-equals normalize(lastPreviewedScene)，以 renderer/metrics/ledger hash 三元组一致为准。",
+      "positive_example": "提交路径重新生成 patch 时多应用了一次 margin 偏移，落库结果与 preview 差一个坐标位。",
+      "negative_example": "提交前远端发生不相交写集变更，系统按新 revision 重派并重新 preview 后用户再次确认提交。",
+      "evidence": "preview hash、commit hash、两者归一化差异。"
+    },
+    "C-TX-CAS-DIRTY-WRITE": {
+      "severity": "critical",
+      "layer": "transaction",
+      "definition": "在 baseRevision 已过期或写集与本地/远端变更相交时仍发生权威 Scene 写入、History 事务或广播（CAS 零写入约束被破坏）。",
+      "predicate": "任何提交临界区内 revision/fingerprint 校验失败时，写入次数必须为 0，History 事务必须为 0，广播必须为 0。",
+      "positive_example": "协作远端先提交，本地迟到响应未校验 revision 直接覆盖，用户刚输入的一行字被抹掉。",
+      "negative_example": "revision 不符时系统零写入并提示重新分析，先应用远端变化。",
+      "evidence": "临界区日志：revision 比对、写集相交检测结果、写入计数。"
+    },
+    "C-TX-UNDO-REDO-BROKEN": {
+      "severity": "critical",
+      "layer": "transaction",
+      "definition": "undo/redo 无法恢复提交前状态，或产生脏 History（缺事务、错序、重放后不一致）。",
+      "predicate": "commit 后立即 undo 必须恢复到 base scene 深度等价状态；redo 幂等；History 长度与事务边界一致。",
+      "positive_example": "undo 后页面上残留 v3 新增的一个文本块，History 缺最后一个事务。",
+      "negative_example": "undo 恢复 base scene；再次 redo 恢复 v3 结果，两次 redo 结果深度等价。",
+      "evidence": "History 事务序列与重放结果 hash。"
+    },
+    "C-SESSION-CRASH-HANG": {
+      "severity": "critical",
+      "layer": "candidate",
+      "definition": "授权 fixture 环境内会话崩溃、未捕获异常、死循环或超时。崩溃与超时不得记作成功，也不得计入 no-candidate 规避失败（对应 V3-003A 基线口径）。",
+      "predicate": "runner 以超时/非零退出/未捕获异常终止该页处理，即登记本 code；该页不得进入任何成功分母。",
+      "positive_example": "3000 笔画压力页触发死循环，runner 超时杀进程。",
+      "negative_example": "页面处理在 benchmark 预算内正常完成，只是耗时偏长（记 m-PERF-BUDGET）。",
+      "evidence": "runner 退出码、超时记录、崩溃栈（不含用户原始内容）。",
+      "attribution_note": "登记时必须附带发生阶段 stage（capturing/segmenting/analyzing/generating/committing）；分层归因按 stage 展开，不因本 code 固定 layer 而失真。"
+    },
+    "C-PRIVACY-RAW-LEAK": {
+      "severity": "critical",
+      "layer": "privacy",
+      "definition": "raw 页面图像、OCR 原文或 prompt 在生产被持久化、缓存或发送到未授权通道（生产禁录 raw；日志只存不可逆指标）。",
+      "predicate": "生产配置下任何 raw 图像/OCR/prompt 载荷出现在持久化存储、日志或非白名单网络出口。",
+      "positive_example": "调试日志把整页截图 base64 写入本地文件并随遥测上传。",
+      "negative_example": "开发环境仅使用合成/授权脱敏内容做 record/replay。",
+      "evidence": "日志白名单审计、出口流量审计（只存字段名与计数，不存内容）。"
+    },
+    "M-LAYOUT-OOB": {
+      "severity": "major",
+      "layer": "layout",
+      "definition": "展示元素超出页面/visual bounds 容忍度（越界）。",
+      "predicate": "element.bounds 与页面 bounds 的交集面积比 < 1 - oob_tolerance（阈值由 Gate 0 冻结）。",
+      "positive_example": "段落右缘超出画布 8%。",
+      "negative_example": "元素贴边但完全在 bounds 内。",
+      "evidence": "renderer 实测 bounds。"
+    },
+    "M-LAYOUT-OVERLAP": {
+      "severity": "major",
+      "layer": "layout",
+      "definition": "两个内容元素非法重叠超过容忍度（装饰线等豁免关系除外）。",
+      "predicate": "两元素包围盒相交面积 / min(面积) > overlap_tolerance，且二者无 allow_overlap 豁免关系。",
+      "positive_example": "文本块压在图片上 10% 面积，二者无 caption/装饰豁免。",
+      "negative_example": "图注紧邻图形，包围盒相交 1.5% 在容忍度内。",
+      "evidence": "renderer 实测 bounds 与豁免关系清单。"
+    },
+    "M-LAYOUT-CLIP": {
+      "severity": "major",
+      "layer": "layout",
+      "definition": "文字被裁切/截断：字形被容器或画布裁掉，或文本在无省略与分页意图的情况下被截断。",
+      "predicate": "实测 glyph 可见区域 < 字形应有区域 - clip_tolerance，或字符流在渲染层丢失。",
+      "positive_example": "段落最后一行下缘被 frame 裁掉半行。",
+      "negative_example": "列表尾部按设计显示省略号且全文可在详情中查看（分页/省略意图显式登记）。",
+      "evidence": "renderer golden 与裁切检测结果。"
+    },
+    "M-LAYOUT-IMAGE-CLIP": {
+      "severity": "major",
+      "layer": "layout",
+      "definition": "非文本元素（图片/图形/公式）被容器或画布裁切超出硬约束容忍度（§4.8 裁字与比例硬约束的图片侧）。",
+      "predicate": "元素可见区域 / 应有区域 < 1 - clip_tolerance 且非用户显式裁剪意图。",
+      "positive_example": "示意图右缘 15% 被 frame 裁掉。",
+      "negative_example": "用户 capture 前已对图片做过等比裁剪，输出如实保留。",
+      "evidence": "renderer golden 与裁切检测结果。"
+    },
+    "M-LAYOUT-FONT-FLOOR": {
+      "severity": "major",
+      "layer": "layout",
+      "definition": "字号低于硬下限（§4.8 硬约束）：无论动机（含为消除重叠而降号），低于 hard_floor 即违规，与偏好带宽瑕疵 m-LAYOUT-FONTSIZE-BAND 严格分界。",
+      "predicate": "任一展示文本元素 font size < hard_floor（Gate 0 冻结值）。",
+      "positive_example": "正文整体降到 7pt 以塞进半栏，hard_floor=9pt。",
+      "negative_example": "字号 10pt，位于硬下限之上但低于偏好带宽（记 m-LAYOUT-FONTSIZE-BAND）。",
+      "evidence": "renderer 字号统计与 hard_floor 引用值。"
+    },
+    "M-LAYOUT-ASPECT-HARD": {
+      "severity": "major",
+      "layer": "layout",
+      "definition": "非文本元素比例失真超出硬区间（§4.8 比例硬约束），与偏好区间瑕疵 m-LAYOUT-ASPECT 严格分界。",
+      "predicate": "宽高比变化超出硬区间（Gate 0 冻结值）。",
+      "positive_example": "示意图被纵向压扁 30% 以避让文本。",
+      "negative_example": "宽高比变化 12%，在硬区间内但超出偏好区间（记 m-LAYOUT-ASPECT）。",
+      "evidence": "bounds 宽高比比对与硬区间引用值。"
+    },
+    "M-SNAPSHOT-PROTECTED-DAMAGE": {
+      "severity": "major",
+      "layer": "snapshot",
+      "definition": "受保护/锁定/显式 preserve 的对象被移动、改样式、重绑或重复消费（同一 source 元素被两个候选区域同时容纳）。",
+      "predicate": "protected/locked 元素的 bounds、绑定或内容相对 base 发生非用户发起的变化；或同一 source key 出现在多个布局区域。",
+      "positive_example": "用户锁定的手写签名被移位并与正文对齐。",
+      "negative_example": "锁定元素原样保留在原坐标（preserve 策略的正确执行）。",
+      "evidence": "base 与最终 Scene 的保护对象 diff、source key 消费审计。"
+    },
+    "M-HARD-COVERAGE": {
+      "severity": "major",
+      "layer": "candidate",
+      "definition": "source 元素虽未丢失，但未被任何候选区域合理容纳（coverage 低于冻结阈值，或被塞入 preserved 逃避布局）。",
+      "predicate": "sourceCoverage 覆盖率 < Gate 0 冻结阈值；或将可布局元素违规移入 preserved 逃避约束。",
+      "positive_example": "手写批注被整体丢进 preserved 原位悬空，与正文重叠。",
+      "negative_example": "unknown 元素因语义未知按策略 preserved 原位保留且不产生重叠。",
+      "evidence": "sourceCoverage 明细与 preserved 审计。"
+    },
+    "M-HARD-RELATION-BREAK": {
+      "severity": "major",
+      "layer": "analysis",
+      "definition": "允许关系被破坏：caption_of 图注与图形分离、keep_together 组被拆页/拆栏、绑定点脱钩。",
+      "predicate": "最终布局中 caption_of 的 from/to 不再同栏邻接；keep_together 成员被分隔；binding 端点丢失。",
+      "positive_example": "图注被排到下一栏顶部，与图形分离且不相邻。",
+      "negative_example": "图注在图形正下方，符合 caption_of 邻接。",
+      "evidence": "relations[] 与最终布局坐标比对。"
+    },
+    "M-HARD-ORDER-BREAK": {
+      "severity": "major",
+      "layer": "analysis",
+      "definition": "不可交换的 reading order 被交换（order pair accuracy 破坏），导致阅读顺序错误。",
+      "predicate": "最终 readingOrder 中出现不可交换对的逆序（以双人标注+仲裁的 frozen 标注为准）。",
+      "positive_example": "步骤 3 被排到步骤 2 之前。",
+      "negative_example": "两个并列段落顺序互换且标注确认可交换。",
+      "evidence": "order pair 比对结果。"
+    },
+    "M-HARD-GROUP-BREAK": {
+      "severity": "major",
+      "layer": "snapshot",
+      "definition": "group/frame/binding 完整性破坏：成员丢失、重绑到错误容器、frame 语义改变。",
+      "predicate": "最终 Scene 的 group 成员集合与 base 语义等价集合不一致（用户显式改组除外）。",
+      "positive_example": "三元素组中两个被并入正文，组解体且未记录用户改组。",
+      "negative_example": "用户在 capture 后手动解组，输出反映用户操作。",
+      "evidence": "group tree diff。"
+    },
+    "M-SEMANTIC-UNSANITIZED": {
+      "severity": "major",
+      "layer": "analysis",
+      "definition": "未通过 sanitize 的语义文档（引用非法、readingOrder 不完整、关系有环、typed text 未回填）进入 planner 或被提交。",
+      "predicate": "planner/commit 入口校验 sanitize 契约失败仍继续（fail-open）。",
+      "positive_example": "引用了已删除 region 的 relation 通过校验缺口进入 planner。",
+      "negative_example": "sanitize 拒绝非法文档并局部重算。",
+      "evidence": "sanitize 校验日志与拦截记录。"
+    },
+    "M-SEMANTIC-HIDDEN-RULE": {
+      "severity": "major",
+      "layer": "analysis",
+      "definition": "出现规范外暗规则（如『短于 12 字抬标题』）参与决策：客户端/服务端任何未在 spec 登记的角色或顺序启发式生效。",
+      "predicate": "决策路径使用了 spec/预注册之外的规则常量或阈值。",
+      "positive_example": "客户端在校验阶段偷偷按字数提升角色。",
+      "negative_example": "角色判定全部来自服务端 spec 内登记规则且带 evidence。",
+      "evidence": "决策日志中的规则来源标记。"
+    },
+    "M-OCR-EXCEEDS-THRESHOLD": {
+      "severity": "major",
+      "layer": "analysis",
+      "definition": "CER/WER 超过 Gate 0 冻结阈值（typed/handwritten 分别统计并报告最差分组）。",
+      "predicate": "按用户/笔记聚类的 CER 或 WER 超冻结阈值。",
+      "positive_example": "某用户三页平均 WER 18%，阈值 8%。",
+      "negative_example": "全文仅标点全半角差异，CER 0.4% 在阈值内。",
+      "evidence": "字符级 diff 聚合。"
+    },
+    "M-SEG-MERGE-SPLIT-ERROR": {
+      "severity": "major",
+      "layer": "segmentation",
+      "definition": "区域合并/拆分错误超阈值（把一个语义单元拆开或把无关单元合并）。",
+      "predicate": "merge/split 错误率超 Gate 0 冻结阈值；单页最差分组单独列出。",
+      "positive_example": "标题与其段落被合并成一个 region。",
+      "negative_example": "段落内换行被合并为同一 region（正确）。",
+      "evidence": "region 标注比对。"
+    },
+    "M-CAND-ANTI-GAMING": {
+      "severity": "major",
+      "layer": "candidate",
+      "definition": "反投机否决线失守：no-op、极缩、隐藏文本、大空白、单对象、全标题化等投机样本进入 Top 3 或合格候选集（§5.3-4）。",
+      "predicate": "见 anti_gaming_cases 各检测谓词；命中任一且该候选进入 Top 3 展示或合格集合即违规。",
+      "positive_example": "散乱页上与原稿几乎相同的 no-op 候选被排为 Top 1 并标记『推荐』。",
+      "negative_example": "整洁页上 no-op 候选位居 Top 1：页面无未满足布局意图，属 §5.3-8 非劣要求，不构成违规。",
+      "evidence": "候选排名、投机谓词命中记录。"
+    },
+    "M-CAND-FALSE-NO-CANDIDATE": {
+      "severity": "major",
+      "layer": "candidate",
+      "definition": "页面存在可行解但系统报告无候选（无解准确率破坏）；或 no-candidate 统计漏页，用『不出结果』规避失败（§5.3-3）。",
+      "predicate": "可行解存在性由预注册求解器/人工仲裁确认；统计分母必须含全部页面（崩溃超时除外，另记 C-SESSION-CRASH-HANG）。",
+      "positive_example": "普通图文页被拒绝，复查发现贪心 preflight 误杀。",
+      "negative_example": "保护对象使硬约束不可满足，系统明确拒绝并给出原因（设计要求的行为）。",
+      "evidence": "无解复核记录、全量分母审计。"
+    },
+    "M-CAND-SILENT-FALLBACK": {
+      "severity": "major",
+      "layer": "candidate",
+      "definition": "保守 fallback 候选未显式标记，被计入合格候选或成功率（§9『保守 fallback 被当成成功』）。",
+      "predicate": "fallback 候选缺少 fallback 标记，或标记后仍进入合格候选/no-candidate 成功率分子。",
+      "positive_example": "服务端超时降级为保留原样的候选，被 scorer 记为合格候选。",
+      "negative_example": "同候选带显式 fallback 标记，仅原样展示且不计入合格候选。",
+      "evidence": "候选标记与统计口径审计。"
+    },
+    "M-TX-LATE-RESPONSE": {
+      "severity": "major",
+      "layer": "transaction",
+      "definition": "迟到的异步响应在 operation/page/revision/disposed 检查失效后仍被应用。无论后果如何本 code 始终登记；若进一步造成覆盖写入，另登记 C-TX-CAS-DIRTY-WRITE（R3 升级不删原 code）。",
+      "predicate": "async continuation 更新状态前未通过 operationId/pageId/revision/disposed 四检即生效。",
+      "positive_example": "用户已取消会话，迟到的分割结果仍把状态从 idle 掰到 reviewing。",
+      "negative_example": "取消后迟到响应被四检拦截丢弃。",
+      "evidence": "continuation 检查日志。"
+    },
+    "M-CAND-UNVALIDATED": {
+      "severity": "major",
+      "layer": "candidate",
+      "definition": "候选未完成全链验证（缺 renderer/metrics/ledger hash 或未经 DraftSceneRenderer 实测）即进入打分、排序、Top 3 展示或提交流程（违反 §4.8 ValidatedCandidate 契约，对应 FP-6）。",
+      "predicate": "任一候选在 renderer/metrics/ledger hash 不齐全时被 scorer 打分、参与排名或对外展示。",
+      "positive_example": "scorer 对未渲染的 draft patch 直接估分并排入 Top 3。",
+      "negative_example": "全链完成、三元组 hash 齐备的 ValidatedCandidate 参与排名。",
+      "evidence": "候选封装处的 hash 三元组校验日志。"
+    },
+    "M-SEMANTIC-ROLE-ERROR": {
+      "severity": "major",
+      "layer": "analysis",
+      "definition": "role 判定错误：按用户/笔记聚类的 role macro-F1 低于 Gate 0 冻结阈值，或单个 role 判错改变结构语义（标题↔正文互换等造成层级/结构错误）。",
+      "predicate": "role macro-F1 < 冻结阈值；或对照 frozen 标注出现改变结构的 role 错判。",
+      "positive_example": "章节标题被整体判为正文，层级结构丢失。",
+      "negative_example": "装饰性划线被判为 unknown 并按策略 preserved 原位保留。",
+      "evidence": "role 混淆矩阵（按用户/笔记聚类）。"
+    },
+    "m-LAYOUT-FONTSIZE-BAND": {
+      "severity": "minor",
+      "layer": "layout",
+      "definition": "字号在硬下限之上但偏离 profile 偏好带宽（为消除重叠而降号等），可读性成立但节奏受损。",
+      "predicate": "font size ∈ (hard_floor, preferred_band) 之外但在硬界内。",
+      "positive_example": "正文整体降 2pt 以塞进半栏。",
+      "negative_example": "字号在偏好带宽内随层级单调。",
+      "evidence": "renderer 字号统计。"
+    },
+    "m-LAYOUT-ASPECT": {
+      "severity": "minor",
+      "layer": "layout",
+      "definition": "非文本元素比例失真超过偏好区间但未达硬约束（§4.8 比例约束）违规。",
+      "predicate": "宽高比变化超出偏好区间、未超出硬区间。",
+      "positive_example": "示意图被横向拉伸 12%。",
+      "negative_example": "等比缩放。",
+      "evidence": "bounds 宽高比比对。"
+    },
+    "m-LAYOUT-ALIGN-RHYTHM": {
+      "severity": "minor",
+      "layer": "layout",
+      "definition": "对齐节奏不达标：同级元素基线/左缘不齐超过软阈值。",
+      "predicate": "对齐方差超过 profile 软阈值。",
+      "positive_example": "三个并列卡片左缘参差 6px。",
+      "negative_example": "左缘对齐在 1px 内。",
+      "evidence": "对齐统计。"
+    },
+    "m-LAYOUT-SPACING": {
+      "severity": "minor",
+      "layer": "layout",
+      "definition": "间距不一致或超出偏好区间（段间距忽大忽小），密度留白软分受损。",
+      "predicate": "间距分布方差/极差超过软阈值。",
+      "positive_example": "相邻段距在 4px 与 28px 间跳动。",
+      "negative_example": "段距一致或按层级阶梯分布。",
+      "evidence": "间距统计。"
+    },
+    "m-LAYOUT-DENSITY-BLANK": {
+      "severity": "minor",
+      "layer": "layout",
+      "definition": "密度/留白软分超出偏好区间（未达大空白投机线的轻度失衡）。",
+      "predicate": "canvas 占用率低于偏好下限但高于反投机『大空白』判定线。",
+      "positive_example": "内容集中在左上 2/3 页，右下轻度空白。",
+      "negative_example": "留白均衡且符合密度偏好。",
+      "evidence": "密度统计。"
+    },
+    "m-PERF-BUDGET": {
+      "severity": "minor",
+      "layer": "experience",
+      "definition": "在 benchmark 预算口径（预注册主机/warm-up/缓存/并发）下 P50/P95 或峰值内存超标，但会话正常完成。",
+      "predicate": "P50/P95/峰值内存任一超过 Gate 0 冻结预算。",
+      "positive_example": "P95 达到预算的 1.4 倍。",
+      "negative_example": "P95 在预算内。",
+      "evidence": "benchmark 采样（无图像/OCR/Scene 内容）。"
+    }
+  },
+  "allowed_relations": {
+    "registry": [
+      {
+        "type": "caption_of",
+        "from": "text block",
+        "to": "figure/graphic/formula",
+        "constraints": "图注→被注对象，单向；一个图注至多一个 caption_of 目标；终局布局中 from/to 必须同栏邻接（M-HARD-RELATION-BREAK 谓词）。",
+        "evidence_required": "confidence ∈ [0,1] 与 evidence（边界框/语义线索）"
+      },
+      {
+        "type": "keep_together",
+        "from": "block",
+        "to": "block",
+        "constraints": "对称分组约束；成员在终局布局中不得被栏/页分隔；不得形成环（含传递环）。",
+        "evidence_required": "confidence ∈ [0,1] 与 evidence"
+      },
+      {
+        "type": "belongs_to",
+        "from": "list item / paragraph",
+        "to": "list / section container",
+        "constraints": "容器成员关系，单向无环；容器必须存在于 blocks；readingOrder 必须覆盖所有成员。",
+        "evidence_required": "confidence ∈ [0,1] 与 evidence"
+      }
+    ],
+    "global_constraints": [
+      "relations[] 只能使用 registry 内 type；出现未注册 type 即 M-SEMANTIC-UNSANITIZED。",
+      "from[]/to[] 引用的 id 必须存在；关系图无环；同一对不得同时存在互相矛盾的 type。",
+      "readingOrder 是独立数组：所有未豁免 block 必须出现且仅出现一次；不可交换对以 frozen 双人标注为准。",
+      "unknown 元素不强制产生关系；无证据的关系必须丢弃而不是猜（保存冲突而不静默择一，§4 复核原则）。"
+    ]
+  },
+  "forbidden_patterns": [
+    {
+      "id": "FP-1-hidden-heuristic",
+      "pattern": "规范外暗规则参与决策（如『短于 12 字抬标题』），包括客户端可解释校验之外的任何角色/顺序启发式。",
+      "maps_to": "M-SEMANTIC-HIDDEN-RULE"
+    },
+    {
+      "id": "FP-2-preflight-soft-peek",
+      "pattern": "生成期 preflight 读取软分、profile、当前排名或『能否超过当前候选集』，而非仅做单调硬可行性检查。",
+      "maps_to": "M-CAND-FALSE-NO-CANDIDATE（若导致误杀可行页）"
+    },
+    {
+      "id": "FP-3-raw-recording",
+      "pattern": "生产环境录制/持久化 raw 页面图像、OCR 原文或 prompt；日志超出不可逆指标白名单。",
+      "maps_to": "C-PRIVACY-RAW-LEAK"
+    },
+    {
+      "id": "FP-4-unmarked-fallback",
+      "pattern": "fallback 候选不带显式标记，或标记后仍计入合格候选、成功率分子。",
+      "maps_to": "M-CAND-SILENT-FALLBACK"
+    },
+    {
+      "id": "FP-5-bypass-commit-path",
+      "pattern": "绕过唯一 compare-and-commit 入口提交：直接改权威 Scene、绕过 reducer 应用 patch、导出『提交任意 patch』API、接受原始 patch/旧轮次候选/过期验证结果。",
+      "maps_to": "C-TX-PREVIEW-COMMIT-MISMATCH 或 C-TX-CAS-DIRTY-WRITE（按后果）"
+    },
+    {
+      "id": "FP-6-score-before-render",
+      "pattern": "未经 DraftSceneRenderer 实际测量就打分、排序或输出候选；跳过硬约束链。",
+      "maps_to": "M-CAND-UNVALIDATED（管线违规本身记 code；其布局维度判定按 R4 记 insufficient）"
+    },
+    {
+      "id": "FP-7-denominator-shrink",
+      "pattern": "no-candidate/成功率统计遗漏页面（含不出结果页、崩溃超时页），用缩小分母规避失败。",
+      "maps_to": "M-CAND-FALSE-NO-CANDIDATE"
+    },
+    {
+      "id": "FP-8-frozen-reentry",
+      "pattern": "frozen holdout 重复正式判定、按逐页答案调参回流、或修改已冻结的 EvaluationSpec/rubric/golden 而不改 hash 重新预注册。",
+      "maps_to": "V3-004B 变更控制拒绝；如发生按 adjudication_rules.R8 作废该次判定"
+    },
+    {
+      "id": "FP-9-authoritative-scene-direct-write",
+      "pattern": "任何路径不经 SceneReducer 直接写权威 Scene 或 History。",
+      "maps_to": "C-TX-PREVIEW-COMMIT-MISMATCH / C-TX-UNDO-REDO-BROKEN（按后果）"
+    }
+  ],
+  "anti_gaming_cases": [
+    {
+      "id": "AG-1-noop-passthrough",
+      "name": "no-op 原样透传",
+      "mechanism": "把与原稿几乎相同的布局当作『整理结果』参与排名，在不整洁页上骗取『非劣』与低改动成本。",
+      "detection_predicate": "候选变换距离 < noop_distance_floor 且页面存在未满足布局意图（未满足硬/软意图计数 > 0）且该候选进入 Top 3 或合格集合。",
+      "boundary": "整洁页上 no-op 位居前列是 §5.3-8 非劣要求的正确行为，不命中本谓词（由『未满足布局意图』分位保证）。",
+      "maps_to": "M-CAND-ANTI-GAMING"
+    },
+    {
+      "id": "AG-2-extreme-shrink",
+      "name": "极缩",
+      "mechanism": "整体缩小内容以消除重叠/越界，牺牲可读性换取硬约束通过。",
+      "detection_predicate": "中位字号低于 hard_floor 或 canvas 占用率低于密度硬下限，同时声称硬约束全过。",
+      "boundary": "中位字号低于 hard_floor 的部分同时记 M-LAYOUT-FONT-FLOOR；字号尚在硬下限之上但偏离偏好带宽记 m-LAYOUT-FONTSIZE-BAND。",
+      "maps_to": "M-CAND-ANTI-GAMING（伴随 M-LAYOUT-FONT-FLOOR 或 m-LAYOUT-FONTSIZE-BAND 按边界分界）"
+    },
+    {
+      "id": "AG-3-hidden-text",
+      "name": "隐藏文本",
+      "mechanism": "文本存在于 Scene 但视觉不可见（零面积、移出画布、被不透明元素遮盖、透明度 0），以通过 typed text 100% 与 coverage。",
+      "detection_predicate": "任一文本元素可见字形面积 = 0 或被完全遮盖/移出画布。",
+      "boundary": "字符流同时丢失时升级 C-SNAPSHOT-TYPED-TEXT-LOST。",
+      "maps_to": "M-CAND-ANTI-GAMING"
+    },
+    {
+      "id": "AG-4-large-blank",
+      "name": "大空白",
+      "mechanism": "把内容压进页面一角，留下大片空白，规避关系/顺序/密度工作。",
+      "detection_predicate": "canvas 占用率 < blank_floor 且存在可布局而未布局的 source 意图。",
+      "boundary": "轻度失衡未到 blank_floor 时记 m-LAYOUT-DENSITY-BLANK。",
+      "maps_to": "M-CAND-ANTI-GAMING"
+    },
+    {
+      "id": "AG-5-single-object",
+      "name": "单对象合并",
+      "mechanism": "把语义上独立的多个单元合并成一个巨型块，逃避关系、顺序与层级判定。",
+      "detection_predicate": "不同 role 的 ≥2 个语义单元被合并为单块且丢失原有 role 边界（对照 frozen 标注）。",
+      "maps_to": "M-CAND-ANTI-GAMING（伴随 M-SEG-MERGE-SPLIT-ERROR）"
+    },
+    {
+      "id": "AG-6-all-heading",
+      "name": "全标题化",
+      "mechanism": "把全部内容标为标题，跳出段落/列表结构与顺序约束。",
+      "detection_predicate": "标题角色占比 > heading_ratio_ceiling 且与 frozen role 标注矛盾。",
+      "maps_to": "M-CAND-ANTI-GAMING（伴随 M-SEMANTIC-HIDDEN-RULE 若由暗规则触发）"
+    }
+  ],
+  "rubric_anchor_set": {
+    "note": "锚点样例是分级规则的最小正反例。每个锚点给出最小化输入描述与三视角一致的唯一期望判定；V3-000B 人工 rubric 与 V3-004A EvaluationSpec 必须引用本集合版本 hash。polarity=positive 表示期望得到非通过判定（存在违规计数或 insufficient），negative 表示易混淆但应判通过。",
+    "anchors": [
+      {
+        "id": "ANCH-01-clean-tidy-noop",
+        "polarity": "negative",
+        "input": "整洁页：元素已对齐、无重叠、关系完整；v3 输出与原稿近似（no-op 位居 Top 1）。",
+        "expected_verdict": { "critical": 0, "major": 0, "minor": 0 },
+        "rationale": "整洁页非劣是 §5.3-8 要求；AG-1 谓词因『未满足布局意图=0』不成立。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-02-lost-stroke-group",
+        "polarity": "positive",
+        "input": "12 元素页，最终 Scene 仅含 11 个元素；缺失的手写笔迹组未出现在 preserved[]。",
+        "expected_verdict": { "critical": 1, "major": 0, "minor": 0, "codes": ["C-SNAPSHOT-LOST-SOURCE"] },
+        "rationale": "未豁免 source 元素丢失，source recall < 100%。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-03-preserved-unknown",
+        "polarity": "negative",
+        "input": "一个语义 unknown 的涂鸦按策略 preserved 原位保留，不与正文重叠，审计记录在案。",
+        "expected_verdict": { "critical": 0, "major": 0, "minor": 0 },
+        "rationale": "preserve 是登记在案的豁免，非丢失亦非逃避（未塞入可布局元素）。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-04-typed-text-truncated",
+        "polarity": "positive",
+        "input": "typed text 段落末两字在渲染层被截断，字符流丢失。",
+        "expected_verdict": { "critical": 1, "major": 0, "minor": 0, "codes": ["C-SNAPSHOT-TYPED-TEXT-LOST"] },
+        "rationale": "字符流不相等即破坏 typed text 100%；换行折行不算差异（对照 negative：仅折行位置变化）。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-05-commit-drifts-from-preview",
+        "polarity": "positive",
+        "input": "落库 Scene 与最后 preview 的归一化坐标差一个 margin 偏移，renderer/metrics/ledger hash 不一致。",
+        "expected_verdict": { "critical": 1, "major": 0, "minor": 0, "codes": ["C-TX-PREVIEW-COMMIT-MISMATCH"] },
+        "rationale": "preview=commit 以三元组 hash 一致为准。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-06-redispatch-after-remote",
+        "polarity": "negative",
+        "input": "提交临界区发现远端不相交写集变更：零写入，先应用远端，按新 revision 重派并重新 preview，用户再确认提交。",
+        "expected_verdict": { "critical": 0, "major": 0, "minor": 0 },
+        "rationale": "CAS 零写入 + 重派是设计行为，非脏写入。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-07-overlap-beyond-tolerance",
+        "polarity": "positive",
+        "input": "文本块与图片包围盒相交 10% 面积，二者无任何豁免关系。",
+        "expected_verdict": { "critical": 0, "major": 1, "minor": 0, "codes": ["M-LAYOUT-OVERLAP"] },
+        "rationale": "相交比例超 Gate 0 冻结容忍度且无豁免。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-08-caption-separated",
+        "polarity": "positive",
+        "input": "图注与图形分属两栏，不相邻；frozen 标注确认 caption_of 关系成立。",
+        "expected_verdict": { "critical": 0, "major": 1, "minor": 0, "codes": ["M-HARD-RELATION-BREAK"] },
+        "rationale": "caption_of 要求同栏邻接。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-09-noop-on-messy-page",
+        "polarity": "positive",
+        "input": "散乱页（多组未满足布局意图），与原稿近似的 no-op 候选被排 Top 1 并标『推荐』。",
+        "expected_verdict": { "critical": 0, "major": 1, "minor": 0, "codes": ["M-CAND-ANTI-GAMING"] },
+        "rationale": "AG-1 谓词全量命中：变换距离低 + 页面有布局意图 + 进入 Top 3。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-10-hidden-text-behind-image",
+        "polarity": "positive",
+        "input": "一段 typed text 完整存在于 Scene，但渲染时被不透明图片完全遮盖（可见字形面积 0）；该候选已完成全链渲染验证并进入 Top 3 展示。",
+        "expected_verdict": { "critical": 0, "major": 1, "minor": 0, "codes": ["M-CAND-ANTI-GAMING"] },
+        "rationale": "AG-3 命中且候选进入 Top 3（R5）；字符流未丢，故不升 critical（对照 ANCH-04）。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-11-unmarked-fallback",
+        "polarity": "positive",
+        "input": "服务端超时降级为原样保留的候选，无 fallback 标记，被 scorer 计入合格候选。",
+        "expected_verdict": { "critical": 0, "major": 1, "minor": 0, "codes": ["M-CAND-SILENT-FALLBACK"] },
+        "rationale": "fallback 必须显式标记且不得计入合格集合。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-12-marked-fallback",
+        "polarity": "negative",
+        "input": "同 ANCH-11 的候选，但带显式 fallback 标记，仅原样展示，不计入合格候选与成功率。",
+        "expected_verdict": { "critical": 0, "major": 0, "minor": 0 },
+        "rationale": "标记后的 fallback 是诚实降级，非失败。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-13-correct-rejection",
+        "polarity": "negative",
+        "input": "保护对象使硬约束不可满足，系统明确拒绝并给出原因，页面计入 no-candidate 分母。",
+        "expected_verdict": { "critical": 0, "major": 0, "minor": 0 },
+        "rationale": "无解准确率的正确侧；明示拒绝是设计要求。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-14-feasible-page-rejected",
+        "polarity": "positive",
+        "input": "普通图文页存在人工仲裁确认的可行解，但系统报告无候选（贪心 preflight 误杀）。",
+        "expected_verdict": { "critical": 0, "major": 1, "minor": 0, "codes": ["M-CAND-FALSE-NO-CANDIDATE"] },
+        "rationale": "可行页被拒绝破坏无解准确率；且页面必须留在统计分母。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-15-stale-revision-write",
+        "polarity": "positive",
+        "input": "远端已提交新 revision，本地迟到响应未过 revision 校验直接写权威 Scene，覆盖用户一行输入（四检失效与覆盖写入同时成立）。",
+        "expected_verdict": { "critical": 1, "major": 1, "minor": 0, "codes": ["C-TX-CAS-DIRTY-WRITE", "M-TX-LATE-RESPONSE"] },
+        "rationale": "迟到响应四检失效记 M-TX-LATE-RESPONSE；造成覆盖写入按 R3 升级另记 C-TX-CAS-DIRTY-WRITE，双码并列不删原 code；页面级 severity 取最高。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-16-late-response-discarded",
+        "polarity": "negative",
+        "input": "用户取消会话后迟到的分割响应被 operation/page/revision/disposed 四检拦截丢弃。",
+        "expected_verdict": { "critical": 0, "major": 0, "minor": 0 },
+        "rationale": "四检生效是设计行为（对照 M-TX-LATE-RESPONSE 正例）。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-17-runner-timeout",
+        "polarity": "positive",
+        "input": "3000 笔画压力页触发死循环，runner 按预算超时杀进程；该页未被计入成功分母。",
+        "expected_verdict": { "critical": 1, "major": 0, "minor": 0, "codes": ["C-SESSION-CRASH-HANG"] },
+        "rationale": "崩溃/挂死/超时登记为 critical 且不得记作成功；预算内慢但完成记 m-PERF-BUDGET。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-18-misaligned-cards",
+        "polarity": "positive",
+        "input": "三个并列卡片左缘参差 6px，其余约束全部满足。",
+        "expected_verdict": { "critical": 0, "major": 0, "minor": 1, "codes": ["m-LAYOUT-ALIGN-RHYTHM"] },
+        "rationale": "纯软指标瑕疵，不触发任何 major。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-19-insufficient-evidence",
+        "polarity": "positive",
+        "input": "某页候选缺 renderer 实测指标（管线中断），无法判定 OOB/重叠/裁字。",
+        "expected_verdict": { "insufficient": true },
+        "rationale": "证据不足记 insufficient：不计通过、不计失败、不抵扣 critical=0 分母；按 R7 处理并追补证据。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-20-multi-failure-accounting",
+        "polarity": "positive",
+        "input": "同一页同时发生：段落重叠 12%（M-LAYOUT-OVERLAP）与图注分离（M-HARD-RELATION-BREAK）。",
+        "expected_verdict": { "critical": 0, "major": 2, "minor": 0, "codes": ["M-LAYOUT-OVERLAP", "M-HARD-RELATION-BREAK"] },
+        "rationale": "多重失败并存：按 R2 各 code 分别登记，页面级 severity 取最高。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-21-font-below-hard-floor",
+        "polarity": "positive",
+        "input": "正文整体降到 7pt 以塞进半栏消除重叠（hard_floor=9pt，中位字号低于 hard_floor）；该候选已完成全链渲染验证、硬约束自评声明全过，并进入 Top 3 展示。",
+        "expected_verdict": { "critical": 0, "major": 2, "minor": 0, "codes": ["M-CAND-ANTI-GAMING", "M-LAYOUT-FONT-FLOOR"] },
+        "rationale": "AG-2 极缩命中（变换以缩代排、进入 Top 3、硬约束声明与事实矛盾）记 M-CAND-ANTI-GAMING；低于硬下限按硬约束记 M-LAYOUT-FONT-FLOOR。若字号仅在硬下限之上偏离偏好带宽，则只有 m-LAYOUT-FONTSIZE-BAND（分界见两 code 负例）。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-22-locked-signature-moved",
+        "polarity": "positive",
+        "input": "用户锁定的手写签名被 v3 移动 40px 并与正文对齐；无用户发起的解锁或移动。",
+        "expected_verdict": { "critical": 0, "major": 1, "minor": 0, "codes": ["M-SNAPSHOT-PROTECTED-DAMAGE"] },
+        "rationale": "保护对象非用户发起的变化即违规；元素未丢失故不升 critical（对照 ANCH-02）。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-23-role-structure-error",
+        "polarity": "positive",
+        "input": "章节标题被整体判为正文（对照 frozen 标注），层级结构丢失；该候选进入 Top 3。",
+        "expected_verdict": { "critical": 0, "major": 1, "minor": 0, "codes": ["M-SEMANTIC-ROLE-ERROR"] },
+        "rationale": "改变结构语义的 role 错判记本 code；若同时命中 AG-6 全标题化等反投机谓词则并列登记（R2）。",
+        "perspectives_agree": true
+      },
+      {
+        "id": "ANCH-24-unvalidated-candidate-scored",
+        "polarity": "positive",
+        "input": "scorer 对未渲染的 draft patch 直接估分并排入 Top 3（renderer/metrics/ledger hash 不齐全）。",
+        "expected_verdict": { "critical": 0, "major": 1, "minor": 0, "codes": ["M-CAND-UNVALIDATED"] },
+        "rationale": "FP-6 管线违规记本 code；其布局维度因无实测证据按 insufficient 处理（R4，对照 ANCH-19）。",
+        "perspectives_agree": true
+      }
+    ]
+  },
+  "adjudication_rules": {
+    "R1_pure_function": "分级是观测证据的纯函数。产品/算法/编辑器视角只能提交不同证据；证据相同则结论必须相同。锚点集中每个锚点三视角判定一致（perspectives_agree=true），任何视角得出不同结论即为规则缺陷，须修订本账并升版。",
+    "R2_multi_failure": "多重失败并存时各 code 分别登记、不互相吞并；页面/会话级汇总 severity 取最高级，计数按 code 保留以支持分层归因与最差分组报告。",
+    "R3_escalation": "上游 major/minor 造成下游 critical 事实时按最终事实定级：如 M-SEMANTIC-UNSANITIZED 的文档最终被提交 → 记 C-TX-PREVIEW-COMMIT-MISMATCH；M-TX-LATE-RESPONSE 造成覆盖写入 → 记 C-TX-CAS-DIRTY-WRITE。升级不删除原 code，两者都登记。",
+    "R4_missing_measurement": "任何跳过 DraftSceneRenderer 实测的候选（FP-6）一律不得计为成功：管线违规登记 M-CAND-UNVALIDATED，其布局维度判定（OOB/重叠/裁字）因无证据按 insufficient 处理，并对该批次触发审计。禁止用估计值替代实测值进入门禁。",
+    "R5_gaming_scope": "反投机判定只取决于投机候选是否进入 Top 3 展示或合格集合，与其排名高低、scorer 高低无关；进入即 M-CAND-ANTI-GAMING。",
+    "R6_fallback_honesty": "fallback 必须显式标记。标记后：不计合格候选、不计成功率、不构成失败；未标记：M-CAND-SILENT-FALLBACK。『没有合格候选时明确拒绝』是正确行为，拒绝本身不失败。",
+    "R7_insufficient": "证据不足记 insufficient：不计通过、不计失败、不进入任何一方分母抵扣（包括 critical=0 的样本量）。insufficient 必须追补证据或复跑；无法补足时该页排除并记录排除原因，排除率本身进入审计。",
+    "R8_frozen_single_shot": "frozen holdout 每套只允许一次正式判定。判定过程中发现规则缺陷导致大规模 insufficient 时，该次判定作废、修复缺陷、账本升版后按预注册流程重新判定，并保留作废记录；不得边判边改规则。",
+    "R9_clustering": "所有比例类统计以用户/笔记为聚类单位（§5.3-6）；页面与评分者不得作为独立样本。分类账只提供 code 级事实，聚类口径由 EvaluationSpec 固定。",
+    "R10_no_threshold_gaming": "critical 判定不设阈值、不容许样本剔除消化；major/minor 阈值只能由 V3-004A EvaluationSpec 在 Gate 0 预注册冻结后生效，事后改阈值必须改 hash 并重新预注册。"
+  },
+  "release_gate_semantics": {
+    "critical": "任一数据集、任一阶段出现即阻断；frozen 与生产窗口均要求为 0。",
+    "major": "按 Gate 0 冻结的分层阈值与聚类口径判定；『展示候选硬约束违规为 0』（§5.3-3）与『投机样本不得进入 Top 3』（§5.3-4）按 code 精确执行。",
+    "minor": "不单独阻断排版质量门禁，进入软分与人工 rubric 相关性校验；自动分与人工分相关性不达冻结阈值时 scorer 只能过滤、不能标『推荐』。性能等 Phase 门禁（§5.3-9）可直接引用 m-PERF-BUDGET 的 code 事实并按其预注册条款阻断，这不改变本账 severity：阻断力来自该门禁的预注册条款，而非 minor 级本身。",
+    "insufficient": "不构成通过证据；按 R7 处理。"
+  },
+  "field_constraints": {
+    "schema_version": "semver；任何 rule/code/anchor 语义变化必须升版并使引用方（V3-000B rubric、V3-004A EvaluationSpec、V3-004B 变更控制）重新解析 hash。",
+    "severities": "必须且只能是 critical/major/minor 三键。",
+    "failure_codes": "code 命名 critical 前缀 C-、major 前缀 M-、minor 前缀 m-；每条必须含 severity/layer/definition/predicate/positive_example/negative_example/evidence。",
+    "rubric_anchor_set.anchors": "每条必须含 id/polarity/ input/expected_verdict/rationale/perspectives_agree；expected_verdict 的 codes 必须是 failure_codes 已定义的 code；polarity=positive 的锚点 expected_verdict 至少一个 severity 计数 > 0 或 insufficient=true。",
+    "cross_reference_closure": "forbidden_patterns[].maps_to、anti_gaming_cases[].maps_to、anchors[].expected_verdict.codes 中出现的每个 code 都必须在 failure_codes 中定义。",
+    "consumers": [
+      "V3-000B：人工 rubric 与锚点样例按本账 code 建档，1-5 分 rubric 的低分档必须映射 critical/major 事实。",
+      "V3-001C/V3-003A：runner 输出失败分类字段时使用本账 code。",
+      "V3-004A/V3-004B：EvaluationSpec 的 critical=0 与阈值条款引用本账版本 hash。",
+      "V3-702B：生产稳定性 critical=0 规则引用本账 severity 语义。"
+    ]
+  },
+  "provenance": {
+    "author_run": "executor(agent) V3-000A",
+    "review": "独立 reviewer 复审通过后由 Complete 登记 commit；本文件后续变更必须走 V3-004B 变更控制。",
+    "sign_off": "产品/算法/编辑器三方签字在 V3-000B 完成（人工任务），签字引用本版本 hash。"
+  }
+}

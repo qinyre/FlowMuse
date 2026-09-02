@@ -1,0 +1,16 @@
+{
+  "task_id": "V3-500B",
+  "run_id": "863a3753-3909-45d5-aede-46ec72e43600",
+  "summary": "Patch 校验、深度等价、fixture codec 与 candidate 一次物化器落地于 patch/ 四件：smart_layout_patch_validator.dart（SmartLayoutScenePatchValidator.validate 以 base Scene 重跑全部 PatchInvariant 供 502 commit 临界区复用；checkLedgerConservation 账本守恒三类违反=未终结/账本外触碰/preserved 源被触碰，确定性排序）、smart_layout_patch_equality.dart（deepEquals 逐字段：baseRevision+操作版本与 nonce+元素负载经 ExcalidrawJsonCodec.elementToJson 全字段投影+文件字节+document+selection+账本；preview=commit 语义基石）、scene_patch_debug_codec.dart（scene-patch-debug-v1 单向确定性编码，diagnosticOnly 标记，仅测试诊断不进持久化/协作）、candidate_patch_materializer.dart（SmartLayoutCandidateMaterializer.materialize 完整 candidate 一次物化：块分类按 preserved/protected/missingAsset 零触碰→table 等不支持类型→源契约（typed=1 活动 TextElement/figure=1 活动 ImageElement/transcribed 全解析）→放置查找→303A SmartLayoutSceneTransformer 变换链（闭包/绑定/容器文本统一重算，typed 字号显式对齐 placed.appliedFontSize）→transcribed 源整组 remove+确定性 sl3- 前缀新增 TextElement（autoResize false，pageId customData 与快照同口径）→version=base+1 与 fingerprint64 推导 nonce（无随机无时钟，双跑深度等价）→ledger 按 assembly 文档账目终结标记+守恒前置（assembly.ledgerConserved+源集一致+变换闭包不触碰 preserved）→Builder/PatchInvariant 终审，任何失败九类稳定原因码原子返回零 patch；构建后零坐标推导；selection intent=物化主体）。9 新用例（全链物化/双跑深度等价+codec 一致/六类原子失败/missingAsset 零触碰按 assembly 账目），patch 套件累计 20 用例全绿，analyze smart_layout 全目录零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/patch/smart_layout_patch_validator.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/patch/smart_layout_patch_equality.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/patch/scene_patch_debug_codec.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/patch/candidate_patch_materializer.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/patch/scene_patch_validation_equality_codec_test.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/patch/candidate_patch_materializer_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-500B/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-500B/commands.json"
+  ],
+  "artifacts": []
+}

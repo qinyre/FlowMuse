@@ -1,0 +1,82 @@
+{
+ "run_id": "e2f683db-89c2-4ab8-be6b-990d3dab59ab",
+ "rater": "A",
+ "round": 2,
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "inputs_read": {
+  "blind_packet_sha256": "659fc58480763b090a78b7dcb8f44729ed4018e64e5e40c97e968ee98ea0957a"
+ },
+ "verdicts": [
+  {
+   "id": "C1",
+   "verdict": "adequate",
+   "reason": "聚类单位=样本(scene)、跨系统同一样本配对，与 three-baseline-report.json 实测结构一致（development 三臂均为 48/48 samples_with_metrics），样本内先聚合再跨样本推断，保守且无歧义。"
+  },
+  {
+   "id": "C2",
+   "verdict": "adequate",
+   "reason": "E1~E4 全部闭合：E1/E2 配对风险差、E3 配对均值差、E4 确定性预算比值，均绑定 registered_metrics（maj_violation_rate/rubric_overall/bench_*）且与 direction 一致，无未定义量。"
+  },
+  {
+   "id": "C3",
+   "verdict": "adequate",
+   "reason": "百分位 bootstrap B=10000、seed=20260831、splitmix64、E1→E2→E3 固定序列、常数差 CI=[c,c] 均确定；实测 packet 内嵌 spec 与 specs/smart-layout-v3/evaluation-spec.json 逐键相等且其 content_sha256=238f06b8 可由排序紧凑规范化复现，可复现性成立。"
+  },
+  {
+   "id": "C4",
+   "verdict": "inadequate",
+   "reason": "T6 方向自相矛盾：hypothesis 称 rubric_overall 与每样本失败码计数“负相关”，但 decision 要求“bootstrap 单侧 95% 下界>0”、target“点估计≥0.3”，而 score_correlation_gate 明确定义 ρ=Spearman(rubric_overall, 每样本失败码计数)——按此定义构念效度成立（ρ<0）时反记 caveat、ρ>0（效度失效）时反判“支持”，违反新增 direction_convention“T1~T6 的 H1 一律取改善方向”；另 Spearman 全并列/退化分支未被 degenerate 条款覆盖、其 bootstrap 在 PRNG 流中的位置未指明（T1/T2/T3/T4/T5 方向经推导均一致：T2/T3/T4 的 p=越界比例判据分别等价于单侧 95% 上/下界未越 margin 的标准判据，p 条件与点估计条件同向）。"
+  },
+  {
+   "id": "C5",
+   "verdict": "adequate",
+   "reason": "四类缺失全为 worst-case 且判定无自由度：primary 映射到可核验最差值（rubric_overall=1 与实测 rubric.json scale.range=[1,5] 下限一致），bench 超时即该操作 failed 且 run=failed（替换数值未唯一固定但只影响报告数不影响判定），hash 不符整 run 拒绝（RR-3/RR-4），无插补无剔除。"
+  },
+  {
+   "id": "C6",
+   "verdict": "adequate",
+   "reason": "F1={T2,T3,T4}、Holm 单侧 α=0.05，公式“0.05/(m−k+1)”为标准 step-down（m=3 实测阈值 0.0167/0.025/0.05），比例型 bootstrap p∈[0,1] 可取精确 0/1 与 Holm 相容，T1/T5/T6 与 secondary 排除校正的理由明确。"
+  },
+  {
+   "id": "C7",
+   "verdict": "adequate",
+   "reason": "固定 n（development=48）禁止 interim/追加（SR-1），事后功效与 MDE 由预注册 MC（B=20000、seed=20260831 同流）计算且仅披露，honesty_rule 明确禁止以功效不足为由放宽 margin（只能走 amendment_policy）。"
+  },
+  {
+   "id": "C8",
+   "verdict": "adequate",
+   "reason": "14 项指标全部显式引用 denominator_key；D_SAMPLES 48/18/19/85 与三个 split manifest 实测一致（样本 id 两两不相交、并集=池 85），D_BENCH_OPS 的 3 次/nearest_rank/cold_process 与 benchmark-spec.json 逐字相符，RR-2 拒绝未登记分母；D_CONTENT_ELEMENTS/D_TYPED_CHARS 仅上下文且确无通过判定引用。"
+  },
+  {
+   "id": "C9",
+   "verdict": "adequate",
+   "reason": "critical=0 恒等式（含缺失 worst-case 计入）先于 F1 执行、“F1 全过而 T1 fail 时 Gate 仍 fail”无歧义，并与 rubric scoring_rules.critical_floor（任一维 1 分强制 overall=1）及 taxonomy 实测 7 个 C-* 码口径闭合。"
+  },
+  {
+   "id": "C10",
+   "verdict": "adequate",
+   "reason": "方向全部正确（T2 lower_better 配 margin +0.10、T3 higher_better 配 −0.25、T4 优效=RD<0 且 H1/p/点估计三处同向，修正到位）；引用数字实测吻合（three-baseline-report：ai 0/85、v2 11/85≈0.129、development v2 7/48≈0.146），0/48 单侧 95% 上界实测 0.0605<0.10 可达性论证算术正确。"
+  },
+  {
+   "id": "C11",
+   "verdict": "adequate",
+   "reason": "六项 hard_caps 与 benchmark-spec.json 逐字一致（300s/100000 ticks/cold_process/3 reps/offline_replay_only/synthetic_only，环境 ≥4 核/8GB 相符），阶段预算先于测量（V3-301C/V3-604A 尚无产物，实测 tasks/ 仅到 V3-003B）且只许收紧，SR-1~5 完备；environment_pinning 的 content_sha256 标签误用记入 C12。"
+  },
+  {
+   "id": "C12",
+   "verdict": "inadequate",
+   "reason": "RR-3 不可唯一机器执行：environment_pinning 断言“benchmark-spec content_sha256=dbc00bc4…”，但实测 benchmark-spec.json 自身 content_sha256 字段=1db65ecd…（canonical 内容哈希，benchmark_spec.dart verifyFileHash 即此语义），dbc00bc4 实为文件字节哈希——按仓库原生语义实现 RR-3 恒判不符而拒绝一切运行（T5 永不可过）；另 RR-6“测量时间早于现行 spec_version 生效时间即拒”与 amendment_policy.tightening（允许收紧且未要求重测）交互未闭合，且 frozen_holdout_usage.allowed_roles=[\"final_evaluation\"] 不在被引 frozen_label_access_guard.dart 的 frozenReaderRoles={evaluation,gate,annotation_freeze} 内（按字面 FINAL 评估反被守卫拒绝）；披露部分如实（AI 面板、HUMAN_VALIDATION_NOT_PERFORMED、PRODUCTION_RELEASE_NOT_AUTHORIZED 与实际一致，golden-ledger 声明由 V3-004B 后建且确不存在）。"
+  }
+ ],
+ "overall": "fail",
+ "notes": [
+  "8/8 上游 hash 实测全部相符（failure-taxonomy/rubric/benchmark-spec/three-baseline/dataset-manifest/三个 split manifest）。",
+  "packet 内嵌 spec 与 docs/研发记录/specs/smart-layout-v3/evaluation-spec.json 完全相等；spec 自身 content_sha256=238f06b8b2183186 可由 sorted-keys 紧凑序列化剥离该字段后复现，与 gates/G0/spec-validation.json 记录的 spec_file_sha256=770f91bb… 相区分——该记录本身即证明生态同时维护“内容哈希/文件哈希”两种约定，environment_pinning 却把文件哈希标为 content_sha256。",
+  "T2/T3/T4 方向复核（本轮重点）：T2 p=P(RD_boot≥0.10)<0.05 ⟺ RD 的单侧 95% 上界<0.10（lower_better 非劣标准判据）；T3 p=P(Δ_boot≤−0.25)<0.05 ⟺ Δ 的单侧 95% 下界>−0.25（higher_better 非劣标准判据）；T4 p=P(RD_boot≥0)<0.05 ⟺ RD 单侧 95% 上界<0（优效标准判据）；三者与 confidence_intervals 的单侧界及 direction_convention 互恰，两臂全零等退化情形判定确定（T2 判过、T4 不判优）。",
+  "两处 inadequate 均为 fail-closed 型缺陷（错误实现方向只会更严不会假阳性）：T6 符号矛盾影响 G3 构念效度披露的方向，RR-3 标签冲突可能使 T5 无法执行；不影响 T1~T5 的判定方向正确性。",
+  "次要披露：T2/T4 justification 引用的 11/85 与 7/48 实为 any-severity samples_with_failure_codes（含 m-*），用作 major 指标可达性论据属保守近似，数字本身与报告一致；bench 超时 worst-case 的替换数值未唯一固定（仅影响报告值）；Spearman bootstrap 的 PRNG 流位置未指明。",
+  "修正建议：T6 显式定义符号（如 ρ=Spearman(rubric_overall, −失败码计数)，或判据改“单侧 95% 上界<0”且 target 改 ≤−0.3）；environment_pinning 明确为“文件字节 sha256”或改钉 1db65ecd…；RR-6 补 tightening 后既有测量的效力条款；frozen 角色词表与 guard 对齐。",
+  "未读取 gates/G0/panel/ 下除 blind-packet.json 外任何文件（含 round-1/）；未修改除本输出文件外的任何文件。"
+ ]
+}

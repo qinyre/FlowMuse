@@ -1,0 +1,33 @@
+{
+ "task_id": "V3-002C",
+ "run_id": "e7c2df17-6616-4504-95e0-ef8b88545d18",
+ "summary": "完成双代理盲标、仲裁与冻结（经两轮 rejected 修复）。(1) 标注手册（sha=1826391e18a5…，与标注者声明 hash 一致且从未事后改动）：R1 阅读顺序/R2 角色（title=center_y 最小 text 且 text 数≥2）/R3 关系（caption_of 80px+水平重叠；belongs_to 欧氏中心距≤120）/R4 独立性；预注册阈值 ro≥0.80/roles≥0.85/role槽≥0.95/rel≥0.80。(2) 两个上下文隔离 GLM-5.3 Max 标注代理（run dec8844e…/c1660c12…，输入 hash 双双核对一致）独立标注 85 样本：reading_order 85/85、roles 85/85（role 槽 100%）、relations 80/85（0.941 达标）；5 个 annotated-diagram 样本 relations 分歧 → 第三全新仲裁代理（run b329f701…，X/Y 盲化）按 R3 逐项重算裁决 5/5（全裁 Y：13/33/1/6/6 条）；裁决经程序断言全部落地 adjudicated-labels（status=passed）。(3) 工具：calculator 新增标签级 calculateLabelAgreement/applyLabelArbitration + fromJson 解析契约（裁决载荷缺失报 arbitration_payload_missing 不静默回退；final_relations 与空列表裁决语义区分）；annotation_cli 统一走 fromJson；修复 V3-002A 复审 RF1-1/RF1-2 与 List 引用相等陷阱。(4) 冻结 frozen_version 1.0.1：19 个 frozen_holdout 样本标签 + 上游 5 hash 程序断言一致 + R8 单发 + voided_history（1.0.0 因 CLI 解析缺陷污染 1047 被二轮复审拒后作废，未消费即重冻）；FrozenLabelAccessGuard 调参/训练角色拒读 frozen 标签。(5) 复审轮次披露：一轮 rejected（F1 manual hash 审计链断裂/F2 冻结自引 hash 失效/F3 analyzer 声明不实——因执行者在 hash 记录后补丁文件）→ 手册定稿重跑双盲标+冻结链重建；二轮 rejected（R2C-1 CLI 误读 final_relations 致 5 裁决静默丢弃/R2C-2 frozen 1047 污染/R2C-3 报告声明与产物矛盾/R2C-4 缺 CLI 端到端测试）→ 修 CLI+严格化 calculator+补端到端回归测试+裁决落地断言+升 1.0.1 重冻；本轮为二修后提交。测试：flutter test tool/smart_layout_v3 83 全过（新增 9：RF1-1/2 回归 2、标签一致性 3、冻结闸门 2、CLI 端到端 2）；flutter analyze tool/smart_layout_v3/dataset 0 问题（实测）。披露：panel_type=ai_surrogate；human_validation_performed=false；HUMAN_VALIDATION_NOT_PERFORMED；PRODUCTION_RELEASE_NOT_AUTHORIZED。",
+ "changed_paths": [
+  "FlowMuse-App/tool/smart_layout_v3/dataset/annotation_agreement_calculator.dart",
+  "FlowMuse-App/tool/smart_layout_v3/dataset/annotation_cli.dart",
+  "FlowMuse-App/tool/smart_layout_v3/dataset/frozen_label_access_guard.dart",
+  "FlowMuse-App/tool/smart_layout_v3/dataset/annotation_labels_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/annotation-manual.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/projections/scenes-projection.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/projections/id-mapping.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/annotator-a.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/annotator-b.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/arbitration-input.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/arbitration-rulings.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/agreement-report.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/adjudicated-labels.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/frozen-labels.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/frozen-manifest.json",
+  "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/annotation-report.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002C/result.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002C/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002C/review.json"
+ ],
+ "artifacts": [
+  {
+   "key": "v3_002c_deliverable",
+   "path": "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/annotation-report.json",
+   "sha256": "fe3038df5ff4cd0dfe6fef36fc6a9f85ed4ed8ee636e2e8b99fbe0532f47bd1b"
+  }
+ ]
+}

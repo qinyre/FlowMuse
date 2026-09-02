@@ -17,7 +17,6 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 
 import 'studio_rail_icon_button.dart';
-import 'zoom_controls.dart';
 
 /// A full-featured drawing editor widget.
 ///
@@ -509,10 +508,13 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
             for (final position in ControlGroupPosition.values)
               RadioListTile<ControlGroupPosition>(
                 value: position,
+                // ignore: deprecated_member_use
                 groupValue: _controlGroupPosition,
                 title: Text(_controlGroupPositionLabel(position)),
+                // ignore: deprecated_member_use
                 onChanged: (value) => Navigator.of(context).pop(value),
               ),
+          // ignore: deprecated_member_use
           ],
         ),
       ),

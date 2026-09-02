@@ -1,0 +1,93 @@
+{
+  "task_id": "V3-001B",
+  "run_id": "f3a4a965-eba6-49a8-9cf3-09783621322f",
+  "executor_run_id": "b775b336-3601-4563-975b-a48e16406588",
+  "model": "glm-5.3",
+  "reasoning_effort": "max",
+  "verdict": "approved",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "pass",
+      "summary": "flutter test tool/smart_layout_v3/ 实测 41 项全绿（benchmark_determinism_test.dart 12 项新增 + fixture_manifest_test.dart 29 项 V3-001A 既有），含隔离子进程三次一致性验收测试。",
+      "evidence": "命令 cd FlowMuse-App && flutter test tool/smart_layout_v3/ 输出 'All tests passed!' 计数 +41；grep 统计两测试文件 test() 数为 12 与 29。"
+    },
+    {
+      "id": "F2",
+      "severity": "pass",
+      "summary": "flutter analyze tool/smart_layout_v3 实测 'No issues found!'，exit 0。",
+      "evidence": "cd FlowMuse-App && flutter analyze tool/smart_layout_v3 → No issues found! (ran in 1.4s)。"
+    },
+    {
+      "id": "F3",
+      "severity": "pass",
+      "summary": "CLI benchmark-hash 实测 ok:true 且 content_sha256=1db65ecd86164231edf535c56476050b95941efd8b75cbbd2de92951722c64a7 与 benchmark-spec.json 声明值一致；result.json 的 artifact sha256 dbc00bc413ec02f80339ffd87a33dbc98d265c5518833a012da7ef9eb24be42f 与文件原始字节 SHA-256（python hashlib 独立计算）一致。注意 content_sha256 是剥离该字段后的规范化 JSON 哈希、artifact sha256 是原始文件哈希，二者口径不同且各自正确。",
+      "evidence": "dart run tool/smart_layout_v3/main.dart benchmark-hash → {\"ok\":true,...,\"content_sha256\":\"1db65ecd…\"} exit 0；python sha256(benchmark-spec.json bytes)=dbc00bc4…。"
+    },
+    {
+      "id": "F4",
+      "severity": "pass",
+      "summary": "自建临时 fixture（产物文件+SHA-256 齐全，参照 _buildAdmissibleManifest 结构、PNG 用 zlib.crc32 生成）跑 determinism --runs 3：ok:true、consistent:true、isolated_processes:true、exit 0，三次一致性哈希均为 6791ee268025d7efb3fdfb938a0665c358fc628970b4d3488f314007b005f578；直接跑 determinism-once 的 consistency_hash 与之子进程完全相同，证明隔离是真隔离子进程（Process.runSync 每次新起独立 dart VM）而非同进程循环冒充。",
+      "evidence": "dart run tool/smart_layout_v3/main.dart determinism --manifest <tmp>\\manifest.json --repo-root <tmp> --runs 3 → ok:true consistent:true exit 0，consistency_by_run 三项同值。"
+    },
+    {
+      "id": "F5",
+      "severity": "pass",
+      "summary": "DeterministicClock 确实读不到墙钟：整个 tool/smart_layout_v3 目录 grep 无 DateTime.now/Stopwatch/SystemClock（grep exit 1）；时钟状态只有环境声明的固定字符串 + 显式 tick 计数，超时判定 timedOut 以 tick 为单位。SeededRandom 为纯 LCG，同种子指纹一致、异种子不同（测试覆盖 + 实现 22 行可核）。"
+    },
+    {
+      "id": "F6",
+      "severity": "pass",
+      "summary": "canonicalJson 数字规范化实测：1.0→1、2.5→2.5、-3.0→-3、1e14→100000000000000、0.1→0.1、-0.0→0、3.0000000000000004 保留最短往返；键序无关、易变键（generated_at_utc/timestamp 等 6 键）剥离且 stripVolatile:false 时可保留参与哈希。易变键列表保守，未发现会误伤 Scene 必要语义的键（均为时间戳/墙钟类）。",
+      "evidence": "dart --packages=.dart_tool/package_config.json <临时 probe>（源文件复制到系统临时目录，未触碰仓库）。"
+    },
+    {
+      "id": "F7",
+      "severity": "pass",
+      "summary": "canonicalPng chunk 白名单实测：PLTE/tRNS 被保留且内容敏感（有无 PLTE、PLTE/tRNS 取值变化均改变哈希）；tEXt/tIME 被剥离（含它们的 PNG 与不含者同哈希）；影响颜色解释的 gAMA/cHRM/sRGB/iCCP 保留；chunk 保持原序。CRC-32 实现正确：对仅含白名单 chunk 的 zlib.crc32 生成 PNG，canonicalPng 输出与输入逐字节一致。",
+      "evidence": "probe 输出 'CRC/bytes identical to zlib-generated PNG: true' 及 PLTE/tRNS/tEXt/tIME 各边界断言全 true。"
+    },
+    {
+      "id": "F8",
+      "severity": "pass",
+      "summary": "benchmark spec 冻结口径六要素齐备且被机器校验：主机/OS（os+arch+environment_requirements）、warm-up（warmup_runs=1）、缓存（cache_policy=cold_process）、并发（concurrency 强制=1）、P50/P95（metrics=p50,p95 + percentile_method 冻结 nearest_rank）、峰值内存（peak_memory_metric 冻结 process_peak_rss）、超时（timeout_seconds=300 + timeout_ticks=100000）。防篡改实测：删除任一必填字段（warmup_runs/metrics/timeout_seconds/os/environment_requirements）load 拒绝；删除 content_sha256 本身 load 通过但 verifyFileHash 拒绝；新增未知键或 environment_requirements 嵌套篡改均致 content_sha256 不一致被拒。唯一残余绕过是改字段后重算 content_sha256——无签名自哈希的固有限制，下游 V3-004A/CI 以 hash 引用可察觉，可接受。",
+      "evidence": "probe tamper 输出全部 'load errors: true / verifyFileHash errors: true'；套件内篡改 timeout_seconds 测试亦在 41 绿中。"
+    },
+    {
+      "id": "F9",
+      "severity": "pass",
+      "summary": "synthetic_only 数据政策在 harness 层独立于 001A parse 层真实执行：构造边界完整（consent granted/anonymization/deletion/isolation key 齐全）的 authorized_real fixture，validate CLI（001A 层）admitted:true exit 0，而 determinism-once CLI 在 stage=data_policy 拒绝 exit 2——政策检查在 CLI 路径实际执行，不是只写在类注释里；determinism 通过 spawn determinism-once 子进程同样过检。",
+      "evidence": "validate → {\"admitted\":true,\"errors\":[]}；determinism-once → {\"ok\":false,\"stage\":\"data_policy\",\"errors\":[…synthetic_only…]} exit 2。"
+    },
+    {
+      "id": "F10",
+      "severity": "pass",
+      "summary": "范围合规：git diff --cached 共 8 文件，全部落在 allowed_paths（FlowMuse-App/tool/smart_layout_v3/** 与 docs/研发记录/evidence/smart-layout-v3/tasks/V3-001B/**）；工作区另有未暂存的插件 registrant 与 manifest 状态修改，不属于本任务 staged diff。未越界实现 V3-001C 职责：runOnce 只是确定性指纹运行（字体冻结校验+环境身份哈希+时钟/随机指纹+规范化 scene/golden 哈希），无管线执行、计时统计、受控回放与分层报告；determinism 对 manifest.fixtures 的遍历仅是同一指纹运行的一致性比对。",
+      "evidence": "git diff --cached --name-only 输出 8 路径；git status 首列确认插件文件为未暂存 ' M'。"
+    },
+    {
+      "id": "F11",
+      "severity": "pass",
+      "summary": "证据真实性：commands.json 的 command 字符串与 Manifest V3-001B commands[0] 逐字符一致（python == 比较为 True），exit_code 0 符合 expected_exit_codes[0]；本人重跑该命令 'powershell … AgentExecution.ps1 -Action VerifyArtifacts -TaskId V3-001B' exit 0（输出 'V3-001B artifact contract valid.'）；result.json summary 的关键声称（41 测试/12 新增、analyze 零问题、benchmark-hash ok:true、三次隔离子进程一致、1db65ecd…/dbc00bc4… 两哈希、authorized_real 被拦、governed_real 放行）逐项复现一致。",
+      "evidence": "本 finding 所列各命令实测输出。"
+    },
+    {
+      "id": "F12",
+      "severity": "pass",
+      "summary": "无投机：src/ 与 main.dart 无硬编码 64 位十六进制常量（grep 无匹配）；一致性哈希均为计算值跨进程/跨次比对，无与固定期望值比较的通过逻辑。",
+      "evidence": "grep -rnE '[0-9a-f]{64}' src/ main.dart（排除 sha256Pattern 正则）无匹配。"
+    },
+    {
+      "id": "F13",
+      "severity": "minor",
+      "summary": "determinism_harness.dart runOnce：先 tick 恰好 spec.timeoutTicks 次再调 timedOut(>=)，该条件恒真，故每次成功报告都携带 errors:['clock reached timeout ticks within a single run'] 同时 ok:true（非 failed 构造写死 ok:true，errors 不参与门槛）。属误导性恒真探针/死告警，不影响确定性与验收结果，建议后续修正为有意义的工作量探测或将 errors 并入 ok 判定。",
+      "evidence": "determinism-once 实测输出 reports[0].ok=true 且 errors 含该串；源码 determinism_harness.dart:144-149、179。"
+    },
+    {
+      "id": "F14",
+      "severity": "minor",
+      "summary": "次要观察（不阻塞）：a) 整数值 double ≥1e15 保留 '.0' 形式（1e15→'1000000000000000.0'，1e14→'100000000000000'），确定但格式边界需知晓；b) int 1 与 double 1.0 规范化后同哈希（有意的数值等价口径）；c) PNG 白名单丢弃 bKGD/sBIT/pHYs——bKGD 在部分查看器影响透明合成，对像素 golden 比对是保守选择；d) canonicalPng 不校验原始 CRC 仅重算，保留 chunk 的 CRC 损坏与正确版本同哈希（原始文件 sha256 已在 001A 准入层核对，风险受控）；e) determinism 路径只 load spec 不调 verifyFileHash（spec 哈希校验由 benchmark-hash 命令与测试承担），对结果无实质影响（该路径仅消费 timeoutTicks/syntheticOnly）。",
+      "evidence": "probe 输出与 benchmark_spec.dart/ canonical_artifacts.dart 源码。"
+    }
+  ]
+}

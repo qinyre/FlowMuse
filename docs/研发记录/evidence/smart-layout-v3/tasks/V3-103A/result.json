@@ -1,0 +1,15 @@
+{
+ "task_id": "V3-103A",
+ "run_id": "484da88e-530f-4f2b-a2d9-c86ed7b7da8e",
+ "summary": "笔画特征、空间图与 reading geometry（合并原 V3-103A～C）。(1) SpatialGridIndex 均匀网格：盒按四角散列入 cell，半径查询只扫邻近 cell 并按 id 去重排序；evaluationCount 记录候选盒距离评估次数（确定性性能断言依据，不依赖墙上时钟）；UnionFind 加权并查集。(2) SegmentationPolicy 参数束：邻域半径/邻接 gap/网格边长/deskew 限幅 15° 与 bin 5°/列间隔/纵横比阈值/最少投票数，全部按局部尺度归一化（非跨页固定 pt），标注为待校准参数（103B 冻结），development 唯一实例。(3) InkRegionSegmenter 管线：局部尺度=邻域（含自身）中位笔画高（偶数取下中位保证确定）→deskew 估计（右半平面 |角|≤45° 内按欧氏距离最近邻投票+5° 直方图取模态 bin，票数<3 记 0，±15° 限幅；纯 dx 排序会被斜向邻居抢占，7° 倾斜用例捕获后改为欧氏最近）→绕全页中心旋转 -skew 得保守 AABB 帧→第二网格邻接（阈值=gapFactor×双方较大局部尺度，从大尺度侧发现保证与成对规则严格等价）→连通分量→deskewed 帧列间隔聚类（>2.5×中位笔画高起新列，列号左→右）→RegionSegment 输出（原始坐标框+lineDirection 横/竖/mixed+columnIndex+skewRadians+localScale，段按 (top,left) 定稳定 id；竖排=保留模式候选方向）。重复笔画 id 构造即败；输入按 id 排序后全管线确定。(4) 测试 9 用例全绿：空/单笔画/重复 id/双跑逐字段一致/双栏分离且列号 0-1 不混笔/缩放×3 与平移 (10000,5000) membership+方向不变/整体旋转 7° membership 不变且 skew 估计>0.03/窄高堆叠判 vertical/确定性随机 120 笔画与全配对 oracle 逐组等价（oracle 独立复刻局部尺度+右邻投票+旋转帧+成对规则）/3000 笔画网格评估次数 < N×800（N²=9×10⁶ 远上方，排除全配对退化）；analyze 零 issue。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/segmentation/segmentation_policy.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/segmentation/spatial_grid_index.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/segmentation/region_segment.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/segmentation/ink_region_segmenter.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/segmentation/ink_region_segmenter_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-103A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-103A/result.json"
+ ],
+ "artifacts": {}
+}

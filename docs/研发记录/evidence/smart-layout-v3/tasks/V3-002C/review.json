@@ -1,0 +1,66 @@
+{
+ "task_id": "V3-002C",
+ "run_id": "c5cfed10-7af2-4bbd-87bf-51f781fb9081",
+ "executor_run_id": "e7c2df17-6616-4504-95e0-ef8b88545d18",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "findings": [
+  {
+   "id": "R3C-1",
+   "severity": "info",
+   "blocking": false,
+   "location": "FlowMuse-App/tool/smart_layout_v3/dataset/{annotation_cli.dart,annotation_agreement_calculator.dart,annotation_labels_test.dart}",
+   "issue": "R2C-1 修复彻底：annotation_cli L37-43 统一走 LabelRuling.fromJson；calculator L590-605 正确解析 final_relations（containsKey 区分键存在与缺失）；L307-310 载荷缺失报 arbitration_payload_missing、空列表为合法裁决值；端到端测试经 Process.runSync 真实驱动 dart 子进程，裁决值 keep_together 双方输入均不含、字段名再漂移即断言失败（无假阳）。flutter test 83 全过、flutter analyze 0 问题（均实测）。"
+  },
+  {
+   "id": "R3C-2",
+   "severity": "info",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/{adjudicated-labels.json,arbitration-rulings.json,frozen-labels.json}",
+   "issue": "R2C-2 修复彻底：adjudicated-labels 中 1056/1059/1047/1052/1055 的 relations 与 arbitration-rulings 的 final_relations 规范化集合逐条相等（13/33/1/6/6）；复审以 Python 按手册 R3 从 scenes-projection 独立重算 5 样本与裁决完全一致；frozen-labels 中 1047 恰为 1 条 caption_of e11→e13，污染清除；frozen 19 样本集合与 splits/frozen_holdout manifest 全等、为 adjudicated 精确子集。"
+  },
+  {
+   "id": "R3C-3",
+   "severity": "info",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/{annotation-report.json,agreement-report.json}",
+   "issue": "R2C-3 修复彻底：报告声明（resolved 5、rulings_landed_verification、post_arbitration_status=passed、85/85/85/80、role 槽 2759）经独立复算全部属实；以真实 dart.exe+三真实输入重跑 CLI（exit 0），agreement-report.json 与 adjudicated-labels.json 均与仓库文件字节一致（adjudicated hash=75194877…与 frozen-manifest 上游声明同值）。"
+  },
+  {
+   "id": "R3C-4",
+   "severity": "info",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/{frozen-manifest.json,annotation-manual.json}",
+   "issue": "hash 审计链完整：manual 1826391e…、projection a8cf3f3c…、arbitration-input 3b9538f9…、adjudicated 75194877…、frozen-manifest afc4e451…、frozen-labels e963a8d8…、coverage-report eebf4b4a…、frozen split manifest 8d08d802… 全部实测吻合；manual hash 与两名标注者及仲裁者声明三方一致；frozen_version=1.0.1、voided_history 如实记录 1.0.0 作废。"
+  },
+  {
+   "id": "R3C-5",
+   "severity": "info",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002C/{result.json,commands.json}",
+   "issue": "范围与证据合规：HEAD c8a5384 全部文件在 allowed_paths 内；rubric=9408c037… 与 failure-taxonomy=e0dd0ad6… 未触碰；result run_id 与任务状态一致；commands.json 末条命令与 Manifest 逐字一致退出码 0；deliverable hash fe3038df…=实测 annotation-report.json；仲裁输入 X/Y 映射一致且无身份泄漏。"
+  },
+  {
+   "id": "R3C-6",
+   "severity": "low",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/annotation-manual.json",
+   "issue": "manual 披露块外层键名为 disclosure 而非 panel_disclosure（内容完整合规）；修正键名必然改变 hash 钉死的手册并连锁重跑双盲标与冻结链，收益与风险不成比例，执行者不改动取舍可接受（二轮 R2C-5 已知项）。"
+  },
+  {
+   "id": "R3C-7",
+   "severity": "low",
+   "blocking": false,
+   "location": "FlowMuse-App/tool/smart_layout_v3/dataset/{annotation_agreement_calculator.dart L595-597, annotation_cli.dart L40}",
+   "issue": "LabelRuling.fromJson 对显式 final_relations:null 会 cast 崩溃而非报 arbitration_payload_missing（响亮失败非静默，不破坏审计链）；annotation_cli 对缺 rulings 键的裁决文件亦为崩溃式失败。建议后续版本改为 payload_missing/结构错误码。"
+  },
+  {
+   "id": "R3C-8",
+   "severity": "low",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/datasets/annotations/{annotation-report.json,frozen-manifest.json}",
+   "issue": "generated_at_utc/created_at_utc=2026-08-31T00:00:00Z 为日期占位而非实际生成时刻；与 commands.json 时间戳交叉可还原真实时间，不影响审计结论。"
+  }
+ ]
+}

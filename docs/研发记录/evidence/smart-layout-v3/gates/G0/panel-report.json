@@ -1,0 +1,98 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "evaluation-spec-preregistration-panel-report",
+ "task": "V3-004A",
+ "panel_type": "ai_surrogate",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "rounds": [
+  {
+   "round": 1,
+   "packet_sha256": "47547c253f90a188d2f165b8ccf60dd40b4e320e1f906887296d494612905d94",
+   "spec_content_sha256": "684d805fcdd9700f28a60134ccf388b8841a13064c63048c1aafe6e40dce8c49",
+   "raters": {
+    "A": "727e4d68-0225-48b2-94ec-bb728977e937",
+    "B": "531caf86-1cac-4dcc-88a7-c2175681c8ff"
+   },
+   "inadequate": {
+    "A": [
+     "C4",
+     "C10"
+    ],
+    "B": [
+     "C4",
+     "C10"
+    ]
+   },
+   "inter_rater_disagreements": [],
+   "arbiter_invoked": false,
+   "verdict": "fail",
+   "finding": "双评一致发现 T4 优效方向反转（H1 应为 RD<0）：E2 定义 RD=v3−v2 且指标 lower_better，原注册 H1: RD>0 会使劣于 v2 反判优效。",
+   "fix": "T4 改为 H0: RD≥0 vs H1: RD<0，p=P(RD_boot≥0)，判定含点估计 RD<0；新增 direction_convention 条款。"
+  },
+  {
+   "round": 2,
+   "packet_sha256": "659fc58480763b090a78b7dcb8f44729ed4018e64e5e40c97e968ee98ea0957a",
+   "spec_content_sha256": "238f06b8b2183186b659e073f1fffd68f5856d4b196fcaa27ae7aa4248f9544c",
+   "raters": {
+    "A": "e2f683db-89c2-4ab8-be6b-990d3dab59ab",
+    "B": "8c2c4973-fcd9-4a32-a39f-890430034c42"
+   },
+   "inadequate": {
+    "A": [
+     "C4",
+     "C12"
+    ],
+    "B": [
+     "C4"
+    ]
+   },
+   "inter_rater_disagreements": [
+    "C12"
+   ],
+   "arbiter": {
+    "run_id": "9356341b-a384-4198-9025-11588a578216",
+    "item": "C12",
+    "verdict": "inadequate",
+    "file": "gates/G0/arbiters/round-2-C12.json"
+   },
+   "arbiter_invoked": true,
+   "verdict": "fail",
+   "finding": "双评共识 C4：T6 构念效度方向反转（假设写负相关但判定取下界>0/目标≥0.3）且全零失败码时 Spearman 无退化分支、PRNG 流位置未指明；C12 分歧经仲裁维持 inadequate：RR-3 把文件字节哈希误标为 content_sha256（仓库原生语义下恒拒）、RR-6 与 tightening 交互未闭合、frozen allowed_roles 脱离 guard 词表。",
+   "fix": "T6 改 H1: ρ<0（p=P(ρ_boot≥0)、上界<0、目标≤−0.3）+ construct_check_indeterminate 退化分支 + PRNG 位次；RR-3 双口径 pinning（file+content 双哈希三条件）；RR-6 限定为被修订参数；frozen allowed_roles=['evaluation'] 对齐 frozenReaderRoles 且 gate 角色按 RR-5 拒绝。"
+  },
+  {
+   "round": 3,
+   "packet_sha256": "27ed536f8f3b31aa7ee7f01c856d094247b7707684520dade4913949c146832e",
+   "spec_content_sha256": "83dc663e5f7eee107c40f528df555a45e86a52c2a097bf4afa908171635ef303",
+   "raters": {
+    "A": "3e6677cc-3cab-4892-95cf-5fa0b53d29a4",
+    "B": "8cbe9186-d066-43a7-b84f-57e746283fe4"
+   },
+   "inadequate": {
+    "A": [],
+    "B": []
+   },
+   "inter_rater_disagreements": [],
+   "arbiter_invoked": false,
+   "verdict": "pass",
+   "finding": "12/12 双 adequate，零分歧，仲裁未触发。"
+  }
+ ],
+ "final_verdict": "pass",
+ "agreement": {
+  "round_1_items_agreed": 12,
+  "round_2_items_agreed": 11,
+  "round_3_items_agreed": 12,
+  "arbitrations_total": 1,
+  "arbitration_item": "C12"
+ },
+ "isolation": "每轮两名全新上下文隔离代理互不可见；仲裁代理为第三全新上下文；执行者不兼任任何评审。",
+ "errors": [],
+ "panel_disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "本预注册盲审与仲裁全部由 GLM-5.3 Max AI 代理执行，不构成统计学家真人同行评审；生产决策仍需 V3-700A 外部批准包。"
+ }
+}

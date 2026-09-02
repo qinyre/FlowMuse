@@ -9,7 +9,6 @@ import '../../../shared/widgets/cover_selection_checkbox.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../library/models/note_item.dart';
-import '../../library/models/library_index.dart';
 import '../../library/repositories/library_repository.dart';
 import '../../library/widgets/create_collection_dialog.dart';
 import '../../library/widgets/collection_note_content.dart';
@@ -572,6 +571,7 @@ class _CreateCollectionTile extends StatelessWidget {
 class _CollectionPage extends StatelessWidget {
   const _CollectionPage({
     required this.title,
+    // ignore: unused_element_parameter
     this.onBack,
     required this.viewMode,
     required this.sortAscending,

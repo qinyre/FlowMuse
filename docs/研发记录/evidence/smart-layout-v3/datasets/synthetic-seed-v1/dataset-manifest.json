@@ -1,0 +1,438 @@
+{
+ "schema_version": "1.0.0",
+ "dataset_kind": "smart-layout-v3-dataset-manifest",
+ "dataset": {
+  "name": "synthetic-seed-v1",
+  "version": "1.0.0",
+  "generated_at_utc": "2026-08-31T00:00:00Z",
+  "lane": "ai_synthetic_development",
+  "admission_policy": {
+   "admitted_kinds": [
+    "synthetic",
+    "licensed"
+   ],
+   "rejected_kinds": [
+    "real_user_content"
+   ],
+   "rejection_directive": "real_user_content 保持隔离并推迟到 V3-700A 授权包（数据授权/脱敏/同意批准）"
+  }
+ },
+ "samples": [
+  {
+   "sample_id": "syn-seed-0001",
+   "kind": "synthetic",
+   "origin": {
+    "generator": {
+     "name": "seed-scene-composer",
+     "version": "1.0.0",
+     "seed": 101,
+     "params_sha256": "ed319d9ed5d909db5dfd64ed801aeeaf2582a66b5dfde50bd88013bc703e8ce3",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/tools/generate.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-seed-0001.scene.json",
+    "sha256": "6138735ed52b84084fcf7d5b9c5ffcc411d9d6a5fe844aaf8b94c7311679194e"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 14,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": true,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-seed-0002",
+   "kind": "synthetic",
+   "origin": {
+    "generator": {
+     "name": "seed-scene-composer",
+     "version": "1.0.0",
+     "seed": 102,
+     "params_sha256": "9e902ea8565c36a6c855e463c8f25c0d23d5aa1ede2fbcd515396739c072e86c",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/tools/generate.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-seed-0002.scene.json",
+    "sha256": "ceb6b7fef717d7eda04ef950d5e21983b21a6e564dd6e8ca3955b703eb6841b6"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 38,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": true,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-seed-0003",
+   "kind": "synthetic",
+   "origin": {
+    "generator": {
+     "name": "seed-scene-composer",
+     "version": "1.0.0",
+     "seed": 103,
+     "params_sha256": "4bb1bc4a3ab5072bcb576aaa0d53f52b148eb97e558eb56d8ebc86e8a503ac88",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/tools/generate.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-seed-0003.scene.json",
+    "sha256": "ba9d4596ab599e3c76fb205cc24cc4a78458e512b3751684f01006c935c3219f"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 22,
+    "has_images": true,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": true,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-seed-0004",
+   "kind": "synthetic",
+   "origin": {
+    "generator": {
+     "name": "seed-scene-composer",
+     "version": "1.0.0",
+     "seed": 104,
+     "params_sha256": "b4c4eae83dcc8be719532597018510d9e5bbbf76eafdcfa35daf0ddf2e0ec5ed",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/tools/generate.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-seed-0004.scene.json",
+    "sha256": "189597f9eae0a32bcf5dcb32720ab8e68ff3e1ea7bf04c0b4756fbc247cf38d0"
+   },
+   "features": {
+    "content_kind": "typed_only",
+    "stroke_count": 0,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": true,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-seed-0005",
+   "kind": "synthetic",
+   "origin": {
+    "generator": {
+     "name": "seed-scene-composer",
+     "version": "1.0.0",
+     "seed": 105,
+     "params_sha256": "eda797e3b8540551a642f84edac5bb9d50b5b92aa735c2155a4741fad164bc78",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/tools/generate.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-seed-0005.scene.json",
+    "sha256": "4a7ccb4171f68e7ec95f50864876daa129fe9a841af89b9bc379dfd3f2bfd869"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 55,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": false,
+    "has_groups": true,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": true,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-seed-0006",
+   "kind": "synthetic",
+   "origin": {
+    "generator": {
+     "name": "seed-scene-composer",
+     "version": "1.0.0",
+     "seed": 106,
+     "params_sha256": "d1adf30f503ed60de1721e8920af686fadcce7be9d8fab23c9a95c639853967e",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/tools/generate.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-seed-0006.scene.json",
+    "sha256": "c057f464aa879ff949edb08b55cf642e3af24413a35efbeca1900a3589416a44"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 18,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": true,
+    "has_bindings": false,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": true,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-seed-0007",
+   "kind": "synthetic",
+   "origin": {
+    "generator": {
+     "name": "seed-scene-composer",
+     "version": "1.0.0",
+     "seed": 107,
+     "params_sha256": "be048a14b0107a6b9b11e46806002748714c55c47d4c32b1fd87537360999f01",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/tools/generate.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-seed-0007.scene.json",
+    "sha256": "eae41a733f7bf618f19372967329f57e211b204cde9f95d3bda0bd3e00cf3c62"
+   },
+   "features": {
+    "content_kind": "handwritten_only",
+    "stroke_count": 26,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": false,
+    "has_locked_objects": true,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": true,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": false
+   }
+  },
+  {
+   "sample_id": "syn-seed-0008",
+   "kind": "synthetic",
+   "origin": {
+    "generator": {
+     "name": "seed-scene-composer",
+     "version": "1.0.0",
+     "seed": 108,
+     "params_sha256": "47d843c83b38349cba96776eb8d28f69aaca69487d4267b10792c1937ca60278",
+     "deterministic": true
+    },
+    "generated_at_utc": "2026-08-31T00:00:00Z",
+    "derivation_chain": []
+   },
+   "rights": {
+    "kind": "synthetic",
+    "license": null,
+    "forbidden_uses": [
+     "production_release_claims",
+     "human_validation_claims",
+     "training_external_models"
+    ],
+    "deletion": {
+     "policy_id": "regenerable-synthetic-v1",
+     "method": "regenerable_no_retention",
+     "reference": "docs/研发记录/evidence/smart-layout-v3/datasets/synthetic-seed-v1/tools/generate.py"
+    }
+   },
+   "content": {
+    "path": "samples/syn-seed-0008.scene.json",
+    "sha256": "840e9cce2f2061e76b1b4890cc485438c388596c5873a88cdb89c6793fda56aa"
+   },
+   "features": {
+    "content_kind": "mixed",
+    "stroke_count": 31,
+    "has_images": false,
+    "has_formula": false,
+    "has_shapes": true,
+    "has_groups": false,
+    "has_frames": false,
+    "has_bindings": true,
+    "has_locked_objects": false,
+    "has_decorative_lines": false,
+    "has_list": false,
+    "long_form": false,
+    "vertical_text_preserved": false,
+    "tidy_page": false,
+    "scattered_page": false,
+    "pressure_stress": false,
+    "known_failure_page": true
+   }
+  }
+ ]
+}

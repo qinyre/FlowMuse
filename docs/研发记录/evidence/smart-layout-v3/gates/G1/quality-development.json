@@ -1,0 +1,25 @@
+{
+ "split": "development",
+ "evaluated_samples": 48,
+ "pair_precision": 0.2344,
+ "pair_recall": 0.9811,
+ "pair_f1": 0.3784,
+ "merge_errors": 0,
+ "split_errors": 6,
+ "stroke_loss_samples": 0,
+ "worst_grouping": {
+  "sample_id": "syn-p2-brai-hand-med-des-v-1037",
+  "pair_precision": 0.0,
+  "pair_recall": 1.0,
+  "pair_f1": 0.0,
+  "merge_errors": 0,
+  "split_errors": 0,
+  "lost_strokes": [],
+  "expected_groups": 0,
+  "predicted_groups": 2
+ },
+ "verdicts": {
+  "quality": "measured",
+  "stroke_conservation": "pass"
+ }
+}

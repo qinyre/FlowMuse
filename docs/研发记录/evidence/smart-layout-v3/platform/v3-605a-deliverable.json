@@ -1,0 +1,72 @@
+{
+  "task_id": "V3-605A",
+  "merged_from": [
+    "V3-605A",
+    "V3-605B",
+    "V3-605C"
+  ],
+  "target_symbols": [
+    "PlatformBuildMatrix",
+    "PlatformSmokeSuite"
+  ],
+  "tooling": {
+    "build_matrix": "FlowMuse-App/tool/smart_layout_v3/platform/platform_build_matrix.dart（六端配方冻结+可用性探测+实构建/产物哈希/release_deferred 恢复命令）",
+    "smoke_suite": "FlowMuse-App/tool/smart_layout_v3/platform/platform_smoke_suite.dart（入口→commit→undo→reopen 四段全真链）",
+    "workflow": ".github/workflows/smart-layout-v3-platform.yml（三类宿主 ubuntu/windows/macos 跑 smoke+矩阵，OHOS 无托管 runner 恒 deferred）"
+  },
+  "platforms": {
+    "android": {
+      "status": "built",
+      "command": "flutter build apk --debug",
+      "artifact": "build/app/outputs/flutter-apk/app-debug.apk",
+      "note": "首次 1172.7s（引引擎工件下载），缓存后 32.6s"
+    },
+    "web": {
+      "status": "built",
+      "command": "flutter build web",
+      "artifact": "build/web/main.dart.js"
+    },
+    "windows": {
+      "status": "release_deferred",
+      "blocked_by": "Visual Studio 不可用",
+      "recovery": "安装 VS2022 含 C++ 桌面开发工作负载"
+    },
+    "ohos": {
+      "status": "release_deferred",
+      "blocked_by": "HOS_SDK_HOME 未设置且 flutter doctor HarmonyOS toolchain 不可用",
+      "recovery": "安装 HarmonyOS SDK（DevEco Studio）设 HOS_SDK_HOME 后 flutter build hap --debug"
+    },
+    "ios": {
+      "status": "release_deferred",
+      "blocked_by": "host=macos required",
+      "recovery": "macOS 宿主 + Xcode"
+    },
+    "macos": {
+      "status": "release_deferred",
+      "blocked_by": "host=macos required",
+      "recovery": "macOS 宿主 + Xcode"
+    }
+  },
+  "build_blocker_finding": {
+    "android_maven_403": "本机全局 FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn 对 OHOS fork 引擎工件(io.flutter:x86_64_debug@42d3d75a)的 .pom 返回 200 但 .jar 返回 403；主站 storage.googleapis.com 当前可达。恢复命令：FLUTTER_STORAGE_BASE_URL=https://storage.googleapis.com flutter build apk --debug（CLI env 覆盖，零工程改动）"
+  },
+  "smoke": {
+    "report": "docs/研发记录/evidence/smart-layout-v3/platform/v3-605a-smoke.json",
+    "host": "windows",
+    "steps": [
+      "entry-load(真实控制器 loadFromContent)",
+      "commit-applyResult(真实 v3 patch 经 pushHistory+applyResult 与 502A 同通道)",
+      "undo-restore(fingerprint 精确回基线)",
+      "reopen-equiv(serializeScene→新控制器重开,内容字段深度一致,document 存活)"
+    ],
+    "all_passed": true
+  },
+  "report": "docs/研发记录/evidence/smart-layout-v3/platform/v3-605a-report.json",
+  "all_available_built": true,
+  "acceptance": {
+    "available_targets_green": "android+web 实构建 built（产物 fnv1a64 哈希入证据，生成文件不入提交）；smoke 四段全绿",
+    "unavailable_recorded_only": "windows/ohos/ios/macos 四端如实 release_deferred（runner/缺失依赖/恢复命令逐端记录），不伪造成功",
+    "generated_files_not_committed": "仅 report/smoke/deliverable JSON 入提交；APK/web 产物哈希记录",
+    "production_certification_by_V3-700A": "生产六端认证不在本任务"
+  }
+}

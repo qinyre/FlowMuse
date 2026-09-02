@@ -1,0 +1,868 @@
+﻿{
+    "task":  "V3-705A",
+    "kind":  "CompetitionDeliveryAudit",
+    "generated_at_utc":  "2026-09-02T04:29:16.6328568Z",
+    "task_cards":  {
+                       "total":  69,
+                       "completed":  68,
+                       "in_progress_self":  1,
+                       "index":  [
+                                     {
+                                         "id":  "V3-000A",
+                                         "phase":  0,
+                                         "title":  "失败分类账",
+                                         "status":  "completed",
+                                         "commit":  "2f10767",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-000B",
+                                         "phase":  0,
+                                         "title":  "AI 代理 rubric 与锚点样例",
+                                         "status":  "completed",
+                                         "commit":  "6d109ee",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-001A",
+                                         "phase":  0,
+                                         "title":  "FixtureManifest 契约",
+                                         "status":  "completed",
+                                         "commit":  "004679d",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-001B",
+                                         "phase":  0,
+                                         "title":  "确定性与 benchmark 环境",
+                                         "status":  "completed",
+                                         "commit":  "4a8edee",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-001C",
+                                         "phase":  0,
+                                         "title":  "Runner、受控 replay、报告与 hash",
+                                         "status":  "completed",
+                                         "commit":  "7cc4fd0",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-001C",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-002A",
+                                         "phase":  0,
+                                         "title":  "合成样本清单与生成边界",
+                                         "status":  "completed",
+                                         "commit":  "65243de",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-002B",
+                                         "phase":  0,
+                                         "title":  "分层抽样与集合隔离",
+                                         "status":  "completed",
+                                         "commit":  "7750244",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-002C",
+                                         "phase":  0,
+                                         "title":  "双代理盲标、仲裁与冻结",
+                                         "status":  "completed",
+                                         "commit":  "2aec880",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002C",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-003A",
+                                         "phase":  0,
+                                         "title":  "no-op 与 v2 自动基线",
+                                         "status":  "completed",
+                                         "commit":  "3ca8674",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-003A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-003B",
+                                         "phase":  0,
+                                         "title":  "AI 专家代理整理基线与总报告",
+                                         "status":  "completed",
+                                         "commit":  "6321f18",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-003B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-004A",
+                                         "phase":  0,
+                                         "title":  "EvaluationSpec 与阈值预注册",
+                                         "status":  "completed",
+                                         "commit":  "4c414a6",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-004B",
+                                         "phase":  0,
+                                         "title":  "统计、rubric 与 golden 变更控制",
+                                         "status":  "completed",
+                                         "commit":  "bc523d3",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-004C",
+                                         "phase":  0,
+                                         "title":  "Gate 0 开发证据包",
+                                         "status":  "completed",
+                                         "commit":  "d921d7c",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-004C",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-100A",
+                                         "phase":  1,
+                                         "title":  "feature 骨架与最小 gateways",
+                                         "status":  "completed",
+                                         "commit":  "daa3140",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-100A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-101A",
+                                         "phase":  1,
+                                         "title":  "SceneRevision、fingerprint 与变化接线",
+                                         "status":  "completed",
+                                         "commit":  "9abe3b9",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-101A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-102A",
+                                         "phase":  1,
+                                         "title":  "完整 Snapshot 与唯一 SourceCoverageLedger",
+                                         "status":  "completed",
+                                         "commit":  "2eb73bd",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-102A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-103A",
+                                         "phase":  1,
+                                         "title":  "笔画特征、空间图与 reading geometry",
+                                         "status":  "completed",
+                                         "commit":  "fc5e492",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-103A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-103B",
+                                         "phase":  1,
+                                         "title":  "区域分类、防误并拆与参数冻结",
+                                         "status":  "completed",
+                                         "commit":  "61e69cf",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-103B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-104A",
+                                         "phase":  1,
+                                         "title":  "RegionCorrectionPatch 与最小受影响集",
+                                         "status":  "completed",
+                                         "commit":  "b01d891",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-104A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-105A",
+                                         "phase":  1,
+                                         "title":  "clean/annotated/crop 资产与资源生命周期",
+                                         "status":  "completed",
+                                         "commit":  "f75dd68",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-105A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-106A",
+                                         "phase":  1,
+                                         "title":  "Session 状态、continuation 守卫与重入",
+                                         "status":  "completed",
+                                         "commit":  "1c3ca89",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-106A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-200A",
+                                         "phase":  2,
+                                         "title":  "canonical 协议、双端模型与 conformance",
+                                         "status":  "completed",
+                                         "commit":  "5e7d342",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-200A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-201A",
+                                         "phase":  2,
+                                         "title":  "V3Analyzer、strict decode 与 sanitize",
+                                         "status":  "completed",
+                                         "commit":  "06c3a31",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-201A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-201B",
+                                         "phase":  2,
+                                         "title":  "v3 路由、传输健壮性与 live-route",
+                                         "status":  "completed",
+                                         "commit":  "d3b4ff5",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-201B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-202A",
+                                         "phase":  2,
+                                         "title":  "overview/crop 分析与冲突合并",
+                                         "status":  "completed",
+                                         "commit":  "3a07673",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-202A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-203A",
+                                         "phase":  2,
+                                         "title":  "Repository、取消重试与真实联调",
+                                         "status":  "completed",
+                                         "commit":  "d131ce8",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-203A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-204A",
+                                         "phase":  2,
+                                         "title":  "SemanticDocument、ledger 与持久化映射",
+                                         "status":  "completed",
+                                         "commit":  "5685b99",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-204A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-205A",
+                                         "phase":  2,
+                                         "title":  "可逆语义纠错与局部重分析",
+                                         "status":  "completed",
+                                         "commit":  "5d8d435",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-205A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-206A",
+                                         "phase":  2,
+                                         "title":  "Gate 1 指标、闭环与证据包",
+                                         "status":  "completed",
+                                         "commit":  "5b83a0f",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-206A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-300A",
+                                         "phase":  3,
+                                         "title":  "design tokens、真实测量与边界语种冻结",
+                                         "status":  "completed",
+                                         "commit":  "803d2f1",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-300A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-301A",
+                                         "phase":  3,
+                                         "title":  "feature-local 几何、碰撞与零漏检 oracle",
+                                         "status":  "completed",
+                                         "commit":  "59b09241b4d7623044bea8ebf2e81675f1360247",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-301A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-302A",
+                                         "phase":  3,
+                                         "title":  "TransformContract、支持矩阵与 conformance",
+                                         "status":  "completed",
+                                         "commit":  "1167d49ac7c14ad08b7c3139547e8d47d7848c75",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-302A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-304A",
+                                         "phase":  3,
+                                         "title":  "helper 迁移前快照与最小适配边界",
+                                         "status":  "completed",
+                                         "commit":  "4cf90c32e52e1d1ec516f7ff6b6b0fd00cba8d1b",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-304A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-303A",
+                                         "phase":  3,
+                                         "title":  "原子 Scene 变换、依赖重算与 gateway 接入",
+                                         "status":  "completed",
+                                         "commit":  "9dcaabef265e0a2798ee0d4a272396eb12dfaece",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-303A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-305A",
+                                         "phase":  3,
+                                         "title":  "Gate 2 变换矩阵、性能与证据包",
+                                         "status":  "completed",
+                                         "commit":  "9c6b206e3afd79e4e20396fa5f67e958e4b0bd26",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-305A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-400A",
+                                         "phase":  4,
+                                         "title":  "LayoutBlock、文本/图像/保留原语",
+                                         "status":  "completed",
+                                         "commit":  "350d1257df44c6e3e37c5bebef805daebf59f9c2",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-400A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-401A",
+                                         "phase":  4,
+                                         "title":  "Planner 契约、skeleton、token 域与结构配额",
+                                         "status":  "completed",
+                                         "commit":  "ee83935e9f48df9bf0d5498a1da1f53cd53691ae",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-401A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-401B",
+                                         "phase":  4,
+                                         "title":  "硬下界剪枝与全枚举 oracle",
+                                         "status":  "completed",
+                                         "commit":  "3d9fede7d41e2f75679d6e54b129e1a149e925fb",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-401B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-402A",
+                                         "phase":  4,
+                                         "title":  "reading flow、真实换行与关系原子性",
+                                         "status":  "completed",
+                                         "commit":  "374e59ec10a01f3b3b99519d3b5791dc3b0a6e9b",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-402A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-402B",
+                                         "phase":  4,
+                                         "title":  "栏平衡、contain、障碍、figure/preserved 回归",
+                                         "status":  "completed",
+                                         "commit":  "618543fa71627a5015eb2db2bce166e3404efda0",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-402B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-403A",
+                                         "phase":  4,
+                                         "title":  "preflight、NoFeasibleLayout 与 preserveFallback",
+                                         "status":  "completed",
+                                         "commit":  "516fe872fc8be17eedba6c5a1edae81f09887a90",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-403A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-404A",
+                                         "phase":  4,
+                                         "title":  "指标边界、三 profiles 与反投机解释",
+                                         "status":  "completed",
+                                         "commit":  "44c4195d527eab8ba0d506bf2a714b105df0ee34",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-404A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-405A",
+                                         "phase":  4,
+                                         "title":  "placement 去重与真实 Scene metrics 契约",
+                                         "status":  "completed",
+                                         "commit":  "3600765a85d25e9e261874778916768f166d76ea",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-405A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-406A",
+                                         "phase":  4,
+                                         "title":  "Gate 3 Planner oracle、质量性能与证据包",
+                                         "status":  "completed",
+                                         "commit":  "091674effb28fd4a064147318de9a1c3321485db",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-406A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-500A",
+                                         "phase":  5,
+                                         "title":  "ScenePatch 模型、归一化与完整 write set",
+                                         "status":  "completed",
+                                         "commit":  "8c5ce3919324b376baa185f7d707d91d96ef05a5",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-500A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-500B",
+                                         "phase":  5,
+                                         "title":  "Patch 校验、fixture codec 与 ScenePatchBuilder",
+                                         "status":  "completed",
+                                         "commit":  "1ee889c377498ae98279efd48dba8a61b1b70ad7",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-500B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-501A",
+                                         "phase":  5,
+                                         "title":  "SceneReducer、preview 与既有 History bridge",
+                                         "status":  "completed",
+                                         "commit":  "f8165b6a18398ec0d6589a00f047f3b24058f321",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-501A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-503A",
+                                         "phase":  5,
+                                         "title":  "真实 DraftSceneRenderer、边界、golden 与资源",
+                                         "status":  "completed",
+                                         "commit":  "968d145b72c4c87fa36d03458327845093d0623a",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-503A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-504A",
+                                         "phase":  5,
+                                         "title":  "真实 metrics 与 HardConstraintValidator",
+                                         "status":  "completed",
+                                         "commit":  "197794aac6ab3bbe2a2439526574e6dd24d575a2",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-504A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-504B",
+                                         "phase":  5,
+                                         "title":  "Scorer、Top3、ValidatedCandidate 与纠错重跑",
+                                         "status":  "completed",
+                                         "commit":  "4d732ab0df57890d49e9b0abdd107cc2beaf281a",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-504B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-502A",
+                                         "phase":  5,
+                                         "title":  "compare-and-commit、冲突重派与协作兼容",
+                                         "status":  "completed",
+                                         "commit":  "b9e3be01ceb65744c5086c44a93d509e93ae4c19",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-502A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-505A",
+                                         "phase":  5,
+                                         "title":  "Session ViewModel 与用户操作编排",
+                                         "status":  "completed",
+                                         "commit":  "70cec03f18d597e81b62f2c26e2e89e341a84a2a",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-505A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-505B",
+                                         "phase":  5,
+                                         "title":  "纠错核对与真实候选比较",
+                                         "status":  "completed",
+                                         "commit":  "92384c6f67823e1647b6206868f0702af6b5c2d7",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-505B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-505C",
+                                         "phase":  5,
+                                         "title":  "真实入口、错误取消与可访问性闭环",
+                                         "status":  "completed",
+                                         "commit":  "dfc2e54",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-505C",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-506A",
+                                         "phase":  5,
+                                         "title":  "Gate 4 事务体验矩阵与证据包",
+                                         "status":  "completed",
+                                         "commit":  "eb5158b",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-506A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-600A",
+                                         "phase":  6,
+                                         "title":  "codec、协作与 hash 兼容矩阵",
+                                         "status":  "completed",
+                                         "commit":  "7484a2b7c712b1473686422fe467684b3ef6afce",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-600A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-601A",
+                                         "phase":  6,
+                                         "title":  "文档重开与 Markdown/LaTeX 出口兼容",
+                                         "status":  "completed",
+                                         "commit":  "9f633fe2f16effbff1f152c9f7ad3e6474676176",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-601A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-602A",
+                                         "phase":  6,
+                                         "title":  "可复制 CI、失败报告与证据归档",
+                                         "status":  "completed",
+                                         "commit":  "3521fbb83e38066659ee6927f1557b90bdb7a21e",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-602A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-603A",
+                                         "phase":  6,
+                                         "title":  "Go/Schema/Flutter 聚合门禁",
+                                         "status":  "completed",
+                                         "commit":  "a832a517ff46334e48b3f4d0c3b156c2e25a7577",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-603A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-604A",
+                                         "phase":  6,
+                                         "title":  "大页、渲染、取消与资源压力",
+                                         "status":  "completed",
+                                         "commit":  "4c8967d23f1f8586473b1dfc3720452fac77db2e",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-604A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-605A",
+                                         "phase":  6,
+                                         "title":  "可用平台构建、OHOS 边界与跨端 smoke",
+                                         "status":  "completed",
+                                         "commit":  "f56dbf386e5702c97ab9fcb953239b12dac2ac7d",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-605A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-606A",
+                                         "phase":  6,
+                                         "title":  "frozen AI 双盲、效果统计与 Gate 5",
+                                         "status":  "completed",
+                                         "commit":  "e772b761a1f6a75f2a3a1cb4c0dc9793cf2a3b6f",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-606A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-700B",
+                                         "phase":  7,
+                                         "title":  "fail-closed capability 与可观测性预部署",
+                                         "status":  "completed",
+                                         "commit":  "e377d369557b1505e150c3cf1c20e6946ffe2030",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-700B",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-701A",
+                                         "phase":  7,
+                                         "title":  "公开入口默认关闭切换、回滚与关闭行为",
+                                         "status":  "completed",
+                                         "commit":  "742ce8f",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-701A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-700A",
+                                         "phase":  7,
+                                         "title":  "比赛演示环境启动与端到端 smoke",
+                                         "status":  "completed",
+                                         "commit":  "3698f56981c5be0703485fd3ac4a0c9272a18c53",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-700A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-702A",
+                                         "phase":  7,
+                                         "title":  "合成稳定性与故障注入结论",
+                                         "status":  "completed",
+                                         "commit":  "bcd68cef53747c78c2ab1e97ee0ed30a75a91006",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-702A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-703A",
+                                         "phase":  7,
+                                         "title":  "客户端 v2 隔离与保留说明",
+                                         "status":  "completed",
+                                         "commit":  "be9514135182ed0475b2d0fcd7472710f96f61d4",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-703A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-704A",
+                                         "phase":  7,
+                                         "title":  "服务端旧端点隔离与保留说明",
+                                         "status":  "completed",
+                                         "commit":  "5b25aaa5b9ebf2edf0362c81e961c4bf8b767b62",
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-704A",
+                                         "result_exists":  true,
+                                         "commands_exists":  true,
+                                         "is_audit_self":  false
+                                     },
+                                     {
+                                         "id":  "V3-705A",
+                                         "phase":  7,
+                                         "title":  "比赛交付包与最终技术审计",
+                                         "status":  "in_progress",
+                                         "commit":  null,
+                                         "evidence_root":  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-705A",
+                                         "result_exists":  false,
+                                         "commands_exists":  false,
+                                         "is_audit_self":  true
+                                     }
+                                 ],
+                       "issues":  [
+
+                                  ]
+                   },
+    "gates":  {
+                  "G0_to_G5":  [
+                                   {
+                                       "id":  "G0",
+                                       "status":  "passed",
+                                       "path":  "docs/研发记录/evidence/smart-layout-v3/gates/G0/gate-result.json"
+                                   },
+                                   {
+                                       "id":  "G1",
+                                       "status":  "passed",
+                                       "path":  "docs/研发记录/evidence/smart-layout-v3/gates/G1/gate-result.json"
+                                   },
+                                   {
+                                       "id":  "G2",
+                                       "status":  "passed",
+                                       "path":  "docs/研发记录/evidence/smart-layout-v3/gates/G2/gate-result.json"
+                                   },
+                                   {
+                                       "id":  "G3",
+                                       "status":  "passed",
+                                       "path":  "docs/研发记录/evidence/smart-layout-v3/gates/G3/gate-result.json"
+                                   },
+                                   {
+                                       "id":  "G4",
+                                       "status":  "passed",
+                                       "path":  "docs/研发记录/evidence/smart-layout-v3/gates/G4/gate-result.json"
+                                   },
+                                   {
+                                       "id":  "G5",
+                                       "status":  "passed",
+                                       "path":  "docs/研发记录/evidence/smart-layout-v3/gates/G5/gate-result.json"
+                                   }
+                               ],
+                  "issues":  [
+
+                             ],
+                  "final_gate":  {
+                                     "status":  "pending_after_this_task",
+                                     "reverify_command":  "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smart-layout-v3/AgentExecution.ps1 -Action Gate -GateId FINAL（需 go 在 PATH）"
+                                 }
+              },
+    "demo_runbook":  {
+                         "steps":  [
+                                       {
+                                           "step":  "demo-smoke-client",
+                                           "cwd":  "FlowMuse-App",
+                                           "command":  "flutter test test/features/whiteboard/smart_layout/rollout",
+                                           "evidence":  "docs/研发记录/evidence/smart-layout-v3/competition/v3-700a-demo-smoke.json"
+                                       },
+                                       {
+                                           "step":  "demo-smoke-server",
+                                           "cwd":  "FlowMuse-Server",
+                                           "command":  "go test ./internal/recognition/...",
+                                           "evidence":  "docs/研发记录/evidence/smart-layout-v3/competition/v3-700a-server-smoke.json"
+                                       },
+                                       {
+                                           "step":  "stability-matrix",
+                                           "cwd":  "FlowMuse-App",
+                                           "command":  "flutter test test/features/whiteboard/smart_layout/rollout/synthetic_stability_evaluator_test.dart",
+                                           "evidence":  "docs/研发记录/evidence/smart-layout-v3/competition/v3-702a-stability-report.json"
+                                       },
+                                       {
+                                           "step":  "client-isolation",
+                                           "cwd":  "FlowMuse-App",
+                                           "command":  "flutter test test/features/whiteboard/smart_layout/v2_client_isolation_matrix_test.dart",
+                                           "evidence":  "docs/研发记录/evidence/smart-layout-v3/competition/v3-703a-client-isolation.json"
+                                       },
+                                       {
+                                           "step":  "route-isolation",
+                                           "cwd":  "FlowMuse-Server",
+                                           "command":  "go test ./internal/recognition/ -run RouteIsolation",
+                                           "evidence":  "docs/研发记录/evidence/smart-layout-v3/competition/v3-704a-route-isolation.json"
+                                       }
+                                   ],
+                         "issues":  [
+
+                                    ]
+                     },
+    "known_limits":  [
+                         "v3_flow_policy 为 v3 放置语义确定性代表策略，非生产全管线复刻（dev 线限制，606A 披露）",
+                         "HUMAN_VALIDATION_NOT_PERFORMED：冻结实验未做人工验收（606A 预注册披露）",
+                         "PRODUCTION_RELEASE_NOT_AUTHORIZED：比赛交付口径，不宣称生产发布完成",
+                         "平台矩阵：android/web 实构建 built；windows/ohos/ios/macos 比赛版按 release_deferred 记录（605A）",
+                         "客户端 v2 私有实现原位保留（9 lib+8 测试），不删除不迁移不加兼容 wrapper（703A）",
+                         "服务端旧端点（6 条路由）仅为比赛版本兼容保留，不做 census、不返 410、不删除（704A）",
+                         "可观测性为进程内合成指标（LocalSyntheticMetricsSink，零网络）；生产端点不在比赛交付范围（700B）"
+                     ],
+    "rollback":  {
+                     "policy":  "SmartLayoutRollbackPolicy（V3-701A）：切流提交 allowlist 机器判定；回滚完整性=残余 diff 为空（恰为逆集）；关闭重开四条检查单",
+                     "kill_switch":  "SmartLayoutKillSwitch 只关不换：类型面无 v2 回退 API；跳闸后入口 disabled（零请求零 Draft）",
+                     "observability_closure":  "失败率滑动窗口告警 → onAlert 关闭 kill switch → 重开 disabled（700A 场景 4 可重放）"
+                 },
+    "production_release_claimed":  false,
+    "all_checks_passed":  true
+}

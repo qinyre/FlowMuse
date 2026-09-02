@@ -1,0 +1,28 @@
+{
+ "task_id": "V3-206A",
+ "run_id": "4d3d46a4-4ba4-4765-8b19-cec8d286e680",
+ "summary": "Gate 1 指标、闭环与证据包（合并原 V3-206A～C）。(1) 评测工具 tool/smart_layout_v3/evaluation/：G1Inputs（样本/标注/e-id 映射/split 装载；期望分组=阅读序同 role 连续段，15/85 空阅读序样本按 role 全集兜底，e-id→真实 id 映射后按元素类型过滤为纯笔画——修正了两处口径 bug：过滤器键空间错位与空序样本）；RecognitionQualityEvaluator（pairwise 共同成员 P/R/F1 用确定性排序字符串键非 String.hashCode、merge/split 计数、最差分组、源守恒、dev/validation 严格分离、低样本<10 → insufficient）；RecognitionLatencyEvaluator（warmup=1/repetitions=3/nearest_rank，口径取自冻结 benchmark-spec，p95≤300s 机器判定）；g1_runner（flutter test 入口执行——分割器依赖 Flutter；产出 G1 四件套+前置检查：协议 schema sha256 与 V3-200A 登记 pin 对拍/管线四文件 hash 记录/真实 live-route（绝对路径 go.exe 调 TestV3LiveRouteSmoke，Dart 单引号 \b 转义坑两炸后改正斜杠）/frozen holdout 与 dev+validation 交集为空（SR-4）；任何前置缺失→blocked=true，planner 保持 blocked）。(2) build_gate_one_report.py 确定性构建器（仿 G0）：删除 gate-one-report.json 后单命令重建逐字节一致（双跑验证），组件 hash 钉定，10 项机器判定；质量阈值未在 Phase 0 预注册——按 SR-2 不事后设阈，分割质量（dev P=0.2344/R=0.9811/F1=0.3784 merge0 split6；validation P=0.2171/R=1.0/F1=0.3567；drift=0.0177）以回归地板记录并显式披露不声明达标；gate_decision=development_gate_reported；HUMAN_VALIDATION_NOT_PERFORMED+PRODUCTION_RELEASE_NOT_AUTHORIZED。(3) 测试：评测器单测 6 用例+runner 全链 1 用例全绿；G1 gate 两命令实测通过（flutter smart_layout 167 用例+go recognition ok）。(4) 工具链披露：Go 1.25 为本机 D:\\Program\\Go 新装（V3-200A 记录在案）。",
+ "changed_paths": [
+  "FlowMuse-App/tool/smart_layout_v3/evaluation/g1_inputs.dart",
+  "FlowMuse-App/tool/smart_layout_v3/evaluation/recognition_quality_evaluator.dart",
+  "FlowMuse-App/tool/smart_layout_v3/evaluation/recognition_latency_evaluator.dart",
+  "FlowMuse-App/tool/smart_layout_v3/evaluation/g1_runner.dart",
+  "FlowMuse-App/tool/smart_layout_v3/evaluation/g1_runner_cli_test.dart",
+  "FlowMuse-App/tool/smart_layout_v3/evaluation/g1_evaluator_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G1/quality-development.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G1/quality-validation.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G1/latency-development.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G1/prerequisites.json",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G1/build_gate_one_report.py",
+  "docs/研发记录/evidence/smart-layout-v3/gates/G1/gate-one-report.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-206A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-206A/result.json"
+ ],
+ "artifacts": [
+  {
+   "key": "v3_206a_deliverable",
+   "path": "docs/研发记录/evidence/smart-layout-v3/gates/G1/gate-one-report.json",
+   "sha256": "9d11d3f57d8a6e658c1f86227cd8a8a22b8cc13028fe8a8b0bf29611677ed0a6"
+  }
+ ]
+}

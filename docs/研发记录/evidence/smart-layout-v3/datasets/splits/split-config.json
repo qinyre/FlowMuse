@@ -1,0 +1,35 @@
+{
+ "schema_version": "1.0.0",
+ "config_kind": "smart-layout-v3-split-config",
+ "task": "V3-002B",
+ "seed": 20260831,
+ "weights": {
+  "development": 0.6,
+  "validation": 0.2,
+  "frozen_holdout": 0.2
+ },
+ "min_quotas": {
+  "development": {
+   "per_scene_family": 2,
+   "per_content_kind": 2,
+   "per_platform_profile": 2
+  },
+  "validation": {
+   "per_scene_family": 1,
+   "per_content_kind": 1,
+   "per_platform_profile": 1
+  },
+  "frozen_holdout": {
+   "per_scene_family": 1,
+   "per_content_kind": 1,
+   "per_platform_profile": 1
+  }
+ },
+ "isolation": {
+  "rules": [
+   "derivation_chain",
+   "same_generator_identity"
+  ]
+ },
+ "notes": "预注册切分配置：轴值最小配额以『组件数』计（同一原稿/种子/派生图算一个组件）；轴 = scene_family/content_kind/complexity_band/platform_profile；分配为种子化确定性过程。"
+}

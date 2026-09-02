@@ -1,0 +1,344 @@
+{
+  "generatedAtUtc": "2026-09-01T17:21:23.429721Z",
+  "allPassed": true,
+  "caseCount": 8,
+  "a11yEvidencePointers": [
+    "test/features/whiteboard/smart_layout/views/smart_layout_session_view_test.dart::V3-505C 无鼠标/可访问性闭环::键盘全流程：Enter 开始 → Escape 取消 → Enter 复位并归还焦点",
+    "test/features/whiteboard/smart_layout/views/smart_layout_session_view_test.dart::V3-505C 无鼠标/可访问性闭环::reviewing 键盘：方向键切换候选、Enter 应用所选",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_view.dart::Semantics(container/liveRegion/button/selected) 全相位覆盖"
+  ],
+  "cases": [
+    {
+      "id": "S1-preview-commit",
+      "title": "preview=commit：真实候选提交与归约产物等价 + 六态一致",
+      "passed": true,
+      "checks": [
+        "preview fingerprint=f8f4990a4a5983b7",
+        "phase applied=true",
+        "scene payload==preview=true(applyResult 盖章 versionNonce/updated，全量 fingerprint 仅记录)",
+        "history undo+1=true",
+        "revision==scene=true",
+        "broadcast events=1",
+        "document consistent=true(after=null, op=null)",
+        "ledger finalized=true(consumed=1, preserved=0)"
+      ],
+      "failure": null,
+      "before": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      },
+      "after": {
+        "sceneFingerprint": "d9fe985e52da1a03",
+        "undoCount": 1,
+        "redoCount": 0,
+        "revisionFingerprint": "d9fe985e52da1a03",
+        "broadcastEvents": [
+          "userEdit"
+        ],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 1,
+          "preserved": 0,
+          "hash": "29499a9332ec9e8c"
+        }
+      }
+    },
+    {
+      "id": "S2-undo-redo",
+      "title": "undo/redo：一次 undo 精确回提交前、redo 回提交后",
+      "passed": true,
+      "checks": [
+        "undo→pre-commit scene=true",
+        "undo history=0/1",
+        "redo→committed scene=true"
+      ],
+      "failure": null,
+      "before": {
+        "sceneFingerprint": "d9fe985e52da1a03",
+        "undoCount": 1,
+        "redoCount": 0,
+        "revisionFingerprint": "d9fe985e52da1a03",
+        "broadcastEvents": [
+          "userEdit"
+        ],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 1,
+          "preserved": 0,
+          "hash": "29499a9332ec9e8c"
+        }
+      },
+      "after": {
+        "sceneFingerprint": "d9fe985e52da1a03",
+        "undoCount": 1,
+        "redoCount": 0,
+        "revisionFingerprint": "d9fe985e52da1a03",
+        "broadcastEvents": [
+          "userEdit",
+          "undo",
+          "redo"
+        ],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      }
+    },
+    {
+      "id": "S3-cancel-late",
+      "title": "取消：在途立即终止；迟到响应票据判旧零残留",
+      "passed": true,
+      "checks": [
+        "cancel sync phase=true",
+        "late discarded phase=true",
+        "cards empty=true",
+        "scene unchanged=true",
+        "history 0=true",
+        "revision unchanged=true",
+        "broadcast none=true"
+      ],
+      "failure": null,
+      "before": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      },
+      "after": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      }
+    },
+    {
+      "id": "S4-draft-release",
+      "title": "候选草稿资源释放：取消即 dispose（零泄漏）",
+      "passed": true,
+      "checks": [
+        "thumbnail alive pre-cancel=true",
+        "thumbnail disposed post-cancel=true",
+        "cards cleared=true",
+        "scene untouched=true"
+      ],
+      "failure": null,
+      "before": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      },
+      "after": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      }
+    },
+    {
+      "id": "S5a-conflict-intersect",
+      "title": "写集相交：远端改写写集元素 → 拒绝且六态零副作用",
+      "passed": true,
+      "checks": [
+        "phase failed=true",
+        "stage apply=true",
+        "scene untouched=true",
+        "history untouched=true",
+        "failure recorded=true"
+      ],
+      "failure": null,
+      "before": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      },
+      "after": {
+        "sceneFingerprint": "c78b444fcacfc16e",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "c78b444fcacfc16e",
+        "broadcastEvents": [
+          "userEdit"
+        ],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      }
+    },
+    {
+      "id": "S5b-conflict-disjoint",
+      "title": "写集不相交：会话守卫拒绝过时票据 + 网关重派一次成功",
+      "passed": true,
+      "checks": [
+        "session guard rejected=true(revision-changed)",
+        "session zero side effect=true",
+        "gateway redispatched=true",
+        "remote shape present=true",
+        "text transformed=true",
+        "undo+1=true",
+        "broadcast events=2"
+      ],
+      "failure": null,
+      "before": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      },
+      "after": {
+        "sceneFingerprint": "58ec7318c2b81f45",
+        "undoCount": 1,
+        "redoCount": 0,
+        "revisionFingerprint": "58ec7318c2b81f45",
+        "broadcastEvents": [
+          "userEdit",
+          "userEdit"
+        ],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 1,
+          "preserved": 0,
+          "hash": "29499a9332ec9e8c"
+        }
+      }
+    },
+    {
+      "id": "S6-correction-rerun",
+      "title": "纠错重跑：旧候选全失效释放、新候选发布、Scene 零副作用",
+      "passed": true,
+      "checks": [
+        "phase reviewing=true",
+        "old candidates disposed=true",
+        "new cards=3",
+        "scene untouched=true",
+        "history untouched=true"
+      ],
+      "failure": null,
+      "before": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      },
+      "after": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      }
+    },
+    {
+      "id": "S7-render-ranking",
+      "title": "渲染/排名证据：真实缩略图、Top3 分序+多样性、评分可还原",
+      "passed": true,
+      "checks": [
+        "thumbnail conservativeLayout#8=1200x800",
+        "thumbnail single#0=1200x800",
+        "thumbnail mainSide#2=1200x800",
+        "rank scores desc=[0.7408617424242425, 0.7408617424242425, 0.7290246212121213]",
+        "diversity keys={conservativeLayout, single, mainSide}",
+        "score restore conservativeLayout#8=true(Σ0.7408617424242425 vs 0.7408617424242425)",
+        "score restore single#0=true(Σ0.7408617424242425 vs 0.7408617424242425)",
+        "score restore mainSide#2=true(Σ0.7290246212121213 vs 0.7290246212121213)"
+      ],
+      "failure": null,
+      "before": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      },
+      "after": {
+        "sceneFingerprint": "0cd66f3795e25ef4",
+        "undoCount": 0,
+        "redoCount": 0,
+        "revisionFingerprint": "0cd66f3795e25ef4",
+        "broadcastEvents": [],
+        "documentVersion": null,
+        "ledger": {
+          "consumed": 0,
+          "preserved": 0,
+          "hash": null
+        }
+      }
+    }
+  ]
+}

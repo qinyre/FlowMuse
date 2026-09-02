@@ -1,0 +1,13 @@
+{
+ "task_id": "V3-104A",
+ "run_id": "aad4464c-9a37-4578-b069-dfae52e74fdd",
+ "summary": "RegionCorrectionPatch 与最小受影响集（合并原 V3-104A～B）。(1) region_correction_patch.dart：sealed RegionCorrectionPatch（baseRevision 前置）+MergeRegionsPatch（regionId→成员快照）/SplitRegionPatch（regionId+成员快照+≥2 子集划分）；regionIdOf 内容派生 id（成员最小笔画 id，'r:' 前缀）——同一成员集合永远同 id，merge/split 往返与重复应用幂等。(2) correction_patch_applier.dart：SegmentationState（revision+regions+笔画盒快照，笔画几何 patch 不改）；CorrectionPatchApplier.apply 拒绝序=stale-revision→unknown-region→membership-changed（构造时成员快照对拍）→RegionMembershipGuard 守卫（跨列/preserved/重叠/外来/丢笔/重复/空子集/too-few）；接受则 revision+1 重建：内容派生 id、笔画盒并集几何、方向按纵横比阈值重判、局部尺度=成员中位、语义字段 unknown/置信 0/preservedReason null（'结构已定、语义待算'——不是 preserved，preserved 会错误阻断后续结构校正，往返用例捕获后修正；语义重算归 V3-205）且未触区域原对象原样透传；返回逆 patch（merge↔split 互逆，baseRevision=新 revision）。(3) AffectedSourceSet：regionIds（移除+新建）+strokeSourceIds（membership 变化笔画）+renderAssetKeys（fileId|ownerStrokeId）+cropKeys（裁剪资产加 |crop 后缀），资产归属从 LayoutPageSnapshot.renderAssets 的 ownerSourceId 映射传入，不应用即可计算。(4) 区域内容哈希以测试侧 helper 提供（全字段 canonical，fingerprint64；生产侧失效计算归 V3-504，避免越出本任务 allowlist）。(5) 测试 8 用例（另跑全 smart_layout 96 用例回归全绿）：merge 内容派生 id+语义待算+几何并集、apply→inverse→再 apply→再 inverse 两轮往返 partitionKey 含 id 完全一致且全笔画守恒、stale-revision(2!=3) 与 (3!=4) 双形态拒绝、交叉 patch（revision 对齐但引用已消失区域→unknown-region(seg-a)）、成员快照不一致→membership-changed、跨列/preserved/拆分丢笔 stroke-loss(2) 守卫透传、合法 split 重建 r:a1/r:b1、受影响集与 apply 后全量 diff 精确对拍（removed={seg-a,seg-b}、added={r:a1}、changed=空、seg-c hash 不变）+资产/裁剪键、regionIdOf 幂等；analyze 零 issue。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/correction/region_correction_patch.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/correction/correction_patch_applier.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/correction/correction_patch_applier_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-104A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-104A/result.json"
+ ],
+ "artifacts": {}
+}

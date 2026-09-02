@@ -302,6 +302,7 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
           _SettingsSection.lab => const _AiSettingsSection(),
           _SettingsSection.privacy => const _PrivacySettingsSection(),
           _SettingsSection.other => const _OtherSettingsSection(),
+          // ignore: unreachable_switch_case
           _ => _PlaceholderSettingsSection(section: widget.section),
         },
       ],
@@ -2634,7 +2635,7 @@ class _BackupListDialogState extends State<_BackupListDialog> {
                 child: ListView.separated(
                   primary: false,
                   itemCount: widget.backups.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (ctx, i) {
                     final entry = widget.backups[i];
                     final restoring = _restoringHref == entry.href;

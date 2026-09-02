@@ -1,0 +1,26 @@
+{
+ "schema_version": "1.0.0",
+ "artifact": "ai-surrogate-editor-protocol",
+ "task": "V3-003B",
+ "fixed_parameters": {
+  "margin_px": 24,
+  "gap_px": 12,
+  "gutter_px": 16,
+  "row_band_px": 64
+ },
+ "rules": [
+  "R1 排序：内容元素（type∈{text,shape,image}）按 (floor((bbox.y+bbox.h/2)/64), bbox.x, element.id) 升序。",
+  "R2 列数：可用宽=page.width-2*margin；可用高=page.height-2*margin；内容元素总堆叠高(每元素 h+gap)在可用高内→1 列；否则自增列数 N（上限 100）直到 总高/N≤可用高 且列宽>0；列宽=(可用宽-gutter*(N-1))/N。",
+  "R3 装列：按 R1 序依序放置；当前列 cursorY+h 超 page.height-margin 且还有下一列→换列（cursorY 重置 margin）；x=margin+列序号*(列宽+gutter)；元素宽超列宽截断为列宽，高不变。",
+  "R4 原位：type∈{stroke,decorative_line,binding} 一律保持原 bbox；所有元素 id/type/附加字段逐字保留。",
+  "R5 步骤记录：bbox 发生变化的内容元素记一条 {element_id, from:[x,y,w,h], to:[x,y,w,h]}；修改次数=步骤条数。",
+  "R6 输出场景元素顺序：先全部原位元素（原相对顺序），后全部重排内容元素（R1 序）。"
+ ],
+ "replayability": "本协议可由机器确定性重放；两名代理的输出必须与重放一致（assembly 阶段程序断言），否则该代理产物不合格。",
+ "panel_disclosure": {
+  "panel_type": "ai_surrogate",
+  "human_validation_performed": false,
+  "disclosure": "HUMAN_VALIDATION_NOT_PERFORMED",
+  "statement": "执行本协议的两名整理者为上下文隔离的 GLM-5.3 Max AI 代理；产物仅称 AI surrogate baseline，不代表真人整理效率。"
+ }
+}

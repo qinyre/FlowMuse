@@ -1,0 +1,14 @@
+{
+ "task_id": "V3-102A",
+ "run_id": "9f381a3b-e028-4e7d-8046-d3f2c1fad5b1",
+ "summary": "完整 Snapshot 与唯一 SourceCoverageLedger（合并原 V3-102A～C）。(1) SourceCoverageLedger：建账全 pending（重复 id 构造即败），标记只能 pending→consumed/preserved 单向一次（终态再标记/未知 id 均 StateError），mark* 返回新不可变账本（唯一性透传基础，不建第二套 source 状态），isFinalized 要求零 pending，canonical 哈希（id 排序+status 全量，fingerprint64）供 V3-502/V3-504 renderer/metrics/ledger 一致性校验；无任何主观忽略分支——不可靠消费一律 preserved。(2) LayoutPageSnapshot 不可变投影族：SnapshotObject（sourceId/kind/bounds/visualBounds/rotation/mobility/groupIds/frameId/bindingRefs/zIndex/memberIds/exactText/textStyle/fileId/imageCrop/imageIntrinsicSize）、SnapshotInkStroke（几何+pointCount/hasPressures）、SnapshotRenderAsset（resolved|missing 事实状态+mime/byteLength）、SnapshotBounds 自含值语义；conservativeVisualBounds=editor_core 可视边界（含笔刷包络）+旋转四角 AABB；contentBounds=非背景对象+笔迹并集；快照级 canonical fingerprint（pageId+revision+对象投影+账本哈希）。(3) SnapshotExtractor：页归属=flowMuseData.pageId 精确匹配（无分页数据不猜测）；页面框/PDF 底图=background 且产出 pageBounds，锁定=protectedObstacle，其余 movable；软删元素不入账；frame 收集 memberIds；绑定=boundElements+容器文本 containerId 双向；裁剪图片记归一化 crop+显示/比例内在尺寸，文件缺失记 missing 资产但对象照常入账；未知元素类型 kind 原样保留。(4) 测试 17 用例（目录累计 38 全绿）：账本四态生命周期/终态不可翻/未知源拒绝/值语义/哈希稳定、页归属过滤、三档 mobility+页面框、旋转 AABB 数学核对（(40+30)·cos45°）、嵌套组保序+zIndex、绑定双向、裁剪图片全要素、缺文件不丢失、未知类型不丢失、笔迹进 inkStrokes+包络外扩、frame 成员、contentBounds 并集/空页 null、快照指纹确定且随位移变化、消费推进哈希变化；analyze 零 issue。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/snapshot/source_coverage_ledger.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/snapshot/layout_page_snapshot.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/snapshot/snapshot_extractor.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/snapshot/snapshot_extractor_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-102A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-102A/result.json"
+ ],
+ "artifacts": {}
+}

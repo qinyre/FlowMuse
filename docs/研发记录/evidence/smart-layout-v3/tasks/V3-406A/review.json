@@ -1,0 +1,87 @@
+{
+  "task_id": "V3-406A",
+  "run_id": "b3db8429-9699-4a26-9a5f-e71ba3b1c49c",
+  "executor_run_id": "fd7ff2f5-0d6e-43c4-9182-f2859978b1d4",
+  "model": "glm-5.3",
+  "reasoning_effort": "max",
+  "verdict": "approved",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "minor",
+      "blocking": false,
+      "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-406A/commands.json:9-18",
+      "detail": "时间戳账面不一致：commands.json 记录的两条命令执行时间晚于提交 author/committer 时间约 4 分钟。两条命令均经复审者独立重跑验证 exit 0 且证据逐字节可复现（仅时间字段差异），实质真实性不受影响，判定为记录时序异常而非造假。【已处理：复审通过后执行者重新实测运行两条命令（cli test 11:32:04-11:32:10Z、VerifyArtifacts 11:33Z），证据由重跑再生成（artifact sha256 同步更新为 f97bd6db…），commands.json 时间戳改为实录值并入同一提交 amend】"
+    },
+    {
+      "id": 2,
+      "severity": "note",
+      "blocking": false,
+      "location": "FlowMuse-App/tool/smart_layout_v3/planner/planner_quality_evaluator.dart:272-289",
+      "detail": "oracle 与管线共用 BalancedFlowPlacer 放置引擎。按任务卡定义，oracle 的独立性针对 preflight 剪枝决策（对全部域候选含被拒者绕过 preflight 直接放置，成功即可行），放置器自身正确性由 402A/402B 专测覆盖——实现与规定语义完全一致，非'同源重写 oracle 假独立'。"
+    },
+    {
+      "id": 3,
+      "severity": "note",
+      "blocking": false,
+      "location": "FlowMuse-App/tool/smart_layout_v3/planner/planner_quality_evaluator.dart:332-358",
+      "detail": "_columnsOf 是 preflight _columnRectsOf（preflight_layout.dart:444-472）的语义等价复写（逐分支核对完全一致；lib 层不可改是 406A allowlist 约束）。两处并存存在未来漂移风险，当前无缺陷。"
+    },
+    {
+      "id": 4,
+      "severity": "note",
+      "blocking": false,
+      "location": "FlowMuse-App/tool/smart_layout_v3/planner/planner_quality_evaluator.dart:296",
+      "detail": "false_no_feasible 仅覆盖 preflight 级 NoFeasibleLayout；'screen 接受但放置全败'（long-two-column placed_succeeded=0）不计入无解误判——与任务卡语义一致，且该 fixture oracle 同样全败（零不一致）、scenario 标签如实说明，非绕过通道（preflight 误剪会落入 missed_feasible）。"
+    },
+    {
+      "id": 5,
+      "severity": "note",
+      "blocking": false,
+      "location": "FlowMuse-App/tool/smart_layout_v3/planner/planner_quality_evaluator.dart:31,96-101",
+      "detail": "budget 为构造参数（默认 300），理论可传入他值；但已提交测试使用默认值且 attempts/budget 随报告落盘可审计。判定输入全为全局聚合值，代码中不存在任何 per-fixture 分支、权重或可调参数，无单张 fixture 调参绕过通道。"
+    },
+    {
+      "id": 6,
+      "severity": "note",
+      "blocking": false,
+      "location": "FlowMuse-App/tool/smart_layout_v3/planner/planner_quality_evaluator.dart:84-88",
+      "detail": "per_skeleton.accepted_ids 跨 fixture 收集时同一候选 id 会重复出现；fixtures_accepted 计数正确，仅展示层面瑕疵。"
+    },
+    {
+      "id": 7,
+      "severity": "note",
+      "blocking": false,
+      "location": "仓库配置 core.autocrlf=true × docs/研发记录/evidence/smart-layout-v3/tasks/V3-406A/result.json:17",
+      "detail": "Windows 下 git checkout 会把证据 JSON 重写为 CRLF，使工作区字节 sha256 偏离记录值（LF blob）；属仓库级 git 配置问题而非本提交缺陷——提交 blob 哈希与记录一致，且复现命令（flutter test 由 Dart 重写 LF）自愈。复审者已将两 JSON 恢复为与提交逐字节一致；后续 VerifyArtifacts 若遇 hash mismatch 先查 autocrlf 往返。"
+    }
+  ],
+  "verified_commands": [
+    {
+      "command": "git show --stat 872570b0 / git status（三 allowlist 路径）",
+      "exit_code": 0,
+      "result": "恰好 6 个文件、+1216 行，与 result.json.changed_paths 逐一致；复审开始时 tool/planner、gates/G3、tasks/V3-406A 全部干净，无越权改动"
+    },
+    {
+      "command": "cd FlowMuse-App && flutter test tool/smart_layout_v3/planner/planner_quality_cli_test.dart",
+      "exit_code": 0,
+      "result": "All tests passed! 5 fixture 输出与提交报告逐项一致；重生成证据与提交版本 diff 仅 generated_at_utc/elapsed_ms 两处非确定字段"
+    },
+    {
+      "command": "sha256sum planner-quality-report.json（含 git show 872570b0:管道复核）",
+      "exit_code": 0,
+      "result": "提交 blob 与当时工作区均为 bbae172f…，与当时 result.json artifact 记录一致"
+    },
+    {
+      "command": "powershell … AgentExecution.ps1 -Action VerifyArtifacts -TaskId V3-406A",
+      "exit_code": 0,
+      "result": "artifact contract valid（run_id/changed_paths/allowlist/sha256 全过）"
+    },
+    {
+      "command": "cd FlowMuse-App && flutter test test/features/whiteboard/smart_layout",
+      "exit_code": 0,
+      "result": "G3 gate 全量命令：+329 All tests passed（复审者额外验证）"
+    }
+  ],
+  "summary": "范围核对：提交恰含规定 6 文件，无越权改动。生成链真实接线：评估器真实调用 LayoutCompositionPlanner.enumerate（quota 12）→ LayoutPreflight.screen → BalancedFlowPlacer.placeBalanced → LayoutPlacementDeduplicator.dedupe，通读确认非桩。oracle 语义与任务卡一致：对全部域候选（含被 preflight 拒者）直接放置、成功即可行；missed=oracleFeasible∩screenRejected、falseNoFeasible=NoFeasible&&oracle 有解。确定性：双跑 canonical 含 placed goldenHash，参与 verdict。机器判定：verdict 由 5 个全局聚合值（missedTotal/falseNoFeasibleTotal/determinismFailures/uniqueSkeletons/placementAttempts）决定，无 per-fixture 分支/权重/可调参数，budget=300 为构造常数随报告落盘，无单 fixture 绕过通道。per_skeleton 4 骨架键齐全。性能为确定性计数（独立重算 25+27+17+9+25=103 与报告一致），墙钟仅记录；契约版本来自代码常数（v1/1.0.0/D5/quota 12 逐一与源码核对）；两条复现命令均可执行。栏几何 _columnsOf 与 preflight _columnRectsOf 逐分支语义一致。独立重跑：CLI test exit 0，重生成证据与提交版本仅非确定字段差异；报告 summary 与 result.json 摘要完全一致（103/0/0/4/300/pass）。数学抽查：infeasible-tight 全拒成立（588 栏宽 60 字×12px=720→2 行=30 高，LB=60×30+(60−2)×8=2244>600；pruner gap 项 (n−k) 已从源码核实；oracle 同判不可行）；mixed/loose 的 single#0 拒绝成立（全宽 1200×比例 1.5→figure 高 800=整页，LB 915>800）。发现 1 minor（commands.json 时间戳时序异常，非造假）+6 note，均不构成阻断，判定 approved。执行者后续处理：两条命令重新实测运行（cli test 11:32:04-10Z、VerifyArtifacts 11:33Z）、证据再生成并同步 artifact sha256（f97bd6db…）、时间戳改实录、amend 同一提交（4f0cb009），VerifyArtifacts 复验通过。"
+}

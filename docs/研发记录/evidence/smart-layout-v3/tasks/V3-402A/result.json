@@ -1,0 +1,12 @@
+{
+  "task_id": "V3-402A",
+  "run_id": "440bd839-f8ba-480d-8167-2f7f164c21dd",
+  "summary": "reading flow、真实换行与关系原子性（合并原 V3-402A~C）。(1) PlacementCursor：栏序+栏内 y 游标，顺序填充语义（第一栏满再第二栏；栏平衡归 V3-402B）。(2) FlowPlacer.place：按语义阅读序放置——放置单元=原子组（assembly.atomicGroups 按首块阅读序穿插）或孤立块；逐块经注入 TextMeasureAdapter 真实测量（Excalifont bundled 同路径，RTL 块显式 rtl 基向）；字号档全部 token 推导（title 28→20→12，步长 snapStep=8，下限 minBodySize 不越线）；figure 等比（宽=栏宽、高=宽/比例）；组内间距 compactGapFloor、组间 paragraphSpacing；keep/list/section/formula/caption 组不拆（同栏连续，当前栏放不下整组换栏，末栏不足 columnsExhausted 显式失败）。(3) 稳定失败码四枚：keepGroupTooTall/blockOverflowsAtMinFontSize/columnsExhausted/textualBlockWithoutContent——不可满足返回原因（含 unit 高度与栏剩余细节），不静默拆关系、不缩小越线、不裁字、不省略（overflows 原子簇到最小字号档仍超即失败，绝不截断）；preserved/protected 不参与放置（patch 层处理）。(4) PlacedBlock：绝对页面坐标 rect（宽≤栏宽）+栏序+真实行数+生效字号+shrunk 标记；usedHeights 供 402B 栏平衡。9 用例：阅读序单调推进/CJK·超长词·emoji·RTL·公式五语种无裁字（成功宽不越栏或显式 blockOverflowsAtMinFontSize）/keep 组第一栏剩余不足整组换栏且同栏连续/超高块显式失败/末栏用尽/缩档 token 档 28→20→12 固化/figure 等比/preserved 跳过/无文本显式失败；placement 9 用例+analyze 零 issue。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/placement/flow_placer.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/placement/flow_placer_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-402A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-402A/result.json"
+  ],
+  "artifacts": {}
+}

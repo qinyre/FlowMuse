@@ -1,0 +1,27 @@
+{
+  "task_id": "V3-304A",
+  "helper": "elementVisualBounds",
+  "helper_definition": "editor_core/src/core/elements/element_visual_bounds.dart（笔刷包络外扩；Scene 命中/sceneBounds/导出边界/湿墨 dim 层共用，issue #5 T6 冻结）",
+  "v3_consumption_path": "smart_layout/snapshot/layout_page_snapshot.dart conservativeVisualBounds → elementVisualBounds（唯一入口，geometry 包经 SnapshotBounds 投影复用）",
+  "behavior_snapshot": {
+    "highlighter_visual_half_width": "renderSize(sw)=sw×4.2；half = renderSize×0.5 + 2.0（恒宽 thinning=0，抗锯齿余量 2.0）",
+    "fountain_default": "无 flowMuse.brushType 键时默认 fountainPen",
+    "rotated_aabb": "angle≠0 时可视边界=旋转四角 AABB，宽高=(w+h)·|cos(rad)|；angle=0 恒等返回",
+    "freedraw_v1_fallback": "缺 pressures 或非 v2 元数据按 v1 边界（与 renderer 分发一致）"
+  },
+  "caller_count_snapshot": {
+    "counting_rule": "带括号真实调用 elementVisualBounds(，排除定义行与注释",
+    "frozen_at": "2026-09-01",
+    "callers": {
+      "core/scene/scene.dart": 2,
+      "rendering/export/export_bounds.dart": 1,
+      "rendering/viewport_culling.dart": 1
+    },
+    "comment_mentions_only": [
+      "core/elements/brush_render_profile.dart",
+      "rendering/remote_wet_ink_painter.dart"
+    ]
+  },
+  "reverse_dependency_check": "editor_core/src 对 features/whiteboard/smart_layout（v3）import/export 计数 = 0",
+  "guard_test": "test/features/whiteboard/smart_layout/compatibility/geometry_compatibility_fixture_test.dart"
+}

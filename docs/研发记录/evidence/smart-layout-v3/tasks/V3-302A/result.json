@@ -1,0 +1,14 @@
+{
+  "task_id": "V3-302A",
+  "run_id": "5220446f-f365-492a-849e-ad9a317ec547",
+  "summary": "TransformContract、支持矩阵与 conformance（合并原 V3-302A~C）。(1) AffineLayoutTransform：2×3 仿射纯值对象（identity/translation/rotationAround/scaleAround/compose 语义=先 b 后 a/invert），退化矩阵求逆 StateError 显式失败（排版变换必须可逆）；identity 不动点、平移/旋转逆还原、旋转保距、复合逆=倒序复合、缩放锚点不动全部数学核对。(2) SmartLayoutTransformContract：9 类已知 kind×move/resize/rotate 支持矩阵；稳定拒绝码四枚（unsupportedElementType 未知类型原子拒绝不存在'尽量变换'、backgroundElement 背景、protectedObstacleLocked 锁定、degenerateResizeTarget 负/NaN 目标；零尺寸 resize 合法与 V3-301A 对齐）；mobility 拒绝优先于类型矩阵（同格单一稳定码）；传播顺序契约常量 members→containers→bindings→indexesAndVersion；绑定跟随契约（arrow 几何跟随不断链）。(3) TransformInvariant：old/new 快照深一致性纯函数校验器——源集合增删、mobility/group/frame/绑定关系变化、zIndex 相对序、visualBounds 与期望变换比对（形状 OBB 四角直接过仿射取外包，与 conservativeVisualBounds 同语义，修复了'先外扩再变换'的双重旋转错误）、rotate 场景 rotation 按 Δθ 协变；对象与笔迹（含包络 visualBounds 直接变换）双入口。(4) conformance fixtures 21 用例：支持矩阵每格（9×3 movable 全支持/未知类型 3 操作原子拒/mobility 优先级/resize 目标校验）、嵌套组（g2⊂g1）整组平移零违规+漏移成员 geometryMismatch 精确命中源、旋转 frame 成员绕 frame 中心协变零违规+rotation 忘加 θ 命中、绑定链双移闭合零违规+断链/悬空 bindingRefBroken、源增删/mobility 变化/z 序翻转各命中、笔迹平移零违规+漏移命中；累计 geometry 目录 48 用例+analyze 零 issue。V3-303A 将按本契约执行真实 Scene 变换并以 TransformInvariant 验收。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/geometry/affine_layout_transform.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/geometry/smart_layout_transform_contract.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/geometry/transform_invariant.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/geometry/transform_conformance_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-302A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-302A/result.json"
+  ],
+  "artifacts": {}
+}

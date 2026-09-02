@@ -1,0 +1,1250 @@
+{
+ "label_set_kind": "smart-layout-v3-adjudicated-labels",
+ "subset": "frozen_holdout",
+ "source_status": "passed",
+ "annotations": [
+  {
+   "sample_id": "syn-p2-anno-mixe-low-des-1046",
+   "reading_order": [
+    "e11",
+    "e14",
+    "e09",
+    "e15",
+    "e10",
+    "e12",
+    "e13"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "paragraph",
+    "e10": "paragraph",
+    "e11": "title",
+    "e12": "paragraph",
+    "e13": "figure",
+    "e14": "figure",
+    "e15": "image",
+    "e16": "divider",
+    "e17": "divider"
+   },
+   "relations": []
+  },
+  {
+   "sample_id": "syn-p2-anno-mixe-low-des-v-1047",
+   "reading_order": [
+    "e10",
+    "e13",
+    "e11",
+    "e12",
+    "e15",
+    "e14",
+    "e09"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "paragraph",
+    "e10": "title",
+    "e11": "paragraph",
+    "e12": "paragraph",
+    "e13": "figure",
+    "e14": "figure",
+    "e15": "image",
+    "e16": "divider",
+    "e17": "divider",
+    "e18": "annotation"
+   },
+   "relations": [
+    {
+     "type": "caption_of",
+     "from": "e11",
+     "to": "e13"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-brai-hand-hig-web-1045",
+   "reading_order": [
+    "e57"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "handwriting",
+    "e10": "handwriting",
+    "e11": "handwriting",
+    "e12": "handwriting",
+    "e13": "handwriting",
+    "e14": "handwriting",
+    "e15": "handwriting",
+    "e16": "handwriting",
+    "e17": "handwriting",
+    "e18": "handwriting",
+    "e19": "handwriting",
+    "e20": "handwriting",
+    "e21": "handwriting",
+    "e22": "handwriting",
+    "e23": "handwriting",
+    "e24": "handwriting",
+    "e25": "handwriting",
+    "e26": "handwriting",
+    "e27": "handwriting",
+    "e28": "handwriting",
+    "e29": "handwriting",
+    "e30": "handwriting",
+    "e31": "handwriting",
+    "e32": "handwriting",
+    "e33": "handwriting",
+    "e34": "handwriting",
+    "e35": "handwriting",
+    "e36": "handwriting",
+    "e37": "handwriting",
+    "e38": "handwriting",
+    "e39": "handwriting",
+    "e40": "handwriting",
+    "e41": "handwriting",
+    "e42": "handwriting",
+    "e43": "handwriting",
+    "e44": "handwriting",
+    "e45": "handwriting",
+    "e46": "handwriting",
+    "e47": "handwriting",
+    "e48": "handwriting",
+    "e49": "handwriting",
+    "e50": "handwriting",
+    "e51": "handwriting",
+    "e52": "handwriting",
+    "e53": "handwriting",
+    "e54": "handwriting",
+    "e55": "handwriting",
+    "e56": "handwriting",
+    "e57": "figure"
+   },
+   "relations": []
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-low-des-1001",
+   "reading_order": [],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting"
+   },
+   "relations": []
+  },
+  {
+   "sample_id": "syn-p2-meet-hand-low-des-v-1002",
+   "reading_order": [],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "annotation"
+   },
+   "relations": []
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-low-mob-1018",
+   "reading_order": [
+    "e09",
+    "e11",
+    "e12",
+    "e10"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "title",
+    "e10": "paragraph",
+    "e11": "paragraph",
+    "e12": "paragraph"
+   },
+   "relations": [
+    {
+     "type": "belongs_to",
+     "from": "e04",
+     "to": "e11"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e05",
+     "to": "e11"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e06",
+     "to": "e12"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e07",
+     "to": "e11"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-low-mob-v-1019",
+   "reading_order": [
+    "e09",
+    "e11",
+    "e10",
+    "e12"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "title",
+    "e10": "paragraph",
+    "e11": "paragraph",
+    "e12": "paragraph",
+    "e13": "annotation"
+   },
+   "relations": []
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-med-mob-1023",
+   "reading_order": [
+    "e26",
+    "e30",
+    "e31",
+    "e25",
+    "e32",
+    "e27",
+    "e29",
+    "e28"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "handwriting",
+    "e10": "handwriting",
+    "e11": "handwriting",
+    "e12": "handwriting",
+    "e13": "handwriting",
+    "e14": "handwriting",
+    "e15": "handwriting",
+    "e16": "handwriting",
+    "e17": "handwriting",
+    "e18": "handwriting",
+    "e19": "handwriting",
+    "e20": "handwriting",
+    "e21": "handwriting",
+    "e22": "handwriting",
+    "e23": "handwriting",
+    "e24": "handwriting",
+    "e25": "paragraph",
+    "e26": "title",
+    "e27": "paragraph",
+    "e28": "paragraph",
+    "e29": "paragraph",
+    "e30": "paragraph",
+    "e31": "paragraph",
+    "e32": "paragraph"
+   },
+   "relations": [
+    {
+     "type": "belongs_to",
+     "from": "e01",
+     "to": "e27"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e03",
+     "to": "e27"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e04",
+     "to": "e26"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e05",
+     "to": "e32"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e09",
+     "to": "e27"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e10",
+     "to": "e25"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e13",
+     "to": "e28"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e14",
+     "to": "e30"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e15",
+     "to": "e29"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e17",
+     "to": "e27"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e18",
+     "to": "e30"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e20",
+     "to": "e25"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-meet-mixe-med-mob-v-1024",
+   "reading_order": [
+    "e32",
+    "e26",
+    "e28",
+    "e27",
+    "e29",
+    "e25",
+    "e30",
+    "e31"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "handwriting",
+    "e10": "handwriting",
+    "e11": "handwriting",
+    "e12": "handwriting",
+    "e13": "handwriting",
+    "e14": "handwriting",
+    "e15": "handwriting",
+    "e16": "handwriting",
+    "e17": "handwriting",
+    "e18": "handwriting",
+    "e19": "handwriting",
+    "e20": "handwriting",
+    "e21": "handwriting",
+    "e22": "handwriting",
+    "e23": "handwriting",
+    "e24": "handwriting",
+    "e25": "paragraph",
+    "e26": "paragraph",
+    "e27": "paragraph",
+    "e28": "paragraph",
+    "e29": "paragraph",
+    "e30": "paragraph",
+    "e31": "paragraph",
+    "e32": "title",
+    "e33": "annotation"
+   },
+   "relations": [
+    {
+     "type": "belongs_to",
+     "from": "e06",
+     "to": "e27"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e13",
+     "to": "e31"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e23",
+     "to": "e30"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-hig-mob-1083",
+   "reading_order": [
+    "e57",
+    "e62",
+    "e69",
+    "e60",
+    "e58",
+    "e59",
+    "e70",
+    "e64",
+    "e61",
+    "e68",
+    "e67",
+    "e65",
+    "e63",
+    "e66"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "handwriting",
+    "e10": "handwriting",
+    "e11": "handwriting",
+    "e12": "handwriting",
+    "e13": "handwriting",
+    "e14": "handwriting",
+    "e15": "handwriting",
+    "e16": "handwriting",
+    "e17": "handwriting",
+    "e18": "handwriting",
+    "e19": "handwriting",
+    "e20": "handwriting",
+    "e21": "handwriting",
+    "e22": "handwriting",
+    "e23": "handwriting",
+    "e24": "handwriting",
+    "e25": "handwriting",
+    "e26": "handwriting",
+    "e27": "handwriting",
+    "e28": "handwriting",
+    "e29": "handwriting",
+    "e30": "handwriting",
+    "e31": "handwriting",
+    "e32": "handwriting",
+    "e33": "handwriting",
+    "e34": "handwriting",
+    "e35": "handwriting",
+    "e36": "handwriting",
+    "e37": "handwriting",
+    "e38": "handwriting",
+    "e39": "handwriting",
+    "e40": "handwriting",
+    "e41": "handwriting",
+    "e42": "handwriting",
+    "e43": "handwriting",
+    "e44": "handwriting",
+    "e45": "handwriting",
+    "e46": "handwriting",
+    "e47": "handwriting",
+    "e48": "handwriting",
+    "e49": "handwriting",
+    "e50": "handwriting",
+    "e51": "handwriting",
+    "e52": "handwriting",
+    "e53": "handwriting",
+    "e54": "handwriting",
+    "e55": "handwriting",
+    "e56": "handwriting",
+    "e57": "title",
+    "e58": "paragraph",
+    "e59": "paragraph",
+    "e60": "paragraph",
+    "e61": "paragraph",
+    "e62": "paragraph",
+    "e63": "paragraph",
+    "e64": "paragraph",
+    "e65": "paragraph",
+    "e66": "paragraph",
+    "e67": "paragraph",
+    "e68": "paragraph",
+    "e69": "paragraph",
+    "e70": "paragraph"
+   },
+   "relations": [
+    {
+     "type": "belongs_to",
+     "from": "e01",
+     "to": "e60"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e02",
+     "to": "e67"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e04",
+     "to": "e60"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e05",
+     "to": "e67"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e06",
+     "to": "e61"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e07",
+     "to": "e62"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e08",
+     "to": "e68"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e11",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e12",
+     "to": "e63"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e13",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e16",
+     "to": "e65"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e17",
+     "to": "e63"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e18",
+     "to": "e69"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e19",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e20",
+     "to": "e68"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e25",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e26",
+     "to": "e62"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e27",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e30",
+     "to": "e61"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e31",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e32",
+     "to": "e65"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e33",
+     "to": "e61"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e34",
+     "to": "e70"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e37",
+     "to": "e68"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e39",
+     "to": "e65"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e40",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e41",
+     "to": "e66"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e42",
+     "to": "e61"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e44",
+     "to": "e64"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e46",
+     "to": "e68"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e47",
+     "to": "e68"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e49",
+     "to": "e67"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e50",
+     "to": "e67"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e53",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e55",
+     "to": "e65"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-hig-mob-v-1084",
+   "reading_order": [
+    "e66",
+    "e62",
+    "e63",
+    "e60",
+    "e59",
+    "e69",
+    "e65",
+    "e64",
+    "e70",
+    "e57",
+    "e58",
+    "e61",
+    "e67",
+    "e68"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "handwriting",
+    "e10": "handwriting",
+    "e11": "handwriting",
+    "e12": "handwriting",
+    "e13": "handwriting",
+    "e14": "handwriting",
+    "e15": "handwriting",
+    "e16": "handwriting",
+    "e17": "handwriting",
+    "e18": "handwriting",
+    "e19": "handwriting",
+    "e20": "handwriting",
+    "e21": "handwriting",
+    "e22": "handwriting",
+    "e23": "handwriting",
+    "e24": "handwriting",
+    "e25": "handwriting",
+    "e26": "handwriting",
+    "e27": "handwriting",
+    "e28": "handwriting",
+    "e29": "handwriting",
+    "e30": "handwriting",
+    "e31": "handwriting",
+    "e32": "handwriting",
+    "e33": "handwriting",
+    "e34": "handwriting",
+    "e35": "handwriting",
+    "e36": "handwriting",
+    "e37": "handwriting",
+    "e38": "handwriting",
+    "e39": "handwriting",
+    "e40": "handwriting",
+    "e41": "handwriting",
+    "e42": "handwriting",
+    "e43": "handwriting",
+    "e44": "handwriting",
+    "e45": "handwriting",
+    "e46": "handwriting",
+    "e47": "handwriting",
+    "e48": "handwriting",
+    "e49": "handwriting",
+    "e50": "handwriting",
+    "e51": "handwriting",
+    "e52": "handwriting",
+    "e53": "handwriting",
+    "e54": "handwriting",
+    "e55": "handwriting",
+    "e56": "handwriting",
+    "e57": "paragraph",
+    "e58": "paragraph",
+    "e59": "paragraph",
+    "e60": "paragraph",
+    "e61": "paragraph",
+    "e62": "paragraph",
+    "e63": "paragraph",
+    "e64": "paragraph",
+    "e65": "paragraph",
+    "e66": "title",
+    "e67": "paragraph",
+    "e68": "paragraph",
+    "e69": "paragraph",
+    "e70": "paragraph",
+    "e71": "annotation"
+   },
+   "relations": [
+    {
+     "type": "belongs_to",
+     "from": "e02",
+     "to": "e65"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e05",
+     "to": "e63"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e07",
+     "to": "e63"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e09",
+     "to": "e60"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e10",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e13",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e14",
+     "to": "e68"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e17",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e18",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e19",
+     "to": "e65"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e22",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e23",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e24",
+     "to": "e57"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e25",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e27",
+     "to": "e61"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e31",
+     "to": "e69"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e34",
+     "to": "e66"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e35",
+     "to": "e61"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e38",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e40",
+     "to": "e67"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e41",
+     "to": "e67"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e43",
+     "to": "e69"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e45",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e46",
+     "to": "e58"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e48",
+     "to": "e63"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e49",
+     "to": "e69"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e51",
+     "to": "e63"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e53",
+     "to": "e59"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e54",
+     "to": "e68"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e55",
+     "to": "e70"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-low-mob-1073",
+   "reading_order": [
+    "e12",
+    "e10",
+    "e11",
+    "e09"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "paragraph",
+    "e10": "paragraph",
+    "e11": "paragraph",
+    "e12": "title"
+   },
+   "relations": [
+    {
+     "type": "belongs_to",
+     "from": "e02",
+     "to": "e12"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-low-mob-v-1074",
+   "reading_order": [
+    "e12",
+    "e09",
+    "e11",
+    "e10"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "paragraph",
+    "e10": "paragraph",
+    "e11": "paragraph",
+    "e12": "title",
+    "e13": "annotation"
+   },
+   "relations": [
+    {
+     "type": "belongs_to",
+     "from": "e04",
+     "to": "e12"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e05",
+     "to": "e09"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-med-mob-1078",
+   "reading_order": [
+    "e28",
+    "e29",
+    "e25",
+    "e30",
+    "e27",
+    "e26",
+    "e32",
+    "e31"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "handwriting",
+    "e10": "handwriting",
+    "e11": "handwriting",
+    "e12": "handwriting",
+    "e13": "handwriting",
+    "e14": "handwriting",
+    "e15": "handwriting",
+    "e16": "handwriting",
+    "e17": "handwriting",
+    "e18": "handwriting",
+    "e19": "handwriting",
+    "e20": "handwriting",
+    "e21": "handwriting",
+    "e22": "handwriting",
+    "e23": "handwriting",
+    "e24": "handwriting",
+    "e25": "paragraph",
+    "e26": "paragraph",
+    "e27": "paragraph",
+    "e28": "paragraph",
+    "e29": "title",
+    "e30": "paragraph",
+    "e31": "paragraph",
+    "e32": "paragraph"
+   },
+   "relations": [
+    {
+     "type": "belongs_to",
+     "from": "e01",
+     "to": "e26"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e09",
+     "to": "e31"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e10",
+     "to": "e31"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e12",
+     "to": "e29"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e14",
+     "to": "e26"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e16",
+     "to": "e29"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e18",
+     "to": "e26"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e19",
+     "to": "e28"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e20",
+     "to": "e27"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-type-mixe-med-mob-v-1079",
+   "reading_order": [
+    "e32",
+    "e28",
+    "e30",
+    "e26",
+    "e29",
+    "e31",
+    "e25",
+    "e27"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "handwriting",
+    "e05": "handwriting",
+    "e06": "handwriting",
+    "e07": "handwriting",
+    "e08": "handwriting",
+    "e09": "handwriting",
+    "e10": "handwriting",
+    "e11": "handwriting",
+    "e12": "handwriting",
+    "e13": "handwriting",
+    "e14": "handwriting",
+    "e15": "handwriting",
+    "e16": "handwriting",
+    "e17": "handwriting",
+    "e18": "handwriting",
+    "e19": "handwriting",
+    "e20": "handwriting",
+    "e21": "handwriting",
+    "e22": "handwriting",
+    "e23": "handwriting",
+    "e24": "handwriting",
+    "e25": "paragraph",
+    "e26": "paragraph",
+    "e27": "paragraph",
+    "e28": "paragraph",
+    "e29": "paragraph",
+    "e30": "paragraph",
+    "e31": "paragraph",
+    "e32": "title",
+    "e33": "annotation"
+   },
+   "relations": [
+    {
+     "type": "belongs_to",
+     "from": "e06",
+     "to": "e31"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e09",
+     "to": "e31"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e15",
+     "to": "e31"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e19",
+     "to": "e28"
+    },
+    {
+     "type": "belongs_to",
+     "from": "e21",
+     "to": "e27"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-type-type-low-des-1066",
+   "reading_order": [
+    "e07",
+    "e04",
+    "e05",
+    "e06"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "title",
+    "e05": "paragraph",
+    "e06": "paragraph",
+    "e07": "paragraph"
+   },
+   "relations": []
+  },
+  {
+   "sample_id": "syn-p2-type-type-low-des-v-1067",
+   "reading_order": [
+    "e05",
+    "e07",
+    "e04",
+    "e06"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "paragraph",
+    "e05": "title",
+    "e06": "paragraph",
+    "e07": "paragraph",
+    "e08": "annotation"
+   },
+   "relations": [
+    {
+     "type": "belongs_to",
+     "from": "e01",
+     "to": "e04"
+    }
+   ]
+  },
+  {
+   "sample_id": "syn-p2-type-type-low-mob-1068",
+   "reading_order": [
+    "e04",
+    "e06",
+    "e07",
+    "e05"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "title",
+    "e05": "paragraph",
+    "e06": "paragraph",
+    "e07": "paragraph"
+   },
+   "relations": []
+  },
+  {
+   "sample_id": "syn-p2-type-type-low-mob-v-1069",
+   "reading_order": [
+    "e06",
+    "e05",
+    "e07",
+    "e04"
+   ],
+   "roles": {
+    "e01": "handwriting",
+    "e02": "handwriting",
+    "e03": "handwriting",
+    "e04": "paragraph",
+    "e05": "paragraph",
+    "e06": "title",
+    "e07": "paragraph",
+    "e08": "annotation"
+   },
+   "relations": []
+  }
+ ]
+}

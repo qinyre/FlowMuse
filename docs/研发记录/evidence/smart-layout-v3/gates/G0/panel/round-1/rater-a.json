@@ -1,0 +1,85 @@
+{
+ "run_id": "727e4d68-0225-48b2-94ec-bb728977e937",
+ "rater": "A",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "inputs_read": {
+  "blind_packet_sha256": "47547c253f90a188d2f165b8ccf60dd40b4e320e1f906887296d494612905d94"
+ },
+ "verdicts": [
+  {
+   "id": "C1",
+   "verdict": "adequate",
+   "reason": "聚类单位=sample(scene) 且样本内先聚合再跨样本配对推断，与数据结构一致：实测三个 split manifest 各 48/18/19 样本、两两无交集、并集 85 = 池 manifest 85，每样本由 stratified-scene-composer 独立种子生成，独立性/配对假设与 rationale 吻合，最高粒度保守聚类成立。"
+  },
+  {
+   "id": "C2",
+   "verdict": "adequate",
+   "reason": "E1~E4 逐一显式定义（配对风险差/配对均值差/确定性预算比值）并附主辅效应量（RD+Cohen h、均值差+dz）；E1/E2 中 P(maj_violation_rate|system=…) 记法略松但按 registered_metrics 聚合定义可唯一解析为 split 级比例之差，无计算性歧义。"
+  },
+  {
+   "id": "C3",
+   "verdict": "adequate",
+   "reason": "CI 程序完整钉死：配对样本聚类 bootstrap B=10000、seed=20260831、splitmix64、固定流序（E1→E2→E3 不重置）、百分位法、退化为常数 c 时 CI=[c,c]，比例臂用 Wilson（仅描述）；我另实测 spec 自身 content_sha256 可按紧凑 sort_keys 规范化复现，口径可复现。"
+  },
+  {
+   "id": "C4",
+   "verdict": "inadequate",
+   "reason": "T4 决策规则方向反转：E2=P(v3)−P(v2) 且指标 lower_better（T2 自身口径即 RD>0=v3 更差），而 T4 要求点估计 RD>0 且 p=P(RD_boot≤0)<0.05 才'优效成立'——任何不劣于 v2 的 v3（设计目标；ai 基线 0/85、v2 dev 7/48 个 M-码样本，实测确认）都有 RD_boot≤0 恒成立使 p=1.0 恒不可通过，反而劣于 v2 的系统可通过；规则确定但检验的是与所声称假设相反的方向，与计划 §5.3-7（v3 相对 v2 减少缺陷）矛盾。"
+  },
+  {
+   "id": "C5",
+   "verdict": "adequate",
+   "reason": "缺失映射闭环无插补无剔除：样本崩溃→全部 primary 指标最差值（违规/source_recall=0/rubric_overall=1，rubric 量表下确为最差）、bench 超时→记超预算值且 run failed、hash 不符→整 run 拒绝、frozen 违规访问→中止上报；T1 明确含 worst-case 计数；仅次要无界计数指标（crit/oob/overlap per-sample）崩溃时最差值未定义，但它们只报 CI 不进判定，不构成判定自由度。"
+  },
+  {
+   "id": "C6",
+   "verdict": "adequate",
+   "reason": "族 F1={T2,T3,T4} 明确，Holm 单侧 α=0.05 按 p 升序对 0.05/(m−k+1)（m=3）逐步比较，与 count/B 的 bootstrap 单侧 p 完全相容（p=0 可达）；族外排除逐一列明（T1 硬规则、T5 确定性、T6 构念性、secondary 只报 CI），无族膨胀漏洞。"
+  },
+  {
+   "id": "C7",
+   "verdict": "adequate",
+   "reason": "固定 n=48 禁止追加样本（SR-1 呼应），事后功效/MDE 由预注册 Monte-Carlo（B=20000、seed=20260831、与 CI 同一 PRNG 流继续）仅披露不反馈，honesty_rule 明令禁止以功效为由放宽 margin 且 amendment_policy 禁止看见结果后放宽——无反向定制通道。"
+  },
+  {
+   "id": "C8",
+   "verdict": "adequate",
+   "reason": "实测 14 个比率/均值指标全部引用 D_SAMPLES、3 个 bench 指标全部引用 D_BENCH_OPS，无未登记分母；D_SAMPLES 登记 48/18/19/85 与三个 split manifest 实测样本数逐一相等且清单 hash 已核验，RR-2 拒绝未登记分母，D_CONTENT_ELEMENTS/D_TYPED_CHARS 明确仅上下文用。"
+  },
+  {
+   "id": "C9",
+   "verdict": "adequate",
+   "reason": "critical=0 硬规则明确（任一 C-码→该系统该 Gate 直接 fail，与均值/CI/多重比较无关），T1 恒等式判定（含缺失 worst-case 映射）先于 F1 且'F1 全过而 T1 fail 时 Gate 仍 fail'；与 failure-taxonomy release_gate_semantics.critical 一致，且实测三基线均无 C-码，规则可达。"
+  },
+  {
+   "id": "C10",
+   "verdict": "inadequate",
+   "reason": "T2/T3 阈值论证扎实且数据核验无误（实测 v2 池内 11/85 全部恰为 M-码样本，锚 0.129 精确；0/48 的 CP 单侧上界 1−0.05^(1/48)=0.0605<0.10；两臂全零退化可判过；T3 margin=1~5 量表 1/4 级合理），但 T4 优效阈值（boundary=0、H1: RD>0）在 lower_better 指标与 E2 定义下方向非法，其'n=48 下可检'的可达性论证在注册方向下为假（好系统 p=1.0 恒不可通过），仅劣化系统可达。"
+  },
+  {
+   "id": "C11",
+   "verdict": "adequate",
+   "reason": "环境锁定值实测等于 benchmark-spec.json 文件 SHA-256；硬上限逐项与 benchmark-spec 一致（300s/100000 ticks/cold_process/3 次/offline_replay_only/synthetic_only/nearest_rank、≥4 核/8GB）；6 条阶段预算+全场景 RSS 上限先于 V3-301C/V3-604A 首测预注册且只许收紧，SR-1~5 完备；保留意见见 notes（content_sha256 命名冲突、场景清单仅由本表自举）。"
+  },
+  {
+   "id": "C12",
+   "verdict": "adequate",
+   "reason": "RR-1~6 均含 error_code 与可执行规则（指标注册表/分母注册表/环境 hash/split hash/frozen 角色/作废版本拒绝），frozen_label_access_guard.dart 实际存在；披露如实：PRODUCTION_RELEASE_NOT_AUTHORIZED、HUMAN_VALIDATION_NOT_PERFORMED，panel_disclosure 明示 AI 盲审不构成真人统计同行评审，不声称人工验证或生产授权。"
+  }
+ ],
+ "overall": "fail",
+ "notes": [
+  "全部 8 个上游合约 SHA-256 实测逐字节匹配；三基线数字实测核对（no_op 47/85、v2 11/85、ai 0/85，n=85；dev 48/validation 18/frozen 19）。",
+  "实测 v2 的 11 个违规样本每个恰含 1 个 M- 码（无 C-/m- 码，dev split 7 个），故 T2 margin 锚 '11/85≈0.129' 是 v2 major 违规率的精确值而非高估；三基线零 C- 码，T1 可达。",
+  "spec content_sha256 已按规范 JSON（紧凑分隔符+sort_keys+去除 hash 字段）独立复现；同一规范化亦复现 benchmark-spec 内部 content_sha256（1db65ecd…），项目规范化约定一致。",
+  "T4 方向反转为本次唯一致命缺陷：与 T2 的方向约定、E2 定义、指标 lower_better 及计划 §5.3-7 目标（v3 相对 v2 减少缺陷）交叉证实；属测量前可修正项（amendment_policy 允许在任何 T4 测量前修版本+复审），但本包按现状不可采纳。",
+  "environment_pinning 把文件 hash 标注为 'content_sha256'，而 benchmark-spec.json 内部同名字段值为 1db65ecd…≠dbc00bc4…；RR-3 若按字面读内部字段将恒不匹配而拒绝一切运行（fail-closed 死锁而非后门），建议改标为文件 sha256。",
+  "frozen_label_access_guard.dart 的角色白名单为 {evaluation, gate, annotation_freeze}，与 spec 声明的 allowed_roles=[final_evaluation] 词汇不一致：合法 FINAL 角色会被误拒（fail-closed），需在 runner 映射或 guard 侧对齐。",
+  "预算表场景/阶段 ID（S-3000-STROKES/S-LONG-PAGE/S-MULTI-CAND）在仓库中仅存在于本 spec（benchmark 目录仅有 spec 文件且无 scenarios 字段），T5 的'全部场景阶段'判定面目前只由本表自举锚定；待 V3-301C/V3-604A 落地时应对场景清单二次 hash 钉死。",
+  "次要保留：bootstrap 百分位 CI 的分位指数约定（type-1/type-7）与 Spearman bootstrap 的 PRNG 流位置未钉死（前者影响描述性区间、后者 T6 仅 caveat 不判 fail，均不进入通过判定）；次要无界计数指标崩溃时的最差值未定义（仅 CI 报告，无判定自由度）。",
+  "预算/阈值后门检查结论：amendment_policy 收紧随时允许（只会更难通过）、放宽仅限任何受影响测量之前且须全量重测、RR-6 拒绝早于现行版本生效时间的测量，机制上未发现'看见结果后可改'的通道；残余风险仅在未入 gate 运行记录的 ad-hoc 测量不可被预注册约束（预注册的固有边界）。",
+  "T2 在注册规则下的实际可达边界：v3 major 违规 ≤1/48 时 bootstrap p（Poisson 近似）<0.0167 可过 Holm，k=2 时未校正 p≈0.05 大概率不过、k≥3 不过；零事件路径按退化分支确定通过——可达性成立但有效容错仅约 1 个样本，属紧张但已如实论证。",
+  "golden-ledger.json 尚不存在，与 spec 自述（V3-004B 建立并维护）一致，非虚引。"
+ ]
+}

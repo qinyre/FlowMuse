@@ -1,0 +1,229 @@
+{
+  "rater": "A",
+  "run_id": "3bdbcb33-54ec-4f1b-a128-d14c2a9bba32",
+  "model": "glm-5.3",
+  "reasoning_effort": "max",
+  "inputs_read": {
+    "blind_rubric_sha256": "ccf0418139e41b427ceac68e1384a4e2ba67f14375255504d095b5ca9b63e498",
+    "anchor_packet_sha256": "8bae5d7d7bc8c0f2c3c38aa006aee1eb48d758fb28e15a9a380b10ada83049fb",
+    "taxonomy_sha256": "e0dd0ad6a5d5094e4605e8fec6813e008cf0712fa151414418c8aaa9679428f4"
+  },
+  "ratings": [
+    {
+      "anchor_id": "ANCH-01-clean-tidy-noop",
+      "identified_codes": [],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 5,
+      "overall_insufficient": false,
+      "reason": "整洁页未满足布局意图=0，AG-1 谓词不成立（M-CAND-ANTI-GAMING 负例），各维无失败事实按 scoring_rules 通式取 5。"
+    },
+    {
+      "anchor_id": "ANCH-02-lost-stroke-group",
+      "identified_codes": ["C-SNAPSHOT-LOST-SOURCE"],
+      "dimension_scores": {"D1": 1, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 1,
+      "overall_insufficient": false,
+      "reason": "未豁免 source 元素丢失且未出现在 preserved[]，命中 C-SNAPSHOT-LOST-SOURCE，含 critical 归 D1=1，critical_floor 使 overall=1。"
+    },
+    {
+      "anchor_id": "ANCH-03-preserved-unknown",
+      "identified_codes": [],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 5,
+      "overall_insufficient": false,
+      "reason": "unknown 按策略 preserved 原位保留且不重叠、有审计，是 C-SNAPSHOT-LOST-SOURCE 与 M-HARD-COVERAGE 的登记豁免负例，无失败事实，全维 5。"
+    },
+    {
+      "anchor_id": "ANCH-04-typed-text-truncated",
+      "identified_codes": ["C-SNAPSHOT-TYPED-TEXT-LOST"],
+      "dimension_scores": {"D1": 1, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 1,
+      "overall_insufficient": false,
+      "reason": "渲染层字符流丢失命中 C-SNAPSHOT-TYPED-TEXT-LOST（critical→D1=1）；按 escalation_and_dedup『单一事件双码域取最高级单记（ANCH-04 判例）』D5 不另记 layout 码。"
+    },
+    {
+      "anchor_id": "ANCH-05-commit-drifts-from-preview",
+      "identified_codes": ["C-TX-PREVIEW-COMMIT-MISMATCH"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 1, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 1,
+      "overall_insufficient": false,
+      "reason": "落库与最后 preview 归一化坐标偏移、三元组 hash 不一致，命中 C-TX-PREVIEW-COMMIT-MISMATCH，含 critical 归 D6=1。"
+    },
+    {
+      "anchor_id": "ANCH-06-redispatch-after-remote",
+      "identified_codes": [],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 5,
+      "overall_insufficient": false,
+      "reason": "临界区零写入+先应用远端+按新 revision 重派再确认，是 C-TX-CAS-DIRTY-WRITE 与 C-TX-PREVIEW-COMMIT-MISMATCH 的负例，无失败事实，全维 5。"
+    },
+    {
+      "anchor_id": "ANCH-07-overlap-beyond-tolerance",
+      "identified_codes": ["M-LAYOUT-OVERLAP"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": 3, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 3,
+      "overall_insufficient": false,
+      "reason": "文本块与图片相交 10% 且无任何豁免关系，命中 M-LAYOUT-OVERLAP（positive_example 同形），D5 恰 1 major=3。"
+    },
+    {
+      "anchor_id": "ANCH-08-caption-separated",
+      "identified_codes": ["M-HARD-RELATION-BREAK"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 3, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 3,
+      "overall_insufficient": false,
+      "reason": "frozen 标注确认 caption_of 成立但图注与图形分栏不邻接，命中 M-HARD-RELATION-BREAK（同栏邻接谓词失败），D3 恰 1 major=3。"
+    },
+    {
+      "anchor_id": "ANCH-09-noop-on-messy-page",
+      "identified_codes": ["M-CAND-ANTI-GAMING"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 3, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 3,
+      "overall_insufficient": false,
+      "reason": "AG-1 谓词全量命中（变换距离低+页面多组未满足布局意图+进 Top 3 标『推荐』），记 M-CAND-ANTI-GAMING，D4 恰 1 major=3。"
+    },
+    {
+      "anchor_id": "ANCH-10-hidden-text-behind-image",
+      "identified_codes": ["M-CAND-ANTI-GAMING"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 3, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 3,
+      "overall_insufficient": false,
+      "reason": "AG-3 命中（可见字形面积 0 且候选进 Top 3，R5 进入即违规）记 M-CAND-ANTI-GAMING，D4 恰 1 major=3；字符流未丢失故不升 C-SNAPSHOT-TYPED-TEXT-LOST。"
+    },
+    {
+      "anchor_id": "ANCH-11-unmarked-fallback",
+      "identified_codes": ["M-CAND-SILENT-FALLBACK"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 3, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 3,
+      "overall_insufficient": false,
+      "reason": "fallback 候选无显式标记且被 scorer 计入合格候选，违反 R6/FP-4，命中 M-CAND-SILENT-FALLBACK，D4 恰 1 major=3。"
+    },
+    {
+      "anchor_id": "ANCH-12-marked-fallback",
+      "identified_codes": [],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 5,
+      "overall_insufficient": false,
+      "reason": "带显式 fallback 标记、仅原样展示且不计入合格候选与成功率，按 R6『标记后的 fallback 不构成失败』，无失败事实，全维 5。"
+    },
+    {
+      "anchor_id": "ANCH-13-correct-rejection",
+      "identified_codes": [],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 5,
+      "overall_insufficient": false,
+      "reason": "硬约束不可满足时明示拒绝并给出原因、计入 no-candidate 分母，是 M-CAND-FALSE-NO-CANDIDATE 的负例（rubric D4 档 5 引 ANCH-13 形态），全维 5。"
+    },
+    {
+      "anchor_id": "ANCH-14-feasible-page-rejected",
+      "identified_codes": ["M-CAND-FALSE-NO-CANDIDATE"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 3, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 3,
+      "overall_insufficient": false,
+      "reason": "人工仲裁确认存在可行解却因贪心 preflight 误杀报告无候选（FP-2），命中 M-CAND-FALSE-NO-CANDIDATE，D4 恰 1 major=3。"
+    },
+    {
+      "anchor_id": "ANCH-15-stale-revision-write",
+      "identified_codes": ["M-TX-LATE-RESPONSE", "C-TX-CAS-DIRTY-WRITE"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 1, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 1,
+      "overall_insufficient": false,
+      "reason": "按 escalation_and_dedup『升级后双登记（ANCH-15）』：四检失效记 M-TX-LATE-RESPONSE，造成覆盖写入按 R3 另记 C-TX-CAS-DIRTY-WRITE，两码均归 D6，含 critical 故 D6=1、overall=1。"
+    },
+    {
+      "anchor_id": "ANCH-16-late-response-discarded",
+      "identified_codes": [],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 5,
+      "overall_insufficient": false,
+      "reason": "迟到分割响应被 operation/page/revision/disposed 四检拦截丢弃，是 M-TX-LATE-RESPONSE 的负例（rubric D6 档 5 引 ANCH-16 形态），无失败事实，全维 5。"
+    },
+    {
+      "anchor_id": "ANCH-17-runner-timeout",
+      "identified_codes": ["C-SESSION-CRASH-HANG"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 1, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 1,
+      "overall_insufficient": false,
+      "reason": "3000 笔画页死循环被 runner 按预算超时杀进程，命中 C-SESSION-CRASH-HANG（positive_example 同形），含 critical 归 D4=1；会话未正常完成故不记 m-PERF-BUDGET，D7=5。"
+    },
+    {
+      "anchor_id": "ANCH-18-misaligned-cards",
+      "identified_codes": ["m-LAYOUT-ALIGN-RHYTHM"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": 4, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 4,
+      "overall_insufficient": false,
+      "reason": "三个并列卡片左缘参差 6px 且其余约束全满足，命中 m-LAYOUT-ALIGN-RHYTHM（positive_example 同形），D5 无 critical/major 仅 minor=4。"
+    },
+    {
+      "anchor_id": "ANCH-19-insufficient-evidence",
+      "identified_codes": [],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 5, "D5": null, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": ["D5"],
+      "overall": 5,
+      "overall_insufficient": true,
+      "reason": "缺 renderer 实测指标、无法判定 OOB/重叠/裁字，D5 按 R7 记 insufficient；场景未述 scorer 打分/排名/展示事实，M-CAND-UNVALIDATED 谓词不成立，其余维度无失败事实。"
+    },
+    {
+      "anchor_id": "ANCH-20-multi-failure-accounting",
+      "identified_codes": ["M-LAYOUT-OVERLAP", "M-HARD-RELATION-BREAK"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 3, "D4": 5, "D5": 3, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 3,
+      "overall_insufficient": false,
+      "reason": "按 R2 多码分别登记各归其层：段落重叠 12% 命中 M-LAYOUT-OVERLAP（D5 恰 1 major=3），图注分离命中 M-HARD-RELATION-BREAK（D3 恰 1 major=3）。"
+    },
+    {
+      "anchor_id": "ANCH-21-font-below-hard-floor",
+      "identified_codes": ["M-CAND-ANTI-GAMING", "M-LAYOUT-FONT-FLOOR"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 3, "D5": 3, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 3,
+      "overall_insufficient": false,
+      "reason": "AG-2 极缩命中（中位字号 7pt<hard_floor 9pt 且硬约束声明全过并进 Top 3）记 M-CAND-ANTI-GAMING，按 AG-2 boundary 同时记 M-LAYOUT-FONT-FLOOR；D4 与 D5 各恰 1 major=3。"
+    },
+    {
+      "anchor_id": "ANCH-22-locked-signature-moved",
+      "identified_codes": ["M-SNAPSHOT-PROTECTED-DAMAGE"],
+      "dimension_scores": {"D1": 3, "D2": 5, "D3": 5, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 3,
+      "overall_insufficient": false,
+      "reason": "用户锁定的签名发生非用户发起的 40px 移位，命中 M-SNAPSHOT-PROTECTED-DAMAGE（positive_example 同形）；元素未丢失不升 critical，D1 恰 1 major=3。"
+    },
+    {
+      "anchor_id": "ANCH-23-role-structure-error",
+      "identified_codes": ["M-SEMANTIC-ROLE-ERROR"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 3, "D4": 5, "D5": 5, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": [],
+      "overall": 3,
+      "overall_insufficient": false,
+      "reason": "对照 frozen 标注章节标题被整体判为正文、层级结构丢失，命中 M-SEMANTIC-ROLE-ERROR（positive_example 同形），D3 恰 1 major=3；仅进 Top 3 未命中 AG-6 全标题化，不并列反投机码。"
+    },
+    {
+      "anchor_id": "ANCH-24-unvalidated-candidate-scored",
+      "identified_codes": ["M-CAND-UNVALIDATED"],
+      "dimension_scores": {"D1": 5, "D2": 5, "D3": 5, "D4": 3, "D5": null, "D6": 5, "D7": 5, "D8": 5},
+      "insufficient_dimensions": ["D5"],
+      "overall": 3,
+      "overall_insufficient": true,
+      "reason": "对未渲染 draft patch（三元组 hash 不齐全）直接估分入 Top 3，命中 M-CAND-UNVALIDATED（FP-6，positive_example 同形），D4 恰 1 major=3；按 R4 布局维度无实测证据记 insufficient。"
+    }
+  ]
+}

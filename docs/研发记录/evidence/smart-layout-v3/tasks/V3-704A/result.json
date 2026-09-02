@@ -1,0 +1,19 @@
+{
+  "task_id": "V3-704A",
+  "run_id": "c530b014-f5d6-4c8b-bd5f-3dea0a4ed7dc",
+  "summary": "服务端旧端点隔离与保留说明（比赛交付口径）。SmartLayoutRouteIsolationMatrix（smart_layout_v3_route_isolation_test.go，目标符号 RegisterSmartLayoutV3 复验）：1) 同一 mux 经 HTTPAPI.Register+WithV3Analyzer 同时注册全部 6 旧端点+v3 端点——ServeMux 重复路径即 panic，构建成功即无路径冲突；2) v3 路径 /api/ink/smart-layout/analyze/v3 与全部旧路径两两不同（旧家族无 analyze 子路径）；3) 独立命中证明：7 路由 GET 全 405（各 handler 先于业务校验拒方法，路由互不遮蔽）+ 旧智能排版端点 POST {} 全 502 not-configured（到达旧 handler 而非 404/405）；4) v3 smoke：合法请求 200+protocolVersion 3+regions、非法请求 400 冻结错误 envelope。旧端点仅为比赛版本兼容保留：原位不删除、不做 census、不返 410（文档与证据明示）。零生产代码改动（纯测试+证据）。flutter smart_layout 全套 452 用例+go recognition 全包全绿。",
+  "changed_paths": [
+    "FlowMuse-Server/internal/recognition/smart_layout_v3_route_isolation_test.go",
+    "docs/研发记录/evidence/smart-layout-v3/competition/v3-704a-route-isolation.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-704A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-704A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-704A/v3-704a-deliverable.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_704a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-704A/v3-704a-deliverable.json",
+      "sha256": "84bc59e1709a1219ff633798ceb468b926dd8e371dcae5b2b13ea2b040b19324"
+    }
+  ]
+}

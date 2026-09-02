@@ -255,8 +255,10 @@ void main() {
         return out;
       }
 
+      // ignore: prefer_function_declarations_over_variables
       final widthOf = (NaturalMediaRaster r, StrokeArcGeometry g) =>
           WidthProfile.medianCenterWidth(r, g, strokeWidth: kNominalWidth);
+      // ignore: prefer_function_declarations_over_variables
       final darkOf = (NaturalMediaRaster r, StrokeArcGeometry g) =>
           CenterBandDarkness.commonBandMeanDarkness(
             r,
@@ -395,7 +397,7 @@ void main() {
       BrushStrokeFixture constantPressure(String name, double p) =>
           BrushStrokeFixture(
             name: name,
-            description: 'N6 ${p}恒压探针',
+            description: 'N6 $p恒压探针',
             points: [for (var i = 0; i <= 40; i++) Point(9.0 * i, 0)],
             pressures: List<double>.filled(41, p),
           );

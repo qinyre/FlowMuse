@@ -1,0 +1,14 @@
+{
+  "task_id": "V3-405A",
+  "run_id": "8698b06e-ae48-4c1f-b6e8-5254617566d8",
+  "summary": "placement 结构签名去重与真实 Scene metrics 契约落地于 metrics/ 三新文件。layout_structure_signature.dart：LayoutStructureSignature 冻结等价契约=同骨架+每块同栏+栏内堆叠秩相同+生效字号相同，不比较像素坐标（坐标差非结构差）；blockId 参与签名故叙事指派/堆叠序/字号/骨架任一不同即不等价（叙事结构不误合并）；LayoutPlacementDeduplicator 只删等价结构、保留首个（输入序=401A 枚举序，配额语义归 401 不变），DroppedPlacement 记录 equivalentTo+签名（零静默删除），先于排序、不选 Top3。semantic_coverage_metric.dart：SemanticCoverageMetric.of 集合代数（ledger 权威全集）算 consumed/preserved/uncovered 占比与缺失源清单；fail closed——ledger 重复、渲染源不在 ledger、同源重复消费/保留、既消费又保留均构造即抛。scene_metrics_contract.dart：SceneMetricsExtraction 证据链三件套（sceneRevision+rendererFingerprint+renderedSceneDigest）缺一构造即抛、correct>total/负计数即抛；SceneMetricsContract.build 唯一入口产出 SceneMetricsSnapshot（coverage 复用 SemanticCoverageMetric.of 的 fail closed、relationCompliance/orderPairAccuracy 空集中性 1.0、visualBoundsViolations 计数承载判定语义归 504、factsFingerprint 双跑确定）；合成 placement 不能冒充——契约不提供任何 placement 层构造 API，源码门禁测试钉死 scene_metrics_contract.dart 零引用 placement 类型（注释亦不提及）。5 项测试：结构签名等价/不等价五分支、去重保留首个+等价记录+双跑确定、覆盖全覆盖/缺失/空文档中性/三类 fail closed、契约四类指标+指纹+证据链缺失与非法计数 fail closed、源码门禁。",
+  "changed_paths": [
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/metrics/layout_structure_signature.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/metrics/semantic_coverage_metric.dart",
+    "FlowMuse-App/lib/features/whiteboard/smart_layout/metrics/scene_metrics_contract.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/metrics/scene_metrics_contract_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-405A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-405A/commands.json"
+  ],
+  "artifacts": []
+}

@@ -1,0 +1,163 @@
+{
+    "all_passed":  true,
+    "schema_version":  1,
+    "gate":  "G5-aggregate",
+    "environment":  {
+                        "go":  "go version go1.25.0 windows/amd64",
+                        "flutter":  "Flutter 3.41.10-ohos-0.0.1-canary1 鈥?channel [user-branch] 鈥?unknown source"
+                    },
+    "aggregate_exit_code":  0,
+    "generated_at_utc":  "2026-09-02T00:25:02.5012349Z",
+    "format_drift":  {
+                         "baseline":  62
+                     },
+    "jobs":  [
+                 {
+                     "id":  "go-test",
+                     "scope":  "Go 全部包测试（含 smart-layout v3 analyzer/route 与旧端点）",
+                     "command":  "go test ./...",
+                     "note":  "",
+                     "duration_ms":  1041,
+                     "cwd":  "FlowMuse-Server",
+                     "exit_code":  0
+                 },
+                 {
+                     "id":  "go-vet",
+                     "scope":  "Go 静态检查全部包",
+                     "command":  "go vet ./...",
+                     "note":  "",
+                     "duration_ms":  1022,
+                     "cwd":  "FlowMuse-Server",
+                     "exit_code":  0
+                 },
+                 {
+                     "id":  "schema-conformance-replay",
+                     "scope":  "v3 协议 conformance fixtures 正/负全量重放（Go 与 Dart 同一 fixtures）",
+                     "command":  "go test ./internal/recognition -run \u0027TestPositiveFixturesRoundTrip|TestNegativeFixturesRejectedWithSameCode|TestSmartLayoutV3ErrorEnvelope|TestParseRejectsMalformedJson\u0027 -count=1 -v",
+                     "note":  "",
+                     "duration_ms":  1012,
+                     "cwd":  "FlowMuse-Server",
+                     "exit_code":  0
+                 },
+                 {
+                     "id":  "legacy-endpoint-fixtures",
+                     "scope":  "旧端点（v2 decide-layout）fixture 保持绿",
+                     "command":  "go test ./internal/recognition -run \u0027TestDecideLayout\u0027 -count=1 -v",
+                     "note":  "",
+                     "duration_ms":  1017,
+                     "cwd":  "FlowMuse-Server",
+                     "exit_code":  0
+                 },
+                 {
+                     "id":  "dart-format-nonregression",
+                     "scope":  "智能排版作用域 format 漂移计数（冻结基线 62，只拦新增漂移；--output=none 只读）",
+                     "command":  "dart format --output=none lib/features/whiteboard/smart_layout test/features/whiteboard/smart_layout tool/smart_layout_v3/ci",
+                     "note":  "format 漂移 62 个（基线 62，只拦新增）",
+                     "duration_ms":  2035,
+                     "cwd":  "FlowMuse-App",
+                     "exit_code":  0
+                 },
+                 {
+                     "id":  "flutter-analyze",
+                     "scope":  "Flutter 全仓 analyze 零诊断（G4 基线，不新增 analyzer error）",
+                     "command":  "flutter analyze",
+                     "note":  "",
+                     "duration_ms":  7056,
+                     "cwd":  "FlowMuse-App",
+                     "exit_code":  0
+                 },
+                 {
+                     "id":  "smart-layout-focused-tests",
+                     "scope":  "智能排版 focused 全目录测试",
+                     "command":  "flutter test test/features/whiteboard/smart_layout",
+                     "note":  "",
+                     "duration_ms":  21169,
+                     "cwd":  "FlowMuse-App",
+                     "exit_code":  0
+                 },
+                 {
+                     "id":  "golden-job",
+                     "scope":  "真实渲染 golden 逐字节校验（只读，不带 --update-goldens）",
+                     "command":  "flutter test test/features/whiteboard/smart_layout/rendering/draft_scene_renderer_test.dart",
+                     "note":  "",
+                     "duration_ms":  5056,
+                     "cwd":  "FlowMuse-App",
+                     "exit_code":  0
+                 },
+                 {
+                     "id":  "flutter-all-tests",
+                     "scope":  "Flutter 全仓测试（G5 口径）",
+                     "command":  "flutter test",
+                     "note":  "",
+                     "duration_ms":  61481,
+                     "cwd":  "FlowMuse-App",
+                     "exit_code":  0
+                 }
+             ],
+    "scope_audit":  {
+                        "ends":  {
+                                     "go":  4,
+                                     "flutter":  5
+                                 },
+                        "findings":  [
+
+                                     ],
+                        "jobs":  [
+                                     {
+                                         "scope":  "Go 全部包测试（含 smart-layout v3 analyzer/route 与旧端点）",
+                                         "read_only":  true,
+                                         "id":  "go-test",
+                                         "cwd":  "FlowMuse-Server"
+                                     },
+                                     {
+                                         "scope":  "Go 静态检查全部包",
+                                         "read_only":  true,
+                                         "id":  "go-vet",
+                                         "cwd":  "FlowMuse-Server"
+                                     },
+                                     {
+                                         "scope":  "v3 协议 conformance fixtures 正/负全量重放（Go 与 Dart 同一 fixtures）",
+                                         "read_only":  true,
+                                         "id":  "schema-conformance-replay",
+                                         "cwd":  "FlowMuse-Server"
+                                     },
+                                     {
+                                         "scope":  "旧端点（v2 decide-layout）fixture 保持绿",
+                                         "read_only":  true,
+                                         "id":  "legacy-endpoint-fixtures",
+                                         "cwd":  "FlowMuse-Server"
+                                     },
+                                     {
+                                         "scope":  "智能排版作用域 format 漂移计数（冻结基线 62，只拦新增漂移；--output=none 只读）",
+                                         "read_only":  true,
+                                         "id":  "dart-format-nonregression",
+                                         "cwd":  "FlowMuse-App"
+                                     },
+                                     {
+                                         "scope":  "Flutter 全仓 analyze 零诊断（G4 基线，不新增 analyzer error）",
+                                         "read_only":  true,
+                                         "id":  "flutter-analyze",
+                                         "cwd":  "FlowMuse-App"
+                                     },
+                                     {
+                                         "scope":  "智能排版 focused 全目录测试",
+                                         "read_only":  true,
+                                         "id":  "smart-layout-focused-tests",
+                                         "cwd":  "FlowMuse-App"
+                                     },
+                                     {
+                                         "scope":  "真实渲染 golden 逐字节校验（只读，不带 --update-goldens）",
+                                         "read_only":  true,
+                                         "id":  "golden-job",
+                                         "cwd":  "FlowMuse-App"
+                                     },
+                                     {
+                                         "scope":  "Flutter 全仓测试（G5 口径）",
+                                         "read_only":  true,
+                                         "id":  "flutter-all-tests",
+                                         "cwd":  "FlowMuse-App"
+                                     }
+                                 ],
+                        "passed":  true
+                    }
+}

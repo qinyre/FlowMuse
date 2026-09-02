@@ -1,0 +1,31 @@
+{
+ "task_id": "V3-000B",
+ "run_id": "53551b24-e10b-45d0-92d1-e842c31267ca",
+ "executor_run_id": "6889a192-756c-4320-b7c7-a7a117723aed",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "findings": [
+  {
+   "id": "RF1-1",
+   "severity": "low",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel-report.json blinded_inputs；rater-A/B.json inputs_read.taxonomy_sha256",
+   "issue": "盲评者获发 failure-taxonomy.json 全文，其中 rubric_anchor_set.anchors[].expected_verdict.codes 含每个锚点的期望 code 集，评分者可由 code 答案加 scoring_rules 机械推出全部期望分数，panel 对『code 识别能力』的测试强度弱于对『分数映射可复现性』的测试。taxonomy 为只读上游且评分必需，该折中已在 panel-report 中如实披露，不违反 DG1 字面（anchor_expectations 分数数组已剥离），建议 V3-002C 校准任务改用剥离 rubric_anchor_set 的裁剪 taxonomy 以恢复盲度。"
+  },
+  {
+   "id": "RF2-1",
+   "severity": "low",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/artifacts/panel/blind-rubric.json taxonomy_reference.binding_rule 与 coverage.closure",
+   "issue": "盲评版 rubric 保留的文字提及『anchor_expectations 完全由 scoring_rules…机械推导』『24 锚点全部给出期望逐维分数』，向评分者明示期望分数存在且可由规则推导（未含任何具体分数值，不构成 DG1 违规）；与 RF1-1 同源，后续可措辞为『期望判定由规则确定』以降低提示强度。"
+  },
+  {
+   "id": "RF3-1",
+   "severity": "low",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-000B/result.json changed_paths",
+   "issue": "changed_paths 声明了 review.json，但该文件在复审时点尚未落盘（属前瞻性声明，待独立复审写入后成立）。不构成证据伪造，提交时须确保该文件实际存在且路径一致。"
+  }
+ ]
+}

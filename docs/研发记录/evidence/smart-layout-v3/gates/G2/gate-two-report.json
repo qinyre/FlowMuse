@@ -1,0 +1,436 @@
+{
+  "gate": "G2",
+  "task_id": "V3-305A",
+  "generated_at_utc": "2026-09-01T07:17:58.721365Z",
+  "cells": [
+    {
+      "id": "A-rectangle-move",
+      "kind": "rectangle",
+      "op": "move",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-rectangle-resize",
+      "kind": "rectangle",
+      "op": "resize",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-rectangle-rotate",
+      "kind": "rectangle",
+      "op": "rotate",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-ellipse-move",
+      "kind": "ellipse",
+      "op": "move",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-ellipse-resize",
+      "kind": "ellipse",
+      "op": "resize",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-ellipse-rotate",
+      "kind": "ellipse",
+      "op": "rotate",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-diamond-move",
+      "kind": "diamond",
+      "op": "move",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-diamond-resize",
+      "kind": "diamond",
+      "op": "resize",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-diamond-rotate",
+      "kind": "diamond",
+      "op": "rotate",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-text-move",
+      "kind": "text",
+      "op": "move",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-text-resize",
+      "kind": "text",
+      "op": "resize",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-text-rotate",
+      "kind": "text",
+      "op": "rotate",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-image-move",
+      "kind": "image",
+      "op": "move",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-image-resize",
+      "kind": "image",
+      "op": "resize",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-image-rotate",
+      "kind": "image",
+      "op": "rotate",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-frame-move",
+      "kind": "frame",
+      "op": "move",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-frame-resize",
+      "kind": "frame",
+      "op": "resize",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-frame-rotate",
+      "kind": "frame",
+      "op": "rotate",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-line-move",
+      "kind": "line",
+      "op": "move",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-line-resize",
+      "kind": "line",
+      "op": "resize",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-line-rotate",
+      "kind": "line",
+      "op": "rotate",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-arrow-move",
+      "kind": "arrow",
+      "op": "move",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-arrow-resize",
+      "kind": "arrow",
+      "op": "resize",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-arrow-rotate",
+      "kind": "arrow",
+      "op": "rotate",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-freedraw-move",
+      "kind": "freedraw",
+      "op": "move",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-freedraw-resize",
+      "kind": "freedraw",
+      "op": "resize",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "A-freedraw-rotate",
+      "kind": "freedraw",
+      "op": "rotate",
+      "scenario": "movable-baseline",
+      "status": "pass",
+      "detail": "invariant 零违规 + excalidraw round-trip 保持"
+    },
+    {
+      "id": "B-locked-move",
+      "kind": "rectangle",
+      "op": "move",
+      "scenario": "locked",
+      "status": "rejected",
+      "reject_reason": "protectedObstacleLocked",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-background-move",
+      "kind": "rectangle",
+      "op": "move",
+      "scenario": "canvas-page",
+      "status": "rejected",
+      "reject_reason": "backgroundElement",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-unknown-move",
+      "kind": "future-widget",
+      "op": "move",
+      "scenario": "unknown-type",
+      "status": "rejected",
+      "reject_reason": "unsupportedElementType",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-locked-resize",
+      "kind": "rectangle",
+      "op": "resize",
+      "scenario": "locked",
+      "status": "rejected",
+      "reject_reason": "protectedObstacleLocked",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-background-resize",
+      "kind": "rectangle",
+      "op": "resize",
+      "scenario": "canvas-page",
+      "status": "rejected",
+      "reject_reason": "backgroundElement",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-unknown-resize",
+      "kind": "future-widget",
+      "op": "resize",
+      "scenario": "unknown-type",
+      "status": "rejected",
+      "reject_reason": "unsupportedElementType",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-locked-rotate",
+      "kind": "rectangle",
+      "op": "rotate",
+      "scenario": "locked",
+      "status": "rejected",
+      "reject_reason": "protectedObstacleLocked",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-background-rotate",
+      "kind": "rectangle",
+      "op": "rotate",
+      "scenario": "canvas-page",
+      "status": "rejected",
+      "reject_reason": "backgroundElement",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-unknown-rotate",
+      "kind": "future-widget",
+      "op": "rotate",
+      "scenario": "unknown-type",
+      "status": "rejected",
+      "reject_reason": "unsupportedElementType",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-negative-resize",
+      "kind": "rectangle",
+      "op": "resize",
+      "scenario": "negative-target",
+      "status": "rejected",
+      "reject_reason": "degenerateResizeTarget",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-indirect-locked-binding",
+      "kind": "arrow",
+      "op": "move",
+      "scenario": "locked-bound-arrow-follows",
+      "status": "rejected",
+      "reject_reason": "protectedObstacleLocked",
+      "detail": "原子拒绝；原 Scene 未被触碰（Failure 不携带 scene）"
+    },
+    {
+      "id": "B-soft-deleted",
+      "kind": "rectangle",
+      "op": "move",
+      "scenario": "soft-deleted-target",
+      "status": "pass",
+      "detail": "软删零触碰=true，合法目标照常移动=true"
+    },
+    {
+      "id": "C-negative-scale",
+      "kind": "rectangle",
+      "op": "resize",
+      "scenario": "negative-scale",
+      "status": "unsupported",
+      "detail": "确定性 UnsupportedError（非静默）"
+    },
+    {
+      "id": "C-mirror-scale",
+      "kind": "rectangle",
+      "op": "resize",
+      "scenario": "mirror-scale",
+      "status": "unsupported",
+      "detail": "确定性 UnsupportedError（非静默）"
+    },
+    {
+      "id": "C-rotated-element-scale",
+      "kind": "rectangle",
+      "op": "resize",
+      "scenario": "scale-on-rotated-element",
+      "status": "unsupported",
+      "detail": "确定性 UnsupportedError（非静默）"
+    },
+    {
+      "id": "C-shear",
+      "kind": "rectangle",
+      "op": "resize",
+      "scenario": "shear",
+      "status": "unsupported",
+      "detail": "确定性 UnsupportedError（非静默）"
+    },
+    {
+      "id": "D-nested-group",
+      "kind": "relation",
+      "op": "move",
+      "scenario": "D-nested-group",
+      "status": "pass",
+      "detail": "嵌套组（g2⊂g1）整体移动，三成员 TransformInvariant 零违规（覆盖 ga,gb,gc）"
+    },
+    {
+      "id": "D-frame-follow",
+      "kind": "relation",
+      "op": "move",
+      "scenario": "D-frame-follow",
+      "status": "pass",
+      "detail": "frame 成员与容器文本同变换，frameId/containerId 保持（覆盖 fr,inner,label）"
+    },
+    {
+      "id": "D-rotated-frame",
+      "kind": "relation",
+      "op": "rotate",
+      "scenario": "D-rotated-frame",
+      "status": "pass",
+      "detail": "旋转 frame：成员绕 frame 中心协变（rotation Δθ 校验）（覆盖 fr,inner,label）"
+    },
+    {
+      "id": "D-binding-chain",
+      "kind": "arrow",
+      "op": "move",
+      "scenario": "bound-arrow-endpoint-follows",
+      "status": "pass",
+      "detail": "被绑元素移动后箭头端点重采样贴合（BindingUtils 同语义）"
+    }
+  ],
+  "summary": {
+    "total": 47,
+    "pass": 32,
+    "rejected": 11,
+    "unsupported": 4,
+    "unexpected": 0,
+    "silent_skips": 0
+  },
+  "invariants": {
+    "identity": "pass",
+    "inverse": "pass",
+    "compose": "pass",
+    "inverse_rotation": "pass"
+  },
+  "zero_miss": {
+    "obstacles": 5,
+    "oracle_pairs": 2,
+    "misses": 0,
+    "note": "renderer oracle（visualBounds 全配对）零漏检；完整 3000 笔画预算与逐块 oracle 见 test/.../geometry/geometry_budget_test.dart"
+  },
+  "performance": {
+    "strokes": 3000,
+    "queries": 100,
+    "deterministic_evaluations": 2854,
+    "budget_upper": 24000,
+    "full_pair_baseline": 300000,
+    "within_budget": true,
+    "oracle_hits": 1696,
+    "oracle_misses": 0,
+    "note": "确定性评估计数（evaluationCount），不依赖墙上时钟"
+  },
+  "compatibility": {
+    "excalidraw_roundtrip_cells": 27,
+    "roundtrip_failures": 0,
+    "regression_note": "Excalidraw/LWW 回归由 editor_core 全量测试覆盖（flutter test test/features/whiteboard/editor_core，625 用例）"
+  },
+  "reproduce_commands": [
+    "cd FlowMuse-App && flutter test tool/smart_layout_v3/transform/transform_runner_cli_test.dart",
+    "cd FlowMuse-App && flutter test test/features/whiteboard/smart_layout",
+    "cd FlowMuse-App && flutter test test/features/whiteboard/editor_core"
+  ],
+  "verdict": "pass"
+}

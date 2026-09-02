@@ -1,0 +1,26 @@
+{
+  "spec_version": "1.0.0",
+  "os": "windows",
+  "arch": "x64",
+  "environment_requirements": {
+    "cpu_cores_min": 4,
+    "ram_gb_min": 8,
+    "font_files_hashed": true,
+    "network": "offline_replay_only"
+  },
+  "warmup_runs": 1,
+  "cache_policy": "cold_process",
+  "concurrency": 1,
+  "repetitions": 3,
+  "metrics": [
+    "p50",
+    "p95",
+    "peak_rss_mb"
+  ],
+  "percentile_method": "nearest_rank",
+  "peak_memory_metric": "process_peak_rss",
+  "timeout_seconds": 300,
+  "timeout_ticks": 100000,
+  "data_policy": "synthetic_only",
+  "content_sha256": "1db65ecd86164231edf535c56476050b95941efd8b75cbbd2de92951722c64a7"
+}

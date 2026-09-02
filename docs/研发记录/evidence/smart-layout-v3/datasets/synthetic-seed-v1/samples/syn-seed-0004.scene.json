@@ -1,0 +1,86 @@
+{
+ "page": {
+  "width": 1240,
+  "height": 1754
+ },
+ "elements": [
+  {
+   "id": "syn-seed-0004-text-001",
+   "type": "text",
+   "bbox": [
+    932,
+    445,
+    176,
+    124
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落1段落1"
+  },
+  {
+   "id": "syn-seed-0004-text-002",
+   "type": "text",
+   "bbox": [
+    770,
+    296,
+    68,
+    66
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落2段落2"
+  },
+  {
+   "id": "syn-seed-0004-text-003",
+   "type": "text",
+   "bbox": [
+    160,
+    196,
+    395,
+    108
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落3段落3段落3"
+  },
+  {
+   "id": "syn-seed-0004-text-004",
+   "type": "text",
+   "bbox": [
+    922,
+    455,
+    357,
+    89
+   ],
+   "rotation": 90,
+   "text_kind": "typed",
+   "chars": "段落4段落4"
+  },
+  {
+   "id": "syn-seed-0004-text-005",
+   "type": "text",
+   "bbox": [
+    676,
+    391,
+    381,
+    100
+   ],
+   "rotation": 90,
+   "text_kind": "typed",
+   "chars": "段落5段落5段落5段落5"
+  },
+  {
+   "id": "syn-seed-0004-text-006",
+   "type": "text",
+   "bbox": [
+    517,
+    952,
+    334,
+    86
+   ],
+   "rotation": 0,
+   "text_kind": "typed",
+   "chars": "段落6段落6"
+  }
+ ]
+}

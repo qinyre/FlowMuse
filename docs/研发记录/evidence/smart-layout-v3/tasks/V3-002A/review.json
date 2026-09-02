@@ -1,0 +1,45 @@
+{
+ "task_id": "V3-002A",
+ "run_id": "0e21dae6-82b5-431f-995c-19b5fedf294c",
+ "executor_run_id": "d7036bac-932e-475e-af31-83ea1ff23a53",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "findings": [
+  {
+   "id": "RF1-1",
+   "severity": "medium",
+   "blocking": false,
+   "location": "FlowMuse-App/tool/smart_layout_v3/dataset/annotation_agreement_calculator.dart:119 (applyArbitration, 'byB[id]!')",
+   "issue": "实测复现：当两评分者样本集合不一致时（raterA 有 s1/s2 而 raterB 只有 s1），applyArbitration 抛未捕获 'Null check operator used on a null value' 异常并崩溃；而 calculate() 对同一输入优雅返回 annotation_set_mismatch。与项目『错误一次性返回、不抛未捕获异常』的约定不一致。fail-stop 方向安全（不会让坏数据通过），不阻塞，但 V3-002C 调用前应先检查 calculate().hasErrors 或补空安全降级。"
+  },
+  {
+   "id": "RF1-2",
+   "severity": "medium",
+   "blocking": false,
+   "location": "FlowMuse-App/tool/smart_layout_v3/dataset/annotation_agreement_calculator.dart:150-152 (applyArbitration, codeRuling 分支)",
+   "issue": "实测复现：样本存在 code 集分歧但无对应裁决时，hasErrors=false、不报 arbitration_missing，最终 codes 静默取双方并集。DG4 规定 code 集分歧属三种强制仲裁情形之一（『必须交第三代理仲裁……逐项裁决』），且分数槽（Δ≥2/insufficient 翻转）缺裁决会报错降 insufficient——code 分歧缺裁决却静默通过，语义不对齐。并集方向保守（不丢码、不放松分数边界），故非阻塞；建议补 'arbitration_missing:<id>||code_set_difference' 报错。"
+  },
+  {
+   "id": "RF1-3",
+   "severity": "low",
+   "blocking": false,
+   "location": "FlowMuse-App/tool/smart_layout_v3/dataset/annotation_agreement_calculator.dart:144-148 (applyArbitration, Δ=1 分支)",
+   "issue": "DG3 字面条件为『Δ=1 且无 insufficient 翻转、无 code 集分歧→不需仲裁』，按样本级读法样本内存在翻转/code 分歧时其 Δ=1 槽也应仲裁；实现按槽级处理——Δ=1 槽一律保守取低不强制仲裁（实测 A4：D1 5vs4 取 4，仅同样本 D2 翻转被仲裁）。处理方向保守（取低不会高估质量），与 DG3 意图（Δ=1 不进仲裁）相容，记录备查。"
+  },
+  {
+   "id": "RF1-4",
+   "severity": "low",
+   "blocking": false,
+   "location": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-002A/result.json (changed_paths / summary)",
+   "issue": "证据卫生三处小瑕疵：(a) changed_paths 预先列入了运行时尚不存在的 tasks/V3-002A/review.json（复审产物，最终 commit 前会存在）；(b) 样本路径使用 Windows 反斜杠分隔符（'samples\\syn-seed-0001.scene.json'），与 allowed_paths 正斜杠 glob 风格不一致（VerifyArtifacts 兼容，跨平台可移植性差）；(c) summary 称『拒绝路径 13、一致性计算 6』，实测分类为 14/5（总数 21 正确）。均不影响证据实质真实性。"
+  },
+  {
+   "id": "RF1-5",
+   "severity": "low",
+   "blocking": false,
+   "location": "工作区（非本任务交付）",
+   "issue": "git 工作区混有其他任务/框架的未提交改动（plans 文档、agent-preflight.json、V3-000A~V3-001C 的 commit.json、flutter 生成插件文件、scripts/），本任务 state.commit 尚为 null。提交阶段须确保 one_task_only：仅纳入 changed_paths 所列本任务文件，避免夹带其他任务产物。"
+  }
+ ]
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "tool_version": "1.0.0",
+  "matrix": "smart-layout-v3",
+  "generated_at_utc": "2026-09-02T00:10:46.735945Z",
+  "environment": {
+    "flutter": "Flutter 3.41.10-ohos-0.0.1-canary1 • channel [user-branch] • unknown source"
+  },
+  "all_passed": false,
+  "aggregate_exit_code": 1,
+  "stages": [
+    {
+      "id": "sabotage-probe",
+      "command": [
+        "dart",
+        "run",
+        "tool/smart_layout_v3/ci/sabotage_probe.dart"
+      ],
+      "exit_code": 1,
+      "duration_ms": 1065,
+      "stdout_tail": "Running build hooks...Running build hooks...",
+      "stderr_tail": "[sabotage-probe] 故意失败：诊断已写入 docs/研发记录/evidence/smart-layout-v3/ci/sabotage/probe-artifacts\n",
+      "captured_failure_artifacts": [
+        ".dart_tool/smart_layout_v3_ci_sabotage/failures/sabotage-probe/sabotage-diagnostic.json"
+      ]
+    }
+  ]
+}

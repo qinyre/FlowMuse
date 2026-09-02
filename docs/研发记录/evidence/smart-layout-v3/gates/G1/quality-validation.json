@@ -1,0 +1,25 @@
+{
+ "split": "validation",
+ "evaluated_samples": 18,
+ "pair_precision": 0.2171,
+ "pair_recall": 1.0,
+ "pair_f1": 0.3567,
+ "merge_errors": 0,
+ "split_errors": 0,
+ "stroke_loss_samples": 0,
+ "worst_grouping": {
+  "sample_id": "syn-p2-meet-mixe-low-des-1016",
+  "pair_precision": 0.0,
+  "pair_recall": 1.0,
+  "pair_f1": 0.0,
+  "merge_errors": 0,
+  "split_errors": 0,
+  "lost_strokes": [],
+  "expected_groups": 0,
+  "predicted_groups": 2
+ },
+ "verdicts": {
+  "quality": "measured",
+  "stroke_conservation": "pass"
+ }
+}

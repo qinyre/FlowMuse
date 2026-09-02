@@ -1,0 +1,20 @@
+{
+  "task_id": "V3-603A",
+  "run_id": "9d94ee12-f820-4b3e-b43e-32fb6422deac",
+  "summary": "Go/Schema/Flutter 聚合门禁（合并原 V3-603A~B）。scripts/smart-layout-v3/GateRunner.ps1 落库目标符号 SmartLayoutGateRunner+ScopeAudit：9 job 双端覆盖——Go 端 go test ./... (1.0s)/go vet ./... (1.0s)/schema conformance 正负 fixtures 全量重放+错误 envelope+malformed JSON (1.0s)/旧端点 TestDecideLayout fixture 组 (1.0s)；Flutter 端 dart format 作用域漂移基线判定 (62=冻结基线零新增, 历史存量 62 文件无路径权限不改写)/flutter analyze 全仓零诊断 (7.1s, G4 基线保持)/smart_layout focused 全目录 (21.2s)/真实渲染 golden 只读校验 (5.1s)/全仓 flutter test (61.5s)。真实本机跑全绿 aggregate_exit_code=0（go1.25.0+Flutter 3.41.10-ohos），报告与 scope 审计归档 gates/G5/。ScopeAudit 四规则强制：双端覆盖(Go4+Flutter5)/逐 job scope 说明/dart format 必须 --output=none/golden 禁 --update-goldens（全部只读作业零仓库写入）。执行器 Start-Process 参数数组引用安全（规避 PS ErrorRecord stderr 抛出与 cmd 引号歧义），命令逐字记录可从仓库复制。acceptance 四条落证：双端独立全绿/旧端点 fixture 保持/命令可复制/不新增 analyzer error。",
+  "changed_paths": [
+    "scripts/smart-layout-v3/GateRunner.ps1",
+    "docs/研发记录/evidence/smart-layout-v3/gates/G5/aggregate-gate-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/gates/G5/scope-audit.json",
+    "docs/研发记录/evidence/smart-layout-v3/gates/G5/v3-603a-deliverable.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-603A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-603A/commands.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_603a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/gates/G5/v3-603a-deliverable.json",
+      "sha256": "8cd638bd3280fb7d77354e6d3a6808aad720af5507ff7f61e06cc9a0cf65af31"
+    }
+  ]
+}

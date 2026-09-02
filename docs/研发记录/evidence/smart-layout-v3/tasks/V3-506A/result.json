@@ -1,0 +1,20 @@
+{
+  "task_id": "V3-506A",
+  "run_id": "5786fa19-1428-4f24-bd70-ee89d0c2e26f",
+  "summary": "Gate 4 事务体验矩阵与证据包（原 V3-506A～B 合并）。test/features/whiteboard/smart_layout/transaction/transaction_matrix.dart：TransactionMatrixRunner——从真实入口（SmartLayoutRealSessionScope + loopback 真实 HttpServer + 真实 NativeHttpClient）驱动 8 个事务场景，每场景六态快照断言（Scene fingerprint/History undo+redo 计数/revision tracker fingerprint/broadcast sceneChangeListeners 事件/document smartLayout 版本/ledger patch 账本终态 consumed+preserved+hash）：S1 preview=commit（502A 负载口径：排除 versionNonce/updated 深度等价+version 一致+元素 id 集一致；提交后 history undo+1、revision==scene、broadcast≥1、document 与 documentOp 一致、ledger 终态闭合）；S2 undo/redo（一次 undo 精确回提交前 fingerprint、redo 回提交后、计数联动）；S3 cancel/late（在途同步取消、迟到响应票据判旧、六态零残留）；S4 draft 释放（取消即 dispose——ui.Image.debugDisposed 探针：取消前活/取消后已释放、卡清空、Scene 零触碰）；S5a 写集相交（远端改写 text-1 → 会话 failed/apply、Scene identical、History 不变）；S5b 写集不相交双层语义（会话守卫拒绝过时票据 revision-changed 零副作用 + commitGateway 直接路径 HistoryCommitted redispatched=true 重派一次成功、远端元素与排版变换双在场、undo+1）；S6 纠错重跑（旧候选全失效释放 debugDisposed、新卡发布、Scene/History 零副作用）；S7 渲染/排名证据（每卡真实 renderer 缩略图非零尺寸、Top3 分数非升序、diversityKey 互异、Σcontribution==score 1e-9 容差可还原）。a11y 证据指针引用 V3-505C 已提交键盘/语义/零 modal 用例。transaction_matrix_test.dart：矩阵 8 场景全绿断言 + FLOWMUSE_GENERATE_GATE4_EVIDENCE=1 环境变量门控的一次性证据生成（常规 flutter test 只读验证不重写证据防 sha 漂移）。deliverable 工件：gates/G4/transaction-matrix-report.json（allPassed=true，8/8，sha256 钉住）。全套 smart_layout 测试含矩阵全绿；矩阵测试独立运行 60s 内完成。",
+  "changed_paths": [
+    "FlowMuse-App/test/features/whiteboard/smart_layout/transaction/transaction_matrix.dart",
+    "FlowMuse-App/test/features/whiteboard/smart_layout/transaction/transaction_matrix_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/gates/G4/transaction-matrix-report.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-506A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-506A/commands.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_506a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/gates/G4/transaction-matrix-report.json",
+      "sha256": "9cda6f2fc2dd7392c4e30c880ef6197064766b98213ba4acc32ebed40939da7a",
+      "category": "gate_four_report"
+    }
+  ]
+}

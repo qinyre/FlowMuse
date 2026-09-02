@@ -1,0 +1,287 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "docs/研发记录/specs/smart-layout-v3/fixture-manifest.schema.json",
+  "title": "智能排版 v3 FixtureManifest 契约",
+  "description": "智能排版 v3 评测 fixture 的唯一清单契约：来源组、授权/脱敏/删除数据边界、页面特征、确定性环境、期望产物与版本字段。runner 只接受通过本契约校验的 manifest；缺少数据边界元数据的真实样本必须被机器拒绝。语义依据：plans/2026-08-30-smart-layout-v3-architecture-refactor.md §5.1；失败码词汇表：specs/smart-layout-v3/failure-taxonomy.json。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "manifest_kind", "manifest", "data_boundary", "fixtures"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "manifest_kind": { "type": "string", "const": "smart-layout-v3-fixture-manifest" },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "generated_at_utc", "generator", "split"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "$ref": "#/definitions/semver" },
+        "generated_at_utc": { "$ref": "#/definitions/utc_instant" },
+        "generator": { "type": "string", "minLength": 1 },
+        "split": { "enum": ["synthetic", "development", "validation", "frozen_holdout"] },
+        "model_reference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "description": "被测模型引用（§5.1 schema/model hash）；V3-201x 服务端能力上线后由生成器填写",
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 },
+            "hash": { "$ref": "#/definitions/sha256_hex" }
+          }
+        },
+        "failure_taxonomy_reference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": { "type": "string", "const": "docs/研发记录/specs/smart-layout-v3/failure-taxonomy.json" },
+            "sha256": { "$ref": "#/definitions/sha256_hex" }
+          }
+        }
+      }
+    },
+    "data_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "source_groups", "forbidden_uses"],
+      "properties": {
+        "origin": { "enum": ["synthetic", "authorized_real"] },
+        "source_groups": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "origin", "user_isolation_key_hash", "sample_count"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$" },
+              "origin": { "enum": ["synthetic", "authorized_real"] },
+              "user_isolation_key_hash": {
+                "oneOf": [
+                  { "type": "null" },
+                  { "$ref": "#/definitions/sha256_hex" }
+                ]
+              },
+              "sample_count": { "type": "integer", "minimum": 1 },
+              "collected_at_utc": { "$ref": "#/definitions/utc_instant" },
+              "reference": { "type": "string", "description": "外部记录引用（授权文书/工单号），不得包含用户正文、OCR、prompt 或密钥" }
+            }
+          }
+        },
+        "consent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "scope", "reference"],
+          "properties": {
+            "status": { "enum": ["granted", "not_required"] },
+            "granted_at_utc": { "$ref": "#/definitions/utc_instant" },
+            "scope": { "type": "string", "minLength": 1 },
+            "reference": { "type": "string", "minLength": 1 }
+          }
+        },
+        "anonymization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": { "enum": ["not_required", "applied"] },
+            "method": { "type": "string" },
+            "applied_at_utc": { "$ref": "#/definitions/utc_instant" }
+          }
+        },
+        "deletion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["policy_id", "verified_at_utc", "reference"],
+          "properties": {
+            "policy_id": { "type": "string", "minLength": 1 },
+            "retention_until_utc": {
+              "oneOf": [
+                { "type": "null" },
+                { "$ref": "#/definitions/utc_instant" }
+              ]
+            },
+            "verified_at_utc": { "$ref": "#/definitions/utc_instant" },
+            "reference": { "type": "string", "minLength": 1 }
+          }
+        },
+        "user_isolation_key_hash": { "$ref": "#/definitions/sha256_hex" },
+        "forbidden_uses": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "禁止用途清单，如：禁止回流训练、禁止逐页人工查看 frozen 答案、禁止跨 split 复用样本"
+        }
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/fixture" }
+    }
+  },
+  "definitions": {
+    "semver": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" },
+    "utc_instant": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$" },
+    "sha256_hex": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "fixture_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$" },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/definitions/sha256_hex" }
+      }
+    },
+    "page_features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content_kind", "stroke_count"],
+      "properties": {
+        "content_kind": { "enum": ["handwritten_only", "typed_only", "mixed"] },
+        "stroke_count": { "type": "integer", "minimum": 0 },
+        "has_images": { "type": "boolean" },
+        "has_formula": { "type": "boolean" },
+        "has_shapes": { "type": "boolean" },
+        "has_groups": { "type": "boolean" },
+        "has_frames": { "type": "boolean" },
+        "has_bindings": { "type": "boolean" },
+        "has_locked_objects": { "type": "boolean" },
+        "has_decorative_lines": { "type": "boolean" },
+        "has_list": { "type": "boolean" },
+        "long_form": { "type": "boolean" },
+        "vertical_text_preserved": { "type": "boolean" },
+        "tidy_page": { "type": "boolean" },
+        "scattered_page": { "type": "boolean" },
+        "pressure_stress": { "type": "boolean" },
+        "known_failure_page": { "type": "boolean" }
+      }
+    },
+    "deterministic_environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dpr", "locale", "timezone", "clock", "random_seed", "fonts", "platform", "network_mode"],
+      "properties": {
+        "dpr": { "type": "number", "exclusiveMinimum": 0 },
+        "locale": { "type": "string", "pattern": "^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$" },
+        "timezone": { "type": "string", "minLength": 1 },
+        "clock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "fixed_at_utc"],
+          "properties": {
+            "mode": { "const": "fixed" },
+            "fixed_at_utc": { "$ref": "#/definitions/utc_instant" }
+          }
+        },
+        "random_seed": { "type": "integer", "minimum": 0 },
+        "fonts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["family", "file", "sha256"],
+            "properties": {
+              "family": { "type": "string", "minLength": 1 },
+              "file": { "type": "string", "minLength": 1 },
+              "sha256": { "$ref": "#/definitions/sha256_hex" }
+            }
+          }
+        },
+        "platform": { "enum": ["android", "ios", "macos", "windows", "web", "ohos"] },
+        "network_mode": { "const": "offline_replay" }
+      }
+    },
+    "recorded_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "content_origin", "path", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["vlm_overview", "vlm_crop", "ocr", "other_network"] },
+        "content_origin": { "enum": ["synthetic", "authorized_real"] },
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/definitions/sha256_hex" }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverage", "renderer_golden"],
+      "properties": {
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min_source_recall"],
+          "properties": {
+            "min_source_recall": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "from", "to", "confidence"],
+            "properties": {
+              "type": { "enum": ["caption_of", "keep_together", "belongs_to"] },
+              "from": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "to": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        },
+        "reading_order": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "renderer_golden": { "$ref": "#/definitions/artifact_ref" },
+        "failure_codes": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[CMm]-[A-Z0-9-]+$" },
+          "description": "负例 fixture 的期望失败码，必须存在于 failure-taxonomy.json 的 failure_codes 中"
+        }
+      }
+    },
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source_group_id", "features", "scene", "environment", "element_integrity", "expected"],
+      "properties": {
+        "id": { "$ref": "#/definitions/fixture_id" },
+        "description": { "type": "string" },
+        "source_group_id": { "type": "string", "pattern": "^[a-z0-9_-]{1,64}$" },
+        "features": { "$ref": "#/definitions/page_features" },
+        "scene": { "$ref": "#/definitions/artifact_ref" },
+        "image": { "$ref": "#/definitions/artifact_ref" },
+        "environment": { "$ref": "#/definitions/deterministic_environment" },
+        "element_integrity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["element_ids_sha256", "version_nonce_seed"],
+          "properties": {
+            "element_ids_sha256": { "$ref": "#/definitions/sha256_hex" },
+            "version_nonce_seed": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "recorded_responses": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/recorded_response" }
+        },
+        "expected": { "$ref": "#/definitions/expected" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "data_boundary": { "properties": { "origin": { "const": "authorized_real" } }, "required": ["origin"] } } },
+      "then": {
+        "properties": {
+          "data_boundary": {
+            "required": ["consent", "anonymization", "deletion", "user_isolation_key_hash"]
+          }
+        }
+      }
+    }
+  ]
+}

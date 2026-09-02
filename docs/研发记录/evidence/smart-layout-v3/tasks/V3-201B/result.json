@@ -1,0 +1,12 @@
+{
+ "task_id": "V3-201B",
+ "run_id": "3f6f16d7-eb3b-4b83-9a0a-73d212246d9c",
+ "summary": "v3 路由、传输健壮性与 live-route（服务端，201A 已建路由骨架本任务收尾）。(1) 取消传播：provider ctx 链自 r.Context()，新增 context.Canceled 与 DeadlineExceeded 分离映射（客户端取消→'客户端取消请求'稳定错误，非超时误报）。(2) 传输健壮性测试五组：live-route smoke——完整 p2 级请求经真实 mux（HTTPAPI.Register 同款注册路径）→200+冻结响应 schema 全字段（ReadingOrder/Confidence 必填指针非空）+provider 侧收到完整请求（pageId/exactTexts 数量核对）；客户端取消——NewRequestWithContext 30ms 后 cancel，provider 侧 channel 证实取消传播（≤2s 判定）；请求级超时——RequestTimeout=50ms+provider 挂 5s，端到端 ≤2s 返回 502；错误码→状态映射表——残缺输出 502/悬空 sourceRef 400/重叠认领 400，全部带 envelope code；新旧端点不串线——同一 mux 双通道（stub v2 Layouter 实现完整 SmartLayouter 三方法+v3 analyzer），v3 payload 打 v2 端点被 v2 校验拒、v2 payload 打 v3 端点被严格解析 400、v3 端点不受 v2 干扰 200。(3) 不新增供应方政策/同意/审批系统（硬约束遵守）。go test ./internal/recognition/... ok（含 201A 七组与 200A 21 fixtures 回归）+go vet ./... 零告警。教训：bash heredoc 内嵌 Go 反引号 raw string 再次引爆——按既有流程 Write 临时 py 脚本执行。",
+ "changed_paths": [
+  "FlowMuse-Server/internal/recognition/smart_layout_v3.go",
+  "FlowMuse-Server/internal/recognition/smart_layout_v3_test.go",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-201B/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-201B/result.json"
+ ],
+ "artifacts": {}
+}

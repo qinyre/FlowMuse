@@ -1,0 +1,59 @@
+{
+  "task": "V3-702A",
+  "kind": "synthetic_stability_deliverable",
+  "scope": "合成稳定性与故障注入结论（比赛交付口径：不等待生产指标窗口）",
+  "sample_source": {
+    "split": "datasets/splits/development/manifest.json",
+    "sample_count": 48,
+    "replay_order_seed": 20260902,
+    "samples_sha256": "308f65305a3e3f3f7baf3a1db8f6095206f477afb130b17dbcdbecdfcb0ec7e4"
+  },
+  "fault_matrix": {
+    "faults": [
+      "offline",
+      "timeout",
+      "http-429",
+      "http-500",
+      "http-503",
+      "bad-schema",
+      "cancel",
+      "late-callback"
+    ],
+    "semantics": {
+      "offline": "SocketException → network（可重试，耗尽后 failed）",
+      "timeout": "TimeoutException → timeout（可重试，耗尽后 failed）",
+      "http-429": "badStatus 429（可重试，耗尽后 failed）",
+      "http-500": "badStatus 500（可重试，耗尽后 failed）",
+      "http-503": "badStatus 503（可重试，耗尽后 failed）",
+      "bad-schema": "200 + 非合约响应体 → badSchema（稳定失败不重试）",
+      "cancel": "在途取消（响应落地前）→ late-guard 拒绝（协作式取消）",
+      "late-callback": "传输延迟 50ms 后响应到达时操作已取消 → 落地前 late-guard 拒绝"
+    }
+  },
+  "totals": {
+    "runs": 384,
+    "failed": 288,
+    "guard_rejected": 96,
+    "succeeded": 0,
+    "error_rate": 1.0,
+    "rejection_rate": 0.25,
+    "critical": 0,
+    "failed_samples_excluded": false
+  },
+  "reports": [
+    {
+      "category": "synthetic_stability_report",
+      "path": "docs/研发记录/evidence/smart-layout-v3/competition/v3-702a-stability-report.json",
+      "sha256": "bc1ba0182d8ed636b04e4366a950f23cdf2a5a13912962a3890ace1e2e07ff37"
+    }
+  ],
+  "critical_zero": true,
+  "failure_semantics_confirmed": {
+    "offline": "network 重试耗尽 failed attempts=2",
+    "timeout": "timeout 重试耗尽 failed attempts=2",
+    "http-429/500/503": "badStatus 可重试耗尽 failed attempts=2",
+    "bad-schema": "badSchema 稳定失败不重试 attempts=1",
+    "cancel": "在途取消 late-guard 拒绝 attempts=1",
+    "late-callback": "迟到回调 late-guard 拒绝 attempts=1"
+  }
+}

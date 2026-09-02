@@ -1,0 +1,45 @@
+{
+ "run_id": "3781934b-e274-49f8-8dc1-05ab782c7b98",
+ "rater": "A",
+ "task": "V3-004C",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "inputs_read": {
+  "report_sha256": "8b1d833cc18ef26feb417ea07bd968c52bd3d7e1f32f3b6ad1848308e81ad12c"
+ },
+ "verdicts": [
+  {
+   "id": "C1",
+   "verdict": "adequate",
+   "reason": "components 内 16 条 path 全部存在，我亲自重算 sha256 与报告 claim 及 expected_sha256 钉定值全部相等；evaluation-spec content_sha256=83dc663e…用 canonical.py 重算（剔除自引用字段）一致，golden-ledger 4 条目（rubric 9408c037…/spec e1598624…+83dc663e…/three-baseline 8b8cf415…/frozen-manifest afc4e451…）逐条对拍一致，benchmark content 1db65ecd… 亦重算一致。"
+  },
+  {
+   "id": "C2",
+   "verdict": "adequate",
+   "reason": "将 gate-zero-report.json 移走后单命令运行 build_gate_zero_report.py，exit code 0、stdout status=frozen，重建文件与原件逐字节一致（sha256 均 8b1d833c…81ad12c），备份已删且重建产物等于原件，目录无残留痕迹。"
+  },
+  {
+   "id": "C3",
+   "verdict": "adequate",
+   "reason": "六类齐备：rubric/evaluation_spec/benchmark_spec/数据版本（pool 85 样本+splits 48+18+19+annotations frozen-manifest）/三基线（no_op_run、v2_naive_reflow_run、three_baseline_report）/reproduction_commands 7 条且所引 CLI 与脚本全部存在；三基线数字与 three-baseline-report.json 实测一致（no_op samples_with_failure_codes=47/85、v2=11/85、dev split v2=7/48、ai=0/85、modification_count_total=480）。"
+  },
+  {
+   "id": "C4",
+   "verdict": "adequate",
+   "reason": "panel_disclosure 三要素逐字：panel_type=ai_surrogate、human_validation_performed=false、disclosure=HUMAN_VALIDATION_NOT_PERFORMED；gate_decision=development_gate_frozen 仅授权继续 Phase 1+ 开发，does_not_authorize 明确列出生产发布、应用商店上架、真实用户数据接入；全文无任何人工验证或生产授权声称（statement 另注明生产发布需 V3-700A 外部批准包与 FINAL）。"
+  },
+  {
+   "id": "C5",
+   "verdict": "adequate",
+   "reason": "status=frozen 且 16 条 resolved 全 true、content_sha256_ok=true；正则扫描无 utc/timestamp/_at/created/datetime 等易变键；双跑逐字节一致的重建本身即证明确定性。"
+  }
+ ],
+ "overall": "pass",
+ "notes": [
+  "实测 report_sha256=8b1d833cc18ef26feb417ea07bd968c52bd3d7e1f32f3b6ad1848308e81ad12c（重建后复测相同，仓库未留任何修改痕迹）。",
+  "preregistration/spec-validation/no_op_run/v2_run 的 expected_sha256 为 null 属自引用防循环设计（G0 目录内文件被报告自身引用时不可预钉），sha256 仍重算一致且 resolved=true。",
+  "canonical content_sha256 口径为剔除自引用 content_sha256 字段后按 canonical.py（键排序/无空白）哈希，已用该口径独立重算验证两个 spec 均吻合。",
+  "baseline-run.json 内含 run_hash（277e9b32…/e458b48e…），报告如实转述，非易变字段。",
+  "golden-ledger 自身 panel_disclosure.panel_type=ai_synthetic 与报告的 ai_surrogate 措辞不同但语义一致（均 AI 代理），不构成披露冲突。"
+ ]
+}

@@ -1,0 +1,20 @@
+{
+  "task_id": "V3-705A",
+  "run_id": "910bb296-ae01-43bb-972e-edcdff76a163",
+  "summary": "文档与最终技术审计（比赛交付，不宣称生产发布完成）。CompetitionDeliveryAudit（scripts/smart-layout-v3/CompetitionDeliveryAudit.ps1，UTF-8 BOM 可重跑）：1) 69 张任务卡状态/证据路径(result+commands 存在性)/提交 SHA 全量索引（审计时点 68 completed+自身 in_progress，Complete 后 69/69，脚本可重跑刷新）；2) G0～G5 门禁 gate-result.json 全 passed 零问题，FINAL 复验命令入报告不冒充通过；3) 演示 runbook 五步命令与 competition/ 五份证据一一对应零缺失；4) 已知边界七条诚实披露（v3_flow_policy 代表策略/HUMAN_VALIDATION_NOT_PERFORMED/PRODUCTION_RELEASE_NOT_AUTHORIZED/四端 release_deferred/客户端 v2 原位保留/服务端旧端点兼容保留/可观测性进程内合成）；回滚说明（701A 回滚策略三件套+kill switch 只关不换+失败率自动关闭闭环）。docs/研发记录/competition-demo-runbook.md：演示步骤/架构接口速览/已知边界/回滚/任务门禁索引。审计 all_checks_passed=true。",
+  "changed_paths": [
+    "scripts/smart-layout-v3/CompetitionDeliveryAudit.ps1",
+    "docs/研发记录/competition-demo-runbook.md",
+    "docs/研发记录/evidence/smart-layout-v3/competition/v3-705a-delivery-audit.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-705A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-705A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-705A/v3-705a-deliverable.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_705a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-705A/v3-705a-deliverable.json",
+      "sha256": "b30fa75c9091514a119352a656cafba41906e1324b3446d07c3e24a3c2a63db1"
+    }
+  ]
+}

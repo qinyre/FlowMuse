@@ -55,6 +55,7 @@ class AppRoutes {
     return Uri(
       path: createNote,
       queryParameters: {
+        // ignore: use_null_aware_elements
         if (notebookId != null) 'notebookId': notebookId,
         if (tagIds.isNotEmpty) 'tagId': tagIds,
       },
@@ -275,6 +276,7 @@ Page<void> _contentPage(GoRouterState state, Widget child) {
   return NoTransitionPage<void>(key: state.pageKey, child: child);
 }
 
+// ignore: unused_element
 Page<void> _detailPage(GoRouterState state, Widget child) {
   return _motionPage(
     state,

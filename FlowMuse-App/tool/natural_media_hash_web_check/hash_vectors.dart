@@ -9,7 +9,7 @@
 // 向量来源：fnv1a32 为 FNV-1a 32 公开规范值；mul32/mix32 为协议
 // 自冻结值（二轮审查期间 dart VM 与 dart2js+node 双跑核对后固化）。
 // 修改任何向量 = 修订协议。
-import '../../lib/features/whiteboard/editor_core/src/rendering/natural_media/deterministic_stroke_seed.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/natural_media/deterministic_stroke_seed.dart';
 
 /// 一次向量断言；返回失败描述（空列表 = 全部通过）。
 List<String> runFrozenVectorChecks() {

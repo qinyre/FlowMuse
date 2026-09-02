@@ -249,6 +249,9 @@ class MarkdrawController extends ChangeNotifier {
   final _textFocusNode = FocusNode();
   bool _disposed = false;
 
+  /// 编辑器是否已释放（智能排版 v3 gateway 的 dispose 防线读取）。
+  bool get isDisposed => _disposed;
+
   Object? _editableTextRegistration;
   TextSelection? Function()? _readEditableTextSelection;
   void Function(TextSelection selection)? _restoreEditableTextSelection;
@@ -283,6 +286,11 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Called whenever the scene changes (element add/update/remove).
   void Function(Scene scene, SceneChangeSource source)? onSceneChanged;
+
+  /// 智能排版 v3 网关订阅的场景变化监听器（可多方注册；
+  /// 与 [onSceneChanged] 同时触发，不占用其单槽）。
+  final List<void Function(Scene scene, SceneChangeSource source)>
+      sceneChangeListeners = [];
   void Function(FreedrawElement element)? onLiveFreedrawChanged;
   bool Function()? shouldUseLiveInkV2;
   LiveInkFreedrawCallback? onLiveInkChanged;
@@ -393,6 +401,7 @@ class MarkdrawController extends ChangeNotifier {
 
   Size get canvasSize => _canvasSize;
 
+  // ignore: unnecessary_getters_setters
   Offset get canvasGlobalOffset => _canvasGlobalOffset;
 
   bool get isPagedViewport => _layout.isPaged && _layout.pages.isNotEmpty;
@@ -893,7 +902,7 @@ class MarkdrawController extends ChangeNotifier {
       );
       _syncLayoutFromScene();
       _lastChangedElements = null;
-      onSceneChanged?.call(_editorState.scene, SceneChangeSource.undo);
+      _notifySceneChanged(_editorState.scene, SceneChangeSource.undo);
       notifyListeners();
     }
   }
@@ -909,7 +918,7 @@ class MarkdrawController extends ChangeNotifier {
       );
       _syncLayoutFromScene();
       _lastChangedElements = null;
-      onSceneChanged?.call(_editorState.scene, SceneChangeSource.redo);
+      _notifySceneChanged(_editorState.scene, SceneChangeSource.redo);
       notifyListeners();
     }
   }
@@ -1139,7 +1148,7 @@ class MarkdrawController extends ChangeNotifier {
           styled,
           _editorState.scene,
         );
-        onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
+        _notifySceneChanged(_editorState.scene, SceneChangeSource.userEdit);
         _scheduleInkRecognitionFromResult(prepared);
       }
     }
@@ -1897,7 +1906,7 @@ class MarkdrawController extends ChangeNotifier {
     _originalText = null;
     textEditingController.clear();
     _lastChangedElements = null;
-    onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
+    _notifySceneChanged(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
     // Request focus after the frame rebuilds — the TextEditingOverlay removal
     // detaches _textFocusNode, which triggers Scaffold's FocusScope.unfocus().
@@ -2018,7 +2027,7 @@ class MarkdrawController extends ChangeNotifier {
     );
     final changed = _editorState.scene.getElementById(id);
     _lastChangedElements = changed == null ? const [] : [changed];
-    onSceneChanged?.call(_editorState.scene, SceneChangeSource.userEdit);
+    _notifySceneChanged(_editorState.scene, SceneChangeSource.userEdit);
     notifyListeners();
   }
 
@@ -3277,7 +3286,7 @@ class MarkdrawController extends ChangeNotifier {
       _canvasBackgroundColor = background;
     }
     _lastChangedElements = null;
-    onSceneChanged?.call(_editorState.scene, SceneChangeSource.remoteApply);
+    _notifySceneChanged(_editorState.scene, SceneChangeSource.remoteApply);
     notifyListeners();
   }
 
@@ -3299,7 +3308,7 @@ class MarkdrawController extends ChangeNotifier {
       _applyViewportConstraints();
     }
     _lastChangedElements = null;
-    onSceneChanged?.call(_editorState.scene, SceneChangeSource.remoteApply);
+    _notifySceneChanged(_editorState.scene, SceneChangeSource.remoteApply);
     notifyListeners();
   }
 
@@ -3322,6 +3331,15 @@ class MarkdrawController extends ChangeNotifier {
   /// Saves the current scene to the undo stack.
   void pushHistory() {
     _historyManager.push(_editorState.scene);
+  }
+
+  /// 同时通知 [onSceneChanged] 与 [sceneChangeListeners]；
+  /// 监听器按快照遍历，允许回调内增删监听器。
+  void _notifySceneChanged(Scene scene, SceneChangeSource source) {
+    onSceneChanged?.call(scene, source);
+    for (final listener in List.of(sceneChangeListeners)) {
+      listener(scene, source);
+    }
   }
 
   /// Toggles the split-pane markdown editor panel.
@@ -5773,7 +5791,7 @@ class MarkdrawController extends ChangeNotifier {
     _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
     _documentName = null;
     _lastChangedElements = null;
-    onSceneChanged?.call(_editorState.scene, SceneChangeSource.reset);
+    _notifySceneChanged(_editorState.scene, SceneChangeSource.reset);
     notifyListeners();
   }
 

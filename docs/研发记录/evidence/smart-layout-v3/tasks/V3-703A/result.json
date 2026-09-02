@@ -1,0 +1,19 @@
+{
+  "task_id": "V3-703A",
+  "run_id": "69fa2322-221d-4143-b133-397a894949cc",
+  "summary": "客户端 v2 隔离与保留说明（比赛交付口径）。V2ClientIsolationMatrix（test/smart_layout/v2_client_isolation_matrix_test.dart）四检查：1) 公开入口面（gateways/rollout/session/analysis/views 五目录）扫描零 v2 路由符号（v2reflow/fallbackToV2/routeToV2/legacyV2 正则）；2) 全 smart_layout v3 库零 v2 私有实现 import（editor_core/src/core/smart_layout/** 与 template_engine/ink_clusterer 不可达）；3) v3 库唯一分析端点串=/api/ink/smart-layout/analyze/v3（仅 repository 一处），零旧端点串（/block /compose /vision /transcribe /recognize 全无）；4) v2 私有代码原位保留清单：9 个 lib 文件+8 个既有测试文件全部在位（不删除、不迁移、不新增兼容 wrapper）。公开入口 SmartLayoutPublicEntry（gateways）零改动复验（V3-100A 唯一入口继续有效）。新旧测试全绿：v3 smart_layout 全套 452 用例+既有 v2 测试 113 用例+analyze 零 issue。证据一次性生成 competition/v3-703a-client-isolation.json 常规只读校验。",
+  "changed_paths": [
+    "FlowMuse-App/test/features/whiteboard/smart_layout/v2_client_isolation_matrix_test.dart",
+    "docs/研发记录/evidence/smart-layout-v3/competition/v3-703a-client-isolation.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-703A/commands.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-703A/result.json",
+    "docs/研发记录/evidence/smart-layout-v3/tasks/V3-703A/v3-703a-deliverable.json"
+  ],
+  "artifacts": [
+    {
+      "key": "v3_703a_deliverable",
+      "path": "docs/研发记录/evidence/smart-layout-v3/tasks/V3-703A/v3-703a-deliverable.json",
+      "sha256": "51bdfb77976a0df954b79c995e90e6565345cf76cdeb969b4b8755e453c57cfa"
+    }
+  ]
+}

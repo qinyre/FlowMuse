@@ -1,0 +1,84 @@
+{
+ "task_id": "V3-004B",
+ "run_id": "822aa976-89b4-43ff-a7d2-c67a41547620",
+ "executor_run_id": "1c682724-8c38-4709-878a-5097b2e7511b",
+ "model": "glm-5.3",
+ "reasoning_effort": "max",
+ "verdict": "approved",
+ "findings": [
+  {
+   "id": "F1",
+   "severity": "medium",
+   "blocking": false,
+   "location": "tasks/V3-004B/artifacts/change_control_drill.py:20-21",
+   "issue": "演练依赖 C:\\Users\\86184\\AppData\\Local\\Temp\\canonical_check.py（仓库外临时文件）提供 canonical_sha；Temp 清理或 fresh clone 重跑将 ImportError。〔执行者已修复：canonical 实现vendored 为 artifacts/canonical.py（对拍 benchmark-spec 内部 content_sha256 验证一致），演练自包含。〕"
+  },
+  {
+   "id": "F2",
+   "severity": "medium",
+   "blocking": false,
+   "location": "change_control_drill.py:91-97",
+   "issue": "drill 3（spec_mutation_detection）的 ledger_rejected 断言恒真：无条件追加字面量错误串，validate_entry 对 fake_entry 实际返回空。〔执行者已修复：validate_entry 新增真实规则——evaluation_spec 条目 content_sha256 与磁盘文件内部声明比对，冒充已登记版本被真实拒绝（post_hoc_amendment），恒真断言移除并复跑通过。〕"
+  },
+  {
+   "id": "F3",
+   "severity": "low",
+   "blocking": false,
+   "location": "spec_decision.py:127,153-157",
+   "issue": "输入守卫只检查 v3.rubric_overall；ai_surrogate/v2_naive_reflow 缺 rubric_overall 或缺 major 向量时 evaluate 抛 KeyError 而非按 taxonomy 判 missing。〔执行者已修复：对照系必需向量（major/rubric_overall）守卫先行，缺失→missing+evaluation_inputs_missing，边界探针复测不抛异常。〕"
+  },
+  {
+   "id": "F4",
+   "severity": "low",
+   "blocking": false,
+   "location": "spec_decision.py:163,173; change_control_drill.py:34",
+   "issue": "三处与 spec/ledger 现值一致的硬编码：T4 阈值 0.0、α=0.05、校验器允许的 rubric 版本字符串。〔执行者已修复前两处：T4 boundary 运行时读 superiority_thresholds、α 从 multiple_comparisons.correction 正则解析；rubric 版本闸字符串保留（ledger policy 单一来源的运行时解析收益低，记录在案）。〕"
+  },
+  {
+   "id": "F5",
+   "severity": "low",
+   "blocking": false,
+   "location": "gates/G0/golden-ledger.json:21",
+   "issue": "rubric 条目 approved_by.evidence 引用 tasks/V3-000B/panel-report.json，实际文件在 tasks/V3-000B/artifacts/panel-report.json。〔执行者已修复路径；ledger hash 随之更新并复跑审计演练通过。〕"
+  },
+  {
+   "id": "F6",
+   "severity": "info",
+   "blocking": false,
+   "location": "drill-report.json outcome_taxonomy",
+   "issue": "taxonomy 文本称 missing=『被 RR-1~6 拒绝』，但实现把 RR-2（denominator_not_fixed）判为 insufficient（insufficient 条款显式涵盖样本数≠D_SAMPLES，两条款重叠）。实现经边界探测证实四态穷尽且自洽、critical>0 永不判 pass，仅措辞过宽。"
+  },
+  {
+   "id": "F7",
+   "severity": "info",
+   "blocking": false,
+   "location": "git status 工作树",
+   "issue": "allowed_paths 外存在未提交改动：7 个 flutter generated 文件（工具副作用、非 .dart、diff 字节=0）与 4 个 plans/backlog+manifest 改写（编排层跨任务修订）。本任务自身 changed_paths 全部位于三条 allowed_paths 内，无 Dart 改动。"
+  },
+  {
+   "id": "F8",
+   "severity": "info",
+   "blocking": false,
+   "location": "result.json summary",
+   "issue": "EvaluationSpec/GateZeroEvaluator 仅以 python 参考实现交付，无 Dart 消费方；manifest 中 004B 的 target_symbols 与 004A 相同（阶段级符号族）。任务 operative 合同为 artifact_keys=v3_004b_deliverable（已 VerifyArtifacts 通过），result.json 已如实披露此归属。"
+  }
+ ],
+ "verification_log": [
+  "drill_runner.py 复跑×2：status=passed，6 场景结论 pass/pass(t6_indeterminate)/reject×2/insufficient/missing 全 match=true，输出逐字节一致，sha256=6e370fa8…与 result.json 声明相等。",
+  "change_control_drill.py 复跑×2：status=passed，5 项审计演练全过，字节一致；golden-ledger 与 change-control-drill 哈希与声明相等。",
+  "evaluation-spec.json 实测双 hash file=e1598624…/content=83dc663e…，与 preregistration.json 钉定值一致——上游 spec 未被改动。",
+  "ledger 4 条目 file_sha256 逐一独立实测 vs 磁盘全部相等（rubric 9408c037/spec e1598624/three-baseline 8b8cf415/frozen-manifest afc4e451）；approved_by 的 4 个 commit 6d109ee/4c414a6/6321f18/2aec880 均在 git log 中存在且归属对应任务。",
+  "Holm 从磁盘源码原样抽取以 4 组对抗性 p 值直接执行——α/(m−k) 阶梯正确、一旦失败其后全被阻断、established=holm∧point_ok 与 spec T2/T3/T4 decision 逐条一致。",
+  "bootstrap 方向与数值经解析二项/泊松交叉验证：T2 0.0032、T4 0.002、T3 0.0、rejectStat T2 0.9978、reject_critical T3 0.0841，方向无一反置。",
+  "splitmix64 常数与 Vigna 参考实现逐输出一致；单一 PRNG 实例经 T2(E1)→T4(E2)→T3(E3)→T6 不重置，与 spec 流序一致。",
+  "退化分支实测：常数 diff 走 CI=[c,c]、并列常数 rubric→Spearman None→construct_check_indeterminate 不判 fail；T3 点估计恰为 −0.25 时 point_ok=False（严格 > 与 spec 一致）。",
+  "T1 先于统计且 reject 优先经边界探测确认四态穷尽自洽：critical>0 且统计全过→reject、critical>0 且 n=47→insufficient、bench 缺失/超预算→reject、system 不全→missing 带 RR 码。",
+  "硬编码抽查：margin 0.10/−0.25、n=48、B=10000、seed=20260831、预算数字经 grep 确认运行时读 spec（T4 阈值与 α 为字面量但等于 spec 值，见 F4）。",
+  "drill 2 篡改演示与序列化效应隔离：json.dumps(indent=1) 逐字节重现 golden 原文件，hash 变化确由单字段篡改引起且被 ledger hash 校验真实拒绝；drill 1/4/5 断言均有判别力。",
+  "drill 3 独立复算：canonical_sha(spec body)=83dc663e 与登记值相等，margin 0.10→0.12 后=3fb79834 与报告一致（其 ledger_rejected 标志当时恒真，见 F2）。",
+  "rubric 版本闸双落实：ledger policy.rubric_source 钉死 9408c037@1.0.0 且演练 drill 4 实测 v1.0.1 被拒。",
+  "披露完整：drill-report/change-control-drill/result.json 均含三要素；『不得外推为 score-human 相关性』显式出现；PRODUCTION_RELEASE_NOT_AUTHORIZED 在。",
+  "路径纪律：git status 无任何 .dart 改动；changed_paths 全在三条 allowed_paths 内；VerifyArtifacts 复跑 exit=0。",
+  "验收映射逐项核实：四态演练 ✓、spec/rubric/golden 变化改 hash（golden 字节级+spec canonical 级实测）✓、score-human 不可外推披露 ✓。"
+ ]
+}

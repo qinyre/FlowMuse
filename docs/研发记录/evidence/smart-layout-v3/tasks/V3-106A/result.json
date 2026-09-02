@@ -1,0 +1,14 @@
+{
+ "task_id": "V3-106A",
+ "run_id": "5f9a17ee-d215-477d-9c8f-1ab874c87eb0",
+ "summary": "Session 状态、continuation 守卫与重入（合并原 V3-106A～C）。(1) SmartLayoutSessionState sealed 状态机：SessionIdle/Analyzing/Reviewing(candidateCount)/Applying(candidateId)/Applied/Cancelled(reason)/Failed(reason)，相位+operationId；SmartLayoutSessionReducer 纯 reducer+合法迁移表（idle→analyzing→reviewing→applying→applied→reset→idle，cancel 合法于 analyzing/reviewing/applying，终态仅 reset），非法组合抛 SmartLayoutSessionInvalidTransition 且不改状态（副作用前失败），analysisStarted 必带 session 分配的 operationId（缺失即 ArgumentError）。(2) SmartLayoutOperationGuard 四检+取消固定顺序 disposed→operation-mismatch→cancelled→page-changed→revision-changed：SmartLayoutOperationTicket（operationId+pageId+baseRevision=SceneRevision 快照）；SmartLayoutGuardTruth 活真值（editor.isDisposed/当前操作/取消标志/活动页/当前 revision——revision 经 SceneRevisionTracker，视口/选择变化不触发失配，远端/本地内容变化才失配）；裁定 sealed Allowed/Rejected(reason)。(3) SmartLayoutSession 门面：beginOperation 签发票据、setActivePage 离页防线、checkContinuation 四检入口、advance 纯迁移、cancelOperation 幂等取消、reset 复位；completeApply 是唯一提交入口——reviewing 自动 chosen→applying，非 applying 相位直接 session-not-applying 拒绝，四检通过后才 editor.commitValidated，被拒时状态回 failed 且 Scene 零副作用；对外不暴露任何绕过门禁的 Scene 写入。(4) 测试 15 用例全绿（真控制器+tracker+gateway 接线，另全 smart_layout 118 用例回归全绿）：合法全链/非法迁移 6 组合在 idle+applied 后取消/operationId 缺失；四检通过路径+编辑器释放/迟到旧票据 operation-mismatch（新票据同时 allow）/取消后新操作不污染/离页/远端元素 revision-changed/视口选择不误伤；合法提交落地 applied+Scene 含提交元素/门禁失败零 Scene 副作用+failed/非法相位 session-not-applying/非法 advance 状态不污染/取消后迟到 apply 拒绝且新会话 fresh 正常落地而 late 永不出现；analyze 零 issue。",
+ "changed_paths": [
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_session_state.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_operation_guard.dart",
+  "FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_session.dart",
+  "FlowMuse-App/test/features/whiteboard/smart_layout/session/smart_layout_session_test.dart",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-106A/commands.json",
+  "docs/研发记录/evidence/smart-layout-v3/tasks/V3-106A/result.json"
+ ],
+ "artifacts": {}
+}

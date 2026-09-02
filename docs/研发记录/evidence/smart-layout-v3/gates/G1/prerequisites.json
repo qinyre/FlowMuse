@@ -1,0 +1,17 @@
+{
+ "checks": {
+  "schema_hash": "b2a4255623062fd36e00b5e7d7e122e637a00ae5c9c2757623e624aa28206175",
+  "schema_hash_pinned": "b2a4255623062fd36e00b5e7d7e122e637a00ae5c9c2757623e624aa28206175",
+  "pipeline_hashes": {
+   "lib/features/whiteboard/smart_layout/segmentation/ink_region_segmenter.dart": "94cf95d6c8339d61b273b2647a527af83ce2d21513c70e89ca69ddb3a2fb756d",
+   "lib/features/whiteboard/smart_layout/semantics/semantic_document_assembler.dart": "c2efb30d1dd9a7b8ebfff82224129fcc45c49e196f6bb21bc3ec3ede6de7afa5",
+   "lib/features/whiteboard/smart_layout/protocol/smart_layout_v3_request.dart": "738465e8142a4de77c129aa7435ae02a817b36dbbfd9b8367842ce206ebdd10e",
+   "../FlowMuse-Server/internal/recognition/smart_layout_v3.go": "fe79c64e7e3095813b054350a7c2847e7bfcbd32879d367447ba464a2503c89a"
+  },
+  "live_route_exit_code": 0,
+  "frozen_isolation": true
+ },
+ "block_reasons": [],
+ "blocked": false,
+ "calibration_drift_pair_f1": 0.0217
+}
