@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "task_id": "V3-605A",
+  "matrix": "PlatformBuildMatrix",
+  "generated_at_utc": "2026-09-02T01:19:42.565331Z",
+  "host": "windows",
+  "recipes_frozen": [
+    {
+      "platform": "android",
+      "command": [
+        "flutter",
+        "build",
+        "apk",
+        "--debug"
+      ],
+      "host": "any"
+    },
+    {
+      "platform": "web",
+      "command": [
+        "flutter",
+        "build",
+        "web"
+      ],
+      "host": "any"
+    },
+    {
+      "platform": "windows",
+      "command": [
+        "flutter",
+        "build",
+        "windows"
+      ],
+      "host": "windows"
+    },
+    {
+      "platform": "ohos",
+      "command": [
+        "flutter",
+        "build",
+        "hap",
+        "--debug"
+      ],
+      "host": "any"
+    },
+    {
+      "platform": "ios",
+      "command": [
+        "flutter",
+        "build",
+        "ios",
+        "--debug",
+        "--no-codesign"
+      ],
+      "host": "macos"
+    },
+    {
+      "platform": "macos",
+      "command": [
+        "flutter",
+        "build",
+        "macos"
+      ],
+      "host": "macos"
+    }
+  ],
+  "platforms": [
+    {
+      "platform": "android",
+      "status": "built",
+      "runner": "windows",
+      "command": [
+        "flutter",
+        "build",
+        "apk",
+        "--debug"
+      ],
+      "exit_code": 0,
+      "duration_ms": 173014,
+      "artifact": {
+        "path": "build/app/outputs/flutter-apk/app-debug.apk",
+        "sha256": "fnv1a64-4b9ab655393cfb5f-341394533B",
+        "size_bytes": 341394533
+      }
+    },
+    {
+      "platform": "web",
+      "status": "built",
+      "runner": "windows",
+      "command": [
+        "flutter",
+        "build",
+        "web"
+      ],
+      "exit_code": 0,
+      "duration_ms": 55149,
+      "artifact": {
+        "path": "build/web/main.dart.js",
+        "sha256": "fnv1a64-24245046472e634f-10023608B",
+        "size_bytes": 10023608
+      }
+    },
+    {
+      "platform": "windows",
+      "status": "release_deferred",
+      "runner": "windows",
+      "device": "none",
+      "blocked_by": "Visual Studio 不可用（flutter doctor）",
+      "recovery": "安装 Visual Studio 2022（含\"使用 C++ 的桌面开发\"工作负载）后重跑",
+      "command": [
+        "flutter",
+        "build",
+        "windows"
+      ]
+    },
+    {
+      "platform": "ohos",
+      "status": "release_deferred",
+      "runner": "windows",
+      "device": "none",
+      "blocked_by": "HOS_SDK_HOME 未设置且 flutter doctor HarmonyOS toolchain 不可用",
+      "recovery": "安装 HarmonyOS SDK 并设 HOS_SDK_HOME（DevEco Studio），使用 OHOS Flutter 分支后重跑 flutter build hap --debug",
+      "command": [
+        "flutter",
+        "build",
+        "hap",
+        "--debug"
+      ]
+    },
+    {
+      "platform": "ios",
+      "status": "release_deferred",
+      "runner": "windows",
+      "device": "none",
+      "blocked_by": "host=macos required（当前 windows）",
+      "recovery": "在 macOS 宿主安装 Xcode 命令行工具后重跑",
+      "command": [
+        "flutter",
+        "build",
+        "ios",
+        "--debug",
+        "--no-codesign"
+      ]
+    },
+    {
+      "platform": "macos",
+      "status": "release_deferred",
+      "runner": "windows",
+      "device": "none",
+      "blocked_by": "host=macos required（当前 windows）",
+      "recovery": "在 macOS 宿主安装 Xcode 后重跑",
+      "command": [
+        "flutter",
+        "build",
+        "macos"
+      ]
+    }
+  ],
+  "all_available_built": true
+}
