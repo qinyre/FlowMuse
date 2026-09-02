@@ -137,7 +137,7 @@ class FlowPlacer {
     final placed = <PlacedBlock>[];
 
     // 有序放置单元：原子组保持成员顺序与连续性；孤立块单块成组。
-    final units = _placementUnits(assembly);
+    final units = placementUnits(assembly);
 
     for (var u = 0; u < units.length; u++) {
       final unit = units[u];
@@ -259,8 +259,8 @@ class FlowPlacer {
   }
 
   /// 放置单元：原子组（assembly.atomicGroups）按首块阅读序穿插到
-  /// 块流中；孤立块单块成组。
-  List<List<LayoutBlock>> _placementUnits(LayoutBlockAssembly assembly) {
+  /// 块流中；孤立块单块成组。公开供 V3-402B 栏平衡切分使用。
+  static List<List<LayoutBlock>> placementUnits(LayoutBlockAssembly assembly) {
     final groupOf = <String, int>{};
     for (var g = 0; g < assembly.atomicGroups.length; g++) {
       for (final id in assembly.atomicGroups[g]) {
