@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block_assembler.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/design/text_measure_adapter.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/protocol/smart_layout_v3_response.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document_assembler.dart';
@@ -8,6 +11,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_finger
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_revision.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/snapshot_extractor.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() {
   const pageId = 'page-1';
@@ -310,5 +314,148 @@ void main() {
     );
     expect(broken.ledgerConserved, isFalse);
     expect(broken.ledgerHash, isNot(document.ledgerHash));
+  });
+
+  SmartLayoutV3Response inkResponse(String regionId, String role) =>
+      SmartLayoutV3Response.fromJson({
+        'protocolVersion': 3,
+        'regions': [
+          {
+            'id': regionId,
+            'role': role,
+            'sourceIds': ['ink-1'],
+            'readingOrder': 0,
+            'confidence': 0.9,
+            'relations': [],
+          },
+          {
+            'id': 'g-shape',
+            'role': 'figure',
+            'sourceIds': ['shape-1'],
+            'readingOrder': 1,
+            'confidence': 0.8,
+            'relations': [],
+          },
+          {
+            'id': 'g-text',
+            'role': 'title',
+            'sourceIds': ['text-1'],
+            'readingOrder': 2,
+            'confidence': 0.9,
+            'relations': [],
+          },
+          {
+            'id': 'g-frame',
+            'role': 'unknown',
+            'sourceIds': ['frame-1'],
+            'readingOrder': 3,
+            'confidence': 0,
+            'relations': [],
+          },
+        ],
+        'warnings': [],
+      });
+
+  group('手写转写（本地 map，v2 视觉感知 → v3 排版）', () {
+    test('手写 region 的转写进 extras → 块装配得到 transcribed 文本', () {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final scene = buildScene();
+      final snapshot = const SnapshotExtractor().extract(
+        scene: scene,
+        pageId: pageId,
+        sceneRevision: revisionOf(scene),
+      );
+      const transcribed = {'g-ink': '手写流水记录'};
+      final document = const SemanticDocumentAssembler()
+          .assemble(
+            snapshot: snapshot,
+            response: inkResponse('g-ink', 'body'),
+            transcribedTextByRegion: transcribed,
+          )
+          .document;
+      final block = document.blocks.firstWhere((b) => b.id == 'g-ink');
+      expect(block.text, isNull, reason: '快照无 typed exactText');
+      expect(block.extras['transcribedText'], '手写流水记录');
+
+      final assembly = const LayoutBlockAssembler().assemble(
+        document: document,
+        snapshot: snapshot,
+        measure: TextMeasureAdapter(),
+      );
+      final layoutBlock = assembly.blockById('g-ink')!;
+      expect(layoutBlock.textOrigin, LayoutTextOrigin.transcribed);
+      expect(layoutBlock.text!.text, '手写流水记录');
+    });
+
+    test('typed exactText 优先：有打字文本的 region 不被转写覆盖', () {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final scene = buildScene();
+      final snapshot = const SnapshotExtractor().extract(
+        scene: scene,
+        pageId: pageId,
+        sceneRevision: revisionOf(scene),
+      );
+      final document = const SemanticDocumentAssembler()
+          .assemble(
+            snapshot: snapshot,
+            response: inkResponse('g-ink', 'body'),
+            transcribedTextByRegion: const {
+              'g-text': 'OCR 不许覆盖打字',
+              'g-ink': '手写流水记录',
+            },
+          )
+          .document;
+      final typed = document.blocks.firstWhere((b) => b.id == 'g-text');
+      expect(typed.text, '会议纪要标题');
+      expect(typed.extras.containsKey('transcribedText'), isFalse);
+
+      final assembly = const LayoutBlockAssembler().assemble(
+        document: document,
+        snapshot: snapshot,
+        measure: TextMeasureAdapter(),
+      );
+      final layoutBlock = assembly.blockById('g-text')!;
+      expect(layoutBlock.textOrigin, LayoutTextOrigin.typed);
+      expect(layoutBlock.text!.text, '会议纪要标题');
+    });
+
+    test('悬空 regionId 拒绝（缓存串会话 fail closed）', () {
+      final scene = buildScene();
+      final snapshot = const SnapshotExtractor().extract(
+        scene: scene,
+        pageId: pageId,
+        sceneRevision: revisionOf(scene),
+      );
+      expect(
+        () => const SemanticDocumentAssembler().assemble(
+          snapshot: snapshot,
+          response: inkResponse('g-ink', 'body'),
+          transcribedTextByRegion: const {'ghost-region': '旧响应残留'},
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('空转写不生成文本（不伪造）', () {
+      final scene = buildScene();
+      final snapshot = const SnapshotExtractor().extract(
+        scene: scene,
+        pageId: pageId,
+        sceneRevision: revisionOf(scene),
+      );
+      final document = const SemanticDocumentAssembler()
+          .assemble(
+            snapshot: snapshot,
+            response: inkResponse('g-ink', 'body'),
+            transcribedTextByRegion: const {'g-ink': '  '},
+          )
+          .document;
+      final block = document.blocks.firstWhere((b) => b.id == 'g-ink');
+      expect(block.text, isNull);
+      expect(block.extras.containsKey('transcribedText'), isFalse,
+          reason: '空白转写不得进入 extras');
+    });
   });
 }

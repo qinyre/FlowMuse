@@ -139,8 +139,9 @@ class SmartLayoutSessionUiState {
       phase == SmartLayoutSessionPhase.analyzing ||
       phase == SmartLayoutSessionPhase.applying;
 
-  bool get canStartAnalysis =>
-      phase == SmartLayoutSessionPhase.idle && scopeSourceIds.isNotEmpty;
+  /// 整页视觉模式：分析对象是当前页全量内容（视觉链按页截图识别），
+  /// 不依赖 scope 手工圈选——idle 即可启动；scope 仅作展示/保护数据。
+  bool get canStartAnalysis => phase == SmartLayoutSessionPhase.idle;
 
   bool get canCancel =>
       phase == SmartLayoutSessionPhase.analyzing ||
@@ -225,10 +226,30 @@ class SmartLayoutSessionUiState {
       'failure: $failure, attempts: $attemptCount)';
 }
 
+/// 本地分析执行函数：绕过 requestBuilder+HTTP 仓库，直接产出
+/// [SmartLayoutAnalysisOutcome]（生产链：v2 视觉感知 → v3 response 适配，
+/// 手写转写文本经本地 map 进入语义装配，不经网络协议）。
+/// 候选生成、状态迁移与失败处理仍在 ViewModel——runner 只负责分析。
+typedef SmartLayoutAnalysisRunner =
+    Future<SmartLayoutAnalysisOutcome> Function(
+      SmartLayoutOperationTicket ticket,
+    );
+
 /// ViewModel 依赖束（真实接线归 V3-505C；测试经 provider 覆盖注入）。
 class SmartLayoutSessionDependencies {
   final SmartLayoutSession session;
   final V3AnalysisRepository repository;
+
+  /// 本地分析入口（生产链 v2 视觉感知 → v3 适配）：非 null 时
+  /// [_runAnalysis] 调用它而非 requestBuilder+repository——不向
+  /// `/analyze/v3` 发第二次模型请求。null = 保持既有 HTTP 仓库路径
+  /// （实验/测试基础设施）。
+  final SmartLayoutAnalysisRunner? analysisRunner;
+
+  /// 取消在途分析的底层回调（生产视觉链：控制器
+  /// cancelSmartLayoutPreparation——在途整页识别在下一检查点中止并
+  /// 释放识别锁）；null = 无底层可取消（票据判旧兜底）。幂等。
+  final void Function()? onCancelAnalysis;
 
   /// 以当次票据构建分析请求（真实链：快照提取 + 资产编码，V3-505C 接线）。
   final Future<SmartLayoutV3Request> Function(SmartLayoutOperationTicket ticket)
@@ -271,6 +292,8 @@ class SmartLayoutSessionDependencies {
     required this.repository,
     required this.requestBuilder,
     required this.commitResultBuilder,
+    this.analysisRunner,
+    this.onCancelAnalysis,
     this.correctionHandler = _emptyCorrection,
     this.rerunChain = _emptyRerun,
     this.candidateChain,
@@ -405,12 +428,19 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
   ) async {
     SmartLayoutAnalysisOutcome outcome;
     try {
-      final request = await _deps.requestBuilder(ticket);
-      outcome = await _deps.repository.analyze(
-        request: request,
-        ticket: ticket,
-        bearerToken: _deps.bearerToken,
-      );
+      final runner = _deps.analysisRunner;
+      if (runner != null) {
+        // 本地分析链（v2 视觉感知 → v3 适配）：零 `/analyze/v3` 请求；
+        // 取消/离页/守卫/失败语义由 runner 以 outcome 表达。
+        outcome = await runner(ticket);
+      } else {
+        final request = await _deps.requestBuilder(ticket);
+        outcome = await _deps.repository.analyze(
+          request: request,
+          ticket: ticket,
+          bearerToken: _deps.bearerToken,
+        );
+      }
     } on StateError {
       // 编辑器/追踪器已释放等同守卫路径：按失败收敛。
       _recordAnalysisFailure('analysis', 'disposed', false, attempt, ticket);
@@ -674,6 +704,9 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
   /// 不得再被提交/预览引用——与纠错失效同口径）。
   void cancel({String reason = 'user-cancel'}) {
     if (!state.canCancel) return;
+    // 先请底层中止在途整页识别（幂等）：请求返回后在检查点退出并释放
+    // 识别锁——取消后立即重试不撞“智能排版进行中”。
+    _deps.onCancelAnalysis?.call();
     _releaseValidatedCards();
     _session.cancelOperation(reason: reason);
     _clearDraft();

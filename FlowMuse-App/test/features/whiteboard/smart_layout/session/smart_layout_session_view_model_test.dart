@@ -139,7 +139,11 @@ void main() {
       _TransportScript(const [_TransportStep.ok()]).invoke,
     );
     expect(stateOf(container).phase, SmartLayoutSessionPhase.idle);
-    expect(stateOf(container).canStartAnalysis, isFalse, reason: '空范围禁启');
+    expect(
+      stateOf(container).canStartAnalysis,
+      isTrue,
+      reason: '整页视觉模式：idle 即可启动，不依赖 scope 手工圈选',
+    );
 
     final vm = vmOf(container);
     vm

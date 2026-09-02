@@ -337,6 +337,10 @@ class MarkdrawController extends ChangeNotifier {
   bool _smartLayoutPrepareActive = false;
   bool _smartLayoutPrepareCancelled = false;
 
+  /// 已取消准备的收尾信号：取消后立即重开的新准备等它释放识别锁，
+  /// 而非直接报"智能排版进行中"。
+  Completer<void>? _smartLayoutPrepareWindDown;
+
   // --- 智能排版草稿编辑态（预览即编辑：可拖动、确认落地、取消零残留） ---
   bool _smartLayoutDraftActive = false;
   Scene? _draftBaseScene;
@@ -3372,8 +3376,17 @@ class MarkdrawController extends ChangeNotifier {
     required String pageId,
     void Function(int completed, int total)? onProgress,
   }) async {
-    if (_recognizingInk) {
-      throw StateError('智能排版进行中，请稍候');
+    while (_recognizingInk) {
+      if (!_smartLayoutPrepareCancelled ||
+          _smartLayoutPrepareWindDown == null) {
+        throw StateError('智能排版进行中，请稍候');
+      }
+      // 上一次准备已请求取消、正在收尾（在途截图/VLM 返回后在检查点
+      // 退出）：等它释放识别锁再开始新一轮——取消后立即重试不撞锁。
+      await _smartLayoutPrepareWindDown!.future;
+      if (_disposed) {
+        throw StateError('编辑器已释放');
+      }
     }
     if (_disposed) {
       throw StateError('编辑器已释放');
@@ -3416,6 +3429,12 @@ class MarkdrawController extends ChangeNotifier {
     } finally {
       _recognizingInk = false;
       _smartLayoutPrepareActive = false;
+      // 收尾信号：等待锁的重开调用在此后同步夺得锁或按忙处理；
+      // 取消标记随本次准备终结（下次取消需重新请求）。
+      _smartLayoutPrepareCancelled = false;
+      final windDown = _smartLayoutPrepareWindDown;
+      _smartLayoutPrepareWindDown = null;
+      windDown?.complete();
     }
   }
 
@@ -3424,10 +3443,12 @@ class MarkdrawController extends ChangeNotifier {
   /// 取消后 [prepareSmartLayoutTemplates] 在下一个检查点抛
   /// [SmartLayoutCancelledException]；已发出的截图/VLM 请求不强行中断 HTTP，
   /// 待其返回后在检查点收尾。prepare 本就不修改场景，取消保证场景零残留；
-  /// 取消状态在下一次 prepare 开始时重置。
+  /// 取消状态在下一次 prepare 开始时重置。取消后立即重开的 prepare 不报
+  /// "智能排版进行中"，而是等待本次收尾释放识别锁后继续。
   void cancelSmartLayoutPreparation() {
     if (!_smartLayoutPrepareActive) return;
     _smartLayoutPrepareCancelled = true;
+    _smartLayoutPrepareWindDown ??= Completer<void>();
   }
 
   /// 取消检查点：准备被用户取消时立即中止后续阶段。

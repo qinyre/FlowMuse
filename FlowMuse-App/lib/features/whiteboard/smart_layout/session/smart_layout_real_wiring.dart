@@ -1,5 +1,6 @@
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
+import '../analysis/analysis_retry_policy.dart';
 import '../analysis/smart_layout_analysis_repository.dart';
 import '../commit/validated_candidate_commit_gateway.dart';
 import '../composition/layout_block_assembler.dart';
@@ -18,6 +19,7 @@ import '../placement/balanced_flow_placer.dart';
 import '../placement/flow_placer.dart' show FlowPlacementSuccess;
 import '../placement/preflight_layout.dart';
 import '../protocol/smart_layout_v3_request.dart';
+import '../protocol/smart_layout_v3_response.dart';
 import '../semantics/semantic_document_assembler.dart';
 import '../snapshot/layout_page_snapshot.dart';
 import '../snapshot/scene_revision.dart';
@@ -77,6 +79,7 @@ abstract final class SmartLayoutRealCandidateChain {
     required TextMeasureAdapter measure,
     SmartLayoutDesignTokens tokens = SmartLayoutDesignTokens.v1,
     LayoutProfile profile = LayoutProfile.readability,
+    Map<String, String> transcribedTextByRegion = const {},
   }) async {
     // ---- 0. 布局快照视图：剥离页框/PDF 底图（page furniture）----
     // background 对象只贡献 pageBounds（已提取），不是排版内容：留在
@@ -111,11 +114,14 @@ abstract final class SmartLayoutRealCandidateChain {
     );
 
     // ---- 1. 语义装配（悬空 source/ledger 破坏 → fail closed）----
+    // 手写转写经本地 map 进入 extras（typed exactText 优先，悬空
+    // regionId 拒绝）——文本不经网络协议往返。
     final SemanticAssembly semantic;
     try {
       semantic = const SemanticDocumentAssembler().assemble(
         snapshot: layoutSnapshot,
         response: response,
+        transcribedTextByRegion: transcribedTextByRegion,
       );
     } on StateError catch (error) {
       return RealGenerationFailed(
@@ -337,35 +343,72 @@ final class _RequestCapture {
   final SmartLayoutOperationTicket ticket;
 }
 
+/// v2 视觉准备 → v3 响应适配的契约破坏（source 守恒失败等）：
+/// 稳定语义失败（badSchema，不重试），由 runner 统一映射。
+class _VisionAdapterContractError implements Exception {
+  const _VisionAdapterContractError(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'VisionAdapterContractError: $message';
+}
+
+/// 排序草稿：region 待定内容 + 阅读序排序键（原稿 top/left/稳定 key）。
+class _RegionDraft {
+  const _RegionDraft({
+    required this.role,
+    required this.sourceIds,
+    required this.confidence,
+    required this.sortTop,
+    required this.sortLeft,
+    required this.sortKey,
+    this.transcribedText,
+  });
+
+  final SmartLayoutV3Role role;
+  final List<String> sourceIds;
+  final double confidence;
+  final double sortTop;
+  final double sortLeft;
+  final String sortKey;
+  final String? transcribedText;
+}
+
 /// 真实会话装配（V3-505C）：把既有真实模块组装为 ViewModel 依赖束——
 /// 真实 editor/HTTP/分析仓库、快照级请求装配、真实候选生成链与
 /// compare-and-commit 提交网关。无 fake provider；[post] 仅供测试注入
 /// 传输（生产为 null，走真实 NativeHttpClient）。
 ///
-/// 生命周期：一个页面一个 scope；[dispose] 在页面离开时释放
-/// revision tracker 并作废捕获缓存。
+/// 生命周期：scope 可跨页复用（[setActivePage] 改指新页）；[dispose]
+/// 在页面离开时释放 revision tracker 并作废捕获缓存。
 class SmartLayoutRealSessionScope {
   SmartLayoutRealSessionScope._({
     required String pageId,
     required this.session,
     required this.repository,
     required this.commitGateway,
+    required MarkdrawController controller,
     required SmartLayoutEditorGateway editor,
     required SceneRevisionTracker tracker,
     required TextMeasureAdapter measure,
     required SmartLayoutDesignTokens tokens,
     required LayoutProfile profile,
   }) : _pageId = pageId,
+       _controller = controller,
        _editor = editor,
        _tracker = tracker,
        _measure = measure,
        _tokens = tokens,
        _profile = profile;
 
-  final String _pageId;
+  /// 当前作用页（截图/视觉识别/候选重跑共用）；[setActivePage] 切页时
+  /// 随会话一并改指新页。
+  String _pageId;
   final SmartLayoutSession session;
   final V3AnalysisRepository repository;
   final ValidatedCandidateCommitGateway commitGateway;
+  final MarkdrawController _controller;
   final SmartLayoutEditorGateway _editor;
   final SceneRevisionTracker _tracker;
   final TextMeasureAdapter _measure;
@@ -377,6 +420,7 @@ class SmartLayoutRealSessionScope {
 
   _RequestCapture? _lastCapture;
   SmartLayoutV3Response? _lastResponse;
+  Map<String, String>? _lastTranscribedTextByRegion;
   bool _disposed = false;
 
   bool get isDisposed => _disposed;
@@ -389,6 +433,7 @@ class SmartLayoutRealSessionScope {
     SmartLayoutHttpPost? post,
     SmartLayoutDesignTokens tokens = SmartLayoutDesignTokens.v1,
     LayoutProfile profile = LayoutProfile.readability,
+    bool useVisionAnalysis = true,
   }) {
     final editor = SmartLayoutEditorGateway(controller);
     final tracker = SceneRevisionTracker(editor: editor);
@@ -410,6 +455,7 @@ class SmartLayoutRealSessionScope {
       session: session,
       repository: repo,
       commitGateway: commitGateway,
+      controller: controller,
       editor: editor,
       tracker: tracker,
       measure: TextMeasureAdapter(tokens: tokens),
@@ -419,6 +465,15 @@ class SmartLayoutRealSessionScope {
     scope.dependencies = SmartLayoutSessionDependencies(
       session: session,
       repository: repo,
+      // 生产分析入口（v2 视觉感知 → v3 适配）：零 `/analyze/v3` 请求。
+      // [useVisionAnalysis]=false 时回落 requestBuilder+repository 的
+      // HTTP 实验路径（既有基础设施测试口径）。
+      analysisRunner: useVisionAnalysis
+          ? (ticket) => scope._analyzeWithVision(ticket)
+          : null,
+      // 取消回调（生产视觉链）：VM 取消 → 控制器中止在途整页识别，
+      // 释放识别锁（幂等；未在准备中为空操作）。
+      onCancelAnalysis: () => controller.cancelSmartLayoutPreparation(),
       requestBuilder: (ticket) async => scope._buildRequest(ticket),
       commitResultBuilder: (candidateId) =>
           throw StateError('真实路径走 commitGateway（compare-and-commit）'),
@@ -440,7 +495,8 @@ class SmartLayoutRealSessionScope {
 
   /// 快照级真实请求装配：pageId + 当前 revision + clean 资产引用 +
   /// typed exactText + 全源 refs；捕获（scene+snapshot+ticket）供
-  /// 响应后的生成链同源消费。
+  /// 响应后的生成链同源消费。（实验/测试路径：生产分析走
+  /// [_analyzeWithVision]，不发送本请求。）
   SmartLayoutV3Request _buildRequest(SmartLayoutOperationTicket ticket) {
     if (_disposed) throw StateError('scope disposed');
     final revision = _tracker.isDisposed ? null : _tracker.current;
@@ -483,6 +539,369 @@ class SmartLayoutRealSessionScope {
     );
   }
 
+  /// 本地分析链（生产入口）：v2 视觉感知（整页截图 + Set-of-Mark +
+  /// `/vision` 一次 + 低置信 `/transcribe` 裁剪重问）→ 轻量适配层 →
+  /// v3 response + 本地转写 map。零 `/analyze/v3` 第二模型请求；
+  /// 一页最多一次整页 VLM 调用。
+  ///
+  /// 异常映射：
+  /// - 用户取消（SmartLayoutCancelledException）→ cancelled；
+  /// - 页面/Scene/票据变化、编辑器释放、并发准备 → guard rejected；
+  /// - 无识别引擎 → capabilityOff（稳定不可重试）；
+  /// - 截图/vision/transcribe 主链失败 → 可重试失败；
+  /// - 适配器 source 守恒失败 → badSchema（稳定不可重试）；
+  /// - 页面门控全空（preparation null）→ 空响应（生成链按无解收敛）。
+  Future<SmartLayoutAnalysisOutcome> _analyzeWithVision(
+    SmartLayoutOperationTicket ticket,
+  ) async {
+    if (_disposed) {
+      return const SmartLayoutAnalysisGuardRejected('disposed', 0);
+    }
+    final revision = _tracker.isDisposed ? null : _tracker.current;
+    if (revision == null) {
+      return const SmartLayoutAnalysisGuardRejected('disposed', 0);
+    }
+    final scene = _editor.currentScene;
+    final snapshot = const SnapshotExtractor().extract(
+      scene: scene,
+      pageId: _pageId,
+      sceneRevision: revision,
+    );
+    _lastCapture = _RequestCapture(
+      scene: scene,
+      snapshot: snapshot,
+      ticket: ticket,
+    );
+    _lastResponse = null;
+    _lastTranscribedTextByRegion = null;
+
+    final SmartLayoutTemplatePreparation? preparation;
+    try {
+      preparation = await _controller.prepareSmartLayoutTemplates(
+        pageId: _pageId,
+      );
+    } on SmartLayoutCancelledException {
+      return const SmartLayoutAnalysisFailed(
+        AnalysisFailureKind.cancelled,
+        'cancelled',
+        1,
+      );
+    } on StateError catch (error) {
+      final message = error.message;
+      if (message == '编辑器已释放') {
+        return const SmartLayoutAnalysisGuardRejected('disposed', 0);
+      }
+      if (message.startsWith('智能排版进行中') || message.startsWith('页面不存在')) {
+        return SmartLayoutAnalysisGuardRejected(message, 0);
+      }
+      if (message == '没有可用的识别引擎') {
+        return const SmartLayoutAnalysisFailed(
+          AnalysisFailureKind.capabilityOff,
+          '没有可用的识别引擎',
+          1,
+        );
+      }
+      // 截图失败/整页识别无内容（v2 显式"请重试"语义）→ 可重试失败。
+      return SmartLayoutAnalysisFailed(
+        AnalysisFailureKind.network,
+        message,
+        1,
+      );
+    } catch (error) {
+      // 截图/vision/transcribe 主链其余异常：可重试失败，不伪装成功。
+      return SmartLayoutAnalysisFailed(
+        AnalysisFailureKind.network,
+        error.toString(),
+        1,
+      );
+    }
+
+    // 迟到防线：识别期间用户取消/离页/新操作接管/远端内容变化/
+    // scope 释放——任何一项发生即丢弃结果（四检）。
+    if (_disposed) {
+      return const SmartLayoutAnalysisGuardRejected('disposed', 1);
+    }
+    final decision = session.checkContinuation(ticket);
+    if (decision is SmartLayoutGuardRejected) {
+      return SmartLayoutAnalysisGuardRejected(decision.reason, 1);
+    }
+    if (preparation == null) {
+      // 页面门控全空（无手写簇、无页面元素）：稳定无解——空 regions
+      // 响应由生成链按 empty-page 空候选收敛（无解不是错误）。
+      return const SmartLayoutAnalysisSucceeded(
+        SmartLayoutV3Response(regions: [], warnings: []),
+        1,
+      );
+    }
+    try {
+      final (response, transcribed) = _adaptVisionPreparation(
+        preparation,
+        snapshot,
+      );
+      _lastTranscribedTextByRegion = Map.unmodifiable(transcribed);
+      return SmartLayoutAnalysisSucceeded(response, 1);
+    } on _VisionAdapterContractError catch (error) {
+      return SmartLayoutAnalysisFailed(
+        AnalysisFailureKind.badSchema,
+        error.toString(),
+        1,
+      );
+    }
+  }
+
+  /// v2 视觉准备 → v3 响应适配（轻量投影，零模型调用）。
+  ///
+  /// - title → role=title；pairs → figure + captions（figure 先于其
+  ///   captions，最近前驱 figure 绑定生效；relation 系统不扩展——
+  ///   语义装配器不消费 response relation）；looseTexts → body（公式块
+  ///   smartLayoutType=math → formula）；looseFigures → figure；
+  /// - sourceIds 全部锚定原始 Scene/source ledger：手写=memberIds 笔迹
+  ///   id、打字=原 TextElement id、图/形/组=成员元素 id；VLM 临时 id
+  ///   （e0/vision-*）绝不充当 sourceId；region 自身 id 用稳定
+  ///   vision-rN；
+  /// - 每个 source 至多认领一次（重复=契约破坏 fail closed）；锁定成员
+  ///   跳过认领（保持 protected obstacle）；
+  /// - 未认领的 movable 对象/笔迹 → 显式 unknown region（进 preserved，
+  ///   不静默删除）；background 与 protectedObstacle 不生成 region；
+  /// - readingOrder 重建为连续 0..N-1：title 优先，其余按原稿
+  ///   top/left/稳定 key；图文组内 figure 后接其 captions；
+  /// - 置信度：单块值（blockId 直查）优先，缺省用页面整体值，clamp
+  ///   [0,1]；unknown 用 0；
+  /// - 手写转写进本地 map（空文本不伪造）；typed 不入 map（快照
+  ///   exactText 回填，禁止 OCR 覆盖打字）。
+  (SmartLayoutV3Response, Map<String, String>) _adaptVisionPreparation(
+    SmartLayoutTemplatePreparation preparation,
+    LayoutPageSnapshot snapshot,
+  ) {
+    final content = preparation.content;
+    final objectById = {
+      for (final object in snapshot.objects) object.sourceId: object,
+    };
+    final strokeIds = {
+      for (final stroke in snapshot.inkStrokes) stroke.sourceId,
+    };
+    final claimed = <String>{};
+    final transcribed = <String, String>{};
+
+    List<String> claimUnitSources(LayoutUnit unit) {
+      final ids = <String>[];
+      for (final id in unit.memberIds) {
+        final object = objectById[id];
+        if (object != null &&
+            object.mobility == SnapshotMobility.protectedObstacle) {
+          continue;
+        }
+        if (object == null && !strokeIds.contains(id)) {
+          throw _VisionAdapterContractError(
+            '单元 ${unit.key} 引用了快照不存在的 source: $id',
+          );
+        }
+        if (!claimed.add(id)) {
+          throw _VisionAdapterContractError(
+            '单元 ${unit.key} 重复认领 source: $id',
+          );
+        }
+        ids.add(id);
+      }
+      return ids;
+    }
+
+    SmartLayoutV3Role unitRole(LayoutUnit unit, SmartLayoutV3Role fallback) {
+      final flowMuse = unit.textElement?.customData?['flowMuse'];
+      if (flowMuse is Map && flowMuse['smartLayoutType'] == 'math') {
+        return SmartLayoutV3Role.formula;
+      }
+      return fallback;
+    }
+
+    double unitConfidence(LayoutUnit unit) {
+      final flowMuse = unit.textElement?.customData?['flowMuse'];
+      final blockId = flowMuse is Map ? flowMuse['blockId'] as String? : null;
+      final value =
+          (blockId == null ? null : preparation.confidenceByBlockId[blockId]) ??
+          preparation.confidence;
+      return value.clamp(0.0, 1.0);
+    }
+
+    _RegionDraft? textDraft(LayoutUnit unit, SmartLayoutV3Role role) {
+      final typed =
+          unit.memberIds.length == 1 &&
+          objectById.containsKey(unit.memberIds.single);
+      final handwritten =
+          unit.memberIds.isNotEmpty && unit.memberIds.every(strokeIds.contains);
+      if (!typed && !handwritten) {
+        throw _VisionAdapterContractError(
+          '文本单元 ${unit.key} 的成员既非单一场景元素也非整组笔迹',
+        );
+      }
+      final ids = claimUnitSources(unit);
+      if (ids.isEmpty) return null;
+      return _RegionDraft(
+        role: unitRole(unit, role),
+        sourceIds: ids,
+        confidence: unitConfidence(unit),
+        sortTop: unit.sourceBounds.top,
+        sortLeft: unit.sourceBounds.left,
+        sortKey: unit.key,
+        transcribedText: handwritten
+            ? (unit.textElement?.text.trim() ?? '')
+            : null,
+      );
+    }
+
+    _RegionDraft? figureDraft(LayoutUnit unit) {
+      final ids = claimUnitSources(unit);
+      if (ids.isEmpty) return null;
+      return _RegionDraft(
+        role: SmartLayoutV3Role.figure,
+        sourceIds: ids,
+        confidence: unitConfidence(unit),
+        sortTop: unit.sourceBounds.top,
+        sortLeft: unit.sourceBounds.left,
+        sortKey: unit.key,
+      );
+    }
+
+    // 有序组：图文组内 figure 先于其 captions（最近前驱 figure 绑定），
+    // 组间与松散项/unknown 统一按原稿 top/left/稳定 key 排序。
+    final titleDrafts = <_RegionDraft>[];
+    final groups =
+        <({double top, double left, String key, List<_RegionDraft> drafts})>[];
+
+    void addGroup(
+      double top,
+      double left,
+      String key,
+      List<_RegionDraft?> nullable,
+    ) {
+      final drafts = [for (final draft in nullable) ?draft];
+      if (drafts.isEmpty) return;
+      groups.add((top: top, left: left, key: key, drafts: drafts));
+    }
+
+    final titleUnit = content.title;
+    if (titleUnit != null) {
+      final draft = textDraft(titleUnit, SmartLayoutV3Role.title);
+      if (draft != null) titleDrafts.add(draft);
+    }
+    for (final pair in content.pairs) {
+      addGroup(
+        pair.figure.sourceBounds.top,
+        pair.figure.sourceBounds.left,
+        pair.figure.key,
+        [
+          figureDraft(pair.figure),
+          for (final unit in pair.topTexts)
+            textDraft(unit, SmartLayoutV3Role.caption),
+          for (final unit in pair.bottomTexts)
+            textDraft(unit, SmartLayoutV3Role.caption),
+        ],
+      );
+    }
+    for (final unit in content.looseTexts) {
+      addGroup(
+        unit.sourceBounds.top,
+        unit.sourceBounds.left,
+        unit.key,
+        [textDraft(unit, SmartLayoutV3Role.body)],
+      );
+    }
+    for (final unit in content.looseFigures) {
+      addGroup(
+        unit.sourceBounds.top,
+        unit.sourceBounds.left,
+        unit.key,
+        [figureDraft(unit)],
+      );
+    }
+
+    // 未认领的可移动内容 → 显式 unknown region（进 preserved，不静默
+    // 删除）。background 不生成 region；protectedObstacle 不生成
+    // unknown（v3 障碍装配逻辑处理）。
+    void addUnknown(String sourceId, double top, double left) {
+      groups.add((
+        top: top,
+        left: left,
+        key: sourceId,
+        drafts: [
+          _RegionDraft(
+            role: SmartLayoutV3Role.unknown,
+            sourceIds: [sourceId],
+            confidence: 0,
+            sortTop: top,
+            sortLeft: left,
+            sortKey: sourceId,
+          ),
+        ],
+      ));
+    }
+
+    for (final object in snapshot.objects) {
+      if (object.mobility != SnapshotMobility.movable) continue;
+      if (claimed.contains(object.sourceId)) continue;
+      addUnknown(
+        object.sourceId,
+        object.visualBounds.top,
+        object.visualBounds.left,
+      );
+    }
+    for (final stroke in snapshot.inkStrokes) {
+      if (claimed.contains(stroke.sourceId)) continue;
+      addUnknown(
+        stroke.sourceId,
+        stroke.visualBounds.top,
+        stroke.visualBounds.left,
+      );
+    }
+
+    groups.sort((a, b) {
+      final byTop = a.top.compareTo(b.top);
+      if (byTop != 0) return byTop;
+      final byLeft = a.left.compareTo(b.left);
+      if (byLeft != 0) return byLeft;
+      return a.key.compareTo(b.key);
+    });
+
+    // 终态化：region id 稳定编号 vision-r1..rN，readingOrder 连续
+    // 0..N-1（不沿用可能有间断的旧序号）；手写转写以 region id 键入
+    // 本地 map（空文本不伪造，typed 不入 map）。
+    final regions = <SmartLayoutV3Region>[];
+    var regionNumber = 0;
+    void publish(_RegionDraft draft) {
+      final id = 'vision-r${++regionNumber}';
+      regions.add(
+        SmartLayoutV3Region(
+          id: id,
+          role: draft.role,
+          sourceIds: List.unmodifiable(draft.sourceIds),
+          readingOrder: regions.length,
+          confidence: draft.confidence,
+          relations: const [],
+        ),
+      );
+      final text = draft.transcribedText;
+      if (text != null && text.isNotEmpty) {
+        transcribed[id] = text;
+      }
+    }
+
+    for (final draft in titleDrafts) {
+      publish(draft);
+    }
+    for (final group in groups) {
+      for (final draft in group.drafts) {
+        publish(draft);
+      }
+    }
+    return (
+      SmartLayoutV3Response(
+        regions: List.unmodifiable(regions),
+        warnings: const [],
+      ),
+      Map.unmodifiable(transcribed),
+    );
+  }
+
   /// 真实候选生成链入口：捕获同源校验（票据不一致 = 离页/取消/重试
   /// 后的迟到响应 → StateError fail closed）。
   Future<List<ValidatedCandidate>> _runCandidateChain(
@@ -501,6 +920,8 @@ class SmartLayoutRealSessionScope {
       measure: _measure,
       tokens: _tokens,
       profile: _profile,
+      transcribedTextByRegion:
+          _lastTranscribedTextByRegion ?? const <String, String>{},
     );
     switch (outcome) {
       case RealGenerationSucceeded():
@@ -540,6 +961,8 @@ class SmartLayoutRealSessionScope {
         measure: _measure,
         tokens: _tokens,
         profile: _profile,
+        transcribedTextByRegion:
+            _lastTranscribedTextByRegion ?? const <String, String>{},
       );
       return outcome is RealGenerationSucceeded ? outcome.candidates : const [];
     } on StateError {
@@ -547,20 +970,25 @@ class SmartLayoutRealSessionScope {
     }
   }
 
-  /// 用户切换页面（离页防线）：更新会话活页并作废未完成的捕获
-  /// （旧票据续作由会话守卫拒绝）。
+  /// 用户切换页面（离页防线）：scope 改指新页（截图、视觉识别、候选
+  /// 重跑都作用于新页号）并作废未完成的捕获与转写缓存（旧票据续作由
+  /// 会话守卫拒绝）。
   void setActivePage(String pageId) {
+    _pageId = pageId;
     _lastCapture = null;
+    _lastResponse = null;
+    _lastTranscribedTextByRegion = null;
     session.setActivePage(pageId);
   }
 
   /// 释放作用域：候选产物归 ViewModel 候选卡管理（其 provider dispose
-  /// 释放）；此处作废捕获/响应缓存并释放 revision tracker。
+  /// 释放）；此处作废捕获/响应/转写缓存并释放 revision tracker。
   void dispose() {
     if (_disposed) return;
     _disposed = true;
     _lastCapture = null;
     _lastResponse = null;
+    _lastTranscribedTextByRegion = null;
     _tracker.dispose();
   }
 }

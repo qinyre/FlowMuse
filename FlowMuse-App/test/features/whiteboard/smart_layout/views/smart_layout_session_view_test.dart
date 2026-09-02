@@ -114,15 +114,15 @@ void main() {
     ),
   );
 
-  testWidgets('idle：空范围禁启；加范围后可启，摘要随状态更新', (tester) async {
+  testWidgets('idle：整页视觉模式空范围也可启动，摘要随范围更新', (tester) async {
     final container = setUpContainer();
     await tester.pumpWidget(host(container));
 
     expect(find.text('开始智能排版'), findsOneWidget);
     expect(
       tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-      isNull,
-      reason: '空范围禁启',
+      isNotNull,
+      reason: '整页视觉模式：idle 即可启动，不依赖 scope 手工圈选',
     );
     expect(find.textContaining('排版范围 0 项'), findsOneWidget);
 

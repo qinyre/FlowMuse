@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/protocol/smart_layout
 import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_real_wiring.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_session_state.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_session_view_model.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// V3-505C 真实链闭环：loopback 真实 HTTP 服务（真实 NativeHttpClient）
 /// + 真实 Scene（canvas page + typed 文本）+ 真实装配
@@ -19,6 +21,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const pageId = 'page-1';
+  const page2Id = 'page-2';
   const pageCustomData = {
     'flowMuse': {'role': 'page', 'pageId': pageId},
   };
@@ -126,6 +129,9 @@ void main() {
       controller: controller,
       serverUri: serverUri,
       pageId: pageId,
+      // 既有 HTTP 仓库路径口径（/analyze/v3 实验/测试基础设施）；
+      // 生产视觉链（默认 true）由下方视觉闭环组覆盖。
+      useVisionAnalysis: false,
     );
     addTearDown(scope.dispose);
     final container = ProviderContainer(
@@ -238,6 +244,7 @@ void main() {
         controller: controller,
         serverUri: Uri.parse('http://127.0.0.1:${server.port}'),
         pageId: pageId,
+        useVisionAnalysis: false,
       );
       addTearDown(scope.dispose);
       final container = ProviderContainer(
@@ -421,5 +428,516 @@ void main() {
     // reset 仅终态合法：先取消（analyzing→cancelled）再复位。
     scope.session.cancelOperation();
     scope.session.reset();
+  });
+
+  group('生产视觉链（v2 视觉感知 → v3 确定性排版，零 /analyze/v3）', () {
+    /// 手写页控制器：显式版式页（prepareSmartLayoutTemplates 的页面
+    /// 来源）+ canvas page 元素（快照页框/pageBounds）+ 单笔迹簇
+    /// （session s1 → mark m1）。
+    MarkdrawController visionController() {
+      final controller = MarkdrawController(
+        config: MarkdrawEditorConfig(
+          initialLayout: CanvasLayout(
+            type: CanvasLayoutType.paged,
+            pages: const [
+              CanvasPage(
+                id: pageId,
+                index: 0,
+                bounds: Rect.fromLTWH(0, 0, 1200, 800),
+                template: CanvasPageTemplate.blank,
+              ),
+            ],
+          ),
+        ),
+      );
+      controller.applyStyleChange(
+        const ElementStyle(fontFamily: 'Excalifont'),
+      );
+      controller.applyResult(AddElementResult(canvasPage()));
+      controller.applyResult(
+        AddElementResult(
+          FreedrawElement(
+            id: const ElementId('k-s1'),
+            x: 200,
+            y: 150,
+            width: 300,
+            height: 60,
+            points: const [Point(0, 0), Point(40, 20)],
+            customData: {
+              recognitionStrokeSessionKey: 's1',
+              'flowMuse': {'pageId': pageId},
+            },
+          ),
+        ),
+      );
+      return controller;
+    }
+
+    testWidgets('高置信闭环：一次 /vision → transcribed 候选 → apply → undo', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final controller = visionController();
+      addTearDown(controller.dispose);
+
+      var visionCalls = 0;
+      var transcribeCalls = 0;
+      controller.onVisionSmartLayout = (request) async {
+        visionCalls++;
+        expect(request.marks, ['m1'], reason: '单笔迹簇应只编号 m1');
+        return SmartLayoutVisionResponse(
+          elements: [
+            SmartLayoutVisionElement(
+              id: 'e0',
+              role: 'body',
+              text: '手工记账流水',
+              markIds: const ['m1'],
+              confidence: 0.95,
+            ),
+          ],
+        );
+      };
+      controller.onTranscribeCrop = (request) async {
+        transcribeCalls++;
+        return const SmartLayoutTranscribeResponse(text: '', confidence: 0);
+      };
+
+      final scope = SmartLayoutRealSessionScope.build(
+        controller: controller,
+        // 生产视觉链不发 /analyze/v3：指向不可达端口即"被调用即失败"。
+        serverUri: Uri.parse('http://127.0.0.1:9'),
+        pageId: pageId,
+      );
+      addTearDown(scope.dispose);
+      final container = ProviderContainer(
+        overrides: [
+          smartLayoutSessionDependenciesProvider.overrideWithValue(
+            scope.dependencies,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      // 生产入口等价：不手工注入 scope（整页视觉模式 idle 即可启动）。
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+      final beforeStroke = controller.currentScene.elements.firstWhere(
+        (e) => e.id.value == 'k-s1',
+      );
+
+      await tester.runAsync(vm.startAnalysis);
+      var state = container.read(smartLayoutSessionViewModelProvider);
+      expect(state.phase, SmartLayoutSessionPhase.reviewing);
+      expect(state.validatedCards, isNotEmpty, reason: '视觉链产出真候选');
+      expect(state.failure, isNull);
+
+      // 一页一次整页 VLM；高置信不裁剪重问；零 /analyze/v3 请求。
+      expect(visionCalls, 1);
+      expect(transcribeCalls, 0);
+      expect(scope.repository.requestCount, 0);
+
+      await tester.runAsync(vm.applySelectedCandidate);
+      state = container.read(smartLayoutSessionViewModelProvider);
+      expect(state.phase, SmartLayoutSessionPhase.applied);
+
+      // Scene 真实变更（V3-303A transcribed 变换）：源笔迹整组移除，
+      // 新增确定性文本元素承载 VLM 转写（非 typed 克隆）。
+      final applied = controller.currentScene;
+      expect(
+        applied.elements.where(
+          (e) => e.id.value == 'k-s1' && !e.isDeleted,
+        ),
+        isEmpty,
+        reason: 'transcribed 块源笔迹移除',
+      );
+      expect(
+        applied.elements.where(
+          (e) => e is TextElement && !e.isDeleted && e.text == '手工记账流水',
+        ),
+        isNotEmpty,
+        reason: '候选文本来自 VLM 返回值',
+      );
+
+      // 一次 undo 回到提交前（compare-and-commit 单事务）。
+      controller.undo();
+      final undone = controller.currentScene;
+      expect(
+        undone.elements.where((e) => e.id.value == 'k-s1' && !e.isDeleted),
+        isNotEmpty,
+        reason: 'undo 恢复源笔迹',
+      );
+      expect(
+        undone.elements.where(
+          (e) => e is TextElement && !e.isDeleted && e.text == '手工记账流水',
+        ),
+        isEmpty,
+        reason: 'undo 移除新增文本',
+      );
+      expect(
+        undone.elements.firstWhere((e) => e.id.value == 'k-s1').x,
+        beforeStroke.x,
+      );
+    }, timeout: const Timeout(Duration(seconds: 90)));
+
+    testWidgets('低置信：整页 vision 低置信 → /transcribe 一次 → 候选用重问文本', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final controller = visionController();
+      addTearDown(controller.dispose);
+
+      var visionCalls = 0;
+      var transcribeCalls = 0;
+      controller.onVisionSmartLayout = (request) async {
+        visionCalls++;
+        return SmartLayoutVisionResponse(
+          elements: [
+            SmartLayoutVisionElement(
+              id: 'e0',
+              role: 'body',
+              text: '',
+              markIds: const ['m1'],
+              confidence: 0.3,
+            ),
+          ],
+        );
+      };
+      controller.onTranscribeCrop = (request) async {
+        transcribeCalls++;
+        return const SmartLayoutTranscribeResponse(
+          text: '重问后的文字',
+          confidence: 0.9,
+        );
+      };
+
+      final scope = SmartLayoutRealSessionScope.build(
+        controller: controller,
+        serverUri: Uri.parse('http://127.0.0.1:9'),
+        pageId: pageId,
+      );
+      addTearDown(scope.dispose);
+      final container = ProviderContainer(
+        overrides: [
+          smartLayoutSessionDependenciesProvider.overrideWithValue(
+            scope.dependencies,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      // 生产入口等价：不手工注入 scope（整页视觉模式 idle 即可启动）。
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+
+      await tester.runAsync(vm.startAnalysis);
+      final state = container.read(smartLayoutSessionViewModelProvider);
+      expect(state.phase, SmartLayoutSessionPhase.reviewing);
+      expect(state.validatedCards, isNotEmpty);
+
+      // /vision 一次、/transcribe 一次（低置信块才重问）、零第二次语义模型。
+      expect(visionCalls, 1);
+      expect(transcribeCalls, 1);
+      expect(scope.repository.requestCount, 0);
+
+      await tester.runAsync(vm.applySelectedCandidate);
+      expect(
+        controller.currentScene.elements.where(
+          (e) => e is TextElement && !e.isDeleted && e.text == '重问后的文字',
+        ),
+        isNotEmpty,
+        reason: '最终候选使用裁剪重问文字',
+      );
+    }, timeout: const Timeout(Duration(seconds: 90)));
+
+    testWidgets('未识别笔迹：无匹配 → 可重试失败；空页 → 无解空候选', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final controller = visionController();
+      addTearDown(controller.dispose);
+      controller.onVisionSmartLayout = (request) async {
+        // VLM 未认出任何内容（空 elements）。
+        return const SmartLayoutVisionResponse(elements: []);
+      };
+      final scope = SmartLayoutRealSessionScope.build(
+        controller: controller,
+        serverUri: Uri.parse('http://127.0.0.1:9'),
+        pageId: pageId,
+      );
+      addTearDown(scope.dispose);
+      final container = ProviderContainer(
+        overrides: [
+          smartLayoutSessionDependenciesProvider.overrideWithValue(
+            scope.dependencies,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      // 生产入口等价：不手工注入 scope（整页视觉模式 idle 即可启动）。
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+
+      await tester.runAsync(vm.startAnalysis);
+      var state = container.read(smartLayoutSessionViewModelProvider);
+      expect(state.phase, SmartLayoutSessionPhase.failed);
+      expect(state.failure!.retryable, isTrue, reason: '识别无内容可重试');
+      expect(state.failure!.stage, 'analysis');
+
+      // 空页（无笔迹无元素）：稳定无解——空候选 reviewing，非错误。
+      controller.applyResult(
+        RemoveElementResult(const ElementId('k-s1')),
+      );
+      await tester.runAsync(vm.retry);
+      state = container.read(smartLayoutSessionViewModelProvider);
+      expect(state.phase, SmartLayoutSessionPhase.reviewing);
+      expect(state.candidates, isEmpty);
+      expect(state.failure, isNull, reason: '空页无解不是错误');
+    }, timeout: const Timeout(Duration(seconds: 90)));
+
+    FreedrawElement pageStroke(
+      String id,
+      double y,
+      String pid,
+      String session,
+    ) => FreedrawElement(
+      id: ElementId(id),
+      x: 200,
+      y: y,
+      width: 300,
+      height: 60,
+      points: const [Point(0, 0), Point(40, 20)],
+      customData: {
+        recognitionStrokeSessionKey: session,
+        'flowMuse': {'pageId': pid},
+      },
+    );
+
+    /// 双页控制器：page-1 笔迹 k-s1、page-2 笔迹 k-s2（各自的页框 +
+    /// 单笔迹簇；两页内容错位摆放）。
+    MarkdrawController twoPageVisionController() {
+      final controller = MarkdrawController(
+        config: MarkdrawEditorConfig(
+          initialLayout: CanvasLayout(
+            type: CanvasLayoutType.paged,
+            pages: const [
+              CanvasPage(
+                id: pageId,
+                index: 0,
+                bounds: Rect.fromLTWH(0, 0, 1200, 800),
+                template: CanvasPageTemplate.blank,
+              ),
+              CanvasPage(
+                id: page2Id,
+                index: 1,
+                bounds: Rect.fromLTWH(0, 0, 1200, 800),
+                template: CanvasPageTemplate.blank,
+              ),
+            ],
+          ),
+        ),
+      );
+      controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
+      controller.applyResult(AddElementResult(canvasPage()));
+      controller.applyResult(
+        AddElementResult(
+          RectangleElement(
+            id: const ElementId('page-frame-2'),
+            x: 0,
+            y: 0,
+            width: 1200,
+            height: 800,
+            seed: 7,
+            versionNonce: 11,
+            updated: 1000,
+            customData: {
+              'flowMuse': {'role': 'page', 'pageId': page2Id},
+            },
+          ),
+        ),
+      );
+      controller.applyResult(
+        AddElementResult(pageStroke('k-s1', 150, pageId, 's1')),
+      );
+      controller.applyResult(
+        AddElementResult(pageStroke('k-s2', 500, page2Id, 's2')),
+      );
+      return controller;
+    }
+
+    testWidgets(
+      '切页重析：setActivePage 后分析与 apply 作用于新页',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        GoogleFonts.config.allowRuntimeFetching = false;
+        final controller = twoPageVisionController();
+        addTearDown(controller.dispose);
+
+        var visionCalls = 0;
+        controller.onVisionSmartLayout = (request) async {
+          visionCalls++;
+          expect(request.marks, ['m1'], reason: '新页（page-2）单笔迹簇编号 m1');
+          return SmartLayoutVisionResponse(
+            elements: [
+              SmartLayoutVisionElement(
+                id: 'e0',
+                role: 'body',
+                text: '第二页手写内容',
+                markIds: const ['m1'],
+                confidence: 0.95,
+              ),
+            ],
+          );
+        };
+        controller.onTranscribeCrop = (request) async {
+          return const SmartLayoutTranscribeResponse(text: '', confidence: 0);
+        };
+
+        final scope = SmartLayoutRealSessionScope.build(
+          controller: controller,
+          serverUri: Uri.parse('http://127.0.0.1:9'),
+          pageId: pageId, // scope 建立在 page-1
+        );
+        addTearDown(scope.dispose);
+        // 生产切页路径：面板重开时 setActivePage 同步活页——此后截图、
+        // 视觉识别、候选重跑都应作用于 page-2。
+        scope.setActivePage(page2Id);
+        final container = ProviderContainer(
+          overrides: [
+            smartLayoutSessionDependenciesProvider.overrideWithValue(
+              scope.dependencies,
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+
+        await tester.runAsync(vm.startAnalysis);
+        var state = container.read(smartLayoutSessionViewModelProvider);
+        expect(state.phase, SmartLayoutSessionPhase.reviewing);
+        expect(state.validatedCards, isNotEmpty);
+        expect(visionCalls, 1);
+        expect(scope.repository.requestCount, 0);
+
+        await tester.runAsync(vm.applySelectedCandidate);
+        state = container.read(smartLayoutSessionViewModelProvider);
+        expect(state.phase, SmartLayoutSessionPhase.applied);
+
+        final applied = controller.currentScene;
+        expect(
+          applied.elements.where((e) => e.id.value == 'k-s2' && !e.isDeleted),
+          isEmpty,
+          reason: '切页后分析新页：page-2 源笔迹被替换',
+        );
+        expect(
+          applied.elements.where(
+            (e) => e is TextElement && !e.isDeleted && e.text == '第二页手写内容',
+          ),
+          isNotEmpty,
+          reason: '新页候选文本落地',
+        );
+        expect(
+          applied.elements.where((e) => e.id.value == 'k-s1' && !e.isDeleted),
+          isNotEmpty,
+          reason: '旧页（page-1）笔迹不受切页分析影响',
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 90)),
+    );
+
+    testWidgets('取消后立即重试：识别锁随取消释放，不撞"智能排版进行中"', (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final controller = visionController();
+      addTearDown(controller.dispose);
+
+      var visionCalls = 0;
+      // 在 runAsync（真实异步区）内创建并 complete：测试体处于 fake
+      // zone，其 Completer 的完成事件排入 fake 微任务队列，runAsync
+      // 挂起期间不会排空（会死锁）。
+      Completer<void>? releaseFirstVision;
+      controller.onVisionSmartLayout = (request) async {
+        visionCalls++;
+        if (visionCalls == 1) {
+          // 模拟在途整页 VLM：悬挂至放行（取消不强行中断 HTTP）。
+          await releaseFirstVision!.future;
+          return const SmartLayoutVisionResponse(elements: []);
+        }
+        return SmartLayoutVisionResponse(
+          elements: [
+            SmartLayoutVisionElement(
+              id: 'e0',
+              role: 'body',
+              text: '重试后的手写',
+              markIds: const ['m1'],
+              confidence: 0.95,
+            ),
+          ],
+        );
+      };
+      controller.onTranscribeCrop = (request) async {
+        return const SmartLayoutTranscribeResponse(text: '', confidence: 0);
+      };
+
+      final scope = SmartLayoutRealSessionScope.build(
+        controller: controller,
+        serverUri: Uri.parse('http://127.0.0.1:9'),
+        pageId: pageId,
+      );
+      addTearDown(scope.dispose);
+      final container = ProviderContainer(
+        overrides: [
+          smartLayoutSessionDependenciesProvider.overrideWithValue(
+            scope.dependencies,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+
+      Future<void>? firstAnalysis;
+      Future<void>? retryAnalysis;
+      await tester.runAsync(() async {
+        releaseFirstVision = Completer<void>();
+        firstAnalysis = vm.startAnalysis();
+        // 轮询等第一次整页 VLM 真正发出（同 zone 内真实计时）。
+        while (visionCalls == 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        // 取消（状态机 + 底层识别锁回调）后立即重试——不等待第一次收尾。
+        vm.cancel();
+        expect(
+          container.read(smartLayoutSessionViewModelProvider).phase,
+          SmartLayoutSessionPhase.cancelled,
+        );
+        vm.reset();
+        retryAnalysis = vm.startAnalysis(); // 旧准备仍在途：等收尾让锁
+        releaseFirstVision!.complete(); // 在途请求返回 → 检查点退出释放锁
+        await firstAnalysis;
+        await retryAnalysis;
+      });
+
+      final state = container.read(smartLayoutSessionViewModelProvider);
+      expect(state.phase, SmartLayoutSessionPhase.reviewing);
+      expect(state.failure, isNull, reason: '不得出现"智能排版进行中"守卫失败');
+      expect(visionCalls, 2, reason: '重试真正发出了第二次整页识别');
+      expect(state.validatedCards, isNotEmpty);
+
+      await tester.runAsync(vm.applySelectedCandidate);
+      expect(
+        controller.currentScene.elements.where(
+          (e) => e is TextElement && !e.isDeleted && e.text == '重试后的手写',
+        ),
+        isNotEmpty,
+        reason: '重试链路完整走通',
+      );
+    }, timeout: const Timeout(Duration(seconds: 90)));
   });
 }
