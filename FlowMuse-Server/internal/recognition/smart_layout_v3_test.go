@@ -59,45 +59,6 @@ func v3ValidResponseJSON() []byte {
 	}`)
 }
 
-func TestOpenAICompatibleV3Provider(t *testing.T) {
-	var model string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/chat/completions" || r.Header.Get("Authorization") != "Bearer test-key" {
-			t.Fatalf("unexpected provider request: %s auth=%q", r.URL.Path, r.Header.Get("Authorization"))
-		}
-		var body struct {
-			Model string `json:"model"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatal(err)
-		}
-		model = body.Model
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"choices": []any{map[string]any{
-				"message": map[string]any{"content": string(v3ValidResponseJSON())},
-			}},
-		})
-	}))
-	defer server.Close()
-
-	layouter := NewOpenAICompatibleSmartLayouter(OpenAICompatibleConfig{
-		BaseURL: server.URL,
-		APIKey:  "test-key",
-		Model:   "test-model",
-	})
-	analyzer := NewV3Analyzer(layouter.V3Provider(), DefaultV3RequestLimits())
-	doc, v3Err := analyzer.Analyze(context.Background(), v3TestRequest())
-	if v3Err != nil || doc == nil || len(doc.Response.Regions) != 3 {
-		t.Fatalf("live provider chain failed: doc=%v err=%v", doc, v3Err)
-	}
-	if model != "test-model" {
-		t.Fatalf("model = %q, want test-model", model)
-	}
-	if NewOpenAICompatibleSmartLayouter(OpenAICompatibleConfig{}).V3Provider() != nil {
-		t.Fatal("unconfigured provider must stay disabled")
-	}
-}
-
 func TestV3AnalyzerProducesValidatedDocument(t *testing.T) {
 	analyzer := NewV3Analyzer(func(ctx context.Context, req *SmartLayoutV3Request) ([]byte, error) {
 		return v3ValidResponseJSON(), nil

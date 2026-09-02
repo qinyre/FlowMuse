@@ -225,10 +225,25 @@ class SmartLayoutSessionUiState {
       'failure: $failure, attempts: $attemptCount)';
 }
 
+/// 本地分析执行函数：绕过 requestBuilder+HTTP 仓库，直接产出
+/// [SmartLayoutAnalysisOutcome]（生产链：v2 视觉感知 → v3 response 适配，
+/// 手写转写文本经本地 map 进入语义装配，不经网络协议）。
+/// 候选生成、状态迁移与失败处理仍在 ViewModel——runner 只负责分析。
+typedef SmartLayoutAnalysisRunner =
+    Future<SmartLayoutAnalysisOutcome> Function(
+      SmartLayoutOperationTicket ticket,
+    );
+
 /// ViewModel 依赖束（真实接线归 V3-505C；测试经 provider 覆盖注入）。
 class SmartLayoutSessionDependencies {
   final SmartLayoutSession session;
   final V3AnalysisRepository repository;
+
+  /// 本地分析入口（生产链 v2 视觉感知 → v3 适配）：非 null 时
+  /// [_runAnalysis] 调用它而非 requestBuilder+repository——不向
+  /// `/analyze/v3` 发第二次模型请求。null = 保持既有 HTTP 仓库路径
+  /// （实验/测试基础设施）。
+  final SmartLayoutAnalysisRunner? analysisRunner;
 
   /// 以当次票据构建分析请求（真实链：快照提取 + 资产编码，V3-505C 接线）。
   final Future<SmartLayoutV3Request> Function(SmartLayoutOperationTicket ticket)
@@ -271,6 +286,7 @@ class SmartLayoutSessionDependencies {
     required this.repository,
     required this.requestBuilder,
     required this.commitResultBuilder,
+    this.analysisRunner,
     this.correctionHandler = _emptyCorrection,
     this.rerunChain = _emptyRerun,
     this.candidateChain,
@@ -405,12 +421,19 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
   ) async {
     SmartLayoutAnalysisOutcome outcome;
     try {
-      final request = await _deps.requestBuilder(ticket);
-      outcome = await _deps.repository.analyze(
-        request: request,
-        ticket: ticket,
-        bearerToken: _deps.bearerToken,
-      );
+      final runner = _deps.analysisRunner;
+      if (runner != null) {
+        // 本地分析链（v2 视觉感知 → v3 适配）：零 `/analyze/v3` 请求；
+        // 取消/离页/守卫/失败语义由 runner 以 outcome 表达。
+        outcome = await runner(ticket);
+      } else {
+        final request = await _deps.requestBuilder(ticket);
+        outcome = await _deps.repository.analyze(
+          request: request,
+          ticket: ticket,
+          bearerToken: _deps.bearerToken,
+        );
+      }
     } on StateError {
       // 编辑器/追踪器已释放等同守卫路径：按失败收敛。
       _recordAnalysisFailure('analysis', 'disposed', false, attempt, ticket);

@@ -314,6 +314,8 @@ abstract final class TransactionMatrixRunner {
       controller: controller,
       serverUri: serverUri,
       pageId: pageId,
+      // HTTP 仓库路径口径（生产视觉链由 wiring 视觉闭环组覆盖）。
+      useVisionAnalysis: false,
     );
     final observer = SceneRevisionTracker(
       editor: SmartLayoutEditorGateway(controller),

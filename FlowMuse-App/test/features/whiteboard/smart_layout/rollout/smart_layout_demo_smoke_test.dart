@@ -100,6 +100,9 @@ class DemoSessionHandle implements SmartLayoutV3SessionHandle {
       controller: controller,
       serverUri: serverUri,
       pageId: pageId,
+      // 演示 smoke 走 loopback HTTP 假分析器口径（生产视觉链由
+      // wiring 视觉闭环组覆盖）。
+      useVisionAnalysis: false,
     );
     final container = ProviderContainer(
       overrides: [

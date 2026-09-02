@@ -15,6 +15,9 @@ class SemanticAssembly {
 ///
 /// - 每个 region → SemanticBlock（role/sourceIds/orderIndex/confidence）；
 /// - typed text 只回填自快照对象 exactText（不来自模型）；
+/// - 手写转写文本经 [transcribedTextByRegion]（本地 map，不经网络协议）
+///   进入块 extras：仅在 region 无 typed exactText 时回填，绝不覆盖
+///   打字文本；悬空 regionId（缓存串会话/旧响应）fail closed；
 /// - unknown 块的 source 一律 preserved（默认不参与自动重排）；
 /// - 未被任何 region 认领的 source → preserved；
 /// - 装配失败（悬空 source/ledger 不守恒）抛 StateError，不产出半文档。
@@ -25,7 +28,18 @@ class SemanticDocumentAssembler {
     required LayoutPageSnapshot snapshot,
     required SmartLayoutV3Response response,
     List<RawConflict> conflicts = const [],
+    Map<String, String> transcribedTextByRegion = const {},
   }) {
+    if (transcribedTextByRegion.isNotEmpty) {
+      final regionIds = {for (final region in response.regions) region.id};
+      final dangling = <String>[
+        for (final id in transcribedTextByRegion.keys)
+          if (!regionIds.contains(id)) id,
+      ]..sort();
+      if (dangling.isNotEmpty) {
+        throw StateError('转写缓存引用了响应不存在的 region: ${dangling.join(',')}');
+      }
+    }
     final exactTextBySource = <String, String>{};
     for (final object in snapshot.objects) {
       if (object.exactText != null) {
@@ -48,6 +62,16 @@ class SemanticDocumentAssembler {
         for (final sourceId in region.sourceIds)
           if (exactTextBySource[sourceId] != null) exactTextBySource[sourceId]!,
       ];
+      // 手写转写（本地 map）：仅在无 typed exactText 时回填到 extras，
+      // 由 LayoutBlockAssembler 投影为 LayoutTextOrigin.transcribed；
+      // 空白转写不生成文本（不伪造）。
+      final extras = <String, Object?>{};
+      if (textParts.isEmpty) {
+        final transcribed = transcribedTextByRegion[region.id]?.trim();
+        if (transcribed != null && transcribed.isNotEmpty) {
+          extras['transcribedText'] = transcribed;
+        }
+      }
       blocks.add(
         SemanticBlock(
           id: region.id,
@@ -56,6 +80,7 @@ class SemanticDocumentAssembler {
           orderIndex: region.readingOrder,
           confidence: region.confidence,
           text: textParts.isEmpty ? null : textParts.join('\n'),
+          extras: Map.unmodifiable(extras),
         ),
       );
       if (role.defaultsToPreserved) {

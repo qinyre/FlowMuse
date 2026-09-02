@@ -52,7 +52,7 @@ class V3AnalysisRepository {
     this.capabilityEnabled = true,
     this.retryPolicy = const AnalysisRetryPolicy(),
     this.guard = const AnalysisOperationGuard(),
-    this.readTimeoutMs = 65000,
+    this.readTimeoutMs = 15000,
   }) : _http = http,
        _session = session;
 
