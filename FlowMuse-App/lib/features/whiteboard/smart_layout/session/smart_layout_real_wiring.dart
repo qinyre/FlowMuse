@@ -5,6 +5,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import '../analysis/analysis_retry_policy.dart';
 import '../analysis/smart_layout_analysis_repository.dart';
 import '../commit/validated_candidate_commit_gateway.dart';
+import '../composition/layout_block.dart';
 import '../composition/layout_block_assembler.dart';
 import '../composition/layout_composition_planner.dart';
 import '../correction/correction_patch_applier.dart' show AffectedSourceSet;
@@ -176,9 +177,29 @@ abstract final class SmartLayoutRealCandidateChain {
     final contentHeight = pageContent.height;
 
     // ---- 4. planner 枚举（确定性）+ 硬 preflight（批量，四型分派）----
+    // 内容量事实（结构适用性输入，真机 2026-09-03 门禁）：内容块数 +
+    // 文本实测填充率；图/图注存在即非纯文字（多栏适用性另由约束判）。
+    var contentBlockCount = 0;
+    var textMeasuredHeight = 0.0;
+    var hasFigureContent = false;
+    for (final block in assembly.blocks) {
+      if (block.isPreservedLike) continue;
+      contentBlockCount++;
+      if (block.kind == LayoutBlockKind.figure ||
+          block.kind == LayoutBlockKind.caption) {
+        hasFigureContent = true;
+      }
+      final intrinsic = block.measuredIntrinsic;
+      if (intrinsic != null) textMeasuredHeight += intrinsic.height;
+    }
     final enumeration = const LayoutCompositionPlanner().enumerate(
       constraint: CompositionConstraint(
         contentWidth: pageContent.width,
+        contentBlockCount: contentBlockCount,
+        contentFillRatio: contentHeight > 0
+            ? (textMeasuredHeight / contentHeight).clamp(0.0, 1.0)
+            : 0.0,
+        hasFigureContent: hasFigureContent,
         tokens: tokens,
       ),
     );
@@ -364,6 +385,12 @@ class _VisionAdapterContractError implements Exception {
 }
 
 /// 排序草稿：region 待定内容 + 阅读序排序键（原稿 top/left/稳定 key）。
+/// 列表项编号模式（行首，容忍空白）：阿拉伯 `1.`/`1、`/`1．`/`1)`、
+/// CJK `一、`/`一.`、圈号 `①-⑳`。孤立编号行不成组；范围即冻结口径。
+final RegExp _listItemNumberPattern = RegExp(
+  r'^\s*(?:\d{1,3}\s*[.、．）)]|[①-⑳]|[一二三四五六七八九十]{1,3}\s*[、.．])',
+);
+
 class _RegionDraft {
   const _RegionDraft({
     required this.role,
@@ -922,6 +949,83 @@ class SmartLayoutRealSessionScope {
       if (byLeft != 0) return byLeft;
       return a.key.compareTo(b.key);
     });
+
+    // 连续编号行黏连（真机 2026-09-03 案例）：视觉服务逐行返回、不产
+    // list 语义，"1./一、/①"连续行会被当独立正文块，双栏平衡器按
+    // 栏深均衡把它们拆到两栏（阅读断裂）。阅读序连续、文本匹配编号
+    // 模式的手写转写行黏连为单个列表块——单块物理不可拆，平衡器无法
+    // 拆清单；角色升为 list 供下游语义使用。typed 文本不打乱（用户
+    // 显式分立的元素不改组）。
+    bool numberedBodyGroup(
+      ({double top, double left, String key, List<_RegionDraft> drafts}) group,
+    ) {
+      if (group.drafts.length != 1) return false;
+      final draft = group.drafts.single;
+      final text = draft.transcribedText;
+      return draft.role == SmartLayoutV3Role.body &&
+          text != null &&
+          _listItemNumberPattern.hasMatch(text);
+    }
+
+    final compactedGroups =
+        <({double top, double left, String key, List<_RegionDraft> drafts})>[];
+    var runStart = 0;
+    while (runStart < groups.length) {
+      if (!numberedBodyGroup(groups[runStart])) {
+        compactedGroups.add(groups[runStart]);
+        runStart++;
+        continue;
+      }
+      var runEnd = runStart + 1;
+      while (runEnd < groups.length && numberedBodyGroup(groups[runEnd])) {
+        runEnd++;
+      }
+      if (runEnd - runStart == 1) {
+        // 孤立编号行不成组（无拆分风险，保持原样不造语义）。
+        compactedGroups.add(groups[runStart]);
+        runStart = runEnd;
+        continue;
+      }
+      final runDrafts = <_RegionDraft>[
+        for (var i = runStart; i < runEnd; i++) groups[i].drafts.single,
+      ];
+      var left = runDrafts.first.bounds.left;
+      var top = runDrafts.first.bounds.top;
+      var right = runDrafts.first.bounds.right;
+      var bottom = runDrafts.first.bounds.bottom;
+      var confidence = runDrafts.first.confidence;
+      for (final draft in runDrafts.skip(1)) {
+        left = draft.bounds.left < left ? draft.bounds.left : left;
+        top = draft.bounds.top < top ? draft.bounds.top : top;
+        right = draft.bounds.right > right ? draft.bounds.right : right;
+        bottom = draft.bounds.bottom > bottom ? draft.bounds.bottom : bottom;
+        if (draft.confidence < confidence) confidence = draft.confidence;
+      }
+      final first = runDrafts.first;
+      compactedGroups.add((
+        top: groups[runStart].top,
+        left: groups[runStart].left,
+        key: groups[runStart].key,
+        drafts: [
+          _RegionDraft(
+            role: SmartLayoutV3Role.list,
+            sourceIds: [for (final draft in runDrafts) ...draft.sourceIds],
+            confidence: confidence,
+            sortTop: first.sortTop,
+            sortLeft: first.sortLeft,
+            sortKey: first.sortKey,
+            bounds: Rect.fromLTWH(left, top, right - left, bottom - top),
+            transcribedText: [
+              for (final draft in runDrafts) draft.transcribedText!,
+            ].join('\n'),
+          ),
+        ],
+      ));
+      runStart = runEnd;
+    }
+    groups
+      ..clear()
+      ..addAll(compactedGroups);
 
     // 终态化：region id 稳定编号 vision-r1..rN，readingOrder 连续
     // 0..N-1（不沿用可能有间断的旧序号）；手写转写以 region id 键入

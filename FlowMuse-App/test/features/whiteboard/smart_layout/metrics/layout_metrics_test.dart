@@ -217,6 +217,26 @@ void main() {
     expect(unbalanced, lessThan(balanced));
   });
 
+  test('单栏族豁免：顶部对齐内容不因质心偏移扣分（文档自然顶对齐）', () {
+    // 旧质心行为对顶对齐内容约 0.75 分——正是稀疏内容被"摊两栏求
+    // 平衡"的候选反超的根因；单栏族（栏数=1）现在恒满分。
+    final v = (calc.calculate(LayoutMetricInput(
+          assembly: assemblyOf([paraBlock('a'), paraBlock('b'), paraBlock('c')]),
+          placed: [
+            placed('a', const LayoutRect(left: 0, top: 0, width: 588, height: 60), 0),
+            placed('b', const LayoutRect(left: 0, top: 84, width: 588, height: 60), 0),
+            placed('c', const LayoutRect(left: 0, top: 168, width: 588, height: 60), 0),
+          ],
+          columnRects: [columns2.first],
+          preservedRects: const {},
+          originalBounds: const {},
+          contentHeight: 800,
+          hardValidated: true,
+        )) as LayoutMetricVector)
+        .values[LayoutMetricId.visualBalance]!;
+    expect(v, 1.0);
+  });
+
   test('层级与图文亲和：违规降分', () {
     // title 被缩到 12（< 正文 20 中位）→ 层级 0。
     final flatTitle = LayoutMetricInput(

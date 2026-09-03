@@ -14,8 +14,14 @@ void main() {
   const tokens = SmartLayoutDesignTokens.v1;
   // compactGapFloor=8 paragraphSpacing=24 minLine=240。
 
-  CompositionConstraint at(double width) =>
-      CompositionConstraint(contentWidth: width, tokens: tokens);
+  CompositionConstraint at(double width) => CompositionConstraint(
+    // 宽度专项差分：给足内容量与图语义，门禁不触发。
+    contentWidth: width,
+    contentBlockCount: 12,
+    contentFillRatio: 0.8,
+    hasFigureContent: true,
+    tokens: tokens,
+  );
 
   /// 候选的栏宽序列（twoColumn 两等宽栏；mainSide 主+侧；其余单栏）。
   List<double> columnsOf(CompositionCandidate c) => switch (c.skeleton) {

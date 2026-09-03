@@ -171,9 +171,16 @@ class PlannerQualityEvaluator {
   ) {
     final tokens = SmartLayoutDesignTokens.v1;
     final measure = TextMeasureAdapter();
+    // 门禁中性事实（给足内容量+图语义）：G3 评估的是放置可行性质量
+    // （枚举域须覆盖全部骨架，fixture 为手工几何块、无实测内在高，
+    // 不具备镜像生产内容量门禁的输入）；适用性门禁本身由 planner
+    // 单测与真机回归 fixture 覆盖。
     final enumeration = const LayoutCompositionPlanner().enumerate(
       constraint: CompositionConstraint(
         contentWidth: fixture.contentWidth,
+        contentBlockCount: 12,
+        contentFillRatio: 0.8,
+        hasFigureContent: true,
         tokens: tokens,
       ),
     );

@@ -9,8 +9,14 @@ void main() {
   const tokens = SmartLayoutDesignTokens.v1;
   // min=240 max=560 gutter=24。
 
-  CompositionConstraint at(double width) =>
-      CompositionConstraint(contentWidth: width, tokens: tokens);
+  CompositionConstraint at(double width) => CompositionConstraint(
+    contentWidth: width,
+    // 宽度专项测试默认给足内容量与图语义：门禁不触发。
+    contentBlockCount: 12,
+    contentFillRatio: 0.8,
+    hasFigureContent: true,
+    tokens: tokens,
+  );
 
   test('宽页：四种结构全部有候选，域=10 ≤ 配额 12', () {
     final plan = planner.enumerate(constraint: at(1200));
@@ -157,5 +163,78 @@ void main() {
         .map((c) => int.parse(c.id.split('#')[1]))
         .toList();
     expect(mainSideIdx, [2, 3, 4, 5, 6, 7]);
+  });
+
+  group('内容量/侧栏语义门禁（真机 2026-09-03 案例：短清单被 mainSide 拆栏）', () {
+    CompositionConstraint withFacts({
+      required int blocks,
+      required double fill,
+      required bool figure,
+    }) => CompositionConstraint(
+      contentWidth: 1200,
+      contentBlockCount: blocks,
+      contentFillRatio: fill,
+      hasFigureContent: figure,
+      tokens: tokens,
+    );
+
+    test('纯文字稀疏：多栏全拒，单栏族保留', () {
+      final plan = planner.enumerate(
+        constraint: withFacts(blocks: 4, fill: 0.15, figure: false),
+      );
+      expect(
+        plan.candidates.map((c) => c.skeleton).toSet(),
+        {LayoutSkeleton.single, LayoutSkeleton.conservativeLayout},
+        reason: '短内容只出单栏族，双栏/主侧栏不适用',
+      );
+      expect(
+        plan.rejected
+            .where((r) => r.skeleton == LayoutSkeleton.twoColumn)
+            .map((r) => r.reason),
+        everyElement(CompositionRejectReason.contentTooSparse),
+      );
+      expect(
+        plan.rejected.where((r) => r.skeleton == LayoutSkeleton.mainSide),
+        hasLength(6),
+        reason: 'mainSide 六档全部留档拒绝（零静默跳过）',
+      );
+    });
+
+    test('纯文字稠密：twoColumn 适用，mainSide 因无侧栏语义拒绝', () {
+      final plan = planner.enumerate(
+        constraint: withFacts(blocks: 12, fill: 0.8, figure: false),
+      );
+      expect(
+        plan.candidates.map((c) => c.skeleton),
+        contains(LayoutSkeleton.twoColumn),
+      );
+      expect(
+        plan.rejected
+            .where((r) => r.skeleton == LayoutSkeleton.mainSide)
+            .map((r) => r.reason),
+        everyElement(CompositionRejectReason.sidebarSemanticsRequired),
+        reason: '空侧栏只会把正文挤出大空洞，mainSide 需图/图注语义',
+      );
+      expect(
+        plan.rejected
+            .where((r) => r.reason == CompositionRejectReason.contentTooSparse),
+        isEmpty,
+      );
+    });
+
+    test('图文稀疏：内容量门禁不触发（图语义放行多栏，交由宽度判定）', () {
+      final plan = planner.enumerate(
+        constraint: withFacts(blocks: 2, fill: 0.1, figure: true),
+      );
+      expect(
+        plan.rejected.where(
+          (r) =>
+              r.reason == CompositionRejectReason.contentTooSparse ||
+              r.reason == CompositionRejectReason.sidebarSemanticsRequired,
+        ),
+        isEmpty,
+      );
+      expect(plan.domainSize, 9);
+    });
   });
 }
