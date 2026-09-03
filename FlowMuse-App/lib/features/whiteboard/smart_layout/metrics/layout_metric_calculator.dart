@@ -184,10 +184,13 @@ class LayoutMetricCalculator {
     return 1.0;
   }
 
-  // ---- 6. 视觉平衡：多栏有内容时取两极栏填充差的归一；单内容栏
-  //         取面积加权质心相对栏心的偏移。
+  // ---- 6. 视觉平衡：单栏族恒满分（文档内容自然顶部对齐，不做垂直
+  //         居中偏好——旧质心项把顶对齐内容压到 0 分，使稀疏内容被
+  //         "摊到两栏求深度平衡"的候选反超）；多栏有内容时取两极栏
+  //         填充差的归一，单内容栏取面积加权质心相对栏心的偏移。
 
   double _visualBalance(LayoutMetricInput input) {
+    if (input.columnRects.length == 1) return 1.0;
     final usedColumns = <int, double>{};
     for (final p in input.placed) {
       final column = _columnOf(input, p.columnIndex);

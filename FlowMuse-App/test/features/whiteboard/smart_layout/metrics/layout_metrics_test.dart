@@ -217,6 +217,26 @@ void main() {
     expect(unbalanced, lessThan(balanced));
   });
 
+  test('单栏族豁免：顶部对齐内容不因质心偏移扣分（文档自然顶对齐）', () {
+    // 旧质心行为对顶对齐内容约 0.75 分——正是稀疏内容被"摊两栏求
+    // 平衡"的候选反超的根因；单栏族（栏数=1）现在恒满分。
+    final v = (calc.calculate(LayoutMetricInput(
+          assembly: assemblyOf([paraBlock('a'), paraBlock('b'), paraBlock('c')]),
+          placed: [
+            placed('a', const LayoutRect(left: 0, top: 0, width: 588, height: 60), 0),
+            placed('b', const LayoutRect(left: 0, top: 84, width: 588, height: 60), 0),
+            placed('c', const LayoutRect(left: 0, top: 168, width: 588, height: 60), 0),
+          ],
+          columnRects: [columns2.first],
+          preservedRects: const {},
+          originalBounds: const {},
+          contentHeight: 800,
+          hardValidated: true,
+        )) as LayoutMetricVector)
+        .values[LayoutMetricId.visualBalance]!;
+    expect(v, 1.0);
+  });
+
   test('层级与图文亲和：违规降分', () {
     // title 被缩到 12（< 正文 20 中位）→ 层级 0。
     final flatTitle = LayoutMetricInput(
@@ -353,8 +373,31 @@ void main() {
       contains(AntiGamingVetoKind.hiddenText),
     );
 
-    // 大留白：4 块挤在栏顶部（填充 ~0.08）。
+    // 大留白（投机口径）：内容体量本可达下限（4×60/800=0.30 ≥ 0.20）
+    // 却被挤在两栏顶部（填充 144/800≈0.18）——布局浪费，否决。
     final blankInput = LayoutMetricInput(
+      assembly: assemblyOf([paraBlock('a'), paraBlock('b'), paraBlock('c'), paraBlock('d')]),
+      placed: [
+        placed('a', const LayoutRect(left: 0, top: 0, width: 588, height: 60), 0),
+        placed('b', const LayoutRect(left: 0, top: 84, width: 588, height: 60), 0),
+        placed('c', const LayoutRect(left: 612, top: 0, width: 588, height: 60), 1),
+        placed('d', const LayoutRect(left: 612, top: 84, width: 588, height: 60), 1),
+      ],
+      columnRects: columns2,
+      preservedRects: const {},
+      originalBounds: const {},
+      contentHeight: 800,
+      hardValidated: true,
+    );
+    expect(
+      vetoDetector.evaluate(blankInput).kinds,
+      contains(AntiGamingVetoKind.excessiveWhitespace),
+    );
+
+    // 大留白（稀疏豁免）：内容体量天然达不到下限（4×20/800=0.10 <
+    // 0.20，任何排列都填不满页面）——留白是内容体量的诚实结果而非
+    // 投机，不否决（真实稀疏手写转写页口径）。
+    final sparseInput = LayoutMetricInput(
       assembly: assemblyOf([paraBlock('a'), paraBlock('b'), paraBlock('c'), paraBlock('d')]),
       placed: [
         placed('a', const LayoutRect(left: 0, top: 0, width: 588, height: 20), 0),
@@ -369,8 +412,8 @@ void main() {
       hardValidated: true,
     );
     expect(
-      vetoDetector.evaluate(blankInput).kinds,
-      contains(AntiGamingVetoKind.excessiveWhitespace),
+      vetoDetector.evaluate(sparseInput).kinds,
+      isNot(contains(AntiGamingVetoKind.excessiveWhitespace)),
     );
 
     // 重复：两个块占完全相同盒。

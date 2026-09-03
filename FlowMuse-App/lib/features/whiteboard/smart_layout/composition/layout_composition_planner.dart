@@ -30,6 +30,14 @@ enum CompositionRejectReason {
 
   /// 侧栏档在界外（内容区不足以容纳主栏下限+侧栏下限+沟）。
   sideColumnInfeasible,
+
+  /// 内容量不足（纯文字且块数/填充率低于门禁）：多栏结构不适用——
+  /// 短内容分栏必然产生大空洞与阅读断裂，只出单栏族。
+  contentTooSparse,
+
+  /// 无侧栏语义（纯文字、无图/图注）：侧栏无内容可承载，空侧栏
+  /// 只会把正文挤出大空洞——mainSide 不适用。
+  sidebarSemanticsRequired,
 }
 
 /// 单条结构级约束结论。
@@ -46,16 +54,46 @@ class CompositionConstraintCheck {
   final CompositionRejectReason? reason;
 }
 
-/// 结构适用性约束（V3-401A）：只依赖内容区宽度与冻结 tokens——
-/// 参数域与判定全部可溯源 token 常数，不读软分、不读排名。
+/// 结构适用性约束（V3-401A）：依赖内容区宽度、内容量事实与冻结
+/// tokens——参数域与判定全部可溯源 token/冻结常数，不读软分、不读排名。
 class CompositionConstraint {
   const CompositionConstraint({
     required this.contentWidth,
+    required this.contentBlockCount,
+    required this.contentFillRatio,
+    required this.hasFigureContent,
     required this.tokens,
   });
 
   final double contentWidth;
+
+  /// 内容块数（排版块中非 preserved/protected 的块）。
+  final int contentBlockCount;
+
+  /// 文本填充率：Σ文本块实测高 / 内容区高（0~1；图块高度不计入——
+  /// 无实测口径不造数据，图文页的多栏适用性由 [hasFigureContent]
+  /// 单独放行）。
+  final double contentFillRatio;
+
+  /// 存在图/图注内容：纯文字页不成立侧栏语义，多栏适用性收紧。
+  final bool hasFigureContent;
+
   final SmartLayoutDesignTokens tokens;
+
+  /// 多栏适用最小内容块数（纯文字）：低于此值内容不构成文章结构，
+  /// 分栏只会制造空洞与跳读（真机 2026-09-03 案例：标题+3 行清单被
+  /// mainSide 拆到两栏）。冻结 v1；调整须经评审与回归 fixture。
+  static const int minMultiColumnBlocks = 6;
+
+  /// 多栏适用最小文本填充率（冻结 v1，口径同 [contentFillRatio]）。
+  static const double minMultiColumnFill = 0.35;
+
+  /// 内容量门禁：纯文字且（块数不足 或 填充率不足）→ 多栏不适用。
+  /// 图/图注存在时不触发（图文页本就具备分栏/侧栏的内容结构）。
+  bool get _contentTooSparse =>
+      !hasFigureContent &&
+      (contentBlockCount < minMultiColumnBlocks ||
+          contentFillRatio < minMultiColumnFill);
 
   /// 单栏适用：内容区 ≥ 最小行长。
   CompositionConstraintCheck singleColumn() =>
@@ -65,8 +103,13 @@ class CompositionConstraint {
               CompositionRejectReason.contentBelowMinLine,
             );
 
-  /// 双栏适用：扣沟后每栏 ≥ 最小行长。
+  /// 双栏适用：内容量门禁通过，且扣沟后每栏 ≥ 最小行长。
   CompositionConstraintCheck twoColumn() {
+    if (_contentTooSparse) {
+      return const CompositionConstraintCheck.rejected(
+        CompositionRejectReason.contentTooSparse,
+      );
+    }
     final column = (contentWidth - tokens.columnGutter) / 2;
     if (column + _eps < tokens.minLineLength) {
       return const CompositionConstraintCheck.rejected(
@@ -76,8 +119,19 @@ class CompositionConstraint {
     return const CompositionConstraintCheck.allowed();
   }
 
-  /// 主侧栏适用（侧栏宽 [sideWidth]）：主栏 ≥ 最小行长。
+  /// 主侧栏适用：侧栏语义门禁（无图/图注则侧栏无内容可承载），
+  /// 内容量门禁通过，且主栏（扣侧栏宽与沟）≥ 最小行长。
   CompositionConstraintCheck mainSide(double sideWidth) {
+    if (!hasFigureContent) {
+      return const CompositionConstraintCheck.rejected(
+        CompositionRejectReason.sidebarSemanticsRequired,
+      );
+    }
+    if (_contentTooSparse) {
+      return const CompositionConstraintCheck.rejected(
+        CompositionRejectReason.contentTooSparse,
+      );
+    }
     final main = contentWidth - sideWidth - tokens.columnGutter;
     if (main + _eps < tokens.minLineLength) {
       return const CompositionConstraintCheck.rejected(

@@ -119,9 +119,16 @@ class AntiGamingVetoDetector {
           'actual mean move $meanMove');
     }
 
-    // 大留白：≥3 块且各栏填充率均值 < 0.20。
+    // 大留白：≥3 块且各栏填充率均值 < 0.20。前提是内容体量本可达下限
+    // （零间隙堆叠的理论填充 ≥ 下限）——稀疏内容页（如少量手写转写成
+    // 标准字号文本后远小于页面）任何排列都无法达到下限，留白是内容
+    // 体量的诚实结果而非布局投机，不适用本否决线。
     if (input.placed.length >= 3 && input.columnRects.isNotEmpty) {
       var fillSum = 0.0;
+      var placedHeightSum = 0.0;
+      for (final p in input.placed) {
+        placedHeightSum += p.rect.height;
+      }
       for (var c = 0; c < input.columnRects.length; c++) {
         var deepest = 0.0;
         for (final p in input.placed) {
@@ -132,7 +139,10 @@ class AntiGamingVetoDetector {
         fillSum += (deepest / input.contentHeight).clamp(0.0, 1.0);
       }
       final density = fillSum / input.columnRects.length;
-      if (density < _whitespaceDensityFloor) {
+      final achievable =
+          (placedHeightSum / input.contentHeight).clamp(0.0, 1.0);
+      if (density < _whitespaceDensityFloor &&
+          achievable >= _whitespaceDensityFloor) {
         kinds.add(AntiGamingVetoKind.excessiveWhitespace);
         reasons.add('mean column fill $density < $_whitespaceDensityFloor');
       }

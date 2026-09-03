@@ -1,8 +1,11 @@
+import 'dart:ui';
+
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import '../analysis/analysis_retry_policy.dart';
 import '../analysis/smart_layout_analysis_repository.dart';
 import '../commit/validated_candidate_commit_gateway.dart';
+import '../composition/layout_block.dart';
 import '../composition/layout_block_assembler.dart';
 import '../composition/layout_composition_planner.dart';
 import '../correction/correction_patch_applier.dart' show AffectedSourceSet;
@@ -29,6 +32,7 @@ import '../validation/validated_candidate.dart';
 import '../validation/validated_candidate_pipeline.dart';
 import 'smart_layout_operation_guard.dart';
 import 'smart_layout_session.dart';
+import 'smart_layout_session_state.dart';
 import 'smart_layout_session_view_model.dart';
 
 /// 真实候选生成链结果（V3-505C）：成功 = 验证候选（可能为空——
@@ -94,6 +98,12 @@ abstract final class SmartLayoutRealCandidateChain {
         reason: 'empty-page',
         retryable: false,
       );
+    }
+    if (response.regions.isEmpty && layoutObjects.isEmpty) {
+      // 视觉适配器口径：无 movable 对象且零 region = prepare 门控全空
+      // （页内仅余噪点等非排版源，不构成内容）——无解空候选收敛，
+      // 不进守恒校验。有内容对象时零认领仍是契约破坏（fail closed）。
+      return const RealGenerationSucceeded(candidates: []);
     }
     final layoutSnapshot = LayoutPageSnapshot(
       pageId: snapshot.pageId,
@@ -167,9 +177,29 @@ abstract final class SmartLayoutRealCandidateChain {
     final contentHeight = pageContent.height;
 
     // ---- 4. planner 枚举（确定性）+ 硬 preflight（批量，四型分派）----
+    // 内容量事实（结构适用性输入，真机 2026-09-03 门禁）：内容块数 +
+    // 文本实测填充率；图/图注存在即非纯文字（多栏适用性另由约束判）。
+    var contentBlockCount = 0;
+    var textMeasuredHeight = 0.0;
+    var hasFigureContent = false;
+    for (final block in assembly.blocks) {
+      if (block.isPreservedLike) continue;
+      contentBlockCount++;
+      if (block.kind == LayoutBlockKind.figure ||
+          block.kind == LayoutBlockKind.caption) {
+        hasFigureContent = true;
+      }
+      final intrinsic = block.measuredIntrinsic;
+      if (intrinsic != null) textMeasuredHeight += intrinsic.height;
+    }
     final enumeration = const LayoutCompositionPlanner().enumerate(
       constraint: CompositionConstraint(
         contentWidth: pageContent.width,
+        contentBlockCount: contentBlockCount,
+        contentFillRatio: contentHeight > 0
+            ? (textMeasuredHeight / contentHeight).clamp(0.0, 1.0)
+            : 0.0,
+        hasFigureContent: hasFigureContent,
         tokens: tokens,
       ),
     );
@@ -355,6 +385,12 @@ class _VisionAdapterContractError implements Exception {
 }
 
 /// 排序草稿：region 待定内容 + 阅读序排序键（原稿 top/left/稳定 key）。
+/// 列表项编号模式（行首，容忍空白）：阿拉伯 `1.`/`1、`/`1．`/`1)`、
+/// CJK `一、`/`一.`、圈号 `①-⑳`。孤立编号行不成组；范围即冻结口径。
+final RegExp _listItemNumberPattern = RegExp(
+  r'^\s*(?:\d{1,3}\s*[.、．）)]|[①-⑳]|[一二三四五六七八九十]{1,3}\s*[、.．])',
+);
+
 class _RegionDraft {
   const _RegionDraft({
     required this.role,
@@ -363,6 +399,7 @@ class _RegionDraft {
     required this.sortTop,
     required this.sortLeft,
     required this.sortKey,
+    required this.bounds,
     this.transcribedText,
   });
 
@@ -372,6 +409,9 @@ class _RegionDraft {
   final double sortTop;
   final double sortLeft;
   final String sortKey;
+
+  /// 认领源在原稿中的包围盒（噪点最近邻认领用）。
+  final Rect bounds;
   final String? transcribedText;
 }
 
@@ -663,6 +703,8 @@ class SmartLayoutRealSessionScope {
   ///   跳过认领（保持 protected obstacle）；
   /// - 未认领的 movable 对象/笔迹 → 显式 unknown region（进 preserved，
   ///   不静默删除）；background 与 protectedObstacle 不生成 region；
+  ///   噪点笔画（removeIds 交集）例外——认领进最近转写文本块随应用
+  ///   删除（v2"随方案静默删除"同口径，消除残留墨点）；
   /// - readingOrder 重建为连续 0..N-1：title 优先，其余按原稿
   ///   top/left/稳定 key；图文组内 figure 后接其 captions；
   /// - 置信度：单块值（blockId 直查）优先，缺省用页面整体值，clamp
@@ -743,6 +785,7 @@ class SmartLayoutRealSessionScope {
         sortTop: unit.sourceBounds.top,
         sortLeft: unit.sourceBounds.left,
         sortKey: unit.key,
+        bounds: unit.sourceBounds,
         transcribedText: handwritten
             ? (unit.textElement?.text.trim() ?? '')
             : null,
@@ -759,6 +802,7 @@ class SmartLayoutRealSessionScope {
         sortTop: unit.sourceBounds.top,
         sortLeft: unit.sourceBounds.left,
         sortKey: unit.key,
+        bounds: unit.sourceBounds,
       );
     }
 
@@ -831,6 +875,7 @@ class SmartLayoutRealSessionScope {
             sortTop: top,
             sortLeft: left,
             sortKey: sourceId,
+            bounds: Rect.fromLTWH(left, top, 0, 0),
           ),
         ],
       ));
@@ -845,8 +890,51 @@ class SmartLayoutRealSessionScope {
         object.visualBounds.left,
       );
     }
+    // 噪点笔画（<8×8pt，v2 口径"随方案静默删除，消除残留墨点"）：
+    // 不进 preserved——认领进最近的转写文本块（transcribed 变换整组
+    // 删除源笔迹，应用时一并清除）；页面无转写块时回落 preserved
+    // （未发生 ink→text 转换，噪点保留不算残留）。
+    final noiseSourceIds = {
+      for (final id in preparation.removeIds) id.value,
+    };
+    final textDraftsForNoise = [
+      for (final draft in titleDrafts)
+        if (draft.transcribedText != null) draft,
+      for (final group in groups)
+        for (final draft in group.drafts)
+          if (draft.transcribedText != null) draft,
+    ];
+    double distanceToDraft(Rect strokeBounds, _RegionDraft draft) {
+      final strokeCenter = strokeBounds.center;
+      final draftCenter = draft.bounds.center;
+      final dx = strokeCenter.dx - draftCenter.dx;
+      final dy = strokeCenter.dy - draftCenter.dy;
+      return dx * dx + dy * dy;
+    }
+
     for (final stroke in snapshot.inkStrokes) {
       if (claimed.contains(stroke.sourceId)) continue;
+      if (noiseSourceIds.contains(stroke.sourceId) &&
+          textDraftsForNoise.isNotEmpty) {
+        final strokeRect = Rect.fromLTWH(
+          stroke.visualBounds.left,
+          stroke.visualBounds.top,
+          stroke.visualBounds.width,
+          stroke.visualBounds.height,
+        );
+        _RegionDraft nearest = textDraftsForNoise.first;
+        var nearestDistance = distanceToDraft(strokeRect, nearest);
+        for (final draft in textDraftsForNoise.skip(1)) {
+          final distance = distanceToDraft(strokeRect, draft);
+          if (distance < nearestDistance) {
+            nearest = draft;
+            nearestDistance = distance;
+          }
+        }
+        nearest.sourceIds.add(stroke.sourceId);
+        claimed.add(stroke.sourceId);
+        continue;
+      }
       addUnknown(
         stroke.sourceId,
         stroke.visualBounds.top,
@@ -861,6 +949,83 @@ class SmartLayoutRealSessionScope {
       if (byLeft != 0) return byLeft;
       return a.key.compareTo(b.key);
     });
+
+    // 连续编号行黏连（真机 2026-09-03 案例）：视觉服务逐行返回、不产
+    // list 语义，"1./一、/①"连续行会被当独立正文块，双栏平衡器按
+    // 栏深均衡把它们拆到两栏（阅读断裂）。阅读序连续、文本匹配编号
+    // 模式的手写转写行黏连为单个列表块——单块物理不可拆，平衡器无法
+    // 拆清单；角色升为 list 供下游语义使用。typed 文本不打乱（用户
+    // 显式分立的元素不改组）。
+    bool numberedBodyGroup(
+      ({double top, double left, String key, List<_RegionDraft> drafts}) group,
+    ) {
+      if (group.drafts.length != 1) return false;
+      final draft = group.drafts.single;
+      final text = draft.transcribedText;
+      return draft.role == SmartLayoutV3Role.body &&
+          text != null &&
+          _listItemNumberPattern.hasMatch(text);
+    }
+
+    final compactedGroups =
+        <({double top, double left, String key, List<_RegionDraft> drafts})>[];
+    var runStart = 0;
+    while (runStart < groups.length) {
+      if (!numberedBodyGroup(groups[runStart])) {
+        compactedGroups.add(groups[runStart]);
+        runStart++;
+        continue;
+      }
+      var runEnd = runStart + 1;
+      while (runEnd < groups.length && numberedBodyGroup(groups[runEnd])) {
+        runEnd++;
+      }
+      if (runEnd - runStart == 1) {
+        // 孤立编号行不成组（无拆分风险，保持原样不造语义）。
+        compactedGroups.add(groups[runStart]);
+        runStart = runEnd;
+        continue;
+      }
+      final runDrafts = <_RegionDraft>[
+        for (var i = runStart; i < runEnd; i++) groups[i].drafts.single,
+      ];
+      var left = runDrafts.first.bounds.left;
+      var top = runDrafts.first.bounds.top;
+      var right = runDrafts.first.bounds.right;
+      var bottom = runDrafts.first.bounds.bottom;
+      var confidence = runDrafts.first.confidence;
+      for (final draft in runDrafts.skip(1)) {
+        left = draft.bounds.left < left ? draft.bounds.left : left;
+        top = draft.bounds.top < top ? draft.bounds.top : top;
+        right = draft.bounds.right > right ? draft.bounds.right : right;
+        bottom = draft.bounds.bottom > bottom ? draft.bounds.bottom : bottom;
+        if (draft.confidence < confidence) confidence = draft.confidence;
+      }
+      final first = runDrafts.first;
+      compactedGroups.add((
+        top: groups[runStart].top,
+        left: groups[runStart].left,
+        key: groups[runStart].key,
+        drafts: [
+          _RegionDraft(
+            role: SmartLayoutV3Role.list,
+            sourceIds: [for (final draft in runDrafts) ...draft.sourceIds],
+            confidence: confidence,
+            sortTop: first.sortTop,
+            sortLeft: first.sortLeft,
+            sortKey: first.sortKey,
+            bounds: Rect.fromLTWH(left, top, right - left, bottom - top),
+            transcribedText: [
+              for (final draft in runDrafts) draft.transcribedText!,
+            ].join('\n'),
+          ),
+        ],
+      ));
+      runStart = runEnd;
+    }
+    groups
+      ..clear()
+      ..addAll(compactedGroups);
 
     // 终态化：region id 稳定编号 vision-r1..rN，readingOrder 连续
     // 0..N-1（不沿用可能有间断的旧序号）；手写转写以 region id 键入
@@ -973,11 +1138,26 @@ class SmartLayoutRealSessionScope {
   /// 用户切换页面（离页防线）：scope 改指新页（截图、视觉识别、候选
   /// 重跑都作用于新页号）并作废未完成的捕获与转写缓存（旧票据续作由
   /// 会话守卫拒绝）。
+  ///
+  /// 面板重开复用本 scope：终态会话（applied/cancelled/failed）在此
+  /// 复位为 idle——新面板的 VM 初始相位与状态机若错位，点开始将在
+  /// beginOperation 静默抛非法迁移（零反馈死按钮）。在途态不动。
   void setActivePage(String pageId) {
     _pageId = pageId;
     _lastCapture = null;
     _lastResponse = null;
     _lastTranscribedTextByRegion = null;
+    switch (session.state.phase) {
+      case SmartLayoutSessionPhase.applied:
+      case SmartLayoutSessionPhase.cancelled:
+      case SmartLayoutSessionPhase.failed:
+        session.reset();
+      case SmartLayoutSessionPhase.idle:
+      case SmartLayoutSessionPhase.analyzing:
+      case SmartLayoutSessionPhase.reviewing:
+      case SmartLayoutSessionPhase.applying:
+        break;
+    }
     session.setActivePage(pageId);
   }
 

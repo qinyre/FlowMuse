@@ -26,6 +26,10 @@ void main() {
       .enumerate(
         constraint: CompositionConstraint(
           contentWidth: 1200,
+          // 结构可行性专项：给足内容量与图语义，门禁不触发。
+          contentBlockCount: 12,
+          contentFillRatio: 0.8,
+          hasFigureContent: true,
           tokens: tokens,
         ),
       )

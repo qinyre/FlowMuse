@@ -470,6 +470,77 @@ void main() {
           ),
         ),
       );
+      // 噪点笔画（<8×8pt）：不进聚类、无 SoM 标记，v2 口径随方案
+      // 静默删除——v3 适配器应把它认领进最近转写块一并清除。
+      controller.applyResult(
+        AddElementResult(
+          FreedrawElement(
+            id: const ElementId('k-n1'),
+            x: 210,
+            y: 300,
+            width: 6,
+            height: 6,
+            points: const [Point(0, 0), Point(4, 4)],
+            customData: {
+              'flowMuse': {'pageId': pageId},
+            },
+          ),
+        ),
+      );
+      return controller;
+    }
+
+    /// 手写标题+三行编号清单页（真机 2026-09-03 案例回归 fixture）。
+    /// mark 编号按阅读序（上→左）：m1=标题、m2/m3/m4=编号行。
+    MarkdrawController listPageController() {
+      final controller = MarkdrawController(
+        config: MarkdrawEditorConfig(
+          initialLayout: CanvasLayout(
+            type: CanvasLayoutType.paged,
+            pages: const [
+              CanvasPage(
+                id: pageId,
+                index: 0,
+                bounds: Rect.fromLTWH(0, 0, 1200, 800),
+                template: CanvasPageTemplate.blank,
+              ),
+            ],
+          ),
+        ),
+      );
+      controller.applyStyleChange(
+        const ElementStyle(fontFamily: 'Excalifont'),
+      );
+      controller.applyResult(AddElementResult(canvasPage()));
+      void addStroke(
+        String id,
+        double x,
+        double y,
+        double w,
+        String session,
+      ) {
+        controller.applyResult(
+          AddElementResult(
+            FreedrawElement(
+              id: ElementId(id),
+              x: x,
+              y: y,
+              width: w,
+              height: 40,
+              points: const [Point(0, 0), Point(40, 20)],
+              customData: {
+                recognitionStrokeSessionKey: session,
+                'flowMuse': {'pageId': pageId},
+              },
+            ),
+          ),
+        );
+      }
+
+      addStroke('k-t1', 300, 120, 400, 't1');
+      addStroke('k-l1', 200, 300, 220, 'l1');
+      addStroke('k-l2', 200, 380, 160, 'l2');
+      addStroke('k-l3', 200, 460, 160, 'l3');
       return controller;
     }
 
@@ -553,6 +624,13 @@ void main() {
       );
       expect(
         applied.elements.where(
+          (e) => e.id.value == 'k-n1' && !e.isDeleted,
+        ),
+        isEmpty,
+        reason: '噪点笔画随方案静默删除（v2 同口径，无残留墨点）',
+      );
+      expect(
+        applied.elements.where(
           (e) => e is TextElement && !e.isDeleted && e.text == '手工记账流水',
         ),
         isNotEmpty,
@@ -577,6 +655,128 @@ void main() {
       expect(
         undone.elements.firstWhere((e) => e.id.value == 'k-s1').x,
         beforeStroke.x,
+      );
+      expect(
+        undone.elements.where((e) => e.id.value == 'k-n1' && !e.isDeleted),
+        isNotEmpty,
+        reason: 'undo 恢复噪点笔画（单事务完整回滚）',
+      );
+    }, timeout: const Timeout(Duration(seconds: 90)));
+
+    testWidgets('短清单页回归：编号三行黏连单块 + 候选仅单栏族（真机 2026-09-03）', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final controller = listPageController();
+      addTearDown(controller.dispose);
+
+      var visionCalls = 0;
+      controller.onVisionSmartLayout = (request) async {
+        visionCalls++;
+        expect(request.marks, ['m1', 'm2', 'm3', 'm4'],
+            reason: 'mark 按阅读序编号：标题+三行');
+        return SmartLayoutVisionResponse(
+          elements: [
+            SmartLayoutVisionElement(
+              id: 'e0',
+              role: 'title',
+              text: '你好，这是标题',
+              markIds: const ['m1'],
+              confidence: 0.95,
+            ),
+            SmartLayoutVisionElement(
+              id: 'e1',
+              role: 'body',
+              text: '1. 真的假的',
+              markIds: const ['m2'],
+              confidence: 0.95,
+            ),
+            SmartLayoutVisionElement(
+              id: 'e2',
+              role: 'body',
+              text: '2. 真的',
+              markIds: const ['m3'],
+              confidence: 0.95,
+            ),
+            SmartLayoutVisionElement(
+              id: 'e3',
+              role: 'body',
+              text: '3. 假的',
+              markIds: const ['m4'],
+              confidence: 0.95,
+            ),
+          ],
+        );
+      };
+      controller.onTranscribeCrop = (request) async =>
+          const SmartLayoutTranscribeResponse(text: '', confidence: 0);
+
+      final scope = SmartLayoutRealSessionScope.build(
+        controller: controller,
+        serverUri: Uri.parse('http://127.0.0.1:9'),
+        pageId: pageId,
+      );
+      addTearDown(scope.dispose);
+      final container = ProviderContainer(
+        overrides: [
+          smartLayoutSessionDependenciesProvider.overrideWithValue(
+            scope.dependencies,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+
+      await tester.runAsync(vm.startAnalysis);
+      final state = container.read(smartLayoutSessionViewModelProvider);
+      expect(state.phase, SmartLayoutSessionPhase.reviewing);
+      expect(visionCalls, 1);
+
+      // 内容量门禁：纯文字短内容（黏连后 2 块、填充 ~0.16）只出单栏族，
+      // 双栏/主侧栏不参与竞争——不再出现"清单拆两栏"的最高分。
+      final cards = state.validatedCards;
+      expect(cards, isNotEmpty);
+      expect(
+        cards.map((c) => c.candidate.diversityKey),
+        everyElement(anyOf('single', 'conservativeLayout')),
+      );
+      expect(
+        cards.first.candidate.diversityKey,
+        anyOf('single', 'conservativeLayout'),
+      );
+
+      await tester.runAsync(vm.applySelectedCandidate);
+      final applied = controller.currentScene;
+      final newTexts = applied.elements
+          .where((e) => e is TextElement && !e.isDeleted)
+          .toList();
+      final texts = {
+        for (final e in newTexts) (e as TextElement).text,
+      };
+      expect(
+        texts,
+        contains('1. 真的假的\n2. 真的\n3. 假的'),
+        reason: '编号三行黏连为单个列表块（阅读序换行连接，物理不可拆）',
+      );
+      expect(texts, contains('你好，这是标题'));
+      expect(newTexts, hasLength(2), reason: '仅标题+合并列表，无逐行散块');
+      for (final id in ['k-t1', 'k-l1', 'k-l2', 'k-l3']) {
+        expect(
+          applied.elements.where((e) => e.id.value == id && !e.isDeleted),
+          isEmpty,
+          reason: '$id 源笔迹随转写变换整组移除',
+        );
+      }
+
+      controller.undo();
+      expect(
+        controller.currentScene.elements
+            .where((e) => e.id.value == 'k-l2' && !e.isDeleted),
+        isNotEmpty,
+        reason: 'undo 单事务回滚恢复源笔迹',
       );
     }, timeout: const Timeout(Duration(seconds: 90)));
 
@@ -938,6 +1138,71 @@ void main() {
         isNotEmpty,
         reason: '重试链路完整走通',
       );
+    }, timeout: const Timeout(Duration(seconds: 90)));
+
+    testWidgets('面板重开复用 scope：终态会话复位，重开面板可直接再开始', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final controller = visionController();
+      addTearDown(controller.dispose);
+
+      var visionCalls = 0;
+      controller.onVisionSmartLayout = (request) async {
+        visionCalls++;
+        return SmartLayoutVisionResponse(
+          elements: [
+            SmartLayoutVisionElement(
+              id: 'e0',
+              role: 'body',
+              text: '重开后的手写',
+              markIds: const ['m1'],
+              confidence: 0.95,
+            ),
+          ],
+        );
+      };
+      controller.onTranscribeCrop = (request) async {
+        return const SmartLayoutTranscribeResponse(text: '', confidence: 0);
+      };
+
+      final scope = SmartLayoutRealSessionScope.build(
+        controller: controller,
+        serverUri: Uri.parse('http://127.0.0.1:9'),
+        pageId: pageId,
+      );
+      addTearDown(scope.dispose);
+
+      // 在途会话不被 setActivePage 复位（终态才复位）。
+      scope.session.beginOperation();
+      scope.setActivePage(pageId);
+      expect(scope.session.state.phase, SmartLayoutSessionPhase.analyzing);
+      scope.session.cancelOperation();
+
+      // 模拟重开面板（关闭时 onClose 先取消 → 终态 cancelled；生产
+      // 路径复用 scope 并走 setActivePage）：必须复位为 idle，否则新
+      // 面板的初始 idle 视图与状态机终态错位，点开始将在
+      // beginOperation 静默抛非法迁移（零反馈死按钮）。
+      expect(scope.session.state.phase, SmartLayoutSessionPhase.cancelled);
+      scope.setActivePage(pageId);
+      expect(scope.session.state.phase, SmartLayoutSessionPhase.idle);
+
+      final container = ProviderContainer(
+        overrides: [
+          smartLayoutSessionDependenciesProvider.overrideWithValue(
+            scope.dependencies,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+      await tester.runAsync(vm.startAnalysis);
+      final state = container.read(smartLayoutSessionViewModelProvider);
+      expect(state.phase, SmartLayoutSessionPhase.reviewing);
+      expect(visionCalls, 1, reason: '重开面板的首次分析真实走通视觉链');
     }, timeout: const Timeout(Duration(seconds: 90)));
   });
 }
