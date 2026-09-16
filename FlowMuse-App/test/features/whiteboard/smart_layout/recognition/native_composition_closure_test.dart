@@ -20,21 +20,20 @@ void main() {
     String groupId, {
     double x = 100,
     bool locked = false,
-  }) =>
-      TextElement(
-        id: ElementId(id),
-        x: x,
-        y: 50,
-        width: 200,
-        height: 40,
-        text: 'text $id',
-        groupIds: [groupId],
-        locked: locked,
-        seed: 7,
-        versionNonce: 11,
-        updated: 1000,
-        version: 1,
-      );
+  }) => TextElement(
+    id: ElementId(id),
+    x: x,
+    y: 50,
+    width: 200,
+    height: 40,
+    text: 'text $id',
+    groupIds: [groupId],
+    locked: locked,
+    seed: 7,
+    versionNonce: 11,
+    updated: 1000,
+    version: 1,
+  );
 
   LayoutRect rect(double left, double top) =>
       LayoutRect(left: left, top: top, width: 200, height: 40);
@@ -44,20 +43,14 @@ void main() {
         .addElement(groupedText('t1', 'grp-1'))
         .addElement(groupedText('t2', 'grp-1', x: 400))
         .addElement(groupedText('t3', 'grp-2', x: 700));
-    final closure = SmartLayoutSceneTransformer.closureOf(
-      scene,
-      {ElementId('t1')},
-    );
+    final closure = SmartLayoutSceneTransformer.closureOf(scene, {
+      ElementId('t1'),
+    });
     expect(closure, containsAll([ElementId('t1'), ElementId('t2')]));
-    expect(
-      closure.contains(const ElementId('t3')),
-      isFalse,
-      reason: '无关组不进闭包',
-    );
+    expect(closure.contains(const ElementId('t3')), isFalse, reason: '无关组不进闭包');
   });
 
-  test('变换整组一次：成员 t1 变换后 t2 同步位移（appliedSourceIds 含两者）',
-      () {
+  test('变换整组一次：成员 t1 变换后 t2 同步位移（appliedSourceIds 含两者）', () {
     final scene = Scene()
         .addElement(groupedText('t1', 'grp-1'))
         .addElement(groupedText('t2', 'grp-1', x: 400));
@@ -78,12 +71,8 @@ void main() {
     final success = outcome as SceneTransformSuccess;
     expect(success.appliedSourceIds, containsAll(const ['t1', 't2']));
     final next = success.scene;
-    final moved1 = next.activeElements.firstWhere(
-      (e) => e.id.value == 't1',
-    );
-    final moved2 = next.activeElements.firstWhere(
-      (e) => e.id.value == 't2',
-    );
+    final moved1 = next.activeElements.firstWhere((e) => e.id.value == 't1');
+    final moved2 = next.activeElements.firstWhere((e) => e.id.value == 't2');
     expect(moved1.x, 150, reason: '目标位移 +50');
     expect(moved2.x, 450, reason: '同组成员同步位移（整体变换）');
   });
@@ -172,11 +161,7 @@ void main() {
     final outcome = SmartLayoutCandidateMaterializer.materialize(
       baseScene: scene,
       baseRevision: revision,
-      sourceCoverage: SourceCoverageLedger.pending(const [
-        't1',
-        't2',
-        't3',
-      ]),
+      sourceCoverage: SourceCoverageLedger.pending(const ['t1', 't2', 't3']),
       assembly: assembly,
       placement: placement,
       timestampMs: 1000,
@@ -185,5 +170,42 @@ void main() {
     final failure = outcome as PatchMaterializationFailure;
     expect(failure.kind, PatchMaterializationFailureKind.sharedClosureGroup);
     expect(failure.blockId, 'b2');
+
+    final composed = SmartLayoutCandidateMaterializer.composeNativeGroups(
+      scene,
+      assembly,
+    );
+    expect(composed.blocks, hasLength(2));
+    expect(composed.blocks.first.sourceRefs, ['t1', 't2']);
+    expect(composed.ledgerConserved, isTrue);
+    final success = SmartLayoutCandidateMaterializer.materialize(
+      baseScene: scene,
+      baseRevision: revision,
+      sourceCoverage: SourceCoverageLedger.pending(const ['t1', 't2', 't3']),
+      assembly: composed,
+      placement: FlowPlacementSuccess(
+        placed: [
+          PlacedBlock(
+            blockId: 'b1',
+            rect: const LayoutRect(left: 0, top: 0, width: 500, height: 40),
+            columnIndex: 0,
+            lineCount: 1,
+            appliedFontSize: 20,
+            shrunk: false,
+          ),
+        ],
+        usedHeights: const [],
+      ),
+      timestampMs: 1000,
+    );
+    expect(success, isA<PatchMaterializationSuccess>());
+    final patch = (success as PatchMaterializationSuccess).patch;
+    expect(patch.updates, hasLength(2), reason: '同组每个成员只变换一次');
+    final updated = {
+      for (final u in patch.updates) u.element.id.value: u.element,
+    };
+    expect(updated['t1']!.x, 0);
+    expect(updated['t2']!.x, 300);
+    expect(patch.removes, isEmpty);
   });
 }

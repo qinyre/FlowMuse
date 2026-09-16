@@ -22,6 +22,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/segmentation/ink_regi
 import 'package:flow_muse/features/whiteboard/smart_layout/segmentation/region_segment.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/rendering/draft_scene_renderer.dart';
+import '../snapshot/layout_page_snapshot.dart' show conservativeVisualBounds;
 
 /// 分区层区域记录：regionId 沿用 `regionIdOf`（`r:` + 成员最小 sourceId），
 /// 显式区分 [targetSourceIds]（本区域待消费正文笔迹）与
@@ -249,8 +250,14 @@ class RegionAssetBuilder {
   final DraftSceneRenderer _renderer;
   int _counter = 0;
   bool _disposed = false;
+  bool _cancelled = false;
 
   bool get isDisposed => _disposed;
+
+  void cancel() {
+    _cancelled = true;
+    _renderer.cancelCurrent();
+  }
 
   void dispose() {
     if (_disposed) return;
@@ -259,6 +266,7 @@ class RegionAssetBuilder {
   }
 
   void _checkAlive() {
+    if (_cancelled) throw const DraftRenderCancelled();
     if (_disposed) {
       throw StateError('RegionAssetBuilder 已释放');
     }
@@ -351,6 +359,7 @@ class RegionAssetBuilder {
     );
     ui.Image? enhanced;
     try {
+      _checkAlive();
       final needsEnhancement = _targetHasLightStroke(
         record.targetSourceIds,
         budget.pencilLightnessThreshold,
@@ -364,6 +373,7 @@ class RegionAssetBuilder {
         png = await _encodePng(image);
       }
       final assetId = '$assetPrefix${++_counter}';
+      _checkAlive();
       return RegionAssetBuilt(
         RegionAsset(
           assetId: assetId,
@@ -597,10 +607,11 @@ class RegionPartitioner {
       var bottom = double.negativeInfinity;
       for (final member in members) {
         final stroke = byId[member]!;
-        left = math.min(left, stroke.x);
-        top = math.min(top, stroke.y);
-        right = math.max(right, stroke.x + stroke.width);
-        bottom = math.max(bottom, stroke.y + stroke.height);
+        final visual = conservativeVisualBounds(stroke);
+        left = math.min(left, visual.left);
+        top = math.min(top, visual.top);
+        right = math.max(right, visual.right);
+        bottom = math.max(bottom, visual.bottom);
       }
       final bounds = RecognitionBounds(
         left: left,

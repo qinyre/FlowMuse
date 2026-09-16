@@ -1,6 +1,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
@@ -10,6 +11,8 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recogniti
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_repository.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/region_assets.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_ledger.dart';
+import '../snapshot/layout_page_snapshot.dart' show conservativeVisualBounds;
+import '../rendering/draft_scene_renderer.dart' show DraftRenderCancelled;
 
 /// 识别管线状态机与编排（spec §6.1/§6.2/§6.3）。
 ///
@@ -19,8 +22,8 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_le
 /// 再发复核请求**——regrouping 在 verifying 之前。
 ///
 /// 取消检查点：capture 后、分区后、每张资产生成后、每批请求派发前、
-/// 每批返回后、结构请求前后、装配前；检查点间最长不可取消窗口=单次请求
-/// （服务端 ctx 取消 + 仓库侧总预算计时器兜底）。
+/// 每批返回后、结构请求前后、装配前；总预算主动取消网络与资产构建。
+/// 单次底层原生光栅化不可强行抢占，完成后丢弃迟到产物并释放资源。
 
 enum RecognitionPipelineState {
   idle,
@@ -306,6 +309,9 @@ class RecognitionPipeline {
   bool _cancelRequested = false;
   SmartLayoutCancellationToken? _cancelToken;
   RecognitionBudget _budget = const RecognitionBudget();
+  final Stopwatch _clock = Stopwatch();
+  RegionAssetBuilder? _renderBuilder;
+  bool get _budgetExpired => _clock.elapsed >= _budget.totalTimeout;
   final Map<String, RecognitionResponse> _responseCache = {};
   final Map<String, RegionAsset> _assetByRegion = {};
   final Map<String, RegionReadOutcome> _outcomes = {};
@@ -330,6 +336,7 @@ class RecognitionPipeline {
   void cancel() {
     _cancelRequested = true;
     _cancelToken?.cancel();
+    _renderBuilder?.cancel();
   }
 
   void _transition(RecognitionPipelineState next) {
@@ -355,9 +362,41 @@ class RecognitionPipeline {
     Set<String> affectedSourceIds = const {},
   }) async {
     if (_state != RecognitionPipelineState.idle) {
+      throw StateError('pipeline 实例不可复用');
+    }
+    _budget = budget;
+    _clock.start();
+    final deadline = Timer(budget.totalTimeout, () {
+      _cancelToken?.cancel();
+      _renderBuilder?.cancel();
+    });
+    try {
+      return await _run(
+        capture,
+        budget: budget,
+        bearerToken: bearerToken,
+        correctedPartitions: correctedPartitions,
+        previous: previous,
+        affectedSourceIds: affectedSourceIds,
+      );
+    } finally {
+      deadline.cancel();
+      _clock.stop();
+    }
+  }
+
+  Future<RecognitionSessionResult> _run(
+    RecognitionCapture capture, {
+    RecognitionBudget budget = const RecognitionBudget(),
+    String? bearerToken,
+    List<RegionPartition>? correctedPartitions,
+    RecognitionSessionResult? previous,
+    Set<String> affectedSourceIds = const {},
+  }) async {
+    if (_state != RecognitionPipelineState.idle) {
       throw StateError('pipeline 实例不可复用（一个操作一个实例）');
     }
-    final stopwatch = Stopwatch()..start();
+    final stopwatch = _clock;
     _cancelToken = SmartLayoutCancellationToken();
     _budget = budget;
     final partialNotes = <String>[];
@@ -448,9 +487,17 @@ class RecognitionPipeline {
       capturedScene: capture.scene,
       assetPrefix: '${capture.operationId}:a',
     );
+    _renderBuilder = regionBuilder;
     try {
       for (final partition in included) {
         _checkCancelled();
+        if (_budgetExpired) {
+          for (final id in partition.record.targetSourceIds) {
+            ledger = ledger.preserve(id, SourcePreserveReason.budgetExceeded);
+          }
+          partialNotes.add('总时限耗尽，停止渲染');
+          continue;
+        }
         final subPartitions = await _buildWithSplit(
           regionBuilder,
           partition,
@@ -461,7 +508,9 @@ class RecognitionPipeline {
           for (final sourceId in partition.record.targetSourceIds) {
             ledger = ledger.preserve(
               sourceId,
-              SourcePreserveReason.assetFailed,
+              _budgetExpired
+                  ? SourcePreserveReason.budgetExceeded
+                  : SourcePreserveReason.assetFailed,
             );
           }
           partialNotes.add('资产失败保留: ${partition.record.regionId}');
@@ -471,6 +520,7 @@ class RecognitionPipeline {
       }
     } finally {
       regionBuilder.dispose();
+      _renderBuilder = null;
     }
     for (final partition in _effectivePartitions) {
       final asset = _assetByRegion[partition.record.regionId];
@@ -485,7 +535,7 @@ class RecognitionPipeline {
     final batches = _batchRegions(_effectivePartitions, budget);
     for (final batch in batches) {
       _checkCancelled();
-      if (!_budget.canSpendModelCall) {
+      if (!_budget.canSpendModelCall || _budgetExpired) {
         // 预算不足则不发，该批区域保留（§6.2 执行点）。无响应不是模型
         // 输出——不产生 outcome，不进入复核触发表。
         for (final partition in batch) {
@@ -513,7 +563,9 @@ class RecognitionPipeline {
           for (final sourceId in partition.record.targetSourceIds) {
             ledger = ledger.preserve(
               sourceId,
-              SourcePreserveReason.missingResponse,
+              _budgetExpired
+                  ? SourcePreserveReason.budgetExceeded
+                  : SourcePreserveReason.missingResponse,
             );
           }
           partialNotes.add('批次未获有效响应保留: ${partition.record.regionId}');
@@ -541,19 +593,106 @@ class RecognitionPipeline {
         candidates[partition] = trigger;
       }
     }
-    if (candidates.isNotEmpty) {
+    if (candidates.isNotEmpty && !_budgetExpired) {
       var capped = candidates.entries.toList()
         ..sort((a, b) => a.value.index.compareTo(b.value.index));
       if (capped.length > budget.verifyMaxRegions) {
         capped = capped.sublist(0, budget.verifyMaxRegions);
       }
-      // 重分组：相邻候选（间距 < 0.5×行高）合并为同一批复核组；
-      // regionId 保持稳定（最终复核区域分组语义）。
       _transition(RecognitionPipelineState.regrouping);
-      final groups = _mergeAdjacentCandidates(capped);
+      final groups = budget.regroupRounds > 0
+          ? _mergeAdjacentCandidates(capped)
+          : [
+              for (final entry in capped) [entry.key],
+            ];
+      final verifyPartitions = <RegionPartition>[];
+      final regroupBuilder = RegionAssetBuilder(
+        capturedScene: capture.scene,
+        assetPrefix: '${capture.operationId}:regroup',
+      );
+      _renderBuilder = regroupBuilder;
+      try {
+        for (final group in groups) {
+          _checkCancelled();
+          if (_budgetExpired) break;
+          if (group.length == 1) {
+            verifyPartitions.add(group.single);
+            continue;
+          }
+          final strokes = [for (final p in group) ...p.strokes];
+          final ids = strokes.map((s) => s.id.value).toList()..sort();
+          final boxes = strokes.map(conservativeVisualBounds).toList();
+          final left = boxes.map((b) => b.left).reduce(math.min);
+          final top = boxes.map((b) => b.top).reduce(math.min);
+          final merged = RegionPartition(
+            strokes: strokes,
+            record: RegionRecord(
+              regionId: 'r:${ids.first}',
+              targetSourceIds: ids,
+              bounds: RecognitionBounds(
+                left: left,
+                top: top,
+                width: boxes.map((b) => b.right).reduce(math.max) - left,
+                height: boxes.map((b) => b.bottom).reduce(math.max) - top,
+              ),
+              localLineHeight: group
+                  .map((p) => p.record.localLineHeight)
+                  .reduce(math.max),
+            ),
+          );
+          final rendered = await _renderAsset(
+            regroupBuilder,
+            merged.record,
+            budget,
+          );
+          _checkCancelled();
+          if (rendered is! RegionAssetBuilt || _budgetExpired) {
+            for (final id in ids) {
+              if (ledger.entryOf(id).status == SourceLedgerStatus.pending) {
+                ledger = ledger.preserve(
+                  id,
+                  _budgetExpired
+                      ? SourcePreserveReason.budgetExceeded
+                      : SourcePreserveReason.assetFailed,
+                );
+              }
+            }
+            partialNotes.add('重分组资产不可用，保留原件');
+            continue;
+          }
+          final oldIds = group.map((p) => p.record.regionId).toSet();
+          assetIndex.invalidateForSources(ids);
+          for (final id in oldIds) {
+            _assetByRegion.remove(id);
+            _outcomes.remove(id);
+          }
+          _effectivePartitions = [
+            for (final p in _effectivePartitions)
+              if (!oldIds.contains(p.record.regionId)) p,
+            merged,
+          ];
+          _assetByRegion[merged.record.regionId] = rendered.asset;
+          assetIndex.register(rendered.asset);
+          _verifyReasons[merged.record.regionId] =
+              RecognitionVerifyReason.suspectedMiss;
+          // 新成员集合不能继承旧区域的 recognized 状态。
+          _outcomes[merged.record.regionId] = RegionReadOutcome(
+            regionId: merged.record.regionId,
+            status: RecognitionRegionStatus.uncertain,
+            targetSourceIds: ids,
+          );
+          verifyPartitions.add(merged);
+        }
+      } finally {
+        regroupBuilder.dispose();
+        _renderBuilder = null;
+      }
+      assertTargetOwnershipUniqueness(
+        _effectivePartitions.map((p) => p.record),
+      );
       _checkCancelled();
       _transition(RecognitionPipelineState.verifying);
-      for (final group in groups.expand((g) => _batchRegions(g, budget))) {
+      for (final group in _batchRegions(verifyPartitions, budget)) {
         _checkCancelled();
         final response = await _dispatch(
           capture,
@@ -563,8 +702,7 @@ class RecognitionPipeline {
           verify: true,
         );
         if (response == null) {
-          // 复核失败不推翻初读：保持初读结果（§6.1 复核未消解冲突按保留
-          // 或初读处理——此处初读已定，保守保持）。
+          // 只保留初读诊断，不授予替换许可；下方疑难源结算统一保留。
           continue;
         }
         _applyBatchResponse(
@@ -575,6 +713,35 @@ class RecognitionPipeline {
           verified: true,
         );
         ledger = _ledgerAfterBatch;
+      }
+    }
+
+    // 疑难区域只有成功复核后才可准入；预算截断/复核失败不得沿用低置信初读。
+    final confirmed = <String>{
+      for (final o in _outcomes.values)
+        if (o.verified &&
+            o.status == RecognitionRegionStatus.recognized &&
+            (o.confidence ?? 0) >= verifyConfidenceThreshold)
+          ...o.targetSourceIds,
+    };
+    final nonTextSources = <String>{
+      for (final o in _outcomes.values)
+        if (o.status == RecognitionRegionStatus.nonText ||
+            o.status == RecognitionRegionStatus.unreadable)
+          ...o.targetSourceIds,
+    };
+    for (final p in candidates.keys) {
+      for (final id in p.record.targetSourceIds) {
+        if (!confirmed.contains(id) &&
+            !nonTextSources.contains(id) &&
+            ledger.entryOf(id).status == SourceLedgerStatus.pending) {
+          ledger = ledger.preserve(
+            id,
+            _budgetExpired
+                ? SourcePreserveReason.budgetExceeded
+                : SourcePreserveReason.uncertain,
+          );
+        }
       }
     }
 
@@ -735,7 +902,7 @@ class RecognitionPipeline {
   }) async {
     if (batch.isEmpty) return null;
     _checkCancelled();
-    if (!_budget.canSpendModelCall) {
+    if (!_budget.canSpendModelCall || _budgetExpired) {
       return null;
     }
     final isVerify = verify;
@@ -759,10 +926,13 @@ class RecognitionPipeline {
           cancelToken: _cancelToken,
           remainingBudget: _remaining(stopwatch),
         );
+        _checkCancelled();
+        if (_budgetExpired) return null;
         _responseCache[cacheKey] = response;
         return response;
       } on RecognitionException catch (error) {
         if (error.kind == RecognitionExceptionKind.cancelled) {
+          if (_budgetExpired && !_cancelRequested) return null;
           throw RecognitionCancelledException(null);
         }
         final canRetry =
@@ -790,7 +960,7 @@ class RecognitionPipeline {
     String? bearerToken,
   }) async {
     _checkCancelled();
-    if (!_budget.canSpendModelCall) {
+    if (!_budget.canSpendModelCall || _budgetExpired) {
       return null;
     }
     final cacheKey =
@@ -811,10 +981,13 @@ class RecognitionPipeline {
           cancelToken: _cancelToken,
           remainingBudget: _remaining(stopwatch),
         );
+        _checkCancelled();
+        if (_budgetExpired) return null;
         _responseCache[cacheKey] = response;
         return response as RecognitionStructureResponse;
       } on RecognitionException catch (error) {
         if (error.kind == RecognitionExceptionKind.cancelled) {
+          if (_budgetExpired && !_cancelRequested) return null;
           throw RecognitionCancelledException(null);
         }
         final canRetry =
@@ -978,8 +1151,8 @@ class RecognitionPipeline {
     return closest;
   }
 
-  /// 重分组：相邻复核候选（间距 < verifyMergeGapLineHeights×行高）合并为
-  /// 同批复核组（至多一轮；regrouping 产物=最终复核区域分组）。
+  /// 同行相邻疑难区域的合并提案；调用方重建成员与图像后再发复核，
+  /// 不把网络分批误当作分区变更。
   List<List<RegionPartition>> _mergeAdjacentCandidates(
     List<MapEntry<RegionPartition, RecognitionVerifyTrigger>> candidates,
   ) {
@@ -1003,7 +1176,23 @@ class RecognitionPipeline {
           last.record.bounds,
           entry.key.record.bounds,
         );
-        if (gap < verifyMergeGapLineHeights * lineHeight) {
+        final verticalOverlap =
+            math.min(
+              last.record.bounds.top + last.record.bounds.height,
+              entry.key.record.bounds.top + entry.key.record.bounds.height,
+            ) -
+            math.max(last.record.bounds.top, entry.key.record.bounds.top);
+        if (gap < verifyMergeGapLineHeights * lineHeight &&
+            verticalOverlap >
+                0.5 *
+                    math.min(
+                      last.record.bounds.height,
+                      entry.key.record.bounds.height,
+                    ) &&
+            ![
+              ...last.strokes,
+              ...entry.key.strokes,
+            ].any((s) => s.locked || s.boundElements.isNotEmpty)) {
           group.add(entry.key);
           merged = true;
           break;
@@ -1039,7 +1228,10 @@ class RecognitionPipeline {
     RecognitionBudget budget, {
     required int depth,
   }) async {
-    final outcome = await builder.build(partition.record, budget);
+    if (_budgetExpired) return null;
+    final outcome = await _renderAsset(builder, partition.record, budget);
+    _checkCancelled();
+    if (_budgetExpired) return null;
     if (outcome is RegionAssetBuilt) {
       _assetByRegion[partition.record.regionId] = outcome.asset;
       return [partition];
@@ -1081,6 +1273,24 @@ class RecognitionPipeline {
     return subPartitions;
   }
 
+  Future<RegionAssetOutcome> _renderAsset(
+    RegionAssetBuilder builder,
+    RegionRecord record,
+    RecognitionBudget budget,
+  ) async {
+    try {
+      return await builder.build(record, budget);
+    } on DraftRenderCancelled {
+      _checkCancelled();
+      if (!_budgetExpired) rethrow;
+      return RegionAssetFailed(
+        record.regionId,
+        RegionAssetFailureReason.renderError,
+        '总时限耗尽',
+      );
+    }
+  }
+
   RegionPartition? _subPartition(RegionPartition partition, List<String> ids) {
     final strokes = [for (final id in ids) _strokeOf(partition, id)!];
     var left = double.infinity;
@@ -1088,10 +1298,11 @@ class RecognitionPipeline {
     var right = double.negativeInfinity;
     var bottom = double.negativeInfinity;
     for (final stroke in strokes) {
-      left = math.min(left, stroke.x);
-      top = math.min(top, stroke.y);
-      right = math.max(right, stroke.x + stroke.width);
-      bottom = math.max(bottom, stroke.y + stroke.height);
+      final visual = conservativeVisualBounds(stroke);
+      left = math.min(left, visual.left);
+      top = math.min(top, visual.top);
+      right = math.max(right, visual.right);
+      bottom = math.max(bottom, visual.bottom);
     }
     final sortedIds = [...ids]..sort();
     return RegionPartition(

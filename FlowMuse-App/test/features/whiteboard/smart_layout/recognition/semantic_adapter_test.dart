@@ -19,6 +19,91 @@ void main() {
   const adapter = RecognitionSemanticAdapter();
   const tokens = SmartLayoutDesignTokens.v1;
 
+  test('原生组合含锁定成员：整个闭包入保留账本', () async {
+    final result = await sessionOf(
+      const [],
+      scene: Scene()
+          .addElement(
+            TextElement(
+              id: const ElementId('a'),
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 30,
+              text: '甲',
+              groupIds: const ['g'],
+            ),
+          )
+          .addElement(
+            TextElement(
+              id: const ElementId('b'),
+              x: 120,
+              y: 0,
+              width: 100,
+              height: 30,
+              text: '乙',
+              groupIds: const ['g'],
+              locked: true,
+            ),
+          ),
+    );
+    final settled = adapter.settle(result);
+    expect(settled.ledger.preservedCount, 2);
+    expect(settled.ledger.consumedCount, 0);
+  });
+
+  test('OCR已成功但结构冲突：账本保留、障碍块、后置守卫禁止替换', () async {
+    final result = await sessionOf(
+      const [RegionSpec(regionId: 'r:a', top: 0, left: 0, text: '标题')],
+      structureOverride: StructureResult(
+        units: [
+          RecognitionUnitInput(
+            unitId: 'ink:r:a',
+            kind: RecognitionUnitKind.ink,
+            text: '标题',
+            bounds: const RecognitionBounds(
+              left: 0,
+              top: 0,
+              width: 200,
+              height: 20,
+            ),
+          ),
+        ],
+        readingOrder: const ['ink:r:a'],
+        roles: const {'ink:r:a': 'title'},
+        listGroups: const [],
+        captions: const [],
+        warnings: const ['冲突'],
+        usedModel: true,
+        conflictedUnitIds: const {'ink:r:a'},
+      ),
+    );
+    final settled = adapter.settle(result);
+    expect(settled.ledger.entryOf('s-a').status, SourceLedgerStatus.preserved);
+    expect(
+      adapter
+          .assemble(settled, measure: TextMeasureAdapter(), tokens: tokens)
+          .document
+          .blocks
+          .single
+          .role,
+      SemanticRole.unknown,
+    );
+    expect(
+      ReplacementGuard.factsOf(result)['ink:r:a']!.conflictsResolved,
+      isFalse,
+    );
+    expect(
+      ReplacementGuard.check(
+        recognition: settled.ledger,
+        unitFactsByUnitId: ReplacementGuard.factsOf(result),
+        deletedSourceIds: ['s-a'],
+        modifiedSourceIds: const [],
+      ),
+      isNotEmpty,
+    );
+  });
+
   SemanticAssembly assembleOf(RecognitionSessionResult result) =>
       adapter.assemble(result, measure: TextMeasureAdapter(), tokens: tokens);
 
@@ -74,8 +159,16 @@ void main() {
       expect(roleOf['ink:r:a'], SemanticRole.title);
       expect(roleOf['ink:r:b'], SemanticRole.body);
       expect(roleOf['ink:r:c'], SemanticRole.caption);
-      expect(roleOf['ink:r:d'], SemanticRole.list, reason: 'listItem 必须映射为 list');
-      expect(roleOf['ink:r:e'], SemanticRole.unknown, reason: 'other 保留语义不进排版流');
+      expect(
+        roleOf['ink:r:d'],
+        SemanticRole.list,
+        reason: 'listItem 必须映射为 list',
+      );
+      expect(
+        roleOf['ink:r:e'],
+        SemanticRole.unknown,
+        reason: 'other 保留语义不进排版流',
+      );
       // 全部 recognized 笔迹消费入账。
       expect(
         assembly.document.consumedSourceIds,
@@ -118,8 +211,7 @@ void main() {
       );
     });
 
-    test('figure 单元→figure 角色；preserved 单元→unknown + bounds 障碍身份',
-        () async {
+    test('figure 单元→figure 角色；preserved 单元→unknown + bounds 障碍身份', () async {
       final scene = Scene()
           .addElement(
             ImageElement(
@@ -167,26 +259,24 @@ void main() {
         settled.ledger.projection.preservedReasons['dia-1'],
         SourcePreserveReason.nonText,
       );
-      expect(
-        settled.ledger.projection.consumedBy['img-1'],
-        'native:img-1',
-      );
+      expect(settled.ledger.projection.consumedBy['img-1'], 'native:img-1');
     });
   });
 
   group('账本结算（§6.4）', () {
     test('uncertain 区域：保留 reason=uncertain，角色强制 unknown', () async {
-      final result = await sessionOf(const [
-        RegionSpec(regionId: 'r:u', top: 0, left: 0, text: '存疑内容'),
-      ], customOutcomes: const {
-        'r:u': RegionReadOutcome(
-          regionId: 'r:u',
-          status: RecognitionRegionStatus.uncertain,
-          targetSourceIds: ['s-u'],
-          text: '存疑内容',
-          confidence: 0.3,
-        ),
-      });
+      final result = await sessionOf(
+        const [RegionSpec(regionId: 'r:u', top: 0, left: 0, text: '存疑内容')],
+        customOutcomes: const {
+          'r:u': RegionReadOutcome(
+            regionId: 'r:u',
+            status: RecognitionRegionStatus.uncertain,
+            targetSourceIds: ['s-u'],
+            text: '存疑内容',
+            confidence: 0.3,
+          ),
+        },
+      );
       final settled = adapter.settle(result);
       expect(
         settled.ledger.projection.preservedReasons['s-u'],
@@ -368,7 +458,9 @@ void main() {
               seed: 7,
               versionNonce: 11,
               updated: 1000,
-              customData: const {'flowMuse': {'role': 'page'}},
+              customData: const {
+                'flowMuse': {'role': 'page'},
+              },
             ),
           )
           .addElement(
@@ -382,15 +474,19 @@ void main() {
               seed: 7,
               versionNonce: 11,
               updated: 1000,
-              customData: const {'flowMuse': {'pdfBackground': true}},
+              customData: const {
+                'flowMuse': {'pdfBackground': true},
+              },
             ),
           );
       final result = await sessionOf(const [], scene: scene);
       final assembly = assembleOf(result);
       expect(
-        assembly.document.blocks
-            .where((b) => b.id.startsWith('native:page-frame') ||
-                b.id.startsWith('native:pdf-bg')),
+        assembly.document.blocks.where(
+          (b) =>
+              b.id.startsWith('native:page-frame') ||
+              b.id.startsWith('native:pdf-bg'),
+        ),
         isEmpty,
       );
       expect(assembly.ledger.sourceCount, 0);
@@ -501,7 +597,10 @@ void main() {
         roles: const {'ink:r:cap': 'caption'},
         listGroups: const [],
         captions: const [
-          RecognitionCaption(captionUnitId: 'ink:r:cap', targetUnitId: 'native:img-1'),
+          RecognitionCaption(
+            captionUnitId: 'ink:r:cap',
+            targetUnitId: 'native:img-1',
+          ),
         ],
         warnings: const [],
         usedModel: false,
@@ -519,9 +618,11 @@ void main() {
           updated: 1000,
         ),
       );
-      final result = await sessionOf(const [
-        RegionSpec(regionId: 'r:cap', top: 100, left: 0, text: '图1 说明'),
-      ], scene: scene, structureOverride: goodStructure);
+      final result = await sessionOf(
+        const [RegionSpec(regionId: 'r:cap', top: 100, left: 0, text: '图1 说明')],
+        scene: scene,
+        structureOverride: goodStructure,
+      );
       final assembly = assembleOf(result);
       expect(
         assembly.document.blocks
@@ -544,9 +645,11 @@ void main() {
         warnings: const [],
         usedModel: false,
       );
-      final danglingResult = await sessionOf(const [
-        RegionSpec(regionId: 'r:cap', top: 100, left: 0, text: '图1 说明'),
-      ], scene: scene, structureOverride: dangling);
+      final danglingResult = await sessionOf(
+        const [RegionSpec(regionId: 'r:cap', top: 100, left: 0, text: '图1 说明')],
+        scene: scene,
+        structureOverride: dangling,
+      );
       expect(() => assembleOf(danglingResult), throwsStateError);
     });
   });
@@ -586,12 +689,14 @@ void main() {
       final assembly = assembleOf(result);
       final settled = adapter.settle(result);
       final projection = settled.ledger.projection;
-      expect(assembly.document.consumedSourceIds, [
-        ...projection.consumedBy.keys,
-      ]..sort());
-      expect(assembly.document.preservedSourceIds, [
-        ...projection.preservedReasons.keys,
-      ]..sort());
+      expect(
+        assembly.document.consumedSourceIds,
+        [...projection.consumedBy.keys]..sort(),
+      );
+      expect(
+        assembly.document.preservedSourceIds,
+        [...projection.preservedReasons.keys]..sort(),
+      );
       expect(assembly.document.ledgerConserved, isTrue);
       expect(assembly.ledger.isFinalized, isTrue);
       // 漏答区域保留原因透传（管线侧 missingResponse）。

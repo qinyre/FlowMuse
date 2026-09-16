@@ -6,6 +6,39 @@ import 'structure_test_helpers.dart';
 /// 结构请求触发条件（§7；与 §6.1 复核触发表分离）与模型结果合并：
 /// 模型只改角色/分组/顺序/层级；正文与几何一律本地；验证失败回退本地。
 void main() {
+  test('真实触发结构请求后角色冲突产出准入阻断集合', () async {
+    final result = await recoverWithRegions(
+      const [
+        RegionSpec(regionId: 'r:a1', top: 100, left: 0, text: '1. 甲'),
+        RegionSpec(regionId: 'r:a2', top: 130, left: 0, text: '2. 乙'),
+        RegionSpec(regionId: 'r:mid', top: 160, left: 60, text: '中间正文'),
+        RegionSpec(regionId: 'r:b1', top: 190, left: 120, text: '1. 丙'),
+        RegionSpec(regionId: 'r:b2', top: 220, left: 120, text: '2. 丁'),
+      ],
+      send: (r) async => RecognitionStructureResponse(
+        operationId: r.operationId,
+        requestId: r.requestId,
+        pageId: r.pageId,
+        sceneRevision: r.sceneRevision,
+        contentFingerprint: r.contentFingerprint,
+        generation: r.generation,
+        textFingerprint: r.textFingerprint,
+        readingOrder: r.units.map((u) => u.unitId).toList(),
+        roles: [
+          for (final u in r.units)
+            RecognitionRoleAssignment(
+              unitId: u.unitId,
+              role: RecognitionStructureRole.other,
+            ),
+        ],
+        listGroups: const [],
+        captions: const [],
+        warnings: const [],
+      ),
+    );
+    expect(result.usedModel, isTrue);
+    expect(result.conflictedUnitIds, containsAll(['ink:r:a1', 'ink:r:mid']));
+  });
   test('触发条件命中才发结构请求：列表组歧义场景', () async {
     RecognitionStructureRequest? sent;
     final result = await recoverWithRegions(

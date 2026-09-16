@@ -10,6 +10,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recogniti
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_ledger.dart';
 
 import 'fake_recognition_transport.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/recognition/region_assets.dart';
 
 /// 状态机全迁移（spec §6.1）：含 regrouping 先于 verifying、部分批次、
 /// 预算耗尽、重试仅一次、结构 seam。
@@ -60,6 +61,98 @@ void main() {
   Scene twoRegionScene() => Scene()
       .addElement(stroke('s1', 10, 20))
       .addElement(stroke('s2', 10, 120));
+
+  test('总预算在渲染前耗尽：不出图、不发请求、全部源保留', () async {
+    final transport = FakeRecognitionTransport();
+    final result = await pipelineOf(transport).run(
+      captureOf(twoRegionScene()),
+      budget: const RecognitionBudget(totalTimeout: Duration.zero),
+    );
+    expect(transport.requests, isEmpty);
+    expect(result.assetIndex.assetCount, 0);
+    expect(result.ledger.preservedCount, 2);
+    expect(
+      result.ledger.entryOf('s1').reason,
+      SourcePreserveReason.budgetExceeded,
+    );
+  });
+
+  test('疑难初读的复核请求失败：不能沿用 recognized 状态获得转换许可', () async {
+    final transport = FakeRecognitionTransport(
+      responder: (body) async {
+        final req = jsonDecode(body) as Map<String, Object?>;
+        if (req['stage'] == 'verify') return (502, '{}');
+        return buildBatchResponseBody(req, confidence: 0.2);
+      },
+    );
+    final result = await pipelineOf(transport).run(captureOf(twoRegionScene()));
+    expect(result.ledger.preservedCount, 2);
+    expect(result.ledger.entryOf('s1').reason, SourcePreserveReason.uncertain);
+  });
+
+  for (final missing in [false, true]) {
+    test('自动重分组重新出图与替换成员；复核漏答=$missing', () async {
+      final a = stroke('a', 10, 20);
+      final b = stroke('b', 73, 20);
+      final scene = Scene().addElement(a).addElement(b);
+      final transport = FakeRecognitionTransport(
+        responder: (body) async {
+          final req = jsonDecode(body) as Map<String, Object?>;
+          return buildBatchResponseBody(
+            req,
+            confidence: req['stage'] == 'read' ? 0.2 : 0.95,
+            missingRegionIds: missing && req['stage'] == 'verify'
+                ? {'r:a'}
+                : null,
+          );
+        },
+      );
+      final result = await pipelineOf(transport).run(
+        captureOf(scene),
+        correctedPartitions: [
+          for (final s in [a, b])
+            RegionPartition(
+              strokes: [s],
+              record: RegionRecord(
+                regionId: 'r:${s.id.value}',
+                targetSourceIds: [s.id.value],
+                localLineHeight: 8,
+                bounds: RecognitionBounds(
+                  left: s.x,
+                  top: s.y,
+                  width: s.width,
+                  height: s.height,
+                ),
+              ),
+            ),
+        ],
+      );
+      final reads = transport.decodedBodies('read').single['regions'] as List;
+      final verified =
+          transport.decodedBodies('verify').single['regions'] as List;
+      expect(reads, hasLength(2));
+      expect(verified, hasLength(1));
+      expect(
+        verified.single['imagePngBase64'],
+        isNot(reads.first['imagePngBase64']),
+      );
+      expect(result.regionRecords.single.targetSourceIds, ['a', 'b']);
+      expect(result.regionOutcomes.keys, ['r:a']);
+      expect(
+        result.assetIndex.assetIdsOf('a'),
+        result.assetIndex.assetIdsOf('b'),
+      );
+      if (missing) {
+        expect(result.ledger.preservedCount, 2);
+        expect(
+          result.regionOutcomes['r:a']!.status,
+          isNot(RecognitionRegionStatus.recognized),
+        );
+      } else {
+        expect(result.regionOutcomes['r:a']!.verified, isTrue);
+      }
+    });
+  }
 
   test('全流程：capturing→…→done，识别入账、零保留、非部分完成', () async {
     final transport = FakeRecognitionTransport(
@@ -126,10 +219,10 @@ void main() {
       lessThan(history.indexOf(RecognitionPipelineState.verifying)),
       reason: '计划书 §3.4：先重分组得到最终复核区域，再发复核请求',
     );
-    // 初读 1 批 + 复核：两区域相距远（不可合并）各成一组 → 共 3 次调用。
-    expect(call, 3);
+    // 不相邻区域不合并，但仍可共享一个网络批次。
+    expect(call, 2);
     final verifyBodies = transport.decodedBodies('verify').toList();
-    expect(verifyBodies, hasLength(2), reason: '相距远的候选不合并为同批');
+    expect(verifyBodies, hasLength(1), reason: '分区身份与网络分批互不混淆');
     final verifyRegions = [
       for (final body in verifyBodies)
         ...(body['regions'] as List).cast<Map<String, Object?>>(),

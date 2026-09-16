@@ -9,7 +9,11 @@ import '../commit/validated_candidate_commit_gateway.dart';
 import '../composition/layout_block.dart';
 import '../composition/layout_block_assembler.dart';
 import '../composition/layout_composition_planner.dart';
-import '../correction/correction_patch_applier.dart' show AffectedSourceSet;
+import '../correction/correction_patch_applier.dart';
+import '../correction/region_correction_patch.dart';
+import '../segmentation/ink_region_segmenter.dart';
+import '../segmentation/region_segment.dart';
+import '../segmentation/spatial_grid_index.dart';
 import '../correction/semantic_correction.dart';
 import '../design/smart_layout_design_tokens.dart';
 import '../design/text_measure_adapter.dart';
@@ -243,7 +247,7 @@ abstract final class SmartLayoutRealCandidateChain {
   }) async {
     // ---- 2. 块装配（真实测量；账目不守恒 = 响应未全额认领源 →
     // 协议契约破坏，fail closed）----
-    final LayoutBlockAssembly assembly;
+    late LayoutBlockAssembly assembly;
     try {
       assembly = const LayoutBlockAssembler().assemble(
         document: semantic.document,
@@ -251,6 +255,12 @@ abstract final class SmartLayoutRealCandidateChain {
         measure: measure,
         tokens: tokens,
       );
+      if (recognition != null) {
+        assembly = SmartLayoutCandidateMaterializer.composeNativeGroups(
+          baseScene,
+          assembly,
+        );
+      }
     } on StateError catch (error) {
       return RealGenerationFailed(
         reason: 'semantic-contract-broken',
@@ -540,6 +550,7 @@ class SmartLayoutRealSessionScope {
 
   /// 分区纠错的更正区域记录（rerunChain 重识别输入；一次性消费）。
   List<RegionRecord>? _correctedRegionRecords;
+  RegionCorrectionPatch? _inverseRegionPatch;
 
   /// 会话代次（§6.2/§9.8）：识别操作与显式纠错各 +1，单调递增。
   int _generation = 0;
@@ -897,8 +908,13 @@ class SmartLayoutRealSessionScope {
       // 无识别会话（未分析/已复位）：无修正语义，返回空影响集。
       return empty;
     }
+    if (result.generation != _generation) {
+      throw const SmartLayoutCorrectionRejected('stale-recognition-generation');
+    }
     return switch (intent.kind) {
-      'merge' || 'split' => _applyRegionCorrection(result, intent),
+      'merge' ||
+      'split' ||
+      'undo-region' => _applyRegionCorrection(result, intent),
       'role' ||
       'order' ||
       'relation' ||
@@ -916,10 +932,53 @@ class SmartLayoutRealSessionScope {
     final recordsByRegionId = {
       for (final record in result.regionRecords) record.regionId: record,
     };
-    final List<RegionRecord> corrected;
-    final Set<String> beforeRegionIds;
+    if (_correctedRegionRecords != null) {
+      throw const SmartLayoutCorrectionRejected('correction-in-progress');
+    }
+    final strokes = result.scene.activeElements
+        .whereType<FreedrawElement>()
+        .toList();
+    final bySource = {for (final stroke in strokes) stroke.id.value: stroke};
+    final columnOf = <String, int>{
+      for (final segment in InkRegionSegmenter().segment(strokes))
+        for (final id in segment.strokeIds) id: segment.columnIndex,
+    };
+    final state = SegmentationState(
+      revision: _generation,
+      regions: [
+        for (final r in result.regionRecords)
+          RegionSegment(
+            id: r.regionId,
+            strokeIds: r.targetSourceIds,
+            left: r.bounds.left,
+            top: r.bounds.top,
+            width: r.bounds.width,
+            height: r.bounds.height,
+            lineDirection: SegmentLineDirection.horizontal,
+            columnIndex: columnOf[r.targetSourceIds.first] ?? 0,
+            skewRadians: 0,
+            localScale: r.localLineHeight,
+            preservedReason:
+                r.targetSourceIds.any((id) => bySource[id]?.locked ?? true)
+                ? RegionPreservedReason.lowConfidence
+                : null,
+          ),
+      ],
+      strokeBoxes: {
+        for (final s in strokes)
+          s.id.value: StrokeBox(
+            id: s.id.value,
+            left: conservativeVisualBounds(s).left,
+            top: conservativeVisualBounds(s).top,
+            width: conservativeVisualBounds(s).width,
+            height: conservativeVisualBounds(s).height,
+          ),
+      },
+    );
+    final RegionCorrectionPatch patch;
     if (intent.kind == 'merge') {
-      if (intent.subjectIds.length < 2) {
+      if (intent.subjectIds.toSet().length < 2 ||
+          intent.subjectIds.toSet().length != intent.subjectIds.length) {
         throw const SmartLayoutCorrectionRejected('merge-needs-two-regions');
       }
       final members = <RegionRecord>[];
@@ -930,17 +989,18 @@ class SmartLayoutRealSessionScope {
         }
         members.add(record);
       }
-      final targetIds = <String>{
-        for (final record in members) ...record.targetSourceIds,
-      };
-      final merged = _rebuildRecord(members, targetIds);
-      final removed = intent.subjectIds.toSet();
-      corrected = [
-        for (final record in result.regionRecords)
-          if (!removed.contains(record.regionId)) record,
-        merged,
-      ];
-      beforeRegionIds = Set.unmodifiable(removed);
+      patch = MergeRegionsPatch(
+        baseRevision: state.revision,
+        membersByRegionId: {
+          for (final r in members) r.regionId: r.targetSourceIds,
+        },
+      );
+    } else if (intent.kind == 'undo-region') {
+      final inverse = _inverseRegionPatch;
+      if (inverse == null) {
+        throw const SmartLayoutCorrectionRejected('no-region-inverse');
+      }
+      patch = inverse;
     } else {
       if (intent.subjectIds.length != 1) {
         throw const SmartLayoutCorrectionRejected('split-needs-one-region');
@@ -951,13 +1011,30 @@ class SmartLayoutRealSessionScope {
         throw SmartLayoutCorrectionRejected('unknown-region($regionId)');
       }
       final subsets = _parseSplitSubsets(intent.detail, record);
-      corrected = [
-        for (final other in result.regionRecords)
-          if (other.regionId != regionId) other,
-        for (final subset in subsets) _rebuildRecord([record], subset),
-      ];
-      beforeRegionIds = {regionId};
+      patch = SplitRegionPatch(
+        baseRevision: state.revision,
+        regionId: regionId,
+        regionStrokeIdsSnapshot: record.targetSourceIds,
+        subsets: [for (final subset in subsets) subset.toList()],
+      );
     }
+    const applier = CorrectionPatchApplier();
+    final applied = applier.apply(state, patch);
+    if (!applied.accepted) {
+      throw SmartLayoutCorrectionRejected(applied.rejectionReason!);
+    }
+    final affected = applier.affectedSources(state, patch);
+    final beforeRegionIds = affected.regionIds;
+    final corrected = [
+      for (final r in applied.state!.regions)
+        if (!r.strokeIds.any(affected.strokeSourceIds.contains))
+          recordsByRegionId[r.id]!
+        else
+          _rebuildRecord([
+            for (final old in result.regionRecords)
+              if (old.targetSourceIds.any(r.strokeIds.contains)) old,
+          ], r.strokeIds.toSet()),
+    ];
     final afterRegionIds = correctionDiffOf(corrected, result.regionRecords);
     final strokeIds = <String>{
       for (final record in recordsByRegionId.values)
@@ -965,6 +1042,7 @@ class SmartLayoutRealSessionScope {
           ...record.targetSourceIds,
     };
     _generation++;
+    _inverseRegionPatch = applied.inverse;
     _pendingCorrectionContext = RecognitionCorrectionContext.capture(
       generation: _generation,
       operationId: 'rec-cor-${++_operationCounter}',

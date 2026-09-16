@@ -21,7 +21,10 @@ void main() {
 
   const pageId = 'page-1';
 
-  _ObservedController controllerWithContent({bool nativeText = false}) {
+  _ObservedController controllerWithContent({
+    bool nativeText = false,
+    bool grouped = false,
+  }) {
     final controller = _ObservedController(
       config: MarkdrawEditorConfig(
         initialLayout: CanvasLayout(
@@ -65,6 +68,7 @@ void main() {
                 width: 300,
                 height: 60,
                 text: '旧入口原生正文',
+                groupIds: grouped ? const ['native-group'] : const [],
                 fontFamily: 'Excalifont',
                 customData: const {
                   'flowMuse': {'pageId': pageId},
@@ -91,6 +95,52 @@ void main() {
     responder: (body) async =>
         buildBatchResponseBody(jsonDecode(body) as Map<String, Object?>),
   );
+
+  testWidgets('真实入口：原生文本组合进入排版且整组只移动一次', (tester) async {
+    final controller = controllerWithContent(nativeText: true, grouped: true);
+    addTearDown(controller.dispose);
+    controller.applyResult(
+      AddElementResult(
+        TextElement(
+          id: const ElementId('t2'),
+          x: 550,
+          y: 150,
+          width: 150,
+          height: 60,
+          text: '组合成员',
+          fontFamily: 'Excalifont',
+          groupIds: const ['native-group'],
+          customData: const {
+            'flowMuse': {'pageId': pageId},
+          },
+        ),
+      ),
+    );
+    final transport = transportOf();
+    final scope = SmartLayoutRealSessionScope.build(
+      controller: controller,
+      serverUri: Uri.parse('http://127.0.0.1:9'),
+      pageId: pageId,
+      post: transport.post,
+    );
+    addTearDown(scope.dispose);
+    final ticket = scope.session.beginOperation();
+    final result = await tester.runAsync(
+      () => scope.dependencies.analysisRunner!(ticket),
+    );
+    expect(result, isA<SmartLayoutRecognitionSucceeded>());
+    final recognized = result as SmartLayoutRecognitionSucceeded;
+    expect(recognized.recognition.ledger.consumedCount, 2);
+    final candidates = await tester.runAsync(
+      () => scope.dependencies.candidateChainFromDocument!(recognized, ticket),
+    );
+    expect(candidates, isNotEmpty);
+    for (final c in candidates!) {
+      c.dispose();
+    }
+    expect(transport.requests, isEmpty, reason: '原生组合无需OCR');
+    scope.session.cancelOperation();
+  });
 
   for (final cancelV3 in [true, false]) {
     testWidgets('R8 同一控制器并发：取消 ${cancelV3 ? 'V3' : 'V1'} 不影响另一链路', (
@@ -297,6 +347,16 @@ void main() {
       (r) => r.targetSourceIds.contains('k-s1'),
     );
     expect(region.targetSourceIds.toSet(), {'k-s1', 'k-s2'});
+    expect(
+      () => scope.dependencies.correctionHandler(
+        RegionCorrectionIntent(
+          kind: 'merge',
+          subjectIds: [region.regionId, region.regionId],
+          detail: '',
+        ),
+      ),
+      throwsA(isA<SmartLayoutCorrectionRejected>()),
+    );
     final previousCount = transport.requests.length;
     final affected = scope.dependencies.correctionHandler(
       RegionCorrectionIntent(
@@ -324,6 +384,24 @@ void main() {
       {'r:k-s1', 'r:k-s2'},
     );
     expect(reads.single['generation'], recognition.generation + 1);
+    final undo = scope.dependencies.correctionHandler(
+      const RegionCorrectionIntent(
+        kind: 'undo-region',
+        subjectIds: [],
+        detail: '',
+      ),
+    );
+    expect(undo.strokeSourceIds, {'k-s1', 'k-s2'});
+    final restored = await tester.runAsync(
+      () => scope.dependencies.rerunChain(undo.strokeSourceIds),
+    );
+    expect(restored, isNotEmpty);
+    for (final c in restored!) {
+      c.dispose();
+    }
+    final lastRead = transport.decodedBodies('read').last;
+    expect((lastRead['regions'] as List).map((r) => r['regionId']), ['r:k-s1']);
+    expect(lastRead['generation'], recognition.generation + 2);
     scope.session.cancelOperation();
   });
 

@@ -50,6 +50,7 @@ class StructureResult {
     required this.warnings,
     required this.usedModel,
     this.modelRejected = false,
+    this.conflictedUnitIds = const {},
   });
 
   /// 全部 unit（typed/ink/figure/preserved），含本地正文与几何（真值）。
@@ -61,6 +62,9 @@ class StructureResult {
   final List<RecognitionListGroup> listGroups;
   final List<RecognitionCaption> captions;
   final List<String> warnings;
+
+  /// 未消解的结构冲突，必须阻止该单元的自动转换。
+  final Set<String> conflictedUnitIds;
 
   /// 是否发出过结构请求。
   final bool usedModel;
@@ -634,6 +638,7 @@ class StructureRecovery implements RecognitionStructureRecoverer {
     RecognitionStructureResponse model,
   ) {
     final warnings = <String>[...local.warnings];
+    final conflicts = <String>{...local.conflictedUnitIds};
     final roles = <String, String>{};
     for (final entry in model.roles) {
       roles[entry.unitId] = entry.role.wireName;
@@ -643,6 +648,7 @@ class StructureRecovery implements RecognitionStructureRecoverer {
       final modelRole = roles[entry.key];
       if (modelRole == 'other' && entry.value != 'other') {
         roles[entry.key] = entry.value;
+        conflicts.add(entry.key);
         warnings.add('角色冲突保留本地（${entry.key}: ${entry.value}）');
       }
     }
@@ -653,6 +659,7 @@ class StructureRecovery implements RecognitionStructureRecoverer {
       listGroups: model.listGroups,
       captions: model.captions,
       warnings: List.unmodifiable(warnings),
+      conflictedUnitIds: Set.unmodifiable(conflicts),
       usedModel: true,
     );
   }

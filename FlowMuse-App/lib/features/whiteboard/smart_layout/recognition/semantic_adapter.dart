@@ -11,6 +11,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/structure
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document_assembler.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/source_coverage_ledger.dart';
+import '../geometry/smart_layout_scene_transformer.dart';
 
 /// R6 语义适配器（spec §8）：识别会话产物 → [SemanticAssembly]。
 ///
@@ -83,6 +84,28 @@ class RecognitionSemanticAdapter {
     //   →consume；锁定→保留；形状/未入流→保留。
     final elementById = _nonBackgroundElementById(result);
     final flowRoles = const {'title', 'body', 'caption', 'listItem'};
+    final eligibleNative = {
+      for (final unit in structure.units)
+        if ((unit.kind == RecognitionUnitKind.figure ||
+                (unit.kind == RecognitionUnitKind.typed &&
+                    flowRoles.contains(structure.roles[unit.unitId]))) &&
+            !structure.conflictedUnitIds.contains(unit.unitId))
+          _sourceIdOfNativeUnit(unit.unitId),
+    };
+    final blockedNative = <String>{};
+    for (final id in eligibleNative) {
+      final closure = SmartLayoutSceneTransformer.closureOf(result.scene, {
+        ElementId(id),
+      });
+      if (closure.any(
+        (ref) =>
+            !eligibleNative.contains(ref.value) ||
+            (elementById[ref.value]?.locked ?? true) ||
+            elementById[ref.value]?.pageId != elementById[id]?.pageId,
+      )) {
+        blockedNative.addAll(closure.map((ref) => ref.value));
+      }
+    }
     for (final unit in structure.units) {
       if (unit.kind != RecognitionUnitKind.typed &&
           unit.kind != RecognitionUnitKind.figure) {
@@ -98,6 +121,15 @@ class RecognitionSemanticAdapter {
           ledger,
           sourceId,
           SourcePreserveReason.locked,
+        );
+        continue;
+      }
+      if (structure.conflictedUnitIds.contains(unit.unitId) ||
+          blockedNative.contains(sourceId)) {
+        ledger = _preserveIfPending(
+          ledger,
+          sourceId,
+          SourcePreserveReason.uncertain,
         );
         continue;
       }
@@ -453,6 +485,16 @@ class RecognitionSemanticAdapter {
     Map<String, Element> elementById,
     Set<String> lockedSourceIds,
   ) {
+    final sources = unit.kind == RecognitionUnitKind.ink
+        ? _recordOf(result, _regionIdOfInkUnit(unit.unitId)!).targetSourceIds
+        : [_sourceIdOfNativeUnit(unit.unitId)];
+    if (structure.conflictedUnitIds.contains(unit.unitId) ||
+        sources.any(
+          (id) =>
+              result.ledger.entryOf(id).status == SourceLedgerStatus.preserved,
+        )) {
+      return SemanticRole.unknown;
+    }
     switch (unit.kind) {
       case RecognitionUnitKind.figure:
         return SemanticRole.figure;
@@ -722,7 +764,10 @@ abstract final class ReplacementGuard {
           regionTargetSourceIds: record.targetSourceIds.toSet(),
           conflictsResolved:
               result.regionOutcomes[record.regionId]?.status ==
-              RecognitionRegionStatus.recognized,
+                  RecognitionRegionStatus.recognized &&
+              !(result.structureResult is StructureResult &&
+                  (result.structureResult as StructureResult).conflictedUnitIds
+                      .contains('ink:${record.regionId}')),
           sourceGuards: {
             for (final id in record.targetSourceIds)
               id: SourceGuardFacts(

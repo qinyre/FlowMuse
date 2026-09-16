@@ -6,10 +6,46 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_budget.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/region_assets.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/layout_page_snapshot.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/rendering/draft_scene_renderer.dart';
 
 /// 区域高清资产（spec §5）：真实 DraftSceneRenderer 渲染 + 像素级断言。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('旋转长笔迹：区域与渲染视口包含完整可视外框', () async {
+    final ink = FreedrawElement(
+      id: const ElementId('rotated'),
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 10,
+      angle: 0.7853981633974483,
+      points: const [Point(0, 5), Point(200, 5)],
+      strokeWidth: 2,
+      isComplete: true,
+    );
+    final scene = Scene().addElement(ink);
+    final record = const RegionPartitioner().partition(scene).single.record;
+    final visual = conservativeVisualBounds(ink);
+    expect(record.bounds.top, lessThanOrEqualTo(visual.top));
+    expect(
+      record.bounds.top + record.bounds.height,
+      greaterThanOrEqualTo(visual.bottom),
+    );
+    expect(record.bounds.height, greaterThan(100));
+    final builder = RegionAssetBuilder(capturedScene: scene);
+    addTearDown(builder.dispose);
+    final asset =
+        (await builder.build(record, const RecognitionBudget())
+                as RegionAssetBuilt)
+            .asset;
+    expect(asset.pageBounds.top, lessThan(visual.top));
+    expect(
+      asset.pageBounds.top + asset.pageBounds.height,
+      greaterThan(visual.bottom),
+    );
+  });
 
   FreedrawElement stroke(String id, double x, double y, String color) {
     return FreedrawElement(
@@ -29,6 +65,19 @@ void main() {
   }
 
   group('缩放目标 / 上限 / 留白 / 坐标闭环', () {
+    test('渲染在途取消：不返回迟到PNG，后续区域禁止启动', () async {
+      final scene = Scene().addElement(stroke('s', 10, 20, '#1e1e1e'));
+      final builder = RegionAssetBuilder(capturedScene: scene);
+      addTearDown(builder.dispose);
+      final record = const RegionPartitioner().partition(scene).single.record;
+      final pending = builder.build(record, const RecognitionBudget());
+      builder.cancel();
+      await expectLater(pending, throwsA(isA<DraftRenderCancelled>()));
+      await expectLater(
+        builder.build(record, const RecognitionBudget()),
+        throwsA(isA<DraftRenderCancelled>()),
+      );
+    });
     test('缩放使局部行高达到目标下限，留白=0.3×行高，坐标闭环一致', () async {
       final scene = Scene().addElement(stroke('stroke-a', 10, 20, '#1e1e1e'));
       final builder = RegionAssetBuilder(capturedScene: scene);
