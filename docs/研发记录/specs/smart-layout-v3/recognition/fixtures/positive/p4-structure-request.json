@@ -1,0 +1,67 @@
+{
+ "kind": "request",
+ "expect": "accept",
+ "payload": {
+  "schemaVersion": "recognition-v3/1",
+  "stage": "structure",
+  "operationId": "11111111-1111-4111-8111-111111111111",
+  "requestId": "22222222-2222-4222-8222-222222222222",
+  "pageId": "page-1",
+  "sceneRevision": {
+   "epoch": 0,
+   "revision": 5,
+   "fingerprint": "0123456789abcdef"
+  },
+  "contentFingerprint": "fedcba9876543210",
+  "generation": 0,
+  "units": [
+   {
+    "unitId": "native:r:element-9",
+    "kind": "typed",
+    "bounds": {
+     "left": 10,
+     "top": 12,
+     "width": 200,
+     "height": 40
+    },
+    "text": "既有原生标题文本",
+    "roleHint": "title"
+   },
+   {
+    "unitId": "ink:r:ink-0007",
+    "kind": "ink",
+    "bounds": {
+     "left": 10,
+     "top": 60,
+     "width": 300,
+     "height": 80
+    },
+    "text": "手写正文两行",
+    "lineHintHeight": 18.5,
+    "roleHint": "body"
+   },
+   {
+    "unitId": "native:img-3",
+    "kind": "figure",
+    "bounds": {
+     "left": 350,
+     "top": 60,
+     "width": 150,
+     "height": 150
+    }
+   },
+   {
+    "unitId": "native:r:locked-2",
+    "kind": "preserved",
+    "bounds": {
+     "left": 10,
+     "top": 230,
+     "width": 120,
+     "height": 60
+    }
+   }
+  ],
+  "overviewPngBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "textFingerprint": "0123456789abcdef"
+ }
+}

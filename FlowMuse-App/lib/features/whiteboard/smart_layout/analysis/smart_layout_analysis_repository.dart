@@ -5,6 +5,9 @@ import '../gateways/smart_layout_http_gateway.dart';
 import '../protocol/smart_layout_v3_error.dart';
 import '../protocol/smart_layout_v3_request.dart';
 import '../protocol/smart_layout_v3_response.dart';
+import '../recognition/recognition_pipeline.dart'
+    show RecognitionCorrectionContext, RecognitionSessionResult;
+import '../semantics/semantic_document_assembler.dart' show SemanticAssembly;
 import '../session/smart_layout_operation_guard.dart';
 import '../session/smart_layout_session.dart';
 import 'analysis_operation_guard.dart';
@@ -21,6 +24,30 @@ class SmartLayoutAnalysisSucceeded extends SmartLayoutAnalysisOutcome {
   const SmartLayoutAnalysisSucceeded(this.response, this.attempts);
 
   final SmartLayoutV3Response response;
+  final int attempts;
+}
+
+/// V3 独立识别成功（R7，spec §10）：识别管线产物直接进入生成链——
+/// 语义装配 + 识别会话（含结算后的只读源账本）。不伪造 v3 response；
+/// 生成链走 `runFromSemanticAssembly`（三方一致断言输入即
+/// [recognition] 携带的独立账本）。
+class SmartLayoutRecognitionSucceeded extends SmartLayoutAnalysisOutcome {
+  const SmartLayoutRecognitionSucceeded({
+    required this.semantic,
+    required this.recognition,
+    this.correctionContext,
+    this.attempts = 1,
+  });
+
+  /// 识别结果投影出的语义装配（§8：角色/字号/阅读序已定）。
+  final SemanticAssembly semantic;
+
+  /// 识别会话产物（含已结算识别账本与区域结果；纠错重跑的输入）。
+  final RecognitionSessionResult recognition;
+
+  /// 产物对应的纠错捕获上下文（纠错重识别路径携带；新分析为 null）。
+  final RecognitionCorrectionContext? correctionContext;
+
   final int attempts;
 }
 

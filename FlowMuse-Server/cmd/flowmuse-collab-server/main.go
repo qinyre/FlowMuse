@@ -10,6 +10,7 @@ import (
 	"flowmuse/server/internal/auth"
 	"flowmuse/server/internal/collab"
 	"flowmuse/server/internal/config"
+	"flowmuse/server/internal/layoutrecognitionv3"
 	"flowmuse/server/internal/recognition"
 	"flowmuse/server/internal/storage"
 
@@ -115,6 +116,20 @@ func main() {
 		cfg.AITimeout+10*time.Second,
 		smartLayouter,
 	).WithVisionLayouter(smartLayouter).Register(mux)
+	// 独立识别链路（recognize/v3）：配置缺失时 provider 为 nil，
+	// 路由仍注册、返回 503 unconfigured；旧通道初始化与注册不动。
+	layoutV3Provider := layoutrecognitionv3.NewOpenAICompatProvider(
+		cfg.LayoutV3BaseURL,
+		cfg.LayoutV3APIKey,
+		cfg.LayoutV3Model,
+	)
+	layoutrecognitionv3.RegisterRecognitionV3(
+		mux,
+		layoutrecognitionv3.NewRecognitionHandler(
+			layoutV3Provider,
+			layoutrecognitionv3.DefaultLimits(),
+		),
+	)
 
 	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)
 	if err := http.ListenAndServe(cfg.Addr, withCORS(mux, cfg.AllowedOrigins)); err != nil {

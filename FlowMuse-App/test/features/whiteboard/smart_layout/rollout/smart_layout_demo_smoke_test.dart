@@ -102,7 +102,7 @@ class DemoSessionHandle implements SmartLayoutV3SessionHandle {
       pageId: pageId,
       // 演示 smoke 走 loopback HTTP 假分析器口径（生产视觉链由
       // wiring 视觉闭环组覆盖）。
-      useVisionAnalysis: false,
+      useRecognitionPipeline: false,
     );
     final container = ProviderContainer(
       overrides: [
@@ -256,12 +256,11 @@ void main() {
         for (final element in reopenedScene.activeElements) {
           if (!expected.containsKey(element.id.value)) continue;
           expect(
-            projectContent(ExcalidrawJsonCodec.elementToJson(element))
-                .toString(),
             projectContent(
-              ExcalidrawJsonCodec.elementToJson(
-                expected[element.id.value]!,
-              ),
+              ExcalidrawJsonCodec.elementToJson(element),
+            ).toString(),
+            projectContent(
+              ExcalidrawJsonCodec.elementToJson(expected[element.id.value]!),
             ).toString(),
             reason: '重开内容漂移：${element.id.value}',
           );
@@ -288,23 +287,25 @@ void main() {
         addTearDown(demo.close);
         final vm = demo.vm..addScopeSource('text-1');
         final controller = demo.controller;
-        final beforeFingerprint = SceneFingerprint.of(
-          controller.currentScene,
-        );
+        final beforeFingerprint = SceneFingerprint.of(controller.currentScene);
 
         // 服务故障：分析 fail closed，Scene 零副作用。
         await vm.startAnalysis();
         final state = _readState(demo);
         expect(state.phase, SmartLayoutSessionPhase.failed);
         expect(state.failure, isNotNull);
-        expect(SceneFingerprint.of(controller.currentScene),
-            beforeFingerprint, reason: '故障路径不得触碰 Scene');
+        expect(
+          SceneFingerprint.of(controller.currentScene),
+          beforeFingerprint,
+          reason: '故障路径不得触碰 Scene',
+        );
         demo.close();
 
         final requests = failingReceived().length;
         return SmartLayoutDemoChainResult(
           passed: requests > 0,
-          detail: 'analyzer 500 → failed（fail closed，Scene 零副作用）；'
+          detail:
+              'analyzer 500 → failed（fail closed，Scene 零副作用）；'
               '请求 $requests 次',
           requestCount: requests,
         );
@@ -322,9 +323,7 @@ void main() {
 
     // ---- 四场景全绿 ----
     expect(report.allPassed, isTrue);
-    final byId = {
-      for (final s in report.scenarios) s.id: s,
-    };
+    final byId = {for (final s in report.scenarios) s.id: s};
     expect(byId.keys, {
       'default-off',
       'enabled-full-chain',
@@ -338,10 +337,7 @@ void main() {
     );
     expect(byId['enabled-full-chain']!.requestCount, greaterThan(0));
     expect(byId['kill-switch']!.factoryCalls, 0);
-    expect(
-      byId['service-failure']!.detail,
-      contains('kill_tripped=true'),
-    );
+    expect(byId['service-failure']!.detail, contains('kill_tripped=true'));
 
     // ---- synthetic observability 快照：告警闭环落账 ----
     final snapshot = report.observabilitySnapshot;
@@ -362,7 +358,7 @@ void main() {
       target.writeAsStringSync(
         const JsonEncoder.withIndent('  ').convert(report.toJson()),
         flush: true,
-    );
+      );
     }
     if (target.existsSync()) {
       final persisted = jsonDecode(target.readAsStringSync());

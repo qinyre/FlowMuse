@@ -226,9 +226,20 @@ class SmartLayoutSessionUiState {
       'failure: $failure, attempts: $attemptCount)';
 }
 
+/// 纠错意图被拒（修正非法/过期/目标缺失，§9.3a）：保持当前 review
+/// 状态——不发布新上下文、不失效既有候选、不重跑。
+class SmartLayoutCorrectionRejected implements Exception {
+  const SmartLayoutCorrectionRejected(this.reason);
+
+  final String reason;
+
+  @override
+  String toString() => 'SmartLayoutCorrectionRejected($reason)';
+}
+
 /// 本地分析执行函数：绕过 requestBuilder+HTTP 仓库，直接产出
-/// [SmartLayoutAnalysisOutcome]（生产链：v2 视觉感知 → v3 response 适配，
-/// 手写转写文本经本地 map 进入语义装配，不经网络协议）。
+/// [SmartLayoutAnalysisOutcome]（生产链 R7：recognize/v3 独立识别管线
+/// → 语义适配，产物为 [SmartLayoutRecognitionSucceeded]）。
 /// 候选生成、状态迁移与失败处理仍在 ViewModel——runner 只负责分析。
 typedef SmartLayoutAnalysisRunner =
     Future<SmartLayoutAnalysisOutcome> Function(
@@ -280,6 +291,19 @@ class SmartLayoutSessionDependencies {
   )?
   candidateChain;
 
+  /// V3 识别产物候选链（R7，spec §10）：[SmartLayoutRecognitionSucceeded]
+  /// 分支消费——`runFromSemanticAssembly`（page-furniture 剥离 + §6.4
+  /// 三方一致断言 + 既有生成管线）。null = 编排方手动 complete 路径。
+  final Future<List<ValidatedCandidate>> Function(
+    SmartLayoutRecognitionSucceeded outcome,
+    SmartLayoutOperationTicket ticket,
+  )?
+  candidateChainFromDocument;
+
+  /// 当前识别会话代次（§9.8 发布代次守卫读取；null = 无代次语义，
+  /// 守卫退化为既有票据判旧）。
+  final int Function()? currentRecognitionGeneration;
+
   /// 验证候选提交网关（V3-505C 真实提交路径）：review 卡绑定候选时
   /// 走 compare-and-commit 事务（V3-502A）。null = 回落
   /// [commitResultBuilder]（V3-505A 测试路径）。
@@ -297,6 +321,8 @@ class SmartLayoutSessionDependencies {
     this.correctionHandler = _emptyCorrection,
     this.rerunChain = _emptyRerun,
     this.candidateChain,
+    this.candidateChainFromDocument,
+    this.currentRecognitionGeneration,
     this.commitGateway,
     this.bearerToken,
   });
@@ -454,6 +480,41 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
     // 迟到判旧：票据不再是当次操作（取消/复位/新操作已接管）。
     if (!identical(state.activeTicket, ticket)) return;
     switch (outcome) {
+      case SmartLayoutRecognitionSucceeded():
+        // V3 独立识别（R7）：产物直接进入文档级候选链（无 response）。
+        final chain = _deps.candidateChainFromDocument;
+        if (chain == null) return;
+        List<ValidatedCandidate> candidates;
+        try {
+          candidates = await chain(outcome, ticket);
+        } on StateError catch (error) {
+          // 生成链 fail closed（契约破坏/内部错误/测量依赖失败）：
+          // reason 透传；测量依赖失败按可重试收敛。
+          _recordAnalysisFailure(
+            'generation',
+            error.message,
+            error.message == 'measurement-dependency',
+            attempt,
+            ticket,
+          );
+          return;
+        }
+        if (!identical(state.activeTicket, ticket)) {
+          // 迟到判旧：候选从未发布，立即释放其渲染资源（零泄漏）。
+          for (final candidate in candidates) {
+            candidate.dispose();
+          }
+          return;
+        }
+        if (!_generationIsCurrent(outcome)) {
+          // §9.8 发布代次守卫（正常完成点）：产物代次已被新纠错/新
+          // 分析接管即丢弃，候选零发布零泄漏。
+          for (final candidate in candidates) {
+            candidate.dispose();
+          }
+          return;
+        }
+        completeGenerationFromValidated(candidates);
       case SmartLayoutAnalysisSucceeded():
         state = state.copyWith(lastAnalysisResponse: outcome.response);
         // 真实链（V3-505C）：分析成功即在同票据下运行候选生成链；
@@ -513,6 +574,15 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
       case SmartLayoutAnalysisGuardRejected(:final reason):
         _recordAnalysisFailure('analysis', reason, false, attempt, ticket);
     }
+  }
+
+  /// 产物代次是否仍为当前会话代次（§9.8；无代次语义时恒真）。
+  bool _generationIsCurrent(SmartLayoutRecognitionSucceeded outcome) {
+    final current = _deps.currentRecognitionGeneration;
+    if (current == null) return true;
+    final captured =
+        outcome.correctionContext?.generation ?? outcome.recognition.generation;
+    return current() == captured;
   }
 
   void _recordAnalysisFailure(
@@ -613,25 +683,61 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
     );
   }
 
-  /// 纠错修正（V3-505B）：应用修正 → 受影响源集 → 旧候选全失效
-  ///（CorrectionRerunCoordinator 释放其渲染资源）→ 以受影响源为
-  /// scope 最小重跑 → 新验证候选发布。仅 reviewing 相位合法。
+  /// 纠错修正（V3-505B + R7 §9.3/§9.8）：应用修正 → 受影响源集 → 旧候选
+  /// 全失效（CorrectionRerunCoordinator 释放其渲染资源）→ 以受影响源为
+  /// scope 最小重跑 → 新验证候选发布。仅 reviewing 相位合法；纠错在途
+  /// 期间重复入口 no-op（isCorrecting 语义）；意图被拒
+  /// （[SmartLayoutCorrectionRejected]）保持现状不动。
   ///
-  /// 修正期间锁定 reviewing 交互（isCorrecting 派生态）；
   /// 重跑无候选产出时保持 reviewing 并清空卡（无解如实呈现）。
+  /// §9.8 发布代次守卫：纠错重跑完成时若会话代次已被更新一轮接管，
+  /// 旧代产物（即使空数组）不得清空较新代候选。
   Future<void> applyRegionCorrection(RegionCorrectionIntent intent) async {
     if (state.phase != SmartLayoutSessionPhase.reviewing) return;
-    final affected = _deps.correctionHandler(intent);
-    final previous = [for (final card in state.validatedCards) card.candidate];
-    final coordinator = CorrectionRerunCoordinator(chain: _deps.rerunChain);
-    // 旧候选由 coordinator 释放（渲染资源归零）；随后立即发布新候选，
-    // 重跑无产出时进入空卡 reviewing（无解如实呈现，不复活已释放候选）。
-    final rerun = await coordinator.rerun(
-      previousCandidates: previous,
-      affected: affected,
-    );
-    completeGenerationFromValidated(rerun.newCandidates);
+    if (_correctionInFlight) return;
+    AffectedSourceSet affected;
+    try {
+      affected = _deps.correctionHandler(intent);
+    } on SmartLayoutCorrectionRejected {
+      // 被拒的 patch：不发布新上下文、不重跑（§9.3a），既有候选原样
+      // 保留在 review。
+      return;
+    }
+    _correctionInFlight = true;
+    try {
+      // §9.8 捕获：纠错已受理（代次 +1）后的当前代次。
+      final capturedGeneration = _deps.currentRecognitionGeneration?.call();
+      final capturedTicket = state.activeTicket;
+      final previous = [
+        for (final card in state.validatedCards) card.candidate,
+      ];
+      final coordinator = CorrectionRerunCoordinator(chain: _deps.rerunChain);
+      // 旧候选由 coordinator 释放（渲染资源归零）；随后立即发布新候选，
+      // 重跑无产出时进入空卡 reviewing（无解如实呈现，不复活已释放候选）。
+      final rerun = await coordinator.rerun(
+        previousCandidates: previous,
+        affected: affected,
+      );
+      final currentGeneration = _deps.currentRecognitionGeneration;
+      if (!identical(state.activeTicket, capturedTicket) ||
+          state.phase != SmartLayoutSessionPhase.reviewing ||
+          (capturedGeneration != null &&
+              currentGeneration != null &&
+              currentGeneration() != capturedGeneration)) {
+        // 旧代次重跑：即使空数组也不得清空较新代候选（§9.8）。
+        for (final candidate in rerun.newCandidates) {
+          candidate.dispose();
+        }
+        return;
+      }
+      completeGenerationFromValidated(rerun.newCandidates);
+    } finally {
+      _correctionInFlight = false;
+    }
   }
+
+  /// 纠错重跑在途标记（reviewing 相位不变；重复纠错入口 no-op）。
+  bool _correctionInFlight = false;
 
   /// 选择候选（review 阶段）。非法相位或未知 id 为 no-op。
   void chooseCandidate(String candidateId) {
@@ -649,7 +755,7 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
   /// 事务内一次完成）；否则回落 [SmartLayoutSessionDependencies.
   /// commitResultBuilder] 构建负载的 505A 路径。
   Future<void> applySelectedCandidate() async {
-    if (!state.canApply) return;
+    if (!state.canApply || _correctionInFlight) return;
     final ticket = state.activeTicket;
     if (ticket == null) return;
     final candidateId = state.selectedCandidateId!;

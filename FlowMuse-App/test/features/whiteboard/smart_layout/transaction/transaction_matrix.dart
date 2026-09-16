@@ -30,8 +30,6 @@ import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_finger
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_revision.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/validation/validated_candidate.dart';
 
-
-
 /// 六态快照：机器可判定的状态证据。
 class TransactionStateSnapshot {
   const TransactionStateSnapshot({
@@ -50,6 +48,7 @@ class TransactionStateSnapshot {
   final int undoCount;
   final int redoCount;
   final String revisionFingerprint;
+
   /// 广播事件（source 序列；协作通道的本地可观测投影）。
   final List<String> broadcastEvents;
   final int? documentVersion;
@@ -253,10 +252,9 @@ abstract final class TransactionMatrixRunner {
       sceneFingerprint: SceneFingerprint.of(scene).value,
       undoCount: controller.historyManager.undoCount,
       redoCount: controller.historyManager.redoCount,
-      revisionFingerprint: observer.isDisposed ? 'disposed' : observer
-          .current
-          .fingerprint
-          .value,
+      revisionFingerprint: observer.isDisposed
+          ? 'disposed'
+          : observer.current.fingerprint.value,
       broadcastEvents: List.unmodifiable(broadcast),
       documentVersion: scene.smartLayout?.version,
       ledgerConsumed: ledgerOf?.patch.sourceCoverage.consumedCount ?? 0,
@@ -288,10 +286,7 @@ abstract final class TransactionMatrixRunner {
       await request.response.close();
     });
     try {
-      return await body(
-        Uri.parse('http://127.0.0.1:${server.port}'),
-        bodies,
-      );
+      return await body(Uri.parse('http://127.0.0.1:${server.port}'), bodies);
     } finally {
       await sub.cancel();
       await server.close();
@@ -314,8 +309,8 @@ abstract final class TransactionMatrixRunner {
       controller: controller,
       serverUri: serverUri,
       pageId: pageId,
-      // HTTP 仓库路径口径（生产视觉链由 wiring 视觉闭环组覆盖）。
-      useVisionAnalysis: false,
+      // HTTP 实验路径；生产独立识别链由 wiring 闭环测试覆盖。
+      useRecognitionPipeline: false,
     );
     final observer = SceneRevisionTracker(
       editor: SmartLayoutEditorGateway(controller),
@@ -362,7 +357,8 @@ abstract final class TransactionMatrixRunner {
               checks: const [],
               before: before,
               after: null,
-              failure: '生成链未产出候选：${state1.phase}/'
+              failure:
+                  '生成链未产出候选：${state1.phase}/'
                   '${state1.failure}',
             ),
           ];
@@ -378,7 +374,9 @@ abstract final class TransactionMatrixRunner {
 
         await h.vm.applySelectedCandidate();
         final state2 = h.container.read(smartLayoutSessionViewModelProvider);
-        checks.add('phase applied=${state2.phase == SmartLayoutSessionPhase.applied}');
+        checks.add(
+          'phase applied=${state2.phase == SmartLayoutSessionPhase.applied}',
+        );
 
         final after = snapshotOf(
           h.controller,
@@ -401,18 +399,21 @@ abstract final class TransactionMatrixRunner {
         ok &= after.undoCount == before.undoCount + 1;
         checks.add('history undo+1=${after.undoCount == before.undoCount + 1}');
         ok &= after.revisionFingerprint == after.sceneFingerprint;
-        checks.add('revision==scene=${after.revisionFingerprint == after.sceneFingerprint}');
+        checks.add(
+          'revision==scene=${after.revisionFingerprint == after.sceneFingerprint}',
+        );
         ok &= h.broadcasts.isNotEmpty;
         checks.add('broadcast events=${h.broadcasts.length}');
         final op = candidate.patch.documentOp;
         final doc = op?.document;
-        final documentOk =
-            doc == null
+        final documentOk = doc == null
             ? after.documentVersion == before.documentVersion
             : after.documentVersion == doc.version;
         ok &= documentOk;
-        checks.add('document consistent=$documentOk'
-            '(after=${after.documentVersion}, op=${doc?.version})');
+        checks.add(
+          'document consistent=$documentOk'
+          '(after=${after.documentVersion}, op=${doc?.version})',
+        );
         final ledger = candidate.patch.sourceCoverage;
         ok &= ledger.isFinalized;
         checks.add(
@@ -445,9 +446,7 @@ abstract final class TransactionMatrixRunner {
         undoChecks.add(
           'undo→pre-commit scene=${undone.sceneFingerprint == before.sceneFingerprint}',
         );
-        undoChecks.add(
-          'undo history=${undone.undoCount}/${undone.redoCount}',
-        );
+        undoChecks.add('undo history=${undone.undoCount}/${undone.redoCount}');
         h.controller.redo();
         final redone = snapshotOf(
           h.controller,
@@ -582,11 +581,7 @@ abstract final class TransactionMatrixRunner {
           passed: ok,
           checks: checks,
           before: before,
-          after: snapshotOf(
-            h.controller,
-            h.observer,
-            broadcast: h.broadcasts,
-          ),
+          after: snapshotOf(h.controller, h.observer, broadcast: h.broadcasts),
           failure: ok ? null : '草稿释放断言存在失败项',
         );
       } finally {
@@ -621,9 +616,7 @@ abstract final class TransactionMatrixRunner {
         }
         // 远端改写 text-1（版本前进；模拟远端编辑落地）。
         h.controller.applyResult(
-          UpdateElementResult(
-            pageText().copyWith(x: 260, version: 99),
-          ),
+          UpdateElementResult(pageText().copyWith(x: 260, version: 99)),
         );
         final afterRemote = h.controller.currentScene;
         final historyAfterRemote = h.controller.historyManager.undoCount;
@@ -701,9 +694,7 @@ abstract final class TransactionMatrixRunner {
         final redispatched =
             commitResult is HistoryCommitted && commitResult.redispatched;
         final scene = h.controller.currentScene;
-        final shapePresent = scene.elements.any(
-          (e) => e.id.value == 'shape-1',
-        );
+        final shapePresent = scene.elements.any((e) => e.id.value == 'shape-1');
         final textMoved =
             scene.elements.firstWhere((e) => e.id.value == 'text-1').version >
             1;
@@ -772,15 +763,10 @@ abstract final class TransactionMatrixRunner {
         final oldCandidates = [
           for (final card in state.validatedCards) card.candidate,
         ];
-        final oldImages = [
-          for (final c in oldCandidates) c.snapshot.image,
-        ];
+        final oldImages = [for (final c in oldCandidates) c.snapshot.image];
         final historyBefore = h.controller.historyManager.undoCount;
         await h.vm.applyRegionCorrection(
-          const RegionCorrectionIntent(
-            kind: 'merge',
-            subjectIds: ['text-1'],
-          ),
+          const RegionCorrectionIntent(kind: 'merge', subjectIds: ['text-1']),
         );
         state = h.container.read(smartLayoutSessionViewModelProvider);
         var oldDisposed = true;
@@ -854,9 +840,7 @@ abstract final class TransactionMatrixRunner {
           checks.add('thumbnail ${card.candidateId}=${w}x$hh');
         }
         // 排名：分数非升序排列（第 1 名 ≥ 后续）。
-        final scores = [
-          for (final card in state.validatedCards) card.score,
-        ];
+        final scores = [for (final card in state.validatedCards) card.score];
         for (var i = 1; i < scores.length; i++) {
           ok &= scores[i - 1] >= scores[i];
         }
@@ -886,11 +870,7 @@ abstract final class TransactionMatrixRunner {
           passed: ok,
           checks: checks,
           before: before,
-          after: snapshotOf(
-            h.controller,
-            h.observer,
-            broadcast: h.broadcasts,
-          ),
+          after: snapshotOf(h.controller, h.observer, broadcast: h.broadcasts),
           failure: ok ? null : '渲染/排名断言存在失败项',
         );
       } finally {
@@ -898,15 +878,14 @@ abstract final class TransactionMatrixRunner {
       }
     });
   }
+
   /// 负载深度等价（preview=commit 口径）：元素 id 集一致；逐元素
   /// 排除 versionNonce/updated 后字段等价；version 数字一致。
   static bool _payloadEquivalent(Scene preview, Scene committed) {
-    final previewIds = [
-      for (final e in preview.orderedElements) e.id.value,
-    ]..sort();
-    final committedIds = [
-      for (final e in committed.orderedElements) e.id.value,
-    ]..sort();
+    final previewIds = [for (final e in preview.orderedElements) e.id.value]
+      ..sort();
+    final committedIds = [for (final e in committed.orderedElements) e.id.value]
+      ..sort();
     if (previewIds.length != committedIds.length) return false;
     for (var i = 0; i < previewIds.length; i++) {
       if (previewIds[i] != committedIds[i]) return false;

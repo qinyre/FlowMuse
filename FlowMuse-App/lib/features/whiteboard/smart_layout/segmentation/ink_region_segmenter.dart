@@ -177,9 +177,21 @@ class InkRegionSegmenter {
           : width > height * policy.horizontalAspectThreshold
           ? SegmentLineDirection.horizontal
           : SegmentLineDirection.mixed;
-      final localScale = _median([
-        for (final box in group) localScaleById[box.id]!,
-      ]);
+      // 局部尺度 = 成员局部中位数的"主体簇"中位：并组进来的噪点笔画
+      //（高度 < 0.5×组内最大高）是尺度离群值——按它估行高会让区域
+      // 高清资产按噪点尺度放大（48px/6u → 超 2MP 上限）而整区渲染
+      // 失败。主体簇为空时回退全体中位（均匀组行为不变）。
+      final memberScales = [for (final box in group) localScaleById[box.id]!];
+      final maxScale = memberScales.reduce(math.max);
+      final dominant = [
+        for (final scale in memberScales)
+          if (scale >= maxScale * 0.5) scale,
+      ];
+      final localScale = _median(
+        dominant.length == memberScales.length || dominant.isEmpty
+            ? memberScales
+            : dominant,
+      );
       final semantic = _classifier.semanticOf(
         group,
         direction: direction,

@@ -73,7 +73,9 @@ class _SmartLayoutSessionPanelState extends State<SmartLayoutSessionPanel> {
             children: [
               _PanelHeader(onClose: widget.onClose),
               const SizedBox(height: 4),
-              const SmartLayoutSessionView(),
+              SmartLayoutSessionView(
+                recognitionStatus: widget.scope.recognitionStatus,
+              ),
             ],
           ),
         ),
@@ -100,8 +102,7 @@ class _PanelHeader extends ConsumerWidget {
         IconButton(
           tooltip: '关闭排版面板',
           onPressed: () {
-            final phase =
-                ref.read(smartLayoutSessionViewModelProvider).phase;
+            final phase = ref.read(smartLayoutSessionViewModelProvider).phase;
             if (phase == SmartLayoutSessionPhase.analyzing ||
                 phase == SmartLayoutSessionPhase.reviewing ||
                 phase == SmartLayoutSessionPhase.applying) {

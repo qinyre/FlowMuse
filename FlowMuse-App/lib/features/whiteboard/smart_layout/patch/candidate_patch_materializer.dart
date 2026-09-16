@@ -9,6 +9,7 @@ import '../placement/flow_placer.dart';
 import '../snapshot/deterministic_hash.dart';
 import '../snapshot/scene_revision.dart';
 import '../snapshot/source_coverage_ledger.dart';
+import '../snapshot/layout_page_snapshot.dart';
 import 'smart_layout_scene_patch.dart';
 import 'smart_layout_scene_patch_builder.dart';
 
@@ -37,6 +38,10 @@ enum PatchMaterializationFailureKind {
 
   /// V3-303A 变换契约拒绝（锁定/背景/未知类型等，detail 携带原因）。
   transformRejected,
+
+  /// 原生组合单元闭包共享：两个消费块引用同一 group/frame/binding
+  /// 闭包成员——同组只变换一次，共享时整组保留（§6.4 末段）。
+  sharedClosureGroup,
 
   /// 物化产出未通过 patch 不变量终审（内部契约破坏，整体失败）。
   patchInvariantRejected,
@@ -99,6 +104,104 @@ class PatchMaterializationFailure extends PatchMaterializationOutcome {
 /// 确定性：新增元素 id、versionNonce、updated 全部显式推导（无随机、
 /// 无时钟），同一输入双跑产出深度等价 patch。
 abstract final class SmartLayoutCandidateMaterializer {
+  /// V3 原生闭包先合成一个放置块，再整体变换；不改变语义账本归属。
+  /// 只接纳完整、未锁定的原生文本/图片闭包，不吞并识别笔迹或保留物。
+  static LayoutBlockAssembly composeNativeGroups(
+    Scene scene,
+    LayoutBlockAssembly assembly,
+  ) {
+    final elements = {for (final e in scene.activeElements) e.id.value: e};
+    final blockOf = {
+      for (final b in assembly.blocks)
+        for (final id in b.sourceRefs) id: b,
+    };
+    final aliases = <String, String>{};
+    final composites = <String, LayoutBlock>{};
+    for (final block in assembly.blocks) {
+      if (aliases.containsKey(block.id) ||
+          block.isPreservedLike ||
+          block.sourceRefs.length != 1) {
+        continue;
+      }
+      final closure = SmartLayoutSceneTransformer.closureOf(scene, {
+        ElementId(block.sourceRefs.single),
+      }).map((e) => e.value).toSet();
+      if (closure.length < 2) continue;
+      final members = [
+        for (final b in assembly.blocks)
+          if (b.sourceRefs.any(closure.contains)) b,
+      ];
+      if (closure.any(
+            (id) =>
+                elements[id] == null ||
+                elements[id]!.locked ||
+                (elements[id] is! TextElement &&
+                    elements[id] is! ImageElement) ||
+                elements[id]!.pageId !=
+                    elements[block.sourceRefs.single]!.pageId ||
+                blockOf[id] == null ||
+                blockOf[id]!.isPreservedLike ||
+                blockOf[id]!.figure?.missingAsset == true,
+          ) ||
+          members.any((b) => b.sourceRefs.length != 1)) {
+        continue;
+      }
+      final bounds = closure
+          .map((id) => conservativeVisualBounds(elements[id]!))
+          .reduce((a, b) => a.union(b));
+      if (bounds.width <= 0 || bounds.height <= 0) continue;
+      final ids = closure.toList()..sort();
+      composites[block.id] = LayoutBlock(
+        id: block.id,
+        kind: LayoutBlockKind.figure,
+        sourceRefs: ids,
+        orderIndex: block.orderIndex,
+        keepTogether: true,
+        figure: FigureBlockSpec(
+          fileId: '',
+          displayAspectRatio: bounds.width / bounds.height,
+        ),
+        extras: const {'nativeComposite': true},
+      );
+      for (final member in members) {
+        aliases[member.id] = block.id;
+      }
+    }
+    if (composites.isEmpty) return assembly;
+    final relations = <BlockRelationship>{};
+    for (final r in assembly.relationships) {
+      final from = aliases[r.fromBlockId] ?? r.fromBlockId;
+      final to = aliases[r.toBlockId] ?? r.toBlockId;
+      if (from != to) {
+        relations.add(
+          BlockRelationship(kind: r.kind, fromBlockId: from, toBlockId: to),
+        );
+      }
+    }
+    // 两个原子组可能因合成同一闭包相交；合并后每块仍只放置一次。
+    final groups = <Set<String>>[];
+    for (final group in assembly.atomicGroups) {
+      final merged = {for (final id in group) aliases[id] ?? id};
+      for (var i = groups.length - 1; i >= 0; i--) {
+        if (groups[i].any(merged.contains)) merged.addAll(groups.removeAt(i));
+      }
+      if (merged.isNotEmpty) groups.add(merged);
+    }
+    final result = LayoutBlockAssembly(
+      blocks: [
+        for (final b in assembly.blocks)
+          if (!aliases.containsKey(b.id) || aliases[b.id] == b.id)
+            composites[b.id] ?? b,
+      ],
+      relationships: relations.toList(),
+      atomicGroups: [for (final group in groups) group.toList()],
+      documentConsumedSourceIds: assembly.documentConsumedSourceIds,
+      documentPreservedSourceIds: assembly.documentPreservedSourceIds,
+    );
+    if (!result.ledgerConserved) throw StateError('native-composite-ledger');
+    return result;
+  }
+
   static const String addedIdPrefix = 'sl3-';
 
   /// [timestampMs]：新增/改写元素的 updated 字段（显式传入保证双跑
@@ -170,6 +273,50 @@ abstract final class SmartLayoutCandidateMaterializer {
         );
       }
       // 源契约先于放置查找校验（块与 base 的结构绑定是 assembly 属性）。
+      if (block.extras['nativeComposite'] == true) {
+        final ids = block.sourceRefs.map(ElementId.new).toSet();
+        final closure = SmartLayoutSceneTransformer.closureOf(baseScene, ids);
+        if (ids.length < 2 ||
+            ids.length != closure.length ||
+            !ids.containsAll(closure) ||
+            ids.any(
+              (id) =>
+                  baseActiveById[id.value] == null ||
+                  baseActiveById[id.value]!.locked ||
+                  (baseActiveById[id.value] is! TextElement &&
+                      baseActiveById[id.value] is! ImageElement) ||
+                  baseActiveById[id.value]!.pageId !=
+                      baseActiveById[block.sourceRefs.first]!.pageId,
+            )) {
+          return PatchMaterializationFailure(
+            kind: PatchMaterializationFailureKind.transformRejected,
+            blockId: block.id,
+            detail: '原生组合闭包不完整或受保护',
+          );
+        }
+        final placed = placedByBlockId[block.id];
+        if (placed == null) {
+          return PatchMaterializationFailure(
+            kind: PatchMaterializationFailureKind.missingPlacement,
+            blockId: block.id,
+            detail: '组合未放置',
+          );
+        }
+        transformPlans.add(
+          _TransformPlan(
+            blockId: block.id,
+            sourceId: block.sourceRefs.first,
+            placed: placed,
+            compositeIds: ids,
+            compositeBounds: ids
+                .map(
+                  (id) => conservativeVisualBounds(baseActiveById[id.value]!),
+                )
+                .reduce((a, b) => a.union(b)),
+          ),
+        );
+        continue;
+      }
       if (block.figure != null) {
         if (block.sourceRefs.length != 1) {
           return PatchMaterializationFailure(
@@ -265,6 +412,28 @@ abstract final class SmartLayoutCandidateMaterializer {
       }
     }
 
+    // ---- 1.5 原生组合单元守卫（§6.4 末段）：同组只变换一次 ----
+    // 两个消费块的变换闭包（group/frame/binding）相交时，逐块变换会把
+    // 同组移动两次；整组保留（候选失败，base 零触碰）。
+    if (transformPlans.length > 1) {
+      final closureByBlockId = <String, Set<ElementId>>{};
+      for (final plan in transformPlans) {
+        final closure = SmartLayoutSceneTransformer.closureOf(baseScene, {
+          ElementId(plan.sourceId),
+        });
+        for (final entry in closureByBlockId.entries) {
+          if (closure.intersection(entry.value).isNotEmpty) {
+            return PatchMaterializationFailure(
+              kind: PatchMaterializationFailureKind.sharedClosureGroup,
+              blockId: plan.blockId,
+              detail: '闭包与 ${entry.key} 相交（同组只变换一次，整组保留）',
+            );
+          }
+        }
+        closureByBlockId[plan.blockId] = closure;
+      }
+    }
+
     // ---- 2. 变换链：逐块经 V3-303A 原子变换（闭包/绑定统一重算）----
     var evolvingScene = baseScene;
     final baseVersionById = <String, int>{
@@ -295,20 +464,29 @@ abstract final class SmartLayoutCandidateMaterializer {
         );
       }
       final target = plan.placed.rect;
-      final sx = target.width / current.width;
-      final sy = target.height / current.height;
+      final sourceBounds =
+          plan.compositeBounds ?? SnapshotBounds.ofElement(current);
+      final sx = target.width / sourceBounds.width;
+      final sy = target.height / sourceBounds.height;
+      if (plan.compositeIds != null && (sx - sy).abs() > 0.000001) {
+        return PatchMaterializationFailure(
+          kind: PatchMaterializationFailureKind.transformRejected,
+          blockId: plan.blockId,
+          detail: '原生组合只能等比缩放',
+        );
+      }
       final transform = AffineLayoutTransform(
         m00: sx,
         m01: 0,
         m10: 0,
         m11: sy,
-        tx: target.left - current.x * sx,
-        ty: target.top - current.y * sy,
+        tx: target.left - sourceBounds.left * sx,
+        ty: target.top - sourceBounds.top * sy,
       );
       final isMoveOnly = sx == 1 && sy == 1;
       final outcome = SmartLayoutSceneTransformer.apply(
         scene: evolvingScene,
-        targetIds: {ElementId(plan.sourceId)},
+        targetIds: plan.compositeIds ?? {ElementId(plan.sourceId)},
         op: isMoveOnly ? LayoutTransformOp.move : LayoutTransformOp.resize,
         transform: transform,
         resizeTargetWidth: target.width,
@@ -324,6 +502,19 @@ abstract final class SmartLayoutCandidateMaterializer {
       final success = outcome as SceneTransformSuccess;
       evolvingScene = success.scene;
       for (final element in success.updatedElements) {
+        if (plan.compositeIds != null && element is TextElement) {
+          final size =
+              (baseActiveById[element.id.value] as TextElement).fontSize * sx;
+          if (!size.isFinite || size < 12) {
+            return PatchMaterializationFailure(
+              kind: PatchMaterializationFailureKind.transformRejected,
+              blockId: plan.blockId,
+              detail: '组合缩放后文字低于可读下限',
+            );
+          }
+          finalStates[element.id.value] = element.copyWithText(fontSize: size);
+          continue;
+        }
         // typed 文本字号显式对齐放置档（变换器不缩放 fontSize）。
         if (element is TextElement &&
             element.fontSize != plan.placed.appliedFontSize) {
@@ -492,11 +683,15 @@ class _TransformPlan {
     required this.blockId,
     required this.sourceId,
     required this.placed,
+    this.compositeIds,
+    this.compositeBounds,
   });
 
   final String blockId;
   final String sourceId;
   final PlacedBlock placed;
+  final Set<ElementId>? compositeIds;
+  final SnapshotBounds? compositeBounds;
 }
 
 class _RetypePlan {

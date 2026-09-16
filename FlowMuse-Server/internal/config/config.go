@@ -38,6 +38,10 @@ type Config struct {
 	AIAPIKey           string
 	AIModel            string
 	AITimeout          time.Duration
+	LayoutV3BaseURL    string
+	LayoutV3APIKey     string
+	LayoutV3Model      string
+	LayoutV3Timeout    time.Duration
 }
 
 func Load() (Config, error) {
@@ -71,10 +75,14 @@ func Load() (Config, error) {
 			"FLOWMUSE_RECOGNITION_TIMEOUT",
 			20*time.Second,
 		),
-		AIBaseURL: env("FLOWMUSE_AI_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
-		AIAPIKey:  envFirst("FLOWMUSE_AI_API_KEY", "ARK_API_KEY"),
-		AIModel:   env("FLOWMUSE_AI_MODEL", "doubao-seed-2-1-turbo-260628"),
-		AITimeout: envDuration("FLOWMUSE_AI_TIMEOUT", 120*time.Second),
+		AIBaseURL:       env("FLOWMUSE_AI_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+		AIAPIKey:        envFirst("FLOWMUSE_AI_API_KEY", "ARK_API_KEY"),
+		AIModel:         env("FLOWMUSE_AI_MODEL", "doubao-seed-2-1-turbo-260628"),
+		AITimeout:       envDuration("FLOWMUSE_AI_TIMEOUT", 120*time.Second),
+		LayoutV3BaseURL: env("FLOWMUSE_LAYOUT_V3_BASE_URL", ""),
+		LayoutV3APIKey:  envFirst("FLOWMUSE_LAYOUT_V3_API_KEY", "ARK_API_KEY"),
+		LayoutV3Model:   env("FLOWMUSE_LAYOUT_V3_MODEL", ""),
+		LayoutV3Timeout: envIntSeconds("FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS", 60),
 	}
 	cfg.S3AccessKeyID = os.Getenv("FLOWMUSE_S3_ACCESS_KEY_ID")
 	cfg.S3SecretAccessKey = os.Getenv("FLOWMUSE_S3_SECRET_ACCESS_KEY")
@@ -136,6 +144,20 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+// envIntSeconds 解析整数秒环境变量。不得用 envDuration——该 helper 走
+// time.ParseDuration，裸数字（如 "90"）会解析失败回落默认值。
+func envIntSeconds(key string, fallbackSeconds int) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return time.Duration(fallbackSeconds) * time.Second
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || parsed <= 0 {
+		return time.Duration(fallbackSeconds) * time.Second
+	}
+	return time.Duration(parsed) * time.Second
 }
 
 func envDuration(key string, fallback time.Duration) time.Duration {

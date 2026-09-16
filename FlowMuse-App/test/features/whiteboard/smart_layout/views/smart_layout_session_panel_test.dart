@@ -38,16 +38,16 @@ void main() {
     // 与生产一致：app 根 scope → 白板页 Stack → 面板（自带 scope）。
     await tester.pumpWidget(
       ProviderScope(
-        child: MaterialApp(home: Scaffold(body: Stack(children: [child]))),
+        child: MaterialApp(
+          home: Scaffold(body: Stack(children: [child])),
+        ),
       ),
     );
     await tester.pump();
     await tester.pump();
   }
 
-  testWidgets('根 scope 内嵌面板：deps override 生效，idle 面板完整渲染', (
-    tester,
-  ) async {
+  testWidgets('根 scope 内嵌面板：deps override 生效，idle 面板完整渲染', (tester) async {
     GoogleFonts.config.allowRuntimeFetching = false;
     final controller = pagedController();
     addTearDown(controller.dispose);
@@ -68,9 +68,7 @@ void main() {
     expect(find.textContaining('排版范围 0 项'), findsOneWidget);
   });
 
-  testWidgets('根 scope 内嵌面板：开始可点且 VM 真实工作（无引擎→失败可见）', (
-    tester,
-  ) async {
+  testWidgets('根 scope 内嵌面板：开始可点且空页如实显示无候选', (tester) async {
     GoogleFonts.config.allowRuntimeFetching = false;
     final controller = pagedController();
     addTearDown(controller.dispose);
@@ -86,13 +84,12 @@ void main() {
       SmartLayoutSessionPanel(scope: scope, onClose: () {}),
     );
 
-    // 无识别引擎：点击后 VM 以 capabilityOff 失败收敛（异常零吞没），
-    // 证明 deps override 在生产嵌套结构下真实注入。
+    // V3 空页无需旧识别引擎或网络；完成分析后如实呈现空候选。
     await tester.tap(find.text('开始智能排版'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.textContaining('失败'), findsWidgets);
+    expect(find.text('本次分析没有可用的排版候选'), findsOneWidget);
     expect(find.text('关闭'), findsOneWidget);
   });
 }

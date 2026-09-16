@@ -44,12 +44,31 @@ class SmartLayoutHttpException implements Exception {
       'SmartLayoutHttpException($kind, statusCode: $statusCode, $detail)';
 }
 
-/// 请求在完成前被 [NativeHttpCancelToken] 取消。
+/// 请求在完成前被取消（原生取消令牌或 [SmartLayoutCancellationToken]）。
 class SmartLayoutHttpCancelledException implements Exception {
   const SmartLayoutHttpCancelledException();
 
   @override
   String toString() => 'SmartLayoutHttpCancelledException';
+}
+
+/// 独立取消信号（V3 识别链 spec §6.1）：gateways/ 之外不直接触达
+/// 原生 HTTP client 类型，取消语义（用户取消 + 总时限到期主动取消
+/// 在途请求）经此包装进出。
+class SmartLayoutCancellationToken {
+  SmartLayoutCancellationToken() : _native = NativeHttpCancelToken();
+
+  final NativeHttpCancelToken _native;
+  bool _cancelled = false;
+
+  /// 是否已取消（幂等；只置位一次）。
+  bool get isCancelled => _cancelled;
+
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    _native.cancel();
+  }
 }
 
 /// 智能排版 v3 的唯一 HTTP 边界：薄封装既有 [NativeHttpClient]，
@@ -92,8 +111,10 @@ class SmartLayoutHttpGateway {
     required String body,
     String? bearerToken,
     NativeHttpCancelToken? cancelToken,
+    SmartLayoutCancellationToken? token,
     int? readTimeoutMs,
   }) async {
+    final nativeCancelToken = token != null ? token._native : cancelToken;
     final uri = resolveUri(path);
     final headers = <String, String>{
       'content-type': 'application/json',
@@ -108,7 +129,7 @@ class SmartLayoutHttpGateway {
         body: body,
         connectTimeoutMs: _connectTimeoutMs,
         readTimeoutMs: readTimeoutMs ?? _readTimeoutMs,
-        cancelToken: cancelToken,
+        cancelToken: nativeCancelToken,
       );
     } on NativeHttpCancelledException {
       throw const SmartLayoutHttpCancelledException();
