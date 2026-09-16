@@ -6,6 +6,36 @@ import 'structure_test_helpers.dart';
 /// 结构请求触发条件（§7；与 §6.1 复核触发表分离）与模型结果合并：
 /// 模型只改角色/分组/顺序/层级；正文与几何一律本地；验证失败回退本地。
 void main() {
+  test('结构指纹跨端稳定，正文或等长单元ID变化不能复用旧指纹', () async {
+    Future<String> fingerprint({
+      String id = 'r:mid',
+      String text = '正文😀',
+    }) async {
+      String? value;
+      await recoverWithRegions(
+        [
+          const RegionSpec(regionId: 'r:a1', top: 100, left: 0, text: '1. 甲'),
+          const RegionSpec(regionId: 'r:a2', top: 130, left: 0, text: '2. 乙'),
+          RegionSpec(regionId: id, top: 160, left: 60, text: text),
+          const RegionSpec(regionId: 'r:b1', top: 190, left: 120, text: '1. 丙'),
+          const RegionSpec(regionId: 'r:b2', top: 220, left: 120, text: '2. 丁'),
+        ],
+        send: (request) async {
+          value = request.textFingerprint;
+          return null;
+        },
+      );
+      expect(value, isNotNull);
+      return value!;
+    }
+
+    final first = await fingerprint();
+    expect(first, '4b9d3e826427c025', reason: 'VM 与 Chrome 使用同一固定向量');
+    expect(first, matches(RegExp(r'^[0-9a-f]{16}$')));
+    expect(await fingerprint(), first);
+    expect(await fingerprint(id: 'r:new'), isNot(first));
+    expect(await fingerprint(text: '正文😁'), isNot(first));
+  });
   test('真实触发结构请求后角色冲突产出准入阻断集合', () async {
     final result = await recoverWithRegions(
       const [

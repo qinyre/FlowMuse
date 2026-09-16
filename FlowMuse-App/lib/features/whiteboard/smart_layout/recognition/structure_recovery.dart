@@ -1,10 +1,12 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:convert';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart';
+import '../snapshot/deterministic_hash.dart';
 
 /// 结构恢复（spec §7）：本地规则优先；结构请求触发条件命中才发
 ///（至多一次）；模型只改角色/分组/顺序/层级，正文与几何一律本地值。
@@ -665,16 +667,12 @@ class StructureRecovery implements RecognitionStructureRecoverer {
   }
 
   String _textFingerprintOf(List<RecognitionUnitInput> units) {
-    var hash = 0xcbf29ce484222325;
-    for (final unit in units) {
-      for (final code in (unit.text ?? '').codeUnits) {
-        hash ^= code;
-        hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
-      }
-      hash ^= unit.unitId.length;
-      hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
-    }
-    return hash.toRadixString(16).padLeft(16, '0');
+    // 复用 VM/dart2js 一致的双 32 位车道；JSON 保留单元边界与完整 ID。
+    return fingerprint64(
+      jsonEncode([
+        for (final unit in units) [unit.unitId, unit.text],
+      ]),
+    );
   }
 }
 
