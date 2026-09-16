@@ -1,0 +1,196 @@
+{
+ "kind": "response",
+ "expect": "reject",
+ "expectedErrorCode": "invalidProviderResponse",
+ "payload": {
+  "schemaVersion": "recognition-v3/1",
+  "stage": "structure",
+  "operationId": "11111111-1111-4111-8111-111111111111",
+  "requestId": "22222222-2222-4222-8222-222222222222",
+  "pageId": "page-1",
+  "sceneRevision": {
+   "epoch": 0,
+   "revision": 5,
+   "fingerprint": "0123456789abcdef"
+  },
+  "contentFingerprint": "fedcba9876543210",
+  "generation": 0,
+  "textFingerprint": "0123456789abcdef",
+  "readingOrder": [
+   "native:r:element-9",
+   "ink:r:list-1",
+   "ink:r:list-2",
+   "ink:r:list-3",
+   "ink:r:list-4",
+   "ink:r:ink-0007",
+   "native:img-3",
+   "native:r:locked-2"
+  ],
+  "roles": [
+   {
+    "unitId": "native:r:element-9",
+    "role": "title"
+   },
+   {
+    "unitId": "ink:r:list-1",
+    "role": "listItem"
+   },
+   {
+    "unitId": "ink:r:list-2",
+    "role": "listItem"
+   },
+   {
+    "unitId": "ink:r:list-3",
+    "role": "listItem"
+   },
+   {
+    "unitId": "ink:r:list-4",
+    "role": "listItem"
+   },
+   {
+    "unitId": "ink:r:ink-0007",
+    "role": "caption"
+   }
+  ],
+  "listGroups": [
+   {
+    "groupId": "g1",
+    "members": [
+     "ink:r:list-1",
+     "ink:r:list-2",
+     "ink:r:list-4"
+    ],
+    "level": 1,
+    "listType": "ordered",
+    "startNumber": 1
+   },
+   {
+    "groupId": "g2",
+    "members": [
+     "ink:r:list-3"
+    ],
+    "level": 2,
+    "parentUnitId": "native:img-3",
+    "listType": "ordered"
+   }
+  ],
+  "captions": [
+   {
+    "captionUnitId": "ink:r:ink-0007",
+    "targetUnitId": "native:img-3"
+   }
+  ],
+  "warnings": [
+   "标题置信度一般"
+  ]
+ },
+ "request": {
+  "schemaVersion": "recognition-v3/1",
+  "stage": "structure",
+  "operationId": "11111111-1111-4111-8111-111111111111",
+  "requestId": "22222222-2222-4222-8222-222222222222",
+  "pageId": "page-1",
+  "sceneRevision": {
+   "epoch": 0,
+   "revision": 5,
+   "fingerprint": "0123456789abcdef"
+  },
+  "contentFingerprint": "fedcba9876543210",
+  "generation": 0,
+  "units": [
+   {
+    "unitId": "native:r:element-9",
+    "kind": "typed",
+    "bounds": {
+     "left": 10,
+     "top": 12,
+     "width": 200,
+     "height": 40
+    },
+    "text": "既有原生标题文本",
+    "roleHint": "title"
+   },
+   {
+    "unitId": "ink:r:list-1",
+    "kind": "ink",
+    "bounds": {
+     "left": 10,
+     "top": 60,
+     "width": 280,
+     "height": 24
+    },
+    "text": "1. 第一项",
+    "roleHint": "listItem"
+   },
+   {
+    "unitId": "ink:r:list-2",
+    "kind": "ink",
+    "bounds": {
+     "left": 10,
+     "top": 90,
+     "width": 280,
+     "height": 24
+    },
+    "text": "2. 第二项",
+    "roleHint": "listItem"
+   },
+   {
+    "unitId": "ink:r:list-3",
+    "kind": "ink",
+    "bounds": {
+     "left": 34,
+     "top": 120,
+     "width": 256,
+     "height": 24
+    },
+    "text": "2.1. 子项",
+    "roleHint": "listItem"
+   },
+   {
+    "unitId": "ink:r:list-4",
+    "kind": "ink",
+    "bounds": {
+     "left": 10,
+     "top": 150,
+     "width": 280,
+     "height": 24
+    },
+    "text": "3. 第三项",
+    "roleHint": "listItem"
+   },
+   {
+    "unitId": "ink:r:ink-0007",
+    "kind": "ink",
+    "bounds": {
+     "left": 350,
+     "top": 300,
+     "width": 300,
+     "height": 30
+    },
+    "text": "图1 示意图",
+    "roleHint": "caption"
+   },
+   {
+    "unitId": "native:img-3",
+    "kind": "figure",
+    "bounds": {
+     "left": 350,
+     "top": 60,
+     "width": 150,
+     "height": 150
+    }
+   },
+   {
+    "unitId": "native:r:locked-2",
+    "kind": "preserved",
+    "bounds": {
+     "left": 10,
+     "top": 230,
+     "width": 120,
+     "height": 60
+    }
+   }
+  ],
+  "textFingerprint": "0123456789abcdef"
+ }
+}
