@@ -225,6 +225,21 @@ void main() {
     test('已是 preserved 的 source 拒绝（not-consumed）', () {
       final doc = buildDocument();
       const applier = SemanticPatchApplier();
+      // 整块保留（§9.2）：g3 = {ink-1, ink-2} 必须整块触达。
+      final result = applier.apply(
+        doc,
+        PreserveSemanticSourcesPatch(
+          baseRevision: SemanticRevisionRef.of(doc),
+          sourceIds: const ['ink-1', 'ink-2'],
+          toPreserved: true,
+        ),
+      );
+      expect(result.rejection, 'not-consumed(ink-1)');
+    });
+
+    test('部分块保留拒绝（partial-block-preserve，§9.2 整块语义）', () {
+      final doc = buildDocument();
+      const applier = SemanticPatchApplier();
       final result = applier.apply(
         doc,
         PreserveSemanticSourcesPatch(
@@ -233,7 +248,7 @@ void main() {
           toPreserved: true,
         ),
       );
-      expect(result.rejection, 'not-consumed(ink-1)');
+      expect(result.rejection, contains('partial-block-preserve'));
     });
   });
 
@@ -285,7 +300,8 @@ void main() {
         ),
       ];
       final scope = SemanticRerunScope.resolve(patches, doc);
-      expect(scope.blockIds, {'g3'});
+      // §9.2 修复后：保留切换同步块角色，受触块 g1 进入重算范围。
+      expect(scope.blockIds, {'g1', 'g3'});
       expect(scope.stableSourceKeys, [
         'ink-1',
         'ink-2',

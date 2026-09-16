@@ -38,6 +38,10 @@ enum PatchMaterializationFailureKind {
   /// V3-303A 变换契约拒绝（锁定/背景/未知类型等，detail 携带原因）。
   transformRejected,
 
+  /// 原生组合单元闭包共享：两个消费块引用同一 group/frame/binding
+  /// 闭包成员——同组只变换一次，共享时整组保留（§6.4 末段）。
+  sharedClosureGroup,
+
   /// 物化产出未通过 patch 不变量终审（内部契约破坏，整体失败）。
   patchInvariantRejected,
 }
@@ -262,6 +266,29 @@ abstract final class SmartLayoutCandidateMaterializer {
           );
         }
         retypePlans.add(_RetypePlan(block: block, placed: placed, spec: spec));
+      }
+    }
+
+    // ---- 1.5 原生组合单元守卫（§6.4 末段）：同组只变换一次 ----
+    // 两个消费块的变换闭包（group/frame/binding）相交时，逐块变换会把
+    // 同组移动两次；整组保留（候选失败，base 零触碰）。
+    if (transformPlans.length > 1) {
+      final closureByBlockId = <String, Set<ElementId>>{};
+      for (final plan in transformPlans) {
+        final closure = SmartLayoutSceneTransformer.closureOf(
+          baseScene,
+          {ElementId(plan.sourceId)},
+        );
+        for (final entry in closureByBlockId.entries) {
+          if (closure.intersection(entry.value).isNotEmpty) {
+            return PatchMaterializationFailure(
+              kind: PatchMaterializationFailureKind.sharedClosureGroup,
+              blockId: plan.blockId,
+              detail: '闭包与 ${entry.key} 相交（同组只变换一次，整组保留）',
+            );
+          }
+        }
+        closureByBlockId[plan.blockId] = closure;
       }
     }
 

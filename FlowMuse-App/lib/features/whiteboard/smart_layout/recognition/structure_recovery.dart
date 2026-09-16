@@ -165,6 +165,9 @@ class StructureRecovery implements RecognitionStructureRecoverer {
       }
     }
     for (final element in scene.activeElements) {
+      // 背景元素（页面框/PDF 底图）不构成内容单元——与旧入口第 0 步
+      // page-furniture 剥离同口径，语义适配同样排除其源。
+      if (element.isCanvasPage || element.isPdfBackground) continue;
       if (element is TextElement) {
         units.add(
           RecognitionUnitInput(

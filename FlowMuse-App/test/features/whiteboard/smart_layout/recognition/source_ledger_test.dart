@@ -230,6 +230,7 @@ void main() {
         'assetFailed',
         'missingResponse',
         'contextOnly',
+        'uncertain',
       ];
       expect(
         SourcePreserveReason.values.map((reason) => reason.wireName),

@@ -161,6 +161,15 @@ class SemanticPatchValidator {
     SemanticDocument document,
     PreserveSemanticSourcesPatch patch,
   ) {
+    final sourceIdSet = patch.sourceIds.toSet();
+    // §9.2 整块语义：块装配守恒按块计 consumed/preserved——部分覆盖会把
+    // 同一块拆进双终态，拒绝（保留按完整 unit，spec §6.4-3）。
+    for (final block in document.blocks) {
+      final overlap = block.sourceIds.where(sourceIdSet.contains).length;
+      if (overlap > 0 && overlap != block.sourceIds.length) {
+        return 'partial-block-preserve(${block.id})';
+      }
+    }
     for (final sourceId in patch.sourceIds) {
       final consumed = document.consumedSourceIds.contains(sourceId);
       final preserved = document.preservedSourceIds.contains(sourceId);
@@ -258,30 +267,102 @@ class SemanticPatchApplier {
         bumped,
         readingOrder: SemanticReadingOrder(orderedBlockIds: newOrder),
       ),
-      SetSemanticRelationsPatch() => bumped, // 关系不影响文档核心字段（由冲突/重算消费）
+      // §9.2 闭环修复：关系真正写入块 extras（图注/列表关系），目标
+      // 存在性已在 validator 校验——不再是仅递增 revision 的空操作。
+      SetSemanticRelationsPatch(:final blockId, :final newRelations) =>
+        _copyWith(
+          bumped,
+          blocks: [
+            for (final block in bumped.blocks)
+              if (block.id == blockId)
+                _withExtras(
+                  block,
+                  'relations',
+                  List.unmodifiable([
+                    for (final relation in newRelations)
+                      Map.unmodifiable(<String, Object?>{
+                        'type': relation.type,
+                        'targetBlockId': relation.targetBlockId,
+                      }),
+                  ]),
+                )
+              else
+                block,
+          ],
+        ),
+      // §9.2 闭环修复：保留切换同步块角色（unknown=保留语义）并记录
+      // previousRole 供逆操作恢复；不再只搬移 consumed/preserved 列表。
       PreserveSemanticSourcesPatch(:final sourceIds, :final toPreserved) =>
-        toPreserved
-            ? _copyWith(
-                bumped,
-                consumedSourceIds: [
-                  ...bumped.consumedSourceIds.where(
-                    (id) => !sourceIds.contains(id),
-                  ),
-                ]..sort(),
-                preservedSourceIds: [...bumped.preservedSourceIds, ...sourceIds]
-                  ..sort(),
-              )
-            : _copyWith(
-                bumped,
-                consumedSourceIds: [...bumped.consumedSourceIds, ...sourceIds]
-                  ..sort(),
-                preservedSourceIds: [
-                  ...bumped.preservedSourceIds.where(
-                    (id) => !sourceIds.contains(id),
-                  ),
-                ]..sort(),
-              ),
+        _copyWith(
+          bumped,
+          blocks: [
+            for (final block in bumped.blocks)
+              if (block.sourceIds.any(sourceIds.contains))
+                _syncPreservedRole(block, toPreserved)
+              else
+                block,
+          ],
+          consumedSourceIds:
+              toPreserved
+                  ? ([...bumped.consumedSourceIds.where((id) => !sourceIds.contains(id))]..sort())
+                  : ([...bumped.consumedSourceIds, ...sourceIds]..sort()),
+          preservedSourceIds:
+              toPreserved
+                  ? ([...bumped.preservedSourceIds, ...sourceIds]..sort())
+                  : ([...bumped.preservedSourceIds.where((id) => !sourceIds.contains(id))]..sort()),
+        ),
     };
+  }
+
+  static SemanticBlock _withExtras(
+    SemanticBlock block,
+    String key,
+    Object? value,
+  ) => SemanticBlock(
+    id: block.id,
+    role: block.role,
+    sourceIds: block.sourceIds,
+    orderIndex: block.orderIndex,
+    confidence: block.confidence,
+    text: block.text,
+    extras: Map.unmodifiable({...block.extras, key: value}),
+  );
+
+  /// 保留切换的块角色同步：toPreserved 把消费块降为 unknown（保留
+  /// 语义，不进排版流）并首次记 previousRole；逆操作恢复 previousRole
+  ///（缺席则维持 unknown，不凭空造角色）。
+  static SemanticBlock _syncPreservedRole(SemanticBlock block, bool toPreserved) {
+    if (toPreserved) {
+      if (block.role == SemanticRole.unknown) return block;
+      return _withExtras(
+        SemanticBlock(
+          id: block.id,
+          role: SemanticRole.unknown,
+          sourceIds: block.sourceIds,
+          orderIndex: block.orderIndex,
+          confidence: block.confidence,
+          text: block.text,
+          extras: block.extras,
+        ),
+        'previousRole',
+        block.role.wireName,
+      );
+    }
+    final previous = block.extras['previousRole'];
+    if (previous is! String) return block;
+    final restored = SemanticRole.fromWireName(previous);
+    return SemanticBlock(
+      id: block.id,
+      role: restored,
+      sourceIds: block.sourceIds,
+      orderIndex: block.orderIndex,
+      confidence: block.confidence,
+      text: block.text,
+      extras: Map.unmodifiable({
+        for (final entry in block.extras.entries)
+          if (entry.key != 'previousRole') entry.key: entry.value,
+      }),
+    );
   }
 
   SemanticCorrectionPatch _inverse(
@@ -371,9 +452,19 @@ class SemanticRerunScope {
     SemanticDocument document,
   ) {
     final base = SemanticRerunScope.of(patches);
+    final blocks = {...base.blockIds};
     final sources = <String>{};
+    for (final patch in SemanticRerunScope.coalesce(patches)) {
+      if (patch is! PreserveSemanticSourcesPatch) continue;
+      // §9.2：保留切换同步了块角色——受触块整体进入重算范围。
+      for (final block in document.blocks) {
+        if (block.sourceIds.any(patch.sourceIds.contains)) {
+          blocks.add(block.id);
+        }
+      }
+    }
     for (final block in document.blocks) {
-      if (base.blockIds.contains(block.id)) {
+      if (blocks.contains(block.id)) {
         sources.addAll(block.sourceIds);
       }
     }
@@ -382,7 +473,7 @@ class SemanticRerunScope {
         sources.addAll(patch.sourceIds);
       }
     }
-    return SemanticRerunScope._(base.blockIds, sources);
+    return SemanticRerunScope._(blocks, sources);
   }
 
   /// 连续修正合并：同块连续 patch 只保留最后一次（仅提交最后一次

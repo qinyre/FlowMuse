@@ -156,9 +156,13 @@ class SmartLayoutSceneTransformer {
     return SnapshotMobility.movable;
   }
 
-  /// 闭包展开：目标 + 同组成员 + frame 成员 + 容器文本。
+  /// 闭包展开（公共入口）：目标 + 同组成员 + frame 成员 + 容器文本。
   /// 与 v1 SmartLayoutMoveBuilder 的跟随范围对齐（组由调用方展开的
-  /// 契约在此内聚：同组成员必须整体移动，排版不拆组）。
+  /// 契约在此内聚：同组成员必须整体移动，排版不拆组）；物化层用同一
+  /// 计算做原生组合单元的"同组只变换一次"守卫（§6.4 末段）。
+  static Set<ElementId> closureOf(Scene scene, Set<ElementId> targetIds) =>
+      _closure(scene, targetIds);
+
   static Set<ElementId> _closure(Scene scene, Set<ElementId> targetIds) {
     final active = scene.activeElements;
     final byId = {for (final e in active) e.id: e};

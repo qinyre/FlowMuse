@@ -17,7 +17,11 @@ enum SourcePreserveReason {
   budgetExceeded('budgetExceeded'),
   assetFailed('assetFailed'),
   missingResponse('missingResponse'),
-  contextOnly('contextOnly');
+  contextOnly('contextOnly'),
+
+  /// 区域识别为 uncertain（复核冲突未消解）：按保留处理，不进替换流
+  /// （§6.4 准入条件 6）。
+  uncertain('uncertain');
 
   const SourcePreserveReason(this.wireName);
 

@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
-import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/gateways/smart_layout_http_gateway.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_budget.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_repository.dart';
@@ -86,6 +86,7 @@ class RecognitionSessionResult {
     required this.operationId,
     required this.generation,
     required this.pageId,
+    required this.scene,
     required this.sceneRevision,
     required this.contentFingerprint,
     required this.regionRecords,
@@ -100,6 +101,9 @@ class RecognitionSessionResult {
   final String operationId;
   final int generation;
   final String pageId;
+
+  /// 完整捕获快照（含原生元素与背景；语义适配按 §6.4 口径自行剥离）。
+  final Scene scene;
   final RecognitionSceneRevision sceneRevision;
   final String contentFingerprint;
 
@@ -107,8 +111,11 @@ class RecognitionSessionResult {
   final List<RegionRecord> regionRecords;
   final Map<String, RegionReadOutcome> regionOutcomes;
 
-  /// 识别期源账本：unreadable/nonText/missing/assetFailed/budgetExceeded
-  /// 已 preserve；recognized/uncertain 保持 pending，待语义适配 consume。
+  /// 识别期源账本（§6.4）：注册范围为完整捕获源集合−背景剥离集
+  /// （全部活动笔迹 + 非背景原生元素）。识别失败原因
+  /// （unreadable/nonText/missingResponse/assetFailed/budgetExceeded）
+  /// 已 preserve；recognized/uncertain 笔迹与全部原生源保持 pending，
+  /// 由语义适配（R6 `RecognitionSemanticAdapter.settle`）按结构结果结算。
   final SourceLedger ledger;
   final RegionAssetIndex assetIndex;
 
@@ -118,6 +125,24 @@ class RecognitionSessionResult {
   /// 部分完成（有区域被保留）及其原因。
   final bool partial;
   final List<String> partialNotes;
+
+  /// 携带已结算账本的副本（语义适配后回填会话产物用；其余字段原样）。
+  RecognitionSessionResult copyWith({SourceLedger? ledger}) =>
+      RecognitionSessionResult(
+        operationId: operationId,
+        generation: generation,
+        pageId: pageId,
+        scene: scene,
+        sceneRevision: sceneRevision,
+        contentFingerprint: contentFingerprint,
+        regionRecords: regionRecords,
+        regionOutcomes: regionOutcomes,
+        ledger: ledger ?? this.ledger,
+        assetIndex: assetIndex,
+        structureResult: structureResult,
+        partial: partial,
+        partialNotes: partialNotes,
+      );
 }
 
 /// 取消异常（携带已安全结算的部分会话；§6.1 部分预览）。
@@ -129,6 +154,84 @@ class RecognitionCancelledException implements Exception {
   @override
   String toString() =>
       'RecognitionCancelledException(partial: ${partialSession != null})';
+}
+
+/// 纠错影响集（§9.3：影响区域 = before 受触 ∪ after 新建；笔画 = 前后
+/// 成员并集；资产失效集来自会话资产索引的反向索引，含多临时资产）。
+class RecognitionCorrectionAffected {
+  const RecognitionCorrectionAffected({
+    required this.beforeRegionIds,
+    required this.afterRegionIds,
+    required this.strokeSourceIds,
+    required this.invalidatedAssetIds,
+  });
+
+  /// before 状态被触碰（移除/重建）的区域 id。
+  final Set<String> beforeRegionIds;
+
+  /// 经 apply 校验通过的 after 状态新建区域 id（split 产生）。
+  final Set<String> afterRegionIds;
+
+  /// 前后成员并集（笔画 source id）。
+  final Set<String> strokeSourceIds;
+
+  /// 会话临时资产失效集（assetId）。
+  final Set<String> invalidatedAssetIds;
+
+  /// 四集合完整性（§9.3 末条：不得单独依赖 AffectedSourceSet.isEmpty
+  /// ——该实现不检查 cropKeys；包装层自做断言）。
+  bool get isEmpty =>
+      beforeRegionIds.isEmpty &&
+      afterRegionIds.isEmpty &&
+      strokeSourceIds.isEmpty &&
+      invalidatedAssetIds.isEmpty;
+}
+
+/// 纠错调用开始时捕获的不可变上下文（§9.4）：异步过程中不得反复读取
+/// 可被下一次纠错覆盖的共享字段；发布新候选前校验捕获时 generation ==
+/// 当前会话 generation。
+class RecognitionCorrectionContext {
+  const RecognitionCorrectionContext._({
+    required this.generation,
+    required this.operationId,
+    required this.affected,
+    required this.regionRecords,
+  });
+
+  /// 从会话捕获（副作用：在会话资产索引上执行失效，返回失效集快照）。
+  factory RecognitionCorrectionContext.capture({
+    required int generation,
+    required String operationId,
+    required RecognitionSessionResult session,
+    required Set<String> beforeRegionIds,
+    required Set<String> afterRegionIds,
+    required Set<String> strokeSourceIds,
+  }) {
+    final invalidated = session.assetIndex.invalidateForSources(
+      strokeSourceIds,
+    );
+    return RecognitionCorrectionContext._(
+      generation: generation,
+      operationId: operationId,
+      affected: RecognitionCorrectionAffected(
+        beforeRegionIds: Set.unmodifiable(beforeRegionIds),
+        afterRegionIds: Set.unmodifiable(afterRegionIds),
+        strokeSourceIds: Set.unmodifiable(strokeSourceIds),
+        invalidatedAssetIds: Set.unmodifiable(invalidated),
+      ),
+      regionRecords: List.unmodifiable(session.regionRecords),
+    );
+  }
+
+  final int generation;
+  final String operationId;
+  final RecognitionCorrectionAffected affected;
+
+  /// before 状态的区域记录（不可变快照）。
+  final List<RegionRecord> regionRecords;
+
+  /// 代次守卫：捕获时 generation 与当前会话 generation 不一致即过期。
+  bool isCurrent(int currentGeneration) => generation == currentGeneration;
 }
 
 /// 复核触发条件（spec §6.1；与 §7 结构触发表分离，不混用）。
@@ -198,7 +301,7 @@ class RecognitionPipeline {
 
   RecognitionPipelineState _state = RecognitionPipelineState.idle;
   bool _cancelRequested = false;
-  NativeHttpCancelToken? _cancelToken;
+  SmartLayoutCancellationToken? _cancelToken;
   RecognitionBudget _budget = const RecognitionBudget();
   final Map<String, RecognitionResponse> _responseCache = {};
   final Map<String, RegionAsset> _assetByRegion = {};
@@ -245,18 +348,19 @@ class RecognitionPipeline {
       throw StateError('pipeline 实例不可复用（一个操作一个实例）');
     }
     final stopwatch = Stopwatch()..start();
-    _cancelToken = NativeHttpCancelToken();
+    _cancelToken = SmartLayoutCancellationToken();
     _budget = budget;
     final partialNotes = <String>[];
     final assetIndex = RegionAssetIndex();
 
-    // ---- capturing：源集合注册（排除背景后的识别源 = 全部活动笔迹）----
+    // ---- capturing：源集合注册（§6.4：完整捕获源集合−背景剥离集；
+    // 与旧入口第 0 步 page-furniture 剥离同口径——isCanvasPage/
+    // isPdfBackground 剔除，锁定元素保留在源集内）----
     _transition(RecognitionPipelineState.capturing);
-    final strokes = capture.scene.activeElements
-        .whereType<FreedrawElement>()
-        .toList(growable: false);
     var ledger = SourceLedger.register(
-      strokes.map((stroke) => stroke.id.value),
+      capture.scene.activeElements
+          .where((element) => !(element.isCanvasPage || element.isPdfBackground))
+          .map((element) => element.id.value),
     );
     _checkCancelled();
 
@@ -442,6 +546,7 @@ class RecognitionPipeline {
       operationId: capture.operationId,
       generation: capture.generation,
       pageId: capture.pageId,
+      scene: capture.scene,
       sceneRevision: capture.sceneRevision,
       contentFingerprint: capture.contentFingerprint,
       regionRecords: [

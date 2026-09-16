@@ -5,7 +5,6 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/gateways/smart_layout_http_gateway.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_json_reader.dart';
 
@@ -77,7 +76,7 @@ class RecognitionRepository {
   Future<RecognitionResponse> send(
     RecognitionRequest request, {
     String? bearerToken,
-    NativeHttpCancelToken? cancelToken,
+    SmartLayoutCancellationToken? cancelToken,
     required Duration remainingBudget,
   }) async {
     // 1. 发送前自检（双保险的客户端一半）。
@@ -106,14 +105,14 @@ class RecognitionRepository {
 
     // 2. 总预算计时器：到期主动取消在途请求（服务端 ctx 取消兜底之外的
     //    客户端主动取消，spec §6.1）。
-    final activeCancelToken = cancelToken ?? NativeHttpCancelToken();
+    final activeCancelToken = cancelToken ?? SmartLayoutCancellationToken();
     final watchdog = Timer(remainingBudget, activeCancelToken.cancel);
     try {
       final responseBody = await _gateway.postJson(
         path: endpointPath,
         body: body,
         bearerToken: bearerToken,
-        cancelToken: activeCancelToken,
+        token: activeCancelToken,
         readTimeoutMs: readTimeoutMs,
       );
       return _parseResponse(responseBody, request);
