@@ -27,7 +27,7 @@ import 'package:flutter_test/flutter_test.dart';
 class V2ClientIsolationMatrix {
   static final v2RoutingSymbolPattern = RegExp(
     r'(v2_?[Rr]eflow|fallbackToV2|routeToV2|legacyV2|'
-    r'\.(prepareSmartLayoutTemplates|cancelSmartLayoutPreparation)\s*\()',
+    r'\.(prepareSmartLayoutTemplates|cancelSmartLayoutPreparation|onVisionSmartLayout)\b)',
   );
 
   /// 公开入口面：页面层→会话→传输的全部目录（v2 在此出现即违规）。
@@ -96,7 +96,8 @@ class V2ClientIsolationMatrix {
         final target = m.group(1)!;
         if (target.contains('core/smart_layout/') ||
             target.contains('smart_layout_template_engine') ||
-            target.contains('smart_layout_ink_clusterer')) {
+            target.contains('smart_layout_ink_clusterer') ||
+            target.endsWith('/ink_recognition_repository.dart')) {
           offenders.add('${_rel(file)} -> $target');
         }
       }
@@ -194,6 +195,20 @@ void main() {
   final appRoot = io.Directory.current.path;
   final matrix = V2ClientIsolationMatrix(appRoot: appRoot);
 
+  test('R8 静态隔离同时拦截直接调用、tear-off 与旧视觉回调访问', () {
+    for (final source in [
+      'controller.prepareSmartLayoutTemplates(pageId: id)',
+      'final prepare = controller.prepareSmartLayoutTemplates;',
+      'onCancel: controller.cancelSmartLayoutPreparation,',
+      'final vision = controller.onVisionSmartLayout;',
+    ]) {
+      expect(
+        V2ClientIsolationMatrix.v2RoutingSymbolPattern.hasMatch(source),
+        isTrue,
+      );
+    }
+  });
+
   test('V2ClientIsolationMatrix：公开入口零 v2 可达 + 私有实现原位保留', () {
     final checks = matrix.all();
     final byId = {for (final c in checks) c['id'] as String: c};
@@ -222,6 +237,7 @@ void main() {
     final endpoints = byId['single-v3-endpoint-string']!;
     expect(endpoints['passed'], isTrue);
     expect(endpoints['v3_endpoint_files'], greaterThanOrEqualTo(1));
+    expect(endpoints['recognition_endpoint_files'], greaterThanOrEqualTo(1));
 
     final inventory = byId['v2-private-in-place']!;
     expect(inventory['passed'], isTrue);

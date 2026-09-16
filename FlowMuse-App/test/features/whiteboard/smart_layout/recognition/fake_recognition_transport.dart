@@ -42,6 +42,7 @@ class FakeRecognitionTransport {
             headers: Map<String, String>.from(headers),
             connectTimeoutMs: connectTimeoutMs,
             readTimeoutMs: readTimeoutMs,
+            cancelToken: cancelToken,
           ),
         );
         if (!firstRequestSeen.isCompleted) {
@@ -88,6 +89,7 @@ class RecordedRequest {
     required this.headers,
     required this.connectTimeoutMs,
     required this.readTimeoutMs,
+    this.cancelToken,
   });
 
   final String url;
@@ -95,6 +97,7 @@ class RecordedRequest {
   final Map<String, String> headers;
   final int connectTimeoutMs;
   final int readTimeoutMs;
+  final NativeHttpCancelToken? cancelToken;
 }
 
 /// 构建合法 read/verify 响应：回填请求外壳并把区域标为 recognized
