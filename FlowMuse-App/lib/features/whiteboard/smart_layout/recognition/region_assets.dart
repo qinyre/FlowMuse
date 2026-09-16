@@ -18,6 +18,8 @@ import 'dart:ui'
 import 'package:flutter/foundation.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_budget.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/segmentation/ink_region_segmenter.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/segmentation/region_segment.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/rendering/draft_scene_renderer.dart';
 
@@ -197,7 +199,7 @@ class SmallStrokeAttribution {
       String? bestRegion;
       var bestGap = double.infinity;
       for (final region in regions) {
-        final gap = _rectGap(region.bounds, entry.value);
+        final gap = gapBetween(region.bounds, entry.value);
         final threshold = 0.8 * region.localLineHeight;
         if (gap < threshold && gap < bestGap) {
           bestGap = gap;
@@ -212,7 +214,7 @@ class SmallStrokeAttribution {
   }
 
   /// 两外框间距：相交/包含为 0，否则为最近边距。
-  static double _rectGap(RecognitionBounds a, RecognitionBounds b) {
+  static double gapBetween(RecognitionBounds a, RecognitionBounds b) {
     final dx = math.max(
       0.0,
       math.max(a.left - (b.left + b.width), b.left - (a.left + a.width)),
@@ -473,4 +475,180 @@ double lightnessOfStrokeColor(String? hexColor) {
   }
   if (r == null || g == null || b == null) return 0;
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0;
+}
+
+/// 分区产物：识别区域记录 + 成员笔画（供类型守卫与账本使用）。
+class RegionPartition {
+  const RegionPartition({required this.record, required this.strokes});
+
+  final RegionRecord record;
+  final List<FreedrawElement> strokes;
+}
+
+/// 分区层（spec §5 前段、§6.1 proposing）：场景 → 识别区域记录。
+///
+/// - 复用确定性 [InkRegionSegmenter]（连通分量 + 列聚类），不新造分割算法；
+/// - regionId 沿用 `regionIdOf` 口径（`r:` + 成员最小 sourceId）；
+/// - 微小段（句号/编号点/短横线级）就近并入最近文本区域（间距 <
+///   0.8×该区域局部行高），无法确认归属的独立保留，禁止按面积小删除；
+/// - 邻区边缘笔迹进 contextSourceIds（首版不进识别图，仅本地归属断言）。
+class RegionPartitioner {
+  const RegionPartitioner({double smallStrokeExtentFactor = 0.35})
+    : _smallStrokeExtentFactor = smallStrokeExtentFactor;
+
+  /// 判定"小笔迹段"的尺度因子（段外框双维 < 该因子×局部行高）。
+  final double _smallStrokeExtentFactor;
+
+  List<RegionPartition> partition(Scene scene) {
+    final strokes = scene.activeElements.whereType<FreedrawElement>().toList(
+      growable: false,
+    );
+    if (strokes.isEmpty) return const [];
+    final segments = InkRegionSegmenter().segment(strokes);
+
+    // 1. 区分小段与正常区域段。
+    String regionIdOfSegment(RegionSegment segment) =>
+        'r:${_minStrokeId(segment.strokeIds)}';
+    final byId = <String, FreedrawElement>{
+      for (final stroke in strokes) stroke.id.value: stroke,
+    };
+    RecognitionBounds boundsOfSegment(RegionSegment segment) =>
+        RecognitionBounds(
+          left: segment.left,
+          top: segment.top,
+          width: segment.width,
+          height: segment.height,
+        );
+    double lineHeightOf(RegionSegment segment) =>
+        segment.localScale > 0 ? segment.localScale : 1.0;
+
+    final normal = <RegionSegment>[];
+    final small = <RegionSegment>[];
+    for (final segment in segments) {
+      final threshold = _smallStrokeExtentFactor * lineHeightOf(segment);
+      if (segment.width < threshold && segment.height < threshold) {
+        small.add(segment);
+      } else {
+        normal.add(segment);
+      }
+    }
+
+    // 2. 小段就近并入（<0.8×宿主行高）；无法确认归属的独立保留。
+    final mergedInto = <String, String>{};
+    if (small.isNotEmpty && normal.isNotEmpty) {
+      final attribution = SmallStrokeAttribution();
+      final hostRecords = <RegionRecord>[
+        for (final segment in normal)
+          RegionRecord(
+            regionId: regionIdOfSegment(segment),
+            bounds: boundsOfSegment(segment),
+            targetSourceIds: segment.strokeIds,
+            localLineHeight: lineHeightOf(segment),
+          ),
+      ];
+      final smallBounds = <String, RecognitionBounds>{
+        for (final segment in small)
+          regionIdOfSegment(segment): boundsOfSegment(segment),
+      };
+      final attributionMap = attribution.attribute(
+        regions: hostRecords,
+        smallStrokeBounds: smallBounds,
+      );
+      for (final entry in attributionMap.entries) {
+        mergedInto[entry.key] = entry.value;
+      }
+    }
+
+    // 3. 重建成员集合（并入的小段成员归入宿主区域）。
+    final membersByRegion = <String, Set<String>>{};
+    for (final segment in normal) {
+      membersByRegion
+          .putIfAbsent(regionIdOfSegment(segment), () => <String>{})
+          .addAll(segment.strokeIds);
+    }
+    for (final segment in small) {
+      final host = mergedInto[regionIdOfSegment(segment)];
+      if (host != null) {
+        membersByRegion
+            .putIfAbsent(host, () => <String>{})
+            .addAll(segment.strokeIds);
+      } else {
+        // 独立保留：自成区域。
+        membersByRegion
+            .putIfAbsent(regionIdOfSegment(segment), () => <String>{})
+            .addAll(segment.strokeIds);
+      }
+    }
+    final lineHeightByRegion = <String, double>{
+      for (final segment in normal)
+        regionIdOfSegment(segment): lineHeightOf(segment),
+      for (final segment in small)
+        regionIdOfSegment(segment): lineHeightOf(segment),
+    };
+
+    // 4. 生成记录：bounds = 成员并集外框；context = 邻区边缘笔迹。
+    final results = <RegionPartition>[];
+    for (final entry in membersByRegion.entries) {
+      final members = entry.value.toList()..sort();
+      var left = double.infinity;
+      var top = double.infinity;
+      var right = double.negativeInfinity;
+      var bottom = double.negativeInfinity;
+      for (final member in members) {
+        final stroke = byId[member]!;
+        left = math.min(left, stroke.x);
+        top = math.min(top, stroke.y);
+        right = math.max(right, stroke.x + stroke.width);
+        bottom = math.max(bottom, stroke.y + stroke.height);
+      }
+      final bounds = RecognitionBounds(
+        left: left,
+        top: top,
+        width: right - left,
+        height: bottom - top,
+      );
+      final lineHeight = lineHeightByRegion[entry.key] ?? 1.0;
+      final context = <String>[];
+      for (final other in membersByRegion.entries) {
+        if (other.key == entry.key) continue;
+        for (final member in other.value) {
+          final stroke = byId[member]!;
+          final memberBounds = RecognitionBounds(
+            left: stroke.x,
+            top: stroke.y,
+            width: stroke.width,
+            height: stroke.height,
+          );
+          if (SmallStrokeAttribution.gapBetween(bounds, memberBounds) <
+              0.8 * lineHeight) {
+            context.add(member);
+          }
+        }
+      }
+      results.add(
+        RegionPartition(
+          record: RegionRecord(
+            regionId: entry.key,
+            bounds: bounds,
+            targetSourceIds: List.unmodifiable(members),
+            contextSourceIds: List.unmodifiable(context..sort()),
+            localLineHeight: lineHeight,
+          ),
+          strokes: List.unmodifiable([
+            for (final member in members) byId[member]!,
+          ]),
+        ),
+      );
+    }
+    assertTargetOwnershipUniqueness(results.map((entry) => entry.record));
+    return List.unmodifiable(results);
+  }
+
+  static String _minStrokeId(List<String> ids) {
+    var min = ids.first;
+    for (final id in ids) {
+      if (id.compareTo(min) < 0) min = id;
+    }
+    return min;
+  }
 }
