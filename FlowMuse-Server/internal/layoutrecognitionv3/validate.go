@@ -7,6 +7,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"image"
+	// imageDecodeFits 走 image.DecodeConfig，依赖解码器注册；
+	// 不在此显式注册 PNG 解码器时，所有 PNG 都报 unknown format
+	// 被误判"超解码上限"（包内测试文件导入 image/png 会在测试二进制
+	// 全局注册解码器，令测试全绿而生产全挂，见 cmd 侧回归测试）。
+	_ "image/png"
 	"math"
 	"strings"
 	"unicode/utf8"
