@@ -10,7 +10,6 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recogniti
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_repository.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/semantic_adapter.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_ledger.dart';
-import 'package:flow_muse/features/whiteboard/smart_layout/recognition/structure_recovery.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document.dart';
 
 import 'fake_recognition_transport.dart';
@@ -74,7 +73,11 @@ void main() {
         .addElement(stroke('s2', 10, 120));
     final result = await pipeline.run(captureOf(scene));
 
-    expect(pipeline.state, RecognitionPipelineState.done, reason: '部分完成也是 done 终态');
+    expect(
+      pipeline.state,
+      RecognitionPipelineState.done,
+      reason: '部分完成也是 done 终态',
+    );
     expect(result.partial, isTrue);
     expect(result.partialNotes, isNotEmpty);
     expect(result.partialNotes.join('\n'), contains('r:s1'));
@@ -85,8 +88,7 @@ void main() {
     );
   });
 
-  test('适配：混合会话（1 消费 + 1 漏答保留）产出守恒文档，保留区成障碍',
-      () async {
+  test('适配：混合会话（1 消费 + 1 漏答保留）产出守恒文档，保留区成障碍', () async {
     final result = await sessionOf(const [
       RegionSpec(regionId: 'r:ok', top: 0, left: 0, text: '识别成功'),
       RegionSpec(regionId: 'r:miss', top: 60, left: 0),
@@ -106,8 +108,11 @@ void main() {
       orElse: () => throw StateError('漏答区域必须生成带 bounds 的保留块'),
     );
     expect(obstacle.role, SemanticRole.unknown);
-    expect(obstacle.extras['bounds'], isA<Map<String, Object?>>(),
-        reason: '障碍物身份（原始 bounds）');
+    expect(
+      obstacle.extras['bounds'],
+      isA<Map<String, Object?>>(),
+      reason: '障碍物身份（原始 bounds）',
+    );
     expect(assembly.ledger.isFinalized, isTrue);
   });
 
@@ -123,7 +128,10 @@ void main() {
     );
     expect(assembly.document.consumedSourceIds, isEmpty);
     expect(assembly.document.preservedSourceIds, containsAll(['s-m1', 's-m2']));
-    expect(assembly.document.readingOrder.orderedBlockIds, isNotEmpty,
-        reason: '保留块仍进阅读序（障碍物可追溯）');
+    expect(
+      assembly.document.readingOrder.orderedBlockIds,
+      isNotEmpty,
+      reason: '保留块仍进阅读序（障碍物可追溯）',
+    );
   });
 }

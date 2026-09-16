@@ -140,7 +140,7 @@ Future<RecognitionStructureResponse?> _failIfCalled(
 }
 
 /// R6 适配测试输入：完整会话结果（管线等价账本 + 结构恢复结果）。
-/// 每个 RegionSpec 生成一笔笔画（id = 's-<regionId 去 r: 前缀>'）；
+/// 每个 RegionSpec 生成一笔笔画（id 为 s- 加 regionId 去 r: 前缀）；
 /// text 非空 = recognized，null = 无结果（按 missingResponse 保留）。
 Future<RecognitionSessionResult> sessionOf(
   List<RegionSpec> specs, {
@@ -200,8 +200,7 @@ Future<RecognitionSessionResult> sessionOf(
       );
   var ledger = SourceLedger.register([
     for (final element in effectiveScene.activeElements)
-      if (!(element.isCanvasPage || element.isPdfBackground))
-        element.id.value,
+      if (!(element.isCanvasPage || element.isPdfBackground)) element.id.value,
   ]);
   for (final record in records) {
     if (outcomes[record.regionId] != null) continue;

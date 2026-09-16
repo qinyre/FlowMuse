@@ -28,7 +28,13 @@ void main() {
           unitId: 'ink:r:a',
           text: '可替换正文',
           regionTargetSourceIds: {'s-a'},
-          sourceGuards: {'s-a': SourceGuardFacts(isReplaceableInk: true, isLocked: false, hasCrossBinding: false)},
+          sourceGuards: {
+            's-a': SourceGuardFacts(
+              isReplaceableInk: true,
+              isLocked: false,
+              hasCrossBinding: false,
+            ),
+          },
         ),
       },
       deletedSourceIds: const ['s-a'],
@@ -80,14 +86,25 @@ void main() {
       RegionSpec(regionId: 'r:a', top: 0, left: 0, text: '。！！'),
     ]);
     final settled = adapter.settle(result);
+    expect(settled.ledger.preservedCount, 1, reason: '真实准入层先保留纯标点');
+    // 注入错误的消费授权，独立验证物化后置守卫仍能拒绝。
+    final unsafeLedger = SourceLedger.register([
+      's-a',
+    ]).registerUnits(['ink:r:a']).consume('s-a', 'ink:r:a');
     final violations = ReplacementGuard.check(
-      recognition: settled.ledger,
+      recognition: unsafeLedger,
       unitFactsByUnitId: const {
         'ink:r:a': ReplacementUnitFacts(
           unitId: 'ink:r:a',
           text: '。！！',
           regionTargetSourceIds: {'s-a'},
-          sourceGuards: {'s-a': SourceGuardFacts(isReplaceableInk: true, isLocked: false, hasCrossBinding: false)},
+          sourceGuards: {
+            's-a': SourceGuardFacts(
+              isReplaceableInk: true,
+              isLocked: false,
+              hasCrossBinding: false,
+            ),
+          },
         ),
       },
       deletedSourceIds: const ['s-a'],
@@ -138,7 +155,13 @@ void main() {
           unitId: 'ink:r:a',
           text: '正文',
           regionTargetSourceIds: {'s-a'},
-          sourceGuards: {'s-a': SourceGuardFacts(isReplaceableInk: true, isLocked: false, hasCrossBinding: false)},
+          sourceGuards: {
+            's-a': SourceGuardFacts(
+              isReplaceableInk: true,
+              isLocked: false,
+              hasCrossBinding: false,
+            ),
+          },
         ),
       },
       deletedSourceIds: const ['s-a'],

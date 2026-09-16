@@ -6,7 +6,6 @@ import 'package:flow_muse/features/whiteboard/smart_layout/design/smart_layout_d
 import 'package:flow_muse/features/whiteboard/smart_layout/design/text_measure_adapter.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/geometry/layout_rect.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/patch/candidate_patch_materializer.dart';
-import 'package:flow_muse/features/whiteboard/smart_layout/patch/smart_layout_scene_patch.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/placement/flow_placer.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/semantic_adapter.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/reducer/smart_layout_scene_reducer.dart';
@@ -31,7 +30,9 @@ void main() {
     for (final element in scene.elements) {
       withData = withData.upsertRemoteElements([
         element.copyWith(
-          customData: const {'flowMuse': {'pageId': 'p1'}},
+          customData: const {
+            'flowMuse': {'pageId': 'p1'},
+          },
         ),
       ]);
     }
@@ -39,22 +40,23 @@ void main() {
   }
 
   test('应用→撤销→重开：识别 patch 全链不变量', () async {
-    final result = await sessionOf(const [
-      RegionSpec(regionId: 'r:ink', top: 100, left: 0, text: '手写内容转写'),
-    ], scene: Scene().addElement(
-      TextElement(
-        id: const ElementId('text-1'),
-        x: 0,
-        y: 0,
-        width: 200,
-        height: 40,
-        text: '原生文本',
-        seed: 7,
-        versionNonce: 11,
-        updated: 1000,
-        version: 1,
+    final result = await sessionOf(
+      const [RegionSpec(regionId: 'r:ink', top: 100, left: 0, text: '手写内容转写')],
+      scene: Scene().addElement(
+        TextElement(
+          id: const ElementId('text-1'),
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 40,
+          text: '原生文本',
+          seed: 7,
+          versionNonce: 11,
+          updated: 1000,
+          version: 1,
+        ),
       ),
-    ));
+    );
     final base = pageScene(result.scene);
     final assembly = adapter.assemble(
       result,
@@ -124,7 +126,11 @@ void main() {
     expect(activeById.containsKey('s-ink'), isFalse, reason: '转写源笔迹软删');
     expect(activeById.containsKey('text-1'), isTrue, reason: 'typed 变换不删除');
     final added = applied.activeElements
-        .where((e) => e.id.value.startsWith(SmartLayoutCandidateMaterializer.addedIdPrefix))
+        .where(
+          (e) => e.id.value.startsWith(
+            SmartLayoutCandidateMaterializer.addedIdPrefix,
+          ),
+        )
         .toList();
     expect(added, hasLength(1));
     final addedText = added.single as TextElement;
@@ -144,9 +150,7 @@ void main() {
       for (final op in patch.adds)
         op.element.copyWith(isDeleted: true, version: op.element.version + 1),
       for (final op in patch.updates)
-        baseById[op.elementId]!.copyWith(
-          version: op.element.version + 1,
-        ),
+        baseById[op.elementId]!.copyWith(version: op.element.version + 1),
       for (final op in patch.removes)
         baseById[op.elementId]!.copyWith(
           isDeleted: false,
@@ -160,8 +164,9 @@ void main() {
       for (final element in base.activeElements) element.id.value,
     };
     expect(undoneActiveIds, baseActiveIds, reason: '撤销恢复 base 活动元素集');
-    final restoredInk =
-        undone.activeElements.firstWhere((e) => e.id.value == 's-ink');
+    final restoredInk = undone.activeElements.firstWhere(
+      (e) => e.id.value == 's-ink',
+    );
     expect(restoredInk, isA<FreedrawElement>());
     final restoredTyped =
         undone.activeElements.firstWhere((e) => e.id.value == 'text-1')

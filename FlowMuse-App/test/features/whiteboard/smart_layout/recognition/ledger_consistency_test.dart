@@ -2,9 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/design/smart_layout_design_tokens.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/design/text_measure_adapter.dart';
-import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart';
-import 'package:flow_muse/features/whiteboard/smart_layout/recognition/region_assets.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/semantic_adapter.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_ledger.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document_assembler.dart';
@@ -23,8 +21,7 @@ void main() {
 
   Set<String> nonBackgroundIdsOf(RecognitionSessionResult result) => {
     for (final element in result.scene.activeElements)
-      if (!(element.isCanvasPage || element.isPdfBackground))
-        element.id.value,
+      if (!(element.isCanvasPage || element.isPdfBackground)) element.id.value,
   };
 
   test('正例：适配产物与结算识别账本三方一致', () async {
@@ -77,9 +74,9 @@ void main() {
     final settled = adapter.settle(result);
     final assembly = assembleOf(settled);
     // 伪造归属错配的独立账本：同一源被另一 unit 消费。
-    final mismatched = SourceLedger.register(const ['s-a'])
-        .registerUnits(const ['ink:r:other'])
-        .consume('s-a', 'ink:r:other');
+    final mismatched = SourceLedger.register(const [
+      's-a',
+    ]).registerUnits(const ['ink:r:other']).consume('s-a', 'ink:r:other');
     expect(mismatched.projection.consumedBy['s-a'], 'ink:r:other');
     expect(
       () => RecognitionLedgerAssertions.assertThreeWayConsistency(
@@ -104,7 +101,9 @@ void main() {
         seed: 7,
         versionNonce: 11,
         updated: 1000,
-        customData: const {'flowMuse': {'role': 'page'}},
+        customData: const {
+          'flowMuse': {'role': 'page'},
+        },
       ),
     );
     final result = await sessionOf(const [

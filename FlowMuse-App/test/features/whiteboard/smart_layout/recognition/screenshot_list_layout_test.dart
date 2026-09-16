@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block_assembler.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/design/smart_layout_design_tokens.dart';
@@ -26,7 +25,13 @@ void main() {
   test('一标题一列表：角色/顺序/原子组（不拆列机制）', () async {
     // 截图识别结果的典型形态：大字标题 + 三个连续编号列表项。
     final result = await sessionOf(const [
-      RegionSpec(regionId: 'r:title', top: 0, left: 0, text: '会议纪要', lineHeight: 40),
+      RegionSpec(
+        regionId: 'r:title',
+        top: 0,
+        left: 0,
+        text: '会议纪要',
+        lineHeight: 40,
+      ),
       RegionSpec(regionId: 'r:i1', top: 60, left: 0, text: '1. 第一项'),
       RegionSpec(regionId: 'r:i2', top: 90, left: 0, text: '2. 第二项'),
       RegionSpec(regionId: 'r:i3', top: 120, left: 0, text: '3. 第三项'),
@@ -39,9 +44,7 @@ void main() {
     final document = assembly.document;
 
     // 角色：本地规则把编号连续行判为列表（R5 规则 1）。
-    final roleOf = {
-      for (final block in document.blocks) block.id: block.role,
-    };
+    final roleOf = {for (final block in document.blocks) block.id: block.role};
     expect(roleOf['ink:r:i1'], SemanticRole.list);
     expect(roleOf['ink:r:i2'], SemanticRole.list);
     expect(roleOf['ink:r:i3'], SemanticRole.list);

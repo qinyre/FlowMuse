@@ -41,6 +41,7 @@ class RecognitionSemanticAdapter {
     // 1. ink 单元：recognized→consume（锁定笔迹毒化整单元→保留）；
     //    uncertain→保留（§6.4 准入条件 6）。
     final lockedSourceIds = _lockedSourceIds(result);
+    final replacementFacts = ReplacementGuard.factsOf(result);
     for (final unit in structure.units) {
       if (unit.kind != RecognitionUnitKind.ink) continue;
       final regionId = _regionIdOfInkUnit(unit.unitId);
@@ -53,7 +54,18 @@ class RecognitionSemanticAdapter {
         throw StateError('ink 单元引用了无识别结果的区域: $regionId');
       }
       final poisoned = record.targetSourceIds.any(lockedSourceIds.contains);
-      if (outcome.status == RecognitionRegionStatus.uncertain || poisoned) {
+      final facts = replacementFacts[unit.unitId]!;
+      final admission = ConversionAdmission.check(
+        statusConfirmedRecognized:
+            outcome.status == RecognitionRegionStatus.recognized,
+        text: facts.text,
+        unitSourceIds: record.targetSourceIds.toSet(),
+        regionTargetSourceIds: facts.regionTargetSourceIds,
+        sourceGuards: facts.sourceGuards,
+        conflictsResolved: facts.conflictsResolved,
+        versionValid: facts.versionValid,
+      );
+      if (admission != null) {
         final reason = poisoned
             ? SourcePreserveReason.locked
             : SourcePreserveReason.uncertain;
@@ -82,7 +94,11 @@ class RecognitionSemanticAdapter {
         throw StateError('原生单元引用了不存在的场景元素: ${unit.unitId}');
       }
       if (element.locked) {
-        ledger = _preserveIfPending(ledger, sourceId, SourcePreserveReason.locked);
+        ledger = _preserveIfPending(
+          ledger,
+          sourceId,
+          SourcePreserveReason.locked,
+        );
         continue;
       }
       if (unit.kind == RecognitionUnitKind.figure) {
@@ -146,9 +162,7 @@ class RecognitionSemanticAdapter {
       for (final caption in structure.captions)
         caption.captionUnitId: caption.targetUnitId,
     };
-    final unitIds = {
-      for (final unit in structure.units) unit.unitId,
-    };
+    final unitIds = {for (final unit in structure.units) unit.unitId};
     for (final entry in captionTargetOf.entries) {
       if (!unitIds.contains(entry.key) || !unitIds.contains(entry.value)) {
         throw StateError('图注关系目标不存在: ${entry.key} -> ${entry.value}');
@@ -211,11 +225,13 @@ class RecognitionSemanticAdapter {
       revision: settled.sceneRevision.revision,
       fingerprint: settled.sceneRevision.fingerprint,
       blocks: List.unmodifiable(blocks..sort((a, b) => a.id.compareTo(b.id))),
-      readingOrder: SemanticReadingOrder(orderedBlockIds: List.unmodifiable([
-        // 阅读序只引用实际产出的块（锁定原生单元无语义块，不在序中）。
-        for (final id in order)
-          if (blockIds.contains(id)) id,
-      ])),
+      readingOrder: SemanticReadingOrder(
+        orderedBlockIds: List.unmodifiable([
+          // 阅读序只引用实际产出的块（锁定原生单元无语义块，不在序中）。
+          for (final id in order)
+            if (blockIds.contains(id)) id,
+        ]),
+      ),
       conflicts: const [],
       consumedSourceIds: List.unmodifiable(consumedSorted),
       preservedSourceIds: List.unmodifiable(preservedSorted),
@@ -317,8 +333,7 @@ class RecognitionSemanticAdapter {
     if (entry.status == SourceLedgerStatus.pending) {
       return ledger.consume(sourceId, unitId);
     }
-    if (entry.status == SourceLedgerStatus.consumed &&
-        entry.unitId == unitId) {
+    if (entry.status == SourceLedgerStatus.consumed && entry.unitId == unitId) {
       return ledger;
     }
     throw StateError(
@@ -379,8 +394,8 @@ class RecognitionSemanticAdapter {
         sourceIds = List.unmodifiable(record.targetSourceIds);
         confidence = outcome.confidence ?? 0;
       case RecognitionUnitKind.typed:
-        final element = elementById[_sourceIdOfNativeUnit(unit.unitId)]
-            as TextElement?;
+        final element =
+            elementById[_sourceIdOfNativeUnit(unit.unitId)] as TextElement?;
         if (element == null) {
           throw StateError('typed 单元源不是场景文本元素: ${unit.unitId}');
         }
@@ -451,7 +466,8 @@ class RecognitionSemanticAdapter {
       case RecognitionUnitKind.ink:
         final regionId = _regionIdOfInkUnit(unit.unitId)!;
         final outcome = result.regionOutcomes[regionId];
-        if (outcome == null || outcome.status != RecognitionRegionStatus.recognized) {
+        if (outcome == null ||
+            outcome.status != RecognitionRegionStatus.recognized) {
           // uncertain：按保留语义处理，不进排版流。
           return SemanticRole.unknown;
         }
@@ -488,12 +504,16 @@ class RecognitionSemanticAdapter {
     Map<String, Element> elementById,
   ) {
     final sourceId = _sourceIdOfNativeUnit(unit.unitId);
-    if (elementById.containsKey(sourceId)) {
-      return [sourceId];
-    }
+    // 区域派生保留单元（native:<区域最小源>）优先按区域记录解析整组
+    // target 集——最小源本身也是场景元素，先查元素表会把多笔迹区域
+    // 截断成单源，块装配守恒（并集 vs ledger）随之失败。场景形状类
+    // 保留单元无区域记录，按单元素解析。
     final record = _recordByMinSource(result)[sourceId];
     if (record != null) {
       return List.unmodifiable(record.targetSourceIds);
+    }
+    if (elementById.containsKey(sourceId)) {
+      return [sourceId];
     }
     throw StateError('保留单元无法解析源集: ${unit.unitId}');
   }
@@ -533,9 +553,9 @@ class RecognitionSemanticAdapter {
 
     final subtreeOfRoot = <String, Set<String>>{};
     for (final group in structure.listGroups) {
-      subtreeOfRoot.putIfAbsent(rootOf(group.groupId), () => {}).addAll(
-        group.members,
-      );
+      subtreeOfRoot
+          .putIfAbsent(rootOf(group.groupId), () => {})
+          .addAll(group.members);
     }
 
     final emitted = <String>{};
@@ -687,6 +707,47 @@ class ReplacementViolation {
 /// §6.4-2 物化后置检查：删除源 ⊆ 已批准替换集合（识别账本 consume 且
 /// 七条件通过）；保留源未被删除或修改。违反即候选整体失败。
 abstract final class ReplacementGuard {
+  /// 同一份源事实用于识别准入和物化后置检查，不能以文档账目自证安全。
+  static Map<String, ReplacementUnitFacts> factsOf(
+    RecognitionSessionResult result,
+  ) {
+    final elements = {
+      for (final e in result.scene.activeElements) e.id.value: e,
+    };
+    return {
+      for (final record in result.regionRecords)
+        'ink:${record.regionId}': ReplacementUnitFacts(
+          unitId: 'ink:${record.regionId}',
+          text: result.regionOutcomes[record.regionId]?.text ?? '',
+          regionTargetSourceIds: record.targetSourceIds.toSet(),
+          conflictsResolved:
+              result.regionOutcomes[record.regionId]?.status ==
+              RecognitionRegionStatus.recognized,
+          sourceGuards: {
+            for (final id in record.targetSourceIds)
+              id: SourceGuardFacts(
+                isReplaceableInk:
+                    elements[id] is FreedrawElement &&
+                    brushTypeFromCustomData(
+                      elements[id]!.customData,
+                    ).canAutoRecognize,
+                isLocked: elements[id]?.locked ?? true,
+                hasCrossBinding:
+                    (elements[id]?.boundElements.any(
+                          (bound) => !record.targetSourceIds.contains(bound.id),
+                        ) ??
+                        true) ||
+                    elements.values.any(
+                      (other) =>
+                          !record.targetSourceIds.contains(other.id.value) &&
+                          other.boundElements.any((bound) => bound.id == id),
+                    ),
+              ),
+          },
+        ),
+    };
+  }
+
   static List<ReplacementViolation> check({
     required SourceLedger recognition,
     required Map<String, ReplacementUnitFacts> unitFactsByUnitId,

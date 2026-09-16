@@ -7,8 +7,8 @@
 ///    legacyV2）；
 /// 2. 全 smart_layout v3 库零 v2 私有实现 import
 ///    （editor_core/src/core/smart_layout/** 不可达）；
-/// 3. v3 库唯一分析端点串 = /api/ink/smart-layout/analyze/v3（零旧端点
-///    串 /block /compose /vision /transcribe）；
+/// 3. V3 recognize/v3 生产端点与 analyze/v3 实验端点共存，零旧端点
+///    串 /block /compose /vision /transcribe；
 /// 4. v2 私有代码原位保留：editor_core/src/core/smart_layout/** 与
 ///    test/features/whiteboard/editor_core/smart_layout* 测试清单入报告
 ///    （不做普查、迁移或删除，不新增兼容 wrapper）。
@@ -26,7 +26,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// 客户端 v2 隔离矩阵（V3-703A，比赛交付口径：隔离验证而非删除）。
 class V2ClientIsolationMatrix {
   static final v2RoutingSymbolPattern = RegExp(
-    r'(v2_?[Rr]eflow|fallbackToV2|routeToV2|legacyV2)',
+    r'(v2_?[Rr]eflow|fallbackToV2|routeToV2|legacyV2|'
+    r'\.(prepareSmartLayoutTemplates|cancelSmartLayoutPreparation)\s*\()',
   );
 
   /// 公开入口面：页面层→会话→传输的全部目录（v2 在此出现即违规）。
@@ -35,10 +36,11 @@ class V2ClientIsolationMatrix {
     'lib/features/whiteboard/smart_layout/rollout',
     'lib/features/whiteboard/smart_layout/session',
     'lib/features/whiteboard/smart_layout/analysis',
+    'lib/features/whiteboard/smart_layout/recognition',
     'lib/features/whiteboard/smart_layout/views',
   ];
 
-  /// 旧端点路径片段（v3 库出现即违规；v3 唯一端点为 analyze/v3）。
+  /// 旧端点路径片段（v3 库出现即违规）。
   static const legacyEndpointFragments = <String>[
     "api/ink/smart-layout'",
     '"api/ink/smart-layout"',
@@ -66,8 +68,9 @@ class V2ClientIsolationMatrix {
     for (final dir in publicSurfaceDirs) {
       for (final file in _dartFiles(dir)) {
         scanned++;
-        final matches =
-            v2RoutingSymbolPattern.allMatches(file.readAsStringSync());
+        final matches = v2RoutingSymbolPattern.allMatches(
+          file.readAsStringSync(),
+        );
         if (matches.isNotEmpty) {
           offenders.add('${_rel(file)}: ${matches.length} 处');
         }
@@ -106,14 +109,18 @@ class V2ClientIsolationMatrix {
     };
   }
 
-  /// 检查 3：v3 库唯一分析端点串（零旧端点串，唯一 v3 端点真实存在）。
+  /// 检查 3：生产识别与实验分析端点均存在，零旧端点串。
   Map<String, Object?> endpointStringScan() {
     final legacy = <String>[];
     var v3EndpointFiles = 0;
+    var recognitionEndpointFiles = 0;
     for (final file in _dartFiles('lib/features/whiteboard/smart_layout')) {
       final source = file.readAsStringSync();
       if (source.contains('api/ink/smart-layout/analyze/v3')) {
         v3EndpointFiles++;
+      }
+      if (source.contains('api/ink/smart-layout/recognize/v3')) {
+        recognitionEndpointFiles++;
       }
       for (final fragment in legacyEndpointFragments) {
         if (source.contains(fragment)) {
@@ -123,8 +130,10 @@ class V2ClientIsolationMatrix {
     }
     return {
       'id': 'single-v3-endpoint-string',
-      'passed': legacy.isEmpty && v3EndpointFiles > 0,
+      'passed':
+          legacy.isEmpty && v3EndpointFiles > 0 && recognitionEndpointFiles > 0,
       'v3_endpoint_files': v3EndpointFiles,
+      'recognition_endpoint_files': recognitionEndpointFiles,
       'legacy_endpoint_offenders': legacy,
     };
   }
@@ -134,18 +143,18 @@ class V2ClientIsolationMatrix {
     final libFiles = _dartFiles(
       'lib/features/whiteboard/editor_core/src/core/smart_layout',
     ).map(_rel).toList()..sort();
-    final testFiles = io.Directory(
-      '$appRoot/test/features/whiteboard/editor_core',
-    )
-        .listSync()
-        .whereType<io.File>()
-        .where(
-          (f) =>
-              f.path.endsWith('.dart') &&
-              _rel(f).split('/').last.startsWith('smart_layout_'),
-        )
-        .map(_rel)
-        .toList()..sort();
+    final testFiles =
+        io.Directory('$appRoot/test/features/whiteboard/editor_core')
+            .listSync()
+            .whereType<io.File>()
+            .where(
+              (f) =>
+                  f.path.endsWith('.dart') &&
+                  _rel(f).split('/').last.startsWith('smart_layout_'),
+            )
+            .map(_rel)
+            .toList()
+          ..sort();
     return {
       'id': 'v2-private-in-place',
       'passed': libFiles.isNotEmpty && testFiles.isNotEmpty,
@@ -185,12 +194,9 @@ void main() {
   final appRoot = io.Directory.current.path;
   final matrix = V2ClientIsolationMatrix(appRoot: appRoot);
 
-  test('V2ClientIsolationMatrix：公开入口零 v2 可达 + 私有实现原位保留',
-      () {
+  test('V2ClientIsolationMatrix：公开入口零 v2 可达 + 私有实现原位保留', () {
     final checks = matrix.all();
-    final byId = {
-      for (final c in checks) c['id'] as String: c,
-    };
+    final byId = {for (final c in checks) c['id'] as String: c};
     expect(byId.keys, {
       'public-surface-zero-v2-symbols',
       'v3-lib-zero-v2-imports',
@@ -199,11 +205,19 @@ void main() {
     });
 
     final surface = byId['public-surface-zero-v2-symbols']!;
-    expect(surface['passed'], isTrue, reason: '入口面 v2 符号：${surface['offenders']}');
+    expect(
+      surface['passed'],
+      isTrue,
+      reason: '入口面 v2 符号：${surface['offenders']}',
+    );
     expect(surface['scanned_files'], greaterThan(10));
 
     final imports = byId['v3-lib-zero-v2-imports']!;
-    expect(imports['passed'], isTrue, reason: 'v3 库 v2 import：${imports['offenders']}');
+    expect(
+      imports['passed'],
+      isTrue,
+      reason: 'v3 库 v2 import：${imports['offenders']}',
+    );
 
     final endpoints = byId['single-v3-endpoint-string']!;
     expect(endpoints['passed'], isTrue);

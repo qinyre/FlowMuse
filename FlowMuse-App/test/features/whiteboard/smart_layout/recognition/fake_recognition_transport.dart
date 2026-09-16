@@ -98,11 +98,12 @@ class RecordedRequest {
 }
 
 /// 构建合法 read/verify 响应：回填请求外壳并把区域标为 recognized
-///（可选置信度与 missingRegionIds 子集）。
+///（可选置信度、状态覆写与 missingRegionIds 子集）。
 (int, String) buildBatchResponseBody(
   Map<String, Object?> requestBody, {
   double confidence = 0.9,
   String Function(String)? textOf,
+  String Function(String)? statusOf,
   Set<String>? missingRegionIds,
 }) {
   textOf ??= defaultTextOf;
@@ -112,10 +113,11 @@ class RecordedRequest {
   for (final region in regions) {
     final id = region['regionId'] as String;
     if (missing.contains(id)) continue;
+    final status = statusOf?.call(id) ?? 'recognized';
     answered.add({
       'regionId': id,
-      'status': 'recognized',
-      'text': textOf(id),
+      'status': status,
+      if (status == 'recognized' || status == 'uncertain') 'text': textOf(id),
       'confidence': confidence,
       'diagnostics': <String>[],
     });

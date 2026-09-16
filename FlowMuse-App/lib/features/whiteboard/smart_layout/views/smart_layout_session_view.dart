@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,11 +28,20 @@ import 'smart_layout_candidate_view.dart';
 /// - 零 modal：本视图为常驻面板，不使用 showDialog/Navigator 弹层，
 ///   不存在模态死锁或弹层残留路径。
 class SmartLayoutSessionView extends ConsumerStatefulWidget {
-  const SmartLayoutSessionView({super.key, this.restoreFocusNode});
+  const SmartLayoutSessionView({
+    super.key,
+    this.restoreFocusNode,
+    this.recognitionStatus,
+  });
 
   /// 会话结束（applied/cancelled 复位后回到 idle）时归还焦点的节点
   ///（通常为宿主页面的画布/入口控件）。
   final FocusNode? restoreFocusNode;
+
+  /// 识别状态播报（R7，spec §10 面板状态枚举：正在准备/正在识别/
+  /// 正在重分组/正在复核/正在恢复结构/正在生成排版/部分完成）；
+  /// null = 无独立识别链（HTTP 实验路径），analyzing 显示通用文案。
+  final ValueListenable<String?>? recognitionStatus;
 
   @override
   ConsumerState<SmartLayoutSessionView> createState() =>
@@ -47,18 +57,21 @@ class _SmartLayoutSessionViewState
 
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape):
-            state.canCancel || state.canReset
-                ? () => _onEscape(state, viewModel)
-                : () {},
-        const SingleActivator(LogicalKeyboardKey.arrowDown):
-            state.canChooseCandidate
-                ? () => _moveSelection(state, viewModel, 1)
-                : () {},
-        const SingleActivator(LogicalKeyboardKey.arrowUp):
-            state.canChooseCandidate
-                ? () => _moveSelection(state, viewModel, -1)
-                : () {},
+        const SingleActivator(
+          LogicalKeyboardKey.escape,
+        ): state.canCancel || state.canReset
+            ? () => _onEscape(state, viewModel)
+            : () {},
+        const SingleActivator(
+          LogicalKeyboardKey.arrowDown,
+        ): state.canChooseCandidate
+            ? () => _moveSelection(state, viewModel, 1)
+            : () {},
+        const SingleActivator(
+          LogicalKeyboardKey.arrowUp,
+        ): state.canChooseCandidate
+            ? () => _moveSelection(state, viewModel, -1)
+            : () {},
       },
       child: Semantics(
         container: true,
@@ -81,9 +94,9 @@ class _SmartLayoutSessionViewState
                 state: state,
                 onStart: viewModel.startAnalysis,
               ),
-              SmartLayoutSessionPhase.analyzing => _BusyPane(
-                message: '正在分析…',
-                onCancel: state.canCancel ? viewModel.cancel : null,
+              SmartLayoutSessionPhase.analyzing => _analyzingPane(
+                state,
+                viewModel,
               ),
               SmartLayoutSessionPhase.reviewing => _ReviewPane(
                 state: state,
@@ -113,6 +126,28 @@ class _SmartLayoutSessionViewState
             },
           ],
         ),
+      ),
+    );
+  }
+
+  /// analyzing 相位面板：有识别状态播报时跟随（正在准备/正在识别/
+  /// …/部分完成），否则通用文案。
+  Widget _analyzingPane(
+    SmartLayoutSessionUiState state,
+    SmartLayoutSessionViewModel viewModel,
+  ) {
+    final status = widget.recognitionStatus;
+    if (status == null) {
+      return _BusyPane(
+        message: '正在分析…',
+        onCancel: state.canCancel ? viewModel.cancel : null,
+      );
+    }
+    return ValueListenableBuilder<String?>(
+      valueListenable: status,
+      builder: (context, value, _) => _BusyPane(
+        message: value ?? '正在分析…',
+        onCancel: state.canCancel ? viewModel.cancel : null,
       ),
     );
   }
@@ -249,10 +284,7 @@ class _ReviewPane extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Semantics(
-            label: '本次分析没有可用的排版候选',
-            child: const Text('本次分析没有可用的排版候选'),
-          ),
+          Semantics(label: '本次分析没有可用的排版候选', child: const Text('本次分析没有可用的排版候选')),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -401,11 +433,10 @@ class _FailurePane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final failure = state.failure;
-    final label =
-        failure == null
+    final label = failure == null
         ? '会话失败'
         : '失败（${failure.stage}/${failure.reason}，'
-          '第 ${failure.attempt} 次尝试）';
+              '第 ${failure.attempt} 次尝试）';
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [

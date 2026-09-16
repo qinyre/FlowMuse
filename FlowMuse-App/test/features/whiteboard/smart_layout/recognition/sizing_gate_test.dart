@@ -1,10 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/design/smart_layout_design_tokens.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/design/text_measure_adapter.dart';
-import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/semantic_adapter.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document_assembler.dart';
 
@@ -17,9 +15,7 @@ void main() {
   const tokens = SmartLayoutDesignTokens.v1;
 
   double? fontSizeOf(SemanticAssembly assembly, String blockId) {
-    final block = assembly.document.blocks.firstWhere(
-      (b) => b.id == blockId,
-    );
+    final block = assembly.document.blocks.firstWhere((b) => b.id == blockId);
     return block.extras['fontSize'] as double?;
   }
 
@@ -45,14 +41,21 @@ void main() {
 
   test('§8.2-2 首版规则：title→28，其余文本单元→20（token 实值）', () async {
     final result = await sessionOf(const [
-      RegionSpec(regionId: 'r:title', top: 0, left: 0, text: '大标题', lineHeight: 34),
+      RegionSpec(
+        regionId: 'r:title',
+        top: 0,
+        left: 0,
+        text: '大标题',
+        lineHeight: 34,
+      ),
       RegionSpec(regionId: 'r:body', top: 50, left: 0, text: '正文内容'),
     ]);
     final assembly = adapter.assemble(
       result,
       measure: TextMeasureAdapter(),
       tokens: tokens,
-    );    expect(fontSizeOf(assembly, 'ink:r:title'), tokens.titleFloorSize);
+    );
+    expect(fontSizeOf(assembly, 'ink:r:title'), tokens.titleFloorSize);
     expect(fontSizeOf(assembly, 'ink:r:body'), tokens.bodySize);
   });
 
@@ -61,10 +64,24 @@ void main() {
       RegionSpec(regionId: 'r:a', top: 0, left: 0, text: '同一段文字'),
     ]);
     final multi = await sessionOf(const [
-      RegionSpec(regionId: 'r:b', top: 0, left: 0, text: '同\n一\n段\n文\n字', lineHeight: 100),
+      RegionSpec(
+        regionId: 'r:b',
+        top: 0,
+        left: 0,
+        text: '同\n一\n段\n文\n字',
+        lineHeight: 100,
+      ),
     ]);
-    final a = adapter.assemble(single, measure: TextMeasureAdapter(), tokens: tokens);
-    final b = adapter.assemble(multi, measure: TextMeasureAdapter(), tokens: tokens);
+    final a = adapter.assemble(
+      single,
+      measure: TextMeasureAdapter(),
+      tokens: tokens,
+    );
+    final b = adapter.assemble(
+      multi,
+      measure: TextMeasureAdapter(),
+      tokens: tokens,
+    );
     expect(
       a.document.blocks.firstWhere((x) => x.id == 'ink:r:a').extras['fontSize'],
       b.document.blocks.firstWhere((x) => x.id == 'ink:r:b').extras['fontSize'],
@@ -78,11 +95,23 @@ void main() {
     final mixed = await sessionOf(const [
       RegionSpec(regionId: 'r:mix', top: 0, left: 0, text: '混合 Text 正文 abc'),
     ]);
-    final a = adapter.assemble(zh, measure: TextMeasureAdapter(), tokens: tokens);
-    final b = adapter.assemble(mixed, measure: TextMeasureAdapter(), tokens: tokens);
+    final a = adapter.assemble(
+      zh,
+      measure: TextMeasureAdapter(),
+      tokens: tokens,
+    );
+    final b = adapter.assemble(
+      mixed,
+      measure: TextMeasureAdapter(),
+      tokens: tokens,
+    );
     expect(
-      a.document.blocks.firstWhere((x) => x.id == 'ink:r:zh').extras['fontSize'],
-      b.document.blocks.firstWhere((x) => x.id == 'ink:r:mix').extras['fontSize'],
+      a.document.blocks
+          .firstWhere((x) => x.id == 'ink:r:zh')
+          .extras['fontSize'],
+      b.document.blocks
+          .firstWhere((x) => x.id == 'ink:r:mix')
+          .extras['fontSize'],
     );
   });
 
@@ -96,17 +125,31 @@ void main() {
     final widePadding = await sessionOf(const [
       RegionSpec(regionId: 'r:w', top: 0, left: 0, text: '正文', width: 1200),
     ]);
-    final a = adapter.assemble(normal, measure: TextMeasureAdapter(), tokens: tokens);
-    final b = adapter.assemble(outlier, measure: TextMeasureAdapter(), tokens: tokens);
-    final c = adapter.assemble(widePadding, measure: TextMeasureAdapter(), tokens: tokens);
-    final sizeOf = (SemanticAssembly assembly, String id) =>
-        assembly.document.blocks.firstWhere((x) => x.id == id).extras['fontSize'];
+    final a = adapter.assemble(
+      normal,
+      measure: TextMeasureAdapter(),
+      tokens: tokens,
+    );
+    final b = adapter.assemble(
+      outlier,
+      measure: TextMeasureAdapter(),
+      tokens: tokens,
+    );
+    final c = adapter.assemble(
+      widePadding,
+      measure: TextMeasureAdapter(),
+      tokens: tokens,
+    );
+    Object? sizeOf(SemanticAssembly assembly, String id) => assembly
+        .document
+        .blocks
+        .firstWhere((x) => x.id == id)
+        .extras['fontSize'];
     expect(sizeOf(a, 'ink:r:n'), sizeOf(b, 'ink:r:o'));
     expect(sizeOf(a, 'ink:r:n'), sizeOf(c, 'ink:r:w'));
   });
 
-  test('§8.2-6 回归 6：区域合并（行数变化）不改档；源行高提示不参与选档',
-      () async {
+  test('§8.2-6 回归 6：区域合并（行数变化）不改档；源行高提示不参与选档', () async {
     // 两区域分别识别后由结构合并成一段（模拟合并后行数变化）：
     // 手工构造结构覆盖两个区域成一个连续阅读序。
     final result = await sessionOf(const [
@@ -118,8 +161,9 @@ void main() {
       measure: TextMeasureAdapter(),
       tokens: tokens,
     );
-    final sizeOf = (String id) =>
-        assembly.document.blocks.firstWhere((x) => x.id == id).extras['fontSize'];
+    Object? sizeOf(String id) => assembly.document.blocks
+        .firstWhere((x) => x.id == id)
+        .extras['fontSize'];
     expect(sizeOf('ink:r:part1'), tokens.bodySize);
     expect(sizeOf('ink:r:part2'), tokens.bodySize);
   });

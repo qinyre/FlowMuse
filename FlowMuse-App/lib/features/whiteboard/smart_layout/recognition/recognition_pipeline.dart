@@ -127,22 +127,25 @@ class RecognitionSessionResult {
   final List<String> partialNotes;
 
   /// 携带已结算账本的副本（语义适配后回填会话产物用；其余字段原样）。
-  RecognitionSessionResult copyWith({SourceLedger? ledger}) =>
-      RecognitionSessionResult(
-        operationId: operationId,
-        generation: generation,
-        pageId: pageId,
-        scene: scene,
-        sceneRevision: sceneRevision,
-        contentFingerprint: contentFingerprint,
-        regionRecords: regionRecords,
-        regionOutcomes: regionOutcomes,
-        ledger: ledger ?? this.ledger,
-        assetIndex: assetIndex,
-        structureResult: structureResult,
-        partial: partial,
-        partialNotes: partialNotes,
-      );
+  RecognitionSessionResult copyWith({
+    SourceLedger? ledger,
+    String? operationId,
+    int? generation,
+  }) => RecognitionSessionResult(
+    operationId: operationId ?? this.operationId,
+    generation: generation ?? this.generation,
+    pageId: pageId,
+    scene: scene,
+    sceneRevision: sceneRevision,
+    contentFingerprint: contentFingerprint,
+    regionRecords: regionRecords,
+    regionOutcomes: regionOutcomes,
+    ledger: ledger ?? this.ledger,
+    assetIndex: assetIndex,
+    structureResult: structureResult,
+    partial: partial || (ledger?.preservedCount ?? 0) > 0,
+    partialNotes: partialNotes,
+  );
 }
 
 /// 取消异常（携带已安全结算的部分会话；§6.1 部分预览）。
@@ -309,6 +312,9 @@ class RecognitionPipeline {
   int _cacheHits = 0;
   List<RegionPartition> _effectivePartitions = const [];
 
+  /// 状态迁移观察者（R7 面板状态播报；null = 无观察）。
+  void Function(RecognitionPipelineState state)? onStateChanged;
+
   RecognitionPipelineState get state => _state;
 
   final List<RecognitionPipelineState> _stateHistory = [];
@@ -329,6 +335,7 @@ class RecognitionPipeline {
   void _transition(RecognitionPipelineState next) {
     _state = next;
     _stateHistory.add(next);
+    onStateChanged?.call(next);
   }
 
   void _checkCancelled() {
@@ -343,6 +350,9 @@ class RecognitionPipeline {
     RecognitionCapture capture, {
     RecognitionBudget budget = const RecognitionBudget(),
     String? bearerToken,
+    List<RegionPartition>? correctedPartitions,
+    RecognitionSessionResult? previous,
+    Set<String> affectedSourceIds = const {},
   }) async {
     if (_state != RecognitionPipelineState.idle) {
       throw StateError('pipeline 实例不可复用（一个操作一个实例）');
@@ -359,18 +369,68 @@ class RecognitionPipeline {
     _transition(RecognitionPipelineState.capturing);
     var ledger = SourceLedger.register(
       capture.scene.activeElements
-          .where((element) => !(element.isCanvasPage || element.isPdfBackground))
+          .where(
+            (element) => !(element.isCanvasPage || element.isPdfBackground),
+          )
           .map((element) => element.id.value),
     );
     _checkCancelled();
 
     // ---- proposing：分区 + 首轮上限 ----
     _transition(RecognitionPipelineState.proposing);
-    final partitions = const RegionPartitioner().partition(capture.scene);
-    var included = partitions;
-    if (partitions.length > budget.firstRoundMaxRegions) {
-      included = partitions.take(budget.firstRoundMaxRegions).toList();
-      for (final dropped in partitions.skip(budget.firstRoundMaxRegions)) {
+    final partitions =
+        correctedPartitions ??
+        const RegionPartitioner().partition(capture.scene);
+    assertTargetOwnershipUniqueness(partitions.map((p) => p.record));
+    final reusedRegionIds = <String>{};
+    if (previous != null) {
+      if (correctedPartitions == null ||
+          previous.pageId != capture.pageId ||
+          previous.sceneRevision != capture.sceneRevision ||
+          previous.contentFingerprint != capture.contentFingerprint) {
+        throw StateError('correction-capture-mismatch');
+      }
+      final copiedAssets = <String>{};
+      for (final partition in partitions) {
+        final record = partition.record;
+        if (record.targetSourceIds.any(affectedSourceIds.contains)) continue;
+        final old = previous.regionRecords
+            .where((r) => r.regionId == record.regionId)
+            .firstOrNull;
+        if (old == null ||
+            old.targetSourceIds.length != record.targetSourceIds.length ||
+            !old.targetSourceIds.toSet().containsAll(record.targetSourceIds)) {
+          throw StateError('correction-unaffected-membership-mismatch');
+        }
+        reusedRegionIds.add(record.regionId);
+        final outcome = previous.regionOutcomes[record.regionId];
+        if (outcome != null) _outcomes[record.regionId] = outcome;
+        for (final id in record.targetSourceIds) {
+          final entry = previous.ledger.entryOf(id);
+          if (entry.status == SourceLedgerStatus.preserved) {
+            ledger = ledger.preserve(id, entry.reason!);
+          }
+          for (final assetId in previous.assetIndex.assetIdsOf(id)) {
+            if (copiedAssets.add(assetId)) {
+              assetIndex.register(previous.assetIndex.assetOf(assetId)!);
+            }
+          }
+        }
+      }
+    }
+    _effectivePartitions = [
+      for (final p in partitions)
+        if (reusedRegionIds.contains(p.record.regionId)) p,
+    ];
+    final pendingPartitions = partitions
+        .where((p) => !reusedRegionIds.contains(p.record.regionId))
+        .toList();
+    var included = pendingPartitions;
+    if (pendingPartitions.length > budget.firstRoundMaxRegions) {
+      included = pendingPartitions.take(budget.firstRoundMaxRegions).toList();
+      for (final dropped in pendingPartitions.skip(
+        budget.firstRoundMaxRegions,
+      )) {
         for (final sourceId in dropped.record.targetSourceIds) {
           ledger = ledger.preserve(
             sourceId,
@@ -384,7 +444,10 @@ class RecognitionPipeline {
 
     // ---- rendering：区域高清资产（逐区域失败隔离；超限一次二分拆分）----
     _transition(RecognitionPipelineState.rendering);
-    final regionBuilder = RegionAssetBuilder(capturedScene: capture.scene);
+    final regionBuilder = RegionAssetBuilder(
+      capturedScene: capture.scene,
+      assetPrefix: '${capture.operationId}:a',
+    );
     try {
       for (final partition in included) {
         _checkCancelled();
@@ -470,6 +533,7 @@ class RecognitionPipeline {
     // ---- 复核触发评估 → regrouping（至多一轮）→ verifying ----
     final candidates = <RegionPartition, RecognitionVerifyTrigger>{};
     for (final partition in _effectivePartitions) {
+      if (reusedRegionIds.contains(partition.record.regionId)) continue;
       final outcome = _outcomes[partition.record.regionId];
       if (outcome == null) continue;
       final trigger = _verifyTriggerOf(partition, outcome);
@@ -489,7 +553,7 @@ class RecognitionPipeline {
       final groups = _mergeAdjacentCandidates(capped);
       _checkCancelled();
       _transition(RecognitionPipelineState.verifying);
-      for (final group in groups) {
+      for (final group in groups.expand((g) => _batchRegions(g, budget))) {
         _checkCancelled();
         final response = await _dispatch(
           capture,
@@ -511,6 +575,25 @@ class RecognitionPipeline {
           verified: true,
         );
         ledger = _ledgerAfterBatch;
+      }
+    }
+
+    // 模型状态待复核结束再结算；初读 nonText 不能先锁成保留终态，
+    // 否则复核确认正文时无法消费，复核仍为 nonText 时会重复结算。
+    for (final outcome in _outcomes.values) {
+      if (outcome.status != RecognitionRegionStatus.nonText &&
+          outcome.status != RecognitionRegionStatus.unreadable) {
+        continue;
+      }
+      for (final id in outcome.targetSourceIds) {
+        if (ledger.entryOf(id).status == SourceLedgerStatus.pending) {
+          ledger = ledger.preserve(
+            id,
+            outcome.status == RecognitionRegionStatus.nonText
+                ? SourcePreserveReason.nonText
+                : SourcePreserveReason.unreadable,
+          );
+        }
       }
     }
 
@@ -592,17 +675,6 @@ class RecognitionPipeline {
         diagnostics: region.diagnostics,
         verified: verified,
       );
-      if (region.status == RecognitionRegionStatus.unreadable ||
-          region.status == RecognitionRegionStatus.nonText) {
-        for (final sourceId in partition.record.targetSourceIds) {
-          next = next.preserve(
-            sourceId,
-            region.status == RecognitionRegionStatus.unreadable
-                ? SourcePreserveReason.unreadable
-                : SourcePreserveReason.nonText,
-          );
-        }
-      }
     }
     for (final missingId in response.missingRegionIds) {
       final partition = byRegionId[missingId];

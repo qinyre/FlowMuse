@@ -145,6 +145,31 @@ void main() {
     }
   });
 
+  test('nonText 复核后才结算：确认正文可准入，仍为非文字只保留一次', () async {
+    for (final reviewedStatus in ['recognized', 'nonText']) {
+      final transport = FakeRecognitionTransport(
+        responder: (body) async {
+          final request = jsonDecode(body) as Map<String, Object?>;
+          return buildBatchResponseBody(
+            request,
+            confidence: request['stage'] == 'read' ? 0.3 : 0.9,
+            statusOf: (_) =>
+                request['stage'] == 'read' ? 'nonText' : reviewedStatus,
+          );
+        },
+      );
+      final result = await pipelineOf(
+        transport,
+      ).run(captureOf(twoRegionScene()));
+      expect(transport.decodedBodies('verify'), isNotEmpty);
+      expect(result.regionOutcomes.values.every((r) => r.verified), isTrue);
+      expect(
+        result.ledger.preservedCount,
+        reviewedStatus == 'recognized' ? 0 : 2,
+      );
+    }
+  });
+
   test('部分批次：missingRegionIds 区域按 preserve(missingResponse)', () async {
     final transport = FakeRecognitionTransport(
       responder: (body) async {

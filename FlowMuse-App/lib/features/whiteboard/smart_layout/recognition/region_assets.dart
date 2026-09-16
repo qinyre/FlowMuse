@@ -240,11 +240,12 @@ class SmallStrokeAttribution {
 ///   原图与笔迹样式不变，不双份发送；
 /// - 渲染位图在成功/失败/取消路径均释放。
 class RegionAssetBuilder {
-  RegionAssetBuilder({required Scene capturedScene})
+  RegionAssetBuilder({required Scene capturedScene, this.assetPrefix = 'a'})
     : _scene = capturedScene,
       _renderer = DraftSceneRenderer();
 
   final Scene _scene;
+  final String assetPrefix;
   final DraftSceneRenderer _renderer;
   int _counter = 0;
   bool _disposed = false;
@@ -362,7 +363,7 @@ class RegionAssetBuilder {
       } else {
         png = await _encodePng(image);
       }
-      final assetId = 'a${++_counter}';
+      final assetId = '$assetPrefix${++_counter}';
       return RegionAssetBuilt(
         RegionAsset(
           assetId: assetId,

@@ -312,11 +312,10 @@ class SyntheticStabilityEvaluator {
       }
 
       final (kind, failureKind, attempts) = switch (outcome) {
-        SmartLayoutAnalysisSucceeded(:final attempts) => (
-          'succeeded',
-          null,
-          attempts,
-        ),
+        SmartLayoutAnalysisSucceeded(:final attempts) ||
+        SmartLayoutRecognitionSucceeded(
+          :final attempts,
+        ) => ('succeeded', null, attempts),
         SmartLayoutAnalysisFailed(:final kind, :final attempts) => (
           'failed',
           kind.name,
