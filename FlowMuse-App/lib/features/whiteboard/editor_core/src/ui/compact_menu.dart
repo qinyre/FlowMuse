@@ -213,6 +213,8 @@ class CompactMenuButton extends StatelessWidget {
   ) {
     return Tooltip(
       message: tooltip,
+      // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
+      triggerMode: TooltipTriggerMode.manual,
       child: Material(
         color: isActive ? cs.primaryContainer : Colors.transparent,
         borderRadius: BorderRadius.circular(6),

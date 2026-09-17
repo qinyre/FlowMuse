@@ -77,7 +77,12 @@ class IconToggleChip extends StatelessWidget {
       ),
     );
     if (tooltip != null) {
-      chip = Tooltip(message: tooltip!, child: chip);
+      // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
+      chip = Tooltip(
+        message: tooltip!,
+        triggerMode: TooltipTriggerMode.manual,
+        child: chip,
+      );
     }
     return chip;
   }

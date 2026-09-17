@@ -576,6 +576,8 @@ class _TextPane extends StatelessWidget {
               const Spacer(),
               Tooltip(
                 message: '停靠在右侧',
+                // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
+                triggerMode: TooltipTriggerMode.manual,
                 child: IconButton(
                   icon: Icon(
                     Icons.vertical_split,
@@ -595,6 +597,8 @@ class _TextPane extends StatelessWidget {
               ),
               Tooltip(
                 message: '停靠在底部',
+                // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
+                triggerMode: TooltipTriggerMode.manual,
                 child: IconButton(
                   icon: Icon(
                     Icons.horizontal_split,
@@ -614,6 +618,8 @@ class _TextPane extends StatelessWidget {
               ),
               Tooltip(
                 message: '复制为 Markdown',
+                // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
+                triggerMode: TooltipTriggerMode.manual,
                 child: IconButton(
                   icon: Icon(
                     Icons.text_snippet,

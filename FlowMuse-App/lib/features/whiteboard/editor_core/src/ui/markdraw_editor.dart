@@ -1296,6 +1296,8 @@ class _FingerDrawingSwitch extends StatelessWidget {
         const SizedBox(width: 4),
         Tooltip(
           message: '开启后单指绘制，双指缩放或移动画布',
+          // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
+          triggerMode: TooltipTriggerMode.manual,
           child: Switch(value: value, onChanged: onChanged),
         ),
       ],
@@ -1322,6 +1324,8 @@ class _DocumentTitle extends StatelessWidget {
         : '未命名白板';
     return Tooltip(
       message: '重命名',
+      // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
+      triggerMode: TooltipTriggerMode.manual,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () =>
@@ -1513,6 +1517,8 @@ class ParticipantAvatarStack extends StatelessWidget {
             return participant.isCurrentUser ? '$name（我）' : name;
           })
           .join('、'),
+      // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
+      triggerMode: TooltipTriggerMode.manual,
       child: SizedBox(
         width: width,
         height: 44,
@@ -1587,6 +1593,8 @@ class _ParticipantAvatar extends StatelessWidget {
 
     return Tooltip(
       message: disabled ? '暂不可按归属聚焦' : participant.username,
+      // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
+      triggerMode: TooltipTriggerMode.manual,
       child: participant.onTap != null
           ? InkWell(
               onTap: participant.onTap,
@@ -1615,6 +1623,8 @@ class _ParticipantOverflowAvatar extends StatelessWidget {
       customBorder: const CircleBorder(),
       child: Tooltip(
         message: '查看全部参与者',
+        // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
+        triggerMode: TooltipTriggerMode.manual,
         child: Container(
           width: ParticipantAvatarStack._avatarSize,
           height: ParticipantAvatarStack._avatarSize,

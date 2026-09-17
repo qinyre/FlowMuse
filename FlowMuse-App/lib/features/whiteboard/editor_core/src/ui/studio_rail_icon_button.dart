@@ -32,6 +32,9 @@ class StudioRailIconButton extends StatelessWidget {
       enabled: onPressed != null,
       child: Tooltip(
         message: tooltip,
+        // 仅保留悬停/无障碍提示：默认的 longPress 触发会在按压 ≥500ms 时
+        // 抢走手势竞技场，吞掉触控笔的这次点击（issue #31）。
+        triggerMode: TooltipTriggerMode.manual,
         child: Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(12),
