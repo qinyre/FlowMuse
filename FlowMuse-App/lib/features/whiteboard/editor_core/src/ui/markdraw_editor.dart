@@ -1294,10 +1294,8 @@ class _FingerDrawingSwitch extends StatelessWidget {
       children: [
         Text('手指绘制', style: Theme.of(context).textTheme.labelMedium),
         const SizedBox(width: 4),
-        Tooltip(
+        HoverTooltip(
           message: '开启后单指绘制，双指缩放或移动画布',
-          // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
-          triggerMode: TooltipTriggerMode.manual,
           child: Switch(value: value, onChanged: onChanged),
         ),
       ],
@@ -1322,10 +1320,8 @@ class _DocumentTitle extends StatelessWidget {
     final title = controller.documentName?.trim().isNotEmpty == true
         ? controller.documentName!.trim()
         : '未命名白板';
-    return Tooltip(
+    return HoverTooltip(
       message: '重命名',
-      // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
-      triggerMode: TooltipTriggerMode.manual,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () =>
@@ -1508,7 +1504,7 @@ class ParticipantAvatarStack extends StatelessWidget {
         ? _avatarSize
         : _avatarSize + (itemCount - 1) * _overlapStep;
 
-    return Tooltip(
+    return HoverTooltip(
       message: participants
           .map((participant) {
             final name = participant.username.isEmpty
@@ -1517,8 +1513,6 @@ class ParticipantAvatarStack extends StatelessWidget {
             return participant.isCurrentUser ? '$name（我）' : name;
           })
           .join('、'),
-      // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
-      triggerMode: TooltipTriggerMode.manual,
       child: SizedBox(
         width: width,
         height: 44,
@@ -1591,10 +1585,8 @@ class _ParticipantAvatar extends StatelessWidget {
       ),
     );
 
-    return Tooltip(
+    return HoverTooltip(
       message: disabled ? '暂不可按归属聚焦' : participant.username,
-      // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
-      triggerMode: TooltipTriggerMode.manual,
       child: participant.onTap != null
           ? InkWell(
               onTap: participant.onTap,
@@ -1621,10 +1613,8 @@ class _ParticipantOverflowAvatar extends StatelessWidget {
     return InkWell(
       onTap: () => _showFullParticipantList(context),
       customBorder: const CircleBorder(),
-      child: Tooltip(
+      child: HoverTooltip(
         message: '查看全部参与者',
-        // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
-        triggerMode: TooltipTriggerMode.manual,
         child: Container(
           width: ParticipantAvatarStack._avatarSize,
           height: ParticipantAvatarStack._avatarSize,

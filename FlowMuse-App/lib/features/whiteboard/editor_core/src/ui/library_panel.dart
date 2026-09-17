@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../core/library/library_item.dart';
+import 'hover_tooltip.dart';
 import 'markdraw_controller.dart';
 
 /// Desktop library panel (right side).
@@ -47,27 +48,33 @@ class LibraryPanel extends StatelessWidget {
                 ),
                 const Spacer(),
                 if (onImportLibrary != null)
-                  IconButton(
-                    icon: const Icon(Icons.file_upload, size: 18),
-                    onPressed: onImportLibrary,
-                    tooltip: '导入素材库',
-                    constraints: const BoxConstraints(),
-                    padding: const EdgeInsets.all(4),
+                  HoverTooltip(
+                    message: '导入素材库',
+                    child: IconButton(
+                      icon: const Icon(Icons.file_upload, size: 18),
+                      onPressed: onImportLibrary,
+                      constraints: const BoxConstraints(),
+                      padding: const EdgeInsets.all(4),
+                    ),
                   ),
                 if (onExportLibrary != null)
-                  IconButton(
-                    icon: const Icon(Icons.file_download, size: 18),
-                    onPressed: items.isEmpty ? null : onExportLibrary,
-                    tooltip: '导出素材库',
+                  HoverTooltip(
+                    message: '导出素材库',
+                    child: IconButton(
+                      icon: const Icon(Icons.file_download, size: 18),
+                      onPressed: items.isEmpty ? null : onExportLibrary,
+                      constraints: const BoxConstraints(),
+                      padding: const EdgeInsets.all(4),
+                    ),
+                  ),
+                HoverTooltip(
+                  message: '关闭',
+                  child: IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => controller.showLibraryPanel = false,
                     constraints: const BoxConstraints(),
                     padding: const EdgeInsets.all(4),
                   ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: () => controller.showLibraryPanel = false,
-                  tooltip: '关闭',
-                  constraints: const BoxConstraints(),
-                  padding: const EdgeInsets.all(4),
                 ),
               ],
             ),
@@ -121,13 +128,15 @@ class LibraryPanel extends StatelessWidget {
                           final size = box?.size ?? const Size(800, 600);
                           controller.placeLibraryItem(item, size);
                         },
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, size: 16),
-                          onPressed: () =>
-                              controller.removeLibraryItem(item.id),
-                          tooltip: '移除',
-                          constraints: const BoxConstraints(),
-                          padding: const EdgeInsets.all(4),
+                        trailing: HoverTooltip(
+                          message: '移除',
+                          child: IconButton(
+                            icon: const Icon(Icons.delete, size: 16),
+                            onPressed: () =>
+                                controller.removeLibraryItem(item.id),
+                            constraints: const BoxConstraints(),
+                            padding: const EdgeInsets.all(4),
+                          ),
                         ),
                       );
                       return Draggable<LibraryItem>(

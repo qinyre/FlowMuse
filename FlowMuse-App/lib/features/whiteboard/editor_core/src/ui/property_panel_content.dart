@@ -778,10 +778,8 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     String tooltip,
     List<Element> Function(List<Element>) operation,
   ) {
-    return Tooltip(
+    return HoverTooltip(
       message: tooltip,
-      // 避免长按触发吞掉触控笔点击（issue #31），仅保留悬停/无障碍提示
-      triggerMode: TooltipTriggerMode.manual,
       child: IconButton(
         icon: Icon(icon, size: 18),
         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

@@ -2,6 +2,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'hover_tooltip.dart';
 import 'markdraw_controller.dart';
 
 /// Undo/redo controls used by the editor navigation.
@@ -16,34 +17,38 @@ class UndoRedoControls extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          icon: const Icon(Icons.undo, size: 16),
-          onPressed: controller.undo,
-          tooltip: '撤销 (Ctrl+Z)',
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          iconSize: 16,
-          padding: EdgeInsets.zero,
-          style: IconButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+        HoverTooltip(
+          message: '撤销 (Ctrl+Z)',
+          child: IconButton(
+            icon: const Icon(Icons.undo, size: 16),
+            onPressed: controller.undo,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            iconSize: 16,
+            padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hoverColor: cs.surfaceContainerHighest,
+              focusColor: cs.surfaceContainerHighest,
             ),
-            hoverColor: cs.surfaceContainerHighest,
-            focusColor: cs.surfaceContainerHighest,
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.redo, size: 16),
-          onPressed: controller.redo,
-          tooltip: '重做 (Ctrl+Shift+Z)',
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          iconSize: 16,
-          padding: EdgeInsets.zero,
-          style: IconButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+        HoverTooltip(
+          message: '重做 (Ctrl+Shift+Z)',
+          child: IconButton(
+            icon: const Icon(Icons.redo, size: 16),
+            onPressed: controller.redo,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            iconSize: 16,
+            padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              hoverColor: cs.surfaceContainerHighest,
+              focusColor: cs.surfaceContainerHighest,
             ),
-            hoverColor: cs.surfaceContainerHighest,
-            focusColor: cs.surfaceContainerHighest,
           ),
         ),
         Padding(
@@ -85,19 +90,21 @@ class ZoomControls extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: const Icon(Icons.remove, size: 16),
-            onPressed: () => controller.zoomOut(getCanvasSize()),
-            tooltip: '缩小 (Ctrl+\u2212)',
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            iconSize: 16,
-            padding: EdgeInsets.zero,
-            style: IconButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          HoverTooltip(
+            message: '缩小 (Ctrl+\u2212)',
+            child: IconButton(
+              icon: const Icon(Icons.remove, size: 16),
+              onPressed: () => controller.zoomOut(getCanvasSize()),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              iconSize: 16,
+              padding: EdgeInsets.zero,
+              style: IconButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                hoverColor: cs.surfaceContainerHighest,
+                focusColor: cs.surfaceContainerHighest,
               ),
-              hoverColor: cs.surfaceContainerHighest,
-              focusColor: cs.surfaceContainerHighest,
             ),
           ),
           Semantics(
@@ -117,19 +124,21 @@ class ZoomControls extends StatelessWidget {
               ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.add, size: 16),
-            onPressed: () => controller.zoomIn(getCanvasSize()),
-            tooltip: '放大 (Ctrl++)',
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            iconSize: 16,
-            padding: EdgeInsets.zero,
-            style: IconButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          HoverTooltip(
+            message: '放大 (Ctrl++)',
+            child: IconButton(
+              icon: const Icon(Icons.add, size: 16),
+              onPressed: () => controller.zoomIn(getCanvasSize()),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              iconSize: 16,
+              padding: EdgeInsets.zero,
+              style: IconButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                hoverColor: cs.surfaceContainerHighest,
+                focusColor: cs.surfaceContainerHighest,
               ),
-              hoverColor: cs.surfaceContainerHighest,
-              focusColor: cs.surfaceContainerHighest,
             ),
           ),
         ],

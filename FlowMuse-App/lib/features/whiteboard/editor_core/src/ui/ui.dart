@@ -15,6 +15,7 @@ export 'font_picker.dart';
 export 'hamburger_menu.dart';
 export 'help_button.dart';
 export 'help_dialog.dart';
+export 'hover_tooltip.dart';
 export 'keyboard_handler.dart';
 export 'library_panel.dart';
 export 'link_overlay.dart';

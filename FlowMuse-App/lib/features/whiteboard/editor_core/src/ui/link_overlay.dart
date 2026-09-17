@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
+import 'hover_tooltip.dart';
 import 'markdraw_controller.dart';
 
 /// Floating link editor overlay positioned near the selected element.
@@ -166,12 +167,14 @@ class _LinkOverlayState extends State<LinkOverlay> {
           SizedBox(
             width: 28,
             height: 28,
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              iconSize: 16,
-              tooltip: '取消 (Esc)',
-              onPressed: _cancel,
-              icon: Icon(Icons.close, color: cs.onPrimaryContainer),
+            child: HoverTooltip(
+              message: '取消 (Esc)',
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                iconSize: 16,
+                onPressed: _cancel,
+                icon: Icon(Icons.close, color: cs.onPrimaryContainer),
+              ),
             ),
           ),
         ],
@@ -220,36 +223,42 @@ class _LinkOverlayState extends State<LinkOverlay> {
         SizedBox(
           width: 28,
           height: 28,
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            iconSize: 16,
-            tooltip: '编辑链接',
-            onPressed: () {
-              widget.controller.openLinkEditor();
-            },
-            icon: const Icon(Icons.edit),
+          child: HoverTooltip(
+            message: '编辑链接',
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              iconSize: 16,
+              onPressed: () {
+                widget.controller.openLinkEditor();
+              },
+              icon: const Icon(Icons.edit),
+            ),
           ),
         ),
         SizedBox(
           width: 28,
           height: 28,
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            iconSize: 16,
-            tooltip: '移除链接',
-            onPressed: _remove,
-            icon: const Icon(Icons.link_off),
+          child: HoverTooltip(
+            message: '移除链接',
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              iconSize: 16,
+              onPressed: _remove,
+              icon: const Icon(Icons.link_off),
+            ),
           ),
         ),
         SizedBox(
           width: 28,
           height: 28,
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            iconSize: 16,
-            tooltip: '关闭',
-            onPressed: _cancel,
-            icon: const Icon(Icons.close),
+          child: HoverTooltip(
+            message: '关闭',
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              iconSize: 16,
+              onPressed: _cancel,
+              icon: const Icon(Icons.close),
+            ),
           ),
         ),
       ],
@@ -307,12 +316,14 @@ class _LinkOverlayState extends State<LinkOverlay> {
               SizedBox(
                 width: 28,
                 height: 28,
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  iconSize: 16,
-                  tooltip: '移除链接',
-                  onPressed: _remove,
-                  icon: const Icon(Icons.link_off),
+                child: HoverTooltip(
+                  message: '移除链接',
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    iconSize: 16,
+                    onPressed: _remove,
+                    icon: const Icon(Icons.link_off),
+                  ),
                 ),
               ),
             const SizedBox(width: 4),

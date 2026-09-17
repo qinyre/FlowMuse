@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// issue #31 回归测试：用触控笔/手指点工具栏按钮，按压时长不应影响 onTap。
-/// 根因：按钮外层 Tooltip 默认 triggerMode=longPress，按压 ≥500ms 时长按
+/// 根因（第一轮）：按钮外层 Tooltip 默认 triggerMode=longPress，按压 ≥500ms 时长按
 /// 识别器赢得手势竞技场，InkWell.onTap 被取消（表现为需点两遍）。
-/// 修复：Tooltip 改为 TooltipTriggerMode.manual（仅悬停/无障碍提示）。
+/// 第一轮修复 TooltipTriggerMode.manual；第二轮改为自绘 HoverTooltip
+/// （气泡不参与命中测试，见 hover_tooltip.dart），本文件继续守护点击链路。
 void main() {
   Future<void> pumpButton(WidgetTester tester, VoidCallback onPressed) async {
     await tester.pumpWidget(
