@@ -43,7 +43,7 @@ func DefaultLimits() Limits {
 		MaxImageEdge:        2048,
 		MaxTextRunes:        2000,
 		MaxInFlight:         4,
-		ProviderTimeout:     60 * time.Second,
+		ProviderTimeout:     120 * time.Second, // 真机手写 OCR 实测 21-60s+，60s 会掐死慢请求
 	}
 }
 
@@ -73,7 +73,7 @@ func (l Limits) normalized() Limits {
 		l.MaxInFlight = 4
 	}
 	if l.ProviderTimeout <= 0 {
-		l.ProviderTimeout = 60 * time.Second
+		l.ProviderTimeout = 120 * time.Second
 	}
 	return l
 }
