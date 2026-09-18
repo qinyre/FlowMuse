@@ -3,7 +3,7 @@
 > 发现日期：2026-09-17
 > 发现途径：鸿蒙真机触控笔反馈（第一轮修复无效后复现）+ 框架源码核验 + widget 复现测试
 > 性质：**框架交互机制缺陷**（Material `Tooltip` 气泡命中不透明），非业务代码逻辑错误
-> 状态：已修复（编辑期内统一自绘 `HoverTooltip`），待真机复验
+> 状态：悬停气泡缺陷已由自绘 `HoverTooltip` 覆盖；本轮剩余真机现象尚未在本机复现，已补默认关闭的输入诊断探针
 
 ## 现象
 
@@ -70,11 +70,25 @@
 ## 验证
 
 - `flutter analyze`：无 issue。
-- `flutter test`：全量通过（1670 例）。
+- `flutter test`：本轮全量通过（1681 项）。
 - 新增回归：`stylus_hover_tooltip_tap_test.dart`（6 例，含"悬停 A 后点 B 第一下即生效"）；
   点击链路 `studio_rail_icon_button_test.dart`、笔盒语义 `toolbar_pressure_semantics_test.dart`
-  同步迁移 finder 后全绿。
+  同步迁移 finder 后全绿；本轮新增真实工具栏交互回归与输入诊断回归。
 - **未做真机验证**：需在鸿蒙真机（触控笔）上复验工具栏 / 选笔 / 选图形三处。
+
+## 本轮复核与诊断
+
+本轮把真实 `DesktopToolbar`、`CompactToolbar`、三种停靠位置、真实滚动祖先、笔盒与图形弹层纳入测试。触控笔悬停相邻按钮后一次点选、700ms 按压、触摸、反向触控笔、移出取消和滚动拖动均保持正确语义；本机没有出现新的“有效点击被吞”失败，因此没有添加手势阈值或绕过 arena 的补丁。
+
+新增 `toolbar_input_diagnostics.dart`，由 `StudioRailIconButton` 接入原始 pointer 与 InkWell 的 `tapDown`、`tapUp`、`tapCancel`、`tap` 阶段。默认编译开关为 `false`，关闭时不注册全局路由、不收集、不输出；只在需要真机复验时用以下命令打开：
+
+```text
+flutter run --dart-define=FLOWMUSE_TOOLBAR_INPUT_DIAGNOSTICS=true
+```
+
+日志只包含固定控件标识、pointer/device/kind/buttons、相对位移、耗时和阶段，不包含绝对坐标、用户文本、白板内容或协作密钥。`globalDown` 表示按下位置落在按钮边界内；随后有 `down` 表示按钮实际命中；有 `down` 但最终只有 `tapCancel` 表示手势在 arena 或系统取消；有 `globalDown` 而没有 `down` 表示按钮边界内的按下被更上层命中对象拦截。
+
+本机测试覆盖诊断默认关闭、事件阶段、取消和卸载清理。原鸿蒙设备仍需按真机矩阵复验，不能仅凭 widget 测试宣称原现场现象已经消失。
 
 ## 遗留与后续
 
@@ -82,8 +96,7 @@
   区域截取、排版面板/模板表、whiteboard_page；其余 feature 23 处）。
   这些同样具备"气泡吞点击"的机制，但布局多为横向行（探针证明当前不受影响）；
   若后续出现同类现象，按同一模式替换为 `HoverTooltip`。
-- 若真机复验仍复现，下一步需在输入端加探针日志定位：
-  记录 stylus 事件的 down/up 与命中目标（不涉及协作明文/密钥，符合日志脱敏约定）。
+- 若真机复验仍复现，先用上述开关关联失败次数与事件阶段，再决定是否需要新的输入适配；没有事件证据前不要扩大手势层改动。
 
 ## 关联
 

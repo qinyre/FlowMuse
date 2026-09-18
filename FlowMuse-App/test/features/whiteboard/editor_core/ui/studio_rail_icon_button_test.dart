@@ -1,4 +1,5 @@
 import 'package:flow_muse/features/whiteboard/editor_core/src/ui/studio_rail_icon_button.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/ui/toolbar_input_diagnostics.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -125,5 +126,82 @@ void main() {
       // Then: 期望两下都生效；若实际为 1，即"第一下被吞、第二下才生效"
       expect(taps, 2, reason: '实际为 1 时即复现 issue 的"需要点两遍"');
     });
+  });
+
+  testWidgets('诊断开关默认关闭时不记录输入', (tester) async {
+    expect(ToolbarInputDiagnostics.enabled, isFalse);
+    final lines = <String>[];
+    ToolbarInputDiagnostics.resetTestSink();
+    addTearDown(ToolbarInputDiagnostics.resetTestSink);
+    await pumpButton(tester, () {});
+
+    await tester.tap(find.byType(StudioRailIconButton));
+    expect(lines, isEmpty);
+  });
+
+  testWidgets('诊断开启时记录原始事件和手势阶段且不记录坐标或文本', (tester) async {
+    final lines = <String>[];
+    ToolbarInputDiagnostics.setTestSink(lines.add);
+    addTearDown(ToolbarInputDiagnostics.resetTestSink);
+    await pumpButton(tester, () {});
+
+    final gesture = await tester.startGesture(
+      buttonCenter(tester),
+      kind: PointerDeviceKind.stylus,
+    );
+    await tester.pump(const Duration(milliseconds: 80));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      lines.any((line) => line.contains('source=pointer stage=down')),
+      isTrue,
+    );
+    expect(
+      lines.any((line) => line.contains('source=pointer stage=globalDown')),
+      isTrue,
+    );
+    expect(
+      lines.any((line) => line.contains('source=pointer stage=up')),
+      isTrue,
+    );
+    expect(
+      lines.any((line) => line.contains('source=gesture stage=tapDown')),
+      isTrue,
+    );
+    expect(
+      lines.any((line) => line.contains('source=gesture stage=tapUp')),
+      isTrue,
+    );
+    expect(
+      lines.any((line) => line.contains('source=gesture stage=tap')),
+      isTrue,
+    );
+    expect(lines.every((line) => !line.contains('测试工具')), isTrue);
+    expect(lines.every((line) => !line.contains('position=')), isTrue);
+  });
+
+  testWidgets('诊断记录取消且卸载后不再回调', (tester) async {
+    final lines = <String>[];
+    ToolbarInputDiagnostics.setTestSink(lines.add);
+    addTearDown(ToolbarInputDiagnostics.resetTestSink);
+    await pumpButton(tester, () {});
+
+    final gesture = await tester.startGesture(
+      buttonCenter(tester),
+      kind: PointerDeviceKind.stylus,
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveTo(const Offset(790, 590));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(lines.any((line) => line.contains('stage=tapCancel')), isTrue);
+    expect(lines.any((line) => line.contains('stage=tap ')), isFalse);
+
+    final countBeforeUnmount = lines.length;
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    expect(lines.length, countBeforeUnmount);
   });
 }
