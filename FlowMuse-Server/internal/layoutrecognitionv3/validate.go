@@ -125,6 +125,9 @@ func validateRegionBatch(req *RecognitionRequest, limits Limits) *WireError {
 		if !imageDecodeFits(region.ImagePngBase64, limits) {
 			return wireErr(CodeLimitExceeded, fmt.Sprintf("regions[%d] 解码尺寸超上限（≤2MP、长边 ≤2048）", i))
 		}
+		if !imageHasVisibleInk(region.ImagePngBase64) {
+			return wireErr(CodeInvalidSchema, fmt.Sprintf("regions[%d] 图片无任何可见像素（全透明空图，疑似零长度笔画）", i))
+		}
 	}
 	return nil
 }
@@ -188,6 +191,9 @@ func validateStructureRequest(req *RecognitionRequest, limits Limits) *WireError
 		if !imageDecodeFits(req.OverviewPngBase64, limits) {
 			return wireErr(CodeLimitExceeded, "overviewPngBase64 解码尺寸超上限")
 		}
+		if !imageHasVisibleInk(req.OverviewPngBase64) {
+			return wireErr(CodeInvalidSchema, "overviewPngBase64 无任何可见像素（全透明空图）")
+		}
 	}
 	if req.TextFingerprint == "" || utf8.RuneCountInString(req.TextFingerprint) > 64 {
 		return wireErr(CodeInvalidSchema, "textFingerprint 必须非空且 ≤64 字符")
@@ -210,6 +216,46 @@ func imageDecodeFits(base64Image string, limits Limits) bool {
 		return false
 	}
 	return limits.imageFitsLimits(config)
+}
+
+// imageHasVisibleInk 全解码扫描 alpha 通道：全透明空图（2026-09-18 真机
+// 事故：零长度笔画渲染的 831×831 空图）会让上游视觉 API 无限挂起直至
+// provider 超时，必须在入站拒绝。解码失败与 imageDecodeFits 同口径
+// （false → 由调用方的尺寸/空图校验报 400）。
+func imageHasVisibleInk(base64Image string) bool {
+	decoded, err := base64.StdEncoding.DecodeString(base64Image)
+	if err != nil {
+		return false
+	}
+	img, _, err := image.Decode(bytes.NewReader(decoded))
+	if err != nil {
+		return false
+	}
+	switch im := img.(type) {
+	case *image.NRGBA:
+		for i := 3; i < len(im.Pix); i += 4 {
+			if im.Pix[i] != 0 {
+				return true
+			}
+		}
+		return false
+	case *image.RGBA:
+		for i := 3; i < len(im.Pix); i += 4 {
+			if im.Pix[i] != 0 {
+				return true
+			}
+		}
+		return false
+	}
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if _, _, _, a := img.At(x, y).RGBA(); a != 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // SanitizeRegionResults 校验模型 read/verify 输出（R-02/R-03 + 数组去重）

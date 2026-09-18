@@ -181,6 +181,71 @@ type RecognitionResponse struct {
 	Warnings           []string         `json:"warnings,omitempty"`
 }
 
+// MarshalJSON 按阶段输出精确键集。客户端严格读取器要求阶段相关数组键
+// 必须存在（空集也须出现为 []），且跨阶段键一律按未知字段拒绝；
+// encoding/json 的 omitempty 表达不了「空集出现为 []」（nil/空集都会
+// 被省略），故按阶段显式回填：read/verify 恒含 regions+missingRegionIds，
+// structure 恒含 textFingerprint+五个结构数组（2026-09-18 真机事故：
+// 识别成功但 missingRegionIds 为空被省略，客户端整批判无效 → 全保留
+// 空候选）。
+func (r RecognitionResponse) MarshalJSON() ([]byte, error) {
+	type plain RecognitionResponse
+	base, err := json.Marshal(plain(r))
+	if err != nil {
+		return nil, err
+	}
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(base, &fields); err != nil {
+		return nil, err
+	}
+	rawOrEmpty := func(v any) (json.RawMessage, error) {
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		if string(encoded) == "null" {
+			return json.RawMessage("[]"), nil
+		}
+		return json.RawMessage(encoded), nil
+	}
+	if r.Stage == StageStructure {
+		delete(fields, "regions")
+		delete(fields, "missingRegionIds")
+		for key, value := range map[string]any{
+			"textFingerprint": r.TextFingerprint,
+			"readingOrder":    r.ReadingOrder,
+			"roles":           r.Roles,
+			"listGroups":      r.ListGroups,
+			"captions":        r.Captions,
+			"warnings":        r.Warnings,
+		} {
+			raw, err := rawOrEmpty(value)
+			if err != nil {
+				return nil, err
+			}
+			fields[key] = raw
+		}
+	} else {
+		delete(fields, "textFingerprint")
+		delete(fields, "readingOrder")
+		delete(fields, "roles")
+		delete(fields, "listGroups")
+		delete(fields, "captions")
+		delete(fields, "warnings")
+		for key, value := range map[string]any{
+			"regions":          r.Regions,
+			"missingRegionIds": r.MissingRegionIDs,
+		} {
+			raw, err := rawOrEmpty(value)
+			if err != nil {
+				return nil, err
+			}
+			fields[key] = raw
+		}
+	}
+	return json.Marshal(fields)
+}
+
 // ModelRegionResult 是模型侧 read/verify 输出的单区域结果（无外壳）。
 type ModelRegionResult struct {
 	RegionID    string   `json:"regionId"`

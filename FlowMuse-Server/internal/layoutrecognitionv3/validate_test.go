@@ -232,6 +232,45 @@ func TestSanitizeRegionResultsPartialSemantics(t *testing.T) {
 	}
 }
 
+// transparentPngBase64 是 1×1 全透明 PNG——零长度笔画渲染产物的事故
+// 样本形态（2026-09-18 真机：831×831 同性质空图致 provider 无限挂起）。
+const transparentPngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABpfZFQAAAAABJRU5ErkJggg=="
+
+func TestValidateRequestRejectsFullyTransparentImage(t *testing.T) {
+	read := RecognitionRequest{
+		SchemaVersion:      SchemaVersion,
+		Stage:              StageRead,
+		OperationID:        "op",
+		RequestID:          "req",
+		PageID:             "page",
+		SceneRevision:      SceneRevision{Fingerprint: "sfp"},
+		ContentFingerprint: "fp",
+		Regions:            []RegionImageInput{validRegion("r:a")},
+	}
+	read.Regions[0].ImagePngBase64 = transparentPngBase64
+	wire := ValidateRequest(&read, DefaultLimits())
+	if wire == nil || wire.Code != CodeInvalidSchema {
+		t.Fatalf("全透明区域图应 400 拒绝: %v", wire)
+	}
+
+	structure := RecognitionRequest{
+		SchemaVersion:      SchemaVersion,
+		Stage:              StageStructure,
+		OperationID:        "op",
+		RequestID:          "req",
+		PageID:             "page",
+		SceneRevision:      SceneRevision{Fingerprint: "sfp"},
+		ContentFingerprint: "fp",
+		Units:              []UnitInput{validUnit("ink:r:x")},
+		TextFingerprint:    "tfp",
+	}
+	structure.OverviewPngBase64 = transparentPngBase64
+	wire = ValidateRequest(&structure, DefaultLimits())
+	if wire == nil || wire.Code != CodeInvalidSchema {
+		t.Fatalf("全透明概览图应 400 拒绝: %v", wire)
+	}
+}
+
 func TestValidateRequestStageIsolation(t *testing.T) {
 	base := RecognitionRequest{
 		SchemaVersion:      SchemaVersion,
