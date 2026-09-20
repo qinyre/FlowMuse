@@ -16,6 +16,8 @@ class SemanticRelationExpectation {
     required this.kind,
     required this.anchorId,
     required this.followerId,
+    this.maxGap,
+    this.memberIds = const {},
   });
 
   final String relationId;
@@ -26,13 +28,21 @@ class SemanticRelationExpectation {
 
   /// captionOf：caption；keepWith：后继。
   final String followerId;
+  final double? maxGap;
+  final Set<String> memberIds;
 }
 
 /// 阅读序期望（渲染后元素 id 的语义阅读序；相邻项构成检查对）。
 class ReadingOrderExpectation {
-  const ReadingOrderExpectation({required this.orderedElementIds});
+  const ReadingOrderExpectation({
+    required this.orderedElementIds,
+    this.columnByNode = const {},
+    this.columns = const [],
+  });
 
   final List<String> orderedElementIds;
+  final Map<String, int> columnByNode;
+  final List<Bounds> columns;
 }
 
 /// 真实 Scene metrics 提取器（V3-504A）：从 **reducer + renderer 的真实
@@ -60,6 +70,7 @@ abstract final class ReducedSceneMetricsExtractor {
     ReadingOrderExpectation? readingOrder,
     double captionGapTolerance = 24.0,
     Set<String>? validationElementIds,
+    Map<String, List<String>> outputElementIdsByBlock = const {},
   }) {
     final patch = reduced.patch;
 
@@ -105,11 +116,24 @@ abstract final class ReducedSceneMetricsExtractor {
     }
 
     // ---- 关系满足表（真实渲染几何判定）----
+    final nodeBounds = <String, Bounds>{
+      for (final layer in snapshot.layers) layer.elementId: layer.bounds,
+    };
+    for (final entry in outputElementIdsByBlock.entries) {
+      final boxes = [for (final id in entry.value) nodeBounds[id]];
+      if (boxes.isEmpty || boxes.any((b) => b == null)) continue;
+      nodeBounds[entry.key] = boxes.cast<Bounds>().reduce((a, b) => a.union(b));
+    }
     final relationResults = <(String, bool)>[
       for (final relation in relations)
         (
           relation.relationId,
-          _relationSatisfied(relation, snapshot, captionGapTolerance),
+          _relationSatisfied(
+            relation,
+            nodeBounds,
+            captionGapTolerance,
+            outputElementIdsByBlock.keys.toSet(),
+          ),
         ),
     ];
 
@@ -117,16 +141,30 @@ abstract final class ReducedSceneMetricsExtractor {
     var orderPairsTotal = 0;
     var orderPairsCorrect = 0;
     if (readingOrder != null && readingOrder.orderedElementIds.length > 1) {
-      final positionById = <String, (double, double)>{
-        for (final layer in snapshot.layers)
-          layer.elementId: (layer.bounds.top, layer.bounds.left),
-      };
       bool precedes(String a, String b) {
-        final pa = positionById[a];
-        final pb = positionById[b];
+        final pa = nodeBounds[a];
+        final pb = nodeBounds[b];
         if (pa == null || pb == null) return false;
-        if ((pa.$1 - pb.$1).abs() > 1e-9) return pa.$1 < pb.$1;
-        return pa.$2 < pb.$2;
+        if (readingOrder.columnByNode.isNotEmpty) {
+          final ca = readingOrder.columnByNode[a];
+          final cb = readingOrder.columnByNode[b];
+          if (ca == null ||
+              cb == null ||
+              ca < 0 ||
+              cb < 0 ||
+              ca >= readingOrder.columns.length ||
+              cb >= readingOrder.columns.length) {
+            return false;
+          }
+          if (!_inside(pa, readingOrder.columns[ca]) ||
+              !_inside(pb, readingOrder.columns[cb])) {
+            return false;
+          }
+          if (ca != cb) return ca < cb;
+          return pa.bottom <= pb.top + 0.5;
+        }
+        if ((pa.top - pb.top).abs() > 1e-9) return pa.top < pb.top;
+        return pa.left < pb.left;
       }
 
       final order = readingOrder.orderedElementIds;
@@ -160,26 +198,38 @@ abstract final class ReducedSceneMetricsExtractor {
 
   static bool _relationSatisfied(
     SemanticRelationExpectation relation,
-    DraftRenderSnapshot snapshot,
+    Map<String, Bounds> byId,
     double captionGapTolerance,
+    Set<String> blockIds,
   ) {
-    final byId = {
-      for (final layer in snapshot.layers) layer.elementId: layer.bounds,
-    };
     final anchor = byId[relation.anchorId];
     final follower = byId[relation.followerId];
     if (anchor == null || follower == null) return false;
-    switch (relation.kind) {
-      case SemanticRelationExpectationKind.captionOf:
-        // caption 水平与 figure 有重叠且紧随其下（容差内）。
-        final horizontalOverlap =
-            follower.left < anchor.right && anchor.left < follower.right;
-        final gap = follower.top - anchor.bottom;
-        return horizontalOverlap && gap >= -1e-9 && gap <= captionGapTolerance;
-      case SemanticRelationExpectationKind.keepWith:
-        // 后继不得排到前驱上方（阅读序不逆转）。
-        return follower.top >= anchor.top - 1e-9;
+    final horizontalOverlap =
+        follower.left < anchor.right && anchor.left < follower.right;
+    final gap = follower.top - anchor.bottom;
+    if (!horizontalOverlap ||
+        gap < -0.5 ||
+        gap > (relation.maxGap ?? captionGapTolerance) + 0.5) {
+      return false;
     }
+    // 无关块不能插在关联两端之间；允许同组其他说明/图注。
+    for (final id in blockIds) {
+      if (id == relation.anchorId ||
+          id == relation.followerId ||
+          relation.memberIds.contains(id)) {
+        continue;
+      }
+      final box = byId[id];
+      if (box == null) continue;
+      if (box.top >= anchor.bottom &&
+          box.bottom <= follower.top &&
+          box.right > anchor.left &&
+          box.left < anchor.right) {
+        return false;
+      }
+    }
+    return true;
   }
 }
 

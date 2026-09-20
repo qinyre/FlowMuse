@@ -3,6 +3,7 @@ import '../patch/smart_layout_scene_patch.dart';
 import '../patch/smart_layout_patch_validator.dart';
 import '../reducer/smart_layout_scene_reducer.dart';
 import '../snapshot/scene_revision.dart';
+import '../snapshot/scene_fingerprint.dart';
 import '../validation/reduced_scene_metrics_extractor.dart';
 import '../validation/validated_candidate.dart';
 
@@ -88,8 +89,11 @@ class ValidatedCandidateCommitGateway {
       );
     }
     // 证据完整性：渲染 digest 与候选快照重算一致（防装配后篡改）。
-    if (reducedSceneDigestOf(candidate.snapshot) !=
-        candidate.metrics.renderedSceneDigest) {
+    if (candidate.isDisposed ||
+        SceneFingerprint.of(candidate.reduced.scene) !=
+            candidate.validatedSceneFingerprint ||
+        reducedSceneDigestOf(candidate.snapshot) !=
+            candidate.metrics.renderedSceneDigest) {
       return const HistoryCommitRejected(
         kind: CommitRejectionKind.provenanceBroken,
         detail: 'render digest mismatch',
@@ -131,6 +135,13 @@ class ValidatedCandidateCommitGateway {
     }
 
     // ---- 基线已变：写集判定 + 最多一次重派 ----
+    if (candidate.expectationDigest != null) {
+      // 整页关系依赖未改写的固定内容；仅比较写集无法证明旧构图仍有效。
+      return const HistoryCommitRejected(
+        kind: CommitRejectionKind.writeSetConflict,
+        detail: 'composition scene changed; regenerate candidate',
+      );
+    }
     final rebased = SmartLayoutScenePatch(
       baseRevision: current,
       removes: candidate.patch.removes,

@@ -45,6 +45,7 @@ import '../snapshot/snapshot_extractor.dart';
 import '../snapshot/resolved_page_scope.dart';
 import '../snapshot/source_coverage_ledger.dart';
 import '../validation/validated_candidate.dart';
+import '../validation/reduced_scene_metrics_extractor.dart';
 import '../validation/validated_candidate_pipeline.dart';
 import 'smart_layout_operation_guard.dart';
 import 'smart_layout_session.dart';
@@ -464,6 +465,37 @@ abstract final class SmartLayoutRealCandidateChain {
                   ...materialized.patch.adds.map((op) => op.element.id.value),
                   ...materialized.patch.updates.map((op) => op.elementId),
                 },
+          outputElementIdsByBlock: recognition == null
+              ? null
+              : materialized.outputElementIdsByBlock,
+          semanticContextKey: recognition == null
+              ? null
+              : '${semantic.document.epoch}:${semantic.document.revision}:${semantic.document.fingerprint}|'
+                    '${layoutSnapshot.fingerprint}|${tokens.canonicalHash()}',
+          relations: recognition == null
+              ? const []
+              : [
+                  for (final relation in assembly.relationships)
+                    _verticalRelation(relation, assembly, tokens),
+                ],
+          readingOrder: recognition == null
+              ? null
+              : ReadingOrderExpectation(
+                  orderedElementIds: [
+                    for (final b in assembly.blocks)
+                      if (!b.isPreservedLike) b.id,
+                  ],
+                  columnByNode: {
+                    for (final p in placed.placed)
+                      p.blockId: columnRects.indexWhere(
+                        (c) => c.containsRect(p.rect),
+                      ),
+                  },
+                  columns: [
+                    for (final c in columnRects)
+                      Bounds.fromLTWH(c.left, c.top, c.width, c.height),
+                  ],
+                ),
         ),
       );
     }
@@ -530,6 +562,31 @@ abstract final class SmartLayoutRealCandidateChain {
     width: (json['width'] as num).toDouble(),
     height: (json['height'] as num).toDouble(),
   );
+
+  static SemanticRelationExpectation _verticalRelation(
+    BlockRelationship relation,
+    LayoutBlockAssembly assembly,
+    SmartLayoutDesignTokens tokens,
+  ) {
+    final from = assembly.blocks.indexWhere(
+      (b) => b.id == relation.fromBlockId,
+    );
+    final to = assembly.blocks.indexWhere((b) => b.id == relation.toBlockId);
+    return SemanticRelationExpectation(
+      relationId:
+          '${relation.kind.name}:${relation.fromBlockId}:${relation.toBlockId}',
+      kind: relation.kind == BlockRelationKind.captionOf
+          ? SemanticRelationExpectationKind.captionOf
+          : SemanticRelationExpectationKind.keepWith,
+      anchorId: from < to ? relation.fromBlockId : relation.toBlockId,
+      followerId: from < to ? relation.toBlockId : relation.fromBlockId,
+      maxGap: tokens.paragraphSpacing + tokens.figureTextGap,
+      memberIds: {
+        for (final group in assembly.atomicGroups)
+          if (group.contains(relation.fromBlockId)) ...group,
+      },
+    );
+  }
 }
 
 /// 请求时捕获（请求、响应与生成链同源）。

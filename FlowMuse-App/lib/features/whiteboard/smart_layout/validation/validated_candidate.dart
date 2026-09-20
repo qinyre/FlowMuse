@@ -4,6 +4,7 @@ import '../metrics/scene_metrics_contract.dart';
 import '../patch/smart_layout_scene_patch.dart';
 import '../reducer/smart_layout_scene_reducer.dart';
 import '../rendering/draft_scene_renderer.dart';
+import '../snapshot/scene_fingerprint.dart';
 import 'hard_constraint_validator.dart';
 
 /// 本轮完整门禁产出的验证候选（V3-504B）：携带 patch、归约产物、渲染
@@ -28,6 +29,8 @@ class ValidatedCandidate {
     required this.vector,
     required this.score,
     required this.hardReport,
+    required this.expectationDigest,
+    required this.validatedSceneFingerprint,
   });
 
   final String candidateId;
@@ -43,6 +46,8 @@ class ValidatedCandidate {
   final LayoutMetricVector vector;
   final ProfileScore score;
   final HardConstraintReport hardReport;
+  final String? expectationDigest;
+  final SceneFingerprint validatedSceneFingerprint;
 
   /// 唯一工厂：只有本轮完整门禁全过才能构造——任何缺失/不一致
   /// 抛 [StateError]（fail closed，不返回部分结果）。
@@ -56,6 +61,7 @@ class ValidatedCandidate {
     required LayoutMetricVector vector,
     required ProfileScore score,
     required HardConstraintReport hardReport,
+    String? expectationDigest,
   }) {
     if (!hardReport.passed) {
       throw StateError(
@@ -87,6 +93,8 @@ class ValidatedCandidate {
       vector: vector,
       score: score,
       hardReport: hardReport,
+      expectationDigest: expectationDigest,
+      validatedSceneFingerprint: SceneFingerprint.of(reduced.scene),
     );
   }
 
@@ -94,6 +102,7 @@ class ValidatedCandidate {
   String get ledgerHash => patch.sourceCoverage.hashValue;
 
   bool _disposed = false;
+  bool get isDisposed => _disposed;
 
   /// 释放渲染快照资源；幂等。patch/reduced/metrics 纯数据不受影响。
   void dispose() {

@@ -258,6 +258,55 @@ void main() {
     );
   });
 
+  test('纠错释放的旧候选不能再应用', () async {
+    final (controller, editor, tracker) = setUpEditor();
+    final candidate = await buildCandidate(controller, tracker);
+    candidate.dispose();
+    final before = controller.currentScene;
+    final result = ValidatedCandidateCommitGateway(
+      editor: editor,
+      revisions: tracker,
+    ).commit(candidate);
+    expect(result, isA<HistoryCommitRejected>());
+    expect(
+      (result as HistoryCommitRejected).kind,
+      CommitRejectionKind.provenanceBroken,
+    );
+    expect(identical(controller.currentScene, before), isTrue);
+  });
+
+  test('整页关系候选：未写入的障碍改变也必须重排，不能沿用旧预览', () async {
+    final (controller, editor, tracker) = setUpEditor();
+    final source = await buildCandidate(controller, tracker);
+    addTearDown(source.dispose);
+    final candidate = ValidatedCandidate.assemble(
+      candidateId: source.candidateId,
+      diversityKey: source.diversityKey,
+      patch: source.patch,
+      reduced: source.reduced,
+      snapshot: source.snapshot,
+      metrics: source.metrics,
+      vector: source.vector,
+      score: source.score,
+      hardReport: const HardConstraintReport(violations: []),
+      expectationDigest: 'composition-context',
+    );
+    controller.applyResult(
+      UpdateElementResult(rect('s1', x: 100).copyWith(version: 9)),
+    );
+    final before = controller.currentScene;
+    final result = ValidatedCandidateCommitGateway(
+      editor: editor,
+      revisions: tracker,
+    ).commit(candidate);
+    expect(result, isA<HistoryCommitRejected>());
+    expect(
+      (result as HistoryCommitRejected).kind,
+      CommitRejectionKind.writeSetConflict,
+    );
+    expect(identical(controller.currentScene, before), isTrue);
+  });
+
   test('证据断链：装配后 metrics/快照不符 → 拒绝', () async {
     final (controller, editor, tracker) = setUpEditor();
     final a = await buildCandidate(controller, tracker);

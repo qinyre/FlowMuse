@@ -59,6 +59,7 @@ class PatchMaterializationSuccess extends PatchMaterializationOutcome {
     required this.preservedSourceIds,
     required this.addedElementIds,
     required this.transformedSourceIds,
+    required this.outputElementIdsByBlock,
   });
 
   final SmartLayoutScenePatch patch;
@@ -71,6 +72,9 @@ class PatchMaterializationSuccess extends PatchMaterializationOutcome {
   /// 经 V3-303A 变换改写的消费源 id（含闭包成员时以最终状态进入
   /// patch.updates，成员明细见 transformer 输出）。
   final List<String> transformedSourceIds;
+
+  /// 物化时记录真实 id；含原生闭包全部成员，不靠文本或 id 前缀反猜。
+  final Map<String, List<String>> outputElementIdsByBlock;
 }
 
 class PatchMaterializationFailure extends PatchMaterializationOutcome {
@@ -647,6 +651,12 @@ abstract final class SmartLayoutCandidateMaterializer {
         transformedSourceIds: [
           for (final plan in transformPlans) plan.sourceId,
         ],
+        outputElementIdsByBlock: Map.unmodifiable({
+          for (final block in assembly.blocks)
+            block.id: List<String>.unmodifiable(block.sourceRefs),
+          for (final plan in retypePlans)
+            plan.block.id: List<String>.unmodifiable([plan.newElementId!]),
+        }),
       );
     } on StateError catch (error) {
       // Builder 终审失败 = 物化内部契约破坏；作为整体失败上报。

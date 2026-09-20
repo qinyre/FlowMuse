@@ -31,11 +31,18 @@ class LayoutBlockAssembly {
   /// 无重叠、无遗漏（每源恰好出现在一个块）。
   bool get ledgerConserved {
     final seen = <String>{};
+    final consumedSet = documentConsumedSourceIds.toSet();
+    final preservedSet = documentPreservedSourceIds.toSet();
     var consumedSeen = 0;
     var preservedSeen = 0;
     for (final block in blocks) {
       for (final ref in block.sourceRefs) {
         if (!seen.add(ref)) return false;
+        if (!(block.isPreservedLike ? preservedSet : consumedSet).contains(
+          ref,
+        )) {
+          return false;
+        }
       }
       if (block.isPreservedLike) {
         preservedSeen += block.sourceRefs.length;
@@ -43,8 +50,6 @@ class LayoutBlockAssembly {
         consumedSeen += block.sourceRefs.length;
       }
     }
-    final consumedSet = documentConsumedSourceIds.toSet();
-    final preservedSet = documentPreservedSourceIds.toSet();
     return seen.length == consumedSet.length + preservedSet.length &&
         consumedSeen == consumedSet.length &&
         preservedSeen == preservedSet.length &&
