@@ -194,6 +194,20 @@ class RecognitionSemanticAdapter {
       for (final caption in structure.captions)
         caption.captionUnitId: caption.targetUnitId,
     };
+    final figureTargetOf = <String, String>{
+      for (final link in structure.figureTextLinks)
+        if (link.confidence >= 0.8 &&
+            structure.units.any(
+              (u) =>
+                  u.unitId == link.figureUnitId &&
+                  u.kind == RecognitionUnitKind.figure &&
+                  settled.ledger
+                          .entryOf(_sourceIdOfNativeUnit(u.unitId))
+                          .status ==
+                      SourceLedgerStatus.consumed,
+            ))
+          link.textUnitId: link.figureUnitId,
+    };
     final unitIds = {for (final unit in structure.units) unit.unitId};
     for (final entry in captionTargetOf.entries) {
       if (!unitIds.contains(entry.key) || !unitIds.contains(entry.value)) {
@@ -223,6 +237,7 @@ class RecognitionSemanticAdapter {
           unit,
           groupByMember: groupByMember,
           captionTargetOf: captionTargetOf,
+          figureTargetOf: figureTargetOf,
           orderIndexOf: orderIndexOf,
           elementById: elementById,
           lockedSourceIds: lockedSourceIds,
@@ -394,6 +409,7 @@ class RecognitionSemanticAdapter {
     RecognitionUnitInput unit, {
     required Map<String, RecognitionListGroup> groupByMember,
     required Map<String, String> captionTargetOf,
+    required Map<String, String> figureTargetOf,
     required Map<String, int> orderIndexOf,
     required Map<String, Element> elementById,
     required Set<String> lockedSourceIds,
@@ -455,6 +471,11 @@ class RecognitionSemanticAdapter {
     final captionTarget = captionTargetOf[unit.unitId];
     if (captionTarget != null) {
       extras['captionOf'] = captionTarget;
+    }
+    final figureTarget = figureTargetOf[unit.unitId];
+    if (figureTarget != null &&
+        (role == SemanticRole.body || role == SemanticRole.list)) {
+      extras['relatedFigure'] = figureTarget;
     }
     if (role == SemanticRole.unknown) {
       // 保留块障碍物身份（§8.1：带原始 bounds 进入约束输入）。

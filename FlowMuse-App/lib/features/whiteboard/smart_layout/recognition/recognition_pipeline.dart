@@ -270,9 +270,15 @@ class RecognitionStructureInput {
     required this.regionOutcomes,
     required this.remainingBudgetOf,
     required this.sendStructureRequest,
+    this.budget = const RecognitionBudget(),
+    this.checkCancelled,
+    this.onWarning,
   });
 
   final RecognitionCapture capture;
+  final RecognitionBudget budget;
+  final void Function()? checkCancelled;
+  final void Function(String)? onWarning;
   final List<RegionRecord> regionRecords;
   final Map<String, RegionReadOutcome> regionOutcomes;
 
@@ -793,6 +799,9 @@ class RecognitionPipeline {
       structureResult = await _structureRecoverer.recover(
         RecognitionStructureInput(
           capture: capture,
+          budget: _budget,
+          checkCancelled: _checkCancelled,
+          onWarning: partialNotes.add,
           regionRecords: [
             for (final partition in _effectivePartitions) partition.record,
           ],

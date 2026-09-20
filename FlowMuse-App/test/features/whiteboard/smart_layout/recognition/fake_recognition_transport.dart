@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/gateways/smart_layout_http_gateway.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
 
 /// R4 测试共用的假传输层：按脚本响应、记录请求、可阻塞与可被取消。
 class FakeRecognitionTransport {
@@ -138,6 +139,38 @@ class RecordedRequest {
     'missingRegionIds': missing.toList(),
   };
   return (200, jsonEncode(response));
+}
+
+/// 合法的纯正文结构响应；与 read/verify 分开，避免测试把结构请求当 OCR。
+(int, String) buildStructureResponseBody(Map<String, Object?> requestBody) {
+  final request =
+      RecognitionRequest.fromJson(requestBody) as RecognitionStructureRequest;
+  return (
+    200,
+    jsonEncode(
+      RecognitionStructureResponse(
+        operationId: request.operationId,
+        requestId: request.requestId,
+        pageId: request.pageId,
+        sceneRevision: request.sceneRevision,
+        contentFingerprint: request.contentFingerprint,
+        generation: request.generation,
+        textFingerprint: request.textFingerprint,
+        readingOrder: [for (final unit in request.units) unit.unitId],
+        roles: [
+          for (final unit in request.units)
+            if (unit.isTextUnit)
+              RecognitionRoleAssignment(
+                unitId: unit.unitId,
+                role: RecognitionStructureRole.body,
+              ),
+        ],
+        listGroups: const [],
+        captions: const [],
+        warnings: const [],
+      ).toJson(),
+    ),
+  );
 }
 
 String defaultTextOf(String regionId) => '识别正文-$regionId';

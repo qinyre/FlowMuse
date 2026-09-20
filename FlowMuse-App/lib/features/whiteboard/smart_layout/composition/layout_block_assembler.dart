@@ -220,8 +220,29 @@ class LayoutBlockAssembler {
     String? lastFigureId;
     final byId = {for (final block in blocks) block.id: block};
     final blockIds = [for (final b in blocks) b.id];
+    final figureLinkedLists = <String>{};
     for (var i = 0; i < blocks.length; i++) {
       final block = blocks[i];
+      // 正文图文关联与 caption 分开；保留/缺失图片不牵动正文，也不换绑。
+      final relatedFigure = block.extras['relatedFigure'];
+      if ((block.kind == LayoutBlockKind.paragraph ||
+              block.kind == LayoutBlockKind.list) &&
+          relatedFigure is String) {
+        final figure = byId[relatedFigure];
+        if (figure?.kind == LayoutBlockKind.figure &&
+            figure?.figure?.missingAsset == false) {
+          relationships.add(
+            BlockRelationship(
+              kind: BlockRelationKind.keepWith,
+              fromBlockId: block.id,
+              toBlockId: relatedFigure,
+            ),
+          );
+          if (block.kind == LayoutBlockKind.list) {
+            figureLinkedLists.add(block.id);
+          }
+        }
+      }
       if (block.kind == LayoutBlockKind.figure) {
         lastFigureId = block.id;
       } else if (block.kind == LayoutBlockKind.caption) {
@@ -251,6 +272,39 @@ class LayoutBlockAssembler {
               kind: BlockRelationKind.keepWith,
               fromBlockId: block.id,
               toBlockId: next.id,
+            ),
+          );
+        }
+      }
+    }
+
+    // 只给本轮图文关联牵涉的列表子树补原子关系，避免把单个条目拉出列表。
+    // 父子组共用根组；不改变无图列表的既有分页/换栏行为。
+    if (figureLinkedLists.isNotEmpty) {
+      final rootById = <String, String>{};
+      for (final block in blocks.where((b) => b.kind == LayoutBlockKind.list)) {
+        var current = block;
+        final visited = <String>{};
+        while (visited.add(current.id)) {
+          final parent = byId[current.extras['parentUnitId']];
+          if (parent == null || parent.kind != LayoutBlockKind.list) break;
+          current = parent;
+        }
+        final root = current.extras['listGroupId'];
+        if (root is String) rootById[block.id] = root;
+      }
+      final linkedRoots = figureLinkedLists
+          .map((id) => rootById[id])
+          .nonNulls
+          .toSet();
+      for (final root in linkedRoots) {
+        final members = blocks.where((b) => rootById[b.id] == root).toList();
+        for (var i = 1; i < members.length; i++) {
+          relationships.add(
+            BlockRelationship(
+              kind: BlockRelationKind.keepWith,
+              fromBlockId: members[i - 1].id,
+              toBlockId: members[i].id,
             ),
           );
         }

@@ -144,10 +144,12 @@ void main() {
       expect(SceneFingerprint.of(controller.currentScene), before);
       final oldOperation = failed.activeTicket!.operationId;
       transport.errorFactory = null;
-      transport.responder = (body) async => buildBatchResponseBody(
-        jsonDecode(body) as Map<String, Object?>,
-        textOf: (_) => '识别后的正文',
-      );
+      transport.responder = (body) async {
+        final request = jsonDecode(body) as Map<String, Object?>;
+        return request['stage'] == 'structure'
+            ? buildStructureResponseBody(request)
+            : buildBatchResponseBody(request, textOf: (_) => '识别后的正文');
+      };
       await tester.ensureVisible(find.text('重新分析'));
       await tester.runAsync(() async {
         await tester.tap(find.text('重新分析'));

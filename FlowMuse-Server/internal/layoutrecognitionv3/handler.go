@@ -183,6 +183,9 @@ func (h *RecognitionHandler) runTranscribe(ctx context.Context, request *Recogni
 // 解析（对象）→ 结构校验（R-06..R-10 + 子树连续性）→ 回填外壳与指纹。
 func (h *RecognitionHandler) runStructure(ctx context.Context, request *RecognitionRequest) (*RecognitionResponse, *WireError) {
 	prompt := BuildStructurePrompt(request.Units, request.OverviewPngBase64 != "")
+	if request.IncludeFigureTextLinks {
+		prompt += figureTextLinkPrompt
+	}
 	images := make([]ProviderImage, 0, 1)
 	if request.OverviewPngBase64 != "" {
 		images = append(images, ProviderImage{Base64: request.OverviewPngBase64})
@@ -198,6 +201,10 @@ func (h *RecognitionHandler) runStructure(ctx context.Context, request *Recognit
 	var model ModelStructureResult
 	if pErr := parseModelJSON(raw, &model); pErr != nil {
 		return nil, pErr
+	}
+	// 未协商时不向严格旧客户端输出新字段。
+	if !request.IncludeFigureTextLinks {
+		model.FigureTextLinks = nil
 	}
 	sanitized, sErr := SanitizeStructureResult(request.Units, &model)
 	if sErr != nil {
