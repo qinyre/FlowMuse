@@ -115,19 +115,20 @@ func (u UnitInput) IsTextUnit() bool {
 
 // RecognitionRequest 是三阶段共用的请求外壳；stage 决定有效字段集。
 type RecognitionRequest struct {
-	SchemaVersion          string             `json:"schemaVersion"`
-	Stage                  string             `json:"stage"`
-	OperationID            string             `json:"operationId"`
-	RequestID              string             `json:"requestId"`
-	PageID                 string             `json:"pageId"`
-	SceneRevision          SceneRevision      `json:"sceneRevision"`
-	ContentFingerprint     string             `json:"contentFingerprint"`
-	Generation             int                `json:"generation"`
-	Regions                []RegionImageInput `json:"regions,omitempty"`
-	Units                  []UnitInput        `json:"units,omitempty"`
-	OverviewPngBase64      string             `json:"overviewPngBase64,omitempty"`
-	IncludeFigureTextLinks bool               `json:"includeFigureTextLinks,omitempty"`
-	TextFingerprint        string             `json:"textFingerprint,omitempty"`
+	SchemaVersion           string             `json:"schemaVersion"`
+	Stage                   string             `json:"stage"`
+	OperationID             string             `json:"operationId"`
+	RequestID               string             `json:"requestId"`
+	PageID                  string             `json:"pageId"`
+	SceneRevision           SceneRevision      `json:"sceneRevision"`
+	ContentFingerprint      string             `json:"contentFingerprint"`
+	Generation              int                `json:"generation"`
+	Regions                 []RegionImageInput `json:"regions,omitempty"`
+	Units                   []UnitInput        `json:"units,omitempty"`
+	OverviewPngBase64       string             `json:"overviewPngBase64,omitempty"`
+	IncludeFigureTextLinks  bool               `json:"includeFigureTextLinks,omitempty"`
+	IncludeCompositionHints bool               `json:"includeCompositionHints,omitempty"`
+	TextFingerprint         string             `json:"textFingerprint,omitempty"`
 }
 
 // RegionResult 是 read/verify 响应的单区域结果。
@@ -171,23 +172,24 @@ type FigureTextLink struct {
 // RecognitionResponse 是三阶段共用的响应外壳；服务端从请求回填，
 // 不依赖模型回显（R-12 由客户端比对兜底）。
 type RecognitionResponse struct {
-	SchemaVersion      string           `json:"schemaVersion"`
-	Stage              string           `json:"stage"`
-	OperationID        string           `json:"operationId"`
-	RequestID          string           `json:"requestId"`
-	PageID             string           `json:"pageId"`
-	SceneRevision      SceneRevision    `json:"sceneRevision"`
-	ContentFingerprint string           `json:"contentFingerprint"`
-	Generation         int              `json:"generation"`
-	Regions            []RegionResult   `json:"regions,omitempty"`
-	MissingRegionIDs   []string         `json:"missingRegionIds,omitempty"`
-	TextFingerprint    string           `json:"textFingerprint,omitempty"`
-	ReadingOrder       []string         `json:"readingOrder,omitempty"`
-	Roles              []RoleAssignment `json:"roles,omitempty"`
-	ListGroups         []ListGroup      `json:"listGroups,omitempty"`
-	Captions           []Caption        `json:"captions,omitempty"`
-	FigureTextLinks    []FigureTextLink `json:"figureTextLinks,omitempty"`
-	Warnings           []string         `json:"warnings,omitempty"`
+	SchemaVersion      string            `json:"schemaVersion"`
+	Stage              string            `json:"stage"`
+	OperationID        string            `json:"operationId"`
+	RequestID          string            `json:"requestId"`
+	PageID             string            `json:"pageId"`
+	SceneRevision      SceneRevision     `json:"sceneRevision"`
+	ContentFingerprint string            `json:"contentFingerprint"`
+	Generation         int               `json:"generation"`
+	Regions            []RegionResult    `json:"regions,omitempty"`
+	MissingRegionIDs   []string          `json:"missingRegionIds,omitempty"`
+	TextFingerprint    string            `json:"textFingerprint,omitempty"`
+	ReadingOrder       []string          `json:"readingOrder,omitempty"`
+	Roles              []RoleAssignment  `json:"roles,omitempty"`
+	ListGroups         []ListGroup       `json:"listGroups,omitempty"`
+	Captions           []Caption         `json:"captions,omitempty"`
+	FigureTextLinks    []FigureTextLink  `json:"figureTextLinks,omitempty"`
+	CompositionHints   *CompositionHints `json:"compositionHints,omitempty"`
+	Warnings           []string          `json:"warnings,omitempty"`
 }
 
 // MarshalJSON 按阶段输出精确键集。客户端严格读取器要求阶段相关数组键
@@ -241,6 +243,7 @@ func (r RecognitionResponse) MarshalJSON() ([]byte, error) {
 		delete(fields, "listGroups")
 		delete(fields, "captions")
 		delete(fields, "figureTextLinks")
+		delete(fields, "compositionHints")
 		delete(fields, "warnings")
 		for key, value := range map[string]any{
 			"regions":          r.Regions,
@@ -267,12 +270,13 @@ type ModelRegionResult struct {
 
 // ModelStructureResult 是模型侧 structure 输出（无外壳、无正文）。
 type ModelStructureResult struct {
-	ReadingOrder    []string              `json:"readingOrder"`
-	Roles           []ModelRoleEntry      `json:"roles"`
-	ListGroups      []ModelListGroup      `json:"listGroups"`
-	Captions        []ModelCaption        `json:"captions"`
-	FigureTextLinks []ModelFigureTextLink `json:"figureTextLinks,omitempty"`
-	Warnings        []string              `json:"warnings,omitempty"`
+	ReadingOrder     []string              `json:"readingOrder"`
+	Roles            []ModelRoleEntry      `json:"roles"`
+	ListGroups       []ModelListGroup      `json:"listGroups"`
+	Captions         []ModelCaption        `json:"captions"`
+	FigureTextLinks  []ModelFigureTextLink `json:"figureTextLinks,omitempty"`
+	CompositionHints *CompositionHints     `json:"compositionHints,omitempty"`
+	Warnings         []string              `json:"warnings,omitempty"`
 }
 
 // ModelFigureTextLink 模型图文关系；Text 存在即 R-10 违规。
@@ -328,6 +332,15 @@ func DecodeRecognitionRequest(body []byte) (*RecognitionRequest, error) {
 	var req RecognitionRequest
 	if err := decodeStrict(body, &req); err != nil {
 		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return nil, err
+	}
+	for _, key := range []string{"includeCompositionHints", "includeFigureTextLinks"} {
+		if raw, ok := fields[key]; ok && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return nil, errors.New("能力标记必须为布尔值")
+		}
 	}
 	return &req, nil
 }
