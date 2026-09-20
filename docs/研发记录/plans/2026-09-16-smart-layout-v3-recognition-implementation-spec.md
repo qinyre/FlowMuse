@@ -14,6 +14,7 @@
 - v4（定稿）：第三轮评审通过（无 P1），并入 3 项 P2 实施备注——P2-1 部分响应数组校验与
   全漏答语义（清理 §3.5"缺区域一律 502"残留表述）、P2-2 降级作用域与只读账本输入、
   P2-3 评测一对多对齐、同分歧义与部分转换。
+- 2026-09-20 性能修复：同步计划书时限为整次 180s / 单次 130s / 服务端默认 120s；接通独立超时配置，初读/复核/结构统一禁止超时重试，日志只记阶段、规模和耗时。识别协议、效果准入及 V1 冻结边界不变。
 
 ## 0. 定位与裁决规则
 
@@ -51,7 +52,7 @@
 | --- | --- | --- |
 | `recognition_models.dart` | 请求/响应 DTO 与常量 | `schemaVersion = 'recognition-v3/1'`；`RecognitionStage {read, verify, structure}`；各 DTO 类（§3） |
 | `recognition_json_reader.dart` | 严格 JSON 解析 | 镜像 `SmartLayoutV3JsonReader` 惯例（实例化见 `SL/protocol/smart_layout_v3_response.dart:14`），错误码表独立（§3.5） |
-| `recognition_repository.dart` | HTTP 边界 | `Future<RecognitionResponse> send(RecognitionRequest req, {String? bearerToken, NativeHttpCancelToken? cancelToken, required Duration remainingBudget})`；内部仅调 `SmartLayoutHttpGateway.postJson`（`SL/gateways/smart_layout_http_gateway.dart:90`），`readTimeoutMs = min(45000, remainingBudget.inMilliseconds)`，总计时器到期主动 `cancelToken.cancel()` 在途请求；按 §3.5 映射错误 |
+| `recognition_repository.dart` | HTTP 边界 | `Future<RecognitionResponse> send(RecognitionRequest req, {String? bearerToken, SmartLayoutCancellationToken? cancelToken, required Duration remainingBudget, Duration perRequestTimeout = RecognitionBudget.defaultPerRequestTimeout})`；内部仅调 `SmartLayoutHttpGateway.postJson`，`readTimeoutMs = min(perRequestTimeout, remainingBudget).inMilliseconds`，默认单次 130s；总计时器到期主动 `cancelToken.cancel()` 在途请求；按 §3.5 映射错误，保留传输层异常类型以区分客户端超时 |
 | `source_ledger.dart` | 源账本（识别期准入权威） | `SourceLedger.register/consume/preserve/assertAllSettled`；终态仅本类写入，向 `SemanticAssembly` 单向投影（§6.4），不与 patch 层并行维护终态 |
 | `recognition_budget.dart` | 预算值对象 | `RecognitionBudget`（§6.2），含已耗计数与 `canSpend` 断言，测试可注入初值；生命周期规则见 §6.2 末条 |
 | `recognition_pipeline.dart` | 状态机与编排 | `RecognitionPipeline.run(RecognitionCapture) → Future<SmartLayoutAnalysisOutcome>`（返回会话层 outcome 新变体，见 §10）/ `.cancel()` / `.state`（§6.1、§6.3） |
@@ -210,7 +211,7 @@ Handler 行为：stage 分发 → 入站校验 → 组提示词 → provider 调
 | `FLOWMUSE_LAYOUT_V3_BASE_URL` | 空 | 空=包不可用，路由返回 503 `unconfigured` |
 | `FLOWMUSE_LAYOUT_V3_API_KEY` | 空 | 同上 |
 | `FLOWMUSE_LAYOUT_V3_MODEL` | 空 | 同上 |
-| `FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS` | 60 | **整数秒解析**（新增 `envIntSeconds`，`strconv.Atoi`；不得用 `envDuration`——该 helper 走 `time.ParseDuration`（`config.go:141`），裸数字会解析失败回落默认值）。服务端单次 provider 超时；客户端 §6.2 的 45s/剩余时限约束不因此放宽 |
+| `FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS` | 120 | **整数秒解析**（`envIntSeconds`，`strconv.Atoi`；不得用 `envDuration` 解析裸数字）。生产注册必须将 `cfg.LayoutV3Timeout` 传入 `Limits.ProviderTimeout`。客户端单次默认 130s，给服务端 120s 留出传输余量；后续批次仍受整次剩余时限约束。修改服务端上限时必须同步核对客户端预算 |
 
 `cmd/flowmuse-collab-server/main.go` 仅追加构造与 `RegisterRecognitionV3`，旧初始化与注册不动（旧 AI layouter 段 `main.go:105-117`）。
 
@@ -250,10 +251,12 @@ Handler 行为：stage 分发 → 入站校验 → 组提示词 → provider 调
 | `verifyMaxRegions` / `regroupRounds` | 16 / 1 |
 | `localRenderConcurrency` / `networkConcurrency` | 1 / 2 |
 | `modelCallBudget` | 16（含拆批、重试、复核、结构） |
-| `retryPerRequest` | 1（仅 `retryable=true` 且非 `invalidProviderResponse`） |
-| `totalTimeout` / `perRequestTimeout` | 120s / 45s |
+| `retryPerRequest` | 1（仅 `retryable=true`、非超时/协议错误且剩余预算至少容纳一次完整请求） |
+| `totalTimeout` / `perRequestTimeout` | 180s / 130s |
 
 执行点：模型调用计数在派发前递减，不足则不发且该批区域保留；总时限用真实计时器（`Stopwatch` + 到期主动取消）约束。**预算生命周期**：一个 `operationId` 一个预算实例；显式用户纠错=新 `operationId`+新预算+`generation+1`；自动复核、重分组、重试、结构请求全部消耗当前操作预算，不刷新。
+
+初读、复核和结构请求共用重试判定。`retryable` 只是服务端允许重试的声明，不要求客户端必须重试：客户端超时、`providerTimeout`（包括无合法 envelope 的 HTTP 504）不得重新启动模型。客户端快速连接故障仍可重试一次；协议错误不重试，源保留规则不变。网络并发 2 仍是目标上限，当前执行为串行；本轮不修改相邻上下文或账本顺序，不宣称已实现并发提速。
 
 ### 6.3 缓存
 

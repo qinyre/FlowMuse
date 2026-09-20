@@ -20,8 +20,8 @@ void main() {
     expect(budget.networkConcurrency, 2);
     expect(budget.modelCallBudget, 16);
     expect(budget.retryPerRequest, 1);
-    expect(budget.totalTimeout, const Duration(seconds: 120));
-    expect(budget.perRequestTimeout, const Duration(seconds: 45));
+    expect(budget.totalTimeout, const Duration(seconds: 180));
+    expect(budget.perRequestTimeout, const Duration(seconds: 130));
   });
 
   test('模型调用计数：递减、耗尽 fail closed', () {

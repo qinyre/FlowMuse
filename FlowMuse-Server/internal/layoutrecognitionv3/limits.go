@@ -27,7 +27,7 @@ type Limits struct {
 	// in-flight 信号量容量；满则 429 busy。
 	MaxInFlight int
 	// 服务端单次 provider 超时（FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS，
-	// 整数秒；客户端 §6.2 的 45s/剩余时限约束不因此放宽）。
+	// 整数秒；默认 120s，客户端单次默认 130s 并受整次剩余时限约束）。
 	ProviderTimeout time.Duration
 }
 

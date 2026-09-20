@@ -25,11 +25,14 @@ class RecognitionBudget {
     this.networkConcurrency = 2,
     this.modelCallBudget = 16,
     this.retryPerRequest = 1,
-    this.totalTimeout = const Duration(seconds: 120),
-    this.perRequestTimeout = const Duration(seconds: 45),
+    this.totalTimeout = const Duration(seconds: 180),
+    this.perRequestTimeout = defaultPerRequestTimeout,
     this.pencilLightnessThreshold = 0.8,
     this.consumedModelCalls = 0,
   });
+
+  // 服务端默认 120s，另留传输余量；不是每次调用的目标耗时。
+  static const defaultPerRequestTimeout = Duration(seconds: 130);
 
   /// 概览图长边上限（px）。
   final int overviewMaxEdgePx;
@@ -63,7 +66,7 @@ class RecognitionBudget {
   /// 模型调用总预算（含拆批、重试、复核、结构）。
   final int modelCallBudget;
 
-  /// 单请求重试次数（仅 retryable=true 且非 invalidProviderResponse）。
+  /// 单请求重试次数（预算足够且 retryable=true；超时和协议错误不重试）。
   final int retryPerRequest;
 
   final Duration totalTimeout;

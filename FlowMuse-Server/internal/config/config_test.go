@@ -65,6 +65,10 @@ func TestRecognitionV1V3ConfigurationIsolation(t *testing.T) {
 	if missing.LayoutV3BaseURL != "" || missing.LayoutV3Model != "" || missing.LayoutV3APIKey != "test-fallback" {
 		t.Fatal("V3 缺配置时发生未授权旧引擎回退")
 	}
+	t.Setenv("FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS", "")
+	if got := load().LayoutV3Timeout; got != 120*time.Second {
+		t.Fatalf("V3 默认超时应与生产默认 120s 对齐：%v", got)
+	}
 }
 
 // envIntSeconds 整数秒解析（spec §4 配置表：不得用 envDuration——

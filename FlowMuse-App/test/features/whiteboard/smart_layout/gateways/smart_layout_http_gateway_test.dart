@@ -146,6 +146,7 @@ void main() {
         throwsA(
           isA<SmartLayoutHttpException>()
               .having((e) => e.kind, 'kind', SmartLayoutHttpErrorKind.network)
+              .having((e) => e.cause, 'cause', same(error))
               .having((e) => e.statusCode, 'statusCode', isNull),
         ),
       );
