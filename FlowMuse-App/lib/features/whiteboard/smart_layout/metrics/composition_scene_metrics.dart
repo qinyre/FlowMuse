@@ -21,7 +21,7 @@ class CompositionMetricContext {
     this.pageIntent = 'unknown',
   });
 
-  static const version = 'composition-score/1';
+  static const version = 'composition-score/2';
   final LayoutBlockAssembly source;
   final Bounds page;
   final bool analyzed;
@@ -254,7 +254,26 @@ class CompositionMetricContext {
         1 / (1 + math.min((a.left - b.left).abs(), (a.top - b.top).abs()) / em),
       );
     }
-    if (pageIntent == 'comparison' && media.length > 1) {
+    // 普通阅读页也可能包含同一章节的短图注对照，不能完全依赖模型的
+    // pageIntent 标签。仅同级短图注适用，长正文/列表不因此被挤进并列。
+    final shortCaptionPeers =
+        media.length >= 2 &&
+        media.length <= 3 &&
+        media.every((g) {
+          final members = g.map((id) => source.blockById(id)!).toList();
+          final texts = members.where((b) => b.text != null).toList();
+          return members.where((b) => b.figure != null).length == 1 &&
+              texts.isNotEmpty &&
+              texts.every((b) => b.kind == LayoutBlockKind.caption) &&
+              texts.fold<int>(0, (sum, b) => sum + b.text!.text.runes.length) <=
+                  80;
+        }) &&
+        {
+              for (final g in media)
+                for (final id in g) source.blockById(id)!.extras['sectionId'],
+            }.length ==
+            1;
+    if ((pageIntent == 'comparison' || shortCaptionPeers) && media.length > 1) {
       for (var i = 0; i + 1 < media.length; i++) {
         final a =
             rects[media[i].firstWhere(

@@ -541,7 +541,10 @@ abstract final class SemanticComposer {
           lines = m.lineCount;
           font = b.text!.fontSize;
         } else if (b.figure != null) {
-          final maxWidth = media && !side ? width * .6 : trackWidth;
+          // 60% 是整页图片上限，不再对已缩窄的 grid 单元重复打六折。
+          final maxWidth = media && !side
+              ? math.min(width, (policy.pageWidth - 2 * policy.margin) * .6)
+              : trackWidth;
           final size = _figureSize(
             scene,
             b,

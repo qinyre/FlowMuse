@@ -9,7 +9,7 @@ class CompositionPolicy {
     this.tight = false,
   });
 
-  static const version = 'semantic-composition/1';
+  static const version = 'semantic-composition/2';
   final double pageWidth;
   final bool compact;
   final bool tight;

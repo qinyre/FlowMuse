@@ -45,21 +45,22 @@ func TestCompositionNegotiationAndStrictBoundary(t *testing.T) {
 	r.IncludeCompositionHints = true
 	body, _ := json.Marshal(r)
 	for name, raw := range map[string]string{
-		"null hints":        strings.Replace(compositionModel, `"sections":[`, `"unexpected":null,"sections":[`, 1),
-		"null array":        strings.Replace(compositionModel, `"warnings":[]`, `"warnings":null`, 1),
-		"unknown field":     strings.Replace(compositionModel, `"pageIntent":"reading"`, `"pageIntent":"reading","body":"no"`, 1),
-		"null text":         strings.Replace(compositionModel, `"role":"body"`, `"role":"body","text":null`, 1),
-		"old authority":     strings.Replace(compositionModel, `"warnings":[]`, `"warnings":[],"figureTextLinks":[]`, 1),
-		"duplicate member":  strings.Replace(compositionModel, `"textUnitIds":["u-i1","u-i2"]`, `"textUnitIds":["u-i1","u-i1"]`, 1),
-		"interleaved":       strings.Replace(compositionModel, `"textUnitIds":["u-i1","u-i2"]`, `"textUnitIds":["u-i1"]`, 1),
-		"caption as body":   strings.Replace(compositionModel, `"textUnitIds":["u-i1","u-i2"]`, `"textUnitIds":["u-cap"]`, 1),
-		"missing unit":      strings.Replace(compositionModel, `"figureUnitIds":["u-fig"]`, `"figureUnitIds":["missing"]`, 1),
-		"bad confidence":    strings.Replace(compositionModel, `"confidence":0.95`, `"confidence":1.01`, 1),
-		"null confidence":   strings.Replace(compositionModel, `"confidence":0.95`, `"confidence":null`, 1),
-		"section order":     strings.Replace(compositionModel, `"memberUnitIds":["u-i1","u-i2","u-fig","u-cap"]`, `"memberUnitIds":["u-i2","u-i1","u-fig","u-cap"]`, 1),
-		"newline index":     strings.Replace(compositionModel, `"newlineIndexes":[0]`, `"newlineIndexes":[1]`, 1),
-		"newline duplicate": strings.Replace(compositionModel, `"newlineIndexes":[0]`, `"newlineIndexes":[0,0]`, 1),
-		"trailing":          compositionModel + " garbage",
+		"null hints":         strings.Replace(compositionModel, `"sections":[`, `"unexpected":null,"sections":[`, 1),
+		"null array":         strings.Replace(compositionModel, `"warnings":[]`, `"warnings":null`, 1),
+		"unknown field":      strings.Replace(compositionModel, `"pageIntent":"reading"`, `"pageIntent":"reading","body":"no"`, 1),
+		"null text":          strings.Replace(compositionModel, `"role":"body"`, `"role":"body","text":null`, 1),
+		"old authority":      strings.Replace(compositionModel, `"warnings":[]`, `"warnings":[],"figureTextLinks":[]`, 1),
+		"duplicate member":   strings.Replace(compositionModel, `"textUnitIds":["u-i1","u-i2"]`, `"textUnitIds":["u-i1","u-i1"]`, 1),
+		"interleaved":        strings.Replace(compositionModel, `"textUnitIds":["u-i1","u-i2"]`, `"textUnitIds":["u-i1"]`, 1),
+		"caption as body":    strings.Replace(compositionModel, `"textUnitIds":["u-i1","u-i2"]`, `"textUnitIds":["u-cap"]`, 1),
+		"missing unit":       strings.Replace(compositionModel, `"figureUnitIds":["u-fig"]`, `"figureUnitIds":["missing"]`, 1),
+		"bad confidence":     strings.Replace(compositionModel, `"confidence":0.95`, `"confidence":1.01`, 1),
+		"null confidence":    strings.Replace(compositionModel, `"confidence":0.95`, `"confidence":null`, 1),
+		"caption only group": strings.Replace(compositionModel, `"textUnitIds":["u-i1","u-i2"]`, `"textUnitIds":[]`, 1),
+		"section order":      strings.Replace(compositionModel, `"memberUnitIds":["u-i1","u-i2","u-fig","u-cap"]`, `"memberUnitIds":["u-i2","u-i1","u-fig","u-cap"]`, 1),
+		"newline index":      strings.Replace(compositionModel, `"newlineIndexes":[0]`, `"newlineIndexes":[1]`, 1),
+		"newline duplicate":  strings.Replace(compositionModel, `"newlineIndexes":[0]`, `"newlineIndexes":[0,0]`, 1),
+		"trailing":           compositionModel + " garbage",
 	} {
 		t.Run(name, func(t *testing.T) {
 			rec, parsed := post(t, NewRecognitionHandler(&fakeProvider{responses: []string{raw}}, DefaultLimits()), string(body))
@@ -74,6 +75,14 @@ func TestCompositionNegotiationAndStrictBoundary(t *testing.T) {
 	}
 	if _, err := DecodeRecognitionRequest([]byte(strings.Replace(string(body), `"includeCompositionHints":true`, `"includeCompositionHints":null`, 1))); err == nil {
 		t.Fatal("null能力未拒绝")
+	}
+}
+
+func TestCompositionCaptionOnlyPrompt(t *testing.T) {
+	for _, instruction := range []string{"先独立辨认", "说明放错位置", "mediaGroups 必须为 []", "textUnitIds:[]"} {
+		if !strings.Contains(compositionHintPrompt, instruction) {
+			t.Fatalf("缺少图像独立辨认或图注排他规则: %s", instruction)
+		}
 	}
 }
 

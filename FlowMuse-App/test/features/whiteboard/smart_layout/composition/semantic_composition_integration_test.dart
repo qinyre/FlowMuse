@@ -114,12 +114,38 @@ void main() {
         }
       }
       if (page.alreadyGood) expect(round.recommendation!.recommended, isFalse);
+      if (page == effectPages.first) {
+        expect(
+          round.top.first.diversityKey,
+          'peerGrid',
+          reason: '短同级图注即使 pageIntent=reading 也应获得合理并列排序',
+        );
+      }
       debugPrint(
         'EFFECT ${page.name} top=${round.top.first.diversityKey} '
         'recommend=${round.recommendation!.recommended} delta=${round.recommendation!.improvement} '
         'scores=${round.top.map((c) => '${c.diversityKey}:${c.score.score.toStringAsFixed(4)}').join(',')}',
       );
       if (_export) {
+        // 同一 fixture 可导入实机，避免手工重建出另一份样例。
+        await File(
+          'build/semantic-composition-evidence/${page.name}.excalidraw',
+        ).writeAsString(
+          ExcalidrawJsonCodec.serialize(
+            MarkdrawDocument(
+              settings: CanvasSettings(name: 'V3验收-${page.name}'),
+              sections: [
+                SketchSection([
+                  for (final e in f.scene.activeElements)
+                    e is TextElement
+                        ? e.copyWithText(fontFamily: 'Excalifont')
+                        : e,
+                ]),
+              ],
+              files: f.scene.files,
+            ),
+          ),
+        );
         final renderer = DraftSceneRenderer();
         final original = await renderer.render(
           scene: f.scene,
@@ -285,6 +311,14 @@ void main() {
     );
     final grid = layouts.singleWhere((l) => l.family == 'peerGrid');
     expect(
+      grid.placed.singleWhere((p) => p.blockId == 'b-image-a').rect.width,
+      closeTo(
+        (_page.width - 2 * grid.policy.margin - grid.policy.groupGap) / 2,
+        .01,
+      ),
+      reason: '并列单元已限宽，图片不应再按局部宽度打六折',
+    );
+    expect(
       grid.placed.singleWhere((p) => p.blockId == 'b-image-a').rect.top,
       grid.placed.singleWhere((p) => p.blockId == 'b-image-b').rect.top,
     );
@@ -315,7 +349,7 @@ void main() {
       source: f.assembly,
       page: Bounds.fromLTWH(0, 0, 1024, 1300),
       analyzed: true,
-      pageIntent: 'comparison',
+      pageIntent: 'reading',
     );
     final originalBounds = ctx.boxes(best.snapshot, const {});
     final unchanged = ctx.calculate(
@@ -1203,7 +1237,7 @@ Future<GateRoundResult> _gate(
       f.frame.height,
     ),
     analyzed: true,
-    pageIntent: 'comparison',
+    pageIntent: 'reading',
   ),
 );
 
