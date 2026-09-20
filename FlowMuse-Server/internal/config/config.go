@@ -82,7 +82,7 @@ func Load() (Config, error) {
 		LayoutV3BaseURL: env("FLOWMUSE_LAYOUT_V3_BASE_URL", ""),
 		LayoutV3APIKey:  envFirst("FLOWMUSE_LAYOUT_V3_API_KEY", "ARK_API_KEY"),
 		LayoutV3Model:   env("FLOWMUSE_LAYOUT_V3_MODEL", ""),
-		LayoutV3Timeout: envIntSeconds("FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS", 60),
+		LayoutV3Timeout: envIntSeconds("FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS", 120),
 	}
 	cfg.S3AccessKeyID = os.Getenv("FLOWMUSE_S3_ACCESS_KEY_ID")
 	cfg.S3SecretAccessKey = os.Getenv("FLOWMUSE_S3_SECRET_ACCESS_KEY")

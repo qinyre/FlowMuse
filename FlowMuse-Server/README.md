@@ -85,6 +85,14 @@ curl -i http://127.0.0.1:48931/health
 
 客户端协作地址在应用侧配置为 `http://124.221.68.239:48931`，后端本身无需为此额外启动代理。
 
+### V3 识别超时与耗时排查
+
+`/api/ink/smart-layout/recognize/v3` 使用独立的 `FLOWMUSE_LAYOUT_V3_BASE_URL`、`FLOWMUSE_LAYOUT_V3_API_KEY`、`FLOWMUSE_LAYOUT_V3_MODEL` 配置，不改变旧识别链。`FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS` 是整数秒，默认 `120`，现已接入生产 handler；显式设为 `60` 就会在 60 秒截止，调整后需重启服务。
+
+配套客户端的单次上限为 130 秒，整次识别上限为 180 秒；后续请求取单次上限与剩余预算的较小值。超时不自动重做，快速网络失败仅在预算足够时重试一次。只更新服务器不能修复旧客户端写死的 45 秒截止，需要同时更新 App。增大时限是避免半途丢弃，不代表模型推理本身变快。
+
+后端 `[recognition-v3]` 短日志记录 `stage / regions / units / request_bytes / prepare_ms / recognition_ms / ok`：`prepare_ms` 包括接收请求和入站校验；`recognition_ms` 包括模型调用及结果解析，不等同于纯推理时间，也不包含响应发送。客户端同前缀记录阶段耗时、请求规模、请求等待耗时和调用次数；不打印完整图片 Base64 或识别正文。真实端到端收益仍需在更新后的设备与服务器上实测。
+
 ## 生产环境注意事项
 
 - 云防火墙/安全组仅向客户端开放 `48931`；不要对公网开放 `5432`、`9000`、`9001`、`1025`、`8025`。

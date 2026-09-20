@@ -116,6 +116,15 @@ func main() {
 		cfg.AITimeout+10*time.Second,
 		smartLayouter,
 	).WithVisionLayouter(smartLayouter).Register(mux)
+	registerLayoutRecognitionV3(mux, cfg)
+
+	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)
+	if err := http.ListenAndServe(cfg.Addr, withCORS(mux, cfg.AllowedOrigins)); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func registerLayoutRecognitionV3(mux *http.ServeMux, cfg config.Config) {
 	// 独立识别链路（recognize/v3）：配置缺失时 provider 为 nil，
 	// 路由仍注册、返回 503 unconfigured；旧通道初始化与注册不动。
 	layoutV3Provider := layoutrecognitionv3.NewOpenAICompatProvider(
@@ -123,18 +132,15 @@ func main() {
 		cfg.LayoutV3APIKey,
 		cfg.LayoutV3Model,
 	)
+	limits := layoutrecognitionv3.DefaultLimits()
+	limits.ProviderTimeout = cfg.LayoutV3Timeout
 	layoutrecognitionv3.RegisterRecognitionV3(
 		mux,
 		layoutrecognitionv3.NewRecognitionHandler(
 			layoutV3Provider,
-			layoutrecognitionv3.DefaultLimits(),
+			limits,
 		),
 	)
-
-	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)
-	if err := http.ListenAndServe(cfg.Addr, withCORS(mux, cfg.AllowedOrigins)); err != nil {
-		log.Fatal(err)
-	}
 }
 
 func socketAllowedOrigins(origins []string) any {

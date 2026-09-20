@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 // RecognitionHandler 是 recognize/v3 端点处理器。
@@ -54,6 +55,7 @@ func RegisterRecognitionV3(mux *http.ServeMux, handler *RecognitionHandler) {
 }
 
 func (h *RecognitionHandler) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeRecognitionError(w, http.StatusMethodNotAllowed,
@@ -95,7 +97,13 @@ func (h *RecognitionHandler) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	prepared := time.Since(started)
+	recognitionStarted := time.Now()
 	response, pErr := h.dispatch(r, request)
+	// 只记阶段和规模，不打印请求正文、图片或模型原文。
+	log.Printf("[recognition-v3] stage=%s regions=%d units=%d request_bytes=%d prepare_ms=%d recognition_ms=%d ok=%t",
+		request.Stage, len(request.Regions), len(request.Units), len(body),
+		prepared.Milliseconds(), time.Since(recognitionStarted).Milliseconds(), pErr == nil)
 	if pErr != nil {
 		status := http.StatusBadGateway
 		switch pErr.Code {

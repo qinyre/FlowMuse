@@ -1,5 +1,6 @@
 library;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:convert';
 import 'dart:async';
 import 'dart:math' as math;
@@ -310,6 +311,7 @@ class RecognitionPipeline {
   SmartLayoutCancellationToken? _cancelToken;
   RecognitionBudget _budget = const RecognitionBudget();
   final Stopwatch _clock = Stopwatch();
+  int _stateStartedMs = 0;
   RegionAssetBuilder? _renderBuilder;
   bool get _budgetExpired => _clock.elapsed >= _budget.totalTimeout;
   final Map<String, RecognitionResponse> _responseCache = {};
@@ -340,6 +342,14 @@ class RecognitionPipeline {
   }
 
   void _transition(RecognitionPipelineState next) {
+    final elapsed = _clock.elapsedMilliseconds;
+    if (_state != RecognitionPipelineState.idle) {
+      debugPrint(
+        '[FlowMuseCreateNote][recognition-v3] phase=${_state.name} '
+        'elapsed_ms=${elapsed - _stateStartedMs}',
+      );
+    }
+    _stateStartedMs = elapsed;
     _state = next;
     _stateHistory.add(next);
     onStateChanged?.call(next);
@@ -382,6 +392,10 @@ class RecognitionPipeline {
     } finally {
       deadline.cancel();
       _clock.stop();
+      debugPrint(
+        '[FlowMuseCreateNote][recognition-v3] total_ms=${_clock.elapsedMilliseconds} '
+        'model_calls=${_budget.consumedModelCalls}',
+      );
     }
   }
 
@@ -925,6 +939,7 @@ class RecognitionPipeline {
           bearerToken: bearerToken,
           cancelToken: _cancelToken,
           remainingBudget: _remaining(stopwatch),
+          perRequestTimeout: _budget.perRequestTimeout,
         );
         _checkCancelled();
         if (_budgetExpired) return null;
@@ -935,19 +950,10 @@ class RecognitionPipeline {
           if (_budgetExpired && !_cancelRequested) return null;
           throw RecognitionCancelledException(null);
         }
-        final canRetry =
-            error.retryable &&
-            attempts < _budget.retryPerRequest &&
-            error.code != 'invalidProviderResponse' &&
-            error.kind != RecognitionExceptionKind.invalidResponse &&
-            error.kind != RecognitionExceptionKind.invalidRequest;
-        if (!canRetry) {
+        if (!_canRetry(error, attempts)) {
           return null;
         }
         attempts++;
-        if (!_budget.canSpendModelCall) {
-          return null;
-        }
       }
     }
   }
@@ -980,6 +986,7 @@ class RecognitionPipeline {
           bearerToken: bearerToken,
           cancelToken: _cancelToken,
           remainingBudget: _remaining(stopwatch),
+          perRequestTimeout: _budget.perRequestTimeout,
         );
         _checkCancelled();
         if (_budgetExpired) return null;
@@ -990,21 +997,25 @@ class RecognitionPipeline {
           if (_budgetExpired && !_cancelRequested) return null;
           throw RecognitionCancelledException(null);
         }
-        final canRetry =
-            error.retryable &&
-            attempts < _budget.retryPerRequest &&
-            error.kind != RecognitionExceptionKind.invalidResponse &&
-            error.kind != RecognitionExceptionKind.invalidRequest;
-        if (!canRetry) {
+        if (!_canRetry(error, attempts)) {
           return null;
         }
         attempts++;
-        if (!_budget.canSpendModelCall) {
-          return null;
-        }
       }
     }
   }
+
+  /// 初读、复核和结构共用：慢请求超时不重做；快速故障仅在剩余预算
+  /// 足够容纳一次完整尝试时重试，避免临近总期限再次启动模型。
+  bool _canRetry(RecognitionException error, int attempts) =>
+      error.retryable &&
+      error.code != 'providerTimeout' &&
+      error.code != 'invalidProviderResponse' &&
+      error.kind != RecognitionExceptionKind.invalidResponse &&
+      error.kind != RecognitionExceptionKind.invalidRequest &&
+      attempts < _budget.retryPerRequest &&
+      _budget.canSpendModelCall &&
+      _remaining(_clock) >= _budget.perRequestTimeout;
 
   RecognitionReadRequest _buildReadRequest(
     RecognitionCapture capture,

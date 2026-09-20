@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -37,7 +38,7 @@ void main() {
   Map<String, Object?> requestBodyOf(String body) =>
       jsonDecode(body) as Map<String, Object?>;
 
-  test('成功路径：回填外壳响应解析为 batch 响应；readTimeout=min(45s,剩余)', () async {
+  test('成功路径：回填外壳响应解析为 batch 响应；默认请求上限 130s', () async {
     final transport = FakeRecognitionTransport(
       responder: (body) async =>
           buildBatchResponseBody(requestBodyOf(body), confidence: 0.95),
@@ -50,14 +51,14 @@ void main() {
     );
     final response = await repository.send(
       requestOf(),
-      remainingBudget: const Duration(seconds: 120),
+      remainingBudget: const Duration(seconds: 180),
     );
     expect(response, isA<RecognitionBatchResponse>());
     final batch = response as RecognitionBatchResponse;
     expect(batch.regions.single.status, RecognitionRegionStatus.recognized);
     expect(batch.missingRegionIds, isEmpty);
     final recorded = transport.requests.single;
-    expect(recorded.readTimeoutMs, 45000, reason: '剩余 120s > 45s → 取 45s');
+    expect(recorded.readTimeoutMs, 130000, reason: '不再在 45s 掐断慢识别');
     expect(
       recorded.url,
       'https://server.test/api/ink/smart-layout/recognize/v3',
@@ -80,6 +81,47 @@ void main() {
       remainingBudget: const Duration(seconds: 3),
     );
     expect(transport.requests.single.readTimeoutMs, 3000);
+  });
+
+  test('perRequestTimeout 注入值实际传给传输层', () async {
+    final transport = FakeRecognitionTransport(
+      responder: (body) async => buildBatchResponseBody(requestBodyOf(body)),
+    );
+    final repository = RecognitionRepository(
+      gateway: SmartLayoutHttpGateway(
+        serverUri: Uri.parse('https://server.test'),
+        post: transport.post,
+      ),
+    );
+    await repository.send(
+      requestOf(),
+      remainingBudget: const Duration(seconds: 180),
+      perRequestTimeout: const Duration(seconds: 75),
+    );
+    expect(transport.requests.single.readTimeoutMs, 75000);
+  });
+
+  test('客户端超时保留异常类型，不作为可重试连接错误', () async {
+    final transport = FakeRecognitionTransport(
+      errorFactory: (_) async => TimeoutException('read timeout'),
+    );
+    final repository = RecognitionRepository(
+      gateway: SmartLayoutHttpGateway(
+        serverUri: Uri.parse('https://server.test'),
+        post: transport.post,
+      ),
+    );
+    await expectLater(
+      repository.send(
+        requestOf(),
+        remainingBudget: const Duration(seconds: 180),
+      ),
+      throwsA(
+        isA<RecognitionException>()
+            .having((e) => e.code, 'code', 'requestTimeout')
+            .having((e) => e.retryable, 'retryable', false),
+      ),
+    );
   });
 
   test('剩余预算为零：不发出请求', () async {
