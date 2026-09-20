@@ -51,12 +51,16 @@ class DraftRenderSnapshot {
   DraftRenderSnapshot({
     required this.image,
     required this.pixelSize,
+    required this.viewport,
     required this.layers,
     required this.missingFileIds,
   });
 
   final ui.Image image;
   final Size pixelSize;
+
+  /// 场景坐标到位图像素的真实变换，供预览定位；不改变渲染或门禁。
+  final ViewportState viewport;
   final List<DraftRenderLayer> layers;
   final List<String> missingFileIds;
 
@@ -203,6 +207,7 @@ class DraftSceneRenderer {
         image: rasterized,
         pixelSize: pixelSize,
         layers: List.unmodifiable(layers),
+        viewport: viewport,
         missingFileIds: List.unmodifiable(missing),
       );
     } finally {
