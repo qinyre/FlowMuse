@@ -4,6 +4,7 @@ import '../design/smart_layout_design_tokens.dart';
 
 import '../design/text_measure_adapter.dart';
 import '../semantics/semantic_document.dart';
+import '../semantics/semantic_composition.dart';
 import '../snapshot/layout_page_snapshot.dart';
 import 'layout_block.dart';
 
@@ -97,6 +98,8 @@ class LayoutBlockAssembler {
     required TextMeasureAdapter measure,
     SmartLayoutDesignTokens tokens = SmartLayoutDesignTokens.v1,
   }) {
+    final composition = SemanticComposition.of(document);
+    composition?.validate(document);
     final objectById = {for (final o in snapshot.objects) o.sourceId: o};
     final preservedSet = document.preservedSourceIds.toSet();
     final consumedSet = document.consumedSourceIds.toSet();
@@ -183,6 +186,55 @@ class LayoutBlockAssembler {
       }
     }
 
+    if (composition != null) {
+      for (var i = 0; i < blocks.length; i++) {
+        final b = blocks[i];
+        final section = composition.hints.sections
+            .where(
+              (s) => s.headingUnitId == b.id || s.memberUnitIds.contains(b.id),
+            )
+            .firstOrNull;
+        final soft = composition.hints.softLineBreaks
+            .where((s) => s.unitId == b.id)
+            .firstOrNull;
+        final raw = b.text;
+        final projection = raw == null
+            ? null
+            : DisplayTextProjection.create(
+                rawText: raw.text,
+                origin: b.textOrigin ?? LayoutTextOrigin.typed,
+                kind: b.kind,
+                newlineIndexes: soft?.newlineIndexes ?? const [],
+                confidence: soft?.confidence ?? 0,
+              );
+        blocks[i] = LayoutBlock(
+          id: b.id,
+          kind: b.kind,
+          sourceRefs: b.sourceRefs,
+          orderIndex: b.orderIndex,
+          keepTogether: b.keepTogether,
+          textOrigin: b.textOrigin,
+          text: raw == null
+              ? null
+              : TextBlockSpec(
+                  text: projection!.displayText,
+                  fontFamily: raw.fontFamily,
+                  fontSize: raw.fontSize,
+                  lineHeight: raw.lineHeight,
+                  direction: raw.direction,
+                  projection: projection,
+                ),
+          figure: b.figure,
+          measuredIntrinsic: b.measuredIntrinsic,
+          extras: {
+            ...b.extras,
+            if (section != null) 'sectionId': section.sectionId,
+            if (section?.headingUnitId == b.id) 'sectionHeading': true,
+          },
+        );
+      }
+    }
+
     // protected：快照锁定障碍（绕置输入；ledger 必须已 preserved）。
     for (final object in snapshot.objects) {
       if (object.mobility != SnapshotMobility.protectedObstacle) continue;
@@ -230,11 +282,30 @@ class LayoutBlockAssembler {
     final byId = {for (final block in blocks) block.id: block};
     final blockIds = [for (final b in blocks) b.id];
     final figureLinkedLists = <String>{};
+    if (composition != null) {
+      for (final group in composition.hints.mediaGroups) {
+        final ids = {...group.figureUnitIds, ...group.textUnitIds};
+        final ordered = blocks.where((b) => ids.contains(b.id)).toList();
+        for (var i = 1; i < ordered.length; i++) {
+          relationships.add(
+            BlockRelationship(
+              kind: BlockRelationKind.keepWith,
+              fromBlockId: ordered[i - 1].id,
+              toBlockId: ordered[i].id,
+            ),
+          );
+        }
+        figureLinkedLists.addAll(
+          ordered.where((b) => b.kind == LayoutBlockKind.list).map((b) => b.id),
+        );
+      }
+    }
     for (var i = 0; i < blocks.length; i++) {
       final block = blocks[i];
       // 正文图文关联与 caption 分开；保留/缺失图片不牵动正文，也不换绑。
       final relatedFigure = block.extras['relatedFigure'];
-      if ((block.kind == LayoutBlockKind.paragraph ||
+      if (composition == null &&
+          (block.kind == LayoutBlockKind.paragraph ||
               block.kind == LayoutBlockKind.list) &&
           relatedFigure is String) {
         final figure = byId[relatedFigure];
@@ -256,7 +327,11 @@ class LayoutBlockAssembler {
         lastFigureId = block.id;
       } else if (block.kind == LayoutBlockKind.caption) {
         final explicit = block.extras['captionOf'];
-        final target = explicit is String ? explicit : lastFigureId;
+        final target = explicit is String
+            ? explicit
+            : composition == null
+            ? lastFigureId
+            : null;
         if (target != null) {
           final figure = byId[target];
           if (figure == null) {

@@ -225,10 +225,11 @@ class RecognitionCorrectionContext {
     required Set<String> beforeRegionIds,
     required Set<String> afterRegionIds,
     required Set<String> strokeSourceIds,
+    bool invalidateAssets = true,
   }) {
-    final invalidated = session.assetIndex.invalidateForSources(
-      strokeSourceIds,
-    );
+    final invalidated = invalidateAssets
+        ? session.assetIndex.invalidateForSources(strokeSourceIds)
+        : <String>{};
     return RecognitionCorrectionContext._(
       generation: generation,
       operationId: operationId,

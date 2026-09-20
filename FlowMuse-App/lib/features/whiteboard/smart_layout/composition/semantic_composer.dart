@@ -243,7 +243,9 @@ abstract final class SemanticComposer {
           grid &&
           _isMedia(unit) &&
           i + 1 < units.length &&
-          _isMedia(units[i + 1]);
+          _isMedia(units[i + 1]) &&
+          unit.first.extras['sectionId'] ==
+              units[i + 1].first.extras['sectionId'];
       members.add(
         _local(
           scene,
@@ -273,6 +275,20 @@ abstract final class SemanticComposer {
           (g) => g.placed.where((p) => p.lineCount > 8).isNotEmpty,
         )) {
           throw _CannotFit(members.expand((g) => g.ids).toSet());
+        }
+        // 同行图顶对齐，前置说明底对齐；整组平移，不拉大图注内间距。
+        final imageTops = [
+          for (final g in members)
+            g.placed
+                .firstWhere(
+                  (p) => assembly.blockById(p.blockId)?.figure != null,
+                )
+                .rect
+                .top,
+        ];
+        final target = imageTops.reduce(math.max);
+        for (var m = 0; m < members.length; m++) {
+          members[m] = members[m].shiftDown(target - imageTops[m]);
         }
       }
       rows.add(members);
@@ -755,6 +771,30 @@ class _LocalGroup {
   final List<PlacedBlock> placed;
   final double width;
   final double height;
+
+  _LocalGroup shiftDown(double delta) => _LocalGroup(
+    ids: ids,
+    kind: kind,
+    tracks: tracks,
+    width: width,
+    height: height + delta,
+    placed: [
+      for (final p in placed)
+        PlacedBlock(
+          blockId: p.blockId,
+          rect: LayoutRect(
+            left: p.rect.left,
+            top: p.rect.top + delta,
+            width: p.rect.width,
+            height: p.rect.height,
+          ),
+          columnIndex: p.columnIndex,
+          lineCount: p.lineCount,
+          appliedFontSize: p.appliedFontSize,
+          shrunk: p.shrunk,
+        ),
+    ],
+  );
 }
 
 class _CannotFit implements Exception {

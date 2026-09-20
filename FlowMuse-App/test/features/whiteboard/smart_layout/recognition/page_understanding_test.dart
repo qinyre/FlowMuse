@@ -33,6 +33,85 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
 
+  test('一文两图只物化一次，关系纠错同轮重排且不重调模型', () async {
+    final controller = MarkdrawController()..loadScene(await _scene());
+    addTearDown(controller.dispose);
+    final transport = FakeRecognitionTransport(
+      responder: (body) async {
+        final r =
+            RecognitionRequest.fromJson(jsonDecode(body))
+                as RecognitionStructureRequest;
+        final response = _response(r).toJson();
+        response['readingOrder'] = [
+          'native:title',
+          'native:red-image',
+          'native:red-text',
+          'native:blue-image',
+          'native:blue-text',
+          'native:unrelated',
+        ];
+        response['compositionHints'] = const RecognitionCompositionHints(
+          pageIntent: 'comparison',
+          sections: [],
+          mediaGroups: [
+            RecognitionMediaGroup(
+              groupId: 'shared',
+              figureUnitIds: ['native:red-image', 'native:blue-image'],
+              textUnitIds: ['native:red-text'],
+              confidence: 1,
+            ),
+          ],
+          softLineBreaks: [],
+        ).toJson();
+        return (200, jsonEncode(response));
+      },
+    );
+    final scope = SmartLayoutRealSessionScope.build(
+      controller: controller,
+      serverUri: Uri.parse('http://test.invalid'),
+      pageId: 'page-1',
+      post: transport.post,
+    );
+    addTearDown(scope.dispose);
+    final ticket = scope.session.beginOperation();
+    final result =
+        await scope.dependencies.analysisRunner!(ticket)
+            as SmartLayoutRecognitionSucceeded;
+    final candidates = await scope.dependencies.candidateChainFromDocument!(
+      result,
+      ticket,
+    );
+    expect(candidates, isNotEmpty);
+    for (final c in candidates) {
+      expect(
+        c.reduced.scene.activeElements.whereType<TextElement>().where(
+          (e) => e.text == _redText,
+        ),
+        hasLength(1),
+      );
+      expect(
+        c.reduced.scene.activeElements.whereType<ImageElement>(),
+        hasLength(2),
+      );
+      c.dispose();
+    }
+    final affected = scope.dependencies.correctionHandler(
+      const RegionCorrectionIntent(
+        kind: 'relation',
+        subjectIds: ['native:red-text'],
+        detail: '[]',
+      ),
+    );
+    expect(affected.renderAssetKeys, isEmpty);
+    expect(affected.cropKeys, isEmpty);
+    final rerun = await scope.dependencies.rerunChain(affected.strokeSourceIds);
+    expect(rerun, isNotEmpty);
+    for (final c in rerun) {
+      c.dispose();
+    }
+    expect(transport.requests, hasLength(1));
+  });
+
   test('生产捕获：缺归属图片进入同一识别与布局范围，他页保留且纠错不丢图', () async {
     var scene = await _scene();
     final image = scene.activeElements.singleWhere(
@@ -159,7 +238,8 @@ void main() {
         final request =
             RecognitionRequest.fromJson(jsonDecode(body))
                 as RecognitionStructureRequest;
-        expect(request.includeFigureTextLinks, isTrue);
+        expect(request.includeCompositionHints, isTrue);
+        expect(request.includeFigureTextLinks, isFalse);
         expect(
           request.units.singleWhere((u) => u.unitId == 'native:red-text').text,
           _redText,
@@ -202,7 +282,8 @@ void main() {
     expect(transport.requests, hasLength(1), reason: '只做一次整页结构请求；原生文字不 OCR');
     final structure = result.structureResult as StructureResult;
     expect(structure.roles['native:title'], 'title');
-    expect(structure.figureTextLinks, hasLength(2), reason: '低置信/无关段落不硬配');
+    expect(structure.compositionHints!.mediaGroups, hasLength(2));
+    expect(structure.figureTextLinks, isEmpty, reason: '不保留两套关系权威');
 
     const adapter = RecognitionSemanticAdapter();
     final settled = adapter.settle(result);
@@ -360,7 +441,12 @@ void main() {
         },
       ),
     );
-    final request = captured!;
+    final request =
+        RecognitionRequest.fromJson(
+              {...captured!.toJson(), 'includeFigureTextLinks': true}
+                ..remove('includeCompositionHints'),
+            )
+            as RecognitionStructureRequest;
     final valid = _response(request).toJson();
     final link = {
       'textUnitId': 'native:red-text',
@@ -561,7 +647,22 @@ RecognitionStructureResponse _response(
   listGroups: const [],
   captions: const [],
   warnings: const [],
-  figureTextLinks: links
+  compositionHints: r.includeCompositionHints
+      ? RecognitionCompositionHints(
+          pageIntent: 'comparison',
+          mediaGroups: [
+            if (links)
+              for (final name in ['red', 'blue'])
+                RecognitionMediaGroup(
+                  groupId: 'g-$name',
+                  figureUnitIds: ['native:$name-image'],
+                  textUnitIds: ['native:$name-text'],
+                  confidence: .95,
+                ),
+          ],
+        )
+      : null,
+  figureTextLinks: links && !r.includeCompositionHints
       ? const [
           RecognitionFigureTextLink(
             textUnitId: 'native:red-text',

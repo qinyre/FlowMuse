@@ -93,7 +93,9 @@ class DisplayTextProjection {
   }) {
     if (newlineIndexes.isEmpty ||
         origin != LayoutTextOrigin.transcribed ||
-        (kind != LayoutBlockKind.paragraph && kind != LayoutBlockKind.title) ||
+        (kind != LayoutBlockKind.paragraph &&
+            kind != LayoutBlockKind.title &&
+            kind != LayoutBlockKind.caption) ||
         !confidence.isFinite ||
         confidence < 0.9 ||
         confidence > 1) {

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/commit/validated_candidate_commit_gateway.dart';
@@ -47,6 +48,33 @@ void main() {
     }
     await fonts.load();
   });
+
+  if (const bool.fromEnvironment('RUN_LAYOUT_BENCHMARK')) {
+    test('同机同字体本地候选十次基准（不含网络/样例构建）', () async {
+      final f = await _fixture();
+      final times = <int>[];
+      for (var i = 0; i < 11; i++) {
+        final watch = Stopwatch()..start();
+        final layouts = await SemanticComposer.generate(
+          scene: f.scene,
+          assembly: f.assembly,
+          pageFrame: _page,
+          measure: TextMeasureAdapter(),
+        );
+        final round = await _gate(f, layouts);
+        watch.stop();
+        expect(round.top, isNotEmpty);
+        for (final c in round.top) {
+          c.dispose();
+        }
+        if (i > 0) times.add(watch.elapsedMicroseconds);
+      }
+      final sorted = [...times]..sort();
+      debugPrint(
+        'COMPOSITION_BENCH us=$times median_us=${(sorted[4] + sorted[5]) / 2} max_us=${sorted.last} font=$_font',
+      );
+    });
+  }
 
   test('双图双说明：三种真实布局、确定性、最终门禁、应用及撤销', () async {
     final source = await _fixture();
@@ -150,6 +178,30 @@ void main() {
       _visualPayload(controller.currentScene),
       _visualPayload(candidate.reduced.scene),
     );
+  });
+
+  test('不同长度前置说明：同级图片顶对齐且真实门禁通过', () async {
+    final f = await _fixture(textFirst: true);
+    final layouts = await SemanticComposer.generate(
+      scene: f.scene,
+      assembly: f.assembly,
+      pageFrame: _page,
+      measure: TextMeasureAdapter(),
+    );
+    final grid = layouts.singleWhere((l) => l.family == 'peerGrid');
+    expect(
+      grid.placed.singleWhere((p) => p.blockId == 'b-image-a').rect.top,
+      grid.placed.singleWhere((p) => p.blockId == 'b-image-b').rect.top,
+    );
+    final round = await _gate(f, [grid]);
+    expect(
+      round.top,
+      hasLength(1),
+      reason: '${round.rejections.map((r) => r.reasonCodes)}',
+    );
+    for (final c in round.top) {
+      c.dispose();
+    }
   });
 
   test('手写转写与图组共用真实物化，不丢正文、crop、强调色', () async {

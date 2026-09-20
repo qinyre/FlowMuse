@@ -12,6 +12,8 @@ import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_do
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document_assembler.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/source_coverage_ledger.dart';
 import '../geometry/smart_layout_scene_transformer.dart';
+import '../semantics/semantic_composition.dart';
+import '../snapshot/deterministic_hash.dart';
 
 /// R6 语义适配器（spec §8）：识别会话产物 → [SemanticAssembly]。
 ///
@@ -167,6 +169,43 @@ class RecognitionSemanticAdapter {
         _sweepReason(result, elementById, sourceId),
       );
     }
+    // 关联组件中有锁定/不确定源时整组保留，不搬走其说明造成假配对。
+    final sourceByUnit = <String, List<String>>{
+      for (final u in structure.units)
+        u.unitId: u.kind == RecognitionUnitKind.ink
+            ? _recordOf(result, _regionIdOfInkUnit(u.unitId)!).targetSourceIds
+            : u.kind == RecognitionUnitKind.preserved
+            ? _sourcesOfPreservedUnit(result, u, elementById)
+            : [_sourceIdOfNativeUnit(u.unitId)],
+    };
+    final media = _compositionHints(structure).mediaGroups;
+    final components = <Set<String>>[
+      for (final g in media) {...g.figureUnitIds, ...g.textUnitIds},
+      for (final c in structure.captions) {c.captionUnitId, c.targetUnitId},
+    ];
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final component in components) {
+        final sources = component
+            .expand((id) => sourceByUnit[id] ?? <String>[])
+            .toSet();
+        if (!sources.any(
+          (id) => ledger.entryOf(id).status == SourceLedgerStatus.preserved,
+        )) {
+          continue;
+        }
+        for (final id in sources) {
+          if (ledger.entryOf(id).status == SourceLedgerStatus.consumed) {
+            ledger = ledger.downgradeToPreserved(
+              id,
+              SourcePreserveReason.contextOnly,
+            );
+            changed = true;
+          }
+        }
+      }
+    }
     ledger.assertAllSettled();
     return result.copyWith(ledger: ledger);
   }
@@ -183,7 +222,9 @@ class RecognitionSemanticAdapter {
 
     // 阅读序：修复列表子树连续性（§8.1——同一子树成员在 orderedBlockIds
     // 中连续；本地行带序可能拆散嵌套子树）。
-    final order = _contiguousReadingOrder(structure);
+    final order = structure.compositionHints != null
+        ? structure.readingOrder
+        : _contiguousReadingOrder(structure);
     final orderIndexOf = <String, int>{
       for (var i = 0; i < order.length; i++) order[i]: i,
     };
@@ -198,20 +239,6 @@ class RecognitionSemanticAdapter {
     final captionTargetOf = <String, String>{
       for (final caption in structure.captions)
         caption.captionUnitId: caption.targetUnitId,
-    };
-    final figureTargetOf = <String, String>{
-      for (final link in structure.figureTextLinks)
-        if (link.confidence >= 0.8 &&
-            structure.units.any(
-              (u) =>
-                  u.unitId == link.figureUnitId &&
-                  u.kind == RecognitionUnitKind.figure &&
-                  settled.ledger
-                          .entryOf(_sourceIdOfNativeUnit(u.unitId))
-                          .status ==
-                      SourceLedgerStatus.consumed,
-            ))
-          link.textUnitId: link.figureUnitId,
     };
     final unitIds = {for (final unit in structure.units) unit.unitId};
     for (final entry in captionTargetOf.entries) {
@@ -242,7 +269,6 @@ class RecognitionSemanticAdapter {
           unit,
           groupByMember: groupByMember,
           captionTargetOf: captionTargetOf,
-          figureTargetOf: figureTargetOf,
           orderIndexOf: orderIndexOf,
           elementById: elementById,
           lockedSourceIds: lockedSourceIds,
@@ -270,6 +296,17 @@ class RecognitionSemanticAdapter {
       throw StateError('投影账本未闭合：剩余 ${coverage.pendingCount} 个 pending');
     }
 
+    final hints = _compositionHints(structure);
+    final composition = SemanticComposition(
+      hints: hints,
+      analyzed: structure.usedModel && !structure.modelRejected,
+      textFingerprints: {
+        for (final b in hints.softLineBreaks)
+          b.unitId: fingerprint64(
+            structure.units.firstWhere((u) => u.unitId == b.unitId).text ?? '',
+          ),
+      },
+    ).reconcile(blocks);
     final document = SemanticDocument(
       formatVersion: SemanticDocumentFormat.currentVersion,
       pageId: settled.pageId,
@@ -287,11 +324,61 @@ class RecognitionSemanticAdapter {
       conflicts: const [],
       consumedSourceIds: List.unmodifiable(consumedSorted),
       preservedSourceIds: List.unmodifiable(preservedSorted),
+      extras: {'composition': composition.toJson()},
     );
     if (!document.ledgerConserved) {
       throw StateError('文档 ledger 不守恒');
     }
     return SemanticAssembly(document: document, ledger: coverage);
+  }
+
+  // 旧 wire links 仅在此转换一次；语义文档之后只认 composition 图文组。
+  RecognitionCompositionHints _compositionHints(StructureResult structure) {
+    final supplied = structure.compositionHints;
+    if (supplied != null) {
+      return RecognitionCompositionHints(
+        pageIntent: supplied.pageIntent,
+        sections: supplied.sections,
+        mediaGroups: [
+          for (final g in supplied.mediaGroups)
+            if (g.confidence >= .8)
+              RecognitionMediaGroup(
+                groupId: SemanticComposition.groupId([
+                  ...g.figureUnitIds,
+                  ...g.textUnitIds,
+                ]),
+                figureUnitIds: g.figureUnitIds,
+                textUnitIds: g.textUnitIds,
+                confidence: g.confidence,
+              ),
+        ],
+        softLineBreaks: supplied.softLineBreaks
+            .where((b) => b.confidence >= .9)
+            .toList(),
+      );
+    }
+    final byFigure = <String, List<RecognitionFigureTextLink>>{};
+    for (final link in structure.figureTextLinks) {
+      if (link.confidence >= .8) {
+        byFigure.putIfAbsent(link.figureUnitId, () => []).add(link);
+      }
+    }
+    return RecognitionCompositionHints(
+      mediaGroups: [
+        for (final entry in byFigure.entries)
+          RecognitionMediaGroup(
+            groupId: SemanticComposition.groupId([
+              entry.key,
+              ...entry.value.map((l) => l.textUnitId),
+            ]),
+            figureUnitIds: [entry.key],
+            textUnitIds: entry.value.map((l) => l.textUnitId).toList(),
+            confidence: entry.value
+                .map((l) => l.confidence)
+                .reduce((a, b) => a < b ? a : b),
+          ),
+      ],
+    );
   }
 
   // ---- settle 辅助 ----
@@ -389,6 +476,7 @@ class RecognitionSemanticAdapter {
     if (entry.status == SourceLedgerStatus.consumed && entry.unitId == unitId) {
       return ledger;
     }
+    if (entry.status == SourceLedgerStatus.preserved) return ledger;
     throw StateError(
       '源 $sourceId 终态冲突: '
       '${entry.status.name}${entry.unitId != null ? '(${entry.unitId})' : ''}'
@@ -415,7 +503,6 @@ class RecognitionSemanticAdapter {
     RecognitionUnitInput unit, {
     required Map<String, RecognitionListGroup> groupByMember,
     required Map<String, String> captionTargetOf,
-    required Map<String, String> figureTargetOf,
     required Map<String, int> orderIndexOf,
     required Map<String, Element> elementById,
     required Set<String> lockedSourceIds,
@@ -441,8 +528,8 @@ class RecognitionSemanticAdapter {
         final regionId = _regionIdOfInkUnit(unit.unitId)!;
         final record = _recordOf(result, regionId);
         final outcome = result.regionOutcomes[regionId]!;
-        final transcribed = outcome.text?.trim();
-        if (transcribed != null && transcribed.isNotEmpty) {
+        final transcribed = outcome.text;
+        if (transcribed != null && transcribed.trim().isNotEmpty) {
           extras['transcribedText'] = transcribed;
         }
         sourceIds = List.unmodifiable(record.targetSourceIds);
@@ -477,11 +564,6 @@ class RecognitionSemanticAdapter {
     final captionTarget = captionTargetOf[unit.unitId];
     if (captionTarget != null) {
       extras['captionOf'] = captionTarget;
-    }
-    final figureTarget = figureTargetOf[unit.unitId];
-    if (figureTarget != null &&
-        (role == SemanticRole.body || role == SemanticRole.list)) {
-      extras['relatedFigure'] = figureTarget;
     }
     if (role == SemanticRole.unknown) {
       // 保留块障碍物身份（§8.1：带原始 bounds 进入约束输入）。

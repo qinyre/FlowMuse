@@ -57,6 +57,7 @@ class StructureResult {
     this.modelRejected = false,
     this.conflictedUnitIds = const {},
     this.figureTextLinks = const [],
+    this.compositionHints,
   });
 
   /// 全部 unit（typed/ink/figure/preserved），含本地正文与几何（真值）。
@@ -68,6 +69,7 @@ class StructureResult {
   final List<RecognitionListGroup> listGroups;
   final List<RecognitionCaption> captions;
   final List<RecognitionFigureTextLink> figureTextLinks;
+  final RecognitionCompositionHints? compositionHints;
   final List<String> warnings;
 
   /// 未消解的结构冲突，必须阻止该单元的自动转换。
@@ -146,9 +148,7 @@ class StructureRecovery implements RecognitionStructureRecoverer {
       units: units,
       textFingerprint: _textFingerprintOf(units),
       overviewPngBase64: overview,
-      includeFigureTextLinks:
-          overview != null &&
-          units.any((unit) => unit.kind == RecognitionUnitKind.figure),
+      includeCompositionHints: true,
     );
     final model = await input.sendStructureRequest(request);
     if (model == null) {
@@ -754,6 +754,7 @@ class StructureRecovery implements RecognitionStructureRecoverer {
                 !conflicts.contains(link.figureUnitId))
               link,
       ],
+      compositionHints: model.compositionHints,
       warnings: List.unmodifiable(warnings),
       conflictedUnitIds: Set.unmodifiable(conflicts),
       usedModel: true,

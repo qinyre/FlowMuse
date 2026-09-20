@@ -39,6 +39,7 @@ import '../recognition/semantic_adapter.dart';
 import '../recognition/source_ledger.dart';
 import '../recognition/structure_recovery.dart';
 import '../semantics/semantic_document.dart';
+import '../semantics/semantic_composition.dart';
 import '../semantics/semantic_document_assembler.dart';
 import '../snapshot/layout_page_snapshot.dart';
 import '../snapshot/scene_revision.dart';
@@ -1374,15 +1375,26 @@ class SmartLayoutRealSessionScope {
         .markConsumed(nextDocument.consumedSourceIds)
         .markPreserved(nextDocument.preservedSourceIds);
     _generation++;
+    final changedSources = SemanticRerunScope.resolve([
+      patch,
+    ], document).sourceIds;
+    final affectedStrokes = result.scene.activeElements
+        .whereType<FreedrawElement>()
+        .where((e) => changedSources.contains(e.id.value))
+        .map((e) => e.id.value)
+        .toSet();
+    final affectedRegions = result.regionRecords
+        .where((r) => r.targetSourceIds.any(affectedStrokes.contains))
+        .map((r) => r.regionId)
+        .toSet();
     _pendingCorrectionContext = RecognitionCorrectionContext.capture(
       generation: _generation,
       operationId: 'rec-cor-${++_operationCounter}',
       session: result,
-      beforeRegionIds: const {},
-      afterRegionIds: const {},
-      strokeSourceIds: patch is PreserveSemanticSourcesPatch
-          ? patch.sourceIds.toSet()
-          : const {},
+      beforeRegionIds: affectedRegions,
+      afterRegionIds: affectedRegions,
+      strokeSourceIds: affectedStrokes,
+      invalidateAssets: false,
     );
     _lastRecognition = result.copyWith(
       ledger: nextLedger,
@@ -1392,7 +1404,7 @@ class SmartLayoutRealSessionScope {
     _lastSemantic = SemanticAssembly(document: nextDocument, ledger: coverage);
     _correctedRegionRecords = null;
     return AffectedSourceSet(
-      regionIds: const {},
+      regionIds: Set.unmodifiable(affectedRegions),
       strokeSourceIds: Set.unmodifiable(
         _pendingCorrectionContext!.affected.strokeSourceIds,
       ),
@@ -1508,8 +1520,14 @@ class SmartLayoutRealSessionScope {
             'unknown-block(${intent.subjectIds.single})',
           );
         }
-        final oldRelations = <({String type, String targetBlockId})>[];
-        for (final raw in block.extras['relations'] as List? ?? const []) {
+        final composition = SemanticComposition.of(document);
+        final oldRelations = <({String type, String targetBlockId})>[
+          ...?composition?.relationsOf(block.id),
+        ];
+        for (final raw
+            in composition != null
+                ? const []
+                : block.extras['relations'] as List? ?? const []) {
           final relation = raw as Map<String, Object?>;
           oldRelations.add((
             type: relation['type'] as String,

@@ -155,7 +155,15 @@ abstract final class ReducedSceneMetricsExtractor {
             _relationSatisfied(r, nodeBounds, a.maxGap, const {});
       }
       final anchor = groupBounds[a.id];
-      final follower = groupBounds[b.id];
+      // 跨组 keepWith 接到下一行；图顶对齐时短说明可在行内底对齐。
+      // 行起点仍取真实渲染盒，不用声明的 slot 伪造贴近度。
+      final rowBoxes = [
+        for (final g in compositionGroups)
+          if (g.row == b.row && groupBounds[g.id] != null) groupBounds[g.id]!,
+      ];
+      final follower = rowBoxes.isEmpty
+          ? null
+          : rowBoxes.reduce((x, y) => x.union(y));
       return anchor != null &&
           follower != null &&
           _stacked(anchor, follower, r.maxGap ?? captionGapTolerance);
