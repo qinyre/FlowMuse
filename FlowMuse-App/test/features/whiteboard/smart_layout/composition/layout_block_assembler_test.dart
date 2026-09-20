@@ -29,58 +29,56 @@ void main() {
     SnapshotBounds? intrinsic,
     ImageCrop? crop,
     SnapshotMobility mobility = SnapshotMobility.movable,
-  }) =>
-      SnapshotObject(
-        sourceId: id,
-        kind: 'image',
-        bounds: b(0, 0, 200, 100),
-        visualBounds: b(0, 0, 200, 100),
-        rotation: 0,
-        mobility: mobility,
-        groupIds: const [],
-        frameId: null,
-        bindingRefs: const [],
-        zIndex: 0,
-        memberIds: const [],
-        fileId: fileId,
-        imageCrop: crop,
-        imageIntrinsicSize: intrinsic,
-      );
+  }) => SnapshotObject(
+    sourceId: id,
+    kind: 'image',
+    bounds: b(0, 0, 200, 100),
+    visualBounds: b(0, 0, 200, 100),
+    rotation: 0,
+    mobility: mobility,
+    groupIds: const [],
+    frameId: null,
+    bindingRefs: const [],
+    zIndex: 0,
+    memberIds: const [],
+    fileId: fileId,
+    imageCrop: crop,
+    imageIntrinsicSize: intrinsic,
+  );
 
   SnapshotObject lockedObject(String id) => SnapshotObject(
-        sourceId: id,
-        kind: 'rectangle',
-        bounds: b(500, 500, 40, 30),
-        visualBounds: b(500, 500, 40, 30),
-        rotation: 0,
-        mobility: SnapshotMobility.protectedObstacle,
-        groupIds: const [],
-        frameId: null,
-        bindingRefs: const [],
-        zIndex: 0,
-        memberIds: const [],
-      );
+    sourceId: id,
+    kind: 'rectangle',
+    bounds: b(500, 500, 40, 30),
+    visualBounds: b(500, 500, 40, 30),
+    rotation: 0,
+    mobility: SnapshotMobility.protectedObstacle,
+    groupIds: const [],
+    frameId: null,
+    bindingRefs: const [],
+    zIndex: 0,
+    memberIds: const [],
+  );
 
   SemanticDocument doc({
     required List<SemanticBlock> blocks,
     required List<String> consumed,
     required List<String> preserved,
     List<String>? readingOrder,
-  }) =>
-      SemanticDocument(
-        formatVersion: 1,
-        pageId: 'p1',
-        epoch: 0,
-        revision: 1,
-        fingerprint: 'fp',
-        blocks: blocks,
-        readingOrder: SemanticReadingOrder(
-          orderedBlockIds: readingOrder ?? [for (final x in blocks) x.id],
-        ),
-        conflicts: const [],
-        consumedSourceIds: consumed,
-        preservedSourceIds: preserved,
-      );
+  }) => SemanticDocument(
+    formatVersion: 1,
+    pageId: 'p1',
+    epoch: 0,
+    revision: 1,
+    fingerprint: 'fp',
+    blocks: blocks,
+    readingOrder: SemanticReadingOrder(
+      orderedBlockIds: readingOrder ?? [for (final x in blocks) x.id],
+    ),
+    conflicts: const [],
+    consumedSourceIds: consumed,
+    preservedSourceIds: preserved,
+  );
 
   SemanticBlock sb(
     String id,
@@ -89,16 +87,15 @@ void main() {
     String? text,
     int orderIndex = 0,
     Map<String, Object?> extras = const {},
-  }) =>
-      SemanticBlock(
-        id: id,
-        role: role,
-        sourceIds: sources,
-        orderIndex: orderIndex,
-        confidence: 0.9,
-        text: text,
-        extras: extras,
-      );
+  }) => SemanticBlock(
+    id: id,
+    role: role,
+    sourceIds: sources,
+    orderIndex: orderIndex,
+    confidence: 0.9,
+    text: text,
+    extras: extras,
+  );
 
   final revision = SceneRevision(
     epoch: 0,
@@ -110,22 +107,19 @@ void main() {
     List<SnapshotObject> objects = const [],
     List<SnapshotRenderAsset> assets = const [],
     List<String> allSourceIds = const [],
-  }) =>
-      LayoutPageSnapshot(
-        pageId: 'p1',
-        pageBounds: null,
-        contentBounds: null,
-        sceneRevision: revision,
-        objects: objects,
-        inkStrokes: const [],
-        renderAssets: assets,
-        sourceCoverage: SourceCoverageLedger.pending(
-          [
-            for (final o in objects) o.sourceId,
-            ...allSourceIds,
-          ],
-        ),
-      );
+  }) => LayoutPageSnapshot(
+    pageId: 'p1',
+    pageBounds: null,
+    contentBounds: null,
+    sceneRevision: revision,
+    objects: objects,
+    inkStrokes: const [],
+    renderAssets: assets,
+    sourceCoverage: SourceCoverageLedger.pending([
+      for (final o in objects) o.sourceId,
+      ...allSourceIds,
+    ]),
+  );
 
   test('role→kind 全映射与阅读序透传', () {
     final document = doc(
@@ -164,9 +158,7 @@ void main() {
       ),
       measure: measure,
     );
-    final kinds = {
-      for (final block in assembly.blocks) block.id: block.kind,
-    };
+    final kinds = {for (final block in assembly.blocks) block.id: block.kind};
     expect(kinds['b1'], LayoutBlockKind.title);
     expect(kinds['b2'], LayoutBlockKind.paragraph);
     expect(kinds['b3'], LayoutBlockKind.list);
@@ -174,22 +166,70 @@ void main() {
     expect(kinds['b5'], LayoutBlockKind.caption);
     expect(kinds['b6'], LayoutBlockKind.formula);
     expect(kinds['b7'], LayoutBlockKind.table);
-    expect(kinds['b8'], LayoutBlockKind.preserved,
-        reason: 'unknown 一律 preserved 语义');
-    // 阅读序：blocks 按 readingOrder 排列。
     expect(
-      assembly.blocks.map((x) => x.id).toList(),
-      ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8'],
+      kinds['b8'],
+      LayoutBlockKind.preserved,
+      reason: 'unknown 一律 preserved 语义',
     );
+    // 阅读序：blocks 按 readingOrder 排列。
+    expect(assembly.blocks.map((x) => x.id).toList(), [
+      'b1',
+      'b2',
+      'b3',
+      'b4',
+      'b5',
+      'b6',
+      'b7',
+      'b8',
+    ]);
     expect(assembly.ledgerConserved, isTrue);
+  });
+
+  test('显式图注归属优先于最近前驱，支持图上方标签', () {
+    final assembly = assembler.assemble(
+      document: doc(
+        blocks: [
+          sb('f1', SemanticRole.figure, ['i1']),
+          sb(
+            'c2',
+            SemanticRole.caption,
+            ['c'],
+            text: '图二',
+            extras: {'captionOf': 'f2'},
+          ),
+          sb('f2', SemanticRole.figure, ['i2']),
+        ],
+        consumed: ['i1', 'c', 'i2'],
+        preserved: [],
+      ),
+      snapshot: snapshot(objects: [imageObject('i1'), imageObject('i2')]),
+      measure: measure,
+    );
+    expect(
+      assembly.relationships.where(
+        (r) => r.kind == BlockRelationKind.captionOf,
+      ),
+      [
+        const BlockRelationship(
+          kind: BlockRelationKind.captionOf,
+          fromBlockId: 'c2',
+          toBlockId: 'f2',
+        ),
+      ],
+    );
+    expect(assembly.atomicGroups, contains(orderedEquals(['c2', 'f2'])));
   });
 
   test('文本三态：typed / transcribed / 无文本不造数据', () {
     final document = doc(
       blocks: [
         sb('t1', SemanticRole.body, ['s1'], text: '来自快照'),
-        sb('t2', SemanticRole.body, ['s2'],
-            extras: {'transcribedText': '模型转写'}),
+        sb(
+          't2',
+          SemanticRole.body,
+          ['s2'],
+          extras: {'transcribedText': '模型转写'},
+        ),
         sb('t3', SemanticRole.body, ['s3']),
       ],
       consumed: ['s1', 's2', 's3'],
@@ -200,9 +240,7 @@ void main() {
       snapshot: snapshot(),
       measure: measure,
     );
-    final byId = {
-      for (final block in assembly.blocks) block.id: block,
-    };
+    final byId = {for (final block in assembly.blocks) block.id: block};
     expect(byId['t1']!.textOrigin, LayoutTextOrigin.typed);
     expect(byId['t1']!.text!.text, '来自快照');
     expect(byId['t2']!.textOrigin, LayoutTextOrigin.transcribed);
@@ -213,10 +251,11 @@ void main() {
     expect(assembly.ledgerConserved, isTrue);
   });
 
-  test('真实测量接入：typed 块 intrinsic 来自 TextMeasureAdapter（宽>0）',
-      () {
+  test('真实测量接入：typed 块 intrinsic 来自 TextMeasureAdapter（宽>0）', () {
     final document = doc(
-      blocks: [sb('p1', SemanticRole.body, ['s1'], text: '宽度必为真实测量')],
+      blocks: [
+        sb('p1', SemanticRole.body, ['s1'], text: '宽度必为真实测量'),
+      ],
       consumed: ['s1'],
       preserved: const [],
     );
@@ -241,7 +280,9 @@ void main() {
 
   test('图片比例：intrinsic×crop 显示比 + 资产缺失事实', () {
     final document = doc(
-      blocks: [sb('f1', SemanticRole.figure, ['img-1'])],
+      blocks: [
+        sb('f1', SemanticRole.figure, ['img-1']),
+      ],
       consumed: ['img-1'],
       preserved: const [],
     );
@@ -267,12 +308,16 @@ void main() {
     // resolved 资产：missingAsset=false。
     final resolvedAssembly = assembler.assemble(
       document: doc(
-        blocks: [sb('f2', SemanticRole.figure, ['img-2'])],
+        blocks: [
+          sb('f2', SemanticRole.figure, ['img-2']),
+        ],
         consumed: ['img-2'],
         preserved: const [],
       ),
       snapshot: snapshot(
-        objects: [imageObject('img-2', fileId: 'file-ok', intrinsic: b(0, 0, 800, 400))],
+        objects: [
+          imageObject('img-2', fileId: 'file-ok', intrinsic: b(0, 0, 800, 400)),
+        ],
         assets: [
           SnapshotRenderAsset(
             fileId: 'file-ok',
@@ -328,15 +373,20 @@ void main() {
     // 原子组：{title-1, para-1} 与 {fig-1, cap-1}（figure 自身 keepTogether
     // 与 caption 关系并成一组）。
     final groups = assembly.atomicGroups;
-    expect(groups, containsAll([
-      containsAll(['title-1', 'para-1']),
-      containsAll(['fig-1', 'cap-1']),
-    ]));
+    expect(
+      groups,
+      containsAll([
+        containsAll(['title-1', 'para-1']),
+        containsAll(['fig-1', 'cap-1']),
+      ]),
+    );
   });
 
   test('protected 障碍投影 + ledger preserved 态复核 fail closed', () {
     final document = doc(
-      blocks: [sb('p1', SemanticRole.body, ['s1'], text: '正文')],
+      blocks: [
+        sb('p1', SemanticRole.body, ['s1'], text: '正文'),
+      ],
       consumed: ['s1'],
       preserved: ['lock-1'],
     );
@@ -358,7 +408,9 @@ void main() {
     expect(
       () => assembler.assemble(
         document: doc(
-          blocks: [sb('p1', SemanticRole.body, ['s1'], text: 'x')],
+          blocks: [
+            sb('p1', SemanticRole.body, ['s1'], text: 'x'),
+          ],
           consumed: ['s1', 'lock-1'],
           preserved: const [],
         ),
@@ -392,7 +444,9 @@ void main() {
     expect(
       () => assembler.assemble(
         document: doc(
-          blocks: [sb('a', SemanticRole.body, ['s1'], text: 'x')],
+          blocks: [
+            sb('a', SemanticRole.body, ['s1'], text: 'x'),
+          ],
           consumed: ['s1', 's2'],
           preserved: const [],
         ),
@@ -407,8 +461,14 @@ void main() {
   test('unknown extras 原样透传不丢失', () {
     final document = doc(
       blocks: [
-        sb('u1', SemanticRole.unknown, ['s1'],
-            extras: {'futureField': {'nested': 1}}),
+        sb(
+          'u1',
+          SemanticRole.unknown,
+          ['s1'],
+          extras: {
+            'futureField': {'nested': 1},
+          },
+        ),
       ],
       consumed: const [],
       preserved: ['s1'],
@@ -420,9 +480,7 @@ void main() {
     );
     final block = assembly.blocks.single;
     expect(block.kind, LayoutBlockKind.preserved);
-    expect(block.extras['futureField'], {
-      'nested': 1,
-    }, reason: '未知字段逐位保留');
+    expect(block.extras['futureField'], {'nested': 1}, reason: '未知字段逐位保留');
   });
 
   test('formula/table 块级 keepTogether', () {
@@ -439,9 +497,7 @@ void main() {
       snapshot: snapshot(),
       measure: measure,
     );
-    final byId = {
-      for (final block in assembly.blocks) block.id: block,
-    };
+    final byId = {for (final block in assembly.blocks) block.id: block};
     expect(byId['fx']!.keepTogether, isTrue);
     expect(byId['tb']!.keepTogether, isTrue);
   });

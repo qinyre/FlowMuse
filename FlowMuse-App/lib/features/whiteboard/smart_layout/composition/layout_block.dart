@@ -48,6 +48,7 @@ class FigureBlockSpec {
     required this.fileId,
     required this.displayAspectRatio,
     this.missingAsset = false,
+    this.displayWidth,
   });
 
   final String fileId;
@@ -57,6 +58,14 @@ class FigureBlockSpec {
 
   /// 资产缺失事实（不删块、不造数据；消费方按 preserved 语义处理）。
   final bool missingAsset;
+
+  /// 源场景显示宽度；已有小图只缩不放，避免被拉伸铺满一栏。
+  final double? displayWidth;
+
+  double widthInColumn(double columnWidth) =>
+      displayWidth != null && displayWidth! > 0 && displayWidth! < columnWidth
+      ? displayWidth!
+      : columnWidth;
 }
 
 /// 排版块（V3-400A）：语义块 → 候选生成原语的不可变投影。
@@ -140,6 +149,5 @@ class BlockRelationship {
   int get hashCode => Object.hash(kind, fromBlockId, toBlockId);
 
   @override
-  String toString() =>
-      '${kind.name}($fromBlockId -> $toBlockId)';
+  String toString() => '${kind.name}($fromBlockId -> $toBlockId)';
 }
