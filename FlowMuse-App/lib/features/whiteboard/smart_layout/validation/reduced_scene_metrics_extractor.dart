@@ -59,6 +59,7 @@ abstract final class ReducedSceneMetricsExtractor {
     List<SemanticRelationExpectation> relations = const [],
     ReadingOrderExpectation? readingOrder,
     double captionGapTolerance = 24.0,
+    Set<String>? validationElementIds,
   }) {
     final patch = reduced.patch;
 
@@ -95,6 +96,10 @@ abstract final class ReducedSceneMetricsExtractor {
     var boundsViolations = 0;
     if (pageContentBounds != null) {
       for (final layer in snapshot.layers) {
+        if (validationElementIds != null &&
+            !validationElementIds.contains(layer.elementId)) {
+          continue;
+        }
         if (!_inside(layer.bounds, pageContentBounds)) boundsViolations++;
       }
     }

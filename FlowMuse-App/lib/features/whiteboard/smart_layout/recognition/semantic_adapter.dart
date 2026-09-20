@@ -101,7 +101,11 @@ class RecognitionSemanticAdapter {
         (ref) =>
             !eligibleNative.contains(ref.value) ||
             (elementById[ref.value]?.locked ?? true) ||
-            elementById[ref.value]?.pageId != elementById[id]?.pageId,
+            result.pageScope?.protectedSourceIds.contains(ref.value) == true ||
+            (result.pageScope?.effectivePageIdOf(elementById[ref.value]!) ??
+                    elementById[ref.value]?.pageId) !=
+                (result.pageScope?.effectivePageIdOf(elementById[id]!) ??
+                    elementById[id]?.pageId),
       )) {
         blockedNative.addAll(closure.map((ref) => ref.value));
       }
@@ -116,7 +120,8 @@ class RecognitionSemanticAdapter {
       if (element == null) {
         throw StateError('原生单元引用了不存在的场景元素: ${unit.unitId}');
       }
-      if (element.locked) {
+      if (element.locked ||
+          result.pageScope?.protectedSourceIds.contains(sourceId) == true) {
         ledger = _preserveIfPending(
           ledger,
           sourceId,
@@ -308,6 +313,7 @@ class RecognitionSemanticAdapter {
   };
 
   static Set<String> _lockedSourceIds(RecognitionSessionResult result) => {
+    ...?result.pageScope?.protectedSourceIds,
     for (final element in result.scene.activeElements)
       if (element.locked) element.id.value,
   };
@@ -797,7 +803,9 @@ abstract final class ReplacementGuard {
                     brushTypeFromCustomData(
                       elements[id]!.customData,
                     ).canAutoRecognize,
-                isLocked: elements[id]?.locked ?? true,
+                isLocked:
+                    (elements[id]?.locked ?? true) ||
+                    result.pageScope?.protectedSourceIds.contains(id) == true,
                 hasCrossBinding:
                     (elements[id]?.boundElements.any(
                           (bound) => !record.targetSourceIds.contains(bound.id),

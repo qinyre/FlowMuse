@@ -42,6 +42,7 @@ import '../semantics/semantic_document_assembler.dart';
 import '../snapshot/layout_page_snapshot.dart';
 import '../snapshot/scene_revision.dart';
 import '../snapshot/snapshot_extractor.dart';
+import '../snapshot/resolved_page_scope.dart';
 import '../snapshot/source_coverage_ledger.dart';
 import '../validation/validated_candidate.dart';
 import '../validation/validated_candidate_pipeline.dart';
@@ -270,6 +271,7 @@ abstract final class SmartLayoutRealCandidateChain {
         assembly = SmartLayoutCandidateMaterializer.composeNativeGroups(
           baseScene,
           assembly,
+          pageScope: recognition.pageScope,
         );
       }
     } on StateError catch (error) {
@@ -391,6 +393,18 @@ abstract final class SmartLayoutRealCandidateChain {
         contentHeight: contentHeight,
         measure: measure,
         tokens: tokens,
+        preservedAsObstacles: recognition != null,
+        fixedObstacles: {
+          for (final entry
+              in recognition?.pageScope?.fixedBounds.entries ??
+                  const <MapEntry<String, SnapshotBounds>>[])
+            entry.key: LayoutRect(
+              left: entry.value.left,
+              top: entry.value.top,
+              width: entry.value.width,
+              height: entry.value.height,
+            ),
+        },
       );
       if (placed is! BalancedPlacement) {
         continue;
@@ -406,6 +420,7 @@ abstract final class SmartLayoutRealCandidateChain {
         ),
         timestampMs: layoutSnapshot.sceneRevision.revision,
         pageId: layoutSnapshot.pageId,
+        pageScope: recognition?.pageScope,
       );
       if (materialized is! PatchMaterializationSuccess) {
         continue;
@@ -443,6 +458,12 @@ abstract final class SmartLayoutRealCandidateChain {
           patch: materialized.patch,
           metricInput: metricInput,
           veto: const AntiGamingVetoDetector().evaluate(metricInput),
+          validationElementIds: recognition == null
+              ? null
+              : {
+                  ...materialized.patch.adds.map((op) => op.element.id.value),
+                  ...materialized.patch.updates.map((op) => op.elementId),
+                },
         ),
       );
     }
@@ -704,6 +725,7 @@ class SmartLayoutRealSessionScope {
       document: semantic.document,
       preserveReasons: recognition.ledger.projection.preservedReasons,
       recognitionFailure: recognition.failure,
+      excludedScopeReasons: recognition.pageScope?.excludedReasons ?? const {},
     );
   }
 
@@ -716,10 +738,12 @@ class SmartLayoutRealSessionScope {
     final revision = _tracker.isDisposed ? null : _tracker.current;
     if (revision == null) throw StateError('revision tracker disposed');
     final scene = _editor.currentScene;
+    final pageScope = ResolvedPageScope.resolve(scene, _pageId);
     final snapshot = const SnapshotExtractor().extract(
       scene: scene,
       pageId: _pageId,
       sceneRevision: revision,
+      scope: pageScope,
     );
     _lastCapture = _RequestCapture(
       scene: scene,
@@ -775,10 +799,12 @@ class SmartLayoutRealSessionScope {
       return const SmartLayoutAnalysisGuardRejected('disposed', 0);
     }
     final scene = _editor.currentScene;
+    final pageScope = ResolvedPageScope.resolve(scene, _pageId);
     final snapshot = const SnapshotExtractor().extract(
       scene: scene,
       pageId: _pageId,
       sceneRevision: revision,
+      scope: pageScope,
     );
     _lastCapture = _RequestCapture(
       scene: scene,
@@ -794,7 +820,8 @@ class SmartLayoutRealSessionScope {
       // 页级捕获（spec §6.4：完整捕获源集合=目标页非背景源；多页
       // Scene 不过滤会把他页笔迹计入识别账本，与页级快照三方断言
       // 失配）。文件表保留（图源渲染依赖）。
-      scene: _pageScopedScene(scene, _pageId),
+      scene: pageScope.captureScene(scene),
+      pageScope: pageScope,
       sceneRevision: RecognitionSceneRevision(
         epoch: revision.epoch,
         revision: revision.revision,
@@ -882,21 +909,6 @@ class SmartLayoutRealSessionScope {
       RecognitionPipelineState.assembling => '正在恢复结构',
       RecognitionPipelineState.done => '正在生成排版',
     };
-  }
-
-  /// 目标页子 Scene（元素按 flowMuse pageId 归属过滤，文件表原样
-  /// 保留——图源区域渲染依赖 files）。
-  static Scene _pageScopedScene(Scene scene, String pageId) {
-    var scoped = Scene();
-    for (final element in scene.activeElements) {
-      if (element.pageId == pageId) {
-        scoped = scoped.addElement(element);
-      }
-    }
-    for (final entry in scene.files.entries) {
-      scoped = scoped.addFile(entry.key, entry.value);
-    }
-    return scoped;
   }
 
   /// V3 识别产物 → 候选生成链（R7）：票据同源校验后走
@@ -1310,6 +1322,8 @@ class SmartLayoutRealSessionScope {
                       null
                 : source != null &&
                       !source.locked &&
+                      result.pageScope?.protectedSourceIds.contains(sourceId) !=
+                          true &&
                       (source is TextElement || source is ImageElement);
             if (!allowed) {
               throw const SmartLayoutCorrectionRejected(
@@ -1476,6 +1490,7 @@ class SmartLayoutRealSessionScope {
         scene: scene,
         pageId: _pageId,
         sceneRevision: revision,
+        scope: _lastRecognition?.pageScope,
       );
       final correctedRecords = _correctedRegionRecords;
       RecognitionSessionResult recognition;
@@ -1563,6 +1578,7 @@ class SmartLayoutRealSessionScope {
       operationId: context.operationId,
       generation: context.generation,
       pageId: previous.pageId,
+      pageScope: previous.pageScope,
     );
     _activePipeline?.cancel();
     final pipeline = RecognitionPipeline(

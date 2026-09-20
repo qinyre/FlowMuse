@@ -70,6 +70,7 @@ class SmartLayoutReviewContext {
     required this.document,
     required this.preserveReasons,
     this.recognitionFailure,
+    this.excludedScopeReasons = const {},
   });
 
   final Scene originalScene;
@@ -77,6 +78,7 @@ class SmartLayoutReviewContext {
   final SemanticDocument document;
   final Map<String, SourcePreserveReason> preserveReasons;
   final RecognitionException? recognitionFailure;
+  final Map<String, String> excludedScopeReasons;
 }
 
 /// 会话失败的稳定描述：阶段 + 原因 + 是否可重试 + 第几次尝试。

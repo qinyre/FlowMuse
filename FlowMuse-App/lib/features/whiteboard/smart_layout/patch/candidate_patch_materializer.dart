@@ -10,6 +10,7 @@ import '../snapshot/deterministic_hash.dart';
 import '../snapshot/scene_revision.dart';
 import '../snapshot/source_coverage_ledger.dart';
 import '../snapshot/layout_page_snapshot.dart';
+import '../snapshot/resolved_page_scope.dart';
 import 'smart_layout_scene_patch.dart';
 import 'smart_layout_scene_patch_builder.dart';
 
@@ -108,8 +109,9 @@ abstract final class SmartLayoutCandidateMaterializer {
   /// 只接纳完整、未锁定的原生文本/图片闭包，不吞并识别笔迹或保留物。
   static LayoutBlockAssembly composeNativeGroups(
     Scene scene,
-    LayoutBlockAssembly assembly,
-  ) {
+    LayoutBlockAssembly assembly, {
+    ResolvedPageScope? pageScope,
+  }) {
     final elements = {for (final e in scene.activeElements) e.id.value: e};
     final blockOf = {
       for (final b in assembly.blocks)
@@ -137,8 +139,12 @@ abstract final class SmartLayoutCandidateMaterializer {
                 elements[id]!.locked ||
                 (elements[id] is! TextElement &&
                     elements[id] is! ImageElement) ||
-                elements[id]!.pageId !=
-                    elements[block.sourceRefs.single]!.pageId ||
+                (pageScope?.effectivePageIdOf(elements[id]!) ??
+                        elements[id]!.pageId) !=
+                    (pageScope?.effectivePageIdOf(
+                          elements[block.sourceRefs.single]!,
+                        ) ??
+                        elements[block.sourceRefs.single]!.pageId) ||
                 blockOf[id] == null ||
                 blockOf[id]!.isPreservedLike ||
                 blockOf[id]!.figure?.missingAsset == true,
@@ -215,6 +221,7 @@ abstract final class SmartLayoutCandidateMaterializer {
     required FlowPlacementSuccess placement,
     required int timestampMs,
     String? pageId,
+    ResolvedPageScope? pageScope,
   }) {
     // ---- 0. ledger 守恒前置：assembly 账目与传入账本一致 ----
     if (!assembly.ledgerConserved) {
@@ -285,8 +292,12 @@ abstract final class SmartLayoutCandidateMaterializer {
                   baseActiveById[id.value]!.locked ||
                   (baseActiveById[id.value] is! TextElement &&
                       baseActiveById[id.value] is! ImageElement) ||
-                  baseActiveById[id.value]!.pageId !=
-                      baseActiveById[block.sourceRefs.first]!.pageId,
+                  (pageScope?.effectivePageIdOf(baseActiveById[id.value]!) ??
+                          baseActiveById[id.value]!.pageId) !=
+                      (pageScope?.effectivePageIdOf(
+                            baseActiveById[block.sourceRefs.first]!,
+                          ) ??
+                          baseActiveById[block.sourceRefs.first]!.pageId),
             )) {
           return PatchMaterializationFailure(
             kind: PatchMaterializationFailureKind.transformRejected,

@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/analysis/smart_layout_analysis_repository.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_session_view_model.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block_assembler.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/design/smart_layout_design_tokens.dart';
@@ -22,6 +24,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_fingerprint.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_revision.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/snapshot_extractor.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/layout_page_snapshot.dart';
 
 import 'fake_recognition_transport.dart';
 
@@ -29,6 +32,124 @@ import 'fake_recognition_transport.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
+
+  test('生产捕获：缺归属图片进入同一识别与布局范围，他页保留且纠错不丢图', () async {
+    var scene = await _scene();
+    final image = scene.activeElements.singleWhere(
+      (e) => e.id.value == 'blue-image',
+    );
+    scene = scene
+        .updateElement(image.copyWith(customData: const {}))
+        .addElement(
+          RectangleElement(
+            id: const ElementId('second-page'),
+            x: 1600,
+            y: 0,
+            width: 1400,
+            height: 1200,
+            customData: const {
+              'flowMuse': {'role': 'page', 'pageId': 'page-2'},
+            },
+          ),
+        )
+        .addElement(
+          TextElement(
+            id: const ElementId('foreign-text'),
+            x: 48,
+            y: 32,
+            width: 300,
+            height: 48,
+            text: '属于另一页的固定内容',
+            fontFamily: 'Excalifont',
+            customData: const {
+              'flowMuse': {'pageId': 'page-2'},
+            },
+          ),
+        );
+    final controller = MarkdrawController()..loadScene(scene);
+    addTearDown(controller.dispose);
+    final transport = FakeRecognitionTransport(
+      responder: (body) async {
+        final request =
+            RecognitionRequest.fromJson(jsonDecode(body))
+                as RecognitionStructureRequest;
+        expect(
+          request.units.map((u) => u.unitId),
+          containsAll(['native:red-image', 'native:blue-image']),
+        );
+        expect(
+          request.units.map((u) => u.unitId),
+          isNot(contains('native:foreign-text')),
+        );
+        return (200, jsonEncode(_response(request).toJson()));
+      },
+    );
+    final scope = SmartLayoutRealSessionScope.build(
+      controller: controller,
+      serverUri: Uri.parse('http://test.invalid'),
+      pageId: 'page-1',
+      post: transport.post,
+    );
+    addTearDown(scope.dispose);
+    final before = SceneFingerprint.of(controller.currentScene);
+    final ticket = scope.session.beginOperation();
+    final result =
+        await scope.dependencies.analysisRunner!(ticket)
+            as SmartLayoutRecognitionSucceeded;
+    expect(result.recognition.ledger.consumedCount, 6);
+    expect(scope.dependencies.reviewContextBuilder!()!.excludedScopeReasons, {
+      'foreign-text': 'other-page',
+    });
+    final candidates = await scope.dependencies.candidateChainFromDocument!(
+      result,
+      ticket,
+    );
+    expect(candidates, isNotEmpty, reason: '不能因他页页框超出当前页而拒绝所有候选');
+    for (final c in candidates) {
+      final output = {
+        for (final e in c.reduced.scene.activeElements) e.id.value: e,
+      };
+      expect(
+        output['foreign-text'],
+        same(
+          controller.currentScene.activeElements.singleWhere(
+            (e) => e.id.value == 'foreign-text',
+          ),
+        ),
+      );
+      expect(output['blue-image']!.pageId, isNull, reason: '有效临时归属不能回写 Scene');
+      final fixed = result.recognition.pageScope!.fixedBounds['foreign-text']!;
+      for (final op in [
+        ...c.patch.adds.map((o) => o.element),
+        ...c.patch.updates.map((o) => o.element),
+      ]) {
+        final actual = conservativeVisualBounds(op);
+        expect(
+          actual.left >= fixed.right ||
+              actual.right <= fixed.left ||
+              actual.top >= fixed.bottom ||
+              actual.bottom <= fixed.top,
+          isTrue,
+          reason: '可见他页固定内容必须被绕开（可以从侧方通过）',
+        );
+      }
+      c.dispose();
+    }
+    final affected = scope.dependencies.correctionHandler(
+      const RegionCorrectionIntent(
+        kind: 'role',
+        subjectIds: ['native:title'],
+        detail: 'body',
+      ),
+    );
+    final rerun = await scope.dependencies.rerunChain(affected.strokeSourceIds);
+    expect(rerun, isNotEmpty);
+    for (final c in rerun) {
+      c.dispose();
+    }
+    expect(transport.requests, hasLength(1), reason: '语义重排复用捕获范围，不重新识别');
+    expect(SceneFingerprint.of(controller.currentScene), before);
+  });
 
   test('整页含两张真图：跨距离配对、同字号标题、完整正文传到实际候选', () async {
     final scene = await _scene();

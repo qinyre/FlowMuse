@@ -24,6 +24,7 @@ class CandidateGateInput {
     required this.patch,
     required this.metricInput,
     required this.veto,
+    this.validationElementIds,
   });
 
   final String candidateId;
@@ -35,6 +36,9 @@ class CandidateGateInput {
 
   /// 反投机否决结论（V3-404A 检测器以真实 placement 事实产出）。
   final VetoVerdict veto;
+
+  /// 本轮改写范围；其他页及原样保留元素的旧缺陷不冒充本轮失败。
+  final Set<String>? validationElementIds;
 }
 
 /// 本轮完整门禁结果：Top3（不足 3 不补）+ 全部淘汰记录；只有全链
@@ -136,6 +140,7 @@ abstract final class ValidatedCandidatePipeline {
               snapshot: snapshot,
               ledger: input.patch.sourceCoverage,
               pageContentBounds: pageContentBounds,
+              validationElementIds: input.validationElementIds,
             ),
           );
         } on StateError catch (error) {
@@ -157,6 +162,7 @@ abstract final class ValidatedCandidatePipeline {
           ledger: input.patch.sourceCoverage,
           pageContentBounds: pageContentBounds,
           imageIntrinsicSizes: imageIntrinsicSizes,
+          validationElementIds: input.validationElementIds,
         );
         if (!hardReport.passed) {
           rejections.add(

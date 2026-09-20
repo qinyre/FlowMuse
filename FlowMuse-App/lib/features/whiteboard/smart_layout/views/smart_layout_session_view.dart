@@ -395,6 +395,10 @@ class _ReviewPane extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (state.reviewContext?.excludedScopeReasons.isNotEmpty ?? false)
+          Text(
+            '部分整理：本页可见的 ${state.reviewContext!.excludedScopeReasons.length} 个元素归属不明确或属于其他页，保持原位。',
+          ),
         if (state.reviewContext?.recognitionFailure case final error?) ...[
           _RecognitionFailure(error: error),
           TextButton(onPressed: onRestart, child: const Text('重新分析')),

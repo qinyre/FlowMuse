@@ -186,6 +186,8 @@ class LayoutBlockAssembler {
           '锁定物不可被消费，语义文档与快照不一致',
         );
       }
+      // 归属保护可以已由 unknown 语义块承载，不能再认领一次同一源。
+      if (blocks.any((b) => b.sourceRefs.contains(object.sourceId))) continue;
       blocks.add(
         LayoutBlock(
           id: 'protected-${object.sourceId}',
