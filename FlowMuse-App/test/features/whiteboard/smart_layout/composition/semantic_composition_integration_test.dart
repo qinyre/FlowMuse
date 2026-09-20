@@ -138,7 +138,10 @@ void main() {
                 SketchSection([
                   for (final e in f.scene.activeElements)
                     e is TextElement
-                        ? e.copyWithText(fontFamily: 'Excalifont')
+                        ? e.copyWithText(
+                            fontFamily: 'Excalifont',
+                            autoResize: false,
+                          )
                         : e,
                 ]),
               ],
