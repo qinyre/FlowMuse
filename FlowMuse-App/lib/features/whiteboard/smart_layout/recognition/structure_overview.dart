@@ -91,6 +91,8 @@ Future<String?> buildStructureOverview({
               text: '[${i + 1}]',
               style: const TextStyle(
                 color: ui.Color(0xff1565c0),
+                // 使用随应用打包的数字字形，概览编号不能依赖系统默认字体。
+                fontFamily: 'Excalifont',
                 fontSize: 16,
                 backgroundColor: ui.Color(0xffffffff),
               ),

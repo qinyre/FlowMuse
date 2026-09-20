@@ -1,4 +1,5 @@
 import '../composition/layout_composition_planner.dart';
+import '../composition/layout_block.dart';
 import '../placement/flow_placer.dart';
 import '../snapshot/deterministic_hash.dart';
 
@@ -32,10 +33,7 @@ class DroppedPlacement {
 
 /// 去重结论。
 class DeduplicatedPlacements {
-  const DeduplicatedPlacements({
-    required this.kept,
-    required this.dropped,
-  });
+  const DeduplicatedPlacements({required this.kept, required this.dropped});
 
   final List<PlacementEntry> kept;
   final List<DroppedPlacement> dropped;
@@ -50,11 +48,24 @@ class DeduplicatedPlacements {
 class LayoutStructureSignature {
   const LayoutStructureSignature();
 
+  /// 新构图签名跨家族去重：成员、组内路径、组间行列与归一字号档。
+  /// 忽略候选名称及无意义的像素平移，旧实验协议的 of() 契约不变。
+  String compositionOf({
+    required List<PlacedBlock> placed,
+    required List<CompositionGroupIntent> groups,
+    required double scale,
+  }) => fingerprint64(
+    [
+      for (final g in groups) '${g.kind.name}:${g.tracks}:${g.row}:${g.column}',
+      for (final p in placed)
+        '${p.blockId}:${(p.appliedFontSize / scale).toStringAsFixed(2)}',
+    ].join('|'),
+  );
+
   String of({
     required LayoutSkeleton skeleton,
     required List<PlacedBlock> placed,
-  }) =>
-      fingerprint64('structure|${skeleton.name}|${canonicalOf(placed)}');
+  }) => fingerprint64('structure|${skeleton.name}|${canonicalOf(placed)}');
 
   /// canonical 串（审计可读）：逐块 `id#column#rank#font`，阅读序。
   String canonicalOf(List<PlacedBlock> placed) {
@@ -67,7 +78,8 @@ class LayoutStructureSignature {
     final columnIndexes = byColumn.keys.toList()..sort();
     for (final c in columnIndexes) {
       final column = byColumn[c]!;
-      final sorted = [...column]..sort((a, b) {
+      final sorted = [...column]
+        ..sort((a, b) {
           final byTop = a.rect.top.compareTo(b.rect.top);
           return byTop != 0 ? byTop : a.blockId.compareTo(b.blockId);
         });
@@ -80,7 +92,7 @@ class LayoutStructureSignature {
     return [
       for (final p in placed)
         '${p.blockId}#${p.columnIndex}#${rankInColumn[p.blockId]}'
-        '#${n(p.appliedFontSize)}',
+            '#${n(p.appliedFontSize)}',
     ].join('|');
   }
 }

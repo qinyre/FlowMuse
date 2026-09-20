@@ -186,6 +186,12 @@ func (h *RecognitionHandler) runStructure(ctx context.Context, request *Recognit
 	if request.IncludeFigureTextLinks {
 		prompt += figureTextLinkPrompt
 	}
+	if request.IncludeCompositionHints {
+		prompt += compositionHintPrompt
+		if request.OverviewPngBase64 == "" {
+			prompt += "\n本次无概览图，mediaGroups 必须为空数组；仅恢复文字结构和软换行。"
+		}
+	}
 	images := make([]ProviderImage, 0, 1)
 	if request.OverviewPngBase64 != "" {
 		images = append(images, ProviderImage{Base64: request.OverviewPngBase64})
@@ -199,8 +205,21 @@ func (h *RecognitionHandler) runStructure(ctx context.Context, request *Recognit
 		return nil, providerWireError(err)
 	}
 	var model ModelStructureResult
-	if pErr := parseModelJSON(raw, &model); pErr != nil {
+	// 新协商模式使用精确键集，禁止正文偷渡/未知字段/尾随垃圾。
+	if request.IncludeCompositionHints {
+		if err := decodeStrict([]byte(stripCodeFence(raw)), &model); err != nil {
+			return nil, wireErr(CodeInvalidProviderResp, "composition 结构 JSON 非法")
+		}
+		var fields any
+		_ = json.Unmarshal([]byte(stripCodeFence(raw)), &fields)
+		if containsStructureText(fields) {
+			return nil, wireErr(CodeInvalidProviderResp, "structure 禁止正文字段")
+		}
+	} else if pErr := parseModelJSON(raw, &model); pErr != nil {
 		return nil, pErr
+	}
+	if request.IncludeCompositionHints && model.FigureTextLinks != nil {
+		return nil, wireErr(CodeInvalidProviderResp, "composition 模式禁止旧图文关系")
 	}
 	// 未协商时不向严格旧客户端输出新字段。
 	if !request.IncludeFigureTextLinks {
@@ -209,6 +228,12 @@ func (h *RecognitionHandler) runStructure(ctx context.Context, request *Recognit
 	sanitized, sErr := SanitizeStructureResult(request.Units, &model)
 	if sErr != nil {
 		return nil, sErr
+	}
+	if request.IncludeCompositionHints {
+		if err := validateCompositionHints(request, &model); err != nil {
+			return nil, err
+		}
+		sanitized.CompositionHints = model.CompositionHints
 	}
 	sanitized.TextFingerprint = request.TextFingerprint
 	return fillShell(request, sanitized), nil

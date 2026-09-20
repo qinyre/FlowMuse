@@ -140,7 +140,8 @@ void main() {
       expect(failed.phase, SmartLayoutSessionPhase.reviewing);
       expect(failed.reviewContext?.recognitionFailure, isNotNull);
       expect(find.textContaining(message), findsOneWidget);
-      expect(find.textContaining('原样保留 1 个源元素'), findsOneWidget);
+      expect(failed.canApply, isFalse, reason: '缺测时默认保留原稿，不能直接应用');
+      expect(find.textContaining('分析信息不足'), findsOneWidget);
       expect(SceneFingerprint.of(controller.currentScene), before);
       final oldOperation = failed.activeTicket!.operationId;
       transport.errorFactory = null;

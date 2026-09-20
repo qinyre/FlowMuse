@@ -10,6 +10,7 @@ import '../snapshot/deterministic_hash.dart';
 import '../snapshot/scene_revision.dart';
 import '../snapshot/source_coverage_ledger.dart';
 import '../snapshot/layout_page_snapshot.dart';
+import '../snapshot/resolved_page_scope.dart';
 import 'smart_layout_scene_patch.dart';
 import 'smart_layout_scene_patch_builder.dart';
 
@@ -58,6 +59,7 @@ class PatchMaterializationSuccess extends PatchMaterializationOutcome {
     required this.preservedSourceIds,
     required this.addedElementIds,
     required this.transformedSourceIds,
+    required this.outputElementIdsByBlock,
   });
 
   final SmartLayoutScenePatch patch;
@@ -70,6 +72,9 @@ class PatchMaterializationSuccess extends PatchMaterializationOutcome {
   /// 经 V3-303A 变换改写的消费源 id（含闭包成员时以最终状态进入
   /// patch.updates，成员明细见 transformer 输出）。
   final List<String> transformedSourceIds;
+
+  /// 物化时记录真实 id；含原生闭包全部成员，不靠文本或 id 前缀反猜。
+  final Map<String, List<String>> outputElementIdsByBlock;
 }
 
 class PatchMaterializationFailure extends PatchMaterializationOutcome {
@@ -108,8 +113,9 @@ abstract final class SmartLayoutCandidateMaterializer {
   /// 只接纳完整、未锁定的原生文本/图片闭包，不吞并识别笔迹或保留物。
   static LayoutBlockAssembly composeNativeGroups(
     Scene scene,
-    LayoutBlockAssembly assembly,
-  ) {
+    LayoutBlockAssembly assembly, {
+    ResolvedPageScope? pageScope,
+  }) {
     final elements = {for (final e in scene.activeElements) e.id.value: e};
     final blockOf = {
       for (final b in assembly.blocks)
@@ -137,8 +143,12 @@ abstract final class SmartLayoutCandidateMaterializer {
                 elements[id]!.locked ||
                 (elements[id] is! TextElement &&
                     elements[id] is! ImageElement) ||
-                elements[id]!.pageId !=
-                    elements[block.sourceRefs.single]!.pageId ||
+                (pageScope?.effectivePageIdOf(elements[id]!) ??
+                        elements[id]!.pageId) !=
+                    (pageScope?.effectivePageIdOf(
+                          elements[block.sourceRefs.single]!,
+                        ) ??
+                        elements[block.sourceRefs.single]!.pageId) ||
                 blockOf[id] == null ||
                 blockOf[id]!.isPreservedLike ||
                 blockOf[id]!.figure?.missingAsset == true,
@@ -161,7 +171,15 @@ abstract final class SmartLayoutCandidateMaterializer {
           fileId: '',
           displayAspectRatio: bounds.width / bounds.height,
         ),
-        extras: const {'nativeComposite': true},
+        extras: {
+          'nativeComposite': true,
+          'bounds': {
+            'left': bounds.left,
+            'top': bounds.top,
+            'width': bounds.width,
+            'height': bounds.height,
+          },
+        },
       );
       for (final member in members) {
         aliases[member.id] = block.id;
@@ -197,6 +215,11 @@ abstract final class SmartLayoutCandidateMaterializer {
       atomicGroups: [for (final group in groups) group.toList()],
       documentConsumedSourceIds: assembly.documentConsumedSourceIds,
       documentPreservedSourceIds: assembly.documentPreservedSourceIds,
+      blockAliases: Map.unmodifiable({
+        ...assembly.blockAliases,
+        for (final entry in aliases.entries)
+          if (entry.key != entry.value) entry.key: entry.value,
+      }),
     );
     if (!result.ledgerConserved) throw StateError('native-composite-ledger');
     return result;
@@ -215,6 +238,7 @@ abstract final class SmartLayoutCandidateMaterializer {
     required FlowPlacementSuccess placement,
     required int timestampMs,
     String? pageId,
+    ResolvedPageScope? pageScope,
   }) {
     // ---- 0. ledger 守恒前置：assembly 账目与传入账本一致 ----
     if (!assembly.ledgerConserved) {
@@ -285,8 +309,12 @@ abstract final class SmartLayoutCandidateMaterializer {
                   baseActiveById[id.value]!.locked ||
                   (baseActiveById[id.value] is! TextElement &&
                       baseActiveById[id.value] is! ImageElement) ||
-                  baseActiveById[id.value]!.pageId !=
-                      baseActiveById[block.sourceRefs.first]!.pageId,
+                  (pageScope?.effectivePageIdOf(baseActiveById[id.value]!) ??
+                          baseActiveById[id.value]!.pageId) !=
+                      (pageScope?.effectivePageIdOf(
+                            baseActiveById[block.sourceRefs.first]!,
+                          ) ??
+                          baseActiveById[block.sourceRefs.first]!.pageId),
             )) {
           return PatchMaterializationFailure(
             kind: PatchMaterializationFailureKind.transformRejected,
@@ -516,10 +544,13 @@ abstract final class SmartLayoutCandidateMaterializer {
           continue;
         }
         // typed 文本字号显式对齐放置档（变换器不缩放 fontSize）。
-        if (element is TextElement &&
-            element.fontSize != plan.placed.appliedFontSize) {
+        if (element is TextElement) {
+          final spec = assembly.blockById(plan.blockId)?.text;
           finalStates[element.id.value] = element.copyWithText(
             fontSize: plan.placed.appliedFontSize,
+            fontFamily: spec?.fontFamily,
+            lineHeight: spec?.lineHeight,
+            textAlign: spec?.projection != null ? TextAlign.left : null,
           );
         } else {
           finalStates[element.id.value] = element;
@@ -625,6 +656,12 @@ abstract final class SmartLayoutCandidateMaterializer {
 
     try {
       final patch = builder.build();
+      final outputs = {
+        for (final block in assembly.blocks)
+          block.id: List<String>.unmodifiable(block.sourceRefs),
+        for (final plan in retypePlans)
+          plan.block.id: List<String>.unmodifiable([plan.newElementId!]),
+      };
       return PatchMaterializationSuccess(
         patch: patch,
         consumedSourceIds: consumedSet.toList()..sort(),
@@ -636,6 +673,11 @@ abstract final class SmartLayoutCandidateMaterializer {
         transformedSourceIds: [
           for (final plan in transformPlans) plan.sourceId,
         ],
+        outputElementIdsByBlock: Map.unmodifiable({
+          ...outputs,
+          for (final entry in assembly.blockAliases.entries)
+            entry.key: outputs[entry.value]!,
+        }),
       );
     } on StateError catch (error) {
       // Builder 终审失败 = 物化内部契约破坏；作为整体失败上报。

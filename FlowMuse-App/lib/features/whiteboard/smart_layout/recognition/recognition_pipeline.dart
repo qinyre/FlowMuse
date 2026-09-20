@@ -13,6 +13,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recogniti
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/region_assets.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_ledger.dart';
 import '../snapshot/layout_page_snapshot.dart' show conservativeVisualBounds;
+import '../snapshot/resolved_page_scope.dart';
 import '../rendering/draft_scene_renderer.dart' show DraftRenderCancelled;
 
 /// 识别管线状态机与编排（spec §6.1/§6.2/§6.3）。
@@ -48,6 +49,7 @@ class RecognitionCapture {
     required this.operationId,
     required this.generation,
     required this.pageId,
+    this.pageScope,
   });
 
   /// 完整捕获快照（含原生元素；背景剥离由结构/装配阶段处理）。
@@ -57,6 +59,7 @@ class RecognitionCapture {
   final String operationId;
   final int generation;
   final String pageId;
+  final ResolvedPageScope? pageScope;
 }
 
 /// 单区域最终识别状态（初读 + 可能的复核覆盖后）。
@@ -101,11 +104,13 @@ class RecognitionSessionResult {
     this.partial = false,
     this.partialNotes = const [],
     this.failure,
+    this.pageScope,
   });
 
   final String operationId;
   final int generation;
   final String pageId;
+  final ResolvedPageScope? pageScope;
 
   /// 完整捕获快照（含原生元素与背景；语义适配按 §6.4 口径自行剥离）。
   final Scene scene;
@@ -155,6 +160,7 @@ class RecognitionSessionResult {
     partial: partial || (ledger?.preservedCount ?? 0) > 0,
     partialNotes: partialNotes,
     failure: failure,
+    pageScope: pageScope,
   );
 }
 
@@ -219,10 +225,11 @@ class RecognitionCorrectionContext {
     required Set<String> beforeRegionIds,
     required Set<String> afterRegionIds,
     required Set<String> strokeSourceIds,
+    bool invalidateAssets = true,
   }) {
-    final invalidated = session.assetIndex.invalidateForSources(
-      strokeSourceIds,
-    );
+    final invalidated = invalidateAssets
+        ? session.assetIndex.invalidateForSources(strokeSourceIds)
+        : <String>{};
     return RecognitionCorrectionContext._(
       generation: generation,
       operationId: operationId,
@@ -826,6 +833,7 @@ class RecognitionPipeline {
       operationId: capture.operationId,
       generation: capture.generation,
       pageId: capture.pageId,
+      pageScope: capture.pageScope,
       scene: capture.scene,
       sceneRevision: capture.sceneRevision,
       contentFingerprint: capture.contentFingerprint,

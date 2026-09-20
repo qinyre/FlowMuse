@@ -592,6 +592,7 @@ void main() {
           reason: '状态文案限定在既定枚举内',
         );
 
+        vm.chooseCandidate(state.validatedCards.first.candidateId);
         await tester.runAsync(vm.applySelectedCandidate);
         state = container.read(smartLayoutSessionViewModelProvider);
         expect(state.phase, SmartLayoutSessionPhase.applied);
@@ -852,6 +853,7 @@ void main() {
           expect(decoded['pageId'], page2Id, reason: '识别请求作用于新页');
         }
 
+        vm.chooseCandidate(state.validatedCards.first.candidateId);
         await tester.runAsync(vm.applySelectedCandidate);
         state = container.read(smartLayoutSessionViewModelProvider);
         expect(state.phase, SmartLayoutSessionPhase.applied);

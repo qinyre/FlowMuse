@@ -156,6 +156,14 @@ class RecordedRequest {
         contentFingerprint: request.contentFingerprint,
         generation: request.generation,
         textFingerprint: request.textFingerprint,
+        compositionHints: request.includeCompositionHints
+            ? const RecognitionCompositionHints(
+                pageIntent: 'reading',
+                sections: [],
+                mediaGroups: [],
+                softLineBreaks: [],
+              )
+            : null,
         readingOrder: [for (final unit in request.units) unit.unitId],
         roles: [
           for (final unit in request.units)

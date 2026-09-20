@@ -9,6 +9,7 @@ import '../commit/validated_candidate_commit_gateway.dart';
 import '../correction/correction_patch_applier.dart' show AffectedSourceSet;
 import '../snapshot/source_coverage_ledger.dart';
 import '../metrics/layout_profile.dart';
+import '../metrics/composition_scene_metrics.dart';
 import '../protocol/smart_layout_v3_request.dart';
 import '../recognition/source_ledger.dart';
 import '../recognition/recognition_repository.dart';
@@ -70,6 +71,8 @@ class SmartLayoutReviewContext {
     required this.document,
     required this.preserveReasons,
     this.recognitionFailure,
+    this.excludedScopeReasons = const {},
+    this.recommendation,
   });
 
   final Scene originalScene;
@@ -77,6 +80,8 @@ class SmartLayoutReviewContext {
   final SemanticDocument document;
   final Map<String, SourcePreserveReason> preserveReasons;
   final RecognitionException? recognitionFailure;
+  final Map<String, String> excludedScopeReasons;
+  final CompositionRecommendation? recommendation;
 }
 
 /// 会话失败的稳定描述：阶段 + 原因 + 是否可重试 + 第几次尝试。
@@ -718,6 +723,8 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
           rank: i + 1,
           structureLabel: switch (candidate.diversityKey) {
             'single' => '单栏阅读',
+            'mediaSide' => '图文并排',
+            'peerGrid' => '同级图文并列',
             'twoColumn' => '双栏阅读',
             'mainSide' => '图文侧栏',
             'conservativeLayout' => '保守重排',
@@ -735,6 +742,7 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
       if (!candidates.contains(old)) old.dispose();
     }
     _ownedCandidates = List.unmodifiable(candidates);
+    final context = _deps.reviewContextBuilder?.call();
     state = state.copyWith(
       sessionState: _session.state,
       candidates: [
@@ -745,8 +753,11 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
           ),
       ],
       validatedCards: cards,
-      selectedCandidateId: cards.isEmpty ? null : cards.first.candidateId,
-      reviewContext: _deps.reviewContextBuilder?.call(),
+      selectedCandidateId:
+          cards.isEmpty || context?.recommendation?.recommended == false
+          ? null
+          : cards.first.candidateId,
+      reviewContext: context,
       isCorrecting: false,
     );
   }
@@ -832,6 +843,13 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
     if (!state.canChooseCandidate) return;
     if (!state.candidates.any((c) => c.candidateId == candidateId)) return;
     state = state.copyWith(selectedCandidateId: candidateId);
+  }
+
+  void keepOriginal() {
+    if (state.phase == SmartLayoutSessionPhase.reviewing &&
+        !state.isCorrecting) {
+      state = state.copyWith(selectedCandidateId: null);
+    }
   }
 
   /// 提交所选候选：经会话唯一入口四检后 commit。合法相位 reviewing
