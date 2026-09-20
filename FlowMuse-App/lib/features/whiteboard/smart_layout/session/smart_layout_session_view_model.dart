@@ -11,6 +11,7 @@ import '../snapshot/source_coverage_ledger.dart';
 import '../metrics/layout_profile.dart';
 import '../protocol/smart_layout_v3_request.dart';
 import '../recognition/source_ledger.dart';
+import '../recognition/recognition_repository.dart';
 import '../semantics/semantic_document.dart';
 import '../validation/correction_rerun_coordinator.dart';
 import '../validation/validated_candidate.dart';
@@ -68,12 +69,14 @@ class SmartLayoutReviewContext {
     required this.pageBounds,
     required this.document,
     required this.preserveReasons,
+    this.recognitionFailure,
   });
 
   final Scene originalScene;
   final Bounds pageBounds;
   final SemanticDocument document;
   final Map<String, SourcePreserveReason> preserveReasons;
+  final RecognitionException? recognitionFailure;
 }
 
 /// 会话失败的稳定描述：阶段 + 原因 + 是否可重试 + 第几次尝试。
@@ -83,6 +86,7 @@ class SmartLayoutSessionFailure {
     required this.reason,
     required this.retryable,
     required this.attempt,
+    this.detail = '',
   });
 
   /// analysis | apply。
@@ -90,6 +94,7 @@ class SmartLayoutSessionFailure {
   final String reason;
   final bool retryable;
   final int attempt;
+  final String detail;
 
   @override
   String toString() =>
@@ -516,9 +521,16 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
           bearerToken: _deps.bearerToken,
         );
       }
-    } on StateError {
-      // 编辑器/追踪器已释放等同守卫路径：按失败收敛。
-      _recordAnalysisFailure('analysis', 'disposed', false, attempt, ticket);
+    } on StateError catch (error) {
+      // 保留实际错误；StateError 也可能来自捕获/装配，不能全归为已释放。
+      _recordAnalysisFailure(
+        'analysis',
+        'analysis-error',
+        false,
+        attempt,
+        ticket,
+        detail: error.message,
+      );
       return;
     }
     // 迟到判旧：票据不再是当次操作（取消/复位/新操作已接管）。
@@ -658,6 +670,7 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
         reason: reason,
         retryable: retryable,
         attempt: attempt,
+        detail: detail,
       ),
     );
   }
@@ -949,12 +962,15 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
     );
   }
 
-  /// 无解重分析（V3-505C）：reviewing 无候选时以同 scope 重新走完整
+  /// 显式重新分析：reviewing 或失败终态以同 scope 重新走完整
   /// 分析（cancel→reset→startAnalysis 既有迁移的组合，不新增迁移）。
   void restartAnalysis() {
-    if (state.phase != SmartLayoutSessionPhase.reviewing) return;
-    if (state.candidates.isNotEmpty) return;
-    cancel(reason: 'restart-analysis');
+    if (state.isBusy || state.isCorrecting) return;
+    if (state.phase == SmartLayoutSessionPhase.reviewing) {
+      cancel(reason: 'restart-analysis');
+    } else if (!state.canReset) {
+      return;
+    }
     reset();
     startAnalysis();
   }

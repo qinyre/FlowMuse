@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../session/smart_layout_session_state.dart';
 import '../session/smart_layout_session_view_model.dart';
 import '../recognition/source_ledger.dart';
+import '../recognition/recognition_repository.dart';
 import '../semantics/semantic_document.dart';
 import '../snapshot/source_coverage_ledger.dart';
 import 'smart_layout_candidate_view.dart';
@@ -125,12 +128,13 @@ class _SmartLayoutSessionViewState
                     onReset: () => _resetAndRestoreFocus(viewModel),
                   ),
                   SmartLayoutSessionPhase.cancelled => _TerminalPane(
-                    message: '已取消（${state.sessionState.operationId ?? '-'}）',
+                    message: '已取消，原稿未修改',
                     onReset: () => _resetAndRestoreFocus(viewModel),
                   ),
                   SmartLayoutSessionPhase.failed => _FailurePane(
                     state: state,
                     onRetry: viewModel.retry,
+                    onRestart: viewModel.restartAnalysis,
                     onReset: () => _resetAndRestoreFocus(viewModel),
                   ),
                 },
@@ -180,6 +184,7 @@ class _SmartLayoutSessionViewState
     final status = widget.recognitionStatus;
     if (status == null) {
       return _BusyPane(
+        key: ValueKey(state.activeTicket?.operationId),
         message: '正在分析…',
         onCancel: state.canCancel ? viewModel.cancel : null,
       );
@@ -187,6 +192,7 @@ class _SmartLayoutSessionViewState
     return ValueListenableBuilder<String?>(
       valueListenable: status,
       builder: (context, value, _) => _BusyPane(
+        key: ValueKey(state.activeTicket?.operationId),
         message: value ?? '正在分析…',
         onCancel: state.canCancel ? viewModel.cancel : null,
       ),
@@ -269,16 +275,39 @@ class _IdlePane extends StatelessWidget {
   }
 }
 
-class _BusyPane extends StatelessWidget {
-  const _BusyPane({required this.message, this.onCancel});
+class _BusyPane extends StatefulWidget {
+  const _BusyPane({super.key, required this.message, this.onCancel});
 
   final String message;
   final VoidCallback? onCancel;
 
   @override
+  State<_BusyPane> createState() => _BusyPaneState();
+}
+
+class _BusyPaneState extends State<_BusyPane> {
+  final _clock = Stopwatch()..start();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _clock.stop();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: '$message，按 Escape 取消',
+      label: widget.onCancel == null
+          ? widget.message
+          : '${widget.message}，按 Escape 取消',
       child: Row(
         children: [
           const SizedBox(
@@ -287,11 +316,24 @@ class _BusyPane extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
           const SizedBox(width: 12),
-          Expanded(child: Text(message)),
-          if (onCancel != null)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(widget.message),
+                Text(
+                  '已等待 ${_clock.elapsed.inSeconds} 秒',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                if (widget.onCancel != null) const Text('可以随时取消，原稿不会改变。'),
+              ],
+            ),
+          ),
+          if (widget.onCancel != null)
             TextButton(
               autofocus: true,
-              onPressed: onCancel,
+              onPressed: widget.onCancel,
               child: const Text('取消'),
             ),
         ],
@@ -330,6 +372,8 @@ class _ReviewPane extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (state.reviewContext?.recognitionFailure case final error?)
+            _RecognitionFailure(error: error),
           if (state.correctionError != null)
             _CorrectionError(reason: state.correctionError!),
           Semantics(label: '本次分析没有可用的排版候选', child: const Text('本次分析没有可用的排版候选')),
@@ -351,6 +395,10 @@ class _ReviewPane extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (state.reviewContext?.recognitionFailure case final error?) ...[
+          _RecognitionFailure(error: error),
+          TextButton(onPressed: onRestart, child: const Text('重新分析')),
+        ],
         Wrap(
           spacing: 8,
           runSpacing: 4,
@@ -642,34 +690,90 @@ class _TerminalPane extends StatelessWidget {
   }
 }
 
+/// 与保留账本分开解释服务故障；不能把 unreadable 猜成断网。
+class _RecognitionFailure extends StatelessWidget {
+  const _RecognitionFailure({required this.error});
+  final RecognitionException error;
+
+  @override
+  Widget build(BuildContext context) {
+    final message = switch (error.code) {
+      'providerTimeout' ||
+      'requestTimeout' ||
+      'operationTimeout' => '识别处理超时，原稿未修改。可以稍后重新分析。',
+      'unconfigured' => '识别服务尚未配置，请检查服务器模型配置。',
+      'auth' => '识别服务认证失败，请检查服务配置。',
+      'busy' => '识别服务繁忙，可以稍后重新分析。',
+      _ => switch (error.kind) {
+        RecognitionExceptionKind.network => '无法连接识别服务，请检查网络后重新分析。',
+        RecognitionExceptionKind.budgetExhausted => '本轮处理已达到限制，未完成的内容原样保留。',
+        RecognitionExceptionKind.invalidRequest ||
+        RecognitionExceptionKind.invalidResponse => '识别响应校验未通过，未安全转换的内容原样保留。',
+        _ => '识别服务暂不可用，未完成的内容原样保留。',
+      },
+    };
+    return Column(
+      children: [
+        Semantics(liveRegion: true, child: Text(message)),
+        ExpansionTile(
+          title: const Text('识别故障详情'),
+          children: [
+            SelectableText('${error.code ?? error.kind.name}\n${error.detail}'),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _FailurePane extends StatelessWidget {
   const _FailurePane({
     required this.state,
     required this.onRetry,
+    required this.onRestart,
     required this.onReset,
   });
 
   final SmartLayoutSessionUiState state;
   final Future<void> Function() onRetry;
+  final VoidCallback onRestart;
   final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
     final failure = state.failure;
-    final label = failure == null
-        ? '会话失败'
-        : '失败（${failure.stage}/${failure.reason}，'
-              '第 ${failure.attempt} 次尝试）';
+    final reason = failure?.reason ?? '';
+    final stale = reason.contains('changed') || reason.contains('mismatch');
+    final label = stale
+        ? '画布或当前页已变化，请重新分析；旧结果未应用。'
+        : switch (reason) {
+            'network' => '无法连接识别服务，请检查网络后重试。',
+            'timeout' => '识别处理超时，原稿未修改，可以稍后重试。',
+            'badStatus' => '识别服务暂不可用，原稿未修改。',
+            'disposed' => '当前页面已关闭，请重新打开排版。',
+            'badSchema' => '识别或结构校验未通过，原稿未修改。',
+            _ => '本次排版未能完成，原稿未修改。',
+          };
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Semantics(label: label, child: Text(label)),
-        Row(
+        if (failure != null)
+          ExpansionTile(
+            title: const Text('失败详情'),
+            children: [
+              SelectableText(
+                '${failure.stage}/${failure.reason} · 第 ${failure.attempt} 次\n${failure.detail}',
+              ),
+            ],
+          ),
+        Wrap(
+          spacing: 8,
           children: [
             FilledButton(
               autofocus: true,
-              onPressed: state.canRetry ? () => onRetry() : null,
-              child: const Text('重试'),
+              onPressed: state.canRetry ? () => onRetry() : onRestart,
+              child: Text(state.canRetry ? '重试' : '重新分析'),
             ),
             const SizedBox(width: 8),
             TextButton(onPressed: onReset, child: const Text('关闭')),

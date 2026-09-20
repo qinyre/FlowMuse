@@ -1,9 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_real_wiring.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/views/smart_layout_session_panel.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/views/smart_layout_session_view.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_session_view_model.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_session_state.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_fingerprint.dart';
+import '../recognition/fake_recognition_transport.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// 真实入口宿主回归：生产结构 = 根 ProviderScope（app 级）内嵌面板。
@@ -45,6 +52,150 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
+  }
+
+  for (final (code, message) in [
+    ('network', '无法连接识别服务'),
+    ('providerTimeout', '识别处理超时'),
+    ('unconfigured', '识别服务尚未配置'),
+  ]) {
+    testWidgets('$code 故障穿透到真实面板，部分保留、新操作重试、原稿不变', (tester) async {
+      GoogleFonts.config.allowRuntimeFetching = false;
+      final controller = MarkdrawController();
+      addTearDown(controller.dispose);
+      controller.applyResult(
+        AddElementResult(
+          RectangleElement(
+            id: const ElementId('frame'),
+            x: 0,
+            y: 0,
+            width: 1200,
+            height: 800,
+            customData: const {
+              'flowMuse': {'role': 'page', 'pageId': pageId},
+            },
+          ),
+        ),
+      );
+      controller.applyResult(
+        AddElementResult(
+          TextElement(
+            id: const ElementId('text'),
+            x: 200,
+            y: 200,
+            width: 400,
+            height: 30,
+            text: '可用的原生正文',
+            fontSize: 20,
+            fontFamily: 'Excalifont',
+            customData: const {
+              'flowMuse': {'pageId': pageId},
+            },
+          ),
+        ),
+      );
+      controller.applyResult(
+        AddElementResult(
+          FreedrawElement(
+            id: const ElementId('ink'),
+            x: 200,
+            y: 400,
+            width: 60,
+            height: 10,
+            points: const [Point(0, 4), Point(30, 4), Point(60, 8)],
+            isComplete: true,
+            strokeWidth: 2,
+            customData: const {
+              'flowMuse': {'pageId': pageId},
+            },
+          ),
+        ),
+      );
+      final transport = FakeRecognitionTransport(
+        errorFactory: code == 'network'
+            ? (_) async => Exception('offline')
+            : null,
+        responder: (_) async =>
+            (503, errorEnvelopeJson(code, 'test detail', false)),
+      );
+      final scope = SmartLayoutRealSessionScope.build(
+        controller: controller,
+        serverUri: Uri.parse('https://server.test'),
+        pageId: pageId,
+        post: transport.post,
+      );
+      addTearDown(scope.dispose);
+      await pumpProductionNesting(
+        tester,
+        SmartLayoutSessionPanel(scope: scope, onClose: () {}),
+      );
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SmartLayoutSessionView)),
+      );
+      final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+      final before = SceneFingerprint.of(controller.currentScene);
+      await tester.runAsync(vm.startAnalysis);
+      await tester.pumpAndSettle();
+      final failed = container.read(smartLayoutSessionViewModelProvider);
+      expect(failed.phase, SmartLayoutSessionPhase.reviewing);
+      expect(failed.reviewContext?.recognitionFailure, isNotNull);
+      expect(find.textContaining(message), findsOneWidget);
+      expect(find.textContaining('原样保留 1 个源元素'), findsOneWidget);
+      expect(SceneFingerprint.of(controller.currentScene), before);
+      final oldOperation = failed.activeTicket!.operationId;
+      transport.errorFactory = null;
+      transport.responder = (body) async => buildBatchResponseBody(
+        jsonDecode(body) as Map<String, Object?>,
+        textOf: (_) => '识别后的正文',
+      );
+      await tester.ensureVisible(find.text('重新分析'));
+      await tester.runAsync(() async {
+        await tester.tap(find.text('重新分析'));
+      });
+      for (var i = 0; i < 50; i++) {
+        await tester.runAsync(
+          () async => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+        if (container.read(smartLayoutSessionViewModelProvider).phase !=
+            SmartLayoutSessionPhase.analyzing) {
+          break;
+        }
+      }
+      await tester.pumpAndSettle();
+      final recovered = container.read(smartLayoutSessionViewModelProvider);
+      expect(recovered.phase, SmartLayoutSessionPhase.reviewing);
+      expect(recovered.activeTicket!.operationId, isNot(oldOperation));
+      expect(recovered.reviewContext?.recognitionFailure, isNull);
+      expect(recovered.validatedCards, isNotEmpty);
+      expect(find.textContaining(message), findsNothing);
+      expect(SceneFingerprint.of(controller.currentScene), before);
+      // 审阅过程中画布变化：应用走守卫拒绝，不覆盖新文字；可重新分析。
+      controller.applyResult(
+        AddElementResult(
+          TextElement(
+            id: const ElementId('late'),
+            x: 200,
+            y: 700,
+            width: 200,
+            height: 30,
+            text: '新内容',
+            fontSize: 20,
+            fontFamily: 'Excalifont',
+            customData: const {
+              'flowMuse': {'pageId': pageId},
+            },
+          ),
+        ),
+      );
+      final changed = SceneFingerprint.of(controller.currentScene);
+      await tester.tap(find.text('应用所选排版'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('画布或当前页已变化'), findsOneWidget);
+      expect(find.text('重新分析'), findsOneWidget);
+      expect(SceneFingerprint.of(controller.currentScene), changed);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   }
 
   testWidgets('根 scope 内嵌面板：deps override 生效，idle 面板完整渲染', (tester) async {

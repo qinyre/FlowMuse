@@ -1,7 +1,8 @@
 import 'dart:convert' show jsonDecode;
 import 'dart:ui' show TextDirection;
 
-import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, ValueNotifier, debugPrint;
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import '../analysis/analysis_retry_policy.dart';
@@ -222,16 +223,25 @@ abstract final class SmartLayoutRealCandidateChain {
         detail: error.message,
       );
     }
-    return _generateFromAssembly(
-      baseScene: baseScene,
-      layoutSnapshot: layoutSnapshot,
-      fullSnapshot: snapshot,
-      semantic: semantic,
-      measure: measure,
-      tokens: tokens,
-      profile: profile,
-      recognition: recognition,
-    );
+    final clock = Stopwatch()..start();
+    try {
+      return await _generateFromAssembly(
+        baseScene: baseScene,
+        layoutSnapshot: layoutSnapshot,
+        fullSnapshot: snapshot,
+        semantic: semantic,
+        measure: measure,
+        tokens: tokens,
+        profile: profile,
+        recognition: recognition,
+      );
+    } finally {
+      clock.stop();
+      debugPrint(
+        '[FlowMuseCreateNote][recognition-v3] phase=candidates '
+        'operation=${recognition.operationId} elapsed_ms=${clock.elapsedMilliseconds}',
+      );
+    }
   }
 
   /// 语义装配之后的共享生成管线（块装配 → planner 枚举 → preflight →
@@ -693,6 +703,7 @@ class SmartLayoutRealSessionScope {
       ),
       document: semantic.document,
       preserveReasons: recognition.ledger.projection.preservedReasons,
+      recognitionFailure: recognition.failure,
     );
   }
 

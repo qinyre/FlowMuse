@@ -1,6 +1,6 @@
 # FlowMuse 功能与应用体验优化计划
 
-日期：2026-09-20。代码基线：`main @ bb367c7`。状态：B–D 开始实施，分支 `feature/smart-layout-v3-ux`；E/F 暂不实施。
+日期：2026-09-20。代码基线：`main @ bb367c7`。状态：B–D 代码实施完成，分支 `feature/smart-layout-v3-ux`；平板视觉/操作与在线端到端耗时待验证，E/F 未实施。
 
 本计划只处理功能和应用体验，不安排参赛材料、视频、上架或提交工作。基于当前代码与已有问题记录提出方向；没有在本轮重新进行实机体验，下面明确区分已确认缺陷与待验证问题。
 
@@ -185,3 +185,27 @@ Set-Location 'D:\Program\HarmonyOS\2024-se-17\FlowMuse-Server'
 - 用结构名称选择候选，评分与逐源账本折叠；整理/保留计数取所选 patch 账本，保留原因可读。真实语义块可选，标题/正文与保留原件接现有 patch/rerun；无效合并入口移除，拒绝原因显示，不支持逐字改 OCR。
 - 修复纠错重跑期间仍引用已释放旧图、重复操作与关闭后的迟到回调问题；重跑保留所选块 ID，防止后续保留操作误指首块。
 - 验证：390×900 与 1200×900 widget 全链走过对照/纠错/保留/应用/一次撤销，原稿指纹不变、角色变化影响真实产物字号、该原生文字流程零网络；全量 1682 项通过，静态检查零问题（退出码均 0）。桌面截图已检查，生成入口为 `smart_layout_review_flow_test.dart` 的 `SMART_LAYOUT_UX_CAPTURE=true`，产物在忽略目录 `FlowMuse-App/build/smart-layout-ux/`。截图和 widget 检查不代替平板手势/实机清晰度验收。
+
+### D（2026-09-20）
+
+- 等待显示真实阶段与计时，阶段切换不清零，可取消；复用既有请求/识别阶段日志，补充 `phase=candidates` 本地候选阶段计时，不把请求总耗时拆成虚构的上传耗时。
+- 识别结果携带重试耗尽后的实际故障，独立于保留账本；网络、超时、未配置等故障有对应提示与折叠详情。部分成功仍显示安全候选，可主动重新分析；画布变化拒绝应用后也可重新开始。重试成功不残留旧故障，不修改现有重试次数/时限。
+- 确认并修复一处本地热点：`DraftSceneRenderer` 原先在 z-index 循环反复取 `scene.orderedElements`，每次都会复制并排序整个场景。改为循环前取一次，保持顺序、渲染和像素不变；未加缓存层、未改并发、未动服务端模型或 V1。
+- 自动回归：断网/服务超时/未配置 → 原稿不变且未转换源保留 → 恢复服务 → 新操作重新分析成功；审阅后画布变化拒绝旧应用；真实计时随阶段持续、取消释放 timer。既有取消/切页/迟到响应、质量及应用撤销回归继续运行。
+
+**本地渲染测量，不是在线端到端验收**：同一 Windows 桌面 Flutter 测试环境，1200×800、固定视口，1 轮预热后各 5 次；每轮新 renderer，无跨轮图片缓存，不含网络/OCR。前测使用 C 提交 `3d7ad7d` 的渲染实现，后测只改重复排序。数字单位 ms。
+
+| 固定样例 | 前：中位数 / 最慢 | 后：中位数 / 最慢 | 前后像素 SHA-256 相同（前 12 位） |
+| --- | --- | --- | --- |
+| 真实平板 fixture，47 元素 | 2.929 / 9.141 | 4.095 / 8.026 | `50d2d7c9e930` |
+| 构造网格，300 元素 | 22.465 / 23.214 | 12.919 / 14.831 | `7f238000af0f` |
+| 构造网格，900 元素 | 117.290 / 123.231 | 35.099 / 36.517 | `b73788e447b2` |
+
+小样例没有稳定改善，不宣称全部页面变快。大场景本地渲染耗时降低不能外推到后端识别；完整在线三页各五轮和实机验收仍待设备/服务条件就绪后进行。常驻复测入口（默认测试跳过此计时项，不以易抖动耗时作 CI 门禁）：
+
+```powershell
+Set-Location 'D:\Program\HarmonyOS\2024-se-17\FlowMuse-App'
+& 'D:\Program\HarmonyOS-Flutter\bin\flutter.bat' test --no-pub --reporter expanded --dart-define=SMART_LAYOUT_RENDER_BENCH=true test/features/whiteboard/smart_layout/rendering/draft_scene_renderer_benchmark_test.dart
+```
+
+原始五轮时长/完整像素哈希由该测试打印；本轮日志在忽略目录 `FlowMuse-App/build/d-render-before.log`、`d-render-after.log`。独立排序次数回归常规执行，不依赖计时阈值。验证：`flutter analyze --no-pub` 零问题；全量 `flutter test --no-pub` 1687 项通过、1 项计时 benchmark 默认跳过（该项前后已独立运行通过），退出码均为 0。未增加依赖、manifest 或逐任务回执。

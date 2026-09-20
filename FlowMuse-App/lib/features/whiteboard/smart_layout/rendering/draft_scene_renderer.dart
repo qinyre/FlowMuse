@@ -190,8 +190,10 @@ class DraftSceneRenderer {
       final layers = <DraftRenderLayer>[];
       final measure = TextMeasureAdapter();
       final zIndexById = <String, int>{};
-      for (var i = 0; i < scene.orderedElements.length; i++) {
-        zIndexById[scene.orderedElements[i].id.value] = i;
+      // getter 每次都会复制并排序；同一不可变 Scene 只取一次。
+      final ordered = scene.orderedElements;
+      for (var i = 0; i < ordered.length; i++) {
+        zIndexById[ordered[i].id.value] = i;
       }
       for (final element in active) {
         layers.add(_layerOf(element, measure, resolved, zIndexById, missing));

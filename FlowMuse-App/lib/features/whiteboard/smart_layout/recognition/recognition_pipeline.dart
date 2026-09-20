@@ -100,6 +100,7 @@ class RecognitionSessionResult {
     this.structureResult,
     this.partial = false,
     this.partialNotes = const [],
+    this.failure,
   });
 
   final String operationId;
@@ -130,6 +131,10 @@ class RecognitionSessionResult {
   final bool partial;
   final List<String> partialNotes;
 
+  /// 重试耗尽后的真实请求故障；不能从 missingResponse 保留状态猜故障原因。
+  /// 只用于解释部分完成，不改变任何源的准入或保留状态。
+  final RecognitionException? failure;
+
   /// 携带已结算账本的副本（语义适配后回填会话产物用；其余字段原样）。
   RecognitionSessionResult copyWith({
     SourceLedger? ledger,
@@ -149,6 +154,7 @@ class RecognitionSessionResult {
     structureResult: structureResult,
     partial: partial || (ledger?.preservedCount ?? 0) > 0,
     partialNotes: partialNotes,
+    failure: failure,
   );
 }
 
@@ -318,6 +324,7 @@ class RecognitionPipeline {
   final Map<String, RegionAsset> _assetByRegion = {};
   final Map<String, RegionReadOutcome> _outcomes = {};
   int _cacheHits = 0;
+  RecognitionException? _lastFailure;
   List<RegionPartition> _effectivePartitions = const [];
 
   /// 状态迁移观察者（R7 面板状态播报；null = 无观察）。
@@ -820,8 +827,21 @@ class RecognitionPipeline {
       ledger: ledger,
       assetIndex: assetIndex,
       structureResult: structureResult,
-      partial: ledger.preservedCount > 0 || partialNotes.isNotEmpty,
+      partial:
+          ledger.preservedCount > 0 ||
+          partialNotes.isNotEmpty ||
+          _lastFailure != null,
       partialNotes: List.unmodifiable(partialNotes),
+      failure:
+          _lastFailure ??
+          (_budgetExpired
+              ? const RecognitionException(
+                  RecognitionExceptionKind.budgetExhausted,
+                  retryable: false,
+                  code: 'operationTimeout',
+                  detail: '本轮处理时限已到',
+                )
+              : null),
     );
   }
 
@@ -951,6 +971,7 @@ class RecognitionPipeline {
           throw RecognitionCancelledException(null);
         }
         if (!_canRetry(error, attempts)) {
+          _lastFailure = error;
           return null;
         }
         attempts++;
@@ -998,6 +1019,7 @@ class RecognitionPipeline {
           throw RecognitionCancelledException(null);
         }
         if (!_canRetry(error, attempts)) {
+          _lastFailure = error;
           return null;
         }
         attempts++;

@@ -105,14 +105,44 @@ void main() {
     return container;
   }
 
-  Widget host(ProviderContainer container) => UncontrolledProviderScope(
-    container: container,
-    child: const MaterialApp(
-      home: Scaffold(
-        body: SingleChildScrollView(child: SmartLayoutSessionView()),
-      ),
-    ),
-  );
+  Widget host(ProviderContainer container, {ValueNotifier<String?>? status}) =>
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SmartLayoutSessionView(recognitionStatus: status),
+            ),
+          ),
+        ),
+      );
+
+  testWidgets('等待时间为真实经过时间，阶段切换不归零，取消后释放计时器', (tester) async {
+    final container = setUpContainer();
+    final status = ValueNotifier<String?>('正在识别');
+    addTearDown(status.dispose);
+    final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+    await tester.pumpWidget(host(container, status: status));
+    await vm.startAnalysis();
+    await tester.pump();
+    expect(find.text('已等待 0 秒'), findsOneWidget);
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 1100)),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('已等待 0 秒'), findsNothing);
+    final elapsed = tester.widget<Text>(find.textContaining('已等待')).data;
+    status.value = '正在复核';
+    await tester.pump();
+    expect(find.text('正在复核'), findsOneWidget);
+    expect(find.text(elapsed!), findsOneWidget);
+    expect(find.textContaining('%'), findsNothing);
+    await tester.tap(find.text('取消'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 10));
+    expect(find.textContaining('已等待'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('idle：整页视觉模式空范围也可启动，摘要随范围更新', (tester) async {
     final container = setUpContainer();
