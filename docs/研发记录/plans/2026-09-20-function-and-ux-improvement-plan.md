@@ -185,6 +185,7 @@ Set-Location 'D:\Program\HarmonyOS\2024-se-17\FlowMuse-Server'
 - 用结构名称选择候选，评分与逐源账本折叠；整理/保留计数取所选 patch 账本，保留原因可读。真实语义块可选，标题/正文与保留原件接现有 patch/rerun；无效合并入口移除，拒绝原因显示，不支持逐字改 OCR。
 - 修复纠错重跑期间仍引用已释放旧图、重复操作与关闭后的迟到回调问题；重跑保留所选块 ID，防止后续保留操作误指首块。
 - 验证：390×900 与 1200×900 widget 全链走过对照/纠错/保留/应用/一次撤销，原稿指纹不变、角色变化影响真实产物字号、该原生文字流程零网络；全量 1682 项通过，静态检查零问题（退出码均 0）。桌面截图已检查，生成入口为 `smart_layout_review_flow_test.dart` 的 `SMART_LAYOUT_UX_CAPTURE=true`，产物在忽略目录 `FlowMuse-App/build/smart-layout-ux/`。截图和 widget 检查不代替平板手势/实机清晰度验收。
+- 配色复核：初版截图测试遗漏 `AppTheme`，误显示 Flutter 默认紫色，不能代表正式应用配色。已改用 `AppTheme.fromPreset(defaultThemePreset)`，补面板色板/主按钮颜色断言，并重生成含实际背景和阴影的两种尺寸截图；正式面板仍继承宿主主题，未硬编码绿色或改动全局主题。
 
 ### D（2026-09-20）
 

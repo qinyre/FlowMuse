@@ -6,6 +6,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flow_muse/app/app_theme.dart';
+import 'package:flow_muse/app/app_theme_preset.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document.dart';
@@ -30,7 +32,7 @@ void main() {
         'MaterialIcons',
       )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
       final bytes = ByteData.sublistView(await File(fontPath).readAsBytes());
-      for (final family in ['Ahem', 'Roboto', 'Excalifont']) {
+      for (final family in ['Ahem', 'Roboto', 'serif', 'Excalifont']) {
         await (FontLoader(family)..addFont(Future.value(bytes))).load();
       }
     }
@@ -38,6 +40,12 @@ void main() {
 
   for (final width in [390.0, 1200.0]) {
     testWidgets('审阅完整流程 ${width.toInt()}px：对照/纠错/保留/应用/一次撤销', (tester) async {
+      final disabledShadows = debugDisableShadows;
+      if (const bool.fromEnvironment('SMART_LAYOUT_UX_CAPTURE')) {
+        // 截图保留真实阴影，避免测试替身把面板画成粗黑轮廓。
+        debugDisableShadows = false;
+        addTearDown(() => debugDisableShadows = disabledShadows);
+      }
       tester.view.devicePixelRatio = 1;
       tester.view.physicalSize = Size(width, 900);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -97,13 +105,15 @@ void main() {
       );
       addTearDown(scope.dispose);
       final boundary = GlobalKey();
+      final appTheme = AppTheme.fromPreset(defaultThemePreset);
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
-            home: Scaffold(
-              body: RepaintBoundary(
-                key: boundary,
-                child: Stack(
+            theme: appTheme,
+            home: RepaintBoundary(
+              key: boundary,
+              child: Scaffold(
+                body: Stack(
                   children: [
                     Positioned(
                       left: 16,
@@ -142,6 +152,25 @@ void main() {
       expect(state().phase, SmartLayoutSessionPhase.reviewing);
       expect(state().validatedCards, isNotEmpty);
       expect(state().reviewContext, isNotNull);
+      expect(
+        Theme.of(
+          tester.element(find.byType(SmartLayoutSessionView)),
+        ).colorScheme,
+        appTheme.colorScheme,
+        reason: '截图与真实面板必须沿用应用主题，不能用 Flutter 默认紫色',
+      );
+      expect(
+        tester
+            .widget<Material>(
+              find.descendant(
+                of: find.widgetWithText(FilledButton, '应用所选排版'),
+                matching: find.byType(Material),
+              ),
+            )
+            .color,
+        appTheme.colorScheme.primary,
+        reason: '主要操作按钮使用应用主色',
+      );
       final captured = state().reviewContext!.originalScene;
       final sourceBlock =
           state().reviewContext!.document.blocks[width > 720 ? 1 : 0];
@@ -181,7 +210,11 @@ void main() {
       );
       await tester.tap(find.byTooltip('适合页面'));
       await tester.pump();
-      await _capture(tester, boundary, 'review-${width.toInt()}');
+      try {
+        await _capture(tester, boundary, 'review-${width.toInt()}');
+      } finally {
+        debugDisableShadows = disabledShadows;
+      }
 
       Future<void> openCorrections() async {
         if (find.byType(DropdownButton<String>).evaluate().isNotEmpty) return;
