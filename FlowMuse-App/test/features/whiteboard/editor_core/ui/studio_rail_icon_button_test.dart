@@ -173,9 +173,16 @@ void main() {
       lines.any((line) => line.contains('source=gesture stage=tapUp')),
       isTrue,
     );
+    // 第三轮起动作走原始指针通道：rawTap 记录派发，InkWell 的 tap 被去重挡下。
     expect(
-      lines.any((line) => line.contains('source=gesture stage=tap')),
+      lines.any((line) => line.contains('source=gesture stage=rawTap')),
       isTrue,
+      reason: '触控笔点选应由原始指针通道派发',
+    );
+    expect(
+      lines.any((line) => line.contains('source=gesture stage=inkTapSuppressed')),
+      isTrue,
+      reason: 'InkWell 判赢的同一按压必须被去重，不能派发两次',
     );
     expect(lines.every((line) => !line.contains('测试工具')), isTrue);
     expect(lines.every((line) => !line.contains('position=')), isTrue);

@@ -2,8 +2,9 @@
 
 > 发现日期：2026-09-17
 > 发现途径：鸿蒙真机触控笔反馈（第一轮修复无效后复现）+ 框架源码核验 + widget 复现测试
-> 性质：**框架交互机制缺陷**（Material `Tooltip` 气泡命中不透明），非业务代码逻辑错误
-> 状态：悬停气泡缺陷已由自绘 `HoverTooltip` 覆盖；本轮剩余真机现象尚未在本机复现，已补默认关闭的输入诊断探针
+> 性质：前两轮为**框架交互机制缺陷**（Material `Tooltip` 气泡命中不透明）；第三轮确认为
+> **结构性缺陷**（点击动作依赖手势竞技场判决，引擎取消指针即永久失效）
+> 状态：第三轮已改为触控笔原始指针通道派发（绕开竞技场）；**真机复验待做**（用下方诊断开关）
 
 ## 现象
 
@@ -90,18 +91,113 @@ flutter run --dart-define=FLOWMUSE_TOOLBAR_INPUT_DIAGNOSTICS=true
 
 本机测试覆盖诊断默认关闭、事件阶段、取消和卸载清理。原鸿蒙设备仍需按真机矩阵复验，不能仅凭 widget 测试宣称原现场现象已经消失。
 
+## 第三轮（2026-09-20）：真机症状恶化 → 绕开竞技场的原始指针通道
+
+### 新现象（真机反馈）
+
+前两轮修复（`36bbb38` 改 `triggerMode=manual`、`c1c00ff` 换 `HoverTooltip`）之后真机症状**更重**：
+几乎每次都要点好几次，且第一次点击连灰色高亮都不出现。说明前两轮改的都是"气泡吞点击"的
+子问题，没有触及真正的机制。
+
+### 本轮排除的假设（均有框架源码/探针证据）
+
+| 假设 | 证据 | 结论 |
+|------|------|------|
+| `buttons` 不匹配导致 tap 被拒 | `converter.dart` `_synthesiseDownButtons` 对 touch/stylus/invertedStylus 的 down/move 在 `buttons==0` 时合成 `kPrimaryButton` | 排除 |
+| 抖动位移越过 slop | `kTouchSlop = 18` 逻辑像素，探针 10px 抖动不触发 `handleEvent` 的 slop 分支 | 排除（≤18px 内不取消） |
+| 竞技场里有第二个识别器抢手势 | `debugPrintGestureArenaDiagnostics` 探针：按钮本地竞技场只有 tap 一个成员，Default winner 正常 | 排除 |
+| `HoverTooltip` 气泡吞事件 | 气泡包 `IgnorePointer`，本地测试点击透传 | 排除 |
+| 应用层代码合成 `PointerCancelEvent` | 全仓无 `cancelPointer` 调用 | 排除 |
+
+### 根因（框架机制，真机引擎差异触发）
+
+点击动作**完全依赖手势竞技场判决**：
+
+1. `BaseTapGestureRecognizer` 的 `deadline = kPressTimeout(100ms)`——`tapDown`（按钮高亮）
+   只有在竞技场判赢或超时后才派发；`tap` 只在 `PointerUpEvent` 时派发。
+2. `BaseTapGestureRecognizer.handlePrimaryPointer` 收到 `PointerCancelEvent` 时
+   `resolve(rejected)` + `_reset()`——**这一次按压被永久取消**，不会再有 tap。
+3. `GestureBinding._handlePointerEventImmediately`（`gestures/binding.dart:418-421`）对
+   `PointerUpEvent || PointerCancelEvent` 执行 `_hitTests.remove(event.pointer)`：
+   cancel 会把该指针的命中路径从缓存里移除，而 `hitTestResult == null` 的事件
+   **不派发**（`binding.dart:436-438`）——即**引擎发 cancel 之后，紧随的 up 根本到不了按钮**。
+
+真机触控笔的事件流由 OHOS 引擎产生，按压期间出现 cancel（或取消时机早于竞技场判决）
+即命中此链：高亮都没来得及画 → 点一次没用；需要连点多次。手指触摸不走这条路径，故不复现。
+
+### 修复
+
+`StudioRailIconButton`（`editor_core/src/ui/studio_rail_icon_button.dart`）改为 StatefulWidget，
+在最外层 `Listener` 上为触控笔（`stylus` / `invertedStylus`）加一条**不经过竞技场**的通道：
+
+- 按下（命中按钮）→ 记录 pointer 与按下位置；
+- 移动 → 累计最大位移；抬起**或取消** → 位移 ≤ `kTouchSlop`（与框架同源）即派发动作，
+  位移越大（视作拖动）则忽略；
+- 结算发生在 `PointerUpEvent` 与 `PointerCancelEvent` 两处——因为 cancel 之后 up 不会派发，
+  取消时刻是唯一能救回这次点选的机会；
+- 去重：原始通道派发后置 400ms 抑制开关，InkWell 的 tap 若也判赢则只记 `inkTapSuppressed` 不派发；
+  下一次按压按下时复位；
+- 手指/鼠标**完全不动**（仍走 InkWell 原路径），已有测试证明两者行为不变。
+
+### 验证
+
+- `flutter analyze`：No issues found。
+- `flutter test`：**全量 1690 项通过**。本轮新增 9 例
+  （`studio_rail_icon_button_stylus_test.dart`），其中"按下后引擎取消指针，抬手仍应生效"
+  在修复前实测 `taps=0`（复现吞点击），修复后 `taps=1`；另含"拖动后被取消不生效"守位移容差。
+- 既有回归（输入诊断、悬停气泡、真实工具栏/弹层交互、拖动不切换工具、长按/触摸/反向笔）
+  全部保持通过。
+
+### 真机复验方法（待做）
+
+```text
+flutter run --dart-define=FLOWMUSE_TOOLBAR_INPUT_DIAGNOSTICS=true
+```
+
+关注 `studio_rail_icon_button` 的 `source=gesture` 阶段：
+
+| 日志 | 含义 |
+|------|------|
+| `stage=rawTap` | 引擎正常发 up，原始通道结算（正常路径） |
+| `stage=rawCancelTap` | **引擎用 cancel 代替了 up**（本轮根因的现场证据），原始通道救回 |
+| `stage=inkTapSuppressed` | InkWell 的 tap 也判赢，被去重挡下（同一次按压不会派发两次） |
+| `stage=tap` | 手指/鼠标路径（未走原始通道） |
+
+若真机上仍出现"点了没反应"，看是否有 `source=pointer stage=down` 而无任何 `rawTap`/`rawCancelTap`：
+那说明按下事件根本没到按钮（被更上层命中对象拦截），属另一个问题。
+
+### 未覆盖的同根因站点（本轮范围外）
+
+本轮只改 `StudioRailIconButton`，覆盖：桌面/紧凑工具栏全部按钮、笔盒与图形弹层全部条目。
+以下编辑器内控件仍是 `IconButton`/`InkWell`/`IconToggleChip`（同样依赖竞技场，触控笔遇到
+引擎 cancel 会同样失效，但不在本次反馈范围内）：
+
+- `zoom_controls`（撤销/重做/缩放）、`hamburger_menu`、`help_button`、`theme_buttons`；
+- `library_panel` / `compact_library`（素材库）、`compact_menu`、`canvas_background_picker`；
+- `find_overlay`、`link_overlay`、`property_panel_content`（属性面板 chips 与按钮）、
+  `toggle_chips`（`IconToggleChip`）。
+
+若真机复验显示这些控件也有同类现象，可按同一模式（提取原始指针通道到共用基件）扩展。
+
 ## 遗留与后续
 
 - `editor_core` 之外仍有 31 处框架 `Tooltip`（白板 feature 内 8 处：AI 助手对话框、
   区域截取、排版面板/模板表、whiteboard_page；其余 feature 23 处）。
   这些同样具备"气泡吞点击"的机制，但布局多为横向行（探针证明当前不受影响）；
   若后续出现同类现象，按同一模式替换为 `HoverTooltip`。
-- 若真机复验仍复现，先用上述开关关联失败次数与事件阶段，再决定是否需要新的输入适配；没有事件证据前不要扩大手势层改动。
+- 第三轮的原始指针通道目前只落在 `StudioRailIconButton`；若要覆盖其余编辑器控件，
+  先按上一节的清单评估，不要在没有真机证据时扩大手势层改动。
 
 ## 关联
 
 - 分支：`fix/toolbar-stylus-double-tap`
 - 首轮提交：`36bbb38`（`triggerMode: manual`，无效）
+- 第二轮提交：`c1c00ff`（自绘 `HoverTooltip`）、`c4ba847`（输入诊断与回归）
 - 涉及框架源码：`packages/flutter/lib/src/widgets/raw_tooltip.dart`
   (`_ExclusiveMouseRegion`、`build`、`_RenderTheater.hitTestChildren`)、
   `packages/flutter/lib/src/material/tooltip.dart`（`_defaultVerticalOffset = 24`）
+- 第三轮涉及框架源码：`packages/flutter/lib/src/gestures/binding.dart`
+  （`_handlePointerEventImmediately`，cancel 移除命中缓存后 up 不再派发）、
+  `gestures/tap.dart`（`BaseTapGestureRecognizer`，`deadline=kPressTimeout`、
+  cancel → `resolve(rejected)` + `_reset()`）、`gestures/recognizer.dart`
+  （slop 检查只在 move 事件上）、`gestures/constants.dart`（`kTouchSlop = 18`）
