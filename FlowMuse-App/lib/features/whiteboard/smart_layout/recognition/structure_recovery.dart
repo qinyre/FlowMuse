@@ -7,6 +7,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart';
 import '../snapshot/deterministic_hash.dart';
+import '../snapshot/layout_page_snapshot.dart' show conservativeVisualBounds;
 
 /// 结构恢复（spec §7）：本地规则优先；结构请求触发条件命中才发
 ///（至多一次）；模型只改角色/分组/顺序/层级，正文与几何一律本地值。
@@ -140,6 +141,13 @@ class StructureRecovery implements RecognitionStructureRecoverer {
   List<RecognitionUnitInput> buildUnits(RecognitionStructureInput input) {
     final units = <RecognitionUnitInput>[];
     final scene = input.capture.scene;
+    // 区域成员覆盖集：识别链中资产失败等原因被丢弃分区的笔迹不属任何
+    // 区域记录，但识别账本仍注册并保留它们——必须补保留障碍单元，
+    // 否则语义文档块覆盖不了账本全集，候选链守恒断言 fail closed
+    //（2026-09-18 真机：两个零长度墨点致 semantic-contract-broken）。
+    final coveredSourceIds = <String>{
+      for (final record in input.regionRecords) ...record.targetSourceIds,
+    };
     for (final record in input.regionRecords) {
       final outcome = input.regionOutcomes[record.regionId];
       final isRecognized =
@@ -205,7 +213,24 @@ class StructureRecovery implements RecognitionStructureRecoverer {
             ),
           ),
         );
-      } else if (element is! FreedrawElement) {
+      } else if (element is FreedrawElement) {
+        // 无区域覆盖的孤儿笔迹（资产失败丢弃分区等）：保留障碍单元。
+        if (!coveredSourceIds.contains(element.id.value)) {
+          final visual = conservativeVisualBounds(element);
+          units.add(
+            RecognitionUnitInput(
+              unitId: 'native:${element.id.value}',
+              kind: RecognitionUnitKind.preserved,
+              bounds: RecognitionBounds(
+                left: visual.left,
+                top: visual.top,
+                width: visual.width,
+                height: visual.height,
+              ),
+            ),
+          );
+        }
+      } else {
         units.add(
           RecognitionUnitInput(
             unitId: 'native:${element.id.value}',

@@ -242,6 +242,51 @@ void main() {
   });
 
   group('逐区域失败隔离与资产释放', () {
+    test('零长度笔画：渲染无可见像素 → 资产失败，区域保留不发送', () async {
+      // 2026-09-18 真机事故原样元素：落笔即抬（两点重合）、width/height=1、
+      // 钢笔笔刷带压力——渲染出 831×831 全透明空图，致 provider 挂死。
+      final dot = FreedrawElement(
+        id: const ElementId('dot'),
+        x: 741.28,
+        y: 394.25,
+        width: 1,
+        height: 1,
+        points: const [Point(0, 0), Point(0, 0)],
+        pressures: const [0.4124751281738281, 0.19854505334926154],
+        simulatePressure: false,
+        strokeColor: '#1e1e1e',
+        strokeWidth: 6,
+        isComplete: true,
+        customData: const {
+          'flowMuse': {
+            'brushType': 'fountain-pen',
+            'pressureEncoding': 1,
+            'pageId': 'page-1',
+          },
+        },
+      );
+      final scene = Scene().addElement(dot);
+      final builder = RegionAssetBuilder(capturedScene: scene);
+      addTearDown(builder.dispose);
+      final outcome = await builder.build(
+        RegionRecord(
+          regionId: 'r:dot',
+          bounds: const RecognitionBounds(
+            left: 10,
+            top: 20,
+            width: 8,
+            height: 8,
+          ),
+          targetSourceIds: const ['dot'],
+          localLineHeight: 1,
+        ),
+        const RecognitionBudget(),
+      );
+      final failed = outcome as RegionAssetFailed;
+      expect(failed.reason, RegionAssetFailureReason.renderError);
+      expect(failed.detail, contains('无可见像素'));
+    });
+
     test('target 缺员：单区域失败不影响其他区域', () async {
       final scene = Scene().addElement(stroke('stroke-a', 10, 20, '#1e1e1e'));
       final builder = RegionAssetBuilder(capturedScene: scene);
