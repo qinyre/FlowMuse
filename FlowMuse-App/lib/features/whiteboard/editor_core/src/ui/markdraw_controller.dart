@@ -4389,13 +4389,8 @@ class MarkdrawController extends ChangeNotifier {
     final trimmed = newText.trim();
     // 空文本会产出不可见的空文字元素（笔迹已删、橙框圈空盒），拒绝保存。
     if (trimmed.isEmpty) return false;
-    var candidate = current.copyWithText(text: trimmed);
-    // 与创建/引擎一致的尺寸规则：横排 max(现值, 测量) 只放不缩，
-    // 避免改字后盒子跳动。（v2 转写一律横排，无竖排文本进草稿。）
-    final (measuredWidth, measuredHeight) = TextRenderer.measure(candidate);
-    candidate = candidate.copyWith(
-      width: math.max(current.width, measuredWidth),
-      height: math.max(current.height, measuredHeight),
+    final candidate = SmartLayoutTemplateEngine.measureTemplateText(
+      current.copyWithText(text: trimmed),
     );
     // 草稿场景内原位替换（同 id）；提交时按 id 采用草稿最终形态。
     applyResult(UpdateElementResult(candidate));
@@ -5158,11 +5153,7 @@ class MarkdrawController extends ChangeNotifier {
       },
     );
     final styled = _applySmartLayoutTextStyle(element);
-    final (measuredWidth, measuredHeight) = TextRenderer.measure(styled);
-    return styled.copyWith(
-      width: math.max(styled.width, measuredWidth),
-      height: math.max(styled.height, measuredHeight),
-    );
+    return SmartLayoutTemplateEngine.measureTemplateText(styled);
   }
 
   double _fontSizeForRecognizedBlock(
