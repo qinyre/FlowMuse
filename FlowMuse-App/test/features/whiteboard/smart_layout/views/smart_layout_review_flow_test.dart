@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -20,6 +21,8 @@ import 'package:flow_muse/features/whiteboard/smart_layout/views/smart_layout_se
 import 'package:flow_muse/features/whiteboard/smart_layout/views/smart_layout_session_view.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/validation/validated_candidate.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import '../recognition/fake_recognition_transport.dart';
 
 /// 原生文字 → 生产 V3 识别/语义/候选 → 真实面板纠错 → CAS 应用/撤销。
 /// 不依赖服务与实机；截图是桌面 widget 渲染，不作为平板验收证据。
@@ -86,23 +89,16 @@ void main() {
           ),
         );
       }
-      var requests = 0;
+      final transport = FakeRecognitionTransport(
+        responder: (body) async => buildStructureResponseBody(
+          jsonDecode(body) as Map<String, Object?>,
+        ),
+      );
       final scope = SmartLayoutRealSessionScope.build(
         controller: controller,
         pageId: 'page-1',
         serverUri: Uri.parse('http://127.0.0.1:9'),
-        post:
-            ({
-              required url,
-              required body,
-              headers = const {},
-              connectTimeoutMs = 8000,
-              readTimeoutMs = 15000,
-              cancelToken,
-            }) async {
-              requests++;
-              throw StateError('此原生文本场景不应请求识别');
-            },
+        post: transport.post,
       );
       addTearDown(scope.dispose);
       final boundary = GlobalKey();
@@ -153,6 +149,10 @@ void main() {
       expect(state().phase, SmartLayoutSessionPhase.reviewing);
       expect(state().validatedCards, isNotEmpty);
       expect(state().reviewContext, isNotNull);
+      expect(state().reviewContext!.recognitionFailure, isNull);
+      expect(transport.decodedBodies('read'), isEmpty, reason: '原生文字不 OCR');
+      expect(transport.decodedBodies('structure'), hasLength(1));
+      final analyzedRequests = transport.requests.length;
       expect(
         Theme.of(
           tester.element(find.byType(SmartLayoutSessionView)),
@@ -296,7 +296,11 @@ void main() {
         );
       }
       expect(SceneFingerprint.of(controller.currentScene), before);
-      expect(requests, 0, reason: '对照/角色/保留不重新请求识别');
+      expect(
+        transport.requests,
+        hasLength(analyzedRequests),
+        reason: '对照/角色/保留不重新请求识别或整页分析',
+      );
       await tester.ensureVisible(find.text('应用所选排版'));
       expect(find.text('应用所选排版').hitTestable(), findsOneWidget);
       await tester.tap(find.text('应用所选排版'));

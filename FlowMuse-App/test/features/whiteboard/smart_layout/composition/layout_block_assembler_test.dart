@@ -1,6 +1,7 @@
 import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/composition/layout_block_assembler.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/design/text_measure_adapter.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/placement/flow_placer.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/layout_page_snapshot.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
@@ -380,6 +381,74 @@ void main() {
         containsAll(['fig-1', 'cap-1']),
       ]),
     );
+  });
+
+  test('图文关联带上完整列表子树；保留/缺失图不拉动条目或改绑', () {
+    for (final mode in ['resolved', 'missing', 'preserved']) {
+      final preserved = mode == 'preserved';
+      final assembly = assembler.assemble(
+        document: doc(
+          blocks: [
+            sb('f', preserved ? SemanticRole.unknown : SemanticRole.figure, [
+              'i',
+            ]),
+            sb('other', SemanticRole.body, ['o'], text: '不相关的段落'),
+            sb(
+              'a',
+              SemanticRole.list,
+              ['a'],
+              text: '1. 实验',
+              extras: {'listGroupId': 'root'},
+            ),
+            sb(
+              'child',
+              SemanticRole.list,
+              ['child'],
+              text: 'a. 说明',
+              extras: {
+                'listGroupId': 'nested',
+                'parentUnitId': 'a',
+                'relatedFigure': 'f',
+              },
+            ),
+            sb(
+              'b',
+              SemanticRole.list,
+              ['b'],
+              text: '2. 结果',
+              extras: {'listGroupId': 'root'},
+            ),
+          ],
+          consumed: [if (!preserved) 'i', 'o', 'a', 'child', 'b'],
+          preserved: [if (preserved) 'i'],
+        ),
+        snapshot: snapshot(
+          objects: [imageObject('i')],
+          assets: [
+            if (mode == 'resolved')
+              SnapshotRenderAsset(
+                fileId: 'file-1',
+                ownerSourceId: 'i',
+                status: SnapshotRenderAssetStatus.resolved,
+                mimeType: 'image/png',
+                byteLength: 10,
+              ),
+          ],
+        ),
+        measure: measure,
+      );
+      expect(assembly.ledgerConserved, isTrue);
+      final units = FlowPlacer.placementUnits(assembly);
+      final childGroup = units.singleWhere(
+        (g) => g.any((b) => b.id == 'child'),
+      );
+      expect(
+        childGroup.map((b) => b.id),
+        mode == 'resolved' ? ['f', 'a', 'child', 'b'] : ['child'],
+      );
+      expect(assembly.blockById('child')!.kind, LayoutBlockKind.list);
+      expect(assembly.blockById('child')!.text!.text, 'a. 说明');
+    }
   });
 
   test('protected 障碍投影 + ledger preserved 态复核 fail closed', () {

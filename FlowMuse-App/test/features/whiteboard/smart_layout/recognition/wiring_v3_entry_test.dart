@@ -92,8 +92,13 @@ void main() {
   }
 
   FakeRecognitionTransport transportOf() => FakeRecognitionTransport(
-    responder: (body) async =>
-        buildBatchResponseBody(jsonDecode(body) as Map<String, Object?>),
+    responder: (body) async {
+      final decoded = jsonDecode(body) as Map<String, Object?>;
+      if (decoded['stage'] != 'structure') {
+        return buildBatchResponseBody(decoded);
+      }
+      return buildStructureResponseBody(decoded);
+    },
   );
 
   testWidgets('真实入口：原生文本组合进入排版且整组只移动一次', (tester) async {
@@ -138,7 +143,13 @@ void main() {
     for (final c in candidates!) {
       c.dispose();
     }
-    expect(transport.requests, isEmpty, reason: '原生组合无需OCR');
+    expect(transport.decodedBodies('read'), isEmpty, reason: '原生组合无需OCR');
+    expect(transport.decodedBodies('verify'), isEmpty);
+    expect(
+      transport.decodedBodies('structure'),
+      hasLength(1),
+      reason: '多段原生文字仍需结构分析',
+    );
     scope.session.cancelOperation();
   });
 
