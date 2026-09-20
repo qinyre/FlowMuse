@@ -13,6 +13,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/design/text_measure_a
 import 'package:flow_muse/features/whiteboard/smart_layout/gateways/smart_layout_editor_gateway.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/geometry/layout_rect.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/metrics/anti_gaming_veto.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/metrics/composition_scene_metrics.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/metrics/layout_metric_contract.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/metrics/layout_profile.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/patch/candidate_patch_materializer.dart';
@@ -20,11 +21,13 @@ import 'package:flow_muse/features/whiteboard/smart_layout/patch/scene_patch_deb
 import 'package:flow_muse/features/whiteboard/smart_layout/patch/smart_layout_scene_patch.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/placement/flow_placer.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/rendering/draft_scene_renderer.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/reducer/smart_layout_scene_reducer.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_fingerprint.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_revision.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/source_coverage_ledger.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/validation/reduced_scene_metrics_extractor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/validation/validated_candidate_pipeline.dart';
+import 'fixtures/semantic_composition/pages.dart';
 
 // 离线布局回归：角色/图文配对是真值输入，合成插画不是线上模型识别证据。
 const _export = bool.fromEnvironment('EXPORT_LAYOUT_EVIDENCE');
@@ -48,6 +51,98 @@ void main() {
     }
     await fonts.load();
   });
+
+  for (final page in effectPages) {
+    test('效果集 ${page.holdout ? '留出' : '开发'} ${page.name}', () async {
+      final f = await _effectFixture(page);
+      final layouts = await SemanticComposer.generate(
+        scene: f.scene,
+        assembly: f.assembly,
+        pageFrame: f.frame,
+        measure: TextMeasureAdapter(),
+      );
+      final repeat = await SemanticComposer.generate(
+        scene: f.scene,
+        assembly: f.assembly,
+        pageFrame: f.frame,
+        measure: TextMeasureAdapter(),
+      );
+      expect(layouts.map((l) => l.signature), repeat.map((l) => l.signature));
+      for (var i = 0; i < layouts.length; i++) {
+        expect(
+          ScenePatchDebugCodec.encode(_input(f, layouts[i]).patch),
+          ScenePatchDebugCodec.encode(_input(f, repeat[i]).patch),
+        );
+      }
+      final round = await _gate(f, layouts);
+      expect(
+        round.top,
+        isNotEmpty,
+        reason: '${page.name}: ${round.rejections}',
+      );
+      for (final c in round.top) {
+        final output = c.reduced.scene.activeElements;
+        expect(
+          output.whereType<ImageElement>().map((e) => e.id.value).toSet(),
+          f.scene.activeElements
+              .whereType<ImageElement>()
+              .map((e) => e.id.value)
+              .toSet(),
+        );
+        for (final b in f.assembly.blocks) {
+          if (b.text != null &&
+              c.patch.sourceCoverage.statusOf(b.sourceRefs.first) ==
+                  SourceCoverageStatus.consumed) {
+            expect(
+              output.whereType<TextElement>().where(
+                (e) => e.text == b.text!.text,
+              ),
+              hasLength(1),
+              reason: b.id,
+            );
+          }
+          if (b.isPreservedLike) {
+            for (final id in b.sourceRefs) {
+              expect(
+                output.singleWhere((e) => e.id.value == id),
+                same(
+                  f.scene.activeElements.singleWhere((e) => e.id.value == id),
+                ),
+              );
+            }
+          }
+        }
+      }
+      if (page.alreadyGood) expect(round.recommendation!.recommended, isFalse);
+      debugPrint(
+        'EFFECT ${page.name} top=${round.top.first.diversityKey} '
+        'recommend=${round.recommendation!.recommended} delta=${round.recommendation!.improvement} '
+        'scores=${round.top.map((c) => '${c.diversityKey}:${c.score.score.toStringAsFixed(4)}').join(',')}',
+      );
+      if (_export) {
+        final renderer = DraftSceneRenderer();
+        final original = await renderer.render(
+          scene: f.scene,
+          viewport: const ViewportState(),
+          pixelSize: ui.Size(f.frame.width, f.frame.height),
+        );
+        await _png('${page.name}-before', original);
+        await _png(
+          '${page.name}-after',
+          round.recommendation!.recommended
+              ? round.top.first.snapshot
+              : original,
+        );
+        // 即使保留原稿，也留一份最高分备选，不能以隐藏坏例代替评估。
+        await _png('${page.name}-alternative', round.top.first.snapshot);
+        original.dispose();
+        renderer.dispose();
+      }
+      for (final c in round.top) {
+        c.dispose();
+      }
+    });
+  }
 
   if (const bool.fromEnvironment('RUN_LAYOUT_BENCHMARK')) {
     test('同机同字体本地候选十次基准（不含网络/样例构建）', () async {
@@ -200,6 +295,100 @@ void main() {
       reason: '${round.rejections.map((r) => r.reasonCodes)}',
     );
     for (final c in round.top) {
+      c.dispose();
+    }
+  });
+
+  test('实际评分：原稿可胜出、缺测不推荐、同输入分母不随候选改变', () async {
+    final f = await _fixture();
+    final layouts = await SemanticComposer.generate(
+      scene: f.scene,
+      assembly: f.assembly,
+      pageFrame: _page,
+      measure: TextMeasureAdapter(),
+    );
+    final round = await _gate(f, layouts);
+    expect(round.recommendation!.recommended, isTrue);
+    expect(round.recommendation!.improvement, greaterThanOrEqualTo(.05));
+    final best = round.top.first;
+    final ctx = CompositionMetricContext(
+      source: f.assembly,
+      page: Bounds.fromLTWH(0, 0, 1024, 1300),
+      analyzed: true,
+      pageIntent: 'comparison',
+    );
+    final originalBounds = ctx.boxes(best.snapshot, const {});
+    final unchanged = ctx.calculate(
+      scene: best.reduced.scene,
+      snapshot: best.snapshot,
+      originalBounds: originalBounds,
+    );
+    expect(
+      CompositionRecommendation.compare(unchanged, unchanged).recommended,
+      isFalse,
+    );
+    expect(
+      CompositionRecommendation.compare(unchanged, unchanged).improvement,
+      0,
+    );
+    final unknown =
+        CompositionMetricContext(
+          source: f.assembly,
+          page: ctx.page,
+          analyzed: false,
+        ).calculate(
+          scene: best.reduced.scene,
+          snapshot: best.snapshot,
+          originalBounds: originalBounds,
+        );
+    expect(
+      unknown.stateOf(LayoutMetricId.figureTextAffinity),
+      LayoutMetricState.unavailable,
+    );
+    expect(unknown[LayoutMetricId.figureTextAffinity], 0);
+    expect(
+      CompositionRecommendation.compare(unknown, unchanged).improvement,
+      isNull,
+    );
+    final fake = _input(f, layouts.first);
+    final altered = CandidateGateInput(
+      candidateId: fake.candidateId,
+      diversityKey: fake.diversityKey,
+      patch: fake.patch,
+      metricInput: LayoutMetricInput(
+        assembly: fake.metricInput.assembly,
+        placed: const [],
+        columnRects: const [],
+        preservedRects: const {},
+        originalBounds: const {},
+        contentHeight: 1,
+        hardValidated: true,
+      ),
+      veto: fake.veto,
+      validationElementIds: fake.validationElementIds,
+      outputElementIdsByBlock: fake.outputElementIdsByBlock,
+      semanticContextKey: fake.semanticContextKey,
+      relations: fake.relations,
+      readingOrder: fake.readingOrder,
+      compositionGroups: fake.compositionGroups,
+    );
+    final tampered = await ValidatedCandidatePipeline.run(
+      baseScene: f.scene,
+      pageContentBounds: ctx.page,
+      candidates: [altered],
+      profile: LayoutProfile.composition,
+      compositionMetrics: ctx,
+    );
+    expect(tampered.top, hasLength(1));
+    final matching = round.top.singleWhere(
+      (c) => c.candidateId == fake.candidateId,
+    );
+    expect(
+      tampered.top.single.score.score,
+      matching.score.score,
+      reason: '空的计划位置、内容高度和原位声明不能改变实际评分',
+    );
+    for (final c in [...round.top, ...tampered.top]) {
       c.dispose();
     }
   });
@@ -501,9 +690,236 @@ void main() {
 }
 
 class _Fixture {
-  const _Fixture(this.scene, this.assembly);
+  const _Fixture(this.scene, this.assembly, [this.frame = _page]);
   final Scene scene;
   final LayoutBlockAssembly assembly;
+  final LayoutRect frame;
+}
+
+Future<_Fixture> _effectFixture(EffectPage page) async {
+  final frame = LayoutRect(left: 0, top: 0, width: 1024, height: page.height);
+  var scene = Scene().addElement(
+    RectangleElement(
+      id: const ElementId('page'),
+      x: 0,
+      y: 0,
+      width: frame.width,
+      height: frame.height,
+      roughness: 0,
+      customData: const {
+        'flowMuse': {'role': 'page', 'pageId': 'p'},
+      },
+    ),
+  );
+  final blocks = <LayoutBlock>[];
+  for (var i = 0; i < page.order.length; i++) {
+    final id = page.order[i], text = page.texts[id];
+    final x = [600.0, 90.0, 440.0][i % 3];
+    final y = i == 0 ? 36.0 : 100.0 + i * 115;
+    final kind = page.titles.contains(id)
+        ? LayoutBlockKind.title
+        : page.lists.contains(id)
+        ? LayoutBlockKind.list
+        : page.captions.containsKey(id)
+        ? LayoutBlockKind.caption
+        : text == null
+        ? LayoutBlockKind.figure
+        : LayoutBlockKind.paragraph;
+    final ink = page.soft.containsKey(id);
+    final projection = text == null
+        ? null
+        : DisplayTextProjection.create(
+            rawText: text,
+            origin: ink ? LayoutTextOrigin.transcribed : LayoutTextOrigin.typed,
+            kind: kind,
+            newlineIndexes: page.soft[id] ?? const [],
+            confidence: ink ? 1 : 0,
+          );
+    if (text == null) {
+      if (!page.missing.contains(id)) {
+        scene = scene.addFile(
+          id,
+          ImageFile(mimeType: 'image/png', bytes: await _illustration(id, 640)),
+        );
+      }
+      scene = scene.addElement(
+        ImageElement(
+          id: ElementId(id),
+          x: x,
+          y: y,
+          width: 180,
+          height: page.portrait.contains(id) ? 270 : 135,
+          fileId: id,
+          crop: page.portrait.contains(id)
+              ? const ImageCrop(x: 0, y: 0, width: .5, height: 1)
+              : null,
+        ),
+      );
+    } else if (ink) {
+      scene = scene.addElement(
+        FreedrawElement(
+          id: ElementId(id),
+          x: x,
+          y: y,
+          width: 240,
+          height: 70,
+          points: const [
+            Point(0, 0),
+            Point(30, 20),
+            Point(80, 0),
+            Point(120, 50),
+            Point(200, 70),
+          ],
+        ),
+      );
+    } else {
+      scene = scene.addElement(
+        TextElement(
+          id: ElementId(id),
+          x: x,
+          y: y,
+          width: 340,
+          height: 55,
+          fontFamily: _font,
+          fontSize: 20,
+          text: text,
+          strokeColor: '#233b30',
+        ),
+      );
+    }
+    blocks.add(
+      LayoutBlock(
+        id: 'b-$id',
+        kind: kind,
+        sourceRefs: [id],
+        orderIndex: i.toDouble(),
+        keepTogether: false,
+        textOrigin: text == null
+            ? null
+            : ink
+            ? LayoutTextOrigin.transcribed
+            : LayoutTextOrigin.typed,
+        text: projection == null
+            ? null
+            : TextBlockSpec(
+                text: projection.displayText,
+                fontFamily: _font,
+                fontSize: 20,
+                lineHeight: 1.25,
+                projection: projection,
+              ),
+        figure: text == null
+            ? FigureBlockSpec(
+                fileId: id,
+                displayAspectRatio: page.portrait.contains(id) ? 2 / 3 : 4 / 3,
+                missingAsset: page.missing.contains(id),
+              )
+            : null,
+        extras: {
+          if (ink) 'transcribedText': text,
+          if (page.sections[id] != null) 'sectionId': page.sections[id],
+          if (page.sections[id] != null && page.titles.contains(id))
+            'sectionHeading': true,
+          if (page.lists.contains(id)) ...{'listGroupId': 'list', 'level': 1},
+          if (page.captions[id] != null) 'captionOf': 'b-${page.captions[id]}',
+        },
+      ),
+    );
+  }
+  if (page.fixed) {
+    scene = scene
+        .addElement(
+          RectangleElement(
+            id: const ElementId('fixed'),
+            x: 840,
+            y: 1050,
+            width: 90,
+            height: 60,
+            locked: true,
+            groupIds: const ['diagram'],
+          ),
+        )
+        .addElement(
+          ArrowElement(
+            id: const ElementId('arrow'),
+            x: 930,
+            y: 1080,
+            width: 60,
+            height: 30,
+            points: const [Point(0, 0), Point(60, 30)],
+            groupIds: const ['diagram'],
+            startBinding: const PointBinding(
+              elementId: 'fixed',
+              fixedPoint: Point(1, .5),
+            ),
+          ),
+        );
+    for (final id in ['fixed', 'arrow']) {
+      blocks.add(
+        LayoutBlock(
+          id: 'b-$id',
+          kind: LayoutBlockKind.preserved,
+          sourceRefs: [id],
+          orderIndex: blocks.length.toDouble(),
+          keepTogether: true,
+        ),
+      );
+    }
+  }
+  final relations = <BlockRelationship>[
+    for (final g in page.groups)
+      for (var i = 0; i + 1 < g.length; i++)
+        BlockRelationship(
+          kind: BlockRelationKind.keepWith,
+          fromBlockId: 'b-${g[i]}',
+          toBlockId: 'b-${g[i + 1]}',
+        ),
+    for (final c in page.captions.entries)
+      BlockRelationship(
+        kind: BlockRelationKind.captionOf,
+        fromBlockId: 'b-${c.key}',
+        toBlockId: 'b-${c.value}',
+      ),
+    for (var i = 0; i + 1 < page.order.length; i++)
+      if (page.titles.contains(page.order[i]))
+        BlockRelationship(
+          kind: BlockRelationKind.keepWith,
+          fromBlockId: 'b-${page.order[i]}',
+          toBlockId: 'b-${page.order[i + 1]}',
+        ),
+  ];
+  var f = _Fixture(
+    scene,
+    LayoutBlockAssembly(
+      blocks: blocks,
+      relationships: relations,
+      atomicGroups: [
+        for (final g in page.groups) g.map((id) => 'b-$id').toList(),
+      ],
+      documentConsumedSourceIds: page.order,
+      documentPreservedSourceIds: page.fixed
+          ? const ['fixed', 'arrow']
+          : const [],
+    ),
+    frame,
+  );
+  if (page.alreadyGood) {
+    final layouts = await SemanticComposer.generate(
+      scene: f.scene,
+      assembly: f.assembly,
+      pageFrame: frame,
+      measure: TextMeasureAdapter(),
+    );
+    final layout = layouts.firstWhere((l) => l.family == 'peerGrid');
+    final reduced =
+        SmartLayoutSceneReducer.apply(
+              base: f.scene,
+              patch: _input(f, layout).patch,
+            )
+            as ReducedScene;
+    f = _Fixture(reduced.scene, layout.assembly, frame);
+  }
+  return f;
 }
 
 Future<_Fixture> _fixture({
@@ -770,9 +1186,25 @@ Future<GateRoundResult> _gate(
   List<SemanticCompositionLayout> layouts,
 ) => ValidatedCandidatePipeline.run(
   baseScene: f.scene,
-  pageContentBounds: Bounds.fromLTWH(0, 0, 1024, 1300),
+  pageContentBounds: Bounds.fromLTWH(
+    f.frame.left,
+    f.frame.top,
+    f.frame.width,
+    f.frame.height,
+  ),
   candidates: layouts.map((l) => _input(f, l)).toList(),
-  profile: LayoutProfile.readability,
+  profile: LayoutProfile.composition,
+  compositionMetrics: CompositionMetricContext(
+    source: f.assembly,
+    page: Bounds.fromLTWH(
+      f.frame.left,
+      f.frame.top,
+      f.frame.width,
+      f.frame.height,
+    ),
+    analyzed: true,
+    pageIntent: 'comparison',
+  ),
 );
 
 Future<Uint8List> _illustration(String kind, int width) async {
@@ -803,6 +1235,21 @@ Future<Uint8List> _illustration(String kind, int width) async {
       8,
       ui.Paint()..color = const ui.Color(0xff253b31),
     );
+  }
+  // 每个资产可视觉区分，避免测试中两图字节相同而无法发现交换。
+  if (kind != 'a' && kind != 'b') {
+    final code = kind.runes.fold<int>(0, (s, r) => s * 31 + r);
+    canvas.drawRect(
+      const ui.Rect.fromLTWH(0, 0, 640, 24),
+      ui.Paint()..color = ui.Color(0xff000000 | (code & 0x7f7f7f)),
+    );
+    final label = ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: 42))
+      ..pushStyle(ui.TextStyle(color: const ui.Color(0xff233b30)))
+      ..addText(kind);
+    final paragraph = label.build()
+      ..layout(const ui.ParagraphConstraints(width: 620));
+    canvas.drawParagraph(paragraph, const ui.Offset(20, 415));
+    paragraph.dispose();
   }
   final picture = recorder.endRecording();
   final image = await picture.toImage(width, (width * .75).round());

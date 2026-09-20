@@ -401,6 +401,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(state().phase, SmartLayoutSessionPhase.reviewing);
     expect(state().validatedCards, isNotEmpty, reason: '${state().failure}');
+    expect(state().canApply, isFalse, reason: '缺少结构分析时默认保留原稿');
+    await tester.runAsync(vm.applySelectedCandidate);
+    expect(SceneFingerprint.of(controller.currentScene), before);
+    vm.chooseCandidate(state().validatedCards.first.candidateId);
+    await tester.pumpAndSettle();
     final candidate = state().selectedValidatedCandidate!;
     expect(
       candidate.snapshot.viewport.offset,

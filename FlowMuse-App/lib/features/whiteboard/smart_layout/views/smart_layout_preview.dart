@@ -14,7 +14,7 @@ import '../validation/validated_candidate.dart';
 class SmartLayoutPreview extends StatefulWidget {
   const SmartLayoutPreview({super.key, required this.candidate, this.context});
 
-  final ValidatedCandidate candidate;
+  final ValidatedCandidate? candidate;
   final SmartLayoutReviewContext? context;
 
   @override
@@ -167,7 +167,7 @@ class _SmartLayoutPreviewState extends State<SmartLayoutPreview> {
 
   void _configureView(Size size, String mode) {
     final before = mode == 'result' ? null : _original;
-    final key = (widget.candidate.snapshot, before, size, mode);
+    final key = (widget.candidate?.snapshot, before, size, mode);
     if (key == _fitKey || size.isEmpty) return;
     _fitKey = key;
     _viewSize = size;
@@ -175,10 +175,10 @@ class _SmartLayoutPreviewState extends State<SmartLayoutPreview> {
     if (before != null) {
       content = _contentRect(before, widget.context!.originalScene, size);
     }
-    if (mode != 'original' || before == null) {
+    if ((mode != 'original' || before == null) && widget.candidate != null) {
       final after = _contentRect(
-        widget.candidate.snapshot,
-        widget.candidate.reduced.scene,
+        widget.candidate!.snapshot,
+        widget.candidate!.reduced.scene,
         size,
       );
       if (after != null) content = content?.expandToInclude(after) ?? after;
@@ -196,7 +196,7 @@ class _SmartLayoutPreviewState extends State<SmartLayoutPreview> {
         padding: AppSpacing.sectionGap,
       );
       // 默认最多放到场景的 2 倍，短句可读但不撑成满屏巨字；手动仍可继续放大。
-      final snapshot = before ?? widget.candidate.snapshot;
+      final snapshot = before ?? widget.candidate!.snapshot;
       final imageScale = math.min(
         size.width / snapshot.image.width,
         size.height / snapshot.image.height,
@@ -220,7 +220,11 @@ class _SmartLayoutPreviewState extends State<SmartLayoutPreview> {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 720;
-      final mode = _mode == 'compare' && !wide ? 'result' : _mode;
+      final mode = widget.candidate == null
+          ? 'original'
+          : _mode == 'compare' && !wide
+          ? 'result'
+          : _mode;
       final before = _original;
       Widget pane(DraftRenderSnapshot snapshot, String label) => Expanded(
         child: Column(
@@ -275,11 +279,12 @@ class _SmartLayoutPreviewState extends State<SmartLayoutPreview> {
               Wrap(
                 spacing: 8,
                 children: [
-                  ChoiceChip(
-                    label: const Text('排版结果'),
-                    selected: mode == 'result',
-                    onSelected: (_) => setState(() => _mode = 'result'),
-                  ),
+                  if (widget.candidate != null)
+                    ChoiceChip(
+                      label: const Text('排版结果'),
+                      selected: mode == 'result',
+                      onSelected: (_) => setState(() => _mode = 'result'),
+                    ),
                   if (widget.context != null)
                     ChoiceChip(
                       label: const Text('原稿'),
@@ -288,7 +293,9 @@ class _SmartLayoutPreviewState extends State<SmartLayoutPreview> {
                           ? null
                           : (_) => setState(() => _mode = 'original'),
                     ),
-                  if (wide && widget.context != null)
+                  if (wide &&
+                      widget.context != null &&
+                      widget.candidate != null)
                     ChoiceChip(
                       label: const Text('并排对照'),
                       selected: mode == 'compare',
@@ -341,8 +348,9 @@ class _SmartLayoutPreviewState extends State<SmartLayoutPreview> {
                 if ((mode == 'original' || mode == 'compare') && before != null)
                   pane(before, '分析时的原稿'),
                 if (mode == 'compare') const SizedBox(width: 12),
-                if (mode != 'original' || before == null)
-                  pane(widget.candidate.snapshot, '所选排版预览'),
+                if ((mode != 'original' || before == null) &&
+                    widget.candidate != null)
+                  pane(widget.candidate!.snapshot, '所选排版预览'),
               ],
             ),
           ),

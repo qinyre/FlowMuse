@@ -11,6 +11,7 @@ import '../recognition/source_ledger.dart';
 import '../recognition/recognition_repository.dart';
 import '../semantics/semantic_document.dart';
 import '../snapshot/source_coverage_ledger.dart';
+import '../metrics/layout_metric_contract.dart';
 import 'smart_layout_candidate_view.dart';
 import 'smart_layout_preview.dart';
 
@@ -112,6 +113,7 @@ class _SmartLayoutSessionViewState
                   SmartLayoutSessionPhase.reviewing => _ReviewPane(
                     state: state,
                     onChoose: viewModel.chooseCandidate,
+                    onKeepOriginal: viewModel.keepOriginal,
                     selectedBlockId: _selectedBlockId,
                     onSelectBlock: (id) =>
                         setState(() => _selectedBlockId = id),
@@ -346,6 +348,7 @@ class _ReviewPane extends StatelessWidget {
   const _ReviewPane({
     required this.state,
     required this.onChoose,
+    required this.onKeepOriginal,
     required this.selectedBlockId,
     required this.onSelectBlock,
     required this.onCancel,
@@ -355,6 +358,7 @@ class _ReviewPane extends StatelessWidget {
 
   final SmartLayoutSessionUiState state;
   final ValueChanged<String> onChoose;
+  final VoidCallback onKeepOriginal;
   final String? selectedBlockId;
   final ValueChanged<String?> onSelectBlock;
   final VoidCallback onCancel;
@@ -366,7 +370,8 @@ class _ReviewPane extends StatelessWidget {
     if (state.isCorrecting) {
       return _BusyPane(message: '正在更新排版预览…', onCancel: onCancel);
     }
-    if (state.candidates.isEmpty) {
+    if (state.candidates.isEmpty &&
+        state.reviewContext?.recommendation == null) {
       // 无解分支（V3-505C）：空候选如实呈现 + 重新分析（同 scope
       // 重走完整链），不伪装成功。
       return Column(
@@ -395,6 +400,11 @@ class _ReviewPane extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (state.reviewContext?.recommendation case final recommendation?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(recommendation.reason),
+          ),
         if (state.reviewContext?.excludedScopeReasons.isNotEmpty ?? false)
           Text(
             '部分整理：本页可见的 ${state.reviewContext!.excludedScopeReasons.length} 个元素归属不明确或属于其他页，保持原位。',
@@ -407,12 +417,19 @@ class _ReviewPane extends StatelessWidget {
           spacing: 8,
           runSpacing: 4,
           children: [
+            if (state.reviewContext?.recommendation != null)
+              ChoiceChip(
+                label: const Text('保留原样'),
+                selected: state.selectedCandidateId == null,
+                onSelected: (_) => onKeepOriginal(),
+              ),
             for (final candidate in state.candidates)
               SmartLayoutCandidateView(
                 key: ValueKey(candidate.candidateId),
                 structureLabel: candidate.structureLabel,
                 selected: candidate.candidateId == state.selectedCandidateId,
                 recommended:
+                    state.reviewContext?.recommendation?.recommended != false &&
                     state.validatedCards.isNotEmpty &&
                     candidate.candidateId ==
                         state.validatedCards.first.candidateId,
@@ -429,6 +446,10 @@ class _ReviewPane extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _LedgerSummary(state: state),
+        ] else if (state.reviewContext?.recommendation != null) ...[
+          SmartLayoutPreview(candidate: null, context: state.reviewContext),
+          if (state.candidates.isEmpty)
+            TextButton(onPressed: onCancel, child: const Text('保留原样并关闭')),
         ],
         if (state.correctionError != null)
           _CorrectionError(reason: state.correctionError!),
@@ -447,11 +468,15 @@ class _ReviewPane extends StatelessWidget {
               for (final card in state.validatedCards)
                 ListTile(
                   title: Text(
-                    '${card.structureLabel} · 评分 ${card.score.toStringAsFixed(3)}',
+                    '${card.structureLabel} · 相对评分 ${card.score.toStringAsFixed(3)}',
                   ),
                   subtitle: Text(
                     '${card.candidateId} · ${card.structureDiffLabel}\n'
-                    '${card.scoreEntries.map((e) => '${e.id.name}: ${e.contribution.toStringAsFixed(2)}').join('，')}',
+                    '${card.scoreEntries.map((e) => '${e.id.name}: ${switch (e.state) {
+                      LayoutMetricState.evaluated => e.contribution.toStringAsFixed(2),
+                      LayoutMetricState.notApplicable => '不适用',
+                      LayoutMetricState.unavailable => '缺测',
+                    }}').join('，')}',
                   ),
                 ),
               _LedgerReview(state: state),

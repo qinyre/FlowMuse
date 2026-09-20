@@ -6,11 +6,7 @@ import 'anti_gaming_veto.dart';
 ///
 /// 共用契约：同一生成器、同一硬约束、同一指标向量——profile 只冻结
 /// 排序权重，不引入额外指标或通道；权重和恒为 1。
-enum LayoutProfileId {
-  readability,
-  structurePreservation,
-  figureEmphasis,
-}
+enum LayoutProfileId { readability, structurePreservation, figureEmphasis }
 
 /// 冻结权重表（只读；测试钉住权重和 = 1）。
 class LayoutProfile {
@@ -25,6 +21,21 @@ class LayoutProfile {
 
   /// 设计意图一句话（审计用，不参与计算）。
   final String rationale;
+
+  /// composition-score/1：仅生产整页构图使用；旧实验 profile 不变。
+  static const LayoutProfile composition = LayoutProfile._(
+    id: LayoutProfileId.readability,
+    weights: {
+      LayoutMetricId.figureTextAffinity: .25,
+      LayoutMetricId.readingOrder: .20,
+      LayoutMetricId.hierarchy: .20,
+      LayoutMetricId.alignmentRhythm: .15,
+      LayoutMetricId.densityWhitespace: .075,
+      LayoutMetricId.visualBalance: .075,
+      LayoutMetricId.modificationCost: .05,
+    },
+    rationale: '实际图文组织、阅读路径与可读尺度；不适用项重归一，缺测不给满分',
+  );
 
   /// 增强可读性：层级/顺序/密度为主。
   static const LayoutProfile readability = LayoutProfile._(
@@ -84,11 +95,13 @@ class MetricContribution {
     required this.id,
     required this.value,
     required this.weight,
+    this.state = LayoutMetricState.evaluated,
   });
 
   final LayoutMetricId id;
   final double value;
   final double weight;
+  final LayoutMetricState state;
 
   double get contribution => value * weight;
 }
@@ -132,10 +145,24 @@ class LayoutProfileScorer {
     }
     var score = 0.0;
     final entries = <MetricContribution>[];
+    final totalWeight = profile.weights.entries
+        .where((e) => vector.stateOf(e.key) != LayoutMetricState.notApplicable)
+        .fold<double>(0, (sum, e) => sum + e.value);
     for (final def in LayoutMetricContract.definitions) {
-      final weight = profile.weights[def.id]!;
-      final value = vector.values[def.id]!;
-      final entry = MetricContribution(id: def.id, value: value, weight: weight);
+      final state = vector.stateOf(def.id);
+      final weight =
+          state == LayoutMetricState.notApplicable || totalWeight == 0
+          ? 0.0
+          : profile.weights[def.id]! / totalWeight;
+      final value = state == LayoutMetricState.evaluated
+          ? vector.values[def.id]!
+          : 0.0;
+      final entry = MetricContribution(
+        id: def.id,
+        value: value,
+        weight: weight,
+        state: state,
+      );
       score += entry.contribution;
       entries.add(entry);
     }

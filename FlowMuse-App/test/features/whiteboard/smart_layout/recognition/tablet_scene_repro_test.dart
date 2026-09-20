@@ -222,8 +222,13 @@ void main() {
       // ignore: avoid_print
       print('  detail=${outcome.detail}');
     }
-    expect(outcome, isA<RealGenerationSucceeded>());
-    final candidates = (outcome as RealGenerationSucceeded).candidates;
+    expect(
+      outcome,
+      anyOf(isA<RealGenerationSucceeded>(), isA<RealGenerationKeepOriginal>()),
+    );
+    final candidates = outcome is RealGenerationKeepOriginal
+        ? outcome.alternatives
+        : (outcome as RealGenerationSucceeded).candidates;
     addTearDown(() {
       for (final candidate in candidates) {
         candidate.dispose();

@@ -24,6 +24,7 @@ import '../gateways/smart_layout_editor_gateway.dart';
 import '../gateways/smart_layout_http_gateway.dart';
 import '../geometry/layout_rect.dart';
 import '../metrics/anti_gaming_veto.dart';
+import '../metrics/composition_scene_metrics.dart';
 import '../metrics/layout_metric_contract.dart';
 import '../metrics/layout_profile.dart';
 import '../patch/candidate_patch_materializer.dart';
@@ -72,10 +73,24 @@ sealed class RealGenerationOutcome {
 }
 
 class RealGenerationSucceeded extends RealGenerationOutcome {
-  const RealGenerationSucceeded({required this.candidates});
+  const RealGenerationSucceeded({
+    required this.candidates,
+    this.recommendation,
+  });
 
   /// 经完整门禁流水线的验证候选（空 = 无解/零修改保留）。
   final List<ValidatedCandidate> candidates;
+  final CompositionRecommendation? recommendation;
+}
+
+/// 没有明确改善的只读结论；备选仍是真实修改候选，默认不会选中/提交。
+class RealGenerationKeepOriginal extends RealGenerationOutcome {
+  const RealGenerationKeepOriginal({
+    required this.alternatives,
+    required this.recommendation,
+  });
+  final List<ValidatedCandidate> alternatives;
+  final CompositionRecommendation recommendation;
 }
 
 class RealGenerationFailed extends RealGenerationOutcome {
@@ -643,9 +658,31 @@ abstract final class SmartLayoutRealCandidateChain {
         pageFrame.height,
       ),
       candidates: inputs,
-      profile: profile,
+      profile: LayoutProfile.composition,
+      compositionMetrics: CompositionMetricContext(
+        source: assembly,
+        page: Bounds.fromLTWH(
+          pageFrame.left,
+          pageFrame.top,
+          pageFrame.width,
+          pageFrame.height,
+        ),
+        analyzed: SemanticComposition.of(semantic.document)?.analyzed ?? false,
+        pageIntent:
+            SemanticComposition.of(semantic.document)?.hints.pageIntent ??
+            'unknown',
+      ),
     );
-    return RealGenerationSucceeded(candidates: round.top);
+    if (round.recommendation?.recommended == false) {
+      return RealGenerationKeepOriginal(
+        alternatives: round.top,
+        recommendation: round.recommendation!,
+      );
+    }
+    return RealGenerationSucceeded(
+      candidates: round.top,
+      recommendation: round.recommendation,
+    );
   }
 }
 
@@ -843,6 +880,7 @@ class SmartLayoutRealSessionScope {
       preserveReasons: recognition.ledger.projection.preservedReasons,
       recognitionFailure: recognition.failure,
       excludedScopeReasons: recognition.pageScope?.excludedReasons ?? const {},
+      recommendation: _recommendation,
     );
   }
 
@@ -1057,9 +1095,14 @@ class SmartLayoutRealSessionScope {
 
   /// 生成链结果 → 候选约定（无解=空候选；其余失败 reason 透传）。
   List<ValidatedCandidate> _candidatesOf(RealGenerationOutcome outcome) {
+    _recommendation = null;
     switch (outcome) {
       case RealGenerationSucceeded():
+        _recommendation = outcome.recommendation;
         return outcome.candidates;
+      case RealGenerationKeepOriginal():
+        _recommendation = outcome.recommendation;
+        return outcome.alternatives;
       case RealGenerationFailed() when outcome.isNoSolution:
         // 无解：空候选如实呈现（reviewing 无卡 + 重新分析入口）。
         return const [];
@@ -1069,6 +1112,8 @@ class SmartLayoutRealSessionScope {
         throw StateError(reason);
     }
   }
+
+  CompositionRecommendation? _recommendation;
 
   /// 纠错修正处理（§9.3 真实实现）：
   /// - role/order/relation/preserve：语义纠错（§9.2 闭环）——构造

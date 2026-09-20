@@ -5,6 +5,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 
 import '../composition/layout_block.dart';
 import '../metrics/anti_gaming_veto.dart';
+import '../metrics/composition_scene_metrics.dart';
 import '../metrics/layout_metric_calculator.dart';
 import '../metrics/layout_metric_contract.dart';
 import '../metrics/layout_profile.dart';
@@ -81,12 +82,17 @@ class CandidateGateInput {
 /// 本轮完整门禁结果：Top3（不足 3 不补）+ 全部淘汰记录；只有全链
 /// 通过的候选成为 [ValidatedCandidate]（封装层再复核）。
 class GateRoundResult {
-  const GateRoundResult({required this.top, required this.rejections});
+  const GateRoundResult({
+    required this.top,
+    required this.rejections,
+    this.recommendation,
+  });
 
   /// 已封装的验证候选（与 Top3 排名同序；渲染快照归候选所有，
   /// 候选废弃时 dispose）。
   final List<ValidatedCandidate> top;
   final List<CandidateRejection> rejections;
+  final CompositionRecommendation? recommendation;
 
   bool get hasCandidates => top.isNotEmpty;
 
@@ -108,9 +114,12 @@ abstract final class ValidatedCandidatePipeline {
     required List<CandidateGateInput> candidates,
     required LayoutProfile profile,
     Map<String, Size> imageIntrinsicSizes = const {},
+    CompositionMetricContext? compositionMetrics,
   }) async {
     final rejections = <CandidateRejection>[];
     final renderer = DraftSceneRenderer();
+    LayoutMetricVector? baseline;
+    Map<String, Bounds> originalBounds = const {};
     final survived =
         <
           (
@@ -122,6 +131,28 @@ abstract final class ValidatedCandidatePipeline {
           )
         >[];
     try {
+      if (compositionMetrics != null) {
+        final original = await renderer.render(
+          scene: baseScene,
+          viewport: ViewportState(
+            offset: Offset(pageContentBounds.left, pageContentBounds.top),
+          ),
+          pixelSize: Size(
+            pageContentBounds.size.width,
+            pageContentBounds.size.height,
+          ),
+        );
+        try {
+          originalBounds = compositionMetrics.boxes(original, const {});
+          baseline = compositionMetrics.calculate(
+            scene: baseScene,
+            snapshot: original,
+            originalBounds: originalBounds,
+          );
+        } finally {
+          original.dispose();
+        }
+      }
       for (final input in candidates) {
         final outcome = SmartLayoutSceneReducer.apply(
           base: baseScene,
@@ -222,9 +253,14 @@ abstract final class ValidatedCandidatePipeline {
         }
 
         // ---- 软指标（NaN/缺指标在计算器/向量构造层 fail closed）----
-        final vectorOutcome = const LayoutMetricCalculator().calculate(
-          input.metricInput,
-        );
+        final vectorOutcome = compositionMetrics == null
+            ? const LayoutMetricCalculator().calculate(input.metricInput)
+            : compositionMetrics.calculate(
+                scene: reduced.scene,
+                snapshot: snapshot,
+                originalBounds: originalBounds,
+                mapping: input.outputElementIdsByBlock ?? const {},
+              );
         if (vectorOutcome is MetricsHardRejected) {
           rejections.add(
             CandidateRejection(
@@ -266,7 +302,13 @@ abstract final class ValidatedCandidatePipeline {
     }
 
     if (survived.isEmpty) {
-      return GateRoundResult(top: const [], rejections: rejections);
+      return GateRoundResult(
+        top: const [],
+        rejections: rejections,
+        recommendation: baseline == null
+            ? null
+            : CompositionRecommendation.compare(baseline, null),
+      );
     }
 
     final top3 = LayoutScorer.rank(
@@ -308,6 +350,12 @@ abstract final class ValidatedCandidatePipeline {
     return GateRoundResult(
       top: List.unmodifiable(top),
       rejections: [...rejections, ...top3.rejections],
+      recommendation: baseline == null
+          ? null
+          : CompositionRecommendation.compare(
+              baseline,
+              top.firstOrNull?.vector,
+            ),
     );
   }
 

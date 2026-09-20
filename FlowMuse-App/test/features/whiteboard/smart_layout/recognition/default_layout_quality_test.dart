@@ -227,12 +227,17 @@ void main() {
           );
       expect(
         outcome,
-        isA<RealGenerationSucceeded>(),
+        anyOf(
+          isA<RealGenerationSucceeded>(),
+          isA<RealGenerationKeepOriginal>(),
+        ),
         reason: outcome is RealGenerationFailed
             ? '${outcome.reason}: ${outcome.detail}'
             : example.name,
       );
-      final candidates = (outcome as RealGenerationSucceeded).candidates;
+      final candidates = outcome is RealGenerationKeepOriginal
+          ? outcome.alternatives
+          : (outcome as RealGenerationSucceeded).candidates;
       addTearDown(() {
         for (final candidate in candidates) {
           candidate.dispose();
