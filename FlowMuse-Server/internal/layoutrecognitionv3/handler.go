@@ -154,6 +154,7 @@ func (h *RecognitionHandler) runTranscribe(ctx context.Context, request *Recogni
 		images = append(images, ProviderImage{Base64: region.ImagePngBase64})
 	}
 	raw, err := h.provider.Complete(ctx, ProviderRequest{
+		Stage:      request.Stage,
 		PromptText: prompt,
 		Images:     images,
 	})
@@ -187,6 +188,7 @@ func (h *RecognitionHandler) runStructure(ctx context.Context, request *Recognit
 		images = append(images, ProviderImage{Base64: request.OverviewPngBase64})
 	}
 	raw, err := h.provider.Complete(ctx, ProviderRequest{
+		Stage:      request.Stage,
 		PromptText: prompt,
 		Images:     images,
 	})
