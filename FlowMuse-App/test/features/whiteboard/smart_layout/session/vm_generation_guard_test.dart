@@ -393,12 +393,15 @@ void main() {
     // 重跑在途时新一轮纠错已接管（代次 +1）→ 本轮产物（空数组）不得
     // 清空当前 review 卡。
     harness.generation = 3;
+    final newer = await buildCandidate(harness.controller, 'c-new', 'single');
+    vm.completeGenerationFromValidated([newer]);
     harness.rerunGate!.complete();
     await correction;
 
     final state = stateOf(harness);
     expect(state.phase, SmartLayoutSessionPhase.reviewing);
     expect(state.validatedCards, hasLength(1), reason: '旧代空数组不清空卡片');
+    expect(state.validatedCards.single.candidate, same(newer));
     expect(harness.rerunCalls, 1);
   });
 
@@ -441,6 +444,10 @@ void main() {
     );
     await harness.rerunEntered!.future;
     // 在途纠错：第二次入口为 no-op（isCorrecting 语义）。
+    expect(stateOf(harness).isCorrecting, isTrue);
+    expect(stateOf(harness).validatedCards, isEmpty, reason: '不再引用已释放的旧图');
+    expect(stateOf(harness).canApply, isFalse);
+    expect(stateOf(harness).canChooseCandidate, isFalse);
     await vm.applyRegionCorrection(
       const RegionCorrectionIntent(
         kind: 'role',
@@ -453,5 +460,29 @@ void main() {
     await first;
     expect(harness.rerunCalls, 1);
     expect(stateOf(harness).validatedCards, isEmpty);
+    expect(stateOf(harness).isCorrecting, isFalse);
+  });
+
+  test('纠错在途关面板：晚到返回不访问已释放的 provider', () async {
+    final harness = setUpHarness();
+    harness.chainCandidates = [
+      await buildCandidate(harness.controller, 'c1', 'single'),
+    ];
+    final vm = vmOf(harness);
+    await vm.startAnalysis();
+    harness.rerunEntered = Completer<void>();
+    harness.rerunGate = Completer<void>();
+    final correction = vm.applyRegionCorrection(
+      const RegionCorrectionIntent(
+        kind: 'role',
+        subjectIds: ['b1'],
+        detail: 'title',
+      ),
+    );
+    await harness.rerunEntered!.future;
+    vm.cancel();
+    harness.container.dispose();
+    harness.rerunGate!.complete();
+    await expectLater(correction, completes);
   });
 }

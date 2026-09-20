@@ -59,24 +59,31 @@ class _SmartLayoutSessionPanelState extends State<SmartLayoutSessionPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      elevation: 6,
-      borderRadius: BorderRadius.circular(12),
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
-        child: UncontrolledProviderScope(
-          container: _container,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _PanelHeader(onClose: widget.onClose),
-              const SizedBox(height: 4),
-              SmartLayoutSessionView(
-                recognitionStatus: widget.scope.recognitionStatus,
-              ),
-            ],
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .85,
+      ),
+      child: Material(
+        elevation: 6,
+        borderRadius: BorderRadius.circular(12),
+        color: Theme.of(context).colorScheme.surface,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
+          child: UncontrolledProviderScope(
+            container: _container,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _PanelHeader(onClose: widget.onClose),
+                const SizedBox(height: 4),
+                Flexible(
+                  child: SmartLayoutSessionView(
+                    recognitionStatus: widget.scope.recognitionStatus,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -65,7 +65,7 @@ void main() {
 
     expect(find.text('智能排版（v3 实时预览）'), findsOneWidget);
     expect(find.text('开始智能排版'), findsOneWidget);
-    expect(find.textContaining('排版范围 0 项'), findsOneWidget);
+    expect(find.textContaining('整理当前页'), findsOneWidget);
   });
 
   testWidgets('根 scope 内嵌面板：开始可点且空页如实显示无候选', (tester) async {

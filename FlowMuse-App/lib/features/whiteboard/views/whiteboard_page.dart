@@ -2917,12 +2917,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                 if (_smartLayoutV3PanelVisible &&
                     _smartLayoutV3Scope != null)
                   Positioned(
-                    left: 48,
-                    right: 48,
+                    left: 16,
+                    right: 16,
                     bottom: 24,
                     child: Center(
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 560),
+                        constraints: const BoxConstraints(maxWidth: 1040),
                         child: SmartLayoutSessionPanel(
                           scope: _smartLayoutV3Scope!,
                           onClose: _closeSmartLayoutV3Panel,

@@ -666,8 +666,34 @@ class SmartLayoutRealSessionScope {
           scope._runCandidateChainFromDocument(outcome, ticket),
       commitGateway: commitGateway,
       bearerToken: bearerToken,
+      reviewContextBuilder: scope._reviewContext,
     );
     return scope;
+  }
+
+  SmartLayoutReviewContext? _reviewContext() {
+    final capture = _lastCapture;
+    final semantic = _lastSemantic;
+    final recognition = _lastRecognition;
+    final bounds =
+        capture?.snapshot.pageBounds ?? capture?.snapshot.contentBounds;
+    if (capture == null ||
+        semantic == null ||
+        recognition == null ||
+        bounds == null) {
+      return null;
+    }
+    return SmartLayoutReviewContext(
+      originalScene: capture.scene,
+      pageBounds: Bounds.fromLTWH(
+        bounds.left,
+        bounds.top,
+        bounds.width,
+        bounds.height,
+      ),
+      document: semantic.document,
+      preserveReasons: recognition.ledger.projection.preservedReasons,
+    );
   }
 
   /// 快照级真实请求装配：pageId + 当前 revision + clean 资产引用 +
