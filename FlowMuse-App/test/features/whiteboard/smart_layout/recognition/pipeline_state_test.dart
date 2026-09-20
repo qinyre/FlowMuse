@@ -72,6 +72,7 @@ void main() {
     );
     expect(transport.requests, isEmpty);
     expect(result.assetIndex.assetCount, 0);
+    expect(result.failure?.code, 'operationTimeout');
     expect(result.ledger.preservedCount, 2);
     expect(
       result.ledger.entryOf('s1').reason,
@@ -277,6 +278,7 @@ void main() {
 
     expect(result.partial, isTrue);
     expect(result.ledger.preservedCount, 1);
+    expect(result.failure, isNull, reason: '区域漏答不是网络故障');
     expect(
       result.ledger.projection.preservedReasons['s1'],
       SourcePreserveReason.missingResponse,
@@ -321,6 +323,7 @@ void main() {
     expect(transport.requests, hasLength(2), reason: '初次 + 重试一次');
     expect(result.regionOutcomes.length, 2);
     expect(result.ledger.preservedCount, 0);
+    expect(result.failure, isNull, reason: '自动重试成功不挂过期故障');
 
     var alwaysFail = 0;
     final failingTransport = FakeRecognitionTransport(
@@ -332,6 +335,9 @@ void main() {
     final failingPipeline = pipelineOf(failingTransport);
     final failedResult = await failingPipeline.run(captureOf(twoRegionScene()));
     expect(alwaysFail, 2, reason: '初次 + 至多一次重试，之后放弃');
+    expect(failedResult.failure?.code, 'providerError');
+    expect(failedResult.failure?.detail, '上游 5xx');
+    expect(failedResult.copyWith().failure, same(failedResult.failure));
     expect(failedResult.ledger.preservedCount, 2);
     expect(failedResult.ledger.projection.preservedReasons.values.toSet(), {
       SourcePreserveReason.missingResponse,
@@ -371,6 +377,7 @@ void main() {
         ),
       );
       expect(transport.decodedBodies(stage), hasLength(1));
+      expect(result.failure?.code, 'providerTimeout');
       expect(transport.requests.every((r) => r.readTimeoutMs == 75000), isTrue);
       if (stage == 'structure') {
         expect(
@@ -389,6 +396,7 @@ void main() {
     );
     final result = await pipelineOf(transport).run(captureOf(twoRegionScene()));
     expect(transport.requests, hasLength(1));
+    expect(result.failure?.code, 'requestTimeout');
     expect(result.ledger.preservedCount, 2);
   });
 
@@ -413,6 +421,7 @@ void main() {
       ),
     );
     expect(transport.requests, hasLength(1));
+    expect(result.failure?.kind, RecognitionExceptionKind.network);
     expect(result.ledger.preservedCount, 2);
   });
 

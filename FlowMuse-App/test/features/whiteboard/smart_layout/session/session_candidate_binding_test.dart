@@ -383,6 +383,29 @@ void main() {
     state.validatedCards.single.candidate.dispose();
   });
 
+  test('纠错被拒：保留当前候选并提供可展示的错误码', () async {
+    final (container, controller, _, _) = setUpContainer(
+      correction: (_) =>
+          throw const SmartLayoutCorrectionRejected('unknown-block'),
+      rerun: (_) => throw StateError('不应重跑'),
+    );
+    final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+    await vm.startAnalysis();
+    final candidate = await buildCandidate(controller, 'c1', 'single');
+    vm.completeGenerationFromValidated([candidate]);
+    await vm.applyRegionCorrection(
+      const RegionCorrectionIntent(
+        kind: 'role',
+        subjectIds: ['missing'],
+        detail: 'title',
+      ),
+    );
+    final state = container.read(smartLayoutSessionViewModelProvider);
+    expect(state.selectedValidatedCandidate, same(candidate));
+    expect(state.correctionError, 'unknown-block');
+    expect(state.isCorrecting, isFalse);
+  });
+
   test('修正重跑无产出：空卡 reviewing（无解如实呈现）', () async {
     final (container, controller, tracker, _) = setUpContainer(
       correction: (intent) => AffectedSourceSet(

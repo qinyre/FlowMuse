@@ -1,6 +1,8 @@
 import 'dart:convert' show jsonDecode;
+import 'dart:ui' show TextDirection;
 
-import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, ValueNotifier, debugPrint;
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import '../analysis/analysis_retry_policy.dart';
@@ -221,16 +223,25 @@ abstract final class SmartLayoutRealCandidateChain {
         detail: error.message,
       );
     }
-    return _generateFromAssembly(
-      baseScene: baseScene,
-      layoutSnapshot: layoutSnapshot,
-      fullSnapshot: snapshot,
-      semantic: semantic,
-      measure: measure,
-      tokens: tokens,
-      profile: profile,
-      recognition: recognition,
-    );
+    final clock = Stopwatch()..start();
+    try {
+      return await _generateFromAssembly(
+        baseScene: baseScene,
+        layoutSnapshot: layoutSnapshot,
+        fullSnapshot: snapshot,
+        semantic: semantic,
+        measure: measure,
+        tokens: tokens,
+        profile: profile,
+        recognition: recognition,
+      );
+    } finally {
+      clock.stop();
+      debugPrint(
+        '[FlowMuseCreateNote][recognition-v3] phase=candidates '
+        'operation=${recognition.operationId} elapsed_ms=${clock.elapsedMilliseconds}',
+      );
+    }
   }
 
   /// 语义装配之后的共享生成管线（块装配 → planner 枚举 → preflight →
@@ -284,20 +295,38 @@ abstract final class SmartLayoutRealCandidateChain {
     final contentHeight = pageContent.height;
 
     // ---- 4. planner 枚举（确定性）+ 硬 preflight（批量，四型分派）----
-    // 内容量事实（结构适用性输入，真机 2026-09-03 门禁）：内容块数 +
-    // 文本实测填充率；图/图注存在即非纯文字（多栏适用性另由约束判）。
+    // 文字按可读栏宽实测，图片按源显示尺寸计量；小图不豁免稀疏门禁。
     var contentBlockCount = 0;
     var textMeasuredHeight = 0.0;
+    var figureMeasuredHeight = 0.0;
     var hasFigureContent = false;
     for (final block in assembly.blocks) {
       if (block.isPreservedLike) continue;
       contentBlockCount++;
-      if (block.kind == LayoutBlockKind.figure ||
-          block.kind == LayoutBlockKind.caption) {
+      final figure = block.figure;
+      if (figure != null && !figure.missingAsset) {
         hasFigureContent = true;
+        if (figure.displayWidth != null && figure.displayAspectRatio > 0) {
+          figureMeasuredHeight +=
+              figure.widthInColumn(pageContent.width) /
+              figure.displayAspectRatio;
+        }
       }
-      final intrinsic = block.measuredIntrinsic;
-      if (intrinsic != null) textMeasuredHeight += intrinsic.height;
+      final text = block.text;
+      if (text != null) {
+        textMeasuredHeight += measure
+            .measure(
+              text: text.text,
+              fontFamily: text.fontFamily,
+              fontSize: text.fontSize,
+              lineHeight: text.lineHeight,
+              maxWidth: pageContent.width.clamp(1, tokens.maxLineLength),
+              direction: text.direction == TextDirectionSpec.rtl
+                  ? TextDirection.rtl
+                  : TextDirection.ltr,
+            )
+            .height;
+      }
     }
     final enumeration = const LayoutCompositionPlanner().enumerate(
       constraint: CompositionConstraint(
@@ -307,6 +336,7 @@ abstract final class SmartLayoutRealCandidateChain {
             ? (textMeasuredHeight / contentHeight).clamp(0.0, 1.0)
             : 0.0,
         hasFigureContent: hasFigureContent,
+        figureFillRatio: (figureMeasuredHeight / contentHeight).clamp(0.0, 1.0),
         tokens: tokens,
       ),
     );
@@ -646,8 +676,35 @@ class SmartLayoutRealSessionScope {
           scope._runCandidateChainFromDocument(outcome, ticket),
       commitGateway: commitGateway,
       bearerToken: bearerToken,
+      reviewContextBuilder: scope._reviewContext,
     );
     return scope;
+  }
+
+  SmartLayoutReviewContext? _reviewContext() {
+    final capture = _lastCapture;
+    final semantic = _lastSemantic;
+    final recognition = _lastRecognition;
+    final bounds =
+        capture?.snapshot.pageBounds ?? capture?.snapshot.contentBounds;
+    if (capture == null ||
+        semantic == null ||
+        recognition == null ||
+        bounds == null) {
+      return null;
+    }
+    return SmartLayoutReviewContext(
+      originalScene: capture.scene,
+      pageBounds: Bounds.fromLTWH(
+        bounds.left,
+        bounds.top,
+        bounds.width,
+        bounds.height,
+      ),
+      document: semantic.document,
+      preserveReasons: recognition.ledger.projection.preservedReasons,
+      recognitionFailure: recognition.failure,
+    );
   }
 
   /// 快照级真实请求装配：pageId + 当前 revision + clean 资产引用 +

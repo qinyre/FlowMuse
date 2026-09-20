@@ -24,12 +24,14 @@ import 'fake_recognition_transport.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final fixture = jsonDecode(
-    File(
-      'test/features/whiteboard/smart_layout/recognition/fixtures/'
-      'tablet_note_20260918.json',
-    ).readAsStringSync(),
-  ) as Map<String, Object?>;
+  final fixture =
+      jsonDecode(
+            File(
+              'test/features/whiteboard/smart_layout/recognition/fixtures/'
+              'tablet_note_20260918.json',
+            ).readAsStringSync(),
+          )
+          as Map<String, Object?>;
   final elements = (fixture['elements'] as List).cast<Map<String, Object?>>();
 
   Scene sceneOf() {
@@ -73,26 +75,26 @@ void main() {
         return (
           200,
           jsonEncode({
-          'schemaVersion': request['schemaVersion'],
-          'stage': request['stage'],
-          'operationId': request['operationId'],
-          'requestId': request['requestId'],
-          'pageId': request['pageId'],
-          'sceneRevision': request['sceneRevision'],
-          'contentFingerprint': request['contentFingerprint'],
-          'generation': request['generation'],
-          'regions': [
-            for (final r in regions)
-              if ((r['regionId'] as String).contains('0e2835e7'))
-                {
-                  'regionId': r['regionId'],
-                  'status': 'recognized',
-                  'text': '你好\n我是你爸爸',
-                  'confidence': 0.99,
-                  'diagnostics': ['文字清晰可辨，识别结果准确'],
-                },
-          ],
-          'missingRegionIds': const <String>[],
+            'schemaVersion': request['schemaVersion'],
+            'stage': request['stage'],
+            'operationId': request['operationId'],
+            'requestId': request['requestId'],
+            'pageId': request['pageId'],
+            'sceneRevision': request['sceneRevision'],
+            'contentFingerprint': request['contentFingerprint'],
+            'generation': request['generation'],
+            'regions': [
+              for (final r in regions)
+                if ((r['regionId'] as String).contains('0e2835e7'))
+                  {
+                    'regionId': r['regionId'],
+                    'status': 'recognized',
+                    'text': '你好\n我是你爸爸',
+                    'confidence': 0.99,
+                    'diagnostics': ['文字清晰可辨，识别结果准确'],
+                  },
+            ],
+            'missingRegionIds': const <String>[],
           }),
         );
       },
@@ -182,6 +184,7 @@ void main() {
     } on StateError catch (error) {
       // ignore: avoid_print
       print('三方一致断言：FAIL ${error.message}');
+      fail('真实平板 fixture 三方账本必须一致');
     }
     expect(result.regionOutcomes, isNotEmpty, reason: '读成功的区域必须产生 outcome');
     expect(settled.ledger.consumedCount, greaterThan(0), reason: '识别正文应被消费');
@@ -219,5 +222,22 @@ void main() {
       // ignore: avoid_print
       print('  detail=${outcome.detail}');
     }
+    expect(outcome, isA<RealGenerationSucceeded>());
+    final candidates = (outcome as RealGenerationSucceeded).candidates;
+    addTearDown(() {
+      for (final candidate in candidates) {
+        candidate.dispose();
+      }
+    });
+    expect(candidates, isNotEmpty, reason: '不能只有中间层通过而默认结果为空');
+    final best = candidates.first;
+    expect(best.hardReport.passed, isTrue);
+    expect(
+      best.reduced.scene.activeElements.whereType<TextElement>().map(
+        (e) => e.text,
+      ),
+      contains('你好\n我是你爸爸'),
+    );
+    expect(best.patch.sourceCoverage.preservedCount, greaterThanOrEqualTo(2));
   });
 }

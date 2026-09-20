@@ -145,6 +145,7 @@ Future<RecognitionStructureResponse?> _failIfCalled(
 Future<RecognitionSessionResult> sessionOf(
   List<RegionSpec> specs, {
   Scene? scene,
+  String? pageId,
   Map<String, RegionReadOutcome> customOutcomes = const {},
   Object? structureOverride,
 }) async {
@@ -167,6 +168,11 @@ Future<RecognitionSessionResult> sessionOf(
         seed: 7,
         versionNonce: 11,
         updated: 1000,
+        customData: pageId == null
+            ? null
+            : {
+                'flowMuse': {'pageId': pageId},
+              },
       ),
     );
     records.add(

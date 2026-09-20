@@ -31,7 +31,7 @@ enum CompositionRejectReason {
   /// 侧栏档在界外（内容区不足以容纳主栏下限+侧栏下限+沟）。
   sideColumnInfeasible,
 
-  /// 内容量不足（纯文字且块数/填充率低于门禁）：多栏结构不适用——
+  /// 内容量不足（块数/文字与图片实测填充率低于门禁）：多栏结构不适用——
   /// 短内容分栏必然产生大空洞与阅读断裂，只出单栏族。
   contentTooSparse,
 
@@ -42,9 +42,7 @@ enum CompositionRejectReason {
 
 /// 单条结构级约束结论。
 class CompositionConstraintCheck {
-  const CompositionConstraintCheck.allowed()
-    : allowed = true,
-      reason = null;
+  const CompositionConstraintCheck.allowed() : allowed = true, reason = null;
 
   const CompositionConstraintCheck.rejected(this.reason)
     : assert(reason != null),
@@ -63,6 +61,7 @@ class CompositionConstraint {
     required this.contentFillRatio,
     required this.hasFigureContent,
     required this.tokens,
+    this.figureFillRatio = 0,
   });
 
   final double contentWidth;
@@ -70,10 +69,11 @@ class CompositionConstraint {
   /// 内容块数（排版块中非 preserved/protected 的块）。
   final int contentBlockCount;
 
-  /// 文本填充率：Σ文本块实测高 / 内容区高（0~1；图块高度不计入——
-  /// 无实测口径不造数据，图文页的多栏适用性由 [hasFigureContent]
-  /// 单独放行）。
+  /// 文本填充率：Σ文本块在可读栏宽内实测高 / 内容区高（0~1）。
   final double contentFillRatio;
+
+  /// 图片按原显示宽度缩入内容区后的高度占比；缺尺寸不猜测。
+  final double figureFillRatio;
 
   /// 存在图/图注内容：纯文字页不成立侧栏语义，多栏适用性收紧。
   final bool hasFigureContent;
@@ -88,20 +88,20 @@ class CompositionConstraint {
   /// 多栏适用最小文本填充率（冻结 v1，口径同 [contentFillRatio]）。
   static const double minMultiColumnFill = 0.35;
 
-  /// 内容量门禁：纯文字且（块数不足 或 填充率不足）→ 多栏不适用。
-  /// 图/图注存在时不触发（图文页本就具备分栏/侧栏的内容结构）。
-  bool get _contentTooSparse =>
-      !hasFigureContent &&
-      (contentBlockCount < minMultiColumnBlocks ||
-          contentFillRatio < minMultiColumnFill);
+  /// 图文页也必须有足够内容量；图标/小图不能单独豁免稀疏门禁。
+  /// ponytail: 沿用 0.35 高度阈值，不引入未经样例校准的新评分权重。
+  bool get _contentTooSparse => hasFigureContent
+      ? contentFillRatio + figureFillRatio < minMultiColumnFill
+      : (contentBlockCount < minMultiColumnBlocks ||
+            contentFillRatio < minMultiColumnFill);
 
   /// 单栏适用：内容区 ≥ 最小行长。
   CompositionConstraintCheck singleColumn() =>
       contentWidth + _eps >= tokens.minLineLength
-          ? const CompositionConstraintCheck.allowed()
-          : const CompositionConstraintCheck.rejected(
-              CompositionRejectReason.contentBelowMinLine,
-            );
+      ? const CompositionConstraintCheck.allowed()
+      : const CompositionConstraintCheck.rejected(
+          CompositionRejectReason.contentBelowMinLine,
+        );
 
   /// 双栏适用：内容量门禁通过，且扣沟后每栏 ≥ 最小行长。
   CompositionConstraintCheck twoColumn() {
@@ -213,12 +213,12 @@ class CompositionCandidate {
   final int index;
 
   /// 候选 canonical hash（结构 + 参数；跨端/双跑稳定）。
-  String get structureHash => fingerprint64(
-    'composition|${skeleton.name}|${params.canonical()}',
-  );
+  String get structureHash =>
+      fingerprint64('composition|${skeleton.name}|${params.canonical()}');
 
   @override
-  String toString() => 'CompositionCandidate($id, h=${structureHash.substring(0, 8)})';
+  String toString() =>
+      'CompositionCandidate($id, h=${structureHash.substring(0, 8)})';
 }
 
 /// 宏观候选 planner（V3-401A）：确定性枚举 single/two-column/
@@ -301,8 +301,10 @@ class LayoutCompositionPlanner {
       ),
     ];
 
-    final accepted =
-        domain.where((slot) => slot.$2.allowed).map((s) => s.$1).toList();
+    final accepted = domain
+        .where((slot) => slot.$2.allowed)
+        .map((s) => s.$1)
+        .toList();
     final rejected = [
       for (final slot in domain.where((s) => !s.$2.allowed))
         (skeleton: slot.$1.skeleton, reason: slot.$2.reason!),
@@ -355,10 +357,8 @@ class LayoutCompositionPlanner {
     tokens.maxLineLength,
   ];
 
-  static int _domainIndex(
-    _DomainSlot slot,
-    List<_DomainSlot> accepted,
-  ) => accepted.indexOf(slot);
+  static int _domainIndex(_DomainSlot slot, List<_DomainSlot> accepted) =>
+      accepted.indexOf(slot);
 }
 
 /// 枚举结果：候选 + 拒绝留档（零静默跳过）。
