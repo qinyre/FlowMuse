@@ -161,6 +161,27 @@ abstract final class SmartLayoutTemplateEngine {
 
   // ---------- 公共小件 ----------
 
+  /// 旧版转写横排文本紧包裹；创建、模板变字/变字号及草稿校对共用。
+  /// 手动定宽/绑定文本、公式和竖排保持原有只扩不缩规则。
+  static TextElement measureTemplateText(TextElement element) {
+    final (width, height) = TextRenderer.measure(element);
+    final flowMuse = element.customData?['flowMuse'];
+    final tight =
+        element.autoResize &&
+        element.containerId == null &&
+        flowMuse is Map &&
+        flowMuse['smartLayout'] == true &&
+        flowMuse['blockId'] is String &&
+        flowMuse['smartLayoutType'] != 'math' &&
+        flowMuse['writingMode'] != 'vertical';
+    return element.copyWith(
+      width: tight ? math.max(width + 4, 20) : math.max(element.width, width),
+      height: tight
+          ? math.max(height, element.fontSize * element.lineHeight)
+          : math.max(element.height, height),
+    );
+  }
+
   /// 保留手写判定：文本单元以原稿墨迹整体占位——引擎用 _moveUnit 移动
   /// 墨迹（memberIds 为该块笔迹 id）而不是新增印刷体文本元素。
   static bool _isInkText(LayoutUnit unit) =>
@@ -213,16 +234,10 @@ abstract final class SmartLayoutTemplateEngine {
     return y;
   }
 
-  /// 标题样式：字号不足 28 时放大到 28 并按测量值撑宽（与旧引擎规则一致）。
+  /// 标题样式：字号不足 28 时放大到 28 并重测尺寸。
   static TextElement _styledTitle(TextElement element) {
     if (element.fontSize >= 28) return element;
-    var candidate = element.copyWithText(fontSize: 28);
-    final (mw, mh) = TextRenderer.measure(candidate);
-    final width = math.max(candidate.width, mw);
-    return candidate.copyWith(
-      width: width,
-      height: math.max(candidate.height, mh),
-    );
+    return measureTemplateText(element.copyWithText(fontSize: 28));
   }
 
   /// 正文缩放：字号下限 12pt，缩放后重测尺寸。
@@ -230,12 +245,7 @@ abstract final class SmartLayoutTemplateEngine {
     if (scale >= 1) return element;
     final target = math.max(12.0, element.fontSize * scale);
     if (target >= element.fontSize) return element;
-    final candidate = element.copyWithText(fontSize: target);
-    final (mw, mh) = TextRenderer.measure(candidate);
-    return candidate.copyWith(
-      width: math.max(candidate.width, mw),
-      height: math.max(candidate.height, mh),
-    );
+    return measureTemplateText(element.copyWithText(fontSize: target));
   }
 
   /// 移动单元到目标位置（memberIds 全员同 delta）；保留手写文本单元的
@@ -745,16 +755,11 @@ abstract final class SmartLayoutTemplateEngine {
     );
   }
 
-  /// outline 印刷体条目的"• "前缀元素（按测量值撑宽）。
+  /// outline 印刷体条目的"• "前缀元素（含前缀重测尺寸）。
   static TextElement? _outlineBullet(LayoutUnit unit) {
     final element0 = unit.textElement;
     if (element0 == null) return null;
-    final bullet = element0.copyWithText(text: '• ${element0.text}');
-    final (mw, mh) = TextRenderer.measure(bullet);
-    return bullet.copyWith(
-      width: math.max(bullet.width, mw),
-      height: math.max(bullet.height, mh),
-    );
+    return measureTemplateText(element0.copyWithText(text: '• ${element0.text}'));
   }
 
   /// outline 挂靠小图的行占用：图高 + 上/下标签栈（栈与图间隙 8pt）。
