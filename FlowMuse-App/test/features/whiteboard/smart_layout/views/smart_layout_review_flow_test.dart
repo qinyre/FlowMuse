@@ -313,7 +313,7 @@ void main() {
     });
   }
 
-  testWidgets('大纸张少量内容：自动定位、中心缩放、找回内容、换方案和窄屏重定位', (tester) async {
+  testWidgets('大纸张少量内容：单一真实候选、自动定位、中心缩放、找回内容和窄屏重定位', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1200, 900);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -459,13 +459,9 @@ void main() {
     _expectContentCentered(tester, candidate);
     await _capture(tester, boundary, 'preview-sparse-focused');
 
-    expect(state().validatedCards.length, greaterThan(1));
-    final next = state().validatedCards.firstWhere(
-      (card) => card.candidateId != state().selectedCandidateId,
-    );
-    await tester.tap(find.byKey(ValueKey(next.candidateId)));
-    await tester.pumpAndSettle();
-    _expectContentCentered(tester, state().selectedValidatedCandidate!);
+    // 同名/异名但布局等价的卡已合并；单段文字不能为了测试凑两张。
+    // 多候选点击/键盘切换仍由 smart_layout_session_view_test 的真实卡测试覆盖。
+    expect(state().validatedCards, hasLength(1));
     await tester.tap(find.widgetWithText(ChoiceChip, '原稿'));
     await tester.pumpAndSettle();
     expect(find.text('分析时的原稿'), findsOneWidget);

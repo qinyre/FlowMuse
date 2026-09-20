@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/design/smart_layout_design_tokens.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/composition/composition_policy.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/design/text_measure_adapter.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/semantic_adapter.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_real_wiring.dart';
@@ -296,7 +297,15 @@ void main() {
       if (example.name == '长段落') {
         expect(
           output.first.width,
-          lessThanOrEqualTo(SmartLayoutDesignTokens.v1.maxLineLength),
+          lessThanOrEqualTo(
+            const CompositionPolicy(pageWidth: 1200).maxTextWidth,
+          ),
+          reason: '新策略按页宽归一，最多约 32 字；旧 tokens/v1 的 560 不再是生产链行宽',
+        );
+        expect(
+          output.first.height,
+          greaterThan(output.first.fontSize * output.first.lineHeight * 2),
+          reason: '长文必须真实换行，不能变成整页文字带',
         );
       }
     });

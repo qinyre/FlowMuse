@@ -3,6 +3,7 @@ import 'dart:ui' show Offset, Size;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
+import '../composition/layout_block.dart';
 import '../metrics/anti_gaming_veto.dart';
 import '../metrics/layout_metric_calculator.dart';
 import '../metrics/layout_metric_contract.dart';
@@ -32,6 +33,7 @@ class CandidateGateInput {
     this.semanticContextKey,
     this.relations = const [],
     this.readingOrder,
+    this.compositionGroups = const [],
   });
 
   final String candidateId;
@@ -50,6 +52,7 @@ class CandidateGateInput {
   final String? semanticContextKey;
   final List<SemanticRelationExpectation> relations;
   final ReadingOrderExpectation? readingOrder;
+  final List<CompositionGroupIntent> compositionGroups;
 
   String? get expectationDigest => semanticContextKey == null
       ? null
@@ -68,6 +71,7 @@ class CandidateGateInput {
               ],
             readingOrder?.orderedElementIds,
             readingOrder?.columnByNode,
+            for (final g in compositionGroups) g.toCanonical(),
             for (final b in readingOrder?.columns ?? const <Bounds>[])
               [b.left, b.top, b.size.width, b.size.height],
           ]),
@@ -177,6 +181,7 @@ abstract final class ValidatedCandidatePipeline {
               validationElementIds: input.validationElementIds,
               relations: input.relations,
               readingOrder: input.readingOrder,
+              compositionGroups: input.compositionGroups,
               outputElementIdsByBlock:
                   input.outputElementIdsByBlock ?? const {},
             ),
@@ -319,10 +324,19 @@ abstract final class ValidatedCandidatePipeline {
       throw StateError('content-expectation-missing');
     }
     final assembly = input.metricInput.assembly;
+    final expectedKeys = {
+      ...assembly.blocks.map((b) => b.id),
+      ...assembly.blockAliases.keys,
+    };
     if (!assembly.ledgerConserved ||
-        mapping.length != assembly.blocks.length ||
-        !mapping.keys.toSet().containsAll(assembly.blocks.map((b) => b.id))) {
+        mapping.length != expectedKeys.length ||
+        !mapping.keys.toSet().containsAll(expectedKeys)) {
       throw StateError('block-output-map-incomplete');
+    }
+    for (final alias in assembly.blockAliases.entries) {
+      if (jsonEncode(mapping[alias.key]) != jsonEncode(mapping[alias.value])) {
+        throw StateError('block-alias-output-mismatch');
+      }
     }
     if (input.relations.length != assembly.relationships.length ||
         input.relations.map((r) => r.relationId).toSet().length !=
@@ -354,6 +368,28 @@ abstract final class ValidatedCandidatePipeline {
     if (jsonEncode(input.readingOrder?.orderedElementIds) !=
         jsonEncode(expectedOrder)) {
       throw StateError('reading-order-expectation-incomplete');
+    }
+    if (input.compositionGroups.isNotEmpty) {
+      final members = input.compositionGroups
+          .expand((g) => g.memberIds)
+          .toList();
+      if (jsonEncode(members) != jsonEncode(expectedOrder) ||
+          input.compositionGroups.map((g) => g.id).toSet().length !=
+              input.compositionGroups.length ||
+          input.compositionGroups.any(
+            (g) =>
+                g.tracks.isEmpty ||
+                g.tracks.any((t) => t.isEmpty) ||
+                g.tracks.length !=
+                    (g.kind == CompositionGroupKind.mediaSide ? 2 : 1) ||
+                !g.maxGap.isFinite ||
+                g.maxGap < 0 ||
+                g.row < 0 ||
+                g.column < 0 ||
+                g.column > 1,
+          )) {
+        throw StateError('composition-group-expectation-invalid');
+      }
     }
     final actual = {
       for (final e in reduced.scene.activeElements) e.id.value: e,
@@ -411,6 +447,13 @@ abstract final class ValidatedCandidatePipeline {
       }
       if (block.isPreservedLike) continue;
       final spec = block.text;
+      if (spec?.projection != null &&
+          (spec!.projection!.displayText != spec.text ||
+              (block.textOrigin == LayoutTextOrigin.transcribed &&
+                  spec.projection!.rawText !=
+                      block.extras['transcribedText']))) {
+        throw StateError('text-projection-not-authorized');
+      }
       if (spec != null &&
           (outputs.length != 1 ||
               actual[outputs.single] is! TextElement ||
@@ -456,12 +499,11 @@ abstract final class ValidatedCandidatePipeline {
               actual[l.elementId]?.isPdfBackground != true,
         )
         .toList();
-    for (var i = 0; i < layers.length; i++) {
-      for (var j = i + 1; j < layers.length; j++) {
-        final a = layers[i];
-        final b = layers[j];
-        if (!changedLive.contains(a.elementId) &&
-            !changedLive.contains(b.elementId)) {
+    for (final a in layers.where((l) => changedLive.contains(l.elementId))) {
+      for (final b in layers) {
+        if (a.elementId == b.elementId ||
+            (changedLive.contains(b.elementId) &&
+                a.elementId.compareTo(b.elementId) > 0)) {
           continue;
         }
         final owner = ownerByOutput[a.elementId];

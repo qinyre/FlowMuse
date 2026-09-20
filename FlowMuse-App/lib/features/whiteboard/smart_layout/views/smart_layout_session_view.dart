@@ -488,6 +488,9 @@ class _LedgerSummary extends StatelessWidget {
         null =>
           state.reviewContext?.document.preservedSourceIds.contains(id) == true
               ? '选择保留或不参与重排'
+              : state.reviewContext?.document.consumedSourceIds.contains(id) ==
+                    true
+              ? '无法安全排版，关联内容整组保留'
               : '未安全转换',
       };
       reasons.update(reason, (n) => n + 1, ifAbsent: () => 1);

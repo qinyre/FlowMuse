@@ -171,7 +171,15 @@ abstract final class SmartLayoutCandidateMaterializer {
           fileId: '',
           displayAspectRatio: bounds.width / bounds.height,
         ),
-        extras: const {'nativeComposite': true},
+        extras: {
+          'nativeComposite': true,
+          'bounds': {
+            'left': bounds.left,
+            'top': bounds.top,
+            'width': bounds.width,
+            'height': bounds.height,
+          },
+        },
       );
       for (final member in members) {
         aliases[member.id] = block.id;
@@ -207,6 +215,11 @@ abstract final class SmartLayoutCandidateMaterializer {
       atomicGroups: [for (final group in groups) group.toList()],
       documentConsumedSourceIds: assembly.documentConsumedSourceIds,
       documentPreservedSourceIds: assembly.documentPreservedSourceIds,
+      blockAliases: Map.unmodifiable({
+        ...assembly.blockAliases,
+        for (final entry in aliases.entries)
+          if (entry.key != entry.value) entry.key: entry.value,
+      }),
     );
     if (!result.ledgerConserved) throw StateError('native-composite-ledger');
     return result;
@@ -531,10 +544,13 @@ abstract final class SmartLayoutCandidateMaterializer {
           continue;
         }
         // typed 文本字号显式对齐放置档（变换器不缩放 fontSize）。
-        if (element is TextElement &&
-            element.fontSize != plan.placed.appliedFontSize) {
+        if (element is TextElement) {
+          final spec = assembly.blockById(plan.blockId)?.text;
           finalStates[element.id.value] = element.copyWithText(
             fontSize: plan.placed.appliedFontSize,
+            fontFamily: spec?.fontFamily,
+            lineHeight: spec?.lineHeight,
+            textAlign: spec?.projection != null ? TextAlign.left : null,
           );
         } else {
           finalStates[element.id.value] = element;
@@ -640,6 +656,12 @@ abstract final class SmartLayoutCandidateMaterializer {
 
     try {
       final patch = builder.build();
+      final outputs = {
+        for (final block in assembly.blocks)
+          block.id: List<String>.unmodifiable(block.sourceRefs),
+        for (final plan in retypePlans)
+          plan.block.id: List<String>.unmodifiable([plan.newElementId!]),
+      };
       return PatchMaterializationSuccess(
         patch: patch,
         consumedSourceIds: consumedSet.toList()..sort(),
@@ -652,10 +674,9 @@ abstract final class SmartLayoutCandidateMaterializer {
           for (final plan in transformPlans) plan.sourceId,
         ],
         outputElementIdsByBlock: Map.unmodifiable({
-          for (final block in assembly.blocks)
-            block.id: List<String>.unmodifiable(block.sourceRefs),
-          for (final plan in retypePlans)
-            plan.block.id: List<String>.unmodifiable([plan.newElementId!]),
+          ...outputs,
+          for (final entry in assembly.blockAliases.entries)
+            entry.key: outputs[entry.value]!,
         }),
       );
     } on StateError catch (error) {

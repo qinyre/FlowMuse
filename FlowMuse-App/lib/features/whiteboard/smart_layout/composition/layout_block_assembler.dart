@@ -15,6 +15,7 @@ class LayoutBlockAssembly {
     required this.atomicGroups,
     required this.documentConsumedSourceIds,
     required this.documentPreservedSourceIds,
+    this.blockAliases = const {},
   });
 
   final List<LayoutBlock> blocks;
@@ -26,6 +27,7 @@ class LayoutBlockAssembly {
 
   final List<String> documentConsumedSourceIds;
   final List<String> documentPreservedSourceIds;
+  final Map<String, String> blockAliases;
 
   /// ledger 守恒复核：块 sourceRefs 总并集恰等于文档 ledger，
   /// 无重叠、无遗漏（每源恰好出现在一个块）。

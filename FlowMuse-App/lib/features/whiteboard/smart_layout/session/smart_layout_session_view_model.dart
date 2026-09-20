@@ -720,6 +720,8 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
           rank: i + 1,
           structureLabel: switch (candidate.diversityKey) {
             'single' => '单栏阅读',
+            'mediaSide' => '图文并排',
+            'peerGrid' => '同级图文并列',
             'twoColumn' => '双栏阅读',
             'mainSide' => '图文侧栏',
             'conservativeLayout' => '保守重排',

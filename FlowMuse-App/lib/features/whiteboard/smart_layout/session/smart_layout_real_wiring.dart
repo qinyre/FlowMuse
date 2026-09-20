@@ -11,6 +11,7 @@ import '../commit/validated_candidate_commit_gateway.dart';
 import '../composition/layout_block.dart';
 import '../composition/layout_block_assembler.dart';
 import '../composition/layout_composition_planner.dart';
+import '../composition/semantic_composer.dart';
 import '../correction/correction_patch_applier.dart';
 import '../correction/region_correction_patch.dart';
 import '../segmentation/ink_region_segmenter.dart';
@@ -288,6 +289,18 @@ abstract final class SmartLayoutRealCandidateChain {
     if (pageFrame == null) {
       return const RealGenerationFailed(reason: 'empty-page', retryable: false);
     }
+    if (recognition != null) {
+      return _generateComposition(
+        baseScene: baseScene,
+        snapshot: layoutSnapshot,
+        semantic: semantic,
+        recognition: recognition,
+        assembly: assembly,
+        pageFrame: LayoutRect.fromSnapshotBounds(pageFrame),
+        measure: measure,
+        profile: profile,
+      );
+    }
     final margin = tokens.pageMargin;
     final pageContent = LayoutRect(
       left: pageFrame.left + margin,
@@ -394,18 +407,6 @@ abstract final class SmartLayoutRealCandidateChain {
         contentHeight: contentHeight,
         measure: measure,
         tokens: tokens,
-        preservedAsObstacles: recognition != null,
-        fixedObstacles: {
-          for (final entry
-              in recognition?.pageScope?.fixedBounds.entries ??
-                  const <MapEntry<String, SnapshotBounds>>[])
-            entry.key: LayoutRect(
-              left: entry.value.left,
-              top: entry.value.top,
-              width: entry.value.width,
-              height: entry.value.height,
-            ),
-        },
       );
       if (placed is! BalancedPlacement) {
         continue;
@@ -421,22 +422,8 @@ abstract final class SmartLayoutRealCandidateChain {
         ),
         timestampMs: layoutSnapshot.sceneRevision.revision,
         pageId: layoutSnapshot.pageId,
-        pageScope: recognition?.pageScope,
       );
       if (materialized is! PatchMaterializationSuccess) {
-        continue;
-      }
-      if (recognition != null &&
-          ReplacementGuard.check(
-            recognition: recognition.ledger,
-            unitFactsByUnitId: ReplacementGuard.factsOf(recognition),
-            deletedSourceIds: materialized.patch.removes.map(
-              (op) => op.elementId,
-            ),
-            modifiedSourceIds: materialized.patch.updates.map(
-              (op) => op.elementId,
-            ),
-          ).isNotEmpty) {
         continue;
       }
       final metricInput = LayoutMetricInput(
@@ -459,43 +446,6 @@ abstract final class SmartLayoutRealCandidateChain {
           patch: materialized.patch,
           metricInput: metricInput,
           veto: const AntiGamingVetoDetector().evaluate(metricInput),
-          validationElementIds: recognition == null
-              ? null
-              : {
-                  ...materialized.patch.adds.map((op) => op.element.id.value),
-                  ...materialized.patch.updates.map((op) => op.elementId),
-                },
-          outputElementIdsByBlock: recognition == null
-              ? null
-              : materialized.outputElementIdsByBlock,
-          semanticContextKey: recognition == null
-              ? null
-              : '${semantic.document.epoch}:${semantic.document.revision}:${semantic.document.fingerprint}|'
-                    '${layoutSnapshot.fingerprint}|${tokens.canonicalHash()}',
-          relations: recognition == null
-              ? const []
-              : [
-                  for (final relation in assembly.relationships)
-                    _verticalRelation(relation, assembly, tokens),
-                ],
-          readingOrder: recognition == null
-              ? null
-              : ReadingOrderExpectation(
-                  orderedElementIds: [
-                    for (final b in assembly.blocks)
-                      if (!b.isPreservedLike) b.id,
-                  ],
-                  columnByNode: {
-                    for (final p in placed.placed)
-                      p.blockId: columnRects.indexWhere(
-                        (c) => c.containsRect(p.rect),
-                      ),
-                  },
-                  columns: [
-                    for (final c in columnRects)
-                      Bounds.fromLTWH(c.left, c.top, c.width, c.height),
-                  ],
-                ),
         ),
       );
     }
@@ -566,7 +516,7 @@ abstract final class SmartLayoutRealCandidateChain {
   static SemanticRelationExpectation _verticalRelation(
     BlockRelationship relation,
     LayoutBlockAssembly assembly,
-    SmartLayoutDesignTokens tokens,
+    double maxGap,
   ) {
     final from = assembly.blocks.indexWhere(
       (b) => b.id == relation.fromBlockId,
@@ -580,12 +530,121 @@ abstract final class SmartLayoutRealCandidateChain {
           : SemanticRelationExpectationKind.keepWith,
       anchorId: from < to ? relation.fromBlockId : relation.toBlockId,
       followerId: from < to ? relation.toBlockId : relation.fromBlockId,
-      maxGap: tokens.paragraphSpacing + tokens.figureTextGap,
+      maxGap: maxGap,
       memberIds: {
         for (final group in assembly.atomicGroups)
           if (group.contains(relation.fromBlockId)) ...group,
       },
     );
+  }
+
+  static Future<RealGenerationOutcome> _generateComposition({
+    required Scene baseScene,
+    required LayoutPageSnapshot snapshot,
+    required SemanticAssembly semantic,
+    required RecognitionSessionResult recognition,
+    required LayoutBlockAssembly assembly,
+    required LayoutRect pageFrame,
+    required TextMeasureAdapter measure,
+    required LayoutProfile profile,
+  }) async {
+    final layouts = await SemanticComposer.generate(
+      scene: baseScene,
+      assembly: assembly,
+      pageFrame: pageFrame,
+      measure: measure,
+      fixedObstacles: {
+        for (final entry
+            in recognition.pageScope?.fixedBounds.entries ??
+                const <MapEntry<String, SnapshotBounds>>[])
+          entry.key: LayoutRect.fromSnapshotBounds(entry.value),
+      },
+    );
+    final inputs = <CandidateGateInput>[];
+    for (final layout in layouts) {
+      final materialized = SmartLayoutCandidateMaterializer.materialize(
+        baseScene: baseScene,
+        baseRevision: snapshot.sceneRevision,
+        sourceCoverage: snapshot.sourceCoverage,
+        assembly: layout.assembly,
+        placement: FlowPlacementSuccess(
+          placed: layout.placed,
+          usedHeights: const [],
+        ),
+        timestampMs: snapshot.sceneRevision.revision,
+        pageId: snapshot.pageId,
+        pageScope: recognition.pageScope,
+      );
+      if (materialized is! PatchMaterializationSuccess) continue;
+      if (ReplacementGuard.check(
+        recognition: recognition.ledger,
+        unitFactsByUnitId: ReplacementGuard.factsOf(recognition),
+        deletedSourceIds: materialized.patch.removes.map((o) => o.elementId),
+        modifiedSourceIds: materialized.patch.updates.map((o) => o.elementId),
+      ).isNotEmpty) {
+        continue;
+      }
+      final metrics = LayoutMetricInput(
+        assembly: layout.assembly,
+        placed: layout.placed,
+        columnRects: [layout.content],
+        preservedRects: layout.preservedRects,
+        originalBounds: {
+          for (final b in layout.assembly.blocks)
+            b.id: LayoutRect.fromSnapshotBounds(
+              baseScene.activeElements
+                  .where((e) => b.sourceRefs.contains(e.id.value))
+                  .map(conservativeVisualBounds)
+                  .reduce((a, b) => a.union(b)),
+            ),
+        },
+        contentHeight: layout.content.height,
+        hardValidated: true,
+      );
+      inputs.add(
+        CandidateGateInput(
+          candidateId: '${layout.family}#${layout.signature}',
+          diversityKey: layout.family,
+          patch: materialized.patch,
+          metricInput: metrics,
+          veto: const AntiGamingVetoDetector().evaluate(
+            metrics,
+            tokens: layout.policy.validationTokens,
+          ),
+          validationElementIds: {
+            ...materialized.patch.adds.map((o) => o.elementId),
+            ...materialized.patch.updates.map((o) => o.elementId),
+          },
+          outputElementIdsByBlock: materialized.outputElementIdsByBlock,
+          semanticContextKey:
+              '${semantic.document.epoch}:${semantic.document.revision}:${semantic.document.fingerprint}|'
+              '${snapshot.fingerprint}|${layout.policy.key}|${layout.signature}',
+          compositionGroups: layout.groups,
+          relations: [
+            for (final r in layout.assembly.relationships)
+              _verticalRelation(r, layout.assembly, layout.policy.innerGap),
+          ],
+          readingOrder: ReadingOrderExpectation(
+            orderedElementIds: [
+              for (final b in layout.assembly.blocks)
+                if (!b.isPreservedLike) b.id,
+            ],
+          ),
+        ),
+      );
+    }
+    final round = await ValidatedCandidatePipeline.run(
+      baseScene: baseScene,
+      pageContentBounds: Bounds.fromLTWH(
+        pageFrame.left,
+        pageFrame.top,
+        pageFrame.width,
+        pageFrame.height,
+      ),
+      candidates: inputs,
+      profile: profile,
+    );
+    return RealGenerationSucceeded(candidates: round.top);
   }
 }
 
