@@ -42,6 +42,22 @@ void main() {
     expect(find.byType(Slider), findsOneWidget);
   });
 
+  testWidgets('笔型名称与真实预览可见，双倍字号不溢出', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpPalette(tester);
+    for (final label in ['铅笔', '圆珠笔', '钢笔', '毛笔', '荧光笔']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == '钢笔笔迹预览',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('圆珠笔：隐藏滑块并显示恒定线宽说明', (tester) async {
     final controller = await pumpPalette(tester);
     // 切到圆珠笔（弹层随选择关闭）
