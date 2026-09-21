@@ -246,4 +246,32 @@ void main() {
     expect(find.text('本次分析没有可用的排版候选'), findsOneWidget);
     expect(find.text('关闭'), findsOneWidget);
   });
+
+  testWidgets('面板卸载释放场景监听，重新打开建立独立会话', (tester) async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    final controller = pagedController();
+    addTearDown(controller.dispose);
+    final listenerCount = controller.sceneChangeListeners.length;
+    final original = SceneFingerprint.of(controller.currentScene);
+
+    for (var i = 0; i < 2; i++) {
+      final scope = SmartLayoutRealSessionScope.build(
+        controller: controller,
+        serverUri: Uri.parse('http://127.0.0.1:9'),
+        pageId: pageId,
+      );
+      addTearDown(scope.dispose);
+      await pumpProductionNesting(
+        tester,
+        SmartLayoutSessionPanel(scope: scope, onClose: () {}),
+      );
+      expect(controller.sceneChangeListeners, hasLength(listenerCount + 1));
+      expect(find.text('开始智能排版'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(scope.isDisposed, isTrue);
+      expect(controller.sceneChangeListeners, hasLength(listenerCount));
+      expect(SceneFingerprint.of(controller.currentScene), original);
+    }
+  });
 }

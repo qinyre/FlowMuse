@@ -47,9 +47,12 @@ class SceneRevision {
 /// 源为 reset/restore 时同时递增 epoch；load/clear 经兜底路径只递增
 /// revision（无源标签可辨，文档化为既定口径）。undo 回到旧内容同样递增
 /// （revision 是变更计数，不是内容新颖度）。
+/// Scene 不可变：同一实例的重复通知直接跳过，避免绘制/视口事件
+/// 在 UI 线程上反复序列化整页，也避免内容通知与通用通知重复计算。
 class SceneRevisionTracker {
   SceneRevisionTracker({required SmartLayoutEditorGateway editor})
     : _editor = editor,
+      _observedScene = editor.currentScene,
       _current = SceneRevision(
         epoch: 0,
         revision: 0,
@@ -60,6 +63,7 @@ class SceneRevisionTracker {
   }
 
   final SmartLayoutEditorGateway _editor;
+  Scene? _observedScene;
   SceneRevision _current;
   bool _disposed = false;
 
@@ -73,12 +77,13 @@ class SceneRevisionTracker {
     _disposed = true;
     _editor.removeSceneChangeListener(_onSceneChanged);
     _editor.changes.removeListener(_onNotified);
+    _observedScene = null;
   }
 
   void _onSceneChanged(Scene scene, SceneChangeSource source) {
     if (_disposed) return;
     _advance(
-      fingerprint: SceneFingerprint.of(scene),
+      scene,
       newEpoch:
           source == SceneChangeSource.reset ||
           source == SceneChangeSource.restore,
@@ -87,13 +92,13 @@ class SceneRevisionTracker {
 
   void _onNotified() {
     if (_disposed) return;
-    _advance(fingerprint: SceneFingerprint.of(_editor.currentScene));
+    _advance(_editor.currentScene);
   }
 
-  void _advance({
-    required SceneFingerprint fingerprint,
-    bool newEpoch = false,
-  }) {
+  void _advance(Scene scene, {bool newEpoch = false}) {
+    if (identical(scene, _observedScene)) return;
+    final fingerprint = SceneFingerprint.of(scene);
+    _observedScene = scene;
     if (fingerprint == _current.fingerprint) return;
     _current = SceneRevision(
       epoch: newEpoch ? _current.epoch + 1 : _current.epoch,
