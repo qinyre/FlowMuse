@@ -35,3 +35,17 @@
 - 原件完整离线链：从真实页面范围、分区、模拟 read/structure 响应到生产候选链、真实 renderer，全程原稿不变。三幅手绘图及相关标签保留；光合作用九行含全部编号；羊羊两图在最高分方案等高并排，三行说明各出现一次。共享说明按现有协议作为 `mediaGroups` 的正文，不伪造仅支持单图归属的 caption。
 - 导图位于忽略的 `FlowMuse-App/build/teammate-notes/<原名>/before.png` 与 `after-0.png`。已逐图检查；短页保留底部空白，不以撑满页面为目标。可提供 `LAYOUT_EVIDENCE_CJK_FONT` 加载中文测试字体；导图不是平板字体/线上 OCR 验收。默认小型回归不依赖这些原件。
 - 第三批检查：构图集成 24 项通过；原件离线回归 5 项通过；全量 Flutter 1792 通过、4 个跳过；analyze 零问题。日志 `build/teammate-gallery-*.log`；未部署、未做实机。
+- 第四批：推荐增加关键维度退化否决。阅读序、图文关联、文字可读性/层级任一指标下降至少 0.05 时保留原稿，不能被对齐/密度加分抵消；缺测和前后适用性不同也不比较。沿用现有比较阈值，不宣称经过本轮真实用户标定；指纹版本为 `composition-score/3`。新增三维度各自退化但总分提高、适用性变化及微小浮差反例。
+- 第四批原稿回归还定位到共享说明的评分偏差：旧算法只量说明到最后一张图，左对齐说明会被误判远离右图。现在将语义组中连续图片作为说明的整体目标，同时单独计入图片间距；正常组内间距不扣分，远距离分散仍扣分。无须放松退化否决即可正确推荐双图新方案；增加短共享说明及故意拉远图片的真实渲染检查。
+- 最终检查：全量 Flutter **1793 通过、4 个跳过**（包括需显式原件目录的回归入口），analyze 零问题；构图与原稿定向回归 30 项通过，带中文字体的原件导图回归 5 项通过。图形页默认保留原稿，提纲与共享双图在本轮模拟正确识别/关联输入下推荐新方案。日志 `build/teammate-recommendation-*.log`。四批范围内修复完成，以下真实环境边界保持待验。
+
+## 复跑与剩余边界
+
+在 `FlowMuse-App` 运行（Flutter 已在 PATH 时）：
+
+```powershell
+flutter test --no-pub test/features/whiteboard/smart_layout/composition/semantic_composition_integration_test.dart
+flutter test --no-pub "--dart-define=TEAMMATE_NOTE_DIR=D:/Program/HarmonyOS/tmp/新建文件夹" test/features/whiteboard/smart_layout/recognition/teammate_note_regression_test.dart
+```
+
+第二条可额外传 `--dart-define=EXPORT_LAYOUT_EVIDENCE=true` 和 `--dart-define=LAYOUT_EVIDENCE_CJK_FONT=C:/Windows/Fonts/msyh.ttc` 导图。原件只读；导出走现有 Dart 测试/renderer，无临时 Python 脚本。在线 OCR 错字、模型误配及任意复杂图形不在这些离线证据的证明范围内；仍需后续真实模型/设备验收。V1、手写笔输入、服务端、部署均未改动。

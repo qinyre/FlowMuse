@@ -387,13 +387,12 @@ Future<void> _checkOriginalCandidates(
           reason: '图形和相关标签必须原样保留，不能只保图丢标签关联',
         );
       }
-    } else {
-      for (final line in lines) {
-        expect(
-          output.whereType<TextElement>().where((e) => e.text == line),
-          hasLength(1),
-        );
-      }
+    }
+    for (final line in count == 70 ? lines.take(1) : lines) {
+      expect(
+        output.whereType<TextElement>().where((e) => e.text == line),
+        hasLength(1),
+      );
     }
   }
   if (count == 183) {
@@ -405,6 +404,13 @@ Future<void> _checkOriginalCandidates(
   }
   expect(SceneFingerprint.of(controller.currentScene), before);
   final review = scope.dependencies.reviewContextBuilder!()!;
+  if (count == 183) {
+    expect(
+      review.recommendation?.recommended,
+      isTrue,
+      reason: '原稿共享双图整理后不应因说明左对齐而被误判为图文疏离',
+    );
+  }
   debugPrint(
     'ORIGINAL $name candidates=${candidates.length} '
     'top=${candidates.first.diversityKey} recommend=${review.recommendation?.recommended} '

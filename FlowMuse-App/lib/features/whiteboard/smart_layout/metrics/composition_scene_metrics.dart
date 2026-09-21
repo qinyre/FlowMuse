@@ -5,6 +5,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 
 import '../composition/layout_block.dart';
 import '../composition/layout_block_assembler.dart';
+import '../composition/composition_policy.dart';
 import '../rendering/draft_scene_renderer.dart';
 import '../snapshot/deterministic_hash.dart';
 import '../validation/reduced_scene_metrics_extractor.dart';
@@ -21,7 +22,7 @@ class CompositionMetricContext {
     this.pageIntent = 'unknown',
   });
 
-  static const version = 'composition-score/2';
+  static const version = 'composition-score/3';
   final LayoutBlockAssembly source;
   final Bounds page;
   final bool analyzed;
@@ -178,11 +179,31 @@ class CompositionMetricContext {
               : 0.0;
         }(),
     ]);
-    values[LayoutMetricId.figureTextAffinity] = average([
-      for (final g in media)
-        for (var i = 0; i + 1 < g.length; i++)
-          1 / (1 + distance(rects[g[i]]!, rects[g[i + 1]]!) / (4 * em)),
-    ]);
+    final normalGap = CompositionPolicy(pageWidth: page.size.width).innerGap;
+    double affinity(Bounds a, Bounds b) =>
+        1 / (1 + math.max(0, distance(a, b) - normalGap) / (4 * em));
+    final affinities = <double>[];
+    for (final g in media) {
+      final runs = <Bounds>[];
+      var previousWasFigure = false;
+      for (final id in g) {
+        final figure = source.blockById(id)?.figure != null;
+        final box = rects[id]!;
+        if (figure && previousWasFigure) {
+          // 连续多图是共享说明的完整目标，同时检查图间距离，不能靠
+          // 一个跨越空白的巨大包络把分散图片伪装成紧密关系。
+          affinities.add(affinity(runs.last, box));
+          runs[runs.length - 1] = runs.last.union(box);
+        } else {
+          runs.add(box);
+        }
+        previousWasFigure = figure;
+      }
+      for (var i = 0; i + 1 < runs.length; i++) {
+        affinities.add(affinity(runs[i], runs[i + 1]));
+      }
+    }
+    values[LayoutMetricId.figureTextAffinity] = average(affinities);
 
     // 字号/行高来自实际 TextElement + painter 墨迹盒。原笔迹用实际区域
     // 高度/物理行数比较可读尺度，不因没有 TextElement 就判原稿为零分。
@@ -378,7 +399,8 @@ class CompositionRecommendation {
         LayoutMetricId.values.any(
           (id) =>
               baseline.stateOf(id) == LayoutMetricState.unavailable ||
-              best.stateOf(id) == LayoutMetricState.unavailable,
+              best.stateOf(id) == LayoutMetricState.unavailable ||
+              baseline.stateOf(id) != best.stateOf(id),
         );
     if (incomplete) {
       return CompositionRecommendation(
@@ -400,6 +422,27 @@ class CompositionRecommendation {
       after += w * best[id];
     }
     final delta = weight > 0 ? (after - before) / weight : 0.0;
+    // 总分改善不能抵消关键维度退化；沿用现有 0.05 的比较阈值，
+    // 避免微小测量浮差触发回退。缺测/适用性不一致已在上方拒绝比较。
+    final regressions = <String>[];
+    for (final (id, label) in [
+      (LayoutMetricId.readingOrder, '阅读顺序'),
+      (LayoutMetricId.figureTextAffinity, '图文关联'),
+      (LayoutMetricId.hierarchy, '文字可读性或层级'),
+    ]) {
+      if (baseline.stateOf(id) == LayoutMetricState.evaluated &&
+          baseline[id] - best[id] >= .05 - 1e-9) {
+        regressions.add(label);
+      }
+    }
+    if (regressions.isNotEmpty) {
+      return CompositionRecommendation(
+        baseline: baseline,
+        improvement: delta,
+        recommended: false,
+        reason: '${regressions.join('、')}较原稿退化，建议保留原样；可手动预览方案。',
+      );
+    }
     final recommended = delta >= .05;
     final improved = <String>[];
     for (final (id, label) in [
@@ -409,7 +452,10 @@ class CompositionRecommendation {
       (LayoutMetricId.alignmentRhythm, '同级内容更整齐'),
       (LayoutMetricId.densityWhitespace, '内容空隙更均匀'),
     ]) {
-      if (best[id] - baseline[id] >= .05) improved.add(label);
+      if (baseline.stateOf(id) == LayoutMetricState.evaluated &&
+          best[id] - baseline[id] >= .05) {
+        improved.add(label);
+      }
     }
     return CompositionRecommendation(
       baseline: baseline,
