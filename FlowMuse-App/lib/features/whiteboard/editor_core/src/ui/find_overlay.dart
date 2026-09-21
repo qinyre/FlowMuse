@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
+import 'hover_tooltip.dart';
 import 'markdraw_controller.dart';
 
 /// Floating search bar for finding text on the canvas.
@@ -164,40 +165,46 @@ class _FindOverlayState extends State<FindOverlay> {
             SizedBox(
               width: 28,
               height: 28,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                iconSize: 16,
-                tooltip: '上一个 (Shift+Enter)',
-                onPressed: results.isEmpty
-                    ? null
-                    : () => widget.controller.findPrevious(
-                        widget.getCanvasSize(),
-                      ),
-                icon: const Icon(Icons.keyboard_arrow_up),
+              child: HoverTooltip(
+                message: '上一个 (Shift+Enter)',
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 16,
+                  onPressed: results.isEmpty
+                      ? null
+                      : () => widget.controller.findPrevious(
+                          widget.getCanvasSize(),
+                        ),
+                  icon: const Icon(Icons.keyboard_arrow_up),
+                ),
               ),
             ),
             SizedBox(
               width: 28,
               height: 28,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                iconSize: 16,
-                tooltip: '下一个 (Enter)',
-                onPressed: results.isEmpty
-                    ? null
-                    : () => widget.controller.findNext(widget.getCanvasSize()),
-                icon: const Icon(Icons.keyboard_arrow_down),
+              child: HoverTooltip(
+                message: '下一个 (Enter)',
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 16,
+                  onPressed: results.isEmpty
+                      ? null
+                      : () => widget.controller.findNext(widget.getCanvasSize()),
+                  icon: const Icon(Icons.keyboard_arrow_down),
+                ),
               ),
             ),
             SizedBox(
               width: 28,
               height: 28,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                iconSize: 16,
-                tooltip: '关闭 (Esc)',
-                onPressed: _close,
-                icon: const Icon(Icons.close),
+              child: HoverTooltip(
+                message: '关闭 (Esc)',
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 16,
+                  onPressed: _close,
+                  icon: const Icon(Icons.close),
+                ),
               ),
             ),
           ],

@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+import 'hover_tooltip.dart';
 
 /// Theme toggle buttons (light/dark/system).
 class ThemeButtons extends StatelessWidget {
@@ -78,7 +79,7 @@ class ThemeButtons extends StatelessWidget {
     return Semantics(
       label: tooltip,
       button: true,
-      child: Tooltip(
+      child: HoverTooltip(
         message: tooltip,
         child: Material(
           color: isActive ? cs.primaryContainer : Colors.transparent,

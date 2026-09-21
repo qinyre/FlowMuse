@@ -1,6 +1,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'hover_tooltip.dart';
 
 /// A small text chip used in toggle rows (e.g. font size S/M/L/XL).
 class ToggleChip extends StatelessWidget {
@@ -77,7 +78,7 @@ class IconToggleChip extends StatelessWidget {
       ),
     );
     if (tooltip != null) {
-      chip = Tooltip(message: tooltip!, child: chip);
+      chip = HoverTooltip(message: tooltip!, child: chip);
     }
     return chip;
   }

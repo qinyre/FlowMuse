@@ -120,280 +120,292 @@ class HamburgerMenu extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: PopupMenuButton<String>(
-        icon: const Icon(Icons.menu, size: 20),
-        tooltip: '菜单',
-        position: PopupMenuPosition.under,
-        offset: const Offset(0, 4),
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-        onSelected: (value) {
-          runAfterUiTeardown(() {
-            switch (value) {
-              case 'open':
-                onOpen?.call();
-              case 'save':
-                onSave?.call();
-              case 'save_as':
-                onSaveAs?.call();
-              case 'rename':
-                _showRenameDialog(context);
-              case 'export_png':
-                onExportPng?.call();
-              case 'export_svg':
-                onExportSvg?.call();
-              case 'export_smart_md':
-                onExportSmartMarkdown?.call();
-              case 'export_smart_tex':
-                onExportSmartLatex?.call();
-              case 'share':
-                onShare?.call();
-              case 'library':
-                controller.showLibraryPanel = !controller.showLibraryPanel;
-              case 'markdown':
-                controller.toggleMarkdownPanel();
-              case 'import_image':
-                onImportImage?.call();
-              case 'toggle_grid':
-                controller.toggleGrid();
-              case 'snap_to_objects':
-                controller.toggleObjectsSnapMode();
-              case 'frame_tool':
-                controller.switchTool(ToolType.frame);
-              case 'reset_canvas':
-                controller.resetCanvas();
-              case 'zen_mode':
-                controller.toggleZenMode();
-              case 'view_mode':
-                controller.toggleViewMode();
-              case 'control_group_position':
-                onChooseControlGroupPosition?.call();
-            }
-          });
-        },
-        itemBuilder: (context) => [
-          if (onOpen != null)
-            _menuItem(context, 'open', Icons.folder_open, '打开', '$mod+O'),
-          if (onSave != null)
-            _menuItem(context, 'save', Icons.save, '保存', '$mod+S'),
-          if (onSaveAs != null)
-            _menuItem(context, 'save_as', Icons.save_as, '另存为', '$mod+Shift+S'),
-          _menuItem(
-            context,
-            'rename',
-            Icons.drive_file_rename_outline,
-            '重命名...',
-            null,
-          ),
-          if (onOpen != null || onSave != null || onSaveAs != null)
-            const PopupMenuDivider(),
-          if (onExportPng != null)
+      child: HoverTooltip(
+        message: '菜单',
+        child: PopupMenuButton<String>(
+          icon: const Icon(Icons.menu, size: 20),
+          position: PopupMenuPosition.under,
+          offset: const Offset(0, 4),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          onSelected: (value) {
+            runAfterUiTeardown(() {
+              switch (value) {
+                case 'open':
+                  onOpen?.call();
+                case 'save':
+                  onSave?.call();
+                case 'save_as':
+                  onSaveAs?.call();
+                case 'rename':
+                  _showRenameDialog(context);
+                case 'export_png':
+                  onExportPng?.call();
+                case 'export_svg':
+                  onExportSvg?.call();
+                case 'export_smart_md':
+                  onExportSmartMarkdown?.call();
+                case 'export_smart_tex':
+                  onExportSmartLatex?.call();
+                case 'share':
+                  onShare?.call();
+                case 'library':
+                  controller.showLibraryPanel = !controller.showLibraryPanel;
+                case 'markdown':
+                  controller.toggleMarkdownPanel();
+                case 'import_image':
+                  onImportImage?.call();
+                case 'toggle_grid':
+                  controller.toggleGrid();
+                case 'snap_to_objects':
+                  controller.toggleObjectsSnapMode();
+                case 'frame_tool':
+                  controller.switchTool(ToolType.frame);
+                case 'reset_canvas':
+                  controller.resetCanvas();
+                case 'zen_mode':
+                  controller.toggleZenMode();
+                case 'view_mode':
+                  controller.toggleViewMode();
+                case 'control_group_position':
+                  onChooseControlGroupPosition?.call();
+              }
+            });
+          },
+          itemBuilder: (context) => [
+            if (onOpen != null)
+              _menuItem(context, 'open', Icons.folder_open, '打开', '$mod+O'),
+            if (onSave != null)
+              _menuItem(context, 'save', Icons.save, '保存', '$mod+S'),
+            if (onSaveAs != null)
+              _menuItem(
+                context,
+                'save_as',
+                Icons.save_as,
+                '另存为',
+                '$mod+Shift+S',
+              ),
             _menuItem(
               context,
-              'export_png',
-              Icons.image,
-              '导出 PNG',
-              '$mod+Shift+E',
-            ),
-          if (onExportSvg != null)
-            _menuItem(context, 'export_svg', Icons.code, '导出 SVG', null),
-          if (onExportSmartMarkdown != null)
-            _menuItem(
-              context,
-              'export_smart_md',
-              Icons.text_snippet,
-              '导出智能排版 Markdown',
-              null,
-              enabled: controller.canExportSmartLayout,
-            ),
-          if (onExportSmartLatex != null)
-            _menuItem(
-              context,
-              'export_smart_tex',
-              Icons.functions,
-              '导出智能排版 LaTeX',
-              null,
-              enabled: controller.canExportSmartLayout,
-            ),
-          if (onShare != null)
-            _menuItem(context, 'share', Icons.share, '分享', null),
-          if (onExportPng != null || onExportSvg != null)
-            const PopupMenuDivider(),
-          PopupMenuItem<String>(
-            value: 'library',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.library_books,
-                  size: 18,
-                  color: controller.showLibraryPanel
-                      ? cs.primary
-                      : cs.onSurfaceVariant,
-                ),
-                const SizedBox(width: 12),
-                const Expanded(child: Text('素材库')),
-                if (controller.showLibraryPanel)
-                  Icon(Icons.check, size: 16, color: cs.primary),
-              ],
-            ),
-          ),
-          PopupMenuItem<String>(
-            value: 'markdown',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.text_snippet,
-                  size: 18,
-                  color: controller.showMarkdownPanel
-                      ? cs.primary
-                      : cs.onSurfaceVariant,
-                ),
-                const SizedBox(width: 12),
-                const Expanded(child: Text('Markdown 面板')),
-                if (controller.showMarkdownPanel)
-                  Icon(Icons.check, size: 16, color: cs.primary),
-              ],
-            ),
-          ),
-          if (onChooseControlGroupPosition != null)
-            _menuItem(
-              context,
-              'control_group_position',
-              Icons.open_with,
-              '控制组位置',
+              'rename',
+              Icons.drive_file_rename_outline,
+              '重命名...',
               null,
             ),
-          if (onImportImage != null)
+            if (onOpen != null || onSave != null || onSaveAs != null)
+              const PopupMenuDivider(),
+            if (onExportPng != null)
+              _menuItem(
+                context,
+                'export_png',
+                Icons.image,
+                '导出 PNG',
+                '$mod+Shift+E',
+              ),
+            if (onExportSvg != null)
+              _menuItem(context, 'export_svg', Icons.code, '导出 SVG', null),
+            if (onExportSmartMarkdown != null)
+              _menuItem(
+                context,
+                'export_smart_md',
+                Icons.text_snippet,
+                '导出智能排版 Markdown',
+                null,
+                enabled: controller.canExportSmartLayout,
+              ),
+            if (onExportSmartLatex != null)
+              _menuItem(
+                context,
+                'export_smart_tex',
+                Icons.functions,
+                '导出智能排版 LaTeX',
+                null,
+                enabled: controller.canExportSmartLayout,
+              ),
+            if (onShare != null)
+              _menuItem(context, 'share', Icons.share, '分享', null),
+            if (onExportPng != null || onExportSvg != null)
+              const PopupMenuDivider(),
+            PopupMenuItem<String>(
+              value: 'library',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.library_books,
+                    size: 18,
+                    color: controller.showLibraryPanel
+                        ? cs.primary
+                        : cs.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('素材库')),
+                  if (controller.showLibraryPanel)
+                    Icon(Icons.check, size: 16, color: cs.primary),
+                ],
+              ),
+            ),
+            PopupMenuItem<String>(
+              value: 'markdown',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.text_snippet,
+                    size: 18,
+                    color: controller.showMarkdownPanel
+                        ? cs.primary
+                        : cs.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('Markdown 面板')),
+                  if (controller.showMarkdownPanel)
+                    Icon(Icons.check, size: 16, color: cs.primary),
+                ],
+              ),
+            ),
+            if (onChooseControlGroupPosition != null)
+              _menuItem(
+                context,
+                'control_group_position',
+                Icons.open_with,
+                '控制组位置',
+                null,
+              ),
+            if (onImportImage != null)
+              _menuItem(
+                context,
+                'import_image',
+                Icons.add_photo_alternate,
+                '导入图片',
+                '9',
+              ),
+            const PopupMenuDivider(),
+            PopupMenuItem<String>(
+              value: 'toggle_grid',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.grid_on,
+                    size: 18,
+                    color: controller.gridSize != null
+                        ? cs.primary
+                        : cs.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('网格')),
+                  Text(
+                    "$mod+'",
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                  if (controller.gridSize != null)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Icon(Icons.check, size: 16, color: cs.primary),
+                    ),
+                ],
+              ),
+            ),
+            PopupMenuItem<String>(
+              value: 'snap_to_objects',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.straighten,
+                    size: 18,
+                    color: controller.objectsSnapMode
+                        ? cs.primary
+                        : cs.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('吸附到对象')),
+                  Text(
+                    'Alt+S',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                  if (controller.objectsSnapMode)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Icon(Icons.check, size: 16, color: cs.primary),
+                    ),
+                ],
+              ),
+            ),
+            _menuItem(context, 'frame_tool', Icons.crop_free, '画框工具', 'F'),
             _menuItem(
               context,
-              'import_image',
-              Icons.add_photo_alternate,
-              '导入图片',
-              '9',
+              'reset_canvas',
+              Icons.delete_sweep,
+              '重置画布',
+              '$mod+Del',
             ),
-          const PopupMenuDivider(),
-          PopupMenuItem<String>(
-            value: 'toggle_grid',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.grid_on,
-                  size: 18,
-                  color: controller.gridSize != null
-                      ? cs.primary
-                      : cs.onSurfaceVariant,
-                ),
-                const SizedBox(width: 12),
-                const Expanded(child: Text('网格')),
-                Text(
-                  "$mod+'",
-                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                ),
-                if (controller.gridSize != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Icon(Icons.check, size: 16, color: cs.primary),
-                  ),
-              ],
-            ),
-          ),
-          PopupMenuItem<String>(
-            value: 'snap_to_objects',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.straighten,
-                  size: 18,
-                  color: controller.objectsSnapMode
-                      ? cs.primary
-                      : cs.onSurfaceVariant,
-                ),
-                const SizedBox(width: 12),
-                const Expanded(child: Text('吸附到对象')),
-                Text(
-                  'Alt+S',
-                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                ),
-                if (controller.objectsSnapMode)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Icon(Icons.check, size: 16, color: cs.primary),
-                  ),
-              ],
-            ),
-          ),
-          _menuItem(context, 'frame_tool', Icons.crop_free, '画框工具', 'F'),
-          _menuItem(
-            context,
-            'reset_canvas',
-            Icons.delete_sweep,
-            '重置画布',
-            '$mod+Del',
-          ),
-          const PopupMenuDivider(),
-          PopupMenuItem<String>(
-            value: 'zen_mode',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.self_improvement,
-                  size: 18,
-                  color: controller.zenMode ? cs.primary : cs.onSurfaceVariant,
-                ),
-                const SizedBox(width: 12),
-                const Expanded(child: Text('专注模式')),
-                Text(
-                  'Alt+Z',
-                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                ),
-                if (controller.zenMode)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Icon(Icons.check, size: 16, color: cs.primary),
-                  ),
-              ],
-            ),
-          ),
-          PopupMenuItem<String>(
-            value: 'view_mode',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.visibility,
-                  size: 18,
-                  color: controller.viewMode ? cs.primary : cs.onSurfaceVariant,
-                ),
-                const SizedBox(width: 12),
-                const Expanded(child: Text('查看模式')),
-                Text(
-                  'Alt+R',
-                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                ),
-                if (controller.viewMode)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Icon(Icons.check, size: 16, color: cs.primary),
-                  ),
-              ],
-            ),
-          ),
-          if (onThemeModeChanged != null) ...[
             const PopupMenuDivider(),
+            PopupMenuItem<String>(
+              value: 'zen_mode',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.self_improvement,
+                    size: 18,
+                    color: controller.zenMode
+                        ? cs.primary
+                        : cs.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('专注模式')),
+                  Text(
+                    'Alt+Z',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                  if (controller.zenMode)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Icon(Icons.check, size: 16, color: cs.primary),
+                    ),
+                ],
+              ),
+            ),
+            PopupMenuItem<String>(
+              value: 'view_mode',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.visibility,
+                    size: 18,
+                    color: controller.viewMode
+                        ? cs.primary
+                        : cs.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('查看模式')),
+                  Text(
+                    'Alt+R',
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                  if (controller.viewMode)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Icon(Icons.check, size: 16, color: cs.primary),
+                    ),
+                ],
+              ),
+            ),
+            if (onThemeModeChanged != null) ...[
+              const PopupMenuDivider(),
+              PopupMenuItem<String>(
+                enabled: false,
+                padding: EdgeInsets.zero,
+                child: ThemeButtons(
+                  currentThemeMode: currentThemeMode,
+                  onThemeModeChanged: onThemeModeChanged,
+                ),
+              ),
+            ],
             PopupMenuItem<String>(
               enabled: false,
               padding: EdgeInsets.zero,
-              child: ThemeButtons(
-                currentThemeMode: currentThemeMode,
-                onThemeModeChanged: onThemeModeChanged,
-              ),
+              child: CanvasBackgroundPicker(controller: controller),
             ),
           ],
-          PopupMenuItem<String>(
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: CanvasBackgroundPicker(controller: controller),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -574,7 +574,7 @@ class _TextPane extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Tooltip(
+              HoverTooltip(
                 message: '停靠在右侧',
                 child: IconButton(
                   icon: Icon(
@@ -593,7 +593,7 @@ class _TextPane extends StatelessWidget {
                   ),
                 ),
               ),
-              Tooltip(
+              HoverTooltip(
                 message: '停靠在底部',
                 child: IconButton(
                   icon: Icon(
@@ -612,7 +612,7 @@ class _TextPane extends StatelessWidget {
                   ),
                 ),
               ),
-              Tooltip(
+              HoverTooltip(
                 message: '复制为 Markdown',
                 child: IconButton(
                   icon: Icon(
@@ -724,7 +724,7 @@ class _ParseStatusBar extends StatelessWidget {
       detail = null;
     }
 
-    return Tooltip(
+    return HoverTooltip(
       message: _tooltipMessage(),
       child: Container(
         height: 28,
