@@ -21,6 +21,8 @@ import 'smart_layout_session_view.dart';
 /// 手工容器随之 dispose，候选渲染资源由 ViewModel dispose 释放，
 /// 不存在模态死锁或弹层残留。关闭前若会话在途则先取消（同步、
 /// 不等待 future，零在途残留）。
+/// 面板同时拥有传入 scope 的生命周期：卸载时释放其场景监听和
+/// 识别缓存；宿主重开面板时须为已释放的 scope 创建新实例。
 class SmartLayoutSessionPanel extends StatefulWidget {
   const SmartLayoutSessionPanel({
     super.key,
@@ -54,6 +56,7 @@ class _SmartLayoutSessionPanelState extends State<SmartLayoutSessionPanel> {
   @override
   void dispose() {
     _container.dispose();
+    widget.scope.dispose();
     super.dispose();
   }
 

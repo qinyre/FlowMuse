@@ -4,6 +4,20 @@ import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_finger
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_revision.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+class _NotifyingController extends MarkdrawController {
+  void notifyUnchangedScene() => notifyListeners();
+}
+
+class _CountingScene extends Scene {
+  int elementReads = 0;
+
+  @override
+  List<Element> get elements {
+    elementReads++;
+    return super.elements;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -59,6 +73,34 @@ void main() {
     // 同内容重放（远端发来相同元素）不递增
     controller.applyRemoteElements([rect('r1')]);
     expect(tracker.current.revision, 1, reason: '内容未变的重放不应递增');
+  });
+
+  test('同场景高频通知不遍历元素，内容通知后的通用通知不重复计算', () {
+    final controller = _NotifyingController();
+    addTearDown(controller.dispose);
+    final scene = _CountingScene();
+    controller.loadScene(scene);
+    expect(controller.currentScene, same(scene));
+    final tracker = SceneRevisionTracker(
+      editor: SmartLayoutEditorGateway(controller),
+    );
+    addTearDown(tracker.dispose);
+
+    scene.elementReads = 0;
+    for (var i = 0; i < 240; i++) {
+      controller.notifyUnchangedScene();
+    }
+    expect(scene.elementReads, 0, reason: '绘制/视口通知不能重算整页指纹');
+
+    controller.applyResult(AddElementResult(rect('r1')));
+    // 真实远端场景替换：内容通知先到，随后的通用通知应复用计算结果。
+    final replacement = _CountingScene();
+    controller.sceneChangeListeners.add((_, _) {
+      replacement.elementReads = 0;
+    });
+    controller.applyRemoteScene(replacement);
+    expect(tracker.current.revision, 2);
+    expect(replacement.elementReads, 0, reason: '一份不可变场景只计算一次');
   });
 
   test('undo/redo 均递增（单调计数而非内容新颖度）', () {
