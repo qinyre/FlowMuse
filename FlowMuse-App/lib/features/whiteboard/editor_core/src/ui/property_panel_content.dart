@@ -778,7 +778,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     String tooltip,
     List<Element> Function(List<Element>) operation,
   ) {
-    return Tooltip(
+    return HoverTooltip(
       message: tooltip,
       child: IconButton(
         icon: Icon(icon, size: 18),

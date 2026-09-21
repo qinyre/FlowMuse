@@ -941,14 +941,16 @@ class _CompactPropertyButton extends StatelessWidget {
           BoxShadow(color: cs.shadow.withValues(alpha: 0.08), blurRadius: 3),
         ],
       ),
-      child: IconButton(
-        icon: const Icon(Icons.tune, size: 22),
-        tooltip: '属性',
-        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-        onPressed: () => showCompactPropertyPanel(
-          context,
-          controller,
-          attributionActionResolver: attributionActionResolver,
+      child: HoverTooltip(
+        message: '属性',
+        child: IconButton(
+          icon: const Icon(Icons.tune, size: 22),
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          onPressed: () => showCompactPropertyPanel(
+            context,
+            controller,
+            attributionActionResolver: attributionActionResolver,
+          ),
         ),
       ),
     );

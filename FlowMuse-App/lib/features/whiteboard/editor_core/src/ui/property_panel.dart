@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 
+
 /// Desktop floating property panel (left side).
 class PropertyPanel extends StatelessWidget {
   final MarkdrawController controller;
@@ -113,21 +114,23 @@ class PropertyPanel extends StatelessWidget {
                   child: SizedBox(
                     width: 28,
                     height: 28,
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 28,
-                        height: 28,
+                    child: HoverTooltip(
+                      message: '收起属性面板',
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 28,
+                          height: 28,
+                        ),
+                        iconSize: 20,
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(
+                          dockOnRight
+                              ? Icons.keyboard_arrow_right
+                              : Icons.keyboard_arrow_left,
+                        ),
+                        onPressed: onCollapse,
                       ),
-                      iconSize: 20,
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(
-                        dockOnRight
-                            ? Icons.keyboard_arrow_right
-                            : Icons.keyboard_arrow_left,
-                      ),
-                      tooltip: '收起属性面板',
-                      onPressed: onCollapse,
                     ),
                   ),
                 ),

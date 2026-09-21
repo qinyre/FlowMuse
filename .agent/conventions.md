@@ -392,6 +392,16 @@ flutter test test/features/library/   # 指定目录
 - 切换走 `themeViewModelProvider.notifier.changePreset`,不要直接改 `MaterialApp.theme`。
 - `system` 预设运行时跟随系统深浅色(经 `effectiveAppThemePreset`)。
 
+### 9.4 悬停提示
+
+- 白板编辑器内(`editor_core/src/ui/`)一律用自绘 `HoverTooltip`,**不要用框架 `Tooltip`**
+  (含 `IconButton(tooltip:)`、`PopupMenuButton(tooltip:)`)。
+- 原因:`Tooltip` 气泡被 `_ExclusiveMouseRegion` 包裹且命中不透明,触控笔悬停弹出的气泡会
+  吞掉下方控件的点击(须点多次才生效,issue #31);气泡 24px 偏移还会盖住纵向相邻按钮。
+- `HoverTooltip` 保留鼠标/触控笔悬停提示与无障碍 `Semantics(tooltip:)`,气泡 `IgnorePointer`
+  不参与命中测试,按下任意指针即收起。详见
+  `docs/研发记录/troubleshooting/2026-09-17-issue-31-stylus-tooltip-tap-eaten.md`。
+
 ---
 
 ## 10. 静态检查与完成标准

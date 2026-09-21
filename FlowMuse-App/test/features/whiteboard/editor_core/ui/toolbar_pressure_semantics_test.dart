@@ -1,4 +1,5 @@
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/ui/studio_rail_icon_button.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/ui/toolbar_palette_buttons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,6 +30,12 @@ void main() {
     return controller;
   }
 
+  // 笔盒条目改用自绘 HoverTooltip（issue #31），find.byTooltip 不再适用，
+  // 直接按 StudioRailIconButton.tooltip 定位。
+  Finder railButton(String tooltip) => find.byWidgetPredicate(
+    (widget) => widget is StudioRailIconButton && widget.tooltip == tooltip,
+  );
+
   testWidgets('钢笔（默认）：显示压力滑块', (tester) async {
     final controller = await pumpPalette(tester);
     expect(controller.activeBrushType, BrushType.fountainPen);
@@ -38,7 +45,7 @@ void main() {
   testWidgets('圆珠笔：隐藏滑块并显示恒定线宽说明', (tester) async {
     final controller = await pumpPalette(tester);
     // 切到圆珠笔（弹层随选择关闭）
-    await tester.tap(find.byTooltip('圆珠笔'));
+    await tester.tap(railButton('圆珠笔'));
     await tester.pumpAndSettle();
     expect(controller.activeBrushType, BrushType.ballpoint);
 
@@ -51,7 +58,7 @@ void main() {
 
   testWidgets('荧光笔：同圆珠笔语义', (tester) async {
     final controller = await pumpPalette(tester);
-    await tester.tap(find.byTooltip('荧光笔'));
+    await tester.tap(railButton('荧光笔'));
     await tester.pumpAndSettle();
     expect(controller.activeBrushType, BrushType.highlighter);
 
@@ -63,7 +70,7 @@ void main() {
 
   testWidgets('毛笔/铅笔：保留压力滑块', (tester) async {
     final controller = await pumpPalette(tester);
-    await tester.tap(find.byTooltip('毛笔'));
+    await tester.tap(railButton('毛笔'));
     await tester.pumpAndSettle();
     expect(controller.activeBrushType, BrushType.brushPen);
     await tester.tap(find.byType(BrushPaletteButton));
@@ -79,7 +86,7 @@ void main() {
     final fountainValue = controller.pressureSensitivity;
 
     // 圆珠笔（无滑块）不改变任何偏好
-    await tester.tap(find.byTooltip('圆珠笔'));
+    await tester.tap(railButton('圆珠笔'));
     await tester.pumpAndSettle();
 
     // 切回钢笔：偏好保留且滑块回到该值

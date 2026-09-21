@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+import 'hover_tooltip.dart';
 import 'markdraw_controller.dart';
 
 /// Shows a compact library bottom sheet for mobile layout.
@@ -53,22 +54,26 @@ void showCompactLibrary(
                   ),
                   const Spacer(),
                   if (onImportLibrary != null)
-                    IconButton(
-                      icon: const Icon(Icons.file_upload, size: 20),
-                      onPressed: () {
-                        closeThen(ctx, onImportLibrary);
-                      },
-                      tooltip: '导入素材库',
+                    HoverTooltip(
+                      message: '导入素材库',
+                      child: IconButton(
+                        icon: const Icon(Icons.file_upload, size: 20),
+                        onPressed: () {
+                          closeThen(ctx, onImportLibrary);
+                        },
+                      ),
                     ),
                   if (onExportLibrary != null)
-                    IconButton(
-                      icon: const Icon(Icons.file_download, size: 20),
-                      onPressed: controller.libraryItems.isEmpty
-                          ? null
-                          : () {
-                              closeThen(ctx, onExportLibrary);
-                            },
-                      tooltip: '导出素材库',
+                    HoverTooltip(
+                      message: '导出素材库',
+                      child: IconButton(
+                        icon: const Icon(Icons.file_download, size: 20),
+                        onPressed: controller.libraryItems.isEmpty
+                            ? null
+                            : () {
+                                closeThen(ctx, onExportLibrary);
+                              },
+                      ),
                     ),
                 ],
               ),

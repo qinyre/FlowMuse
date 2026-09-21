@@ -3,6 +3,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'help_dialog.dart';
+import 'hover_tooltip.dart';
 
 /// Help button (bottom-right on desktop).
 class HelpButton extends StatelessWidget {
@@ -16,19 +17,21 @@ class HelpButton extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: IconButton(
-        icon: const Icon(Icons.help_outline, size: 18),
-        onPressed: () => showHelpDialog(context),
-        tooltip: '帮助 (?)',
-        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-        iconSize: 18,
-        padding: EdgeInsets.zero,
-        style: IconButton.styleFrom(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+      child: HoverTooltip(
+        message: '帮助 (?)',
+        child: IconButton(
+          icon: const Icon(Icons.help_outline, size: 18),
+          onPressed: () => showHelpDialog(context),
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          iconSize: 18,
+          padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            hoverColor: cs.surfaceContainerHighest,
+            focusColor: cs.surfaceContainerHighest,
           ),
-          hoverColor: cs.surfaceContainerHighest,
-          focusColor: cs.surfaceContainerHighest,
         ),
       ),
     );

@@ -7,6 +7,7 @@ import 'color_picker.dart' as cp;
 import 'hamburger_menu.dart';
 import 'markdraw_controller.dart';
 import 'color_utils.dart' show canvasBackgroundPresets;
+import 'hover_tooltip.dart';
 
 /// Compact menu button (top-left on mobile).
 class CompactMenuButton extends StatelessWidget {
@@ -53,18 +54,20 @@ class CompactMenuButton extends StatelessWidget {
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: IconButton(
-        icon: const Icon(Icons.menu, size: 24),
-        tooltip: '菜单',
-        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-        style: IconButton.styleFrom(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+      child: HoverTooltip(
+        message: '菜单',
+        child: IconButton(
+          icon: const Icon(Icons.menu, size: 24),
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          style: IconButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            hoverColor: cs.surfaceContainerHighest,
+            focusColor: cs.surfaceContainerHighest,
           ),
-          hoverColor: cs.surfaceContainerHighest,
-          focusColor: cs.surfaceContainerHighest,
+          onPressed: () => _showCompactMenu(context),
         ),
-        onPressed: () => _showCompactMenu(context),
       ),
     );
   }
@@ -211,7 +214,7 @@ class CompactMenuButton extends StatelessWidget {
     ThemeMode mode,
     ColorScheme cs,
   ) {
-    return Tooltip(
+    return HoverTooltip(
       message: tooltip,
       child: Material(
         color: isActive ? cs.primaryContainer : Colors.transparent,
@@ -242,17 +245,19 @@ class CompactMenuButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          IconButton(
-            tooltip: '跟随主题',
-            onPressed: () {
-              Navigator.pop(ctx);
-              runAfterUiTeardown(controller.followThemeCanvasBackground);
-            },
-            icon: Icon(
-              Icons.auto_awesome,
-              color: controller.canvasBackgroundFollowsTheme
-                  ? cs.primary
-                  : cs.onSurfaceVariant,
+          HoverTooltip(
+            message: '跟随主题',
+            child: IconButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                runAfterUiTeardown(controller.followThemeCanvasBackground);
+              },
+              icon: Icon(
+                Icons.auto_awesome,
+                color: controller.canvasBackgroundFollowsTheme
+                    ? cs.primary
+                    : cs.onSurfaceVariant,
+              ),
             ),
           ),
           Text('背景', style: TextStyle(fontSize: 16, color: cs.onSurface)),
