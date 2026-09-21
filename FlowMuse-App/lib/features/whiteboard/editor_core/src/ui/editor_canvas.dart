@@ -67,6 +67,7 @@ class _EditorCanvasState extends State<EditorCanvas>
   bool _appendPageReady = false;
   late final AnimationController _appendPageOverscrollController;
   final RemoteWetInkRenderCache _remoteWetInkCache = RemoteWetInkRenderCache();
+  final StaticCanvasRenderCache _staticCanvasCache = StaticCanvasRenderCache();
 
   Set<ElementId> _lastHighlightIds = const {};
   int _localHighlightRevision = 0;
@@ -87,6 +88,7 @@ class _EditorCanvasState extends State<EditorCanvas>
   void dispose() {
     _appendPageOverscrollController.dispose();
     _remoteWetInkCache.dispose();
+    _staticCanvasCache.dispose();
     super.dispose();
   }
 
@@ -293,6 +295,9 @@ class _EditorCanvasState extends State<EditorCanvas>
 
   @override
   Widget build(BuildContext context) {
+    // Rebuilds can reflect mutable adapter settings as well as scene changes.
+    // Reuse the static display list only while this widget configuration lasts.
+    _staticCanvasCache.dispose();
     final toolOverlay = controller.activeTool.overlay;
 
     // Convert Bounds marqueeRect to Flutter Rect
@@ -449,6 +454,9 @@ class _EditorCanvasState extends State<EditorCanvas>
                     },
                     child: CustomPaint(
                       painter: StaticCanvasPainter(
+                        renderCache: useLayeredWetInk
+                            ? _staticCanvasCache
+                            : null,
                         scene: controller.editorState.scene,
                         adapter: controller.adapter,
                         viewport: paintViewport,

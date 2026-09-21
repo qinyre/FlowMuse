@@ -29,6 +29,7 @@ import '../collaboration/models/live_ink_chunk.dart';
 import '../collaboration/models/room_collaborator.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
 import '../collaboration/services/collaboration_creator_identity.dart';
+import '../collaboration/services/collaboration_activity_timer.dart';
 import '../collaboration/services/collaboration_debug_log.dart';
 import '../collaboration/services/live_ink_receive_scheduler.dart';
 import '../collaboration/services/live_ink_sender.dart';
@@ -116,8 +117,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   StreamSubscription<CollaborationRoomMetadata>? _roomEndedSubscription;
   StreamSubscription<String>? _roomErrorSubscription;
   StreamSubscription<RealtimeConnectionStatus>? _connectionStatusSubscription;
-  Timer? _idleTimer;
-  Timer? _awayTimer;
+  late final _activityTimer = CollaborationActivityTimer(_broadcastIdleState);
   Timer? _loadImagesTimer;
   bool _loadingScene = false;
   bool _applyingRemoteScene = false;
@@ -259,8 +259,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     unawaited(_roomErrorSubscription?.cancel());
     unawaited(_connectionStatusSubscription?.cancel());
     unawaited(_liveInkSubscription?.cancel());
-    _idleTimer?.cancel();
-    _awayTimer?.cancel();
+    _activityTimer.cancel();
     _loadImagesTimer?.cancel();
     _liveInkSender.cancel();
     _remoteWetInkStore.dispose();
@@ -1725,8 +1724,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _roomErrorSubscription = null;
     await _connectionStatusSubscription?.cancel();
     _connectionStatusSubscription = null;
-    _idleTimer?.cancel();
-    _awayTimer?.cancel();
+    _activityTimer.cancel();
     _loadImagesTimer?.cancel();
     _loadImagesTimer = null;
     _lastIdleState = null;
@@ -3087,10 +3085,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _lastPointerDown = false;
 
   void _broadcastPointerPresence(Offset localPosition, bool pointerDown) {
-    if (!_canMutateWhiteboard) {
+    if (!_canMutateWhiteboard ||
+        ref.read(whiteboardViewModelProvider).activeRoom == null) {
       return;
     }
-    _markUserActive();
+    _activityTimer.markActive();
 
     _lastPointerPosition = localPosition;
     _lastPointerDown = pointerDown;
@@ -3157,25 +3156,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         creatorKey: _currentCreatorKey(),
       ),
     );
-  }
-
-  void _markUserActive() {
-    if (!_canMutateWhiteboard) {
-      return;
-    }
-    _idleTimer?.cancel();
-    _awayTimer?.cancel();
-    _broadcastIdleState('active');
-    _idleTimer = Timer(const Duration(minutes: 1), () {
-      if (_canMutateWhiteboard) {
-        _broadcastIdleState('idle');
-      }
-    });
-    _awayTimer = Timer(const Duration(minutes: 5), () {
-      if (_canMutateWhiteboard) {
-        _broadcastIdleState('away');
-      }
-    });
   }
 
   void _broadcastIdleState(String state, {bool force = false}) {
