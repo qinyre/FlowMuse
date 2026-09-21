@@ -464,7 +464,8 @@ Future<WritingResultsSummary> summarizeDirectory(
     final json = jsonDecode(await file.readAsString());
     if (json is! Map) continue;
     final root = Map<String, Object?>.from(json);
-    if (root['mode'] == 'collaboration_cpu_non_ui' ||
+    if (root['mode'] == 'replay_calibration_non_ui' ||
+        root['mode'] == 'collaboration_cpu_non_ui' ||
         root['mode'] == 'collaboration_live_ink') {
       continue;
     }
@@ -656,6 +657,9 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     'brush': root['brush'] ?? 'fountainPen',
     'renderVersion': root['renderVersion'] ?? 'classicV1',
     'fullEditor': root['fullEditor'] ?? false,
+    'framePolicy': root['framePolicy'] ?? 'fadePointers',
+    'inputSource': root['inputSource'] ?? 'test_events',
+    'pencilShaderAvailable': root['pencilShaderAvailable'] ?? false,
   };
   final hasScenarioIdentity = scenarioFields.values.every(
     (value) => value != null && value != '' && value != 0,

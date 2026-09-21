@@ -23,6 +23,7 @@ void main() {
         'pressure_ramp',
         'pointer_cancel',
         'continuous_curve_30s',
+        'continuous_curve_30s_v2',
       });
       for (final fixture in writingRecordingFixtures) {
         expect(fixture.schemaVersion, writingFixtureSchemaVersion);

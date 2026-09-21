@@ -15,6 +15,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_rende
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_report.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_manifest.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/config/writing_feature_flags.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/pencil_shader.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'fixtures/scene_fixtures.dart';
@@ -43,9 +44,18 @@ const _brushName = String.fromEnvironment(
 const _fullEditor = bool.fromEnvironment('FLOWMUSE_FULL_EDITOR');
 const _repeats = int.fromEnvironment('FLOWMUSE_PERF_REPEATS', defaultValue: 1);
 const _compareLayered = bool.fromEnvironment('FLOWMUSE_COMPARE_LAYERED');
+const _calibrateReplay = bool.fromEnvironment('FLOWMUSE_REPLAY_CALIBRATION');
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  // Let app-requested frames run, without test pointer crosshairs/decay frames.
+  binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  binding.shouldPropagateDevicePointerEvents = true;
+  setUpAll(PencilShader.init);
+  if (_calibrateReplay) {
+    _registerCalibration(binding);
+    return;
+  }
   final brushes = _brushName == 'all'
       ? BrushType.values
       : [BrushType.values.byName(_brushName)];
@@ -70,6 +80,11 @@ void main() {
             expect(fixtureSpec, isNotNull, reason: '功能 fixture 不得进入正式性能验收');
             final fixture = writingRecordingFixtures.singleWhere(
               (item) => item.name == _writingFixtureName,
+            );
+            expect(
+              fixture.contentHash,
+              fixtureSpec!.hash,
+              reason: '设备端 fixture 必须匹配冻结 hash，失败立即停止',
             );
             final sceneFixture = buildSceneFixture(_sceneElementCount);
             final probe = ActivePreviewMetricsProbe();
@@ -152,7 +167,7 @@ void main() {
             addTearDown(frameTimings.stop);
             final injectionSamples = <Map<String, int>>[];
             final runClock = Stopwatch()..start();
-            final measureSeconds = fixtureSpec!.durationSeconds;
+            final measureSeconds = fixtureSpec.durationSeconds;
             final refreshHz = ui
                 .PlatformDispatcher
                 .instance
@@ -235,6 +250,9 @@ void main() {
                   : kReleaseMode
                   ? 'release'
                   : 'debug',
+              'framePolicy': binding.framePolicy.name,
+              'inputSource': 'synthetic_device_events',
+              'pencilShaderAvailable': PencilShader.isAvailable,
               'platform': defaultTargetPlatform.name,
               'deviceClass': _deviceClass,
               'deviceId': _deviceId,
@@ -291,8 +309,9 @@ Future<void> _replayFixture(
   Rect canvasRect,
   Stopwatch clock,
   int strokeIndex,
-  List<Map<String, int>>? injectionSamples,
-) async {
+  List<Map<String, int>>? injectionSamples, {
+  bool dispatchEvents = true,
+}) async {
   final samples = fixture.recording.samples;
   final minX = samples.map((sample) => sample.x).reduce(math.min);
   final maxX = samples.map((sample) => sample.x).reduce(math.max);
@@ -314,12 +333,6 @@ Future<void> _replayFixture(
     if (waitMicros > 0) {
       await Future<void>.delayed(Duration(microseconds: waitMicros));
     }
-    final actualMicros = clock.elapsedMicroseconds;
-    injectionSamples?.add({
-      'targetMicros': targetMicros,
-      'actualMicros': actualMicros,
-      'jitterMicros': actualMicros - targetMicros,
-    });
     final position =
         canvasRect.topLeft +
         Offset(20 + (sample.x - minX) * scale, 20 + (sample.y - minY) * scale);
@@ -364,8 +377,90 @@ Future<void> _replayFixture(
         pressureMax: 1,
       ),
     };
-    await tester.sendEventToBinding(event);
+    final actualMicros = clock.elapsedMicroseconds;
+    if (dispatchEvents) {
+      tester.binding.handlePointerEventForSource(event);
+    }
+    final dispatchEndMicros = clock.elapsedMicroseconds;
+    injectionSamples?.add({
+      'targetMicros': targetMicros,
+      'actualMicros': actualMicros,
+      'jitterMicros': actualMicros - targetMicros,
+      'dispatchMicros': dispatchEndMicros - actualMicros,
+    });
     previousPosition = position;
+  }
+}
+
+void _registerCalibration(IntegrationTestWidgetsFlutterBinding binding) {
+  final reports = <Map<String, Object?>>[];
+  for (final dispatchEvents in [false, true]) {
+    testWidgets('回放校准 dispatchEvents=$dispatchEvents', (tester) async {
+      expect(_perfTestEnabled, isTrue);
+      var received = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (_) => received++,
+            onPointerMove: (_) => received++,
+            onPointerUp: (_) => received++,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final fixture = writingRecordingFixtures.singleWhere(
+        (item) => item.name == 'continuous_curve_30s_v2',
+      );
+      expect(
+        fixture.contentHash,
+        writingPerformanceFixtures[fixture.name]!.hash,
+      );
+      final samples = <Map<String, int>>[];
+      await _replayFixture(
+        tester,
+        fixture,
+        tester.getRect(find.byType(SizedBox).first),
+        Stopwatch()..start(),
+        0,
+        samples,
+        dispatchEvents: dispatchEvents,
+      );
+      expect(received, dispatchEvents ? fixture.recording.samples.length : 0);
+      expect(samples.length, fixture.recording.samples.length);
+      final jitters = samples.map((s) => s['jitterMicros']!.abs()).toList()
+        ..sort();
+      final dispatch = samples.map((s) => s['dispatchMicros']!).toList()
+        ..sort();
+      final report = <String, Object?>{
+        'calibration': dispatchEvents ? 'empty_binding' : 'clock_only',
+        'writingFixture': fixture.name,
+        'writingFixtureHash': fixture.contentHash,
+        'received': received,
+        'injectionJitterP95Micros': _nearestRank(jitters, 0.95),
+        'injectionJitterMaxMicros': jitters.last,
+        'dispatchP95Micros': _nearestRank(dispatch, 0.95),
+        'dispatchMaxMicros': dispatch.last,
+        'injectionSamples': samples,
+      };
+      reports.add(report);
+      binding.reportData = {
+        'schemaVersion': 2,
+        'mode': 'replay_calibration_non_ui',
+        'measurementEligible': false,
+        'deviceId': _deviceId,
+        'framePolicy': binding.framePolicy.name,
+        'inputSource': 'synthetic_device_events',
+        'buildMode': kProfileMode ? 'profile' : 'non_profile',
+        'refreshHz': binding.platformDispatcher.views.first.display.refreshRate,
+        'cases': reports,
+      };
+      debugPrint(
+        '[FlowMuseReplayCalibration] ${jsonEncode({for (final entry in report.entries)
+          if (entry.key != 'injectionSamples') entry.key: entry.value})}',
+      );
+    });
   }
 }
 
