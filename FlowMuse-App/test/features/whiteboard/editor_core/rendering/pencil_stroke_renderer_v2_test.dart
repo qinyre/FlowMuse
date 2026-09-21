@@ -1,7 +1,12 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/element_renderer.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/export/svg_element_renderer.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/rough_canvas_adapter.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/natural_media/pencil_stroke_renderer_v2.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,6 +28,47 @@ void main() {
 
   final outDir = Directory('build/natural_media_baseline/v2_pencil');
   outDir.createSync(recursive: true);
+
+  test('单点和重复零长点在预览、静态与 SVG 中均可见且几何一致', () async {
+    List<int>? firstPixels;
+    for (final count in [1, 2]) {
+      for (final complete in [false, true]) {
+        final element = FreedrawElement(
+          id: ElementId('pencil-dot-$count-$complete'),
+          x: 20,
+          y: 20,
+          width: 1,
+          height: 1,
+          points: List.filled(count, Point.zero),
+          pressures: List.filled(count, 0.7),
+          simulatePressure: false,
+          isComplete: complete,
+          strokeWidth: 6,
+          customData: customDataWithFreedrawRender(
+            null,
+            BrushType.pencil,
+            renderVersion: BrushRenderVersion.naturalMediaV2,
+          ),
+        );
+        final recorder = ui.PictureRecorder();
+        ElementRenderer.render(
+          ui.Canvas(recorder),
+          element,
+          RoughCanvasAdapter(),
+        );
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(40, 40);
+        final pixels = (await image.toByteData())!.buffer.asUint8List();
+        final alpha = [for (var i = 3; i < pixels.length; i += 4) pixels[i]];
+        expect(alpha.any((a) => a > 0), isTrue, reason: '零长铅笔不可丢失');
+        firstPixels ??= List.of(pixels);
+        expect(pixels, firstPixels, reason: '落笔、抬笔与重复点保持相同形状');
+        expect(SvgElementRenderer.render(element), contains('<path'));
+        image.dispose();
+        picture.dispose();
+      }
+    }
+  });
 
   Future<PlacedRender> renderFixture(
     BrushStrokeFixture f, {

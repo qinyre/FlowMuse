@@ -138,6 +138,12 @@ void main() {
     expect(c, equals(d));
   });
 
+  test('长铅笔超过 SVG 颗粒预算时仍导出纹理', () {
+    final svg = renderSvg(v2Element(BrushType.pencil, wave(4000), prs(4000)));
+    expect(pathNodeCount(svg), greaterThan(1), reason: '抽稀后必须保留颗粒层');
+    expect(pathNodeCount(svg), lessThanOrEqualTo(4));
+  });
+
   test('T9-d 探针导出（Chromium 视觉验收素材）', () {
     final outDir = Directory('build/natural_media_baseline/svg_v2');
     outDir.createSync(recursive: true);
