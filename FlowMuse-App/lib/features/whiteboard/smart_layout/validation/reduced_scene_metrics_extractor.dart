@@ -191,6 +191,11 @@ abstract final class ReducedSceneMetricsExtractor {
           if (ga.id == gb.id) {
             final ta = ga.tracks.indexWhere((t) => t.contains(a));
             final tb = ga.tracks.indexWhere((t) => t.contains(b));
+            if (ga.kind == CompositionGroupKind.mediaRows) {
+              return ta == tb
+                  ? pa.right <= pb.left + .5
+                  : ta < tb && pa.bottom <= pb.top + .5;
+            }
             return ta == tb
                 ? pa.bottom <= pb.top + .5
                 : ta < tb && pa.right <= pb.left + .5;
@@ -279,7 +284,10 @@ abstract final class ReducedSceneMetricsExtractor {
         return false;
       }
       for (var i = 0; i + 1 < boxes.length; i++) {
-        if (!_stacked(boxes[i]!, boxes[i + 1]!, g.maxGap)) return false;
+        final valid = g.kind == CompositionGroupKind.mediaRows
+            ? _beside(boxes[i]!, boxes[i + 1]!, g.maxGap)
+            : _stacked(boxes[i]!, boxes[i + 1]!, g.maxGap);
+        if (!valid) return false;
       }
       tracks.add(boxes.cast<Bounds>().reduce((a, b) => a.union(b)));
     }
@@ -287,14 +295,24 @@ abstract final class ReducedSceneMetricsExtractor {
       if (tracks.length != 2) return false;
       final a = tracks[0];
       final b = tracks[1];
-      return b.left >= a.right - .5 &&
-          b.left - a.right <= g.maxGap + .5 &&
-          a.top < b.bottom &&
-          b.top < a.bottom &&
-          (a.top - b.top).abs() <= .5;
+      return _beside(a, b, g.maxGap);
+    }
+    if (g.kind == CompositionGroupKind.mediaRows) {
+      if (tracks.length < 2) return false;
+      for (var i = 0; i + 1 < tracks.length; i++) {
+        if (!_stacked(tracks[i], tracks[i + 1], g.maxGap)) return false;
+      }
+      return true;
     }
     return tracks.length == 1;
   }
+
+  static bool _beside(Bounds a, Bounds b, double gap) =>
+      b.left >= a.right - .5 &&
+      b.left - a.right <= gap + .5 &&
+      a.top < b.bottom &&
+      b.top < a.bottom &&
+      (a.top - b.top).abs() <= .5;
 
   static bool _relationSatisfied(
     SemanticRelationExpectation relation,

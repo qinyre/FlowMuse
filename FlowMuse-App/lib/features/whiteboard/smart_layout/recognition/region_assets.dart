@@ -517,6 +517,40 @@ class RegionPartition {
 
   final RegionRecord record;
   final List<FreedrawElement> strokes;
+
+  /// 稀疏的大轮廓只能证明是图形/符号候选，不能证明可用 OCR 文本替换。
+  /// ponytail: 几何守卫不区分孤立的 O/口/轮廓图；歧义时保留原件。
+  bool get isDrawingLike {
+    if (strokes.isEmpty || strokes.length > 3) return false;
+    final width = record.bounds.width, height = record.bounds.height;
+    final extent = math.max(width, height);
+    if (extent <= 0 || math.min(width, height) < extent * .4) return false;
+    var length = 0.0;
+    final ends = <Point>[];
+    for (final stroke in strokes) {
+      if (stroke.points.length < 2) return false;
+      for (final p in [stroke.points.first, stroke.points.last]) {
+        ends.add(Point(stroke.x + p.x, stroke.y + p.y));
+      }
+      for (var i = 1; i < stroke.points.length; i++) {
+        final a = stroke.points[i - 1], b = stroke.points[i];
+        length += math.sqrt(math.pow(b.x - a.x, 2) + math.pow(b.y - a.y, 2));
+      }
+    }
+    if (length < extent * 1.8) return false;
+    for (var i = 0; i < ends.length; i++) {
+      if (!Iterable<int>.generate(ends.length).any(
+        (j) =>
+            i != j &&
+            math.pow(ends[i].x - ends[j].x, 2) +
+                    math.pow(ends[i].y - ends[j].y, 2) <=
+                math.pow(extent * .2, 2),
+      )) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
 
 /// 分区层（spec §5 前段、§6.1 proposing）：场景 → 识别区域记录。
@@ -538,7 +572,10 @@ class RegionPartitioner {
       growable: false,
     );
     if (strokes.isEmpty) return const [];
-    final segments = InkRegionSegmenter().segment(strokes);
+    // 先以真实行间空白切带，再复用连通分量。直接对全页并查集会沿
+    // 大笔画向下串联：标题和右侧三幅图形、相邻章节都变成一个 OCR 区。
+    final bands = _horizontalBands(strokes);
+    final segments = [for (final band in bands) ..._segmentsInLine(band)];
 
     // 1. 区分小段与正常区域段。
     String regionIdOfSegment(RegionSegment segment) =>
@@ -685,5 +722,105 @@ class RegionPartitioner {
       if (id.compareTo(min) < 0) min = id;
     }
     return min;
+  }
+
+  static List<List<FreedrawElement>> _horizontalBands(
+    List<FreedrawElement> strokes,
+  ) {
+    final boxes = {for (final s in strokes) s.id: conservativeVisualBounds(s)};
+    final extents = [for (final s in strokes) math.max(s.width, s.height)]
+      ..sort();
+    final gap = extents[(extents.length - 1) ~/ 2] * 0.25;
+    final ordered = [...strokes]
+      ..sort((a, b) {
+        final top = boxes[a.id]!.top.compareTo(boxes[b.id]!.top);
+        return top != 0 ? top : a.id.value.compareTo(b.id.value);
+      });
+    final bands = <List<FreedrawElement>>[];
+    var bottom = double.negativeInfinity;
+    for (final stroke in ordered) {
+      final bounds = boxes[stroke.id]!;
+      if (bands.isEmpty || bounds.top - bottom > gap) {
+        bands.add([]);
+        bottom = bounds.bottom;
+      } else {
+        bottom = math.max(bottom, bounds.bottom);
+      }
+      bands.last.add(stroke);
+    }
+    return [for (final band in bands) ..._splitOverlappingLines(band)];
+  }
+
+  // 完整行的高笔画作锚，短横/编号点按行中心归属，避免中文字的下伸笔
+  // 穿过行间空白时把两行再次串起来。成员只分配一次，不切碎任何笔画。
+  static List<List<FreedrawElement>> _splitOverlappingLines(
+    List<FreedrawElement> band,
+  ) {
+    final heights = [for (final s in band) s.height]..sort();
+    // 中文短横/点远多于贯穿整字的长笔画，不能用笔画中位高当整行高。
+    final height = heights.last;
+    if (height <= 0) return [band];
+    final anchors = band.where((s) => s.height >= height * .6).toList()
+      ..sort((a, b) => (a.y + a.height / 2).compareTo(b.y + b.height / 2));
+    final rows = <List<FreedrawElement>>[];
+    final centers = <double>[];
+    for (final s in anchors) {
+      final center = s.y + s.height / 2;
+      if (rows.isEmpty ||
+          center - centers.last > math.max(height, s.height) * .65) {
+        rows.add([s]);
+        centers.add(center);
+      } else {
+        final count = rows.last.length;
+        centers[centers.length - 1] =
+            (centers.last * count + center) / (count + 1);
+        rows.last.add(s);
+      }
+    }
+    if (rows.length <= 1) return [band];
+    for (final s in band.where((s) => s.height < height * .6)) {
+      final center = s.y + s.height / 2;
+      var best = 0;
+      for (var i = 1; i < centers.length; i++) {
+        if ((centers[i] - center).abs() < (centers[best] - center).abs()) {
+          best = i;
+        }
+      }
+      rows[best].add(s);
+    }
+    return rows;
+  }
+
+  static List<RegionSegment> _segmentsInLine(List<FreedrawElement> line) {
+    final segments = InkRegionSegmenter().segment(line).toList()
+      ..sort((a, b) => a.left.compareTo(b.left));
+    final heights = [for (final s in line) s.height]..sort();
+    final height = heights.last;
+    final result = <RegionSegment>[];
+    for (final next in segments) {
+      final last = result.lastOrNull;
+      // 同行靠近的编号/点/字的偏旁进入同一个识别图，而不是各自识别。
+      // 保持较大横向间隔（如图形和标签、两栏正文）的独立区域。
+      if (last == null || next.left - (last.left + last.width) > height * .8) {
+        result.add(next);
+        continue;
+      }
+      final top = math.min(last.top, next.top);
+      result[result.length - 1] = RegionSegment(
+        id: last.id,
+        strokeIds: [...last.strokeIds, ...next.strokeIds]..sort(),
+        left: last.left,
+        top: top,
+        width:
+            math.max(last.left + last.width, next.left + next.width) -
+            last.left,
+        height: math.max(last.top + last.height, next.top + next.height) - top,
+        lineDirection: last.lineDirection,
+        columnIndex: last.columnIndex,
+        skewRadians: last.skewRadians,
+        localScale: math.max(last.localScale, next.localScale),
+      );
+    }
+    return result;
   }
 }

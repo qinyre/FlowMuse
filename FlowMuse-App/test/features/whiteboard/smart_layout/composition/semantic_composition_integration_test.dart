@@ -336,6 +336,68 @@ void main() {
     }
   });
 
+  test('推荐不能以对齐/留白加分抵消关键退化，也不能更换适用分母', () {
+    const critical = {
+      LayoutMetricId.readingOrder: '阅读顺序',
+      LayoutMetricId.figureTextAffinity: '图文关联',
+      LayoutMetricId.hierarchy: '文字可读性或层级',
+    };
+    final baseline = LayoutMetricVector(
+      values: {
+        for (final id in LayoutMetricId.values)
+          id: critical.containsKey(id) ? .9 : .2,
+      },
+      factsFingerprint: 'baseline',
+    );
+    LayoutMetricVector candidate({
+      LayoutMetricId? worse,
+      LayoutMetricState? state,
+      double loss = .05,
+    }) => LayoutMetricVector(
+      values: {
+        for (final id in LayoutMetricId.values)
+          id: id == worse
+              ? .9 - loss
+              : critical.containsKey(id)
+              ? .9
+              : 1,
+      },
+      states: {LayoutMetricId.figureTextAffinity: ?state},
+      factsFingerprint: 'candidate',
+    );
+    for (final entry in critical.entries) {
+      final result = CompositionRecommendation.compare(
+        baseline,
+        candidate(worse: entry.key),
+      );
+      expect(result.improvement, greaterThan(.05), reason: '构造总分明显上涨的反例');
+      expect(result.recommended, isFalse);
+      expect(result.reason, contains(entry.value));
+    }
+    for (final state in [
+      LayoutMetricState.unavailable,
+      LayoutMetricState.notApplicable,
+    ]) {
+      final result = CompositionRecommendation.compare(
+        baseline,
+        candidate(state: state),
+      );
+      expect(result.improvement, isNull);
+      expect(result.recommended, isFalse);
+    }
+    expect(
+      CompositionRecommendation.compare(baseline, candidate()).recommended,
+      isTrue,
+    );
+    expect(
+      CompositionRecommendation.compare(
+        baseline,
+        candidate(worse: LayoutMetricId.hierarchy, loss: 1e-8),
+      ).recommended,
+      isTrue,
+    );
+  });
+
   test('实际评分：原稿可胜出、缺测不推荐、同输入分母不随候选改变', () async {
     final f = await _fixture();
     final layouts = await SemanticComposer.generate(
@@ -662,6 +724,87 @@ void main() {
       );
       c.dispose();
     }
+  });
+
+  test('共享说明双图保持等高并排，正文只出现一次且真实错位会拒绝', () async {
+    const page = EffectPage(
+      'shared-row',
+      ['title', 'left', 'right', 'shared'],
+      {'title': '两个视角', 'shared': '共同说明'},
+      [
+        ['left', 'right', 'shared'],
+      ],
+    );
+    final f = await _effectFixture(page);
+    final layouts = await SemanticComposer.generate(
+      scene: f.scene,
+      assembly: f.assembly,
+      pageFrame: f.frame,
+      measure: TextMeasureAdapter(),
+    );
+    final gallery = layouts.firstWhere(
+      (l) => l.groups.any((g) => g.kind == CompositionGroupKind.mediaRows),
+    );
+    final round = await _gate(f, [gallery]);
+    expect(round.top, hasLength(1), reason: '${round.rejections}');
+    expect(
+      round.top.single.vector[LayoutMetricId.figureTextAffinity],
+      closeTo(1, 1e-9),
+      reason: '正常组内间距不扣分；共享短说明对应两图整体，不只对应最右图',
+    );
+    final output = round.top.single.reduced.scene.activeElements;
+    final images = output.whereType<ImageElement>().toList()
+      ..sort((a, b) => a.x.compareTo(b.x));
+    expect(images, hasLength(2));
+    expect(images[0].y, closeTo(images[1].y, .001));
+    expect(images[0].height, closeTo(images[1].height, .001));
+    expect(
+      images[1].x - images[0].x - images[0].width,
+      closeTo(gallery.policy.innerGap, .001),
+    );
+    final shared = output.whereType<TextElement>().where(
+      (e) => e.text == page.texts['shared'],
+    );
+    expect(shared, hasLength(1));
+    expect(shared.single.y, greaterThan(images[0].y + images[0].height));
+    final separated = round.top.single.reduced.scene.updateElement(
+      images[1].copyWith(x: images[1].x + 240),
+    );
+    final renderer = DraftSceneRenderer();
+    final separatedSnapshot = await renderer.render(
+      scene: separated,
+      viewport: const ViewportState(),
+      pixelSize: ui.Size(f.frame.width + 240, f.frame.height),
+    );
+    try {
+      final metrics =
+          CompositionMetricContext(
+            source: f.assembly,
+            page: Bounds.fromLTWH(0, 0, f.frame.width, f.frame.height),
+            analyzed: true,
+          ).calculate(
+            scene: separated,
+            snapshot: separatedSnapshot,
+            originalBounds: const {},
+          );
+      expect(
+        metrics[LayoutMetricId.figureTextAffinity],
+        lessThan(.9),
+        reason: '共享组仍需惩罚图片分散，不能仅用大包络伪装紧密',
+      );
+    } finally {
+      separatedSnapshot.dispose();
+      renderer.dispose();
+    }
+    round.top.single.dispose();
+    final broken = await ValidatedCandidatePipeline.run(
+      baseScene: f.scene,
+      pageContentBounds: Bounds.fromLTWH(0, 0, f.frame.width, f.frame.height),
+      candidates: [_input(f, gallery, corrupt: true, corruptId: 'right')],
+      profile: LayoutProfile.composition,
+    );
+    expect(broken.top, isEmpty);
+    expect(broken.rejections, isNotEmpty);
   });
 
   test('横排/并列声明在真实场景被破坏后拒绝，不把声明本身当证据', () async {
@@ -1130,6 +1273,7 @@ CandidateGateInput _input(
   _Fixture f,
   SemanticCompositionLayout layout, {
   bool corrupt = false,
+  String corruptId = 'body-a',
 }) {
   final output = SmartLayoutCandidateMaterializer.materialize(
     baseScene: f.scene,
@@ -1164,8 +1308,8 @@ CandidateGateInput _input(
       updates: [
         for (final op in patch.updates)
           ScenePatchElementUpdate(
-            element: op.elementId == 'body-a'
-                ? op.element.copyWith(x: 850, y: 1000)
+            element: op.elementId == corruptId
+                ? op.element.copyWith(y: op.element.y + 80)
                 : op.element,
             baseVersion: op.baseVersion,
           ),

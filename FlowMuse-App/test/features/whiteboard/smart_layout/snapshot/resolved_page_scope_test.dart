@@ -103,6 +103,40 @@ void main() {
     expect(scope.fixedBounds.keys, ['other']);
   });
 
+  test('轻微越页边且98%可见的无归属图片纳入；显著越界/重叠页仍不猜', () {
+    ImageElement picture(String id, double x, double width) => ImageElement(
+      id: ElementId(id),
+      x: x,
+      y: 200,
+      width: width,
+      height: 160,
+      fileId: 'asset',
+    );
+    final scene = pages()
+        .addElement(picture('near-edge', -4, 400))
+        .addElement(picture('outside', -30, 400))
+        .addElement(picture('tiny-outside', -4, 4));
+    final before = SceneFingerprint.of(scene);
+    final scope = ResolvedPageScope.resolve(scene, 'p1');
+    expect(scope.includedSourceIds, contains('near-edge'));
+    expect(scope.includedSourceIds, isNot(contains('outside')));
+    expect(scope.includedSourceIds, isNot(contains('tiny-outside')));
+    expect(
+      ResolvedPageScope.resolve(
+        scene.addElement(page('overlap', 0)),
+        'p1',
+      ).includedSourceIds,
+      isNot(contains('near-edge')),
+    );
+    expect(SceneFingerprint.of(scene), before);
+    expect(
+      scene.activeElements.whereType<ImageElement>().every(
+        (e) => e.pageId == null,
+      ),
+      isTrue,
+    );
+  });
+
   test('跨页、跨边界和多个重叠页的推断归属不猜测', () {
     final scene = pages()
         .addElement(text('edge', x: 580))

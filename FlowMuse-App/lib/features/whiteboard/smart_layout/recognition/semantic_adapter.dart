@@ -865,6 +865,12 @@ abstract final class ReplacementGuard {
     final elements = {
       for (final e in result.scene.activeElements) e.id.value: e,
     };
+    // 从原始笔迹独立取事实，不信任模型的 recognized 或纠错合并后的成员。
+    // 同时服务 settle 和物化守卫，避免重新分组绕过图形保护。
+    final drawingSources = {
+      for (final p in const RegionPartitioner().partition(result.scene))
+        if (p.isDrawingLike) ...p.record.targetSourceIds,
+    };
     return {
       for (final record in result.regionRecords)
         'ink:${record.regionId}': ReplacementUnitFacts(
@@ -882,6 +888,7 @@ abstract final class ReplacementGuard {
               id: SourceGuardFacts(
                 isReplaceableInk:
                     elements[id] is FreedrawElement &&
+                    !drawingSources.contains(id) &&
                     brushTypeFromCustomData(
                       elements[id]!.customData,
                     ).canAutoRecognize,
