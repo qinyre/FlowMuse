@@ -22,7 +22,7 @@ enum LayoutBlockKind {
 /// 非文本块（figure/preserved/protected）origin 为 null。
 enum LayoutTextOrigin { typed, transcribed }
 
-enum CompositionGroupKind { textFlow, mediaStack, mediaSide }
+enum CompositionGroupKind { textFlow, mediaStack, mediaSide, mediaRows }
 
 /// 候选声明的组与阅读路径；验证器只用它取期望，几何真值从 renderer 读取。
 class CompositionGroupIntent {
@@ -40,6 +40,8 @@ class CompositionGroupIntent {
 
   final String id;
   final CompositionGroupKind kind;
+
+  /// mediaRows 为先上后下的行，行内从左到右；其余为列内向下的轨道。
   final List<List<String>> tracks;
   final LayoutRect slot;
   final int row;

@@ -664,6 +664,45 @@ void main() {
     }
   });
 
+  test('共享说明双图保持等高并排，正文只出现一次且真实错位会拒绝', () async {
+    final f = await _effectFixture(effectPages[3]);
+    final layouts = await SemanticComposer.generate(
+      scene: f.scene,
+      assembly: f.assembly,
+      pageFrame: f.frame,
+      measure: TextMeasureAdapter(),
+    );
+    final gallery = layouts.firstWhere(
+      (l) => l.groups.any((g) => g.kind == CompositionGroupKind.mediaRows),
+    );
+    final round = await _gate(f, [gallery]);
+    expect(round.top, hasLength(1), reason: '${round.rejections}');
+    final output = round.top.single.reduced.scene.activeElements;
+    final images = output.whereType<ImageElement>().toList()
+      ..sort((a, b) => a.x.compareTo(b.x));
+    expect(images, hasLength(2));
+    expect(images[0].y, closeTo(images[1].y, .001));
+    expect(images[0].height, closeTo(images[1].height, .001));
+    expect(
+      images[1].x - images[0].x - images[0].width,
+      closeTo(gallery.policy.innerGap, .001),
+    );
+    final shared = output.whereType<TextElement>().where(
+      (e) => e.text == effectPages[3].texts['shared'],
+    );
+    expect(shared, hasLength(1));
+    expect(shared.single.y, greaterThan(images[0].y + images[0].height));
+    round.top.single.dispose();
+    final broken = await ValidatedCandidatePipeline.run(
+      baseScene: f.scene,
+      pageContentBounds: Bounds.fromLTWH(0, 0, f.frame.width, f.frame.height),
+      candidates: [_input(f, gallery, corrupt: true, corruptId: 'right')],
+      profile: LayoutProfile.composition,
+    );
+    expect(broken.top, isEmpty);
+    expect(broken.rejections, isNotEmpty);
+  });
+
   test('横排/并列声明在真实场景被破坏后拒绝，不把声明本身当证据', () async {
     final f = await _fixture();
     final layouts = await SemanticComposer.generate(
@@ -1130,6 +1169,7 @@ CandidateGateInput _input(
   _Fixture f,
   SemanticCompositionLayout layout, {
   bool corrupt = false,
+  String corruptId = 'body-a',
 }) {
   final output = SmartLayoutCandidateMaterializer.materialize(
     baseScene: f.scene,
@@ -1164,8 +1204,8 @@ CandidateGateInput _input(
       updates: [
         for (final op in patch.updates)
           ScenePatchElementUpdate(
-            element: op.elementId == 'body-a'
-                ? op.element.copyWith(x: 850, y: 1000)
+            element: op.elementId == corruptId
+                ? op.element.copyWith(y: op.element.y + 80)
                 : op.element,
             baseVersion: op.baseVersion,
           ),

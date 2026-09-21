@@ -440,13 +440,25 @@ abstract final class SemanticComposer {
   ) {
     final ids = unit.map((b) => b.id).toSet();
     final media = _isMedia(unit);
+    if (media && !preferSide) {
+      final gallery = _mediaRows(
+        scene,
+        unit,
+        width,
+        imageHeightBudget,
+        measure,
+        pixels,
+        policy,
+      );
+      if (gallery != null) return gallery;
+    }
     final pictureTrack = unit
         .where((b) => b.figure != null || b.kind == LayoutBlockKind.caption)
         .toList();
     final textTrack = unit
         .where((b) => b.figure == null && b.kind != LayoutBlockKind.caption)
         .toList();
-    // B 先处理现有一图多说明；C 多图组复用同一组及轨道，不复制正文。
+    // 侧栏仍须保持语义阅读序，不能为了换版式把前置说明移到图后。
     var side =
         preferSide &&
         media &&
@@ -586,6 +598,116 @@ abstract final class SemanticComposer {
       placed: placed,
       width: width,
       height: totalHeight,
+    );
+  }
+
+  static _LocalGroup? _mediaRows(
+    Scene scene,
+    List<LayoutBlock> unit,
+    double width,
+    double imageHeightBudget,
+    TextMeasureAdapter measure,
+    Map<String, ui.Size> pixels,
+    CompositionPolicy policy,
+  ) {
+    final figures = unit.where((b) => b.figure != null).toList();
+    // ponytail: 只并排同组内连续的 2–3 图；更多图或穿插独立图注仍走旧轨道，
+    // 真有长图库需求时再加换行，而不是猜测/重排语义顺序。
+    if (figures.length < 2 ||
+        figures.length > 3 ||
+        figures.any((b) => b.extras['nativeComposite'] == true) ||
+        unit.indexOf(figures.last) - unit.indexOf(figures.first) + 1 !=
+            figures.length) {
+      return null;
+    }
+    final textRows = {
+      for (final b in unit.where((b) => b.figure == null))
+        b.id: _local(
+          scene,
+          [b],
+          width,
+          imageHeightBudget,
+          measure,
+          pixels,
+          false,
+          policy,
+        ),
+    };
+    final heightBudget =
+        imageHeightBudget -
+        textRows.values.fold<double>(0, (h, g) => h + g.height) -
+        policy.innerGap * textRows.length;
+    if (heightBudget <= 0) return null;
+    final sizes = [
+      for (final b in figures)
+        _figureSize(scene, b, width, heightBudget, pixels, policy),
+    ];
+    if (sizes.any((s) => s.width <= 0 || s.height <= 0)) return null;
+    final ratioSum = sizes.fold<double>(0, (v, s) => v + s.width / s.height);
+    final height = math.min(
+      sizes.map((s) => s.height).reduce(math.min),
+      (width - policy.innerGap * (figures.length - 1)) / ratioSum,
+    );
+    if (sizes.any((s) => height * s.width / s.height < 4 * policy.bodySize)) {
+      return null;
+    }
+    final galleryWidth =
+        height * ratioSum + policy.innerGap * (figures.length - 1);
+    final placed = <PlacedBlock>[];
+    final rows = <List<String>>[];
+    var y = 0.0;
+    for (final b in unit) {
+      if (b.figure != null) {
+        if (b != figures.first) continue;
+        rows.add(figures.map((b) => b.id).toList());
+        var x = 0.0;
+        for (var i = 0; i < figures.length; i++) {
+          final w = height * sizes[i].width / sizes[i].height;
+          placed.add(
+            PlacedBlock(
+              blockId: figures[i].id,
+              rect: LayoutRect(left: x, top: y, width: w, height: height),
+              columnIndex: 0,
+              lineCount: 1,
+              appliedFontSize: 0,
+              shrunk: policy.compact,
+            ),
+          );
+          x += w + policy.innerGap;
+        }
+        y += height;
+      } else {
+        final row = textRows[b.id]!;
+        final p = row.placed.single;
+        rows.add([b.id]);
+        placed.add(
+          PlacedBlock(
+            blockId: b.id,
+            rect: LayoutRect(
+              left: b.kind == LayoutBlockKind.caption
+                  ? math.max(0, (galleryWidth - p.rect.width) / 2)
+                  : 0,
+              top: y,
+              width: p.rect.width,
+              height: p.rect.height,
+            ),
+            columnIndex: 0,
+            lineCount: p.lineCount,
+            appliedFontSize: p.appliedFontSize,
+            shrunk: p.shrunk,
+          ),
+        );
+        y += row.height;
+      }
+      y += policy.innerGap;
+    }
+    return _LocalGroup(
+      ids: unit.map((b) => b.id).toList(),
+      kind: CompositionGroupKind.mediaRows,
+      tracks: rows,
+      placed: placed,
+      width: width,
+      height: y - policy.innerGap,
     );
   }
 

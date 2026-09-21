@@ -428,8 +428,10 @@ abstract final class ValidatedCandidatePipeline {
             (g) =>
                 g.tracks.isEmpty ||
                 g.tracks.any((t) => t.isEmpty) ||
-                g.tracks.length !=
-                    (g.kind == CompositionGroupKind.mediaSide ? 2 : 1) ||
+                (g.kind == CompositionGroupKind.mediaRows
+                    ? g.tracks.length < 2 || !g.tracks.any((t) => t.length > 1)
+                    : g.tracks.length !=
+                          (g.kind == CompositionGroupKind.mediaSide ? 2 : 1)) ||
                 !g.maxGap.isFinite ||
                 g.maxGap < 0 ||
                 g.row < 0 ||

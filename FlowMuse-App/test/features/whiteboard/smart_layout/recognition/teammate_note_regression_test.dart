@@ -1,8 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/analysis/smart_layout_analysis_repository.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_budget.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/gateways/smart_layout_http_gateway.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
@@ -13,6 +18,9 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/semantic_
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_ledger.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/structure_recovery.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/resolved_page_scope.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_fingerprint.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_real_wiring.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/rendering/draft_scene_renderer.dart';
 
 import 'fake_recognition_transport.dart';
 
@@ -21,9 +29,23 @@ import 'fake_recognition_transport.dart';
 // 加 --dart-define=EXPORT_LAYOUT_EVIDENCE=true 导出区域图及几何（build/）。
 const _noteDir = String.fromEnvironment('TEAMMATE_NOTE_DIR');
 const _export = bool.fromEnvironment('EXPORT_LAYOUT_EVIDENCE');
+const _cjkPath = String.fromEnvironment('LAYOUT_EVIDENCE_CJK_FONT');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  GoogleFonts.config.allowRuntimeFetching = false;
+  setUpAll(() async {
+    final font = FontLoader('Excalifont');
+    // 导图可提供本机中文字体；不改变生产字体配置，不冒充设备渲染证据。
+    if (_export && _cjkPath.isNotEmpty) {
+      font.addFont(File(_cjkPath).readAsBytes().then(ByteData.sublistView));
+    } else {
+      font.addFont(
+        rootBundle.load('assets/fonts/markdraw/Excalifont-Regular.ttf'),
+      );
+    }
+    await font.load();
+  });
   test('编号和短笔画按完整行归属，下伸笔画不串行；平移缩放不改变成员', () {
     for (final scale in [.5, 1.0, 3.0]) {
       FreedrawElement ink(String id, double x, double y, double w, double h) =>
@@ -154,6 +176,7 @@ void main() {
         }
         await _checkDrawingAdmission(scene, drawingIds);
       }
+      await _checkOriginalCandidates(name, count, scene, partitions);
       if (!_export) return;
 
       final dir = await Directory(
@@ -194,6 +217,248 @@ void main() {
         '${dir.path}/regions.json',
       ).writeAsString(const JsonEncoder.withIndent('  ').convert(records));
     });
+  }
+}
+
+Future<void> _checkOriginalCandidates(
+  String name,
+  int count,
+  Scene scene,
+  List<RegionPartition> partitions,
+) async {
+  // 人工读原稿提供的离线响应；不调用线上模型、不把转写正确写成已验证。
+  final lines = switch (count) {
+    70 => ['手绘图形：', '三角形', '', '圆', '', '正方形', ''],
+    183 => ['小懒羊羊喜欢侧身睡觉', '以下为实际照片', '小懒羊羊睡觉姿势'],
+    _ => [
+      '光合作用',
+      '一、基本概念',
+      '1.植物',
+      '2.阳光',
+      '二、影响因素',
+      '1.光照',
+      '2.温度',
+      '三、意义',
+      '能量来源',
+    ],
+  };
+  expect(partitions, hasLength(lines.length));
+  final texts = {
+    for (var i = 0; i < lines.length; i++)
+      partitions[i].record.regionId: lines[i],
+  };
+  String unit(int i) => lines[i].isEmpty
+      ? 'native:${(partitions[i].record.targetSourceIds.toList()..sort()).first}'
+      : 'ink:${partitions[i].record.regionId}';
+  final figures = scene.activeElements.whereType<ImageElement>().toList()
+    ..sort((a, b) => a.x.compareTo(b.x));
+  final figureIds = figures.map((e) => 'native:${e.id.value}').toList();
+  final transport = FakeRecognitionTransport(
+    responder: (body) async {
+      final json = jsonDecode(body) as Map<String, Object?>;
+      if (json['stage'] != 'structure') {
+        return buildBatchResponseBody(
+          json,
+          confidence: .99,
+          textOf: (id) => texts[id]!,
+          statusOf: (id) => texts[id]!.isEmpty ? 'nonText' : 'recognized',
+        );
+      }
+      final request =
+          RecognitionRequest.fromJson(json) as RecognitionStructureRequest;
+      final order = count == 183
+          ? [unit(0), unit(1), ...figureIds, unit(2)]
+          : [for (var i = 0; i < lines.length; i++) unit(i)];
+      return (
+        200,
+        jsonEncode(
+          RecognitionStructureResponse(
+            operationId: request.operationId,
+            requestId: request.requestId,
+            pageId: request.pageId,
+            sceneRevision: request.sceneRevision,
+            contentFingerprint: request.contentFingerprint,
+            generation: request.generation,
+            textFingerprint: request.textFingerprint,
+            readingOrder: order,
+            roles: [
+              for (var i = 0; i < lines.length; i++)
+                if (lines[i].isNotEmpty)
+                  RecognitionRoleAssignment(
+                    unitId: unit(i),
+                    role: count == 183
+                        // 现有协议用 mediaGroups 表达共享说明，caption 只认单图。
+                        ? RecognitionStructureRole.body
+                        : i == 0 || (count == 218 && [1, 4, 7].contains(i))
+                        ? RecognitionStructureRole.title
+                        : count == 70
+                        ? RecognitionStructureRole.caption
+                        : [2, 3, 5, 6].contains(i)
+                        ? RecognitionStructureRole.listItem
+                        : RecognitionStructureRole.body,
+                  ),
+            ],
+            listGroups: [
+              if (count == 218)
+                for (final i in [2, 5])
+                  RecognitionListGroup(
+                    groupId: 'list-$i',
+                    members: [unit(i), unit(i + 1)],
+                    level: 1,
+                    listType: RecognitionListType.ordered,
+                    startNumber: 1,
+                  ),
+            ],
+            captions: [
+              if (count == 70)
+                for (final i in [1, 3, 5])
+                  RecognitionCaption(
+                    captionUnitId: unit(i),
+                    targetUnitId: unit(i + 1),
+                  ),
+            ],
+            compositionHints: RecognitionCompositionHints(
+              pageIntent: 'reading',
+              sections: [
+                if (count == 218)
+                  for (final i in [1, 4, 7])
+                    RecognitionSectionHint(
+                      sectionId: 'section-$i',
+                      headingUnitId: unit(i),
+                      memberUnitIds: [unit(i + 1), if (i < 7) unit(i + 2)],
+                    ),
+              ],
+              mediaGroups: [
+                if (count == 183)
+                  RecognitionMediaGroup(
+                    groupId: 'shared-sheep',
+                    figureUnitIds: figureIds,
+                    textUnitIds: [unit(0), unit(1), unit(2)],
+                    confidence: .99,
+                  ),
+              ],
+            ),
+            warnings: const [],
+          ).toJson(),
+        ),
+      );
+    },
+  );
+  final controller = MarkdrawController()..loadScene(scene);
+  addTearDown(controller.dispose);
+  final scope = SmartLayoutRealSessionScope.build(
+    controller: controller,
+    serverUri: Uri.parse('https://server.test'),
+    pageId: 'page-1',
+    post: transport.post,
+  );
+  addTearDown(scope.dispose);
+  final before = SceneFingerprint.of(controller.currentScene);
+  final ticket = scope.session.beginOperation();
+  final outcome = await scope.dependencies.analysisRunner!(ticket);
+  expect(outcome, isA<SmartLayoutRecognitionSucceeded>(), reason: '$outcome');
+  final success = outcome as SmartLayoutRecognitionSucceeded;
+  final structure = success.recognition.structureResult as StructureResult;
+  expect(structure.modelRejected, isFalse, reason: '${structure.warnings}');
+  expect(structure.usedModel, isTrue);
+  final candidates = await scope.dependencies.candidateChainFromDocument!(
+    success,
+    ticket,
+  );
+  addTearDown(() {
+    for (final c in candidates) {
+      c.dispose();
+    }
+  });
+  expect(candidates, isNotEmpty);
+  for (final c in candidates) {
+    final output = c.reduced.scene.activeElements;
+    expect(
+      output.whereType<ImageElement>().map((e) => e.id.value).toSet(),
+      figures.map((e) => e.id.value).toSet(),
+    );
+    if (count == 70) {
+      for (final s in scene.activeElements.whereType<FreedrawElement>().where(
+        (e) => !partitions.first.record.targetSourceIds.contains(e.id.value),
+      )) {
+        expect(
+          output.singleWhere((e) => e.id == s.id),
+          same(s),
+          reason: '图形和相关标签必须原样保留，不能只保图丢标签关联',
+        );
+      }
+    } else {
+      for (final line in lines) {
+        expect(
+          output.whereType<TextElement>().where((e) => e.text == line),
+          hasLength(1),
+        );
+      }
+    }
+  }
+  if (count == 183) {
+    final images = candidates.first.reduced.scene.activeElements
+        .whereType<ImageElement>()
+        .toList();
+    expect(images[0].y, closeTo(images[1].y, .01), reason: '共享双图的最高分方案须并排');
+    expect(images[0].height, closeTo(images[1].height, .01));
+  }
+  expect(SceneFingerprint.of(controller.currentScene), before);
+  final review = scope.dependencies.reviewContextBuilder!()!;
+  debugPrint(
+    'ORIGINAL $name candidates=${candidates.length} '
+    'top=${candidates.first.diversityKey} recommend=${review.recommendation?.recommended} '
+    'reason=${review.recommendation?.reason}',
+  );
+  if (_export) {
+    final dir = await Directory(
+      'build/teammate-notes/$name',
+    ).create(recursive: true);
+    final renderer = DraftSceneRenderer();
+    try {
+      for (final (label, scene) in [
+        ('before', controller.currentScene),
+        for (var i = 0; i < candidates.length; i++)
+          ('after-$i', candidates[i].reduced.scene),
+      ]) {
+        final snapshot = await renderer.render(
+          scene: scene,
+          viewport: ViewportState(
+            offset: ui.Offset(review.pageBounds.left, review.pageBounds.top),
+            zoom: .6,
+          ),
+          pixelSize: ui.Size(
+            review.pageBounds.size.width * .6,
+            review.pageBounds.size.height * .6,
+          ),
+        );
+        try {
+          // 与白板预览一样铺浅色背景，透明 PNG 上的黑字不能当“缺字”。
+          final recorder = ui.PictureRecorder();
+          ui.Canvas(recorder)
+            ..drawColor(const ui.Color(0xfffffcf4), ui.BlendMode.src)
+            ..drawImage(snapshot.image, ui.Offset.zero, ui.Paint());
+          final picture = recorder.endRecording();
+          final image = await picture.toImage(
+            snapshot.image.width,
+            snapshot.image.height,
+          );
+          picture.dispose();
+          try {
+            final png = await image.toByteData(format: ui.ImageByteFormat.png);
+            await File(
+              '${dir.path}/$label.png',
+            ).writeAsBytes(png!.buffer.asUint8List());
+          } finally {
+            image.dispose();
+          }
+        } finally {
+          snapshot.dispose();
+        }
+      }
+    } finally {
+      renderer.dispose();
+    }
   }
 }
 
