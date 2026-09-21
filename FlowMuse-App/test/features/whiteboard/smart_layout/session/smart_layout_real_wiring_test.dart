@@ -510,6 +510,9 @@ void main() {
     }) => FakeRecognitionTransport(
       responder: (body) async {
         final request = jsonDecode(body) as Map<String, Object?>;
+        if (request['stage'] == 'structure') {
+          return buildStructureResponseBody(request);
+        }
         return buildBatchResponseBody(
           request,
           confidence: 0.9,
@@ -528,8 +531,8 @@ void main() {
         GoogleFonts.config.allowRuntimeFetching = false;
         final controller = recognitionController();
         addTearDown(controller.dispose);
-        // 噪点笔画并入宿主区域（同一连通分量）：单一区域承载全部笔迹，
-        // 转写文本统一返回。
+        // 两个相隔的行带分别识别；这里模拟两区都返回确定正文。
+        // 不再依赖旧分区把远处噪点并入宿主的错误行为。
         final transport = recognitionTransport(textOf: (_) => '手工记账流水');
         final statusSeen = <String>[];
         final scope = SmartLayoutRealSessionScope.build(
@@ -608,7 +611,7 @@ void main() {
         expect(
           applied.elements.where((e) => e.id.value == 'k-n1' && !e.isDeleted),
           isEmpty,
-          reason: '并入宿主区域的噪点笔画随转写块一并替换',
+          reason: '独立区域在明确识别为正文后才可替换',
         );
         expect(
           applied.elements.where(
