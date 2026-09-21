@@ -94,7 +94,13 @@ void main() {
                     'diagnostics': ['文字清晰可辨，识别结果准确'],
                   },
             ],
-            'missingRegionIds': const <String>[],
+            // 历史响应只覆盖锚定区域；新分区的其余区域明确缺席，不能把
+            // 漏报 missing 的无效批次当成有效 read（本用例不评 OCR 准确率）。
+            'missingRegionIds': [
+              for (final r in regions)
+                if (!(r['regionId'] as String).contains('0e2835e7'))
+                  r['regionId'],
+            ],
           }),
         );
       },

@@ -12,6 +12,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/region_as
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/semantic_adapter.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_ledger.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/structure_recovery.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/resolved_page_scope.dart';
 
 import 'fake_recognition_transport.dart';
 
@@ -23,6 +24,31 @@ const _export = bool.fromEnvironment('EXPORT_LAYOUT_EVIDENCE');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('编号和短笔画按完整行归属，下伸笔画不串行；平移缩放不改变成员', () {
+    for (final scale in [.5, 1.0, 3.0]) {
+      FreedrawElement ink(String id, double x, double y, double w, double h) =>
+          FreedrawElement(
+            id: ElementId(id),
+            x: 137 + x * scale,
+            y: 219 + y * scale,
+            width: w * scale,
+            height: h * scale,
+            points: [const Point(0, 0), Point(w * scale, h * scale)],
+            isComplete: true,
+          );
+      final scene = Scene()
+          .addElement(ink('first', 100, 10, 60, 100))
+          .addElement(ink('dash', 20, 55, 40, 2))
+          .addElement(ink('dot', 72, 60, 4, 3))
+          .addElement(ink('second', 100, 95, 60, 100))
+          .addElement(ink('tail', 130, 166, 30, 3));
+      final partitions = const RegionPartitioner().partition(scene);
+      expect(partitions.map((p) => p.record.targetSourceIds.toSet()), [
+        {'first', 'dash', 'dot'},
+        {'second', 'tail'},
+      ]);
+    }
+  });
   test('文字响应不能删除闭合轮廓；纠错合并也不能绕过原稿守卫', () async {
     final scene = Scene()
         .addElement(
@@ -82,6 +108,26 @@ void main() {
           .toList();
       expect(sources, hasLength(count));
       expect(sources.toSet(), hasLength(count));
+      if (count == 218) {
+        expect(
+          partitions.map((p) => p.strokes.length),
+          [20, 38, 20, 12, 34, 17, 22, 19, 36],
+          reason: '原稿9个完整文字行，章节编号和列表编号不能独立漂移',
+        );
+      }
+      if (count == 183) {
+        expect(
+          partitions.map((p) => p.strokes.length),
+          [80, 40, 63],
+          reason: '两行前置说明和一行共享图注，不能拆掉字的下半部',
+        );
+        final scope = ResolvedPageScope.resolve(scene, 'page-1');
+        expect(scope.excludedReasons, isEmpty);
+        expect(
+          scope.captureScene(scene).activeElements.whereType<ImageElement>(),
+          hasLength(2),
+        );
+      }
       if (count == 70) {
         final drawingIds = {
           for (final s in scene.activeElements.whereType<FreedrawElement>())

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import 'layout_page_snapshot.dart';
@@ -174,12 +176,25 @@ class ResolvedPageScope {
       b.width > 0 &&
       b.height > 0;
 
-  static bool _inside(SnapshotBounds a, SnapshotBounds b) =>
-      _valid(a) &&
-      a.left >= b.left &&
-      a.top >= b.top &&
-      a.right <= b.right &&
-      a.bottom <= b.bottom;
+  static bool _inside(SnapshotBounds a, SnapshotBounds b) {
+    if (!_valid(a)) return false;
+    // 历史拖入图片可能仅越页边几像素；不要因此把同页图文拆成两套范围。
+    // 同时约束边距和可见面积，小物体/显著跨页物体不能借容差被抢入。
+    final tolerance = b.width * .01;
+    final width = math.max(
+      0.0,
+      math.min(a.right, b.right) - math.max(a.left, b.left),
+    );
+    final height = math.max(
+      0.0,
+      math.min(a.bottom, b.bottom) - math.max(a.top, b.top),
+    );
+    return a.left >= b.left - tolerance &&
+        a.top >= b.top - tolerance &&
+        a.right <= b.right + tolerance &&
+        a.bottom <= b.bottom + tolerance &&
+        width * height >= a.width * a.height * .98;
+  }
 
   static bool _intersects(SnapshotBounds a, SnapshotBounds b) =>
       a.left < b.right &&
