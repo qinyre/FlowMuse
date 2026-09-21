@@ -2,11 +2,14 @@ library;
 
 import 'dart:math' as math;
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart';
 import '../snapshot/deterministic_hash.dart';
+import '../snapshot/layout_page_snapshot.dart' show conservativeVisualBounds;
+import 'structure_overview.dart';
 
 /// 结构恢复（spec §7）：本地规则优先；结构请求触发条件命中才发
 ///（至多一次）；模型只改角色/分组/顺序/层级，正文与几何一律本地值。
@@ -53,6 +56,8 @@ class StructureResult {
     required this.usedModel,
     this.modelRejected = false,
     this.conflictedUnitIds = const {},
+    this.figureTextLinks = const [],
+    this.compositionHints,
   });
 
   /// 全部 unit（typed/ink/figure/preserved），含本地正文与几何（真值）。
@@ -63,6 +68,8 @@ class StructureResult {
   final Map<String, String> roles;
   final List<RecognitionListGroup> listGroups;
   final List<RecognitionCaption> captions;
+  final List<RecognitionFigureTextLink> figureTextLinks;
+  final RecognitionCompositionHints? compositionHints;
   final List<String> warnings;
 
   /// 未消解的结构冲突，必须阻止该单元的自动转换。
@@ -99,8 +106,38 @@ class StructureRecovery implements RecognitionStructureRecoverer {
     if (trigger == null) {
       return local;
     }
+    if (!input.budget.canSpendModelCall ||
+        input.remainingBudgetOf() <= Duration.zero) {
+      input.onWarning?.call('预算不足，未完成整页结构分析，使用本地结构');
+      return local;
+    }
+    if (units.length > 128 ||
+        units.any((u) => (u.text?.runes.length ?? 0) > 2000)) {
+      input.onWarning?.call('内容超出整页分析上限，使用本地结构，未做图像内容匹配');
+      return local;
+    }
 
-    // ---- 4. 发一次结构请求（§3.4 wire；概览图可选，首版不携带）----
+    // ---- 4. 同轮真实概览 + 完整本地正文；结构请求不承担第二次 OCR ----
+    String? overview;
+    try {
+      overview = await buildStructureOverview(
+        scene: input.capture.scene,
+        units: units,
+        budget: input.budget,
+        isActive: () {
+          input.checkCancelled?.call();
+          return input.remainingBudgetOf() > Duration.zero;
+        },
+      );
+    } on RecognitionCancelledException {
+      rethrow;
+    } catch (_) {
+      debugPrint('[FlowMuseCreateNote][recognition-v3] overview=unavailable');
+    }
+    input.checkCancelled?.call();
+    if (overview == null) {
+      input.onWarning?.call('整页概览不可用，仅分析文字结构，未完成图像内容匹配');
+    }
     final request = RecognitionStructureRequest(
       operationId: input.capture.operationId,
       requestId: 'struct-${input.capture.operationId}',
@@ -110,9 +147,12 @@ class StructureRecovery implements RecognitionStructureRecoverer {
       generation: input.capture.generation,
       units: units,
       textFingerprint: _textFingerprintOf(units),
+      overviewPngBase64: overview,
+      includeCompositionHints: true,
     );
     final model = await input.sendStructureRequest(request);
     if (model == null) {
+      input.onWarning?.call('整页结构分析未成功，使用本地结构，未新增图文配对');
       // 验证失败/预算不足/取消外失败：回退本地保守结构（§7 末条）。
       return StructureResult(
         units: units,
@@ -127,7 +167,7 @@ class StructureRecovery implements RecognitionStructureRecoverer {
     }
 
     // ---- 5. 合并：模型只改角色/分组/顺序/层级；冲突未解标 uncertain 保留 ----
-    return _merge(units, local, model);
+    return _merge(units, local, model, hasOverview: overview != null);
   }
 
   /// 从识别产物与场景原生元素构建 unit 集。
@@ -140,6 +180,13 @@ class StructureRecovery implements RecognitionStructureRecoverer {
   List<RecognitionUnitInput> buildUnits(RecognitionStructureInput input) {
     final units = <RecognitionUnitInput>[];
     final scene = input.capture.scene;
+    // 区域成员覆盖集：识别链中资产失败等原因被丢弃分区的笔迹不属任何
+    // 区域记录，但识别账本仍注册并保留它们——必须补保留障碍单元，
+    // 否则语义文档块覆盖不了账本全集，候选链守恒断言 fail closed
+    //（2026-09-18 真机：两个零长度墨点致 semantic-contract-broken）。
+    final coveredSourceIds = <String>{
+      for (final record in input.regionRecords) ...record.targetSourceIds,
+    };
     for (final record in input.regionRecords) {
       final outcome = input.regionOutcomes[record.regionId];
       final isRecognized =
@@ -205,7 +252,24 @@ class StructureRecovery implements RecognitionStructureRecoverer {
             ),
           ),
         );
-      } else if (element is! FreedrawElement) {
+      } else if (element is FreedrawElement) {
+        // 无区域覆盖的孤儿笔迹（资产失败丢弃分区等）：保留障碍单元。
+        if (!coveredSourceIds.contains(element.id.value)) {
+          final visual = conservativeVisualBounds(element);
+          units.add(
+            RecognitionUnitInput(
+              unitId: 'native:${element.id.value}',
+              kind: RecognitionUnitKind.preserved,
+              bounds: RecognitionBounds(
+                left: visual.left,
+                top: visual.top,
+                width: visual.width,
+                height: visual.height,
+              ),
+            ),
+          );
+        }
+      } else {
         units.add(
           RecognitionUnitInput(
             unitId: 'native:${element.id.value}',
@@ -590,6 +654,23 @@ class StructureRecovery implements RecognitionStructureRecoverer {
     for (final count in targetCount.values) {
       if (count > 1) return 'figureCaptionConflict';
     }
+    final textUnits = units.where((unit) => unit.isTextUnit).toList();
+    if (textUnits.isNotEmpty &&
+        units.any((unit) => unit.kind == RecognitionUnitKind.figure)) {
+      return 'pageFigureTextUnderstanding';
+    }
+    if (textUnits.length > 1) {
+      // 只有明确的单列表（可带标题）保留零模型快路径；普通段落也需要
+      // 全文判断，不能因为几何无冲突就永远不给模型识别标题的机会。
+      final simpleList =
+          local.listGroups.length == 1 &&
+          textUnits.every(
+            (unit) =>
+                local.roles[unit.unitId] == 'title' ||
+                local.listGroups.single.members.contains(unit.unitId),
+          );
+      if (!simpleList) return 'pageTextUnderstanding';
+    }
     return null;
   }
 
@@ -637,9 +718,14 @@ class StructureRecovery implements RecognitionStructureRecoverer {
   StructureResult _merge(
     List<RecognitionUnitInput> units,
     StructureResult local,
-    RecognitionStructureResponse model,
-  ) {
-    final warnings = <String>[...local.warnings];
+    RecognitionStructureResponse model, {
+    required bool hasOverview,
+  }) {
+    final warnings = <String>[
+      ...local.warnings,
+      ...model.warnings,
+      if (!hasOverview) '整页概览不可用，仅分析文字结构，未完成图像内容匹配',
+    ];
     final conflicts = <String>{...local.conflictedUnitIds};
     final roles = <String, String>{};
     for (final entry in model.roles) {
@@ -660,6 +746,15 @@ class StructureRecovery implements RecognitionStructureRecoverer {
       roles: Map.unmodifiable(roles),
       listGroups: model.listGroups,
       captions: model.captions,
+      figureTextLinks: [
+        if (hasOverview)
+          for (final link in model.figureTextLinks)
+            if (link.confidence >= 0.8 &&
+                !conflicts.contains(link.textUnitId) &&
+                !conflicts.contains(link.figureUnitId))
+              link,
+      ],
+      compositionHints: model.compositionHints,
       warnings: List.unmodifiable(warnings),
       conflictedUnitIds: Set.unmodifiable(conflicts),
       usedModel: true,

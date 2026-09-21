@@ -149,6 +149,9 @@ func TestHandlerReadStageFullProtocol(t *testing.T) {
 		t.Fatalf("单批单次调用: %d", provider.callCount())
 	}
 	// 提示词与图像按区域顺序传入。
+	if provider.lastReq.Stage != StageRead {
+		t.Fatal("provider 日志阶段应为 read")
+	}
 	if len(provider.lastReq.Images) != 2 {
 		t.Fatalf("附图数错误: %d", len(provider.lastReq.Images))
 	}
@@ -193,6 +196,9 @@ func TestHandlerVerifyStage(t *testing.T) {
 	if !strings.Contains(provider.lastReq.PromptText, "复核转写器") {
 		t.Fatal("verify 提示词未按口径构建")
 	}
+	if provider.lastReq.Stage != StageVerify {
+		t.Fatal("provider 日志阶段应为 verify")
+	}
 }
 
 func TestHandlerStructureStage(t *testing.T) {
@@ -216,6 +222,9 @@ func TestHandlerStructureStage(t *testing.T) {
 	}
 	if strings.Contains(provider.lastReq.PromptText, "概览图") {
 		t.Fatal("无概览图不得提及概览图")
+	}
+	if provider.lastReq.Stage != StageStructure {
+		t.Fatal("provider 日志阶段应为 structure")
 	}
 }
 

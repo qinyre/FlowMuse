@@ -18,45 +18,47 @@ class ColumnRegionBuilder {
   ///
   /// 段与障碍之间留 [_clearance] 亚像素间隙：V3-301A 冻结的是闭盒
   /// 相交语义（共边即相交），贴边放置会构成“硬碰撞”，必须严格分离。
-  List<LayoutRect> splitColumn(
-    LayoutRect column,
-    List<LayoutRect> obstacles,
-  ) {
+  List<LayoutRect> splitColumn(LayoutRect column, List<LayoutRect> obstacles) {
     if (obstacles.isEmpty) return [column];
     // 收集与本栏横向重叠、纵向有交的障碍。
-    final overlapping = obstacles
-        .where(
-          (o) =>
-              o.left < column.right &&
-              column.left < o.right &&
-              o.top < column.bottom &&
-              column.top < o.bottom,
-        )
-        .toList()
-      ..sort((a, b) => a.top.compareTo(b.top));
+    final overlapping =
+        obstacles
+            .where(
+              (o) =>
+                  o.left < column.right &&
+                  column.left < o.right &&
+                  o.top < column.bottom &&
+                  column.top < o.bottom,
+            )
+            .toList()
+          ..sort((a, b) => a.top.compareTo(b.top));
     if (overlapping.isEmpty) return [column];
     final segments = <LayoutRect>[];
     var cursorTop = column.top;
     for (final o in overlapping) {
       final blockedTop = o.top - _clearance;
       if (blockedTop > cursorTop) {
-        segments.add(LayoutRect(
-          left: column.left,
-          top: cursorTop,
-          width: column.width,
-          height: blockedTop - cursorTop,
-        ));
+        segments.add(
+          LayoutRect(
+            left: column.left,
+            top: cursorTop,
+            width: column.width,
+            height: blockedTop - cursorTop,
+          ),
+        );
       }
       final resumeAt = o.bottom + _clearance;
       cursorTop = cursorTop < resumeAt ? resumeAt : cursorTop;
     }
     if (column.bottom > cursorTop) {
-      segments.add(LayoutRect(
-        left: column.left,
-        top: cursorTop,
-        width: column.width,
-        height: column.bottom - cursorTop,
-      ));
+      segments.add(
+        LayoutRect(
+          left: column.left,
+          top: cursorTop,
+          width: column.width,
+          height: column.bottom - cursorTop,
+        ),
+      );
     }
     return segments;
   }
@@ -123,9 +125,11 @@ class BalancedFlowPlacer {
     required double contentHeight,
     required TextMeasureAdapter measure,
     SmartLayoutDesignTokens tokens = SmartLayoutDesignTokens.v1,
+    Map<String, LayoutRect> fixedObstacles = const {},
+    bool preservedAsObstacles = false,
   }) {
     // 1. protected/preserved 收集：障碍切割 + 原位投影。
-    final obstacles = <LayoutRect>[];
+    final obstacles = <LayoutRect>[...fixedObstacles.values];
     final preservedRects = <String, LayoutRect>{};
     for (final block in assembly.blocks) {
       if (block.kind != LayoutBlockKind.protected) continue;
@@ -151,13 +155,15 @@ class BalancedFlowPlacer {
           width: (boundsJson['width'] as num).toDouble(),
           height: (boundsJson['height'] as num).toDouble(),
         );
+        if (preservedAsObstacles) obstacles.add(preservedRects[block.id]!);
       }
     }
 
     // 2. 障碍切割 → 段流（每栏上→下）。
     const splitter = ColumnRegionBuilder();
     final segmentFlow = <LayoutRect>[
-      for (final column in columnRects) ...splitter.splitColumn(column, obstacles),
+      for (final column in columnRects)
+        ...splitter.splitColumn(column, obstacles),
     ];
     if (segmentFlow.isEmpty) {
       return BalancedPlacementFailure(
@@ -251,22 +257,26 @@ class BalancedFlowPlacer {
         bestMax = worst;
         best = FlowPlacementSuccess(
           placed: [
-            ...?leftSuccess?.placed.map((p) => PlacedBlock(
-                  blockId: p.blockId,
-                  rect: p.rect,
-                  columnIndex: 0,
-                  lineCount: p.lineCount,
-                  appliedFontSize: p.appliedFontSize,
-                  shrunk: p.shrunk,
-                )),
-            ...?rightSuccess?.placed.map((p) => PlacedBlock(
-                  blockId: p.blockId,
-                  rect: p.rect,
-                  columnIndex: 1,
-                  lineCount: p.lineCount,
-                  appliedFontSize: p.appliedFontSize,
-                  shrunk: p.shrunk,
-                )),
+            ...?leftSuccess?.placed.map(
+              (p) => PlacedBlock(
+                blockId: p.blockId,
+                rect: p.rect,
+                columnIndex: 0,
+                lineCount: p.lineCount,
+                appliedFontSize: p.appliedFontSize,
+                shrunk: p.shrunk,
+              ),
+            ),
+            ...?rightSuccess?.placed.map(
+              (p) => PlacedBlock(
+                blockId: p.blockId,
+                rect: p.rect,
+                columnIndex: 1,
+                lineCount: p.lineCount,
+                appliedFontSize: p.appliedFontSize,
+                shrunk: p.shrunk,
+              ),
+            ),
           ],
           usedHeights: [usedLeft, usedRight],
         );
@@ -311,9 +321,7 @@ class BalancedFlowPlacer {
     TextMeasureAdapter measure,
     SmartLayoutDesignTokens tokens,
   ) {
-    final blocks = <LayoutBlock>[
-      for (var u = from; u < end; u++) ...units[u],
-    ];
+    final blocks = <LayoutBlock>[for (var u = from; u < end; u++) ...units[u]];
     if (blocks.isEmpty) return null;
     if (segments.isEmpty) {
       return FlowPlacementFailure(
@@ -411,9 +419,7 @@ class BalancedFlowPlacer {
         }
       }
     }
-    final usedMax = success.usedHeights.reduce(
-      (a, b) => a > b ? a : b,
-    );
+    final usedMax = success.usedHeights.reduce((a, b) => a > b ? a : b);
     final density = contentHeight > 0
         ? (usedMax / contentHeight).clamp(0.0, 1.0)
         : 0.0;
@@ -423,12 +429,12 @@ class BalancedFlowPlacer {
     final canonical = [
       for (final p in success.placed)
         '${p.blockId}:${num(p.rect.left)},${num(p.rect.top)},'
-        '${num(p.rect.width)},${num(p.rect.height)}#${p.columnIndex}'
-        '#${p.lineCount}#${num(p.appliedFontSize)}',
+            '${num(p.rect.width)},${num(p.rect.height)}#${p.columnIndex}'
+            '#${p.lineCount}#${num(p.appliedFontSize)}',
       ...([
         for (final id in preservedRects.keys.toList()..sort())
           '$id@${num(preservedRects[id]!.left)},'
-          '${num(preservedRects[id]!.top)}',
+              '${num(preservedRects[id]!.top)}',
       ]),
     ].join('|');
     return BalancedPlacement(

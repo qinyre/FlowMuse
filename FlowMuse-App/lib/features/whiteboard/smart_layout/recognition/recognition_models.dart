@@ -13,6 +13,8 @@ library;
 
 import 'recognition_json_reader.dart';
 
+part 'composition_hints.dart';
+
 const String recognitionSchemaVersion = 'recognition-v3/1';
 
 /// 单图 base64 上限（Base64 为 ASCII，码元数=字节数）。
@@ -179,6 +181,8 @@ const Set<String> _structureRequestKeys = {
   ..._requestCommonKeys,
   'units',
   'overviewPngBase64',
+  'includeFigureTextLinks',
+  'includeCompositionHints',
   'textFingerprint',
 };
 
@@ -599,16 +603,22 @@ class RecognitionStructureRequest extends RecognitionRequest {
     required this.units,
     required this.textFingerprint,
     this.overviewPngBase64,
+    this.includeFigureTextLinks = false,
+    this.includeCompositionHints = false,
   }) : super(stage: RecognitionStage.structure);
 
   final List<RecognitionUnitInput> units;
   final String? overviewPngBase64;
+  final bool includeFigureTextLinks;
+  final bool includeCompositionHints;
   final String textFingerprint;
 
   @override
   Map<String, Object?> stageJson() => {
     'units': [for (final unit in units) unit.toJson()],
     if (overviewPngBase64 != null) 'overviewPngBase64': overviewPngBase64,
+    if (includeFigureTextLinks) 'includeFigureTextLinks': true,
+    if (includeCompositionHints) 'includeCompositionHints': true,
     'textFingerprint': textFingerprint,
   };
 
@@ -618,6 +628,8 @@ class RecognitionStructureRequest extends RecognitionRequest {
       super == other &&
       _listEq(other.units, units) &&
       other.overviewPngBase64 == overviewPngBase64 &&
+      other.includeFigureTextLinks == includeFigureTextLinks &&
+      other.includeCompositionHints == includeCompositionHints &&
       other.textFingerprint == textFingerprint;
 
   @override
@@ -894,6 +906,18 @@ RecognitionStructureRequest _parseStructureRequest(
     }
   }
   r.require(root, 'textFingerprint', '');
+  final includeLinks = root.containsKey('includeFigureTextLinks')
+      ? root['includeFigureTextLinks']
+      : false;
+  if (includeLinks is! bool || (includeLinks && overviewPngBase64 == null)) {
+    r.invalid('includeFigureTextLinks', '必须是布尔值；图文关联需要概览图');
+  }
+  final includeComposition = root.containsKey('includeCompositionHints')
+      ? root['includeCompositionHints']
+      : false;
+  if (includeComposition is! bool || (includeComposition && includeLinks)) {
+    r.invalid('includeCompositionHints', '必须为布尔值且与旧图文关联互斥');
+  }
   final textFingerprint = r.string(root, 'textFingerprint', '');
   r.nonEmpty(textFingerprint, 'textFingerprint');
   r.idLimit(textFingerprint, 64, 'textFingerprint', 'textFingerprint');
@@ -910,6 +934,8 @@ RecognitionStructureRequest _parseStructureRequest(
     generation: generation,
     units: List.unmodifiable(units),
     overviewPngBase64: overviewPngBase64,
+    includeFigureTextLinks: includeLinks,
+    includeCompositionHints: includeComposition,
     textFingerprint: textFingerprint,
   );
 }
@@ -970,6 +996,8 @@ const Set<String> _structureResponseKeys = {
   'roles',
   'listGroups',
   'captions',
+  'figureTextLinks',
+  'compositionHints',
   'warnings',
 };
 
@@ -1306,6 +1334,35 @@ class RecognitionCaption {
   String toString() => 'RecognitionCaption($captionUnitId -> $targetUnitId)';
 }
 
+/// 正文关联与图注分开；置信度只是模型自评，不等于实测正确率。
+class RecognitionFigureTextLink {
+  const RecognitionFigureTextLink({
+    required this.textUnitId,
+    required this.figureUnitId,
+    required this.confidence,
+  });
+
+  final String textUnitId;
+  final String figureUnitId;
+  final double confidence;
+
+  Map<String, Object?> toJson() => {
+    'textUnitId': textUnitId,
+    'figureUnitId': figureUnitId,
+    'confidence': confidence,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is RecognitionFigureTextLink &&
+      other.textUnitId == textUnitId &&
+      other.figureUnitId == figureUnitId &&
+      other.confidence == confidence;
+
+  @override
+  int get hashCode => Object.hash(textUnitId, figureUnitId, confidence);
+}
+
 class RecognitionStructureResponse extends RecognitionResponse {
   const RecognitionStructureResponse({
     required super.operationId,
@@ -1320,6 +1377,8 @@ class RecognitionStructureResponse extends RecognitionResponse {
     required this.listGroups,
     required this.captions,
     required this.warnings,
+    this.figureTextLinks = const [],
+    this.compositionHints,
   }) : super(stage: RecognitionStage.structure);
 
   final String textFingerprint;
@@ -1328,6 +1387,8 @@ class RecognitionStructureResponse extends RecognitionResponse {
   final List<RecognitionListGroup> listGroups;
   final List<RecognitionCaption> captions;
   final List<String> warnings;
+  final List<RecognitionFigureTextLink> figureTextLinks;
+  final RecognitionCompositionHints? compositionHints;
 
   @override
   Map<String, Object?> stageJson() => {
@@ -1336,6 +1397,10 @@ class RecognitionStructureResponse extends RecognitionResponse {
     'roles': [for (final role in roles) role.toJson()],
     'listGroups': [for (final group in listGroups) group.toJson()],
     'captions': [for (final caption in captions) caption.toJson()],
+    if (figureTextLinks.isNotEmpty)
+      'figureTextLinks': [for (final link in figureTextLinks) link.toJson()],
+    if (compositionHints != null)
+      'compositionHints': compositionHints!.toJson(),
     'warnings': [...warnings],
   };
 
@@ -1348,6 +1413,8 @@ class RecognitionStructureResponse extends RecognitionResponse {
       _listEq(other.roles, roles) &&
       _listEq(other.listGroups, listGroups) &&
       _listEq(other.captions, captions) &&
+      _listEq(other.figureTextLinks, figureTextLinks) &&
+      other.compositionHints == compositionHints &&
       _listEq(other.warnings, warnings);
 
   @override
@@ -1691,6 +1758,60 @@ RecognitionStructureResponse _parseStructureResponse(
     );
   }
 
+  final linksJson = root.containsKey('figureTextLinks')
+      ? r.list(root, 'figureTextLinks', '')
+      : const <Object?>[];
+  if (linksJson.length > 128) {
+    r.invalid('figureTextLinks', '图文关系超过单元上限');
+  }
+  final links = <RecognitionFigureTextLink>[];
+  final roleById = {for (final role in roles) role.unitId: role.role};
+  for (var i = 0; i < linksJson.length; i++) {
+    final path = 'figureTextLinks[$i]';
+    final map = r.objectAt(linksJson, i, 'figureTextLinks', const {
+      'textUnitId',
+      'figureUnitId',
+      'confidence',
+    });
+    final textId = r.string(map, 'textUnitId', path);
+    final figureId = r.string(map, 'figureUnitId', path);
+    final role = roleById[textId];
+    if (textId.isEmpty ||
+        figureId.isEmpty ||
+        textId == figureId ||
+        !readingOrder.contains(textId) ||
+        !readingOrder.contains(figureId) ||
+        (role != RecognitionStructureRole.body &&
+            role != RecognitionStructureRole.listItem) ||
+        captions.any((caption) => caption.captionUnitId == textId)) {
+      r.invalid(path, '图文关系端点或正文角色无效');
+    }
+    links.add(
+      RecognitionFigureTextLink(
+        textUnitId: textId,
+        figureUnitId: figureId,
+        confidence: r.unitInterval(map, 'confidence', path),
+      ),
+    );
+  }
+  r.unique(
+    links.map((link) => link.textUnitId),
+    'figureTextLinks',
+    'textUnitId',
+  );
+  if (structureRequest != null && links.isNotEmpty) {
+    final byId = {for (final unit in structureRequest.units) unit.unitId: unit};
+    if (!structureRequest.includeFigureTextLinks ||
+        structureRequest.overviewPngBase64 == null ||
+        links.any(
+          (link) =>
+              byId[link.textUnitId]?.isTextUnit != true ||
+              byId[link.figureUnitId]?.kind != RecognitionUnitKind.figure,
+        )) {
+      r.invalid('figureTextLinks', '未协商图文关系或目标不是图片');
+    }
+  }
+
   final warningsJson = r.list(root, 'warnings', '');
   r.limit(warningsJson.length, 8, 'warnings', 'warnings 数');
   final warnings = <String>[];
@@ -1767,6 +1888,25 @@ RecognitionStructureResponse _parseStructureResponse(
   // §3.4 嵌套列表连续性：每个组的完整子树在 readingOrder 中连续。
   _validateSubtreeContinuity(r, readingOrder, listGroups);
 
+  final hasComposition = root.containsKey('compositionHints');
+  if ((structureRequest != null &&
+          hasComposition != structureRequest.includeCompositionHints) ||
+      (hasComposition && root.containsKey('figureTextLinks'))) {
+    r.invalid('compositionHints', '协商模式不符或出现两套图文关系');
+  }
+  final composition = hasComposition
+      ? RecognitionCompositionHints.fromJson(root['compositionHints'])
+      : null;
+  composition?.validate(
+    units: structureRequest?.units,
+    readingOrder: readingOrder,
+    roles: {for (final role in roles) role.unitId: role.role.wireName},
+    listGroups: listGroups,
+    captions: captions,
+    hasOverview:
+        structureRequest?.overviewPngBase64 != null || structureRequest == null,
+  );
+
   return RecognitionStructureResponse(
     operationId: operationId,
     requestId: requestId,
@@ -1783,6 +1923,8 @@ RecognitionStructureResponse _parseStructureResponse(
     roles: List.unmodifiable(roles),
     listGroups: List.unmodifiable(listGroups),
     captions: List.unmodifiable(captions),
+    figureTextLinks: List.unmodifiable(links),
+    compositionHints: composition,
     warnings: List.unmodifiable(warnings),
   );
 }

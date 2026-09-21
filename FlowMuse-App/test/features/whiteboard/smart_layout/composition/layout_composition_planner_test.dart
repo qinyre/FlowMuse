@@ -21,14 +21,17 @@ void main() {
   test('宽页：四种结构全部有候选，域=10 ≤ 配额 12', () {
     final plan = planner.enumerate(constraint: at(1200));
     expect(plan.rejected, isEmpty);
-    expect(plan.domainSize, 9, reason: 'single1+twoColumn1+mainSide6+conservative1');
+    expect(
+      plan.domainSize,
+      9,
+      reason: 'single1+twoColumn1+mainSide6+conservative1',
+    );
     expect(plan.candidates, hasLength(9));
     final skeletons = plan.candidates.map((c) => c.skeleton).toSet();
     expect(skeletons, containsAll(LayoutSkeleton.values));
   });
 
-  test('窄页 480：twoColumn 拒绝（栏 228<240），mainSide 侧栏 240 档部分拒绝',
-      () {
+  test('窄页 480：twoColumn 拒绝（栏 228<240），mainSide 侧栏 240 档部分拒绝', () {
     final plan = planner.enumerate(constraint: at(480));
     // twoColumn：(480-24)/2=228 < 240 → columnBelowMinLine。
     expect(
@@ -65,8 +68,7 @@ void main() {
     );
   });
 
-  test('极窄页 200：single 拒绝 contentBelowMinLine，conservative 仍适用',
-      () {
+  test('极窄页 200：single 拒绝 contentBelowMinLine，conservative 仍适用', () {
     final plan = planner.enumerate(constraint: at(200));
     expect(
       plan.rejected.any(
@@ -82,8 +84,9 @@ void main() {
       reason: '保守结构是真实重排兜底，恒适用',
     );
     // conservative 主栏宽 = clamp(200, 240, 560) = 240（最小行长大栏界）。
-    final conservative = plan.candidates
-        .singleWhere((c) => c.skeleton == LayoutSkeleton.conservativeLayout);
+    final conservative = plan.candidates.singleWhere(
+      (c) => c.skeleton == LayoutSkeleton.conservativeLayout,
+    );
     expect(conservative.params.mainColumnWidth, 240);
   });
 
@@ -103,10 +106,7 @@ void main() {
         .where((c) => c.skeleton == LayoutSkeleton.mainSide)
         .toList();
     expect(mainSide.length, greaterThanOrEqualTo(2));
-    expect(
-      mainSide.first.structureHash,
-      isNot(mainSide.last.structureHash),
-    );
+    expect(mainSide.first.structureHash, isNot(mainSide.last.structureHash));
   });
 
   test('配额不饿死结构：quota=4 时四种结构各留至少 1 个代表', () {
@@ -124,8 +124,9 @@ void main() {
 
   test('conservative-layout 不是零修改 fallback：参数是真实重排几何', () {
     final plan = planner.enumerate(constraint: at(1200));
-    final conservative = plan.candidates
-        .singleWhere((c) => c.skeleton == LayoutSkeleton.conservativeLayout);
+    final conservative = plan.candidates.singleWhere(
+      (c) => c.skeleton == LayoutSkeleton.conservativeLayout,
+    );
     // 主栏 clamp 到行长界（560），不是"保持原位"的零修改标记——
     // 零修改另有 V3-403A preserveFallback 分型。
     expect(conservative.params.mainColumnWidth, 560);
@@ -142,21 +143,29 @@ void main() {
       if (side != null) {
         expect(
           side,
-          anyOf(tokens.minLineLength, (tokens.minLineLength + tokens.maxLineLength) / 2, tokens.maxLineLength),
+          anyOf(
+            tokens.minLineLength,
+            (tokens.minLineLength + tokens.maxLineLength) / 2,
+            tokens.maxLineLength,
+          ),
           reason: '${c.id} 侧栏宽必须来自 token 行长界档位',
         );
       }
     }
     // twoColumn 主栏 = (w-gutter)/2。
-    final two = plan.candidates
-        .singleWhere((c) => c.skeleton == LayoutSkeleton.twoColumn);
+    final two = plan.candidates.singleWhere(
+      (c) => c.skeleton == LayoutSkeleton.twoColumn,
+    );
     expect(two.params.mainColumnWidth, (1200 - 24) / 2);
   });
 
   test('id 确定性格式与域序号稳定', () {
     final plan = planner.enumerate(constraint: at(1200));
     final ids = plan.candidates.map((c) => c.id).toList();
-    expect(ids, containsAll(['single#0', 'twoColumn#1', 'conservativeLayout#8']));
+    expect(
+      ids,
+      containsAll(['single#0', 'twoColumn#1', 'conservativeLayout#8']),
+    );
     // mainSide 域序号 = 域内全局序 2..7（single0/twoColumn1 之后连续）。
     final mainSideIdx = plan.candidates
         .where((c) => c.skeleton == LayoutSkeleton.mainSide)
@@ -166,6 +175,23 @@ void main() {
   });
 
   group('内容量/侧栏语义门禁（真机 2026-09-03 案例：短清单被 mainSide 拆栏）', () {
+    test('图文实际高度足够时保留多栏能力', () {
+      final plan = planner.enumerate(
+        constraint: const CompositionConstraint(
+          contentWidth: 1200,
+          contentBlockCount: 3,
+          contentFillRatio: 0.15,
+          figureFillRatio: 0.4,
+          hasFigureContent: true,
+          tokens: tokens,
+        ),
+      );
+      expect(
+        plan.candidates.map((c) => c.skeleton),
+        containsAll(LayoutSkeleton.values),
+      );
+    });
+
     CompositionConstraint withFacts({
       required int blocks,
       required double fill,
@@ -216,25 +242,21 @@ void main() {
         reason: '空侧栏只会把正文挤出大空洞，mainSide 需图/图注语义',
       );
       expect(
-        plan.rejected
-            .where((r) => r.reason == CompositionRejectReason.contentTooSparse),
+        plan.rejected.where(
+          (r) => r.reason == CompositionRejectReason.contentTooSparse,
+        ),
         isEmpty,
       );
     });
 
-    test('图文稀疏：内容量门禁不触发（图语义放行多栏，交由宽度判定）', () {
+    test('短文字加小图：不能只凭图语义放行多栏', () {
       final plan = planner.enumerate(
         constraint: withFacts(blocks: 2, fill: 0.1, figure: true),
       );
-      expect(
-        plan.rejected.where(
-          (r) =>
-              r.reason == CompositionRejectReason.contentTooSparse ||
-              r.reason == CompositionRejectReason.sidebarSemanticsRequired,
-        ),
-        isEmpty,
-      );
-      expect(plan.domainSize, 9);
+      expect(plan.candidates.map((c) => c.skeleton).toSet(), {
+        LayoutSkeleton.single,
+        LayoutSkeleton.conservativeLayout,
+      });
     });
   });
 }

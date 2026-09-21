@@ -89,6 +89,7 @@ abstract final class HardConstraintValidator {
     Map<String, Size> imageIntrinsicSizes = const {},
     double aspectTolerance = 0.02,
     double clipTolerance = 0.5,
+    Set<String>? validationElementIds,
   }) {
     final violations = <HardConstraintViolation>[];
     final patch = reduced.patch;
@@ -169,6 +170,10 @@ abstract final class HardConstraintValidator {
       for (final layer in snapshot.layers) layer.elementId: layer,
     };
     for (final entry in elementById.entries) {
+      if (validationElementIds != null &&
+          !validationElementIds.contains(entry.key)) {
+        continue;
+      }
       if (entry.value is! TextElement) continue;
       final layer = layerById[entry.key];
       if (layer == null) continue;
@@ -193,6 +198,10 @@ abstract final class HardConstraintValidator {
 
     // ---- 5. 比例：图片显示比例 vs 内在比例（crop 感知）----
     for (final entry in elementById.entries) {
+      if (validationElementIds != null &&
+          !validationElementIds.contains(entry.key)) {
+        continue;
+      }
       final element = entry.value;
       if (element is! ImageElement) continue;
       final intrinsic = imageIntrinsicSizes[element.fileId];
@@ -250,6 +259,10 @@ abstract final class HardConstraintValidator {
 
     final dangling = <String>[];
     for (final element in reduced.scene.activeElements) {
+      if (validationElementIds != null &&
+          !validationElementIds.contains(element.id.value)) {
+        continue;
+      }
       final frameId = element.frameId;
       if (frameId != null && !elementById.containsKey(frameId)) {
         dangling.add(element.id.value);
@@ -280,6 +293,10 @@ abstract final class HardConstraintValidator {
     // ---- 7. 页界：层真实几何全部 ⊆ 页内容区 + 计数与自报一致 ----
     final outside = <String>[];
     for (final layer in snapshot.layers) {
+      if (validationElementIds != null &&
+          !validationElementIds.contains(layer.elementId)) {
+        continue;
+      }
       final b = layer.bounds;
       final inside =
           b.left >= pageContentBounds.left - 1e-9 &&

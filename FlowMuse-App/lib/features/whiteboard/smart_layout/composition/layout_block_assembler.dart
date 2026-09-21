@@ -4,6 +4,7 @@ import '../design/smart_layout_design_tokens.dart';
 
 import '../design/text_measure_adapter.dart';
 import '../semantics/semantic_document.dart';
+import '../semantics/semantic_composition.dart';
 import '../snapshot/layout_page_snapshot.dart';
 import 'layout_block.dart';
 
@@ -15,6 +16,7 @@ class LayoutBlockAssembly {
     required this.atomicGroups,
     required this.documentConsumedSourceIds,
     required this.documentPreservedSourceIds,
+    this.blockAliases = const {},
   });
 
   final List<LayoutBlock> blocks;
@@ -26,16 +28,24 @@ class LayoutBlockAssembly {
 
   final List<String> documentConsumedSourceIds;
   final List<String> documentPreservedSourceIds;
+  final Map<String, String> blockAliases;
 
   /// ledger 守恒复核：块 sourceRefs 总并集恰等于文档 ledger，
   /// 无重叠、无遗漏（每源恰好出现在一个块）。
   bool get ledgerConserved {
     final seen = <String>{};
+    final consumedSet = documentConsumedSourceIds.toSet();
+    final preservedSet = documentPreservedSourceIds.toSet();
     var consumedSeen = 0;
     var preservedSeen = 0;
     for (final block in blocks) {
       for (final ref in block.sourceRefs) {
         if (!seen.add(ref)) return false;
+        if (!(block.isPreservedLike ? preservedSet : consumedSet).contains(
+          ref,
+        )) {
+          return false;
+        }
       }
       if (block.isPreservedLike) {
         preservedSeen += block.sourceRefs.length;
@@ -43,10 +53,7 @@ class LayoutBlockAssembly {
         consumedSeen += block.sourceRefs.length;
       }
     }
-    final consumedSet = documentConsumedSourceIds.toSet();
-    final preservedSet = documentPreservedSourceIds.toSet();
-    return seen.length ==
-            consumedSet.length + preservedSet.length &&
+    return seen.length == consumedSet.length + preservedSet.length &&
         consumedSeen == consumedSet.length &&
         preservedSeen == preservedSet.length &&
         seen.containsAll(consumedSet) &&
@@ -78,7 +85,7 @@ const String kLayoutFontFamily = 'Excalifont';
 ///   显示比例 = intrinsic.w·crop.w / intrinsic.h·crop.h；资产缺失记事实。
 /// - protected：快照 mobility=protectedObstacle 的对象投影为绕置障碍块；
 ///   其 ledger 态必须已是 preserved（锁定物不可被消费），违例抛错。
-/// - caption 绑定阅读序最近前驱 figure；标题 keepWith 后继首块
+/// - caption 优先使用明确归属，缺失时才绑定最近前驱 figure；标题 keepWith 后继首块
 ///   （section 语义）。
 /// - 真实测量：文本块 intrinsic（不限宽）由注入的 [TextMeasureAdapter]
 ///   计算——禁止估算，测量失败抛错（fail closed）而非返回猜值。
@@ -91,9 +98,9 @@ class LayoutBlockAssembler {
     required TextMeasureAdapter measure,
     SmartLayoutDesignTokens tokens = SmartLayoutDesignTokens.v1,
   }) {
-    final objectById = {
-      for (final o in snapshot.objects) o.sourceId: o,
-    };
+    final composition = SemanticComposition.of(document);
+    composition?.validate(document);
+    final objectById = {for (final o in snapshot.objects) o.sourceId: o};
     final preservedSet = document.preservedSourceIds.toSet();
     final consumedSet = document.consumedSourceIds.toSet();
     final blocks = <LayoutBlock>[];
@@ -107,36 +114,124 @@ class LayoutBlockAssembler {
         case SemanticRole.figure:
           blocks.add(_figureBlock(sb, objectById, snapshot));
         case SemanticRole.caption:
-          blocks.add(_textualBlock(sb, tokens, measure, forceKind: LayoutBlockKind.caption));
+          blocks.add(
+            _textualBlock(
+              sb,
+              tokens,
+              measure,
+              forceKind: LayoutBlockKind.caption,
+            ),
+          );
         case SemanticRole.title:
-          blocks.add(_textualBlock(sb, tokens, measure, forceKind: LayoutBlockKind.title));
+          blocks.add(
+            _textualBlock(
+              sb,
+              tokens,
+              measure,
+              forceKind: LayoutBlockKind.title,
+            ),
+          );
         case SemanticRole.body:
-          blocks.add(_textualBlock(sb, tokens, measure, forceKind: LayoutBlockKind.paragraph));
+          blocks.add(
+            _textualBlock(
+              sb,
+              tokens,
+              measure,
+              forceKind: LayoutBlockKind.paragraph,
+            ),
+          );
         case SemanticRole.list:
-          blocks.add(_textualBlock(sb, tokens, measure, forceKind: LayoutBlockKind.list));
+          blocks.add(
+            _textualBlock(sb, tokens, measure, forceKind: LayoutBlockKind.list),
+          );
         case SemanticRole.formula:
-          blocks.add(_textualBlock(sb, tokens, measure, forceKind: LayoutBlockKind.formula));
+          blocks.add(
+            _textualBlock(
+              sb,
+              tokens,
+              measure,
+              forceKind: LayoutBlockKind.formula,
+            ),
+          );
         case SemanticRole.table:
-          blocks.add(_textualBlock(sb, tokens, measure, forceKind: LayoutBlockKind.table));
+          blocks.add(
+            _textualBlock(
+              sb,
+              tokens,
+              measure,
+              forceKind: LayoutBlockKind.table,
+            ),
+          );
         case SemanticRole.unknown:
-          blocks.add(LayoutBlock(
-            id: sb.id,
-            kind: LayoutBlockKind.preserved,
-            sourceRefs: List.unmodifiable(sb.sourceIds),
-            orderIndex: sb.orderIndex.toDouble(),
-            keepTogether: true,
-            textOrigin: null,
-            text: sb.text == null
-                ? null
-                : TextBlockSpec(
-                    text: sb.text!,
-                    fontFamily: kLayoutFontFamily,
-                    fontSize: tokens.bodySize,
-                    lineHeight: tokens.lineHeight,
-                  ),
-            measuredIntrinsic: null,
-            extras: Map.unmodifiable(sb.extras),
-          ));
+          blocks.add(
+            LayoutBlock(
+              id: sb.id,
+              kind: LayoutBlockKind.preserved,
+              sourceRefs: List.unmodifiable(sb.sourceIds),
+              orderIndex: sb.orderIndex.toDouble(),
+              keepTogether: true,
+              textOrigin: null,
+              text: sb.text == null
+                  ? null
+                  : TextBlockSpec(
+                      text: sb.text!,
+                      fontFamily: kLayoutFontFamily,
+                      fontSize: tokens.bodySize,
+                      lineHeight: tokens.lineHeight,
+                    ),
+              measuredIntrinsic: null,
+              extras: Map.unmodifiable(sb.extras),
+            ),
+          );
+      }
+    }
+
+    if (composition != null) {
+      for (var i = 0; i < blocks.length; i++) {
+        final b = blocks[i];
+        final section = composition.hints.sections
+            .where(
+              (s) => s.headingUnitId == b.id || s.memberUnitIds.contains(b.id),
+            )
+            .firstOrNull;
+        final soft = composition.hints.softLineBreaks
+            .where((s) => s.unitId == b.id)
+            .firstOrNull;
+        final raw = b.text;
+        final projection = raw == null
+            ? null
+            : DisplayTextProjection.create(
+                rawText: raw.text,
+                origin: b.textOrigin ?? LayoutTextOrigin.typed,
+                kind: b.kind,
+                newlineIndexes: soft?.newlineIndexes ?? const [],
+                confidence: soft?.confidence ?? 0,
+              );
+        blocks[i] = LayoutBlock(
+          id: b.id,
+          kind: b.kind,
+          sourceRefs: b.sourceRefs,
+          orderIndex: b.orderIndex,
+          keepTogether: b.keepTogether,
+          textOrigin: b.textOrigin,
+          text: raw == null
+              ? null
+              : TextBlockSpec(
+                  text: projection!.displayText,
+                  fontFamily: raw.fontFamily,
+                  fontSize: raw.fontSize,
+                  lineHeight: raw.lineHeight,
+                  direction: raw.direction,
+                  projection: projection,
+                ),
+          figure: b.figure,
+          measuredIntrinsic: b.measuredIntrinsic,
+          extras: {
+            ...b.extras,
+            if (section != null) 'sectionId': section.sectionId,
+            if (section?.headingUnitId == b.id) 'sectionHeading': true,
+          },
+        );
       }
     }
 
@@ -150,55 +245,152 @@ class LayoutBlockAssembler {
           '锁定物不可被消费，语义文档与快照不一致',
         );
       }
-      blocks.add(LayoutBlock(
-        id: 'protected-${object.sourceId}',
-        kind: LayoutBlockKind.protected,
-        sourceRefs: [object.sourceId],
-        orderIndex: double.maxFinite,
-        keepTogether: true,
-        figure: object.fileId == null
-            ? null
-            : FigureBlockSpec(
-                fileId: object.fileId!,
-                displayAspectRatio: object.visualBounds.width /
-                    object.visualBounds.height,
-                missingAsset: object.fileId != null &&
-                    !_assetResolved(snapshot, object.fileId!),
-              ),
-        extras: {
-          'kind': object.kind,
-          'bounds': {
-            'left': object.bounds.left,
-            'top': object.bounds.top,
-            'width': object.bounds.width,
-            'height': object.bounds.height,
+      // 归属保护可以已由 unknown 语义块承载，不能再认领一次同一源。
+      if (blocks.any((b) => b.sourceRefs.contains(object.sourceId))) continue;
+      blocks.add(
+        LayoutBlock(
+          id: 'protected-${object.sourceId}',
+          kind: LayoutBlockKind.protected,
+          sourceRefs: [object.sourceId],
+          orderIndex: double.maxFinite,
+          keepTogether: true,
+          figure: object.fileId == null
+              ? null
+              : FigureBlockSpec(
+                  fileId: object.fileId!,
+                  displayAspectRatio:
+                      object.visualBounds.width / object.visualBounds.height,
+                  missingAsset:
+                      object.fileId != null &&
+                      !_assetResolved(snapshot, object.fileId!),
+                ),
+          extras: {
+            'kind': object.kind,
+            'bounds': {
+              'left': object.bounds.left,
+              'top': object.bounds.top,
+              'width': object.bounds.width,
+              'height': object.bounds.height,
+            },
           },
-        },
-      ));
+        ),
+      );
     }
 
-    // 关系：caption → 最近前驱 figure；title → 后继首块（section keep）。
+    // 识别层已有的图注归属是权威；支持图上方标签，不能被最近前驱覆盖。
     String? lastFigureId;
+    final byId = {for (final block in blocks) block.id: block};
     final blockIds = [for (final b in blocks) b.id];
+    final figureLinkedLists = <String>{};
+    if (composition != null) {
+      for (final group in composition.hints.mediaGroups) {
+        final ids = {...group.figureUnitIds, ...group.textUnitIds};
+        final ordered = blocks.where((b) => ids.contains(b.id)).toList();
+        for (var i = 1; i < ordered.length; i++) {
+          relationships.add(
+            BlockRelationship(
+              kind: BlockRelationKind.keepWith,
+              fromBlockId: ordered[i - 1].id,
+              toBlockId: ordered[i].id,
+            ),
+          );
+        }
+        figureLinkedLists.addAll(
+          ordered.where((b) => b.kind == LayoutBlockKind.list).map((b) => b.id),
+        );
+      }
+    }
     for (var i = 0; i < blocks.length; i++) {
       final block = blocks[i];
+      // 正文图文关联与 caption 分开；保留/缺失图片不牵动正文，也不换绑。
+      final relatedFigure = block.extras['relatedFigure'];
+      if (composition == null &&
+          (block.kind == LayoutBlockKind.paragraph ||
+              block.kind == LayoutBlockKind.list) &&
+          relatedFigure is String) {
+        final figure = byId[relatedFigure];
+        if (figure?.kind == LayoutBlockKind.figure &&
+            figure?.figure?.missingAsset == false) {
+          relationships.add(
+            BlockRelationship(
+              kind: BlockRelationKind.keepWith,
+              fromBlockId: block.id,
+              toBlockId: relatedFigure,
+            ),
+          );
+          if (block.kind == LayoutBlockKind.list) {
+            figureLinkedLists.add(block.id);
+          }
+        }
+      }
       if (block.kind == LayoutBlockKind.figure) {
         lastFigureId = block.id;
-      } else if (block.kind == LayoutBlockKind.caption &&
-          lastFigureId != null) {
-        relationships.add(BlockRelationship(
-          kind: BlockRelationKind.captionOf,
-          fromBlockId: block.id,
-          toBlockId: lastFigureId,
-        ));
+      } else if (block.kind == LayoutBlockKind.caption) {
+        final explicit = block.extras['captionOf'];
+        final target = explicit is String
+            ? explicit
+            : composition == null
+            ? lastFigureId
+            : null;
+        if (target != null) {
+          final figure = byId[target];
+          if (figure == null) {
+            throw StateError('caption target missing: $target');
+          }
+          // 用户保留了图片时不把图注错误绑定给另一张图片。
+          if (figure.kind == LayoutBlockKind.figure) {
+            relationships.add(
+              BlockRelationship(
+                kind: BlockRelationKind.captionOf,
+                fromBlockId: block.id,
+                toBlockId: target,
+              ),
+            );
+          }
+        }
       } else if (block.kind == LayoutBlockKind.title) {
         final next = _nextNonCaptionBlock(blocks, i);
         if (next != null) {
-          relationships.add(BlockRelationship(
-            kind: BlockRelationKind.keepWith,
-            fromBlockId: block.id,
-            toBlockId: next.id,
-          ));
+          relationships.add(
+            BlockRelationship(
+              kind: BlockRelationKind.keepWith,
+              fromBlockId: block.id,
+              toBlockId: next.id,
+            ),
+          );
+        }
+      }
+    }
+
+    // 只给本轮图文关联牵涉的列表子树补原子关系，避免把单个条目拉出列表。
+    // 父子组共用根组；不改变无图列表的既有分页/换栏行为。
+    if (figureLinkedLists.isNotEmpty) {
+      final rootById = <String, String>{};
+      for (final block in blocks.where((b) => b.kind == LayoutBlockKind.list)) {
+        var current = block;
+        final visited = <String>{};
+        while (visited.add(current.id)) {
+          final parent = byId[current.extras['parentUnitId']];
+          if (parent == null || parent.kind != LayoutBlockKind.list) break;
+          current = parent;
+        }
+        final root = current.extras['listGroupId'];
+        if (root is String) rootById[block.id] = root;
+      }
+      final linkedRoots = figureLinkedLists
+          .map((id) => rootById[id])
+          .nonNulls
+          .toSet();
+      for (final root in linkedRoots) {
+        final members = blocks.where((b) => rootById[b.id] == root).toList();
+        for (var i = 1; i < members.length; i++) {
+          relationships.add(
+            BlockRelationship(
+              kind: BlockRelationKind.keepWith,
+              fromBlockId: members[i - 1].id,
+              toBlockId: members[i].id,
+            ),
+          );
         }
       }
     }
@@ -226,10 +418,9 @@ class LayoutBlockAssembler {
       // 未进阅读序的块（异常输入）按 orderIndex 追加，不静默丢弃。
       if (ordered.length != document.blocks.length) {
         final orderedIds = ordered.map((b) => b.id).toSet();
-        final rest = document.blocks
-            .where((b) => !orderedIds.contains(b.id))
-            .toList()
-          ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+        final rest =
+            document.blocks.where((b) => !orderedIds.contains(b.id)).toList()
+              ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
         ordered.addAll(rest);
       }
       return ordered;
@@ -251,8 +442,8 @@ class LayoutBlockAssembler {
       if (object.kind == 'image') {
         image = ImageCandidate.fromObject(
           object,
-          assetResolved: object.fileId != null &&
-              _assetResolved(snapshot, object.fileId!),
+          assetResolved:
+              object.fileId != null && _assetResolved(snapshot, object.fileId!),
         );
         break;
       }
@@ -294,7 +485,8 @@ class LayoutBlockAssembler {
         kind: forceKind,
         sourceRefs: List.unmodifiable(sb.sourceIds),
         orderIndex: sb.orderIndex.toDouble(),
-        keepTogether: forceKind == LayoutBlockKind.formula ||
+        keepTogether:
+            forceKind == LayoutBlockKind.formula ||
             forceKind == LayoutBlockKind.table,
         extras: Map.unmodifiable(sb.extras),
       );
@@ -314,7 +506,8 @@ class LayoutBlockAssembler {
       kind: forceKind,
       sourceRefs: List.unmodifiable(sb.sourceIds),
       orderIndex: sb.orderIndex.toDouble(),
-      keepTogether: forceKind == LayoutBlockKind.formula ||
+      keepTogether:
+          forceKind == LayoutBlockKind.formula ||
           forceKind == LayoutBlockKind.table,
       textOrigin: origin,
       text: spec,
@@ -353,9 +546,7 @@ class LayoutBlockAssembler {
     List<LayoutBlock> blocks,
     List<BlockRelationship> relationships,
   ) {
-    final idIndex = {
-      for (var i = 0; i < blocks.length; i++) blocks[i].id: i,
-    };
+    final idIndex = {for (var i = 0; i < blocks.length; i++) blocks[i].id: i};
     final parent = List<int>.generate(blocks.length, (i) => i);
     int find(int x) {
       while (parent[x] != x) {
@@ -389,10 +580,9 @@ class LayoutBlockAssembler {
       }
       groupsByRoot.putIfAbsent(find(i), () => []).add(blocks[i].id);
     }
-    final groups = groupsByRoot.values
-        .map((ids) => List<String>.of(ids))
-        .toList()
-      ..sort((a, b) => a.first.compareTo(b.first));
+    final groups =
+        groupsByRoot.values.map((ids) => List<String>.of(ids)).toList()
+          ..sort((a, b) => a.first.compareTo(b.first));
     return groups;
   }
 
@@ -457,6 +647,7 @@ class ImageCandidate {
         fileId: object.fileId ?? '',
         displayAspectRatio: ratio,
         missingAsset: !assetResolved,
+        displayWidth: object.bounds.width,
       ),
     );
   }

@@ -70,6 +70,20 @@ void main() {
     expect(layer.bounds.size.width, 20, reason: '元素仍在场景中，占位降级不删块');
   });
 
+  test('层级表只排序一次，不随源元素数反复访问排序 getter', () async {
+    final scene = _CountingScene(buildTestScene());
+    final renderer = DraftSceneRenderer();
+    addTearDown(renderer.dispose);
+    final snapshot = await renderer.render(
+      scene: scene,
+      viewport: const ViewportState(),
+      pixelSize: const Size(400, 300),
+    );
+    addTearDown(snapshot.dispose);
+    expect(snapshot.layers, hasLength(3));
+    expect(scene.sortCalls, 2, reason: 'painter 一次、层级表一次；旧循环会额外调用 2N+1 次');
+  });
+
   test('资源归零：连续渲染后活资源为 0；取消在途渲染零残留', () async {
     final renderer = DraftSceneRenderer();
     addTearDown(renderer.dispose);
@@ -138,4 +152,22 @@ void main() {
       matchesGoldenFile('goldens/draft_render_shape_image.png'),
     );
   });
+}
+
+class _CountingScene extends Scene {
+  _CountingScene(this.delegate);
+  final Scene delegate;
+  int sortCalls = 0;
+
+  @override
+  List<Element> get elements => delegate.elements;
+  @override
+  List<Element> get activeElements => delegate.activeElements;
+  @override
+  Map<String, ImageFile> get files => delegate.files;
+  @override
+  List<Element> get orderedElements {
+    sortCalls++;
+    return delegate.orderedElements;
+  }
 }

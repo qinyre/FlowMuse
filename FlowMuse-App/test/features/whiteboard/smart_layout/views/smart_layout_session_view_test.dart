@@ -105,14 +105,44 @@ void main() {
     return container;
   }
 
-  Widget host(ProviderContainer container) => UncontrolledProviderScope(
-    container: container,
-    child: const MaterialApp(
-      home: Scaffold(
-        body: SingleChildScrollView(child: SmartLayoutSessionView()),
-      ),
-    ),
-  );
+  Widget host(ProviderContainer container, {ValueNotifier<String?>? status}) =>
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SmartLayoutSessionView(recognitionStatus: status),
+            ),
+          ),
+        ),
+      );
+
+  testWidgets('等待时间为真实经过时间，阶段切换不归零，取消后释放计时器', (tester) async {
+    final container = setUpContainer();
+    final status = ValueNotifier<String?>('正在识别');
+    addTearDown(status.dispose);
+    final vm = container.read(smartLayoutSessionViewModelProvider.notifier);
+    await tester.pumpWidget(host(container, status: status));
+    await vm.startAnalysis();
+    await tester.pump();
+    expect(find.text('已等待 0 秒'), findsOneWidget);
+    await tester.runAsync(
+      () async => Future<void>.delayed(const Duration(milliseconds: 1100)),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('已等待 0 秒'), findsNothing);
+    final elapsed = tester.widget<Text>(find.textContaining('已等待')).data;
+    status.value = '正在复核';
+    await tester.pump();
+    expect(find.text('正在复核'), findsOneWidget);
+    expect(find.text(elapsed!), findsOneWidget);
+    expect(find.textContaining('%'), findsNothing);
+    await tester.tap(find.text('取消'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 10));
+    expect(find.textContaining('已等待'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('idle：整页视觉模式空范围也可启动，摘要随范围更新', (tester) async {
     final container = setUpContainer();
@@ -124,7 +154,7 @@ void main() {
       isNotNull,
       reason: '整页视觉模式：idle 即可启动，不依赖 scope 手工圈选',
     );
-    expect(find.textContaining('排版范围 0 项'), findsOneWidget);
+    expect(find.textContaining('整理当前页'), findsOneWidget);
 
     container
         .read(smartLayoutSessionViewModelProvider.notifier)
@@ -134,7 +164,7 @@ void main() {
       tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
       isNotNull,
     );
-    expect(find.textContaining('排版范围 1 项'), findsOneWidget);
+    expect(find.textContaining('排版范围 1 个源元素'), findsOneWidget);
   });
 
   testWidgets('reviewing：候选卡渲染、点选切换经 ViewModel、应用可点', (tester) async {
@@ -193,7 +223,7 @@ void main() {
     expect(find.text('开始智能排版'), findsOneWidget);
   });
 
-  testWidgets('验证候选卡：真实缩略图/评分解释/结构差异/账本核对渲染', (tester) async {
+  testWidgets('验证候选：大图、结构名称与源元素计数，技术信息折叠', (tester) async {
     final container = setUpContainer();
     final vm = container.read(smartLayoutSessionViewModelProvider.notifier)
       ..addScopeSource('s1');
@@ -206,30 +236,32 @@ void main() {
     vm.completeGenerationFromValidated(cards);
     await tester.pump();
 
-    expect(find.byType(RawImage), findsNWidgets(2), reason: '每张卡一枚真实渲染缩略图');
-    expect(find.textContaining('第 1 名'), findsOneWidget);
-    expect(find.textContaining('第 2 名'), findsOneWidget);
+    expect(find.byType(RawImage), findsOneWidget, reason: '只显示所选候选的整页预览');
+    expect(tester.getSize(find.byType(RawImage)).height, greaterThan(180));
+    expect(find.textContaining('单栏阅读 · 推荐'), findsOneWidget);
+    expect(find.textContaining('评分 '), findsNothing);
+    expect(find.textContaining('已整理 2 个源元素'), findsOneWidget);
+    expect(find.text('合并所选区域'), findsNothing, reason: '移除空 ID 的无效操作');
+    await tester.ensureVisible(find.text('排版详情'));
+    await tester.tap(find.text('排版详情'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('基准结构'), findsOneWidget);
     expect(find.textContaining('结构不同'), findsOneWidget);
     expect(find.textContaining('评分 '), findsNWidgets(2));
-    expect(find.textContaining('构成：'), findsNWidgets(2), reason: '评分解释可还原分解');
     expect(
       find.textContaining('已消费'),
       findsAtLeastNWidgets(1),
       reason: '账本核对逐源呈现',
     );
-    expect(find.text('合并所选区域'), findsOneWidget, reason: '纠错入口');
-
-    await tester.tap(find.textContaining('第 2 名'));
+    await tester.ensureVisible(find.byKey(const ValueKey('c2')));
+    await tester.tap(find.byKey(const ValueKey('c2')));
     await tester.pump();
     expect(
       container.read(smartLayoutSessionViewModelProvider).selectedCandidateId,
       'c2',
       reason: '切换经 ViewModel，不写权威 Scene',
     );
-    for (final c in cards) {
-      c.dispose();
-    }
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   group('V3-505C 无鼠标/可访问性闭环', () {
@@ -241,18 +273,14 @@ void main() {
               body: Focus(
                 focusNode: restore,
                 child: const SingleChildScrollView(
-                  child: SmartLayoutSessionView(
-                    restoreFocusNode: null,
-                  ),
+                  child: SmartLayoutSessionView(restoreFocusNode: null),
                 ),
               ),
             ),
           ),
         );
 
-    testWidgets('键盘全流程：Enter 开始 → Escape 取消 → Enter 复位并归还焦点', (
-      tester,
-    ) async {
+    testWidgets('键盘全流程：Enter 开始 → Escape 取消 → Enter 复位并归还焦点', (tester) async {
       final container = setUpContainer();
       final restoreNode = FocusNode();
       addTearDown(restoreNode.dispose);
@@ -385,11 +413,7 @@ void main() {
         container.read(smartLayoutSessionViewModelProvider).phase,
         SmartLayoutSessionPhase.applied,
       );
-      expect(
-        find.byType(Dialog),
-        findsNothing,
-        reason: '会话面板非模态：全程无 dialog',
-      );
+      expect(find.byType(Dialog), findsNothing, reason: '会话面板非模态：全程无 dialog');
     });
   });
 }

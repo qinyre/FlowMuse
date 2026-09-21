@@ -1,5 +1,6 @@
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
+import '../composition/layout_block.dart';
 import '../metrics/scene_metrics_contract.dart';
 import '../reducer/smart_layout_scene_reducer.dart';
 import '../rendering/draft_scene_renderer.dart';
@@ -16,6 +17,8 @@ class SemanticRelationExpectation {
     required this.kind,
     required this.anchorId,
     required this.followerId,
+    this.maxGap,
+    this.memberIds = const {},
   });
 
   final String relationId;
@@ -26,13 +29,21 @@ class SemanticRelationExpectation {
 
   /// captionOf：caption；keepWith：后继。
   final String followerId;
+  final double? maxGap;
+  final Set<String> memberIds;
 }
 
 /// 阅读序期望（渲染后元素 id 的语义阅读序；相邻项构成检查对）。
 class ReadingOrderExpectation {
-  const ReadingOrderExpectation({required this.orderedElementIds});
+  const ReadingOrderExpectation({
+    required this.orderedElementIds,
+    this.columnByNode = const {},
+    this.columns = const [],
+  });
 
   final List<String> orderedElementIds;
+  final Map<String, int> columnByNode;
+  final List<Bounds> columns;
 }
 
 /// 真实 Scene metrics 提取器（V3-504A）：从 **reducer + renderer 的真实
@@ -59,6 +70,9 @@ abstract final class ReducedSceneMetricsExtractor {
     List<SemanticRelationExpectation> relations = const [],
     ReadingOrderExpectation? readingOrder,
     double captionGapTolerance = 24.0,
+    Set<String>? validationElementIds,
+    Map<String, List<String>> outputElementIdsByBlock = const {},
+    List<CompositionGroupIntent> compositionGroups = const [],
   }) {
     final patch = reduced.patch;
 
@@ -95,33 +109,122 @@ abstract final class ReducedSceneMetricsExtractor {
     var boundsViolations = 0;
     if (pageContentBounds != null) {
       for (final layer in snapshot.layers) {
+        if (validationElementIds != null &&
+            !validationElementIds.contains(layer.elementId)) {
+          continue;
+        }
         if (!_inside(layer.bounds, pageContentBounds)) boundsViolations++;
       }
     }
 
     // ---- 关系满足表（真实渲染几何判定）----
+    final nodeBounds = <String, Bounds>{
+      for (final layer in snapshot.layers) layer.elementId: layer.bounds,
+    };
+    for (final entry in outputElementIdsByBlock.entries) {
+      final boxes = [for (final id in entry.value) nodeBounds[id]];
+      if (boxes.isEmpty || boxes.any((b) => b == null)) continue;
+      nodeBounds[entry.key] = boxes.cast<Bounds>().reduce((a, b) => a.union(b));
+    }
+    final groupOf = {
+      for (final g in compositionGroups)
+        for (final id in g.memberIds) id: g,
+    };
+    final groupBounds = <String, Bounds>{};
+    for (final g in compositionGroups) {
+      if (g.memberIds.every(nodeBounds.containsKey)) {
+        groupBounds[g.id] = g.memberIds
+            .map((id) => nodeBounds[id]!)
+            .reduce((a, b) => a.union(b));
+      }
+    }
+    bool relationSatisfied(SemanticRelationExpectation r) {
+      final a = groupOf[r.anchorId];
+      final b = groupOf[r.followerId];
+      if (a == null || b == null) {
+        return _relationSatisfied(
+          r,
+          nodeBounds,
+          captionGapTolerance,
+          outputElementIdsByBlock.keys.toSet(),
+        );
+      }
+      if (a.id == b.id) {
+        // 正文可以多段，检查完整阅读轨道；图注仍须直接贴图。
+        return r.kind != SemanticRelationExpectationKind.captionOf ||
+            _relationSatisfied(r, nodeBounds, a.maxGap, const {});
+      }
+      final anchor = groupBounds[a.id];
+      // 跨组 keepWith 接到下一行；图顶对齐时短说明可在行内底对齐。
+      // 行起点仍取真实渲染盒，不用声明的 slot 伪造贴近度。
+      final rowBoxes = [
+        for (final g in compositionGroups)
+          if (g.row == b.row && groupBounds[g.id] != null) groupBounds[g.id]!,
+      ];
+      final follower = rowBoxes.isEmpty
+          ? null
+          : rowBoxes.reduce((x, y) => x.union(y));
+      return anchor != null &&
+          follower != null &&
+          _stacked(anchor, follower, r.maxGap ?? captionGapTolerance);
+    }
+
     final relationResults = <(String, bool)>[
       for (final relation in relations)
-        (
-          relation.relationId,
-          _relationSatisfied(relation, snapshot, captionGapTolerance),
-        ),
+        (relation.relationId, relationSatisfied(relation)),
+      for (final g in compositionGroups)
+        ('group:${g.id}', _groupSatisfied(g, nodeBounds)),
     ];
 
     // ---- 阅读序：真实渲染位置（先上后下、同高先左）与期望相邻对 ----
     var orderPairsTotal = 0;
     var orderPairsCorrect = 0;
     if (readingOrder != null && readingOrder.orderedElementIds.length > 1) {
-      final positionById = <String, (double, double)>{
-        for (final layer in snapshot.layers)
-          layer.elementId: (layer.bounds.top, layer.bounds.left),
-      };
       bool precedes(String a, String b) {
-        final pa = positionById[a];
-        final pb = positionById[b];
+        final pa = nodeBounds[a];
+        final pb = nodeBounds[b];
         if (pa == null || pb == null) return false;
-        if ((pa.$1 - pb.$1).abs() > 1e-9) return pa.$1 < pb.$1;
-        return pa.$2 < pb.$2;
+        if (compositionGroups.isNotEmpty) {
+          final ga = groupOf[a];
+          final gb = groupOf[b];
+          if (ga == null || gb == null) return false;
+          if (ga.id == gb.id) {
+            final ta = ga.tracks.indexWhere((t) => t.contains(a));
+            final tb = ga.tracks.indexWhere((t) => t.contains(b));
+            return ta == tb
+                ? pa.bottom <= pb.top + .5
+                : ta < tb && pa.right <= pb.left + .5;
+          }
+          final ba = groupBounds[ga.id]!;
+          final bb = groupBounds[gb.id]!;
+          if (ga.row == gb.row) {
+            return ga.column < gb.column &&
+                ba.right <= bb.left + .5 &&
+                ba.top < bb.bottom &&
+                bb.top < ba.bottom;
+          }
+          return ga.row < gb.row && ba.bottom <= bb.top + .5;
+        }
+        if (readingOrder.columnByNode.isNotEmpty) {
+          final ca = readingOrder.columnByNode[a];
+          final cb = readingOrder.columnByNode[b];
+          if (ca == null ||
+              cb == null ||
+              ca < 0 ||
+              cb < 0 ||
+              ca >= readingOrder.columns.length ||
+              cb >= readingOrder.columns.length) {
+            return false;
+          }
+          if (!_inside(pa, readingOrder.columns[ca]) ||
+              !_inside(pb, readingOrder.columns[cb])) {
+            return false;
+          }
+          if (ca != cb) return ca < cb;
+          return pa.bottom <= pb.top + 0.5;
+        }
+        if ((pa.top - pb.top).abs() > 1e-9) return pa.top < pb.top;
+        return pa.left < pb.left;
       }
 
       final order = readingOrder.orderedElementIds;
@@ -153,28 +256,80 @@ abstract final class ReducedSceneMetricsExtractor {
       inner.right <= outer.right + 1e-9 &&
       inner.bottom <= outer.bottom + 1e-9;
 
+  static bool _stacked(Bounds a, Bounds b, double gap) =>
+      a.left < b.right &&
+      b.left < a.right &&
+      b.top >= a.bottom - .5 &&
+      b.top - a.bottom <= gap + .5;
+
+  static bool _groupSatisfied(
+    CompositionGroupIntent g,
+    Map<String, Bounds> bounds,
+  ) {
+    final tracks = <Bounds>[];
+    final slot = Bounds.fromLTWH(
+      g.slot.left - .5,
+      g.slot.top - .5,
+      g.slot.width + 1,
+      g.slot.height + 1,
+    );
+    for (final track in g.tracks) {
+      final boxes = [for (final id in track) bounds[id]];
+      if (boxes.isEmpty || boxes.any((b) => b == null || !_inside(b, slot))) {
+        return false;
+      }
+      for (var i = 0; i + 1 < boxes.length; i++) {
+        if (!_stacked(boxes[i]!, boxes[i + 1]!, g.maxGap)) return false;
+      }
+      tracks.add(boxes.cast<Bounds>().reduce((a, b) => a.union(b)));
+    }
+    if (g.kind == CompositionGroupKind.mediaSide) {
+      if (tracks.length != 2) return false;
+      final a = tracks[0];
+      final b = tracks[1];
+      return b.left >= a.right - .5 &&
+          b.left - a.right <= g.maxGap + .5 &&
+          a.top < b.bottom &&
+          b.top < a.bottom &&
+          (a.top - b.top).abs() <= .5;
+    }
+    return tracks.length == 1;
+  }
+
   static bool _relationSatisfied(
     SemanticRelationExpectation relation,
-    DraftRenderSnapshot snapshot,
+    Map<String, Bounds> byId,
     double captionGapTolerance,
+    Set<String> blockIds,
   ) {
-    final byId = {
-      for (final layer in snapshot.layers) layer.elementId: layer.bounds,
-    };
     final anchor = byId[relation.anchorId];
     final follower = byId[relation.followerId];
     if (anchor == null || follower == null) return false;
-    switch (relation.kind) {
-      case SemanticRelationExpectationKind.captionOf:
-        // caption 水平与 figure 有重叠且紧随其下（容差内）。
-        final horizontalOverlap =
-            follower.left < anchor.right && anchor.left < follower.right;
-        final gap = follower.top - anchor.bottom;
-        return horizontalOverlap && gap >= -1e-9 && gap <= captionGapTolerance;
-      case SemanticRelationExpectationKind.keepWith:
-        // 后继不得排到前驱上方（阅读序不逆转）。
-        return follower.top >= anchor.top - 1e-9;
+    final horizontalOverlap =
+        follower.left < anchor.right && anchor.left < follower.right;
+    final gap = follower.top - anchor.bottom;
+    if (!horizontalOverlap ||
+        gap < -0.5 ||
+        gap > (relation.maxGap ?? captionGapTolerance) + 0.5) {
+      return false;
     }
+    // 无关块不能插在关联两端之间；允许同组其他说明/图注。
+    for (final id in blockIds) {
+      if (id == relation.anchorId ||
+          id == relation.followerId ||
+          relation.memberIds.contains(id)) {
+        continue;
+      }
+      final box = byId[id];
+      if (box == null) continue;
+      if (box.top >= anchor.bottom &&
+          box.bottom <= follower.top &&
+          box.right > anchor.left &&
+          box.left < anchor.right) {
+        return false;
+      }
+    }
+    return true;
   }
 }
 

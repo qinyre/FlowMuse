@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 // RecognitionHandler 是 recognize/v3 端点处理器。
@@ -54,6 +55,7 @@ func RegisterRecognitionV3(mux *http.ServeMux, handler *RecognitionHandler) {
 }
 
 func (h *RecognitionHandler) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		writeRecognitionError(w, http.StatusMethodNotAllowed,
@@ -95,7 +97,13 @@ func (h *RecognitionHandler) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	prepared := time.Since(started)
+	recognitionStarted := time.Now()
 	response, pErr := h.dispatch(r, request)
+	// 只记阶段和规模，不打印请求正文、图片或模型原文。
+	log.Printf("[recognition-v3] stage=%s regions=%d units=%d request_bytes=%d prepare_ms=%d recognition_ms=%d ok=%t",
+		request.Stage, len(request.Regions), len(request.Units), len(body),
+		prepared.Milliseconds(), time.Since(recognitionStarted).Milliseconds(), pErr == nil)
 	if pErr != nil {
 		status := http.StatusBadGateway
 		switch pErr.Code {
@@ -146,6 +154,7 @@ func (h *RecognitionHandler) runTranscribe(ctx context.Context, request *Recogni
 		images = append(images, ProviderImage{Base64: region.ImagePngBase64})
 	}
 	raw, err := h.provider.Complete(ctx, ProviderRequest{
+		Stage:      request.Stage,
 		PromptText: prompt,
 		Images:     images,
 	})
@@ -174,11 +183,21 @@ func (h *RecognitionHandler) runTranscribe(ctx context.Context, request *Recogni
 // 解析（对象）→ 结构校验（R-06..R-10 + 子树连续性）→ 回填外壳与指纹。
 func (h *RecognitionHandler) runStructure(ctx context.Context, request *RecognitionRequest) (*RecognitionResponse, *WireError) {
 	prompt := BuildStructurePrompt(request.Units, request.OverviewPngBase64 != "")
+	if request.IncludeFigureTextLinks {
+		prompt += figureTextLinkPrompt
+	}
+	if request.IncludeCompositionHints {
+		prompt += compositionHintPrompt
+		if request.OverviewPngBase64 == "" {
+			prompt += "\n本次无概览图，mediaGroups 必须为空数组；仅恢复文字结构和软换行。"
+		}
+	}
 	images := make([]ProviderImage, 0, 1)
 	if request.OverviewPngBase64 != "" {
 		images = append(images, ProviderImage{Base64: request.OverviewPngBase64})
 	}
 	raw, err := h.provider.Complete(ctx, ProviderRequest{
+		Stage:      request.Stage,
 		PromptText: prompt,
 		Images:     images,
 	})
@@ -186,12 +205,35 @@ func (h *RecognitionHandler) runStructure(ctx context.Context, request *Recognit
 		return nil, providerWireError(err)
 	}
 	var model ModelStructureResult
-	if pErr := parseModelJSON(raw, &model); pErr != nil {
+	// 新协商模式使用精确键集，禁止正文偷渡/未知字段/尾随垃圾。
+	if request.IncludeCompositionHints {
+		if err := decodeStrict([]byte(stripCodeFence(raw)), &model); err != nil {
+			return nil, wireErr(CodeInvalidProviderResp, "composition 结构 JSON 非法")
+		}
+		var fields any
+		_ = json.Unmarshal([]byte(stripCodeFence(raw)), &fields)
+		if containsStructureText(fields) {
+			return nil, wireErr(CodeInvalidProviderResp, "structure 禁止正文字段")
+		}
+	} else if pErr := parseModelJSON(raw, &model); pErr != nil {
 		return nil, pErr
+	}
+	if request.IncludeCompositionHints && model.FigureTextLinks != nil {
+		return nil, wireErr(CodeInvalidProviderResp, "composition 模式禁止旧图文关系")
+	}
+	// 未协商时不向严格旧客户端输出新字段。
+	if !request.IncludeFigureTextLinks {
+		model.FigureTextLinks = nil
 	}
 	sanitized, sErr := SanitizeStructureResult(request.Units, &model)
 	if sErr != nil {
 		return nil, sErr
+	}
+	if request.IncludeCompositionHints {
+		if err := validateCompositionHints(request, &model); err != nil {
+			return nil, err
+		}
+		sanitized.CompositionHints = model.CompositionHints
 	}
 	sanitized.TextFingerprint = request.TextFingerprint
 	return fillShell(request, sanitized), nil

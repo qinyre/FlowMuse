@@ -128,7 +128,8 @@ class PreserveFallback extends GenerationOutcome {
   final List<String> preservedSourceIds;
 
   @override
-  String toString() => 'PreserveFallback(${reason.name}, '
+  String toString() =>
+      'PreserveFallback(${reason.name}, '
       '${preservedSourceIds.length} sources)';
 }
 
@@ -174,15 +175,16 @@ class NoFeasibleLayout extends GenerationOutcome {
 
   /// 去重保序的建议并集（候选枚举序，确定性）。
   List<LayoutSuggestion> get suggestions => [
-    ...{
-      for (final r in rejections) ...r.suggestions,
-    },
+    ...{for (final r in rejections) ...r.suggestions},
   ];
 }
 
 /// 可重试失败：外部依赖暂不可用（非无解、非程序缺陷）。
 class RetryableGenerationFailure extends GenerationOutcome {
-  const RetryableGenerationFailure({required this.dependency, this.detail = ''});
+  const RetryableGenerationFailure({
+    required this.dependency,
+    this.detail = '',
+  });
 
   /// 依赖标识（稳定码，如 'text-measure'）。
   final String dependency;
@@ -211,7 +213,10 @@ sealed class GenerationOutcome {
 /// 硬筛查通过：accepted 继续进入放置/门禁；rejected 留档（可能部分
 /// 拒绝——软排名前的唯一淘汰依据是硬不可行证明）。
 class LayoutGenerationScreened extends GenerationOutcome {
-  const LayoutGenerationScreened({required this.accepted, required this.rejected});
+  const LayoutGenerationScreened({
+    required this.accepted,
+    required this.rejected,
+  });
 
   final List<CompositionCandidate> accepted;
   final List<PreflightRejection> rejected;
@@ -286,8 +291,7 @@ class LayoutPreflight {
     final allSourceIds = {
       ...assembly.documentConsumedSourceIds,
       ...assembly.documentPreservedSourceIds,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     if (placeable.isEmpty) {
       return PreserveFallback(
         reason: PreserveFallbackReason.emptyDocument,
@@ -297,8 +301,7 @@ class LayoutPreflight {
 
     final obstacles = <LayoutRect>[
       for (final b in assembly.blocks)
-        if (b.kind == LayoutBlockKind.protected)
-          _boundsOf(b),
+        if (b.kind == LayoutBlockKind.protected) _boundsOf(b),
     ];
 
     final accepted = <CompositionCandidate>[];
@@ -385,7 +388,8 @@ class LayoutPreflight {
         return PreflightRejection(
           candidateId: candidate.id,
           reason: PreflightRejectReason.blockWiderThanNarrowestColumnAtMinSize,
-          detail: 'block ${b.id} width ${result.width.toStringAsFixed(1)} '
+          detail:
+              'block ${b.id} width ${result.width.toStringAsFixed(1)} '
               '> narrowest column ${narrowest.toStringAsFixed(1)} at '
               'min font ${tokens.minBodySize}',
         );
@@ -402,7 +406,9 @@ class LayoutPreflight {
             ? b.figure!.displayAspectRatio
             : 1.0;
         figureHeights.add(
-          columns.map((c) => c.width / ratio).reduce(math.min),
+          columns
+              .map((c) => b.figure!.widthInColumn(c.width) / ratio)
+              .reduce(math.min),
         );
         continue;
       }
@@ -432,7 +438,8 @@ class LayoutPreflight {
       return PreflightRejection(
         candidateId: candidate.id,
         reason: PreflightRejectReason.hardHeightLowerBoundExceeded,
-        detail: 'lower bound ${prune.lowerBound.toStringAsFixed(1)} > '
+        detail:
+            'lower bound ${prune.lowerBound.toStringAsFixed(1)} > '
             'capacity ${prune.contentLimit.toStringAsFixed(1)}',
       );
     }
@@ -451,7 +458,12 @@ class LayoutPreflight {
       var left = 0.0;
       for (var i = 0; i < widths.length; i++) {
         rects.add(
-          LayoutRect(left: left, top: 0, width: widths[i], height: contentHeight),
+          LayoutRect(
+            left: left,
+            top: 0,
+            width: widths[i],
+            height: contentHeight,
+          ),
         );
         left += widths[i] + p.columnGutter;
       }
@@ -461,9 +473,10 @@ class LayoutPreflight {
     return switch (candidate.skeleton) {
       LayoutSkeleton.single => build([p.mainColumnWidth]),
       LayoutSkeleton.twoColumn => build([p.mainColumnWidth, p.mainColumnWidth]),
-      LayoutSkeleton.mainSide => p.sideOnRight
-          ? build([p.mainColumnWidth, p.sideColumnWidth!])
-          : build([p.sideColumnWidth!, p.mainColumnWidth]),
+      LayoutSkeleton.mainSide =>
+        p.sideOnRight
+            ? build([p.mainColumnWidth, p.sideColumnWidth!])
+            : build([p.sideColumnWidth!, p.mainColumnWidth]),
       LayoutSkeleton.conservativeLayout => build([p.mainColumnWidth]),
     };
   }

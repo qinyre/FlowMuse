@@ -51,12 +51,16 @@ class DraftRenderSnapshot {
   DraftRenderSnapshot({
     required this.image,
     required this.pixelSize,
+    required this.viewport,
     required this.layers,
     required this.missingFileIds,
   });
 
   final ui.Image image;
   final Size pixelSize;
+
+  /// 场景坐标到位图像素的真实变换，供预览定位；不改变渲染或门禁。
+  final ViewportState viewport;
   final List<DraftRenderLayer> layers;
   final List<String> missingFileIds;
 
@@ -190,8 +194,10 @@ class DraftSceneRenderer {
       final layers = <DraftRenderLayer>[];
       final measure = TextMeasureAdapter();
       final zIndexById = <String, int>{};
-      for (var i = 0; i < scene.orderedElements.length; i++) {
-        zIndexById[scene.orderedElements[i].id.value] = i;
+      // getter 每次都会复制并排序；同一不可变 Scene 只取一次。
+      final ordered = scene.orderedElements;
+      for (var i = 0; i < ordered.length; i++) {
+        zIndexById[ordered[i].id.value] = i;
       }
       for (final element in active) {
         layers.add(_layerOf(element, measure, resolved, zIndexById, missing));
@@ -201,6 +207,7 @@ class DraftSceneRenderer {
         image: rasterized,
         pixelSize: pixelSize,
         layers: List.unmodifiable(layers),
+        viewport: viewport,
         missingFileIds: List.unmodifiable(missing),
       );
     } finally {

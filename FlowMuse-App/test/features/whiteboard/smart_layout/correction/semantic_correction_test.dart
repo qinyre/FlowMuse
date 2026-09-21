@@ -1,8 +1,135 @@
 import 'package:flow_muse/features/whiteboard/smart_layout/correction/semantic_correction.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_document.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/semantics/semantic_composition.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/deterministic_hash.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('构图单一权威：共享说明、角色/关系/整组保留及逆操作', () {
+    final blocks = [
+      const SemanticBlock(
+        id: 'h',
+        role: SemanticRole.title,
+        sourceIds: ['h'],
+        orderIndex: 0,
+        confidence: 1,
+        text: '观察',
+      ),
+      const SemanticBlock(
+        id: 'c',
+        role: SemanticRole.caption,
+        sourceIds: ['c'],
+        orderIndex: 1,
+        confidence: 1,
+        extras: {'transcribedText': '这是躺\n着的猫', 'captionOf': 'a'},
+      ),
+      const SemanticBlock(
+        id: 'a',
+        role: SemanticRole.figure,
+        sourceIds: ['a'],
+        orderIndex: 2,
+        confidence: 1,
+      ),
+      const SemanticBlock(
+        id: 't',
+        role: SemanticRole.body,
+        sourceIds: ['t'],
+        orderIndex: 3,
+        confidence: 1,
+        text: '两张图共同说明',
+      ),
+      const SemanticBlock(
+        id: 'b',
+        role: SemanticRole.figure,
+        sourceIds: ['b'],
+        orderIndex: 4,
+        confidence: 1,
+      ),
+    ];
+    final composition = SemanticComposition(
+      analyzed: true,
+      hints: const RecognitionCompositionHints(
+        pageIntent: 'comparison',
+        sections: [],
+        mediaGroups: [
+          RecognitionMediaGroup(
+            groupId: 'ab',
+            figureUnitIds: ['a', 'b'],
+            textUnitIds: ['t'],
+            confidence: 1,
+          ),
+        ],
+        softLineBreaks: [
+          RecognitionSoftBreak(unitId: 'c', newlineIndexes: [0], confidence: 1),
+        ],
+      ),
+      textFingerprints: {'c': fingerprint64('这是躺\n着的猫')},
+    );
+    final doc = SemanticDocument(
+      formatVersion: 1,
+      pageId: 'p',
+      epoch: 0,
+      revision: 0,
+      fingerprint: 'f',
+      blocks: blocks,
+      readingOrder: const SemanticReadingOrder(
+        orderedBlockIds: ['h', 'c', 'a', 't', 'b'],
+      ),
+      conflicts: const [],
+      consumedSourceIds: const ['a', 'b', 'c', 'h', 't'],
+      preservedSourceIds: const [],
+      extras: {'composition': composition.toJson()},
+    );
+    composition.validate(doc);
+    const applier = SemanticPatchApplier();
+    for (final patch in <SemanticCorrectionPatch>[
+      SetSemanticRolePatch(
+        baseRevision: SemanticRevisionRef.of(doc),
+        blockId: 'c',
+        fromRole: SemanticRole.caption,
+        toRole: SemanticRole.body,
+      ),
+      SetSemanticRelationsPatch(
+        baseRevision: SemanticRevisionRef.of(doc),
+        blockId: 't',
+        oldRelations: composition.relationsOf('t'),
+        newRelations: const [],
+      ),
+      PreserveSemanticSourcesPatch(
+        baseRevision: SemanticRevisionRef.of(doc),
+        sourceIds: const ['a'],
+        toPreserved: true,
+      ),
+    ]) {
+      final result = applier.apply(doc, patch);
+      expect(result.accepted, isTrue, reason: result.rejection);
+      final next = result.document!;
+      if (patch is SetSemanticRolePatch) {
+        expect(SemanticComposition.of(next)!.hints.softLineBreaks, isEmpty);
+        expect(next.blocks[1].extras['transcribedText'], '这是躺\n着的猫');
+      } else if (patch is SetSemanticRelationsPatch) {
+        expect(SemanticComposition.of(next)!.hints.mediaGroups, isEmpty);
+      } else {
+        expect(next.preservedSourceIds, ['a', 'b', 'c', 't']);
+        expect(next.ledgerConserved, isTrue);
+      }
+      final restored = applier.apply(next, result.inverse!);
+      expect(restored.accepted, isTrue, reason: restored.rejection);
+      expect(restored.document!.extras, doc.extras);
+      expect(restored.document!.blocks, doc.blocks);
+      expect(restored.document!.consumedSourceIds, doc.consumedSourceIds);
+    }
+    final brokenOrder = applier.apply(
+      doc,
+      ReorderSemanticPatch(
+        baseRevision: SemanticRevisionRef.of(doc),
+        oldOrder: doc.readingOrder.orderedBlockIds,
+        newOrder: const ['c', 'a', 'h', 't', 'b'],
+      ),
+    );
+    expect(brokenOrder.accepted, isFalse, reason: '不能把标题插进媒体组');
+  });
   SemanticDocument buildDocument() => SemanticDocument(
     formatVersion: 1,
     pageId: 'page-1',

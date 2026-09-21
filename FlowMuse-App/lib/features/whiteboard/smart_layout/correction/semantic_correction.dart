@@ -1,4 +1,6 @@
 import '../semantics/semantic_document.dart';
+import '../semantics/semantic_composition.dart';
+import '../recognition/recognition_json_reader.dart';
 
 /// 语义纠错 patch 的 revision 前置（语义文档级）。
 class SemanticRevisionRef {
@@ -28,9 +30,15 @@ class SemanticRevisionRef {
 /// 可逆语义纠错 patch（V3-205A）：role/order/relation/preserve 的显式
 /// 修改。apply 产生新文档与逆 patch；非法/过期 patch 零副作用。
 sealed class SemanticCorrectionPatch {
-  const SemanticCorrectionPatch({required this.baseRevision});
+  const SemanticCorrectionPatch({
+    required this.baseRevision,
+    this.restoreComposition,
+  });
 
   final SemanticRevisionRef baseRevision;
+
+  /// 仅逆 patch 携带上一份构图提示，不重建或伪造识别响应。
+  final Map<String, Object?>? restoreComposition;
 
   String get kind;
 }
@@ -39,6 +47,7 @@ sealed class SemanticCorrectionPatch {
 class SetSemanticRolePatch extends SemanticCorrectionPatch {
   const SetSemanticRolePatch({
     required super.baseRevision,
+    super.restoreComposition,
     required this.blockId,
     required this.fromRole,
     required this.toRole,
@@ -56,6 +65,7 @@ class SetSemanticRolePatch extends SemanticCorrectionPatch {
 class ReorderSemanticPatch extends SemanticCorrectionPatch {
   const ReorderSemanticPatch({
     required super.baseRevision,
+    super.restoreComposition,
     required this.oldOrder,
     required this.newOrder,
   });
@@ -71,6 +81,7 @@ class ReorderSemanticPatch extends SemanticCorrectionPatch {
 class SetSemanticRelationsPatch extends SemanticCorrectionPatch {
   const SetSemanticRelationsPatch({
     required super.baseRevision,
+    super.restoreComposition,
     required this.blockId,
     required this.oldRelations,
     required this.newRelations,
@@ -90,6 +101,7 @@ class SetSemanticRelationsPatch extends SemanticCorrectionPatch {
 class PreserveSemanticSourcesPatch extends SemanticCorrectionPatch {
   const PreserveSemanticSourcesPatch({
     required super.baseRevision,
+    super.restoreComposition,
     required this.sourceIds,
     required this.toPreserved,
   });
@@ -148,6 +160,14 @@ class SemanticPatchValidator {
   ) {
     final block = _blockById(document, patch.blockId);
     if (block == null) return 'unknown-block(${patch.blockId})';
+    final composition = SemanticComposition.of(document);
+    if (composition != null) {
+      final actual = composition.relationsOf(patch.blockId).toSet();
+      if (actual.length != patch.oldRelations.length ||
+          !actual.containsAll(patch.oldRelations)) {
+        return 'relations-mismatch';
+      }
+    }
     final ids = document.blocks.map((b) => b.id).toSet();
     for (final relation in patch.newRelations) {
       if (!ids.contains(relation.targetBlockId)) {
@@ -235,8 +255,61 @@ class SemanticPatchApplier {
     if (reason != null) {
       return SemanticPatchOutcome.rejected(reason);
     }
-    final next = _rebuild(document, patch);
-    return SemanticPatchOutcome.applied(next, _inverse(next, patch));
+    try {
+      final composition = SemanticComposition.of(document);
+      // 保留媒体组一员 = 整组保留。逆 patch 也使用展开后的精确源集合。
+      if (composition != null && patch is PreserveSemanticSourcesPatch) {
+        final affected = SemanticRerunScope.resolve([
+          patch,
+        ], document).sourceIds;
+        final eligible = patch.toPreserved
+            ? document.consumedSourceIds
+            : document.preservedSourceIds;
+        patch = PreserveSemanticSourcesPatch(
+          baseRevision: patch.baseRevision,
+          restoreComposition: patch.restoreComposition,
+          sourceIds: affected.where(eligible.contains).toList(),
+          toPreserved: patch.toPreserved,
+        );
+      }
+      var next = _rebuild(document, patch);
+      if (composition != null) {
+        var nextComposition = composition;
+        if (patch is SetSemanticRelationsPatch) {
+          nextComposition = composition.setMediaRelations(
+            patch.blockId,
+            patch.newRelations,
+            next.blocks,
+          );
+        }
+        nextComposition = nextComposition.reconcile(
+          next.blocks,
+          invalidatedTextIds: patch is SetSemanticRolePatch
+              ? {patch.blockId}
+              : const {},
+        );
+        next = _copyWith(
+          next,
+          extras: {
+            ...next.extras,
+            'composition': patch.restoreComposition ?? nextComposition.toJson(),
+          },
+        );
+        SemanticComposition.of(next)!.validate(next);
+      }
+      return SemanticPatchOutcome.applied(
+        next,
+        _inverse(next, patch, restoreComposition: composition?.toJson()),
+      );
+    } on FormatException {
+      return const SemanticPatchOutcome.rejected(
+        'invalid-composition-correction',
+      );
+    } on RecognitionProtocolException {
+      return const SemanticPatchOutcome.rejected(
+        'invalid-composition-correction',
+      );
+    }
   }
 
   SemanticDocument _rebuild(
@@ -270,26 +343,28 @@ class SemanticPatchApplier {
       // §9.2 闭环修复：关系真正写入块 extras（图注/列表关系），目标
       // 存在性已在 validator 校验——不再是仅递增 revision 的空操作。
       SetSemanticRelationsPatch(:final blockId, :final newRelations) =>
-        _copyWith(
-          bumped,
-          blocks: [
-            for (final block in bumped.blocks)
-              if (block.id == blockId)
-                _withExtras(
-                  block,
-                  'relations',
-                  List.unmodifiable([
-                    for (final relation in newRelations)
-                      Map.unmodifiable(<String, Object?>{
-                        'type': relation.type,
-                        'targetBlockId': relation.targetBlockId,
-                      }),
-                  ]),
-                )
-              else
-                block,
-          ],
-        ),
+        SemanticComposition.of(document) != null
+            ? bumped
+            : _copyWith(
+                bumped,
+                blocks: [
+                  for (final block in bumped.blocks)
+                    if (block.id == blockId)
+                      _withExtras(
+                        block,
+                        'relations',
+                        List.unmodifiable([
+                          for (final relation in newRelations)
+                            Map.unmodifiable(<String, Object?>{
+                              'type': relation.type,
+                              'targetBlockId': relation.targetBlockId,
+                            }),
+                        ]),
+                      )
+                    else
+                      block,
+                ],
+              ),
       // §9.2 闭环修复：保留切换同步块角色（unknown=保留语义）并记录
       // previousRole 供逆操作恢复；不再只搬移 consumed/preserved 列表。
       PreserveSemanticSourcesPatch(:final sourceIds, :final toPreserved) =>
@@ -302,14 +377,20 @@ class SemanticPatchApplier {
               else
                 block,
           ],
-          consumedSourceIds:
-              toPreserved
-                  ? ([...bumped.consumedSourceIds.where((id) => !sourceIds.contains(id))]..sort())
-                  : ([...bumped.consumedSourceIds, ...sourceIds]..sort()),
-          preservedSourceIds:
-              toPreserved
-                  ? ([...bumped.preservedSourceIds, ...sourceIds]..sort())
-                  : ([...bumped.preservedSourceIds.where((id) => !sourceIds.contains(id))]..sort()),
+          consumedSourceIds: toPreserved
+              ? ([
+                  ...bumped.consumedSourceIds.where(
+                    (id) => !sourceIds.contains(id),
+                  ),
+                ]..sort())
+              : ([...bumped.consumedSourceIds, ...sourceIds]..sort()),
+          preservedSourceIds: toPreserved
+              ? ([...bumped.preservedSourceIds, ...sourceIds]..sort())
+              : ([
+                  ...bumped.preservedSourceIds.where(
+                    (id) => !sourceIds.contains(id),
+                  ),
+                ]..sort()),
         ),
     };
   }
@@ -331,7 +412,10 @@ class SemanticPatchApplier {
   /// 保留切换的块角色同步：toPreserved 把消费块降为 unknown（保留
   /// 语义，不进排版流）并首次记 previousRole；逆操作恢复 previousRole
   ///（缺席则维持 unknown，不凭空造角色）。
-  static SemanticBlock _syncPreservedRole(SemanticBlock block, bool toPreserved) {
+  static SemanticBlock _syncPreservedRole(
+    SemanticBlock block,
+    bool toPreserved,
+  ) {
     if (toPreserved) {
       if (block.role == SemanticRole.unknown) return block;
       return _withExtras(
@@ -367,13 +451,15 @@ class SemanticPatchApplier {
 
   SemanticCorrectionPatch _inverse(
     SemanticDocument next,
-    SemanticCorrectionPatch patch,
-  ) {
+    SemanticCorrectionPatch patch, {
+    Map<String, Object?>? restoreComposition,
+  }) {
     final base = SemanticRevisionRef.of(next);
     return switch (patch) {
       SetSemanticRolePatch(:final blockId, :final fromRole, :final toRole) =>
         SetSemanticRolePatch(
           baseRevision: base,
+          restoreComposition: restoreComposition,
           blockId: blockId,
           fromRole: toRole,
           toRole: fromRole,
@@ -381,6 +467,7 @@ class SemanticPatchApplier {
       ReorderSemanticPatch(:final oldOrder, :final newOrder) =>
         ReorderSemanticPatch(
           baseRevision: base,
+          restoreComposition: restoreComposition,
           oldOrder: newOrder,
           newOrder: oldOrder,
         ),
@@ -391,6 +478,7 @@ class SemanticPatchApplier {
       ) =>
         SetSemanticRelationsPatch(
           baseRevision: base,
+          restoreComposition: restoreComposition,
           blockId: blockId,
           oldRelations: newRelations,
           newRelations: oldRelations,
@@ -398,6 +486,7 @@ class SemanticPatchApplier {
       PreserveSemanticSourcesPatch(:final sourceIds, :final toPreserved) =>
         PreserveSemanticSourcesPatch(
           baseRevision: base,
+          restoreComposition: restoreComposition,
           sourceIds: sourceIds,
           toPreserved: !toPreserved,
         ),
@@ -414,6 +503,7 @@ class SemanticPatchApplier {
     SemanticReadingOrder? readingOrder,
     List<String>? consumedSourceIds,
     List<String>? preservedSourceIds,
+    Map<String, Object?>? extras,
   }) => SemanticDocument(
     formatVersion: document.formatVersion,
     pageId: document.pageId,
@@ -426,7 +516,7 @@ class SemanticPatchApplier {
     consumedSourceIds: consumedSourceIds ?? document.consumedSourceIds,
     preservedSourceIds: preservedSourceIds ?? document.preservedSourceIds,
     readVersion: document.readVersion,
-    extras: document.extras,
+    extras: extras ?? document.extras,
   );
 }
 
@@ -461,6 +551,25 @@ class SemanticRerunScope {
         if (block.sourceIds.any(patch.sourceIds.contains)) {
           blocks.add(block.id);
         }
+      }
+    }
+    final composition = SemanticComposition.of(document);
+    if (composition != null) {
+      var changed = true;
+      while (changed) {
+        final count = blocks.length;
+        for (final g in composition.hints.mediaGroups) {
+          final ids = {...g.figureUnitIds, ...g.textUnitIds};
+          if (ids.any(blocks.contains)) blocks.addAll(ids);
+        }
+        for (final b in document.blocks) {
+          final target = b.extras['captionOf'];
+          if (target is String &&
+              (blocks.contains(b.id) || blocks.contains(target))) {
+            blocks.addAll([b.id, target]);
+          }
+        }
+        changed = blocks.length != count;
       }
     }
     for (final block in document.blocks) {
@@ -503,7 +612,16 @@ class SemanticRerunScope {
   static Set<String> _blocksOf(SemanticCorrectionPatch patch) =>
       switch (patch) {
         SetSemanticRolePatch(:final blockId) => {blockId},
-        SetSemanticRelationsPatch(:final blockId) => {blockId},
+        SetSemanticRelationsPatch(
+          :final blockId,
+          :final oldRelations,
+          :final newRelations,
+        ) =>
+          {
+            blockId,
+            ...oldRelations.map((r) => r.targetBlockId),
+            ...newRelations.map((r) => r.targetBlockId),
+          },
         ReorderSemanticPatch(:final newOrder) => newOrder.toSet(),
         PreserveSemanticSourcesPatch() => const {},
       };

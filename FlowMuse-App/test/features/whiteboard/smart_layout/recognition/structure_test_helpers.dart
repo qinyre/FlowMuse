@@ -1,5 +1,6 @@
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_models.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_budget.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/region_assets.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_ledger.dart';
@@ -32,6 +33,8 @@ RecognitionStructureInput structureInputOf(
     regionOutcomes: outcomes,
     remainingBudgetOf: () => const Duration(seconds: 60),
     sendStructureRequest: send ?? _failIfCalled,
+    // 这些辅助输入用于本地规则/适配测试；模型路径须显式传入 send。
+    budget: RecognitionBudget(modelCallBudget: send == null ? 0 : 16),
   );
 }
 
@@ -128,6 +131,7 @@ Future<StructureResult> recoverWithRegions(
           regionOutcomes: outcomes,
           remainingBudgetOf: () => const Duration(seconds: 60),
           sendStructureRequest: send ?? _failIfCalled,
+          budget: RecognitionBudget(modelCallBudget: send == null ? 0 : 16),
         ),
       )
       .then((value) => value as StructureResult);
@@ -145,6 +149,7 @@ Future<RecognitionStructureResponse?> _failIfCalled(
 Future<RecognitionSessionResult> sessionOf(
   List<RegionSpec> specs, {
   Scene? scene,
+  String? pageId,
   Map<String, RegionReadOutcome> customOutcomes = const {},
   Object? structureOverride,
 }) async {
@@ -167,6 +172,11 @@ Future<RecognitionSessionResult> sessionOf(
         seed: 7,
         versionNonce: 11,
         updated: 1000,
+        customData: pageId == null
+            ? null
+            : {
+                'flowMuse': {'pageId': pageId},
+              },
       ),
     );
     records.add(

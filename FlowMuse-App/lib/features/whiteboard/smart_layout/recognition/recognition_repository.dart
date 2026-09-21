@@ -2,8 +2,10 @@
 /// 剩余预算接线。内部仅调 [SmartLayoutHttpGateway.postJson]。
 library;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:async';
 import 'dart:convert';
+import 'recognition_budget.dart';
 
 import 'package:flow_muse/features/whiteboard/smart_layout/gateways/smart_layout_http_gateway.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_json_reader.dart';
@@ -16,7 +18,7 @@ enum RecognitionExceptionKind {
   /// 发送前自检失败（请求 schema 违规）——客户端 bug，不可重试。
   invalidRequest,
 
-  /// 网络传输失败（连接失败等）——可重试。
+  /// 网络传输失败：快速连接故障可重试，超时不重试。
   network,
 
   /// 服务端错误 envelope 携带的语义码（busy/providerError/
@@ -69,7 +71,7 @@ class RecognitionRepository {
   /// - 发送前自检：请求 JSON 经 fromJson 重新解析（客户端侧 400 双保险，
   ///   §3.6）；失败抛 [RecognitionException]（invalidRequest，不可重试）。
   /// - [remainingBudget]：本请求允许占用的剩余时间。readTimeout =
-  ///   min(45s, remaining)；到期由内部计时器**主动** [cancelToken.cancel]
+  ///   min(perRequestTimeout, remaining)；到期由内部计时器**主动** [cancelToken.cancel]
   ///   在途请求（不只靠轮询）。
   /// - 响应携带 [RecognitionResponse.fromJson] 的 expectedFor 上下文校验
   ///   （回填四元组 + 覆盖声明，R-12/R-04 双保险）。
@@ -78,6 +80,7 @@ class RecognitionRepository {
     String? bearerToken,
     SmartLayoutCancellationToken? cancelToken,
     required Duration remainingBudget,
+    Duration perRequestTimeout = RecognitionBudget.defaultPerRequestTimeout,
   }) async {
     // 1. 发送前自检（双保险的客户端一半）。
     final body = jsonEncode(request.toJson());
@@ -92,21 +95,24 @@ class RecognitionRepository {
       );
     }
 
-    if (remainingBudget <= Duration.zero) {
+    if (remainingBudget <= Duration.zero ||
+        perRequestTimeout <= Duration.zero) {
       throw const RecognitionException(
         RecognitionExceptionKind.budgetExhausted,
         retryable: false,
         detail: '剩余预算已耗尽',
       );
     }
-    final readTimeoutMs = remainingBudget.inMilliseconds < 45000
+    final readTimeoutMs = remainingBudget < perRequestTimeout
         ? remainingBudget.inMilliseconds
-        : 45000;
+        : perRequestTimeout.inMilliseconds;
 
     // 2. 总预算计时器：到期主动取消在途请求（服务端 ctx 取消兜底之外的
     //    客户端主动取消，spec §6.1）。
     final activeCancelToken = cancelToken ?? SmartLayoutCancellationToken();
     final watchdog = Timer(remainingBudget, activeCancelToken.cancel);
+    final clock = Stopwatch()..start();
+    var outcome = 'failed';
     try {
       final responseBody = await _gateway.postJson(
         path: endpointPath,
@@ -115,17 +121,31 @@ class RecognitionRepository {
         token: activeCancelToken,
         readTimeoutMs: readTimeoutMs,
       );
-      return _parseResponse(responseBody, request);
+      final response = _parseResponse(responseBody, request);
+      outcome = 'ok';
+      return response;
     } on SmartLayoutHttpCancelledException {
+      outcome = 'cancelled';
       throw const RecognitionException(
         RecognitionExceptionKind.cancelled,
         retryable: false,
         detail: '请求被取消',
       );
     } on SmartLayoutHttpException catch (error) {
-      throw _mapHttpException(error);
+      final mapped = _mapHttpException(
+        error,
+        requestTimedOut: clock.elapsedMilliseconds >= readTimeoutMs,
+      );
+      outcome = mapped.code ?? mapped.kind.name;
+      throw mapped;
     } finally {
       watchdog.cancel();
+      clock.stop();
+      debugPrint(
+        '[FlowMuseCreateNote][recognition-v3] stage=${request.stage.wireName} '
+        'request_chars=${body.length} timeout_ms=$readTimeoutMs '
+        'elapsed_ms=${clock.elapsedMilliseconds} outcome=$outcome',
+      );
     }
   }
 
@@ -157,12 +177,18 @@ class RecognitionRepository {
 
   /// §3.5 错误映射：badStatus 解析服务端 envelope
   /// {"error":{"code","message","retryable"}}；网络故障 → network
-  /// （retryable）；无法解析的错误体按状态码兜底。
-  RecognitionException _mapHttpException(SmartLayoutHttpException error) {
+  /// （超时不可重试）；无法解析的错误体按状态码兜底。
+  RecognitionException _mapHttpException(
+    SmartLayoutHttpException error, {
+    bool requestTimedOut = false,
+  }) {
     if (error.kind == SmartLayoutHttpErrorKind.network) {
+      // 原生平台可能只传回通用网络错误；已耗尽单次时限也不重做慢请求。
+      final timedOut = error.cause is TimeoutException || requestTimedOut;
       return RecognitionException(
         RecognitionExceptionKind.network,
-        retryable: true,
+        retryable: !timedOut,
+        code: timedOut ? 'requestTimeout' : null,
         detail: error.detail,
       );
     }
@@ -190,7 +216,9 @@ class RecognitionRepository {
     return RecognitionException(
       RecognitionExceptionKind.serverCode,
       retryable: retryable,
-      code: status >= 500
+      code: status == 504
+          ? RecognitionExceptionCode.providerTimeout.wireName
+          : status >= 500
           ? RecognitionExceptionCode.providerError.wireName
           : null,
       detail:

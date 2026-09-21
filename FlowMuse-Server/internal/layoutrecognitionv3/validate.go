@@ -71,7 +71,7 @@ func ValidateRequest(req *RecognitionRequest, limits Limits) *WireError {
 
 func validateRegionBatch(req *RecognitionRequest, limits Limits) *WireError {
 	// stage 字段隔离：read/verify 禁止携带结构字段。
-	if len(req.Units) > 0 || req.OverviewPngBase64 != "" || req.TextFingerprint != "" {
+	if len(req.Units) > 0 || req.OverviewPngBase64 != "" || req.TextFingerprint != "" || req.IncludeFigureTextLinks || req.IncludeCompositionHints {
 		return wireErr(CodeInvalidSchema, "read/verify 请求禁止携带结构字段（units/overviewPngBase64/textFingerprint）")
 	}
 	if len(req.Regions) == 0 {
@@ -133,6 +133,12 @@ func validateRegionBatch(req *RecognitionRequest, limits Limits) *WireError {
 }
 
 func validateStructureRequest(req *RecognitionRequest, limits Limits) *WireError {
+	if req.IncludeFigureTextLinks && req.IncludeCompositionHints {
+		return wireErr(CodeInvalidSchema, "composition 与旧图文关联能力互斥")
+	}
+	if req.IncludeFigureTextLinks && req.OverviewPngBase64 == "" {
+		return wireErr(CodeInvalidSchema, "图文关联需要概览图")
+	}
 	if len(req.Regions) > 0 {
 		return wireErr(CodeInvalidSchema, "structure 请求禁止携带 regions 字段")
 	}
@@ -509,6 +515,31 @@ func SanitizeStructureResult(units []UnitInput, result *ModelStructureResult) (*
 		})
 	}
 
+	links := make([]FigureTextLink, 0, len(result.FigureTextLinks))
+	kinds := map[string]string{}
+	roleByID := map[string]string{}
+	captionIDs := map[string]bool{}
+	for _, unit := range units {
+		kinds[unit.UnitID] = unit.Kind
+	}
+	for _, role := range roles {
+		roleByID[role.UnitID] = role.Role
+	}
+	for _, caption := range captions {
+		captionIDs[caption.CaptionUnitID] = true
+	}
+	seenLinks := map[string]bool{}
+	for _, link := range result.FigureTextLinks {
+		role := roleByID[link.TextUnitID]
+		if !textUnitIDs[link.TextUnitID] || kinds[link.FigureUnitID] != "figure" ||
+			(role != "body" && role != "listItem") || captionIDs[link.TextUnitID] ||
+			seenLinks[link.TextUnitID] || link.Confidence == nil || link.Text != nil ||
+			!(*link.Confidence >= 0 && *link.Confidence <= 1) {
+			return nil, wireErr(CodeInvalidProviderResp, "图文关系端点、角色、唯一性或置信度无效")
+		}
+		seenLinks[link.TextUnitID] = true
+		links = append(links, link.FigureTextLink)
+	}
 	if len(result.Warnings) > 8 {
 		return nil, wireErr(CodeInvalidProviderResp, "warnings 超过 8 条")
 	}
@@ -568,11 +599,12 @@ func SanitizeStructureResult(units []UnitInput, result *ModelStructureResult) (*
 	}
 
 	response := &RecognitionResponse{
-		ReadingOrder: append([]string(nil), result.ReadingOrder...),
-		Roles:        roles,
-		ListGroups:   groups,
-		Captions:     captions,
-		Warnings:     append([]string(nil), result.Warnings...),
+		ReadingOrder:    append([]string(nil), result.ReadingOrder...),
+		Roles:           roles,
+		ListGroups:      groups,
+		Captions:        captions,
+		FigureTextLinks: links,
+		Warnings:        append([]string(nil), result.Warnings...),
 	}
 	return response, nil
 }

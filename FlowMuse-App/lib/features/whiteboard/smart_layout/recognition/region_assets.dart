@@ -365,6 +365,13 @@ class RegionAssetBuilder {
         budget.pencilLightnessThreshold,
       );
       final image = snapshot.image;
+      if (!await _hasVisibleInk(image)) {
+        return RegionAssetFailed(
+          record.regionId,
+          RegionAssetFailureReason.renderError,
+          '渲染结果无可见像素（疑似零长度笔画）',
+        );
+      }
       Uint8List png;
       if (needsEnhancement) {
         enhanced = await _enhanceOnce(image);
@@ -420,6 +427,22 @@ class RegionAssetBuilder {
       byteData.offsetInBytes,
       byteData.lengthInBytes,
     );
+  }
+
+  /// 空图守卫：渲染结果不含任何 alpha>0 像素（典型为落笔即抬的零长度
+  /// 笔画）时该区域不进识别请求——全透明大图会让上游视觉 API 无限挂起
+  /// （2026-09-18 真机事故：831×831 空图致 provider 120s 超时、整次
+  /// 分析空候选）。像素读不出时保守放行，不因守卫本身误伤区域。
+  static Future<bool> _hasVisibleInk(ui.Image image) async {
+    final raw = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (raw == null) {
+      return true;
+    }
+    final pixels = raw.buffer.asUint8List(raw.offsetInBytes, raw.lengthInBytes);
+    for (var i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] != 0) return true;
+    }
+    return false;
   }
 
   /// 一次固定参数对比度增强（gamma=2.2，仅暗化中间调、纯白背景不变）；

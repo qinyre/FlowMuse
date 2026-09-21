@@ -151,12 +151,13 @@ void main() {
     );
   });
 
-  test('低置信不触发结构请求（复核触发表与结构触发表分离）', () async {
+  test('多段正文也触发整页理解，失败仍保留本地正文角色', () async {
     final result = await recoverWithRegions(const [
       RegionSpec(regionId: 'r:a', top: 100, left: 0, text: '普通正文'),
       RegionSpec(regionId: 'r:b', top: 130, left: 0, text: '另一段正文'),
-    ], send: (request) async => throw StateError('不应触发'));
-    expect(result.usedModel, isFalse);
+    ], send: (request) async => null);
+    expect(result.usedModel, isTrue);
+    expect(result.roles.values, everyElement('body'));
   });
 
   test('模型结果被拒（send 返回 null）：回退本地保守结构并记警告', () async {
@@ -223,9 +224,8 @@ void main() {
         );
       },
     );
-    // 但本地三段正文无歧义 → 不触发结构请求 → 此用例的 send 不该被调？
-    // 标题场景不触发；改由上面的歧义场景覆盖合并——此处断言不触发路径。
-    expect(result.usedModel, isFalse);
+    expect(result.usedModel, isTrue);
+    expect(result.conflictedUnitIds, contains('ink:r:t'));
     expect(result.roles['ink:r:t'], 'title');
   });
 

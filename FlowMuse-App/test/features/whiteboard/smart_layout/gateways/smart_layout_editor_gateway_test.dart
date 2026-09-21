@@ -135,4 +135,69 @@ void main() {
       isNot(contains('late')),
     );
   });
+
+  for (final tool in [ToolType.freedraw, ToolType.text, ToolType.select]) {
+    test('V3 应用保持预览样式并支持撤销重做：${tool.name}', () {
+      final controller = buildController();
+      controller.switchTool(tool);
+      controller.applyStyleChange(
+        const ElementStyle(
+          strokeColor: '#ff0000',
+          fontSize: 64,
+          fontFamily: 'Excalifont',
+        ),
+      );
+      final text = TextElement(
+        id: ElementId('composed-text'),
+        x: 48,
+        y: 80,
+        width: 240,
+        height: 64,
+        text: '排版后的文字',
+        fontSize: 24,
+        fontFamily: 'Helvetica',
+        lineHeight: 1.35,
+        strokeColor: '#222222',
+        autoResize: false,
+      );
+      final picture = ImageElement(
+        id: ElementId('composed-image'),
+        x: 320,
+        y: 80,
+        width: 120,
+        height: 90,
+        fileId: 'image-file',
+        crop: const ImageCrop(x: 0.1, y: 0.2, width: 0.7, height: 0.6),
+      );
+      void expectPreviewAttributes() {
+        final actual = controller.currentScene.activeElements;
+        final applied = actual.whereType<TextElement>().single;
+        expect(applied.text, text.text);
+        expect(applied.fontSize, text.fontSize);
+        expect(applied.fontFamily, text.fontFamily);
+        expect(applied.lineHeight, text.lineHeight);
+        expect(applied.strokeColor, text.strokeColor);
+        expect(
+          [applied.x, applied.y, applied.width, applied.height],
+          [text.x, text.y, text.width, text.height],
+        );
+        final image = actual.whereType<ImageElement>().single;
+        expect(image.crop, picture.crop);
+        expect(image.fileId, picture.fileId);
+        expect(
+          [image.x, image.y, image.width, image.height],
+          [picture.x, picture.y, picture.width, picture.height],
+        );
+      }
+
+      SmartLayoutEditorGateway(controller).commitValidated(
+        CompoundResult([AddElementResult(text), AddElementResult(picture)]),
+      );
+      expectPreviewAttributes();
+      controller.undo();
+      expect(controller.currentScene.activeElements, isEmpty);
+      controller.redo();
+      expectPreviewAttributes();
+    });
+  }
 }

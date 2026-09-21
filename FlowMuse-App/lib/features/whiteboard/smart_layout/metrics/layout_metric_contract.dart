@@ -16,6 +16,8 @@ enum LayoutMetricId {
   modificationCost,
 }
 
+enum LayoutMetricState { evaluated, notApplicable, unavailable }
+
 /// 单指标冻结定义（v1）。
 class LayoutMetricDefinition {
   const LayoutMetricDefinition({
@@ -126,11 +128,18 @@ class LayoutMetricContract {
 /// 软指标向量（仅经 LayoutMetricCalculator 在硬通过后产生；
 /// [factsFingerprint] 钉住来源几何，供审计与反投机交叉核对）。
 class LayoutMetricVector {
-  LayoutMetricVector({required this.values, required this.factsFingerprint}) {
+  LayoutMetricVector({
+    required this.values,
+    required this.factsFingerprint,
+    this.states = const {},
+  }) {
     LayoutMetricContract.validateVector(values);
   }
 
   final Map<LayoutMetricId, double> values;
+  final Map<LayoutMetricId, LayoutMetricState> states;
+  LayoutMetricState stateOf(LayoutMetricId id) =>
+      states[id] ?? LayoutMetricState.evaluated;
 
   /// 输入事实的 canonical 指纹（fingerprint64；双跑一致）。
   final String factsFingerprint;

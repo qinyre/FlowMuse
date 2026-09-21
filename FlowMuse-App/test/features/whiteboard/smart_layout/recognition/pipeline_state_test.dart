@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recogniti
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recognition_repository.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_ledger.dart';
+import 'package:flow_muse/features/whiteboard/smart_layout/recognition/structure_recovery.dart';
 
 import 'fake_recognition_transport.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/region_assets.dart';
@@ -70,6 +72,7 @@ void main() {
     );
     expect(transport.requests, isEmpty);
     expect(result.assetIndex.assetCount, 0);
+    expect(result.failure?.code, 'operationTimeout');
     expect(result.ledger.preservedCount, 2);
     expect(
       result.ledger.entryOf('s1').reason,
@@ -275,6 +278,7 @@ void main() {
 
     expect(result.partial, isTrue);
     expect(result.ledger.preservedCount, 1);
+    expect(result.failure, isNull, reason: '区域漏答不是网络故障');
     expect(
       result.ledger.projection.preservedReasons['s1'],
       SourcePreserveReason.missingResponse,
@@ -319,6 +323,7 @@ void main() {
     expect(transport.requests, hasLength(2), reason: '初次 + 重试一次');
     expect(result.regionOutcomes.length, 2);
     expect(result.ledger.preservedCount, 0);
+    expect(result.failure, isNull, reason: '自动重试成功不挂过期故障');
 
     var alwaysFail = 0;
     final failingTransport = FakeRecognitionTransport(
@@ -330,10 +335,94 @@ void main() {
     final failingPipeline = pipelineOf(failingTransport);
     final failedResult = await failingPipeline.run(captureOf(twoRegionScene()));
     expect(alwaysFail, 2, reason: '初次 + 至多一次重试，之后放弃');
+    expect(failedResult.failure?.code, 'providerError');
+    expect(failedResult.failure?.detail, '上游 5xx');
+    expect(failedResult.copyWith().failure, same(failedResult.failure));
     expect(failedResult.ledger.preservedCount, 2);
     expect(failedResult.ledger.projection.preservedReasons.values.toSet(), {
       SourcePreserveReason.missingResponse,
     });
+  });
+
+  for (final stage in ['read', 'verify', 'structure']) {
+    test('$stage 超时不重试，三个阶段使用同一注入超时预算', () async {
+      final transport = FakeRecognitionTransport(
+        responder: (body) async {
+          final req = jsonDecode(body) as Map<String, Object?>;
+          if (req['stage'] == stage) {
+            return (504, errorEnvelopeJson('providerTimeout', '超时', true));
+          }
+          return buildBatchResponseBody(
+            req,
+            confidence: stage == 'verify' ? 0.2 : 0.95,
+            textOf: (_) => '图1',
+          );
+        },
+      );
+      final pipeline = RecognitionPipeline(
+        repository: RecognitionRepository(
+          gateway: SmartLayoutHttpGateway(
+            serverUri: Uri.parse('https://server.test'),
+            post: transport.post,
+          ),
+        ),
+        structureRecoverer: stage == 'structure'
+            ? const StructureRecovery()
+            : null,
+      );
+      final result = await pipeline.run(
+        captureOf(twoRegionScene()),
+        budget: const RecognitionBudget(
+          perRequestTimeout: Duration(seconds: 75),
+        ),
+      );
+      expect(transport.decodedBodies(stage), hasLength(1));
+      expect(result.failure?.code, 'providerTimeout');
+      expect(transport.requests.every((r) => r.readTimeoutMs == 75000), isTrue);
+      if (stage == 'structure') {
+        expect(
+          (result.structureResult as StructureResult).modelRejected,
+          isTrue,
+        );
+      } else {
+        expect(result.ledger.preservedCount, 2, reason: '失败仍保留所有原笔迹');
+      }
+    });
+  }
+
+  test('客户端 TimeoutException 不重复派发模型', () async {
+    final transport = FakeRecognitionTransport(
+      errorFactory: (_) async => TimeoutException('read timeout'),
+    );
+    final result = await pipelineOf(transport).run(captureOf(twoRegionScene()));
+    expect(transport.requests, hasLength(1));
+    expect(result.failure?.code, 'requestTimeout');
+    expect(result.ledger.preservedCount, 2);
+  });
+
+  test('无 envelope 的 504 也不重试', () async {
+    final transport = FakeRecognitionTransport(
+      responder: (_) async => (504, 'Gateway Timeout'),
+    );
+    final result = await pipelineOf(transport).run(captureOf(twoRegionScene()));
+    expect(transport.requests, hasLength(1));
+    expect(result.ledger.preservedCount, 2);
+  });
+
+  test('剩余总预算不足单次时限：快速错误也不启动注定截断的重试', () async {
+    final transport = FakeRecognitionTransport(
+      errorFactory: (_) async => Exception('connection refused'),
+    );
+    final result = await pipelineOf(transport).run(
+      captureOf(twoRegionScene()),
+      budget: const RecognitionBudget(
+        totalTimeout: Duration(seconds: 5),
+        perRequestTimeout: Duration(seconds: 10),
+      ),
+    );
+    expect(transport.requests, hasLength(1));
+    expect(result.failure?.kind, RecognitionExceptionKind.network);
+    expect(result.ledger.preservedCount, 2);
   });
 
   test('解析失败类不重试：invalidProviderResponse 单次调用', () async {

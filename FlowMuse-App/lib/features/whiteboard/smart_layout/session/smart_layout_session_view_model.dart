@@ -9,7 +9,11 @@ import '../commit/validated_candidate_commit_gateway.dart';
 import '../correction/correction_patch_applier.dart' show AffectedSourceSet;
 import '../snapshot/source_coverage_ledger.dart';
 import '../metrics/layout_profile.dart';
+import '../metrics/composition_scene_metrics.dart';
 import '../protocol/smart_layout_v3_request.dart';
+import '../recognition/source_ledger.dart';
+import '../recognition/recognition_repository.dart';
+import '../semantics/semantic_document.dart';
 import '../validation/correction_rerun_coordinator.dart';
 import '../validation/validated_candidate.dart';
 import 'smart_layout_operation_guard.dart';
@@ -59,6 +63,27 @@ class ValidatedCandidateCard {
   ui.Image get thumbnail => candidate.snapshot.image;
 }
 
+/// 本轮捕获的原稿与语义事实；不是实时画布，切换候选不能改变它。
+class SmartLayoutReviewContext {
+  const SmartLayoutReviewContext({
+    required this.originalScene,
+    required this.pageBounds,
+    required this.document,
+    required this.preserveReasons,
+    this.recognitionFailure,
+    this.excludedScopeReasons = const {},
+    this.recommendation,
+  });
+
+  final Scene originalScene;
+  final Bounds pageBounds;
+  final SemanticDocument document;
+  final Map<String, SourcePreserveReason> preserveReasons;
+  final RecognitionException? recognitionFailure;
+  final Map<String, String> excludedScopeReasons;
+  final CompositionRecommendation? recommendation;
+}
+
 /// 会话失败的稳定描述：阶段 + 原因 + 是否可重试 + 第几次尝试。
 class SmartLayoutSessionFailure {
   const SmartLayoutSessionFailure({
@@ -66,6 +91,7 @@ class SmartLayoutSessionFailure {
     required this.reason,
     required this.retryable,
     required this.attempt,
+    this.detail = '',
   });
 
   /// analysis | apply。
@@ -73,6 +99,7 @@ class SmartLayoutSessionFailure {
   final String reason;
   final bool retryable;
   final int attempt;
+  final String detail;
 
   @override
   String toString() =>
@@ -96,6 +123,9 @@ class SmartLayoutSessionUiState {
     required this.attemptCount,
     required this.activeTicket,
     required this.lastAnalysisResponse,
+    this.reviewContext,
+    this.isCorrecting = false,
+    this.correctionError,
   });
 
   const SmartLayoutSessionUiState.initial()
@@ -131,6 +161,9 @@ class SmartLayoutSessionUiState {
 
   /// 最近一次成功分析的响应（生成链输入；V3-504B/505B 消费）。
   final SmartLayoutV3Response? lastAnalysisResponse;
+  final SmartLayoutReviewContext? reviewContext;
+  final bool isCorrecting;
+  final String? correctionError;
 
   SmartLayoutSessionPhase get phase => sessionState.phase;
 
@@ -149,7 +182,9 @@ class SmartLayoutSessionUiState {
       phase == SmartLayoutSessionPhase.applying;
 
   bool get canChooseCandidate =>
-      phase == SmartLayoutSessionPhase.reviewing && candidates.isNotEmpty;
+      phase == SmartLayoutSessionPhase.reviewing &&
+      !isCorrecting &&
+      candidates.isNotEmpty;
 
   /// 当前选中卡绑定的验证候选（无验证卡路径为 null）。
   ValidatedCandidate? get selectedValidatedCandidate {
@@ -171,7 +206,9 @@ class SmartLayoutSessionUiState {
   }
 
   bool get canApply =>
-      phase == SmartLayoutSessionPhase.reviewing && selectedCandidateId != null;
+      phase == SmartLayoutSessionPhase.reviewing &&
+      !isCorrecting &&
+      selectedCandidateId != null;
 
   bool get canRetry => failure != null && failure!.retryable;
 
@@ -191,6 +228,9 @@ class SmartLayoutSessionUiState {
     int? attemptCount,
     Object? activeTicket = _sentinel,
     Object? lastAnalysisResponse = _sentinel,
+    Object? reviewContext = _sentinel,
+    bool? isCorrecting,
+    Object? correctionError = _sentinel,
   }) {
     return SmartLayoutSessionUiState(
       sessionState: sessionState ?? this.sessionState,
@@ -213,6 +253,13 @@ class SmartLayoutSessionUiState {
       lastAnalysisResponse: identical(lastAnalysisResponse, _sentinel)
           ? this.lastAnalysisResponse
           : lastAnalysisResponse as SmartLayoutV3Response?,
+      reviewContext: identical(reviewContext, _sentinel)
+          ? this.reviewContext
+          : reviewContext as SmartLayoutReviewContext?,
+      isCorrecting: isCorrecting ?? this.isCorrecting,
+      correctionError: identical(correctionError, _sentinel)
+          ? this.correctionError
+          : correctionError as String?,
     );
   }
 
@@ -310,6 +357,7 @@ class SmartLayoutSessionDependencies {
   final ValidatedCandidateCommitGateway? commitGateway;
 
   final String? bearerToken;
+  final SmartLayoutReviewContext? Function()? reviewContextBuilder;
 
   const SmartLayoutSessionDependencies({
     required this.session,
@@ -325,6 +373,7 @@ class SmartLayoutSessionDependencies {
     this.currentRecognitionGeneration,
     this.commitGateway,
     this.bearerToken,
+    this.reviewContextBuilder,
   });
 
   static AffectedSourceSet _emptyCorrection(RegionCorrectionIntent intent) =>
@@ -389,9 +438,11 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
 
   @override
   SmartLayoutSessionUiState build() {
+    final dependencies = _deps;
     // 离页防线（V3-505C）：provider 作用域销毁（页面离开/重建）时
     // 释放已绑定候选的渲染资源——候选图片归候选所有，不得悬挂泄漏。
     ref.onDispose(() {
+      dependencies.onCancelAnalysis?.call();
       for (final candidate in _ownedCandidates) {
         candidate.dispose();
       }
@@ -449,6 +500,9 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
       failure: null,
       lastAnalysisResponse: null,
       attemptCount: attempt,
+      reviewContext: null,
+      isCorrecting: false,
+      correctionError: null,
     );
     await _runAnalysis(ticket, attempt);
   }
@@ -472,13 +526,20 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
           bearerToken: _deps.bearerToken,
         );
       }
-    } on StateError {
-      // 编辑器/追踪器已释放等同守卫路径：按失败收敛。
-      _recordAnalysisFailure('analysis', 'disposed', false, attempt, ticket);
+    } on StateError catch (error) {
+      // 保留实际错误；StateError 也可能来自捕获/装配，不能全归为已释放。
+      _recordAnalysisFailure(
+        'analysis',
+        'analysis-error',
+        false,
+        attempt,
+        ticket,
+        detail: error.message,
+      );
       return;
     }
     // 迟到判旧：票据不再是当次操作（取消/复位/新操作已接管）。
-    if (!identical(state.activeTicket, ticket)) return;
+    if (!ref.mounted || !identical(state.activeTicket, ticket)) return;
     switch (outcome) {
       case SmartLayoutRecognitionSucceeded():
         // V3 独立识别（R7）：产物直接进入文档级候选链（无 response）。
@@ -499,7 +560,7 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
           );
           return;
         }
-        if (!identical(state.activeTicket, ticket)) {
+        if (!ref.mounted || !identical(state.activeTicket, ticket)) {
           // 迟到判旧：候选从未发布，立即释放其渲染资源（零泄漏）。
           for (final candidate in candidates) {
             candidate.dispose();
@@ -536,7 +597,7 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
           );
           return;
         }
-        if (!identical(state.activeTicket, ticket)) {
+        if (!ref.mounted || !identical(state.activeTicket, ticket)) {
           // 迟到判旧：候选从未发布，立即释放其渲染资源（零泄漏）。
           for (final candidate in candidates) {
             candidate.dispose();
@@ -593,7 +654,7 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
     SmartLayoutOperationTicket ticket, {
     String detail = '',
   }) {
-    if (!identical(state.activeTicket, ticket)) return;
+    if (!ref.mounted || !identical(state.activeTicket, ticket)) return;
     // 用户已取消：会话处于 cancelled，迟到失败不升级为 failure 态。
     if (_session.state.phase == SmartLayoutSessionPhase.cancelled) {
       _clearDraft();
@@ -614,6 +675,7 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
         reason: reason,
         retryable: retryable,
         attempt: attempt,
+        detail: detail,
       ),
     );
   }
@@ -659,7 +721,15 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
         ValidatedCandidateCard(
           candidate: candidate,
           rank: i + 1,
-          structureLabel: candidate.diversityKey,
+          structureLabel: switch (candidate.diversityKey) {
+            'single' => '单栏阅读',
+            'mediaSide' => '图文并排',
+            'peerGrid' => '同级图文并列',
+            'twoColumn' => '双栏阅读',
+            'mainSide' => '图文侧栏',
+            'conservativeLayout' => '保守重排',
+            _ => candidate.diversityKey,
+          },
           structureDiffLabel: i == 0
               ? '基准结构'
               : (candidate.diversityKey == candidates.first.diversityKey
@@ -668,7 +738,11 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
         ),
       );
     }
+    for (final old in _ownedCandidates) {
+      if (!candidates.contains(old)) old.dispose();
+    }
     _ownedCandidates = List.unmodifiable(candidates);
+    final context = _deps.reviewContextBuilder?.call();
     state = state.copyWith(
       sessionState: _session.state,
       candidates: [
@@ -679,7 +753,12 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
           ),
       ],
       validatedCards: cards,
-      selectedCandidateId: cards.isEmpty ? null : cards.first.candidateId,
+      selectedCandidateId:
+          cards.isEmpty || context?.recommendation?.recommended == false
+          ? null
+          : cards.first.candidateId,
+      reviewContext: context,
+      isCorrecting: false,
     );
   }
 
@@ -694,23 +773,30 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
   /// 旧代产物（即使空数组）不得清空较新代候选。
   Future<void> applyRegionCorrection(RegionCorrectionIntent intent) async {
     if (state.phase != SmartLayoutSessionPhase.reviewing) return;
-    if (_correctionInFlight) return;
+    if (state.isCorrecting) return;
     AffectedSourceSet affected;
     try {
       affected = _deps.correctionHandler(intent);
-    } on SmartLayoutCorrectionRejected {
+    } on SmartLayoutCorrectionRejected catch (error) {
       // 被拒的 patch：不发布新上下文、不重跑（§9.3a），既有候选原样
       // 保留在 review。
+      state = state.copyWith(correctionError: error.reason);
       return;
     }
-    _correctionInFlight = true;
+    final capturedGeneration = _deps.currentRecognitionGeneration?.call();
+    final capturedTicket = state.activeTicket;
+    final previous = [for (final card in state.validatedCards) card.candidate];
+    // 先从 UI 撤下旧图片，再交给协调器释放；重跑期间无可应用的旧候选。
+    _ownedCandidates = const [];
+    state = state.copyWith(
+      isCorrecting: true,
+      correctionError: null,
+      candidates: const [],
+      validatedCards: const [],
+      selectedCandidateId: null,
+    );
     try {
       // §9.8 捕获：纠错已受理（代次 +1）后的当前代次。
-      final capturedGeneration = _deps.currentRecognitionGeneration?.call();
-      final capturedTicket = state.activeTicket;
-      final previous = [
-        for (final card in state.validatedCards) card.candidate,
-      ];
       final coordinator = CorrectionRerunCoordinator(chain: _deps.rerunChain);
       // 旧候选由 coordinator 释放（渲染资源归零）；随后立即发布新候选，
       // 重跑无产出时进入空卡 reviewing（无解如实呈现，不复活已释放候选）。
@@ -718,6 +804,12 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
         previousCandidates: previous,
         affected: affected,
       );
+      if (!ref.mounted) {
+        for (final candidate in rerun.newCandidates) {
+          candidate.dispose();
+        }
+        return;
+      }
       final currentGeneration = _deps.currentRecognitionGeneration;
       if (!identical(state.activeTicket, capturedTicket) ||
           state.phase != SmartLayoutSessionPhase.reviewing ||
@@ -731,19 +823,33 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
         return;
       }
       completeGenerationFromValidated(rerun.newCandidates);
+    } on StateError {
+      if (ref.mounted && identical(state.activeTicket, capturedTicket)) {
+        state = state.copyWith(correctionError: 'rerun-failed');
+      }
     } finally {
-      _correctionInFlight = false;
+      if (ref.mounted &&
+          identical(state.activeTicket, capturedTicket) &&
+          (capturedGeneration == null ||
+              _deps.currentRecognitionGeneration?.call() ==
+                  capturedGeneration)) {
+        state = state.copyWith(isCorrecting: false);
+      }
     }
   }
-
-  /// 纠错重跑在途标记（reviewing 相位不变；重复纠错入口 no-op）。
-  bool _correctionInFlight = false;
 
   /// 选择候选（review 阶段）。非法相位或未知 id 为 no-op。
   void chooseCandidate(String candidateId) {
     if (!state.canChooseCandidate) return;
     if (!state.candidates.any((c) => c.candidateId == candidateId)) return;
     state = state.copyWith(selectedCandidateId: candidateId);
+  }
+
+  void keepOriginal() {
+    if (state.phase == SmartLayoutSessionPhase.reviewing &&
+        !state.isCorrecting) {
+      state = state.copyWith(selectedCandidateId: null);
+    }
   }
 
   /// 提交所选候选：经会话唯一入口四检后 commit。合法相位 reviewing
@@ -755,7 +861,7 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
   /// 事务内一次完成）；否则回落 [SmartLayoutSessionDependencies.
   /// commitResultBuilder] 构建负载的 505A 路径。
   Future<void> applySelectedCandidate() async {
-    if (!state.canApply || _correctionInFlight) return;
+    if (!state.canApply) return;
     final ticket = state.activeTicket;
     if (ticket == null) return;
     final candidateId = state.selectedCandidateId!;
@@ -837,6 +943,9 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
       candidates: const [],
       selectedCandidateId: null,
       lastAnalysisResponse: null,
+      reviewContext: null,
+      isCorrecting: false,
+      correctionError: null,
     );
   }
 
@@ -865,15 +974,21 @@ class SmartLayoutSessionViewModel extends Notifier<SmartLayoutSessionUiState> {
       activeTicket: null,
       lastAnalysisResponse: null,
       attemptCount: 0,
+      reviewContext: null,
+      isCorrecting: false,
+      correctionError: null,
     );
   }
 
-  /// 无解重分析（V3-505C）：reviewing 无候选时以同 scope 重新走完整
+  /// 显式重新分析：reviewing 或失败终态以同 scope 重新走完整
   /// 分析（cancel→reset→startAnalysis 既有迁移的组合，不新增迁移）。
   void restartAnalysis() {
-    if (state.phase != SmartLayoutSessionPhase.reviewing) return;
-    if (state.candidates.isNotEmpty) return;
-    cancel(reason: 'restart-analysis');
+    if (state.isBusy || state.isCorrecting) return;
+    if (state.phase == SmartLayoutSessionPhase.reviewing) {
+      cancel(reason: 'restart-analysis');
+    } else if (!state.canReset) {
+      return;
+    }
     reset();
     startAnalysis();
   }

@@ -1,6 +1,7 @@
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import 'layout_page_snapshot.dart';
+import 'resolved_page_scope.dart';
 import 'scene_revision.dart';
 import 'source_coverage_ledger.dart';
 
@@ -18,9 +19,18 @@ class SnapshotExtractor {
     required Scene scene,
     required String pageId,
     required SceneRevision sceneRevision,
+    ResolvedPageScope? scope,
   }) {
+    if (scope != null && scope.pageId != pageId) {
+      throw StateError('snapshot-scope-page-mismatch');
+    }
     final active = scene.orderedElements
-        .where((e) => !e.isDeleted && e.pageId == pageId)
+        .where(
+          (e) =>
+              !e.isDeleted &&
+              (scope?.includedSourceIds.contains(e.id.value) ??
+                  e.pageId == pageId),
+        )
         .toList();
     final zIndexById = <String, int>{
       for (var i = 0; i < active.length; i++) active[i].id.value: i,
@@ -68,7 +78,11 @@ class SnapshotExtractor {
         bounds: SnapshotBounds.ofElement(element),
         visualBounds: visualBounds,
         rotation: element.angle,
-        mobility: _mobilityOf(element),
+        mobility: element.isCanvasPage || element.isPdfBackground
+            ? SnapshotMobility.background
+            : scope?.protectedSourceIds.contains(sourceId) == true
+            ? SnapshotMobility.protectedObstacle
+            : _mobilityOf(element),
         groupIds: List.unmodifiable(element.groupIds),
         frameId: element.frameId,
         bindingRefs: List.unmodifiable(bindingRefs),

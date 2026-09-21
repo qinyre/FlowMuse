@@ -37,7 +37,8 @@ class FlowPlacementFailure {
   final String detail;
 
   @override
-  String toString() => '${kind.name}($blockId${detail.isEmpty ? '' : ': $detail'})';
+  String toString() =>
+      '${kind.name}($blockId${detail.isEmpty ? '' : ': $detail'})';
 }
 
 /// 放置游标（V3-402A）：栏序 + 栏内 y 位置；顺序填充语义
@@ -157,7 +158,7 @@ class FlowPlacer {
               detail: 'figure block missing spec',
             );
           }
-          final columnWidth = cursor.currentColumn.width;
+          final columnWidth = figure.widthInColumn(cursor.currentColumn.width);
           final ratio = figure.displayAspectRatio > 0
               ? figure.displayAspectRatio
               : 1.0;
@@ -225,20 +226,23 @@ class FlowPlacer {
       for (var i = 0; i < measured.length; i++) {
         final (block, result, fontSize) = measured[i];
         final column = cursor.currentColumn;
-        placed.add(PlacedBlock(
-          blockId: block.id,
-          rect: LayoutRect(
-            left: column.left,
-            top: column.top + cursor.y,
-            width: result.width.clamp(0, column.width),
-            height: result.height,
+        placed.add(
+          PlacedBlock(
+            blockId: block.id,
+            rect: LayoutRect(
+              left: column.left,
+              top: column.top + cursor.y,
+              width: result.width.clamp(0, column.width),
+              height: result.height,
+            ),
+            columnIndex: cursor.columnIndex,
+            lineCount: result.lineCount,
+            appliedFontSize: fontSize,
+            shrunk:
+                block.text != null &&
+                fontSize != _baseFontSizeOf(block, tokens),
           ),
-          columnIndex: cursor.columnIndex,
-          lineCount: result.lineCount,
-          appliedFontSize: fontSize,
-          shrunk: block.text != null &&
-              fontSize != _baseFontSizeOf(block, tokens),
-        ));
+        );
         cursor.advance(result.height);
         if (i + 1 < measured.length) {
           cursor.advance(tokens.compactGapFloor);
@@ -341,8 +345,8 @@ class FlowPlacer {
 
   double _baseFontSizeOf(LayoutBlock block, SmartLayoutDesignTokens tokens) =>
       block.kind == LayoutBlockKind.title
-          ? tokens.titleFloorSize
-          : tokens.bodySize;
+      ? tokens.titleFloorSize
+      : tokens.bodySize;
 
   static const double _eps = 1e-9;
 }

@@ -1,6 +1,8 @@
 import 'dart:convert' show jsonDecode;
+import 'dart:ui' show TextDirection;
 
-import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, ValueNotifier, debugPrint;
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import '../analysis/analysis_retry_policy.dart';
@@ -9,6 +11,7 @@ import '../commit/validated_candidate_commit_gateway.dart';
 import '../composition/layout_block.dart';
 import '../composition/layout_block_assembler.dart';
 import '../composition/layout_composition_planner.dart';
+import '../composition/semantic_composer.dart';
 import '../correction/correction_patch_applier.dart';
 import '../correction/region_correction_patch.dart';
 import '../segmentation/ink_region_segmenter.dart';
@@ -21,6 +24,7 @@ import '../gateways/smart_layout_editor_gateway.dart';
 import '../gateways/smart_layout_http_gateway.dart';
 import '../geometry/layout_rect.dart';
 import '../metrics/anti_gaming_veto.dart';
+import '../metrics/composition_scene_metrics.dart';
 import '../metrics/layout_metric_contract.dart';
 import '../metrics/layout_profile.dart';
 import '../patch/candidate_patch_materializer.dart';
@@ -36,12 +40,15 @@ import '../recognition/semantic_adapter.dart';
 import '../recognition/source_ledger.dart';
 import '../recognition/structure_recovery.dart';
 import '../semantics/semantic_document.dart';
+import '../semantics/semantic_composition.dart';
 import '../semantics/semantic_document_assembler.dart';
 import '../snapshot/layout_page_snapshot.dart';
 import '../snapshot/scene_revision.dart';
 import '../snapshot/snapshot_extractor.dart';
+import '../snapshot/resolved_page_scope.dart';
 import '../snapshot/source_coverage_ledger.dart';
 import '../validation/validated_candidate.dart';
+import '../validation/reduced_scene_metrics_extractor.dart';
 import '../validation/validated_candidate_pipeline.dart';
 import 'smart_layout_operation_guard.dart';
 import 'smart_layout_session.dart';
@@ -66,10 +73,24 @@ sealed class RealGenerationOutcome {
 }
 
 class RealGenerationSucceeded extends RealGenerationOutcome {
-  const RealGenerationSucceeded({required this.candidates});
+  const RealGenerationSucceeded({
+    required this.candidates,
+    this.recommendation,
+  });
 
   /// 经完整门禁流水线的验证候选（空 = 无解/零修改保留）。
   final List<ValidatedCandidate> candidates;
+  final CompositionRecommendation? recommendation;
+}
+
+/// 没有明确改善的只读结论；备选仍是真实修改候选，默认不会选中/提交。
+class RealGenerationKeepOriginal extends RealGenerationOutcome {
+  const RealGenerationKeepOriginal({
+    required this.alternatives,
+    required this.recommendation,
+  });
+  final List<ValidatedCandidate> alternatives;
+  final CompositionRecommendation recommendation;
 }
 
 class RealGenerationFailed extends RealGenerationOutcome {
@@ -221,16 +242,25 @@ abstract final class SmartLayoutRealCandidateChain {
         detail: error.message,
       );
     }
-    return _generateFromAssembly(
-      baseScene: baseScene,
-      layoutSnapshot: layoutSnapshot,
-      fullSnapshot: snapshot,
-      semantic: semantic,
-      measure: measure,
-      tokens: tokens,
-      profile: profile,
-      recognition: recognition,
-    );
+    final clock = Stopwatch()..start();
+    try {
+      return await _generateFromAssembly(
+        baseScene: baseScene,
+        layoutSnapshot: layoutSnapshot,
+        fullSnapshot: snapshot,
+        semantic: semantic,
+        measure: measure,
+        tokens: tokens,
+        profile: profile,
+        recognition: recognition,
+      );
+    } finally {
+      clock.stop();
+      debugPrint(
+        '[FlowMuseCreateNote][recognition-v3] phase=candidates '
+        'operation=${recognition.operationId} elapsed_ms=${clock.elapsedMilliseconds}',
+      );
+    }
   }
 
   /// 语义装配之后的共享生成管线（块装配 → planner 枚举 → preflight →
@@ -259,6 +289,7 @@ abstract final class SmartLayoutRealCandidateChain {
         assembly = SmartLayoutCandidateMaterializer.composeNativeGroups(
           baseScene,
           assembly,
+          pageScope: recognition.pageScope,
         );
       }
     } on StateError catch (error) {
@@ -274,6 +305,18 @@ abstract final class SmartLayoutRealCandidateChain {
     if (pageFrame == null) {
       return const RealGenerationFailed(reason: 'empty-page', retryable: false);
     }
+    if (recognition != null) {
+      return _generateComposition(
+        baseScene: baseScene,
+        snapshot: layoutSnapshot,
+        semantic: semantic,
+        recognition: recognition,
+        assembly: assembly,
+        pageFrame: LayoutRect.fromSnapshotBounds(pageFrame),
+        measure: measure,
+        profile: profile,
+      );
+    }
     final margin = tokens.pageMargin;
     final pageContent = LayoutRect(
       left: pageFrame.left + margin,
@@ -284,20 +327,38 @@ abstract final class SmartLayoutRealCandidateChain {
     final contentHeight = pageContent.height;
 
     // ---- 4. planner 枚举（确定性）+ 硬 preflight（批量，四型分派）----
-    // 内容量事实（结构适用性输入，真机 2026-09-03 门禁）：内容块数 +
-    // 文本实测填充率；图/图注存在即非纯文字（多栏适用性另由约束判）。
+    // 文字按可读栏宽实测，图片按源显示尺寸计量；小图不豁免稀疏门禁。
     var contentBlockCount = 0;
     var textMeasuredHeight = 0.0;
+    var figureMeasuredHeight = 0.0;
     var hasFigureContent = false;
     for (final block in assembly.blocks) {
       if (block.isPreservedLike) continue;
       contentBlockCount++;
-      if (block.kind == LayoutBlockKind.figure ||
-          block.kind == LayoutBlockKind.caption) {
+      final figure = block.figure;
+      if (figure != null && !figure.missingAsset) {
         hasFigureContent = true;
+        if (figure.displayWidth != null && figure.displayAspectRatio > 0) {
+          figureMeasuredHeight +=
+              figure.widthInColumn(pageContent.width) /
+              figure.displayAspectRatio;
+        }
       }
-      final intrinsic = block.measuredIntrinsic;
-      if (intrinsic != null) textMeasuredHeight += intrinsic.height;
+      final text = block.text;
+      if (text != null) {
+        textMeasuredHeight += measure
+            .measure(
+              text: text.text,
+              fontFamily: text.fontFamily,
+              fontSize: text.fontSize,
+              lineHeight: text.lineHeight,
+              maxWidth: pageContent.width.clamp(1, tokens.maxLineLength),
+              direction: text.direction == TextDirectionSpec.rtl
+                  ? TextDirection.rtl
+                  : TextDirection.ltr,
+            )
+            .height;
+      }
     }
     final enumeration = const LayoutCompositionPlanner().enumerate(
       constraint: CompositionConstraint(
@@ -307,6 +368,7 @@ abstract final class SmartLayoutRealCandidateChain {
             ? (textMeasuredHeight / contentHeight).clamp(0.0, 1.0)
             : 0.0,
         hasFigureContent: hasFigureContent,
+        figureFillRatio: (figureMeasuredHeight / contentHeight).clamp(0.0, 1.0),
         tokens: tokens,
       ),
     );
@@ -378,19 +440,6 @@ abstract final class SmartLayoutRealCandidateChain {
         pageId: layoutSnapshot.pageId,
       );
       if (materialized is! PatchMaterializationSuccess) {
-        continue;
-      }
-      if (recognition != null &&
-          ReplacementGuard.check(
-            recognition: recognition.ledger,
-            unitFactsByUnitId: ReplacementGuard.factsOf(recognition),
-            deletedSourceIds: materialized.patch.removes.map(
-              (op) => op.elementId,
-            ),
-            modifiedSourceIds: materialized.patch.updates.map(
-              (op) => op.elementId,
-            ),
-          ).isNotEmpty) {
         continue;
       }
       final metricInput = LayoutMetricInput(
@@ -479,6 +528,162 @@ abstract final class SmartLayoutRealCandidateChain {
     width: (json['width'] as num).toDouble(),
     height: (json['height'] as num).toDouble(),
   );
+
+  static SemanticRelationExpectation _verticalRelation(
+    BlockRelationship relation,
+    LayoutBlockAssembly assembly,
+    double maxGap,
+  ) {
+    final from = assembly.blocks.indexWhere(
+      (b) => b.id == relation.fromBlockId,
+    );
+    final to = assembly.blocks.indexWhere((b) => b.id == relation.toBlockId);
+    return SemanticRelationExpectation(
+      relationId:
+          '${relation.kind.name}:${relation.fromBlockId}:${relation.toBlockId}',
+      kind: relation.kind == BlockRelationKind.captionOf
+          ? SemanticRelationExpectationKind.captionOf
+          : SemanticRelationExpectationKind.keepWith,
+      anchorId: from < to ? relation.fromBlockId : relation.toBlockId,
+      followerId: from < to ? relation.toBlockId : relation.fromBlockId,
+      maxGap: maxGap,
+      memberIds: {
+        for (final group in assembly.atomicGroups)
+          if (group.contains(relation.fromBlockId)) ...group,
+      },
+    );
+  }
+
+  static Future<RealGenerationOutcome> _generateComposition({
+    required Scene baseScene,
+    required LayoutPageSnapshot snapshot,
+    required SemanticAssembly semantic,
+    required RecognitionSessionResult recognition,
+    required LayoutBlockAssembly assembly,
+    required LayoutRect pageFrame,
+    required TextMeasureAdapter measure,
+    required LayoutProfile profile,
+  }) async {
+    final layouts = await SemanticComposer.generate(
+      scene: baseScene,
+      assembly: assembly,
+      pageFrame: pageFrame,
+      measure: measure,
+      fixedObstacles: {
+        for (final entry
+            in recognition.pageScope?.fixedBounds.entries ??
+                const <MapEntry<String, SnapshotBounds>>[])
+          entry.key: LayoutRect.fromSnapshotBounds(entry.value),
+      },
+    );
+    final inputs = <CandidateGateInput>[];
+    for (final layout in layouts) {
+      final materialized = SmartLayoutCandidateMaterializer.materialize(
+        baseScene: baseScene,
+        baseRevision: snapshot.sceneRevision,
+        sourceCoverage: snapshot.sourceCoverage,
+        assembly: layout.assembly,
+        placement: FlowPlacementSuccess(
+          placed: layout.placed,
+          usedHeights: const [],
+        ),
+        timestampMs: snapshot.sceneRevision.revision,
+        pageId: snapshot.pageId,
+        pageScope: recognition.pageScope,
+      );
+      if (materialized is! PatchMaterializationSuccess) continue;
+      if (ReplacementGuard.check(
+        recognition: recognition.ledger,
+        unitFactsByUnitId: ReplacementGuard.factsOf(recognition),
+        deletedSourceIds: materialized.patch.removes.map((o) => o.elementId),
+        modifiedSourceIds: materialized.patch.updates.map((o) => o.elementId),
+      ).isNotEmpty) {
+        continue;
+      }
+      final metrics = LayoutMetricInput(
+        assembly: layout.assembly,
+        placed: layout.placed,
+        columnRects: [layout.content],
+        preservedRects: layout.preservedRects,
+        originalBounds: {
+          for (final b in layout.assembly.blocks)
+            b.id: LayoutRect.fromSnapshotBounds(
+              baseScene.activeElements
+                  .where((e) => b.sourceRefs.contains(e.id.value))
+                  .map(conservativeVisualBounds)
+                  .reduce((a, b) => a.union(b)),
+            ),
+        },
+        contentHeight: layout.content.height,
+        hardValidated: true,
+      );
+      inputs.add(
+        CandidateGateInput(
+          candidateId: '${layout.family}#${layout.signature}',
+          diversityKey: layout.family,
+          patch: materialized.patch,
+          metricInput: metrics,
+          veto: const AntiGamingVetoDetector().evaluate(
+            metrics,
+            tokens: layout.policy.validationTokens,
+          ),
+          validationElementIds: {
+            ...materialized.patch.adds.map((o) => o.elementId),
+            ...materialized.patch.updates.map((o) => o.elementId),
+          },
+          outputElementIdsByBlock: materialized.outputElementIdsByBlock,
+          semanticContextKey:
+              '${semantic.document.epoch}:${semantic.document.revision}:${semantic.document.fingerprint}|'
+              '${snapshot.fingerprint}|${layout.policy.key}|${layout.signature}',
+          compositionGroups: layout.groups,
+          relations: [
+            for (final r in layout.assembly.relationships)
+              _verticalRelation(r, layout.assembly, layout.policy.innerGap),
+          ],
+          readingOrder: ReadingOrderExpectation(
+            orderedElementIds: [
+              for (final b in layout.assembly.blocks)
+                if (!b.isPreservedLike) b.id,
+            ],
+          ),
+        ),
+      );
+    }
+    final round = await ValidatedCandidatePipeline.run(
+      baseScene: baseScene,
+      pageContentBounds: Bounds.fromLTWH(
+        pageFrame.left,
+        pageFrame.top,
+        pageFrame.width,
+        pageFrame.height,
+      ),
+      candidates: inputs,
+      profile: LayoutProfile.composition,
+      compositionMetrics: CompositionMetricContext(
+        source: assembly,
+        page: Bounds.fromLTWH(
+          pageFrame.left,
+          pageFrame.top,
+          pageFrame.width,
+          pageFrame.height,
+        ),
+        analyzed: SemanticComposition.of(semantic.document)?.analyzed ?? false,
+        pageIntent:
+            SemanticComposition.of(semantic.document)?.hints.pageIntent ??
+            'unknown',
+      ),
+    );
+    if (round.recommendation?.recommended == false) {
+      return RealGenerationKeepOriginal(
+        alternatives: round.top,
+        recommendation: round.recommendation!,
+      );
+    }
+    return RealGenerationSucceeded(
+      candidates: round.top,
+      recommendation: round.recommendation,
+    );
+  }
 }
 
 /// 请求时捕获（请求、响应与生成链同源）。
@@ -646,8 +851,37 @@ class SmartLayoutRealSessionScope {
           scope._runCandidateChainFromDocument(outcome, ticket),
       commitGateway: commitGateway,
       bearerToken: bearerToken,
+      reviewContextBuilder: scope._reviewContext,
     );
     return scope;
+  }
+
+  SmartLayoutReviewContext? _reviewContext() {
+    final capture = _lastCapture;
+    final semantic = _lastSemantic;
+    final recognition = _lastRecognition;
+    final bounds =
+        capture?.snapshot.pageBounds ?? capture?.snapshot.contentBounds;
+    if (capture == null ||
+        semantic == null ||
+        recognition == null ||
+        bounds == null) {
+      return null;
+    }
+    return SmartLayoutReviewContext(
+      originalScene: capture.scene,
+      pageBounds: Bounds.fromLTWH(
+        bounds.left,
+        bounds.top,
+        bounds.width,
+        bounds.height,
+      ),
+      document: semantic.document,
+      preserveReasons: recognition.ledger.projection.preservedReasons,
+      recognitionFailure: recognition.failure,
+      excludedScopeReasons: recognition.pageScope?.excludedReasons ?? const {},
+      recommendation: _recommendation,
+    );
   }
 
   /// 快照级真实请求装配：pageId + 当前 revision + clean 资产引用 +
@@ -659,10 +893,12 @@ class SmartLayoutRealSessionScope {
     final revision = _tracker.isDisposed ? null : _tracker.current;
     if (revision == null) throw StateError('revision tracker disposed');
     final scene = _editor.currentScene;
+    final pageScope = ResolvedPageScope.resolve(scene, _pageId);
     final snapshot = const SnapshotExtractor().extract(
       scene: scene,
       pageId: _pageId,
       sceneRevision: revision,
+      scope: pageScope,
     );
     _lastCapture = _RequestCapture(
       scene: scene,
@@ -718,10 +954,12 @@ class SmartLayoutRealSessionScope {
       return const SmartLayoutAnalysisGuardRejected('disposed', 0);
     }
     final scene = _editor.currentScene;
+    final pageScope = ResolvedPageScope.resolve(scene, _pageId);
     final snapshot = const SnapshotExtractor().extract(
       scene: scene,
       pageId: _pageId,
       sceneRevision: revision,
+      scope: pageScope,
     );
     _lastCapture = _RequestCapture(
       scene: scene,
@@ -737,7 +975,8 @@ class SmartLayoutRealSessionScope {
       // 页级捕获（spec §6.4：完整捕获源集合=目标页非背景源；多页
       // Scene 不过滤会把他页笔迹计入识别账本，与页级快照三方断言
       // 失配）。文件表保留（图源渲染依赖）。
-      scene: _pageScopedScene(scene, _pageId),
+      scene: pageScope.captureScene(scene),
+      pageScope: pageScope,
       sceneRevision: RecognitionSceneRevision(
         epoch: revision.epoch,
         revision: revision.revision,
@@ -827,21 +1066,6 @@ class SmartLayoutRealSessionScope {
     };
   }
 
-  /// 目标页子 Scene（元素按 flowMuse pageId 归属过滤，文件表原样
-  /// 保留——图源区域渲染依赖 files）。
-  static Scene _pageScopedScene(Scene scene, String pageId) {
-    var scoped = Scene();
-    for (final element in scene.activeElements) {
-      if (element.pageId == pageId) {
-        scoped = scoped.addElement(element);
-      }
-    }
-    for (final entry in scene.files.entries) {
-      scoped = scoped.addFile(entry.key, entry.value);
-    }
-    return scoped;
-  }
-
   /// V3 识别产物 → 候选生成链（R7）：票据同源校验后走
   /// [SmartLayoutRealCandidateChain.runFromSemanticAssembly]（第 0 步
   /// page-furniture 剥离 + §6.4 三方一致断言 + 既有生成管线）。
@@ -871,9 +1095,14 @@ class SmartLayoutRealSessionScope {
 
   /// 生成链结果 → 候选约定（无解=空候选；其余失败 reason 透传）。
   List<ValidatedCandidate> _candidatesOf(RealGenerationOutcome outcome) {
+    _recommendation = null;
     switch (outcome) {
       case RealGenerationSucceeded():
+        _recommendation = outcome.recommendation;
         return outcome.candidates;
+      case RealGenerationKeepOriginal():
+        _recommendation = outcome.recommendation;
+        return outcome.alternatives;
       case RealGenerationFailed() when outcome.isNoSolution:
         // 无解：空候选如实呈现（reviewing 无卡 + 重新分析入口）。
         return const [];
@@ -883,6 +1112,8 @@ class SmartLayoutRealSessionScope {
         throw StateError(reason);
     }
   }
+
+  CompositionRecommendation? _recommendation;
 
   /// 纠错修正处理（§9.3 真实实现）：
   /// - role/order/relation/preserve：语义纠错（§9.2 闭环）——构造
@@ -1189,15 +1420,26 @@ class SmartLayoutRealSessionScope {
         .markConsumed(nextDocument.consumedSourceIds)
         .markPreserved(nextDocument.preservedSourceIds);
     _generation++;
+    final changedSources = SemanticRerunScope.resolve([
+      patch,
+    ], document).sourceIds;
+    final affectedStrokes = result.scene.activeElements
+        .whereType<FreedrawElement>()
+        .where((e) => changedSources.contains(e.id.value))
+        .map((e) => e.id.value)
+        .toSet();
+    final affectedRegions = result.regionRecords
+        .where((r) => r.targetSourceIds.any(affectedStrokes.contains))
+        .map((r) => r.regionId)
+        .toSet();
     _pendingCorrectionContext = RecognitionCorrectionContext.capture(
       generation: _generation,
       operationId: 'rec-cor-${++_operationCounter}',
       session: result,
-      beforeRegionIds: const {},
-      afterRegionIds: const {},
-      strokeSourceIds: patch is PreserveSemanticSourcesPatch
-          ? patch.sourceIds.toSet()
-          : const {},
+      beforeRegionIds: affectedRegions,
+      afterRegionIds: affectedRegions,
+      strokeSourceIds: affectedStrokes,
+      invalidateAssets: false,
     );
     _lastRecognition = result.copyWith(
       ledger: nextLedger,
@@ -1207,7 +1449,7 @@ class SmartLayoutRealSessionScope {
     _lastSemantic = SemanticAssembly(document: nextDocument, ledger: coverage);
     _correctedRegionRecords = null;
     return AffectedSourceSet(
-      regionIds: const {},
+      regionIds: Set.unmodifiable(affectedRegions),
       strokeSourceIds: Set.unmodifiable(
         _pendingCorrectionContext!.affected.strokeSourceIds,
       ),
@@ -1253,6 +1495,8 @@ class SmartLayoutRealSessionScope {
                       null
                 : source != null &&
                       !source.locked &&
+                      result.pageScope?.protectedSourceIds.contains(sourceId) !=
+                          true &&
                       (source is TextElement || source is ImageElement);
             if (!allowed) {
               throw const SmartLayoutCorrectionRejected(
@@ -1321,8 +1565,14 @@ class SmartLayoutRealSessionScope {
             'unknown-block(${intent.subjectIds.single})',
           );
         }
-        final oldRelations = <({String type, String targetBlockId})>[];
-        for (final raw in block.extras['relations'] as List? ?? const []) {
+        final composition = SemanticComposition.of(document);
+        final oldRelations = <({String type, String targetBlockId})>[
+          ...?composition?.relationsOf(block.id),
+        ];
+        for (final raw
+            in composition != null
+                ? const []
+                : block.extras['relations'] as List? ?? const []) {
           final relation = raw as Map<String, Object?>;
           oldRelations.add((
             type: relation['type'] as String,
@@ -1419,6 +1669,7 @@ class SmartLayoutRealSessionScope {
         scene: scene,
         pageId: _pageId,
         sceneRevision: revision,
+        scope: _lastRecognition?.pageScope,
       );
       final correctedRecords = _correctedRegionRecords;
       RecognitionSessionResult recognition;
@@ -1506,6 +1757,7 @@ class SmartLayoutRealSessionScope {
       operationId: context.operationId,
       generation: context.generation,
       pageId: previous.pageId,
+      pageScope: previous.pageScope,
     );
     _activePipeline?.cancel();
     final pipeline = RecognitionPipeline(

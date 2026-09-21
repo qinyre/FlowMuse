@@ -55,7 +55,8 @@ class SmartLayoutEditorGateway {
   void commitValidated(ToolResult result) {
     _throwIfDisposed();
     _controller.pushHistory();
-    _controller.applyResult(result);
+    // 候选已测量并验证，创建工具的 sticky 样式不能再次覆盖它。
+    _controller.applyResult(result, applyDefaultStyle: false);
   }
 
   void _throwIfDisposed() {

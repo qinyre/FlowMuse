@@ -1,5 +1,6 @@
 library;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:convert';
 import 'dart:async';
 import 'dart:math' as math;
@@ -12,6 +13,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/recognition/recogniti
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/region_assets.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/recognition/source_ledger.dart';
 import '../snapshot/layout_page_snapshot.dart' show conservativeVisualBounds;
+import '../snapshot/resolved_page_scope.dart';
 import '../rendering/draft_scene_renderer.dart' show DraftRenderCancelled;
 
 /// 识别管线状态机与编排（spec §6.1/§6.2/§6.3）。
@@ -47,6 +49,7 @@ class RecognitionCapture {
     required this.operationId,
     required this.generation,
     required this.pageId,
+    this.pageScope,
   });
 
   /// 完整捕获快照（含原生元素；背景剥离由结构/装配阶段处理）。
@@ -56,6 +59,7 @@ class RecognitionCapture {
   final String operationId;
   final int generation;
   final String pageId;
+  final ResolvedPageScope? pageScope;
 }
 
 /// 单区域最终识别状态（初读 + 可能的复核覆盖后）。
@@ -99,11 +103,14 @@ class RecognitionSessionResult {
     this.structureResult,
     this.partial = false,
     this.partialNotes = const [],
+    this.failure,
+    this.pageScope,
   });
 
   final String operationId;
   final int generation;
   final String pageId;
+  final ResolvedPageScope? pageScope;
 
   /// 完整捕获快照（含原生元素与背景；语义适配按 §6.4 口径自行剥离）。
   final Scene scene;
@@ -129,6 +136,10 @@ class RecognitionSessionResult {
   final bool partial;
   final List<String> partialNotes;
 
+  /// 重试耗尽后的真实请求故障；不能从 missingResponse 保留状态猜故障原因。
+  /// 只用于解释部分完成，不改变任何源的准入或保留状态。
+  final RecognitionException? failure;
+
   /// 携带已结算账本的副本（语义适配后回填会话产物用；其余字段原样）。
   RecognitionSessionResult copyWith({
     SourceLedger? ledger,
@@ -148,6 +159,8 @@ class RecognitionSessionResult {
     structureResult: structureResult,
     partial: partial || (ledger?.preservedCount ?? 0) > 0,
     partialNotes: partialNotes,
+    failure: failure,
+    pageScope: pageScope,
   );
 }
 
@@ -212,10 +225,11 @@ class RecognitionCorrectionContext {
     required Set<String> beforeRegionIds,
     required Set<String> afterRegionIds,
     required Set<String> strokeSourceIds,
+    bool invalidateAssets = true,
   }) {
-    final invalidated = session.assetIndex.invalidateForSources(
-      strokeSourceIds,
-    );
+    final invalidated = invalidateAssets
+        ? session.assetIndex.invalidateForSources(strokeSourceIds)
+        : <String>{};
     return RecognitionCorrectionContext._(
       generation: generation,
       operationId: operationId,
@@ -263,9 +277,15 @@ class RecognitionStructureInput {
     required this.regionOutcomes,
     required this.remainingBudgetOf,
     required this.sendStructureRequest,
+    this.budget = const RecognitionBudget(),
+    this.checkCancelled,
+    this.onWarning,
   });
 
   final RecognitionCapture capture;
+  final RecognitionBudget budget;
+  final void Function()? checkCancelled;
+  final void Function(String)? onWarning;
   final List<RegionRecord> regionRecords;
   final Map<String, RegionReadOutcome> regionOutcomes;
 
@@ -310,12 +330,14 @@ class RecognitionPipeline {
   SmartLayoutCancellationToken? _cancelToken;
   RecognitionBudget _budget = const RecognitionBudget();
   final Stopwatch _clock = Stopwatch();
+  int _stateStartedMs = 0;
   RegionAssetBuilder? _renderBuilder;
   bool get _budgetExpired => _clock.elapsed >= _budget.totalTimeout;
   final Map<String, RecognitionResponse> _responseCache = {};
   final Map<String, RegionAsset> _assetByRegion = {};
   final Map<String, RegionReadOutcome> _outcomes = {};
   int _cacheHits = 0;
+  RecognitionException? _lastFailure;
   List<RegionPartition> _effectivePartitions = const [];
 
   /// 状态迁移观察者（R7 面板状态播报；null = 无观察）。
@@ -340,6 +362,14 @@ class RecognitionPipeline {
   }
 
   void _transition(RecognitionPipelineState next) {
+    final elapsed = _clock.elapsedMilliseconds;
+    if (_state != RecognitionPipelineState.idle) {
+      debugPrint(
+        '[FlowMuseCreateNote][recognition-v3] phase=${_state.name} '
+        'elapsed_ms=${elapsed - _stateStartedMs}',
+      );
+    }
+    _stateStartedMs = elapsed;
     _state = next;
     _stateHistory.add(next);
     onStateChanged?.call(next);
@@ -382,6 +412,10 @@ class RecognitionPipeline {
     } finally {
       deadline.cancel();
       _clock.stop();
+      debugPrint(
+        '[FlowMuseCreateNote][recognition-v3] total_ms=${_clock.elapsedMilliseconds} '
+        'model_calls=${_budget.consumedModelCalls}',
+      );
     }
   }
 
@@ -772,6 +806,9 @@ class RecognitionPipeline {
       structureResult = await _structureRecoverer.recover(
         RecognitionStructureInput(
           capture: capture,
+          budget: _budget,
+          checkCancelled: _checkCancelled,
+          onWarning: partialNotes.add,
           regionRecords: [
             for (final partition in _effectivePartitions) partition.record,
           ],
@@ -796,6 +833,7 @@ class RecognitionPipeline {
       operationId: capture.operationId,
       generation: capture.generation,
       pageId: capture.pageId,
+      pageScope: capture.pageScope,
       scene: capture.scene,
       sceneRevision: capture.sceneRevision,
       contentFingerprint: capture.contentFingerprint,
@@ -806,8 +844,21 @@ class RecognitionPipeline {
       ledger: ledger,
       assetIndex: assetIndex,
       structureResult: structureResult,
-      partial: ledger.preservedCount > 0 || partialNotes.isNotEmpty,
+      partial:
+          ledger.preservedCount > 0 ||
+          partialNotes.isNotEmpty ||
+          _lastFailure != null,
       partialNotes: List.unmodifiable(partialNotes),
+      failure:
+          _lastFailure ??
+          (_budgetExpired
+              ? const RecognitionException(
+                  RecognitionExceptionKind.budgetExhausted,
+                  retryable: false,
+                  code: 'operationTimeout',
+                  detail: '本轮处理时限已到',
+                )
+              : null),
     );
   }
 
@@ -925,6 +976,7 @@ class RecognitionPipeline {
           bearerToken: bearerToken,
           cancelToken: _cancelToken,
           remainingBudget: _remaining(stopwatch),
+          perRequestTimeout: _budget.perRequestTimeout,
         );
         _checkCancelled();
         if (_budgetExpired) return null;
@@ -935,19 +987,11 @@ class RecognitionPipeline {
           if (_budgetExpired && !_cancelRequested) return null;
           throw RecognitionCancelledException(null);
         }
-        final canRetry =
-            error.retryable &&
-            attempts < _budget.retryPerRequest &&
-            error.code != 'invalidProviderResponse' &&
-            error.kind != RecognitionExceptionKind.invalidResponse &&
-            error.kind != RecognitionExceptionKind.invalidRequest;
-        if (!canRetry) {
+        if (!_canRetry(error, attempts)) {
+          _lastFailure = error;
           return null;
         }
         attempts++;
-        if (!_budget.canSpendModelCall) {
-          return null;
-        }
       }
     }
   }
@@ -980,6 +1024,7 @@ class RecognitionPipeline {
           bearerToken: bearerToken,
           cancelToken: _cancelToken,
           remainingBudget: _remaining(stopwatch),
+          perRequestTimeout: _budget.perRequestTimeout,
         );
         _checkCancelled();
         if (_budgetExpired) return null;
@@ -990,21 +1035,26 @@ class RecognitionPipeline {
           if (_budgetExpired && !_cancelRequested) return null;
           throw RecognitionCancelledException(null);
         }
-        final canRetry =
-            error.retryable &&
-            attempts < _budget.retryPerRequest &&
-            error.kind != RecognitionExceptionKind.invalidResponse &&
-            error.kind != RecognitionExceptionKind.invalidRequest;
-        if (!canRetry) {
+        if (!_canRetry(error, attempts)) {
+          _lastFailure = error;
           return null;
         }
         attempts++;
-        if (!_budget.canSpendModelCall) {
-          return null;
-        }
       }
     }
   }
+
+  /// 初读、复核和结构共用：慢请求超时不重做；快速故障仅在剩余预算
+  /// 足够容纳一次完整尝试时重试，避免临近总期限再次启动模型。
+  bool _canRetry(RecognitionException error, int attempts) =>
+      error.retryable &&
+      error.code != 'providerTimeout' &&
+      error.code != 'invalidProviderResponse' &&
+      error.kind != RecognitionExceptionKind.invalidResponse &&
+      error.kind != RecognitionExceptionKind.invalidRequest &&
+      attempts < _budget.retryPerRequest &&
+      _budget.canSpendModelCall &&
+      _remaining(_clock) >= _budget.perRequestTimeout;
 
   RecognitionReadRequest _buildReadRequest(
     RecognitionCapture capture,

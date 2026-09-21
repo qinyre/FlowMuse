@@ -25,10 +25,15 @@ enum SmartLayoutHttpErrorKind {
 
 /// 智能排版 v3 HTTP 传输错误的唯一异常类型。
 class SmartLayoutHttpException implements Exception {
-  const SmartLayoutHttpException._(this.kind, this.statusCode, this.detail);
+  const SmartLayoutHttpException._(
+    this.kind,
+    this.statusCode,
+    this.detail, {
+    this.cause,
+  });
 
-  const SmartLayoutHttpException.network(String detail)
-    : this._(SmartLayoutHttpErrorKind.network, null, detail);
+  const SmartLayoutHttpException.network(String detail, {Object? cause})
+    : this._(SmartLayoutHttpErrorKind.network, null, detail, cause: cause);
 
   const SmartLayoutHttpException.badStatus(int statusCode, String detail)
     : this._(SmartLayoutHttpErrorKind.badStatus, statusCode, detail);
@@ -38,6 +43,9 @@ class SmartLayoutHttpException implements Exception {
   /// 非 null 时 [kind] 为 [SmartLayoutHttpErrorKind.badStatus]。
   final int? statusCode;
   final String detail;
+
+  /// 保留原始异常类型，识别链可区分超时与快速连接失败，不解析错误文案。
+  final Object? cause;
 
   @override
   String toString() =>
@@ -136,7 +144,7 @@ class SmartLayoutHttpGateway {
     } on SmartLayoutHttpException {
       rethrow;
     } catch (error) {
-      throw SmartLayoutHttpException.network('$uri: $error');
+      throw SmartLayoutHttpException.network('$uri: $error', cause: error);
     }
     final status = response.statusCode;
     if (status < 200 || status >= 300) {
