@@ -21,6 +21,11 @@ const writingPerformanceFixtures = <String, WritingPerformanceFixtureSpec>{
     durationSeconds: 30,
     acceptedSamplesPerStroke: 122,
   ),
+  'continuous_curve_30s': WritingPerformanceFixtureSpec(
+    hash: '0ceeac0ebec3d2d9583e978f5e02ff6c681814f7af3e08c14a7ed739d4ebd643',
+    durationSeconds: 30,
+    acceptedSamplesPerStroke: 3601,
+  ),
 };
 
 const writingSceneFixtureHashes = <int, String>{

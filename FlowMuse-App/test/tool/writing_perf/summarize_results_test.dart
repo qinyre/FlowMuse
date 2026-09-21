@@ -8,6 +8,31 @@ import '../../../integration_test/fixtures/scene_fixtures.dart';
 import '../../../tool/writing_perf/summarize_results.dart';
 
 void main() {
+  test('矩阵继承主机证据，笔刷、版本和完整界面不混合汇总', () async {
+    final directory = await _tempDirectory('matrix');
+    await _writeRun(directory, 'matrix.json', runIndex: 1, offset: 0);
+    final file = File('${directory.path}/matrix.json');
+    final original =
+        jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    final hostEvidence = original.remove('hostEvidence');
+    await file.writeAsString(
+      jsonEncode({
+        'schemaVersion': 2,
+        'hostEvidence': hostEvidence,
+        'cases': [
+          original,
+          {...original, 'brush': 'pencil'},
+          {...original, 'brush': 'pencil', 'renderVersion': 'naturalMediaV2'},
+          {...original, 'fullEditor': true},
+        ],
+      }),
+    );
+    final summary = await summarizeDirectory(directory);
+    expect(summary.validRuns, hasLength(4));
+    expect(summary.scenarios, hasLength(4));
+    expect(summary.completeScenarios, isEmpty);
+  });
+
   test('nearest-rank 与 bootstrap 使用确定性算法', () {
     final values = [for (var value = 1; value <= 100; value++) value];
     expect(nearestRank(values, 0.50), 50);

@@ -7,6 +7,8 @@ import '../tool/writing_perf/profile_device_eligibility.dart';
 
 Future<void> main() {
   return integrationDriver(
+    timeout: const Duration(hours: 2),
+    writeResponseOnFailure: true,
     responseDataCallback: (data) async {
       final outputDirectory = Directory(
         Platform.environment['FLOWMUSE_PERF_OUTPUT_DIR'] ??
@@ -20,9 +22,15 @@ Future<void> main() {
       final output = File(
         '${outputDirectory.path}${Platform.pathSeparator}writing-perf-$timestamp.json',
       );
+      Map<String, Object?> hostEvidence;
+      try {
+        hostEvidence = await _hostEvidence(data);
+      } on ProcessException catch (error) {
+        hostEvidence = {'deviceDetectionError': error.toString()};
+      }
       final report = <String, Object?>{
         if (data != null) ...Map<String, Object?>.from(data),
-        'hostEvidence': await _hostEvidence(data),
+        'hostEvidence': hostEvidence,
       };
       await output.writeAsString(
         const JsonEncoder.withIndent('  ').convert(report),
@@ -36,7 +44,10 @@ Future<Map<String, Object?>> _hostEvidence(Map<String, dynamic>? report) async {
   final sha = await Process.run('git', ['rev-parse', 'HEAD']);
   final status = await Process.run('git', ['status', '--porcelain']);
   final reportedDeviceId = report?['deviceId'];
-  final devices = await Process.run('flutter', ['devices', '--machine']);
+  final devices = await Process.run('flutter', [
+    'devices',
+    '--machine',
+  ], runInShell: Platform.isWindows);
   var deviceEvidence = <String, Object?>{};
   if (devices.exitCode == 0 && reportedDeviceId is String) {
     try {

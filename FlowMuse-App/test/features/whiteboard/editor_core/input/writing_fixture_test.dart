@@ -22,6 +22,7 @@ void main() {
         'quick_zigzag',
         'pressure_ramp',
         'pointer_cancel',
+        'continuous_curve_30s',
       });
       for (final fixture in writingRecordingFixtures) {
         expect(fixture.schemaVersion, writingFixtureSchemaVersion);
@@ -57,6 +58,20 @@ void main() {
           reason: fixture.name,
         );
       }
+    });
+
+    test('连续长笔 fixture 保持同一指针按下超过 30 秒', () {
+      final samples = writingRecordingFixtures
+          .singleWhere((item) => item.name == 'continuous_curve_30s')
+          .recording
+          .samples;
+      expect(
+        samples.last.time,
+        greaterThanOrEqualTo(const Duration(seconds: 30)),
+      );
+      expect(samples.where((s) => s.phase == StrokePhase.down), hasLength(1));
+      expect(samples.where((s) => s.phase == StrokePhase.up), hasLength(1));
+      expect(samples.map((s) => s.pointerId).toSet(), hasLength(1));
     });
 
     test('recording JSON round-trip 稳定', () {
