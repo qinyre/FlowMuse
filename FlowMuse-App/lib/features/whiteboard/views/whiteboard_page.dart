@@ -44,6 +44,7 @@ import '../share/models/share_result.dart';
 import '../share/services/share_export_coordinator.dart';
 import '../share/services/share_service_selector.dart';
 import '../view_models/whiteboard_view_model.dart';
+import '../repositories/whiteboard_scene_repository.dart';
 import '../models/editor_preferences.dart';
 import '../view_models/editor_preferences_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
@@ -108,6 +109,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   late final MarkdrawFileHandler _fileHandler;
   late final WhiteboardCollaborationAdapter _collaborationAdapter;
   late final CollaborationRepository _collaborationRepository;
+  // Dispose can flush a draft after WidgetRef becomes unsafe to access.
+  late final WhiteboardSceneRepository _localSceneRepository;
+  late final LibraryRepository _localLibraryRepository;
   late final LiveInkSender _liveInkSender;
   late final RemoteWetInkStore _remoteWetInkStore;
   StreamSubscription<DecodedLiveInkChunk>? _liveInkSubscription;
@@ -180,6 +184,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _localSceneRepository = ref.read(whiteboardSceneRepositoryProvider);
+    _localLibraryRepository = ref.read(libraryRepositoryProvider);
     _markdrawController = MarkdrawController();
     _markdrawController.onPrepareLocalResult = (result, scene) {
       final creator = _currentCreator();
@@ -247,11 +253,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _closeAiPanel();
+    _disposingOrLeaving = true;
     _flushLocalDraftOnExit();
     _remoteMergeTimer?.cancel();
     _remoteMergeBuffer.clear();
     _pointerTrailingTimer?.cancel();
-    _disposingOrLeaving = true;
     unawaited(_collaborationSubscription?.cancel());
     unawaited(_fileStatusSceneSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
@@ -472,21 +478,31 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
     if (widget.temporaryCollaboration) return;
 
-    final viewModel = ref.read(whiteboardViewModelProvider.notifier);
-    final repository = ref.read(whiteboardSceneRepositoryProvider);
+    final noteId = widget.noteId;
     final content = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
     );
-    await repository.saveScene(widget.noteId, content);
-    await _touchNoteWithCurrentCover(widget.noteId);
-    final latestIndex = await ref.read(libraryIndexProvider.future);
-    final latestNote = _noteById(latestIndex.notes, widget.noteId);
+    // Capture the picture before disposal or a note switch can change the scene.
+    final (_, coverThumbnailBytes) = await (
+      _localSceneRepository.saveScene(noteId, content),
+      _markdrawController.exportCoverThumbnail(),
+    ).wait;
+    await _localLibraryRepository.touchNote(
+      noteId,
+      coverThumbnailBytes: coverThumbnailBytes,
+      clearCoverThumbnail: coverThumbnailBytes == null,
+    );
+    if (!_canMutateWhiteboard || noteId != widget.noteId) return;
+    await ref.read(libraryIndexProvider.notifier).refresh();
+    if (!_canMutateWhiteboard || noteId != widget.noteId) return;
+    final latestIndex = ref.read(libraryIndexProvider).value;
+    final latestNote = latestIndex == null
+        ? null
+        : _noteById(latestIndex.notes, noteId);
     if (latestNote != null) {
       unawaited(_recentWhiteboardSync.syncFromNote(latestNote));
     }
-    if (mounted) {
-      viewModel.markSaved();
-    }
+    ref.read(whiteboardViewModelProvider.notifier).markSaved();
   }
 
   Future<void> _finalizeLocalDraftBeforeLeaving() async {
@@ -2518,6 +2534,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   Future<void> _touchNoteWithCurrentCover(String noteId) async {
     final coverThumbnailBytes = await _markdrawController
         .exportCoverThumbnail();
+    if (!_canMutateWhiteboard) return;
     await ref
         .read(libraryIndexProvider.notifier)
         .touchNote(
