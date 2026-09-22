@@ -208,7 +208,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   static const _toolbarDockKey = 'whiteboard.toolbarDock.v1';
   static const _controlGroupPositionKey = 'whiteboard.controlGroupPosition.v1';
   static const _controlGroupReservedExtent = 120.0;
-  static const _pageNavigationReservedExtent = 108.0;
+  static const _pageNavigationReservedExtent = 92.0;
   static const _speechNoticeKey = 'whiteboard.speechRecognitionNoticeSeen.v1';
 
   MarkdrawController? _ownController;
@@ -753,8 +753,20 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     final topChromeOffset = safeArea.top + chromeHeight + 12;
     final bottomChromeOffset = safeArea.bottom + 12;
     final showPageNavigation = showChrome && _controller.isPagedViewport;
+    final inlinePageNavigation =
+        showPageNavigation && showTopToolbar && !isCompact;
+    final topToolbarOffset = safeArea.top + 60;
+    final pageNavigation = showPageNavigation
+        ? _buildControlSurface(
+            PageNavigationControls(
+              controller: _controller,
+              onOverview: _togglePageOverview,
+              enabled: widget.pageNavigationEnabled,
+            ),
+          )
+        : null;
     final rightChromeOffset =
-        topChromeOffset +
+        (inlinePageNavigation ? topToolbarOffset : topChromeOffset) +
         (showPageNavigation ? _pageNavigationReservedExtent : 0);
     final showDetachedControls =
         showChrome && (!_controller.viewMode || widget.config.showZoomControls);
@@ -1015,10 +1027,27 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           ),
         if (showNavigationTools && showTopToolbar)
           Positioned(
-            top: safeArea.top + 60,
-            left: 8,
-            right: 8,
-            child: Center(child: _buildToolbar(compact: isCompact)),
+            top: topToolbarOffset,
+            left: inlinePageNavigation ? safeArea.left + 12 : 8,
+            right: inlinePageNavigation ? safeArea.right + 12 : 8,
+            child: inlinePageNavigation
+                ? SizedBox(
+                    height: _pageNavigationReservedExtent,
+                    child: NavigationToolbar(
+                      middleSpacing: 12,
+                      middle: Align(
+                        alignment: Alignment.topCenter,
+                        widthFactor: 1,
+                        child: _buildToolbar(compact: isCompact),
+                      ),
+                      trailing: Align(
+                        alignment: Alignment.topRight,
+                        widthFactor: 1,
+                        child: pageNavigation,
+                      ),
+                    ),
+                  )
+                : Center(child: _buildToolbar(compact: isCompact)),
           ),
         if (showNavigationTools && _toolbarDock != ToolbarDock.top)
           Positioned(
@@ -1035,17 +1064,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                   : _buildToolbar(compact: isCompact),
             ),
           ),
-        if (showPageNavigation)
+        if (pageNavigation != null && !inlinePageNavigation)
           Positioned(
             top: topChromeOffset,
             right: safeArea.right + 12,
-            child: _buildControlSurface(
-              PageNavigationControls(
-                controller: _controller,
-                onOverview: _togglePageOverview,
-                enabled: widget.pageNavigationEnabled,
-              ),
-            ),
+            child: pageNavigation,
           ),
         if (showDetachedControls)
           Positioned(
