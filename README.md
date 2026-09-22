@@ -49,7 +49,7 @@ cd FlowMuse-App
 flutter run -d windows
 ~~~
 
-客户端默认读取 FlowMuse-App/assets/config/app.env。连接局域网或自建服务时，可在启动命令中覆盖地址：
+客户端默认读取 FlowMuse-App/assets/config/app.env，随包配置与内置回退地址均为 `https://api.flowmuse.cloud`。HTTP 请求和 Socket.IO 复用此配置，后者自动使用 WSS。连接局域网或自建服务时，可在启动命令中覆盖地址：
 
 ~~~bash
 flutter run -d <device-id> \
@@ -58,6 +58,8 @@ flutter run -d <device-id> \
 ~~~
 
 真机不能通过 127.0.0.1 访问电脑服务，请使用电脑局域网 IP 或可访问的公网地址。
+
+生产 Web 入口为 [app.flowmuse.cloud](https://app.flowmuse.cloud/)。HTTPS 页面必须连接 HTTPS 后端，不能继续使用 HTTP IP 地址；修改配置后需要重新构建部署，旧包的 `--dart-define` 优先于环境文件。HTTP 与 HTTPS 页面使用不同的浏览器本地存储，旧 Web 用户应先在原 HTTP 入口导出备份，再到 HTTPS 入口导入，不要清理浏览器数据。
 
 HarmonyOS 必须使用 flutter_ohos，不能用标准 Flutter SDK 构建 HAP：
 

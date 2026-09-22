@@ -5,7 +5,7 @@
 ## 运行环境
 
 - Docker Engine 及 Docker Compose v2
-- 对外只需为客户端放行 TCP `48931`
+- 生产入口由 Nginx 提供 HTTPS（TCP `443`）；TCP `80` 保留证书验证和旧 Web 入口。后端仍监听 `48931`，旧客户端兼容期间保留原 IP 入口。
 
 ## 首次启动
 
@@ -83,7 +83,27 @@ curl -i http://127.0.0.1:48931/health
 - MyScript 手写识别密钥；
 - 后端 AI 智能排版的 OpenAI 兼容接口密钥与模型。
 
-客户端协作地址在应用侧配置为 `http://124.221.68.239:48931`，后端本身无需为此额外启动代理。
+客户端生产地址为 `https://api.flowmuse.cloud`，Nginx 转发至 `http://127.0.0.1:48931`，Go 服务和 Docker 端口无需改成 HTTPS。客户端配置优先级为 `--dart-define=FLOWMUSE_COLLAB_SERVER_URL` > `assets/config/app.env` > 内置回退地址。
+
+### Web 与 HTTPS 部署
+
+- 官网：`https://flowmuse.cloud` / `https://www.flowmuse.cloud`，静态目录 `/var/www/flowmuse`。
+- Web 客户端：`https://app.flowmuse.cloud`，Nginx 的 `root` 指向版本化目录 `/var/www/flowmuse-app-releases/<release>/`；原 `/var/www/flowmuse-app` 保留作旧版本回退。
+- API：`https://api.flowmuse.cloud`；Socket.IO 使用同一主机的 WSS。
+- `FLOWMUSE_ALLOWED_ORIGINS` 必须包含 `https://app.flowmuse.cloud`；迁移期同时保留 `http://app.flowmuse.cloud` 和已有来源。修改后仅重建应用容器使环境变量生效，不重建数据库、MinIO 或数据卷。
+- Nginx 需保留 WebSocket Upgrade 转发；API 代理请求体上限至少为 V3 所需的 `16m`，识别读取超时不得短于后端 120 秒上限。
+- 证书由 Certbot 管理，`certbot.timer` 自动续期；可执行 `sudo certbot renew --dry-run --no-random-sleep-on-renew` 验证。
+
+Web 构建时显式覆盖旧的 HTTP 构建参数：
+
+```bash
+cd FlowMuse-App
+flutter build web --release --no-web-resources-cdn --pwa-strategy=none --dart-define=FLOWMUSE_COLLAB_SERVER_URL=https://api.flowmuse.cloud
+```
+
+`--no-web-resources-cdn` 让 CanvasKit 等渲染资源使用随包文件，避免 Google CDN 不可达导致白屏；保持现有不启用 Flutter 离线缓存的策略，静态入口返回 `Cache-Control: no-cache`，避免缓存旧的 HTTP 构建配置。
+
+部署前备份已有静态目录，并在浏览器验证加载、API 和 WSS。仅修改服务器上的 `app.env` 不能覆盖旧 Web 包编译进去的 `--dart-define`。HTTP 与 HTTPS 的 IndexedDB/本地笔记不共享；保留原 HTTP 入口供用户导出备份，不配置强制跳转或 HSTS，待迁移完成后另行收口。
 
 ### V3 识别超时与耗时排查
 
@@ -99,7 +119,7 @@ V3 对已实测支持的 `doubao-seed-2-1-turbo-260628` 型号发送 `reasoning_
 
 ## 生产环境注意事项
 
-- 云防火墙/安全组仅向客户端开放 `48931`；不要对公网开放 `5432`、`9000`、`9001`、`1025`、`8025`。
+- 云防火墙/安全组开放生产 HTTPS 所需的 `80`、`443`；旧客户端仍需直连时保留 `48931`。不要对公网开放 `5432`、`9000`、`9001`、`1025`、`8025`。
 - `.env` 含密钥，不要提交到 Git 仓库或发送给他人。
 - 当前 `docker-compose.yml` 的数据库、MinIO 密码和 CORS 设置是开发默认值；正式长期部署前应替换默认密码，并将 `FLOWMUSE_ALLOWED_ORIGINS` 改为实际 Web 域名。
 

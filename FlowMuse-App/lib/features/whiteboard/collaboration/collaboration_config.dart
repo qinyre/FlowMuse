@@ -7,7 +7,7 @@ class CollaborationConfig {
   });
 
   static const String productionServerUrl = 'https://api.flowmuse.cloud';
-  static const String defaultServerUrl = 'http://124.221.68.239:48931';
+  static const String defaultServerUrl = productionServerUrl;
   static const String defaultShareOrigin = 'https://qinyre.github.io/FlowMuse';
 
   static CollaborationConfig get fromEnvironment {
