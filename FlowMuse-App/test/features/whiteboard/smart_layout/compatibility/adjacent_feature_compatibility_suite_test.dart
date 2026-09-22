@@ -1049,12 +1049,17 @@ class AdjacentFeatureCompatibilitySuite {
               ExcalidrawScene.fromContent(legacy).collaborationHash());
 
       // 内容敏感：单元素单字段变化即变哈希。
-      final mutated = ExcalidrawScene.fromContent(content);
-      mutated.elements.first['x'] = 12345.0;
+      final original = ExcalidrawScene.fromContent(content);
+      final mutated = original.copyWith(elements: [
+        {...original.elements.first, 'x': 12345.0},
+        ...original.elements.skip(1),
+      ]);
       c.check(
           '内容敏感（单字段变更→哈希变化）',
           mutated.collaborationHash() !=
               ExcalidrawScene.fromContent(content).collaborationHash());
+      c.check('变化场景不污染原快照', original.collaborationHash() ==
+          ExcalidrawScene.fromContent(content).collaborationHash());
 
       c.check(
           '新旧内容哈希不同',

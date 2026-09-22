@@ -12,8 +12,202 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/collaborati
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
 
 void main() {
+  test('正式发送阻塞时合并跨窗口更新，完整点压数据和独立删除仍送达', () async {
+    final crypto = CollaborationCrypto();
+    final room = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    await store.createRoom(
+      room: room,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'fixture',
+    );
+    final hub = MemoryRealtimeRoomHub();
+    final transport = _GatedMemoryRealtimeTransport(
+      hub: hub,
+      socketId: 'sender',
+    );
+    final peer = MemoryRealtimeTransport(hub: hub, socketId: 'receiver');
+    final repository = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+      crypto: crypto,
+    );
+    await repository.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    await peer.connect(room.roomId);
+    // Allow the new-user initialization to leave before blocking updates.
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final delivered = <CollaborationMessage>[];
+    final completed = Completer<void>();
+    final subscription = peer.messages.listen((payload) async {
+      final message = CollaborationMessage.fromBytes(
+        await crypto.decrypt(roomKey: room.roomKey, encryptedPayload: payload),
+      );
+      if (message.type != CollaborationMessageType.sceneUpdate) return;
+      delivered.add(message);
+      if (message.elements.any(
+        (e) => e['id'] == 'stroke' && e['version'] == 26,
+      )) {
+        completed.complete();
+      }
+    });
+    addTearDown(subscription.cancel);
+    addTearDown(peer.disconnect);
+    addTearDown(repository.stop);
+    final points = [
+      for (var i = 0; i < 2048; i++) [i.toDouble(), (i % 17).toDouble()],
+    ];
+    final pressures = [for (var i = 0; i < 2048; i++) 0.25 + (i % 7) / 10];
+    Map<String, Object?> stroke(int version) => {
+      ..._element('stroke', version),
+      'type': 'freedraw',
+      'points': points,
+      'pressures': pressures,
+      'customData': {
+        'flowMuse': {
+          'brushType': 'pencil',
+          'unknown': ['preserve'],
+        },
+      },
+    };
+    transport.blockNextSend();
+    await repository.broadcastElements(room: room, elements: [stroke(1)]);
+    await transport.waitForBlockedSend();
+    for (var version = 2; version <= 26; version++) {
+      await repository.broadcastElements(
+        room: room,
+        elements: [
+          stroke(version),
+          {..._element('deleted', version), 'isDeleted': version == 26},
+        ],
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    transport.releaseSend();
+    await completed.future.timeout(const Duration(seconds: 5));
+    expect(delivered, hasLength(2));
+    final finalStroke = delivered.last.elements.firstWhere(
+      (e) => e['id'] == 'stroke',
+    );
+    expect(finalStroke['points'], points);
+    expect(finalStroke['pressures'], pressures);
+    expect(finalStroke['customData'], stroke(26)['customData']);
+    expect(
+      delivered.last.elements.singleWhere(
+        (e) => e['id'] == 'deleted',
+      )['isDeleted'],
+      isTrue,
+    );
+  });
+
+  test('增量采用实际合并结果：归属回填、绑定文字、重复包与活动保护', () {
+    final repository = CollaborationRepository();
+    addTearDown(repository.stop);
+    final parent = _element('parent', 1);
+    final child = {
+      ..._element('child', 1),
+      'type': 'text',
+      'containerId': 'parent',
+    };
+    repository.reconcileRemoteScene(
+      localScene: _scene([parent, child]),
+      remoteElements: [],
+    );
+    final incoming = {
+      ..._element('parent', 2),
+      'customData': {
+        'flowMuse': {
+          'unknown': [7],
+          'collaborationOwner': {
+            'version': 1,
+            'creatorKey': 'fixture-owner',
+            'displayName': 'fixture',
+            'isGuest': true,
+          },
+        },
+      },
+    };
+    final changed = repository.reconcileRemoteElements(
+      remoteElements: [incoming],
+    );
+    expect(changed.map((e) => e['id']).toSet(), {'parent', 'child'});
+    expect(changed.every((e) => readCreatorFromJson(e) != null), isTrue);
+    expect(child.containsKey('customData'), isFalse);
+    expect(
+      repository.reconcileRemoteElements(remoteElements: [incoming]),
+      isEmpty,
+    );
+    final oldClient = _element('parent', 3);
+    final repaired = repository.reconcileRemoteElements(
+      remoteElements: [oldClient],
+    );
+    expect(repaired.length, 1);
+    expect(readCreatorFromJson(repaired.single) != null, isTrue);
+    expect(oldClient.containsKey('customData'), isFalse);
+    expect(
+      repository.reconcileRemoteElements(
+        remoteElements: [_element('parent', 4)],
+        protectedElementIds: {'parent'},
+      ),
+      isEmpty,
+    );
+  });
+
+  test('换房后旧加密任务与待发临时帧不得发送或污染新房间', () async {
+    final crypto = _GatedEncryptCrypto();
+    final roomA = CollaborationRoom.newRoom(crypto: crypto);
+    final roomB = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    for (final room in [roomA, roomB]) {
+      await store.createRoom(
+        room: room,
+        scene: ExcalidrawScene.empty(),
+        ownerKeyHash: 'fixture',
+      );
+    }
+    final transport = _LifecycleTransport();
+    final repository = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+      crypto: crypto,
+    );
+    addTearDown(repository.stop);
+    addTearDown(transport.close);
+    await repository.joinRoom(room: roomA, localScene: ExcalidrawScene.empty());
+    await repository.broadcastElements(
+      room: roomA,
+      elements: [_element('stroke', 1)],
+      latestOnly: true,
+    );
+    await crypto.started.future;
+    await repository.broadcastElements(
+      room: roomA,
+      elements: [_element('stroke', 2)],
+      latestOnly: true,
+    );
+    await repository.joinRoom(room: roomB, localScene: ExcalidrawScene.empty());
+    crypto.release.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(transport.sendCount, 0);
+    await repository.broadcastElements(
+      room: roomB,
+      elements: [_element('stroke', 1)],
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(transport.sendCount, 1);
+
+    // A successful send in B must not suppress the same ID/version in A.
+    await repository.joinRoom(room: roomA, localScene: ExcalidrawScene.empty());
+    await repository.broadcastElements(
+      room: roomA,
+      elements: [_element('stroke', 1)],
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(transport.sendCount, 2);
+  });
+
   test('远端合并不会吞掉本地尚未发送的元素', () async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
@@ -318,6 +512,7 @@ void main() {
 }
 
 class _LifecycleTransport implements RealtimeTransport {
+  int sendCount = 0;
   final messagesController = StreamController<EncryptedPayload>.broadcast();
   final newUsersController = StreamController<String>.broadcast();
   int disconnectCount = 0;
@@ -359,7 +554,9 @@ class _LifecycleTransport implements RealtimeTransport {
   Future<void> connect(String roomId) async {}
 
   @override
-  Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {}
+  Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {
+    sendCount++;
+  }
 
   @override
   Future<void> sendLiveInk(EncryptedPayload payload) async {}
@@ -404,6 +601,23 @@ class _GatedMemoryRealtimeTransport extends MemoryRealtimeTransport {
       }
     }
     await super.send(payload, volatile: volatile);
+  }
+}
+
+class _GatedEncryptCrypto extends CollaborationCrypto {
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<EncryptedPayload> encrypt({
+    required String roomKey,
+    required List<int> plainBytes,
+  }) async {
+    if (!started.isCompleted) {
+      started.complete();
+      await release.future;
+    }
+    return super.encrypt(roomKey: roomKey, plainBytes: plainBytes);
   }
 }
 

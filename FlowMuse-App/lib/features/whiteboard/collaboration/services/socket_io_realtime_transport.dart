@@ -403,7 +403,7 @@ class SocketIoRealtimeTransport
     if (roomId == null || socket == null || !socket.connected) {
       throw StateError('协作连接未建立');
     }
-    socket.emit(
+    (volatile ? socket.volatile : socket).emit(
       volatile ? _eventServerVolatileBroadcast : _eventServerBroadcast,
       [
         roomId,

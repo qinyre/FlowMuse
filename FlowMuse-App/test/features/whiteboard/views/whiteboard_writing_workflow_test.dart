@@ -10,8 +10,10 @@ import 'package:flow_muse/features/whiteboard/collaboration/collaboration_config
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_message.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_room.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/excalidraw_scene.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/live_ink_chunk.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/collaboration_crypto.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/live_ink_receive_scheduler.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/ink_recognition/ink_recognition_repository.dart';
@@ -524,11 +526,15 @@ void main() {
     final room = CollaborationRoom.newRoom(crypto: crypto);
     final store = MemoryEncryptedSceneStore();
     final hub = MemoryRealtimeRoomHub();
+    final peerTransport = MemoryRealtimeTransport(
+      hub: hub,
+      socketId: 'workflow-peer',
+    );
     final peer = CollaborationRepository(
-      transport: MemoryRealtimeTransport(hub: hub, socketId: 'workflow-peer'),
+      transport: peerTransport,
       sceneStore: store,
     );
-    final local = CollaborationRepository(
+    final local = _TrackedCollaborationRepository(
       transport: MemoryRealtimeTransport(hub: hub, socketId: 'workflow-page'),
       sceneStore: store,
     );
@@ -567,6 +573,71 @@ void main() {
     final controller = tester
         .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
         .controller!;
+    // Establish the participant once, then pointer updates must stay in the
+    // cursor layer while participant identity/status still updates the header.
+    Future<void> pointer(int x, {String username = 'fixture-peer'}) async {
+      await tester.runAsync(
+        () => peer.broadcastMouseLocation(
+          room: room,
+          pointer: {'x': x, 'y': 140},
+          button: 'down',
+          selectedElementIds: {'workflow-remote': true},
+          username: username,
+        ),
+      );
+      await _drainIo(tester, container);
+    }
+
+    await pointer(100);
+    final pageEditor = tester.widget<MarkdrawEditor>(
+      find.byType(MarkdrawEditor),
+    );
+    final presenceToolbar = tester.widget<DesktopToolbar>(
+      find.byType(DesktopToolbar),
+    );
+    for (var x = 101; x <= 104; x++) {
+      await pointer(x);
+      expect(
+        identical(
+          tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)),
+          pageEditor,
+        ),
+        isTrue,
+      );
+      expect(
+        identical(
+          tester.widget<DesktopToolbar>(find.byType(DesktopToolbar)),
+          presenceToolbar,
+        ),
+        isTrue,
+      );
+      final cursor = tester
+          .widgetList<CustomPaint>(find.byType(CustomPaint))
+          .map((paint) => paint.painter)
+          .whereType<InteractiveCanvasPainter>()
+          .expand((paint) => paint.remoteCollaborators)
+          .single;
+      expect(cursor.pointer!.x, x);
+    }
+    await pointer(105, username: 'fixture-renamed');
+    expect(
+      tester
+          .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+          .collaborationParticipants
+          .any((badge) => badge.username == 'fixture-renamed'),
+      isTrue,
+    );
+    final viewport = controller.editorState.viewport;
+    controller.setViewport(viewport.pan(const Offset(20, 10)));
+    await tester.pump();
+    final presencePaint = tester
+        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .map((paint) => paint.painter)
+        .whereType<InteractiveCanvasPainter>()
+        .singleWhere((paint) => paint.remoteCollaborators.isNotEmpty);
+    expect(presencePaint.viewport, controller.editorState.viewport);
+    controller.setViewport(viewport);
+    await tester.pump();
     controller.switchTool(ToolType.freedraw);
     final gesture = await tester.startGesture(
       const Offset(650, 400),
@@ -599,11 +670,136 @@ void main() {
       controller.currentScene.activeElements.whereType<RectangleElement>(),
       hasLength(1),
     );
+    expect(_ink(controller), isEmpty, reason: '本地活动笔迹不能被远端合并提前提交');
+    // Deliver pre-encrypted packets under the widget clock: a continuous
+    // 5ms stream must become visible before the sender stops.
+    final burst = (await tester.runAsync(
+      () async => [
+        for (var version = 2; version <= 7; version++)
+          await crypto.encrypt(
+            roomKey: room.roomKey,
+            plainBytes: CollaborationMessage.sceneUpdate(
+              elements: [
+                {...elements.single, 'version': version, 'versionNonce': 10},
+              ],
+            ).toBytes(),
+          ),
+      ],
+    ))!;
+    for (var i = 0; i < burst.length; i++) {
+      hub.broadcast(
+        roomId: room.roomId,
+        sender: peerTransport,
+        payload: burst[i],
+      );
+      await tester.pump(const Duration(milliseconds: 5));
+      if (i == 4) {
+        expect(
+          controller.currentScene
+              .getElementById(const ElementId('workflow-remote'))!
+              .version,
+          greaterThan(1),
+          reason: '连续入站消息不能不断推迟第一批画布更新',
+        );
+      }
+    }
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(
+      controller.currentScene
+          .getElementById(const ElementId('workflow-remote'))!
+          .version,
+      7,
+    );
+    final selection = tester
+        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .map((paint) => paint.painter)
+        .whereType<InteractiveCanvasPainter>()
+        .expand((paint) => paint.remoteCollaborators)
+        .single
+        .selectionBounds;
+    expect(selection.single.bounds, Bounds.fromLTWH(100, 100, 40, 40));
+    final wetInk = tester
+        .widget<EditorCanvas>(find.byType(EditorCanvas))
+        .remoteWetInkStore!;
+    const chunk = DecodedLiveInkChunk(
+      senderSocketId: 'workflow-peer',
+      chunk: LiveInkChunk(
+        strokeId: 'workflow-long-remote',
+        startIndex: 0,
+        points: [LiveInkPoint(x: 100, y: 200), LiveInkPoint(x: 120, y: 220)],
+        style: LiveInkStyle(
+          brushType: 'ballpoint',
+          strokeColor: '#000000',
+          strokeWidth: 2,
+          opacity: 100,
+        ),
+      ),
+    );
+    wetInk.apply(chunk);
+    expect(wetInk.strokeCount, 1);
+    void verifyHandoff() {
+      if (wetInk.strokeCount == 0) {
+        expect(
+          controller.currentScene.getElementById(
+            const ElementId('workflow-long-remote'),
+          ),
+          isNotNull,
+          reason: '正式笔迹进入画布后才清除远端湿墨',
+        );
+      }
+    }
+
+    wetInk.addListener(verifyHandoff);
+    final longToolbar = tester.widget<DesktopToolbar>(
+      find.byType(DesktopToolbar),
+    );
+    final imageChecks = local.imageChecks;
+    for (final count in [256, 512, 1024, 2048]) {
+      final longStroke = FreedrawElement(
+        id: const ElementId('workflow-long-remote'),
+        x: 100,
+        y: 200,
+        width: 120,
+        height: 40,
+        points: [
+          for (var i = 0; i < count; i++)
+            Point(i * 120 / count, (i % 40).toDouble()),
+        ],
+        version: count,
+        index: 'b1',
+      );
+      await tester.runAsync(
+        () => peer.broadcastElements(
+          room: room,
+          elements: [
+            Map<String, Object?>.from(
+              ExcalidrawJsonCodec.elementToJson(longStroke),
+            ),
+          ],
+          latestOnly: true,
+        ),
+      );
+      await _drainIo(tester, container);
+      expect(_ink(controller).single.points.length, count);
+      expect(
+        identical(
+          tester.widget<DesktopToolbar>(find.byType(DesktopToolbar)),
+          longToolbar,
+        ),
+        isTrue,
+      );
+      expect(local.imageChecks, imageChecks);
+    }
+    expect(wetInk.strokeCount, 0);
+    expect(wetInk.apply(chunk).accepted, isFalse, reason: '迟到分片不能复活已完成笔迹');
+    wetInk.removeListener(verifyHandoff);
     await gesture.moveBy(const Offset(30, -20));
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 200));
     await _drainIo(tester, container);
-    final stroke = _ink(controller).single;
+    final stroke = _ink(
+      controller,
+    ).singleWhere((stroke) => stroke.id.value != 'workflow-long-remote');
     expect(
       received
           .expand((message) => message.elements)
@@ -672,6 +868,28 @@ void main() {
     },
     skip: '既有协作历史问题：整场景快照撤销会回退远端新增；用 --run-skipped 单独复现，见第二轮验证记录。',
   );
+}
+
+class _TrackedCollaborationRepository extends CollaborationRepository {
+  _TrackedCollaborationRepository({
+    required super.transport,
+    required super.sceneStore,
+  });
+  int imageChecks = 0;
+
+  @override
+  Future<CollaborationLoadedFilesResult> loadMissingFiles({
+    required CollaborationRoom room,
+    required Iterable<String> fileIds,
+    required Set<String> existingFileIds,
+  }) {
+    imageChecks++;
+    return super.loadMissingFiles(
+      room: room,
+      fileIds: fileIds,
+      existingFileIds: existingFileIds,
+    );
+  }
 }
 
 ProviderContainer _container({

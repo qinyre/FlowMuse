@@ -3,6 +3,7 @@ library;
 import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
 import 'package:flutter/services.dart';
 
@@ -61,6 +62,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.shareOriginConfigured = true,
     this.collaboratorCount = 0,
     this.collaborators = const [],
+    this.collaboratorsListenable,
     this.collaborationParticipants = const [],
     this.isCollaborationOwner = false,
     this.onStartCollaboration,
@@ -135,6 +137,8 @@ class MarkdrawEditor extends StatefulWidget {
   final bool shareOriginConfigured;
   final int collaboratorCount;
   final List<RemoteCollaboratorOverlay> collaborators;
+  final ValueListenable<List<RemoteCollaboratorOverlay>>?
+  collaboratorsListenable;
   final List<CollaborationParticipantBadge> collaborationParticipants;
   final bool isCollaborationOwner;
   final Future<void> Function()? onStartCollaboration;
@@ -812,6 +816,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                       child: EditorCanvas(
                         controller: _controller,
                         collaborators: widget.collaborators,
+                        collaboratorsListenable: widget.collaboratorsListenable,
                         remoteWetInkStore: widget.remoteWetInkStore,
                         onPointerPresence: widget.onPointerPresence,
                         onVisibleSceneBoundsChanged:
