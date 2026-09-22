@@ -55,7 +55,7 @@ void main() {
       'defaultPageFlow': 'future-flow',
     });
 
-    expect(restored.defaultTool, ToolType.select);
+    expect(restored.defaultTool, ToolType.hand);
     expect(restored.defaultBrush, BrushType.fountainPen);
     expect(restored.fingerDrawingEnabled, isFalse);
     expect(restored.pressureCurve, PressureCurvePreset.standard);

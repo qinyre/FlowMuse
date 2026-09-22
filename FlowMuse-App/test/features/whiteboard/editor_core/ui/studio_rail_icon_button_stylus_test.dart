@@ -69,7 +69,7 @@ void main() {
 
     await pen.up();
     await tester.pump();
-    expect(taps, 0, reason: '长按仅显示工具名，不应切换工具');
+    expect(taps, 1, reason: '长按显示工具名后仍应保留原有点击动作');
   });
 
   testWidgets('触控笔按下后引擎取消指针，抬手仍应生效（本轮核心场景）', (tester) async {

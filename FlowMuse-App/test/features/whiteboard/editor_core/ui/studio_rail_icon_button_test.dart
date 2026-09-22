@@ -61,13 +61,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump(const Duration(milliseconds: 200));
 
-      // Then(机制签名): 按压期间不应弹出提示气泡。
-      // 若此处找到气泡，说明 Tooltip 长按识别器已赢得手势竞技场
-      //（真机上表现为：按住约 0.5s 弹出提示气泡，且这次点击被吞掉）。
+      // Then: 长按期间显示工具名称，但不应影响松手后的点击动作。
       expect(
         find.text('测试工具'),
-        findsNothing,
-        reason: '按住超过 500ms 时 Tooltip 气泡不应弹出（弹出即长按识别器竞争获胜）',
+        findsOneWidget,
+        reason: '按住超过长按阈值时应显示工具名称',
       );
 
       await gesture.up();
