@@ -102,7 +102,9 @@ class AiAgentRepository {
       }
     }
     final config = _config ?? await _configStore.read();
-    if (config == null) throw StateError('请先在 FlowMuse 实验室配置 AI 接口');
+    if (config == null) {
+      throw StateError('请先在主页-设置-AI笔记助手配置中配置 AI 接口');
+    }
     final body = buildAiAgentRequestBody(
       model: config.model.trim(),
       instruction: normalizedInstruction,

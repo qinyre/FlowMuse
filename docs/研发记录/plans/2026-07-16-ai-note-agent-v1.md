@@ -19,7 +19,7 @@ FlowMuse 已具备语音转文字、手写识别、智能排版、标准文本�
 
 ## 实现方案
 
-1. 在 FlowMuse 实验室保存用户填写的 OpenAI 兼容 Base URL、API Key 和模型名称，其中 API Key 使用本机安全存储。
+1. 在“AI笔记助手配置”中保存用户填写的 OpenAI 兼容 Base URL、API Key 和模型名称，其中 API Key 使用本机安全存储。
 2. Flutter Repository 通过 `NativeHttpClient` 直接请求 `chat/completions`，发送两个受限工具并解析标准 `tool_calls`。
 3. 不新增 FlowMuse 服务端接口，不依赖服务端模型配置或登录状态。
 4. 工具栏增加 AI 入口；对话框负责输入、等待、动作预览和确认。

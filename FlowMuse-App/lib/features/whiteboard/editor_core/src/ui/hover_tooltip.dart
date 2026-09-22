@@ -1,9 +1,12 @@
 library;
 
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-/// 悬停提示气泡：鼠标/触控笔悬停时显示，气泡本身不参与命中测试。
+/// 提示气泡：鼠标/触控笔悬停时显示，也可按需支持触摸/触控笔长按，
+/// 气泡本身不参与命中测试。
 ///
 /// 不能直接用 Material [Tooltip]：其气泡外层是命中不透明的 MouseRegion
 /// （见 flutter/packages/flutter/lib/src/widgets/raw_tooltip.dart 的
@@ -14,10 +17,18 @@ import 'package:flutter/material.dart';
 /// 这里自绘 Overlay 气泡并包一层 [IgnorePointer]：只负责显示，永不拦截
 /// 指针事件，因此任何排布下点击都直达目标控件。
 class HoverTooltip extends StatefulWidget {
-  const HoverTooltip({super.key, required this.message, required this.child});
+  const HoverTooltip({
+    super.key,
+    required this.message,
+    required this.child,
+    this.showOnLongPress = false,
+    this.onLongPressTriggered,
+  });
 
   final String message;
   final Widget child;
+  final bool showOnLongPress;
+  final VoidCallback? onLongPressTriggered;
 
   @override
   State<HoverTooltip> createState() => _HoverTooltipState();
@@ -25,6 +36,11 @@ class HoverTooltip extends StatefulWidget {
 
 class _HoverTooltipState extends State<HoverTooltip> {
   OverlayEntry? _entry;
+  Timer? _longPressTimer;
+  Timer? _hideTimer;
+  int? _longPressPointer;
+  Offset? _longPressStart;
+  bool _shownByLongPress = false;
 
   @override
   void initState() {
@@ -39,6 +55,8 @@ class _HoverTooltipState extends State<HoverTooltip> {
     GestureBinding.instance.pointerRouter.removeGlobalRoute(
       _handleGlobalPointerEvent,
     );
+    _cancelLongPressTracking();
+    _hideTimer?.cancel();
     _hide();
     super.dispose();
   }
@@ -69,6 +87,49 @@ class _HoverTooltipState extends State<HoverTooltip> {
     overlay.insert(entry);
   }
 
+  bool _supportsLongPress(PointerDeviceKind kind) =>
+      kind == PointerDeviceKind.touch ||
+      kind == PointerDeviceKind.stylus ||
+      kind == PointerDeviceKind.invertedStylus;
+
+  void _handlePointerDown(PointerDownEvent event) {
+    _hideTimer?.cancel();
+    _shownByLongPress = false;
+    if (!widget.showOnLongPress || !_supportsLongPress(event.kind)) return;
+    _longPressPointer = event.pointer;
+    _longPressStart = event.position;
+    _longPressTimer = Timer(kLongPressTimeout, () {
+      if (!mounted || _longPressPointer != event.pointer) return;
+      _shownByLongPress = true;
+      _show();
+      widget.onLongPressTriggered?.call();
+    });
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (event.pointer != _longPressPointer || _longPressStart == null) return;
+    if ((event.position - _longPressStart!).distance > kTouchSlop) {
+      _cancelLongPressTracking();
+    }
+  }
+
+  void _handlePointerEnd(PointerEvent event) {
+    if (event.pointer != _longPressPointer) return;
+    final keepVisible = _shownByLongPress;
+    _cancelLongPressTracking();
+    if (keepVisible) {
+      _hideTimer = Timer(const Duration(milliseconds: 1500), _hide);
+    }
+  }
+
+  void _cancelLongPressTracking() {
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+    _longPressPointer = null;
+    _longPressStart = null;
+    _shownByLongPress = false;
+  }
+
   void _hide() {
     _entry?.remove();
     _entry = null;
@@ -83,7 +144,13 @@ class _HoverTooltipState extends State<HoverTooltip> {
       child: MouseRegion(
         onEnter: (_) => _show(),
         onExit: (_) => _hide(),
-        child: widget.child,
+        child: Listener(
+          onPointerDown: _handlePointerDown,
+          onPointerMove: _handlePointerMove,
+          onPointerUp: _handlePointerEnd,
+          onPointerCancel: _handlePointerEnd,
+          child: widget.child,
+        ),
       ),
     );
   }

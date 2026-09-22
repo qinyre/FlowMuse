@@ -54,6 +54,24 @@ void main() {
     expect(taps, 1, reason: '触控笔一次点按应只派发一次，且不依赖竞技场');
   });
 
+  testWidgets('触控笔长按显示工具名且不触发点击', (tester) async {
+    var taps = 0;
+    await pumpButton(tester, () => taps++);
+
+    final pen = await tester.startGesture(
+      center(tester),
+      kind: PointerDeviceKind.stylus,
+    );
+    await tester.pump(kLongPressTimeout);
+
+    expect(find.text('测试工具'), findsOneWidget);
+    expect(taps, 0);
+
+    await pen.up();
+    await tester.pump();
+    expect(taps, 1, reason: '长按显示工具名后仍应保留原有点击动作');
+  });
+
   testWidgets('触控笔按下后引擎取消指针，抬手仍应生效（本轮核心场景）', (tester) async {
     var taps = 0;
     await pumpButton(tester, () => taps++);

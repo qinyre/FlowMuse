@@ -102,7 +102,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
       }
       runWhenUiStable(() {
         if (mounted) {
-          context.pushReplacement(AppRoutes.whiteboardPath(noteId: note.id));
+          context.go(AppRoutes.whiteboardPath(noteId: note.id));
         }
       });
     } catch (error, stackTrace) {
@@ -182,7 +182,7 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
         '[FlowMuseCreateNote] CreateNotePage.importPdf success '
         'noteId=${note.id}',
       );
-      context.push(AppRoutes.whiteboardPath(noteId: note.id));
+      context.go(AppRoutes.whiteboardPath(noteId: note.id));
     } catch (error, stackTrace) {
       debugPrint(
         '[FlowMuseCreateNote] CreateNotePage.importPdf failed: $error',

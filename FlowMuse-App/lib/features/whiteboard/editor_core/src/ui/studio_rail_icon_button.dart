@@ -125,6 +125,7 @@ class _StudioRailIconButtonState extends State<StudioRailIconButton> {
         controlId: _diagnosticControlId,
         child: HoverTooltip(
           message: widget.tooltip,
+          showOnLongPress: callback != null,
           child: Listener(
             onPointerDown: _onPointerDown,
             onPointerMove: _onPointerMove,
