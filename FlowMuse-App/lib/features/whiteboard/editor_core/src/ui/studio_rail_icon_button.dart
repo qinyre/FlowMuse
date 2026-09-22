@@ -48,6 +48,8 @@ class _StudioRailIconButtonState extends State<StudioRailIconButton> {
   /// 完全绕开竞技场。手指/鼠标仍走 InkWell 原路径（它们的竞技场行为已验证
   /// 可靠），两条路径靠抑制开关去重（见 `_StylusTapArbiter.suppressInkTap`）。
   _StylusTapArbiter? _stylusArbiter;
+  bool _longPressTriggered = false;
+  bool _suppressNextInkTap = false;
 
   @override
   void dispose() {
@@ -62,6 +64,8 @@ class _StudioRailIconButtonState extends State<StudioRailIconButton> {
   void _onPointerDown(PointerDownEvent event) {
     // 新的一次按压开始：清掉上一次留下的抑制与记录（指针 id 会被引擎复用）。
     _stylusArbiter?.reset();
+    _longPressTriggered = false;
+    _suppressNextInkTap = false;
     if (widget.onPressed == null || !_isStylusKind(event)) return;
     (_stylusArbiter ??= _StylusTapArbiter(
       onActivated: _onStylusTapActivated,
@@ -75,6 +79,10 @@ class _StudioRailIconButtonState extends State<StudioRailIconButton> {
 
   void _onPointerUp(PointerUpEvent event) {
     if (!_isStylusKind(event)) return;
+    if (_longPressTriggered) {
+      _stylusArbiter?.reset();
+      return;
+    }
     _stylusArbiter?.settle(event, stage: 'rawTap');
   }
 
@@ -83,7 +91,17 @@ class _StudioRailIconButtonState extends State<StudioRailIconButton> {
   /// 而不再派发——真机上引擎若用 cancel 代替 up，这次点选只能在此刻救回。
   void _onPointerCancel(PointerCancelEvent event) {
     if (!_isStylusKind(event)) return;
+    if (_longPressTriggered) {
+      _stylusArbiter?.reset();
+      return;
+    }
     _stylusArbiter?.settle(event, stage: 'rawCancelTap');
+  }
+
+  void _onLongPressTriggered() {
+    _longPressTriggered = true;
+    _suppressNextInkTap = true;
+    _stylusArbiter?.reset();
   }
 
   void _onStylusTapActivated(String stage) {
@@ -95,6 +113,14 @@ class _StudioRailIconButtonState extends State<StudioRailIconButton> {
   }
 
   void _handleInkTap() {
+    if (_suppressNextInkTap) {
+      _suppressNextInkTap = false;
+      ToolbarInputDiagnostics.recordTap(
+        controlId: _diagnosticControlId,
+        stage: 'longPressTapSuppressed',
+      );
+      return;
+    }
     // InkWell 的 tap 与原始通道是同一个动作的两条路径，先派发者胜。
     if (_stylusArbiter?.suppressInkTap ?? false) {
       ToolbarInputDiagnostics.recordTap(
@@ -125,6 +151,8 @@ class _StudioRailIconButtonState extends State<StudioRailIconButton> {
         controlId: _diagnosticControlId,
         child: HoverTooltip(
           message: widget.tooltip,
+          showOnLongPress: callback != null,
+          onLongPressTriggered: _onLongPressTriggered,
           child: Listener(
             onPointerDown: _onPointerDown,
             onPointerMove: _onPointerMove,
