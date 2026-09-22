@@ -309,7 +309,7 @@ version, pageId, fallbackOrdinal, zoom, pageRelativeAnchorX, pageRelativeAnchorY
 - 缩略图只保留自身位图和公式元素，不为每张图保留历史 Scene。局部失效在空闲任务内计算，变更旧图在新图就绪前保留；正文图片有待处理请求时让出解码，图片和自然介质笔迹缓存均不受预览淘汰影响。
 - 已有代码允许复用渲染器的完整 Frame/绑定文字绘制；预览像素测试覆盖跨页对象，公式单独复用主画布 `Math.tex` 组件。复杂旋转/绑定/荧光笔组合仍按第 9 节设备矩阵验收。
 - 正式回归文件：`page_navigation_test.dart`、`page_navigation_widgets_test.dart`；真实 SQLite 阅读恢复用例加入 `whiteboard_writing_workflow_test.dart`。包含 500 页跳转/懒构建、无场景与撤销副作用、落笔拒绝跳转、旧 PDF 派生、混合页排布、缓存隔离、坏记录与取消。
-- 视觉检查输出位于被忽略的 `FlowMuse-App/build/page-navigation-overview.png`，本机加载中文与 Material 字体，确认 280px 面板页码、选中态与缩略图布局。
+- 视觉检查输出位于被忽略的 `FlowMuse-App/build/page-navigation-overview.png`，本机加载中文与 Material 字体，确认 280px 面板页码、选中态与缩略图布局。合并前通过 `FLOWMUSE_PAGE_NAV_SCREENSHOTS=true` 的预览 widget 用例重新生成并归档[预览截图](../evidence/page-navigation/overview.png)，仅含测试生成的空白网格页。
 - 后续补充了 320px 宽度/只读模式测试、宽屏开关预览保持画布尺寸与视口的测试，以及右到左混合宽度 PDF 导入测试。页码输入保留原始值再校验，负数、小数、空值和超长数字不能被字符过滤器误变成有效页码。
 - 待设备事项不阻塞软件交付：Android/鸿蒙的大 PDF 冷热缓存、内存峰值、笔画 event-to-paint p95/p99 与帧时间 A/B。自动化正确性通过不能代替这些性能数据；本轮不安装、不卸载、不清除设备数据。
 
