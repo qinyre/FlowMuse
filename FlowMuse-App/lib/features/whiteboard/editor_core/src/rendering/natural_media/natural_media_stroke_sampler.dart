@@ -277,22 +277,32 @@ class NaturalMediaStrokeSampler {
     if (edges.isEmpty || pts.length < 2) {
       // 单点退化：dot/teardrop（不虚构方向）。
       if (pts.isNotEmpty) {
-        final hw =
-            NaturalMediaResponseCurves.brushContactHalfWidth(
-              strokeWidth,
-              prs.first,
-            ) *
-            1.3;
+        final isPencil = brushType == BrushType.pencil;
+        final hw = isPencil
+            ? NaturalMediaResponseCurves.pencilLocalWidth(
+                    strokeWidth,
+                    prs.first,
+                  ) /
+                  2
+            : NaturalMediaResponseCurves.brushContactHalfWidth(
+                    strokeWidth,
+                    prs.first,
+                  ) *
+                  1.3;
         final c = pts.first;
         final r = ui.Rect.fromCircle(center: ui.Offset(c.x, c.y), radius: hw);
         absorb(r);
         primitives.add(
           NaturalMediaPrimitive(
-            kind: NaturalMediaPrimitiveKind.brushTeardrop,
+            kind: isPencil
+                ? NaturalMediaPrimitiveKind.pencilBase
+                : NaturalMediaPrimitiveKind.brushTeardrop,
             edgeIndex: valid.isEmpty ? 0 : valid.first,
             ordinal: 0,
-            channel: NaturalMediaChannel.brushBody,
-            paintBucket: 'brushTeardrop',
+            channel: isPencil
+                ? NaturalMediaChannel.base
+                : NaturalMediaChannel.brushBody,
+            paintBucket: isPencil ? 'pencilBase' : 'brushTeardrop',
             bounds: r,
             center: c,
             halfLength: hw,
@@ -529,10 +539,12 @@ class NaturalMediaStrokeSampler {
       final sortedKeep = (keep.toList()..sort());
       if (sortedKeep.length >= tuning.particleCap) {
         // 极值过多（噪声压力）时对保留集本身稳定降采样。
+        // Keep insertion order (0, last, extrema), not numeric sorted order.
+        final keepInOrder = keep.toList(growable: false);
         final stride = sortedKeep.length / tuning.particleCap;
         sortedKeep.clear();
         for (var i = 0; i < tuning.particleCap; i++) {
-          sortedKeep.add(keep.elementAt((i * stride).floor()));
+          sortedKeep.add(keepInOrder[(i * stride).floor()]);
         }
         sortedKeep.sort();
       } else {

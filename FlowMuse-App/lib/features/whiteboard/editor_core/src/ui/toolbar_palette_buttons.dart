@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
@@ -201,14 +203,54 @@ class _BrushPalette extends StatelessWidget {
                       StudioRailIconButton(
                         tooltip: _labelForBrush(brushType),
                         selected: controller.activeBrushType == brushType,
-                        size: 44,
+                        size: 52,
                         onPressed: () {
                           controller.selectBrush(brushType);
                           Navigator.of(context).pop();
                         },
-                        child: Icon(_iconForBrush(brushType), size: 20),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(_iconForBrush(brushType), size: 20),
+                            const SizedBox(height: 4),
+                            ExcludeSemantics(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  _labelForBrush(brushType),
+                                  maxLines: 1,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                Semantics(
+                  label: '${_labelForBrush(controller.activeBrushType)}笔迹预览',
+                  image: true,
+                  child: RepaintBoundary(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CustomPaint(
+                        size: const Size(294, 72),
+                        painter: _BrushSamplePainter(
+                          brush: controller.activeBrushType,
+                          color:
+                              controller.defaultStyle.strokeColor ?? '#1e1e1e',
+                          width: controller.defaultStyle.strokeWidth ?? 2,
+                          sensitivity: controller.pressureSensitivity,
+                          opacity: controller.defaultStyle.opacity ?? 1.0,
+                          background: parseColor(
+                            controller.canvasBackgroundColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 if (pressureEnabled) ...[
@@ -279,6 +321,77 @@ class _BrushPalette extends StatelessWidget {
       },
     );
   }
+}
+
+/// Uses the actual renderer and creation-time pressure encoding. The isolated
+/// preview repaints only when a brush setting changes, never on a pen timer.
+class _BrushSamplePainter extends CustomPainter {
+  const _BrushSamplePainter({
+    required this.brush,
+    required this.color,
+    required this.width,
+    required this.sensitivity,
+    required this.opacity,
+    required this.background,
+  });
+
+  final BrushType brush;
+  final String color;
+  final double width;
+  final double sensitivity;
+  final double opacity;
+  final Color background;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawColor(background, BlendMode.srcOver);
+    final profile = BrushRenderProfile.forType(brush);
+    final scale = math.min(
+      1.0,
+      (size.height - 16) / (width * profile.sizeScale + 24),
+    );
+    final points = [
+      for (var i = 0; i <= 40; i++)
+        Point(
+          12 + (size.width - 24) * i / 40,
+          size.height / 2 + 12 * scale * math.sin(i * math.pi / 20),
+        ),
+    ];
+    final element = FreedrawElement(
+      id: ElementId('__brush_sample_${brush.name}'),
+      x: 0,
+      y: 0,
+      width: size.width,
+      height: size.height,
+      points: points,
+      pressures: profile.pressureEnabled
+          ? [
+              for (var i = 0; i <= 40; i++)
+                profile.encodePressure(0.2 + 0.65 * i / 40, sensitivity),
+            ]
+          : const [],
+      simulatePressure: !profile.pressureEnabled,
+      isComplete: false,
+      strokeColor: color,
+      strokeWidth: width * scale,
+      opacity: opacity,
+      customData: customDataWithFreedrawRender(
+        null,
+        brush,
+        renderVersion: defaultRenderVersionForNewStroke(brush),
+      ),
+    );
+    ElementRenderer.render(canvas, element, RoughCanvasAdapter());
+  }
+
+  @override
+  bool shouldRepaint(_BrushSamplePainter oldDelegate) =>
+      brush != oldDelegate.brush ||
+      color != oldDelegate.color ||
+      width != oldDelegate.width ||
+      sensitivity != oldDelegate.sensitivity ||
+      opacity != oldDelegate.opacity ||
+      background != oldDelegate.background;
 }
 
 /// 压力滑块标签（T10）：v2 笔形按响应语义命名——铅笔压力主要控制

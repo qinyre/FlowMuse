@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import '../../core/elements/elements.dart';
@@ -39,9 +40,6 @@ class PencilStrokeRendererV2 {
     int edgeIndexOffset = 0,
   }) {
     final profile = BrushRenderProfile.forType(BrushType.pencil);
-    final abs = [
-      for (final p in element.points) Point(p.x + element.x, p.y + element.y),
-    ];
     // T4-C 条件缓存：整笔静态渲染复用 Path（键含 id/version/nonce/
     // renderVersion/isComplete/宽度/几何版本）。绕过两类调用：
     // ① owned 分段（远端湿墨，每帧几何随 owned 范围变化）；
@@ -71,6 +69,9 @@ class PencilStrokeRendererV2 {
     }
 
     planBuildCount++;
+    final abs = [
+      for (final p in element.points) Point(p.x + element.x, p.y + element.y),
+    ];
     final plan = NaturalMediaStrokeSampler.sample(
       strokeId: element.id.value,
       points: abs,
@@ -152,6 +153,19 @@ class PencilStrokeRendererV2 {
   /// 真源，T9）：逐采样槽抖动偏移，每条 owned 边末补边终点顶点
   ///（分块边界连续性，§3.4）。
   static List<ui.Offset> basePolygon(NaturalMediaStrokePlan plan, double base) {
+    // 零长笔迹由采样器给出同源圆点，Canvas、SVG 与湿墨都消费此几何。
+    if (plan.edges.isEmpty && plan.primitives.isNotEmpty) {
+      final dot = plan.primitives.first;
+      final center = dot.center!;
+      final radius = dot.halfLength!;
+      return [
+        for (var i = 0; i < 32; i++)
+          ui.Offset(
+            center.x + radius * math.cos(i * math.pi / 16),
+            center.y + radius * math.sin(i * math.pi / 16),
+          ),
+      ];
+    }
     if (plan.samples.isEmpty) return const [];
     final profile = BrushRenderProfile.forType(BrushType.pencil);
     final left = <ui.Offset>[];

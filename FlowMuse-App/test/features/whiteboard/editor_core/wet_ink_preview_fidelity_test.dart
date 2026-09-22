@@ -157,16 +157,44 @@ void main() {
     }
   });
 
-  test('A4: 单点 overlay 不产出预览（≥2 点门槛）', () {
-    final controller = controllerFor(BrushType.fountainPen);
-    addTearDown(controller.dispose);
-    final preview = controller.buildPreviewElement(
-      const ToolOverlay(
-        creationPoints: [Point(1, 1)],
-        creationPressures: [0.5],
-      ),
-    );
-    expect(preview, isNull, reason: '单点不崩溃也不产出预览');
+  test('A4: 五种笔形落笔即通知并产出单点预览，线条仍须两个点', () {
+    for (final brush in BrushType.values) {
+      final controller = controllerFor(brush);
+      addTearDown(controller.dispose);
+      var notifications = 0;
+      controller.addListener(() => notifications++);
+      controller.onPointerDown(downEvent(1));
+      expect(notifications, greaterThan(0), reason: '$brush 落笔即请求绘制');
+      final preview = controller.buildPreviewElement(
+        controller.activeTool.overlay,
+      );
+      expect(preview, isA<FreedrawElement>(), reason: '$brush 单点预览');
+      expect((preview! as FreedrawElement).points, hasLength(1));
+      expect(controller.currentScene.elements, isEmpty, reason: '预览不入场景');
+      final beforeCancel = notifications;
+      controller.onPointerCancel(
+        const PointerCancelEvent(pointer: 1, kind: PointerDeviceKind.stylus),
+      );
+      expect(
+        notifications,
+        greaterThan(beforeCancel),
+        reason: '$brush 取消必须请求重绘，否则已显示的首点会残留',
+      );
+      expect(
+        controller.buildPreviewElement(controller.activeTool.overlay),
+        isNull,
+      );
+    }
+    for (final tool in [ToolType.line, ToolType.arrow]) {
+      final controller = MarkdrawController()..switchTool(tool);
+      addTearDown(controller.dispose);
+      expect(
+        controller.buildPreviewElement(
+          const ToolOverlay(creationPoints: [Point(1, 1)]),
+        ),
+        isNull,
+      );
+    }
   });
 
   test('A5: 预览 id 恒定、连续构建互不污染、抬笔后 id 与提交元素相同', () async {

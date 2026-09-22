@@ -29,6 +29,7 @@ import '../collaboration/models/live_ink_chunk.dart';
 import '../collaboration/models/room_collaborator.dart';
 import '../collaboration/repositories/collaboration_repository.dart';
 import '../collaboration/services/collaboration_creator_identity.dart';
+import '../collaboration/services/collaboration_activity_timer.dart';
 import '../collaboration/services/collaboration_debug_log.dart';
 import '../collaboration/services/live_ink_receive_scheduler.dart';
 import '../collaboration/services/live_ink_sender.dart';
@@ -43,6 +44,7 @@ import '../share/models/share_result.dart';
 import '../share/services/share_export_coordinator.dart';
 import '../share/services/share_service_selector.dart';
 import '../view_models/whiteboard_view_model.dart';
+import '../repositories/whiteboard_scene_repository.dart';
 import '../models/editor_preferences.dart';
 import '../view_models/editor_preferences_view_model.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
@@ -105,6 +107,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   late final MarkdrawFileHandler _fileHandler;
   late final WhiteboardCollaborationAdapter _collaborationAdapter;
   late final CollaborationRepository _collaborationRepository;
+  // Dispose can flush a draft after WidgetRef becomes unsafe to access.
+  late final WhiteboardSceneRepository _localSceneRepository;
+  late final LibraryRepository _localLibraryRepository;
   late final LiveInkSender _liveInkSender;
   late final RemoteWetInkStore _remoteWetInkStore;
   StreamSubscription<DecodedLiveInkChunk>? _liveInkSubscription;
@@ -114,8 +119,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   StreamSubscription<CollaborationRoomMetadata>? _roomEndedSubscription;
   StreamSubscription<String>? _roomErrorSubscription;
   StreamSubscription<RealtimeConnectionStatus>? _connectionStatusSubscription;
-  Timer? _idleTimer;
-  Timer? _awayTimer;
+  late final _activityTimer = CollaborationActivityTimer(_broadcastIdleState);
   Timer? _loadImagesTimer;
   bool _loadingScene = false;
   bool _applyingRemoteScene = false;
@@ -158,6 +162,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _localSceneRepository = ref.read(whiteboardSceneRepositoryProvider);
+    _localLibraryRepository = ref.read(libraryRepositoryProvider);
     _markdrawController = MarkdrawController();
     _markdrawController.onPrepareLocalResult = (result, scene) {
       final creator = _currentCreator();
@@ -224,11 +230,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _closeAiPanel();
+    _disposingOrLeaving = true;
     _flushLocalDraftOnExit();
     _remoteMergeTimer?.cancel();
     _remoteMergeBuffer.clear();
     _pointerTrailingTimer?.cancel();
-    _disposingOrLeaving = true;
     unawaited(_collaborationSubscription?.cancel());
     unawaited(_fileStatusSceneSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
@@ -236,8 +242,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     unawaited(_roomErrorSubscription?.cancel());
     unawaited(_connectionStatusSubscription?.cancel());
     unawaited(_liveInkSubscription?.cancel());
-    _idleTimer?.cancel();
-    _awayTimer?.cancel();
+    _activityTimer.cancel();
     _loadImagesTimer?.cancel();
     _liveInkSender.cancel();
     _remoteWetInkStore.dispose();
@@ -446,21 +451,31 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
     if (widget.temporaryCollaboration) return;
 
-    final viewModel = ref.read(whiteboardViewModelProvider.notifier);
-    final repository = ref.read(whiteboardSceneRepositoryProvider);
+    final noteId = widget.noteId;
     final content = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
     );
-    await repository.saveScene(widget.noteId, content);
-    await _touchNoteWithCurrentCover(widget.noteId);
-    final latestIndex = await ref.read(libraryIndexProvider.future);
-    final latestNote = _noteById(latestIndex.notes, widget.noteId);
+    // Capture the picture before disposal or a note switch can change the scene.
+    final (_, coverThumbnailBytes) = await (
+      _localSceneRepository.saveScene(noteId, content),
+      _markdrawController.exportCoverThumbnail(),
+    ).wait;
+    await _localLibraryRepository.touchNote(
+      noteId,
+      coverThumbnailBytes: coverThumbnailBytes,
+      clearCoverThumbnail: coverThumbnailBytes == null,
+    );
+    if (!_canMutateWhiteboard || noteId != widget.noteId) return;
+    await ref.read(libraryIndexProvider.notifier).refresh();
+    if (!_canMutateWhiteboard || noteId != widget.noteId) return;
+    final latestIndex = ref.read(libraryIndexProvider).value;
+    final latestNote = latestIndex == null
+        ? null
+        : _noteById(latestIndex.notes, noteId);
     if (latestNote != null) {
       unawaited(_recentWhiteboardSync.syncFromNote(latestNote));
     }
-    if (mounted) {
-      viewModel.markSaved();
-    }
+    ref.read(whiteboardViewModelProvider.notifier).markSaved();
   }
 
   Future<void> _finalizeLocalDraftBeforeLeaving() async {
@@ -1236,8 +1251,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _roomErrorSubscription = null;
     await _connectionStatusSubscription?.cancel();
     _connectionStatusSubscription = null;
-    _idleTimer?.cancel();
-    _awayTimer?.cancel();
+    _activityTimer.cancel();
     _loadImagesTimer?.cancel();
     _loadImagesTimer = null;
     _lastIdleState = null;
@@ -2013,6 +2027,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   Future<void> _touchNoteWithCurrentCover(String noteId) async {
     final coverThumbnailBytes = await _markdrawController
         .exportCoverThumbnail();
+    if (!_canMutateWhiteboard) return;
     await ref
         .read(libraryIndexProvider.notifier)
         .touchNote(
@@ -2513,10 +2528,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _lastPointerDown = false;
 
   void _broadcastPointerPresence(Offset localPosition, bool pointerDown) {
-    if (!_canMutateWhiteboard) {
+    if (!_canMutateWhiteboard ||
+        ref.read(whiteboardViewModelProvider).activeRoom == null) {
       return;
     }
-    _markUserActive();
+    _activityTimer.markActive();
 
     _lastPointerPosition = localPosition;
     _lastPointerDown = pointerDown;
@@ -2583,25 +2599,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         creatorKey: _currentCreatorKey(),
       ),
     );
-  }
-
-  void _markUserActive() {
-    if (!_canMutateWhiteboard) {
-      return;
-    }
-    _idleTimer?.cancel();
-    _awayTimer?.cancel();
-    _broadcastIdleState('active');
-    _idleTimer = Timer(const Duration(minutes: 1), () {
-      if (_canMutateWhiteboard) {
-        _broadcastIdleState('idle');
-      }
-    });
-    _awayTimer = Timer(const Duration(minutes: 5), () {
-      if (_canMutateWhiteboard) {
-        _broadcastIdleState('away');
-      }
-    });
   }
 
   void _broadcastIdleState(String state, {bool force = false}) {

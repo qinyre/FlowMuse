@@ -475,12 +475,8 @@ class SvgElementRenderer {
         .toList();
     final grainStep = math.max(1, (grains.length / 4000).ceil());
     final bucketData = <int, StringBuffer>{};
-    var grainKept = 0;
-    for (final p in grains) {
-      if (grainKept % grainStep != grainStep - 1 && grains.length > 4000) {
-        continue;
-      }
-      grainKept++;
+    for (var index = grainStep - 1; index < grains.length; index += grainStep) {
+      final p = grains[index];
       final b = bucketData.putIfAbsent(p.channel, StringBuffer.new);
       final t = p.tangent!;
       final c = p.center!;

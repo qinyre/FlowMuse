@@ -8,6 +8,51 @@ import '../../../integration_test/fixtures/scene_fixtures.dart';
 import '../../../tool/writing_perf/summarize_results.dart';
 
 void main() {
+  test('矩阵继承主机证据，笔刷、版本和完整界面不混合汇总', () async {
+    final directory = await _tempDirectory('matrix');
+    await _writeRun(directory, 'matrix.json', runIndex: 1, offset: 0);
+    final file = File('${directory.path}/matrix.json');
+    final original =
+        jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    final hostEvidence = original.remove('hostEvidence');
+    await file.writeAsString(
+      jsonEncode({
+        'schemaVersion': 2,
+        'hostEvidence': hostEvidence,
+        'cases': [
+          original,
+          {...original, 'brush': 'pencil'},
+          {...original, 'brush': 'pencil', 'renderVersion': 'naturalMediaV2'},
+          {...original, 'fullEditor': true},
+          {...original, 'framePolicy': 'fullyLive'},
+          {...original, 'inputSource': 'synthetic_device_events'},
+          {...original, 'pencilShaderAvailable': true},
+        ],
+      }),
+    );
+    final summary = await summarizeDirectory(directory);
+    expect(summary.validRuns, hasLength(7));
+    expect(summary.scenarios, hasLength(7));
+    expect(summary.completeScenarios, isEmpty);
+  });
+
+  test('时钟及空白页校准不进入正式画布性能汇总', () async {
+    final directory = await _tempDirectory('calibration');
+    await File('${directory.path}/calibration.json').writeAsString(
+      jsonEncode({
+        'schemaVersion': 2,
+        'mode': 'replay_calibration_non_ui',
+        'cases': [
+          {'calibration': 'clock_only'},
+          {'calibration': 'empty_binding'},
+        ],
+      }),
+    );
+    final summary = await summarizeDirectory(directory);
+    expect(summary.runs, isEmpty);
+    expect(summary.acceptanceStatus, 'failed');
+  });
+
   test('nearest-rank 与 bootstrap 使用确定性算法', () {
     final values = [for (var value = 1; value <= 100; value++) value];
     expect(nearestRank(values, 0.50), 50);

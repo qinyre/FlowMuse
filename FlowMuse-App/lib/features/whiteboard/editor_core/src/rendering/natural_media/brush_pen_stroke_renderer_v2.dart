@@ -39,9 +39,6 @@ class BrushPenStrokeRendererV2 {
     bool ownsStrokeTail = true,
   }) {
     final profile = BrushRenderProfile.forType(BrushType.brushPen);
-    final abs = [
-      for (final p in element.points) Point(p.x + element.x, p.y + element.y),
-    ];
     // T4-C 条件缓存：整笔静态渲染复用 Path。绕过：owned 分段与起收
     // 所有权让渡的调用（远端湿墨），以及 isComplete=false 的本地湿墨
     // 帧（几何逐帧追加，入缓存会命中首帧 Picture 冻结活动笔迹；与
@@ -72,6 +69,9 @@ class BrushPenStrokeRendererV2 {
     }
 
     planBuildCount++;
+    final abs = [
+      for (final p in element.points) Point(p.x + element.x, p.y + element.y),
+    ];
     final plan = NaturalMediaStrokeSampler.sample(
       strokeId: element.id.value,
       points: abs,

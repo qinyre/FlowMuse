@@ -49,7 +49,7 @@ void main() {
     }
     _up(controller, 10);
 
-    expect(controllerNotifications, 11);
+    expect(controllerNotifications, 12, reason: '落笔首点、10 次 move 和提交各通知一次');
     expect(wetNotifications, 0);
     expect(controller.currentScene.elements, hasLength(1));
   });

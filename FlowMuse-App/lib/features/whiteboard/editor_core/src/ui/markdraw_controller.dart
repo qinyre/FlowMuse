@@ -2247,7 +2247,11 @@ class MarkdrawController extends ChangeNotifier {
         ),
       );
       _recordAcceptedActivePreviewPoint();
-      _publishLocalWetInk();
+      if (writingFlags.layeredWetInk) {
+        _publishLocalWetInk();
+      } else {
+        notifyListeners();
+      }
       if (freedrawTool.activeView?.strokeLiveMode ?? false) {
         _emitLiveFreedraw();
       }
@@ -2434,10 +2438,12 @@ class MarkdrawController extends ChangeNotifier {
         if (activeView?.strokeLiveMode ?? false) {
           _emitLiveFreedraw(terminal: true);
         }
-        final finalResult = _activeTool.onPointerUp(
+        final finalResult = (_activeTool as FreedrawTool).onPointerUp(
           point,
           toolContext,
           pressure: _encodeStrokePressure(r.pressure),
+          // 复用屏幕采样门限，缩放不改变点触判定；仅提交时合并微抖。
+          tapTolerance: _modeler!.policy.minDistance / _editorState.viewport.zoom,
         );
         if (writingFlags.layeredWetInk) {
           localWetInkState.clear(notify: false);
@@ -2660,6 +2666,11 @@ class MarkdrawController extends ChangeNotifier {
       }
     } else {
       _activeTool.reset();
+    }
+    // Tool switches and viewport changes notify their callers; cancellation
+    // must invalidate the legacy canvas itself to remove the visible preview.
+    if (reason == ActivePreviewTerminalReason.cancel) {
+      notifyListeners();
     }
   }
 
@@ -2901,11 +2912,11 @@ class MarkdrawController extends ChangeNotifier {
 
   // --- Key dispatch ---
 
-  /// Dispatches a key event to the active tool (for programmatic shortcuts).
-  void dispatchKey(String key, {bool shift = false, bool ctrl = false}) {
+  /// Dispatches keyboard and programmatic shortcuts; returns whether handled.
+  bool dispatchKey(String key, {bool shift = false, bool ctrl = false}) {
     if (key == 'Escape' && _activeTool is FreedrawTool) {
       _cancelActiveToolInteraction(ActivePreviewTerminalReason.cancel);
-      return;
+      return true;
     }
     final result = _activeTool.onKeyEvent(
       key,
@@ -2917,6 +2928,7 @@ class MarkdrawController extends ChangeNotifier {
       _historyManager.push(_editorState.scene);
     }
     applyResult(result);
+    return result != null;
   }
 
   // --- Selection helpers ---
@@ -3045,7 +3057,8 @@ class MarkdrawController extends ChangeNotifier {
 
     if (element == null &&
         overlay.creationPoints != null &&
-        overlay.creationPoints!.length >= 2) {
+        overlay.creationPoints!.length >=
+            (toolType == ToolType.freedraw ? 1 : 2)) {
       final pts = overlay.creationPoints!;
       final isFreedrawPreview = toolType == ToolType.freedraw;
       // A live freedraw preview is rendered unconditionally, so it does not

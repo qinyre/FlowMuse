@@ -464,11 +464,25 @@ Future<WritingResultsSummary> summarizeDirectory(
     final json = jsonDecode(await file.readAsString());
     if (json is! Map) continue;
     final root = Map<String, Object?>.from(json);
-    if (root['mode'] == 'collaboration_cpu_non_ui' ||
+    if (root['mode'] == 'replay_calibration_non_ui' ||
+        root['mode'] == 'collaboration_cpu_non_ui' ||
         root['mode'] == 'collaboration_live_ink') {
       continue;
     }
-    runs.add(_summarizeRun(file.absolute.path, root));
+    if (root['schemaVersion'] == 2 && root['cases'] is List) {
+      final cases = root['cases']! as List;
+      for (var index = 0; index < cases.length; index++) {
+        runs.add(
+          _summarizeRun('${file.absolute.path}#case-$index', {
+            if (cases[index] is Map)
+              ...Map<String, Object?>.from(cases[index] as Map),
+            'hostEvidence': root['hostEvidence'],
+          }),
+        );
+      }
+    } else {
+      runs.add(_summarizeRun(file.absolute.path, root));
+    }
   }
   return WritingResultsSummary(runs: runs, phase: phase);
 }
@@ -639,6 +653,13 @@ WritingRunSummary _summarizeRun(String path, Map<String, Object?> root) {
     'writingFixtureHash': fixtureHash,
     'measureSeconds': measureSeconds,
     'eventToPaintTargetMicros': eventTarget,
+    // Legacy runners used the default fountain pen and hid editor controls.
+    'brush': root['brush'] ?? 'fountainPen',
+    'renderVersion': root['renderVersion'] ?? 'classicV1',
+    'fullEditor': root['fullEditor'] ?? false,
+    'framePolicy': root['framePolicy'] ?? 'fadePointers',
+    'inputSource': root['inputSource'] ?? 'test_events',
+    'pencilShaderAvailable': root['pencilShaderAvailable'] ?? false,
   };
   final hasScenarioIdentity = scenarioFields.values.every(
     (value) => value != null && value != '' && value != 0,

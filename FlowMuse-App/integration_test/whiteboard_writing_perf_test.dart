@@ -15,6 +15,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_rende
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_report.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_manifest.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/config/writing_feature_flags.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/pencil_shader.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'fixtures/scene_fixtures.dart';
@@ -36,172 +37,270 @@ const _deviceClass = String.fromEnvironment(
 const _runIndex = int.fromEnvironment('FLOWMUSE_RUN_INDEX');
 const _physicalDevice = bool.fromEnvironment('FLOWMUSE_PHYSICAL_DEVICE');
 const _deviceId = String.fromEnvironment('FLOWMUSE_DEVICE_ID');
+const _brushName = String.fromEnvironment(
+  'FLOWMUSE_BRUSH',
+  defaultValue: 'fountainPen',
+);
+const _fullEditor = bool.fromEnvironment('FLOWMUSE_FULL_EDITOR');
+const _repeats = int.fromEnvironment('FLOWMUSE_PERF_REPEATS', defaultValue: 1);
+const _compareLayered = bool.fromEnvironment('FLOWMUSE_COMPARE_LAYERED');
+const _calibrateReplay = bool.fromEnvironment('FLOWMUSE_REPLAY_CALIBRATION');
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  // Let app-requested frames run, without test pointer crosshairs/decay frames.
+  binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  binding.shouldPropagateDevicePointerEvents = true;
+  setUpAll(PencilShader.init);
+  if (_calibrateReplay) {
+    _registerCalibration(binding);
+    return;
+  }
+  final brushes = _brushName == 'all'
+      ? BrushType.values
+      : [BrushType.values.byName(_brushName)];
+  final reports = <Map<String, Object?>>[];
 
-  testWidgets('固定 fixture 的真实 EditorCanvas 书写性能', (tester) async {
-    expect(
-      _perfTestEnabled,
-      isTrue,
-      reason: '性能入口仅允许通过 FLOWMUSE_PERF_TEST=true 启用',
-    );
-    final fixtureSpec = writingPerformanceFixtures[_writingFixtureName];
-    expect(fixtureSpec, isNotNull, reason: '功能 fixture 不得进入正式性能验收');
-    final fixture = writingRecordingFixtures.singleWhere(
-      (item) => item.name == _writingFixtureName,
-    );
-    final sceneFixture = buildSceneFixture(_sceneElementCount);
-    final probe = ActivePreviewMetricsProbe();
-    final controller = MarkdrawController(activePreviewMetricsProbe: probe);
-    addTearDown(controller.dispose);
-    controller.loadFromContent(
-      sceneFixture.toContent(),
-      'writing-performance.excalidraw',
-    );
-    controller.switchTool(ToolType.freedraw);
+  for (var repeat = 0; repeat < _repeats; repeat++) {
+    final runIndex = _runIndex + repeat;
+    for (final brush in brushes) {
+      final modes = _compareLayered
+          ? (repeat.isEven ? [false, true] : [true, false])
+          : [writingFeatureFlags.layeredWetInk];
+      for (final layered in modes) {
+        testWidgets(
+          '固定 fixture 的真实 EditorCanvas 书写性能 ${brush.name} $runIndex layered=$layered',
+          (tester) async {
+            expect(
+              _perfTestEnabled,
+              isTrue,
+              reason: '性能入口仅允许通过 FLOWMUSE_PERF_TEST=true 启用',
+            );
+            final fixtureSpec = writingPerformanceFixtures[_writingFixtureName];
+            expect(fixtureSpec, isNotNull, reason: '功能 fixture 不得进入正式性能验收');
+            final fixture = writingRecordingFixtures.singleWhere(
+              (item) => item.name == _writingFixtureName,
+            );
+            expect(
+              fixture.contentHash,
+              fixtureSpec!.hash,
+              reason: '设备端 fixture 必须匹配冻结 hash，失败立即停止',
+            );
+            final sceneFixture = buildSceneFixture(_sceneElementCount);
+            final probe = ActivePreviewMetricsProbe();
+            final controller = MarkdrawController(
+              activePreviewMetricsProbe: probe,
+              writingFlags: WritingFeatureFlags(layeredWetInk: layered),
+            );
+            addTearDown(controller.dispose);
+            controller.loadFromContent(
+              sceneFixture.toContent(),
+              'writing-performance.excalidraw',
+            );
+            controller.switchTool(ToolType.freedraw);
+            controller.activeBrushType = brush;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: MarkdrawEditor(
-            controller: controller,
-            config: const MarkdrawEditorConfig(
-              showToolbar: false,
-              showPropertyPanel: false,
-              showZoomControls: false,
-              showHelpButton: false,
-              showLibraryPanel: false,
-              showMarkdownButton: false,
-              showMenu: false,
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+            await tester.pumpWidget(
+              MaterialApp(
+                home: Scaffold(
+                  body: MarkdrawEditor(
+                    controller: controller,
+                    config: const MarkdrawEditorConfig(
+                      showToolbar: _fullEditor,
+                      showPropertyPanel: _fullEditor,
+                      showZoomControls: _fullEditor,
+                      showHelpButton: false,
+                      showLibraryPanel: false,
+                      showMarkdownButton: false,
+                      showMenu: false,
+                    ),
+                  ),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
 
-    final canvas = find.byType(EditorCanvas);
-    expect(canvas, findsOneWidget);
-    final canvasRect = tester.getRect(canvas);
-    final warmupClock = Stopwatch()..start();
-    var warmupStrokeIndex = 0;
-    while (warmupClock.elapsed < const Duration(seconds: 5)) {
-      await _replayFixture(
-        tester,
-        fixture,
-        canvasRect,
-        warmupClock,
-        warmupStrokeIndex++,
-        null,
-      );
+            final canvas = find.byType(EditorCanvas);
+            expect(canvas, findsOneWidget);
+            final canvasRect = tester.getRect(canvas);
+            // Keep controls visible, but place the recording beyond floating panels.
+            // Warmup below fails immediately if the first down misses the canvas.
+            final writingRect = _fullEditor
+                ? Rect.fromLTRB(
+                    canvasRect.left + canvasRect.width * 0.3,
+                    canvasRect.top + 100,
+                    canvasRect.right - 80,
+                    canvasRect.bottom - 100,
+                  )
+                : canvasRect;
+            final warmupClock = Stopwatch()..start();
+            final warmupFixture = writingRecordingFixtures.singleWhere(
+              (item) => item.name == 'quick_zigzag',
+            );
+            var warmupStrokeIndex = 0;
+            while (warmupClock.elapsed < const Duration(seconds: 5)) {
+              await _replayFixture(
+                tester,
+                warmupFixture,
+                writingRect,
+                warmupClock,
+                warmupStrokeIndex++,
+                null,
+              );
+              expect(probe.samples, isNotEmpty, reason: '回放必须命中画布而非浮动控件');
+              expect(
+                controller.currentScene.elements.length,
+                _sceneElementCount + warmupStrokeIndex,
+                reason: '预热每次回放都必须生成一条笔迹',
+              );
+            }
+            controller.loadFromContent(
+              sceneFixture.toContent(),
+              'writing-performance.excalidraw',
+            );
+            controller.switchTool(ToolType.freedraw);
+            controller.activeBrushType = brush;
+            probe.clear();
+            await tester.pump();
+
+            final frameTimings = FrameTimingMetricsCollector()..start();
+            addTearDown(frameTimings.stop);
+            final injectionSamples = <Map<String, int>>[];
+            final runClock = Stopwatch()..start();
+            final measureSeconds = fixtureSpec.durationSeconds;
+            final refreshHz = ui
+                .PlatformDispatcher
+                .instance
+                .views
+                .first
+                .display
+                .refreshRate
+                .round();
+            final eventToPaintTargetMicros = frozenEventToPaintTargetMicros(
+              refreshHz,
+            );
+            var strokeIndex = 0;
+            // Fix the workload, not the number that happens to fit in wall time.
+            // Slow runs remain slow and retain the exact same final scene.
+            final expectedStrokes = math.max(
+              1,
+              (measureSeconds *
+                      1000000 /
+                      fixture.recording.samples.last.time.inMicroseconds)
+                  .ceil(),
+            );
+            while (strokeIndex < expectedStrokes) {
+              await _replayFixture(
+                tester,
+                fixture,
+                writingRect,
+                runClock,
+                strokeIndex++,
+                injectionSamples,
+              );
+            }
+            final measuredMicros = runClock.elapsedMicroseconds;
+            await tester.pump();
+            await Future<void>.delayed(const Duration(milliseconds: 150));
+            frameTimings.stop();
+
+            final jitters =
+                injectionSamples
+                    .map((sample) => sample['jitterMicros']!.abs())
+                    .toList()
+                  ..sort();
+            final jitterP95 = _nearestRank(jitters, 0.95);
+            final jitterMax = jitters.isEmpty ? 0 : jitters.last;
+            final invalidReasons = <String>[
+              if (jitterP95 > 4000) 'injection_jitter_p95_above_4ms',
+              if (jitterMax > 16000) 'injection_jitter_max_above_16ms',
+            ];
+            final performance = WritingPerformanceReport.capture(
+              activePreview: probe,
+              frames: frameTimings.frames,
+              invalidReasons: invalidReasons,
+            );
+            final sceneAfterRun = controller.serializeExcalidrawSceneJson();
+            final roundTripScene = ExcalidrawScene.fromJson(sceneAfterRun);
+            final codecRoundTrip = roundTripScene.toJson();
+            final completedElements = roundTripScene.elements.skip(
+              _sceneElementCount,
+            );
+            final validCompletedFreedrawCount = completedElements.where((
+              element,
+            ) {
+              final points = element['points'];
+              return element['type'] == 'freedraw' &&
+                  points is List &&
+                  points.isNotEmpty;
+            }).length;
+            final report = <String, Object?>{
+              'schemaVersion': 1,
+              'measurementEligible':
+                  kProfileMode &&
+                  _physicalDevice &&
+                  _deviceId.isNotEmpty &&
+                  _deviceClass != 'unspecified' &&
+                  refreshHz > 0 &&
+                  runIndex >= 1 &&
+                  runIndex <= 5 &&
+                  eventToPaintTargetMicros > 0,
+              'buildMode': kProfileMode
+                  ? 'profile'
+                  : kReleaseMode
+                  ? 'release'
+                  : 'debug',
+              'framePolicy': binding.framePolicy.name,
+              'inputSource': 'synthetic_device_events',
+              'pencilShaderAvailable': PencilShader.isAvailable,
+              'platform': defaultTargetPlatform.name,
+              'deviceClass': _deviceClass,
+              'deviceId': _deviceId,
+              'physicalDevice': _physicalDevice,
+              'refreshHz': refreshHz,
+              'runIndex': runIndex,
+              'brush': brush.name,
+              'renderVersion': defaultRenderVersionForNewStroke(brush).name,
+              'fullEditor': _fullEditor,
+              'sceneElementCount': _sceneElementCount,
+              'sceneFixtureHash': sceneFixture.collaborationHash(),
+              'writingFixture': fixture.name,
+              'writingFixtureSchemaVersion': fixture.schemaVersion,
+              'writingFixtureHash': fixture.contentHash,
+              'measureSeconds': measureSeconds,
+              'measuredMicros': measuredMicros,
+              'eventToPaintTargetMicros': eventToPaintTargetMicros,
+              'flags': {'layeredWetInk': layered},
+              'injectionJitterP95Micros': jitterP95,
+              'injectionJitterMaxMicros': jitterMax,
+              'injectionSamples': injectionSamples,
+              'elementsAfterRun': controller.currentScene.elements.length,
+              'expectedCompletedStrokes': strokeIndex,
+              'validCompletedFreedrawCount': validCompletedFreedrawCount,
+              'finalScene': sceneAfterRun,
+              'sceneHashAfterRun': _jsonHash(sceneAfterRun),
+              'semanticSceneHashAfterRun': _semanticSceneHash(sceneAfterRun),
+              'codecRoundTripSemanticSceneHashAfterRun': _semanticSceneHash(
+                codecRoundTrip,
+              ),
+              'performance': performance.toJson(),
+            };
+            debugPrint(
+              '[FlowMuseWritingPerf] ${jsonEncode({'brush': brush.name, 'runIndex': runIndex, 'layered': layered, 'accepted': performance.accepted, 'completed': validCompletedFreedrawCount, 'expected': expectedStrokes, 'jitterP95Micros': jitterP95, 'jitterMaxMicros': jitterMax, 'invalidReasons': invalidReasons})}',
+            );
+            reports.add(report);
+            binding.reportData =
+                reports.length == 1 &&
+                    brushes.length == 1 &&
+                    _repeats == 1 &&
+                    !_compareLayered
+                ? report
+                : {'schemaVersion': 2, 'deviceId': _deviceId, 'cases': reports};
+          },
+        );
+      }
     }
-    controller.loadFromContent(
-      sceneFixture.toContent(),
-      'writing-performance.excalidraw',
-    );
-    controller.switchTool(ToolType.freedraw);
-    probe.clear();
-    await tester.pump();
-
-    final frameTimings = FrameTimingMetricsCollector()..start();
-    addTearDown(frameTimings.stop);
-    final injectionSamples = <Map<String, int>>[];
-    final runClock = Stopwatch()..start();
-    final measureSeconds = fixtureSpec!.durationSeconds;
-    final refreshHz = ui
-        .PlatformDispatcher
-        .instance
-        .views
-        .first
-        .display
-        .refreshRate
-        .round();
-    final eventToPaintTargetMicros = frozenEventToPaintTargetMicros(refreshHz);
-    var strokeIndex = 0;
-    while (runClock.elapsed < Duration(seconds: measureSeconds)) {
-      await _replayFixture(
-        tester,
-        fixture,
-        canvasRect,
-        runClock,
-        strokeIndex++,
-        injectionSamples,
-      );
-    }
-    await tester.pump();
-    await Future<void>.delayed(const Duration(milliseconds: 150));
-    frameTimings.stop();
-
-    final jitters =
-        injectionSamples.map((sample) => sample['jitterMicros']!.abs()).toList()
-          ..sort();
-    final jitterP95 = _nearestRank(jitters, 0.95);
-    final jitterMax = jitters.isEmpty ? 0 : jitters.last;
-    final invalidReasons = <String>[
-      if (jitterP95 > 4000) 'injection_jitter_p95_above_4ms',
-      if (jitterMax > 16000) 'injection_jitter_max_above_16ms',
-    ];
-    final performance = WritingPerformanceReport.capture(
-      activePreview: probe,
-      frames: frameTimings.frames,
-      invalidReasons: invalidReasons,
-    );
-    final sceneAfterRun = controller.serializeExcalidrawSceneJson();
-    final roundTripScene = ExcalidrawScene.fromJson(sceneAfterRun);
-    final codecRoundTrip = roundTripScene.toJson();
-    final completedElements = roundTripScene.elements.skip(_sceneElementCount);
-    final validCompletedFreedrawCount = completedElements.where((element) {
-      final points = element['points'];
-      return element['type'] == 'freedraw' &&
-          points is List &&
-          points.isNotEmpty;
-    }).length;
-    binding.reportData = <String, Object?>{
-      'schemaVersion': 1,
-      'measurementEligible':
-          kProfileMode &&
-          _physicalDevice &&
-          _deviceId.isNotEmpty &&
-          _deviceClass != 'unspecified' &&
-          refreshHz > 0 &&
-          _runIndex >= 1 &&
-          _runIndex <= 5 &&
-          eventToPaintTargetMicros > 0,
-      'buildMode': kProfileMode
-          ? 'profile'
-          : kReleaseMode
-          ? 'release'
-          : 'debug',
-      'platform': defaultTargetPlatform.name,
-      'deviceClass': _deviceClass,
-      'deviceId': _deviceId,
-      'physicalDevice': _physicalDevice,
-      'refreshHz': refreshHz,
-      'runIndex': _runIndex,
-      'sceneElementCount': _sceneElementCount,
-      'sceneFixtureHash': sceneFixture.collaborationHash(),
-      'writingFixture': fixture.name,
-      'writingFixtureSchemaVersion': fixture.schemaVersion,
-      'writingFixtureHash': fixture.contentHash,
-      'measureSeconds': measureSeconds,
-      'eventToPaintTargetMicros': eventToPaintTargetMicros,
-      'flags': {'layeredWetInk': writingFeatureFlags.layeredWetInk},
-      'injectionJitterP95Micros': jitterP95,
-      'injectionJitterMaxMicros': jitterMax,
-      'injectionSamples': injectionSamples,
-      'elementsAfterRun': controller.currentScene.elements.length,
-      'expectedCompletedStrokes': strokeIndex,
-      'validCompletedFreedrawCount': validCompletedFreedrawCount,
-      'finalScene': sceneAfterRun,
-      'sceneHashAfterRun': _jsonHash(sceneAfterRun),
-      'semanticSceneHashAfterRun': _semanticSceneHash(sceneAfterRun),
-      'codecRoundTripSemanticSceneHashAfterRun': _semanticSceneHash(
-        codecRoundTrip,
-      ),
-      'performance': performance.toJson(),
-    };
-  });
+  }
 }
 
 Future<void> _replayFixture(
@@ -210,8 +309,9 @@ Future<void> _replayFixture(
   Rect canvasRect,
   Stopwatch clock,
   int strokeIndex,
-  List<Map<String, int>>? injectionSamples,
-) async {
+  List<Map<String, int>>? injectionSamples, {
+  bool dispatchEvents = true,
+}) async {
   final samples = fixture.recording.samples;
   final minX = samples.map((sample) => sample.x).reduce(math.min);
   final maxX = samples.map((sample) => sample.x).reduce(math.max);
@@ -233,12 +333,6 @@ Future<void> _replayFixture(
     if (waitMicros > 0) {
       await Future<void>.delayed(Duration(microseconds: waitMicros));
     }
-    final actualMicros = clock.elapsedMicroseconds;
-    injectionSamples?.add({
-      'targetMicros': targetMicros,
-      'actualMicros': actualMicros,
-      'jitterMicros': actualMicros - targetMicros,
-    });
     final position =
         canvasRect.topLeft +
         Offset(20 + (sample.x - minX) * scale, 20 + (sample.y - minY) * scale);
@@ -283,8 +377,90 @@ Future<void> _replayFixture(
         pressureMax: 1,
       ),
     };
-    await tester.sendEventToBinding(event);
+    final actualMicros = clock.elapsedMicroseconds;
+    if (dispatchEvents) {
+      tester.binding.handlePointerEventForSource(event);
+    }
+    final dispatchEndMicros = clock.elapsedMicroseconds;
+    injectionSamples?.add({
+      'targetMicros': targetMicros,
+      'actualMicros': actualMicros,
+      'jitterMicros': actualMicros - targetMicros,
+      'dispatchMicros': dispatchEndMicros - actualMicros,
+    });
     previousPosition = position;
+  }
+}
+
+void _registerCalibration(IntegrationTestWidgetsFlutterBinding binding) {
+  final reports = <Map<String, Object?>>[];
+  for (final dispatchEvents in [false, true]) {
+    testWidgets('回放校准 dispatchEvents=$dispatchEvents', (tester) async {
+      expect(_perfTestEnabled, isTrue);
+      var received = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (_) => received++,
+            onPointerMove: (_) => received++,
+            onPointerUp: (_) => received++,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final fixture = writingRecordingFixtures.singleWhere(
+        (item) => item.name == 'continuous_curve_30s_v2',
+      );
+      expect(
+        fixture.contentHash,
+        writingPerformanceFixtures[fixture.name]!.hash,
+      );
+      final samples = <Map<String, int>>[];
+      await _replayFixture(
+        tester,
+        fixture,
+        tester.getRect(find.byType(SizedBox).first),
+        Stopwatch()..start(),
+        0,
+        samples,
+        dispatchEvents: dispatchEvents,
+      );
+      expect(received, dispatchEvents ? fixture.recording.samples.length : 0);
+      expect(samples.length, fixture.recording.samples.length);
+      final jitters = samples.map((s) => s['jitterMicros']!.abs()).toList()
+        ..sort();
+      final dispatch = samples.map((s) => s['dispatchMicros']!).toList()
+        ..sort();
+      final report = <String, Object?>{
+        'calibration': dispatchEvents ? 'empty_binding' : 'clock_only',
+        'writingFixture': fixture.name,
+        'writingFixtureHash': fixture.contentHash,
+        'received': received,
+        'injectionJitterP95Micros': _nearestRank(jitters, 0.95),
+        'injectionJitterMaxMicros': jitters.last,
+        'dispatchP95Micros': _nearestRank(dispatch, 0.95),
+        'dispatchMaxMicros': dispatch.last,
+        'injectionSamples': samples,
+      };
+      reports.add(report);
+      binding.reportData = {
+        'schemaVersion': 2,
+        'mode': 'replay_calibration_non_ui',
+        'measurementEligible': false,
+        'deviceId': _deviceId,
+        'framePolicy': binding.framePolicy.name,
+        'inputSource': 'synthetic_device_events',
+        'buildMode': kProfileMode ? 'profile' : 'non_profile',
+        'refreshHz': binding.platformDispatcher.views.first.display.refreshRate,
+        'cases': reports,
+      };
+      debugPrint(
+        '[FlowMuseReplayCalibration] ${jsonEncode({for (final entry in report.entries)
+          if (entry.key != 'injectionSamples') entry.key: entry.value})}',
+      );
+    });
   }
 }
 

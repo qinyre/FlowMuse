@@ -27,7 +27,8 @@ class NaturalMediaPathCache {
   /// 影响几何的 profile 版本：铅笔/毛笔曲线、颗粒常数、包络常数任何
   /// 变更时 +1。1：T4 冻结至盲测修复前；2：2026-08-30 盲测修复
   ///（毛笔 join 变宽梯形过渡 + 压力域扩张 brushV2PressureGain）。
-  static const int geometryVersion = 2;
+  /// 3：2026-09-21 铅笔零长点使用本笔形的圆点几何。
+  static const int geometryVersion = 3;
 
   static final _lru = <String, CachedNaturalMediaPaths>{};
   static int hitCount = 0;

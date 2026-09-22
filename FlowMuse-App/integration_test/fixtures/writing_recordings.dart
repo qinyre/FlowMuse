@@ -71,7 +71,35 @@ final List<WritingRecordingFixture> writingRecordingFixtures = [
     pointAt: (index) => (200.0 + index * 6, 520.0 - index * 3),
     pressureAt: (_) => 0.4,
   ),
+  _fixture(
+    name: 'continuous_curve_30s',
+    seed: 606,
+    moveCount: 3599,
+    expectedAccepted: 3601,
+    intervalMicros: 8334,
+    pointAt: (index) => (
+      400 + 220 * math.cos(index * math.pi / 180),
+      300 + 140 * math.sin(index * math.pi / 180),
+    ),
+    pressureAt: (index) => 0.5 + 0.3 * math.sin(index / 90),
+  ),
+  _fixture(
+    name: 'continuous_curve_30s_v2',
+    seed: 607,
+    moveCount: 3599,
+    expectedAccepted: 3601,
+    intervalMicros: 8334,
+    // Freeze precision: ARM/x64 libm can differ in the last binary digit.
+    // Keep v1 and its hash untouched so old reports remain identifiable.
+    pointAt: (index) => (
+      _fixedPrecision(400 + 220 * math.cos(index * math.pi / 180)),
+      _fixedPrecision(300 + 140 * math.sin(index * math.pi / 180)),
+    ),
+    pressureAt: (index) => _fixedPrecision(0.5 + 0.3 * math.sin(index / 90)),
+  ),
 ];
+
+double _fixedPrecision(double value) => (value * 1000000).round() / 1000000;
 
 WritingRecordingFixture _fixture({
   required String name,

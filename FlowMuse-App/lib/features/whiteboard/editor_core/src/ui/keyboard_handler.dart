@@ -413,17 +413,7 @@ bool handleKeyEvent({
   }
 
   if (keyName != null) {
-    final result = controller.activeTool.onKeyEvent(
-      keyName,
-      shift: shift,
-      ctrl: ctrl,
-      context: controller.toolContext,
-    );
-    if (isSceneChangingResult(result)) {
-      controller.historyManager.push(controller.editorState.scene);
-    }
-    controller.applyResult(result);
-    return result != null;
+    return controller.dispatchKey(keyName, shift: shift, ctrl: ctrl);
   }
 
   return false;
