@@ -135,8 +135,14 @@ class MarkdrawController extends ChangeNotifier {
   final _policySelector = const InputPolicySelector();
   int? _activeDrawPointerId;
   int? _temporaryTouchPanPointerId;
+  Offset? _temporaryTouchPanStartPosition;
+  bool _temporaryTouchPanMoved = false;
+  bool _temporaryTouchCanPan = false;
+  int? _activeTouchSelectionPointerId;
+  SelectTool? _activeTouchSelectionTool;
   int? _activeStylusPointerId;
   final Set<int> _rejectedTouchPointers = {};
+  final SelectTool _touchSelectionTool = SelectTool();
   bool _pressureEnabled = true;
   double _pressureExponent = 1.0;
   bool _palmRejectionEnabled = true;
@@ -2166,6 +2172,48 @@ class MarkdrawController extends ChangeNotifier {
       !_fingerDrawingEnabled &&
       _editorState.activeToolType != ToolType.hand;
 
+  bool _canAcceptTouchInteraction() =>
+      !_palmRejectionEnabled || _activeStylusPointerId == null;
+
+  bool shouldRouteTouchToSelection(Offset localPosition) {
+    if (_fingerDrawingEnabled ||
+        _editorState.activeToolType == ToolType.hand ||
+        !_canAcceptTouchInteraction()) {
+      return false;
+    }
+    final point = toScene(localPosition);
+    final selectionTool = _activeTool is SelectTool
+        ? _activeTool as SelectTool
+        : _touchSelectionTool;
+    return selectionTool.hitTestForTouch(point, toolContext);
+  }
+
+  bool shouldPanTouch(Offset localPosition) {
+    if (!_singleFingerPanEnabled ||
+        _fingerDrawingEnabled ||
+        !_canAcceptTouchInteraction()) {
+      return false;
+    }
+    return !shouldRouteTouchToSelection(localPosition);
+  }
+
+  bool shouldClearSelectionOnTouchTap(Offset localPosition) {
+    if (_fingerDrawingEnabled ||
+        _editorState.activeToolType == ToolType.hand ||
+        _editorState.selectedIds.isEmpty ||
+        !_canAcceptTouchInteraction()) {
+      return false;
+    }
+    final point = toScene(localPosition);
+    return _editorState.scene.getElementAtPoint(point) == null;
+  }
+
+  void clearSelectionOnTouchTap(Offset localPosition) {
+    if (shouldClearSelectionOnTouchTap(localPosition)) {
+      applyResult(SetSelectionResult({}));
+    }
+  }
+
   /// Handles pointer down: commits text edits, dispatches to tool, handles
   /// link-to-element mode and link icon clicks.
   void onPointerDown(PointerEvent event) {
@@ -2176,10 +2224,48 @@ class MarkdrawController extends ChangeNotifier {
       _rejectedTouchPointers.add(event.pointer);
       return;
     }
+    if (event.kind == PointerDeviceKind.touch &&
+        shouldRouteTouchToSelection(event.localPosition)) {
+      restoreKeyboardFocusWhenStable();
+      if (_editingTextElementId != null) {
+        commitTextEditing();
+      }
+      _activeTouchSelectionPointerId = event.pointer;
+      _activeTouchSelectionTool = _activeTool is SelectTool
+          ? _activeTool as SelectTool
+          : _touchSelectionTool;
+      _sceneBeforeDrag = _editorState.scene;
+      final point = toScene(event.localPosition);
+      applyResult(
+        _activeTouchSelectionTool!.onPointerDown(
+          point,
+          toolContext,
+          shift: HardwareKeyboard.instance.isShiftPressed,
+        ),
+      );
+      return;
+    }
     if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
       if (!_palmRejectionEnabled || _activeStylusPointerId == null) {
         _temporaryTouchPanPointerId ??= event.pointer;
+        _temporaryTouchPanStartPosition ??= event.localPosition;
+        _temporaryTouchPanMoved = false;
+        _temporaryTouchCanPan = true;
       }
+      return;
+    }
+    if (event.kind == PointerDeviceKind.touch &&
+        shouldClearSelectionOnTouchTap(event.localPosition)) {
+      _temporaryTouchPanPointerId = event.pointer;
+      _temporaryTouchPanStartPosition = event.localPosition;
+      _temporaryTouchPanMoved = false;
+      _temporaryTouchCanPan = false;
+      return;
+    }
+    if (event.kind == PointerDeviceKind.touch &&
+        !_fingerDrawingEnabled &&
+        _editorState.activeToolType != ToolType.hand) {
+      _rejectedTouchPointers.add(event.pointer);
       return;
     }
     if (_isStylus(event.kind)) {
@@ -2340,7 +2426,29 @@ class MarkdrawController extends ChangeNotifier {
     if (_isViewportGesture) return;
     if (_rejectedTouchPointers.contains(event.pointer)) return;
     if (event.pointer == _temporaryTouchPanPointerId) {
-      applyResult(UpdateViewportResult(_editorState.viewport.pan(event.delta)));
+      final start = _temporaryTouchPanStartPosition;
+      if (start != null &&
+          (event.localPosition - start).distance >= 3.0) {
+        _temporaryTouchPanMoved = true;
+      }
+      if (_temporaryTouchCanPan) {
+        applyResult(
+          UpdateViewportResult(_editorState.viewport.pan(event.delta)),
+        );
+      }
+      return;
+    }
+    if (event.pointer == _activeTouchSelectionPointerId) {
+      final point = toScene(event.localPosition);
+      applyResult(
+        _activeTouchSelectionTool!.onPointerMove(
+          point,
+          toolContext,
+          screenDelta: event.delta,
+        ),
+      );
+      mousePosition = event.localPosition;
+      notifyListeners();
       return;
     }
     if (event.kind == PointerDeviceKind.touch && _usesTemporaryTouchPan) {
@@ -2412,7 +2520,26 @@ class MarkdrawController extends ChangeNotifier {
     if (_isViewportGesture) return;
     if (_rejectedTouchPointers.remove(event.pointer)) return;
     if (event.pointer == _temporaryTouchPanPointerId) {
+      if (!_temporaryTouchPanMoved &&
+          shouldClearSelectionOnTouchTap(event.localPosition)) {
+        clearSelectionOnTouchTap(event.localPosition);
+      }
       _temporaryTouchPanPointerId = null;
+      _temporaryTouchPanStartPosition = null;
+      _temporaryTouchPanMoved = false;
+      _temporaryTouchCanPan = false;
+      return;
+    }
+    if (event.pointer == _activeTouchSelectionPointerId) {
+      final point = toScene(event.localPosition);
+      applyResult(_activeTouchSelectionTool!.onPointerUp(point, toolContext));
+      _activeTouchSelectionPointerId = null;
+      _activeTouchSelectionTool = null;
+      if (_sceneBeforeDrag != null &&
+          !identical(_editorState.scene, _sceneBeforeDrag)) {
+        _historyManager.push(_sceneBeforeDrag!);
+      }
+      _sceneBeforeDrag = null;
       return;
     }
     if (_isStylus(event.kind) && event.pointer == _activeStylusPointerId) {
@@ -2554,6 +2681,16 @@ class MarkdrawController extends ChangeNotifier {
     if (_rejectedTouchPointers.remove(event.pointer)) return;
     if (event.pointer == _temporaryTouchPanPointerId) {
       _temporaryTouchPanPointerId = null;
+      _temporaryTouchPanStartPosition = null;
+      _temporaryTouchPanMoved = false;
+      _temporaryTouchCanPan = false;
+      return;
+    }
+    if (event.pointer == _activeTouchSelectionPointerId) {
+      _activeTouchSelectionTool?.reset();
+      _activeTouchSelectionPointerId = null;
+      _activeTouchSelectionTool = null;
+      _sceneBeforeDrag = null;
       return;
     }
     if (_isStylus(event.kind) && event.pointer == _activeStylusPointerId) {
@@ -2662,6 +2799,11 @@ class MarkdrawController extends ChangeNotifier {
     _modeler = null;
     _activeDrawPointerId = null;
     _temporaryTouchPanPointerId = null;
+    _temporaryTouchPanStartPosition = null;
+    _temporaryTouchPanMoved = false;
+    _temporaryTouchCanPan = false;
+    _activeTouchSelectionPointerId = null;
+    _activeTouchSelectionTool = null;
     _activeStylusPointerId = null;
     _cancelActiveToolInteraction(ActivePreviewTerminalReason.viewportGesture);
     _sceneBeforeDrag = null;

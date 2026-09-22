@@ -62,6 +62,8 @@ class _EditorCanvasState extends State<EditorCanvas>
   Size? _lastReportedSize;
   final Set<int> _activeTouchPointers = {};
   int? _pagedScrollPointer;
+  Offset? _pagedTouchStartPosition;
+  bool _pagedTouchMoved = false;
   double _appendPageOverscroll = 0;
   bool _appendPageReady = false;
   late final AnimationController _appendPageOverscrollController;
@@ -94,7 +96,8 @@ class _EditorCanvasState extends State<EditorCanvas>
   bool _shouldHandlePagedTouch(PointerEvent event) {
     return controller.isPagedViewport &&
         event.kind == PointerDeviceKind.touch &&
-        controller.canPanPagedViewportWithTouch;
+        controller.canPanPagedViewportWithTouch &&
+        controller.shouldPanTouch(event.localPosition);
   }
 
   bool _isPagedTouchPointer(PointerEvent event) =>
@@ -104,6 +107,8 @@ class _EditorCanvasState extends State<EditorCanvas>
     _activeTouchPointers.add(event.pointer);
     if (_activeTouchPointers.length == 1) {
       _pagedScrollPointer = event.pointer;
+      _pagedTouchStartPosition = event.localPosition;
+      _pagedTouchMoved = false;
       _appendPageOverscrollController.stop();
     } else {
       _pagedScrollPointer = null;
@@ -115,6 +120,10 @@ class _EditorCanvasState extends State<EditorCanvas>
     if (_pagedScrollPointer != event.pointer ||
         _activeTouchPointers.length != 1) {
       return;
+    }
+    final start = _pagedTouchStartPosition;
+    if (start != null && (event.localPosition - start).distance >= 3.0) {
+      _pagedTouchMoved = true;
     }
 
     final scrollDelta = controller.layout.isRightToLeft
@@ -149,6 +158,12 @@ class _EditorCanvasState extends State<EditorCanvas>
       return;
     }
     _pagedScrollPointer = null;
+    if (!_pagedTouchMoved &&
+        controller.shouldClearSelectionOnTouchTap(event.localPosition)) {
+      controller.clearSelectionOnTouchTap(event.localPosition);
+    }
+    _pagedTouchStartPosition = null;
+    _pagedTouchMoved = false;
     if (_appendPageReady) {
       controller.appendPageAfterLastAndScroll();
       _setAppendPageOverscroll(0);
@@ -161,6 +176,8 @@ class _EditorCanvasState extends State<EditorCanvas>
     _activeTouchPointers.remove(event.pointer);
     if (_pagedScrollPointer == event.pointer) {
       _pagedScrollPointer = null;
+      _pagedTouchStartPosition = null;
+      _pagedTouchMoved = false;
       _snapBackAppendPageOverscroll();
     }
   }
