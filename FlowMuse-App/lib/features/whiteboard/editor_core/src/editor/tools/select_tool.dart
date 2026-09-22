@@ -68,6 +68,48 @@ class SelectTool implements Tool {
   @override
   ToolType get type => ToolType.select;
 
+  /// Returns whether a touch at [point] should be handled as object
+  /// interaction instead of viewport navigation.
+  ///
+  /// This is intentionally side-effect free: the actual hit-test state is
+  /// captured by [onPointerDown] after the canvas has chosen this route.
+  bool hitTestForTouch(Point point, ToolContext context) {
+    final selectedElements = _getSelectedElements(context);
+    final allLocked =
+        selectedElements.isNotEmpty && selectedElements.every((e) => e.locked);
+
+    if (selectedElements.length == 1 && !allLocked) {
+      final element = selectedElements.first;
+      final isLinearEditable =
+          element is LineElement &&
+          (element.points.length <= 2 || context.isEditingLinear);
+      if (isLinearEditable &&
+          _hitTestPointHandle(point, element, context.interactionMode) !=
+              null) {
+        return true;
+      }
+      if (context.isEditingLinear &&
+          element is ArrowElement &&
+          element.elbowed &&
+          _hitTestSegment(point, element, context.interactionMode) != null) {
+        return true;
+      }
+      if (context.isEditingLinear &&
+          _hitTestMidpointHandle(point, element, context.interactionMode) !=
+              null) {
+        return true;
+      }
+    }
+
+    if (selectedElements.isNotEmpty &&
+        !allLocked &&
+        _hitTestHandle(point, selectedElements, context.interactionMode) !=
+            null) {
+      return true;
+    }
+    return context.scene.getElementAtPoint(point) != null;
+  }
+
   /// True when the user is actively dragging a point or segment handle.
   /// UI should hide the selection bounding box during these drags.
   bool get isDraggingPoint =>
