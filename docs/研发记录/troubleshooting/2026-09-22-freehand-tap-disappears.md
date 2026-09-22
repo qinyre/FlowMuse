@@ -1,0 +1,49 @@
+# 点触抬笔后消失：复现与修复
+
+2026-09-22。用户在实机验收中反馈“仅仅点一笔，抬笔后马上消失”，未指定笔型。基线为 `feature/freehand-experience@4195269`。本轮随后按用户要求停止设备安装，仅做本地验证并保留修复包。
+
+## 复现与原因
+
+通过真实 `MarkdrawController` 输入链发送 stylus down（压力 0.3）与 60ms 后的 up（压力 0），再用生产 `ElementRenderer` 栅格化预览和已提交元素：
+
+- 钢笔同位置点触：预览有墨迹，提交后像素 alpha 总和由 865 变为 0。控制器在 up 前无条件追加终点；相同坐标、不同压力的样本进入 perfect_freehand 2.5.2+1 后不能作为同一个 `PointVector` 合并，最终轮廓面积为零。
+- 荧光笔抬笔横移 0.01 个逻辑像素：alpha 总和由 4767 变为 64。零长点预览在提交时被极短平头线段取代，几乎不可见。铅笔同类情况也观察到墨量明显减小。
+- 扩展回放也复现了钢笔轻微抖动后回到起点的消失：8ms 时横移 0.65 个逻辑像素，经已有滤波后位移仍在 0.6 以内，60ms 时回到起点抬笔。只合并完全同位置点不足以处理此边界。
+- 这是合成事件复现的确定缺陷，不能替代用户原笔型与真实设备的复测。此前“单点/重复点”渲染测试使用恒定压力，未覆盖抬笔压力变化与微移，因此没有挡住该问题。
+
+## 修复边界
+
+1. 控制器把已有输入策略 `minDistance` 按缩放换算为场景坐标，传给 FreedrawTool。手写笔沿用原有 0.6 个屏幕逻辑像素门限，不新增手势等待窗口或扩大采样门限。
+2. FreedrawTool 仅在整条已建模笔迹和抬笔点都未离开落笔点的门限范围时提交为单点，保留落笔压力，并同步缩短压力与识别时间数组。直接调用工具时默认只合并完全同位置的点。
+3. 超出该范围的笔画仍提交真实终点，闭合笔画不被误判为点。PointerMove、平滑、笔刷参数、渲染器、旧文件解释方式和数据格式均不变；新增判断仅在抬笔时执行。
+4. 实验性静态缓存仍默认关闭。本修复作用于后续创建的笔迹，不重写历史笔迹。
+
+## 验证
+
+新增 `FlowMuse-App/test/features/whiteboard/editor_core/ui/freedraw_tap_test.dart`：五种笔 × 两种画层开关 × 50%/100%/200% 缩放 × 四种点触偏移，检查抬笔后像素可见、落笔压力、撤销重做及 Excalidraw 保存重开后的像素一致；另验证点触中的轻微抖动、长停留重复报点、真实短线和回到起点的笔画。
+
+最终验证：
+
+- 定向测试：54 项通过、1 项既有协作撤销问题跳过，包含真实白板页面工作流、点触、工具与压感。
+- `flutter analyze`：无问题。
+- `flutter test --reporter expanded`：1841 项通过、5 项既有跳过（原有 4 项与已记录的协作撤销问题）。
+- Android arm64 release 与 Web release 均构建成功。仍有此前已记录的 CupertinoIcons 字体声明及 Web Wasm 预检提示；构建退出码为 0。本轮不进行设备安装，也未改动鸿蒙原生、插件或通道代码。
+
+修复包：`FlowMuse-App/build/freehand-tap-fix-release.apk`（180981773 字节，构建显示 172.6MB）。SHA-256：`38c1fd147315f0e355d46acc0ec08807d218b228fbdf1b6ea218dcde78317567`。
+
+日志保存在应用目录的 `build/freehand-tap-targeted.log`、`build/freehand-tap-analyze.log`、`build/freehand-tap-full-tests.log`、`build/freehand-tap-release-build.log` 和 `build/freehand-tap-web-build.log`。
+
+## 合入主分支验证
+
+2026-09-22，将 `origin/main@53ae230` 合入 `feature/freehand-experience@e4e3ee6` 后重新验证。自动合并无冲突，保留主分支的 V3 排版入口与本机构建产物取消追踪规则，实验性静态缓存仍默认关闭。
+
+- `flutter analyze`：无问题。
+- `flutter test --reporter expanded`：1679 项通过、5 项既有跳过；主分支删除旧版排版测试，因此总数低于上一次验证。
+- `go test ./...`：7 个包通过；`go vet ./...`：通过。
+- `flutter build hap --no-codesign`：通过，生成 `FlowMuse-App/build/ohos/hap/entry-default-unsigned.hap`（60606930 字节，构建显示 57.8MB）。仅验证构建，未签名、未安装、未做实机复测。
+
+首次 HAP 构建因本地 Flutter SDK 的 `packages/flutter_tools/hvigor` 文件缺失失败。重试使用 SDK 当前提交 `cedbd616b9` 中的同版本插件，解压至应用 `build/freehand-hap-support/` 并通过进程级 `NODE_PATH` 提供；未恢复或修改全局 SDK，未新增项目依赖。验证日志位于应用 `build/freehand-main-merge-analyze.log`、`build/freehand-main-merge-tests.log`、`build/freehand-main-merge-go-tests.log`、`build/freehand-main-merge-go-vet.log` 和 `build/freehand-main-merge-hap-retry.log`。
+
+## 待实机复测
+
+用户暂时没有平板，本轮不安装、不操作设备。之后在修复版分别用五种笔轻点 10 次，并尝试轻压、停留后抬笔、小幅移动后抬笔；记录仍消失时的笔型、笔宽、缩放和出现频率。自动化验证通过不等于真实持笔验收通过。

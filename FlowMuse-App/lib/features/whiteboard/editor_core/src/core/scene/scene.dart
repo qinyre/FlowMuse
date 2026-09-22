@@ -32,7 +32,10 @@ class Scene {
       _elements.where((e) => !e.isDeleted).toList();
 
   /// Elements ordered by fractional index (null index sorts last).
-  List<Element> get orderedElements {
+  /// Return a fresh list as before; cache only the immutable scene's sort.
+  List<Element> get orderedElements => List.of(_orderedElements);
+
+  late final List<Element> _orderedElements = () {
     final sorted = List<Element>.from(_elements);
     sorted.sort((a, b) {
       if (a.index == null && b.index == null) return 0;
@@ -41,7 +44,7 @@ class Scene {
       return a.index!.compareTo(b.index!);
     });
     return sorted;
-  }
+  }();
 
   /// Returns a new scene with the element added.
   Scene addElement(Element element) {
@@ -111,15 +114,20 @@ class Scene {
 
   /// Returns the bound text element whose [containerId] matches [parentId],
   /// or null if none exists.
-  TextElement? findBoundText(ElementId parentId) {
+  TextElement? findBoundText(ElementId parentId) =>
+      _boundTextByParent[parentId.value];
+
+  late final Map<String, TextElement> _boundTextByParent = () {
+    final boundText = <String, TextElement>{};
     for (final e in _elements) {
       if (e.isDeleted) continue;
-      if (e is TextElement && e.containerId == parentId.value) {
-        return e;
+      if (e is TextElement && e.containerId != null) {
+        // Preserve the first active match, including malformed duplicate binds.
+        boundText.putIfAbsent(e.containerId!, () => e);
       }
     }
-    return null;
-  }
+    return boundText;
+  }();
 
   /// Returns the bounding box that encloses all active (non-deleted) elements,
   /// or null if there are no active elements.

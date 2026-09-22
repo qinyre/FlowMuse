@@ -22,6 +22,8 @@ void main() {
         'quick_zigzag',
         'pressure_ramp',
         'pointer_cancel',
+        'continuous_curve_30s',
+        'continuous_curve_30s_v2',
       });
       for (final fixture in writingRecordingFixtures) {
         expect(fixture.schemaVersion, writingFixtureSchemaVersion);
@@ -59,6 +61,20 @@ void main() {
       }
     });
 
+    test('连续长笔 fixture 保持同一指针按下超过 30 秒', () {
+      final samples = writingRecordingFixtures
+          .singleWhere((item) => item.name == 'continuous_curve_30s')
+          .recording
+          .samples;
+      expect(
+        samples.last.time,
+        greaterThanOrEqualTo(const Duration(seconds: 30)),
+      );
+      expect(samples.where((s) => s.phase == StrokePhase.down), hasLength(1));
+      expect(samples.where((s) => s.phase == StrokePhase.up), hasLength(1));
+      expect(samples.map((s) => s.pointerId).toSet(), hasLength(1));
+    });
+
     test('recording JSON round-trip 稳定', () {
       for (final fixture in writingRecordingFixtures) {
         final encoded = jsonEncode(fixture.recording.toJson());
@@ -91,7 +107,7 @@ void main() {
       expect(normalized.pressure, isNull);
     });
 
-    test('fixture 内容 hash 稳定且彼此区分', () {
+    test('fixture 内容彼此区分，可移植版本匹配冻结 hash', () {
       final hashes = writingRecordingFixtures
           .map((fixture) => fixture.contentHash)
           .toList();
@@ -101,7 +117,29 @@ void main() {
         final fixture = writingRecordingFixtures.singleWhere(
           (candidate) => candidate.name == entry.key,
         );
-        expect(fixture.contentHash, entry.value.hash, reason: entry.key);
+        // v1 preserves a historical Windows baseline; libm differs on Linux
+        // and ARM. v2 is the portable replacement. The device runner and
+        // report validator still require the exact frozen hash for either.
+        if (entry.key != 'continuous_curve_30s') {
+          expect(fixture.contentHash, entry.value.hash, reason: entry.key);
+        } else {
+          final portable = writingRecordingFixtures.singleWhere(
+            (candidate) => candidate.name == 'continuous_curve_30s_v2',
+          );
+          final samples = fixture.recording.samples;
+          final expected = portable.recording.samples;
+          expect(samples, hasLength(expected.length));
+          for (var i = 0; i < samples.length; i++) {
+            expect(samples[i].x, closeTo(expected[i].x, 0.000001));
+            expect(samples[i].y, closeTo(expected[i].y, 0.000001));
+            expect(
+              samples[i].pressure,
+              closeTo(expected[i].pressure!, 0.000001),
+            );
+            expect(samples[i].time, expected[i].time);
+            expect(samples[i].phase, expected[i].phase);
+          }
+        }
         expect(
           fixture.expectedAcceptedSampleCount,
           entry.value.acceptedSamplesPerStroke,

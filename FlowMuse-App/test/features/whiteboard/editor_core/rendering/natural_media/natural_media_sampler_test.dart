@@ -192,6 +192,24 @@ void main() {
   });
 
   group('线性度与上限', () {
+    test('噪声压力触顶时保留旧 Set 插入顺序对应的颗粒', () {
+      final plan = NaturalMediaStrokeSampler.sample(
+        strokeId: 'noisy-cap',
+        points: [for (var i = 0; i < 100; i++) Point(i * 0.5, 0)],
+        pressures: [for (var i = 0; i < 100; i++) i % 4 < 2 ? 0.1 : 0.25],
+        strokeWidth: 6,
+        brushType: BrushType.pencil,
+        tuning: const NaturalMediaTuning(particleCap: 8),
+      );
+      expect(plan.stats.hitParticleCap, isTrue);
+      expect(
+        plan.primitives
+            .where((p) => p.kind == NaturalMediaPrimitiveKind.pencilGrain)
+            .map((p) => p.edgeIndex),
+        [1, 11, 23, 35, 49, 61, 73, 85],
+      );
+    });
+
     test('1k/16k 构建耗时比 ≤20；粒子上限生效', () {
       final results = <int, double>{};
       for (final n in [1000, 16000]) {

@@ -15,6 +15,7 @@ import '../input/active_preview_metrics_probe.dart';
 import 'collaboration_focus_alpha.dart';
 import 'element_renderer.dart';
 import 'rough/rough_adapter.dart';
+import 'rough/pencil_shader.dart';
 import 'text_renderer.dart';
 import 'viewport_culling.dart';
 import 'viewport_state.dart';
@@ -81,6 +82,7 @@ class StaticCanvasPainter extends CustomPainter {
   /// painter 只比较 [localHighlightRevision]，禁止对 Set 做 identity 比较。
   final Set<ElementId> locallyHighlightedElementIds;
   final int localHighlightRevision;
+  final StaticCanvasRenderCache? renderCache;
 
   const StaticCanvasPainter({
     required this.scene,
@@ -103,6 +105,7 @@ class StaticCanvasPainter extends CustomPainter {
     this.focusHistoricalContent = false,
     this.locallyHighlightedElementIds = const {},
     this.localHighlightRevision = 0,
+    this.renderCache,
   });
 
   @override
@@ -122,6 +125,15 @@ class StaticCanvasPainter extends CustomPainter {
   }
 
   void _paint(Canvas canvas, Size size) {
+    final cache = renderCache;
+    if (cache != null && previewElement == null) {
+      cache.paint(canvas, size, this);
+      return;
+    }
+    _paintScene(canvas, size);
+  }
+
+  void _paintScene(Canvas canvas, Size size) {
     canvas.save();
 
     // Apply viewport transform: scale then translate
@@ -785,6 +797,7 @@ class StaticCanvasPainter extends CustomPainter {
     return !identical(scene, oldDelegate.scene) ||
         !identical(adapter, oldDelegate.adapter) ||
         viewport != oldDelegate.viewport ||
+        contentBounds != oldDelegate.contentBounds ||
         !identical(layout, oldDelegate.layout) ||
         !identical(previewElement, oldDelegate.previewElement) ||
         !identical(pendingElements, oldDelegate.pendingElements) ||
@@ -801,5 +814,62 @@ class StaticCanvasPainter extends CustomPainter {
         focusHistoricalContent != oldDelegate.focusHistoricalContent ||
         (focusedCreatorKey != null || focusHistoricalContent) &&
             oldDelegate.localHighlightRevision != localHighlightRevision;
+  }
+}
+
+/// One display list for the current static scene. Replaying on the same Canvas
+/// preserves darken blending with the background and wet ink above it.
+/// No bitmap, compositing layer, or per-stroke history is retained here.
+class StaticCanvasRenderCache {
+  ui.Picture? _picture;
+  StaticCanvasPainter? _painter;
+  Size? _size;
+  List<double>? _transform;
+  Matrix4? _inverseTransform;
+  bool? _shaderAvailable;
+
+  void paint(Canvas canvas, Size size, StaticCanvasPainter painter) {
+    final previous = _painter;
+    final transform = canvas.getTransform();
+    final shaderAvailable = PencilShader.isAvailable;
+    if (_picture == null ||
+        _size != size ||
+        previous == null ||
+        !listEquals(_transform, transform) ||
+        _shaderAvailable != shaderAvailable ||
+        painter.shouldRepaint(previous)) {
+      final inverse = Matrix4.copy(Matrix4.fromFloat64List(transform));
+      if (inverse.invert() == 0) {
+        painter._paintScene(canvas, size);
+        return;
+      }
+      final recorder = ui.PictureRecorder();
+      // Preserve the incoming transform: classic pencil shader frequency reads
+      // Canvas.getTransform(), including device/ancestor scaling and rotation.
+      final recordingCanvas = Canvas(recorder)..transform(transform);
+      painter._paintScene(recordingCanvas, size);
+      final picture = recorder.endRecording();
+      _picture?.dispose();
+      _picture = picture;
+      _painter = painter;
+      _size = size;
+      _transform = transform;
+      _inverseTransform = inverse;
+      _shaderAvailable = shaderAvailable;
+    }
+    canvas.save();
+    canvas.transform(_inverseTransform!.storage);
+    canvas.drawPicture(_picture!);
+    canvas.restore();
+  }
+
+  void dispose() {
+    _picture?.dispose();
+    _picture = null;
+    _painter = null;
+    _size = null;
+    _transform = null;
+    _inverseTransform = null;
+    _shaderAvailable = null;
   }
 }
