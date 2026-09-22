@@ -78,6 +78,36 @@ void main() {
     expect(controller.lastChangedElements, isNull);
   });
 
+  test('远端笔迹只刷新画布，选中笔迹的属性更新仍通知工具栏', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    var canvasChanges = 0;
+    var chromeChanges = 0;
+    controller.addListener(() => canvasChanges++);
+    controller.chromeChanges.addListener(() => chromeChanges++);
+    final stroke = FreedrawElement(
+      id: const ElementId('remote-stroke'),
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 10,
+      points: const [Point(0, 0), Point(20, 10)],
+    );
+
+    controller.applyRemoteElements([stroke]);
+    expect(canvasChanges, 1);
+    expect(chromeChanges, 0);
+    expect(controller.currentScene.getElementById(stroke.id), same(stroke));
+
+    controller.applyResult(SetSelectionResult({stroke.id}));
+    canvasChanges = chromeChanges = 0;
+    final moved = stroke.copyWith(x: 30, version: 2);
+    controller.applyRemoteElements([moved]);
+    expect(canvasChanges, 1);
+    expect(chromeChanges, 1);
+    expect(controller.selectedElements.single.x, 30);
+  });
+
   test('reset canvas reports a full-scene replacement', () {
     final controller = MarkdrawController();
     addTearDown(controller.dispose);

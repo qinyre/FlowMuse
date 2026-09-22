@@ -109,6 +109,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   late final MarkdrawController _markdrawController;
   late final MarkdrawFileHandler _fileHandler;
   late final WhiteboardCollaborationAdapter _collaborationAdapter;
+  final _remoteCollaborators = ValueNotifier<List<RemoteCollaboratorOverlay>>(
+    [],
+  );
   late final CollaborationRepository _collaborationRepository;
   // Dispose can flush a draft after WidgetRef becomes unsafe to access.
   late final WhiteboardSceneRepository _localSceneRepository;
@@ -263,6 +266,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _loadImagesTimer?.cancel();
     _liveInkSender.cancel();
     _remoteWetInkStore.dispose();
+    _remoteCollaborators.dispose();
     _markdrawController.onPrepareLocalResult = null;
     _markdrawController.removeListener(_onControllerNotifyForFocus);
     _markdrawController.removeListener(_scheduleReadingPosition);
@@ -1419,6 +1423,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _cancelCollaborationStreams() async {
+    _resetRemoteUpdates();
     _liveInkSender.cancel();
     _remoteWetInkStore.reset();
     _roomSocketIds = {};
@@ -1651,6 +1656,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _listenToRoom(CollaborationRoom room) async {
+    _resetRemoteUpdates();
     _disposingOrLeaving = false;
     if (_collaborationIdentity.isGuest && _guestCreatorSessionId == null) {
       _guestCreatorSessionId = const Uuid().v4();
@@ -2001,11 +2007,19 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   final Map<String, Map<String, Object?>> _remoteMergeBuffer = {};
+  int _remoteApplyGeneration = 0;
   Timer? _remoteMergeTimer;
   static const Duration _remoteMergeWindow = Duration(milliseconds: 16);
 
+  void _resetRemoteUpdates() {
+    _remoteApplyGeneration++;
+    _remoteMergeTimer?.cancel();
+    _remoteMergeTimer = null;
+    _remoteMergeBuffer.clear();
+    _remoteSceneQueue = Future<void>.value();
+  }
+
   void _enqueueRemoteElements(List<Map<String, Object?>> remoteElements) {
-    _remoteWetInkStore.finalizeStrokes(_freedrawIds(remoteElements));
     CollaborationDebugLog.write('scene', 'remote_elements_queued', {
       'elements': remoteElements.length,
       'summary': CollaborationDebugLog.elementSummary(remoteElements),
@@ -2028,8 +2042,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       }
     }
 
-    _remoteMergeTimer?.cancel();
-    _remoteMergeTimer = Timer(_remoteMergeWindow, _flushRemoteMerge);
+    _remoteMergeTimer ??= Timer(_remoteMergeWindow, _flushRemoteMerge);
   }
 
   Future<void> _flushRemoteMerge() async {
@@ -2038,11 +2051,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
     final merged = _remoteMergeBuffer.values.toList();
     _remoteMergeBuffer.clear();
+    final generation = _remoteApplyGeneration;
 
     final pending = _remoteSceneQueue.catchError(_ignoreRemoteSceneError);
     _remoteSceneQueue = pending
         .then<void>((_) async {
           await _runAfterStableFrameAsync(() async {
+            if (generation != _remoteApplyGeneration) return;
             await _applyRemoteElements(merged);
           });
         })
@@ -2055,7 +2070,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     bool loadImages = true,
     bool reconcile = true,
   }) {
-    _remoteWetInkStore.finalizeStrokes(_freedrawIds(remoteScene.elements));
+    final generation = _remoteApplyGeneration;
     CollaborationDebugLog.write('scene', 'remote_scene_queued', {
       'elements': remoteScene.elements.length,
       'sceneVersion': CollaborationDebugLog.sceneVersion(remoteScene.elements),
@@ -2065,6 +2080,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _remoteSceneQueue = pending
         .then<void>((_) async {
           await _runAfterStableFrameAsync(() async {
+            if (generation != _remoteApplyGeneration) return;
             await _applyRemoteScene(remoteScene, reconcile: reconcile);
             if (loadImages) {
               _scheduleLoadImageFiles();
@@ -2123,6 +2139,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final sw = Stopwatch()..start();
     try {
       _collaborationAdapter.applyRemoteElements(changedElements);
+      _remoteWetInkStore.finalizeStrokes(_freedrawIds(changedElements));
       sw.stop();
       CollaborationDebugLog.write('metrics', 'remote_apply_latency_ms', {
         'ms': sw.elapsedMilliseconds,
@@ -2131,7 +2148,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     } finally {
       _applyingRemoteScene = false;
     }
-    _scheduleLoadImageFiles();
+    if (changedElements.any((element) => element['type'] == 'image')) {
+      _scheduleLoadImageFiles();
+    }
   }
 
   Future<void> _applyRemoteScene(
@@ -2179,6 +2198,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         nextScene,
         closeTransientUi: false,
       );
+      _remoteWetInkStore.finalizeStrokes(_freedrawIds(nextScene.elements));
       sw.stop();
       CollaborationDebugLog.write('metrics', 'remote_apply_latency_ms', {
         'ms': sw.elapsedMilliseconds,
@@ -2281,13 +2301,19 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (room == null) {
       return;
     }
-    final scene = _collaborationAdapter.currentScene();
+    final generation = _remoteApplyGeneration;
+    final scene = _markdrawController.currentScene;
     final result = await _collaborationRepository.loadMissingFiles(
       room: room,
-      fileIds: _savedImageFileIds(scene.elements),
+      fileIds: [
+        for (final element
+            in scene.elements.whereType<editor_core.ImageElement>())
+          if (!element.isDeleted && element.status == 'saved') element.fileId,
+      ],
       existingFileIds: scene.files.keys.toSet(),
     );
     if (!_canMutateWhiteboard ||
+        generation != _remoteApplyGeneration ||
         (result.files.isEmpty && result.erroredFileIds.isEmpty)) {
       return;
     }
@@ -2311,18 +2337,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       });
     } finally {
       _applyingRemoteScene = false;
-    }
-  }
-
-  Iterable<String> _savedImageFileIds(
-    List<Map<String, Object?>> elements,
-  ) sync* {
-    for (final element in elements) {
-      if (element['type'] == 'image' &&
-          element['status'] == 'saved' &&
-          element['fileId'] is String) {
-        yield element['fileId']! as String;
-      }
     }
   }
 
@@ -2351,13 +2365,23 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(whiteboardViewModelProvider, (previous, next) {
+      _runAfterStableFrame(() {
+        if (!identical(previous?.collaborators, next.collaborators)) {
+          _remoteCollaborators.value = _remoteCollaboratorOverlays(next);
+        }
+        if (previous == null || !_sameCollaborationChrome(previous, next)) {
+          setState(() {});
+        }
+      });
+    });
     ref.listen(libraryIndexProvider, (_, next) {
       final index = next.asData?.value;
       _syncDocumentTitle(
         index == null ? null : _noteById(index.notes, widget.noteId),
       );
     });
-    final state = ref.watch(whiteboardViewModelProvider);
+    final state = ref.read(whiteboardViewModelProvider);
     final editorPreferences = ref.watch(editorPreferencesProvider).value;
     final themePreset = ref.watch(themeViewModelProvider);
     final effectivePreset = effectiveAppThemePreset(
@@ -2445,7 +2469,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   collaboratorCount: participants.isEmpty
                       ? state.collaborators.length
                       : participants.length,
-                  collaborators: _remoteCollaboratorOverlays(state),
+                  collaboratorsListenable: _remoteCollaborators,
                   collaborationParticipants: participants,
                   isCollaborationOwner: state.isRoomOwner,
                   onSave: () {
@@ -2670,6 +2694,64 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           idle: presence.idleState != CollaboratorIdleState.active,
         ),
     ];
+  }
+
+  // Cursor, selection and visible bounds are painted independently. Only
+  // changes used by the header, room controls and attribution rebuild the page.
+  bool _sameCollaborationChrome(WhiteboardState a, WhiteboardState b) {
+    if ((
+          a.noteId,
+          a.saveStatus,
+          a.activeRoom,
+          a.collaborating,
+          a.collaborationStatus,
+          a.collaborationError,
+          a.roomMetadata,
+          a.exitReason,
+          a.shareOrigin,
+          a.shareOriginConfigured,
+        ) !=
+        (
+          b.noteId,
+          b.saveStatus,
+          b.activeRoom,
+          b.collaborating,
+          b.collaborationStatus,
+          b.collaborationError,
+          b.roomMetadata,
+          b.exitReason,
+          b.shareOrigin,
+          b.shareOriginConfigured,
+        )) {
+      return false;
+    }
+    if (a.collaborators.length != b.collaborators.length) return false;
+    for (final entry in a.collaborators.entries) {
+      final previous = entry.value;
+      final next = b.collaborators[entry.key];
+      if (next == null ||
+          (
+                previous.username,
+                previous.userId,
+                previous.avatarUrl,
+                previous.isGuest,
+                previous.creatorKey,
+                previous.idleState,
+                previous.isCurrentUser,
+              ) !=
+              (
+                next.username,
+                next.userId,
+                next.avatarUrl,
+                next.isGuest,
+                next.creatorKey,
+                next.idleState,
+                next.isCurrentUser,
+              )) {
+        return false;
+      }
+    }
+    return true;
   }
 
   List<CollaborationParticipantBadge> _collaborationParticipantBadges(

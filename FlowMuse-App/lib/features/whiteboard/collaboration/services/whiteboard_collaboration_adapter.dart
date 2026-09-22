@@ -56,6 +56,10 @@ class WhiteboardCollaborationAdapter {
 
   Set<String> protectedElementIds() {
     final ids = selectedElementIds();
+    final activeTool = controller.activeTool;
+    if (activeTool is FreedrawTool && activeTool.activeView != null) {
+      ids.add(activeTool.activeView!.strokeId.value);
+    }
     final editingTextId = controller.editingTextElementId;
     if (editingTextId != null) {
       ids.add(editingTextId.value);

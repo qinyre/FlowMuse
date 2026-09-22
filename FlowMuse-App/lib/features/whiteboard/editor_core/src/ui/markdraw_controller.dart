@@ -3530,7 +3530,16 @@ class MarkdrawController extends ChangeNotifier {
     }
     _lastChangedElements = null;
     _notifySceneChanged(_editorState.scene, SceneChangeSource.remoteApply);
-    notifyListeners();
+    if (updates.every(
+          (element) => element is FreedrawElement && !element.isCanvasPage,
+        ) &&
+        _editorState.selectedIds.isEmpty &&
+        editingTextElementId == null &&
+        editingFrameLabelId == null) {
+      _notifyCanvasChanged();
+    } else {
+      notifyListeners();
+    }
   }
 
   /// Clears the scene and undo history.

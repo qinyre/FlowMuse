@@ -50,8 +50,8 @@ class ChangeAccumulator {
       }
     }
 
-    _timer?.cancel();
-    _timer = Timer(_batchWindow, _flush);
+    // A batch has a deadline. Debouncing here starves continuous edits.
+    _timer ??= Timer(_batchWindow, _flush);
   }
 
   /// 对齐 SceneReconciler._shouldKeepLocal: version 高的赢，

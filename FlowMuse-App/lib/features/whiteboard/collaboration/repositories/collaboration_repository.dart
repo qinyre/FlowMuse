@@ -153,11 +153,12 @@ class CollaborationRepository {
     required LiveInkChunk chunk,
   }) async {
     if (!effectiveLiveInk || _activeRoom?.roomId != room.roomId) return;
+    final sessionGeneration = _roomSessionGeneration;
     final encrypted = await _crypto.encrypt(
       roomKey: room.roomKey,
       plainBytes: CollaborationMessage.inkChunk(chunk).toBytes(),
     );
-    if (_activeRoom?.roomId != room.roomId) return;
+    if (!_isCurrentRoomSession(room, sessionGeneration)) return;
     await sendLiveInk(encrypted);
   }
 
@@ -223,6 +224,7 @@ class CollaborationRepository {
     await _ownerKeyStore.writeOwnerKey(room.roomId, ownerKey);
     _activeRoom = room;
     _latestScene = syncableScene;
+    _broadcastedElementVersions.clear();
     _rememberBroadcasted(syncableScene.elements);
     CollaborationDebugLog.write('repo', 'start_room', {
       'room': _shortRoomId(room.roomId),
@@ -263,6 +265,7 @@ class CollaborationRepository {
       elements: _reconciler.getSyncableElements(storedScene.elements),
     );
     _latestScene = nextScene;
+    _broadcastedElementVersions.clear();
     _rememberBroadcasted(nextScene.elements);
     _activeRoom = room;
     CollaborationDebugLog.write('repo', 'join_room', {
@@ -427,7 +430,9 @@ class CollaborationRepository {
     final roomId = _activeRoom?.roomId;
     _sendQueue = _sendQueue
         .then<void>((_) async {
-          if (_activeRoom?.roomId != roomId) return;
+          if (_sendGeneration != generation || _activeRoom?.roomId != roomId) {
+            return;
+          }
           final elements = _pendingLatestElements.values.toList();
           _pendingLatestElements.clear();
           await _doAccumulatorFlush(elements, false);
@@ -446,8 +451,12 @@ class CollaborationRepository {
   ) {
     // Serialize sends: chain onto queue so the next flush can't start until
     // _rememberBroadcasted has completed, preventing duplicate sends.
+    final generation = _sendGeneration;
     _sendQueue = _sendQueue
-        .then((_) => _doAccumulatorFlush(elements, isInitial))
+        .then<void>((_) async {
+          if (generation != _sendGeneration) return;
+          await _doAccumulatorFlush(elements, isInitial);
+        })
         .catchError(_handleSendQueueError);
     return _sendQueue;
   }
@@ -467,6 +476,7 @@ class CollaborationRepository {
   ) async {
     final room = _activeRoom;
     if (room == null) return;
+    final sessionGeneration = _roomSessionGeneration;
 
     final changed = isInitial ? elements : _changedElements(elements);
     if (changed.isEmpty && !isInitial) return;
@@ -476,6 +486,7 @@ class CollaborationRepository {
         : CollaborationMessage.sceneUpdate(elements: changed);
 
     final sentBytes = await _send(room: room, message: message);
+    if (!_isCurrentRoomSession(room, sessionGeneration)) return;
     _rememberBroadcasted(changed);
 
     _scheduleFileUpload(room);
@@ -626,12 +637,12 @@ class CollaborationRepository {
         itemCount: localScene.elements.length + remoteElements.length,
       );
     }
-    final nextScene = localScene.copyWith(
-      elements: _reconciler.getSyncableElements(reconciled),
+    final nextScene = localScene.copyWith(elements: reconciled);
+    _latestScene = nextScene.copyWith(
+      elements: _reconciler.getSyncableElements(nextScene.elements),
     );
-    _latestScene = nextScene;
     _rememberBroadcasted(remoteWinners);
-    return nextScene.copyWith(elements: reconciled);
+    return nextScene;
   }
 
   List<Map<String, Object?>> reconcileRemoteElements({
@@ -642,21 +653,19 @@ class CollaborationRepository {
     final localById = {
       for (final element in localScene.elements) _id(element): element,
     };
-    final winners = [
-      for (final remote in remoteElements)
-        if (_remoteWins(
-          localById[_id(remote)],
-          remote,
-          protectedElementIds.contains(_id(remote)),
-        ))
-          remote,
-    ];
-    reconcileRemoteScene(
+    final reconciled = reconcileRemoteScene(
       localScene: localScene,
       remoteElements: remoteElements,
       protectedElementIds: protectedElementIds,
     );
-    return winners;
+    // Include owner/index/bound-text repairs made by the reconciler, even
+    // when the repaired element was not a raw remote winner.
+    return [
+      for (final element in reconciled.elements)
+        if (!protectedElementIds.contains(_id(element)) &&
+            !identical(element, localById[_id(element)]))
+          element,
+    ];
   }
 
   bool _remoteWins(
@@ -708,6 +717,10 @@ class CollaborationRepository {
 
   Future<void> _startRoomSession(CollaborationRoom room) async {
     await _stopRoomSession();
+    _sendGeneration++;
+    _pendingLatestElements.clear();
+    _latestSendQueued = false;
+    _sendQueue = Future<void>.value();
     final sessionGeneration = _roomSessionGeneration;
     _accumulator.dispose();
     _accumulator.onFlush = _onAccumulatorFlush;
@@ -927,6 +940,8 @@ class CollaborationRepository {
     required CollaborationMessage message,
     bool volatile = false,
   }) async {
+    final sessionGeneration = _roomSessionGeneration;
+    if (!_isCurrentRoomSession(room, sessionGeneration)) return 0;
     final encodeStarted = _performanceProbe?.nowMicros();
     final plainBytes = kReleaseMode
         ? message.toBytes()
@@ -965,6 +980,7 @@ class CollaborationRepository {
     } finally {
       encryptTask?.finish();
     }
+    if (!_isCurrentRoomSession(room, sessionGeneration)) return 0;
     if (encryptStarted != null) {
       _performanceProbe!.recordSince(
         CollaborationPerformanceStage.encrypt,

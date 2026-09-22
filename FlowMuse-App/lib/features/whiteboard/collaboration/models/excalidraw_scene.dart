@@ -6,7 +6,18 @@ const emptyExcalidrawSceneContent =
     '{"type":"excalidraw","version":2,"source":"https://excalidraw.com","elements":[],"appState":{},"files":{}}';
 
 class ExcalidrawScene {
-  const ExcalidrawScene({
+  ExcalidrawScene({
+    required List<Map<String, Object?>> elements,
+    required Map<String, Object?> appState,
+    required Map<String, Object?> files,
+    this.type = 'excalidraw',
+    this.version = 2,
+    this.source = 'https://excalidraw.com',
+  }) : elements = List.unmodifiable(elements.map(_deepMap)),
+       appState = _deepMap(appState),
+       files = _deepMap(files);
+
+  const ExcalidrawScene._({
     required this.elements,
     required this.appState,
     required this.files,
@@ -16,7 +27,7 @@ class ExcalidrawScene {
   });
 
   factory ExcalidrawScene.empty() {
-    return const ExcalidrawScene(elements: [], appState: {}, files: {});
+    return const ExcalidrawScene._(elements: [], appState: {}, files: {});
   }
 
   factory ExcalidrawScene.fromContent(String content) {
@@ -37,8 +48,10 @@ class ExcalidrawScene {
                 Map<String, Object?>.from(element as Map),
             ]
           : const [],
-      appState: rawAppState is Map ? _deepMap(rawAppState) : const {},
-      files: rawFiles is Map ? _deepMap(rawFiles) : const {},
+      appState: rawAppState is Map
+          ? Map<String, Object?>.from(rawAppState)
+          : const {},
+      files: rawFiles is Map ? Map<String, Object?>.from(rawFiles) : const {},
     );
   }
 
@@ -71,13 +84,21 @@ class ExcalidrawScene {
     Map<String, Object?>? appState,
     Map<String, Object?>? files,
   }) {
-    return ExcalidrawScene(
+    // Only this scene's deeply immutable elements are safe to share. New
+    // inputs are copied and frozen, including unknown nested extension keys.
+    final reusable = elements == null
+        ? null
+        : (Set<Map<String, Object?>>.identity()..addAll(this.elements));
+    return ExcalidrawScene._(
       type: type,
       version: version,
       source: source,
       elements: elements == null
           ? this.elements
-          : [for (final element in elements) _deepMap(element)],
+          : List.unmodifiable([
+              for (final element in elements)
+                reusable!.contains(element) ? element : _deepMap(element),
+            ]),
       appState: appState == null ? this.appState : _deepMap(appState),
       files: files == null ? this.files : _deepMap(files),
     );
@@ -108,10 +129,10 @@ class ExcalidrawScene {
 }
 
 Map<String, Object?> _deepMap(Map source) {
-  return {
+  return Map<String, Object?>.unmodifiable({
     for (final entry in source.entries)
       entry.key as String: _deepValue(entry.value),
-  };
+  });
 }
 
 Object? _deepValue(Object? value) {
@@ -119,7 +140,7 @@ Object? _deepValue(Object? value) {
     return _deepMap(value);
   }
   if (value is List) {
-    return [for (final item in value) _deepValue(item)];
+    return List<Object?>.unmodifiable(value.map(_deepValue));
   }
   return value;
 }

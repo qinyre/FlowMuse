@@ -21,11 +21,17 @@ class CollaborationPerformanceScenario {
     required this.memberCount,
     this.warmupIterations = 100,
     this.measuredIterations = 1000,
+    this.backgroundElementCount = 0,
+    this.backgroundPointCount = 128,
+    this.strokePointCount = 3,
   });
 
   final int memberCount;
   final int warmupIterations;
   final int measuredIterations;
+  final int backgroundElementCount;
+  final int backgroundPointCount;
+  final int strokePointCount;
 
   CollaborationPerformanceScenario copyWith({
     int? warmupIterations,
@@ -35,6 +41,9 @@ class CollaborationPerformanceScenario {
       memberCount: memberCount,
       warmupIterations: warmupIterations ?? this.warmupIterations,
       measuredIterations: measuredIterations ?? this.measuredIterations,
+      backgroundElementCount: backgroundElementCount,
+      backgroundPointCount: backgroundPointCount,
+      strokePointCount: strokePointCount,
     );
   }
 }
@@ -125,8 +134,19 @@ Future<CollaborationPerformanceResult> runCollaborationPerformanceScenario(
     roomId: 'writing-performance-room',
     roomKey: 'AAAAAAAAAAAAAAAAAAAAAA',
   );
+  final background = [
+    for (var i = 0; i < scenario.backgroundElementCount; i++)
+      {
+        ..._element(version: 1, pointCount: scenario.backgroundPointCount),
+        'id': 'fixture-background-$i',
+        'index': 'b${i.toString().padLeft(8, '0')}',
+      },
+  ];
   final initial = ExcalidrawScene.empty().copyWith(
-    elements: [_element(version: 1)],
+    elements: [
+      _element(version: 1, pointCount: scenario.strokePointCount),
+      ...background,
+    ],
   );
   final crypto = CollaborationCrypto();
   final store = MemoryEncryptedSceneStore();
@@ -191,12 +211,16 @@ Future<CollaborationPerformanceResult> runCollaborationPerformanceScenario(
 
     var version = 1;
     Future<void> runIteration() async {
+      final iterationStarted = probes.first.nowMicros();
       version++;
       awaitedVersion = version;
       delivered = 0;
       delivery = Completer<void>();
-      final scene = ExcalidrawScene.empty().copyWith(
-        elements: [_element(version: version)],
+      final scene = scenes.first.copyWith(
+        elements: [
+          _element(version: version, pointCount: scenario.strokePointCount),
+          ...scenes.first.elements.skip(1),
+        ],
       );
       scenes[0] = scene;
       await repositories.first.broadcastScene(
@@ -206,6 +230,11 @@ Future<CollaborationPerformanceResult> runCollaborationPerformanceScenario(
       );
       try {
         await delivery!.future.timeout(const Duration(seconds: 5));
+        probes.first.recordSince(
+          CollaborationPerformanceStage.roundTrip,
+          iterationStarted,
+          itemCount: scenario.memberCount,
+        );
       } catch (_) {
         errors++;
         rethrow;
@@ -281,7 +310,7 @@ int _nearestRank(List<int> sorted, double percentile) {
   return sorted[index];
 }
 
-Map<String, Object?> _element({required int version}) {
+Map<String, Object?> _element({required int version, int pointCount = 3}) {
   return {
     'id': 'fixture-stroke',
     'type': 'freedraw',
@@ -296,7 +325,8 @@ Map<String, Object?> _element({required int version}) {
     'height': 40,
     'points': [
       [0, 0],
-      [version % 120, version % 40],
+      for (var i = 1; i < pointCount - 1; i++)
+        [i * 120 / (pointCount - 1), (version + i) % 40],
       [120, 40],
     ],
   };

@@ -20,6 +20,8 @@ import '../rendering/remote_wet_ink_painter.dart';
 class EditorCanvas extends StatefulWidget {
   final MarkdrawController controller;
   final List<RemoteCollaboratorOverlay> collaborators;
+  final ValueListenable<List<RemoteCollaboratorOverlay>>?
+  collaboratorsListenable;
   final void Function(Offset localPosition, bool pointerDown)?
   onPointerPresence;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
@@ -38,6 +40,7 @@ class EditorCanvas extends StatefulWidget {
     super.key,
     required this.controller,
     this.collaborators = const [],
+    this.collaboratorsListenable,
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
     this.remoteWetInkStore,
@@ -300,9 +303,11 @@ class _EditorCanvasState extends State<EditorCanvas>
     return MindmapUtils.isMindmapNode(node) ? node : null;
   }
 
-  List<RemoteCollaboratorOverlay> _buildRemoteCollaborators() {
+  List<RemoteCollaboratorOverlay> _buildRemoteCollaborators(
+    List<RemoteCollaboratorOverlay> collaborators,
+  ) {
     return [
-      for (final collaborator in widget.collaborators)
+      for (final collaborator in collaborators)
         RemoteCollaboratorOverlay(
           socketId: collaborator.socketId,
           username: collaborator.username,
@@ -548,12 +553,33 @@ class _EditorCanvasState extends State<EditorCanvas>
                             ? (controller.activeTool as LaserTool).activeTrail
                             : null,
                         linkIcons: _buildLinkIcons(),
-                        remoteCollaborators: _buildRemoteCollaborators(),
+                        remoteCollaborators:
+                            widget.collaboratorsListenable == null
+                            ? _buildRemoteCollaborators(widget.collaborators)
+                            : const [],
                       ),
                       child: wetInkLayers,
                     ),
                   ),
                 ),
+                if (widget.collaboratorsListenable case final presence?)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: RepaintBoundary(
+                        child: ValueListenableBuilder(
+                          valueListenable: presence,
+                          builder: (context, collaborators, _) => CustomPaint(
+                            painter: InteractiveCanvasPainter(
+                              viewport: paintViewport,
+                              remoteCollaborators: _buildRemoteCollaborators(
+                                collaborators,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (controller.editorState.activeToolType == ToolType.eraser &&
                     controller.mousePosition != null)
                   Positioned(

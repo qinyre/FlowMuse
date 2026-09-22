@@ -6,6 +6,7 @@ enum CollaborationPerformanceStage {
   decrypt,
   jsonDecode,
   reconcile,
+  roundTrip,
 }
 
 class CollaborationPerformanceSample {
