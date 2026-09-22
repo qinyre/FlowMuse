@@ -17,6 +17,8 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 
 import 'studio_rail_icon_button.dart';
+import 'page_navigation_controls.dart';
+import 'page_overview.dart';
 
 /// A full-featured drawing editor widget.
 ///
@@ -86,6 +88,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.focusHistoricalContent = false,
     this.socketIdCreatorKeys = const {},
     this.presenceCreatorRevision = 0,
+    this.pageNavigationEnabled = true,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -93,6 +96,7 @@ class MarkdrawEditor extends StatefulWidget {
 
   /// Appearance and behavior configuration.
   final MarkdrawEditorConfig config;
+  final bool pageNavigationEnabled;
 
   // File I/O callbacks — null = menu item hidden
   final VoidCallback? onSave;
@@ -207,6 +211,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   static const _speechNoticeKey = 'whiteboard.speechRecognitionNoticeSeen.v1';
 
   MarkdrawController? _ownController;
+  Widget? _pageOverview;
   ToolbarDock _toolbarDock = ToolbarDock.top;
   ControlGroupPosition _controlGroupPosition = ControlGroupPosition.bottomRight;
   bool _toolbarCollapsed = false;
@@ -247,6 +252,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   @override
   void didUpdateWidget(MarkdrawEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.pageNavigationEnabled ||
+        widget.controller != oldWidget.controller) {
+      _pageOverview = null;
+    }
     if (!widget.speechRecognitionEnabled &&
         oldWidget.speechRecognitionEnabled) {
       _speechState = SpeechRecognitionState.idle;
@@ -414,6 +423,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     }
     final context = _propertyPanelContextKey();
     setState(() {
+      if (_controller.showLibraryPanel ||
+          _controller.showMarkdownPanel ||
+          !_controller.isPagedViewport) {
+        _pageOverview = null;
+      }
       if (_propertyPanelContext != context) {
         _propertyPanelCollapsed = false;
       }
@@ -497,7 +511,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 // ignore: deprecated_member_use
                 onChanged: (value) => Navigator.of(context).pop(value),
               ),
-          // ignore: deprecated_member_use
+            // ignore: deprecated_member_use
           ],
         ),
       ),
@@ -574,6 +588,16 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           ? CrossAxisAlignment.end
           : CrossAxisAlignment.start,
       children: [
+        if (_controller.isPagedViewport) ...[
+          _buildControlSurface(
+            PageNavigationControls(
+              controller: _controller,
+              onOverview: _togglePageOverview,
+              enabled: widget.pageNavigationEnabled,
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
         if (!_controller.viewMode)
           _buildControlSurface(UndoRedoControls(controller: _controller)),
         if (!_controller.viewMode && widget.config.showZoomControls)
@@ -587,6 +611,44 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           ),
       ],
     );
+  }
+
+  void _togglePageOverview() {
+    if (!widget.pageNavigationEnabled || !_controller.preparePageNavigation()) {
+      return;
+    }
+    if (_pageOverview != null) {
+      setState(() => _pageOverview = null);
+      return;
+    }
+    if (MediaQuery.sizeOf(context).width < 900 ||
+        _controller.showLibraryPanel ||
+        _controller.showMarkdownPanel) {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (context) => SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.8,
+          child: PageOverview(
+            controller: _controller,
+            onClose: () => Navigator.of(context).pop(),
+            onNavigate: () => Navigator.of(context).pop(),
+          ),
+        ),
+      );
+    } else {
+      setState(
+        () => _pageOverview = PageOverview(
+          controller: _controller,
+          onClose: () {
+            if (_controller.preparePageNavigation()) {
+              setState(() => _pageOverview = null);
+            }
+          },
+        ),
+      );
+    }
   }
 
   Widget _buildControlSurface(Widget child) {
@@ -684,6 +746,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     final isCompact = _controller.isCompact;
     final showChrome = !_controller.zenMode;
     final showEditChrome = showChrome && !_controller.viewMode;
+    final overview = showChrome && widget.pageNavigationEnabled
+        ? _pageOverview
+        : null;
+    final overviewOnLeft = _toolbarDock == ToolbarDock.right;
     final showNavigationTools = showEditChrome && widget.config.showToolbar;
     final showTopToolbar =
         showNavigationTools &&
@@ -696,7 +762,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     final topChromeOffset = safeArea.top + chromeHeight + 12;
     final bottomChromeOffset = safeArea.bottom + 12;
     final showDetachedControls =
-        showChrome && (!_controller.viewMode || widget.config.showZoomControls);
+        showChrome &&
+        (!_controller.viewMode ||
+            widget.config.showZoomControls ||
+            _controller.isPagedViewport);
     final controlGroupAtTop =
         _controlGroupPosition == ControlGroupPosition.topLeft ||
         _controlGroupPosition == ControlGroupPosition.topRight;
@@ -709,11 +778,19 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         ((_toolbarDock == ToolbarDock.left) == controlGroupOnLeft);
     final verticalToolbarTop =
         controlGroupSharesVerticalToolbar && controlGroupAtTop
-        ? topChromeOffset + _controlGroupReservedExtent
+        ? topChromeOffset +
+              _controlGroupReservedExtent +
+              (_controller.isPagedViewport
+                  ? (MediaQuery.sizeOf(context).width < 400 ? 108 : 60)
+                  : 0)
         : safeArea.top + 56;
     final verticalToolbarBottom =
         controlGroupSharesVerticalToolbar && !controlGroupAtTop
-        ? bottomChromeOffset + _controlGroupReservedExtent
+        ? bottomChromeOffset +
+              _controlGroupReservedExtent +
+              (_controller.isPagedViewport
+                  ? (MediaQuery.sizeOf(context).width < 400 ? 108 : 60)
+                  : 0)
         : null;
     Widget body = Stack(
       children: [
@@ -750,6 +827,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 ),
               ),
               if (showChrome &&
+                  overview == null &&
                   !isCompact &&
                   _controller.showLibraryPanel &&
                   widget.config.showLibraryPanel)
@@ -972,12 +1050,17 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           Positioned(
             top: controlGroupAtTop ? topChromeOffset : null,
             bottom: controlGroupAtTop ? null : bottomChromeOffset,
-            left: controlGroupOnLeft ? 12 : null,
-            right: controlGroupOnLeft ? null : 12,
+            left: controlGroupOnLeft
+                ? (overview != null && overviewOnLeft ? 304 : 12)
+                : null,
+            right: controlGroupOnLeft
+                ? null
+                : (overview != null && !overviewOnLeft ? 304 : 12),
             child: _buildDetachedControlGroups(),
           ),
         // Floating property panel — desktop left side
         if (showEditChrome &&
+            overview == null &&
             !isCompact &&
             widget.config.showPropertyPanel &&
             (_controller.selectedElements.isNotEmpty ||
@@ -1007,6 +1090,15 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 attributionActionResolver: widget.attributionActionResolver,
               ),
             ),
+        if (overview != null)
+          Positioned(
+            top: topChromeOffset,
+            bottom: bottomChromeOffset,
+            left: overviewOnLeft ? 12 : null,
+            right: overviewOnLeft ? null : 12,
+            width: 280,
+            child: overview,
+          ),
         // Find overlay
         if (_controller.isFindOpen)
           Positioned(

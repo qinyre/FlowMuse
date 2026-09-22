@@ -158,6 +158,76 @@ void main() {
     expect(_ink(check), hasLength(2));
   });
 
+  testWidgets('页码跳转仅保存本机阅读位置，退出重开恢复页内位置与缩放', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'workflow-reading-position'),
+    ))!;
+    final seed = MarkdrawController();
+    seed.setLayout(const CanvasLayout(type: CanvasLayoutType.paged));
+    seed.insertBlankPage();
+    seed.insertBlankPage();
+    await tester.runAsync(
+      () => scenes.saveScene(
+        note.id,
+        seed.serializeScene(format: DocumentFormat.excalidraw),
+      ),
+    );
+    seed.dispose();
+    final container = _container(library: library);
+    final controller = await _open(tester, container, note);
+    final scene = controller.currentScene;
+    final canvasSize = controller.canvasSize;
+    final initialViewport = controller.editorState.viewport;
+    await tester.tap(find.byIcon(Icons.grid_view_outlined));
+    await tester.pump();
+    expect(find.text('页面预览'), findsOneWidget);
+    expect(controller.canvasSize, canvasSize);
+    expect(controller.editorState.viewport, initialViewport);
+    await tester.tap(
+      find.descendant(
+        of: find.byWidgetPredicate(
+          (widget) => widget is HoverTooltip && widget.message == '关闭预览',
+        ),
+        matching: find.byType(IconButton),
+      ),
+    );
+    await tester.pump();
+    controller.navigateToPage(controller.layout.pages[1].id);
+    controller.setViewport(
+      ViewportState(
+        offset: controller.editorState.viewport.offset + const Offset(0, 150),
+        zoom: 0.8,
+      ),
+    );
+    final viewport = controller.editorState.viewport;
+    await tester.pump(const Duration(milliseconds: 750));
+    await _drainIo(tester, container);
+    expect(controller.currentScene, same(scene));
+    expect(controller.historyManager.canUndo, isFalse);
+    expect(
+      await tester.runAsync(
+        () => defaultLocalSettingsRepository.readString(
+          'whiteboard.readingPosition.v1.${note.id}',
+        ),
+      ),
+      isNotNull,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
+    final reopened = await _open(tester, container, note);
+    expect(reopened.editorState.viewport.zoom, viewport.zoom);
+    expect(
+      reopened.editorState.viewport.offset.dx,
+      closeTo(viewport.offset.dx, 0.001),
+    );
+    expect(
+      reopened.editorState.viewport.offset.dy,
+      closeTo(viewport.offset.dy, 0.001),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
+  });
+
   testWidgets('PDF 底图上书写、撤销和重开保留图片、页边界与笔迹', (tester) async {
     final note = await tester.runAsync(
       () => library.createNote(title: 'workflow-pdf', kind: LibraryFilter.pdf),

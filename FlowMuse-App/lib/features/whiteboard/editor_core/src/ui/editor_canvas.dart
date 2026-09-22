@@ -5,7 +5,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
-import 'package:flutter_math_fork/flutter_math.dart';
+import 'positioned_math_text.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
@@ -15,7 +15,6 @@ import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 import '../rendering/math_text_utils.dart';
 import '../rendering/local_wet_ink_painter.dart';
 import '../rendering/remote_wet_ink_painter.dart';
-import '../rendering/collaboration_focus_alpha.dart';
 
 /// The main canvas area with pointer/gesture handling.
 class EditorCanvas extends StatefulWidget {
@@ -87,6 +86,7 @@ class _EditorCanvasState extends State<EditorCanvas>
 
   @override
   void dispose() {
+    controller.pagedTouchActive = false;
     _appendPageOverscrollController.dispose();
     _remoteWetInkCache.dispose();
     _staticCanvasCache.dispose();
@@ -105,6 +105,7 @@ class _EditorCanvasState extends State<EditorCanvas>
 
   void _startPagedTouch(PointerDownEvent event) {
     _activeTouchPointers.add(event.pointer);
+    controller.pagedTouchActive = true;
     if (_activeTouchPointers.length == 1) {
       _pagedScrollPointer = event.pointer;
       _pagedTouchStartPosition = event.localPosition;
@@ -154,6 +155,7 @@ class _EditorCanvasState extends State<EditorCanvas>
 
   void _endPagedTouch(PointerEvent event) {
     _activeTouchPointers.remove(event.pointer);
+    controller.pagedTouchActive = _activeTouchPointers.isNotEmpty;
     if (_pagedScrollPointer != event.pointer) {
       return;
     }
@@ -174,6 +176,7 @@ class _EditorCanvasState extends State<EditorCanvas>
 
   void _cancelPagedTouch(PointerEvent event) {
     _activeTouchPointers.remove(event.pointer);
+    controller.pagedTouchActive = _activeTouchPointers.isNotEmpty;
     if (_pagedScrollPointer == event.pointer) {
       _pagedScrollPointer = null;
       _pagedTouchStartPosition = null;
@@ -618,7 +621,7 @@ class _MathTextOverlay extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           for (final element in elements)
-            _PositionedMathText(
+            PositionedMathText(
               element: element,
               viewport: viewport,
               focusedCreatorKey: focusedCreatorKey,
@@ -626,72 +629,6 @@ class _MathTextOverlay extends StatelessWidget {
               highlightedElementIds: highlightedElementIds,
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _PositionedMathText extends StatelessWidget {
-  const _PositionedMathText({
-    required this.element,
-    required this.viewport,
-    this.focusedCreatorKey,
-    this.focusHistoricalContent = false,
-    this.highlightedElementIds = const {},
-  });
-
-  final TextElement element;
-  final ViewportState viewport;
-  final String? focusedCreatorKey;
-  final bool focusHistoricalContent;
-  final Set<ElementId> highlightedElementIds;
-
-  @override
-  Widget build(BuildContext context) {
-    final zoom = viewport.zoom;
-    final left = (element.x - viewport.offset.dx) * zoom;
-    final top = (element.y - viewport.offset.dy) * zoom;
-    final width = element.width * zoom;
-    final height = element.height * zoom;
-    final focusAlpha = collaborationFocusAlpha(
-      element,
-      focusedCreatorKey: focusedCreatorKey,
-      focusHistoricalContent: focusHistoricalContent,
-      highlightedElementIds: highlightedElementIds,
-    );
-    final color = parseColor(
-      element.strokeColor,
-    ).withValues(alpha: element.opacity * focusAlpha);
-
-    final child = Align(
-      alignment: Alignment.topLeft,
-      child: Math.tex(
-        element.text,
-        mathStyle: MathStyle.display,
-        textStyle: TextStyle(color: color, fontSize: element.fontSize * zoom),
-        onErrorFallback: (_) => Text(
-          element.text,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: color,
-            fontSize: element.fontSize * zoom,
-            height: element.lineHeight,
-            fontFamily: element.fontFamily,
-          ),
-        ),
-      ),
-    );
-
-    return Positioned(
-      left: left,
-      top: top,
-      width: width,
-      height: height,
-      child: Transform.rotate(
-        angle: element.angle,
-        alignment: Alignment.center,
-        child: ClipRect(child: child),
       ),
     );
   }

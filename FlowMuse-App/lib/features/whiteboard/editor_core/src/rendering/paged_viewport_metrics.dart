@@ -92,12 +92,9 @@ PagedViewportMetrics? computePagedViewportMetrics({
   return PagedViewportMetrics(
     viewport: nextViewport,
     progress: progress,
-    currentPageIndex: _nearestPageToViewportCenter(
-      pages,
-      layout.isRightToLeft
-          ? nextViewport.offset.dx + visibleWidth / 2
-          : nextViewport.offset.dy + visibleHeight / 2,
-    ).index,
+    currentPageIndex: pages.indexOf(
+      layout.pageForVisibleRect(nextViewport.visibleRect(canvasSize))!,
+    ),
     maxScrollOffsetY: maxScrollOffsetY,
     atStart: atStart,
     atEnd: atEnd,

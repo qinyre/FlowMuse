@@ -31,6 +31,12 @@ class ImageElementCache {
 
   ImageElementCache({this.maxSize = 50, this.maxBytes = 96 * 1024 * 1024});
 
+  bool get hasPendingVisibleImages =>
+      _decodingVisible ||
+      _visibleFiles.keys.any(
+        (id) => !_cache.containsKey(id) && !_failed.contains(id),
+      );
+
   /// Replaces queued screen requests; only one visible image decodes at a time.
   /// Scrolling past a page drops its request before it starts decoding.
   Map<String, ui.Image>? resolveVisible(Map<String, ImageFile> files) {
