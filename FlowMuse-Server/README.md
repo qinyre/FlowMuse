@@ -105,6 +105,22 @@ flutter build web --release --no-web-resources-cdn --pwa-strategy=none --dart-de
 
 `--no-web-resources-cdn` 让 CanvasKit 等渲染资源使用随包文件，避免 Google CDN 不可达导致白屏；保持现有不启用 Flutter 离线缓存的策略，静态入口返回 `Cache-Control: no-cache`，避免缓存旧的 HTTP 构建配置。
 
+Web 主脚本和 CanvasKit WASM 较大，在静态 `location /` 中启用压缩，不能仅依赖 Nginx 默认只压缩 HTML 的设置（`/api/`、`/socket.io/` 继续使用各自代理配置）：
+
+```nginx
+location / {
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_comp_level 5;
+    gzip_types application/javascript application/wasm application/json text/css image/svg+xml;
+    add_header Cache-Control "no-cache";
+    try_files $uri $uri/ /index.html;
+}
+```
+
+验证 `curl -I -H 'Accept-Encoding: gzip' https://app.flowmuse.cloud/main.dart.js` 返回 `Content-Encoding: gzip` 和 `Vary: Accept-Encoding`；浏览器不支持 gzip 时仍返回原文件。
+
 部署前备份已有静态目录，并在浏览器验证加载、API 和 WSS。仅修改服务器上的 `app.env` 不能覆盖旧 Web 包编译进去的 `--dart-define`。HTTP 与 HTTPS 的 IndexedDB/本地笔记不共享；保留原 HTTP 入口供用户导出备份，不配置强制跳转或 HSTS，待迁移完成后另行收口。
 
 本地 Web 联调建议固定 `flutter run -d chrome --web-port=8080`；访问本地后端时同时使用上述两个 `--dart-define` 覆盖为本机地址，并设置服务端 `FLOWMUSE_PUBLIC_APP_URL=http://localhost:8080`。CORS 必须包含浏览器实际 origin（含端口），不能填带页面路径的 URL。Compose 未配置来源时的 `*` 仅用于开发，生产按 `.env.example` 的明确列表部署。

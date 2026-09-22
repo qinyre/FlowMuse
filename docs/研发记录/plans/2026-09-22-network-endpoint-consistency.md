@@ -27,3 +27,15 @@
 - Go：`go test ./...`、`go vet ./...` 均通过。macOS 两份 entitlement 的 XML 出站权限静态断言通过，未宣称 macOS 实机验证。
 - 额外修复：游客头像原站缺 CORS，改为固定 OpenMoji 15.1.0 的 jsDelivr HTTPS 地址；HTTP 检查确认 200 且支持 CORS，不下载/复制新素材。
 - 全量扫描：业务代码无残留旧 GitHub Pages 生产地址或 IP/HTTP 服务地址；保留明确的迁移 CORS、局域网覆盖和容器内网 HTTP。现网数据库/MinIO/Mailpit 没有发布宿主公网端口，原 API 48931 继续兼容旧客户端。
+
+## 现网实施与复核（2026-09-22）
+
+- FlowMuse 分支 `fix/network-endpoint-consistency`：客户端 `98a9f10`、后端配置 `2e32d31`。官网仓库独立分支 `fix/https-app-links`：`1839adc`；三个应用入口切为 HTTPS，README 移除示例域名。此时均为本地提交，未推送或合并。
+- Web 发布目录 `/var/www/flowmuse-app-releases/20260922-network-config`；上传包 SHA-256 `3b89f4d4974bdeba456aa40f094ee38c4fa6559641767d46f8a8e6699f1f6c35`。版本目录切换前核对上传哈希与现网配置未被并发修改。
+- 回滚备份 `/opt/flowmuse/backups/network-config-20260922-PiEUiI`：原 Nginx、官网首页、服务端 `.env`、Compose；`server.env` 含密钥，只留服务器受限目录，不入库。压缩前配置另存 `nginx-app.before-gzip.conf`；原静态版本保留，未删除任何用户数据。
+- 现网 `FLOWMUSE_PUBLIC_APP_URL` 和 Compose 回退均改为 `https://app.flowmuse.cloud`，只重建 collab-server 容器并验证 `/health` 200。未重建后端镜像（运行时显式环境配置生效）、未重启 PostgreSQL/MinIO/Mailpit，CORS 既有来源保持兼容。
+- 真实浏览器：HTTPS secure context；跨域 health 200；JSON POST 预检可达 V3 handler，空载荷返回预期 400 `invalidSchema`，未调用模型；WSS 收到 Engine.IO opening 包；头像 CORS 可读 200；官网三个链接均为 HTTPS。
+- 路由：重置密码页直达可见、验证邮箱页将无效测试 token 正确交给 API 拒绝；旧 `/#/settings?section=other` 到新 `/settings?section=other` 且官网入口正确。未发送真实邮件、未修改任何账号。
+- 房间：使用独立空白加密测试场景，实际验证 path 直达、旧 hash 链接和刷新均完成客户端 `/join` 200，room fragment 不丢失。测试后结束房间，确认 `ended=true`、场景读取 410，并移除测试会话中的临时凭据；没有接触既有房间。该检查不等价于多设备完整协作回归。
+- 静态压缩：原主脚本 10,256,443 字节、CanvasKit 5,687,008 字节均无 gzip。现网仅静态 `location /` 启用 gzip（代理配置不变）；实测传输分别为 2,301,677 / 2,176,546 字节，减少约 77.6% / 61.7%。确认 `Content-Encoding: gzip`、`Vary: Accept-Encoding`，解压后 SHA-256 与发布文件完全一致；普通浏览器页面仍正常。
+- HTTP Web 入口仍返回 200，供旧本地数据导出。平板等已安装包未在本次重新安装；更新原生包后才能获取新的分享域名和客户端改动。macOS 未实机验证，SMTP 实际投递及模型识别效果不属于本次验证结果。
