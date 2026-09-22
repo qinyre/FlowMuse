@@ -30,7 +30,7 @@ enum AutosaveInterval {
 @immutable
 class EditorPreferences {
   EditorPreferences({
-    this.defaultTool = ToolType.select,
+    this.defaultTool = ToolType.hand,
     this.defaultBrush = BrushType.fountainPen,
     Map<BrushType, BrushState>? brushStates,
     this.pressureEnabled = true,
@@ -147,7 +147,7 @@ class EditorPreferences {
       defaultTool: _enumByName(
         ToolType.values,
         json['defaultTool'],
-        ToolType.select,
+        ToolType.hand,
       ),
       defaultBrush: _enumByName(
         BrushType.values,
