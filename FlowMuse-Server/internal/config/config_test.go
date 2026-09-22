@@ -6,6 +6,34 @@ import (
 	"time"
 )
 
+func TestPublicWebConfiguration(t *testing.T) {
+	for key, value := range map[string]string{
+		"DATABASE_URL": "postgres://test.invalid/test", "FLOWMUSE_S3_ENDPOINT": "test.invalid",
+		"FLOWMUSE_S3_BUCKET": "test", "FLOWMUSE_S3_ACCESS_KEY_ID": "test-id",
+		"FLOWMUSE_S3_SECRET_ACCESS_KEY": "test-secret",
+	} {
+		t.Setenv(key, value)
+	}
+	for _, publicURL := range []string{"", "http://localhost:8080", "https://self-hosted.example/app"} {
+		t.Setenv("FLOWMUSE_PUBLIC_APP_URL", publicURL)
+		t.Setenv("FLOWMUSE_ALLOWED_ORIGINS", " https://app.flowmuse.cloud, http://localhost:8080 ")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := publicURL
+		if want == "" {
+			want = "https://app.flowmuse.cloud"
+		}
+		if cfg.PublicAppURL != want {
+			t.Fatal("公开邮件入口必须使用 Web 域名，且允许自建覆盖")
+		}
+		if !reflect.DeepEqual(cfg.AllowedOrigins, []string{"https://app.flowmuse.cloud", "http://localhost:8080"}) {
+			t.Fatal("CORS 应保留明确配置的生产与开发来源")
+		}
+	}
+}
+
 func TestRecognitionV3ConfigurationIsolation(t *testing.T) {
 	for key, value := range map[string]string{
 		"DATABASE_URL": "postgres://test.invalid/test", "FLOWMUSE_S3_ENDPOINT": "test.invalid",

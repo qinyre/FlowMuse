@@ -54,7 +54,7 @@ func Load() (Config, error) {
 		RequestTimeout: envDuration("FLOWMUSE_REQUEST_TIMEOUT", 10*time.Second),
 		AuthSecret:     os.Getenv("FLOWMUSE_AUTH_SECRET"),
 		AuthTokenTTL:   envDuration("FLOWMUSE_AUTH_TOKEN_TTL", 30*24*time.Hour),
-		PublicAppURL:   env("FLOWMUSE_PUBLIC_APP_URL", "http://127.0.0.1:3000"),
+		PublicAppURL:   env("FLOWMUSE_PUBLIC_APP_URL", "https://app.flowmuse.cloud"),
 		EmailVerifyTTL: envDuration("FLOWMUSE_EMAIL_VERIFY_TTL", 24*time.Hour),
 		PasswordResetTTL: envDuration(
 			"FLOWMUSE_PASSWORD_RESET_TTL",

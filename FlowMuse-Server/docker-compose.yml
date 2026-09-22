@@ -73,7 +73,7 @@ services:
       FLOWMUSE_S3_USE_SSL: "false"
       FLOWMUSE_ALLOWED_ORIGINS: "${FLOWMUSE_ALLOWED_ORIGINS:-*}"
       FLOWMUSE_AUTH_SECRET: "flowmuse_dev_auth_secret"
-      FLOWMUSE_PUBLIC_APP_URL: "${FLOWMUSE_PUBLIC_APP_URL:-http://127.0.0.1:3000}"
+      FLOWMUSE_PUBLIC_APP_URL: "${FLOWMUSE_PUBLIC_APP_URL:-https://app.flowmuse.cloud}"
       FLOWMUSE_SMTP_HOST: "mailpit"
       FLOWMUSE_SMTP_PORT: "1025"
       FLOWMUSE_SMTP_FROM: "FlowMuse <noreply@flowmuse.local>"

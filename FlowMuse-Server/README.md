@@ -91,6 +91,8 @@ curl -i http://127.0.0.1:48931/health
 - Web 客户端：`https://app.flowmuse.cloud`，Nginx 的 `root` 指向版本化目录 `/var/www/flowmuse-app-releases/<release>/`；原 `/var/www/flowmuse-app` 保留作旧版本回退。
 - API：`https://api.flowmuse.cloud`；Socket.IO 使用同一主机的 WSS。
 - `FLOWMUSE_ALLOWED_ORIGINS` 必须包含 `https://app.flowmuse.cloud`；迁移期同时保留 `http://app.flowmuse.cloud` 和已有来源。修改后仅重建应用容器使环境变量生效，不重建数据库、MinIO 或数据卷。
+- `FLOWMUSE_PUBLIC_APP_URL=https://app.flowmuse.cloud` 决定验证/重置邮件中的回跳入口，不能填 API 域名或旧 GitHub Pages 地址；客户端 `FLOWMUSE_SHARE_ORIGIN` 使用同一 Web 根地址。两者不要加 `/#` 或页面路径。
+- Web 已启用保留房间 fragment 的路径路由，Nginx 保持 `try_files $uri $uri/ /index.html;`，确保 `/whiteboard/collaboration`、`/auth/verify-email`、`/auth/reset-password` 直达和刷新均可用；旧 `/#/...` 入口由客户端兼容。
 - Nginx 需保留 WebSocket Upgrade 转发；API 代理请求体上限至少为 V3 所需的 `16m`，识别读取超时不得短于后端 120 秒上限。
 - 证书由 Certbot 管理，`certbot.timer` 自动续期；可执行 `sudo certbot renew --dry-run --no-random-sleep-on-renew` 验证。
 
@@ -98,12 +100,16 @@ Web 构建时显式覆盖旧的 HTTP 构建参数：
 
 ```bash
 cd FlowMuse-App
-flutter build web --release --no-web-resources-cdn --pwa-strategy=none --dart-define=FLOWMUSE_COLLAB_SERVER_URL=https://api.flowmuse.cloud
+flutter build web --release --no-web-resources-cdn --pwa-strategy=none --dart-define=FLOWMUSE_COLLAB_SERVER_URL=https://api.flowmuse.cloud --dart-define=FLOWMUSE_SHARE_ORIGIN=https://app.flowmuse.cloud
 ```
 
 `--no-web-resources-cdn` 让 CanvasKit 等渲染资源使用随包文件，避免 Google CDN 不可达导致白屏；保持现有不启用 Flutter 离线缓存的策略，静态入口返回 `Cache-Control: no-cache`，避免缓存旧的 HTTP 构建配置。
 
 部署前备份已有静态目录，并在浏览器验证加载、API 和 WSS。仅修改服务器上的 `app.env` 不能覆盖旧 Web 包编译进去的 `--dart-define`。HTTP 与 HTTPS 的 IndexedDB/本地笔记不共享；保留原 HTTP 入口供用户导出备份，不配置强制跳转或 HSTS，待迁移完成后另行收口。
+
+本地 Web 联调建议固定 `flutter run -d chrome --web-port=8080`；访问本地后端时同时使用上述两个 `--dart-define` 覆盖为本机地址，并设置服务端 `FLOWMUSE_PUBLIC_APP_URL=http://localhost:8080`。CORS 必须包含浏览器实际 origin（含端口），不能填带页面路径的 URL。Compose 未配置来源时的 `*` 仅用于开发，生产按 `.env.example` 的明确列表部署。
+
+Android/OHOS 原有 HTTP 放行保留用于局域网调试，不代表生产仍使用 HTTP。macOS Debug/Release 均需要 `com.apple.security.network.client` 出站权限；iOS HTTPS 不需放宽 ATS。私有容器网络及 Nginx 的 loopback HTTP 上游不改为公网 HTTPS。
 
 ### V3 识别超时与耗时排查
 
