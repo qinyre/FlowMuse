@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'hover_tooltip.dart';
 import 'markdraw_controller.dart';
 
-class PageNavigationControls extends StatelessWidget {
+class PageNavigationControls extends StatefulWidget {
   const PageNavigationControls({
     super.key,
     required this.controller,
@@ -16,7 +16,51 @@ class PageNavigationControls extends StatelessWidget {
   final bool enabled;
 
   @override
+  State<PageNavigationControls> createState() => _PageNavigationControlsState();
+}
+
+class _PageNavigationControlsState extends State<PageNavigationControls> {
+  late (int, int, bool, bool) _snapshot;
+
+  (int, int, bool, bool) _readSnapshot() => (
+    widget.controller.layout.pages.length,
+    widget.controller.pagedViewportMetrics?.currentPageIndex ?? 0,
+    widget.controller.layout.isRightToLeft,
+    widget.controller.canReturnToPagePosition,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _snapshot = _readSnapshot();
+    widget.controller.addListener(_onControllerChanged);
+  }
+
+  @override
+  void didUpdateWidget(PageNavigationControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onControllerChanged);
+      widget.controller.addListener(_onControllerChanged);
+    }
+    _snapshot = _readSnapshot();
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    final next = _readSnapshot();
+    if (next != _snapshot) setState(() => _snapshot = next);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final enabled = widget.enabled;
     final pages = controller.layout.pages;
     final index = controller.pagedViewportMetrics?.currentPageIndex ?? 0;
     final rtl = controller.layout.isRightToLeft;
@@ -72,7 +116,7 @@ class PageNavigationControls extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            button('多页预览', Icons.grid_view_outlined, onOverview),
+            button('多页预览', Icons.grid_view_outlined, widget.onOverview),
             button(
               '适合当前页',
               Icons.fit_screen,

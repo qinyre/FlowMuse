@@ -237,7 +237,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         widget.speechRecognitionService ?? createSpeechRecognitionService();
     _speechSubscription = _speechService.events.listen(_onSpeechEvent);
     unawaited(_checkSpeechAvailability());
-    _controller.addListener(_onControllerChanged);
+    _controller.chromeChanges.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
     _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
     _controller.shouldUseLiveInkV2 = widget.shouldUseLiveInkV2;
@@ -264,8 +264,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _speechFinalCommitted = false;
     }
     if (widget.controller != oldWidget.controller) {
-      oldWidget.controller?.removeListener(_onControllerChanged);
-      _controller.addListener(_onControllerChanged);
+      oldWidget.controller?.chromeChanges.removeListener(_onControllerChanged);
+      _controller.chromeChanges.addListener(_onControllerChanged);
       _controller.onSceneChanged = widget.onSceneChanged;
       _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
       _controller.shouldUseLiveInkV2 = widget.shouldUseLiveInkV2;
@@ -299,7 +299,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_speechSubscription?.cancel());
     unawaited(_speechService.dispose());
-    _controller.removeListener(_onControllerChanged);
+    _controller.chromeChanges.removeListener(_onControllerChanged);
     _controller.shouldUseLiveInkV2 = null;
     _controller.onLiveInkChanged = null;
     _controller.onLiveInkCancelled = null;
@@ -796,19 +796,21 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                     _controller.placeLibraryItemAt(details.data, localPos);
                   },
                   builder: (context, candidateData, rejectedData) {
-                    return EditorCanvas(
-                      controller: _controller,
-                      collaborators: widget.collaborators,
-                      remoteWetInkStore: widget.remoteWetInkStore,
-                      onPointerPresence: widget.onPointerPresence,
-                      onVisibleSceneBoundsChanged:
-                          widget.onVisibleSceneBoundsChanged,
-                      attributionActionResolver:
-                          widget.attributionActionResolver,
-                      focusedCreatorKey: widget.focusedCreatorKey,
-                      focusHistoricalContent: widget.focusHistoricalContent,
-                      socketIdCreatorKeys: widget.socketIdCreatorKeys,
-                      presenceCreatorRevision: widget.presenceCreatorRevision,
+                    return RepaintBoundary(
+                      child: EditorCanvas(
+                        controller: _controller,
+                        collaborators: widget.collaborators,
+                        remoteWetInkStore: widget.remoteWetInkStore,
+                        onPointerPresence: widget.onPointerPresence,
+                        onVisibleSceneBoundsChanged:
+                            widget.onVisibleSceneBoundsChanged,
+                        attributionActionResolver:
+                            widget.attributionActionResolver,
+                        focusedCreatorKey: widget.focusedCreatorKey,
+                        focusHistoricalContent: widget.focusHistoricalContent,
+                        socketIdCreatorKeys: widget.socketIdCreatorKeys,
+                        presenceCreatorRevision: widget.presenceCreatorRevision,
+                      ),
                     );
                   },
                 ),
@@ -1116,7 +1118,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         // Link overlay
         if (_controller.isLinkEditorOpen &&
             _controller.selectedElements.length == 1)
-          _buildLinkOverlay(topChromeOffset),
+          ListenableBuilder(
+            listenable: _controller,
+            builder: (context, _) => _buildLinkOverlay(topChromeOffset),
+          ),
         if (widget.speechRecognitionEnabled &&
             _speechState != SpeechRecognitionState.idle)
           Positioned(

@@ -75,6 +75,7 @@ class _EditorCanvasState extends State<EditorCanvas>
   @override
   void initState() {
     super.initState();
+    controller.addListener(_onControllerChanged);
     _appendPageOverscrollController = AnimationController.unbounded(vsync: this)
       ..addListener(() {
         _setAppendPageOverscroll(
@@ -85,7 +86,21 @@ class _EditorCanvasState extends State<EditorCanvas>
   }
 
   @override
+  void didUpdateWidget(EditorCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != controller) {
+      oldWidget.controller.removeListener(_onControllerChanged);
+      controller.addListener(_onControllerChanged);
+    }
+  }
+
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    controller.removeListener(_onControllerChanged);
     controller.pagedTouchActive = false;
     _appendPageOverscrollController.dispose();
     _remoteWetInkCache.dispose();

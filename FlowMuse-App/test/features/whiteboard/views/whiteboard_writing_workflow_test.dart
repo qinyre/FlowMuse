@@ -178,6 +178,47 @@ void main() {
     final scene = controller.currentScene;
     final canvasSize = controller.canvasSize;
     final initialViewport = controller.editorState.viewport;
+    final toolbar = tester.widget<DesktopToolbar>(find.byType(DesktopToolbar));
+    for (var i = 0; i < 8; i++) {
+      controller.scrollPagedViewportBy(10);
+      await tester.pump();
+    }
+    expect(
+      tester.widget<DesktopToolbar>(find.byType(DesktopToolbar)),
+      same(toolbar),
+      reason: '纯滚动不能重建整套工具栏',
+    );
+    final paint = tester.widget<CustomPaint>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is CustomPaint && widget.painter is StaticCanvasPainter,
+      ),
+    );
+    expect(
+      (paint.painter! as StaticCanvasPainter).viewport,
+      controller.editorState.viewport,
+      reason: '外框不重建时画布仍跟随视口刷新',
+    );
+    controller.navigateToPage(controller.layout.pages.last.id);
+    await tester.pump();
+    expect(
+      find.text(
+        '${controller.pagedViewportMetrics!.currentPageIndex + 1} / ${controller.layout.pages.length}',
+      ),
+      findsOneWidget,
+    );
+    controller.zoomIn(canvasSize);
+    await tester.pump();
+    expect(
+      find.text('${(controller.editorState.viewport.zoom * 100).round()}%'),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<DesktopToolbar>(find.byType(DesktopToolbar)),
+      same(toolbar),
+    );
+    controller.setViewport(initialViewport);
+    await tester.pump();
     await tester.tap(find.byIcon(Icons.grid_view_outlined));
     await tester.pump();
     expect(find.text('页面预览'), findsOneWidget);

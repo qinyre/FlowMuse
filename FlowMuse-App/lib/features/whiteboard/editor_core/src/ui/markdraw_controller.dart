@@ -109,10 +109,24 @@ class MarkdrawController extends ChangeNotifier {
 
     _imageCache.onImageDecoded = () {
       if (!_disposed) {
-        notifyListeners();
+        _notifyCanvasChanged();
       }
     };
   }
+
+  final _chromeChanges = ChangeNotifier();
+
+  /// Toolbar/panel changes, excluding pure viewport and decoded-image updates.
+  Listenable get chromeChanges => _chromeChanges;
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    _chromeChanges.notifyListeners();
+  }
+
+  // Keep existing viewport observers (reading position, presence) notified.
+  void _notifyCanvasChanged() => super.notifyListeners();
 
   final MarkdrawEditorConfig _config;
   final ActivePreviewMetricsProbe? activePreviewMetricsProbe;
@@ -855,6 +869,7 @@ class MarkdrawController extends ChangeNotifier {
     textEditingController.dispose();
     _textFocusNode.removeListener(_onTextFocusChanged);
     _textFocusNode.dispose();
+    _chromeChanges.dispose();
     super.dispose();
   }
 
@@ -1209,7 +1224,11 @@ class MarkdrawController extends ChangeNotifier {
       _scheduleInkRecognitionFromResult(prepared);
     }
 
-    notifyListeners();
+    if (prepared is UpdateViewportResult) {
+      _notifyCanvasChanged();
+    } else {
+      notifyListeners();
+    }
   }
 
   /// 文本编辑等内部路径的统一收口：经 onPrepareLocalResult 盖章后应用并
@@ -1292,7 +1311,7 @@ class MarkdrawController extends ChangeNotifier {
     final clamped = _constrainedViewport(_editorState.viewport);
     if (clamped != _editorState.viewport) {
       _editorState = _editorState.copyWith(viewport: clamped);
-      notifyListeners();
+      _notifyCanvasChanged();
     }
   }
 

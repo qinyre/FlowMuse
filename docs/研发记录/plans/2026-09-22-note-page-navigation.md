@@ -328,3 +328,13 @@ version, pageId, fallbackOrdinal, zoom, pageRelativeAnchorX, pageRelativeAnchorY
 HAP 复用本机既有构建支持：进程环境 `JAVA_HOME=D:\JDK\JDK21`、`DEVECO_SDK_HOME=D:\Program\DevEco Studio\sdk`、`NODE_PATH=<app>/build/freehand-hap-support/node_modules`。没有修改 SDK、vendor 源码或跟踪自动生成文件。
 
 测试跳过项延续既有配置，包括协作整场景撤销的已知问题，不作为本轮已修复项。单元测试和桌面测试渲染不证明设备端 p95/p99、源图解码瞬时峰值或冷跳页时间。
+
+### 主画布滚动回归修复
+
+用户反馈关闭预览仍卡顿。OPD2404 上使用当前调试包、91 页 PDF、六次往返滑动采样，`Animator::BeginFrame` P95 为 31.962ms，布局 P95 为 26.350ms，GPU 绘制 P95 为 5.970ms。组件跟踪确认工具栏、页码等随滚动逐帧重建；这些调试采样只用于定位，不作为发布版性能验收。
+
+修复范围：保留 controller 原通知给阅读位置与协作等订阅者，新增编辑器外框的局部通知；纯视口变化和图片解码只刷新画布。页码、缩放控件分别在显示值变化时刷新，画布通过 RepaintBoundary 隔离重绘。保持右上角两行布局，不改滚动物理、笔迹输入或渲染算法。补充真实页面回归，验证滚动不重建工具栏、页码/缩放仍及时刷新、阅读恢复和书写正常，再用同设备同文档复测并覆盖安装。
+
+复测结果（同一 Debug 构建模式、同设备/文档、关闭预览、六次 650ms 往返滑动，预热后关闭组件跟踪采帧）：主线程 `Animator::BeginFrame` P50/P95 从 23.932/31.962ms 降至 8.506/11.648ms；布局 P95 从 26.350ms 降至 4.140ms。另一次组件采样记录到 200 次画布更新、5 次页码更新，未记录到 `DesktopToolbar` 或 `MarkdrawEditor` 重建。数据在忽略目录 `build/scroll-debug-before-frames.json`、`build/scroll-debug-after-frames.json`、`build/scroll-debug-after-builds.json`；仅作为这次滚动问题的诊断对照，不替代 Profile 模式的笔迹延迟及鸿蒙性能验收。
+
+静态检查无问题；完整测试 1711 通过、5 既有跳过，另测 `FLOWMUSE_LAYERED_WET_INK=true` 的画布与真实书写流程 13 通过、1 既有跳过。回归新增到原阅读位置用例中，断言滚动时工具栏实例不变、画布视口更新、跨页页码与缩放百分比刷新。APK 已通过 `adb install -r` 覆盖 OPD2404，保留笔记数据；本轮未卸载或清除数据。
