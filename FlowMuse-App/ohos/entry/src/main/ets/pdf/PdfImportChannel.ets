@@ -24,7 +24,12 @@ export class PdfImportChannel {
           result.notImplemented();
           return;
         }
-        this.renderPdfPages(call.args as PdfImportArgs)
+        const args = call.args as PdfImportArgs;
+        const progressName = args.get('progressChannel') as string | undefined;
+        const progress = progressName?.startsWith('flow_muse/pdf_import/progress/')
+          ? new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), progressName)
+          : undefined;
+        this.renderPdfPages(args, progress)
           .then((pages: ESObject[]) => result.success(pages))
           .catch((error: BusinessError) => {
             result.error('PDF_IMPORT_FAILED', error.message ?? `${error}`, error);
@@ -33,7 +38,7 @@ export class PdfImportChannel {
     });
   }
 
-  private async renderPdfPages(args: PdfImportArgs): Promise<ESObject[]> {
+  private async renderPdfPages(args: PdfImportArgs, progress?: MethodChannel): Promise<ESObject[]> {
     const name = (args.get('name') as string | undefined) ?? `import-${Date.now()}.pdf`;
     const pathArg = args.get('path') as string | undefined;
     const bytes = args.get('bytes') as Uint8Array | undefined;
@@ -53,25 +58,57 @@ export class PdfImportChannel {
       const pageCount = pdfDocument.getPageCount();
       const limit = Math.min(pageCount, maxPages ?? pageCount);
       const pages: ESObject[] = [];
+      await this.reportProgress(progress, 0, limit);
       for (let index = 0; index < limit; index++) {
         const page = pdfDocument.getPage(index);
         const pixelMap = page.getPagePixelMap();
         if (!pixelMap) {
-          continue;
+          throw new Error(`PDF page ${index + 1} could not be rendered`);
         }
-        const packed = await this.pixelMapToPng(pixelMap);
-        pages.push({
-          bytes: new Uint8Array(packed),
-          mimeType: 'image/png',
-          width: page.getWidth(),
-          height: page.getHeight(),
-          pageNumber: index + 1
-        });
+        try {
+          const packed = await this.pixelMapToPng(pixelMap);
+          pages.push({
+            bytes: new Uint8Array(packed),
+            mimeType: 'image/png',
+            width: page.getWidth(),
+            height: page.getHeight(),
+            pageNumber: index + 1
+          });
+        } finally {
+          await pixelMap.release();
+        }
+        await this.reportProgress(progress, index + 1, limit);
       }
       return pages;
     } finally {
-      pdfDocument.releaseDocument();
+      try {
+        pdfDocument.releaseDocument();
+      } finally {
+        if (bytes) {
+          try {
+            fileIo.unlinkSync(sourcePath);
+          } catch (_) {
+            console.warn('[FlowMuseCreateNote] PDF temporary file cleanup failed');
+          }
+        }
+      }
     }
+  }
+
+  private reportProgress(channel: MethodChannel | undefined, completed: number, total: number): Promise<void> {
+    if (!channel) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      channel.invokeMethod('progress', new Map<string, number>([
+        ['completed', completed], ['total', total]
+      ]), {
+        success: (keepGoing: ESObject): void => {
+          if (keepGoing === false) reject(new Error('PDF import cancelled'));
+          else resolve();
+        },
+        error: (): void => reject(new Error('PDF progress channel unavailable')),
+        notImplemented: (): void => resolve()
+      });
+    });
   }
 
   private writeTempPdf(name: string, bytes: Uint8Array): string {
@@ -86,9 +123,13 @@ export class PdfImportChannel {
     return path;
   }
 
-  private pixelMapToPng(pixelMap: image.PixelMap): Promise<ArrayBuffer> {
+  private async pixelMapToPng(pixelMap: image.PixelMap): Promise<ArrayBuffer> {
     const packer = image.createImagePacker();
     const options: image.PackingOption = { format: 'image/png', quality: 100 };
-    return packer.packToData(pixelMap, options);
+    try {
+      return await packer.packToData(pixelMap, options);
+    } finally {
+      await packer.release();
+    }
   }
 }

@@ -33,7 +33,13 @@ class PdfNoteImportService {
       notebookId: notebookId,
       tagIds: tagIds,
     );
-    read(pendingPdfImportProvider.notifier).set(payload);
+    read(pendingPdfImportProvider.notifier).set(
+      PdfNoteImportPayload(
+        bytes: payload.bytes,
+        name: payload.name,
+        noteId: note.id,
+      ),
+    );
     return note;
   }
 

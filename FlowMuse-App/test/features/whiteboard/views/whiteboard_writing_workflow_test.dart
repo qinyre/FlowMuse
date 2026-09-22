@@ -16,6 +16,8 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_tr
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/ink_recognition/ink_recognition_repository.dart';
 import 'package:flow_muse/features/whiteboard/models/editor_preferences.dart';
+import 'package:flow_muse/features/whiteboard/pdf_note_import/pdf_note_import_payload.dart';
+import 'package:flow_muse/features/whiteboard/pdf_note_import/pending_pdf_import_provider.dart';
 import 'package:flow_muse/features/whiteboard/repositories/whiteboard_scene_repository.dart';
 import 'package:flow_muse/features/whiteboard/view_models/editor_preferences_view_model.dart';
 import 'package:flow_muse/features/whiteboard/view_models/whiteboard_view_model.dart';
@@ -223,6 +225,133 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await _drainIo(tester, container);
   });
+
+  for (final outcome in ['success', 'failure', 'leave']) {
+    testWidgets(
+      'PDF 导入显示进度并正确收尾：$outcome',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1200, 900));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        const channel = MethodChannel('flow_muse/pdf_import');
+        const codec = StandardMethodCodec();
+        final rendered = Completer<List<Object?>>();
+        String? progressName;
+        messenger.setMockMethodCallHandler(channel, (call) {
+          progressName = (call.arguments as Map)['progressChannel'] as String;
+          return rendered.future;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+        final note = (await tester.runAsync(
+          () => library.createNote(
+            title: 'pdf-$outcome',
+            kind: LibraryFilter.pdf,
+          ),
+        ))!;
+        final container = _container(library: library);
+        container
+            .read(pendingPdfImportProvider.notifier)
+            .set(
+              PdfNoteImportPayload(
+                bytes: Uint8List(1),
+                name: 'large.pdf',
+                noteId: note.id,
+              ),
+            );
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(home: WhiteboardPage(noteId: note.id)),
+          ),
+        );
+        await _drainIo(tester, container);
+        expect(find.text('正在导入 PDF…'), findsOneWidget);
+        expect(progressName, isNotNull);
+        final controller = tester
+            .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+            .controller!;
+        await messenger.handlePlatformMessage(
+          progressName!,
+          codec.encodeMethodCall(
+            const MethodCall('progress', {'completed': 7, 'total': 200}),
+          ),
+          (reply) => expect(codec.decodeEnvelope(reply!), isTrue),
+        );
+        await tester.pump();
+        expect(find.text('正在导入 PDF：7 / 200 页'), findsOneWidget);
+        controller.switchTool(ToolType.freedraw);
+        await _stroke(tester, const Offset(650, 400));
+        expect(_ink(controller), isEmpty, reason: '加载覆盖层拦住未就绪画布的输入');
+
+        if (outcome == 'success') {
+          final bytes = (await tester.runAsync(() async {
+            final recorder = ui.PictureRecorder();
+            Canvas(recorder).drawColor(Colors.white, BlendMode.src);
+            final picture = recorder.endRecording();
+            final image = await picture.toImage(4, 4);
+            final data = await image.toByteData(format: ui.ImageByteFormat.png);
+            image.dispose();
+            picture.dispose();
+            return data!.buffer.asUint8List();
+          }))!;
+          rendered.complete([
+            for (var page = 1; page <= 2; page++)
+              {
+                'bytes': bytes,
+                'width': 600.0,
+                'height': 800.0,
+                'pageNumber': page,
+              },
+          ]);
+        } else {
+          if (outcome == 'leave') {
+            await tester.pumpWidget(const SizedBox.shrink());
+            await messenger.handlePlatformMessage(
+              progressName!,
+              codec.encodeMethodCall(
+                const MethodCall('progress', {'completed': 8, 'total': 200}),
+              ),
+              (reply) => expect(codec.decodeEnvelope(reply!), isFalse),
+            );
+          }
+          rendered.completeError(PlatformException(code: 'PDF_IMPORT_FAILED'));
+        }
+        for (var attempt = 0; attempt < 20; attempt++) {
+          await _drainIo(tester, container);
+          if (outcome == 'leave' ||
+              find.byType(CircularProgressIndicator).evaluate().isEmpty) {
+            break;
+          }
+        }
+        if (outcome == 'success') {
+          expect(find.textContaining('正在导入 PDF'), findsNothing);
+          expect(controller.contentBounds, isNotNull);
+          expect(controller.resolveImages(), isNotEmpty);
+          final saved = (await tester.runAsync(
+            () => scenes.loadScene(note.id),
+          ))!;
+          final restored = MarkdrawController();
+          addTearDown(restored.dispose);
+          restored.loadFromContent(saved, 'saved.excalidraw');
+          expect(
+            restored.currentScene.activeElements.whereType<ImageElement>(),
+            hasLength(2),
+          );
+        } else {
+          if (outcome == 'failure') {
+            expect(find.text('PDF 导入失败，请返回后重试'), findsOneWidget);
+          }
+          final index = (await tester.runAsync(library.loadIndex))!;
+          expect(
+            index.notes.singleWhere((n) => n.id == note.id).deletedAt,
+            isNotNull,
+          );
+        }
+        await tester.pumpWidget(const SizedBox.shrink());
+        await _drainIo(tester, container);
+      },
+      variant: TargetPlatformVariant({TargetPlatform.ohos}),
+    );
+  }
 
   testWidgets('识别等待期间仍可落笔，延迟结果只替换所属笔画且可撤销', (tester) async {
     final note = await tester.runAsync(

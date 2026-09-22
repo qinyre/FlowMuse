@@ -19,7 +19,10 @@ class PdfImporter {
     PdfRenderOptions? options,
     bool asBackground = false,
   }) async {
-    final pages = await renderer.render(source, options ?? defaultOptions);
+    final renderOptions = options ?? defaultOptions;
+    final pages = await renderer.render(source, renderOptions);
+    renderOptions.checkCancelled();
+    if (controller.isDisposed) return;
     if (pages.isEmpty) {
       return;
     }
@@ -28,6 +31,7 @@ class PdfImporter {
       canvasSize,
       documentName: source.name,
       asBackground: asBackground,
+      isCancelled: renderOptions.isCancelled,
     );
   }
 }

@@ -462,7 +462,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                         layout: controller.layout,
                         previewElement: previewElement,
                         editingElementId: controller.editingTextElementId,
-                        resolvedImages: controller.resolveImages(),
+                        resolvedImages: controller.resolveImages(
+                          viewport: paintViewport,
+                          canvasSize: canvasSize,
+                        ),
                         pendingElements:
                             controller.pendingPreviewElements.isNotEmpty
                             ? controller.pendingPreviewElements
