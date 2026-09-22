@@ -126,13 +126,24 @@ class FreedrawTool implements Tool {
     Point point,
     ToolContext context, {
     double? pressure,
+    double tapTolerance = 0,
   }) {
     if (!_isDrawing || _points.isEmpty) {
       reset();
       return null;
     }
 
-    if (_points.last != point) {
+    // 点触及采样门限内的微抖保留落笔点和压力；重复点/极短线会在
+    // perfect_freehand 中产生零面积轮廓。已有可见位移的笔画仍留终点。
+    final start = _points.first;
+    if (start.distanceTo(point) <= tapTolerance &&
+        _points.every((p) => p.distanceTo(start) <= tapTolerance)) {
+      _points.removeRange(1, _points.length);
+      if (_pressures.isNotEmpty) _pressures.removeRange(1, _pressures.length);
+      if (_pointTimes.isNotEmpty) {
+        _pointTimes.removeRange(1, _pointTimes.length);
+      }
+    } else if (_points.last != point) {
       if (_sessionId != null) {
         _pointTimes.add(DateTime.now().millisecondsSinceEpoch);
       }

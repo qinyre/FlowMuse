@@ -2479,10 +2479,12 @@ class MarkdrawController extends ChangeNotifier {
         if (activeView?.strokeLiveMode ?? false) {
           _emitLiveFreedraw(terminal: true);
         }
-        final finalResult = _activeTool.onPointerUp(
+        final finalResult = (_activeTool as FreedrawTool).onPointerUp(
           point,
           toolContext,
           pressure: _encodeStrokePressure(r.pressure),
+          // 复用屏幕采样门限，缩放不改变点触判定；仅提交时合并微抖。
+          tapTolerance: _modeler!.policy.minDistance / _editorState.viewport.zoom,
         );
         if (writingFlags.layeredWetInk) {
           localWetInkState.clear(notify: false);
