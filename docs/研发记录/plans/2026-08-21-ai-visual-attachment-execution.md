@@ -221,7 +221,7 @@ for (final item in texts) {
   /* 现状 :41-50 texts 校验循环原样 */
 }
 final config = _config ?? await _configStore.read();                 // 现状 :51 原样
-if (config == null) throw StateError('请先在 FlowMuse 实验室配置 AI 接口');
+if (config == null) throw StateError('请先在主页-设置-AI笔记助手配置中配置 AI 接口');
 final body = buildAiAgentRequestBody(
   model: config.model.trim(),
   instruction: normalizedInstruction,
