@@ -34,8 +34,8 @@ class PageNavigationControls extends StatelessWidget {
             ),
           ),
         );
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,

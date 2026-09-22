@@ -208,6 +208,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   static const _toolbarDockKey = 'whiteboard.toolbarDock.v1';
   static const _controlGroupPositionKey = 'whiteboard.controlGroupPosition.v1';
   static const _controlGroupReservedExtent = 120.0;
+  static const _pageNavigationReservedExtent = 108.0;
   static const _speechNoticeKey = 'whiteboard.speechRecognitionNoticeSeen.v1';
 
   MarkdrawController? _ownController;
@@ -588,16 +589,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           ? CrossAxisAlignment.end
           : CrossAxisAlignment.start,
       children: [
-        if (_controller.isPagedViewport) ...[
-          _buildControlSurface(
-            PageNavigationControls(
-              controller: _controller,
-              onOverview: _togglePageOverview,
-              enabled: widget.pageNavigationEnabled,
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
         if (!_controller.viewMode)
           _buildControlSurface(UndoRedoControls(controller: _controller)),
         if (!_controller.viewMode && widget.config.showZoomControls)
@@ -761,11 +752,12 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     final canvasTopInset = showChrome ? safeArea.top + chromeHeight : 0.0;
     final topChromeOffset = safeArea.top + chromeHeight + 12;
     final bottomChromeOffset = safeArea.bottom + 12;
+    final showPageNavigation = showChrome && _controller.isPagedViewport;
+    final rightChromeOffset =
+        topChromeOffset +
+        (showPageNavigation ? _pageNavigationReservedExtent : 0);
     final showDetachedControls =
-        showChrome &&
-        (!_controller.viewMode ||
-            widget.config.showZoomControls ||
-            _controller.isPagedViewport);
+        showChrome && (!_controller.viewMode || widget.config.showZoomControls);
     final controlGroupAtTop =
         _controlGroupPosition == ControlGroupPosition.topLeft ||
         _controlGroupPosition == ControlGroupPosition.topRight;
@@ -778,19 +770,14 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         ((_toolbarDock == ToolbarDock.left) == controlGroupOnLeft);
     final verticalToolbarTop =
         controlGroupSharesVerticalToolbar && controlGroupAtTop
-        ? topChromeOffset +
-              _controlGroupReservedExtent +
-              (_controller.isPagedViewport
-                  ? (MediaQuery.sizeOf(context).width < 400 ? 108 : 60)
-                  : 0)
+        ? (controlGroupOnLeft ? topChromeOffset : rightChromeOffset) +
+              _controlGroupReservedExtent
+        : showPageNavigation && _toolbarDock == ToolbarDock.right
+        ? rightChromeOffset
         : safeArea.top + 56;
     final verticalToolbarBottom =
         controlGroupSharesVerticalToolbar && !controlGroupAtTop
-        ? bottomChromeOffset +
-              _controlGroupReservedExtent +
-              (_controller.isPagedViewport
-                  ? (MediaQuery.sizeOf(context).width < 400 ? 108 : 60)
-                  : 0)
+        ? bottomChromeOffset + _controlGroupReservedExtent
         : null;
     Widget body = Stack(
       children: [
@@ -1046,9 +1033,23 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                   : _buildToolbar(compact: isCompact),
             ),
           ),
+        if (showPageNavigation)
+          Positioned(
+            top: topChromeOffset,
+            right: safeArea.right + 12,
+            child: _buildControlSurface(
+              PageNavigationControls(
+                controller: _controller,
+                onOverview: _togglePageOverview,
+                enabled: widget.pageNavigationEnabled,
+              ),
+            ),
+          ),
         if (showDetachedControls)
           Positioned(
-            top: controlGroupAtTop ? topChromeOffset : null,
+            top: controlGroupAtTop
+                ? (controlGroupOnLeft ? topChromeOffset : rightChromeOffset)
+                : null,
             bottom: controlGroupAtTop ? null : bottomChromeOffset,
             left: controlGroupOnLeft
                 ? (overview != null && overviewOnLeft ? 304 : 12)
@@ -1067,7 +1068,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 _controller.isCreationTool))
           if (_propertyPanelCollapsed)
             Positioned(
-              top: topChromeOffset,
+              top: propertyPanelOnRight ? rightChromeOffset : topChromeOffset,
               left: propertyPanelOnRight ? null : 0,
               right: propertyPanelOnRight ? 0 : null,
               child: StudioRailIconButton(
@@ -1079,7 +1080,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
             )
           else
             Positioned(
-              top: topChromeOffset,
+              top: propertyPanelOnRight ? rightChromeOffset : topChromeOffset,
               left: propertyPanelOnRight ? null : 12,
               right: propertyPanelOnRight ? 12 : null,
               bottom: 12,
@@ -1092,7 +1093,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
             ),
         if (overview != null)
           Positioned(
-            top: topChromeOffset,
+            top: overviewOnLeft ? topChromeOffset : rightChromeOffset,
             bottom: bottomChromeOffset,
             left: overviewOnLeft ? 12 : null,
             right: overviewOnLeft ? null : 12,
