@@ -143,13 +143,18 @@ class StaticCanvasPainter extends CustomPainter {
     // Render pages BEFORE clip — so page shadows extend freely on all sides.
     final pagedLayout = layout;
     if (pagedLayout != null && pagedLayout.isPaged) {
-      _renderPages(canvas);
+      // Include the full blur fringe, even when a page itself is off screen.
+      final visible = viewport.visibleRect(size).inflate(40 + 2 / viewport.zoom);
+      final visiblePages = pagedLayout.pages
+          .where((page) => page.bounds.overlaps(visible))
+          .toList();
+      _renderPages(canvas, visiblePages);
       if (appendPageHint != null) {
         _renderAppendPageHint(canvas, appendPageHint!);
       }
       if (pagedLayout.pages.isNotEmpty) {
         final pageClip = Path();
-        for (final page in pagedLayout.pages) {
+        for (final page in visiblePages) {
           pageClip.addRect(page.bounds);
         }
         canvas.clipPath(pageClip);
@@ -449,8 +454,7 @@ class StaticCanvasPainter extends CustomPainter {
     }
   }
 
-  void _renderPages(Canvas canvas) {
-    final pages = layout?.pages ?? const <CanvasPage>[];
+  void _renderPages(Canvas canvas, List<CanvasPage> pages) {
     final shadowPaint = Paint()
       ..color = const Color(0x1F000000)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);

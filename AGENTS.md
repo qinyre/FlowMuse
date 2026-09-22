@@ -277,6 +277,7 @@ lib/
 
 - 文件选择：`file_picker_channel_ohos.dart` + `FilePickerChannel.ets`
 - HTTP 通道：`native_http_client.dart` + `HttpChannel.ets`
+- PDF 导入进度：`platform_pdf_page_renderer.dart` + `PdfImportChannel.ets`，每次导入使用独立 `flow_muse/pdf_import/progress/<id>` 回调通道，返回 `false` 在页间取消，完成后释放 handler。
 - 语音识别：`speech_recognition_service_io.dart` + `SpeechRecognitionChannel.ets`（通道 `flow_muse/speech_recognition`）
 
 ### 5.5 改动前的跨端自检

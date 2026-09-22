@@ -14,7 +14,9 @@ import '../core/elements/elements.dart';
 ///   永不双解，避免旧 `ui.Image` 被第二次解码覆盖而泄漏）。
 class ImageElementCache {
   final int maxSize;
+  final int maxBytes;
   final Map<String, ui.Image> _cache = {};
+
   /// fileId → 解码状态：value 为 null 表示占位（已标记未启动），
   /// 非 null 表示在途解码 Future（由 [decodeAndWait]/[getImage] 启动，
   /// 供后续等待者共享）。
@@ -23,14 +25,61 @@ class ImageElementCache {
   final List<String> _lruOrder = [];
   bool _disposed = false;
   int _decodedCallbackPaused = 0;
+  int _sizeBytes = 0;
+  Map<String, ImageFile> _visibleFiles = const {};
+  bool _decodingVisible = false;
 
-  ImageElementCache({this.maxSize = 50});
+  ImageElementCache({this.maxSize = 50, this.maxBytes = 96 * 1024 * 1024});
+
+  /// Replaces queued screen requests; only one visible image decodes at a time.
+  /// Scrolling past a page drops its request before it starts decoding.
+  Map<String, ui.Image>? resolveVisible(Map<String, ImageFile> files) {
+    if (_disposed) return null;
+    _visibleFiles = files;
+    _evictIfNeeded();
+    final resolved = <String, ui.Image>{};
+    for (final id in files.keys) {
+      final image = _cache[id];
+      if (image != null) {
+        _touchLru(id);
+        resolved[id] = image;
+      }
+    }
+    if (!_decodingVisible && resolved.length < files.length) _decodeVisible();
+    return resolved.isEmpty ? null : resolved;
+  }
+
+  Future<void> _decodeVisible() async {
+    _decodingVisible = true;
+    try {
+      while (!_disposed) {
+        MapEntry<String, ImageFile>? next;
+        for (final entry in _visibleFiles.entries) {
+          if (_cache.containsKey(entry.key) || _failed.contains(entry.key)) {
+            continue;
+          }
+          // A region export owns placeholders until it starts or releases them.
+          if (_decoding.containsKey(entry.key) &&
+              _decoding[entry.key] == null) {
+            continue;
+          }
+          next = entry;
+          break;
+        }
+        if (next == null) break;
+        await decodeAndWait(next.key, next.value);
+      }
+    } finally {
+      _decodingVisible = false;
+    }
+  }
 
   /// Returns the cached image for [fileId], or null if not yet decoded.
   ///
   /// If the image is not cached, starts an async decode. Call this each
   /// paint frame — the image will appear once decoding completes.
   ui.Image? getImage(String fileId, ImageFile file) {
+    if (_disposed) return null;
     final cached = _cache[fileId];
     if (cached != null) {
       _touchLru(fileId);
@@ -47,13 +96,13 @@ class ImageElementCache {
     return null;
   }
 
-  /// 串行解码单张图片并等待完成。供 loadScene 预热缓存使用，
-  /// 避免 resolveImages 并发触发多张图片同时解码。
+  /// 解码单张图片并等待完成，供可见图片队列与区域导出串行预热使用。
   ///
   /// - 命中 `_cache`/`_failed`：维持早退（本会话粘性语义不变）；
   /// - 命中占位：取得所有权，启动 `_decode` 并升级为在途 Future；
   /// - 命中在途：直接 await 共享的解码 Future，不产生第二次解码。
   Future<void> decodeAndWait(String fileId, ImageFile file) async {
+    if (_disposed) return;
     if (_cache.containsKey(fileId) || _failed.contains(fileId)) return;
     final inFlight = _decoding[fileId];
     if (inFlight != null) {
@@ -66,7 +115,7 @@ class ImageElementCache {
   }
 
   /// 同步批量标记 fileId 为"解码中",阻止 getImage 并发启动 _decode。
-  /// 供 loadScene 在 notifyListeners 前占位使用,随后用 decodeAndWait 串行解码。
+  /// 区域导出先占位，随后用 decodeAndWait 串行解码。
   ///
   /// 仅对"无状态"fileId 插入占位：已缓存/已失败沿用既有前置条件跳过
   /// （对已缓存 id 插占位会在 LRU 逐出后让 getImage 见占位返回 null，
@@ -102,13 +151,26 @@ class ImageElementCache {
   /// Use this when the caller has already decoded the image (e.g., during
   /// import to get dimensions) to avoid a redundant async decode.
   void putImage(String fileId, ui.Image image) {
+    if (_disposed) {
+      image.dispose();
+      return;
+    }
+    final previous = _cache[fileId];
+    if (identical(previous, image)) return;
+    if (previous != null) {
+      _sizeBytes -= previous.width * previous.height * 4;
+      previous.dispose();
+    }
     _cache[fileId] = image;
-    _lruOrder.add(fileId);
+    _sizeBytes += image.width * image.height * 4;
+    _touchLru(fileId);
     _evictIfNeeded();
   }
 
   /// Number of decoded images currently cached.
   int get length => _cache.length;
+
+  int get sizeBytes => _sizeBytes;
 
   /// Callback invoked when a new image finishes decoding.
   /// Set this to trigger a repaint (e.g., `setState`).
@@ -159,9 +221,7 @@ class ImageElementCache {
         return;
       }
 
-      _cache[fileId] = image;
-      _lruOrder.add(fileId);
-      _evictIfNeeded();
+      putImage(fileId, image);
       _notifyDecoded();
     } catch (_) {
       if (_disposed) {
@@ -187,10 +247,19 @@ class ImageElementCache {
   }
 
   void _evictIfNeeded() {
-    while (_cache.length > maxSize && _lruOrder.isNotEmpty) {
-      final oldest = _lruOrder.removeAt(0);
+    while (_cache.length > maxSize || _sizeBytes > maxBytes) {
+      final index = _lruOrder.indexWhere(
+        (id) => !_visibleFiles.containsKey(id),
+      );
+      // ponytail: the visible working set may exceed the soft budget; keep it
+      // intact to avoid flicker. Use resolution tiers if measured memory needs it.
+      if (index < 0) break;
+      final oldest = _lruOrder.removeAt(index);
       final image = _cache.remove(oldest);
-      image?.dispose();
+      if (image != null) {
+        _sizeBytes -= image.width * image.height * 4;
+        image.dispose();
+      }
     }
   }
 
@@ -201,6 +270,8 @@ class ImageElementCache {
       image.dispose();
     }
     _cache.clear();
+    _visibleFiles = const {};
+    _sizeBytes = 0;
     _lruOrder.clear();
     _decoding.clear();
     _failed.clear();

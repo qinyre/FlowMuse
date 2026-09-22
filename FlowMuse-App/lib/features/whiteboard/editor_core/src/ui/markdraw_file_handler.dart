@@ -228,6 +228,7 @@ class MarkdrawFileHandler {
     PdfImportSource source,
     Size canvasSize, {
     bool asBackground = false,
+    PdfRenderOptions? options,
   }) async {
     final importer = PdfImporter(renderer: _pdfPageRenderer);
     await importer.importPdf(
@@ -235,6 +236,7 @@ class MarkdrawFileHandler {
       controller: controller,
       canvasSize: canvasSize,
       asBackground: asBackground,
+      options: options,
     );
   }
 

@@ -39,6 +39,7 @@ import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
 import '../ink_recognition/ink_recognition_repository.dart';
 import '../pdf_note_import/pdf_note_consumer.dart';
+import '../pdf_note_import/pending_pdf_import_provider.dart';
 import '../share/models/share_payload.dart';
 import '../share/models/share_result.dart';
 import '../share/services/share_export_coordinator.dart';
@@ -122,6 +123,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   late final _activityTimer = CollaborationActivityTimer(_broadcastIdleState);
   Timer? _loadImagesTimer;
   bool _loadingScene = false;
+  String? _openingMessage = '正在打开笔记…';
+  String? _openError;
+  double? _openingProgress;
+  bool _openingPdf = false;
+  bool _importedPdfSaved = false;
   bool _applyingRemoteScene = false;
   bool _collaborationOpening = false;
   String? _lastIdleState;
@@ -262,8 +268,50 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _openNote() async {
+    if (!mounted) return;
     final generation = ++_openGeneration;
     _disposingOrLeaving = false;
+    final pendingPdf = ref.read(pendingPdfImportProvider);
+    final importingPdf =
+        pendingPdf != null &&
+        (pendingPdf.noteId == null || pendingPdf.noteId == widget.noteId);
+    setState(() {
+      _loadingScene = true;
+      _openError = null;
+      _openingProgress = null;
+      _openingPdf = importingPdf;
+      _importedPdfSaved = false;
+      _openingMessage = importingPdf ? '正在导入 PDF…' : '正在打开笔记…';
+    });
+    // Let the loading state paint before parsing or native PDF work starts.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!_isCurrentOpen(generation)) return;
+    try {
+      await _loadNote(generation);
+    } catch (error) {
+      debugPrint('[FlowMuseCreateNote] open note failed: ${error.runtimeType}');
+      if (_isCurrentOpen(generation)) {
+        setState(() {
+          _openError = importingPdf
+              ? 'PDF 导入失败，请返回后重试'
+              : '笔记打开失败，请返回后重试';
+        });
+      }
+    } finally {
+      if (_isCurrentOpen(generation)) {
+        setState(() {
+          _loadingScene = false;
+          _openingMessage = null;
+          _openingProgress = null;
+        });
+      }
+    }
+  }
+
+  bool _isCurrentOpen(int generation) =>
+      _canMutateWhiteboard && generation == _openGeneration;
+
+  Future<void> _loadNote(int generation) async {
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote start '
       'noteId=${widget.noteId} temporary=${widget.temporaryCollaboration} '
@@ -286,8 +334,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
     final noteId = widget.noteId;
     await ref.read(libraryIndexProvider.notifier).ensureNote(noteId);
+    if (!_isCurrentOpen(generation)) return;
     debugPrint('[FlowMuseCreateNote] WhiteboardPage.openNote ensured $noteId');
     final libraryIndex = await ref.read(libraryIndexProvider.future);
+    if (!_isCurrentOpen(generation)) return;
     final note = _noteById(libraryIndex.notes, noteId);
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote note '
@@ -342,6 +392,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       unawaited(_recentWhiteboardSync.syncFromNote(note));
     }
     await _restoreInkRecognitionPreference(noteId);
+    if (!_isCurrentOpen(generation)) return;
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote controller loaded '
       'layout=${_markdrawController.layout.type.name} '
@@ -355,7 +406,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           fileHandler: _fileHandler,
           noteId: noteId,
           canvasSize: const Size(1000, 800),
+          isCancelled: () => !_isCurrentOpen(generation),
+          onProgress: (completed, total) {
+            if (!_isCurrentOpen(generation)) return;
+            setState(() {
+              _openingMessage = '正在导入 PDF：$completed / $total 页';
+              _openingProgress = total > 0 ? completed / total : null;
+            });
+          },
         );
+    if (!_isCurrentOpen(generation)) return;
     if (note?.kind == LibraryFilter.pdf && !consumedPdf) {
       _restorePdfViewportBounds();
     } else if (note?.kind != LibraryFilter.pdf) {
@@ -365,16 +425,26 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       '[FlowMuseCreateNote] WhiteboardPage.openNote pdfConsumed=$consumedPdf',
     );
     if (consumedPdf) {
+      setState(() {
+        _openingMessage = '正在保存 PDF 笔记…';
+        _openingProgress = null;
+      });
+      await WidgetsBinding.instance.endOfFrame;
+      if (!_isCurrentOpen(generation)) return;
       final updatedContent = _markdrawController.serializeScene(
         format: DocumentFormat.excalidraw,
       );
       await repository.saveScene(noteId, updatedContent);
+      if (!_isCurrentOpen(generation)) return;
+      _importedPdfSaved = true;
       await _touchNoteWithCurrentCover(noteId);
+      if (!_isCurrentOpen(generation)) return;
       await _broadcastCurrentScene(serializedScene: updatedContent);
     } else if (note?.kind != LibraryFilter.pdf &&
         note?.coverThumbnailBytes == null) {
       await _touchNoteWithCurrentCover(noteId);
     }
+    if (!_isCurrentOpen(generation)) return;
     final latestIndex = ref.read(libraryIndexProvider).asData?.value;
     _syncDocumentTitle(
       latestIndex == null ? null : _noteById(latestIndex.notes, noteId),
@@ -1186,6 +1256,28 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return;
     }
     _handlingBack = true;
+    if (_openingMessage != null || _openError != null) {
+      _disposingOrLeaving = true;
+      ++_openGeneration;
+      if (_openingPdf && !_importedPdfSaved) {
+        final pending = ref.read(pendingPdfImportProvider);
+        if (pending != null &&
+            (pending.noteId == null || pending.noteId == widget.noteId)) {
+          ref.read(pendingPdfImportProvider.notifier).clear();
+        }
+        try {
+          await _localLibraryRepository.deleteNotes([widget.noteId]);
+          if (mounted) ref.invalidate(libraryIndexProvider);
+        } catch (error) {
+          debugPrint(
+            '[FlowMuseCreateNote] PDF cancel cleanup: ${error.runtimeType}',
+          );
+        }
+      }
+      if (!mounted) return;
+      _popWhenStable();
+      return;
+    }
     final state = ref.read(whiteboardViewModelProvider);
     try {
       if (state.collaborating) {
@@ -2339,6 +2431,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onLiveInkCancelled: _cancelLiveInk,
                   remoteWetInkStore: _remoteWetInkStore,
                   onSceneChanged: (editorScene, SceneChangeSource source) {
+                    if (_loadingScene) {
+                      _previousEditorScene = editorScene;
+                      return;
+                    }
                     switch (source) {
                       case SceneChangeSource.undo:
                       case SceneChangeSource.redo:
@@ -2374,6 +2470,38 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   RegionCaptureOverlay(
                     onCommit: _handleRegionSelected,
                     onCancel: _handleRegionCancel,
+                  ),
+                if (_openingMessage != null || _openError != null)
+                  Positioned.fill(
+                    child: ColoredBox(
+                      color: effectivePreset.backgroundEnd,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_openError == null)
+                              CircularProgressIndicator(value: _openingProgress)
+                            else
+                              const Icon(Icons.error_outline, size: 36),
+                            const SizedBox(height: 20),
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(_openError ?? _openingMessage!),
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: () => unawaited(_handleBack()),
+                              child: Text(
+                                _openingPdf && !_importedPdfSaved &&
+                                        _openError == null
+                                    ? '取消导入'
+                                    : '返回',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 if (_smartLayoutV3PanelVisible &&
                     _smartLayoutV3Scope != null)

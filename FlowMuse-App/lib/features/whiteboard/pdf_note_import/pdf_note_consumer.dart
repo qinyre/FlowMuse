@@ -15,19 +15,31 @@ class PdfNoteConsumer {
     required MarkdrawFileHandler fileHandler,
     required String noteId,
     required Size canvasSize,
+    void Function(int completed, int total)? onProgress,
+    bool Function()? isCancelled,
   }) async {
     final payload = ref.read(pendingPdfImportProvider);
-    if (payload == null) {
+    if (payload == null ||
+        (payload.noteId != null && payload.noteId != noteId)) {
       return false;
     }
     ref.read(pendingPdfImportProvider.notifier).clear();
+    final repository = ref.read(libraryRepositoryProvider);
+    final index = ref.read(libraryIndexProvider.notifier);
+    final options = PdfRenderOptions(
+      onProgress: onProgress,
+      isCancelled: () =>
+          controller.isDisposed || (isCancelled?.call() ?? false),
+    );
 
     try {
       await fileHandler.importPdfSource(
         PdfImportSource(name: payload.name, bytes: payload.bytes),
         canvasSize,
         asBackground: true,
+        options: options,
       );
+      options.checkCancelled();
       final effectiveCanvasSize =
           controller.canvasSize.width > 0 && controller.canvasSize.height > 0
           ? controller.canvasSize
@@ -42,13 +54,14 @@ class PdfNoteConsumer {
         fitFirstPageViewport(controller.currentScene, effectiveCanvasSize),
       );
       final pageCount = pdfBackgroundPages(controller.currentScene).length;
-      await ref
-          .read(libraryIndexProvider.notifier)
-          .renameSubtitle(noteId, '$pageCount 页 · ${payload.name}');
+      await index.renameSubtitle(noteId, '$pageCount 页 · ${payload.name}');
       return true;
     } catch (_) {
-      await ref.read(libraryIndexProvider.notifier).deleteNotes([noteId]);
-      return false;
+      await repository.deleteNotes([noteId]);
+      if (!controller.isDisposed && !(isCancelled?.call() ?? false)) {
+        await index.refresh();
+      }
+      rethrow;
     }
   }
 

@@ -13,6 +13,7 @@ class PdfxPdfPageRenderer implements PdfPageRenderer {
     PdfImportSource source,
     PdfRenderOptions options,
   ) async {
+    options.checkCancelled();
     final document = source.bytes != null
         ? await pdfx.PdfDocument.openData(source.bytes!)
         : await pdfx.PdfDocument.openFile(source.path!);
@@ -22,7 +23,9 @@ class PdfxPdfPageRenderer implements PdfPageRenderer {
           ? document.pagesCount
           : math.min(document.pagesCount, options.maxPages!);
       final pages = <PdfRenderedPage>[];
+      options.onProgress?.call(0, pageCount);
       for (var pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+        options.checkCancelled();
         final page = await document.getPage(pageNumber);
         try {
           final scale = options.targetPageWidth / page.width;
@@ -35,7 +38,7 @@ class PdfxPdfPageRenderer implements PdfPageRenderer {
             backgroundColor: '#ffffff',
           );
           if (image == null || image.bytes.isEmpty) {
-            continue;
+            throw StateError('PDF page $pageNumber could not be rendered');
           }
           pages.add(
             PdfRenderedPage(
@@ -49,7 +52,9 @@ class PdfxPdfPageRenderer implements PdfPageRenderer {
         } finally {
           await page.close();
         }
+        options.onProgress?.call(pageNumber, pageCount);
       }
+      options.checkCancelled();
       return pages;
     } finally {
       await document.close();

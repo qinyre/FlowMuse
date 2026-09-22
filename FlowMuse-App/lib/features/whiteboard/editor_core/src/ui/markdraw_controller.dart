@@ -122,6 +122,9 @@ class MarkdrawController extends ChangeNotifier {
   final _historyManager = HistoryManager();
   final ClipboardService _clipboardService = const FlutterClipboardService();
   final _imageCache = ImageElementCache();
+  Scene? _visibleImageScene;
+  Rect? _visibleImageBounds;
+  Map<String, ImageFile> _visibleImageFiles = const {};
   final _flowchartCreator = FlowchartCreator();
   final _flowchartNavigator = FlowchartNavigator();
   final _mindmapCreator = MindmapCreator();
@@ -2106,19 +2109,36 @@ class MarkdrawController extends ChangeNotifier {
 
   // --- Viewport ---
 
-  /// Resolves decoded images for all image files in the scene. Returns null
-  /// if no images are available yet.
-  Map<String, ui.Image>? resolveImages() {
-    final files = _editorState.scene.files;
-    if (files.isEmpty) return null;
-    final resolved = <String, ui.Image>{};
-    for (final entry in files.entries) {
-      final image = _imageCache.getImage(entry.key, entry.value);
-      if (image != null) {
-        resolved[entry.key] = image;
-      }
+  /// Resolves the screen and a small scroll margin, never the entire document.
+  Map<String, ui.Image>? resolveImages({
+    ViewportState? viewport,
+    Size? canvasSize,
+  }) {
+    final view = viewport ?? _editorState.viewport;
+    final size =
+        canvasSize ??
+        (_canvasSize.isEmpty ? const Size(800, 600) : _canvasSize);
+    final bounds = view.visibleRect(size).inflate(200 / view.zoom);
+    final scene = _editorState.scene;
+    if (!identical(scene, _visibleImageScene) || bounds != _visibleImageBounds) {
+      _visibleImageScene = scene;
+      _visibleImageBounds = bounds;
+      _visibleImageFiles = _imageFilesInRect(scene, bounds);
     }
-    return resolved.isEmpty ? null : resolved;
+    return _imageCache.resolveVisible(_visibleImageFiles);
+  }
+
+  Map<String, ImageFile> _imageFilesInRect(Scene scene, Rect rect) {
+    final files = <String, ImageFile>{};
+    if (scene.files.isEmpty) return files;
+    final bounds = Bounds.fromLTWH(rect.left, rect.top, rect.width, rect.height);
+    for (final element in scene.elements) {
+      if (element is! ImageElement || element.isDeleted) continue;
+      if (!AlignmentUtils.visualBounds(element).intersects(bounds)) continue;
+      final file = scene.files[element.fileId];
+      if (file != null) files[element.fileId] = file;
+    }
+    return files;
   }
 
   /// Converts a screen-space offset to a scene-space point.
@@ -3321,26 +3341,8 @@ class MarkdrawController extends ChangeNotifier {
     if (background != null) {
       _canvasBackgroundColor = background;
     }
-    _prewarmImageCache();
+    resolveImages();
     notifyListeners();
-  }
-
-  /// 串行预解码场景中的图片,避免渲染时 resolveImages 对所有图片
-  /// 并发触发 instantiateImageCodec 导致内存压力/解码失败。
-  /// 对齐 importPdfPages 的逐页 await 串行策略。
-  Future<void> _prewarmImageCache() async {
-    final files = _editorState.scene.files;
-    if (files.isEmpty) return;
-    // 同步先把所有 fileId 占位为"解码中",这样 loadScene 的 notifyListeners
-    // 触发首次渲染时,resolveImages → getImage 不会并发启动 _decode,
-    // 而是全部返回 null,等预热串行解码完后逐张 notifyListeners 显示。
-    _imageCache.markDecoding(files.keys);
-    for (final entry in files.entries) {
-      if (!_disposed) {
-        await _imageCache.decodeAndWait(entry.key, entry.value);
-      }
-    }
-    if (!_disposed) notifyListeners();
   }
 
   /// Replaces the scene while preserving undo/redo history.
@@ -4949,7 +4951,7 @@ class MarkdrawController extends ChangeNotifier {
       adapter: _adapter,
       viewport: _editorState.viewport,
       layout: _layout,
-      resolvedImages: resolveImages(),
+      resolvedImages: resolveImages(canvasSize: canvasSize),
     );
     painter.paint(canvas, canvasSize);
 
@@ -4973,6 +4975,16 @@ class MarkdrawController extends ChangeNotifier {
       return null;
     }
     final sourceRect = _coverThumbnailSourceRect(outputSize);
+    final scene = _editorState.scene;
+    final layout = _layout;
+    final background = _canvasBackgroundColor;
+    final contentBounds = _contentBounds;
+    if (_imageFilesInRect(scene, sourceRect).keys.any(
+      (id) => !_imageCache.contains(id),
+    )) {
+      await prewarmRegionImages(sourceRect, scene: scene);
+      if (_disposed) return null;
+    }
 
     const padding = 10.0;
     final drawableWidth = math.max(1.0, outputSize.width - padding * 2);
@@ -4999,16 +5011,16 @@ class MarkdrawController extends ChangeNotifier {
     final canvas = Canvas(recorder);
     canvas.drawRect(
       Offset.zero & outputSize,
-      Paint()..color = parseColor(_canvasBackgroundColor),
+      Paint()..color = parseColor(background),
     );
     StaticCanvasPainter(
-      scene: _editorState.scene,
+      scene: scene,
       adapter: _adapter,
       viewport: viewport,
-      layout: _layout,
-      resolvedImages: resolveImages(),
+      layout: layout,
+      resolvedImages: _peekResolvedImages(scene: scene),
       gridSize: _gridSize,
-      contentBounds: _contentBounds,
+      contentBounds: contentBounds,
       renderPageShadows: false,
     ).paint(canvas, outputSize);
 
@@ -5107,8 +5119,8 @@ class MarkdrawController extends ChangeNotifier {
   /// Peek-only image resolution for region export: unlike [resolveImages],
   /// never triggers async decodes or per-image repaints; prewarmRegionImages
   /// has already cached everything the region needs.
-  Map<String, ui.Image>? _peekResolvedImages() {
-    final files = _editorState.scene.files;
+  Map<String, ui.Image>? _peekResolvedImages({Scene? scene}) {
+    final files = (scene ?? _editorState.scene).files;
     if (files.isEmpty) return null;
     final resolved = <String, ui.Image>{};
     for (final entry in files.entries) {
@@ -5122,21 +5134,11 @@ class MarkdrawController extends ChangeNotifier {
   /// region render cannot silently miss LRU-evicted files.
   ///
   /// Returns how many intersecting images failed to decode.
-  Future<int> prewarmRegionImages(Rect sceneBounds) async {
-    var failed = 0;
-    final intersecting = <String, ImageFile>{};
-    for (final element in _editorState.scene.elements) {
-      if (element is! ImageElement || element.isDeleted) continue;
-      final bounds = Rect.fromLTWH(
-        element.x,
-        element.y,
-        element.width,
-        element.height,
-      );
-      if (!bounds.overlaps(sceneBounds)) continue;
-      final file = _editorState.scene.files[element.fileId];
-      if (file != null) intersecting[element.fileId] = file;
-    }
+  Future<int> prewarmRegionImages(Rect sceneBounds, {Scene? scene}) async {
+    final intersecting = _imageFilesInRect(
+      scene ?? _editorState.scene,
+      sceneBounds,
+    );
     if (intersecting.isEmpty) return 0;
     // 同步占位相交 fileId：预热 await 窗口内一次交互重绘的 getImage 不应
     // 自行启动并发解码（破坏串行预热的内存约束）。占位后 getImage 直接
@@ -5145,10 +5147,7 @@ class MarkdrawController extends ChangeNotifier {
     // 永久滞留在途表（只有 _decode 的 finally 移除），那些图片本会话
     // 再也不渲染。
     _imageCache.markDecoding(intersecting.keys);
-    // 暂停解码完成回调：每次完成都 notifyListeners（markdraw_controller
-    // 构造函数中注册）会触发全画布重绘，resolveImages 对场景所有未缓存
-    // fileId 并发启动解码（>50 图场景即解码风暴 + LRU 挤掉刚预热条目）。
-    // 对齐 loadScene"预热完统一刷"语义（_prewarmImageCache）。
+    // 导出预热结束后统一刷新，避免每张图片完成都重建编辑器。
     // 用可嵌套的暂停计数而非保存/恢复回调字段：两次预热窗口重叠时，
     // 后启动者捕获到的"先前回调"是前者暂停后的值，恢复会互覆，
     // 可能把 controller 的重绘闭包在本会话内永久丢失。
@@ -5157,7 +5156,6 @@ class MarkdrawController extends ChangeNotifier {
       for (final entry in intersecting.entries) {
         if (_disposed) break;
         await _imageCache.decodeAndWait(entry.key, entry.value);
-        if (_imageCache.peek(entry.key) == null) failed++;
       }
     } finally {
       _imageCache.resumeDecodedCallback();
@@ -5166,7 +5164,9 @@ class MarkdrawController extends ChangeNotifier {
       _imageCache.releaseDecodingPlaceholders(intersecting.keys);
     }
     if (!_disposed) notifyListeners();
-    return failed;
+    // Later decodes may evict earlier ones: report the final availability so
+    // exporters never mistake missing page images for a successful prewarm.
+    return intersecting.keys.where((id) => !_imageCache.contains(id)).length;
   }
 
   /// Reads the pixel color at [screenPosition] from a pre-rendered [image].
@@ -5594,8 +5594,9 @@ class MarkdrawController extends ChangeNotifier {
     Size canvasSize, {
     String? documentName,
     bool asBackground = false,
+    bool Function()? isCancelled,
   }) async {
-    if (pages.isEmpty) {
+    if (pages.isEmpty || _disposed || (isCancelled?.call() ?? false)) {
       return;
     }
 
@@ -5654,9 +5655,6 @@ class MarkdrawController extends ChangeNotifier {
       final digest = sha1.convert(page.bytes);
       final fileId = 'pdf-${digest.toString().substring(0, 12)}';
       final imageFile = ImageFile(mimeType: page.mimeType, bytes: page.bytes);
-      final codec = await ui.instantiateImageCodec(page.bytes);
-      final frame = await codec.getNextFrame();
-      _imageCache.putImage(fileId, frame.image);
 
       final element = ImageElement(
         id: ElementId.generate(),
@@ -5679,6 +5677,9 @@ class MarkdrawController extends ChangeNotifier {
       cursor = _layout.isRightToLeft
           ? Offset(cursor.dx - page.width - CanvasLayout.pageGap, 0)
           : Offset(0, cursor.dy + page.height + CanvasLayout.pageGap);
+      // Hashing large page files must leave opportunities to paint progress.
+      await Future<void>.delayed(Duration.zero);
+      if (_disposed || (isCancelled?.call() ?? false)) return;
     }
 
     if (_layout.isPaged) {
@@ -5701,6 +5702,13 @@ class MarkdrawController extends ChangeNotifier {
         Rect.fromLTWH(0, 0, pages.first.width, pages.first.height),
         effectiveCanvasSize,
       ),
+    );
+    resolveImages(
+      viewport: _editorState.viewport,
+      canvasSize: effectiveCanvasSize,
+    );
+    await prewarmRegionImages(
+      _editorState.viewport.visibleRect(effectiveCanvasSize),
     );
   }
 

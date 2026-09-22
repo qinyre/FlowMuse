@@ -12,10 +12,23 @@ class PdfImportSource {
 }
 
 class PdfRenderOptions {
-  const PdfRenderOptions({this.targetPageWidth = 1600, this.maxPages});
+  const PdfRenderOptions({
+    this.targetPageWidth = 1600,
+    this.maxPages,
+    this.onProgress,
+    this.isCancelled,
+  });
 
   final double targetPageWidth;
   final int? maxPages;
+  final void Function(int completed, int total)? onProgress;
+  final bool Function()? isCancelled;
+
+  void checkCancelled() {
+    if (isCancelled?.call() ?? false) {
+      throw StateError('PDF import cancelled');
+    }
+  }
 }
 
 abstract interface class PdfPageRenderer {
