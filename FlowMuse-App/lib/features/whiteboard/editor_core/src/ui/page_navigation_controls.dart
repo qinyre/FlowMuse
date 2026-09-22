@@ -72,9 +72,12 @@ class _PageNavigationControlsState extends State<PageNavigationControls> {
             button: true,
             child: IconButton(
               onPressed: enabled ? action : null,
-              icon: Icon(icon, size: 18),
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 40),
-              padding: const EdgeInsets.all(6),
+              icon: Icon(icon, size: 16),
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              padding: const EdgeInsets.all(4),
+              style: const ButtonStyle(
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ),
         );
@@ -95,6 +98,11 @@ class _PageNavigationControlsState extends State<PageNavigationControls> {
               label: '第 ${index + 1} 页，共 ${pages.length} 页，点击跳转',
               button: true,
               child: TextButton(
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(56, 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
                 onPressed: enabled
                     ? () => showPageJumpDialog(context, controller)
                     : null,
