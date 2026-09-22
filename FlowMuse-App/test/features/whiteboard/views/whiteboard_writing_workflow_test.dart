@@ -35,7 +35,7 @@ void main() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   late Directory directory;
-  late SqliteLibraryRepository library;
+  late _TrackedLibraryRepository library;
   late SqliteWhiteboardSceneRepository scenes;
 
   setUpAll(() async {
@@ -51,7 +51,7 @@ void main() {
       const MethodChannel('flow_muse/service_widget'),
       (_) async => null,
     );
-    library = SqliteLibraryRepository(LocalDatabase.open);
+    library = _TrackedLibraryRepository();
     scenes = SqliteWhiteboardSceneRepository(LocalDatabase.open);
   });
 
@@ -75,7 +75,7 @@ void main() {
     final note = await tester.runAsync(
       () => library.createNote(title: 'workflow-five-brushes'),
     );
-    final container = _container();
+    final container = _container(library: library);
     final controller = await _open(tester, container, note!);
     controller.switchTool(ToolType.freedraw);
     for (final brush in BrushType.values) {
@@ -85,7 +85,7 @@ void main() {
     expect(_ink(controller), hasLength(5));
     final expected = _elements(controller);
     await tester.pump(const Duration(milliseconds: 600));
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     final content = await tester.runAsync(() => scenes.loadScene(note.id));
     final reopened = MarkdrawController();
     addTearDown(reopened.dispose);
@@ -106,20 +106,20 @@ void main() {
     expect(_elements(controller), expected);
 
     await tester.pump(const Duration(milliseconds: 600));
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     await tester.pumpWidget(const SizedBox.shrink());
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     final next = await _open(tester, container, note);
     expect(_elements(next), expected);
     await tester.pumpWidget(const SizedBox.shrink());
-    await _drainIo(tester);
+    await _drainIo(tester, container);
   });
 
   testWidgets('关闭自动保存后，后台与退出仍保存已提交笔迹', (tester) async {
     final note = await tester.runAsync(
       () => library.createNote(title: 'workflow-flush'),
     );
-    final container = _container();
+    final container = _container(library: library);
     final controller = await _open(tester, container, note!);
     await tester.runAsync(
       () => container
@@ -139,7 +139,7 @@ void main() {
     expect(_ink(check), isEmpty);
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     final savedAfterPause = await tester.runAsync(
       () => scenes.loadScene(note.id),
     );
@@ -148,7 +148,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await _stroke(tester, const Offset(650, 500));
     await tester.pumpWidget(const SizedBox.shrink());
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     final savedAfterExit = await tester.runAsync(
       () => scenes.loadScene(note.id),
     );
@@ -193,7 +193,7 @@ void main() {
     });
     final background = _elements(seed).singleWhere((e) => e['type'] == 'image');
     seed.dispose();
-    final container = _container();
+    final container = _container(library: library);
     final controller = await _open(tester, container, note!);
     expect(controller.contentBounds, isNotNull);
     expect(controller.resolveImages(), hasLength(1));
@@ -213,15 +213,15 @@ void main() {
     controller.redo();
     final expected = _elements(controller);
     await tester.pump(const Duration(milliseconds: 600));
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     await tester.pumpWidget(const SizedBox.shrink());
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     final reopened = await _open(tester, container, note);
     expect(_elements(reopened), expected);
     expect(reopened.resolveImages(), hasLength(1));
     expect(reopened.contentBounds, isNotNull);
     await tester.pumpWidget(const SizedBox.shrink());
-    await _drainIo(tester);
+    await _drainIo(tester, container);
   });
 
   testWidgets('识别等待期间仍可落笔，延迟结果只替换所属笔画且可撤销', (tester) async {
@@ -229,7 +229,7 @@ void main() {
       () => library.createNote(title: 'workflow-recognition'),
     );
     final recognition = _PendingRecognition();
-    final container = _container(recognition: recognition);
+    final container = _container(library: library, recognition: recognition);
     final controller = await _open(tester, container, note!);
     controller.applyStyleChange(const ElementStyle(fontFamily: 'Excalifont'));
     controller.switchTool(ToolType.freedraw);
@@ -271,7 +271,7 @@ void main() {
       isEmpty,
     );
     await tester.pumpWidget(const SizedBox.shrink());
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     final content = await tester.runAsync(() => scenes.loadScene(note.id));
     final reopened = MarkdrawController()
       ..loadFromContent(content!, 'recognition.excalidraw');
@@ -304,7 +304,7 @@ void main() {
     final received = <CollaborationMessage>[];
     final subscription = peer.encryptedMessages(room).listen(received.add);
     addTearDown(subscription.cancel);
-    final container = _container(collaboration: local);
+    final container = _container(library: library, collaboration: local);
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     await tester.binding.setSurfaceSize(const Size(1200, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -316,7 +316,7 @@ void main() {
         ),
       ),
     );
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
     final controller = tester
         .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
@@ -348,7 +348,7 @@ void main() {
       () => peer.broadcastElements(room: room, elements: elements),
     );
     await tester.pump(const Duration(milliseconds: 200));
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     expect(
       controller.currentScene.activeElements.whereType<RectangleElement>(),
       hasLength(1),
@@ -356,7 +356,7 @@ void main() {
     await gesture.moveBy(const Offset(30, -20));
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 200));
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     final stroke = _ink(controller).single;
     expect(
       received
@@ -370,7 +370,7 @@ void main() {
     );
     controller.undo();
     await tester.pump(const Duration(milliseconds: 200));
-    await _drainIo(tester);
+    await _drainIo(tester, container);
     expect(_ink(controller), isEmpty);
     expect(
       received
@@ -383,7 +383,7 @@ void main() {
       isTrue,
     );
     await tester.pumpWidget(const SizedBox.shrink());
-    await _drainIo(tester);
+    await _drainIo(tester, container);
   });
 
   test(
@@ -429,11 +429,13 @@ void main() {
 }
 
 ProviderContainer _container({
+  required _TrackedLibraryRepository library,
   InkRecognitionRepository? recognition,
   CollaborationRepository? collaboration,
 }) {
   final container = ProviderContainer(
     overrides: [
+      libraryRepositoryProvider.overrideWithValue(library),
       accountViewModelProvider.overrideWith(_GuestAccount.new),
       collaborationRepositoryProvider.overrideWithValue(
         collaboration ?? CollaborationRepository(),
@@ -460,22 +462,41 @@ Future<MarkdrawController> _open(
       child: MaterialApp(home: WhiteboardPage(noteId: note.id)),
     ),
   );
-  await _drainIo(tester);
+  await _drainIo(tester, container);
   final controller = tester
       .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
       .controller!;
+  // Loading the title precedes restoring PDF bounds and decoding its images.
+  // Wait for the state being asserted, rather than a fixed wall-clock delay.
+  if (note.kind == LibraryFilter.pdf) {
+    for (var attempt = 0; attempt < 100; attempt++) {
+      if (controller.contentBounds != null &&
+          controller.resolveImages()?.isNotEmpty == true) {
+        break;
+      }
+      await _drainIo(tester, container);
+    }
+  }
   expect(controller.documentName, note.title);
   return controller;
 }
 
-Future<void> _drainIo(WidgetTester tester) async {
-  for (var i = 0; i < 10; i++) {
+Future<void> _drainIo(WidgetTester tester, ProviderContainer container) async {
+  final library =
+      container.read(libraryRepositoryProvider) as _TrackedLibraryRepository;
+  for (var i = 0; i < 500; i++) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pump(const Duration(milliseconds: 20));
+    // Keep pumping fake microtasks while real SQLite I/O finishes. Awaiting
+    // its Future inside runAsync would block those fake-zone continuations.
+    if (i >= 9 && library.pendingWrites == 0) {
+      expect(tester.takeException(), isNull);
+      return;
+    }
   }
-  expect(tester.takeException(), isNull);
+  fail('SQLite 笔记更新在 10 秒内未完成');
 }
 
 Future<void> _stroke(WidgetTester tester, Offset start) async {
@@ -507,6 +528,30 @@ List<Map<Object?, Object?>> _elements(MarkdrawController controller) => [
 class _GuestAccount extends AccountViewModel {
   @override
   AccountState build() => const AccountState(status: AccountStatus.guest);
+}
+
+class _TrackedLibraryRepository extends SqliteLibraryRepository {
+  _TrackedLibraryRepository() : super(LocalDatabase.open);
+
+  int pendingWrites = 0;
+
+  @override
+  Future<void> touchNote(
+    String noteId, {
+    Uint8List? coverThumbnailBytes,
+    bool clearCoverThumbnail = false,
+  }) async {
+    pendingWrites++;
+    try {
+      await super.touchNote(
+        noteId,
+        coverThumbnailBytes: coverThumbnailBytes,
+        clearCoverThumbnail: clearCoverThumbnail,
+      );
+    } finally {
+      pendingWrites--;
+    }
+  }
 }
 
 class _PendingRecognition extends InkRecognitionRepository {
