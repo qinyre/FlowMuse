@@ -11,7 +11,6 @@ import (
 )
 
 const maxInkBodyBytes = 512 * 1024
-const maxSmartLayoutBodyBytes = 32 * 1024 * 1024
 
 type Recognizer interface {
 	Recognize(context.Context, RecognizeRequest) (RecognizeResponse, error)
@@ -19,32 +18,18 @@ type Recognizer interface {
 
 type HTTPAPI struct {
 	recognizer     Recognizer
-	layouter       SmartLayouter
-	visionLayouter VisionLayouter
 	v3Analyzer     *V3Analyzer
 	requestTimeout time.Duration
 }
 
-func NewHTTPAPI(recognizer Recognizer, requestTimeout time.Duration, layouter ...SmartLayouter) *HTTPAPI {
-	var smartLayouter SmartLayouter
-	if len(layouter) > 0 {
-		smartLayouter = layouter[0]
-	}
+func NewHTTPAPI(recognizer Recognizer, requestTimeout time.Duration) *HTTPAPI {
 	return &HTTPAPI{
 		recognizer:     recognizer,
-		layouter:       smartLayouter,
 		requestTimeout: requestTimeout,
 	}
 }
 
-// WithVisionLayouter 注入视觉优先排版通道（可选；未注入时 vision 端点返回 502）。
-func (api *HTTPAPI) WithVisionLayouter(visionLayouter VisionLayouter) *HTTPAPI {
-	api.visionLayouter = visionLayouter
-	return api
-}
-
-// WithV3Analyzer 注入 v3 分析通道（可选；未注入时 v3 端点不注册——
-// 与 v2 通道完全独立启停，V3-201A）。
+// WithV3Analyzer 注入 v3 分析通道（可选；未注入时 v3 端点不注册，V3-201A）。
 func (api *HTTPAPI) WithV3Analyzer(analyzer *V3Analyzer) *HTTPAPI {
 	api.v3Analyzer = analyzer
 	return api
@@ -52,11 +37,6 @@ func (api *HTTPAPI) WithV3Analyzer(analyzer *V3Analyzer) *HTTPAPI {
 
 func (api *HTTPAPI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/ink/recognize", api.recognize)
-	mux.HandleFunc("/api/ink/smart-layout", api.smartLayout)
-	mux.HandleFunc("/api/ink/smart-layout/block", api.smartLayoutBlock)
-	mux.HandleFunc("/api/ink/smart-layout/compose", api.smartLayoutCompose)
-	mux.HandleFunc("/api/ink/smart-layout/vision", api.smartLayoutVision)
-	mux.HandleFunc("/api/ink/smart-layout/transcribe", api.smartLayoutTranscribe)
 	if api.v3Analyzer != nil {
 		RegisterSmartLayoutV3(mux, api.v3Analyzer)
 	}
@@ -87,159 +67,6 @@ func (api *HTTPAPI) recognize(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-func (api *HTTPAPI) smartLayout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, "POST")
-		return
-	}
-	if api.layouter == nil {
-		http.Error(w, "AI smart layout is not configured", http.StatusBadGateway)
-		return
-	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-	var request SmartLayoutRequest
-	r.Body = http.MaxBytesReader(w, r.Body, maxSmartLayoutBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := validateSmartLayoutRequest(request); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	response, err := api.layouter.Layout(ctx, request)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
-func (api *HTTPAPI) smartLayoutBlock(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, "POST")
-		return
-	}
-	if api.layouter == nil {
-		http.Error(w, "AI smart layout is not configured", http.StatusBadGateway)
-		return
-	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-	var request SmartLayoutBlockRequest
-	r.Body = http.MaxBytesReader(w, r.Body, maxSmartLayoutBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := validateSmartLayoutInkBlock(request.Block); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	response, err := api.layouter.RecognizeBlock(ctx, request.Block)
-	if err != nil {
-		response = SmartLayoutRecognizedBlock{
-			ID:           request.Block.ID,
-			PageID:       request.Block.PageID,
-			Type:         "error",
-			Bounds:       request.Block.Bounds,
-			StrokeBounds: request.Block.StrokeBounds,
-			StartedAt:    request.Block.StartedAt,
-			Error:        err.Error(),
-		}
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
-func (api *HTTPAPI) smartLayoutCompose(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, "POST")
-		return
-	}
-	if api.layouter == nil {
-		http.Error(w, "AI smart layout is not configured", http.StatusBadGateway)
-		return
-	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-	var request SmartLayoutComposeRequest
-	r.Body = http.MaxBytesReader(w, r.Body, maxSmartLayoutBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := validateSmartLayoutComposeRequest(request); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	response, err := api.layouter.Compose(ctx, request)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
-func (api *HTTPAPI) smartLayoutVision(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, "POST")
-		return
-	}
-	if api.visionLayouter == nil {
-		http.Error(w, "AI vision layout is not configured", http.StatusBadGateway)
-		return
-	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-	var request VisionLayoutRequest
-	r.Body = http.MaxBytesReader(w, r.Body, maxSmartLayoutBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if strings.TrimSpace(request.ImageBase64) == "" {
-		http.Error(w, "image is required", http.StatusBadRequest)
-		return
-	}
-	response, err := api.visionLayouter.VisionLayout(ctx, request)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
-// smartLayoutTranscribe 处理低置信裁剪重问：单块局部截图无上下文转写。
-func (api *HTTPAPI) smartLayoutTranscribe(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, "POST")
-		return
-	}
-	if api.visionLayouter == nil {
-		http.Error(w, "AI vision layout is not configured", http.StatusBadGateway)
-		return
-	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-	var request TranscribeRequest
-	r.Body = http.MaxBytesReader(w, r.Body, maxSmartLayoutBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if strings.TrimSpace(request.ImageBase64) == "" {
-		http.Error(w, "image is required", http.StatusBadRequest)
-		return
-	}
-	response, err := api.visionLayouter.Transcribe(ctx, request)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
 func validateRequest(request RecognizeRequest) error {
 	if len(request.Strokes) == 0 {
 		return errors.New("strokes are required")
@@ -258,58 +85,6 @@ func validateRequest(request RecognizeRequest) error {
 	hint := strings.TrimSpace(request.Hint)
 	if hint != "" && hint != "auto" && hint != "text" && hint != "math" {
 		return errors.New("hint must be auto, text, or math")
-	}
-	return nil
-}
-
-func validateSmartLayoutRequest(request SmartLayoutRequest) error {
-	if len(request.Pages) == 0 {
-		return errors.New("pages are required")
-	}
-	if len(request.Pages) > 256 {
-		return errors.New("too many pages")
-	}
-	if len(request.Blocks) == 0 {
-		return errors.New("blocks are required")
-	}
-	if len(request.Blocks) > 512 {
-		return errors.New("too many blocks")
-	}
-	for _, block := range request.Blocks {
-		if err := validateSmartLayoutInkBlock(block); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateSmartLayoutInkBlock(block SmartLayoutInkBlock) error {
-	if strings.TrimSpace(block.ID) == "" {
-		return errors.New("block id is required")
-	}
-	if strings.TrimSpace(block.ImageBase64) == "" {
-		return errors.New("block image is required")
-	}
-	return nil
-}
-
-func validateSmartLayoutComposeRequest(request SmartLayoutComposeRequest) error {
-	if len(request.Pages) == 0 {
-		return errors.New("pages are required")
-	}
-	if len(request.Pages) > 256 {
-		return errors.New("too many pages")
-	}
-	if len(request.Blocks) == 0 {
-		return errors.New("blocks are required")
-	}
-	if len(request.Blocks) > 512 {
-		return errors.New("too many blocks")
-	}
-	for _, block := range request.Blocks {
-		if strings.TrimSpace(block.ID) == "" {
-			return errors.New("block id is required")
-		}
 	}
 	return nil
 }

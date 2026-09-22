@@ -1,29 +1,24 @@
-/// V3-703A：客户端 v2 隔离与保留说明——目标符号
-/// [V2ClientIsolationMatrix]。
+/// V3-703A：客户端 v2 隔离矩阵（v2 移除后修订版）。
 ///
-/// 静态扫描 + 自动测试证明智能排版公开入口只到达 v3 Session：
+/// 静态扫描证明智能排版公开入口只到达 v3 Session：
 /// 1. 公开入口面（gateways/rollout/session/analysis/views——页面层到
 ///    传输层的全部路径）零 v2 路由符号（reflow/fallbackToV2/routeToV2/
-///    legacyV2）；
+///    legacyV2/prepareSmartLayoutTemplates 等）；
 /// 2. 全 smart_layout v3 库零 v2 私有实现 import
 ///    （editor_core/src/core/smart_layout/** 不可达）；
 /// 3. V3 recognize/v3 生产端点与 analyze/v3 实验端点共存，零旧端点
-///    串 /block /compose /vision /transcribe；
-/// 4. v2 私有代码原位保留：editor_core/src/core/smart_layout/** 与
-///    test/features/whiteboard/editor_core/smart_layout* 测试清单入报告
-///    （不做普查、迁移或删除，不新增兼容 wrapper）。
+///    串 /block /compose /vision /transcribe。
 ///
-/// 证据生成：FLOWMUSE_GENERATE_V3_703A_EVIDENCE=1 一次性写入
-/// docs/研发记录/evidence/smart-layout-v3/competition/
-/// v3-703a-client-isolation.json；常规 flutter test 只读校验不重写。
+/// 2026-09-21：v2 私有实现（模板引擎/聚类/视觉匹配/草稿态）已整体删除，
+/// 原检查 4"v2 私有代码原位保留"随之退役；历史证据文件
+/// v3-703a-client-isolation.json 记录删除前状态，不再作为比对基准。
 library;
 
-import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// 客户端 v2 隔离矩阵（V3-703A，比赛交付口径：隔离验证而非删除）。
+/// 客户端 v2 隔离矩阵：公开入口零 v2 可达。
 class V2ClientIsolationMatrix {
   static final v2RoutingSymbolPattern = RegExp(
     r'(v2_?[Rr]eflow|fallbackToV2|routeToV2|legacyV2|'
@@ -139,51 +134,11 @@ class V2ClientIsolationMatrix {
     };
   }
 
-  /// 检查 4：v2 私有代码原位保留（清单入报告，不删除不迁移）。
-  Map<String, Object?> v2Inventory() {
-    final libFiles = _dartFiles(
-      'lib/features/whiteboard/editor_core/src/core/smart_layout',
-    ).map(_rel).toList()..sort();
-    final testFiles =
-        io.Directory('$appRoot/test/features/whiteboard/editor_core')
-            .listSync()
-            .whereType<io.File>()
-            .where(
-              (f) =>
-                  f.path.endsWith('.dart') &&
-                  _rel(f).split('/').last.startsWith('smart_layout_'),
-            )
-            .map(_rel)
-            .toList()
-          ..sort();
-    return {
-      'id': 'v2-private-in-place',
-      'passed': libFiles.isNotEmpty && testFiles.isNotEmpty,
-      'lib_files': libFiles,
-      'lib_file_count': libFiles.length,
-      'test_files': testFiles,
-      'test_file_count': testFiles.length,
-      'note': '比赛版本兼容保留：原位不删除、不迁移、不新增兼容 wrapper',
-    };
-  }
-
   List<Map<String, Object?>> all() => [
     publicSurfaceScan(),
     crossImportScan(),
     endpointStringScan(),
-    v2Inventory(),
   ];
-
-  Map<String, Object?> toJson() => {
-    'task': 'V3-703A',
-    'kind': 'client_isolation_matrix',
-    'all_passed': all().every((c) => c['passed'] as bool),
-    'checks': all(),
-    'retention_note':
-        'v2 私有实现（editor_core/src/core/smart_layout/**，9 个 lib 文件）'
-        '与 8 个既有测试原位保留；公开入口仅到达 v3 Session；'
-        '不新增兼容 wrapper。',
-  };
 
   String _rel(io.File file) =>
       file.path.replaceAll('\\', '/').substring(appRoot.length + 1);
@@ -209,14 +164,13 @@ void main() {
     }
   });
 
-  test('V2ClientIsolationMatrix：公开入口零 v2 可达 + 私有实现原位保留', () {
+  test('V2ClientIsolationMatrix：公开入口零 v2 可达', () {
     final checks = matrix.all();
     final byId = {for (final c in checks) c['id'] as String: c};
     expect(byId.keys, {
       'public-surface-zero-v2-symbols',
       'v3-lib-zero-v2-imports',
       'single-v3-endpoint-string',
-      'v2-private-in-place',
     });
 
     final surface = byId['public-surface-zero-v2-symbols']!;
@@ -238,33 +192,5 @@ void main() {
     expect(endpoints['passed'], isTrue);
     expect(endpoints['v3_endpoint_files'], greaterThanOrEqualTo(1));
     expect(endpoints['recognition_endpoint_files'], greaterThanOrEqualTo(1));
-
-    final inventory = byId['v2-private-in-place']!;
-    expect(inventory['passed'], isTrue);
-    expect(inventory['lib_file_count'], greaterThanOrEqualTo(9));
-    expect(inventory['test_file_count'], greaterThanOrEqualTo(8));
-
-    final json = matrix.toJson();
-    expect(json['all_passed'], isTrue);
-
-    final target = io.File(
-      '$appRoot/../docs/研发记录/evidence/smart-layout-v3/competition/'
-      'v3-703a-client-isolation.json',
-    );
-    final generate =
-        io.Platform.environment['FLOWMUSE_GENERATE_V3_703A_EVIDENCE'] == '1';
-    if (generate) {
-      target.createSync(recursive: true);
-      target.writeAsStringSync(
-        const JsonEncoder.withIndent('  ').convert(json),
-        flush: true,
-      );
-    }
-    if (target.existsSync()) {
-      final persisted =
-          jsonDecode(target.readAsStringSync()) as Map<String, Object?>;
-      expect(persisted['all_passed'], isTrue);
-      expect((persisted['checks']! as List).length, 4);
-    }
   });
 }

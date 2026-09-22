@@ -27,6 +27,14 @@ func almostEqual(a float64, b float64) bool {
 	return diff < 1e-6
 }
 
+func jsonString(value string) string {
+	// 简易 JSON 字符串转义（测试内容不含控制字符）。
+	escaped := strings.ReplaceAll(value, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	escaped = strings.ReplaceAll(escaped, "\n", "\\n")
+	return `"` + escaped + `"`
+}
+
 // rawElementsFromJSON 把 canned JSON 解析为 parseRawElements 的入参形状。
 func rawElementsFromJSON(t *testing.T, input string) []any {
 	t.Helper()
