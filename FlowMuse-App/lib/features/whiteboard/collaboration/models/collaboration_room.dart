@@ -29,7 +29,8 @@ class CollaborationRoom {
   }
 
   String toLink({required String origin, required String path}) {
-    return '$origin$path#room=$roomId,$roomKey';
+    final base = origin.trim().replaceFirst(RegExp(r'/+$'), '');
+    return '$base$path#room=$roomId,$roomKey';
   }
 
   String toRoomValue() {

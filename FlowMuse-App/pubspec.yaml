@@ -30,6 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
 
   flutter_riverpod: ^3.3.2
   flutter_colorpicker: ^1.1.0

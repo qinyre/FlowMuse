@@ -259,7 +259,7 @@ lib/
 - **自动生成文件**（`GeneratedPluginRegistrant.ets`）已在 `.gitignore` 忽略，**不要提交**。
 - **vendor fork 包的本机构建产物**（`BuildProfile.ets`、`oh-package-lock.json5`）**不要提交、不要强制追踪**：内容是本机生成物（debug/release 构建模式与本机引擎 .har 路径），入库后任何一台机器的内容对其他机器都是错的，会互相污染构建。hvigor/ohpm 在首次构建时自动生成；上游包的 `.gitignore` 已覆盖它们，与兄弟插件 `shared_preferences_ohos` 和 App 级 `ohos/` 工程的实践一致。
 - 改 `tool/vendor/` 下的 fork 包时，在 pubspec.yaml 注释里记录"为什么 fork"（已有范例），方便后续上游同步。
-- 鸿蒙网络安全：`network_config.json` 显式允许 cleartext HTTP（协作服务是 HTTP）。
+- 鸿蒙网络安全：生产协作服务使用 HTTPS；`network_config.json` 的 cleartext HTTP 放行保留用于局域网/自建服务调试。
 - **涉及鸿蒙 API / 原生能力时，先查 `harmonyos-guides/` 目录里的官方文档或联网搜索**，确认有对应的 API 和用法后再写代码，不要凭经验猜测鸿蒙侧的实现。**（harmonyos-guides 目录在项目仓库外，和项目于同级目录下，本地可用）**
 - 涉及 `ohos/`、`tool/vendor/`、Platform Channel 或插件注册的改动，提交前必须运行 `cd FlowMuse-App && flutter build hap`；构建通过不等同于真机行为通过，真机验收范围须在提交/MR 中如实记录。
 

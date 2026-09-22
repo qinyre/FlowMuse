@@ -985,7 +985,7 @@ class _OtherSettingsSectionState extends State<_OtherSettingsSection> {
   }
 
   Future<void> _launchOfficialWebsite() async {
-    final uri = Uri.parse('https://qinyre.github.io/flowmuse-website/');
+    final uri = Uri.parse('https://flowmuse.cloud/');
     final opened = await AppUrlLauncher.launch(uri);
     if (!opened && mounted) {
       ScaffoldMessenger.of(
@@ -1063,7 +1063,7 @@ class _OtherSettingsSectionState extends State<_OtherSettingsSection> {
               ListTile(
                 leading: const Icon(LucideIcons.globe),
                 title: const Text('官方网站'),
-                subtitle: const Text('qinyre.github.io/flowmuse-website'),
+                subtitle: const Text('flowmuse.cloud'),
                 trailing: const Icon(LucideIcons.externalLink, size: 18),
                 onTap: () => _launchOfficialWebsite(),
               ),

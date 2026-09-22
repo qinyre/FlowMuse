@@ -14,7 +14,7 @@ void main() {
 
     expect(config.serverUrl, 'https://api.flowmuse.cloud');
     expect(config.serverUrl, CollaborationConfig.productionServerUrl);
-    expect(config.shareOrigin, CollaborationConfig.defaultShareOrigin);
+    expect(config.shareOrigin, 'https://app.flowmuse.cloud');
     expect(config.hasConfiguredShareOrigin, isTrue);
   });
 
@@ -24,6 +24,10 @@ void main() {
     expect(
       CollaborationConfig.fromEnvironment.serverUrl,
       CollaborationConfig.productionServerUrl,
+    );
+    expect(
+      CollaborationConfig.fromEnvironment.shareOrigin,
+      CollaborationConfig.defaultShareOrigin,
     );
   });
 
@@ -39,5 +43,37 @@ FLOWMUSE_SHARE_ORIGIN=https://share.example.com
 
     expect(config.serverUrl, 'https://collab.example.com');
     expect(config.shareOrigin, 'https://share.example.com');
+  });
+
+  test('空白配置回退生产值且局域网覆盖仍然可用', () {
+    dotenv.loadFromString(
+      envString: '''
+FLOWMUSE_COLLAB_SERVER_URL="   "
+FLOWMUSE_SHARE_ORIGIN=
+''',
+    );
+    expect(
+      CollaborationConfig.fromEnvironment.serverUrl,
+      CollaborationConfig.productionServerUrl,
+    );
+    expect(
+      CollaborationConfig.fromEnvironment.shareOrigin,
+      CollaborationConfig.defaultShareOrigin,
+    );
+
+    dotenv.loadFromString(
+      envString: '''
+FLOWMUSE_COLLAB_SERVER_URL=" http://192.168.1.5:48931 "
+FLOWMUSE_SHARE_ORIGIN=" http://192.168.1.5:8080/ "
+''',
+    );
+    expect(
+      CollaborationConfig.fromEnvironment.serverUrl,
+      'http://192.168.1.5:48931',
+    );
+    expect(
+      CollaborationConfig.fromEnvironment.shareOrigin,
+      'http://192.168.1.5:8080/',
+    );
   });
 }

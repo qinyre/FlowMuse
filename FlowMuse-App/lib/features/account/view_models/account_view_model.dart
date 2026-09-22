@@ -326,7 +326,9 @@ class _ChineseGuestNameGenerator {
 
   final Random _random;
 
-  static const _openMojiCdn = 'https://openmoji.org/data/color/svg';
+  // 固定版本且支持 CORS，避免 Web 头像被原站跨域策略拦截。
+  static const _openMojiCdn =
+      'https://cdn.jsdelivr.net/npm/openmoji@15.1.0/color/svg';
   static const _seqAlphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
   static const _adjectives = [

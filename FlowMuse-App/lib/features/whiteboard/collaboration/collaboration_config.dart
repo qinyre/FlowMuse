@@ -8,7 +8,7 @@ class CollaborationConfig {
 
   static const String productionServerUrl = 'https://api.flowmuse.cloud';
   static const String defaultServerUrl = productionServerUrl;
-  static const String defaultShareOrigin = 'https://qinyre.github.io/FlowMuse';
+  static const String defaultShareOrigin = 'https://app.flowmuse.cloud';
 
   static CollaborationConfig get fromEnvironment {
     const dartDefinedServerUrl = String.fromEnvironment(
@@ -24,12 +24,16 @@ class CollaborationConfig {
         ? dotenv.maybeGet('FLOWMUSE_SHARE_ORIGIN')
         : null;
     return CollaborationConfig(
-      serverUrl: dartDefinedServerUrl.isNotEmpty
-          ? dartDefinedServerUrl
-          : dotenvServerUrl ?? defaultServerUrl,
-      shareOrigin: dartDefinedShareOrigin.isNotEmpty
-          ? dartDefinedShareOrigin
-          : dotenvShareOrigin ?? defaultShareOrigin,
+      serverUrl: _configuredUrl(
+        dartDefinedServerUrl,
+        dotenvServerUrl,
+        defaultServerUrl,
+      ),
+      shareOrigin: _configuredUrl(
+        dartDefinedShareOrigin,
+        dotenvShareOrigin,
+        defaultShareOrigin,
+      ),
     );
   }
 
@@ -38,4 +42,15 @@ class CollaborationConfig {
 
   bool get hasConfiguredShareOrigin =>
       shareOrigin.isNotEmpty && shareOrigin != 'https://flowmuse.local';
+
+  static String _configuredUrl(
+    String defined,
+    String? bundled,
+    String fallback,
+  ) {
+    for (final value in [defined, bundled ?? '', fallback]) {
+      if (value.trim().isNotEmpty) return value.trim();
+    }
+    return fallback;
+  }
 }

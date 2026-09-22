@@ -77,6 +77,26 @@ class AppRoutes {
 GoRouter createAppRouter() {
   return GoRouter(
     initialLocation: AppRoutes.library,
+    redirect: (context, state) {
+      if (state.uri.path != '/') return null;
+      // 兼容迁移前的 /#/library 等书签，包括房间/邮件路由中的参数。
+      // Uri 将嵌套的 #room 转义为 %23；仅还原已知分隔符，不解码查询值。
+      final legacyLocation = state.uri.fragment.replaceFirst(
+        RegExp(r'^/whiteboard/collaboration%23room='),
+        '${AppRoutes.collaborationWhiteboard}#room=',
+      );
+      final legacy = Uri.tryParse(legacyLocation);
+      if (legacy != null &&
+          !legacy.hasScheme &&
+          !legacy.hasAuthority &&
+          legacy.path.startsWith('/')) {
+        return legacy.toString();
+      }
+      if (CollaborationRoom.parse(state.uri.toString()).isValid) {
+        return '${AppRoutes.collaborationWhiteboard}#${state.uri.fragment}';
+      }
+      return AppRoutes.library;
+    },
     routes: [
       ShellRoute(
         builder: (context, state, child) {
@@ -190,9 +210,7 @@ GoRouter createAppRouter() {
         pageBuilder: (context, state) {
           return _modalPage(
             state,
-            SettingsPage(
-              initialSection: state.uri.queryParameters['section'],
-            ),
+            SettingsPage(initialSection: state.uri.queryParameters['section']),
           );
         },
       ),
