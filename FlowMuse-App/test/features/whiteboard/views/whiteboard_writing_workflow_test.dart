@@ -158,6 +158,117 @@ void main() {
     expect(_ink(check), hasLength(2));
   });
 
+  testWidgets('页码跳转仅保存本机阅读位置，退出重开恢复页内位置与缩放', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'workflow-reading-position'),
+    ))!;
+    final seed = MarkdrawController();
+    seed.setLayout(const CanvasLayout(type: CanvasLayoutType.paged));
+    seed.insertBlankPage();
+    seed.insertBlankPage();
+    await tester.runAsync(
+      () => scenes.saveScene(
+        note.id,
+        seed.serializeScene(format: DocumentFormat.excalidraw),
+      ),
+    );
+    seed.dispose();
+    final container = _container(library: library);
+    final controller = await _open(tester, container, note);
+    final scene = controller.currentScene;
+    final canvasSize = controller.canvasSize;
+    final initialViewport = controller.editorState.viewport;
+    final toolbar = tester.widget<DesktopToolbar>(find.byType(DesktopToolbar));
+    for (var i = 0; i < 8; i++) {
+      controller.scrollPagedViewportBy(10);
+      await tester.pump();
+    }
+    expect(
+      tester.widget<DesktopToolbar>(find.byType(DesktopToolbar)),
+      same(toolbar),
+      reason: '纯滚动不能重建整套工具栏',
+    );
+    final paint = tester.widget<CustomPaint>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is CustomPaint && widget.painter is StaticCanvasPainter,
+      ),
+    );
+    expect(
+      (paint.painter! as StaticCanvasPainter).viewport,
+      controller.editorState.viewport,
+      reason: '外框不重建时画布仍跟随视口刷新',
+    );
+    controller.navigateToPage(controller.layout.pages.last.id);
+    await tester.pump();
+    expect(
+      find.text(
+        '${controller.pagedViewportMetrics!.currentPageIndex + 1} / ${controller.layout.pages.length}',
+      ),
+      findsOneWidget,
+    );
+    controller.zoomIn(canvasSize);
+    await tester.pump();
+    expect(
+      find.text('${(controller.editorState.viewport.zoom * 100).round()}%'),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<DesktopToolbar>(find.byType(DesktopToolbar)),
+      same(toolbar),
+    );
+    controller.setViewport(initialViewport);
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.grid_view_outlined));
+    await tester.pump();
+    expect(find.text('页面预览'), findsOneWidget);
+    expect(controller.canvasSize, canvasSize);
+    expect(controller.editorState.viewport, initialViewport);
+    await tester.tap(
+      find.descendant(
+        of: find.byWidgetPredicate(
+          (widget) => widget is HoverTooltip && widget.message == '关闭预览',
+        ),
+        matching: find.byType(IconButton),
+      ),
+    );
+    await tester.pump();
+    controller.navigateToPage(controller.layout.pages[1].id);
+    controller.setViewport(
+      ViewportState(
+        offset: controller.editorState.viewport.offset + const Offset(0, 150),
+        zoom: 0.8,
+      ),
+    );
+    final viewport = controller.editorState.viewport;
+    await tester.pump(const Duration(milliseconds: 750));
+    await _drainIo(tester, container);
+    expect(controller.currentScene, same(scene));
+    expect(controller.historyManager.canUndo, isFalse);
+    expect(
+      await tester.runAsync(
+        () => defaultLocalSettingsRepository.readString(
+          'whiteboard.readingPosition.v1.${note.id}',
+        ),
+      ),
+      isNotNull,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
+    final reopened = await _open(tester, container, note);
+    expect(reopened.editorState.viewport.zoom, viewport.zoom);
+    expect(
+      reopened.editorState.viewport.offset.dx,
+      closeTo(viewport.offset.dx, 0.001),
+    );
+    expect(
+      reopened.editorState.viewport.offset.dy,
+      closeTo(viewport.offset.dy, 0.001),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
+  });
+
   testWidgets('PDF 底图上书写、撤销和重开保留图片、页边界与笔迹', (tester) async {
     final note = await tester.runAsync(
       () => library.createNote(title: 'workflow-pdf', kind: LibraryFilter.pdf),
@@ -263,7 +374,7 @@ void main() {
             child: MaterialApp(home: WhiteboardPage(noteId: note.id)),
           ),
         );
-        await _drainIo(tester, container);
+        await _drainIo(tester, container, until: () => progressName != null);
         expect(find.text('正在导入 PDF…'), findsOneWidget);
         expect(progressName, isNotNull);
         final controller = tester
@@ -315,13 +426,13 @@ void main() {
           }
           rendered.completeError(PlatformException(code: 'PDF_IMPORT_FAILED'));
         }
-        for (var attempt = 0; attempt < 20; attempt++) {
-          await _drainIo(tester, container);
-          if (outcome == 'leave' ||
-              find.byType(CircularProgressIndicator).evaluate().isEmpty) {
-            break;
-          }
-        }
+        await _drainIo(
+          tester,
+          container,
+          until: () => outcome == 'leave'
+              ? library.deletedNotes.contains(note.id)
+              : find.byType(CircularProgressIndicator).evaluate().isEmpty,
+        );
         if (outcome == 'success') {
           expect(find.textContaining('正在导入 PDF'), findsNothing);
           expect(controller.contentBounds, isNotNull);
@@ -445,7 +556,13 @@ void main() {
         ),
       ),
     );
-    await _drainIo(tester, container);
+    await _drainIo(
+      tester,
+      container,
+      until: () =>
+          container.read(whiteboardViewModelProvider).collaborationStatus ==
+          WhiteboardCollaborationStatus.connected,
+    );
     expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
     final controller = tester
         .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
@@ -565,6 +682,9 @@ ProviderContainer _container({
   final container = ProviderContainer(
     overrides: [
       libraryRepositoryProvider.overrideWithValue(library),
+      whiteboardSceneRepositoryProvider.overrideWithValue(
+        _TrackedSceneRepository(library),
+      ),
       accountViewModelProvider.overrideWith(_GuestAccount.new),
       collaborationRepositoryProvider.overrideWithValue(
         collaboration ?? CollaborationRepository(),
@@ -591,26 +711,35 @@ Future<MarkdrawController> _open(
       child: MaterialApp(home: WhiteboardPage(noteId: note.id)),
     ),
   );
-  await _drainIo(tester, container);
+  await _drainIo(
+    tester,
+    container,
+    until: () => find.byType(CircularProgressIndicator).evaluate().isEmpty,
+  );
+  expect(find.text('笔记打开失败，请返回后重试'), findsNothing);
   final controller = tester
       .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
       .controller!;
   // Loading the title precedes restoring PDF bounds and decoding its images.
   // Wait for the state being asserted, rather than a fixed wall-clock delay.
   if (note.kind == LibraryFilter.pdf) {
-    for (var attempt = 0; attempt < 100; attempt++) {
-      if (controller.contentBounds != null &&
-          controller.resolveImages()?.isNotEmpty == true) {
-        break;
-      }
-      await _drainIo(tester, container);
-    }
+    await _drainIo(
+      tester,
+      container,
+      until: () =>
+          controller.contentBounds != null &&
+          controller.resolveImages()?.isNotEmpty == true,
+    );
   }
   expect(controller.documentName, note.title);
   return controller;
 }
 
-Future<void> _drainIo(WidgetTester tester, ProviderContainer container) async {
+Future<void> _drainIo(
+  WidgetTester tester,
+  ProviderContainer container, {
+  bool Function()? until,
+}) async {
   final library =
       container.read(libraryRepositoryProvider) as _TrackedLibraryRepository;
   for (var i = 0; i < 500; i++) {
@@ -618,14 +747,20 @@ Future<void> _drainIo(WidgetTester tester, ProviderContainer container) async {
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pump(const Duration(milliseconds: 20));
+    expect(tester.takeException(), isNull);
     // Keep pumping fake microtasks while real SQLite I/O finishes. Awaiting
     // its Future inside runAsync would block those fake-zone continuations.
-    if (i >= 9 && library.pendingWrites == 0) {
-      expect(tester.takeException(), isNull);
+    if (i >= 9 &&
+        library.pendingWrites == 0 &&
+        library.pendingSceneUpdates == 0 &&
+        (until?.call() ?? true)) {
       return;
     }
   }
-  fail('SQLite 笔记更新在 10 秒内未完成');
+  fail(
+    '异步流程未完成：metadata=${library.pendingWrites}, '
+    'scene=${library.pendingSceneUpdates}, ready=${until?.call() ?? true}',
+  );
 }
 
 Future<void> _stroke(WidgetTester tester, Offset start) async {
@@ -663,6 +798,14 @@ class _TrackedLibraryRepository extends SqliteLibraryRepository {
   _TrackedLibraryRepository() : super(LocalDatabase.open);
 
   int pendingWrites = 0;
+  int pendingSceneUpdates = 0;
+  final deletedNotes = <String>{};
+
+  @override
+  Future<void> deleteNotes(List<String> noteIds) async {
+    await super.deleteNotes(noteIds);
+    deletedNotes.addAll(noteIds);
+  }
 
   @override
   Future<void> touchNote(
@@ -671,6 +814,7 @@ class _TrackedLibraryRepository extends SqliteLibraryRepository {
     bool clearCoverThumbnail = false,
   }) async {
     pendingWrites++;
+    if (pendingSceneUpdates > 0) pendingSceneUpdates--;
     try {
       await super.touchNote(
         noteId,
@@ -679,6 +823,33 @@ class _TrackedLibraryRepository extends SqliteLibraryRepository {
       );
     } finally {
       pendingWrites--;
+    }
+  }
+}
+
+class _TrackedSceneRepository extends SqliteWhiteboardSceneRepository {
+  _TrackedSceneRepository(this.library) : super(LocalDatabase.open);
+
+  final _TrackedLibraryRepository library;
+
+  @override
+  Future<String> loadScene(String noteId) async {
+    // Exceed the old 200 ms idle guess deterministically, even on a fast host.
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    return super.loadScene(noteId);
+  }
+
+  @override
+  Future<void> saveScene(String noteId, String content) async {
+    // Page saves finish with touchNote after scene I/O and cover encoding.
+    // Keep that whole chain pending, including the gap between repositories.
+    library.pendingSceneUpdates++;
+    try {
+      await super.saveScene(noteId, content);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    } catch (_) {
+      library.pendingSceneUpdates--;
+      rethrow;
     }
   }
 }

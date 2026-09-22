@@ -27,6 +27,7 @@ class ElementRenderer {
     RoughAdapter adapter, {
     Map<String, Image>? resolvedImages,
     bool skipMathText = false,
+    bool cacheNaturalMedia = true,
   }) {
     final hasRotation = element.angle != 0.0;
 
@@ -44,7 +45,14 @@ class ElementRenderer {
       adapter.setCurrentElement(element.id.value, element.hashCode);
     }
 
-    _dispatch(canvas, element, adapter, resolvedImages, skipMathText);
+    _dispatch(
+      canvas,
+      element,
+      adapter,
+      resolvedImages,
+      skipMathText,
+      cacheNaturalMedia,
+    );
 
     if (adapter is RoughCanvasAdapter) {
       adapter.setCurrentElement(null, null);
@@ -61,6 +69,7 @@ class ElementRenderer {
     RoughAdapter adapter,
     Map<String, Image>? resolvedImages,
     bool skipMathText,
+    bool cacheNaturalMedia,
   ) {
     final style = DrawStyle.fromElement(element);
     final bounds = Bounds.fromLTWH(
@@ -164,9 +173,19 @@ class ElementRenderer {
               : strokeRendererFamilyFor(element.customData);
           switch (family) {
             case StrokeRendererFamily.pencilV2:
-              PencilStrokeRendererV2.draw(canvas, element, style);
+              PencilStrokeRendererV2.draw(
+                canvas,
+                element,
+                style,
+                cachePaths: cacheNaturalMedia,
+              );
             case StrokeRendererFamily.brushPenV2:
-              BrushPenStrokeRendererV2.draw(canvas, element, style);
+              BrushPenStrokeRendererV2.draw(
+                canvas,
+                element,
+                style,
+                cachePaths: cacheNaturalMedia,
+              );
             case StrokeRendererFamily.classicV1:
               _drawFreedrawClassic(canvas, element, style, adapter);
           }

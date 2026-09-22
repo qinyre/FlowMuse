@@ -35,6 +35,7 @@ class BrushPenStrokeRendererV2 {
     int? ownedEdgeStart,
     int? ownedEdgeEndExclusive,
     int edgeIndexOffset = 0,
+    bool cachePaths = true,
     bool ownsStrokeHead = true,
     bool ownsStrokeTail = true,
   }) {
@@ -44,6 +45,7 @@ class BrushPenStrokeRendererV2 {
     // 帧（几何逐帧追加，入缓存会命中首帧 Picture 冻结活动笔迹；与
     // 铅笔渲染器同判据，详见其注释）。
     final useCache =
+        cachePaths &&
         ownedEdgeStart == null &&
         ownsStrokeHead &&
         ownsStrokeTail &&

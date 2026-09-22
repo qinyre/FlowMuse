@@ -25,6 +25,7 @@ import '../config/writing_feature_flags.dart';
 import 'harmony_stylus_stroke_smoother.dart';
 import 'pointer_pressure.dart';
 import '../rendering/viewport_clamp.dart';
+import '../rendering/page_reading_position.dart';
 import '../rendering/local_wet_ink_state.dart';
 import '../input/active_preview_metrics_probe.dart';
 import '../input/outline_render_mode.dart';
@@ -46,10 +47,16 @@ Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
   var next = scene;
   final existingPageIds = {
     for (final element in scene.elements)
-      if (element.isCanvasPage) element.id.value,
+      if (element.isCanvasPage) element.pageId ?? element.id.value,
   };
+  final legacyPdfIds = existingPageIds.isEmpty
+      ? {
+          for (final element in scene.elements)
+            if (!element.isDeleted && element.isPdfBackground) element.pageId,
+        }
+      : <String?>{};
   for (final page in layout.pages) {
-    if (existingPageIds.contains(page.id)) {
+    if (existingPageIds.contains(page.id) || legacyPdfIds.contains(page.id)) {
       continue;
     }
     next = next.addElement(
@@ -102,10 +109,24 @@ class MarkdrawController extends ChangeNotifier {
 
     _imageCache.onImageDecoded = () {
       if (!_disposed) {
-        notifyListeners();
+        _notifyCanvasChanged();
       }
     };
   }
+
+  final _chromeChanges = ChangeNotifier();
+
+  /// Toolbar/panel changes, excluding pure viewport and decoded-image updates.
+  Listenable get chromeChanges => _chromeChanges;
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    _chromeChanges.notifyListeners();
+  }
+
+  // Keep existing viewport observers (reading position, presence) notified.
+  void _notifyCanvasChanged() => super.notifyListeners();
 
   final MarkdrawEditorConfig _config;
   final ActivePreviewMetricsProbe? activePreviewMetricsProbe;
@@ -295,7 +316,7 @@ class MarkdrawController extends ChangeNotifier {
   /// 智能排版 v3 网关订阅的场景变化监听器（可多方注册；
   /// 与 [onSceneChanged] 同时触发，不占用其单槽）。
   final List<void Function(Scene scene, SceneChangeSource source)>
-      sceneChangeListeners = [];
+  sceneChangeListeners = [];
   void Function(FreedrawElement element)? onLiveFreedrawChanged;
   bool Function()? shouldUseLiveInkV2;
   LiveInkFreedrawCallback? onLiveInkChanged;
@@ -398,11 +419,80 @@ class MarkdrawController extends ChangeNotifier {
       !_fingerDrawingEnabled &&
       (!_palmRejectionEnabled || _activeStylusPointerId == null);
 
-  PagedViewportMetrics? get pagedViewportMetrics => computePagedViewportMetrics(
-    layout: _layout,
-    viewport: _editorState.viewport,
-    canvasSize: _canvasSize,
-  );
+  (CanvasLayout, ViewportState, Size)? _pagedMetricsKey;
+  PagedViewportMetrics? _pagedMetrics;
+  PagedViewportMetrics? get pagedViewportMetrics {
+    final key = (_layout, _editorState.viewport, _canvasSize);
+    if (_pagedMetricsKey != key) {
+      _pagedMetricsKey = key;
+      _pagedMetrics = computePagedViewportMetrics(
+        layout: _layout,
+        viewport: _editorState.viewport,
+        canvasSize: _canvasSize,
+      );
+    }
+    return _pagedMetrics;
+  }
+
+  // Paged touch scrolling is owned by EditorCanvas, outside the tool path.
+  bool pagedTouchActive = false;
+  bool get pageNavigationBusy =>
+      _sceneBeforeDrag != null ||
+      _activeDrawPointerId != null ||
+      _activeStylusPointerId != null ||
+      _temporaryTouchPanPointerId != null ||
+      _activeTouchSelectionPointerId != null ||
+      _isViewportGesture ||
+      pagedTouchActive ||
+      !textEditingController.value.composing.isCollapsed;
+  PageReadingPosition? _pageNavigationReturn;
+  bool get canReturnToPagePosition => _pageNavigationReturn != null;
+
+  PageReadingPosition? captureReadingPosition() =>
+      PageReadingPosition.capture(_layout, _editorState.viewport, _canvasSize);
+
+  bool preparePageNavigation() {
+    if (_disposed || pageNavigationBusy) return false;
+    if (_editingTextElementId != null) commitTextEditing();
+    return true;
+  }
+
+  bool navigateToPage(String pageId, {bool fit = false}) {
+    final index = _layout.pages.indexWhere((page) => page.id == pageId);
+    if (index < 0 || _canvasSize.isEmpty || !preparePageNavigation()) {
+      return false;
+    }
+    _pageNavigationReturn = captureReadingPosition();
+    if (fit) {
+      final bounds = _layout.pages[index].bounds;
+      final zoom = math
+          .min(
+            math.max(1, _canvasSize.width - 32) / bounds.width,
+            math.max(1, _canvasSize.height - 32) / bounds.height,
+          )
+          .clamp(0.1, 30.0);
+      setViewport(
+        ViewportState(
+          zoom: zoom,
+          offset:
+              bounds.center -
+              Offset(_canvasSize.width, _canvasSize.height) / (2 * zoom),
+        ),
+      );
+    } else {
+      scrollToPage(index);
+    }
+    return true;
+  }
+
+  bool returnToPagePosition() {
+    if (!preparePageNavigation()) return false;
+    final viewport = _pageNavigationReturn?.restore(_layout, _canvasSize);
+    if (viewport == null) return false;
+    _pageNavigationReturn = null;
+    setViewport(viewport);
+    return true;
+  }
 
   /// Current scene snapshot.
   Scene get currentScene => _editorState.scene;
@@ -779,6 +869,7 @@ class MarkdrawController extends ChangeNotifier {
     textEditingController.dispose();
     _textFocusNode.removeListener(_onTextFocusChanged);
     _textFocusNode.dispose();
+    _chromeChanges.dispose();
     super.dispose();
   }
 
@@ -1133,7 +1224,11 @@ class MarkdrawController extends ChangeNotifier {
       _scheduleInkRecognitionFromResult(prepared);
     }
 
-    notifyListeners();
+    if (prepared is UpdateViewportResult) {
+      _notifyCanvasChanged();
+    } else {
+      notifyListeners();
+    }
   }
 
   /// 文本编辑等内部路径的统一收口：经 onPrepareLocalResult 盖章后应用并
@@ -1216,7 +1311,7 @@ class MarkdrawController extends ChangeNotifier {
     final clamped = _constrainedViewport(_editorState.viewport);
     if (clamped != _editorState.viewport) {
       _editorState = _editorState.copyWith(viewport: clamped);
-      notifyListeners();
+      _notifyCanvasChanged();
     }
   }
 
@@ -2120,7 +2215,8 @@ class MarkdrawController extends ChangeNotifier {
         (_canvasSize.isEmpty ? const Size(800, 600) : _canvasSize);
     final bounds = view.visibleRect(size).inflate(200 / view.zoom);
     final scene = _editorState.scene;
-    if (!identical(scene, _visibleImageScene) || bounds != _visibleImageBounds) {
+    if (!identical(scene, _visibleImageScene) ||
+        bounds != _visibleImageBounds) {
       _visibleImageScene = scene;
       _visibleImageBounds = bounds;
       _visibleImageFiles = _imageFilesInRect(scene, bounds);
@@ -2131,7 +2227,12 @@ class MarkdrawController extends ChangeNotifier {
   Map<String, ImageFile> _imageFilesInRect(Scene scene, Rect rect) {
     final files = <String, ImageFile>{};
     if (scene.files.isEmpty) return files;
-    final bounds = Bounds.fromLTWH(rect.left, rect.top, rect.width, rect.height);
+    final bounds = Bounds.fromLTWH(
+      rect.left,
+      rect.top,
+      rect.width,
+      rect.height,
+    );
     for (final element in scene.elements) {
       if (element is! ImageElement || element.isDeleted) continue;
       if (!AlignmentUtils.visualBounds(element).intersects(bounds)) continue;
@@ -2427,8 +2528,7 @@ class MarkdrawController extends ChangeNotifier {
     if (_rejectedTouchPointers.contains(event.pointer)) return;
     if (event.pointer == _temporaryTouchPanPointerId) {
       final start = _temporaryTouchPanStartPosition;
-      if (start != null &&
-          (event.localPosition - start).distance >= 3.0) {
+      if (start != null && (event.localPosition - start).distance >= 3.0) {
         _temporaryTouchPanMoved = true;
       }
       if (_temporaryTouchCanPan) {
@@ -2590,7 +2690,8 @@ class MarkdrawController extends ChangeNotifier {
           toolContext,
           pressure: _encodeStrokePressure(r.pressure),
           // 复用屏幕采样门限，缩放不改变点触判定；仅提交时合并微抖。
-          tapTolerance: _modeler!.policy.minDistance / _editorState.viewport.zoom,
+          tapTolerance:
+              _modeler!.policy.minDistance / _editorState.viewport.zoom,
         );
         if (writingFlags.layeredWetInk) {
           localWetInkState.clear(notify: false);
@@ -3313,6 +3414,7 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   void closeTransientUiForSceneReplace() {
+    _pageNavigationReturn = null;
     _endTextEditingBeforeSceneReplace();
     _editingFrameLabelId = null;
     _fontPickerOpen = false;
@@ -3652,7 +3754,12 @@ class MarkdrawController extends ChangeNotifier {
             _rightToLeftPageViewportX(page, viewport.zoom),
             viewport.offset.dy,
           )
-        : Offset(viewport.offset.dx, page.bounds.top);
+        : Offset(
+            viewport.offset.dx,
+            _canvasSize.height / viewport.zoom >= page.bounds.height
+                ? page.bounds.center.dy - _canvasSize.height / viewport.zoom / 2
+                : page.bounds.top,
+          );
     setViewport(ViewportState(offset: targetOffset, zoom: viewport.zoom));
   }
 
@@ -4023,46 +4130,7 @@ class MarkdrawController extends ChangeNotifier {
   /// NOTE: callers that need "is the viewport inside a page" must not rely
   /// on a null return (nearest fallback); test overlap explicitly.
   CanvasPage? pageForVisibleRect(Rect visible) {
-    if (_layout.pages.isEmpty) return null;
-    CanvasPage? bestOverlap;
-    var bestArea = 0.0;
-    for (final page in _layout.pages) {
-      final intersection = page.bounds.intersect(visible);
-      final area = intersection.isEmpty
-          ? 0.0
-          : intersection.width * intersection.height;
-      if (area > bestArea ||
-          (area == bestArea &&
-              area > 0 &&
-              (bestOverlap == null || page.index < bestOverlap.index))) {
-        bestArea = area;
-        bestOverlap = page;
-      }
-    }
-    if (bestOverlap != null) return bestOverlap;
-
-    CanvasPage? nearest;
-    var nearestDistance = double.infinity;
-    for (final page in _layout.pages) {
-      final dx = visible.right < page.bounds.left
-          ? page.bounds.left - visible.right
-          : (page.bounds.right < visible.left
-                ? visible.left - page.bounds.right
-                : 0.0);
-      final dy = visible.bottom < page.bounds.top
-          ? page.bounds.top - visible.bottom
-          : (page.bounds.bottom < visible.top
-                ? visible.top - page.bounds.bottom
-                : 0.0);
-      final distance = dx * dx + dy * dy;
-      if (distance < nearestDistance ||
-          (distance == nearestDistance &&
-              (nearest == null || page.index < nearest.index))) {
-        nearestDistance = distance;
-        nearest = page;
-      }
-    }
-    return nearest;
+    return _layout.pageForVisibleRect(visible);
   }
 
   Bounds? _findTextInsertionBounds(
@@ -4979,9 +5047,10 @@ class MarkdrawController extends ChangeNotifier {
     final layout = _layout;
     final background = _canvasBackgroundColor;
     final contentBounds = _contentBounds;
-    if (_imageFilesInRect(scene, sourceRect).keys.any(
-      (id) => !_imageCache.contains(id),
-    )) {
+    if (_imageFilesInRect(
+      scene,
+      sourceRect,
+    ).keys.any((id) => !_imageCache.contains(id))) {
       await prewarmRegionImages(sourceRect, scene: scene);
       if (_disposed) return null;
     }
@@ -5515,10 +5584,17 @@ class MarkdrawController extends ChangeNotifier {
       final next = CanvasPage(
         id: page.id,
         index: i,
-        bounds: CanvasLayout.pageBoundsForIndex(
-          index: i,
-          pageSize: page.bounds.size,
-          pageFlow: pageFlow,
+        bounds: Rect.fromLTWH(
+          pageFlow == CanvasPageFlow.rightToLeft && nextPages.isNotEmpty
+              ? nextPages.last.bounds.left -
+                    CanvasLayout.pageGap -
+                    page.bounds.width
+              : 0,
+          pageFlow == CanvasPageFlow.topToBottom && nextPages.isNotEmpty
+              ? nextPages.last.bounds.bottom + CanvasLayout.pageGap
+              : 0,
+          page.bounds.width,
+          page.bounds.height,
         ),
         template: page.template,
         pageFlow: pageFlow,
@@ -5618,6 +5694,9 @@ class MarkdrawController extends ChangeNotifier {
     for (var i = 0; i < pages.length; i++) {
       final page = pages[i];
       final pageId = 'page-${page.pageNumber}';
+      if (_layout.isRightToLeft && i > 0) {
+        cursor = Offset(cursor.dx - CanvasLayout.pageGap - page.width, 0);
+      }
       final pageBounds = Rect.fromLTWH(
         cursor.dx,
         cursor.dy,
@@ -5674,9 +5753,9 @@ class MarkdrawController extends ChangeNotifier {
         ..add(AddFileResult(fileId: fileId, file: imageFile))
         ..add(AddElementResult(element));
 
-      cursor = _layout.isRightToLeft
-          ? Offset(cursor.dx - page.width - CanvasLayout.pageGap, 0)
-          : Offset(0, cursor.dy + page.height + CanvasLayout.pageGap);
+      if (!_layout.isRightToLeft) {
+        cursor = Offset(0, cursor.dy + page.height + CanvasLayout.pageGap);
+      }
       // Hashing large page files must leave opportunities to paint progress.
       await Future<void>.delayed(Duration.zero);
       if (_disposed || (isCancelled?.call() ?? false)) return;
