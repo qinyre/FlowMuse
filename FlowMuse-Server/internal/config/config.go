@@ -34,9 +34,6 @@ type Config struct {
 	MyScriptHMACKey    string
 	MyScriptEndpoint   string
 	RecognitionTimeout time.Duration
-	AIBaseURL          string
-	AIAPIKey           string
-	AIModel            string
 	AITimeout          time.Duration
 	LayoutV3BaseURL    string
 	LayoutV3APIKey     string
@@ -75,9 +72,6 @@ func Load() (Config, error) {
 			"FLOWMUSE_RECOGNITION_TIMEOUT",
 			20*time.Second,
 		),
-		AIBaseURL:       env("FLOWMUSE_AI_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
-		AIAPIKey:        envFirst("FLOWMUSE_AI_API_KEY", "ARK_API_KEY"),
-		AIModel:         env("FLOWMUSE_AI_MODEL", "doubao-seed-2-1-turbo-260628"),
 		AITimeout:       envDuration("FLOWMUSE_AI_TIMEOUT", 120*time.Second),
 		LayoutV3BaseURL: env("FLOWMUSE_LAYOUT_V3_BASE_URL", ""),
 		LayoutV3APIKey:  envFirst("FLOWMUSE_LAYOUT_V3_API_KEY", "ARK_API_KEY"),

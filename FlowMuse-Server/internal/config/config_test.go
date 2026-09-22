@@ -6,13 +6,11 @@ import (
 	"time"
 )
 
-func TestRecognitionV1V3ConfigurationIsolation(t *testing.T) {
+func TestRecognitionV3ConfigurationIsolation(t *testing.T) {
 	for key, value := range map[string]string{
 		"DATABASE_URL": "postgres://test.invalid/test", "FLOWMUSE_S3_ENDPOINT": "test.invalid",
 		"FLOWMUSE_S3_BUCKET": "test", "FLOWMUSE_S3_ACCESS_KEY_ID": "test-id",
 		"FLOWMUSE_S3_SECRET_ACCESS_KEY": "test-secret", "ARK_API_KEY": "test-fallback",
-		"FLOWMUSE_AI_BASE_URL": "https://v1.invalid", "FLOWMUSE_AI_API_KEY": "test-v1",
-		"FLOWMUSE_AI_MODEL": "v1-model", "FLOWMUSE_AI_TIMEOUT": "120s",
 		"FLOWMUSE_LAYOUT_V3_BASE_URL": "https://v3.invalid", "FLOWMUSE_LAYOUT_V3_API_KEY": "test-v3",
 		"FLOWMUSE_LAYOUT_V3_MODEL": "v3-model", "FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS": "45",
 	} {
@@ -26,9 +24,8 @@ func TestRecognitionV1V3ConfigurationIsolation(t *testing.T) {
 		}
 		return cfg
 	}
-	oldFields := func(c Config) []any {
-		return []any{c.AIBaseURL, c.AIAPIKey, c.AIModel, c.AITimeout,
-			c.MyScriptAppKey, c.MyScriptHMACKey, c.MyScriptEndpoint, c.RecognitionTimeout}
+	otherFields := func(c Config) []any {
+		return []any{c.MyScriptAppKey, c.MyScriptHMACKey, c.MyScriptEndpoint, c.RecognitionTimeout}
 	}
 	newFields := func(c Config) []any {
 		return []any{c.LayoutV3BaseURL, c.LayoutV3APIKey, c.LayoutV3Model, c.LayoutV3Timeout}
@@ -37,24 +34,13 @@ func TestRecognitionV1V3ConfigurationIsolation(t *testing.T) {
 	if !reflect.DeepEqual(newFields(before), []any{"https://v3.invalid", "test-v3", "v3-model", 45 * time.Second}) {
 		t.Fatal("V3 必须读取独立配置")
 	}
-	if before.AIBaseURL != "https://v1.invalid" || before.AIAPIKey != "test-v1" ||
-		before.AIModel != "v1-model" || before.AITimeout != 120*time.Second {
-		t.Fatal("V1 必须保留原配置")
-	}
 	t.Setenv("FLOWMUSE_LAYOUT_V3_BASE_URL", "https://v3-new.invalid")
 	t.Setenv("FLOWMUSE_LAYOUT_V3_API_KEY", "test-v3-new")
 	t.Setenv("FLOWMUSE_LAYOUT_V3_MODEL", "v3-new")
 	t.Setenv("FLOWMUSE_LAYOUT_V3_TIMEOUT_SECONDS", "90")
 	afterV3 := load()
-	if !reflect.DeepEqual(oldFields(before), oldFields(afterV3)) {
-		t.Fatal("修改 V3 影响了旧配置")
-	}
-	t.Setenv("FLOWMUSE_AI_BASE_URL", "https://v1-new.invalid")
-	t.Setenv("FLOWMUSE_AI_API_KEY", "test-v1-new")
-	t.Setenv("FLOWMUSE_AI_MODEL", "v1-new")
-	t.Setenv("FLOWMUSE_AI_TIMEOUT", "30s")
-	if !reflect.DeepEqual(newFields(afterV3), newFields(load())) {
-		t.Fatal("修改 V1 影响了 V3 配置")
+	if !reflect.DeepEqual(otherFields(before), otherFields(afterV3)) {
+		t.Fatal("修改 V3 影响了其他识别配置")
 	}
 
 	// 按协议只允许 API key 回落 ARK；URL/model 缺失不得借用旧引擎。

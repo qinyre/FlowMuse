@@ -24,7 +24,6 @@ class InkRecognitionRepository {
   final AuthTokenStore _tokenStore;
   static const int _connectTimeoutMs = 8000;
   static const int _readTimeoutMs = 15000;
-  static const int _smartLayoutReadTimeoutMs = 130000;
 
   Future<InkRecognitionResult> recognize(InkRecognitionRequest request) async {
     final totalPoints = request.strokes.fold<int>(
@@ -146,85 +145,6 @@ class InkRecognitionRepository {
         time: startTime,
       );
       rethrow;
-    }
-  }
-
-  /// 视觉优先智能排版：整页截图交由服务端 VLM 一次判定风格/内容/粗位置。
-  Future<SmartLayoutVisionResponse> visionSmartLayout(
-    SmartLayoutVisionRequest request,
-  ) async {
-    final bodyJson = jsonEncode(request.toJson());
-    final url = _serverUri
-        .replace(
-          path: _joinPath(_serverUri.path, '/api/ink/smart-layout/vision'),
-        )
-        .toString();
-    final token = await _readTokenForRequest();
-    final NativeHttpResponse response;
-    try {
-      response = await NativeHttpClient.post(
-        url: url,
-        headers: {
-          'Content-Type': 'application/json',
-          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-        },
-        body: bodyJson,
-        connectTimeoutMs: _connectTimeoutMs,
-        readTimeoutMs: _smartLayoutReadTimeoutMs,
-      );
-    } on Exception catch (error) {
-      throwReadableNetworkError(error);
-    }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      _throwForNonSuccessStatus(response.statusCode, response.body, '视觉排版');
-    }
-    return SmartLayoutVisionResponse.fromJson(
-      jsonDecode(response.body) as Map<String, Object?>,
-    );
-  }
-
-  /// 低置信裁剪重问：单块局部截图无上下文转写（上下文隔离降幻觉）。
-  Future<SmartLayoutTranscribeResponse> transcribeCrop(
-    SmartLayoutTranscribeRequest request,
-  ) async {
-    final bodyJson = jsonEncode(request.toJson());
-    final url = _serverUri
-        .replace(
-          path: _joinPath(_serverUri.path, '/api/ink/smart-layout/transcribe'),
-        )
-        .toString();
-    final token = await _readTokenForRequest();
-    final NativeHttpResponse response;
-    try {
-      response = await NativeHttpClient.post(
-        url: url,
-        headers: {
-          'Content-Type': 'application/json',
-          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
-        },
-        body: bodyJson,
-        connectTimeoutMs: _connectTimeoutMs,
-        readTimeoutMs: _smartLayoutReadTimeoutMs,
-      );
-    } on Exception catch (error) {
-      throwReadableNetworkError(error);
-    }
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      _throwForNonSuccessStatus(response.statusCode, response.body, '单块转写');
-    }
-    return SmartLayoutTranscribeResponse.fromJson(
-      jsonDecode(response.body) as Map<String, Object?>,
-    );
-  }
-
-  Future<String?> _readTokenForRequest() async {
-    try {
-      return await _tokenStore.readToken().timeout(
-        const Duration(seconds: 2),
-        onTimeout: () => null,
-      );
-    } catch (_) {
-      return null;
     }
   }
 

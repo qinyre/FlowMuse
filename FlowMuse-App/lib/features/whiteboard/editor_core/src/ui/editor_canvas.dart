@@ -16,7 +16,6 @@ import '../rendering/math_text_utils.dart';
 import '../rendering/local_wet_ink_painter.dart';
 import '../rendering/remote_wet_ink_painter.dart';
 import '../rendering/collaboration_focus_alpha.dart';
-import '../rendering/interactive/smart_layout_ghost_painter.dart';
 
 /// The main canvas area with pointer/gesture handling.
 class EditorCanvas extends StatefulWidget {
@@ -509,22 +508,6 @@ class _EditorCanvasState extends State<EditorCanvas>
                     ),
                   ),
                 ),
-                ValueListenableBuilder<SmartLayoutGhostSpec?>(
-                  valueListenable: controller.smartLayoutGhost,
-                  builder: (context, spec, _) {
-                    if (spec == null) return const SizedBox.shrink();
-                    return Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: SmartLayoutGhostPainter(
-                            spec: spec,
-                            viewport: controller.editorState.viewport,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
                 if (controller.editorState.activeToolType == ToolType.eraser &&
                     controller.mousePosition != null)
                   Positioned(
@@ -549,9 +532,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                 if (controller.editingFrameLabelId != null)
                   _FrameLabelEditingOverlay(controller: controller),
                 // Compact property panel trigger
-                // 智能排版草稿态全选参与者，不显示属性入口（与确认条互不遮挡）。
                 if (controller.isCompact &&
-                    !controller.smartLayoutDraftActive &&
                     controller.selectedElements.isNotEmpty)
                   Positioned(
                     bottom: 72,

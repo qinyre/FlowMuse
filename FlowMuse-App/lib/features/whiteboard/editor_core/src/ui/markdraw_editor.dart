@@ -70,8 +70,6 @@ class MarkdrawEditor extends StatefulWidget {
     this.onVisibleSceneBoundsChanged,
     this.onDocumentRenamed,
     this.onRecognizeInk,
-    this.onVisionSmartLayout,
-    this.onTranscribeCrop,
     this.canvasThemeBackground = '#ffffff',
     this.useFlatBackgrounds = false,
     this.onEyedropperPressed,
@@ -146,11 +144,6 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onDocumentRenamed;
   final Future<InkRecognitionResult> Function(InkRecognitionRequest)?
   onRecognizeInk;
-  final Future<SmartLayoutVisionResponse> Function(SmartLayoutVisionRequest)?
-  onVisionSmartLayout;
-  final Future<SmartLayoutTranscribeResponse> Function(
-  SmartLayoutTranscribeRequest)?
-  onTranscribeCrop;
   final String canvasThemeBackground;
   final bool useFlatBackgrounds;
   final SpeechRecognitionService? speechRecognitionService;
@@ -245,8 +238,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     _controller.onLiveInkChanged = widget.onLiveInkChanged;
     _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
     _controller.onRecognizeInk = widget.onRecognizeInk;
-    _controller.onVisionSmartLayout = widget.onVisionSmartLayout;
-    _controller.onTranscribeCrop = widget.onTranscribeCrop;
     _controller.onMindmapOperationError = _showMindmapOperationError;
     _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     _controller.restoreKeyboardFocusWhenStable();
@@ -271,8 +262,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _controller.onLiveInkChanged = widget.onLiveInkChanged;
       _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
       _controller.onRecognizeInk = widget.onRecognizeInk;
-      _controller.onVisionSmartLayout = widget.onVisionSmartLayout;
-      _controller.onTranscribeCrop = widget.onTranscribeCrop;
       _controller.onMindmapOperationError = _showMindmapOperationError;
       _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     } else if (widget.onRecognizeInk != oldWidget.onRecognizeInk) {
@@ -289,12 +278,6 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     }
     if (widget.onLiveInkCancelled != oldWidget.onLiveInkCancelled) {
       _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
-    }
-    if (widget.onVisionSmartLayout != oldWidget.onVisionSmartLayout) {
-      _controller.onVisionSmartLayout = widget.onVisionSmartLayout;
-    }
-    if (widget.onTranscribeCrop != oldWidget.onTranscribeCrop) {
-      _controller.onTranscribeCrop = widget.onTranscribeCrop;
     }
     if (widget.canvasThemeBackground != oldWidget.canvasThemeBackground) {
       _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
@@ -994,12 +977,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
             child: _buildDetachedControlGroups(),
           ),
         // Floating property panel — desktop left side
-        // 智能排版草稿态（参与者默认全选）不弹属性面板，避免与底部确认条互相遮挡；
-        // 提交/取消后草稿态结束，恢复常规显隐。
         if (showEditChrome &&
             !isCompact &&
             widget.config.showPropertyPanel &&
-            !_controller.smartLayoutDraftActive &&
             (_controller.selectedElements.isNotEmpty ||
                 _controller.isCreationTool))
           if (_propertyPanelCollapsed)
