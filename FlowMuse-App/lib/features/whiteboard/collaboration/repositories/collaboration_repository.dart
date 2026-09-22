@@ -85,6 +85,7 @@ class CollaborationRepository {
   Timer? _snapshotTimer;
   bool _snapshotSaving = false;
   bool _snapshotDirty = false;
+  int _snapshotFailures = 0;
   static const Duration _snapshotIdle = Duration(seconds: 2);
   static const Duration _snapshotMaxInterval = Duration(seconds: 30);
   DateTime _lastSnapshotTime = DateTime.now();
@@ -904,6 +905,12 @@ class CollaborationRepository {
 
   Future<void> _stopRoomSession() async {
     _roomSessionGeneration++;
+    _snapshotTimer?.cancel();
+    _snapshotTimer = null;
+    _snapshotSaving = false;
+    _snapshotDirty = false;
+    _snapshotFailures = 0;
+    _lastSnapshotTime = DateTime.now();
     final transportMessages = _transportMessageSubscription;
     _transportMessageSubscription = null;
     final liveInkFrames = _liveInkFrameSubscription;
@@ -1119,10 +1126,17 @@ class CollaborationRepository {
 
   void _scheduleSnapshot() {
     _snapshotDirty = true;
+    // New edits must not defeat an active failure backoff.
+    if (_snapshotSaving ||
+        (_snapshotFailures > 0 && (_snapshotTimer?.isActive ?? false))) {
+      return;
+    }
     _snapshotTimer?.cancel();
 
     final sinceLast = DateTime.now().difference(_lastSnapshotTime);
-    final delay = sinceLast >= _snapshotMaxInterval
+    final delay = _snapshotFailures > 0
+        ? Duration(seconds: math.min(1 << _snapshotFailures, 30))
+        : sinceLast >= _snapshotMaxInterval
         ? Duration.zero
         : _snapshotIdle;
 
@@ -1137,6 +1151,7 @@ class CollaborationRepository {
     final room = _activeRoom;
     if (room == null) return;
 
+    final sessionGeneration = _roomSessionGeneration;
     _snapshotSaving = true;
     _snapshotDirty = false;
     final sw = Stopwatch()..start();
@@ -1146,29 +1161,35 @@ class CollaborationRepository {
         room: room,
         scene: scene.copyWith(files: const {}),
       );
+      if (!_isCurrentRoomSession(room, sessionGeneration)) return;
       _lastSnapshotTime = DateTime.now();
+      _snapshotFailures = 0;
     } catch (error) {
+      if (!_isCurrentRoomSession(room, sessionGeneration)) return;
+      _snapshotFailures = math.min(_snapshotFailures + 1, 5);
       if (!_repositoryErrors.isClosed) {
         _repositoryErrors.add('协作快照保存失败：$error');
       }
       _snapshotDirty = true;
     } finally {
       sw.stop();
-      _snapshotDurationAccumMs += sw.elapsedMilliseconds;
-      _snapshotCount++;
-      _snapshotSaving = false;
-      if (_snapshotDirty) {
-        _scheduleSnapshot();
+      if (_isCurrentRoomSession(room, sessionGeneration)) {
+        _snapshotDurationAccumMs += sw.elapsedMilliseconds;
+        _snapshotCount++;
+        _snapshotSaving = false;
+        if (_snapshotDirty) {
+          _scheduleSnapshot();
+        }
       }
     }
   }
 
   Future<void> forceFlushSnapshot() async {
-    _snapshotTimer?.cancel();
-    _snapshotTimer = null;
     while (_snapshotSaving) {
       await Future.delayed(const Duration(milliseconds: 10));
     }
+    _snapshotTimer?.cancel();
+    _snapshotTimer = null;
     if (_snapshotDirty) {
       await _flushSnapshot();
     }

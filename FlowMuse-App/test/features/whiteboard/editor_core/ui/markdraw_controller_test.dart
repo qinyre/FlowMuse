@@ -6,6 +6,67 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/config/writing_fea
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('V1 首段下一事件交付，连续段仍节流且每笔重置', (tester) async {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.switchTool(ToolType.freedraw);
+    final emitted = <FreedrawElement>[];
+    controller.onLiveFreedrawChanged = emitted.add;
+
+    _down(controller);
+    _move(controller, 1);
+    expect(emitted, isEmpty, reason: '不在指针事件同步栈内序列化');
+    await tester.pump(Duration.zero);
+    expect(emitted, hasLength(1), reason: '首段不固定等待 50 ms');
+    final firstId = emitted.single.id;
+    for (var i = 2; i <= 6; i++) {
+      _move(controller, i);
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    expect(emitted, hasLength(1));
+    await tester.pump(const Duration(milliseconds: 10));
+    expect(emitted, hasLength(2));
+    expect(
+      emitted.last.points.length,
+      greaterThan(emitted.first.points.length),
+    );
+    expect(emitted.last.id, firstId);
+
+    _move(controller, 7);
+    _up(controller, 7);
+    final committed =
+        controller.currentScene.elements.single as FreedrawElement;
+    expect(committed.id, firstId);
+    expect(
+      committed.points.length,
+      greaterThanOrEqualTo(emitted.last.points.length),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(emitted, hasLength(2), reason: '抬笔后不再发过期预览');
+
+    _down(controller);
+    _move(controller, 1);
+    await tester.pump(Duration.zero);
+    expect(emitted, hasLength(3));
+    expect(emitted.last.id, isNot(firstId));
+    _up(controller, 1);
+  });
+
+  testWidgets('V1 快速抬笔先提交最终状态，不补发首段', (tester) async {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.switchTool(ToolType.freedraw);
+    final emitted = <FreedrawElement>[];
+    controller.onLiveFreedrawChanged = emitted.add;
+    _down(controller);
+    _move(controller, 1);
+    _up(controller, 1);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(emitted, isEmpty);
+    expect(controller.currentScene.elements, hasLength(1));
+    expect(controller.historyManager.undoCount, 1);
+  });
+
   test('100 个 move 只线性通知 wet notifier，整 controller 只在 final 通知', () {
     final controller = MarkdrawController(
       writingFlags: const WritingFeatureFlags(layeredWetInk: true),

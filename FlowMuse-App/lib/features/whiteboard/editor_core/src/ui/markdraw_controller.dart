@@ -332,6 +332,7 @@ class MarkdrawController extends ChangeNotifier {
   /// 见 v4 §9.1 规则 3）。null = 无协作上下文，不盖章。
   CollaborationCreator? Function()? localCreatorResolver;
   Timer? _liveFreedrawTimer;
+  bool _hasBroadcastLiveFreedraw = false;
   static const Duration _liveFreedrawBroadcastInterval = Duration(
     milliseconds: 50,
   );
@@ -2387,6 +2388,7 @@ class MarkdrawController extends ChangeNotifier {
     // Frame label editing is committed by the overlay itself on submit/blur.
     // We don't force-commit here since the TextField handles its own focus.
 
+    if (_activeTool is FreedrawTool) _cancelPendingLiveFreedraw();
     if (_useUnifiedModeler && _activeTool is FreedrawTool) {
       // --- Unified modeler path for freedraw ---
       final freedrawTool = _activeTool as FreedrawTool;
@@ -2718,6 +2720,7 @@ class MarkdrawController extends ChangeNotifier {
         ? toScenePrecise(event.localPosition)
         : toScene(event.localPosition);
     final now = DateTime.now();
+    if (_activeTool is FreedrawTool) _cancelPendingLiveFreedraw();
     final isDoubleClick =
         _lastPointerUpTime != null &&
         now.difference(_lastPointerUpTime!).inMilliseconds < 300;
@@ -2952,19 +2955,28 @@ class MarkdrawController extends ChangeNotifier {
         element ??
         (tool is FreedrawTool ? tool.buildLiveElement(toolContext) : null);
     if (live == null) return;
+    _hasBroadcastLiveFreedraw = true;
     callback(applyDefaultStyleToElement(live) as FreedrawElement);
   }
 
   void _scheduleLiveFreedraw() {
     final tool = _activeTool;
-    final activeView = tool is FreedrawTool ? tool.activeView : null;
-    final hasCallback = activeView?.strokeLiveMode ?? false
+    if (tool is! FreedrawTool) return;
+    final activeView = tool.activeView;
+    if (activeView == null) return;
+    final isLiveInk = activeView.strokeLiveMode;
+    final hasCallback = isLiveInk
         ? onLiveInkChanged != null
         : onLiveFreedrawChanged != null;
     if (!hasCallback || _liveFreedrawTimer != null) {
       return;
     }
-    _liveFreedrawTimer = Timer(_liveFreedrawBroadcastInterval, () {
+    // V2 already emits at down. V1 starts promptly, off the input stack;
+    // subsequent previews keep the existing 50 ms cadence.
+    final delay = isLiveInk || _hasBroadcastLiveFreedraw
+        ? _liveFreedrawBroadcastInterval
+        : Duration.zero;
+    _liveFreedrawTimer = Timer(delay, () {
       _liveFreedrawTimer = null;
       _emitLiveFreedraw();
     });
@@ -2973,6 +2985,7 @@ class MarkdrawController extends ChangeNotifier {
   void _cancelPendingLiveFreedraw() {
     _liveFreedrawTimer?.cancel();
     _liveFreedrawTimer = null;
+    _hasBroadcastLiveFreedraw = false;
   }
 
   void _startActivePreviewStroke() {

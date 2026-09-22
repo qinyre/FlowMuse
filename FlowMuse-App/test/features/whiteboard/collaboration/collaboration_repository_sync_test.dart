@@ -15,6 +15,93 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
 
 void main() {
+  test('正式发送阻塞时合并跨窗口更新，完整点压数据和独立删除仍送达', () async {
+    final crypto = CollaborationCrypto();
+    final room = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    await store.createRoom(
+      room: room,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'fixture',
+    );
+    final hub = MemoryRealtimeRoomHub();
+    final transport = _GatedMemoryRealtimeTransport(
+      hub: hub,
+      socketId: 'sender',
+    );
+    final peer = MemoryRealtimeTransport(hub: hub, socketId: 'receiver');
+    final repository = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+      crypto: crypto,
+    );
+    await repository.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    await peer.connect(room.roomId);
+    // Allow the new-user initialization to leave before blocking updates.
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final delivered = <CollaborationMessage>[];
+    final completed = Completer<void>();
+    final subscription = peer.messages.listen((payload) async {
+      final message = CollaborationMessage.fromBytes(
+        await crypto.decrypt(roomKey: room.roomKey, encryptedPayload: payload),
+      );
+      if (message.type != CollaborationMessageType.sceneUpdate) return;
+      delivered.add(message);
+      if (message.elements.any(
+        (e) => e['id'] == 'stroke' && e['version'] == 26,
+      )) {
+        completed.complete();
+      }
+    });
+    addTearDown(subscription.cancel);
+    addTearDown(peer.disconnect);
+    addTearDown(repository.stop);
+    final points = [
+      for (var i = 0; i < 2048; i++) [i.toDouble(), (i % 17).toDouble()],
+    ];
+    final pressures = [for (var i = 0; i < 2048; i++) 0.25 + (i % 7) / 10];
+    Map<String, Object?> stroke(int version) => {
+      ..._element('stroke', version),
+      'type': 'freedraw',
+      'points': points,
+      'pressures': pressures,
+      'customData': {
+        'flowMuse': {
+          'brushType': 'pencil',
+          'unknown': ['preserve'],
+        },
+      },
+    };
+    transport.blockNextSend();
+    await repository.broadcastElements(room: room, elements: [stroke(1)]);
+    await transport.waitForBlockedSend();
+    for (var version = 2; version <= 26; version++) {
+      await repository.broadcastElements(
+        room: room,
+        elements: [
+          stroke(version),
+          {..._element('deleted', version), 'isDeleted': version == 26},
+        ],
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    transport.releaseSend();
+    await completed.future.timeout(const Duration(seconds: 5));
+    expect(delivered, hasLength(2));
+    final finalStroke = delivered.last.elements.firstWhere(
+      (e) => e['id'] == 'stroke',
+    );
+    expect(finalStroke['points'], points);
+    expect(finalStroke['pressures'], pressures);
+    expect(finalStroke['customData'], stroke(26)['customData']);
+    expect(
+      delivered.last.elements.singleWhere(
+        (e) => e['id'] == 'deleted',
+      )['isDeleted'],
+      isTrue,
+    );
+  });
+
   test('增量采用实际合并结果：归属回填、绑定文字、重复包与活动保护', () {
     final repository = CollaborationRepository();
     addTearDown(repository.stop);

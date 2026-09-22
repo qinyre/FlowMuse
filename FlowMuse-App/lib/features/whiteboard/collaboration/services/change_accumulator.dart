@@ -18,6 +18,8 @@ class ChangeAccumulator {
   Timer? _timer;
   final Map<String, Map<String, Object?>> _pending = {};
   bool _hasInitial = false;
+  bool _flushing = false;
+  int _generation = 0;
 
   ChangeBatchCallback? onFlush;
 
@@ -71,18 +73,32 @@ class ChangeAccumulator {
     return incomingNonce < existingNonce;
   }
 
-  void _flush() {
+  Future<void> _flush() async {
     _timer = null;
+    // Keep coalescing while the previous batch waits for encryption/send.
+    if (_flushing) return;
     if (_pending.isEmpty && !_hasInitial) return;
 
+    final generation = _generation;
     final elements = _reconciler.getSyncableElements(_pending.values.toList());
     final isInitial = _hasInitial;
     _pending.clear();
     _hasInitial = false;
-    onFlush?.call(elements, isInitial);
+    _flushing = true;
+    try {
+      await onFlush?.call(elements, isInitial);
+    } finally {
+      if (generation == _generation) {
+        _flushing = false;
+        // An expired window drains now; a future deadline stays in place.
+        if (_timer == null && _pending.isNotEmpty) unawaited(_flush());
+      }
+    }
   }
 
   void dispose() {
+    _generation++;
+    _flushing = false;
     _timer?.cancel();
     _timer = null;
     _pending.clear();
