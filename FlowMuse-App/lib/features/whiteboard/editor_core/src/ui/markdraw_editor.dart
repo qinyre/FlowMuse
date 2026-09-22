@@ -17,6 +17,8 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 
 import 'studio_rail_icon_button.dart';
+import 'page_navigation_controls.dart';
+import 'page_overview.dart';
 
 /// A full-featured drawing editor widget.
 ///
@@ -86,6 +88,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.focusHistoricalContent = false,
     this.socketIdCreatorKeys = const {},
     this.presenceCreatorRevision = 0,
+    this.pageNavigationEnabled = true,
   });
 
   /// Optional external controller. If null, one is created internally.
@@ -93,6 +96,7 @@ class MarkdrawEditor extends StatefulWidget {
 
   /// Appearance and behavior configuration.
   final MarkdrawEditorConfig config;
+  final bool pageNavigationEnabled;
 
   // File I/O callbacks — null = menu item hidden
   final VoidCallback? onSave;
@@ -204,9 +208,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   static const _toolbarDockKey = 'whiteboard.toolbarDock.v1';
   static const _controlGroupPositionKey = 'whiteboard.controlGroupPosition.v1';
   static const _controlGroupReservedExtent = 120.0;
+  static const _pageNavigationReservedExtent = 92.0;
   static const _speechNoticeKey = 'whiteboard.speechRecognitionNoticeSeen.v1';
 
   MarkdrawController? _ownController;
+  Widget? _pageOverview;
   ToolbarDock _toolbarDock = ToolbarDock.top;
   ControlGroupPosition _controlGroupPosition = ControlGroupPosition.bottomRight;
   bool _toolbarCollapsed = false;
@@ -231,7 +237,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         widget.speechRecognitionService ?? createSpeechRecognitionService();
     _speechSubscription = _speechService.events.listen(_onSpeechEvent);
     unawaited(_checkSpeechAvailability());
-    _controller.addListener(_onControllerChanged);
+    _controller.chromeChanges.addListener(_onControllerChanged);
     _controller.onSceneChanged = widget.onSceneChanged;
     _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
     _controller.shouldUseLiveInkV2 = widget.shouldUseLiveInkV2;
@@ -247,6 +253,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   @override
   void didUpdateWidget(MarkdrawEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.pageNavigationEnabled ||
+        widget.controller != oldWidget.controller) {
+      _pageOverview = null;
+    }
     if (!widget.speechRecognitionEnabled &&
         oldWidget.speechRecognitionEnabled) {
       _speechState = SpeechRecognitionState.idle;
@@ -254,8 +264,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _speechFinalCommitted = false;
     }
     if (widget.controller != oldWidget.controller) {
-      oldWidget.controller?.removeListener(_onControllerChanged);
-      _controller.addListener(_onControllerChanged);
+      oldWidget.controller?.chromeChanges.removeListener(_onControllerChanged);
+      _controller.chromeChanges.addListener(_onControllerChanged);
       _controller.onSceneChanged = widget.onSceneChanged;
       _controller.onLiveFreedrawChanged = widget.onLiveFreedrawChanged;
       _controller.shouldUseLiveInkV2 = widget.shouldUseLiveInkV2;
@@ -289,7 +299,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_speechSubscription?.cancel());
     unawaited(_speechService.dispose());
-    _controller.removeListener(_onControllerChanged);
+    _controller.chromeChanges.removeListener(_onControllerChanged);
     _controller.shouldUseLiveInkV2 = null;
     _controller.onLiveInkChanged = null;
     _controller.onLiveInkCancelled = null;
@@ -414,6 +424,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     }
     final context = _propertyPanelContextKey();
     setState(() {
+      if (_controller.showLibraryPanel ||
+          _controller.showMarkdownPanel ||
+          !_controller.isPagedViewport) {
+        _pageOverview = null;
+      }
       if (_propertyPanelContext != context) {
         _propertyPanelCollapsed = false;
       }
@@ -497,7 +512,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 // ignore: deprecated_member_use
                 onChanged: (value) => Navigator.of(context).pop(value),
               ),
-          // ignore: deprecated_member_use
+            // ignore: deprecated_member_use
           ],
         ),
       ),
@@ -587,6 +602,44 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           ),
       ],
     );
+  }
+
+  void _togglePageOverview() {
+    if (!widget.pageNavigationEnabled || !_controller.preparePageNavigation()) {
+      return;
+    }
+    if (_pageOverview != null) {
+      setState(() => _pageOverview = null);
+      return;
+    }
+    if (MediaQuery.sizeOf(context).width < 900 ||
+        _controller.showLibraryPanel ||
+        _controller.showMarkdownPanel) {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (context) => SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.8,
+          child: PageOverview(
+            controller: _controller,
+            onClose: () => Navigator.of(context).pop(),
+            onNavigate: () => Navigator.of(context).pop(),
+          ),
+        ),
+      );
+    } else {
+      setState(
+        () => _pageOverview = PageOverview(
+          controller: _controller,
+          onClose: () {
+            if (_controller.preparePageNavigation()) {
+              setState(() => _pageOverview = null);
+            }
+          },
+        ),
+      );
+    }
   }
 
   Widget _buildControlSurface(Widget child) {
@@ -684,6 +737,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     final isCompact = _controller.isCompact;
     final showChrome = !_controller.zenMode;
     final showEditChrome = showChrome && !_controller.viewMode;
+    final overview = showChrome && widget.pageNavigationEnabled
+        ? _pageOverview
+        : null;
+    final overviewOnLeft = _toolbarDock == ToolbarDock.right;
     final showNavigationTools = showEditChrome && widget.config.showToolbar;
     final showTopToolbar =
         showNavigationTools &&
@@ -695,6 +752,22 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     final canvasTopInset = showChrome ? safeArea.top + chromeHeight : 0.0;
     final topChromeOffset = safeArea.top + chromeHeight + 12;
     final bottomChromeOffset = safeArea.bottom + 12;
+    final showPageNavigation = showChrome && _controller.isPagedViewport;
+    final inlinePageNavigation =
+        showPageNavigation && showTopToolbar && !isCompact;
+    final topToolbarOffset = safeArea.top + 60;
+    final pageNavigation = showPageNavigation
+        ? _buildControlSurface(
+            PageNavigationControls(
+              controller: _controller,
+              onOverview: _togglePageOverview,
+              enabled: widget.pageNavigationEnabled,
+            ),
+          )
+        : null;
+    final rightChromeOffset =
+        (inlinePageNavigation ? topToolbarOffset : topChromeOffset) +
+        (showPageNavigation ? _pageNavigationReservedExtent : 0);
     final showDetachedControls =
         showChrome && (!_controller.viewMode || widget.config.showZoomControls);
     final controlGroupAtTop =
@@ -709,7 +782,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         ((_toolbarDock == ToolbarDock.left) == controlGroupOnLeft);
     final verticalToolbarTop =
         controlGroupSharesVerticalToolbar && controlGroupAtTop
-        ? topChromeOffset + _controlGroupReservedExtent
+        ? (controlGroupOnLeft ? topChromeOffset : rightChromeOffset) +
+              _controlGroupReservedExtent
+        : showPageNavigation && _toolbarDock == ToolbarDock.right
+        ? rightChromeOffset
         : safeArea.top + 56;
     final verticalToolbarBottom =
         controlGroupSharesVerticalToolbar && !controlGroupAtTop
@@ -732,24 +808,27 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                     _controller.placeLibraryItemAt(details.data, localPos);
                   },
                   builder: (context, candidateData, rejectedData) {
-                    return EditorCanvas(
-                      controller: _controller,
-                      collaborators: widget.collaborators,
-                      remoteWetInkStore: widget.remoteWetInkStore,
-                      onPointerPresence: widget.onPointerPresence,
-                      onVisibleSceneBoundsChanged:
-                          widget.onVisibleSceneBoundsChanged,
-                      attributionActionResolver:
-                          widget.attributionActionResolver,
-                      focusedCreatorKey: widget.focusedCreatorKey,
-                      focusHistoricalContent: widget.focusHistoricalContent,
-                      socketIdCreatorKeys: widget.socketIdCreatorKeys,
-                      presenceCreatorRevision: widget.presenceCreatorRevision,
+                    return RepaintBoundary(
+                      child: EditorCanvas(
+                        controller: _controller,
+                        collaborators: widget.collaborators,
+                        remoteWetInkStore: widget.remoteWetInkStore,
+                        onPointerPresence: widget.onPointerPresence,
+                        onVisibleSceneBoundsChanged:
+                            widget.onVisibleSceneBoundsChanged,
+                        attributionActionResolver:
+                            widget.attributionActionResolver,
+                        focusedCreatorKey: widget.focusedCreatorKey,
+                        focusHistoricalContent: widget.focusHistoricalContent,
+                        socketIdCreatorKeys: widget.socketIdCreatorKeys,
+                        presenceCreatorRevision: widget.presenceCreatorRevision,
+                      ),
                     );
                   },
                 ),
               ),
               if (showChrome &&
+                  overview == null &&
                   !isCompact &&
                   _controller.showLibraryPanel &&
                   widget.config.showLibraryPanel)
@@ -948,10 +1027,27 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           ),
         if (showNavigationTools && showTopToolbar)
           Positioned(
-            top: safeArea.top + 60,
-            left: 8,
-            right: 8,
-            child: Center(child: _buildToolbar(compact: isCompact)),
+            top: topToolbarOffset,
+            left: inlinePageNavigation ? safeArea.left + 12 : 8,
+            right: inlinePageNavigation ? safeArea.right + 12 : 8,
+            child: inlinePageNavigation
+                ? SizedBox(
+                    height: _pageNavigationReservedExtent,
+                    child: NavigationToolbar(
+                      middleSpacing: 12,
+                      middle: Align(
+                        alignment: Alignment.topCenter,
+                        widthFactor: 1,
+                        child: _buildToolbar(compact: isCompact),
+                      ),
+                      trailing: Align(
+                        alignment: Alignment.topRight,
+                        widthFactor: 1,
+                        child: pageNavigation,
+                      ),
+                    ),
+                  )
+                : Center(child: _buildToolbar(compact: isCompact)),
           ),
         if (showNavigationTools && _toolbarDock != ToolbarDock.top)
           Positioned(
@@ -968,23 +1064,36 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                   : _buildToolbar(compact: isCompact),
             ),
           ),
+        if (pageNavigation != null && !inlinePageNavigation)
+          Positioned(
+            top: topChromeOffset,
+            right: safeArea.right + 12,
+            child: pageNavigation,
+          ),
         if (showDetachedControls)
           Positioned(
-            top: controlGroupAtTop ? topChromeOffset : null,
+            top: controlGroupAtTop
+                ? (controlGroupOnLeft ? topChromeOffset : rightChromeOffset)
+                : null,
             bottom: controlGroupAtTop ? null : bottomChromeOffset,
-            left: controlGroupOnLeft ? 12 : null,
-            right: controlGroupOnLeft ? null : 12,
+            left: controlGroupOnLeft
+                ? (overview != null && overviewOnLeft ? 304 : 12)
+                : null,
+            right: controlGroupOnLeft
+                ? null
+                : (overview != null && !overviewOnLeft ? 304 : 12),
             child: _buildDetachedControlGroups(),
           ),
         // Floating property panel — desktop left side
         if (showEditChrome &&
+            overview == null &&
             !isCompact &&
             widget.config.showPropertyPanel &&
             (_controller.selectedElements.isNotEmpty ||
                 _controller.isCreationTool))
           if (_propertyPanelCollapsed)
             Positioned(
-              top: topChromeOffset,
+              top: propertyPanelOnRight ? rightChromeOffset : topChromeOffset,
               left: propertyPanelOnRight ? null : 0,
               right: propertyPanelOnRight ? 0 : null,
               child: StudioRailIconButton(
@@ -996,7 +1105,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
             )
           else
             Positioned(
-              top: topChromeOffset,
+              top: propertyPanelOnRight ? rightChromeOffset : topChromeOffset,
               left: propertyPanelOnRight ? null : 12,
               right: propertyPanelOnRight ? 12 : null,
               bottom: 12,
@@ -1007,6 +1116,15 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 attributionActionResolver: widget.attributionActionResolver,
               ),
             ),
+        if (overview != null)
+          Positioned(
+            top: overviewOnLeft ? topChromeOffset : rightChromeOffset,
+            bottom: bottomChromeOffset,
+            left: overviewOnLeft ? 12 : null,
+            right: overviewOnLeft ? null : 12,
+            width: 280,
+            child: overview,
+          ),
         // Find overlay
         if (_controller.isFindOpen)
           Positioned(
@@ -1023,7 +1141,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         // Link overlay
         if (_controller.isLinkEditorOpen &&
             _controller.selectedElements.length == 1)
-          _buildLinkOverlay(topChromeOffset),
+          ListenableBuilder(
+            listenable: _controller,
+            builder: (context, _) => _buildLinkOverlay(topChromeOffset),
+          ),
         if (widget.speechRecognitionEnabled &&
             _speechState != SpeechRecognitionState.idle)
           Positioned(

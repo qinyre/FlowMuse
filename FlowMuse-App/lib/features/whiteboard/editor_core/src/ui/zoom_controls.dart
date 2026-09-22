@@ -68,7 +68,7 @@ class UndoRedoControls extends StatelessWidget {
 }
 
 /// Zoom in/out/reset controls used by the editor navigation.
-class ZoomControls extends StatelessWidget {
+class ZoomControls extends StatefulWidget {
   final MarkdrawController controller;
   final Size Function() getCanvasSize;
 
@@ -79,9 +79,49 @@ class ZoomControls extends StatelessWidget {
   });
 
   @override
+  State<ZoomControls> createState() => _ZoomControlsState();
+}
+
+class _ZoomControlsState extends State<ZoomControls> {
+  late int _zoomPercent;
+
+  int get _currentPercent =>
+      (widget.controller.editorState.viewport.zoom * 100).round();
+
+  @override
+  void initState() {
+    super.initState();
+    _zoomPercent = _currentPercent;
+    widget.controller.addListener(_onControllerChanged);
+  }
+
+  @override
+  void didUpdateWidget(ZoomControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onControllerChanged);
+      widget.controller.addListener(_onControllerChanged);
+    }
+    _zoomPercent = _currentPercent;
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    final next = _currentPercent;
+    if (next != _zoomPercent) setState(() => _zoomPercent = next);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final getCanvasSize = widget.getCanvasSize;
     final cs = Theme.of(context).colorScheme;
-    final zoomPercent = (controller.editorState.viewport.zoom * 100).round();
+    final zoomPercent = _zoomPercent;
     return Container(
       decoration: BoxDecoration(
         color: Colors.transparent,

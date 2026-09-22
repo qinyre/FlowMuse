@@ -65,6 +65,48 @@ void main() {
     expect(controller.editorState.selectedIds, isEmpty);
   });
 
+  test('mixed-width PDF pages retain the gap in right-to-left flow', () async {
+    final controller = MarkdrawController(
+      config: const MarkdrawEditorConfig(
+        initialLayout: CanvasLayout(
+          type: CanvasLayoutType.paged,
+          pageFlow: CanvasPageFlow.rightToLeft,
+        ),
+      ),
+    );
+    addTearDown(controller.dispose);
+    final bytes = await _makePng(0xffffffff);
+    await controller.importPdfPages(
+      [
+        PdfRenderedPage(
+          bytes: bytes,
+          mimeType: 'image/png',
+          width: 600,
+          height: 800,
+          pageNumber: 1,
+        ),
+        PdfRenderedPage(
+          bytes: bytes,
+          mimeType: 'image/png',
+          width: 1000,
+          height: 600,
+          pageNumber: 2,
+        ),
+      ],
+      const Size(600, 700),
+      asBackground: true,
+    );
+    final pages = controller.layout.pages;
+    expect(
+      pages.first.bounds.left - pages.last.bounds.right,
+      CanvasLayout.pageGap,
+    );
+    final images = controller.currentScene.activeElements
+        .whereType<ImageElement>()
+        .toList();
+    expect(images.last.x, pages.last.bounds.left);
+  });
+
   test('refits the first PDF page when the real canvas size arrives', () async {
     final controller = MarkdrawController();
     addTearDown(controller.dispose);

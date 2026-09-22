@@ -71,6 +71,9 @@ class StaticCanvasPainter extends CustomPainter {
   final bool renderPageShadows;
   final PagedAppendPageHint? appendPageHint;
   final bool skipMathText;
+
+  /// Thumbnail jobs must not evict paths used by the writing surface.
+  final bool cacheNaturalMedia;
   final ActivePreviewMetricsProbe? activePreviewMetricsProbe;
   final ActivePreviewPaintMarker? activePreviewPaintMarker;
 
@@ -99,6 +102,7 @@ class StaticCanvasPainter extends CustomPainter {
     this.renderPageShadows = true,
     this.appendPageHint,
     this.skipMathText = false,
+    this.cacheNaturalMedia = true,
     this.activePreviewMetricsProbe,
     this.activePreviewPaintMarker,
     this.focusedCreatorKey,
@@ -144,7 +148,9 @@ class StaticCanvasPainter extends CustomPainter {
     final pagedLayout = layout;
     if (pagedLayout != null && pagedLayout.isPaged) {
       // Include the full blur fringe, even when a page itself is off screen.
-      final visible = viewport.visibleRect(size).inflate(40 + 2 / viewport.zoom);
+      final visible = viewport
+          .visibleRect(size)
+          .inflate(40 + 2 / viewport.zoom);
       final visiblePages = pagedLayout.pages
           .where((page) => page.bounds.overlaps(visible))
           .toList();
@@ -250,6 +256,7 @@ class StaticCanvasPainter extends CustomPainter {
         adapter,
         resolvedImages: resolvedImages,
         skipMathText: skipMathText,
+        cacheNaturalMedia: cacheNaturalMedia,
       );
       _renderBoundText(canvas, element);
 
@@ -273,6 +280,7 @@ class StaticCanvasPainter extends CustomPainter {
         adapter,
         resolvedImages: resolvedImages,
         skipMathText: skipMathText,
+        cacheNaturalMedia: cacheNaturalMedia,
       );
       final marker = activePreviewPaintMarker;
       if (previewElement is FreedrawElement && marker != null) {
@@ -293,6 +301,7 @@ class StaticCanvasPainter extends CustomPainter {
           adapter,
           resolvedImages: resolvedImages,
           skipMathText: skipMathText,
+          cacheNaturalMedia: cacheNaturalMedia,
         );
       }
       canvas.restore();
@@ -811,6 +820,7 @@ class StaticCanvasPainter extends CustomPainter {
         isDarkBackground != oldDelegate.isDarkBackground ||
         renderPageShadows != oldDelegate.renderPageShadows ||
         skipMathText != oldDelegate.skipMathText ||
+        cacheNaturalMedia != oldDelegate.cacheNaturalMedia ||
         appendPageHint != oldDelegate.appendPageHint ||
         activePreviewMetricsProbe != oldDelegate.activePreviewMetricsProbe ||
         activePreviewPaintMarker != oldDelegate.activePreviewPaintMarker ||

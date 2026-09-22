@@ -122,6 +122,40 @@ class CanvasLayout {
     return pages.isEmpty ? null : pages.first;
   }
 
+  /// Largest visible area; gaps fall back to the nearest page in reading order.
+  CanvasPage? pageForVisibleRect(Rect visible) {
+    CanvasPage? best;
+    CanvasPage? nearest;
+    var bestArea = 0.0;
+    var nearestDistance = double.infinity;
+    for (final page in pages) {
+      final intersection = page.bounds.intersect(visible);
+      final area = intersection.isEmpty
+          ? 0.0
+          : intersection.width * intersection.height;
+      if (area > bestArea) {
+        bestArea = area;
+        best = page;
+      }
+      final dx = visible.right < page.bounds.left
+          ? page.bounds.left - visible.right
+          : (page.bounds.right < visible.left
+                ? visible.left - page.bounds.right
+                : 0.0);
+      final dy = visible.bottom < page.bounds.top
+          ? page.bounds.top - visible.bottom
+          : (page.bounds.bottom < visible.top
+                ? visible.top - page.bounds.bottom
+                : 0.0);
+      final distance = dx * dx + dy * dy;
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = page;
+      }
+    }
+    return best ?? nearest;
+  }
+
   CanvasLayout copyWith({
     CanvasLayoutType? type,
     CanvasPageTemplate? template,
@@ -143,16 +177,30 @@ class CanvasLayout {
     CanvasPageFlow fallbackPageFlow = CanvasPageFlow.topToBottom,
   }) {
     final pages = <CanvasPage>[];
+    final pageIds = <String>{};
     var pageFlow = fallbackPageFlow;
     for (final element in elements) {
+      if (element.isDeleted ||
+          !element.x.isFinite ||
+          !element.y.isFinite ||
+          !element.width.isFinite ||
+          !element.height.isFinite ||
+          element.width <= 0 ||
+          element.height <= 0) {
+        continue;
+      }
       final flowMuse = flowMuseData(element.customData);
       if (flowMuse?['role'] != 'page') {
         continue;
       }
-      pageFlow =
-          _pageFlowFromName(flowMuse?['pageFlow'] as String?) ?? pageFlow;
-      final id = flowMuse?['pageId'] as String? ?? element.id.value;
-      final index = (flowMuse?['pageIndex'] as num?)?.toInt() ?? pages.length;
+      pageFlow = _pageFlowFromName(flowMuse?['pageFlow']) ?? pageFlow;
+      final rawId = flowMuse?['pageId'];
+      final id = rawId is String && rawId.isNotEmpty ? rawId : element.id.value;
+      if (!pageIds.add(id)) continue;
+      final rawIndex = flowMuse?['pageIndex'];
+      final index = rawIndex is num && rawIndex.isFinite && rawIndex >= 0
+          ? rawIndex.toInt()
+          : pages.length;
       pages.add(
         CanvasPage(
           id: id,
@@ -164,14 +212,61 @@ class CanvasLayout {
             element.height,
           ),
           template:
-              _templateFromName(flowMuse?['template'] as String?) ??
-              fallbackTemplate,
+              _templateFromName(flowMuse?['template']) ?? fallbackTemplate,
           pageFlow: pageFlow,
-          source: flowMuse?['source'] as String? ?? 'blank',
+          source: flowMuse?['source'] is String
+              ? flowMuse!['source']! as String
+              : 'blank',
         ),
       );
     }
-    pages.sort((a, b) => a.index.compareTo(b.index));
+    // Older PDF notes can have reliable background metadata without page
+    // markers. Derive navigation bounds without moving or rewriting content.
+    if (pages.isEmpty && !elements.any((element) => element.isCanvasPage)) {
+      final backgrounds = elements
+          .whereType<flow.ImageElement>()
+          .where(
+            (element) =>
+                !element.isDeleted &&
+                element.isPdfBackground &&
+                element.pageId != null &&
+                element.x.isFinite &&
+                element.y.isFinite &&
+                element.width.isFinite &&
+                element.height.isFinite &&
+                element.width > 0 &&
+                element.height > 0,
+          )
+          .toList();
+      backgrounds.sort((a, b) {
+        final order = fallbackPageFlow == CanvasPageFlow.rightToLeft
+            ? b.x.compareTo(a.x)
+            : a.y.compareTo(b.y);
+        return order != 0 ? order : a.id.value.compareTo(b.id.value);
+      });
+      for (final element in backgrounds) {
+        if (!pageIds.add(element.pageId!)) continue;
+        pages.add(
+          CanvasPage(
+            id: element.pageId!,
+            index: pages.length,
+            bounds: Rect.fromLTWH(
+              element.x,
+              element.y,
+              element.width,
+              element.height,
+            ),
+            template: fallbackTemplate,
+            pageFlow: fallbackPageFlow,
+            source: 'pdf',
+          ),
+        );
+      }
+    }
+    pages.sort((a, b) {
+      final order = a.index.compareTo(b.index);
+      return order != 0 ? order : a.id.compareTo(b.id);
+    });
     if (pages.isNotEmpty) {
       return CanvasLayout(
         type: CanvasLayoutType.paged,
@@ -223,7 +318,7 @@ class CanvasLayout {
     return null;
   }
 
-  static CanvasPageTemplate? _templateFromName(String? name) {
+  static CanvasPageTemplate? _templateFromName(Object? name) {
     if (name == null) {
       return null;
     }
@@ -235,7 +330,7 @@ class CanvasLayout {
     return null;
   }
 
-  static CanvasPageFlow? _pageFlowFromName(String? name) {
+  static CanvasPageFlow? _pageFlowFromName(Object? name) {
     if (name == null) {
       return null;
     }
@@ -251,7 +346,11 @@ class CanvasLayout {
 extension FlowMuseElementData on flow.Element {
   Map<String, Object?>? get flowMuseData =>
       CanvasLayout.flowMuseData(customData);
-  String? get pageId => flowMuseData?['pageId'] as String?;
+  String? get pageId {
+    final value = flowMuseData?['pageId'];
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
   bool get isCanvasPage => flowMuseData?['role'] == 'page';
   bool get isPdfBackground => flowMuseData?['pdfBackground'] == true;
 }

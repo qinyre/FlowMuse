@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/coll
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elements.dart'
     as editor_core;
 import 'package:flow_muse/features/whiteboard/editor_core/src/editor/creator_stamping.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/page_reading_position.dart';
 
 import '../../../app/app_router.dart';
 import '../../../app/app_theme_preset.dart';
@@ -160,6 +162,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   // LocalDraftScheduler — debounce duration comes from editor preferences.
   Timer? _localDraftTimer;
   bool _localDraftDirty = false;
+  Timer? _readingPositionTimer;
+  String? _readingNoteId;
+  (ViewportState, Size, CanvasLayout)? _readingView;
+  Future<void> _readingWrite = Future<void>.value();
 
   Scene? _previousEditorScene;
   final _recentWhiteboardSync = RecentWhiteboardSyncCoordinator();
@@ -177,6 +183,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return stampCreatorOnResult(result, scene, creator);
     };
     _markdrawController.addListener(_onControllerNotifyForFocus);
+    _markdrawController.addListener(_scheduleReadingPosition);
     _speechRecognitionService = createSpeechRecognitionService();
     _seedDocumentTitleFromCache();
     _markdrawController.onBrushStateChanged = (type, state) {
@@ -227,6 +234,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void didUpdateWidget(covariant WhiteboardPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.noteId != widget.noteId) {
+      _saveReadingPosition(force: true);
+      _readingNoteId = null;
       _seedDocumentTitleFromCache();
       Future.microtask(_openNote);
     }
@@ -237,6 +246,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     WidgetsBinding.instance.removeObserver(this);
     _closeAiPanel();
     _disposingOrLeaving = true;
+    _saveReadingPosition(force: true);
+    _readingPositionTimer?.cancel();
     _flushLocalDraftOnExit();
     _remoteMergeTimer?.cancel();
     _remoteMergeBuffer.clear();
@@ -254,6 +265,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _remoteWetInkStore.dispose();
     _markdrawController.onPrepareLocalResult = null;
     _markdrawController.removeListener(_onControllerNotifyForFocus);
+    _markdrawController.removeListener(_scheduleReadingPosition);
     _smartLayoutV3Scope?.dispose();
     _smartLayoutV3Scope = null;
     _focusTarget = null;
@@ -270,6 +282,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   Future<void> _openNote() async {
     if (!mounted) return;
     final generation = ++_openGeneration;
+    _readingPositionTimer?.cancel();
+    _readingNoteId = null;
+    _readingView = null;
     _disposingOrLeaving = false;
     final pendingPdf = ref.read(pendingPdfImportProvider);
     final importingPdf =
@@ -292,9 +307,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       debugPrint('[FlowMuseCreateNote] open note failed: ${error.runtimeType}');
       if (_isCurrentOpen(generation)) {
         setState(() {
-          _openError = importingPdf
-              ? 'PDF 导入失败，请返回后重试'
-              : '笔记打开失败，请返回后重试';
+          _openError = importingPdf ? 'PDF 导入失败，请返回后重试' : '笔记打开失败，请返回后重试';
         });
       }
     } finally {
@@ -421,6 +434,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     } else if (note?.kind != LibraryFilter.pdf) {
       _markdrawController.contentBounds = null;
     }
+    if (!consumedPdf) await _restoreReadingPosition(noteId, generation);
+    if (!_isCurrentOpen(generation)) return;
     debugPrint(
       '[FlowMuseCreateNote] WhiteboardPage.openNote pdfConsumed=$consumedPdf',
     );
@@ -450,6 +465,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       latestIndex == null ? null : _noteById(latestIndex.notes, noteId),
     );
     _loadingScene = false;
+    _readingNoteId = noteId;
+    _scheduleReadingPosition();
     debugPrint('[FlowMuseCreateNote] WhiteboardPage.openNote done $noteId');
     final room = widget.initialRoom;
     if (room != null) {
@@ -459,6 +476,79 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   String _inkRecognitionPreferenceKey(String noteId) {
     return 'whiteboard.inkRecognitionMode.$noteId';
+  }
+
+  Future<void> _restoreReadingPosition(String noteId, int generation) async {
+    try {
+      final saved = await defaultLocalSettingsRepository.readString(
+        'whiteboard.readingPosition.v1.$noteId',
+      );
+      if (saved == null || !_isCurrentOpen(generation)) return;
+      final position = PageReadingPosition.fromJson(jsonDecode(saved));
+      if (position == null) return;
+      if (_markdrawController.canvasSize.isEmpty) {
+        await WidgetsBinding.instance.endOfFrame;
+        if (!_isCurrentOpen(generation)) return;
+      }
+      final viewport = position.restore(
+        _markdrawController.layout,
+        _markdrawController.canvasSize,
+      );
+      if (viewport != null) _markdrawController.setViewport(viewport);
+    } catch (error) {
+      // A broken local view preference must never prevent opening the note.
+      debugPrint(
+        '[PageNavigation] reading position unavailable: ${error.runtimeType}',
+      );
+    }
+  }
+
+  void _scheduleReadingPosition() {
+    if (_readingNoteId == null || _loadingScene || _disposingOrLeaving) return;
+    final controller = _markdrawController;
+    final view = (
+      controller.editorState.viewport,
+      controller.canvasSize,
+      controller.layout,
+    );
+    if (view == _readingView) return;
+    _readingView = view;
+    _readingPositionTimer?.cancel();
+    _readingPositionTimer = Timer(
+      const Duration(milliseconds: 700),
+      _saveReadingPosition,
+    );
+  }
+
+  void _saveReadingPosition({bool force = false}) {
+    _readingPositionTimer?.cancel();
+    final noteId = _readingNoteId;
+    if (noteId == null || _loadingScene || widget.temporaryCollaboration) {
+      return;
+    }
+    if (!force && _markdrawController.pageNavigationBusy) {
+      _readingPositionTimer = Timer(
+        const Duration(milliseconds: 700),
+        _saveReadingPosition,
+      );
+      return;
+    }
+    final position = _markdrawController.captureReadingPosition();
+    if (position == null) return;
+    final value = jsonEncode(position.toJson());
+    // Capture the note ID before queuing; switching notes cannot redirect a write.
+    _readingWrite = _readingWrite
+        .then(
+          (_) => defaultLocalSettingsRepository.writeString(
+            'whiteboard.readingPosition.v1.$noteId',
+            value,
+          ),
+        )
+        .catchError((Object error) {
+          debugPrint(
+            '[PageNavigation] reading position save failed: ${error.runtimeType}',
+          );
+        });
   }
 
   Future<void> _restoreInkRecognitionPreference(String noteId) async {
@@ -598,6 +688,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       _flushLocalDraftOnExit();
+      _saveReadingPosition(force: true);
     }
   }
 
@@ -2415,6 +2506,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onShareCollaboration: _shareCollaborationInvitation,
                   onPointerPresence: _broadcastPointerPresence,
                   onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
+                  pageNavigationEnabled:
+                      !_loadingScene &&
+                      _openingMessage == null &&
+                      _openError == null &&
+                      !_aiCaptureModeActive &&
+                      !_smartLayoutV3PanelVisible,
                   onDocumentRenamed: () {
                     unawaited(_renameAndSaveDocument());
                   },
@@ -2492,7 +2589,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                             TextButton(
                               onPressed: () => unawaited(_handleBack()),
                               child: Text(
-                                _openingPdf && !_importedPdfSaved &&
+                                _openingPdf &&
+                                        !_importedPdfSaved &&
                                         _openError == null
                                     ? '取消导入'
                                     : '返回',
@@ -2503,8 +2601,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       ),
                     ),
                   ),
-                if (_smartLayoutV3PanelVisible &&
-                    _smartLayoutV3Scope != null)
+                if (_smartLayoutV3PanelVisible && _smartLayoutV3Scope != null)
                   Positioned(
                     left: 16,
                     right: 16,
@@ -3053,4 +3150,3 @@ class _RoomInfoBlock extends StatelessWidget {
     );
   }
 }
-
