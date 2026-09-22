@@ -263,7 +263,7 @@ void main() {
             child: MaterialApp(home: WhiteboardPage(noteId: note.id)),
           ),
         );
-        await _drainIo(tester, container);
+        await _drainIo(tester, container, until: () => progressName != null);
         expect(find.text('正在导入 PDF…'), findsOneWidget);
         expect(progressName, isNotNull);
         final controller = tester
@@ -315,13 +315,13 @@ void main() {
           }
           rendered.completeError(PlatformException(code: 'PDF_IMPORT_FAILED'));
         }
-        for (var attempt = 0; attempt < 20; attempt++) {
-          await _drainIo(tester, container);
-          if (outcome == 'leave' ||
-              find.byType(CircularProgressIndicator).evaluate().isEmpty) {
-            break;
-          }
-        }
+        await _drainIo(
+          tester,
+          container,
+          until: () => outcome == 'leave'
+              ? library.deletedNotes.contains(note.id)
+              : find.byType(CircularProgressIndicator).evaluate().isEmpty,
+        );
         if (outcome == 'success') {
           expect(find.textContaining('正在导入 PDF'), findsNothing);
           expect(controller.contentBounds, isNotNull);
@@ -445,7 +445,13 @@ void main() {
         ),
       ),
     );
-    await _drainIo(tester, container);
+    await _drainIo(
+      tester,
+      container,
+      until: () =>
+          container.read(whiteboardViewModelProvider).collaborationStatus ==
+          WhiteboardCollaborationStatus.connected,
+    );
     expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
     final controller = tester
         .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
@@ -565,6 +571,9 @@ ProviderContainer _container({
   final container = ProviderContainer(
     overrides: [
       libraryRepositoryProvider.overrideWithValue(library),
+      whiteboardSceneRepositoryProvider.overrideWithValue(
+        _TrackedSceneRepository(library),
+      ),
       accountViewModelProvider.overrideWith(_GuestAccount.new),
       collaborationRepositoryProvider.overrideWithValue(
         collaboration ?? CollaborationRepository(),
@@ -591,26 +600,35 @@ Future<MarkdrawController> _open(
       child: MaterialApp(home: WhiteboardPage(noteId: note.id)),
     ),
   );
-  await _drainIo(tester, container);
+  await _drainIo(
+    tester,
+    container,
+    until: () => find.byType(CircularProgressIndicator).evaluate().isEmpty,
+  );
+  expect(find.text('笔记打开失败，请返回后重试'), findsNothing);
   final controller = tester
       .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
       .controller!;
   // Loading the title precedes restoring PDF bounds and decoding its images.
   // Wait for the state being asserted, rather than a fixed wall-clock delay.
   if (note.kind == LibraryFilter.pdf) {
-    for (var attempt = 0; attempt < 100; attempt++) {
-      if (controller.contentBounds != null &&
-          controller.resolveImages()?.isNotEmpty == true) {
-        break;
-      }
-      await _drainIo(tester, container);
-    }
+    await _drainIo(
+      tester,
+      container,
+      until: () =>
+          controller.contentBounds != null &&
+          controller.resolveImages()?.isNotEmpty == true,
+    );
   }
   expect(controller.documentName, note.title);
   return controller;
 }
 
-Future<void> _drainIo(WidgetTester tester, ProviderContainer container) async {
+Future<void> _drainIo(
+  WidgetTester tester,
+  ProviderContainer container, {
+  bool Function()? until,
+}) async {
   final library =
       container.read(libraryRepositoryProvider) as _TrackedLibraryRepository;
   for (var i = 0; i < 500; i++) {
@@ -618,14 +636,20 @@ Future<void> _drainIo(WidgetTester tester, ProviderContainer container) async {
       () => Future<void>.delayed(const Duration(milliseconds: 20)),
     );
     await tester.pump(const Duration(milliseconds: 20));
+    expect(tester.takeException(), isNull);
     // Keep pumping fake microtasks while real SQLite I/O finishes. Awaiting
     // its Future inside runAsync would block those fake-zone continuations.
-    if (i >= 9 && library.pendingWrites == 0) {
-      expect(tester.takeException(), isNull);
+    if (i >= 9 &&
+        library.pendingWrites == 0 &&
+        library.pendingSceneUpdates == 0 &&
+        (until?.call() ?? true)) {
       return;
     }
   }
-  fail('SQLite 笔记更新在 10 秒内未完成');
+  fail(
+    '异步流程未完成：metadata=${library.pendingWrites}, '
+    'scene=${library.pendingSceneUpdates}, ready=${until?.call() ?? true}',
+  );
 }
 
 Future<void> _stroke(WidgetTester tester, Offset start) async {
@@ -663,6 +687,14 @@ class _TrackedLibraryRepository extends SqliteLibraryRepository {
   _TrackedLibraryRepository() : super(LocalDatabase.open);
 
   int pendingWrites = 0;
+  int pendingSceneUpdates = 0;
+  final deletedNotes = <String>{};
+
+  @override
+  Future<void> deleteNotes(List<String> noteIds) async {
+    await super.deleteNotes(noteIds);
+    deletedNotes.addAll(noteIds);
+  }
 
   @override
   Future<void> touchNote(
@@ -671,6 +703,7 @@ class _TrackedLibraryRepository extends SqliteLibraryRepository {
     bool clearCoverThumbnail = false,
   }) async {
     pendingWrites++;
+    if (pendingSceneUpdates > 0) pendingSceneUpdates--;
     try {
       await super.touchNote(
         noteId,
@@ -679,6 +712,33 @@ class _TrackedLibraryRepository extends SqliteLibraryRepository {
       );
     } finally {
       pendingWrites--;
+    }
+  }
+}
+
+class _TrackedSceneRepository extends SqliteWhiteboardSceneRepository {
+  _TrackedSceneRepository(this.library) : super(LocalDatabase.open);
+
+  final _TrackedLibraryRepository library;
+
+  @override
+  Future<String> loadScene(String noteId) async {
+    // Exceed the old 200 ms idle guess deterministically, even on a fast host.
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    return super.loadScene(noteId);
+  }
+
+  @override
+  Future<void> saveScene(String noteId, String content) async {
+    // Page saves finish with touchNote after scene I/O and cover encoding.
+    // Keep that whole chain pending, including the gap between repositories.
+    library.pendingSceneUpdates++;
+    try {
+      await super.saveScene(noteId, content);
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    } catch (_) {
+      library.pendingSceneUpdates--;
+      rethrow;
     }
   }
 }
