@@ -113,4 +113,111 @@ void main() {
 
     controller.dispose();
   });
+
+  test('关闭手指绘制时，手指命中对象走选择拖动，空白处仍平移', () {
+    final controller = MarkdrawController();
+    controller.applyEditorPreferences(
+      defaultTool: ToolType.freedraw,
+      defaultBrush: BrushType.pencil,
+      brushStates: const {},
+      pressureEnabled: true,
+      pressureExponent: 1,
+      palmRejectionEnabled: false,
+      twoFingerZoomEnabled: true,
+      singleFingerPanEnabled: true,
+      fingerDrawingEnabled: false,
+    );
+    controller.loadScene(
+      Scene().addElement(
+        RectangleElement(
+          id: ElementId('rect-touch'),
+          x: 10,
+          y: 10,
+          width: 80,
+          height: 60,
+        ),
+      ),
+    );
+
+    expect(
+      controller.shouldRouteTouchToSelection(const Offset(30, 30)),
+      isTrue,
+    );
+    expect(controller.shouldPanTouch(const Offset(300, 300)), isTrue);
+
+    controller.onPointerDown(
+      const PointerDownEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.touch,
+        position: Offset(30, 30),
+      ),
+    );
+    controller.onPointerMove(
+      const PointerMoveEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.touch,
+        position: Offset(50, 40),
+        delta: Offset(20, 10),
+      ),
+    );
+    controller.onPointerUp(
+      const PointerUpEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.touch,
+        position: Offset(50, 40),
+      ),
+    );
+
+    final moved = controller.currentScene.getElementById(
+      ElementId('rect-touch'),
+    );
+    expect(
+      controller.editorState.selectedIds,
+      contains(ElementId('rect-touch')),
+    );
+    expect(moved?.x, 30);
+    expect(moved?.y, 20);
+    controller.dispose();
+  });
+
+  test('关闭手指绘制和单指平移时，手指不会落入创建工具', () {
+    final controller = MarkdrawController();
+    controller.applyEditorPreferences(
+      defaultTool: ToolType.freedraw,
+      defaultBrush: BrushType.pencil,
+      brushStates: const {},
+      pressureEnabled: true,
+      pressureExponent: 1,
+      palmRejectionEnabled: false,
+      twoFingerZoomEnabled: true,
+      singleFingerPanEnabled: false,
+      fingerDrawingEnabled: false,
+    );
+
+    controller.onPointerDown(
+      const PointerDownEvent(
+        pointer: 2,
+        kind: PointerDeviceKind.touch,
+        position: Offset.zero,
+      ),
+    );
+    controller.onPointerMove(
+      const PointerMoveEvent(
+        pointer: 2,
+        kind: PointerDeviceKind.touch,
+        position: Offset(20, 20),
+        delta: Offset(20, 20),
+      ),
+    );
+    controller.onPointerUp(
+      const PointerUpEvent(
+        pointer: 2,
+        kind: PointerDeviceKind.touch,
+        position: Offset(20, 20),
+      ),
+    );
+
+    expect(controller.currentScene.activeElements, isEmpty);
+    controller.dispose();
+  });
 }
