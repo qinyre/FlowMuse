@@ -103,19 +103,10 @@ func main() {
 		Endpoint: cfg.MyScriptEndpoint,
 		Timeout:  cfg.RecognitionTimeout,
 	})
-	smartLayouter := recognition.NewOpenAICompatibleSmartLayouter(
-		recognition.OpenAICompatibleConfig{
-			BaseURL: cfg.AIBaseURL,
-			APIKey:  cfg.AIAPIKey,
-			Model:   cfg.AIModel,
-			Timeout: cfg.AITimeout,
-		},
-	)
 	recognition.NewHTTPAPI(
 		recognizer,
 		cfg.AITimeout+10*time.Second,
-		smartLayouter,
-	).WithVisionLayouter(smartLayouter).Register(mux)
+	).Register(mux)
 	registerLayoutRecognitionV3(mux, cfg)
 
 	log.Printf("FlowMuse collab server listening on %s", cfg.Addr)

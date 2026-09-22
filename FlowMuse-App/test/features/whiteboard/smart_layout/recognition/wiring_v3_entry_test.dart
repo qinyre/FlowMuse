@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 
@@ -21,11 +20,11 @@ void main() {
 
   const pageId = 'page-1';
 
-  _ObservedController controllerWithContent({
+  MarkdrawController controllerWithContent({
     bool nativeText = false,
     bool grouped = false,
   }) {
-    final controller = _ObservedController(
+    final controller = MarkdrawController(
       config: MarkdrawEditorConfig(
         initialLayout: CanvasLayout(
           type: CanvasLayoutType.paged,
@@ -153,100 +152,9 @@ void main() {
     scope.session.cancelOperation();
   });
 
-  for (final cancelV3 in [true, false]) {
-    testWidgets('R8 同一控制器并发：取消 ${cancelV3 ? 'V3' : 'V1'} 不影响另一链路', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(1600, 2400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-      final controller = controllerWithContent();
-      addTearDown(controller.dispose);
-      // 两条在途链及传输 Completer 必须同处真实异步 zone。
-      await tester.runAsync(() async {
-        final transport = transportOf()..blockRequests();
-        addTearDown(transport.release);
-        final scope = SmartLayoutRealSessionScope.build(
-          controller: controller,
-          serverUri: Uri.parse('http://127.0.0.1:9'),
-          pageId: pageId,
-          post: transport.post,
-        );
-        addTearDown(scope.dispose);
-        final oldEntered = Completer<void>();
-        final oldResponse = Completer<SmartLayoutVisionResponse>();
-        controller.onVisionSmartLayout = (_) {
-          oldEntered.complete();
-          return oldResponse.future;
-        };
-        final oldRun = controller
-            .prepareSmartLayoutTemplates(pageId: pageId)
-            .then<Object?>((value) => value, onError: (Object error) => error);
-        await Future.any([
-          oldEntered.future,
-          oldRun.then((value) => throw StateError('旧准备未进入回调: $value')),
-        ]).timeout(const Duration(seconds: 10));
-        final ticket = scope.session.beginOperation();
-        final newRun = scope.dependencies.analysisRunner!(ticket);
-        await transport.firstRequestSeen.future.timeout(
-          const Duration(seconds: 10),
-        );
-        final token = transport.requests.first.cancelToken;
-        expect(token, isNotNull);
-        expect(token!.isCancelled, isFalse);
-        if (cancelV3) {
-          scope.session.cancelOperation();
-          scope.dependencies.onCancelAnalysis!();
-          expect(token.isCancelled, isTrue);
-          expect(controller.cancelCalls, 0, reason: 'V3 取消不可调用旧控制器');
-        } else {
-          controller.cancelSmartLayoutPreparation();
-          expect(token.isCancelled, isFalse, reason: '旧取消不得取消 V3 token');
-        }
-        transport.release();
-        oldResponse.complete(
-          SmartLayoutVisionResponse.fromJson({
-            'elements': [
-              {
-                'id': 'e1',
-                'role': 'body',
-                'text': '隔离测试正文',
-                'markIds': ['m1'],
-                'confidence': 1.0,
-              },
-            ],
-          }),
-        );
-        final oldResult = await oldRun;
-        final newResult = await newRun;
-        expect(controller.prepareCalls, 1, reason: '只有显式 V1 操作进入旧准备');
-        expect(
-          transport.requests.every(
-            (r) =>
-                Uri.parse(r.url).path == '/api/ink/smart-layout/recognize/v3',
-          ),
-          isTrue,
-        );
-        if (cancelV3) {
-          expect(oldResult, isA<SmartLayoutTemplatePreparation>());
-          expect(newResult, isNot(isA<SmartLayoutRecognitionSucceeded>()));
-        } else {
-          expect(oldResult, isA<SmartLayoutCancelledException>());
-          expect(newResult, isA<SmartLayoutRecognitionSucceeded>());
-          scope.session.cancelOperation();
-        }
-      });
-    });
-  }
-
   testWidgets('R8 V3 服务未配置：保留源、不回退旧准备或视觉引擎', (tester) async {
     final controller = controllerWithContent();
     addTearDown(controller.dispose);
-    var oldVisionCalls = 0;
-    controller.onVisionSmartLayout = (_) async {
-      oldVisionCalls++;
-      throw StateError('V3 不应调用旧视觉识别');
-    };
     final transport = FakeRecognitionTransport(
       responder: (_) async =>
           (503, errorEnvelopeJson('unconfigured', 'not configured', false)),
@@ -267,10 +175,7 @@ void main() {
     expect(result.partial, isTrue);
     expect(result.ledger.preservedCount, 1);
     expect(result.ledger.consumedCount, 0);
-    expect(controller.prepareCalls, 0);
-    expect(oldVisionCalls, 0);
     scope.dependencies.onCancelAnalysis!();
-    expect(controller.cancelCalls, 0);
     scope.session.cancelOperation();
   });
 
@@ -485,29 +390,4 @@ void main() {
     scope.session.cancelOperation();
     scope.session.reset();
   });
-}
-
-/// 只观测调用，仍执行真实旧控制器；生产代码不增加测试开关。
-class _ObservedController extends MarkdrawController {
-  _ObservedController({required super.config});
-  int prepareCalls = 0;
-  int cancelCalls = 0;
-
-  @override
-  Future<SmartLayoutTemplatePreparation?> prepareSmartLayoutTemplates({
-    required String pageId,
-    void Function(int completed, int total)? onProgress,
-  }) {
-    prepareCalls++;
-    return super.prepareSmartLayoutTemplates(
-      pageId: pageId,
-      onProgress: onProgress,
-    );
-  }
-
-  @override
-  void cancelSmartLayoutPreparation() {
-    cancelCalls++;
-    super.cancelSmartLayoutPreparation();
-  }
 }

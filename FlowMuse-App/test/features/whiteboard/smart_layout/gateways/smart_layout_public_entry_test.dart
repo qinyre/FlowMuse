@@ -62,16 +62,14 @@ void main() {
     expect(entry.isDisposed, isTrue);
   });
 
-  test('入口不改变旧公开入口签名：v2 prepare/commit API 仍可用', () {
+  test('V3 入口构造不影响控制器基本可用性', () {
     final controller = MarkdrawController();
     addTearDown(controller.dispose);
     SmartLayoutPublicEntry.fromEditor(
       controller: controller,
       serverUri: Uri.parse('http://127.0.0.1:48931'),
     );
-    // v2 公开入口行为不受 v3 入口构造影响。
     expect(controller.isDisposed, isFalse);
     expect(controller.currentScene, isA<Scene>());
-    expect(() => controller.cancelSmartLayoutPreparation(), returnsNormally);
   });
 }

@@ -33,6 +33,17 @@
 
 日志保存在应用目录的 `build/freehand-tap-targeted.log`、`build/freehand-tap-analyze.log`、`build/freehand-tap-full-tests.log`、`build/freehand-tap-release-build.log` 和 `build/freehand-tap-web-build.log`。
 
+## 合入主分支验证
+
+2026-09-22，将 `origin/main@53ae230` 合入 `feature/freehand-experience@e4e3ee6` 后重新验证。自动合并无冲突，保留主分支的 V3 排版入口与本机构建产物取消追踪规则，实验性静态缓存仍默认关闭。
+
+- `flutter analyze`：无问题。
+- `flutter test --reporter expanded`：1679 项通过、5 项既有跳过；主分支删除旧版排版测试，因此总数低于上一次验证。
+- `go test ./...`：7 个包通过；`go vet ./...`：通过。
+- `flutter build hap --no-codesign`：通过，生成 `FlowMuse-App/build/ohos/hap/entry-default-unsigned.hap`（60606930 字节，构建显示 57.8MB）。仅验证构建，未签名、未安装、未做实机复测。
+
+首次 HAP 构建因本地 Flutter SDK 的 `packages/flutter_tools/hvigor` 文件缺失失败。重试使用 SDK 当前提交 `cedbd616b9` 中的同版本插件，解压至应用 `build/freehand-hap-support/` 并通过进程级 `NODE_PATH` 提供；未恢复或修改全局 SDK，未新增项目依赖。验证日志位于应用 `build/freehand-main-merge-analyze.log`、`build/freehand-main-merge-tests.log`、`build/freehand-main-merge-go-tests.log`、`build/freehand-main-merge-go-vet.log` 和 `build/freehand-main-merge-hap-retry.log`。
+
 ## 待实机复测
 
 用户暂时没有平板，本轮不安装、不操作设备。之后在修复版分别用五种笔轻点 10 次，并尝试轻压、停留后抬笔、小幅移动后抬笔；记录仍消失时的笔型、笔宽、缩放和出现频率。自动化验证通过不等于真实持笔验收通过。

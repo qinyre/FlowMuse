@@ -59,8 +59,6 @@ import '../ai_assistant/views/region_capture_overlay.dart';
 import '../ai_assistant/models/ai_visual_attachment.dart';
 import '../speech_recognition/services/speech_recognition_service.dart';
 import 'collaboration_focus_target.dart';
-import 'smart_layout_dialogs.dart';
-import 'smart_layout_template_sheet.dart';
 import '../smart_layout/session/smart_layout_real_wiring.dart';
 import '../smart_layout/views/smart_layout_session_panel.dart';
 import '../collaboration/collaboration_config.dart';
@@ -143,26 +141,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _editorPreferencesApplied = false;
   OverlayEntry? _aiPanelEntry;
   bool _aiCaptureModeActive = false;
-  bool _smartLayoutFlowActive = false;
-  // 用户已点取消但流程尚未收尾（在途请求返回前）：期间重入给出"正在结束"提示。
-  bool _smartLayoutCancelRequested = false;
-  SmartLayoutPlan? _smartLayoutBarPlan;
-  bool _smartLayoutBarMultiPage = false;
-  Completer<SmartLayoutBarAction>? _smartLayoutBarHandler;
-  Future<void> Function()? _smartLayoutOnProofread;
-  // 当前页识别准备缓存：确认条模板 chips 换模板时免重识别直接重建计划。
-  SmartLayoutTemplatePreparation? _smartLayoutActivePreparation;
-  // 当前草稿对应的计划（chips 换模板后更换）：提交/删除应用必须用它而非
-  // 进入草稿时的局部变量，否则换模板后提交会拿旧计划。
-  SmartLayoutPlan? _smartLayoutDraftPlan;
-  // 模板卡的"保留手写笔迹"开关（流程级，换模板沿用当前值）。
-  bool _smartLayoutKeepHandwriting = false;
-  // 识别进度浮层：null = 不显示；ValueNotifier 便于逐块进度原位刷新。
-  final ValueNotifier<SmartLayoutRecognitionProgress?>
-  _smartLayoutRecognitionProgress = ValueNotifier(null);
-  // 草稿态橙框去重缓存：同一方案且低置信矩形未变时跳过幽灵刷新。
-  SmartLayoutPlan? _smartLayoutGhostPlan;
-  List<Rect> _smartLayoutGhostLowConfidenceRects = const [];
 
   // V3 智能排版会话（V3-505C 真实入口）：真实依赖装配 + 非模态面板。
   SmartLayoutRealSessionScope? _smartLayoutV3Scope;
@@ -193,7 +171,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return stampCreatorOnResult(result, scene, creator);
     };
     _markdrawController.addListener(_onControllerNotifyForFocus);
-    _markdrawController.addListener(_onControllerNotifyForSmartLayoutGhost);
     _speechRecognitionService = createSpeechRecognitionService();
     _seedDocumentTitleFromCache();
     _markdrawController.onBrushStateChanged = (type, state) {
@@ -271,12 +248,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _remoteWetInkStore.dispose();
     _markdrawController.onPrepareLocalResult = null;
     _markdrawController.removeListener(_onControllerNotifyForFocus);
-    _markdrawController.removeListener(_onControllerNotifyForSmartLayoutGhost);
-    // 退出页面前中止在途的智能排版识别，避免其完成后回调已释放的通知器。
-    _markdrawController.cancelSmartLayoutPreparation();
     _smartLayoutV3Scope?.dispose();
     _smartLayoutV3Scope = null;
-    _smartLayoutRecognitionProgress.dispose();
     _focusTarget = null;
     _lastFocusEmpty = null;
     _lastKnownCreatorNames.clear();
@@ -899,473 +872,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     setState(() => _smartLayoutV3PanelVisible = false);
   }
 
-  Future<void> _startSmartLayoutFlow({List<String>? initialPageIds}) async {
-    if (_smartLayoutFlowActive) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 2),
-          content: Text(
-            // 取消不中断在途请求，上一轮流程要等响应返回才真正结束。
-            _smartLayoutCancelRequested ? '正在结束上次识别，请稍候' : '智能排版正在进行中',
-          ),
-        ),
-      );
-      return;
-    }
-    final pages = _markdrawController.layout.pages;
-    if (pages.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('当前笔记没有页面')));
-      return;
-    }
-    List<String> selected;
-    if (initialPageIds != null && initialPageIds.length == 1) {
-      // AI 指令路径：已指定单个页面，直接执行，不再弹范围选择框
-      selected = initialPageIds;
-    } else if (pages.length == 1) {
-      // 单页笔记：全部页/当前页/选页无区别，一键执行
-      selected = [pages.first.id];
-    } else {
-      final visible = _markdrawController.editorState.viewport.visibleRect(
-        _markdrawController.canvasSize,
-      );
-      final currentPage = _markdrawController.pageForVisibleRect(visible);
-      final selection = await showDialog<SmartLayoutScopeSelection>(
-        context: context,
-        builder: (dialogContext) => SmartLayoutScopeDialog(
-          pages: pages,
-          currentPageId: currentPage?.id,
-          thumbnailBuilder: (bounds) =>
-              _markdrawController.exportRegionPng(bounds, maxLongestSide: 120),
-        ),
-      );
-      if (selection == null) return;
-      selected = switch (selection.mode) {
-        SmartLayoutScopeMode.allPages => [for (final page in pages) page.id],
-        SmartLayoutScopeMode.currentPage => [
-          if (currentPage != null) currentPage.id else pages.first.id,
-        ],
-        SmartLayoutScopeMode.selectedPages =>
-          selection.pageIds.isEmpty ? [pages.first.id] : selection.pageIds,
-      };
-    }
-    setState(() => _smartLayoutFlowActive = true);
-    _smartLayoutCancelRequested = false;
-    _smartLayoutKeepHandwriting = false;
-    final isMultiPage = selected.length > 1;
-    var applied = 0;
-    var skipped = 0;
-    var failed = 0;
-    var nothing = 0;
-    try {
-      for (var i = 0; i < selected.length; i++) {
-        if (!mounted) return;
-        final pageId = selected[i];
-        final result = await _runSmartLayoutPage(
-          pageId,
-          isMultiPage: isMultiPage,
-          pageLabel: isMultiPage ? '第 ${i + 1}/${selected.length} 页' : null,
-        );
-        switch (result) {
-          case _SmartLayoutPageOutcome.applied:
-            applied++;
-          case _SmartLayoutPageOutcome.skipped:
-            skipped++;
-          case _SmartLayoutPageOutcome.failed:
-            failed++;
-          case _SmartLayoutPageOutcome.nothing:
-            nothing++;
-          case _SmartLayoutPageOutcome.cancelled:
-            // 取消整个流程：停止后续页，已应用页保留
-            setState(() => _smartLayoutFlowActive = false);
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(applied > 0 ? '已取消，完成 $applied 页' : '已取消智能排版'),
-                ),
-              );
-            }
-            return;
-        }
-      }
-    } finally {
-      _smartLayoutCancelRequested = false;
-      _smartLayoutActivePreparation = null;
-      _smartLayoutDraftPlan = null;
-      if (mounted) setState(() => _smartLayoutFlowActive = false);
-    }
-    final parts = <String>[
-      if (applied > 0) '应用 $applied 页',
-      if (skipped > 0) '跳过 $skipped 页',
-      if (failed > 0) '失败 $failed 页',
-      if (nothing > 0) '无内容 $nothing 页',
-    ];
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(parts.isEmpty ? '未执行智能排版' : '智能排版完成：${parts.join('，')}'),
-      ),
-    );
-  }
-
-  /// 等待底部悬浮条动作（非模态：画布全程可见）。
-  Future<SmartLayoutBarAction> _awaitSmartLayoutBarAction({
-    SmartLayoutPlan? plan,
-    required bool isMultiPage,
-    Future<void> Function()? onProofread,
-  }) {
-    final completer = Completer<SmartLayoutBarAction>();
-    setState(() {
-      _smartLayoutBarPlan = plan;
-      _smartLayoutBarMultiPage = isMultiPage;
-      _smartLayoutBarHandler = completer;
-      _smartLayoutOnProofread = onProofread;
-    });
-    return completer.future.whenComplete(() {
-      if (mounted) {
-        setState(() {
-          _smartLayoutBarPlan = null;
-          _smartLayoutBarHandler = null;
-          _smartLayoutOnProofread = null;
-        });
-      }
-    });
-  }
-
-  void _handleSmartLayoutBarAction(SmartLayoutBarAction action) {
-    final handler = _smartLayoutBarHandler;
-    if (handler == null || handler.isCompleted) return;
-    setState(() {
-      _smartLayoutBarPlan = null;
-      _smartLayoutBarHandler = null;
-      _smartLayoutOnProofread = null;
-    });
-    handler.complete(action);
-  }
-
-  Future<_SmartLayoutPageOutcome> _runSmartLayoutPage(
-    String pageId, {
-    required bool isMultiPage,
-    String? pageLabel,
-  }) async {
-    final messenger = ScaffoldMessenger.of(context);
-    // "重新识别"动作回到识别阶段重跑本页：用循环而非递归，防调用栈增长。
-    while (true) {
-      SmartLayoutTemplatePreparation? preparation;
-      try {
-        preparation = await _prepareSmartLayoutWithProgress(
-          pageId,
-          pageLabel: pageLabel,
-        );
-      } on SmartLayoutCancelledException {
-        // 用户主动取消识别：静默结束（不弹"失败"提示），停止整个流程。
-        return _SmartLayoutPageOutcome.cancelled;
-      } catch (catchError) {
-        // 页面可能已在识别途中退出（dispose 触发'编辑器已释放'），
-        // 不再向离开后的页面弹失败提示。
-        if (!mounted) return _SmartLayoutPageOutcome.cancelled;
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('智能排版失败：${_readableSmartLayoutError(catchError)}'),
-          ),
-        );
-        return _SmartLayoutPageOutcome.failed;
-      }
-      if (!mounted) return _SmartLayoutPageOutcome.cancelled;
-      if (preparation == null) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('本页没有可智能排版的内容')),
-        );
-        return _SmartLayoutPageOutcome.nothing;
-      }
-      // 缓存本页识别准备：确认条换模板 chips 直接复用，无需重新识别。
-      _smartLayoutActivePreparation = preparation;
-      // 模板选择卡：三张真实内容缩略图，点选后确定性落位；关闭 = 取消整个
-      // 流程（零残留）；多页流程提供"跳过本页"继续后续页。
-      // 保留手写开关是弹层内部状态，随选卡返回；确认条换模板 chips 沿用该值。
-      final choice = await showSmartLayoutTemplateSheet(
-        context: context,
-        preparation: preparation,
-        allowSkip: isMultiPage,
-        keepHandwriting: _smartLayoutKeepHandwriting,
-      );
-      if (!mounted) return _SmartLayoutPageOutcome.cancelled;
-      if (choice == null) {
-        return _SmartLayoutPageOutcome.cancelled;
-      }
-      if (choice.skipped) {
-        return _SmartLayoutPageOutcome.skipped;
-      }
-      final kind = choice.kind;
-      if (kind == null) {
-        return _SmartLayoutPageOutcome.cancelled;
-      }
-      _smartLayoutKeepHandwriting = choice.keepHandwriting;
-      final result = _markdrawController.buildSmartLayoutPlanForTemplate(
-        preparation,
-        kind,
-        keepHandwriting: choice.keepHandwriting,
-      );
-      final plan = result.plan;
-      if (plan == null) {
-        messenger.showSnackBar(
-          SnackBar(content: Text('智能排版失败：${result.error ?? '未知错误'}')),
-        );
-        return _SmartLayoutPageOutcome.failed;
-      }
-      // 草稿编辑态：把排版结果渲染为可拖动的临时场景（蓝框=参与者选取框），
-      // 红区以红框标注叠加；低置信文本以橙虚线标注，可经底部条"校对"就地改字。
-      // 橙框由控制器通知监听实时跟随（拖动/校对保存后矩形即时刷新）。
-      _markdrawController.enterSmartLayoutDraft(plan);
-      _smartLayoutDraftPlan = plan;
-      _refreshSmartLayoutDraftGhost(plan: plan, force: true);
-      final action = await _awaitSmartLayoutBarAction(
-        plan: plan,
-        isMultiPage: isMultiPage,
-        onProofread: plan.lowConfidenceTexts.isEmpty
-            ? null
-            : _showSmartLayoutProofreadSheet,
-      );
-      // 换模板后草稿计划已被 chips 回调更换；提交必须用当前草稿对应的计划
-      // （进入草稿时必已写入 _smartLayoutDraftPlan，等待动作期间只会被换成新计划）。
-      final draftPlan = _smartLayoutDraftPlan!;
-      switch (action) {
-        case SmartLayoutBarAction.apply:
-          return _commitSmartLayoutDraft(draftPlan, dropFailedBlocks: false);
-        case SmartLayoutBarAction.applyAndDrop:
-          return _commitSmartLayoutDraft(draftPlan, dropFailedBlocks: true);
-        case SmartLayoutBarAction.skipPage:
-          return _cancelSmartLayoutDraftReturn(_SmartLayoutPageOutcome.skipped);
-        case SmartLayoutBarAction.cancelAll:
-          return _cancelSmartLayoutDraftReturn(
-            _SmartLayoutPageOutcome.cancelled,
-          );
-        case SmartLayoutBarAction.retry:
-          // 放弃当前草稿（控制器清空橙/红幽灵框），回到识别阶段重跑本页。
-          _cancelSmartLayoutDraftReturn(_SmartLayoutPageOutcome.skipped);
-      }
-    }
-  }
-
-  /// 带进度浮层与取消的识别准备（首跑与"重新识别"共用）。
-  /// 识别中浮层由 [_smartLayoutRecognitionProgress] 原位刷新；
-  /// onProgress 在裁剪重问阶段逐块回调（total = 待转写文本块数）。
-  /// [pageLabel] 为多页流程的页码提示，随浮层文案展示。
-  Future<SmartLayoutTemplatePreparation?> _prepareSmartLayoutWithProgress(
-    String pageId, {
-    String? pageLabel,
-  }) async {
-    _smartLayoutRecognitionProgress.value = SmartLayoutRecognitionProgress.page(
-      pageLabel: pageLabel,
-    );
-    try {
-      return await _markdrawController.prepareSmartLayoutTemplates(
-        pageId: pageId,
-        onProgress: (completed, total) {
-          if (!mounted) return;
-          _smartLayoutRecognitionProgress.value =
-              SmartLayoutRecognitionProgress.blocks(
-                completed: completed,
-                total: total,
-                pageLabel: pageLabel,
-              );
-        },
-      );
-    } finally {
-      // 页面可能在识别途中退出（dispose 已释放通知器），置值前判 mounted。
-      if (mounted) {
-        _smartLayoutRecognitionProgress.value = null;
-      }
-    }
-  }
-
-  /// 用户点击进度浮层上的"取消"：立即撤下浮层并通知控制器中止识别。
-  /// 取消不中断在途 HTTP 请求（响应返回后在检查点收尾），期间重入流程
-  /// 会被 [_startSmartLayoutFlow] 以"正在结束上次识别"提示。
-  void _cancelSmartLayoutPreparation() {
-    _smartLayoutCancelRequested = true;
-    _smartLayoutRecognitionProgress.value = null;
-    try {
-      _markdrawController.cancelSmartLayoutPreparation();
-    } catch (error) {
-      // 取消是尽力而为的降级操作：失败不打断流程（识别完成照常走模板卡）。
-      debugPrint('[FlowMuseSmartLayout] 取消识别请求未生效: ${error.runtimeType}');
-    }
-  }
-
-  /// 控制器通知 → 草稿态橙框实时跟随（拖动/校对保存后矩形变化即刷新）。
-  /// 仅在草稿确认条显示期间生效；矩形未变时跳过，避免高频通知重复重绘。
-  void _onControllerNotifyForSmartLayoutGhost() {
-    if (!mounted || _smartLayoutBarPlan == null) return;
-    _refreshSmartLayoutDraftGhost();
-  }
-
-  /// 从控制器取低置信矩形的实时快照并更新幽灵层（红区沿用方案固定矩形）。
-  void _refreshSmartLayoutDraftGhost({
-    SmartLayoutPlan? plan,
-    bool force = false,
-  }) {
-    final target = plan ?? _smartLayoutBarPlan;
-    if (target == null || !_markdrawController.smartLayoutDraftActive) {
-      return;
-    }
-    final lowConfidenceRects =
-        _markdrawController.smartLayoutDraftLowConfidenceRects;
-    if (target.failureRects.isEmpty && lowConfidenceRects.isEmpty) return;
-    if (!force &&
-        identical(target, _smartLayoutGhostPlan) &&
-        _smartLayoutRectsEqual(
-          _smartLayoutGhostLowConfidenceRects,
-          lowConfidenceRects,
-        )) {
-      return;
-    }
-    _smartLayoutGhostPlan = target;
-    _smartLayoutGhostLowConfidenceRects = lowConfidenceRects;
-    _markdrawController.setSmartLayoutGhost(
-      SmartLayoutGhostSpec.failures(
-        failureRects: target.failureRects,
-        lowConfidenceRects: lowConfidenceRects,
-      ),
-    );
-  }
-
-  static bool _smartLayoutRectsEqual(List<Rect> left, List<Rect> right) {
-    if (identical(left, right)) return true;
-    if (left.length != right.length) return false;
-    for (var i = 0; i < left.length; i++) {
-      if (left[i] != right[i]) return false;
-    }
-    return true;
-  }
-
-  _SmartLayoutPageOutcome _cancelSmartLayoutDraftReturn(
-    _SmartLayoutPageOutcome outcome,
-  ) {
-    _markdrawController.cancelSmartLayoutDraft();
-    _smartLayoutDraftPlan = null;
-    return outcome;
-  }
-
-  /// 当前模式下放得下的模板种类（确认条 chips 可选项；放不下的置灰）。
-  List<SmartLayoutTemplateKind> _smartLayoutAvailableKinds() {
-    final preparation = _smartLayoutActivePreparation;
-    if (preparation == null) return const [];
-    final layouts = _smartLayoutKeepHandwriting
-        ? preparation.layoutsKeepInk
-        : preparation.layouts;
-    return [
-      for (final kind in SmartLayoutTemplateKind.values)
-        if (layouts[kind] != null) kind,
-    ];
-  }
-
-  /// 确认条模板 chips：草稿态零成本换模板（走查 #14）。
-  /// 先装配新计划、成功后才替换草稿——装配失败时当前草稿原样保留（不存在
-  /// "有确认条无草稿"的中间态），SnackBar 提示后可继续校对/应用/再换其他模板。
-  void _switchSmartLayoutTemplate(SmartLayoutTemplateKind newKind) {
-    final currentPlan = _smartLayoutDraftPlan;
-    final preparation = _smartLayoutActivePreparation;
-    if (currentPlan == null || preparation == null) return;
-    if (newKind == currentPlan.style) return; // 点当前模板：忽略
-    final result = _markdrawController.buildSmartLayoutPlanForTemplate(
-      preparation,
-      newKind,
-      keepHandwriting: _smartLayoutKeepHandwriting,
-    );
-    final newPlan = result.plan;
-    if (newPlan == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '切换到「${newKind.displayName}」失败：${result.error ?? '未知错误'}',
-          ),
-        ),
-      );
-      return;
-    }
-    // 替换草稿：控制器还原旧草稿（场景/视口零残留）→ 按新计划重新进入。
-    _markdrawController.cancelSmartLayoutDraft();
-    _markdrawController.enterSmartLayoutDraft(newPlan);
-    _smartLayoutDraftPlan = newPlan;
-    setState(() {
-      _smartLayoutBarPlan = newPlan;
-      _smartLayoutOnProofread = newPlan.lowConfidenceTexts.isEmpty
-          ? null
-          : _showSmartLayoutProofreadSheet;
-    });
-    // 橙框/红区幽灵按新方案刷新（方案对象已更换，force 跳过去重）。
-    _refreshSmartLayoutDraftGhost(plan: newPlan, force: true);
-  }
-
-  /// 低置信文本校对编辑条：逐项改字即时更新草稿场景；
-  /// 改字触发的控制器通知由 [_onControllerNotifyForSmartLayoutGhost] 刷新橙框。
-  Future<void> _showSmartLayoutProofreadSheet() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => SmartLayoutProofreadSheet(
-        items: _markdrawController.smartLayoutDraftProofreadItems,
-        onRevise: _markdrawController.reviseSmartLayoutDraftText,
-      ),
-    );
-  }
-
-  /// 全文核对编辑条：草稿全部智能排版文本项（不只低置信）逐项核对改字。
-  /// 保留手写草稿无新增文本（文本以墨迹移动）→ 清单为空，入口自动隐藏。
-  Future<void> _showSmartLayoutFullReviewSheet() async {
-    final items = _markdrawController.smartLayoutDraftAllTextItems;
-    if (!mounted || items.isEmpty) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => SmartLayoutProofreadSheet(
-        items: items,
-        onRevise: _markdrawController.reviseSmartLayoutDraftText,
-        headerNote: '全部识别文字如下，逐项核对或修正后应用。',
-      ),
-    );
-  }
-
-  _SmartLayoutPageOutcome _commitSmartLayoutDraft(
-    SmartLayoutPlan plan, {
-    required bool dropFailedBlocks,
-  }) {
-    if (_markdrawController.commitSmartLayoutDraft(
-      plan,
-      dropFailedBlocks: dropFailedBlocks,
-    )) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(dropFailedBlocks ? '智能排版已落地（未识别笔迹已删除）' : '智能排版已落地'),
-        ),
-      );
-      return _SmartLayoutPageOutcome.applied;
-    }
-    return _SmartLayoutPageOutcome.failed;
-  }
-
-  String _readableSmartLayoutError(Object error) {
-    final text = error is StateError ? error.message : error.toString();
-    return text
-        .replaceFirst(RegExp(r'^Bad state:\s*'), '')
-        .replaceFirst(RegExp(r'^Exception:\s*'), '')
-        .trim();
-  }
-
   Future<void> _applyAiAgentResponse(AiAgentResponse response) async {
     if (response.actions.any(
       (action) => action.tool == AiAgentTool.smartLayout,
     )) {
-      final visible = _markdrawController.editorState.viewport.visibleRect(
-        _markdrawController.canvasSize,
-      );
-      final page = _markdrawController.pageForVisibleRect(visible);
-      if (page == null) {
-        throw StateError('当前画布没有可智能排版的内容');
-      }
-      await _startSmartLayoutFlow(initialPageIds: [page.id]);
+      _openSmartLayoutV3Panel();
       return;
     }
     AiAgentAction? rename;
@@ -2413,16 +1924,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       });
       return;
     }
-    // 智能排版草稿期间拒收远端写入：远端消息基于旧场景状态，此时应用会污染
-    // 排版预览（确认位移按被污染场景计算），取消草稿还会把远端改动一并回滚；
-    // commit 后重放旧消息等效回滚用户排版，故直接跳过，等协作层后续全量
-    // reconcile 自然收敛（与 cannot_mutate 同构的暂态跳过）。
-    if (_markdrawController.smartLayoutDraftActive) {
-      CollaborationDebugLog.write('scene', 'remote_elements_skipped', {
-        'reason': 'smart_layout_draft',
-      });
-      return;
-    }
     final protectedElementIds = _collaborationAdapter.protectedElementIds();
     final changedElements = _collaborationRepository.reconcileRemoteElements(
       remoteElements: remoteElements,
@@ -2457,14 +1958,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     if (!_canMutateWhiteboard) {
       CollaborationDebugLog.write('scene', 'remote_scene_skipped', {
         'reason': 'cannot_mutate',
-      });
-      return;
-    }
-    // 智能排版草稿期间拒收远端全量场景：同 _applyRemoteElements 的守卫理由，
-    // 全量替换会直接覆盖排版预览场景。
-    if (_markdrawController.smartLayoutDraftActive) {
-      CollaborationDebugLog.write('scene', 'remote_scene_skipped', {
-        'reason': 'smart_layout_draft',
       });
       return;
     }
@@ -2836,14 +2329,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onRecognizeInk: (request) => ref
                       .read(inkRecognitionRepositoryProvider)
                       .recognize(request),
-                  onVisionSmartLayout: (request) => ref
-                      .read(inkRecognitionRepositoryProvider)
-                      .visionSmartLayout(request),
-                  onTranscribeCrop: (request) => ref
-                      .read(inkRecognitionRepositoryProvider)
-                      .transcribeCrop(request),
                   onAiPressed: _toggleAiAgent,
-                  onSmartLayoutPressed: () => _startSmartLayoutFlow(),
+                  onSmartLayoutPressed: _openSmartLayoutV3Panel,
                   onLiveFreedrawChanged: state.collaborating
                       ? _broadcastLiveFreedraw
                       : null,
@@ -2888,47 +2375,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                     onCommit: _handleRegionSelected,
                     onCancel: _handleRegionCancel,
                   ),
-                if (_smartLayoutBarPlan != null)
-                  Positioned(
-                    left: 48,
-                    right: 48,
-                    bottom: 24,
-                    child: Center(
-                      child: SmartLayoutConfirmBar(
-                        plan: _smartLayoutBarPlan!,
-                        isMultiPage: _smartLayoutBarMultiPage,
-                        onAction: _handleSmartLayoutBarAction,
-                        onProofread: _smartLayoutOnProofread,
-                        // 模板切换 chips：当前模板高亮，放不下的置灰。
-                        currentKind: _smartLayoutBarPlan!.style,
-                        availableKinds: _smartLayoutAvailableKinds(),
-                        onTemplateSelected: _switchSmartLayoutTemplate,
-                        keepHandwriting: _smartLayoutKeepHandwriting,
-                        // 保留手写草稿清单为空 → 入口自动隐藏，无需按模式特判。
-                        onReviewAll: _markdrawController
-                            .smartLayoutDraftAllTextItems
-                            .isNotEmpty
-                            ? _showSmartLayoutFullReviewSheet
-                            : null,
-                      ),
-                    ),
-                  ),
-                // V3 智能排版入口（V3-505C 真实接线）：角落按钮 + 非模态
-                // 面板（真实 server→候选→commit 会话，无 fake provider）。
-                Positioned(
-                  right: 16,
-                  bottom: 88,
-                  child: Semantics(
-                    button: true,
-                    label: '打开智能排版 v3 面板',
-                    child: FloatingActionButton.small(
-                      heroTag: 'smart-layout-v3-entry',
-                      tooltip: '智能排版 v3（实时候选预览）',
-                      onPressed: _openSmartLayoutV3Panel,
-                      child: const Icon(Icons.auto_awesome_outlined),
-                    ),
-                  ),
-                ),
                 if (_smartLayoutV3PanelVisible &&
                     _smartLayoutV3Scope != null)
                   Positioned(
@@ -2945,26 +2391,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       ),
                     ),
                   ),
-                // 识别进度浮层（可取消）：与确认条互斥（只在 prepare 阶段出现），
-                // 由 ValueNotifier 原位刷新文案，SnackBar 不支持改文案故不用。
-                Positioned(
-                  left: 48,
-                  right: 48,
-                  bottom: 24,
-                  child:
-                      ValueListenableBuilder<SmartLayoutRecognitionProgress?>(
-                        valueListenable: _smartLayoutRecognitionProgress,
-                        builder: (context, progress, _) {
-                          if (progress == null) return const SizedBox.shrink();
-                          return Center(
-                            child: SmartLayoutProgressOverlay(
-                              progress: progress,
-                              onCancel: _cancelSmartLayoutPreparation,
-                            ),
-                          );
-                        },
-                      ),
-                ),
               ],
             ),
           ),
@@ -3500,4 +2926,3 @@ class _RoomInfoBlock extends StatelessWidget {
   }
 }
 
-enum _SmartLayoutPageOutcome { applied, skipped, failed, nothing, cancelled }
