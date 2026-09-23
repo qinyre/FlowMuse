@@ -23,6 +23,8 @@ import '../../../shared/widgets/right_page.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
 import '../../../shared/widgets/theme_hero.dart';
 import '../../account/view_models/account_view_model.dart';
+import '../../social/view_models/social_view_model.dart';
+import '../../social/views/social_page.dart' show SocialFriendCode;
 import '../../account/widgets/account_avatar.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
@@ -604,6 +606,21 @@ class _AccountSettingsSectionState
                 ],
               ),
             ),
+          ),
+          Consumer(
+            builder: (context, ref, _) {
+              final person = ref.watch(
+                socialViewModelProvider.select((s) => s.me?.person),
+              );
+              return person == null
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: _SettingsCard(
+                        child: SocialFriendCode(person: person),
+                      ),
+                    );
+            },
           ),
           if (user.huaweiLinked || huaweiAvailable) ...[
             const SizedBox(height: 16),

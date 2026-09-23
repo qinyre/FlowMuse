@@ -44,29 +44,42 @@ class PrivacyPolicyPage extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '更新日期：2026 年 7 月',
+            '更新日期：2026 年 9 月',
             style: theme.textTheme.bodySmall?.copyWith(color: muted),
           ),
           const SizedBox(height: AppSpacing.sectionGap),
           _PolicySection(
             icon: LucideIcons.database,
             title: '我们收集哪些数据',
-            body: 'FlowMuse 以本地优先为设计原则。你的白板内容、笔记本、标签、'
-                '主题偏好均存储在本机的加密 SQLite 数据库中，我们默认不会主动'
+            body:
+                'FlowMuse 以本地优先为设计原则。你的白板内容、笔记本、标签、'
+                '主题偏好均存储在本机的 SQLite 数据库中，由系统沙箱隔离。我们默认不会主动'
                 '收集你的笔记内容。',
           ),
           _PolicySection(
             icon: LucideIcons.users,
             title: '账户信息',
-            body: '当你注册账户时，我们会保存你的邮箱地址、昵称和头像。密码经过'
+            body:
+                '当你注册账户时，我们会保存你提供的邮箱地址、昵称和头像。使用华为账号登录时，'
+                '我们保存必要的账号关联标识；绑定邮箱为可选操作。密码经过'
                 '单向哈希处理后存储，任何人（包括我们）都无法看到你的明文密码。',
           ),
           _PolicySection(
             icon: LucideIcons.lock,
             title: '协作与同步',
-            body: '在多人协作场景下，白板场景数据会在协作者之间通过端到端加密'
+            body:
+                '在多人协作场景下，白板场景数据会在协作者之间通过端到端加密'
                 '通道（AES-GCM-128）实时同步。服务器仅作为加密数据的转发中继，'
                 '无法解读任何场景内容。',
+          ),
+          _PolicySection(
+            icon: LucideIcons.messagesSquare,
+            title: '好友与私聊',
+            body:
+                '好友码、申请、好友和屏蔽关系、私聊文字及阅读进度保存在 FlowMuse 服务器，'
+                '用于跨设备同步。私聊通过加密连接传输，但不采用端到端加密，服务端可处理消息正文。'
+                '删除好友或屏蔽用户不会删除聊天历史。应用在前台同步消息，首版不提供系统后台推送。'
+                '白板密钥链接不能发送到云端私聊。',
           ),
           _PolicySection(
             icon: LucideIcons.wandSparkles,
@@ -79,33 +92,38 @@ class PrivacyPolicyPage extends StatelessWidget {
           _PolicySection(
             icon: LucideIcons.wifi,
             title: '权限用途',
-            body: '· 网络访问（INTERNET）：用于账户登录、实时协作与用户主动发起的 AI 请求\n'
+            body:
+                '· 网络访问（INTERNET）：用于账户登录、好友私聊、实时协作与用户主动发起的 AI 请求\n'
                 '· 网络状态（GET_NETWORK_INFO，鸿蒙端）：用于检测当前网络连接状态\n'
                 '· 文件读取（按需）：仅在你主动导入图片、PDF 或备份文件时使用',
           ),
           _PolicySection(
             icon: LucideIcons.shieldCheck,
             title: '数据安全',
-            body: '我们采用业界标准的加密措施保护你的账户与传输数据。本地数据'
+            body:
+                '我们采用业界标准的加密措施保护你的账户与传输数据。本地数据'
                 '依赖操作系统的应用沙箱进行隔离，其他应用默认无法访问。',
           ),
           _PolicySection(
             icon: LucideIcons.share2,
             title: '数据共享',
-            body: '我们不会将你的个人信息出售或出租给第三方。除法律法规要求或'
+            body:
+                '我们不会将你的个人信息出售或出租给第三方。除法律法规要求或'
                 '为提供核心功能所必需的服务商（如服务器托管）外，我们不会与任何'
                 '第三方共享你的数据。',
           ),
           _PolicySection(
             icon: LucideIcons.userX,
             title: '你的权利',
-            body: '你可以随时在「账户与协作」中修改昵称、头像或退出登录。如需'
+            body:
+                '你可以随时在「账户与协作」中修改昵称、头像或退出登录。如需'
                 '彻底删除账户和相关数据，请通过应用内反馈渠道联系我们。',
           ),
           _PolicySection(
             icon: LucideIcons.pencil,
             title: '政策变更',
-            body: '若本政策有重大调整，我们会在应用更新说明中予以提示。继续使用'
+            body:
+                '若本政策有重大调整，我们会在应用更新说明中予以提示。继续使用'
                 '即视为你认可更新后的隐私政策。',
           ),
           const SizedBox(height: AppSpacing.sectionGap),
