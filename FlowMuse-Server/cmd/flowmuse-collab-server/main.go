@@ -105,7 +105,11 @@ func main() {
 			socialEnabled = false
 		}
 	}
-	social.NewHTTPAPI(socialStore, authAPI.IdentityFromRequest, socialEnabled, cfg.RequestTimeout).Register(mux)
+	socialHub := social.NewHub(io, userStore, tokenService, socialEnabled)
+	defer socialHub.Close()
+	socialAPI := social.NewHTTPAPI(socialStore, authAPI.IdentityFromRequest, socialEnabled, cfg.RequestTimeout)
+	socialAPI.Notify = socialHub.Notify
+	socialAPI.Register(mux)
 	collab.NewHTTPAPI(sceneStore, fileStore, roomStore, authAPI, cfg.RequestTimeout).Register(mux)
 	recognizer := recognition.NewMyScriptRecognizer(recognition.MyScriptConfig{
 		AppKey:   cfg.MyScriptAppKey,
