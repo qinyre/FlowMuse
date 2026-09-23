@@ -17,6 +17,8 @@ void main() {
       '/#/settings?section=other': '/settings?section=other',
       '/#/settings?section=a%26b': '/settings?section=a%26b',
       '/#//untrusted.example/': '/library',
+      '/social/invitations/test-invite': '/social/invitations/test-invite',
+      '/#/social/invitations/test-invite': '/social/invitations/test-invite',
       '/auth/verify-email?token=test-only':
           '/auth/verify-email?token=test-only',
       '/#/auth/verify-email?token=test-only':

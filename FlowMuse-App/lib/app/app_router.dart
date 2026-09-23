@@ -17,6 +17,8 @@ import '../features/tags/views/tags_page.dart';
 import '../features/whiteboard/collaboration/models/collaboration_room.dart';
 import '../features/whiteboard/views/whiteboard_page.dart';
 import '../shared/widgets/app_shell.dart';
+import 'social_invitation_host.dart';
+import 'social_invitation_page.dart';
 
 class AppRoutes {
   const AppRoutes._();
@@ -27,6 +29,9 @@ class AppRoutes {
   static const editCollection = '/edit-collection';
   static const search = '/search';
   static const social = '/social';
+  static const socialInvitation = '/social/invitations/:inviteId';
+  static String socialInvitationPath(String id) =>
+      '/social/invitations/${Uri.encodeComponent(id)}';
   static const notebooks = '/notebooks';
   static const notebookDetail = '/notebooks/:notebookId';
   static const tags = '/tags';
@@ -110,8 +115,10 @@ GoRouter createAppRouter() {
         routes: [
           GoRoute(
             path: AppRoutes.social,
-            pageBuilder: (context, state) =>
-                _contentPage(state, const SocialPage()),
+            pageBuilder: (context, state) => _contentPage(
+              state,
+              const SocialInvitationHost(child: SocialPage()),
+            ),
           ),
           GoRoute(
             path: AppRoutes.library,
@@ -184,6 +191,15 @@ GoRouter createAppRouter() {
             },
           ),
         ],
+      ),
+      GoRoute(
+        path: AppRoutes.socialInvitation,
+        pageBuilder: (context, state) => _standalonePage(
+          state,
+          SocialInvitationPage(
+            inviteId: state.pathParameters['inviteId'] ?? '',
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.createNote,
