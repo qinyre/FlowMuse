@@ -10,6 +10,7 @@ import '../models/social_models.dart';
 import '../repositories/social_repository.dart';
 import '../view_models/conversation_view_model.dart';
 import '../view_models/social_view_model.dart';
+import 'device_security_dialog.dart';
 
 class ConversationPanel extends ConsumerStatefulWidget {
   const ConversationPanel({
@@ -147,6 +148,18 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
                 onPressed: () => _vm.refresh(),
                 icon: const Icon(LucideIcons.refreshCw, size: 18),
               ),
+              if (widget.canSend &&
+                  ref.watch(
+                    socialViewModelProvider.select(
+                      (s) => s.me?.invitations == true,
+                    ),
+                  ))
+                IconButton(
+                  tooltip: '核验好友设备',
+                  icon: const Icon(LucideIcons.shieldCheck, size: 18),
+                  onPressed: () =>
+                      showDeviceSecurity(context, peer: widget.person),
+                ),
             ],
           ),
         ),

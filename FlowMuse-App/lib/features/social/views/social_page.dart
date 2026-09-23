@@ -13,6 +13,7 @@ import '../repositories/social_repository.dart';
 import '../view_models/social_view_model.dart';
 import '../widgets/add_friend_dialog.dart';
 import '../widgets/conversation_panel.dart';
+import '../widgets/device_security_dialog.dart';
 
 class SocialPage extends ConsumerWidget {
   const SocialPage({super.key, this.onClose});
@@ -24,6 +25,12 @@ class SocialPage extends ConsumerWidget {
     return RightPageScaffold(
       title: '好友与消息',
       actions: [
+        if (state.me?.invitations == true)
+          IconButton(
+            tooltip: '我的设备安全',
+            icon: const Icon(LucideIcons.shieldCheck, size: 20),
+            onPressed: () => showDeviceSecurity(context),
+          ),
         if (state.status == SocialStatus.ready)
           IconButton(
             tooltip: '添加好友',
