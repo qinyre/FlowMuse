@@ -285,7 +285,7 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
                       decoration: const InputDecoration(
                         hintText: '写消息…',
                         counterText: '',
-                        helperText: 'Ctrl / ⌘ + Enter 发送',
+                        helperText: 'Ctrl + Enter 发送',
                       ),
                     ),
                   ),
