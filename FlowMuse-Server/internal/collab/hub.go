@@ -769,7 +769,7 @@ func (h *Hub) identityFromSocket(client *socket.Socket) auth.Identity {
 			if !h.userStore.SessionActive(ctx, sessionID, userID) {
 				return guestIdentityFromSocket(client)
 			}
-			if user, err := h.userStore.Load(ctx, userID); err == nil {
+			if user, err := h.userStore.Load(ctx, userID); err == nil && user.HasVerifiedIdentity() {
 				return auth.Identity{
 					UserID:      user.ID,
 					Email:       user.Email,

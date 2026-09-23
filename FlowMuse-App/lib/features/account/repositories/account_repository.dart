@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../../../shared/network/native_http_client.dart';
 import '../../whiteboard/collaboration/collaboration_config.dart';
 import '../models/account_user.dart';
 import '../models/auth_session.dart';
@@ -15,12 +16,31 @@ class AccountRepository {
     http.Client? client,
   }) : _serverUri = Uri.parse(config.serverUrl),
        _tokenStore = tokenStore ?? AuthTokenStore(),
-       _client = client ?? http.Client();
+       _client = client ?? HarmonyAwareHttpClient(readTimeoutMs: 20000);
 
   final Uri _serverUri;
   final AuthTokenStore _tokenStore;
   final http.Client _client;
+  int _sessionRevision = 0;
+  Future<void> _tokenWrites = Future.value();
   static const Duration _requestTimeout = Duration(seconds: 20);
+
+  void close() {
+    _sessionRevision++;
+    _client.close();
+  }
+
+  // Serialize secure-store writes so a late sign-in cannot undo a logout.
+  Future<void> _writeToken(Future<void> Function() write) {
+    final result = _tokenWrites.then((_) => write());
+    _tokenWrites = result.then<void>(
+      (_) {},
+      onError: (Object _) {
+        // The caller receives the error; keep the queue usable for later writes.
+      },
+    );
+    return result;
+  }
 
   Future<String?> readToken() {
     return _tokenStore.readToken();
@@ -40,28 +60,19 @@ class AccountRepository {
     return AccountUser.fromJson(json['user']! as Map<String, Object?>);
   }
 
-  Future<AuthSession> verifyEmail(String token) async {
-    final session = await _postSession('/api/auth/verify-email', {
-      'token': token,
-    });
-    await _tokenStore.writeToken(session.token);
-    return session;
+  Future<AuthSession> verifyEmail(String token) {
+    return _postSession('/api/auth/verify-email', {'token': token});
   }
 
   Future<void> resendVerification(String email) async {
     await _post('/api/auth/resend-verification', {'email': email});
   }
 
-  Future<AuthSession> login({
-    required String email,
-    required String password,
-  }) async {
-    final session = await _postSession('/api/auth/login', {
+  Future<AuthSession> login({required String email, required String password}) {
+    return _postSession('/api/auth/login', {
       'email': email,
       'password': password,
     });
-    await _tokenStore.writeToken(session.token);
-    return session;
   }
 
   Future<AccountUser?> loadCurrentUser() async {
@@ -73,7 +84,9 @@ class AccountRepository {
         .get(_uri('/api/auth/me'), headers: _headers(token: token))
         .timeout(_requestTimeout);
     if (response.statusCode == 401 || response.statusCode == 403) {
-      await _tokenStore.clear();
+      await _writeToken(() async {
+        if (await _tokenStore.readToken() == token) await _tokenStore.clear();
+      });
       return null;
     }
     _ensureSuccess(response, '加载账号失败');
@@ -84,7 +97,7 @@ class AccountRepository {
   Future<AccountUser> updateProfile({required String displayName}) async {
     final token = await _requireToken();
     final response = await _client
-        .patch(
+        .put(
           _uri('/api/auth/me'),
           headers: _headers(token: token),
           body: jsonEncode({'displayName': displayName}),
@@ -132,7 +145,8 @@ class AccountRepository {
         )
         .timeout(_requestTimeout);
     _ensureSuccess(response, '修改密码失败');
-    await _tokenStore.clear();
+    _sessionRevision++;
+    await _writeToken(_tokenStore.clear);
   }
 
   Future<void> requestPasswordReset(String email) async {
@@ -151,17 +165,24 @@ class AccountRepository {
         )
         .timeout(_requestTimeout);
     _ensureSuccess(response, '重置密码失败');
-    await _tokenStore.clear();
+    _sessionRevision++;
+    await _writeToken(_tokenStore.clear);
   }
 
   Future<void> logout() async {
-    final token = await _tokenStore.readToken();
-    if (token != null && token.isNotEmpty) {
-      await _client
-          .post(_uri('/api/auth/logout'), headers: _headers(token: token))
-          .timeout(_requestTimeout);
+    final revision = ++_sessionRevision;
+    try {
+      final token = await _tokenStore.readToken();
+      if (token != null && token.isNotEmpty) {
+        await _client
+            .post(_uri('/api/auth/logout'), headers: _headers(token: token))
+            .timeout(_requestTimeout);
+      }
+    } finally {
+      await _writeToken(() async {
+        if (revision == _sessionRevision) await _tokenStore.clear();
+      });
     }
-    await _tokenStore.clear();
   }
 
   String resolveAvatarUrl(String avatarUrl) {
@@ -175,15 +196,70 @@ class AccountRepository {
     String path,
     Map<String, Object?> body,
   ) async {
+    final revision = ++_sessionRevision;
     final response = await _post(path, body);
-    return AuthSession.fromJson(
+    final session = AuthSession.fromJson(
       jsonDecode(response.body) as Map<String, Object?>,
+    );
+    await _writeToken(() async {
+      if (revision != _sessionRevision) throw StateError('登录已取消，请重试');
+      await _tokenStore.writeToken(session.token);
+    });
+    return session;
+  }
+
+  Future<AuthSession> loginHuawei(String code) {
+    return _postSession('/api/auth/huawei/login', {'code': code});
+  }
+
+  Future<AccountUser> bindHuawei(String code) async {
+    final response = await _post('/api/auth/huawei/bind', {
+      'code': code,
+    }, authenticated: true);
+    return AccountUser.fromJson(
+      (jsonDecode(response.body) as Map<String, dynamic>)['user']
+          as Map<String, dynamic>,
     );
   }
 
-  Future<http.Response> _post(String path, Map<String, Object?> body) async {
+  Future<String> requestEmailBinding(String email) async {
+    final response = await _post('/api/auth/email-binding/request', {
+      'email': email,
+    }, authenticated: true);
+    return (jsonDecode(response.body) as Map<String, dynamic>)['requestId']
+        as String;
+  }
+
+  Future<void> verifyEmailBinding(String token) async {
+    await _post('/api/auth/email-binding/verify', {'token': token});
+  }
+
+  Future<AccountUser> completeEmailBinding(
+    String requestId,
+    String password,
+  ) async {
+    final response = await _post('/api/auth/email-binding/complete', {
+      'requestId': requestId,
+      'password': password,
+    }, authenticated: true);
+    return AccountUser.fromJson(
+      (jsonDecode(response.body) as Map<String, dynamic>)['user']
+          as Map<String, dynamic>,
+    );
+  }
+
+  Future<http.Response> _post(
+    String path,
+    Map<String, Object?> body, {
+    bool authenticated = false,
+  }) async {
+    final token = authenticated ? await _requireToken() : null;
     final response = await _client
-        .post(_uri(path), headers: _headers(), body: jsonEncode(body))
+        .post(
+          _uri(path),
+          headers: _headers(token: token),
+          body: jsonEncode(body),
+        )
         .timeout(_requestTimeout);
     _ensureSuccess(response, '账号请求失败');
     return response;

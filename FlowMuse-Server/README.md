@@ -82,8 +82,38 @@ curl -i http://127.0.0.1:48931/health
 
 - MyScript 手写识别密钥；
 - 后端 AI 智能排版的 OpenAI 兼容接口密钥与模型。
+- SMTP 发信服务和公开邮件链接入口。
 
 客户端生产地址为 `https://api.flowmuse.cloud`，Nginx 转发至 `http://127.0.0.1:48931`，Go 服务和 Docker 端口无需改成 HTTPS。客户端配置优先级为 `--dart-define=FLOWMUSE_COLLAB_SERVER_URL` > `assets/config/app.env` > 内置回退地址。
+
+### 华为账号登录
+
+`.env` 配置 `FLOWMUSE_HUAWEI_CLIENT_ID=6917611606499874343` 与 `FLOWMUSE_HUAWEI_CLIENT_SECRET=<应用 Client Secret>`。Compose 已通过 `env_file` 注入，无需改客户端；这里必须使用应用级 Client ID，Secret 不得打入 App、提交 Git 或写日志。留空时仅华为入口返回 503，邮箱登录照常工作。
+
+后端先向华为兑换用户级 Access Token，再检查 token-info 的应用归属、用户级类型、有效期及 UnionID，随后使用原有 FlowMuse 会话。当前只接入一个开发者主体的应用，不缓存华为 Access/Refresh Token。
+
+发布顺序：备份数据库和受控配置 → 部署兼容迁移的后端 → 部署 Web 邮件确认页面 → 发布原生 App。`EnsureSchema` 自动完成幂等迁移；有纯华为用户后不能回退到仍要求邮箱非空的旧服务。应用 Client ID 与 APP ID 相同，目前无需额外 `client_id` metadata；签名指纹、HAP 构建与真实授权仍由打包电脑验证。
+
+本地数据库回归使用独立 PostgreSQL，设置 `FLOWMUSE_AUTH_TEST_DATABASE_URL`（数据库名必须以 `_test` 结尾），然后运行 `go test ./...`、`go vet ./...`。测试只操作随机独立 schema；未设置时数据库测试会明确跳过，不能据此宣称迁移通过。新增接口使用进程内 IP 限流，代理/多副本部署应在可信网关补充真实客户端限流。
+
+### Resend 验证邮件
+
+真实邮箱投递使用 Resend 免费方案，复用现有 SMTP 发信实现。默认配置仍连接本地 Mailpit，其收件箱仅用于开发测试。
+
+先在 Resend 添加并验证自有发信域名，建议使用 `notify.flowmuse.cloud` 子域名；在域名的 DNS 管理处添加 Resend 页面给出的记录，等待状态变为 `Verified`。创建仅有发送权限且限定该域名的 API Key，然后在部署机器的 `.env` 中替换以下设置：
+
+```dotenv
+FLOWMUSE_SMTP_HOST=smtp.resend.com
+FLOWMUSE_SMTP_PORT=587
+FLOWMUSE_SMTP_USERNAME=resend
+FLOWMUSE_SMTP_PASSWORD=<RESEND_SENDING_API_KEY>
+FLOWMUSE_SMTP_FROM="FlowMuse <noreply@notify.flowmuse.cloud>"
+FLOWMUSE_PUBLIC_APP_URL=https://app.flowmuse.cloud
+```
+
+发件地址必须使用实际验证通过的域名；示例中的 API Key 是占位符，只在部署机器的受控配置中填入真实值。使用 `587` 的 STARTTLS 连接；SMTP 密码填 API Key，不是 Resend 账号登录密码。[官方 SMTP 配置](https://resend.com/docs/send-with-smtp)
+
+配置完成后执行 `docker compose config --quiet` 检查配置，再运行 `docker compose up -d --no-deps collab-server` 使发信设置生效。不要输出完整 Compose 配置，以免把凭据写入终端记录。通过已授权的测试邮箱执行注册验证、重发和找回密码，核对真实收件箱与邮件中的 Web 链接；域名验证或配置检查通过不等于邮件投递已验收。
 
 ### Web 与 HTTPS 部署
 

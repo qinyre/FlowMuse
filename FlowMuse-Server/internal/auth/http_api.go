@@ -36,6 +36,13 @@ type HTTPAPI struct {
 	requestTimeout time.Duration
 	verifyTTL      time.Duration
 	resetTTL       time.Duration
+	huawei         *HuaweiClient
+	linkRate       authRateLimiter
+}
+
+func (api *HTTPAPI) WithHuawei(client *HuaweiClient) *HTTPAPI {
+	api.huawei = client
+	return api
 }
 
 func NewHTTPAPI(
@@ -88,6 +95,16 @@ func (api *HTTPAPI) auth(w http.ResponseWriter, r *http.Request) {
 		api.resetPassword(w, r)
 	case "logout":
 		api.logout(w, r)
+	case "huawei/login":
+		api.huaweiLogin(w, r)
+	case "huawei/bind":
+		api.huaweiBind(w, r)
+	case "email-binding/request":
+		api.requestEmailBinding(w, r)
+	case "email-binding/verify":
+		api.verifyEmailBinding(w, r)
+	case "email-binding/complete":
+		api.completeEmailBinding(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -265,7 +282,7 @@ func (api *HTTPAPI) me(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"user": user})
-	case http.MethodPatch:
+	case http.MethodPatch, http.MethodPut:
 		var request struct {
 			DisplayName string `json:"displayName"`
 		}
@@ -283,7 +300,7 @@ func (api *HTTPAPI) me(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"user": user})
 	default:
-		methodNotAllowed(w, "GET, PATCH")
+		methodNotAllowed(w, "GET, PATCH, PUT")
 	}
 }
 
@@ -401,7 +418,7 @@ func (api *HTTPAPI) resetPassword(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	if len(request.NewPassword) < 8 {
+	if !validPassword(request.NewPassword) {
 		http.Error(w, "新密码至少需要 8 位", http.StatusBadRequest)
 		return
 	}
@@ -481,7 +498,7 @@ func (api *HTTPAPI) IdentityFromRequest(r *http.Request) (Identity, bool) {
 		return Identity{DisplayName: "匿名用户", IsGuest: true}, false
 	}
 	user, err := api.userStore.Load(ctx, userID)
-	if err != nil || !user.EmailVerified {
+	if err != nil || !user.HasVerifiedIdentity() {
 		return Identity{DisplayName: "匿名用户", IsGuest: true}, false
 	}
 	return Identity{
@@ -538,7 +555,17 @@ func allowedAvatarType(contentType string) bool {
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
-	if err := json.NewDecoder(r.Body).Decode(target); err != nil && !errors.Is(err, io.EOF) {
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(target)
+	if err == nil {
+		if trailing := decoder.Decode(new(any)); !errors.Is(trailing, io.EOF) {
+			err = errors.New("unexpected JSON after request")
+			if trailing != nil {
+				err = trailing
+			}
+		}
+	}
+	if err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			http.Error(w, "request body is too large", http.StatusRequestEntityTooLarge)

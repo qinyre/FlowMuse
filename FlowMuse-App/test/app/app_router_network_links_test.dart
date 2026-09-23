@@ -21,6 +21,10 @@ void main() {
           '/auth/verify-email?token=test-only',
       '/#/auth/verify-email?token=test-only':
           '/auth/verify-email?token=test-only',
+      '/auth/verify-email?purpose=bind_email&token=test-only':
+          '/auth/verify-email?purpose=bind_email&token=test-only',
+      '/#/auth/verify-email?purpose=bind_email&token=test-only':
+          '/auth/verify-email?purpose=bind_email&token=test-only',
       '/auth/reset-password?token=test-only':
           '/auth/reset-password?token=test-only',
       '/#/auth/reset-password?token=test-only':

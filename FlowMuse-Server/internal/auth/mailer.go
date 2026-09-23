@@ -33,6 +33,10 @@ func (m *Mailer) SendPasswordReset(ctx context.Context, to, link string) error {
 	return m.send(ctx, to, "重置 FlowMuse 密码", fmt.Sprintf("请打开以下链接重置 FlowMuse 密码：\n\n%s\n\n如果不是你本人操作，请忽略这封邮件。", link))
 }
 
+func (m *Mailer) SendEmailBinding(ctx context.Context, to, link string) error {
+	return m.send(ctx, to, "绑定 FlowMuse 邮箱", fmt.Sprintf("请打开以下链接确认此邮箱属于你：\n\n%s\n\n验证后，请回到发起绑定的 FlowMuse 应用设置密码，完成绑定。如果不是你本人操作，请忽略这封邮件。", link))
+}
+
 func (m *Mailer) send(ctx context.Context, to, subject, body string) error {
 	if m.config.Host == "" || m.config.From == "" {
 		return errors.New("SMTP 未配置")

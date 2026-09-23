@@ -77,7 +77,7 @@ func main() {
 		cfg.RequestTimeout,
 		cfg.EmailVerifyTTL,
 		cfg.PasswordResetTTL,
-	)
+	).WithHuawei(auth.NewHuaweiClient(cfg.HuaweiClientID, cfg.HuaweiClientSecret))
 
 	socketOptions := socket.DefaultServerOptions()
 	allowCredentials := !slices.Contains(cfg.AllowedOrigins, "*")

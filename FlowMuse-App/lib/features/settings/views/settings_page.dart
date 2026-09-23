@@ -6,7 +6,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData, PlatformException;
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -492,11 +493,20 @@ class _AccountSettingsSectionState
   final _oldPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _resetEmailController = TextEditingController();
+  final _bindEmailController = TextEditingController();
+  final _bindPasswordController = TextEditingController();
+  final _bindConfirmController = TextEditingController();
+  String? _bindingRequestId;
+  String? _bindingSession;
+  String? _bindingError;
   bool _registerMode = false;
   bool _busy = false;
 
   @override
   void dispose() {
+    _bindEmailController.dispose();
+    _bindPasswordController.dispose();
+    _bindConfirmController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _displayNameController.dispose();
@@ -509,6 +519,18 @@ class _AccountSettingsSectionState
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(accountViewModelProvider);
+    final huaweiAvailable =
+        ref.watch(huaweiAccountAvailableProvider).asData?.value ?? false;
+    if (_bindingSession != account.token) {
+      _bindingSession = account.token;
+      _bindingRequestId = null;
+      _bindingError = null;
+      _bindEmailController.clear();
+      _bindPasswordController.clear();
+      _bindConfirmController.clear();
+      _displayNameController.text = account.user?.displayName ?? '';
+    }
+    final busy = _busy || account.status == AccountStatus.loading;
     final colorScheme = Theme.of(context).colorScheme;
     final selectedColor = colorScheme.primary;
 
@@ -527,7 +549,7 @@ class _AccountSettingsSectionState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   InkWell(
-                    onTap: _busy ? null : _pickAvatar,
+                    onTap: busy ? null : _pickAvatar,
                     customBorder: const CircleBorder(),
                     child: AccountAvatar(
                       label: user.collaboratorName,
@@ -541,17 +563,17 @@ class _AccountSettingsSectionState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          user.email,
+                          user.email.isNotEmpty
+                              ? user.email
+                              : user.collaboratorName,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          user.emailVerified ? '邮箱已验证' : '邮箱未验证',
+                          user.email.isEmpty ? '已通过华为账号登录 · 尚未绑定邮箱' : '邮箱已验证',
                           style: TextStyle(
-                            color: user.emailVerified
-                                ? selectedColor
-                                : colorScheme.error,
+                            color: selectedColor,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -566,11 +588,11 @@ class _AccountSettingsSectionState
                           runSpacing: AppSpacing.controlGap,
                           children: [
                             FilledButton(
-                              onPressed: _busy ? null : _updateProfile,
+                              onPressed: busy ? null : _updateProfile,
                               child: const Text('保存资料'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: _busy ? null : _pickAvatar,
+                              onPressed: busy ? null : _pickAvatar,
                               icon: const Icon(LucideIcons.imageUp),
                               label: const Text('上传头像'),
                             ),
@@ -583,41 +605,63 @@ class _AccountSettingsSectionState
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          _SettingsCard(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '修改密码',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _oldPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: '旧密码'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _newPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: '新密码'),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: _busy ? null : _changePassword,
-                    child: const Text('修改密码并重新登录'),
-                  ),
-                ],
+          if (user.huaweiLinked || huaweiAvailable) ...[
+            const SizedBox(height: 16),
+            _SettingsCard(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                title: const Text('华为账号'),
+                subtitle: Text(user.huaweiLinked ? '已绑定' : '绑定后可用华为账号登录当前账号'),
+                trailing: user.huaweiLinked
+                    ? const Icon(Icons.check_circle_outline)
+                    : OutlinedButton(
+                        onPressed: busy ? null : () => _useHuawei(bind: true),
+                        child: const Text('绑定华为账号'),
+                      ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
+          ],
+          if (user.email.isEmpty) ...[
+            const SizedBox(height: 16),
+            _emailBindingCard(busy),
+          ],
+          if (user.hasPassword) ...[
+            const SizedBox(height: 16),
+            _SettingsCard(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '修改密码',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _oldPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(labelText: '旧密码'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _newPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(labelText: '新密码'),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: busy ? null : _changePassword,
+                      child: const Text('修改密码并重新登录'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           _SettingsCard(
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -625,7 +669,7 @@ class _AccountSettingsSectionState
               title: const Text('退出登录'),
               subtitle: const Text('退出后继续使用匿名协作身份'),
               trailing: const Text('退出'),
-              onTap: _busy ? null : _logout,
+              onTap: busy ? null : _logout,
             ),
           ),
           if (account.error != null || account.message != null) ...[
@@ -666,6 +710,19 @@ class _AccountSettingsSectionState
           ),
         ),
         const SizedBox(height: 16),
+        if (huaweiAvailable) ...[
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: busy ? null : () => _useHuawei(),
+              child: const Text('华为账号登录'),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text('首次登录将创建账号，之后可绑定邮箱在安卓登录。已有邮箱账号请先用邮箱登录，再绑定华为账号。'),
+          ),
+        ],
         Card.outlined(
           color: colorScheme.surface,
           child: Padding(
@@ -712,7 +769,7 @@ class _AccountSettingsSectionState
                   runSpacing: AppSpacing.controlGap,
                   children: [
                     FilledButton(
-                      onPressed: _busy ? null : _submit,
+                      onPressed: busy ? null : _submit,
                       child: Text(
                         _busy
                             ? '处理中'
@@ -723,19 +780,19 @@ class _AccountSettingsSectionState
                     ),
                     const SizedBox(width: AppSpacing.controlGap),
                     TextButton(
-                      onPressed: _busy
+                      onPressed: busy
                           ? null
                           : () =>
                                 setState(() => _registerMode = !_registerMode),
                       child: Text(_registerMode ? '已有账号，去登录' : '注册新账号'),
                     ),
                     TextButton(
-                      onPressed: _busy ? null : _requestPasswordReset,
+                      onPressed: busy ? null : _requestPasswordReset,
                       child: const Text('忘记密码'),
                     ),
                     if (account.status == AccountStatus.verificationRequired)
                       TextButton(
-                        onPressed: _busy ? null : _resendVerification,
+                        onPressed: busy ? null : _resendVerification,
                         child: const Text('重发验证邮件'),
                       ),
                   ],
@@ -757,6 +814,129 @@ class _AccountSettingsSectionState
     );
   }
 
+  Widget _emailBindingCard(bool busy) => _SettingsCard(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('绑定邮箱', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          const Text('绑定后，安卓和鸿蒙都可以用邮箱与密码登录同一个账号。'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _bindEmailController,
+            enabled: !busy && _bindingRequestId == null,
+            keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
+            decoration: const InputDecoration(labelText: '邮箱'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: busy ? null : _sendBindingEmail,
+            child: Text(_bindingRequestId == null ? '发送验证邮件' : '重新发送验证邮件'),
+          ),
+          if (_bindingRequestId != null) ...[
+            const SizedBox(height: 12),
+            const Text('请先打开邮件确认邮箱，再回到这里设置密码。请保留此页面，验证链接 30 分钟内有效。'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _bindPasswordController,
+              obscureText: true,
+              enabled: !busy,
+              autofillHints: const [AutofillHints.newPassword],
+              decoration: const InputDecoration(labelText: '设置密码（至少 8 位）'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _bindConfirmController,
+              obscureText: true,
+              enabled: !busy,
+              decoration: const InputDecoration(labelText: '再次输入密码'),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: busy ? null : _finishEmailBinding,
+              child: const Text('我已验证邮箱，完成绑定'),
+            ),
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () => setState(() {
+                      _bindingRequestId = null;
+                      _bindingError = null;
+                      _bindPasswordController.clear();
+                      _bindConfirmController.clear();
+                    }),
+              child: const Text('改用其他邮箱'),
+            ),
+          ],
+          if (_bindingError != null) ...[
+            const SizedBox(height: 12),
+            _AccountMessage(message: _bindingError!, isError: true),
+          ],
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _useHuawei({bool bind = false}) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(accountViewModelProvider.notifier).useHuawei(bind: bind);
+    } catch (_) {
+      // The account message displays the localized failure; cancellation is silent.
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _sendBindingEmail() async {
+    setState(() {
+      _busy = true;
+      _bindingError = null;
+    });
+    try {
+      final id = await ref
+          .read(accountViewModelProvider.notifier)
+          .requestEmailBinding(_bindEmailController.text.trim());
+      if (mounted && id != null) setState(() => _bindingRequestId = id);
+    } catch (error) {
+      if (mounted) setState(() => _bindingError = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _finishEmailBinding() async {
+    final password = _bindPasswordController.text;
+    if (utf8.encode(password).length < 8 || utf8.encode(password).length > 72) {
+      setState(() => _bindingError = '密码至少 8 位；过长时请缩短，建议使用字母、数字和符号');
+      return;
+    }
+    if (password != _bindConfirmController.text) {
+      setState(() => _bindingError = '两次输入的密码不一致');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _bindingError = null;
+    });
+    try {
+      await ref
+          .read(accountViewModelProvider.notifier)
+          .completeEmailBinding(_bindingRequestId!, password);
+      if (mounted) {
+        _bindPasswordController.clear();
+        _bindConfirmController.clear();
+      }
+    } catch (error) {
+      if (mounted) setState(() => _bindingError = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _submit() async {
     setState(() => _busy = true);
     try {
@@ -773,6 +953,12 @@ class _AccountSettingsSectionState
           password: _passwordController.text,
         );
       }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -786,6 +972,12 @@ class _AccountSettingsSectionState
       await ref
           .read(accountViewModelProvider.notifier)
           .updateProfile(displayName: _displayNameController.text.trim());
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -834,6 +1026,12 @@ class _AccountSettingsSectionState
             bytes: bytes,
             mimeType: _mimeTypeForAvatar(extension ?? ''),
           );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -852,6 +1050,12 @@ class _AccountSettingsSectionState
           );
       _oldPasswordController.clear();
       _newPasswordController.clear();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -868,6 +1072,12 @@ class _AccountSettingsSectionState
       await ref
           .read(accountViewModelProvider.notifier)
           .requestPasswordReset(email);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -882,6 +1092,12 @@ class _AccountSettingsSectionState
       await ref
           .read(accountViewModelProvider.notifier)
           .resendVerification(email);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -901,6 +1117,12 @@ class _AccountSettingsSectionState
     setState(() => _busy = true);
     try {
       await ref.read(accountViewModelProvider.notifier).logout();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -1003,9 +1225,9 @@ class _OtherSettingsSectionState extends State<_OtherSettingsSection> {
     if (!mounted) return;
     await Clipboard.setData(const ClipboardData(text: address));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已复制邮箱:3252024846@qq.com')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已复制邮箱:3252024846@qq.com')));
   }
 
   @override
@@ -2185,7 +2407,8 @@ class _CloudBackupSection extends ConsumerStatefulWidget {
   const _CloudBackupSection();
 
   @override
-  ConsumerState<_CloudBackupSection> createState() => _CloudBackupSectionState();
+  ConsumerState<_CloudBackupSection> createState() =>
+      _CloudBackupSectionState();
 }
 
 class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
@@ -2226,7 +2449,9 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
         _serverCtrl.text = config.serverUrl;
         _usernameCtrl.text = config.username;
         _passwordCtrl.text = config.password;
-        _pathCtrl.text = config.remotePath.isEmpty ? '/FlowMuse/' : config.remotePath;
+        _pathCtrl.text = config.remotePath.isEmpty
+            ? '/FlowMuse/'
+            : config.remotePath;
         _lastBackupAt = lastBackup;
         _configLoaded = true;
       });
@@ -2257,7 +2482,9 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
       serverUrl: _serverCtrl.text.trim(),
       username: _usernameCtrl.text.trim(),
       password: _passwordCtrl.text,
-      remotePath: _pathCtrl.text.trim().isEmpty ? '/FlowMuse/' : _pathCtrl.text.trim(),
+      remotePath: _pathCtrl.text.trim().isEmpty
+          ? '/FlowMuse/'
+          : _pathCtrl.text.trim(),
     );
     await defaultWebDavSettingsRepository.saveConfig(config);
   }
@@ -2304,7 +2531,9 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
     try {
       await webDavBackupService.createBackup(
         client: client,
-        remotePath: _pathCtrl.text.trim().isEmpty ? '/FlowMuse/' : _pathCtrl.text.trim(),
+        remotePath: _pathCtrl.text.trim().isEmpty
+            ? '/FlowMuse/'
+            : _pathCtrl.text.trim(),
         localRepo: defaultLocalBackupRepository,
       );
       final now = DateTime.now();
@@ -2334,7 +2563,9 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
     try {
       final backups = await webDavBackupService.listBackups(
         client: client,
-        remotePath: _pathCtrl.text.trim().isEmpty ? '/FlowMuse/' : _pathCtrl.text.trim(),
+        remotePath: _pathCtrl.text.trim().isEmpty
+            ? '/FlowMuse/'
+            : _pathCtrl.text.trim(),
       );
       if (!mounted) return;
       setState(() => _status = _CloudBackupStatus.idle);
@@ -2348,9 +2579,9 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
               : _pathCtrl.text.trim(),
           onRestored: () {
             ref.invalidate(libraryIndexProvider);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('备份已恢复，请重启应用使更改完全生效')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('备份已恢复，请重启应用使更改完全生效')));
           },
         ),
       );
@@ -2393,9 +2624,12 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('WebDAV 连接',
-                    style: Theme.of(context).textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'WebDAV 连接',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 14),
                 TextField(
                   controller: _serverCtrl,
@@ -2419,10 +2653,10 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
                   decoration: InputDecoration(
                     labelText: '密码 / 应用专用密码',
                     suffixIcon: IconButton(
-                      icon: Icon(_passwordVisible
-                          ? LucideIcons.eyeOff
-                          : LucideIcons.eye,
-                          size: 18),
+                      icon: Icon(
+                        _passwordVisible ? LucideIcons.eyeOff : LucideIcons.eye,
+                        size: 18,
+                      ),
                       onPressed: () =>
                           setState(() => _passwordVisible = !_passwordVisible),
                     ),
@@ -2444,9 +2678,11 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
                   children: [
                     FilledButton(
                       onPressed: (!_busy && _canAct) ? _testConnection : null,
-                      child: Text(_status == _CloudBackupStatus.testing
-                          ? busyLabel
-                          : '测试连接'),
+                      child: Text(
+                        _status == _CloudBackupStatus.testing
+                            ? busyLabel
+                            : '测试连接',
+                      ),
                     ),
                   ],
                 ),
@@ -2478,9 +2714,11 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
                       )
                     : const Icon(LucideIcons.cloudUpload),
                 title: const Text('立即备份'),
-                subtitle: Text(_lastBackupAt == null
-                    ? '从未备份'
-                    : '上次备份：${_formatDateTime(_lastBackupAt!)}'),
+                subtitle: Text(
+                  _lastBackupAt == null
+                      ? '从未备份'
+                      : '上次备份：${_formatDateTime(_lastBackupAt!)}',
+                ),
                 trailing: Text(
                   _status == _CloudBackupStatus.backingUp ? busyLabel : '备份',
                   style: TextStyle(
@@ -2522,21 +2760,27 @@ class _CloudBackupSectionState extends ConsumerState<_CloudBackupSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [
-                  Icon(LucideIcons.info, size: 16, color: muted),
-                  const SizedBox(width: 8),
-                  Text('如何使用坚果云',
-                      style: Theme.of(context).textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600)),
-                ]),
+                Row(
+                  children: [
+                    Icon(LucideIcons.info, size: 16, color: muted),
+                    const SizedBox(width: 8),
+                    Text(
+                      '如何使用坚果云',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 Text(
                   '1. 服务器地址填写 https://dav.jianguoyun.com/dav/\n'
                   '2. 用户名为坚果云账号邮箱\n'
                   '3. 密码使用"应用专用密码"，在坚果云网页版 → 账户设置 → 安全中创建\n'
                   '4. 备份目录留空时默认使用 /FlowMuse/',
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: muted, height: 1.6),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: muted, height: 1.6),
                 ),
               ],
             ),
@@ -2593,9 +2837,9 @@ class _BackupListDialogState extends State<_BackupListDialog> {
       widget.onRestored();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('恢复失败：$e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('恢复失败：$e')));
     } finally {
       if (mounted) setState(() => _restoringHref = null);
     }
@@ -2616,9 +2860,7 @@ class _BackupListDialogState extends State<_BackupListDialog> {
             ? Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    '将用"${pending.fileName}"覆盖当前所有本地数据，此操作不可撤销。确定继续吗？',
-                  ),
+                  Text('将用"${pending.fileName}"覆盖当前所有本地数据，此操作不可撤销。确定继续吗？'),
                   if (restoring) ...[
                     const SizedBox(height: 24),
                     const CircularProgressIndicator(),
@@ -2647,14 +2889,20 @@ class _BackupListDialogState extends State<_BackupListDialog> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(LucideIcons.fileJson),
-                      title: Text(entry.fileName,
-                          style: const TextStyle(fontFamily: 'monospace',
-                              fontSize: 13)),
-                      subtitle: Text([
-                        if (entry.lastModified != null)
-                          _fmtDate(entry.lastModified!),
-                        if (entry.displaySize.isNotEmpty) entry.displaySize,
-                      ].join('  ·  ')),
+                      title: Text(
+                        entry.fileName,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                        ),
+                      ),
+                      subtitle: Text(
+                        [
+                          if (entry.lastModified != null)
+                            _fmtDate(entry.lastModified!),
+                          if (entry.displaySize.isNotEmpty) entry.displaySize,
+                        ].join('  ·  '),
+                      ),
                       trailing: TextButton(
                         onPressed: () =>
                             setState(() => _pendingRestore = entry),
@@ -2689,9 +2937,9 @@ class _BackupListDialogState extends State<_BackupListDialog> {
 
   static String _fmtDate(DateTime dt) {
     final l = dt.toLocal();
-    return '${l.year}-${l.month.toString().padLeft(2,'0')}-'
-        '${l.day.toString().padLeft(2,'0')} '
-        '${l.hour.toString().padLeft(2,'0')}:'
-        '${l.minute.toString().padLeft(2,'0')}';
+    return '${l.year}-${l.month.toString().padLeft(2, '0')}-'
+        '${l.day.toString().padLeft(2, '0')} '
+        '${l.hour.toString().padLeft(2, '0')}:'
+        '${l.minute.toString().padLeft(2, '0')}';
   }
 }

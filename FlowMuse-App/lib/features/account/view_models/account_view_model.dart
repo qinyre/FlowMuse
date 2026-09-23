@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/storage/local_settings_repository.dart';
 import '../../whiteboard/view_models/whiteboard_view_model.dart';
 import '../models/account_user.dart';
+import '../models/auth_session.dart';
 import '../models/collaboration_identity.dart';
 import '../repositories/account_repository.dart';
+import '../repositories/huawei_account_channel_ohos.dart';
 
 enum AccountStatus {
   loading,
@@ -73,13 +75,42 @@ class AccountState {
 }
 
 class AccountViewModel extends Notifier<AccountState> {
-  late final AccountRepository _repository;
+  late AccountRepository _repository;
+  int _revision = 0;
 
   @override
   AccountState build() {
     _repository = ref.watch(accountRepositoryProvider);
-    _restore();
+    _restore(++_revision);
     return const AccountState();
+  }
+
+  Future<T?> _run<T>(
+    Future<T> Function() request,
+    void Function(T) apply, {
+    bool signingIn = false,
+  }) async {
+    final revision = ++_revision;
+    state = state.copyWith(
+      status: signingIn ? AccountStatus.loading : null,
+      clearError: true,
+      clearMessage: true,
+    );
+    try {
+      final result = await request();
+      if (!ref.mounted || revision != _revision) return null;
+      apply(result);
+      return result;
+    } catch (error) {
+      if (!ref.mounted || revision != _revision) return null;
+      state = state.copyWith(
+        status: state.user != null && state.token != null
+            ? AccountStatus.authenticated
+            : AccountStatus.failed,
+        error: error.toString(),
+      );
+      rethrow;
+    }
   }
 
   Future<void> register({
@@ -87,203 +118,193 @@ class AccountViewModel extends Notifier<AccountState> {
     required String password,
     required String displayName,
   }) async {
-    state = state.copyWith(
-      status: AccountStatus.loading,
-      clearError: true,
-      clearMessage: true,
-    );
-    try {
-      final user = await _repository.register(
+    await _run(
+      () => _repository.register(
         email: email,
         password: password,
         displayName: displayName,
-      );
-      state = state.copyWith(
-        status: AccountStatus.verificationRequired,
-        user: user,
-        clearToken: true,
-        clearError: true,
-        message: '验证邮件已发送，请验证后登录',
-      );
-    } catch (error) {
-      _fail(error);
-      rethrow;
-    }
+      ),
+      (user) {
+        state = state.copyWith(
+          status: AccountStatus.verificationRequired,
+          user: user,
+          clearToken: true,
+          message: '验证邮件已发送，请验证后登录',
+        );
+      },
+      signingIn: true,
+    );
   }
 
   Future<void> verifyEmail(String token) async {
-    state = state.copyWith(
-      status: AccountStatus.loading,
-      clearError: true,
-      clearMessage: true,
-    );
-    try {
-      final session = await _repository.verifyEmail(token);
+    await _run(() => _repository.verifyEmail(token), (session) {
       state = state.copyWith(
         status: AccountStatus.authenticated,
         user: session.user,
         token: session.token,
-        clearError: true,
         message: '邮箱已验证',
       );
-    } catch (error) {
-      _fail(error);
-      rethrow;
-    }
-  }
-
-  Future<void> resendVerification(String email) async {
-    state = state.copyWith(clearError: true, clearMessage: true);
-    try {
-      await _repository.resendVerification(email);
-      state = state.copyWith(message: '验证邮件已重新发送');
-    } catch (error) {
-      _fail(error);
-      rethrow;
-    }
+    }, signingIn: true);
   }
 
   Future<void> login({required String email, required String password}) async {
-    state = state.copyWith(
-      status: AccountStatus.loading,
-      clearError: true,
-      clearMessage: true,
-    );
-    try {
-      final session = await _repository.login(email: email, password: password);
+    await _run(() => _repository.login(email: email, password: password), (
+      session,
+    ) {
       state = state.copyWith(
         status: AccountStatus.authenticated,
         user: session.user,
         token: session.token,
-        clearError: true,
         message: '已登录',
       );
-    } catch (error) {
-      _fail(error);
-      rethrow;
-    }
+    }, signingIn: true);
+  }
+
+  Future<void> useHuawei({bool bind = false}) async {
+    final revision = _revision + 1;
+    await _run<Object?>(
+      () async {
+        final code = await ref.read(huaweiAccountChannelProvider).authorize();
+        if (!ref.mounted || code == null || revision != _revision) return null;
+        return bind
+            ? await _repository.bindHuawei(code)
+            : await _repository.loginHuawei(code);
+      },
+      (result) {
+        if (result is AccountUser) {
+          state = state.copyWith(user: result, message: '华为账号已绑定');
+        } else if (result is AuthSession) {
+          state = state.copyWith(
+            status: AccountStatus.authenticated,
+            user: result.user,
+            token: result.token,
+            message: '已通过华为账号登录',
+          );
+        }
+      },
+    );
+  }
+
+  Future<String?> requestEmailBinding(String email) =>
+      _run(() => _repository.requestEmailBinding(email), (_) {
+        state = state.copyWith(message: '请打开邮件确认邮箱，再回到这里设置密码');
+      });
+
+  Future<void> completeEmailBinding(String requestId, String password) async {
+    await _run(() => _repository.completeEmailBinding(requestId, password), (
+      user,
+    ) {
+      state = state.copyWith(user: user, message: '邮箱已绑定，可在安卓使用邮箱和密码登录');
+    });
+  }
+
+  Future<void> resendVerification(String email) async {
+    await _run(() => _repository.resendVerification(email), (_) {
+      state = state.copyWith(message: '验证邮件已重新发送');
+    });
   }
 
   Future<void> updateProfile({required String displayName}) async {
-    state = state.copyWith(clearError: true, clearMessage: true);
-    try {
-      final user = await _repository.updateProfile(displayName: displayName);
+    await _run(() => _repository.updateProfile(displayName: displayName), (
+      user,
+    ) {
       state = state.copyWith(user: user, message: '资料已更新');
-    } catch (error) {
-      _fail(error);
-      rethrow;
-    }
+    });
   }
 
   Future<void> uploadAvatar({
     required Uint8List bytes,
     required String mimeType,
   }) async {
-    state = state.copyWith(clearError: true, clearMessage: true);
-    try {
-      final user = await _repository.uploadAvatar(
-        bytes: bytes,
-        mimeType: mimeType,
-      );
-      state = state.copyWith(user: user, message: '头像已更新');
-    } catch (error) {
-      _fail(error);
-      rethrow;
-    }
+    await _run(
+      () => _repository.uploadAvatar(bytes: bytes, mimeType: mimeType),
+      (user) {
+        state = state.copyWith(user: user, message: '头像已更新');
+      },
+    );
   }
 
   Future<void> changePassword({
     required String oldPassword,
     required String newPassword,
   }) async {
-    state = state.copyWith(clearError: true, clearMessage: true);
-    try {
-      await _repository.changePassword(
+    await _run(
+      () => _repository.changePassword(
         oldPassword: oldPassword,
         newPassword: newPassword,
-      );
-      state = state.copyWith(
-        status: AccountStatus.guest,
-        clearUser: true,
-        message: '密码已修改，请重新登录',
-      );
-    } catch (error) {
-      _fail(error);
-      rethrow;
-    }
+      ),
+      (_) {
+        state = state.copyWith(
+          status: AccountStatus.guest,
+          clearUser: true,
+          message: '密码已修改，请重新登录',
+        );
+      },
+    );
   }
 
   Future<void> requestPasswordReset(String email) async {
-    state = state.copyWith(clearError: true, clearMessage: true);
-    try {
-      await _repository.requestPasswordReset(email);
+    await _run(() => _repository.requestPasswordReset(email), (_) {
       state = state.copyWith(message: '如果邮箱存在，重置邮件会发送到该邮箱');
-    } catch (error) {
-      _fail(error);
-      rethrow;
-    }
+    });
   }
 
   Future<void> resetPassword({
     required String token,
     required String newPassword,
   }) async {
-    state = state.copyWith(clearError: true, clearMessage: true);
-    try {
-      await _repository.resetPassword(token: token, newPassword: newPassword);
-      state = state.copyWith(
-        status: AccountStatus.guest,
-        clearUser: true,
-        message: '密码已重置，请使用新密码登录',
-      );
-    } catch (error) {
-      _fail(error);
-      rethrow;
-    }
-  }
-
-  Future<void> logout() async {
-    await _repository.logout();
-    state = state.copyWith(
-      status: AccountStatus.guest,
-      clearUser: true,
-      clearError: true,
-      message: '已退出登录',
+    await _run(
+      () => _repository.resetPassword(token: token, newPassword: newPassword),
+      (_) {
+        state = state.copyWith(
+          status: AccountStatus.guest,
+          clearUser: true,
+          message: '密码已重置，请使用新密码登录',
+        );
+      },
     );
   }
 
-  String resolveAvatarUrl(String avatarUrl) {
-    return _repository.resolveAvatarUrl(avatarUrl);
-  }
-
-  Future<void> _restore() async {
-    final guestName = await _loadGuestName();
-    if (state.status == AccountStatus.loading) {
-      state = state.copyWith(guestName: guestName);
-    }
+  Future<void> logout() async {
+    final revision = _revision + 1;
     try {
-      final token = await _repository.readToken();
-      final user = await _repository.loadCurrentUser();
-      if (user == null || token == null) {
+      await _run(_repository.logout, (_) {});
+    } finally {
+      if (ref.mounted && revision == _revision) {
         state = state.copyWith(
           status: AccountStatus.guest,
-          guestName: guestName,
           clearUser: true,
-          clearError: true,
+          message: '已退出本机登录',
         );
-        return;
       }
+    }
+  }
+
+  String resolveAvatarUrl(String avatarUrl) =>
+      _repository.resolveAvatarUrl(avatarUrl);
+
+  Future<void> _restore(int revision) async {
+    try {
+      final guestName = await _loadGuestName();
+      if (!ref.mounted || revision != _revision) return;
+      state = state.copyWith(guestName: guestName);
+      final token = await _repository.readToken();
+      if (!ref.mounted || revision != _revision) return;
+      final user = await _repository.loadCurrentUser();
+      if (!ref.mounted || revision != _revision) return;
       state = state.copyWith(
-        status: AccountStatus.authenticated,
+        status: user != null && token != null
+            ? AccountStatus.authenticated
+            : AccountStatus.guest,
         user: user,
         token: token,
-        guestName: guestName,
+        clearUser: user == null || token == null,
         clearError: true,
       );
     } catch (error) {
+      if (!ref.mounted || revision != _revision) return;
       state = state.copyWith(
         status: AccountStatus.failed,
-        guestName: guestName,
         clearUser: true,
         error: error.toString(),
       );
@@ -293,25 +314,24 @@ class AccountViewModel extends Notifier<AccountState> {
   Future<String> _loadGuestName() async {
     final settings = defaultLocalSettingsRepository;
     final existing = await settings.readString(_guestNameSettingsKey);
-    if (existing != null && existing.isNotEmpty) {
-      return existing;
-    }
+    if (existing != null && existing.isNotEmpty) return existing;
     final name = _guestNameGenerator.next();
     await settings.writeString(_guestNameSettingsKey, name);
     return name;
   }
-
-  void _fail(Object error) {
-    state = state.copyWith(
-      status: AccountStatus.failed,
-      error: error.toString(),
-    );
-  }
 }
 
+final huaweiAccountChannelProvider = Provider((ref) => HuaweiAccountChannel());
+final huaweiAccountAvailableProvider = FutureProvider<bool>(
+  (ref) => ref.watch(huaweiAccountChannelProvider).isAvailable(),
+);
+
 final accountRepositoryProvider = Provider<AccountRepository>((ref) {
-  final config = ref.watch(collaborationConfigProvider);
-  return AccountRepository(config: config);
+  final repository = AccountRepository(
+    config: ref.watch(collaborationConfigProvider),
+  );
+  ref.onDispose(repository.close);
+  return repository;
 });
 
 final accountViewModelProvider =

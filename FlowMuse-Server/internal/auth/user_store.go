@@ -19,6 +19,9 @@ var (
 	ErrInvalidRegistration    = errors.New("invalid registration")
 	ErrEmailNotVerified       = errors.New("email not verified")
 	ErrInvalidAccountToken    = errors.New("invalid account token")
+	ErrIdentityAlreadyLinked  = errors.New("login method already linked")
+	ErrEmailBindingPending    = errors.New("email binding not verified")
+	ErrEmailRateLimited       = errors.New("email requested too recently")
 )
 
 type User struct {
@@ -30,6 +33,13 @@ type User struct {
 	EmailVerified   bool   `json:"emailVerified"`
 	EmailVerifiedAt int64  `json:"emailVerifiedAt,omitempty"`
 	UpdatedAt       int64  `json:"updatedAt,omitempty"`
+	HuaweiLinked    bool   `json:"huaweiLinked"`
+	HasPassword     bool   `json:"hasPassword"`
+}
+
+// HasVerifiedIdentity is shared by HTTP and Socket.IO authentication.
+func (u User) HasVerifiedIdentity() bool {
+	return u.EmailVerified || u.HuaweiLinked
 }
 
 type UserStore struct {
@@ -44,14 +54,20 @@ func (s *UserStore) EnsureSchema(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `
 CREATE TABLE IF NOT EXISTS users (
 	id TEXT PRIMARY KEY,
-	email TEXT NOT NULL UNIQUE,
-	password_hash TEXT NOT NULL,
+	email TEXT UNIQUE,
+	password_hash TEXT,
 	display_name TEXT NOT NULL,
 	avatar_url TEXT NOT NULL DEFAULT '',
 	email_verified_at TIMESTAMPTZ,
 	registered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS huawei_union_id TEXT;
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS users_huawei_union_id_key
+ON users (huawei_union_id) WHERE huawei_union_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS auth_sessions (
 	id TEXT PRIMARY KEY,
@@ -72,13 +88,17 @@ CREATE TABLE IF NOT EXISTS auth_email_tokens (
 
 CREATE INDEX IF NOT EXISTS auth_email_tokens_user_purpose_idx
 ON auth_email_tokens (user_id, purpose);
+
+ALTER TABLE auth_email_tokens ADD COLUMN IF NOT EXISTS target_email TEXT;
+ALTER TABLE auth_email_tokens ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+ALTER TABLE auth_email_tokens ADD COLUMN IF NOT EXISTS session_id TEXT REFERENCES auth_sessions(id) ON DELETE CASCADE;
 `)
 	return err
 }
 
 func (s *UserStore) Register(ctx context.Context, email, password, displayName string) (User, error) {
 	normalizedEmail, err := normalizeEmail(email)
-	if err != nil || len(password) < 8 {
+	if err != nil || !validPassword(password) {
 		return User{}, ErrInvalidRegistration
 	}
 	displayName = cleanDisplayName(displayName)
@@ -93,6 +113,7 @@ func (s *UserStore) Register(ctx context.Context, email, password, displayName s
 		ID:          uuid.NewString(),
 		Email:       normalizedEmail,
 		DisplayName: displayName,
+		HasPassword: true,
 	}
 	var registeredAt time.Time
 	var updatedAt time.Time
@@ -143,7 +164,8 @@ func (s *UserStore) Load(ctx context.Context, userID string) (User, error) {
 	var updatedAt time.Time
 	var verifiedAt *time.Time
 	err := s.db.QueryRow(ctx, `
-SELECT id, email, display_name, avatar_url, registered_at, updated_at, email_verified_at
+SELECT id, COALESCE(email, ''), display_name, avatar_url, registered_at, updated_at, email_verified_at,
+       huawei_union_id IS NOT NULL, password_hash IS NOT NULL
 FROM users
 WHERE id = $1`, userID).Scan(
 		&user.ID,
@@ -153,6 +175,8 @@ WHERE id = $1`, userID).Scan(
 		&registeredAt,
 		&updatedAt,
 		&verifiedAt,
+		&user.HuaweiLinked,
+		&user.HasPassword,
 	)
 	if err != nil {
 		return User{}, err
@@ -183,7 +207,8 @@ func (s *UserStore) UpdateProfile(ctx context.Context, userID, displayName strin
 UPDATE users
 SET display_name = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, email, display_name, avatar_url, registered_at, updated_at, email_verified_at`,
+RETURNING id, COALESCE(email, ''), display_name, avatar_url, registered_at, updated_at, email_verified_at,
+          huawei_union_id IS NOT NULL, password_hash IS NOT NULL`,
 		userID,
 		displayName,
 	).Scan(
@@ -194,6 +219,8 @@ RETURNING id, email, display_name, avatar_url, registered_at, updated_at, email_
 		&registeredAt,
 		&updatedAt,
 		&verifiedAt,
+		&user.HuaweiLinked,
+		&user.HasPassword,
 	)
 	if err != nil {
 		return User{}, err
@@ -211,7 +238,8 @@ func (s *UserStore) SetAvatarURL(ctx context.Context, userID, avatarURL string) 
 UPDATE users
 SET avatar_url = $2, updated_at = now()
 WHERE id = $1
-RETURNING id, email, display_name, avatar_url, registered_at, updated_at, email_verified_at`,
+RETURNING id, COALESCE(email, ''), display_name, avatar_url, registered_at, updated_at, email_verified_at,
+          huawei_union_id IS NOT NULL, password_hash IS NOT NULL`,
 		userID,
 		avatarURL,
 	).Scan(
@@ -222,6 +250,8 @@ RETURNING id, email, display_name, avatar_url, registered_at, updated_at, email_
 		&registeredAt,
 		&updatedAt,
 		&verifiedAt,
+		&user.HuaweiLinked,
+		&user.HasPassword,
 	)
 	if err != nil {
 		return User{}, err
@@ -231,11 +261,11 @@ RETURNING id, email, display_name, avatar_url, registered_at, updated_at, email_
 }
 
 func (s *UserStore) ChangePassword(ctx context.Context, userID, oldPassword, newPassword string) error {
-	if len(newPassword) < 8 {
+	if !validPassword(newPassword) {
 		return ErrInvalidRegistration
 	}
 	var hash string
-	err := s.db.QueryRow(ctx, `SELECT password_hash FROM users WHERE id = $1`, userID).Scan(&hash)
+	err := s.db.QueryRow(ctx, `SELECT COALESCE(password_hash, '') FROM users WHERE id = $1`, userID).Scan(&hash)
 	if err != nil {
 		return err
 	}
@@ -252,7 +282,7 @@ UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, userID, 
 }
 
 func (s *UserStore) ResetPassword(ctx context.Context, userID, newPassword string) error {
-	if len(newPassword) < 8 {
+	if !validPassword(newPassword) {
 		return ErrInvalidRegistration
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
@@ -272,8 +302,9 @@ func (s *UserStore) MarkEmailVerified(ctx context.Context, userID string) (User,
 	err := s.db.QueryRow(ctx, `
 UPDATE users
 SET email_verified_at = COALESCE(email_verified_at, now()), updated_at = now()
-WHERE id = $1
-RETURNING id, email, display_name, avatar_url, registered_at, updated_at, email_verified_at`,
+WHERE id = $1 AND email IS NOT NULL
+RETURNING id, COALESCE(email, ''), display_name, avatar_url, registered_at, updated_at, email_verified_at,
+          huawei_union_id IS NOT NULL, password_hash IS NOT NULL`,
 		userID,
 	).Scan(
 		&user.ID,
@@ -283,6 +314,8 @@ RETURNING id, email, display_name, avatar_url, registered_at, updated_at, email_
 		&registeredAt,
 		&updatedAt,
 		&verifiedAt,
+		&user.HuaweiLinked,
+		&user.HasPassword,
 	)
 	if err != nil {
 		return User{}, err
@@ -358,7 +391,8 @@ func (s *UserStore) loadByEmail(ctx context.Context, email string) (User, string
 	var updatedAt time.Time
 	var verifiedAt *time.Time
 	err := s.db.QueryRow(ctx, `
-SELECT id, email, password_hash, display_name, avatar_url, registered_at, updated_at, email_verified_at
+SELECT id, COALESCE(email, ''), COALESCE(password_hash, ''), display_name, avatar_url, registered_at, updated_at, email_verified_at,
+       huawei_union_id IS NOT NULL, password_hash IS NOT NULL
 FROM users
 WHERE email = $1`, email).Scan(
 		&user.ID,
@@ -369,6 +403,8 @@ WHERE email = $1`, email).Scan(
 		&registeredAt,
 		&updatedAt,
 		&verifiedAt,
+		&user.HuaweiLinked,
+		&user.HasPassword,
 	)
 	if err != nil {
 		return User{}, "", err
@@ -391,7 +427,14 @@ func normalizeEmail(value string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if len(parsed.Address) > 254 {
+		return "", ErrInvalidRegistration
+	}
 	return strings.ToLower(parsed.Address), nil
+}
+
+func validPassword(password string) bool {
+	return len(password) >= 8 && len(password) <= 72
 }
 
 func cleanDisplayName(value string) string {

@@ -30,6 +30,8 @@ type Config struct {
 	SMTPUsername       string
 	SMTPPassword       string
 	SMTPFrom           string
+	HuaweiClientID     string
+	HuaweiClientSecret string
 	MyScriptAppKey     string
 	MyScriptHMACKey    string
 	MyScriptEndpoint   string
@@ -60,14 +62,16 @@ func Load() (Config, error) {
 			"FLOWMUSE_PASSWORD_RESET_TTL",
 			30*time.Minute,
 		),
-		SMTPHost:         os.Getenv("FLOWMUSE_SMTP_HOST"),
-		SMTPPort:         envInt("FLOWMUSE_SMTP_PORT", 1025),
-		SMTPUsername:     os.Getenv("FLOWMUSE_SMTP_USERNAME"),
-		SMTPPassword:     os.Getenv("FLOWMUSE_SMTP_PASSWORD"),
-		SMTPFrom:         env("FLOWMUSE_SMTP_FROM", "FlowMuse <noreply@flowmuse.local>"),
-		MyScriptAppKey:   os.Getenv("FLOWMUSE_MYSCRIPT_APP_KEY"),
-		MyScriptHMACKey:  os.Getenv("FLOWMUSE_MYSCRIPT_HMAC_KEY"),
-		MyScriptEndpoint: env("FLOWMUSE_MYSCRIPT_ENDPOINT", "https://cloud.myscript.com/api/v4.0/iink/batch"),
+		SMTPHost:           os.Getenv("FLOWMUSE_SMTP_HOST"),
+		SMTPPort:           envInt("FLOWMUSE_SMTP_PORT", 1025),
+		SMTPUsername:       os.Getenv("FLOWMUSE_SMTP_USERNAME"),
+		SMTPPassword:       os.Getenv("FLOWMUSE_SMTP_PASSWORD"),
+		SMTPFrom:           env("FLOWMUSE_SMTP_FROM", "FlowMuse <noreply@flowmuse.local>"),
+		HuaweiClientID:     os.Getenv("FLOWMUSE_HUAWEI_CLIENT_ID"),
+		HuaweiClientSecret: os.Getenv("FLOWMUSE_HUAWEI_CLIENT_SECRET"),
+		MyScriptAppKey:     os.Getenv("FLOWMUSE_MYSCRIPT_APP_KEY"),
+		MyScriptHMACKey:    os.Getenv("FLOWMUSE_MYSCRIPT_HMAC_KEY"),
+		MyScriptEndpoint:   env("FLOWMUSE_MYSCRIPT_ENDPOINT", "https://cloud.myscript.com/api/v4.0/iink/batch"),
 		RecognitionTimeout: envDuration(
 			"FLOWMUSE_RECOGNITION_TIMEOUT",
 			20*time.Second,
