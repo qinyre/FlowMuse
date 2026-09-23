@@ -121,7 +121,6 @@ func (h *Hub) Register() {
 	h.server.On("connection", func(clients ...any) {
 		client := clients[0].(*socket.Socket)
 		h.rememberSocketIdentity(client)
-		client.Emit(EventInitRoom)
 
 		client.On(EventJoinRoom, func(args ...any) {
 			roomID, ok := firstString(args)
@@ -166,6 +165,9 @@ func (h *Hub) Register() {
 		client.On("disconnect", func(...any) {
 			h.leaveAll(client)
 		})
+		// Announce readiness only after all handlers exist. Authentication can
+		// perform database I/O after Socket.IO's transport-level connect event.
+		client.Emit(EventInitRoom)
 	})
 }
 
