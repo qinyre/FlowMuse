@@ -93,7 +93,10 @@ CREATE TABLE IF NOT EXISTS direct_messages (
 );
 CREATE INDEX IF NOT EXISTS direct_messages_sender_time_idx ON direct_messages(sender_id,created_at);
 `)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.ensureInvitationSchema(ctx)
 }
 
 type Person struct {
