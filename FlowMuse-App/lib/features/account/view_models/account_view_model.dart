@@ -266,6 +266,8 @@ class AccountViewModel extends Notifier<AccountState> {
   }
 
   Future<void> logout() async {
+    // Clear account-scoped screens and connections immediately, before network I/O.
+    state = state.copyWith(status: AccountStatus.guest, clearUser: true);
     final revision = _revision + 1;
     try {
       await _run(_repository.logout, (_) {});

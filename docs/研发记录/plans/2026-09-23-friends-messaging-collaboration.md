@@ -365,6 +365,8 @@ FlowMuse-App:
 
 ## 9. 实施记录
 
+- T06/T11/T18（账号收件）：Riverpod 社交状态按账号/会话重建、取消旧网络请求；独立 Socket Manager、前台 30 秒补查和提示合并，根组件只保持订阅，不随每条通知重建白板。退出账号先同步清空身份，再请求远端注销。全量 Flutter：1741 通过、5 项既有跳过；全量 analyze 仅既有 build warning。
+
 - T06（数据访问）：Flutter 社交模型/Repository 复用 HarmonyAwareHttpClient，绑定不可变会话并在销毁时取消请求；错误正文脱敏，协作密钥链接阻止误传。BigInt 游标测试覆盖 2^53 以上序号及延迟响应隔离。`flutter test --no-pub`：1739 通过、5 项既有跳过；新模块分析无问题，全量分析仅既有 build 截图脚本 warning。
 
 - T11（服务端）：独立 `/social` namespace，仅服务端按真实账号分发 ID 提示，不接收订阅第三人或写消息命令。每账号最多 10 连接、进程 2048，通知队列有界；每次投递和每 30 秒重验会话，撤销后断开。真实 Socket.IO polling 集成验证浏览器 auth.token、游客/伪造凭据拒绝、账号隔离及撤销；Go vet 通过。

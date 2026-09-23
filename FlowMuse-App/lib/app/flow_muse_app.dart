@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/library/repositories/library_repository.dart';
+import '../features/social/view_models/social_view_model.dart';
 import '../features/whiteboard/share/models/external_document_request.dart';
 import '../features/whiteboard/share/services/external_document_channel.dart';
 import '../features/whiteboard/share/services/imported_document_coordinator.dart';
@@ -52,6 +53,9 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    ref
+        .read(socialViewModelProvider.notifier)
+        .setForeground(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed) {
       _enableImmersiveMode();
     }
@@ -95,14 +99,12 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
           // 启动时把已存储的最近白板推一次给服务卡片，使卡片在冷启动后
           // 能尽快从占位文案切换为真实内容（卡片进程与主进程独立）。
           await _recentWhiteboardSync.syncFromStore();
-          final location =
-              await _recentWhiteboardSync.takePendingResumeLocation(
-            libraryIndex.notes,
-          );
+          final location = await _recentWhiteboardSync
+              .takePendingResumeLocation(libraryIndex.notes);
           if (location == null) {
             // 检查是否有创建笔记 action
-            final action =
-                await const ServiceWidgetChannelOhos().takePendingLaunchAction();
+            final action = await const ServiceWidgetChannelOhos()
+                .takePendingLaunchAction();
             if (action == ServiceWidgetLaunchAction.createNote) {
               widget._router.push(AppRoutes.createNote);
             }
@@ -180,6 +182,8 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
 
   @override
   Widget build(BuildContext context) {
+    // Keep the account-scoped inbox alive without rebuilding the canvas on hints.
+    ref.listen(socialViewModelProvider, (_, _) {});
     final themePreset = ref.watch(themeViewModelProvider);
     final darkThemePreset = effectiveAppThemePreset(
       themePreset,
