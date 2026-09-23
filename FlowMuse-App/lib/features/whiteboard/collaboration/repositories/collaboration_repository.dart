@@ -416,7 +416,9 @@ class CollaborationRepository {
       elements: _reconciler.getSyncableElements(merged),
     );
 
-    if (latestOnly) {
+    // Cancellation tombstones must survive congestion, just like pen-up edits.
+    if (latestOnly &&
+        syncable.every((element) => element['isDeleted'] != true)) {
       for (final element in syncable) {
         _pendingLatestElements[_id(element)] = element;
       }
@@ -456,7 +458,7 @@ class CollaborationRepository {
           }
           final elements = _pendingLatestElements.values.toList();
           _pendingLatestElements.clear();
-          await _doAccumulatorFlush(elements, false);
+          await _doAccumulatorFlush(elements, false, volatile: true);
         })
         .catchError(_handleSendQueueError)
         .whenComplete(() {
@@ -493,8 +495,9 @@ class CollaborationRepository {
 
   Future<void> _doAccumulatorFlush(
     List<Map<String, Object?>> elements,
-    bool isInitial,
-  ) async {
+    bool isInitial, {
+    bool volatile = false,
+  }) async {
     final room = _activeRoom;
     if (room == null) return;
     final sessionGeneration = _roomSessionGeneration;
@@ -506,9 +509,14 @@ class CollaborationRepository {
         ? CollaborationMessage.sceneInit(elements: changed)
         : CollaborationMessage.sceneUpdate(elements: changed);
 
-    final sentBytes = await _send(room: room, message: message);
+    final sentBytes = await _send(
+      room: room,
+      message: message,
+      volatile: volatile,
+    );
     if (!_isCurrentRoomSession(room, sessionGeneration)) return;
-    _rememberBroadcasted(changed);
+    // A dropped preview must not suppress a later reliable send of this version.
+    if (!volatile) _rememberBroadcasted(changed);
 
     _scheduleFileUpload(room);
 
