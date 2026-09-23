@@ -1,6 +1,6 @@
 # 协作邀请测试与鸿蒙交接
 
-分支 `feature/friends-collaboration`，PR [#51](https://github.com/qinyre/FlowMuse/pull/51)。本次实现设备安全卡、定向加密邀请、拒绝/撤销、新设备补发及安全加入白板。生产未合并、未部署，两个社交开关仍默认关闭。
+分支 `feature/friends-collaboration`，PR [#51](https://github.com/qinyre/FlowMuse/pull/51)。本次实现设备安全卡、定向加密邀请、拒绝/撤销、新设备补发及安全加入白板。2026-09-23 已按用户要求部署到 [正式站点](https://app.flowmuse.cloud/social)，生产启用两个社交开关，见 [上线记录](2026-09-23-social-deployment.md)。下方临时测试账号仅属于隔离预览，不能登录正式站点；正式环境使用原有账号。
 
 ## 当前电脑直接试用
 
@@ -47,7 +47,7 @@ python tool/serve_web_preview.py
 docker compose -p flowmuse-invite-test -f docker-compose.social-test.yml down
 ```
 
-如使用团队已有的 HTTPS 测试环境，服务器同时启用 `FLOWMUSE_SOCIAL_ENABLED=true` 和 `FLOWMUSE_SOCIAL_INVITATIONS_ENABLED=true`；所有客户端的 `FLOWMUSE_COLLAB_SERVER_URL` 必须是相同 origin，重新构建后再交换安全卡。原生产 App/API 地址上的版本仍不包含本次改动。
+如使用团队已有的 HTTPS 测试环境，服务器同时启用 `FLOWMUSE_SOCIAL_ENABLED=true` 和 `FLOWMUSE_SOCIAL_INVITATIONS_ENABLED=true`；所有客户端的 `FLOWMUSE_COLLAB_SERVER_URL` 必须是相同 origin，重新构建后再交换安全卡。正式 API 为 `https://api.flowmuse.cloud`，Web/分享地址为 `https://app.flowmuse.cloud`；原生客户端须从本次代码重新打包。此前 loopback Android 测试包仍只能连接隔离环境。
 
 ## 鸿蒙队员重点验证
 
