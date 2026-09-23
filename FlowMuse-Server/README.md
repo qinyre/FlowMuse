@@ -180,3 +180,7 @@ V3 对已实测支持的 `doubao-seed-2-1-turbo-260628` 型号发送 `reasoning_
 `FLOWMUSE_SOCIAL_ENABLED` 默认 `false`，关闭时 `/api/social/*` 返回带 `code=disabled` 的 503，不影响账号和白板。开启后幂等迁移好友与消息表；社交迁移失败仅关闭该模块。Compose 的 `env_file` 读取这一配置。
 
 专项 PostgreSQL 测试使用独立 `FLOWMUSE_SOCIAL_TEST_DATABASE_URL`，数据库名必须以 `_test` 结尾，每个测试自动建立/清理独立 schema。运行 `go test ./internal/social ./internal/storage`；未设置时明确跳过数据库集成测试，不能当作已验证迁移。禁止使用生产 `DATABASE_URL`。
+
+当前可用范围为好友管理与云端文字私聊。`/social` 只通知账号自己的变更 ID，客户端通过 HTTP 补查；独立 namespace 需要有效账号会话。鉴权期间数据库故障返回 503，只有确定失效的凭据返回 401/`session.revoked`。服务当前按单进程分发实时提示；扩展为多副本之前需共享 adapter，HTTP 历史仍是事实来源。
+
+邀请能力固定返回 `invitations=false`，尚无设备公钥或邀请信封 API。上线前的真实双账号/跨端验收、备份和回退步骤见 [阶段验证记录](../docs/研发记录/research/2026-09-23-social-validation.md)。
