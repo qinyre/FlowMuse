@@ -2,6 +2,7 @@ import 'package:flow_muse/features/social/models/social_models.dart';
 import 'package:flow_muse/features/social/view_models/conversation_view_model.dart';
 import 'package:flow_muse/features/social/view_models/social_view_model.dart';
 import 'package:flow_muse/features/social/widgets/conversation_panel.dart';
+import 'package:flow_muse/features/social/widgets/add_friend_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,6 +51,16 @@ class TestChat extends ConversationViewModel {
   Future<void> refresh({bool older = false}) async {}
 }
 
+class TestLookup extends TestInbox {
+  TestLookup() : super(const SocialState(status: SocialStatus.ready));
+  final codes = <String>[];
+  @override
+  Future<SocialLookup?> lookup(String code) async {
+    codes.add(code);
+    return SocialLookup(testPerson, BigInt.zero, null);
+  }
+}
+
 const testPerson = SocialPerson(
   id: 'B',
   name: '小林',
@@ -57,6 +68,29 @@ const testPerson = SocialPerson(
 );
 
 void main() {
+  testWidgets('好友查找只提交完整好友码并先展示公开资料', (tester) async {
+    final inbox = TestLookup();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          socialSessionProvider.overrideWithValue((userId: 'A', token: 'test')),
+          socialViewModelProvider.overrideWith(() => inbox),
+        ],
+        child: const MaterialApp(home: Scaffold(body: AddFriendDialog())),
+      ),
+    );
+    await tester.enterText(find.byType(TextField).first, 'abc');
+    await tester.tap(find.text('查找'));
+    await tester.pump();
+    expect(inbox.codes, isEmpty);
+    expect(find.text('请输入完整的 12 位好友码'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'abcd-2345-efgh');
+    await tester.tap(find.text('查找'));
+    await tester.pumpAndSettle();
+    expect(inbox.codes, ['ABCD2345EFGH']);
+    expect(find.text('小林'), findsOneWidget);
+    expect(find.text('发送申请'), findsOneWidget);
+  });
   testWidgets('窄屏大字体聊天显示纯文本，键盘发送；遮挡时不标已读', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
