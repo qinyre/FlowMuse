@@ -23,7 +23,9 @@
 | UI | 390px 夜间与 1200px 日间截图已人工查看；窄屏 1.5 倍字体、纯文本显示、Ctrl+Enter、弹层遮挡不误已读有 widget 回归 |
 | 白板 | 使用真实白板、控制器、SQLite 和内存加密协作的原回归扩充：消息弹层开关后协作仍在线，控制器未替换，点击不穿透；原画笔与撤销流程继续通过 |
 
-CI Quality 的 Go job 新增 PostgreSQL service，并同时配置两个测试 DSN；不再将跳过数据库测试当作通过。数据库凭据为 CI 一次性测试值。
+现有 CI Quality 仍运行 Go 测试与 vet；未配置测试 DSN 时，数据库集成用例明确跳过，不能据此声称数据库验收通过。上表数据库结果来自本次独立测试容器的实际执行。
+
+新增 PostgreSQL service 的 CI 配置已准备为[待应用补丁](patches/2026-09-23-social-postgres-ci.patch)，但当前 GitHub 凭据缺少 `workflow` 权限，工作流变更被拒绝，尚未应用到分支。补丁同时配置两个测试 DSN，密码仅为一次性测试值。具备工作流写权限后，在仓库根目录运行 `git apply --check docs/研发记录/research/patches/2026-09-23-social-postgres-ci.patch`、`git apply docs/研发记录/research/patches/2026-09-23-social-postgres-ci.patch`，再单独提交并验证 CI。补丁文件本身不会启用数据库服务。
 
 ## T03 邀请密码方案门槛
 
