@@ -65,7 +65,11 @@ func (api *HTTPAPI) serve(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			var pending int
 			err = api.store.db.QueryRow(ctx, `SELECT count(*) FROM social_relationships WHERE $1 IN(user_low_id,user_high_id) AND requester_id<>$1 AND state='pending'`, user).Scan(&pending)
-			result = map[string]any{"person": person, "pendingRequestCount": pending, "unreadCount": 0, "capabilities": map[string]bool{"friends": true, "textMessages": false, "invitations": false}}
+			var unread int64
+			if err == nil {
+				unread, err = api.store.UnreadCount(ctx, user)
+			}
+			result = map[string]any{"person": person, "pendingRequestCount": pending, "unreadCount": unread, "capabilities": map[string]bool{"friends": true, "textMessages": true, "invitations": false}}
 		}
 	case path == "people/lookup" && r.Method == "POST":
 		var body struct {
@@ -159,6 +163,77 @@ func (api *HTTPAPI) serve(w http.ResponseWriter, r *http.Request) {
 			api.changed("relationship.changed", "", user, id)
 		}
 		status = 204
+	case path == "conversations" && r.Method == "GET":
+		limit, cursor, valid := page(r, 20)
+		if !valid {
+			respondError(w, ErrInvalid)
+			return
+		}
+		var items []Conversation
+		items, err = api.store.Conversations(ctx, user, cursor, limit+1)
+		next := ""
+		if len(items) > limit {
+			items = items[:limit]
+			next = items[limit-1].ID
+		}
+		result = map[string]any{"items": items, "nextCursor": next}
+	case strings.HasPrefix(path, "conversations/"):
+		id, ok := actionID(path, "conversations", "messages")
+		if ok && r.Method == "GET" {
+			limit, _, valid := page(r, 50)
+			q := r.URL.Query()
+			before, be := parseSeq(q.Get("beforeSeq"))
+			after, ae := parseSeq(q.Get("afterSeq"))
+			if !valid || be != nil || ae != nil || (q.Has("beforeSeq") && q.Has("afterSeq")) {
+				respondError(w, ErrInvalid)
+				return
+			}
+			var items []Message
+			items, err = api.store.Messages(ctx, user, id, before, after, limit+1)
+			hasMore := len(items) > limit
+			if hasMore {
+				if after > 0 {
+					items = items[:limit]
+				} else {
+					items = items[1:]
+				}
+			}
+			result = map[string]any{"items": items, "hasMore": hasMore}
+		} else if ok && r.Method == "POST" {
+			var body struct {
+				ClientMessageID string `json:"clientMessageId"`
+				Text            string `json:"text"`
+			}
+			if !decode(w, r, &body) {
+				return
+			}
+			var m Message
+			var peer string
+			m, peer, err = api.store.SendMessage(ctx, user, id, body.ClientMessageID, body.Text)
+			result = m
+			if err == nil {
+				api.changed("conversation.changed", id, user, peer)
+			}
+		} else if id, ok := actionID(path, "conversations", "read"); ok && r.Method == "PUT" {
+			var body struct {
+				ThroughSeq *int64 `json:"throughSeq,string"`
+			}
+			if !decode(w, r, &body) {
+				return
+			}
+			if body.ThroughSeq == nil {
+				respondError(w, ErrInvalid)
+				return
+			}
+			err = api.store.MarkRead(ctx, user, id, *body.ThroughSeq)
+			status = 204
+			if err == nil {
+				api.changed("conversation.changed", id, user)
+			}
+		} else {
+			respondError(w, ErrNotFound)
+			return
+		}
 	default:
 		respondError(w, ErrNotFound)
 		return
@@ -172,6 +247,17 @@ func (api *HTTPAPI) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, status, result)
+}
+
+func parseSeq(s string) (int64, error) {
+	if s == "" {
+		return 0, nil
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n < 0 {
+		return 0, ErrInvalid
+	}
+	return n, nil
 }
 
 func (api *HTTPAPI) changed(event, id string, users ...string) {
