@@ -225,7 +225,10 @@ GoRouter createAppRouter() {
         pageBuilder: (context, state) {
           return _standalonePage(
             state,
-            VerifyEmailPage(token: state.uri.queryParameters['token'] ?? ''),
+            VerifyEmailPage(
+              token: state.uri.queryParameters['token'] ?? '',
+              binding: state.uri.queryParameters['purpose'] == 'bind_email',
+            ),
           );
         },
       ),

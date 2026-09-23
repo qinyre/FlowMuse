@@ -74,9 +74,11 @@ services:
       FLOWMUSE_ALLOWED_ORIGINS: "${FLOWMUSE_ALLOWED_ORIGINS:-*}"
       FLOWMUSE_AUTH_SECRET: "flowmuse_dev_auth_secret"
       FLOWMUSE_PUBLIC_APP_URL: "${FLOWMUSE_PUBLIC_APP_URL:-https://app.flowmuse.cloud}"
-      FLOWMUSE_SMTP_HOST: "mailpit"
-      FLOWMUSE_SMTP_PORT: "1025"
-      FLOWMUSE_SMTP_FROM: "FlowMuse <noreply@flowmuse.local>"
+      FLOWMUSE_SMTP_HOST: "${FLOWMUSE_SMTP_HOST:-mailpit}"
+      FLOWMUSE_SMTP_PORT: "${FLOWMUSE_SMTP_PORT:-1025}"
+      FLOWMUSE_SMTP_USERNAME: "${FLOWMUSE_SMTP_USERNAME:-}"
+      FLOWMUSE_SMTP_PASSWORD: "${FLOWMUSE_SMTP_PASSWORD:-}"
+      FLOWMUSE_SMTP_FROM: "${FLOWMUSE_SMTP_FROM:-FlowMuse <noreply@flowmuse.local>}"
     ports:
       - "48931:48931"
 

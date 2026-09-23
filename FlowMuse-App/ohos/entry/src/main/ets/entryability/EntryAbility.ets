@@ -13,8 +13,16 @@ import { PenColorPickerChannel } from '../channels/PenColorPickerChannel';
 import { ServiceWidgetChannel } from '../channels/ServiceWidgetChannel';
 import { SpeechRecognitionChannel } from '../channels/SpeechRecognitionChannel';
 import { UrlLauncherChannel } from '../channels/UrlLauncherChannel';
+import { HuaweiAccountChannel } from '../channels/HuaweiAccountChannel';
 
 export default class EntryAbility extends FlutterAbility {
+  private huaweiAccountChannel: HuaweiAccountChannel | undefined;
+
+  onDestroy(): void {
+    this.huaweiAccountChannel?.dispose();
+    this.huaweiAccountChannel = undefined;
+    super.onDestroy();
+  }
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onCreate(want, launchParam)
     if (want?.parameters?.params) {
@@ -70,5 +78,8 @@ export default class EntryAbility extends FlutterAbility {
     new ServiceWidgetChannel(this.context).register(flutterEngine)
     new SpeechRecognitionChannel(this.context).register(flutterEngine)
     new UrlLauncherChannel(this.context).register(flutterEngine)
+    this.huaweiAccountChannel?.dispose();
+    this.huaweiAccountChannel = new HuaweiAccountChannel(this.context);
+    this.huaweiAccountChannel.register(flutterEngine);
   }
 }
