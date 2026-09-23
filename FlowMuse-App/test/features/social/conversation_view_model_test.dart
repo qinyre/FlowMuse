@@ -89,11 +89,11 @@ void main() {
     addTearDown(container.dispose);
     (container.read(accountViewModelProvider.notifier) as TestSocialAccount)
         .signIn('A');
-    final subscription = container.listen(
+    var subscription = container.listen(
       conversationViewModelProvider('chat'),
       (_, _) {},
     );
-    addTearDown(subscription.close);
+    addTearDown(() => subscription.close());
     final vm = container.read(conversationViewModelProvider('chat').notifier);
     await Future<void>.delayed(const Duration(milliseconds: 10));
     await vm.send('hello');
@@ -102,6 +102,16 @@ void main() {
         .pending
         .single;
     expect(pending.failed, isTrue);
+    subscription.close();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    subscription = container.listen(
+      conversationViewModelProvider('chat'),
+      (_, _) {},
+    );
+    expect(
+      container.read(conversationViewModelProvider('chat')).pending.single.id,
+      pending.id,
+    );
     await vm.send(pending.text, clientId: pending.id);
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(clientIds, [pending.id, pending.id]);
@@ -125,5 +135,11 @@ void main() {
     await vm.markVisibleRead(BigInt.from(3));
     await vm.markVisibleRead(BigInt.one);
     expect(reads, 1);
+    (container.read(accountViewModelProvider.notifier) as TestSocialAccount)
+        .signIn('B');
+    expect(
+      container.read(conversationViewModelProvider('chat')).messages,
+      isEmpty,
+    );
   });
 }

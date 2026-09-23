@@ -24,6 +24,15 @@ class TestChat extends ConversationViewModel {
   final sent = <String>[];
   final reads = <BigInt>[];
   void fail() => state = state.copyWith(error: '网络恢复中');
+  void coverWithPending() => state = state.copyWith(
+    pending: [
+      PendingSocialMessage(
+        'local',
+        List.filled(100, '待发送的内容').join('\n'),
+        failed: true,
+      ),
+    ],
+  );
   @override
   ConversationState build() => ConversationState(
     loading: false,
@@ -218,6 +227,12 @@ void main() {
     chat.fail();
     await tester.pump();
     expect(chat.reads.length, reads);
+    Navigator.of(context).pop();
+    await tester.pumpAndSettle();
+    chat.reads.clear();
+    chat.coverWithPending();
+    await tester.pumpAndSettle();
+    expect(chat.reads, isEmpty, reason: '最后一条入站消息在可视区域以外，不得已读');
     await tester.pumpWidget(const SizedBox());
   });
 }

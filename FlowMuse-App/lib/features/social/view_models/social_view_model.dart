@@ -95,6 +95,8 @@ class SocialViewModel extends Notifier<SocialState> {
   SocialRealtimeTransport? _realtime;
   Timer? _poll, _debounce;
   int _generation = 0;
+  int _conversationPages = 1;
+  bool _loadingMore = false;
   bool _refreshing = false, _refreshAgain = false, _foreground = true;
 
   @override
@@ -104,6 +106,8 @@ class SocialViewModel extends Notifier<SocialState> {
     final session = ref.watch(socialSessionProvider);
     _refreshing = false;
     _refreshAgain = false;
+    _conversationPages = 1;
+    _loadingMore = false;
     ref.onDispose(() {
       _generation++;
       _poll?.cancel();
@@ -177,7 +181,7 @@ class SocialViewModel extends Notifier<SocialState> {
   Future<void> refresh() async {
     final repo = _repo;
     if (repo == null) return;
-    if (_refreshing) {
+    if (_refreshing || _loadingMore) {
       _refreshAgain = true;
       return;
     }
@@ -190,21 +194,17 @@ class SocialViewModel extends Notifier<SocialState> {
         _relationships(repo, 'accepted'),
         _relationships(repo, 'pending'),
         repo.blocks(),
-        repo.conversations(),
+        _conversationWindow(repo),
       ]);
       if (!_current(generation)) return;
       final page = values[3] as SocialPageResult<SocialConversation>;
-      final conversations = {
-        for (final c in state.conversations) c.id: c,
-        for (final c in page.items) c.id: c,
-      }.values.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       state = state.copyWith(
         status: SocialStatus.ready,
         me: me,
         friends: values[0] as List<SocialRelationship>,
         requests: values[1] as List<SocialRelationship>,
         blocks: values[2] as List<SocialPerson>,
-        conversations: List.unmodifiable(conversations),
+        conversations: page.items,
         nextCursor: page.nextCursor,
         revision: state.revision + 1,
         clearError: true,
@@ -221,6 +221,25 @@ class SocialViewModel extends Notifier<SocialState> {
         }
       }
     }
+  }
+
+  Future<SocialPageResult<SocialConversation>> _conversationWindow(
+    SocialRepository repo,
+  ) async {
+    final conversations = <String, SocialConversation>{};
+    var cursor = '';
+    for (var i = 0; i < _conversationPages; i++) {
+      final page = await repo.conversations(cursor: cursor);
+      for (final item in page.items) {
+        conversations[item.id] = item;
+      }
+      cursor = page.nextCursor;
+      if (cursor.isEmpty) break;
+    }
+    return SocialPageResult(
+      List.unmodifiable(conversations.values),
+      nextCursor: cursor,
+    );
   }
 
   void _handleError(Object error) {
@@ -295,10 +314,12 @@ class SocialViewModel extends Notifier<SocialState> {
     final repo = _repo;
     final generation = _generation;
     final cursor = state.nextCursor;
-    if (repo == null || cursor.isEmpty) return;
+    if (repo == null || cursor.isEmpty || _loadingMore || _refreshing) return;
+    _loadingMore = true;
     try {
       final page = await repo.conversations(cursor: cursor);
       if (!_current(generation) || cursor != state.nextCursor) return;
+      _conversationPages++;
       final all = {
         for (final c in state.conversations) c.id: c,
         for (final c in page.items) c.id: c,
@@ -309,6 +330,14 @@ class SocialViewModel extends Notifier<SocialState> {
       );
     } catch (error) {
       if (_current(generation)) _handleError(error);
+    } finally {
+      if (_current(generation)) {
+        _loadingMore = false;
+        if (_refreshAgain) {
+          _refreshAgain = false;
+          unawaited(refresh());
+        }
+      }
     }
   }
 }

@@ -55,6 +55,7 @@ class ConversationViewModel extends Notifier<ConversationState> {
   BigInt _readThrough = BigInt.zero;
   BigInt _syncThrough = BigInt.zero;
   String? _userId;
+  void Function()? _releasePending;
 
   @override
   ConversationState build() {
@@ -67,6 +68,7 @@ class ConversationViewModel extends Notifier<ConversationState> {
     _syncThrough = BigInt.zero;
     ref.onDispose(() {
       _generation++;
+      _releasePending = null;
     });
     ref.listen(
       socialViewModelProvider.select((s) => s.revision),
@@ -97,6 +99,17 @@ class ConversationViewModel extends Notifier<ConversationState> {
       loading: false,
       clearError: true,
     );
+    _retainPending();
+  }
+
+  void _retainPending() {
+    if (state.pending.isEmpty) {
+      _releasePending?.call();
+      _releasePending = null;
+    } else {
+      // Keep unsent text in this account's memory when the conversation closes.
+      _releasePending ??= ref.keepAlive().close;
+    }
   }
 
   Future<void> refresh({bool older = false}) async {
@@ -159,6 +172,7 @@ class ConversationViewModel extends Notifier<ConversationState> {
       ]),
       clearError: true,
     );
+    _retainPending();
     try {
       final message = await repo.send(conversationId, id, text);
       if (!_current(generation)) return;
@@ -185,6 +199,7 @@ class ConversationViewModel extends Notifier<ConversationState> {
         state.pending.where((p) => p.id != id || !p.failed),
       ),
     );
+    _retainPending();
   }
 
   Future<void> markVisibleRead(BigInt seq) async {

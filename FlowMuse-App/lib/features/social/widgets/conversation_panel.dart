@@ -31,6 +31,8 @@ class ConversationPanel extends ConsumerStatefulWidget {
 class _ConversationPanelState extends ConsumerState<ConversationPanel> {
   final _text = TextEditingController();
   final _scroll = ScrollController();
+  final _historyKey = GlobalKey();
+  final _latestMessageKey = GlobalKey();
   bool _atBottom = true;
 
   ConversationViewModel get _vm =>
@@ -62,6 +64,16 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
         !(ModalRoute.of(context)?.isCurrent ?? true)) {
       return;
     }
+    final bubble = _latestMessageKey.currentContext?.findRenderObject();
+    final history = _historyKey.currentContext?.findRenderObject();
+    if (bubble is! RenderBox ||
+        history is! RenderBox ||
+        !bubble.hasSize ||
+        !history.hasSize) {
+      return;
+    }
+    final top = bubble.localToGlobal(Offset.zero, ancestor: history).dy;
+    if (top >= history.size.height || top + bubble.size.height <= 0) return;
     final messages = ref
         .read(conversationViewModelProvider(widget.id))
         .messages;
@@ -150,7 +162,7 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
               : Stack(
                   children: [
                     ListView.builder(
-                      key: const ValueKey('message-history'),
+                      key: _historyKey,
                       controller: _scroll,
                       reverse: true,
                       padding: const EdgeInsets.all(16),
@@ -215,12 +227,17 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
                         }
                         final message = state.messages[at];
                         final date = message.createdAt.toLocal();
-                        return _bubble(
-                          message.text,
-                          message.senderId == mine,
-                          footer: Text(
-                            '${date.month}/${date.day} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}',
-                            style: Theme.of(context).textTheme.labelSmall,
+                        return KeyedSubtree(
+                          key: at == state.messages.length - 1
+                              ? _latestMessageKey
+                              : null,
+                          child: _bubble(
+                            message.text,
+                            message.senderId == mine,
+                            footer: Text(
+                              '${date.month}/${date.day} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}',
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
                           ),
                         );
                       },

@@ -71,6 +71,54 @@ http.Response socialResponse(Object body, [int status = 200]) => http.Response(
 );
 
 void main() {
+  test('刷新覆盖已加载的会话页并保持正确的后续游标', () async {
+    var read = false;
+    final repo = SocialRepository(
+      serverUrl: 'https://example.test',
+      token: 'test',
+      client: MockClient((request) async {
+        if (request.url.path.endsWith('/me')) {
+          return socialResponse(meJson('A'));
+        }
+        if (!request.url.path.endsWith('/conversations')) {
+          return socialResponse({'items': []});
+        }
+        final second = request.url.queryParameters['cursor'] == 'second';
+        return socialResponse({
+          'items': [
+            {
+              'id': second ? 'two' : 'one',
+              'person': meJson('B')['person'],
+              'canSend': true,
+              'lastSeq': '1',
+              'readSeq': read ? '1' : '0',
+              'unreadCount': read ? 0 : 1,
+              'updatedAt': second ? 1 : 2,
+            },
+          ],
+          'nextCursor': second ? 'third' : 'second',
+        });
+      }),
+    );
+    addTearDown(repo.close);
+    final container = ProviderContainer(
+      overrides: [
+        socialSessionProvider.overrideWithValue((userId: 'A', token: 'test')),
+        socialRepositoryProvider.overrideWithValue(repo),
+        socialRealtimeFactoryProvider.overrideWithValue(TestSocialRealtime.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    final vm = container.read(socialViewModelProvider.notifier);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await vm.loadMoreConversations();
+    expect(container.read(socialViewModelProvider).nextCursor, 'third');
+    read = true;
+    await vm.refresh();
+    final state = container.read(socialViewModelProvider);
+    expect(state.nextCursor, 'third');
+    expect(state.conversations.map((c) => c.unreadCount), [0, 0]);
+  });
   test('A 的晚到请求不会污染 B，退出即清空内存和连接', () async {
     final late = Completer<http.Response>();
     final transports = <String, TestSocialRealtime>{};
