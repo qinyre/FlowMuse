@@ -11,6 +11,8 @@ import '../repositories/social_repository.dart';
 import '../view_models/conversation_view_model.dart';
 import '../view_models/social_view_model.dart';
 import 'device_security_dialog.dart';
+import 'invitation_actions.dart';
+import 'invitation_card.dart';
 
 class ConversationPanel extends ConsumerStatefulWidget {
   const ConversationPanel({
@@ -108,6 +110,12 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
     final mine = ref.watch(socialSessionProvider)?.userId;
     ref.watch(socialViewModelProvider.select((s) => s.foreground));
     final colors = Theme.of(context).colorScheme;
+    final invitations =
+        widget.canSend &&
+        ref.watch(
+          socialViewModelProvider.select((s) => s.me?.invitations == true),
+        );
+    final invitationActions = InvitationActions.of(context);
     WidgetsBinding.instance.addPostFrameCallback((_) => _markVisible());
     return Column(
       children: [
@@ -159,6 +167,12 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
                   icon: const Icon(LucideIcons.shieldCheck, size: 18),
                   onPressed: () =>
                       showDeviceSecurity(context, peer: widget.person),
+                ),
+              if (invitations && invitationActions != null)
+                IconButton(
+                  tooltip: '邀请协作当前白板',
+                  icon: const Icon(Icons.add_to_photos_outlined, size: 18),
+                  onPressed: () => invitationActions.send(widget.person, null),
                 ),
             ],
           ),
@@ -244,14 +258,22 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
                           key: at == state.messages.length - 1
                               ? _latestMessageKey
                               : null,
-                          child: _bubble(
-                            message.text,
-                            message.senderId == mine,
-                            footer: Text(
-                              '${date.month}/${date.day} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}',
-                              style: Theme.of(context).textTheme.labelSmall,
-                            ),
-                          ),
+                          child: message.invitation != null
+                              ? InvitationCard(
+                                  invitation: message.invitation!,
+                                  peer: widget.person,
+                                  canInteract: invitations,
+                                )
+                              : _bubble(
+                                  message.text,
+                                  message.senderId == mine,
+                                  footer: Text(
+                                    '${date.month}/${date.day} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.labelSmall,
+                                  ),
+                                ),
                         );
                       },
                     ),
