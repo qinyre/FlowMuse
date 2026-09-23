@@ -15,13 +15,14 @@ import (
 )
 
 type HTTPAPI struct {
-	store    *Store
-	identity func(*http.Request) (auth.Identity, error)
-	enabled  bool
-	timeout  time.Duration
-	Notify   func(event, id string, users ...string)
-	mu       sync.Mutex
-	rates    map[string]requestRate
+	store              *Store
+	identity           func(*http.Request) (auth.Identity, error)
+	enabled            bool
+	timeout            time.Duration
+	Notify             func(event, id string, users ...string)
+	InvitationsEnabled bool
+	mu                 sync.Mutex
+	rates              map[string]requestRate
 }
 
 type requestRate struct {
@@ -59,6 +60,14 @@ func (api *HTTPAPI) serve(w http.ResponseWriter, r *http.Request) {
 		respondError(w, ErrLimit)
 		return
 	}
+	if path == "devices" || strings.HasPrefix(path, "devices/") || strings.HasPrefix(path, "friends/") || path == "invitations" || strings.HasPrefix(path, "invitations/") {
+		if !api.InvitationsEnabled {
+			fail(w, 503, "invitations_disabled", "协作邀请暂未开放")
+			return
+		}
+		api.serveInvitations(w, r, user, path)
+		return
+	}
 	var result any
 	var err error
 	status := http.StatusOK
@@ -73,7 +82,7 @@ func (api *HTTPAPI) serve(w http.ResponseWriter, r *http.Request) {
 			if err == nil {
 				unread, err = api.store.UnreadCount(ctx, user)
 			}
-			result = map[string]any{"person": person, "pendingRequestCount": pending, "unreadCount": unread, "capabilities": map[string]bool{"friends": true, "textMessages": true, "invitations": false}}
+			result = map[string]any{"person": person, "pendingRequestCount": pending, "unreadCount": unread, "capabilities": map[string]bool{"friends": true, "textMessages": true, "invitations": api.InvitationsEnabled}}
 		}
 	case path == "people/lookup" && r.Method == "POST":
 		var body struct {
@@ -344,6 +353,10 @@ func decode(w http.ResponseWriter, r *http.Request, target any) bool {
 
 func respondError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, ErrInviteGone):
+		fail(w, 410, "invitation_unavailable", "邀请已失效、已撤销或房间已结束")
+	case errors.Is(err, ErrEnvelopeMissing):
+		fail(w, 404, "device_envelope_missing", "此设备没有可用邀请，请核验设备后联系发送者补发")
 	case errors.Is(err, ErrInvalid):
 		fail(w, 400, "invalid_input", "内容或参数不符合要求，请检查后重试")
 	case errors.Is(err, ErrNotFound):
