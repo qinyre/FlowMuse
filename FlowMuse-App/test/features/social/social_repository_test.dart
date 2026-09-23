@@ -5,9 +5,70 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:flow_muse/features/social/models/social_models.dart';
+import 'package:flow_muse/features/social/models/invitation_models.dart';
 import 'package:flow_muse/features/social/repositories/social_repository.dart';
 
 void main() {
+  test('邀请卡保留类型与大整数版本，设备接口只发送公钥', () async {
+    final invite = {
+      'id': 'invite',
+      'roomId': 'room',
+      'senderId': 'a',
+      'recipientId': 'b',
+      'conversationId': 'c',
+      'status': 'pending',
+      'version': '9007199254740993',
+      'expiresAt': 2000000000000,
+    };
+    final message = SocialMessage.fromJson({
+      'id': 'm',
+      'conversationId': 'c',
+      'seq': '1',
+      'senderId': 'a',
+      'clientMessageId': 'client',
+      'kind': 'invitation',
+      'createdAt': 0,
+      'invitation': invite,
+    });
+    expect(message.invitation!.version.toString(), '9007199254740993');
+    expect(message.text, '协作白板');
+    final calls = <String>[];
+    final repo = SocialRepository(
+      serverUrl: 'https://example.test',
+      token: 'test-token',
+      client: MockClient((request) async {
+        calls.add(request.url.path);
+        expect(request.url.queryParameters.containsKey('token'), isFalse);
+        final body = jsonDecode(request.body) as Map;
+        if (request.url.path.endsWith('/devices')) {
+          expect(body.keys.toSet(), {'id', 'keyId', 'publicKey', 'label'});
+          return http.Response(
+            jsonEncode({...body, 'userId': 'a', 'fingerprint': 'fp'}),
+            200,
+          );
+        }
+        expect(body, {'expectedVersion': '9007199254740993'});
+        return http.Response(jsonEncode({...invite, 'status': 'revoked'}), 200);
+      }),
+    );
+    await repo.registerDevice(
+      const SocialDevice(
+        id: 'd',
+        userId: 'a',
+        keyId: 'k',
+        publicKey: 'public',
+        fingerprint: 'fp',
+        label: 'test',
+      ),
+    );
+    final revoked = await repo.invitationAction(message.invitation!, 'revoke');
+    expect(revoked.status, 'revoked');
+    expect(calls, [
+      '/api/social/devices',
+      '/api/social/invitations/invite/revoke',
+    ]);
+    repo.close();
+  });
   test('消息序号跨越 Web 安全整数仍精确保留', () async {
     const seq = '9007199254740993';
     final repo = SocialRepository(

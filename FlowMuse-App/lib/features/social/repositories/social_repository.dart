@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../shared/network/native_http_client.dart';
 import '../models/social_models.dart';
+import '../models/invitation_models.dart';
 
 class SocialException implements Exception {
   const SocialException(this.code, this.message);
@@ -64,6 +65,18 @@ class SocialRepository {
         }
         if (response.statusCode == 401) code = 'unauthorized';
         throw switch (code) {
+          'invitations_disabled' => const SocialException(
+            'invitations_disabled',
+            '协作邀请暂未开放',
+          ),
+          'invitation_unavailable' => const SocialException(
+            'invitation_unavailable',
+            '邀请已失效、已撤销或房间已结束',
+          ),
+          'device_envelope_missing' => const SocialException(
+            'device_envelope_missing',
+            '此设备没有可用邀请，请核验设备后联系发送者补发',
+          ),
           'disabled' => const SocialException('disabled', '好友服务暂未开放'),
           'unauthorized' => const SocialException(
             'unauthorized',
@@ -199,6 +212,93 @@ class SocialRepository {
 
   String avatarUrl(String value) =>
       value.isEmpty ? '' : Uri.parse(serverUrl).resolve(value).toString();
+
+  Future<SocialDevice> registerDevice(SocialDevice device) async =>
+      SocialDevice.fromJson(
+        await _request(
+          'POST',
+          'devices',
+          body: {
+            'id': device.id,
+            'keyId': device.keyId,
+            'publicKey': device.publicKey,
+            'label': device.label,
+          },
+        ),
+      );
+  Future<SocialDeviceSet> devices({String? friendId}) async =>
+      SocialDeviceSet.fromJson(
+        await _request(
+          'GET',
+          friendId == null ? 'devices' : 'friends/$friendId/devices',
+        ),
+      );
+  Future<void> revokeDevice(String id) async {
+    await _request('POST', 'devices/$id/revoke', body: const {});
+  }
+
+  Future<SocialInvitation> invitation(String id) async =>
+      SocialInvitation.fromJson(await _request('GET', 'invitations/$id'));
+  Future<SocialPageResult<SocialInvitation>> invitations({
+    String direction = 'received',
+    String cursor = '',
+  }) async => SocialPageResult.fromJson(
+    await _request(
+      'GET',
+      'invitations',
+      query: {'direction': direction, 'cursor': cursor, 'limit': '100'},
+    ),
+    SocialInvitation.fromJson,
+  );
+  Future<SocialInvitation> createInvitation(SocialJson request) async =>
+      SocialInvitation.fromJson(
+        await _request('POST', 'invitations', body: request),
+      );
+  Future<({SocialInvitation invitation, InvitationEnvelope envelope})>
+  acceptInvitation(String id, SocialDevice device) async {
+    final json = await _request(
+      'POST',
+      'invitations/$id/accept',
+      body: {'deviceId': device.id, 'keyId': device.keyId},
+    );
+    return (
+      invitation: SocialInvitation.fromJson(
+        Map<String, dynamic>.from(json['invitation']! as Map),
+      ),
+      envelope: InvitationEnvelope.fromJson(
+        Map<String, dynamic>.from(json['envelope']! as Map),
+      ),
+    );
+  }
+
+  Future<SocialInvitation> invitationAction(
+    SocialInvitation invitation,
+    String action,
+  ) async => SocialInvitation.fromJson(
+    await _request(
+      'POST',
+      'invitations/${invitation.id}/$action',
+      body: {'expectedVersion': invitation.version.toString()},
+    ),
+  );
+  Future<void> invitationJoined(String id) async {
+    await _request('POST', 'invitations/$id/joined', body: const {});
+  }
+
+  Future<SocialInvitation> addEnvelopes(
+    String id,
+    BigInt version,
+    List<InvitationEnvelope> envelopes,
+  ) async => SocialInvitation.fromJson(
+    await _request(
+      'POST',
+      'invitations/$id/envelopes',
+      body: {
+        'keysetVersion': version.toString(),
+        'envelopes': envelopes.map((e) => e.toJson()).toList(),
+      },
+    ),
+  );
 }
 
 String validateMessage(String text) {

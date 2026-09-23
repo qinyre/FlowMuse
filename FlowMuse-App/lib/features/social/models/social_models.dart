@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'invitation_models.dart';
 
 typedef SocialJson = Map<String, Object?>;
 
@@ -82,9 +83,10 @@ class SocialMessage {
     required this.clientMessageId,
     required this.text,
     required this.createdAt,
+    this.invitation,
   });
   factory SocialMessage.fromJson(SocialJson json) {
-    if (json['kind'] != 'text') {
+    if (json['kind'] != 'text' && json['kind'] != 'invitation') {
       throw const FormatException('Unsupported message kind');
     }
     return SocialMessage(
@@ -93,7 +95,12 @@ class SocialMessage {
       seq: socialSequence(json['seq']),
       senderId: json['senderId']! as String,
       clientMessageId: json['clientMessageId']! as String,
-      text: json['text']! as String,
+      text: json['kind'] == 'invitation' ? '协作白板' : json['text']! as String,
+      invitation: json['kind'] == 'invitation'
+          ? SocialInvitation.fromJson(
+              Map<String, dynamic>.from(json['invitation']! as Map),
+            )
+          : null,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         (json['createdAt']! as num).toInt(),
       ),
@@ -102,6 +109,7 @@ class SocialMessage {
   final String id, conversationId, senderId, clientMessageId, text;
   final BigInt seq;
   final DateTime createdAt;
+  final SocialInvitation? invitation;
 }
 
 @immutable
@@ -143,16 +151,18 @@ class SocialMe {
     required this.unreadCount,
     required this.pendingRequestCount,
     required this.textMessages,
+    this.invitations = false,
   });
   factory SocialMe.fromJson(SocialJson json) => SocialMe(
     person: SocialPerson.fromJson(socialJson(json['person'])),
     unreadCount: (json['unreadCount']! as num).toInt(),
     pendingRequestCount: (json['pendingRequestCount']! as num).toInt(),
     textMessages: socialJson(json['capabilities'])['textMessages'] == true,
+    invitations: socialJson(json['capabilities'])['invitations'] == true,
   );
   final SocialPerson person;
   final int unreadCount, pendingRequestCount;
-  final bool textMessages;
+  final bool textMessages, invitations;
 }
 
 @immutable
