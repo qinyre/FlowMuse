@@ -2,8 +2,10 @@ package social
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +30,20 @@ func (s *Store) UnreadCount(ctx context.Context, userID string) (int64, error) {
 }
 
 func (s *Store) Conversations(ctx context.Context, userID, cursor string, limit int) ([]Conversation, error) {
+	var before time.Time
+	var beforeID string
+	if cursor != "" {
+		data, err := base64.RawURLEncoding.DecodeString(cursor)
+		parts := strings.Split(string(data), "|")
+		if err != nil || len(parts) != 2 || !safeID.MatchString(parts[1]) {
+			return nil, ErrInvalid
+		}
+		before, err = time.Parse(time.RFC3339Nano, parts[0])
+		if err != nil {
+			return nil, ErrInvalid
+		}
+		beforeID = parts[1]
+	}
 	rows, err := s.db.Query(ctx, `SELECT c.id,`+personColumns+`,
  r.state='accepted' AND NOT EXISTS(SELECT 1 FROM social_blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$1)),
  c.last_seq,CASE WHEN c.user_low_id=$1 THEN c.low_read_seq ELSE c.high_read_seq END,
@@ -37,7 +53,8 @@ func (s *Store) Conversations(ctx context.Context, userID, cursor string, limit 
  JOIN social_relationships r ON r.id=c.relationship_id
  JOIN users u ON u.id=CASE WHEN c.user_low_id=$1 THEN c.user_high_id ELSE c.user_low_id END
  LEFT JOIN direct_messages m ON m.conversation_id=c.id AND m.seq=c.last_seq
- WHERE $1 IN(c.user_low_id,c.user_high_id) AND c.id>$2 ORDER BY c.id LIMIT $3`, userID, cursor, limit)
+ WHERE $1 IN(c.user_low_id,c.user_high_id) AND ($2='' OR (c.updated_at,c.id)<($3,$2))
+ ORDER BY c.updated_at DESC,c.id DESC LIMIT $4`, userID, beforeID, before, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +70,7 @@ func (s *Store) Conversations(ctx context.Context, userID, cursor string, limit 
 			return nil, err
 		}
 		c.UpdatedAt = updated.UnixMilli()
+		c.Cursor = base64.RawURLEncoding.EncodeToString([]byte(updated.UTC().Format(time.RFC3339Nano) + "|" + c.ID))
 		if created != nil {
 			m.CreatedAt = created.UnixMilli()
 			m.ConversationID = c.ID

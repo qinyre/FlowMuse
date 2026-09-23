@@ -133,6 +133,7 @@ type Message struct {
 }
 
 type Conversation struct {
+	Cursor      string   `json:"-"`
 	ID          string   `json:"id"`
 	Person      Person   `json:"person"`
 	CanSend     bool     `json:"canSend"`

@@ -11,7 +11,7 @@ import (
 func friendConversation(t *testing.T, s *Store, a, b Person) Relationship {
 	t.Helper()
 	ctx := context.Background()
-	r, err := s.RequestFriend(ctx, a.ID, b.FriendCode, "", "request-chat", 0)
+	r, err := s.RequestFriend(ctx, a.ID, b.FriendCode, "", "request-chat-"+b.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,6 +20,27 @@ func friendConversation(t *testing.T, s *Store, a, b Person) Relationship {
 		t.Fatal(err)
 	}
 	return r
+}
+
+func TestConversationPaginationUsesLastActivity(t *testing.T) {
+	s, p := socialStore(t)
+	ctx := context.Background()
+	ab := friendConversation(t, s, p[0], p[1])
+	ac := friendConversation(t, s, p[0], p[2])
+	if _, _, err := s.SendMessage(ctx, p[0].ID, ab.ConversationID, "latest", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.Conversations(ctx, p[0].ID, "", 1)
+	if err != nil || len(first) != 1 || first[0].ID != ab.ConversationID {
+		t.Fatal("latest conversation missing", err)
+	}
+	second, err := s.Conversations(ctx, p[0].ID, first[0].Cursor, 1)
+	if err != nil || len(second) != 1 || second[0].ID != ac.ConversationID {
+		t.Fatal("cursor skipped conversation", err)
+	}
+	if _, err := s.Conversations(ctx, p[0].ID, "bad-cursor", 1); !errors.Is(err, ErrInvalid) {
+		t.Fatal("bad cursor accepted")
+	}
 }
 
 func TestMessagesDeduplicateAndReadCursor(t *testing.T) {

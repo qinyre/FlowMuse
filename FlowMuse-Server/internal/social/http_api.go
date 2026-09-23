@@ -174,7 +174,7 @@ func (api *HTTPAPI) serve(w http.ResponseWriter, r *http.Request) {
 		next := ""
 		if len(items) > limit {
 			items = items[:limit]
-			next = items[limit-1].ID
+			next = items[limit-1].Cursor
 		}
 		result = map[string]any{"items": items, "nextCursor": next}
 	case strings.HasPrefix(path, "conversations/"):
