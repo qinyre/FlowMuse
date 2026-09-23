@@ -79,6 +79,11 @@ func TestSchemaAndFriendCodes(t *testing.T) {
 }
 
 func TestTextValidation(t *testing.T) {
+	for _, value := range []string{"short," + strings.Repeat("b", 22), "https://example.test/%23room%3Dany%2Csecret"} {
+		if _, err := normalizeText(value, 2000, 8192, false); err == nil {
+			t.Fatal("room key accepted")
+		}
+	}
 	for _, value := range []string{"", " \n ", strings.Repeat("字", 2001), "a\x00b", "#room=" + strings.Repeat("a", 20) + "," + strings.Repeat("b", 22)} {
 		if _, err := normalizeText(value, 2000, 8192, false); err == nil {
 			t.Fatal("invalid text accepted")

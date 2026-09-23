@@ -210,7 +210,7 @@ String validateMessage(String text) {
     throw const SocialException('invalid_input', '请输入 1–2000 字的消息');
   }
   if (RegExp(
-    r'(#room=|#room%3d|[a-z0-9_-]{20},[a-z0-9_-]{22}([^a-z0-9_-]|$))',
+    r'((#|%23)room(=|%3d)|[a-z0-9_-]+,[a-z0-9_-]{22}([^a-z0-9_-]|$))',
     caseSensitive: false,
   ).hasMatch(text)) {
     throw const SocialException('room_secret', '协作链接含白板密钥，不能保存到云端私聊；请使用协作分享入口');

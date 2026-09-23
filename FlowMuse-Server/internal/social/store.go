@@ -24,7 +24,7 @@ var (
 
 var safeID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 var friendCodePattern = regexp.MustCompile(`^[A-Z2-7]{12}$`)
-var roomSecretPattern = regexp.MustCompile(`(?i)(?:#room=|#room%3d|[a-z0-9_-]{20},[a-z0-9_-]{22}(?:[^a-z0-9_-]|$))`)
+var roomSecretPattern = regexp.MustCompile(`(?i)(?:(?:#|%23)room(?:=|%3d)|[a-z0-9_-]+,[a-z0-9_-]{22}(?:[^a-z0-9_-]|$))`)
 
 type Store struct{ db *pgxpool.Pool }
 

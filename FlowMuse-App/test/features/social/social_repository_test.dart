@@ -79,6 +79,8 @@ void main() {
       '',
       List.filled(2001, '字').join(),
       'https://example.test/#room=any,secret',
+      'short,${'b' * 22}',
+      'https://example.test/%23room%3Dany%2Csecret',
     ]) {
       expect(() => validateMessage(text), throwsA(isA<SocialException>()));
     }
