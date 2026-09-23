@@ -365,6 +365,8 @@ FlowMuse-App:
 
 ## 9. 实施记录
 
+- T04（好友/文字部分）：幂等 schema、最小公开 DTO、字符串版本/消息序号、好友码与输入校验完成；隔离库重复迁移、唯一约束、中文/Emoji、协作密钥链接拒绝测试通过。每日申请额度用 users 上的日期/计数两列实现，无需额外事件账本。设备及邀请字段留待 T03 放行。
+
 - T02：CreateRoom 使用事务保存房间与真实 owner 成员；冲突不替换归属或空 ownerKeyHash。成员角色从房间 owner_id 推导，历史错误 owner 角色在读取时降为 editor，不批量改写旧数据。新增严格 FindRoom。隔离 PostgreSQL 验证重复创建、伪造 owner 角色、游客房间、缺失房间及已结束房间；storage/collab 测试与 vet 通过。
 
 - T01：统一 token/session/身份验证，Socket 支持 auth.token 并拒绝冲突凭据；原游客入口保留。`go test ./internal/auth ./internal/collab` 与专项鉴权测试、`go vet` 通过。隔离 PostgreSQL 17 容器使用临时内存数据目录、独立端口和 `_test` 数据库，每个测试独立 schema；未接入生产业务库。
