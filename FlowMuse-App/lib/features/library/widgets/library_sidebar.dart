@@ -7,6 +7,7 @@ import '../../../app/app_router.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
 import '../../notebooks/view_models/notebooks_view_model.dart';
+import '../../social/view_models/social_view_model.dart';
 import '../repositories/library_repository.dart';
 import '../../tags/view_models/tags_view_model.dart';
 import 'create_collection_dialog.dart';
@@ -50,6 +51,30 @@ class _LibrarySidebarState extends ConsumerState<LibrarySidebar> {
         ],
       ),
       children: [
+        Consumer(
+          builder: (context, ref, _) {
+            final (status, count) = ref.watch(
+              socialViewModelProvider.select((s) => (s.status, s.badgeCount)),
+            );
+            if (status == SocialStatus.disabled) return const SizedBox.shrink();
+            return SharedSidebarItem(
+              icon: LucideIcons.messagesSquare,
+              label: '好友与消息',
+              selected: widget.section == ShellSection.social,
+              count: count == 0
+                  ? null
+                  : count > 99
+                  ? '99+'
+                  : '$count',
+              onTap: () {
+                if (Scaffold.maybeOf(context)?.isDrawerOpen ?? false) {
+                  Navigator.of(context).pop();
+                }
+                context.go(AppRoutes.social);
+              },
+            );
+          },
+        ),
         SharedSidebarItem(
           icon: LucideIcons.search,
           label: '搜索',

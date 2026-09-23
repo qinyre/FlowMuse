@@ -100,10 +100,10 @@ class SocialRepository {
   Future<SocialLookup> lookup(String code) async => SocialLookup.fromJson(
     await _request('POST', 'people/lookup', body: {'friendCode': code}),
   );
-  Future<SocialPage<SocialRelationship>> relationships(
+  Future<SocialPageResult<SocialRelationship>> relationships(
     String status, {
     String cursor = '',
-  }) async => SocialPage.fromJson(
+  }) async => SocialPageResult.fromJson(
     await _request(
       'GET',
       'relationships',
@@ -140,7 +140,7 @@ class SocialRepository {
       },
     ),
   );
-  Future<List<SocialPerson>> blocks() async => SocialPage.fromJson(
+  Future<List<SocialPerson>> blocks() async => SocialPageResult.fromJson(
     await _request('GET', 'blocks'),
     SocialPerson.fromJson,
   ).items;
@@ -152,9 +152,9 @@ class SocialRepository {
     await _request('POST', 'blocks/$userId/remove', body: const {});
   }
 
-  Future<SocialPage<SocialConversation>> conversations({
+  Future<SocialPageResult<SocialConversation>> conversations({
     String cursor = '',
-  }) async => SocialPage.fromJson(
+  }) async => SocialPageResult.fromJson(
     await _request(
       'GET',
       'conversations',
@@ -162,11 +162,11 @@ class SocialRepository {
     ),
     SocialConversation.fromJson,
   );
-  Future<SocialPage<SocialMessage>> messages(
+  Future<SocialPageResult<SocialMessage>> messages(
     String id, {
     BigInt? before,
     BigInt? after,
-  }) async => SocialPage.fromJson(
+  }) async => SocialPageResult.fromJson(
     await _request(
       'GET',
       'conversations/$id/messages',

@@ -3,6 +3,7 @@ import 'package:flow_muse/features/social/view_models/conversation_view_model.da
 import 'package:flow_muse/features/social/view_models/social_view_model.dart';
 import 'package:flow_muse/features/social/widgets/conversation_panel.dart';
 import 'package:flow_muse/features/social/widgets/add_friend_dialog.dart';
+import 'package:flow_muse/features/social/views/social_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,7 @@ class TestInbox extends SocialViewModel {
   final SocialState initial;
   @override
   SocialState build() => initial;
+  void update(SocialState value) => state = value;
   @override
   Future<void> refresh() async {}
 }
@@ -68,6 +70,80 @@ const testPerson = SocialPerson(
 );
 
 void main() {
+  for (final width in [390.0, 1200.0]) {
+    testWidgets('好友页在 $width 宽度打开聊天，服务关闭即清空内容', (tester) async {
+      tester.view.physicalSize = Size(width, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final inbox = TestInbox(
+        SocialState(
+          status: SocialStatus.ready,
+          me: const SocialMe(
+            person: SocialPerson(
+              id: 'A',
+              name: '我',
+              friendCode: 'FGHI2345ABCD',
+            ),
+            unreadCount: 1,
+            pendingRequestCount: 0,
+            textMessages: true,
+          ),
+          friends: [
+            SocialRelationship(
+              id: 'r',
+              person: testPerson,
+              requesterId: 'A',
+              clientRequestId: 'c',
+              status: 'accepted',
+              version: BigInt.two,
+              conversationId: 'chat',
+            ),
+          ],
+          conversations: [
+            SocialConversation(
+              id: 'chat',
+              person: testPerson,
+              canSend: true,
+              lastSeq: BigInt.one,
+              readSeq: BigInt.zero,
+              unreadCount: 1,
+              updatedAt: 1,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            socialSessionProvider.overrideWithValue((
+              userId: 'A',
+              token: 'test',
+            )),
+            socialViewModelProvider.overrideWith(() => inbox),
+            conversationViewModelProvider(
+              'chat',
+            ).overrideWith(() => TestChat('chat')),
+          ],
+          child: const MaterialApp(home: Scaffold(body: SocialPage())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('我的好友码'), findsOneWidget);
+      await tester.tap(find.text('小林'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('message-input')), findsOneWidget);
+      expect(
+        find.byTooltip('返回列表'),
+        width < 820 ? findsOneWidget : findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      inbox.update(const SocialState(status: SocialStatus.disabled));
+      await tester.pumpAndSettle();
+      expect(find.text('好友服务暂未开放，请稍后刷新。'), findsOneWidget);
+      expect(find.text('小林'), findsNothing);
+    });
+  }
   testWidgets('好友查找只提交完整好友码并先展示公开资料', (tester) async {
     final inbox = TestLookup();
     await tester.pumpWidget(

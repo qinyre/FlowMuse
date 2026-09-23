@@ -193,7 +193,7 @@ class SocialViewModel extends Notifier<SocialState> {
         repo.conversations(),
       ]);
       if (!_current(generation)) return;
-      final page = values[3] as SocialPage<SocialConversation>;
+      final page = values[3] as SocialPageResult<SocialConversation>;
       final conversations = {
         for (final c in state.conversations) c.id: c,
         for (final c in page.items) c.id: c,

@@ -156,16 +156,22 @@ class SocialMe {
 }
 
 @immutable
-class SocialPage<T> {
-  const SocialPage(this.items, {this.nextCursor = '', this.hasMore = false});
-  factory SocialPage.fromJson(SocialJson json, T Function(SocialJson) read) =>
-      SocialPage(
-        List.unmodifiable(
-          (json['items']! as List).map((item) => read(socialJson(item))),
-        ),
-        nextCursor: json['nextCursor'] as String? ?? '',
-        hasMore: json['hasMore'] == true,
-      );
+class SocialPageResult<T> {
+  const SocialPageResult(
+    this.items, {
+    this.nextCursor = '',
+    this.hasMore = false,
+  });
+  factory SocialPageResult.fromJson(
+    SocialJson json,
+    T Function(SocialJson) read,
+  ) => SocialPageResult(
+    List.unmodifiable(
+      (json['items']! as List).map((item) => read(socialJson(item))),
+    ),
+    nextCursor: json['nextCursor'] as String? ?? '',
+    hasMore: json['hasMore'] == true,
+  );
   final List<T> items;
   final String nextCursor;
   final bool hasMore;

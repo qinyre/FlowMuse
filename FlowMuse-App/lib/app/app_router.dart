@@ -9,6 +9,7 @@ import '../features/library/views/library_home_page.dart';
 import '../features/library/widgets/create_collection_dialog.dart';
 import '../features/library/widgets/edit_collection_page.dart';
 import '../features/search/views/search_page.dart';
+import '../features/social/views/social_page.dart';
 import '../features/settings/views/settings_page.dart';
 import '../features/settings/views/privacy_policy_page.dart';
 import '../features/notebooks/views/notebooks_page.dart';
@@ -25,6 +26,7 @@ class AppRoutes {
   static const createCollection = '/create-collection';
   static const editCollection = '/edit-collection';
   static const search = '/search';
+  static const social = '/social';
   static const notebooks = '/notebooks';
   static const notebookDetail = '/notebooks/:notebookId';
   static const tags = '/tags';
@@ -106,6 +108,11 @@ GoRouter createAppRouter() {
           );
         },
         routes: [
+          GoRoute(
+            path: AppRoutes.social,
+            pageBuilder: (context, state) =>
+                _contentPage(state, const SocialPage()),
+          ),
           GoRoute(
             path: AppRoutes.library,
             pageBuilder: (context, state) {
@@ -274,6 +281,7 @@ GoRouter createAppRouter() {
 }
 
 ShellSection _sectionForPath(String path) {
+  if (path == AppRoutes.social) return ShellSection.social;
   if (path == AppRoutes.search) {
     return ShellSection.search;
   }
