@@ -10,7 +10,13 @@ class SocialRealtimeTransport {
     required void Function() onRevoked,
     required void Function(bool) onConnection,
   }) {
-    if (_socket != null) return;
+    final existing = _socket;
+    if (existing != null) {
+      // Namespace rejections stop Socket.IO's automatic reconnection. The next
+      // successful HTTP refresh retries only this inactive namespace.
+      if (!existing.connected && !existing.active) existing.connect();
+      return;
+    }
     final socket = io.io(
       '${serverUrl.replaceFirst(RegExp(r'/+$'), '')}/social',
       io.OptionBuilder()
