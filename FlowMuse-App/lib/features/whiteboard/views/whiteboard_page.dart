@@ -16,6 +16,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/editor/creator_sta
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/page_reading_position.dart';
 
 import '../../../app/app_router.dart';
+import '../../../app/social_overlay.dart';
 import '../../../app/app_theme_preset.dart';
 import '../../../app/view_models/theme_view_model.dart';
 import '../../account/models/collaboration_identity.dart';
@@ -73,17 +74,20 @@ class WhiteboardPage extends ConsumerStatefulWidget {
     required this.noteId,
     this.discardIfUnchanged = false,
   }) : temporaryCollaboration = false,
+       onInitialRoomJoined = null,
        initialRoom = null;
 
   const WhiteboardPage.collaboration({super.key})
     : noteId = 'collaboration-room',
       temporaryCollaboration = true,
+      onInitialRoomJoined = null,
       initialRoom = null,
       discardIfUnchanged = false;
 
   const WhiteboardPage.collaborationRoom({
     super.key,
     required CollaborationRoom this.initialRoom,
+    this.onInitialRoomJoined,
   }) : noteId = 'collaboration-room',
        temporaryCollaboration = true,
        discardIfUnchanged = false;
@@ -91,6 +95,7 @@ class WhiteboardPage extends ConsumerStatefulWidget {
   final String noteId;
   final bool temporaryCollaboration;
   final CollaborationRoom? initialRoom;
+  final Future<void> Function()? onInitialRoomJoined;
   final bool discardIfUnchanged;
 
   @override
@@ -345,7 +350,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _loadingScene = false;
       final room = widget.initialRoom;
       if (room != null) {
-        unawaited(_joinCollaboration(room));
+        await _joinCollaboration(room);
       }
       return;
     }
@@ -1284,7 +1289,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       final scene = _currentScene();
       final reconciledScene = await ref
           .read(whiteboardViewModelProvider.notifier)
-          .joinCollaboration(room: room, localScene: scene);
+          .joinCollaboration(
+            room: room,
+            localScene: scene,
+            isCurrent: () =>
+                _canMutateWhiteboard &&
+                identical(
+                  _collaborationRepository,
+                  ref.read(collaborationRepositoryProvider),
+                ),
+          );
       _remoteWetInkStore.seedFinalizedStrokeIds(
         _freedrawIds(reconciledScene.elements),
       );
@@ -1302,6 +1316,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         ref
             .read(whiteboardViewModelProvider.notifier)
             .applyCollaborationInitialized();
+        if (identical(room, widget.initialRoom)) {
+          await widget.onInitialRoomJoined?.call();
+        }
       }
     } finally {
       _collaborationOpening = false;
@@ -1328,6 +1345,57 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _disconnectCollaboration();
     if (widget.temporaryCollaboration && mounted) {
       _popWhenStable();
+    }
+  }
+
+  Future<bool> _prepareToOpenFriendInvitation() async {
+    if (!_canMutateWhiteboard ||
+        _handlingBack ||
+        _collaborationOpening ||
+        _openingMessage != null) {
+      return false;
+    }
+    _handlingBack = true;
+    try {
+      final state = ref.read(whiteboardViewModelProvider);
+      bool saveTemporary = false;
+      if (widget.temporaryCollaboration && !_temporarySaved) {
+        final save = await _confirmMemberRoomExit();
+        if (save == null || !mounted) return false;
+        saveTemporary = save;
+      }
+      if (state.isRoomOwner && state.collaborating) {
+        if (await _confirmEndCollaborationRoom() != true || !mounted) {
+          return false;
+        }
+      }
+      if (saveTemporary) await _saveTemporaryRoomAsLocalNote();
+      if (!widget.temporaryCollaboration) {
+        // Flush even if a previous auto-save failed after clearing its flag.
+        _localDraftDirty = true;
+        await _finalizeLocalDraftBeforeLeaving();
+      }
+      if (!mounted) return false;
+      if (state.isRoomOwner && state.collaborating) {
+        await ref.read(whiteboardViewModelProvider.notifier).endCollaboration();
+        await _cancelCollaborationStreams();
+      } else {
+        await _disconnectCollaboration();
+      }
+      if (!mounted) return false;
+      _disposingOrLeaving = true;
+      _markdrawController.closeTransientUiForSceneReplace();
+      return true;
+    } catch (_) {
+      _localDraftDirty = true;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('当前白板未能保存或退出，已保留在此页面，请重试')),
+        );
+      }
+      return false;
+    } finally {
+      if (mounted && !_disposingOrLeaving) _handlingBack = false;
     }
   }
 
@@ -2528,6 +2596,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onLeaveCollaboration: _leaveCollaboration,
                   onEndCollaboration: _endCollaboration,
                   onShareCollaboration: _shareCollaborationInvitation,
+                  socialAction: SocialMessagesAction(
+                    prepareToOpenInvitation: _prepareToOpenFriendInvitation,
+                  ),
                   onPointerPresence: _broadcastPointerPresence,
                   onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
                   pageNavigationEnabled:

@@ -6,7 +6,7 @@ import '../../app/view_models/theme_view_model.dart';
 import '../../features/library/widgets/library_sidebar.dart';
 import '../storage/local_settings_repository.dart';
 
-enum ShellSection { library, search, notebooks, tags, trash, settings }
+enum ShellSection { library, search, notebooks, tags, trash, settings, social }
 
 const sharedSidebarWidth = 268.0;
 const shellCompactBreakpoint = 820.0;
@@ -133,14 +133,14 @@ class _AppShellState extends ConsumerState<AppShell> {
             gradient: effectivePreset.usesMonochromeBackground
                 ? null
                 : LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                effectivePreset.backgroundStart,
-                effectivePreset.backgroundMiddle,
-                effectivePreset.backgroundEnd,
-              ],
-            ),
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      effectivePreset.backgroundStart,
+                      effectivePreset.backgroundMiddle,
+                      effectivePreset.backgroundEnd,
+                    ],
+                  ),
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {

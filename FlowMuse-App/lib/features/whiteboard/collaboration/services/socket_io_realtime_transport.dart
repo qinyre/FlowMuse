@@ -139,8 +139,9 @@ class SocketIoRealtimeTransport
         'room': _shortRoomId(roomId),
         'socket': existing.id,
       });
+      final waiting = _waitForRoomJoin();
       _sendJoin(existing, roomId);
-      await _waitForRoomJoin();
+      await waiting;
       _emitStatus(RealtimeConnectionStatus.joined);
       return;
     }
@@ -184,7 +185,6 @@ class SocketIoRealtimeTransport
       });
       _emitStatus(RealtimeConnectionStatus.reconnecting);
       _beginConnection(activeRoomId);
-      _sendJoin(socket, activeRoomId);
     });
     socket.onReconnectAttempt((_) {
       CollaborationDebugLog.write('socket', 'reconnect_attempt', {
@@ -216,7 +216,8 @@ class SocketIoRealtimeTransport
       CollaborationDebugLog.write('socket', 'init_room', {
         'room': _shortRoomId(roomId),
       });
-      _sendJoin(socket, roomId);
+      final activeRoomId = _roomId;
+      if (activeRoomId != null) _sendJoin(socket, activeRoomId);
     });
     socket.on(_eventFirstInRoom, (_) {
       CollaborationDebugLog.write('socket', 'first_in_room', {
@@ -349,11 +350,8 @@ class SocketIoRealtimeTransport
       const Duration(seconds: 10),
       onTimeout: () => throw StateError('Socket.IO connect timed out'),
     );
-    _sendJoin(socket, roomId);
-    CollaborationDebugLog.write('socket', 'join_sent', {
-      'room': _shortRoomId(roomId),
-      'socket': socket.id,
-    });
+    // init-room is the server's readiness barrier. Sending on transport connect
+    // can race its account lookup; deduplication would then hide the lost join.
     await joined.future.timeout(
       const Duration(seconds: 10),
       onTimeout: () => throw StateError('Socket.IO join room timed out'),

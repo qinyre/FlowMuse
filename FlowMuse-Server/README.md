@@ -175,4 +175,14 @@ V3 对已实测支持的 `doubao-seed-2-1-turbo-260628` 型号发送 `reasoning_
 - `.env` 含密钥，不要提交到 Git 仓库或发送给他人。
 - 当前 `docker-compose.yml` 的数据库、MinIO 密码和 CORS 设置是开发默认值；正式长期部署前应替换默认密码，并将 `FLOWMUSE_ALLOWED_ORIGINS` 改为实际 Web 域名。
 
-测试SSH链接
+## 好友、私聊与协作邀请
+
+`FLOWMUSE_SOCIAL_ENABLED` 默认 `false`，关闭时 `/api/social/*` 返回带 `code=disabled` 的 503，不影响账号和白板。开启后幂等迁移好友与消息表；社交迁移失败仅关闭该模块。Compose 的 `env_file` 读取这一配置。
+
+专项 PostgreSQL 测试使用独立 `FLOWMUSE_SOCIAL_TEST_DATABASE_URL`，数据库名必须以 `_test` 结尾，每个测试自动建立/清理独立 schema。运行 `go test ./internal/social ./internal/storage`；未设置时明确跳过数据库集成测试，不能当作已验证迁移。禁止使用生产 `DATABASE_URL`。
+
+当前可用范围为好友管理、云端文字私聊与定向加密邀请。`/social` 只通知账号自己的变更 ID，客户端通过 HTTP 补查；独立 namespace 需要有效账号会话。鉴权期间数据库故障返回 503，只有确定失效的凭据返回 401/`session.revoked`。服务当前按单进程分发实时提示；扩展为多副本之前需共享 adapter，HTTP 历史仍是事实来源。
+
+`FLOWMUSE_SOCIAL_INVITATIONS_ENABLED` 默认 `false`；与总开关同时开启后，`/api/social/me` 返回 `invitations=true` 并开放设备公钥、邀请信封和状态接口。客户端必须手动核验双方安全卡；云端不保存设备私钥或白板明文密钥。支持接受、拒绝、撤销、新设备补发，真实加入房间后才记录 joined。迁移扩展 `users`、`room_invites` 与 `direct_messages`，新增设备/信封表，保留原有数据。
+
+2026-09-23 已按用户要求在生产启用两个开关，Web/API 已部署。发布版本、备份与检查结果见 [上线记录](../docs/研发记录/research/2026-09-23-social-deployment.md)；跨端与鸿蒙验收范围见 [阶段验证记录](../docs/研发记录/research/2026-09-23-social-validation.md)。

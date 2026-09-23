@@ -9,6 +9,7 @@ import '../features/library/views/library_home_page.dart';
 import '../features/library/widgets/create_collection_dialog.dart';
 import '../features/library/widgets/edit_collection_page.dart';
 import '../features/search/views/search_page.dart';
+import '../features/social/views/social_page.dart';
 import '../features/settings/views/settings_page.dart';
 import '../features/settings/views/privacy_policy_page.dart';
 import '../features/notebooks/views/notebooks_page.dart';
@@ -16,6 +17,8 @@ import '../features/tags/views/tags_page.dart';
 import '../features/whiteboard/collaboration/models/collaboration_room.dart';
 import '../features/whiteboard/views/whiteboard_page.dart';
 import '../shared/widgets/app_shell.dart';
+import 'social_invitation_host.dart';
+import 'social_invitation_page.dart';
 
 class AppRoutes {
   const AppRoutes._();
@@ -25,6 +28,10 @@ class AppRoutes {
   static const createCollection = '/create-collection';
   static const editCollection = '/edit-collection';
   static const search = '/search';
+  static const social = '/social';
+  static const socialInvitation = '/social/invitations/:inviteId';
+  static String socialInvitationPath(String id) =>
+      '/social/invitations/${Uri.encodeComponent(id)}';
   static const notebooks = '/notebooks';
   static const notebookDetail = '/notebooks/:notebookId';
   static const tags = '/tags';
@@ -107,6 +114,13 @@ GoRouter createAppRouter() {
         },
         routes: [
           GoRoute(
+            path: AppRoutes.social,
+            pageBuilder: (context, state) => _contentPage(
+              state,
+              const SocialInvitationHost(child: SocialPage()),
+            ),
+          ),
+          GoRoute(
             path: AppRoutes.library,
             pageBuilder: (context, state) {
               return _contentPage(state, const LibraryHomePage());
@@ -177,6 +191,15 @@ GoRouter createAppRouter() {
             },
           ),
         ],
+      ),
+      GoRoute(
+        path: AppRoutes.socialInvitation,
+        pageBuilder: (context, state) => _standalonePage(
+          state,
+          SocialInvitationPage(
+            inviteId: state.pathParameters['inviteId'] ?? '',
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.createNote,
@@ -274,6 +297,7 @@ GoRouter createAppRouter() {
 }
 
 ShellSection _sectionForPath(String path) {
+  if (path == AppRoutes.social) return ShellSection.social;
   if (path == AppRoutes.search) {
     return ShellSection.search;
   }

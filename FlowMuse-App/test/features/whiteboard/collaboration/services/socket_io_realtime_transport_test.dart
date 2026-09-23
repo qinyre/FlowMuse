@@ -5,6 +5,41 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/socket_io_r
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 void main() {
+  test('等待服务端 init-room 后才发送首次加入，避免登录身份查询期间丢包', () async {
+    const url = 'http://join-barrier-fixture.invalid:1';
+    final client = _ConnectedSocket(
+      io.io(
+        url,
+        io.OptionBuilder().disableAutoConnect().enableForceNew().build(),
+      ),
+      autoReady: false,
+    );
+    io.cache[url] = client.io;
+    client.io.nsps['/'] = client;
+    final transport = SocketIoRealtimeTransport(
+      serverUrl: url,
+      identity: CollaborationIdentity.guest('fixture'),
+    );
+    addTearDown(() async {
+      await transport.disconnect();
+      io.cache.remove(url);
+    });
+    final connected = transport.connect('room');
+    await Future<void>.delayed(Duration.zero);
+    expect(
+      client.packets.where((p) => (p['data'] as List).first == 'join-room'),
+      isEmpty,
+    );
+    client.emitEvent(['init-room', null]);
+    client.emitEvent(['first-in-room', null]);
+    await connected;
+    expect(
+      client.packets
+          .where((p) => (p['data'] as List).first == 'join-room')
+          .length,
+      1,
+    );
+  });
   test('生产 send 在不可写时丢弃光标，随后正式内容仍交给 transport', () async {
     const url = 'http://collaboration-fixture.invalid:1';
     final previous = io.cache[url];
@@ -85,10 +120,11 @@ void main() {
 // Keep the real Socket.emit/volatile implementation; replace only connection
 // setup and the final wire write. This fixture never opens a network socket.
 class _ConnectedSocket extends io.Socket {
-  _ConnectedSocket(io.Socket seed)
+  _ConnectedSocket(io.Socket seed, {this.autoReady = true})
     : super(seed.io, '/', {'autoConnect': false});
 
   final packets = <Map>[];
+  final bool autoReady;
 
   @override
   void packet(Map packet) => packets.add(packet);
@@ -96,7 +132,10 @@ class _ConnectedSocket extends io.Socket {
   @override
   io.Socket connect() {
     onconnect('fixture-socket', null);
-    emitEvent(['first-in-room', null]);
+    if (autoReady) {
+      emitEvent(['init-room', null]);
+      emitEvent(['first-in-room', null]);
+    }
     return this;
   }
 }

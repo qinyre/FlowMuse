@@ -3,6 +3,9 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/account/view_models/account_view_model.dart';
+import 'package:flow_muse/app/social_overlay.dart';
+import 'package:flow_muse/features/social/views/social_page.dart';
+import 'package:flow_muse/features/social/widgets/invitation_actions.dart';
 import 'package:flow_muse/features/library/models/note_item.dart';
 import 'package:flow_muse/features/library/repositories/library_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
@@ -551,6 +554,7 @@ void main() {
     final subscription = peer.encryptedMessages(room).listen(received.add);
     addTearDown(subscription.cancel);
     final container = _container(library: library, collaboration: local);
+    var joinedCallbacks = 0;
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     await tester.binding.setSurfaceSize(const Size(1200, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -558,7 +562,16 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: MaterialApp(
-          home: WhiteboardPage.collaborationRoom(initialRoom: room),
+          home: WhiteboardPage.collaborationRoom(
+            initialRoom: room,
+            onInitialRoomJoined: () async {
+              expect(
+                container.read(whiteboardViewModelProvider).collaborationStatus,
+                WhiteboardCollaborationStatus.connected,
+              );
+              joinedCallbacks++;
+            },
+          ),
         ),
       ),
     );
@@ -570,6 +583,7 @@ void main() {
           WhiteboardCollaborationStatus.connected,
     );
     expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
+    expect(joinedCallbacks, 1);
     final controller = tester
         .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
         .controller!;
@@ -589,6 +603,30 @@ void main() {
     }
 
     await pointer(100);
+    // Reading messages must not replace/dispose the collaborating route.
+    await tester.tap(find.byType(SocialMessagesAction));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('登录后，与好友交流新的想法'), findsOneWidget);
+    expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
+    final elementCount = controller.currentScene.elements.length;
+    await tester.tapAt(const Offset(600, 400));
+    expect(controller.currentScene.elements.length, elementCount);
+    final openingInvitation = InvitationActions.of(
+      tester.element(find.byType(SocialPage)),
+    )!.open('test-invite');
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('退出协作房间'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await openingInvitation;
+    expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
+    await tester.tap(find.byTooltip('关闭消息'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
+    expect(
+      tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).controller,
+      same(controller),
+    );
     final pageEditor = tester.widget<MarkdrawEditor>(
       find.byType(MarkdrawEditor),
     );

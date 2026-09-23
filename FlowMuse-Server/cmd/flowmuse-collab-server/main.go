@@ -12,6 +12,7 @@ import (
 	"flowmuse/server/internal/config"
 	"flowmuse/server/internal/layoutrecognitionv3"
 	"flowmuse/server/internal/recognition"
+	"flowmuse/server/internal/social"
 	"flowmuse/server/internal/storage"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -96,6 +97,20 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/socket.io/", io.ServeHandler(nil))
 	authAPI.Register(mux)
+	socialStore := social.NewStore(db)
+	socialEnabled := cfg.SocialEnabled
+	if socialEnabled {
+		if err := socialStore.EnsureSchema(ctx); err != nil {
+			log.Print("social schema unavailable; social endpoints disabled")
+			socialEnabled = false
+		}
+	}
+	socialHub := social.NewHub(io, userStore, tokenService, socialEnabled)
+	defer socialHub.Close()
+	socialAPI := social.NewHTTPAPI(socialStore, authAPI.AuthenticateRequest, socialEnabled, cfg.RequestTimeout)
+	socialAPI.InvitationsEnabled = cfg.SocialInvitationsEnabled
+	socialAPI.Notify = socialHub.Notify
+	socialAPI.Register(mux)
 	collab.NewHTTPAPI(sceneStore, fileStore, roomStore, authAPI, cfg.RequestTimeout).Register(mux)
 	recognizer := recognition.NewMyScriptRecognizer(recognition.MyScriptConfig{
 		AppKey:   cfg.MyScriptAppKey,

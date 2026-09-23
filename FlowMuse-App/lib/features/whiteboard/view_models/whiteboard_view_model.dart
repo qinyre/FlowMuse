@@ -171,16 +171,22 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
   Future<ExcalidrawScene> joinCollaboration({
     required CollaborationRoom room,
     required ExcalidrawScene localScene,
+    bool Function()? isCurrent,
   }) async {
+    final repository = _repository;
+    bool current() =>
+        identical(repository, _repository) && (isCurrent?.call() ?? true);
     state = state.copyWith(
       collaborationStatus: WhiteboardCollaborationStatus.connecting,
       clearError: true,
     );
     try {
-      final result = await _repository.joinRoom(
+      final result = await repository.joinRoom(
         room: room,
         localScene: localScene,
+        isCurrent: current,
       );
+      if (!current()) throw StateError('加入协作已取消');
       state = state.copyWith(
         activeRoom: room,
         roomMetadata: result.metadata,
@@ -190,6 +196,7 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
       );
       return result.scene;
     } catch (error) {
+      if (!current()) rethrow;
       state = state.copyWith(
         collaborating: false,
         collaborationStatus: WhiteboardCollaborationStatus.failed,

@@ -11,53 +11,57 @@ import (
 )
 
 type Config struct {
-	Addr               string
-	DatabaseURL        string
-	S3Endpoint         string
-	S3AccessKeyID      string
-	S3SecretAccessKey  string
-	S3Bucket           string
-	S3UseSSL           bool
-	AllowedOrigins     []string
-	RequestTimeout     time.Duration
-	AuthSecret         string
-	AuthTokenTTL       time.Duration
-	PublicAppURL       string
-	EmailVerifyTTL     time.Duration
-	PasswordResetTTL   time.Duration
-	SMTPHost           string
-	SMTPPort           int
-	SMTPUsername       string
-	SMTPPassword       string
-	SMTPFrom           string
-	HuaweiClientID     string
-	HuaweiClientSecret string
-	MyScriptAppKey     string
-	MyScriptHMACKey    string
-	MyScriptEndpoint   string
-	RecognitionTimeout time.Duration
-	AITimeout          time.Duration
-	LayoutV3BaseURL    string
-	LayoutV3APIKey     string
-	LayoutV3Model      string
-	LayoutV3Timeout    time.Duration
+	SocialEnabled            bool
+	SocialInvitationsEnabled bool
+	Addr                     string
+	DatabaseURL              string
+	S3Endpoint               string
+	S3AccessKeyID            string
+	S3SecretAccessKey        string
+	S3Bucket                 string
+	S3UseSSL                 bool
+	AllowedOrigins           []string
+	RequestTimeout           time.Duration
+	AuthSecret               string
+	AuthTokenTTL             time.Duration
+	PublicAppURL             string
+	EmailVerifyTTL           time.Duration
+	PasswordResetTTL         time.Duration
+	SMTPHost                 string
+	SMTPPort                 int
+	SMTPUsername             string
+	SMTPPassword             string
+	SMTPFrom                 string
+	HuaweiClientID           string
+	HuaweiClientSecret       string
+	MyScriptAppKey           string
+	MyScriptHMACKey          string
+	MyScriptEndpoint         string
+	RecognitionTimeout       time.Duration
+	AITimeout                time.Duration
+	LayoutV3BaseURL          string
+	LayoutV3APIKey           string
+	LayoutV3Model            string
+	LayoutV3Timeout          time.Duration
 }
 
 func Load() (Config, error) {
 	_ = godotenv.Load(".env", "FlowMuse-Server/.env")
 
 	cfg := Config{
-		Addr:           env("FLOWMUSE_ADDR", ":3000"),
-		DatabaseURL:    os.Getenv("DATABASE_URL"),
-		S3Endpoint:     os.Getenv("FLOWMUSE_S3_ENDPOINT"),
-		S3Bucket:       os.Getenv("FLOWMUSE_S3_BUCKET"),
-		S3UseSSL:       envBool("FLOWMUSE_S3_USE_SSL", true),
-		AllowedOrigins: envList("FLOWMUSE_ALLOWED_ORIGINS", "*"),
-		RequestTimeout: envDuration("FLOWMUSE_REQUEST_TIMEOUT", 10*time.Second),
-		AuthSecret:     os.Getenv("FLOWMUSE_AUTH_SECRET"),
-		AuthTokenTTL:   envDuration("FLOWMUSE_AUTH_TOKEN_TTL", 30*24*time.Hour),
-		PublicAppURL:   env("FLOWMUSE_PUBLIC_APP_URL", "https://app.flowmuse.cloud"),
-		EmailVerifyTTL: envDuration("FLOWMUSE_EMAIL_VERIFY_TTL", 24*time.Hour),
+		SocialEnabled:            envBool("FLOWMUSE_SOCIAL_ENABLED", false),
+		SocialInvitationsEnabled: envBool("FLOWMUSE_SOCIAL_INVITATIONS_ENABLED", false),
+		Addr:                     env("FLOWMUSE_ADDR", ":3000"),
+		DatabaseURL:              os.Getenv("DATABASE_URL"),
+		S3Endpoint:               os.Getenv("FLOWMUSE_S3_ENDPOINT"),
+		S3Bucket:                 os.Getenv("FLOWMUSE_S3_BUCKET"),
+		S3UseSSL:                 envBool("FLOWMUSE_S3_USE_SSL", true),
+		AllowedOrigins:           envList("FLOWMUSE_ALLOWED_ORIGINS", "*"),
+		RequestTimeout:           envDuration("FLOWMUSE_REQUEST_TIMEOUT", 10*time.Second),
+		AuthSecret:               os.Getenv("FLOWMUSE_AUTH_SECRET"),
+		AuthTokenTTL:             envDuration("FLOWMUSE_AUTH_TOKEN_TTL", 30*24*time.Hour),
+		PublicAppURL:             env("FLOWMUSE_PUBLIC_APP_URL", "https://app.flowmuse.cloud"),
+		EmailVerifyTTL:           envDuration("FLOWMUSE_EMAIL_VERIFY_TTL", 24*time.Hour),
 		PasswordResetTTL: envDuration(
 			"FLOWMUSE_PASSWORD_RESET_TTL",
 			30*time.Minute,
