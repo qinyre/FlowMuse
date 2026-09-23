@@ -107,7 +107,7 @@ func main() {
 	}
 	socialHub := social.NewHub(io, userStore, tokenService, socialEnabled)
 	defer socialHub.Close()
-	socialAPI := social.NewHTTPAPI(socialStore, authAPI.IdentityFromRequest, socialEnabled, cfg.RequestTimeout)
+	socialAPI := social.NewHTTPAPI(socialStore, authAPI.AuthenticateRequest, socialEnabled, cfg.RequestTimeout)
 	socialAPI.Notify = socialHub.Notify
 	socialAPI.Register(mux)
 	collab.NewHTTPAPI(sceneStore, fileStore, roomStore, authAPI, cfg.RequestTimeout).Register(mux)

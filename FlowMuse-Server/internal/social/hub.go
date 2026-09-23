@@ -2,6 +2,7 @@ package social
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"time"
@@ -49,7 +50,11 @@ func NewHub(server *socket.Server, users *auth.UserStore, tokens *auth.TokenServ
 			identity, err = users.AuthenticateToken(ctx, tokens, token)
 		}
 		if err != nil {
-			next(socket.NewExtendedError("unauthorized", nil))
+			code := "unavailable"
+			if errors.Is(err, auth.ErrInvalidToken) {
+				code = "unauthorized"
+			}
+			next(socket.NewExtendedError(code, nil))
 			return
 		}
 		client.SetData(&connection{client: client, userID: identity.UserID, token: token})
@@ -58,7 +63,13 @@ func NewHub(server *socket.Server, users *auth.UserStore, tokens *auth.TokenServ
 	ns.On("connection", func(args ...any) {
 		client := args[0].(*socket.Socket)
 		c := client.Data().(*connection)
+		// Install cleanup before publishing the connection to avoid stale slots.
+		client.On("disconnect", func(...any) { h.mu.Lock(); delete(h.clients, string(client.Id())); h.mu.Unlock() })
 		h.mu.Lock()
+		if !client.Connected() {
+			h.mu.Unlock()
+			return
+		}
 		count := 0
 		for _, v := range h.clients {
 			if v.userID == c.userID {
@@ -73,7 +84,6 @@ func NewHub(server *socket.Server, users *auth.UserStore, tokens *auth.TokenServ
 		h.clients[string(client.Id())] = c
 		h.mu.Unlock()
 		// No client-controlled subscription or write event is registered.
-		client.On("disconnect", func(...any) { h.mu.Lock(); delete(h.clients, string(client.Id())); h.mu.Unlock() })
 	})
 	go h.run()
 	return h
@@ -122,8 +132,10 @@ func (h *Hub) deliver(event hint) {
 		_, err := h.users.AuthenticateToken(ctx, h.tokens, c.token)
 		cancel()
 		if err != nil {
-			c.client.Emit("session.revoked", map[string]any{})
-			c.client.Disconnect(false)
+			if errors.Is(err, auth.ErrInvalidToken) {
+				c.client.Emit("session.revoked", map[string]any{})
+				c.client.Disconnect(false)
+			}
 			continue
 		}
 		if event.event != "" {

@@ -91,6 +91,19 @@ func TestSocialSocketWebAuthIsolationAndRevocation(t *testing.T) {
 	if strings.Contains(packet, "other-user-only") || !strings.Contains(packet, "own-id") {
 		t.Fatal("notification isolation failed")
 	}
+	// Simulate a database query failure inside this test's isolated schema.
+	if _, err := s.db.Exec(ctx, `ALTER TABLE auth_sessions RENAME TO temporarily_unavailable_sessions`); err != nil {
+		t.Fatal(err)
+	}
+	h.deliver(hint{event: "conversation.changed", id: "unverified-hint", users: []string{u.ID}})
+	if _, err := s.db.Exec(ctx, `ALTER TABLE temporarily_unavailable_sessions RENAME TO auth_sessions`); err != nil {
+		t.Fatal(err)
+	}
+	h.Notify("conversation.changed", "after-recovery", u.ID)
+	packet = get(url)
+	if !strings.Contains(packet, "after-recovery") || strings.Contains(packet, "session.revoked") || strings.Contains(packet, "unverified-hint") {
+		t.Fatal("temporary database failure revoked session or delivered unchecked data")
+	}
 	if err := users.RevokeSession(ctx, sid, u.ID); err != nil {
 		t.Fatal(err)
 	}

@@ -488,13 +488,18 @@ func (api *HTTPAPI) IdentityFromRequest(r *http.Request) (Identity, bool) {
 			IsGuest:     true,
 		}, false
 	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-	identity, err := api.userStore.AuthenticateToken(ctx, api.tokenService, token)
+	identity, err := api.AuthenticateRequest(r)
 	if err != nil {
 		return Identity{DisplayName: "匿名用户", IsGuest: true}, false
 	}
 	return identity, true
+}
+
+// AuthenticateRequest preserves infrastructure failures for strict clients.
+func (api *HTTPAPI) AuthenticateRequest(r *http.Request) (Identity, error) {
+	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
+	defer cancel()
+	return api.userStore.AuthenticateToken(ctx, api.tokenService, BearerToken(r.Header.Get("Authorization")))
 }
 
 func (api *HTTPAPI) sendAccountEmail(ctx context.Context, user User, purpose string) error {

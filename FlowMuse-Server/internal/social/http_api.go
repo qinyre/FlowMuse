@@ -16,7 +16,7 @@ import (
 
 type HTTPAPI struct {
 	store    *Store
-	identity func(*http.Request) (auth.Identity, bool)
+	identity func(*http.Request) (auth.Identity, error)
 	enabled  bool
 	timeout  time.Duration
 	Notify   func(event, id string, users ...string)
@@ -29,7 +29,7 @@ type requestRate struct {
 	count int
 }
 
-func NewHTTPAPI(store *Store, identity func(*http.Request) (auth.Identity, bool), enabled bool, timeout time.Duration) *HTTPAPI {
+func NewHTTPAPI(store *Store, identity func(*http.Request) (auth.Identity, error), enabled bool, timeout time.Duration) *HTTPAPI {
 	return &HTTPAPI{store: store, identity: identity, enabled: enabled, timeout: timeout, rates: map[string]requestRate{}}
 }
 
@@ -44,8 +44,12 @@ func (api *HTTPAPI) serve(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), api.timeout)
 	defer cancel()
 	r = r.WithContext(ctx)
-	identity, ok := api.identity(r)
-	if !ok || identity.IsGuest || identity.UserID == "" {
+	identity, authErr := api.identity(r)
+	if authErr != nil && !errors.Is(authErr, auth.ErrInvalidToken) {
+		respondError(w, authErr)
+		return
+	}
+	if authErr != nil || identity.IsGuest || identity.UserID == "" {
 		fail(w, 401, "unauthorized", "登录已失效，请重新登录")
 		return
 	}

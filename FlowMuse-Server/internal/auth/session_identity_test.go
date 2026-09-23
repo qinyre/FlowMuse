@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -47,6 +48,11 @@ func TestAuthenticateTokenRequiresActiveVerifiedIdentity(t *testing.T) {
 	identity, err := s.AuthenticateToken(ctx, tokens, token)
 	if err != nil || identity.IsGuest || identity.UserID != u.ID || identity.Email != "" {
 		t.Fatal("Huawei-only identity rejected")
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := s.AuthenticateToken(cancelled, tokens, token); err == nil || errors.Is(err, ErrInvalidToken) {
+		t.Fatal("database cancellation must not revoke valid credentials")
 	}
 	for _, invalid := range []string{"", "forged", token + "x"} {
 		if _, err := s.AuthenticateToken(ctx, tokens, invalid); err == nil {

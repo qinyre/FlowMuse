@@ -332,14 +332,14 @@ VALUES ($1, $2, $3)`, sessionID, userID, expiresAt)
 	return sessionID, err
 }
 
-func (s *UserStore) SessionActive(ctx context.Context, sessionID, userID string) bool {
+func (s *UserStore) sessionActive(ctx context.Context, sessionID, userID string) (bool, error) {
 	var exists bool
 	err := s.db.QueryRow(ctx, `
 SELECT EXISTS (
 	SELECT 1 FROM auth_sessions
 	WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL AND expires_at > now()
 )`, sessionID, userID).Scan(&exists)
-	return err == nil && exists
+	return exists, err
 }
 
 func (s *UserStore) RevokeSession(ctx context.Context, sessionID, userID string) error {

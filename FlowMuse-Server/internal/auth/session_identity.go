@@ -2,7 +2,10 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/zishang520/socket.io/v2/socket"
 )
@@ -13,11 +16,24 @@ func (s *UserStore) AuthenticateToken(ctx context.Context, tokens *TokenService,
 		return Identity{}, ErrInvalidToken
 	}
 	userID, sessionID, err := tokens.Verify(token)
-	if err != nil || !s.SessionActive(ctx, sessionID, userID) {
+	if err != nil {
+		return Identity{}, ErrInvalidToken
+	}
+	active, err := s.sessionActive(ctx, sessionID, userID)
+	if err != nil {
+		return Identity{}, err
+	}
+	if !active {
 		return Identity{}, ErrInvalidToken
 	}
 	user, err := s.Load(ctx, userID)
-	if err != nil || !user.HasVerifiedIdentity() {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Identity{}, ErrInvalidToken
+	}
+	if err != nil {
+		return Identity{}, err
+	}
+	if !user.HasVerifiedIdentity() {
 		return Identity{}, ErrInvalidToken
 	}
 	return Identity{UserID: user.ID, Email: user.Email, DisplayName: user.DisplayName, AvatarURL: user.AvatarURL}, nil

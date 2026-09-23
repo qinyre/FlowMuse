@@ -19,7 +19,7 @@ func TestSocialHTTPRequiresIdentityAndHidesPrivateFields(t *testing.T) {
 	tokens := auth.NewTokenService("social-http-test", time.Hour)
 	authAPI := auth.NewHTTPAPI(users, nil, tokens, nil, "", 10*time.Second, time.Hour, time.Hour)
 	mux := http.NewServeMux()
-	NewHTTPAPI(s, authAPI.IdentityFromRequest, true, 10*time.Second).Register(mux)
+	NewHTTPAPI(s, authAPI.AuthenticateRequest, true, 10*time.Second).Register(mux)
 	call := func(method, path, token, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "/api/social/"+path, strings.NewReader(body))
 		if token != "" {
@@ -79,5 +79,14 @@ func TestSocialDisabledAndRateIsolation(t *testing.T) {
 	}
 	if !api.allow("a", 1) || api.allow("a", 1) || !api.allow("b", 1) {
 		t.Fatal("rate limit not isolated per account")
+	}
+}
+
+func TestSocialAuthInfrastructureFailureIsUnavailable(t *testing.T) {
+	api := NewHTTPAPI(nil, func(*http.Request) (auth.Identity, error) { return auth.Identity{}, context.DeadlineExceeded }, true, time.Second)
+	w := httptest.NewRecorder()
+	api.serve(w, httptest.NewRequest("GET", "/api/social/me", nil))
+	if w.Code != http.StatusServiceUnavailable || strings.Contains(w.Body.String(), "unauthorized") {
+		t.Fatal("temporary infrastructure failure must not sign out the client")
 	}
 }
