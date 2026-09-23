@@ -256,12 +256,23 @@ class CollaborationRepository {
   Future<CollaborationJoinResult> joinRoom({
     required CollaborationRoom room,
     required ExcalidrawScene localScene,
+    bool Function()? isCurrent,
   }) async {
+    final generation = _roomSessionGeneration;
+    void checkOpening() {
+      if (generation != _roomSessionGeneration ||
+          !(isCurrent?.call() ?? true)) {
+        throw StateError('加入协作已取消');
+      }
+    }
+
     final storedScene = await _sceneStore.loadScene(room);
+    checkOpening();
     if (storedScene == null) {
       throw StateError('房间不存在或尚未创建');
     }
     final metadata = await _sceneStore.joinRoom(room);
+    checkOpening();
     final nextScene = storedScene.copyWith(
       elements: _reconciler.getSyncableElements(storedScene.elements),
     );
@@ -280,9 +291,18 @@ class CollaborationRepository {
     });
     await _startRoomSession(room);
     try {
+      if (!identical(_activeRoom, room) || !(isCurrent?.call() ?? true)) {
+        throw StateError('加入协作已取消');
+      }
       await _transport.connect(room.roomId);
+      if (!identical(_activeRoom, room) || !(isCurrent?.call() ?? true)) {
+        throw StateError('加入协作已取消');
+      }
     } catch (_) {
-      await _resetLocalState();
+      if (identical(_activeRoom, room)) {
+        await _resetLocalState();
+        await _transport.disconnect();
+      }
       rethrow;
     }
     _startFullSceneSync();
@@ -1329,6 +1349,7 @@ class CollaborationRepository {
       fileId.length > 8 ? fileId.substring(0, 8) : fileId;
 
   Future<void> stop() async {
+    _roomSessionGeneration++;
     await forceFlushSnapshot();
     await _resetLocalState();
     await _transport.disconnect();
