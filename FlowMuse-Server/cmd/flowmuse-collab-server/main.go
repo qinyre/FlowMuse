@@ -80,15 +80,7 @@ func main() {
 		cfg.PasswordResetTTL,
 	).WithHuawei(auth.NewHuaweiClient(cfg.HuaweiClientID, cfg.HuaweiClientSecret))
 
-	socketOptions := socket.DefaultServerOptions()
-	allowCredentials := !slices.Contains(cfg.AllowedOrigins, "*")
-	socketOptions.SetCors(&types.Cors{
-		Origin:      socketAllowedOrigins(cfg.AllowedOrigins),
-		Credentials: allowCredentials,
-	})
-	socketOptions.SetPingInterval(25 * time.Second)
-	socketOptions.SetPingTimeout(20 * time.Second)
-	io := socket.NewServer(nil, socketOptions)
+	io := socket.NewServer(nil, socketServerOptions(cfg.AllowedOrigins))
 	defer io.Close(nil)
 
 	hub := collab.NewHub(io, sceneStore, roomStore, userStore, tokenService)
@@ -147,6 +139,20 @@ func registerLayoutRecognitionV3(mux *http.ServeMux, cfg config.Config) {
 			limits,
 		),
 	)
+}
+
+func socketServerOptions(allowedOrigins []string) *socket.ServerOptions {
+	options := socket.DefaultServerOptions()
+	options.SetCors(&types.Cors{
+		Origin:      socketAllowedOrigins(allowedOrigins),
+		Credentials: !slices.Contains(allowedOrigins, "*"),
+	})
+	options.SetPingInterval(25 * time.Second)
+	options.SetPingTimeout(20 * time.Second)
+	// Match the existing 8 MiB collaboration limits; Engine.IO defaults to 1 MB
+	// and otherwise disconnects valid full-scene resends before the hub sees them.
+	options.SetMaxHttpBufferSize(8 * 1024 * 1024)
+	return options
 }
 
 func socketAllowedOrigins(origins []string) any {

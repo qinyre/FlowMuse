@@ -5,15 +5,94 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"flowmuse/server/internal/config"
 	"flowmuse/server/internal/layoutrecognitionv3"
+
+	"github.com/gorilla/websocket"
+	"github.com/zishang520/socket.io/v2/socket"
 )
+
+func TestSocketServerLargeCollaborationFrame(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		size   int
+		reject bool
+	}{
+		{"snapshot_over_one_megabyte", 1250000, false},
+		{"over_eight_mebibyte_limit", 8*1024*1024 + 1, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := socket.NewServer(nil, socketServerOptions([]string{"*"}))
+			defer server.Close(nil)
+			server.On("connection", func(clients ...any) {
+				client := clients[0].(*socket.Socket)
+				client.On("frame-probe", func(...any) { client.Emit("frame-ack") })
+				client.Emit("probe-ready")
+			})
+			httpServer := httptest.NewServer(server.ServeHandler(nil))
+			defer httpServer.Close()
+			conn, _, err := websocket.DefaultDialer.Dial(
+				"ws"+strings.TrimPrefix(httpServer.URL, "http")+"/socket.io/?EIO=4&transport=websocket", nil,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := conn.ReadMessage(); err != nil {
+				t.Fatal(err)
+			}
+			if err := conn.WriteMessage(websocket.TextMessage, []byte("40")); err != nil {
+				t.Fatal(err)
+			}
+			for {
+				_, packet, err := conn.ReadMessage()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(packet) == `42["probe-ready"]` {
+					break
+				}
+			}
+			// The same binary envelope used by Dart Socket.IO. A second small
+			// frame proves a large snapshot does not silently kill the connection.
+			for _, size := range []int{tc.size, 32} {
+				if err := conn.WriteMessage(websocket.TextMessage, []byte(`451-["frame-probe",{"_placeholder":true,"num":0}]`)); err != nil {
+					t.Fatal(err)
+				}
+				writeErr := conn.WriteMessage(websocket.BinaryMessage, make([]byte, size))
+				_, packet, readErr := conn.ReadMessage()
+				if tc.reject {
+					// Windows may reset the TCP socket while the sender is still
+					// writing. Both an explicit 1009 and a reset reject the frame.
+					if readErr == nil {
+						t.Fatal("oversize frame was accepted")
+					}
+					if networkErr, ok := readErr.(net.Error); ok && networkErr.Timeout() {
+						t.Fatal("oversize connection stayed open until timeout")
+					}
+					return
+				}
+				if writeErr != nil || readErr != nil {
+					t.Fatalf("valid frame disconnected: bytes=%d write=%v read=%v", size, writeErr, readErr)
+				}
+				if string(packet) != `42["frame-ack"]` {
+					t.Fatalf("missing frame acknowledgement: bytes=%d", size)
+				}
+			}
+		})
+	}
+}
 
 func TestRecognitionV3RegistrationUsesConfiguredTimeout(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
