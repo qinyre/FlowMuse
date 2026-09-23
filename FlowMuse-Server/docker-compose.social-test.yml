@@ -1,0 +1,54 @@
+# Disposable, loopback-only invitation testing. Does not read production .env.
+# docker compose -p flowmuse-invite-test -f docker-compose.social-test.yml up -d --build
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: flowmuse_invite_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: invite-test-only
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d flowmuse_invite_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: invite-preview
+      MINIO_ROOT_PASSWORD: invite-preview-only
+    tmpfs:
+      - /data
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:18345:8025"
+  server:
+    build: .
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    ports:
+      - "127.0.0.1:18343:3000"
+    environment:
+      FLOWMUSE_ADDR: ":3000"
+      DATABASE_URL: "postgres://postgres:invite-test-only@postgres:5432/flowmuse_invite_test?sslmode=disable"
+      FLOWMUSE_S3_ENDPOINT: "minio:9000"
+      FLOWMUSE_S3_BUCKET: invitation-preview
+      FLOWMUSE_S3_ACCESS_KEY_ID: invite-preview
+      FLOWMUSE_S3_SECRET_ACCESS_KEY: invite-preview-only
+      FLOWMUSE_S3_USE_SSL: "false"
+      FLOWMUSE_AUTH_SECRET: invitation-preview-local-test-only
+      FLOWMUSE_SOCIAL_ENABLED: "true"
+      FLOWMUSE_SOCIAL_INVITATIONS_ENABLED: "true"
+      FLOWMUSE_ALLOWED_ORIGINS: "http://127.0.0.1:18344,http://localhost:18344"
+      FLOWMUSE_PUBLIC_APP_URL: "http://127.0.0.1:18344"
+      FLOWMUSE_SMTP_HOST: mailpit
+      FLOWMUSE_SMTP_PORT: "1025"
+      FLOWMUSE_SMTP_FROM: "FlowMuse Test <noreply@example.test>"
