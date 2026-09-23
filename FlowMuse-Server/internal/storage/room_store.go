@@ -67,47 +67,64 @@ CREATE TABLE IF NOT EXISTS room_invites (
 }
 
 func (s *RoomStore) CreateRoom(ctx context.Context, roomID string, ownerID string, ownerKeyHash string) (RoomMetadata, error) {
-	var createdAt time.Time
-	err := s.db.QueryRow(ctx, `
-INSERT INTO collaboration_rooms (room_id, owner_id, owner_key_hash)
-VALUES ($1, NULLIF($2, ''), $3)
-ON CONFLICT (room_id) DO UPDATE SET
-	owner_key_hash = CASE
-		WHEN collaboration_rooms.owner_key_hash = '' THEN EXCLUDED.owner_key_hash
-		ELSE collaboration_rooms.owner_key_hash
-	END
-RETURNING created_at`, roomID, ownerID, ownerKeyHash).Scan(&createdAt)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return RoomMetadata{}, err
 	}
-	if ownerID != "" {
-		if err := s.UpsertMember(ctx, roomID, ownerID, "owner"); err != nil {
-			return RoomMetadata{}, err
-		}
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, `
+INSERT INTO collaboration_rooms (room_id, owner_id, owner_key_hash)
+VALUES ($1, NULLIF($2, ''), $3)
+ON CONFLICT (room_id) DO NOTHING`, roomID, ownerID, ownerKeyHash)
+	if err != nil {
+		return RoomMetadata{}, err
 	}
-	return RoomMetadata{
-		RoomID:        roomID,
-		OwnerID:       ownerID,
-		OwnerKeyHash:  ownerKeyHash,
-		AccessPolicy:  "link_guest",
-		CreatedAt:     createdAt.UnixMilli(),
-		MemberRole:    roleForOwner(ownerID),
-		Authenticated: ownerID != "",
-	}, nil
+	// A retry cannot claim a room or initialize another owner's key hash.
+	_, err = tx.Exec(ctx, `
+INSERT INTO room_members (room_id, user_id, role)
+SELECT room_id, owner_id, 'owner' FROM collaboration_rooms
+WHERE room_id=$1 AND owner_id IS NOT NULL
+ON CONFLICT (room_id, user_id) DO NOTHING`, roomID)
+	if err != nil {
+		return RoomMetadata{}, err
+	}
+	metadata, err := scanRoom(tx.QueryRow(ctx, roomMetadataQuery, roomID, ownerID), ownerID)
+	if err != nil {
+		return RoomMetadata{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return RoomMetadata{}, err
+	}
+	return metadata, nil
+}
+
+// FindRoom distinguishes missing metadata from legacy LoadRoom's fallback.
+func (s *RoomStore) FindRoom(ctx context.Context, roomID, userID string) (RoomMetadata, error) {
+	return scanRoom(s.db.QueryRow(ctx, roomMetadataQuery, roomID, userID), userID)
 }
 
 func (s *RoomStore) LoadRoom(ctx context.Context, roomID string, userID string) (RoomMetadata, error) {
-	var metadata RoomMetadata
-	var createdAt time.Time
-	var endedAt *time.Time
-	var joinedAt *time.Time
-	err := s.db.QueryRow(ctx, `
+	metadata, err := s.FindRoom(ctx, roomID, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return RoomMetadata{RoomID: roomID, AccessPolicy: "link_guest"}, nil
+	}
+	return metadata, err
+}
+
+const roomMetadataQuery = `
 SELECT r.room_id, COALESCE(r.owner_id, ''), COALESCE(r.owner_key_hash, ''), r.access_policy, r.created_at,
 	COALESCE(r.ended_by, ''), r.ended_at,
-	COALESCE(m.role, ''), m.joined_at
+	CASE WHEN r.owner_id = NULLIF($2, '') THEN 'owner'
+	     WHEN m.role = 'owner' THEN 'editor' ELSE COALESCE(m.role, '') END, m.joined_at
 FROM collaboration_rooms r
 LEFT JOIN room_members m ON m.room_id = r.room_id AND m.user_id = NULLIF($2, '')
-WHERE r.room_id = $1`, roomID, userID).Scan(
+WHERE r.room_id = $1`
+
+func scanRoom(row pgx.Row, userID string) (RoomMetadata, error) {
+	var metadata RoomMetadata
+	var createdAt time.Time
+	var endedAt, joinedAt *time.Time
+	err := row.Scan(
 		&metadata.RoomID,
 		&metadata.OwnerID,
 		&metadata.OwnerKeyHash,
@@ -118,9 +135,6 @@ WHERE r.room_id = $1`, roomID, userID).Scan(
 		&metadata.MemberRole,
 		&joinedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return RoomMetadata{RoomID: roomID, AccessPolicy: "link_guest"}, nil
-	}
 	if err != nil {
 		return RoomMetadata{}, err
 	}
@@ -139,16 +153,16 @@ WHERE r.room_id = $1`, roomID, userID).Scan(
 	return metadata, nil
 }
 
-func (s *RoomStore) UpsertMember(ctx context.Context, roomID, userID, role string) error {
+func (s *RoomStore) UpsertMember(ctx context.Context, roomID, userID, _ string) error {
 	if roomID == "" || userID == "" {
 		return nil
 	}
 	_, err := s.db.Exec(ctx, `
 INSERT INTO room_members (room_id, user_id, role)
-VALUES ($1, $2, $3)
+SELECT room_id, $2, CASE WHEN owner_id = $2 THEN 'owner' ELSE 'editor' END
+FROM collaboration_rooms WHERE room_id = $1
 ON CONFLICT (room_id, user_id) DO UPDATE SET
-	role = room_members.role,
-	joined_at = now()`, roomID, userID, role)
+	joined_at = now()`, roomID, userID)
 	return err
 }
 
@@ -178,13 +192,6 @@ RETURNING ended_at`, roomID, userID).Scan(&endedAt)
 	metadata.EndedAt = endedAt.UnixMilli()
 	metadata.EndedBy = userID
 	return metadata, nil
-}
-
-func roleForOwner(ownerID string) string {
-	if ownerID == "" {
-		return ""
-	}
-	return "owner"
 }
 
 func ownerKeyHashesEqual(expected, supplied string) bool {

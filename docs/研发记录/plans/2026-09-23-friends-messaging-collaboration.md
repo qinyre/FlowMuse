@@ -365,6 +365,8 @@ FlowMuse-App:
 
 ## 9. 实施记录
 
+- T02：CreateRoom 使用事务保存房间与真实 owner 成员；冲突不替换归属或空 ownerKeyHash。成员角色从房间 owner_id 推导，历史错误 owner 角色在读取时降为 editor，不批量改写旧数据。新增严格 FindRoom。隔离 PostgreSQL 验证重复创建、伪造 owner 角色、游客房间、缺失房间及已结束房间；storage/collab 测试与 vet 通过。
+
 - T01：统一 token/session/身份验证，Socket 支持 auth.token 并拒绝冲突凭据；原游客入口保留。`go test ./internal/auth ./internal/collab` 与专项鉴权测试、`go vet` 通过。隔离 PostgreSQL 17 容器使用临时内存数据目录、独立端口和 `_test` 数据库，每个测试独立 schema；未接入生产业务库。
 
 - 2026-09-23：从与 origin/main 一致的 `91cc03a` 新建 `feature/friends-collaboration`。当前仅有本计划和设计稿未提交；先提交方案，再按鉴权、房间归属、好友、消息等职责分别提交。沿用上一轮已通过的账号基线检查；新增变更各自补专项验证。
