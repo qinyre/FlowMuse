@@ -221,6 +221,11 @@ func (s *Store) RelationshipAction(ctx context.Context, userID, id, action strin
 	if err != nil {
 		return Relationship{}, err
 	}
+	if action == "remove" {
+		if err = revokePairInvitations(ctx, tx, low, high); err != nil {
+			return Relationship{}, err
+		}
+	}
 	return finishRelationship(ctx, tx, userID, id)
 }
 
@@ -245,6 +250,9 @@ func (s *Store) SetBlock(ctx context.Context, userID, other string, block bool) 
 		_, err = tx.Exec(ctx, `INSERT INTO social_blocks(blocker_id,blocked_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, userID, other)
 		if err == nil {
 			_, err = tx.Exec(ctx, `UPDATE social_relationships SET state='removed',version=version+1,updated_at=now() WHERE user_low_id=$1 AND user_high_id=$2 AND state IN ('pending','accepted')`, low, high)
+		}
+		if err == nil {
+			err = revokePairInvitations(ctx, tx, low, high)
 		}
 	} else {
 		_, err = tx.Exec(ctx, `DELETE FROM social_blocks WHERE blocker_id=$1 AND blocked_id=$2`, userID, other)

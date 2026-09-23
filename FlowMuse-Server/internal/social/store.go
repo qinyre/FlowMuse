@@ -125,14 +125,16 @@ type Lookup struct {
 }
 
 type Message struct {
-	ID              string `json:"id"`
-	ConversationID  string `json:"conversationId"`
-	Seq             int64  `json:"seq,string"`
-	SenderID        string `json:"senderId"`
-	ClientMessageID string `json:"clientMessageId"`
-	Kind            string `json:"kind"`
-	Text            string `json:"text"`
-	CreatedAt       int64  `json:"createdAt"`
+	ID              string      `json:"id"`
+	ConversationID  string      `json:"conversationId"`
+	Seq             int64       `json:"seq,string"`
+	SenderID        string      `json:"senderId"`
+	ClientMessageID string      `json:"clientMessageId"`
+	Kind            string      `json:"kind"`
+	Text            string      `json:"text"`
+	CreatedAt       int64       `json:"createdAt"`
+	InviteID        string      `json:"inviteId,omitempty"`
+	Invitation      *Invitation `json:"invitation,omitempty"`
 }
 
 type Conversation struct {
@@ -201,7 +203,9 @@ func lockPair(ctx context.Context, tx pgx.Tx, a, b string) (string, string, erro
 	if a > b {
 		a, b = b, a
 	}
-	rows, err := tx.Query(ctx, `SELECT id FROM users WHERE id IN ($1,$2) ORDER BY id FOR UPDATE`, a, b)
+	// Account metadata writes do not change keys; NO KEY UPDATE also allows
+	// legacy room/member FK checks without reversing the social lock order.
+	rows, err := tx.Query(ctx, `SELECT id FROM users WHERE id IN ($1,$2) ORDER BY id FOR NO KEY UPDATE`, a, b)
 	if err != nil {
 		return "", "", err
 	}

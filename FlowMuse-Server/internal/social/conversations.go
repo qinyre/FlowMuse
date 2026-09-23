@@ -12,12 +12,12 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const messageColumns = `id,conversation_id,seq,sender_id,client_message_id,kind,body_text,created_at`
+const messageColumns = `id,conversation_id,seq,sender_id,client_message_id,kind,COALESCE(body_text,''),created_at,COALESCE(invite_id,'')`
 
 func scanMessage(row pgx.Row) (Message, error) {
 	var m Message
 	var created time.Time
-	err := row.Scan(&m.ID, &m.ConversationID, &m.Seq, &m.SenderID, &m.ClientMessageID, &m.Kind, &m.Text, &created)
+	err := row.Scan(&m.ID, &m.ConversationID, &m.Seq, &m.SenderID, &m.ClientMessageID, &m.Kind, &m.Text, &created, &m.InviteID)
 	m.CreatedAt = created.UnixMilli()
 	return m, err
 }
@@ -48,7 +48,7 @@ func (s *Store) Conversations(ctx context.Context, userID, cursor string, limit 
  r.state='accepted' AND NOT EXISTS(SELECT 1 FROM social_blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$1)),
  c.last_seq,CASE WHEN c.user_low_id=$1 THEN c.low_read_seq ELSE c.high_read_seq END,
  (SELECT count(*) FROM direct_messages x WHERE x.conversation_id=c.id AND x.sender_id<>$1 AND x.seq>CASE WHEN c.user_low_id=$1 THEN c.low_read_seq ELSE c.high_read_seq END),c.updated_at,
- COALESCE(m.id,''),COALESCE(m.seq,0),COALESCE(m.sender_id,''),COALESCE(m.client_message_id,''),COALESCE(m.kind,''),COALESCE(m.body_text,''),m.created_at
+ COALESCE(m.id,''),COALESCE(m.seq,0),COALESCE(m.sender_id,''),COALESCE(m.client_message_id,''),COALESCE(m.kind,''),COALESCE(m.body_text,''),m.created_at,COALESCE(m.invite_id,'')
  FROM direct_conversations c
  JOIN social_relationships r ON r.id=c.relationship_id
  JOIN users u ON u.id=CASE WHEN c.user_low_id=$1 THEN c.user_high_id ELSE c.user_low_id END
@@ -65,7 +65,7 @@ func (s *Store) Conversations(ctx context.Context, userID, cursor string, limit 
 		var m Message
 		var updated time.Time
 		var created *time.Time
-		err := rows.Scan(&c.ID, &c.Person.ID, &c.Person.DisplayName, &c.Person.AvatarURL, &c.Person.FriendCode, &c.CanSend, &c.LastSeq, &c.ReadSeq, &c.UnreadCount, &updated, &m.ID, &m.Seq, &m.SenderID, &m.ClientMessageID, &m.Kind, &m.Text, &created)
+		err := rows.Scan(&c.ID, &c.Person.ID, &c.Person.DisplayName, &c.Person.AvatarURL, &c.Person.FriendCode, &c.CanSend, &c.LastSeq, &c.ReadSeq, &c.UnreadCount, &updated, &m.ID, &m.Seq, &m.SenderID, &m.ClientMessageID, &m.Kind, &m.Text, &created, &m.InviteID)
 		if err != nil {
 			return nil, err
 		}
@@ -78,7 +78,17 @@ func (s *Store) Conversations(ctx context.Context, userID, cursor string, limit 
 		}
 		items = append(items, c)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	messages := []*Message{}
+	for n := range items {
+		if items[n].LastMessage != nil {
+			messages = append(messages, items[n].LastMessage)
+		}
+	}
+	return items, s.attachInvitations(ctx, userID, messages)
 }
 
 func (s *Store) conversationPeer(ctx context.Context, userID, id string) (string, error) {
@@ -123,7 +133,46 @@ func (s *Store) Messages(ctx context.Context, userID, id string, before, after i
 	if after == 0 {
 		slices.Reverse(items)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	messages := make([]*Message, len(items))
+	for n := range items {
+		messages[n] = &items[n]
+	}
+	return items, s.attachInvitations(ctx, userID, messages)
+}
+
+func (s *Store) attachInvitations(ctx context.Context, user string, messages []*Message) error {
+	ids := []string{}
+	for _, m := range messages {
+		if m.InviteID != "" {
+			ids = append(ids, m.InviteID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := s.db.Query(ctx, invitationQuery+` AND i.id=ANY($1) AND $2 IN(i.created_by,i.recipient_id)`, ids, user)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	items := map[string]Invitation{}
+	for rows.Next() {
+		i, err := scanInvitation(rows)
+		if err != nil {
+			return err
+		}
+		items[i.ID] = i
+	}
+	for _, m := range messages {
+		if i, ok := items[m.InviteID]; ok {
+			m.Invitation = &i
+		}
+	}
+	return rows.Err()
 }
 
 func (s *Store) SendMessage(ctx context.Context, userID, id, clientID, text string) (Message, string, error) {

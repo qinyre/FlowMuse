@@ -129,7 +129,7 @@ func (s *Store) RegisterDevice(ctx context.Context, user string, d Device) (Devi
 	}
 	defer tx.Rollback(ctx)
 	var version int64
-	if err = tx.QueryRow(ctx, `SELECT social_keyset_version FROM users WHERE id=$1 FOR UPDATE`, user).Scan(&version); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT social_keyset_version FROM users WHERE id=$1 FOR NO KEY UPDATE`, user).Scan(&version); err != nil {
 		return Device{}, err
 	}
 	old, err := scanDevice(tx.QueryRow(ctx, `SELECT `+deviceColumns+` FROM social_devices WHERE id=$1 OR (user_id=$2 AND key_id=$3) LIMIT 1`, d.ID, user, d.KeyID))
@@ -234,7 +234,7 @@ func (s *Store) RevokeDevice(ctx context.Context, user, id string) error {
 	}
 	defer tx.Rollback(ctx)
 	var version int64
-	if err = tx.QueryRow(ctx, `SELECT social_keyset_version FROM users WHERE id=$1 FOR UPDATE`, user).Scan(&version); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT social_keyset_version FROM users WHERE id=$1 FOR NO KEY UPDATE`, user).Scan(&version); err != nil {
 		return err
 	}
 	var revoked *time.Time
