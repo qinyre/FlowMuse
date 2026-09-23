@@ -70,6 +70,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onLeaveCollaboration,
     this.onEndCollaboration,
     this.onShareCollaboration,
+    this.socialAction,
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
     this.onDocumentRenamed,
@@ -146,6 +147,7 @@ class MarkdrawEditor extends StatefulWidget {
   final Future<void> Function()? onLeaveCollaboration;
   final Future<void> Function()? onEndCollaboration;
   final Future<void> Function()? onShareCollaboration;
+  final Widget? socialAction;
   final void Function(Offset localPosition, bool pointerDown)?
   onPointerPresence;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
@@ -974,6 +976,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                                 onEndCollaboration: widget.onEndCollaboration,
                                 onShareCollaboration:
                                     widget.onShareCollaboration,
+                                socialAction: widget.socialAction,
                                 viewMode: _controller.viewMode,
                                 zenMode: _controller.zenMode,
                                 collaborationFocusLabel:
@@ -1475,6 +1478,7 @@ class _RightChrome extends StatelessWidget {
     required this.onLeaveCollaboration,
     required this.onEndCollaboration,
     required this.onShareCollaboration,
+    this.socialAction,
     required this.viewMode,
     required this.zenMode,
     required this.onExitViewMode,
@@ -1501,6 +1505,7 @@ class _RightChrome extends StatelessWidget {
   final Future<void> Function()? onLeaveCollaboration;
   final Future<void> Function()? onEndCollaboration;
   final Future<void> Function()? onShareCollaboration;
+  final Widget? socialAction;
   final bool viewMode;
   final bool zenMode;
   final VoidCallback onExitViewMode;
@@ -1563,6 +1568,7 @@ class _RightChrome extends StatelessWidget {
               onEnd: onEndCollaboration,
               onShare: onShareCollaboration,
             ),
+          ?socialAction,
         ],
       ],
     );

@@ -16,6 +16,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/editor/creator_sta
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/page_reading_position.dart';
 
 import '../../../app/app_router.dart';
+import '../../../app/social_overlay.dart';
 import '../../../app/app_theme_preset.dart';
 import '../../../app/view_models/theme_view_model.dart';
 import '../../account/models/collaboration_identity.dart';
@@ -2528,6 +2529,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onLeaveCollaboration: _leaveCollaboration,
                   onEndCollaboration: _endCollaboration,
                   onShareCollaboration: _shareCollaborationInvitation,
+                  socialAction: const SocialMessagesAction(),
                   onPointerPresence: _broadcastPointerPresence,
                   onVisibleSceneBoundsChanged: _broadcastVisibleSceneBounds,
                   pageNavigationEnabled:

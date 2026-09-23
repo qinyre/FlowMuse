@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/account/view_models/account_view_model.dart';
+import 'package:flow_muse/app/social_overlay.dart';
 import 'package:flow_muse/features/library/models/note_item.dart';
 import 'package:flow_muse/features/library/repositories/library_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
@@ -589,6 +590,21 @@ void main() {
     }
 
     await pointer(100);
+    // Reading messages must not replace/dispose the collaborating route.
+    await tester.tap(find.byType(SocialMessagesAction));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('登录后，与好友交流新的想法'), findsOneWidget);
+    expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
+    final elementCount = controller.currentScene.elements.length;
+    await tester.tapAt(const Offset(600, 400));
+    expect(controller.currentScene.elements.length, elementCount);
+    await tester.tap(find.byTooltip('关闭消息'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
+    expect(
+      tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).controller,
+      same(controller),
+    );
     final pageEditor = tester.widget<MarkdrawEditor>(
       find.byType(MarkdrawEditor),
     );
