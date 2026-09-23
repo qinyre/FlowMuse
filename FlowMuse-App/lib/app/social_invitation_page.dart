@@ -71,8 +71,9 @@ class _InvitationSessionState extends ConsumerState<_InvitationSession> {
 
   Future<void> _joined() async {
     final controller = ref.read(invitationControllerProvider);
-    if (controller == null || controller != _roomController || _room == null)
+    if (controller == null || controller != _roomController || _room == null) {
       return;
+    }
     try {
       await controller.repo.invitationJoined(widget.inviteId);
       if (mounted && ref.read(invitationControllerProvider) == controller) {
