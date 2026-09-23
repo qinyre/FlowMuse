@@ -175,4 +175,8 @@ V3 对已实测支持的 `doubao-seed-2-1-turbo-260628` 型号发送 `reasoning_
 - `.env` 含密钥，不要提交到 Git 仓库或发送给他人。
 - 当前 `docker-compose.yml` 的数据库、MinIO 密码和 CORS 设置是开发默认值；正式长期部署前应替换默认密码，并将 `FLOWMUSE_ALLOWED_ORIGINS` 改为实际 Web 域名。
 
-测试SSH链接
+## 好友模块（功能分支）
+
+`FLOWMUSE_SOCIAL_ENABLED` 默认 `false`，关闭时 `/api/social/*` 返回带 `code=disabled` 的 503，不影响账号和白板。开启后幂等迁移好友与消息表；社交迁移失败仅关闭该模块。Compose 的 `env_file` 读取这一配置。
+
+专项 PostgreSQL 测试使用独立 `FLOWMUSE_SOCIAL_TEST_DATABASE_URL`，数据库名必须以 `_test` 结尾，每个测试自动建立/清理独立 schema。运行 `go test ./internal/social ./internal/storage`；未设置时明确跳过数据库集成测试，不能当作已验证迁移。禁止使用生产 `DATABASE_URL`。

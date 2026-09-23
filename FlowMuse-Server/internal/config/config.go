@@ -11,6 +11,7 @@ import (
 )
 
 type Config struct {
+	SocialEnabled      bool
 	Addr               string
 	DatabaseURL        string
 	S3Endpoint         string
@@ -47,6 +48,7 @@ func Load() (Config, error) {
 	_ = godotenv.Load(".env", "FlowMuse-Server/.env")
 
 	cfg := Config{
+		SocialEnabled:  envBool("FLOWMUSE_SOCIAL_ENABLED", false),
 		Addr:           env("FLOWMUSE_ADDR", ":3000"),
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
 		S3Endpoint:     os.Getenv("FLOWMUSE_S3_ENDPOINT"),
