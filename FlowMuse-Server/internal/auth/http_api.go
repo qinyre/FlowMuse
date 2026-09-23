@@ -488,26 +488,13 @@ func (api *HTTPAPI) IdentityFromRequest(r *http.Request) (Identity, bool) {
 			IsGuest:     true,
 		}, false
 	}
-	userID, sessionID, err := api.tokenService.Verify(token)
+	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
+	defer cancel()
+	identity, err := api.userStore.AuthenticateToken(ctx, api.tokenService, token)
 	if err != nil {
 		return Identity{DisplayName: "匿名用户", IsGuest: true}, false
 	}
-	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
-	defer cancel()
-	if !api.userStore.SessionActive(ctx, sessionID, userID) {
-		return Identity{DisplayName: "匿名用户", IsGuest: true}, false
-	}
-	user, err := api.userStore.Load(ctx, userID)
-	if err != nil || !user.HasVerifiedIdentity() {
-		return Identity{DisplayName: "匿名用户", IsGuest: true}, false
-	}
-	return Identity{
-		UserID:      user.ID,
-		Email:       user.Email,
-		DisplayName: user.DisplayName,
-		AvatarURL:   user.AvatarURL,
-		IsGuest:     false,
-	}, true
+	return identity, true
 }
 
 func (api *HTTPAPI) sendAccountEmail(ctx context.Context, user User, purpose string) error {

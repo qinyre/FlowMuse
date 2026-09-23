@@ -365,5 +365,7 @@ FlowMuse-App:
 
 ## 9. 实施记录
 
+- T01：统一 token/session/身份验证，Socket 支持 auth.token 并拒绝冲突凭据；原游客入口保留。`go test ./internal/auth ./internal/collab` 与专项鉴权测试、`go vet` 通过。隔离 PostgreSQL 17 容器使用临时内存数据目录、独立端口和 `_test` 数据库，每个测试独立 schema；未接入生产业务库。
+
 - 2026-09-23：从与 origin/main 一致的 `91cc03a` 新建 `feature/friends-collaboration`。当前仅有本计划和设计稿未提交；先提交方案，再按鉴权、房间归属、好友、消息等职责分别提交。沿用上一轮已通过的账号基线检查；新增变更各自补专项验证。
 - 平台边界：本机不恢复 DevEco；T03 的 OHOS 密码探针和 T21 真机门槛尚未满足，定向加密邀请不得提前开放。继续完成不依赖该门槛的好友和云端私聊，并明确记录待验证项。

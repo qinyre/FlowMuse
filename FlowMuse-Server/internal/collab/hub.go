@@ -105,6 +105,19 @@ func NewHub(
 }
 
 func (h *Hub) Register() {
+	h.server.Use(func(client *socket.Socket, next func(*socket.ExtendedError)) {
+		token, err := auth.SocketToken(client)
+		if err == nil && token != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			_, err = h.userStore.AuthenticateToken(ctx, h.tokens, token)
+		}
+		if err != nil {
+			next(socket.NewExtendedError("unauthorized", nil))
+			return
+		}
+		next(nil)
+	})
 	h.server.On("connection", func(clients ...any) {
 		client := clients[0].(*socket.Socket)
 		h.rememberSocketIdentity(client)
@@ -761,23 +774,12 @@ func (h *Hub) rememberSocketIdentity(client *socket.Socket) {
 }
 
 func (h *Hub) identityFromSocket(client *socket.Socket) auth.Identity {
-	token := auth.BearerToken(requestHeader(client, "Authorization"))
-	if token != "" {
-		if userID, sessionID, err := h.tokens.Verify(token); err == nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			if !h.userStore.SessionActive(ctx, sessionID, userID) {
-				return guestIdentityFromSocket(client)
-			}
-			if user, err := h.userStore.Load(ctx, userID); err == nil && user.HasVerifiedIdentity() {
-				return auth.Identity{
-					UserID:      user.ID,
-					Email:       user.Email,
-					DisplayName: user.DisplayName,
-					AvatarURL:   user.AvatarURL,
-					IsGuest:     false,
-				}
-			}
+	token, err := auth.SocketToken(client)
+	if err == nil && token != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if identity, err := h.userStore.AuthenticateToken(ctx, h.tokens, token); err == nil {
+			return identity
 		}
 	}
 	return guestIdentityFromSocket(client)
