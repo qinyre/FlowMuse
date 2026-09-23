@@ -257,6 +257,10 @@ class SocialViewModel extends Notifier<SocialState> {
     }
   }
 
+  void handleSessionFailure(SocialException error) {
+    if (error.code == 'unauthorized') _handleError(error);
+  }
+
   Future<T?> perform<T>(Future<T> Function(SocialRepository) operation) async {
     final repo = _repo;
     final generation = _generation;
