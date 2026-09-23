@@ -143,6 +143,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('message-input')), findsOneWidget);
       expect(
+        tester.getTopLeft(find.text('<b>纯文本消息</b>')).dy -
+            tester.getBottomLeft(find.text('私聊记录在云端保存')).dy,
+        lessThan(120),
+        reason: '少量消息应从标题下方排列，不能被推到聊天区底部',
+      );
+      expect(
         find.byTooltip('返回列表'),
         width < 820 ? findsOneWidget : findsNothing,
       );

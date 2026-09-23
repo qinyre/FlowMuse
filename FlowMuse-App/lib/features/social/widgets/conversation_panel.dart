@@ -192,6 +192,7 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
                       key: _historyKey,
                       controller: _scroll,
                       reverse: true,
+                      shrinkWrap: true,
                       padding: const EdgeInsets.all(16),
                       itemCount:
                           state.messages.length + state.pending.length + 1,
