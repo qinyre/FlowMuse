@@ -274,6 +274,7 @@ class SocketIoRealtimeTransport
     });
     socket.on(_eventRoomEnded, (data) {
       final metadata = _metadataFromEvent(data);
+      if (!metadata.ended || metadata.roomId != _roomId) return;
       CollaborationDebugLog.write('socket', 'room_ended', {
         'room': _shortRoomId(metadata.roomId),
       });
