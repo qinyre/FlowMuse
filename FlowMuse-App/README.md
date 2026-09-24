@@ -16,6 +16,30 @@ For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
 
+## Web 发布与首屏加载
+
+在 `FlowMuse-App` 下构建后预压缩资源（Python 3.11+ 标准库，无额外依赖）：
+
+```sh
+flutter build web --release --no-web-resources-cdn --pwa-strategy=none \
+  --dart-define=FLOWMUSE_COLLAB_SERVER_URL=https://api.flowmuse.cloud \
+  --dart-define=FLOWMUSE_SHARE_ORIGIN=https://app.flowmuse.cloud
+python tool/precompress_web.py build/web
+```
+
+将整个 `build/web`（包括 `.gz`）一并发布。Nginx Web 站点采用
+`tool/nginx_web_resources.conf` 中的静态资源配置，并在已有 HTTPS listen 上开启 HTTP/2；
+保留证书、`/api/`、`/socket.io/` 配置。先 `nginx -t` 再 reload。
+预压缩覆盖字体，入口和未版本化资源保留 `no-cache` 校验，防止发布后资源版本混用。
+
+Web 加载提示直接来自 HTML，不依赖 Flutter 或网络字体；显示真实启动阶段，在第一帧出现后移除。
+慢加载提供手动重试，不自动刷新或清理浏览器数据。验证入口：
+
+```sh
+node --test tool/web_startup_test.mjs
+python tool/precompress_web_test.py
+```
+
 ## Android / 鸿蒙 / Web 应用图标
 
 唯一原图为 `assets/images/flowmuse-app-icon.png`，保留原有绿色笔触、星光和米黄色底色。
