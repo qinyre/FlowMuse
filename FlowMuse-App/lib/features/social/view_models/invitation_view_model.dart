@@ -21,6 +21,16 @@ final invitationControllerProvider = Provider<InvitationController?>((ref) {
   return controller;
 });
 
+// Prepare receiving keys after sign-in without making device setup a user step.
+final invitationDeviceRegistrationProvider = FutureProvider<void>((ref) async {
+  final enabled = ref.watch(
+    socialViewModelProvider.select((s) => s.me?.invitations == true),
+  );
+  if (!enabled) return;
+  final controller = ref.watch(invitationControllerProvider);
+  if (controller != null) await controller.register();
+});
+
 final socialInvitationProvider = FutureProvider.autoDispose
     .family<SocialInvitation, String>((ref, id) async {
       ref.watch(socialViewModelProvider.select((s) => s.revision));
@@ -84,10 +94,18 @@ class InvitationController {
     return devices.checkCard(raw, peer, directory.devices);
   }
 
-  Future<List<SocialDevice>> trusted(List<SocialDevice> directory) async {
+  Future<List<SocialDevice>> trusted(
+    List<SocialDevice> directory, {
+    bool requireVerification = true,
+  }) async {
     final result = <SocialDevice>[];
     for (final device in directory) {
-      if (await devices.isTrusted(device)) result.add(device);
+      if (await devices.isTrusted(
+        device,
+        requireVerification: requireVerification,
+      )) {
+        result.add(device);
+      }
     }
     _check();
     return result;
@@ -114,20 +132,26 @@ class InvitationController {
     if (request != null) {
       final local = await devices.current();
       final directory = await repo.devices(friendId: recipientId);
-      final verified = await trusted(directory.devices);
+      final available = await trusted(
+        directory.devices,
+        requireVerification: false,
+      );
       final valid = (request['envelopes']! as List).every((value) {
         final e = InvitationEnvelope.fromJson(
           Map<String, dynamic>.from(value as Map),
         ).context;
         return e.senderDeviceId == local.device.id &&
             e.senderKeyId == local.device.keyId &&
-            verified.any(
-              (d) => d.id == e.recipientDeviceId && d.keyId == e.keyId,
+            available.any(
+              (d) =>
+                  d.userId == recipientId &&
+                  d.id == e.recipientDeviceId &&
+                  d.keyId == e.keyId,
             );
       });
       if (!valid) {
         _pending.remove(slot);
-        throw const SocialException('trust_required', '设备或信任已改变，请重新核验后发送');
+        throw const SocialException('device_changed', '好友设备已变化，请刷新后重新发送邀请');
       }
       _check(stillCurrent);
     }
@@ -137,17 +161,20 @@ class InvitationController {
       }
       final sender = await register();
       final directory = await repo.devices(friendId: recipientId);
-      final verified = await trusted(directory.devices);
+      final available = await trusted(
+        directory.devices,
+        requireVerification: false,
+      );
       _check(stillCurrent);
       final recipients = target == null
-          ? verified
-          : verified
+          ? available
+          : available
                 .where((d) => d.id == target.id && d.keyId == target.keyId)
                 .toList();
       if (recipients.isEmpty) {
         throw const SocialException(
-          'trust_required',
-          '请先让好友登记设备，并在「核验好友设备」中核对安全卡',
+          'device_unavailable',
+          '好友暂时无法接收邀请，请让对方打开应用后重试，也可直接分享协作码',
         );
       }
       if (supplement != null &&
@@ -251,11 +278,12 @@ class InvitationController {
         )
         .toList();
     _check();
-    if (candidates.length != 1 || !await devices.isTrusted(candidates.single)) {
-      throw const SocialException(
-        'trust_required',
-        '请先在聊天中的「核验好友设备」核对发送者安全卡，再重新接受邀请',
-      );
+    if (candidates.length != 1 ||
+        !await devices.isTrusted(
+          candidates.single,
+          requireVerification: false,
+        )) {
+      throw const SocialException('device_mismatch', '好友设备信息不匹配，请联系好友重新发送邀请');
     }
     final sender = candidates.single;
     try {
@@ -280,7 +308,7 @@ class InvitationController {
     } on SocialException {
       rethrow;
     } on Object {
-      throw const SocialException('invalid_envelope', '邀请无法安全解密，请重新核验设备并联系发送者');
+      throw const SocialException('invalid_envelope', '邀请无法打开，请联系好友重新发送邀请');
     }
   }
 }

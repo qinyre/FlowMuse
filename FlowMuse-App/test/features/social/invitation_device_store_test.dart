@@ -45,11 +45,38 @@ void main() {
     const peer = SocialPerson(id: 'b', name: 'B', friendCode: 'ABCDEFGHJKLM');
     final remote = (await b.current()).device;
     expect(await a.isTrusted(remote), isFalse);
+    expect(await a.isTrusted(remote, requireVerification: false), isTrue);
+    expect(await a.isTrusted(remote), isFalse);
     final raw = await b.securityCard(peer.friendCode);
     expect(raw.contains('privateKey'), isFalse);
     final checked = a.checkCard(raw, peer, [remote]);
     await a.trust(checked);
     expect(await a.isTrusted(remote), isTrue);
+    final replacement = (await InvitationDeviceStore(
+      serverUrl: 'https://one.test',
+      userId: 'replacement',
+    ).current()).device;
+    for (final invalid in [
+      SocialDevice(
+        id: remote.id,
+        userId: remote.userId,
+        keyId: remote.keyId,
+        publicKey: replacement.publicKey,
+        fingerprint: replacement.fingerprint,
+        label: remote.label,
+      ),
+      SocialDevice(
+        id: remote.id,
+        userId: remote.userId,
+        keyId: remote.keyId,
+        publicKey: remote.publicKey,
+        fingerprint: remote.fingerprint,
+        label: remote.label,
+        revokedAt: 1,
+      ),
+    ]) {
+      expect(await a.isTrusted(invalid, requireVerification: false), isFalse);
+    }
     final changed = SocialDevice(
       id: remote.id,
       userId: remote.userId,
