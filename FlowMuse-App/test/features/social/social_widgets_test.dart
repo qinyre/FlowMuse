@@ -3,6 +3,7 @@ import 'package:flow_muse/features/social/view_models/conversation_view_model.da
 import 'package:flow_muse/features/social/view_models/social_view_model.dart';
 import 'package:flow_muse/features/social/widgets/conversation_panel.dart';
 import 'package:flow_muse/features/social/widgets/add_friend_dialog.dart';
+import 'package:flow_muse/features/social/widgets/invitation_actions.dart';
 import 'package:flow_muse/features/social/views/social_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -80,6 +81,65 @@ const testPerson = SocialPerson(
 
 void main() {
   for (final width in [390.0, 1200.0]) {
+    testWidgets('邀请好友在 $width 宽度直接选人，不需要打开聊天', (tester) async {
+      tester.view.physicalSize = Size(width, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final inbox = TestInbox(
+        SocialState(
+          status: SocialStatus.ready,
+          me: const SocialMe(
+            person: testPerson,
+            unreadCount: 0,
+            pendingRequestCount: 0,
+            textMessages: true,
+            invitations: true,
+          ),
+          friends: [
+            SocialRelationship(
+              id: 'friend',
+              person: testPerson,
+              requesterId: 'A',
+              clientRequestId: 'request',
+              status: 'accepted',
+              version: BigInt.one,
+              conversationId: '',
+            ),
+          ],
+        ),
+      );
+      final invited = <String>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [socialViewModelProvider.overrideWith(() => inbox)],
+          child: MaterialApp(
+            home: Scaffold(
+              body: InvitationActions(
+                open: (_) async => fail('选人邀请不应打开收到的邀请'),
+                send: (peer, supplement) async {
+                  invited.add(peer.id);
+                  expect(supplement, isNull);
+                },
+                child: const SocialPage(inviteFriends: true),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('小林'));
+      await tester.pumpAndSettle();
+      expect(invited, ['B']);
+      expect(find.byType(ConversationPanel), findsNothing);
+      expect(find.textContaining('安全'), findsNothing);
+      inbox.update(const SocialState(status: SocialStatus.ready));
+      await tester.pumpAndSettle();
+      expect(find.text('好友邀请暂不可用，请复制房间码邀请协作者。'), findsOneWidget);
+      expect(find.text('小林'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('好友页在 $width 宽度打开聊天，服务关闭即清空内容', (tester) async {
       tester.view.physicalSize = Size(width, 844);
       tester.view.devicePixelRatio = 1;

@@ -1181,15 +1181,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
   }
 
-  Future<void> _showCreatedCollaborationRoom(CollaborationRoom room) {
+  Future<void> _showCreatedCollaborationRoom(CollaborationRoom room) async {
     final state = ref.read(whiteboardViewModelProvider);
     final roomLink = state.roomLink;
     final roomValue = state.roomValue ?? room.toRoomValue();
     final shareText = roomLink ?? roomValue;
-    return showDialog<void>(
+    final inviteFriends = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('协作房间已创建'),
+        scrollable: true,
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Column(
@@ -1212,6 +1213,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               const SizedBox(height: 16),
               const Text(
                 '加入指引：在笔记库首页或白板右上协作菜单选择“加入房间”，粘贴完整链接、#room=房间号,密钥 或 房间号,密钥。',
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  icon: const Icon(Icons.person_add_outlined),
+                  label: const Text('邀请好友'),
+                ),
               ),
             ],
           ),
@@ -1246,6 +1256,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         ],
       ),
     );
+    if (inviteFriends == true && mounted) {
+      await showSocialOverlay(
+        context,
+        inviteFriends: true,
+        prepareToOpenInvitation: _prepareToOpenFriendInvitation,
+      );
+    }
   }
 
   Future<void> _shareCollaborationInvitation() async {

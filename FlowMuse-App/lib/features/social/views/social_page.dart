@@ -14,18 +14,20 @@ import '../view_models/social_view_model.dart';
 import '../widgets/add_friend_dialog.dart';
 import '../widgets/conversation_panel.dart';
 import '../widgets/device_security_dialog.dart';
+import '../widgets/invitation_actions.dart';
 
 class SocialPage extends ConsumerWidget {
-  const SocialPage({super.key, this.onClose});
+  const SocialPage({super.key, this.onClose, this.inviteFriends = false});
   final VoidCallback? onClose;
+  final bool inviteFriends;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(socialViewModelProvider);
     return RightPageScaffold(
-      title: '好友与消息',
+      title: inviteFriends ? '邀请好友' : '好友与消息',
       actions: [
-        if (state.me?.invitations == true)
+        if (!inviteFriends && state.me?.invitations == true)
           IconButton(
             tooltip: '我的设备安全',
             icon: const Icon(LucideIcons.shieldCheck, size: 20),
@@ -47,7 +49,7 @@ class SocialPage extends ConsumerWidget {
         ),
         if (onClose != null)
           IconButton(
-            tooltip: '关闭消息',
+            tooltip: inviteFriends ? '关闭好友列表' : '关闭消息',
             icon: const Icon(LucideIcons.x, size: 20),
             onPressed: onClose,
           ),
@@ -73,18 +75,27 @@ class SocialPage extends ConsumerWidget {
         ),
         SocialStatus.disabled => const Center(child: Text('好友服务暂未开放，请稍后刷新。')),
         SocialStatus.failed => Center(child: Text(state.error ?? '加载失败，请刷新重试')),
-        SocialStatus.ready => _SocialWorkspace(
-          key: ValueKey(ref.watch(socialSessionProvider)),
-          state: state,
-        ),
+        SocialStatus.ready =>
+          inviteFriends && state.me?.invitations != true
+              ? const Center(child: Text('好友邀请暂不可用，请复制房间码邀请协作者。'))
+              : _SocialWorkspace(
+                  key: ValueKey(ref.watch(socialSessionProvider)),
+                  state: state,
+                  inviteFriends: inviteFriends,
+                ),
       },
     );
   }
 }
 
 class _SocialWorkspace extends ConsumerStatefulWidget {
-  const _SocialWorkspace({super.key, required this.state});
+  const _SocialWorkspace({
+    super.key,
+    required this.state,
+    required this.inviteFriends,
+  });
   final SocialState state;
+  final bool inviteFriends;
   @override
   ConsumerState<_SocialWorkspace> createState() => _SocialWorkspaceState();
 }
@@ -95,6 +106,16 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
 
   void _open(String id, SocialPerson person) {
     if (id.isNotEmpty) setState(() => _selected = (id: id, person: person));
+  }
+
+  Future<void> _invite(SocialPerson peer) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await InvitationActions.of(context)?.send(peer, null);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _action(
@@ -154,6 +175,7 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.inviteFriends) return _friends();
     final state = widget.state;
     final colors = Theme.of(context).colorScheme;
     return LayoutBuilder(
@@ -351,16 +373,20 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
               overflow: TextOverflow.ellipsis,
             ),
             subtitle: Text(f.person.formattedCode),
-            onTap: () => _open(f.conversationId, f.person),
-            trailing: PopupMenuButton<String>(
-              tooltip: '管理好友',
-              enabled: !_busy,
-              onSelected: (action) => _manage(f, action),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'remove', child: Text('删除好友')),
-                PopupMenuItem(value: 'block', child: Text('屏蔽')),
-              ],
-            ),
+            onTap: widget.inviteFriends
+                ? (_busy ? null : () => _invite(f.person))
+                : () => _open(f.conversationId, f.person),
+            trailing: widget.inviteFriends
+                ? const Icon(LucideIcons.chevronRight, size: 20)
+                : PopupMenuButton<String>(
+                    tooltip: '管理好友',
+                    enabled: !_busy,
+                    onSelected: (action) => _manage(f, action),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'remove', child: Text('删除好友')),
+                      PopupMenuItem(value: 'block', child: Text('屏蔽')),
+                    ],
+                  ),
           ),
       ],
     );

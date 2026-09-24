@@ -33,6 +33,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage_ohos/flutter_secure_storage_ohos.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Real page, controller and SQLite; no account/server/platform service calls.
@@ -522,6 +523,68 @@ void main() {
       ..loadFromContent(content!, 'recognition.excalidraw');
     expect(_ink(reopened), hasLength(2));
     reopened.dispose();
+  });
+
+  testWidgets('创建房间后可直接邀请好友，窄屏可滚动且关闭列表不退出协作', (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'workflow-invite-after-create'),
+    ))!;
+    final local = CollaborationRepository(
+      transport: MemoryRealtimeTransport(
+        hub: MemoryRealtimeRoomHub(),
+        socketId: 'create-room-page',
+      ),
+      sceneStore: MemoryEncryptedSceneStore(),
+    );
+    addTearDown(local.stop);
+    final container = _container(library: library, collaboration: local);
+    final controller = await _open(tester, container, note);
+    final creating = tester
+        .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+        .onStartCollaboration!();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.widgetWithText(FilledButton, '创建房间'),
+      ),
+    );
+    await _drainIo(
+      tester,
+      container,
+      until: () => find.text('协作房间已创建').evaluate().isNotEmpty,
+    );
+    final room = container.read(whiteboardViewModelProvider).activeRoom;
+    expect(room != null, isTrue);
+    expect(container.read(whiteboardViewModelProvider).isRoomOwner, isTrue);
+    await tester.binding.setSurfaceSize(const Size(390, 500));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.ensureVisible(find.text('邀请好友'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('邀请好友'));
+    await tester.pumpAndSettle();
+    expect(find.text('协作房间已创建'), findsNothing);
+    expect(
+      tester.widget<SocialPage>(find.byType(SocialPage)).inviteFriends,
+      isTrue,
+    );
+    expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
+    await tester.tap(find.byTooltip('关闭好友列表'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await creating;
+    expect(
+      identical(container.read(whiteboardViewModelProvider).activeRoom, room),
+      isTrue,
+    );
+    expect(container.read(whiteboardViewModelProvider).collaborating, isTrue);
+    expect(
+      tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).controller,
+      same(controller),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
   });
 
   testWidgets('内存加密协作：落笔中接收远端元素，终笔与撤销仍广播', (tester) async {
