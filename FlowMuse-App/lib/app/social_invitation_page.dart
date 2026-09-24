@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../features/social/repositories/social_repository.dart';
 import '../features/social/view_models/invitation_view_model.dart';
 import '../features/social/view_models/social_view_model.dart';
-import '../features/social/widgets/device_security_dialog.dart';
 import '../features/social/widgets/invitation_card.dart';
 import '../features/whiteboard/collaboration/models/collaboration_room.dart';
 import '../features/whiteboard/views/whiteboard_page.dart';
@@ -164,18 +163,7 @@ class _InvitationSessionState extends ConsumerState<_InvitationSession> {
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: canJoin && !_busy ? _accept : null,
-                    child: Text(_busy ? '正在安全打开…' : '接受并加入白板'),
-                  ),
-                  if (peer != null)
-                    TextButton(
-                      onPressed: _busy
-                          ? null
-                          : () => showDeviceSecurity(context, peer: peer),
-                      child: const Text('核验邀请发送者设备'),
-                    ),
-                  TextButton(
-                    onPressed: _busy ? null : () => showDeviceSecurity(context),
-                    child: const Text('我的设备安全'),
+                    child: Text(_busy ? '正在加入…' : '接受并加入白板'),
                   ),
                   if (_error != null)
                     Text(

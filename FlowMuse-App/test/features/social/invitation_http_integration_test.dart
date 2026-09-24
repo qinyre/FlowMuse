@@ -64,18 +64,8 @@ void main() {
         await ar.revokeDevice(ad.device.id);
         await br.revokeDevice(bd.device.id);
       });
-      await ac.devices.trust(
-        await ac.checkCard(
-          await bc.devices.securityCard(bm.person.friendCode),
-          bm.person,
-        ),
-      );
-      await bc.devices.trust(
-        await bc.checkCard(
-          await ac.devices.securityCard(am.person.friendCode),
-          am.person,
-        ),
-      );
+      expect(await ac.devices.isTrusted(bd.device), isFalse);
+      expect(await bc.devices.isTrusted(ad.device), isFalse);
 
       final crypto = CollaborationCrypto();
       final room = CollaborationRoom.newRoom(crypto: crypto);
@@ -141,12 +131,6 @@ void main() {
             'code',
             'device_envelope_missing',
           ),
-        ),
-      );
-      await ac.devices.trust(
-        await ac.checkCard(
-          await bc.devices.securityCard(bm.person.friendCode),
-          bm.person,
         ),
       );
       final updated = await ac.send(

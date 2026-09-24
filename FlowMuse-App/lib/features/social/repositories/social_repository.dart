@@ -75,7 +75,7 @@ class SocialRepository {
           ),
           'device_envelope_missing' => const SocialException(
             'device_envelope_missing',
-            '此设备没有可用邀请，请核验设备后联系发送者补发',
+            '这台设备尚未收到邀请，请让好友补发，也可直接分享协作码加入',
           ),
           'disabled' => const SocialException('disabled', '好友服务暂未开放'),
           'unauthorized' => const SocialException(

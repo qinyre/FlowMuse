@@ -143,7 +143,7 @@ class _DeviceSecurityDialogState extends ConsumerState<DeviceSecurityDialog> {
     });
     final peer = widget.peer;
     return AlertDialog(
-      title: Text(peer == null ? '我的设备安全' : '核验好友设备'),
+      title: Text(peer == null ? '我的设备安全' : '设备核验（可选）'),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -153,14 +153,14 @@ class _DeviceSecurityDialogState extends ConsumerState<DeviceSecurityDialog> {
             children: [
               Text(
                 peer == null
-                    ? '每台设备只需登记一次。双方通过可信渠道互换安全卡并核验后，即可接收加密协作邀请。退出账号会保留本机密钥。'
-                    : '${peer.name} · ${peer.formattedCode}\n新设备需要单独核验，旧设备的信任不会自动转移。',
+                    ? '登录后会自动准备接收邀请。无需交换安全卡即可与好友协作；如需额外确认设备身份，可选择核验。退出账号会保留本机密钥。'
+                    : '${peer.name} · ${peer.formattedCode}\n这是额外的身份核对，不影响普通好友邀请。仅在需要时，通过可信渠道交换安全卡。',
               ),
               const SizedBox(height: 16),
               if (peer == null) ...[
                 FilledButton.tonal(
                   onPressed: _busy ? null : () => _run(_copy),
-                  child: const Text('登记并复制本机安全卡'),
+                  child: const Text('复制安全卡（可选）'),
                 ),
                 if (_card != null) ...[
                   const SizedBox(height: 12),
