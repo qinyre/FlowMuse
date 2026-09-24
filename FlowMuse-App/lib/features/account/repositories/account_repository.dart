@@ -281,7 +281,7 @@ class AccountRepository {
   }
 
   Uri _uri(String path) {
-    return _serverUri.replace(path: _joinPath(_serverUri.path, path));
+    return _serverUri.resolve(_joinPath(_serverUri.path, path));
   }
 
   String _joinPath(String basePath, String suffix) {
