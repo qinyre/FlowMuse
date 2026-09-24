@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -17,6 +17,7 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="FlowMuse 跨平台协同白板与智能笔记">
   <meta name="theme-color" content="#4F8F84">
@@ -32,8 +33,52 @@
 
   <title>FlowMuse</title>
   <link rel="manifest" href="manifest.json?v=flowmuse-1">
+  <link rel="preload" href="main.dart.js" as="script">
+  <link rel="preload" href="sqlite3.wasm" as="fetch" type="application/wasm" crossorigin>
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #f8faf8; }
+    #startup {
+      position: fixed; inset: 0; z-index: 9999; display: grid;
+      place-items: center; padding: 24px; box-sizing: border-box;
+      background: #f8faf8; color: #193c35;
+      font-family: Georgia, "Songti SC", "SimSun", serif;
+    }
+    .startup-content { width: min(100%, 320px); }
+    .startup-brand { margin: 0 0 36px; font-size: 44px; font-weight: 400; letter-spacing: -2px; }
+    .startup-line { height: 2px; overflow: hidden; background: #dce9e3; }
+    .startup-line::after {
+      content: ""; display: block; width: 35%; height: 100%; background: #4f8f84;
+      animation: loading 1.6s ease-in-out infinite;
+    }
+    #startup-status { margin: 22px 0 10px; font-size: 17px; }
+    #startup-hint { margin: 0; color: #697b74; font-size: 14px; line-height: 1.8; }
+    #startup-retry {
+      margin-top: 24px; padding: 10px 18px; color: #193c35; background: transparent;
+      border: 1px solid #9cb7ab; border-radius: 8px; font: inherit; cursor: pointer;
+    }
+    #startup-retry:focus-visible { outline: 2px solid #4f8f84; outline-offset: 4px; }
+    #startup[data-failed] .startup-line::after { animation: none; width: 100%; }
+    @keyframes loading { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
+    @media (prefers-reduced-motion: reduce) { .startup-line::after { animation: none; } }
+    @media (prefers-color-scheme: dark) {
+      html, body, #startup { background: #172420; color: #e1ede6; }
+      .startup-line { background: #30483d; }
+      #startup-hint { color: #a6bcb0; }
+      #startup-retry { color: #e1ede6; }
+    }
+  </style>
 </head>
 <body>
+  <div id="startup" role="status" aria-live="polite">
+    <div class="startup-content">
+      <h1 class="startup-brand">FlowMuse</h1>
+      <div class="startup-line" aria-hidden="true"></div>
+      <p id="startup-status">正在加载应用…</p>
+      <p id="startup-hint">首次打开需要下载应用资源，稍后再次访问会更快。</p>
+      <button id="startup-retry" type="button" hidden onclick="location.reload()">重新加载</button>
+      <noscript><p>请启用浏览器 JavaScript 后重新打开。</p></noscript>
+    </div>
+  </div>
   <script src='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs' type='module'></script>
   <script type='module'>
   var { pdfjsLib } = globalThis;
@@ -52,6 +97,6 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js" async></script>
+  <script src="flutter_bootstrap.js" async onerror="document.getElementById('startup-status').textContent='应用加载失败，请检查网络后重试。';document.getElementById('startup-retry').hidden=false;"></script>
 </body>
 </html>
