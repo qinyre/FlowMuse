@@ -103,7 +103,7 @@ func main() {
 	socialAPI.InvitationsEnabled = cfg.SocialInvitationsEnabled
 	socialAPI.Notify = socialHub.Notify
 	socialAPI.Register(mux)
-	collab.NewHTTPAPI(sceneStore, fileStore, roomStore, authAPI, cfg.RequestTimeout).Register(mux)
+	collab.NewHTTPAPI(sceneStore, fileStore, roomStore, hub, authAPI, cfg.RequestTimeout).Register(mux)
 	recognizer := recognition.NewMyScriptRecognizer(recognition.MyScriptConfig{
 		AppKey:   cfg.MyScriptAppKey,
 		HMACKey:  cfg.MyScriptHMACKey,

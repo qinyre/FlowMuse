@@ -206,6 +206,13 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 
 	h.recordRoomJoin(roomID, user)
 	client.Join(room)
+	// Ending may have raced the initial check and removed the room before Join.
+	if h.roomEnded(roomID) {
+		h.leaveRoom(client, roomID)
+		client.Leave(room)
+		client.Emit(EventRoomError, "协作房间已结束")
+		return
+	}
 	if first {
 		client.Emit(EventFirstInRoom)
 	} else {
@@ -409,7 +416,12 @@ func (h *Hub) endRoom(client *socket.Socket, roomID string, ownerKey string) {
 		client.Emit(EventRoomError, err.Error())
 		return
 	}
+	h.closeRoom(metadata)
+}
 
+// closeRoom revokes live membership after either end endpoint persists success.
+func (h *Hub) closeRoom(metadata storage.RoomMetadata) {
+	roomID := metadata.RoomID
 	h.mu.Lock()
 	users := h.roomUsers[roomID]
 	socketIDs := make([]string, 0, len(users))
