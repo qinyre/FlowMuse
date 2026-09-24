@@ -41,6 +41,7 @@ class SocialMessagesAction extends ConsumerWidget {
 
 Future<void> showSocialOverlay(
   BuildContext context, {
+  bool inviteFriends = false,
   Future<bool> Function()? prepareToOpenInvitation,
 }) => showDialog<void>(
   context: context,
@@ -59,7 +60,10 @@ Future<void> showSocialOverlay(
             Navigator.pop(dialogContext);
             context.go(AppRoutes.socialInvitationPath(id));
           },
-          child: SocialPage(onClose: () => Navigator.of(dialogContext).pop()),
+          child: SocialPage(
+            inviteFriends: inviteFriends,
+            onClose: () => Navigator.of(dialogContext).pop(),
+          ),
         ),
       ),
     );
