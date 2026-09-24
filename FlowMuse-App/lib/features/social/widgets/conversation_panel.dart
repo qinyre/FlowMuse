@@ -163,7 +163,7 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
                     ),
                   ))
                 IconButton(
-                  tooltip: '核验好友设备',
+                  tooltip: '设备核验（可选）',
                   icon: const Icon(LucideIcons.shieldCheck, size: 18),
                   onPressed: () =>
                       showDeviceSecurity(context, peer: widget.person),

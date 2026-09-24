@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/library/repositories/library_repository.dart';
+import '../features/social/view_models/invitation_view_model.dart';
 import '../features/social/view_models/social_view_model.dart';
 import '../features/whiteboard/share/models/external_document_request.dart';
 import '../features/whiteboard/share/services/external_document_channel.dart';
@@ -184,6 +185,7 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
   Widget build(BuildContext context) {
     // Keep the account-scoped inbox alive without rebuilding the canvas on hints.
     ref.listen(socialViewModelProvider, (_, _) {});
+    ref.listen(invitationDeviceRegistrationProvider, (_, _) {});
     final themePreset = ref.watch(themeViewModelProvider);
     final darkThemePreset = effectiveAppThemePreset(
       themePreset,

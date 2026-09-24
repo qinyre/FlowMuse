@@ -17,12 +17,12 @@ Android 本地联调包：`FlowMuse-App/build/app/outputs/flutter-apk/app-debug.
 
 ## 最短验收流程
 
-1. 两端分别进入「好友与消息 → 我的设备安全 → 登记并复制本机安全卡」。通过当面、可信外部聊天等渠道互换卡片；不要把服务器设备列表本身当作验证证据。
-2. 各自打开对方的聊天，点「核验好友设备」，粘贴收到的完整卡片，核对好友码与完整指纹后确认信任。双方都要完成；换设备需再核验。
+1. 两端登录，应用自动准备接收邀请的设备。无需打开设备安全或互换安全卡；若接收方尚未准备好，先打开应用，再由发送方刷新邀请窗口。
+2. 普通协作可跳过此步。需要额外核对身份时，才通过可信外部渠道交换安全卡，在聊天的「设备核验（可选）」中核对并确认；设备目录不标记为已经完成带外核验。
 3. A 打开本地笔记，创建协作房间。保持白板打开，点白板的「好友与消息」，选择 B，再点「邀请协作当前白板 → 发送邀请」。弹层关闭后白板应仍在线。
 4. B 在邀请卡点「查看并加入 → 接受并加入白板」。双方各画一笔。加入失败只保留 accepted，真正加入后才显示「已加入过白板」。邀请路由地址只包含邀请编号。
 5. A 再次打开聊天，确认房间未结束。B 打开其他白板时接受邀请，取消退出对话应保持旧白板；确认退出则先保存，房主必须先确认结束旧房间。
-6. B 使用另一浏览器/设备登录同一账号，登记新设备；旧卡应提示本机无信封。A 核验 B 的新安全卡后，在原邀请点「补发新设备」，选择新设备；B 重试可加入，不新增第二张聊天卡。已收到过信封的设备无需补发。
+6. B 使用另一浏览器/设备登录同一账号，自动准备新设备；旧卡应提示本机尚未收到邀请。A 在原邀请点「补发新设备」，选择新设备；B 重试可加入，不新增第二张聊天卡。已收到过信封的设备无需补发。
 7. 分别验证拒绝、撤销、过期、A 结束房间、删除好友、屏蔽、断网重试、退出后换账号。旧邀请不得给第三个账号领取；换号后旧操作结果不能落到新账号。已解密的旧 roomKey 无法通过撤销邀请追回。
 
 ## 在队员电脑搭建相同测试环境
@@ -47,13 +47,13 @@ python tool/serve_web_preview.py
 docker compose -p flowmuse-invite-test -f docker-compose.social-test.yml down
 ```
 
-如使用团队已有的 HTTPS 测试环境，服务器同时启用 `FLOWMUSE_SOCIAL_ENABLED=true` 和 `FLOWMUSE_SOCIAL_INVITATIONS_ENABLED=true`；所有客户端的 `FLOWMUSE_COLLAB_SERVER_URL` 必须是相同 origin，重新构建后再交换安全卡。正式 API 为 `https://api.flowmuse.cloud`，Web/分享地址为 `https://app.flowmuse.cloud`；原生客户端须从本次代码重新打包。此前 loopback Android 测试包仍只能连接隔离环境。
+如使用团队已有的 HTTPS 测试环境，服务器同时启用 `FLOWMUSE_SOCIAL_ENABLED=true` 和 `FLOWMUSE_SOCIAL_INVITATIONS_ENABLED=true`；所有客户端的 `FLOWMUSE_COLLAB_SERVER_URL` 必须是相同 origin。正式 API 为 `https://api.flowmuse.cloud`，Web/分享地址为 `https://app.flowmuse.cloud`；原生客户端须从本次代码重新打包，才能免去安全卡前置步骤。此前 loopback Android 测试包仍只能连接隔离环境。
 
 ## 鸿蒙队员重点验证
 
 - 使用本分支与原发布/调试签名配置打包；本次未改证书或恢复此电脑的 DevEco。构建前把 API 指向团队测试环境，或配置设备到测试电脑的端口转发。
-- 华为账号登录后登记设备、双向核验，与 Web/Android 真实交换邀请。检查纯华为账号无需邮箱也能完成好友与邀请。
-- 强退、重启、退出再登录：设备公钥/指纹保持一致；撤销本机后重新登记产生新身份，旧安全卡失效。卸载或安全存储丢失需要重新登记/核验。
+- 华为账号登录后自动准备设备，与 Web/Android 直接交换邀请。检查纯华为账号无需邮箱或手工核验也能完成好友与邀请。
+- 强退、重启、退出再登录：设备公钥/指纹保持一致；撤销本机后重新登记产生新身份，旧安全卡失效。卸载或安全存储丢失后自动准备新设备，旧邀请需好友补发。
 - 鸿蒙设备作为发送者和接收者各测一次；变更安全卡一位、公钥不匹配、邀请到期时必须拒绝；不得退回明文传递 roomKey。
 - 验证 HTTPS/Socket 重连、窄屏/分屏、键盘输入与复制安全卡，实际画笔/撤销/图片同步和返回时本地保存。
 - 回传客户端与服务端 commit、设备/系统/SDK 版本、每步结果及脱敏录屏。不要录入 token、私钥或真实白板密钥。
@@ -66,4 +66,4 @@ flutter test --no-pub test/features/social
 flutter test --no-pub --dart-define=FLOWMUSE_SOCIAL_TEST_URL=http://127.0.0.1:18343 test/features/social/invitation_http_integration_test.dart
 ```
 
-后一个测试真实走 Dart → HTTP API → PostgreSQL/Socket.IO，覆盖公钥登记、安全卡、加密邀请、解密、成员角色、joined 回报、新设备补发、卡片去重和撤销；只允许 loopback 地址。一般单元测试不自动启用此测试。密码互测工具和范围见 [阶段验证记录](2026-09-23-social-validation.md)。
+后一个测试真实走 Dart → HTTP API → PostgreSQL/Socket.IO，覆盖公钥登记、无需安全卡的加密邀请与解密、成员角色、joined 回报、新设备补发、卡片去重和撤销；只允许 loopback 地址。一般单元测试不自动启用此测试。密码互测工具和范围见 [阶段验证记录](2026-09-23-social-validation.md)。

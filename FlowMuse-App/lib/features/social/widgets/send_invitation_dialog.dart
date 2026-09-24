@@ -5,7 +5,6 @@ import '../models/social_models.dart';
 import '../repositories/social_repository.dart';
 import '../view_models/invitation_view_model.dart';
 import '../view_models/social_view_model.dart';
-import 'device_security_dialog.dart';
 
 class SendInvitationDialog extends ConsumerStatefulWidget {
   const SendInvitationDialog({
@@ -62,13 +61,16 @@ class _SendInvitationDialogState extends ConsumerState<SendInvitationDialog> {
 
   Future<void> _load() => _run((controller) async {
     final set = await controller.repo.devices(friendId: widget.peer.id);
-    final verified = await controller.trusted(set.devices);
+    final available = await controller.trusted(
+      set.devices,
+      requireVerification: false,
+    );
     if (!mounted || ref.read(invitationControllerProvider) != controller) {
       return;
     }
     setState(() {
-      _devices = verified;
-      _target = verified.firstOrNull;
+      _devices = available;
+      _target = available.firstOrNull;
     });
   });
 
@@ -105,15 +107,14 @@ class _SendInvitationDialogState extends ConsumerState<SendInvitationDialog> {
             children: [
               Text(
                 supplement
-                    ? '仅给尚未收到密钥的新设备补发。已有信封不会被覆盖，原邀请的有效期保持不变。'
+                    ? '选择好友当前使用的设备重新发送，邀请有效期保持不变。'
                     : '好友接受后可共同编辑当前白板。邀请有效期为 1 小时，房间结束后立即失效。',
               ),
               const SizedBox(height: 16),
-              Text(
-                _devices.isEmpty
-                    ? '还没有已核验的好友设备，请先互换安全卡。'
-                    : '将发送到 ${_devices.length} 台已核验设备。',
-              ),
+              if (!_busy && _devices.isEmpty) ...[
+                const Text('好友暂时无法接收邀请，请让对方打开应用后重试，也可直接分享协作码。'),
+                TextButton(onPressed: _load, child: const Text('刷新')),
+              ],
               if (supplement && _devices.isNotEmpty)
                 DropdownButton<SocialDevice>(
                   isExpanded: true,
@@ -122,29 +123,12 @@ class _SendInvitationDialogState extends ConsumerState<SendInvitationDialog> {
                       .map(
                         (d) => DropdownMenuItem(
                           value: d,
-                          child: Text(
-                            '${d.label} · ${d.fingerprint.substring(0, 12)}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child: Text(d.label, overflow: TextOverflow.ellipsis),
                         ),
                       )
                       .toList(),
                   onChanged: _busy ? null : (d) => setState(() => _target = d),
                 ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: _busy
-                    ? null
-                    : () async {
-                        await showDeviceSecurity(context, peer: widget.peer);
-                        if (mounted) await _load();
-                      },
-                child: const Text('核验好友设备'),
-              ),
-              TextButton(
-                onPressed: _busy ? null : () => showDeviceSecurity(context),
-                child: const Text('复制我的安全卡给好友'),
-              ),
               if (_busy) const LinearProgressIndicator(),
               if (_error != null)
                 Text(

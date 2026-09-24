@@ -205,7 +205,10 @@ class InvitationDeviceStore {
     _check();
   }
 
-  Future<bool> isTrusted(SocialDevice device) async {
+  Future<bool> isTrusted(
+    SocialDevice device, {
+    bool requireVerification = true,
+  }) async {
     _check();
     if (device.revokedAt != 0 ||
         fingerprint(device.publicKey) != device.fingerprint) {
@@ -215,7 +218,10 @@ class InvitationDeviceStore {
       key: '$_prefix.trust.${device.userId}.${device.id}.${device.keyId}',
     );
     _check();
-    if (raw == null || raw.length > 1024) return false;
+    // Normal invitations use the authenticated directory. Optional manual pins
+    // still reject a changed key; directory use never writes a verified pin.
+    if (raw == null) return !requireVerification;
+    if (raw.length > 1024) return false;
     try {
       final pin = jsonDecode(raw);
       return pin['publicKey'] == device.publicKey &&

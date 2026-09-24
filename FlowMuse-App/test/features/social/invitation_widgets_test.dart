@@ -13,11 +13,112 @@ import 'package:flow_muse/features/social/view_models/social_view_model.dart';
 import 'package:flow_muse/features/social/widgets/device_security_dialog.dart';
 import 'package:flow_muse/features/social/widgets/invitation_actions.dart';
 import 'package:flow_muse/features/social/widgets/invitation_card.dart';
+import 'package:flow_muse/features/social/widgets/send_invitation_dialog.dart';
 import 'social_widgets_test.dart' show TestInbox, testPerson;
 import 'invitation_flow_test.dart' show deviceJson;
 
 void main() {
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  testWidgets('好友打开应用后刷新即可发送邀请，无需安全卡步骤', (tester) async {
+    final store = InvitationDeviceStore(
+      serverUrl: 'https://test.example',
+      userId: 'A',
+    );
+    final peerStore = InvitationDeviceStore(
+      serverUrl: 'https://test.example',
+      userId: 'B',
+    );
+    final local = (await store.current()).device;
+    final peer = (await peerStore.current()).device;
+    var peerReady = false, sent = false;
+    final roomKey = invitationBase64(List.filled(16, 1));
+    final repo = SocialRepository(
+      serverUrl: 'https://test.example',
+      token: 'test',
+      client: MockClient((request) async {
+        final body = request.method == 'POST' ? jsonDecode(request.body) : null;
+        final Map<String, dynamic> response;
+        if (request.url.path.contains('/friends/')) {
+          response = {
+            'keysetVersion': '1',
+            'items': [if (peerReady) deviceJson(peer)],
+          };
+        } else if (request.url.path.endsWith('/devices')) {
+          response = deviceJson(local);
+        } else {
+          expect(request.url.path, '/api/social/invitations');
+          expect(request.body.contains(roomKey), isFalse);
+          sent = true;
+          response = {
+            'id': body['inviteId'],
+            'roomId': 'room',
+            'senderId': 'A',
+            'recipientId': 'B',
+            'conversationId': 'chat',
+            'status': 'pending',
+            'version': '1',
+            'expiresAt': body['expiresAt'],
+          };
+        }
+        return http.Response(
+          jsonEncode(response),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+    final controller = InvitationController(repo, store);
+    addTearDown(() {
+      controller.close();
+      repo.close();
+      peerStore.close();
+    });
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          invitationControllerProvider.overrideWithValue(controller),
+          socialViewModelProvider.overrideWith(
+            () => TestInbox(const SocialState(status: SocialStatus.ready)),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => SendInvitationDialog(
+                    peer: testPerson,
+                    roomId: 'room',
+                    roomKey: roomKey,
+                    stillCurrent: () => true,
+                  ),
+                ),
+                child: const Text('邀请好友'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('邀请好友'));
+    await tester.pumpAndSettle();
+    final send = find.widgetWithText(FilledButton, '发送邀请');
+    expect(tester.widget<FilledButton>(send).onPressed, isNull);
+    peerReady = true;
+    await tester.tap(find.text('刷新'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(send).onPressed, isNotNull);
+    expect(find.textContaining('安全卡'), findsNothing);
+    expect(find.textContaining('核验'), findsNothing);
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(sent, isTrue);
+    expect(find.byType(SendInvitationDialog), findsNothing);
+    expect(await store.isTrusted(peer), isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('粘贴安全卡不会自动信任，必须确认完整指纹', (tester) async {
     final store = InvitationDeviceStore(
       serverUrl: 'https://test.example',
