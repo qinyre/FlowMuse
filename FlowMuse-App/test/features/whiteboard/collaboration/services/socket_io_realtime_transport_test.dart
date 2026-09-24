@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage_ohos/flutter_secure_storage_ohos.dart';
 import 'package:flow_muse/features/account/models/collaboration_identity.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_message.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_room.dart';
@@ -13,6 +14,98 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/socket_io_r
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 void main() {
+  for (final localEnd in [false, true]) {
+    test('结束通知停止同步，主动结束=$localEnd 时不重复提示', () async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final url = 'http://room-ended-$localEnd.invalid:1';
+      final client = _ConnectedSocket(
+        io.io(
+          url,
+          io.OptionBuilder().disableAutoConnect().enableForceNew().build(),
+        ),
+      );
+      io.cache[url] = client.io;
+      client.io.nsps['/'] = client;
+      final store = _EndingSceneStore();
+      final repository = CollaborationRepository(
+        transport: SocketIoRealtimeTransport(
+          serverUrl: url,
+          identity: CollaborationIdentity.guest('fixture'),
+        ),
+        sceneStore: store,
+      );
+      final notifications = <CollaborationRoomMetadata>[];
+      final subscription = repository.roomEnded.listen(notifications.add);
+      addTearDown(() async {
+        await subscription.cancel();
+        await repository.stop();
+        io.cache.remove(url);
+      });
+      final room = await repository.startNewRoom(
+        initialScene: ExcalidrawScene.empty(),
+      );
+      client.emitEvent([
+        'room-ended',
+        {'roomId': 'old-room', 'ended': true},
+      ]);
+      await Future<void>.delayed(Duration.zero);
+      expect(notifications, isEmpty);
+      expect(client.connected, isTrue, reason: '旧房间结束不能断开当前房间');
+      final element = <String, Object?>{
+        'id': 'end-fixture',
+        'type': 'rectangle',
+        'version': 1,
+        'versionNonce': 1,
+        'updated': DateTime.now().millisecondsSinceEpoch,
+        'isDeleted': false,
+        'index': 'a0',
+        'x': 0,
+        'y': 0,
+        'width': 1,
+        'height': 1,
+      };
+      await repository.broadcastElements(room: room, elements: [element]);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(
+        client.packets.any(
+          (p) => (p['data'] as List).first == 'server-broadcast',
+        ),
+        isTrue,
+      );
+      final saves = store.saves;
+      client.packets.clear();
+      void notifyEnd() {
+        for (var i = 0; i < 2; i++) {
+          client.emitEvent([
+            'room-ended',
+            {'roomId': room.roomId, 'ended': true},
+          ]);
+        }
+      }
+
+      if (localEnd) {
+        store.onEnd = notifyEnd;
+        expect((await repository.endRoom()).ended, isTrue);
+      } else {
+        notifyEnd();
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(notifications.length, localEnd ? 0 : 1);
+      expect(client.connected, isFalse);
+      final packets = client.packets.length;
+      await repository.forceFlushSnapshot();
+      await repository.broadcastElements(
+        room: room,
+        elements: [
+          {...element, 'version': 2},
+        ],
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(store.saves, saves, reason: '结束后不再写入快照');
+      expect(client.packets.length, packets, reason: '结束后不再发送场景');
+    });
+  }
+
   test('快速长笔预览不进入拥堵网络队列，完整笔画和取消仍可靠发送', () async {
     const url = 'http://long-stroke-fixture.invalid:1';
     final client = _ConnectedSocket(
@@ -257,5 +350,31 @@ class _RecordingVolatileChannel implements LiveInkVolatileChannel {
   @override
   void emit(String event, Object data) {
     events.add(event);
+  }
+}
+
+class _EndingSceneStore extends MemoryEncryptedSceneStore {
+  void Function()? onEnd;
+  var saves = 0;
+
+  @override
+  Future<CollaborationRoomMetadata> endRoom(
+    CollaborationRoom room, {
+    String? ownerKey,
+  }) async {
+    final metadata = await super.endRoom(room, ownerKey: ownerKey);
+    onEnd?.call();
+    // Match the server: Socket.IO notification may precede the HTTP response.
+    await Future<void>.delayed(Duration.zero);
+    return metadata;
+  }
+
+  @override
+  Future<void> saveScene({
+    required CollaborationRoom room,
+    required ExcalidrawScene scene,
+  }) async {
+    saves++;
+    await super.saveScene(room: room, scene: scene);
   }
 }

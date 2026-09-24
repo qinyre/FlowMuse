@@ -112,6 +112,7 @@ class CollaborationRepository {
   bool _latestSendQueued = false;
   int _sendGeneration = 0;
   CollaborationRoom? _activeRoom;
+  String? _endingRoomId;
   ExcalidrawScene _latestScene = ExcalidrawScene.empty();
 
   String get socketId => _transport.socketId ?? 'local-client';
@@ -165,7 +166,19 @@ class CollaborationRepository {
 
   Stream<List<RoomCollaborator>> get roomUsers => _transport.roomUsers;
 
-  Stream<CollaborationRoomMetadata> get roomEnded => _transport.roomEnded;
+  Stream<CollaborationRoomMetadata> get roomEnded => _transport.roomEnded
+      .where(
+        (metadata) =>
+            metadata.ended &&
+            metadata.roomId == _activeRoom?.roomId &&
+            metadata.roomId != _endingRoomId,
+      )
+      .asyncMap((metadata) async {
+        // The room is already closed: cancel pending snapshots without saving.
+        await _resetLocalState();
+        await _transport.disconnect();
+        return metadata;
+      });
 
   Stream<void> get firstInRoom => _transport.firstInRoom;
 
@@ -318,13 +331,19 @@ class CollaborationRepository {
     if (ownerKey == null || ownerKey.isEmpty) {
       throw StateError('本机缺少房主密钥，无法结束协作');
     }
-    final metadata = await _sceneStore.endRoom(room, ownerKey: ownerKey);
+    _endingRoomId = room.roomId;
     try {
-      await _transport.endRoom(ownerKey: ownerKey);
-    } catch (_) {}
-    await _ownerKeyStore.clearOwnerKey(room.roomId);
-    await _resetLocalState();
-    return metadata;
+      final metadata = await _sceneStore.endRoom(room, ownerKey: ownerKey);
+      try {
+        await _transport.endRoom(ownerKey: ownerKey);
+      } catch (_) {}
+      await _ownerKeyStore.clearOwnerKey(room.roomId);
+      await _resetLocalState();
+      await _transport.disconnect();
+      return metadata;
+    } finally {
+      _endingRoomId = null;
+    }
   }
 
   Future<ExcalidrawScene?> refreshFromSnapshot({

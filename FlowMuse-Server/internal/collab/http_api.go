@@ -33,6 +33,7 @@ type HTTPAPI struct {
 	sceneStore     *storage.SceneStore
 	fileStore      *storage.FileStore
 	roomStore      *storage.RoomStore
+	hub            *Hub
 	identitySource authIdentitySource
 	requestTimeout time.Duration
 }
@@ -45,6 +46,7 @@ func NewHTTPAPI(
 	sceneStore *storage.SceneStore,
 	fileStore *storage.FileStore,
 	roomStore *storage.RoomStore,
+	hub *Hub,
 	identitySource authIdentitySource,
 	requestTimeout time.Duration,
 ) *HTTPAPI {
@@ -52,6 +54,7 @@ func NewHTTPAPI(
 		sceneStore:     sceneStore,
 		fileStore:      fileStore,
 		roomStore:      roomStore,
+		hub:            hub,
 		identitySource: identitySource,
 		requestTimeout: requestTimeout,
 	}
@@ -216,6 +219,7 @@ func (api *HTTPAPI) endRoom(w http.ResponseWriter, r *http.Request, roomID strin
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	api.hub.closeRoom(metadata)
 	writeJSON(w, http.StatusOK, metadata)
 }
 
