@@ -14,6 +14,7 @@ import '../features/whiteboard/share/services/imported_document_coordinator.dart
 import '../features/whiteboard/view_models/whiteboard_view_model.dart';
 import '../features/whiteboard/service_widget/recent_whiteboard_sync_coordinator.dart';
 import '../features/whiteboard/service_widget/service_widget_channel.dart';
+import 'adapters/ohos_keyboard_focus_recovery.dart';
 import 'app_router.dart';
 import 'app_theme.dart';
 import 'app_theme_preset.dart';
@@ -199,6 +200,7 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
       darkTheme: AppTheme.fromPreset(darkThemePreset),
       themeMode: themePreset.themeMode,
       routerConfig: widget._router,
+      builder: wrapOhosKeyboardFocusRecovery,
     );
   }
 }
