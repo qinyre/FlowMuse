@@ -45,7 +45,7 @@ export class HuaweiAccountChannel {
       if (this.pending !== result) {
         return;
       }
-      if (response.state !== state || !response.data?.authorizationCode) {
+      if ((response.state && response.state !== state) || !response.data?.authorizationCode) {
         result.error('invalid_response', 'Invalid Huawei response', null);
       } else {
         result.success(response.data.authorizationCode);
@@ -58,7 +58,7 @@ export class HuaweiAccountChannel {
       if (code === 1001502012) {
         result.success(null);
       } else {
-        result.error(code === 1001502005 ? 'network' : 'authorization_failed', 'Huawei login failed', null);
+        result.error(code === 1001502005 ? 'network' : 'authorization_failed', 'Huawei login failed', code);
       }
     } finally {
       if (this.pending === result) {

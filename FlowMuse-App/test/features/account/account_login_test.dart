@@ -254,6 +254,40 @@ void main() {
         ),
       ),
     );
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) async => throw PlatformException(
+        code: 'authorization_failed',
+        details: 1001500001,
+      ),
+    );
+    await expectLater(
+      adapter.authorize(),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          '签名配置提示',
+          contains('证书指纹'),
+        ),
+      ),
+    );
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) async => throw PlatformException(
+        code: 'authorization_failed',
+        details: 1001502014,
+      ),
+    );
+    await expectLater(
+      adapter.authorize(),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          '原生错误码',
+          contains('1001502014'),
+        ),
+      ),
+    );
   });
 
   test('绑定失败与取消华为授权保留已有登录状态', () async {
