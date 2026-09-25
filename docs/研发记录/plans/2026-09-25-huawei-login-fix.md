@@ -39,3 +39,9 @@
 用户提供的新版 AGC 截图确认 `com.flowmuse.app` 的 **APP ID 和应用级 OAuth Client ID 都是 `6917611606499874343`**；本机 `debug` Profile 的 `bundle-info.app-identifier` 却是 **`6918737523937821249`**。AGC 当前登记的 SHA-256 指纹为 `E5F20841B73E08AD367DA70539DA2C7627CC3930240B274A49022DA47F3E63FC`，而安装包使用的是上文的 `A511...`，两者也不相同。本机 `.ohos/config` 中的所有现有证书均无 `E5F2...` 指纹，不能通过切换本地现成证书解决。这两处身份不一致是当前 `1001502003` 的明确配置线索。
 
 下一步在 DevEco Studio 使用「关联注册应用」签名，选择 AGC 中 APP ID `6917611606499874343` 对应的 FlowMuse 应用；或在 AGC 为该 APP ID 重新申请调试 Profile。新 HAP 签名后解码 Profile 核对 `app-identifier`，提取实际开发证书指纹并添加到同一 AGC 应用，保留原有指纹，再安装真机测试。`debug` 模式本身受支持，关键是 Profile、Client ID、AGC 应用和签名指纹必须一致。[华为关联注册应用的自动签名说明](https://developer.huawei.com/consumer/cn/doc/HarmonyOS-Guides/ide-signing-auto)。
+
+## 2026-09-26 关联签名与安装验证
+
+DevEco 的团队已切换到 FlowMuse 所属的「任逸青」，同包名冲突提示消失。新生成的 `default` 调试 Profile 经 `hap-sign-tool verify-profile` 验证，包名为 `com.flowmuse.app`，`app-identifier` 为 AGC APP ID `6917611606499874343`。但本机工程级 `ohos/build-profile.json5` 的默认产品仍引用旧 `debug` 签名配置；第一次 `flutter build hap --debug --no-pub` 产出的 HAP 因此仍携带旧 `app-identifier`。将默认产品的 `signingConfig` 改为 `default` 后重建，`hap-sign-tool verify-app` 确认包内 Profile 的 APP ID 为 `6917611606499874343`。证书链不能按输出顺序盲取第一项：第一项 SHA-256 `DF21A3C09F7954579305F85C64F80CAD86F79853EE3A887C1DEC95D218DF3A37` 是根证书；**实际开发证书在第二项，SHA-256 为 `5215C110A83A366570715425D04ECD2BA5B1C4AD65EF49028FE43A7E692F4768`**，与设备 `bm dump` 的 `fingerprint` 一致。曾让用户误将根证书指纹添加到 AGC，已通知用户删除并改加开发证书指纹，保留原有指纹。`build-profile.json5` 是本机生成的忽略文件，不提交签名路径、密码或私钥。
+
+本次默认 release 构建在 `ProcessRouterMap` 阶段因本机 ohpm 依赖解析 `ENOENT: stat ''` 中止；针对真机调试的 `flutter build hap --debug --no-pub` 已成功。设备原有 FlowMuse 为旧 `app-identifier` 和旧证书，`hdc install -r` 返回 `9568332 install sign info inconsistent`，未覆盖安装。用户确认该测试设备无须保留旧应用数据后，已卸载旧包并安装新 HAP；设备 `bm dump` 显示 APP ID、`client_id` 都是 `6917611606499874343`，开发证书指纹为上述 `5215...`。待 AGC 指纹替换并完成真机授权测试前，不能声称登录已修复。
