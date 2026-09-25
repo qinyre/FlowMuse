@@ -23,9 +23,19 @@
 
 ## 实施与验证记录
 
-- 应用级 Client ID 与已有 `.env.example` 和 2026-09-23 部署记录一致；未将 Client Secret 放入客户端。
+- 当时按 `.env.example` 和 2026-09-23 部署记录将 `6917611606499874343` 视为应用级 Client ID；未将 Client Secret 放入客户端。后续 AGC 截图确认该应用的 APP ID 与 OAuth 2.0 应用级 Client ID 恰好同为此值。
 - 账号专项测试 9 项通过；`flutter analyze --no-pub` 无问题；全量 `flutter test --no-pub` 1789 项通过、6 项既有跳过。
 - `flutter build hap --no-pub` 首次因当前进程 `PATH` 缺少 `java.exe` 在打包阶段失败；临时将已有 JDK 21 的 `bin` 加入 `PATH` 后构建成功。产物为 `FlowMuse-App/build/ohos/hap/entry-default-signed.hap`，压缩包内 `module.json` 含配置的 Client ID。
-- 本机无 `hdc` 和已连接设备的证据，尚未验证真实 Account Kit 授权。打包侧需核对 AGC 中 `com.flowmuse.app` 的应用级 Client ID 与签名证书公钥指纹，并安装本次 HAP 测试。若仍报错，界面现在会显示已知原因或原生数字错误码，便于继续定位。
+- 当时未找到 `hdc`，尚未验证真实 Account Kit 授权。打包侧需核对 AGC 中 `com.flowmuse.app` 的应用级 Client ID 与签名证书公钥指纹，并安装本次 HAP 测试。若仍报错，界面现在会显示已知原因或原生数字错误码，便于继续定位。
 
 依据：[华为官方 Client ID 配置](https://developer.huawei.com/consumer/cn/doc/doccenter-capabilities/health-configuration-client-id)、[官方授权回调示例（仅在返回的 state 不匹配时拒绝）](https://developer.huawei.com/consumer/en/doc/harmonyos-guides/account-get-phonenumber)、[Account Kit 指纹错误排查](https://developer.huawei.com/consumer/cn/doc/doccenter-atomic-service/account-guide-atomic-faq)。
+
+## 2026-09-25 真机错误码跟进
+
+用户安装新包后仍收到原生 `1001502003`。该错误发生在获取授权码之前，服务端尚未参与。后续找到了本机 DevEco SDK 的 `hdc`，设备已连接；`bm dump` 显示安装包内有预期的 `client_id`，应用采用 `debug` Profile，系统报告的应用签名指纹与本机 HAP 证书链中的开发证书一致。
+
+本机 `hap-sign-tool` 对 HAP 和 Profile 的签名验证通过。Profile 的包名、设备、有效期和本地签名材料一致。HAP 实际开发证书的 SHA-256 指纹为 `A5111E5115C043FD540409D130D4B413519B7ED7D42696C713695E8CE094FE59`（证书链第 1 项，不是根 CA）。**这只证明本地签名材料彼此一致，不能证明 AGC 中的应用 Client ID 和 SHA-256 证书指纹已与之匹配。**
+
+用户提供的新版 AGC 截图确认 `com.flowmuse.app` 的 **APP ID 和应用级 OAuth Client ID 都是 `6917611606499874343`**；本机 `debug` Profile 的 `bundle-info.app-identifier` 却是 **`6918737523937821249`**。AGC 当前登记的 SHA-256 指纹为 `E5F20841B73E08AD367DA70539DA2C7627CC3930240B274A49022DA47F3E63FC`，而安装包使用的是上文的 `A511...`，两者也不相同。本机 `.ohos/config` 中的所有现有证书均无 `E5F2...` 指纹，不能通过切换本地现成证书解决。这两处身份不一致是当前 `1001502003` 的明确配置线索。
+
+下一步在 DevEco Studio 使用「关联注册应用」签名，选择 AGC 中 APP ID `6917611606499874343` 对应的 FlowMuse 应用；或在 AGC 为该 APP ID 重新申请调试 Profile。新 HAP 签名后解码 Profile 核对 `app-identifier`，提取实际开发证书指纹并添加到同一 AGC 应用，保留原有指纹，再安装真机测试。`debug` 模式本身受支持，关键是 Profile、Client ID、AGC 应用和签名指纹必须一致。[华为关联注册应用的自动签名说明](https://developer.huawei.com/consumer/cn/doc/HarmonyOS-Guides/ide-signing-auto)。
