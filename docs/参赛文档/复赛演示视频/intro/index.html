@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=1920, height=1080">
+<title>FlowMuse · 流形白板</title><script src="gsap.min.js"></script>
+<style>
+@font-face{font-family:'DM Sans';src:url('dm-sans-latin-400-normal.woff2')}@font-face{font-family:'DM Sans';src:url('dm-sans-latin-700-normal.woff2');font-weight:700}
+@font-face{font-family:'Microsoft YaHei';src:local('Microsoft YaHei')}
+*{box-sizing:border-box;margin:0}html,body{width:1920px;height:1080px;overflow:hidden;background:#FAFAF9}
+#root{width:100%;height:100%;font-family:'DM Sans','Microsoft YaHei',sans-serif;color:#1C1917}
+.scene-content{width:100%;height:100%;padding:100px 120px 190px;display:flex;flex-direction:column;gap:54px}
+.top{display:flex;justify-content:space-between;align-items:center;font-size:28px;letter-spacing:3px;color:#57534E}
+.rule{height:2px;background:#E7E5E4;transform-origin:left}.main{display:flex;align-items:center;gap:88px;flex:1}
+.copy{display:flex;flex-direction:column;gap:30px;flex:1}h1{font-size:160px;letter-spacing:-7px;font-weight:700;line-height:1.1}
+h2{font-size:76px;font-weight:500;line-height:1.25;letter-spacing:6px}.tagline{font-size:50px;line-height:1.5;color:#57534E;max-width:1040px}
+.icon{width:420px;height:420px;border-radius:88px;box-shadow:0 28px 70px #1C191714}
+.bottom{display:flex;align-items:center;gap:32px;font-size:34px;color:#57534E}.dot{width:10px;height:10px;border-radius:50%;background:#059669}
+.accent{height:5px;width:180px;background:#059669;transform-origin:left}.underline{color:#059669}
+</style></head><body>
+<div id="root" data-composition-id="flowmuse-intro" data-start="0" data-duration="10.4" data-width="1920" data-height="1080">
+<div class="scene-content">
+<div class="top"><span id="eyebrow">2026 鸿蒙高校创新赛</span><span id="kind">作品演示</span></div>
+<div class="rule" id="rule"></div>
+<div class="main"><div class="copy"><div id="accent" class="accent"></div>
+<h1 id="brand">FlowMuse<span class="underline">.</span></h1><h2 id="name">流形白板</h2>
+<p id="tagline" class="tagline">让思考，留在同一块白板上。</p></div>
+<img id="icon" class="icon" src="logo.png" alt="FlowMuse 应用图标"></div>
+<div class="bottom" id="bottom"><span>手写记录</span><i class="dot"></i><span>AI 辅助整理</span><i class="dot"></i><span>多端协作</span></div>
+</div></div>
+<script>
+window.__timelines=window.__timelines||{};
+const tl=gsap.timeline({paused:true});
+tl.from('#rule',{scaleX:0,duration:.7,ease:'power3.out'},.1)
+.from('#eyebrow',{opacity:0,x:-22,duration:.45,ease:'power2.out'},.18)
+.from('#kind',{opacity:0,x:20,duration:.5,ease:'sine.out'},.25)
+.from('#accent',{scaleX:0,duration:.6,ease:'expo.out'},.25)
+.from('#brand',{opacity:0,x:-48,duration:.7,ease:'power3.out'},.3)
+.from('#icon',{opacity:0,scale:.93,rotation:2,duration:.75,ease:'sine.out'},.4)
+.from('#name',{opacity:0,y:24,duration:.6,ease:'power2.out'},.5)
+.from('#tagline',{opacity:0,y:18,duration:.5,ease:'expo.out'},.65)
+.from('#bottom',{opacity:0,duration:.7,ease:'sine.inOut'},.8);
+window.__timelines['flowmuse-intro']=tl;
+</script></body></html>

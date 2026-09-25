@@ -1,0 +1,6 @@
+node_modules/
+.remotion/
+public/footage/*.mp4
+public/narration.wav
+public/narration.mp3
+src/*.generated.json

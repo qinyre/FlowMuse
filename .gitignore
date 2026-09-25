@@ -65,10 +65,11 @@ ohos/entry/src/main/ets/plugins/GeneratedPluginRegistrant.ets
 
 FlowMuse-Server/.env
 
-# Competition process and acceptance artifacts are kept locally only.
+# Competition process and acceptance artifacts are kept locally except the demo video project.
 docs/周报与总结报告/
 docs/验收材料/
-docs/参赛文档/
+docs/参赛文档/*
+!docs/参赛文档/复赛演示视频/
 
 # Crash dumps (may contain sensitive memory content)
 *.dmp
