@@ -13,32 +13,39 @@ func (api *HTTPAPI) huaweiLogin(w http.ResponseWriter, r *http.Request) {
 	if !api.allowLinkRequest(w, r) {
 		return
 	}
-	unionID, ok := api.huaweiIdentity(w, r)
+	identity, ok := api.huaweiIdentity(w, r)
 	if !ok {
 		return
 	}
 	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
 	defer cancel()
-	user, err := api.userStore.LoginHuawei(ctx, unionID)
+	user, err := api.userStore.LoginHuawei(ctx, identity.UnionID)
 	if err != nil {
 		writeLinkError(w, err)
 		return
+	}
+	if identity.DisplayName != "" || identity.AvatarURL != "" {
+		user, err = api.userStore.FillHuaweiProfile(ctx, user.ID, identity.DisplayName, identity.AvatarURL)
+		if err != nil {
+			writeLinkError(w, err)
+			return
+		}
 	}
 	api.writeAuthSession(w, http.StatusOK, user)
 }
 
 func (api *HTTPAPI) huaweiBind(w http.ResponseWriter, r *http.Request) {
-	identity, sessionID, ok := api.linkSession(w, r)
+	sessionIdentity, sessionID, ok := api.linkSession(w, r)
 	if !ok {
 		return
 	}
-	unionID, ok := api.huaweiIdentity(w, r)
+	identity, ok := api.huaweiIdentity(w, r)
 	if !ok {
 		return
 	}
 	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
 	defer cancel()
-	user, err := api.userStore.BindHuawei(ctx, identity.UserID, sessionID, unionID)
+	user, err := api.userStore.BindHuawei(ctx, sessionIdentity.UserID, sessionID, identity.UnionID)
 	if err != nil {
 		writeLinkError(w, err)
 		return
@@ -46,33 +53,33 @@ func (api *HTTPAPI) huaweiBind(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"user": user})
 }
 
-func (api *HTTPAPI) huaweiIdentity(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (api *HTTPAPI) huaweiIdentity(w http.ResponseWriter, r *http.Request) (HuaweiIdentity, bool) {
 	if api.huawei == nil {
 		http.Error(w, "华为登录暂未配置，请使用邮箱登录", http.StatusServiceUnavailable)
-		return "", false
+		return HuaweiIdentity{}, false
 	}
 	var request struct {
 		Code string `json:"code"`
 	}
 	if !decodeJSON(w, r, &request) {
-		return "", false
+		return HuaweiIdentity{}, false
 	}
 	if strings.TrimSpace(request.Code) == "" || len(request.Code) > 8192 {
 		http.Error(w, "华为授权码无效，请重新授权", http.StatusBadRequest)
-		return "", false
+		return HuaweiIdentity{}, false
 	}
 	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
 	defer cancel()
-	unionID, err := api.huawei.VerifyCode(ctx, request.Code)
+	identity, err := api.huawei.VerifyCode(ctx, request.Code)
 	if err != nil {
 		if errors.Is(err, ErrInvalidHuaweiCode) {
 			http.Error(w, "华为授权已失效，请重新授权", http.StatusUnauthorized)
 		} else {
 			http.Error(w, "华为登录暂时不可用，请稍后重试", http.StatusBadGateway)
 		}
-		return "", false
+		return HuaweiIdentity{}, false
 	}
-	return unionID, true
+	return identity, true
 }
 
 func (api *HTTPAPI) requestEmailBinding(w http.ResponseWriter, r *http.Request) {

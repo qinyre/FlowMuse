@@ -36,12 +36,14 @@ export class HuaweiAccountChannel {
     this.pending = result;
     try {
       const provider = new authentication.HuaweiIDProvider();
-      const request = provider.createLoginWithHuaweiIDRequest();
+      const request = provider.createAuthorizationWithHuaweiIDRequest();
       const state = util.generateRandomUUID();
-      request.forceLogin = true;
+      request.scopes = ['profile'];
+      request.permissions = ['serviceauthcode'];
+      request.forceAuthorization = true;
       request.state = state;
       const controller = new authentication.AuthenticationController(this.context);
-      const response = await controller.executeRequest(request) as authentication.LoginWithHuaweiIDResponse;
+      const response = await controller.executeRequest(request) as authentication.AuthorizationWithHuaweiIDResponse;
       if (this.pending !== result) {
         return;
       }
