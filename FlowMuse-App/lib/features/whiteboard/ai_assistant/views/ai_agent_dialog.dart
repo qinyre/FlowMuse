@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../../../shared/widgets/app_spacing.dart';
+import '../../../../shared/widgets/keyboard_focus_recovery.dart';
 import '../../ink_recognition/native_http_client.dart';
 import '../models/ai_agent_models.dart';
 import '../models/ai_visual_attachment.dart';
@@ -535,9 +536,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     _actionControllers
       ..clear()
       ..addAll(
-        actions.map(
-          (action) => TextEditingController(text: action.value),
-        ),
+        actions.map((action) => TextEditingController(text: action.value)),
       );
     _actionFocusNodes
       ..clear()
@@ -545,10 +544,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     setState(() {
       _conversation = compactAiAgentConversation([
         ..._conversation,
-        AiAgentConversationTurn(
-          instruction: instruction,
-          response: effective,
-        ),
+        AiAgentConversationTurn(instruction: instruction, response: effective),
       ]);
       _response = effective;
       _selectedActions = {
@@ -746,8 +742,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(AppSpacing.sidebarInset),
-              keyboardDismissBehavior:
-                  ScrollViewKeyboardDismissBehavior.onDrag,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -807,60 +802,65 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.listGap),
-                  TextField(
-                    controller: _instructionController,
-                    focusNode: _instructionFocusNode,
-                    enabled: !_loading && !_applying,
-                    onTapAlwaysCalled: true,
-                    onTap: () {
-                      if (!_instructionFocusNode.hasFocus) {
-                        FocusScope.of(context)
-                            .requestFocus(_instructionFocusNode);
-                        return;
-                      }
-                      if (_loading || _applying) return;
-                      _instructionFocusNode.unfocus();
-                      Future<void>.delayed(
-                        const Duration(milliseconds: 50),
-                        () {
-                          if (mounted) {
-                            // ignore: use_build_context_synchronously
-                            FocusScope.of(context)
-                                .requestFocus(_instructionFocusNode);
-                          }
-                        },
-                      );
-                    },
-                    onChanged: (_) => setState(() {}),
-                    maxLength: 1000,
-                    minLines: 2,
-                    maxLines: 4,
-                    decoration: InputDecoration(
-                      labelText: response == null
-                          ? '希望 AI 完成什么？'
-                          : '继续修改，例如：再精简一点',
-                      border: const OutlineInputBorder(),
-                      filled: true,
-                      fillColor: colors.surfaceContainerLowest,
-                      helperText: _speechState == SpeechRecognitionState.idle
-                          ? null
-                          : (_speechPreview.isEmpty ? '正在聆听…' : _speechPreview),
-                      suffixIcon: _speechAvailable
-                          ? IconButton(
-                              tooltip:
+                  KeyboardFocusRecoveryExclusion(
+                    child: TextField(
+                      controller: _instructionController,
+                      focusNode: _instructionFocusNode,
+                      enabled: !_loading && !_applying,
+                      onTapAlwaysCalled: true,
+                      onTap: () {
+                        if (!_instructionFocusNode.hasFocus) {
+                          FocusScope.of(
+                            context,
+                          ).requestFocus(_instructionFocusNode);
+                          return;
+                        }
+                        if (_loading || _applying) return;
+                        _instructionFocusNode.unfocus();
+                        Future<void>.delayed(
+                          const Duration(milliseconds: 50),
+                          () {
+                            if (context.mounted) {
+                              FocusScope.of(
+                                context,
+                              ).requestFocus(_instructionFocusNode);
+                            }
+                          },
+                        );
+                      },
+                      onChanged: (_) => setState(() {}),
+                      maxLength: 1000,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: InputDecoration(
+                        labelText: response == null
+                            ? '希望 AI 完成什么？'
+                            : '继续修改，例如：再精简一点',
+                        border: const OutlineInputBorder(),
+                        filled: true,
+                        fillColor: colors.surfaceContainerLowest,
+                        helperText: _speechState == SpeechRecognitionState.idle
+                            ? null
+                            : (_speechPreview.isEmpty
+                                  ? '正在聆听…'
+                                  : _speechPreview),
+                        suffixIcon: _speechAvailable
+                            ? IconButton(
+                                tooltip:
+                                    _speechState == SpeechRecognitionState.idle
+                                    ? '语音输入'
+                                    : '结束语音输入',
+                                onPressed: _loading || _applying
+                                    ? null
+                                    : _toggleSpeech,
+                                icon: Icon(
                                   _speechState == SpeechRecognitionState.idle
-                                  ? '语音输入'
-                                  : '结束语音输入',
-                              onPressed: _loading || _applying
-                                  ? null
-                                  : _toggleSpeech,
-                              icon: Icon(
-                                _speechState == SpeechRecognitionState.idle
-                                    ? Icons.mic_none
-                                    : Icons.stop_circle_outlined,
-                              ),
-                            )
-                          : null,
+                                      ? Icons.mic_none
+                                      : Icons.stop_circle_outlined,
+                                ),
+                              )
+                            : null,
+                      ),
                     ),
                   ),
                   Align(
@@ -895,8 +895,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                     widget.onRegionCapture != null
                                         ? _addRegionAttachment()
                                         : _captureAndApply(
-                                            capture:
-                                                widget.onCaptureSelection!,
+                                            capture: widget.onCaptureSelection!,
                                             scene: _AiCaptureScene.manual,
                                           ),
                                   ),
@@ -1162,52 +1161,54 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                 left: 40,
                                 bottom: AppSpacing.controlGap,
                               ),
-                              child: TextField(
-                                controller: _actionControllers[index],
-                                focusNode: _actionFocusNodes[index],
-                                enabled: !_applying && !_loading,
-                                onTapAlwaysCalled: true,
-                                onTap: () {
-                                  final node = _actionFocusNodes[index];
-                                  if (!node.hasFocus) {
-                                    FocusScope.of(context).requestFocus(node);
-                                    return;
-                                  }
-                                  if (_applying || _loading) return;
-                                  node.unfocus();
-                                  Future<void>.delayed(
-                                    const Duration(milliseconds: 50),
-                                    () {
-                                      if (mounted) {
-                                        // ignore: use_build_context_synchronously
-                                        FocusScope.of(context)
-                                            .requestFocus(node);
-                                      }
-                                    },
-                                  );
-                                },
-                                onChanged: (_) => setState(() {}),
-                                minLines: 1,
-                                maxLines:
-                                    switch (response.actions[index].tool) {
-                                      AiAgentTool.renameNote => 2,
-                                      AiAgentTool.insertText => 8,
-                                      AiAgentTool.generateMindmap => 12,
-                                      AiAgentTool.smartLayout => 1,
-                                    },
-                                maxLength:
-                                    switch (response.actions[index].tool) {
-                                      AiAgentTool.renameNote =>
-                                        maxAiAgentTitleLength,
-                                      AiAgentTool.insertText =>
-                                        maxAiAgentTextLength,
-                                      AiAgentTool.generateMindmap =>
-                                        maxAiMindmapJsonLength,
-                                      AiAgentTool.smartLayout => 0,
-                                    },
-                                decoration: const InputDecoration(
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
+                              child: KeyboardFocusRecoveryExclusion(
+                                child: TextField(
+                                  controller: _actionControllers[index],
+                                  focusNode: _actionFocusNodes[index],
+                                  enabled: !_applying && !_loading,
+                                  onTapAlwaysCalled: true,
+                                  onTap: () {
+                                    final node = _actionFocusNodes[index];
+                                    if (!node.hasFocus) {
+                                      FocusScope.of(context).requestFocus(node);
+                                      return;
+                                    }
+                                    if (_applying || _loading) return;
+                                    node.unfocus();
+                                    Future<void>.delayed(
+                                      const Duration(milliseconds: 50),
+                                      () {
+                                        if (context.mounted) {
+                                          FocusScope.of(
+                                            context,
+                                          ).requestFocus(node);
+                                        }
+                                      },
+                                    );
+                                  },
+                                  onChanged: (_) => setState(() {}),
+                                  minLines: 1,
+                                  maxLines:
+                                      switch (response.actions[index].tool) {
+                                        AiAgentTool.renameNote => 2,
+                                        AiAgentTool.insertText => 8,
+                                        AiAgentTool.generateMindmap => 12,
+                                        AiAgentTool.smartLayout => 1,
+                                      },
+                                  maxLength:
+                                      switch (response.actions[index].tool) {
+                                        AiAgentTool.renameNote =>
+                                          maxAiAgentTitleLength,
+                                        AiAgentTool.insertText =>
+                                          maxAiAgentTextLength,
+                                        AiAgentTool.generateMindmap =>
+                                          maxAiMindmapJsonLength,
+                                        AiAgentTool.smartLayout => 0,
+                                      },
+                                  decoration: const InputDecoration(
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
                                 ),
                               ),
                             ),

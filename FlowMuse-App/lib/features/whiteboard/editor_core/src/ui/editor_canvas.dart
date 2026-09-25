@@ -11,6 +11,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
     hide TextAlign;
 import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_ink_store.dart';
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+import 'package:flow_muse/shared/widgets/keyboard_focus_recovery.dart';
 
 import '../rendering/math_text_utils.dart';
 import '../rendering/local_wet_ink_painter.dart';
@@ -71,6 +72,8 @@ class _EditorCanvasState extends State<EditorCanvas>
   late final AnimationController _appendPageOverscrollController;
   final RemoteWetInkRenderCache _remoteWetInkCache = RemoteWetInkRenderCache();
   final StaticCanvasRenderCache _staticCanvasCache = StaticCanvasRenderCache();
+  MarkdrawController? _recoveringTextController;
+  bool? _focusCommitBeforeRecovery;
 
   Set<ElementId> _lastHighlightIds = const {};
   int _localHighlightRevision = 0;
@@ -92,8 +95,29 @@ class _EditorCanvasState extends State<EditorCanvas>
   void didUpdateWidget(EditorCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != controller) {
+      _onTextRecoveryChanged(false);
       oldWidget.controller.removeListener(_onControllerChanged);
       controller.addListener(_onControllerChanged);
+    }
+  }
+
+  void _onTextRecoveryChanged(bool recovering) {
+    if (recovering) {
+      if (_recoveringTextController != null) return;
+      _recoveringTextController = controller;
+      _focusCommitBeforeRecovery = controller.suppressFocusCommit;
+      controller.suppressFocusCommit = true;
+      return;
+    }
+    final recoveringController = _recoveringTextController;
+    if (recoveringController == null) return;
+    recoveringController.suppressFocusCommit = _focusCommitBeforeRecovery!;
+    _recoveringTextController = null;
+    _focusCommitBeforeRecovery = null;
+    if (!recoveringController.textFocusNode.hasFocus &&
+        recoveringController.editingTextElementId != null &&
+        !recoveringController.suppressFocusCommit) {
+      recoveringController.commitTextEditing();
     }
   }
 
@@ -103,6 +127,7 @@ class _EditorCanvasState extends State<EditorCanvas>
 
   @override
   void dispose() {
+    _onTextRecoveryChanged(false);
     controller.removeListener(_onControllerChanged);
     controller.pagedTouchActive = false;
     _appendPageOverscrollController.dispose();
@@ -593,7 +618,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                     ),
                   ),
                 if (controller.editingTextElementId != null)
-                  TextEditingOverlay(controller: controller),
+                  KeyboardFocusRecoveryGuard(
+                    onRecoveryChanged: _onTextRecoveryChanged,
+                    child: TextEditingOverlay(controller: controller),
+                  ),
                 _MathTextOverlay(
                   controller: controller,
                   viewport: paintViewport,
@@ -801,6 +829,7 @@ class _FrameLabelEditingOverlayState extends State<_FrameLabelEditingOverlay> {
   late TextEditingController _textController;
   final _focusNode = FocusNode();
   bool _committed = false;
+  bool _recoveringFocus = false;
 
   FrameElement? get _frame {
     final id = widget.controller.editingFrameLabelId;
@@ -838,7 +867,15 @@ class _FrameLabelEditingOverlayState extends State<_FrameLabelEditingOverlay> {
   }
 
   void _onFocusChanged() {
-    if (!_focusNode.hasFocus) {
+    if (!_focusNode.hasFocus && !_recoveringFocus) {
+      _submit(_textController.text);
+    }
+  }
+
+  void _onRecoveryChanged(bool recovering) {
+    if (!mounted) return;
+    _recoveringFocus = recovering;
+    if (!recovering && !_focusNode.hasFocus) {
       _submit(_textController.text);
     }
   }
@@ -870,35 +907,38 @@ class _FrameLabelEditingOverlayState extends State<_FrameLabelEditingOverlay> {
     return Positioned(
       left: screenPos.dx,
       top: screenPos.dy - scaledFontSize - 4,
-      child: SizedBox(
-        width: fieldWidth,
-        height: scaledFontSize + 8,
-        child: TextField(
-          controller: _textController,
-          focusNode: _focusNode,
-          style: TextStyle(
-            fontSize: scaledFontSize,
-            fontFamily: 'Helvetica',
-            color: isDark ? cs.onSurface : cs.onSurface,
+      child: KeyboardFocusRecoveryGuard(
+        onRecoveryChanged: _onRecoveryChanged,
+        child: SizedBox(
+          width: fieldWidth,
+          height: scaledFontSize + 8,
+          child: TextField(
+            controller: _textController,
+            focusNode: _focusNode,
+            style: TextStyle(
+              fontSize: scaledFontSize,
+              fontFamily: 'Helvetica',
+              color: isDark ? cs.onSurface : cs.onSurface,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 2,
+                vertical: 2,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(2),
+                borderSide: BorderSide(color: cs.primary),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(2),
+                borderSide: BorderSide(color: cs.primary, width: 2),
+              ),
+              filled: true,
+              fillColor: cs.surface,
+            ),
+            onSubmitted: _submit,
           ),
-          decoration: InputDecoration(
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 2,
-              vertical: 2,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(2),
-              borderSide: BorderSide(color: cs.primary),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(2),
-              borderSide: BorderSide(color: cs.primary, width: 2),
-            ),
-            filled: true,
-            fillColor: cs.surface,
-          ),
-          onSubmitted: _submit,
         ),
       ),
     );

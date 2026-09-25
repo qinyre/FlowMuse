@@ -8,6 +8,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/local_we
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/remote_wet_ink_painter.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/natural_media/natural_media_path_cache.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/remote_wet_ink_store.dart';
+import 'package:flow_muse/shared/widgets/keyboard_focus_recovery.dart';
 
 void main() {
   testWidgets('湿墨更新不遍历重绘静态笔迹，提交与撤销及时失效', (tester) async {
@@ -207,6 +208,72 @@ void main() {
     expect(remoteLayer.painter, isA<RemoteWetInkPainter>());
     expect(localLayer.painter, isA<LocalWetInkPainter>());
     expect(staticLayer.foregroundPainter, isA<InteractiveCanvasPainter>());
+  });
+
+  testWidgets('白板内联文字重复唤起键盘时不会提交编辑', (tester) async {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    final text = TextElement(
+      id: const ElementId('focus-text'),
+      x: 100,
+      y: 100,
+      width: 140,
+      height: 40,
+      text: '仍在编辑',
+    );
+    controller.applyResult(AddElementResult(text), applyDefaultStyle: false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: KeyboardFocusRecovery(
+          child: Scaffold(body: EditorCanvas(controller: controller)),
+        ),
+      ),
+    );
+    controller.startTextEditingExisting(text);
+    await tester.pumpAndSettle();
+    expect(controller.textFocusNode.hasFocus, isTrue);
+    tester.testTextInput.hide();
+    await tester.pump();
+
+    await tester.tap(find.byType(EditableText));
+    await tester.pump();
+    expect(controller.editingTextElementId, text.id);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(controller.textFocusNode.hasFocus, isTrue);
+    expect(controller.editingTextElementId, text.id);
+  });
+
+  testWidgets('画框标签重复唤起键盘时不会提前提交', (tester) async {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    final frame = FrameElement(
+      id: const ElementId('focus-frame'),
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 120,
+      label: '原标签',
+    );
+    controller.applyResult(AddElementResult(frame), applyDefaultStyle: false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: KeyboardFocusRecovery(
+          child: Scaffold(body: EditorCanvas(controller: controller)),
+        ),
+      ),
+    );
+    controller.startFrameLabelEditing(frame);
+    await tester.pumpAndSettle();
+    expect(controller.editingFrameLabelId, frame.id);
+    tester.testTextInput.hide();
+    await tester.pump();
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    expect(controller.editingFrameLabelId, frame.id);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(controller.editingFrameLabelId, frame.id);
+    expect(tester.testTextInput.isVisible, isTrue);
   });
 }
 
