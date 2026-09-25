@@ -63,6 +63,8 @@ class _EditorCanvasState extends State<EditorCanvas>
   MarkdrawController get controller => widget.controller;
   Size? _lastReportedSize;
   final Set<int> _activeTouchPointers = {};
+  final Set<int> _touchPointers = {};
+  bool _multiTouch = false;
   int? _pagedScrollPointer;
   Offset? _pagedTouchStartPosition;
   bool _pagedTouchMoved = false;
@@ -121,6 +123,34 @@ class _EditorCanvasState extends State<EditorCanvas>
   bool _isPagedTouchPointer(PointerEvent event) =>
       _activeTouchPointers.contains(event.pointer);
 
+  // Raw pointer moves arrive before the scale recognizer. Stop single-finger
+  // editing as soon as a second finger lands, and wait for all fingers to lift.
+  bool _beginTouch(PointerDownEvent event) {
+    if (event.kind != PointerDeviceKind.touch) return false;
+    _touchPointers.add(event.pointer);
+    if (_touchPointers.length == 2) {
+      _multiTouch = true;
+      final cancel = PointerCancelEvent(
+        pointer: _touchPointers.first,
+        kind: PointerDeviceKind.touch,
+      );
+      if (_isPagedTouchPointer(cancel)) {
+        _cancelPagedTouch(cancel);
+      } else {
+        controller.onPointerCancel(cancel);
+      }
+    }
+    return _multiTouch;
+  }
+
+  bool _endTouch(PointerEvent event) {
+    if (event.kind != PointerDeviceKind.touch) return false;
+    _touchPointers.remove(event.pointer);
+    final wasMultiTouch = _multiTouch;
+    if (_touchPointers.isEmpty) _multiTouch = false;
+    return wasMultiTouch;
+  }
+
   void _startPagedTouch(PointerDownEvent event) {
     _activeTouchPointers.add(event.pointer);
     controller.pagedTouchActive = true;
@@ -140,14 +170,21 @@ class _EditorCanvasState extends State<EditorCanvas>
         _activeTouchPointers.length != 1) {
       return;
     }
+    if (!controller.canPanPagedViewportWithTouch) {
+      _pagedScrollPointer = null;
+      _pagedTouchStartPosition = null;
+      _snapBackAppendPageOverscroll();
+      return;
+    }
     final start = _pagedTouchStartPosition;
-    if (start != null && (event.localPosition - start).distance >= 3.0) {
+    var delta = event.delta;
+    if (!_pagedTouchMoved && start != null) {
+      delta = event.localPosition - start;
+      if (delta.distance < kTouchSlop) return;
       _pagedTouchMoved = true;
     }
 
-    final scrollDelta = controller.layout.isRightToLeft
-        ? event.delta.dx
-        : -event.delta.dy;
+    final scrollDelta = controller.layout.isRightToLeft ? delta.dx : -delta.dy;
     if (scrollDelta == 0) {
       return;
     }
@@ -178,9 +215,11 @@ class _EditorCanvasState extends State<EditorCanvas>
       return;
     }
     _pagedScrollPointer = null;
+    final start = _pagedTouchStartPosition;
     if (!_pagedTouchMoved &&
-        controller.shouldClearSelectionOnTouchTap(event.localPosition)) {
-      controller.clearSelectionOnTouchTap(event.localPosition);
+        start != null &&
+        (event.localPosition - start).distance < kTouchSlop) {
+      controller.selectOnTouchTap(start);
     }
     _pagedTouchStartPosition = null;
     _pagedTouchMoved = false;
@@ -436,6 +475,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       );
                     },
                     onPointerDown: (event) {
+                      if (_beginTouch(event)) return;
                       if (_shouldHandlePagedTouch(event)) {
                         _startPagedTouch(event);
                         widget.onPointerPresence?.call(
@@ -448,6 +488,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                       widget.onPointerPresence?.call(event.localPosition, true);
                     },
                     onPointerMove: (event) {
+                      if (_multiTouch &&
+                          event.kind == PointerDeviceKind.touch) {
+                        return;
+                      }
                       if (_isPagedTouchPointer(event)) {
                         _updatePagedTouch(event);
                         widget.onPointerPresence?.call(
@@ -460,6 +504,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       widget.onPointerPresence?.call(event.localPosition, true);
                     },
                     onPointerUp: (event) {
+                      if (_endTouch(event)) return;
                       if (_isPagedTouchPointer(event)) {
                         _endPagedTouch(event);
                         widget.onPointerPresence?.call(
@@ -477,6 +522,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       widget.onVisibleSceneBoundsChanged?.call(canvasSize);
                     },
                     onPointerCancel: (event) {
+                      if (_endTouch(event)) return;
                       if (_isPagedTouchPointer(event)) {
                         _cancelPagedTouch(event);
                       } else {

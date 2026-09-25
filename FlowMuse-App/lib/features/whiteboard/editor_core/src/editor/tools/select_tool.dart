@@ -36,6 +36,7 @@ class SelectTool implements Tool {
   Point? _current;
   Element? _hitElement;
   bool _isDragging = false;
+  double _dragThreshold = _clickThreshold;
   bool _shiftDown = false;
   _DragMode _dragMode = _DragMode.none;
 
@@ -68,8 +69,8 @@ class SelectTool implements Tool {
   @override
   ToolType get type => ToolType.select;
 
-  /// Returns whether a touch at [point] should be handled as object
-  /// interaction instead of viewport navigation.
+  /// Only previously selected objects and their handles can start a touch
+  /// drag. An unselected object must first be selected by a completed tap.
   ///
   /// This is intentionally side-effect free: the actual hit-test state is
   /// captured by [onPointerDown] after the canvas has chosen this route.
@@ -107,7 +108,8 @@ class SelectTool implements Tool {
             null) {
       return true;
     }
-    return context.scene.getElementAtPoint(point) != null;
+    final hit = context.scene.getElementAtPoint(point);
+    return hit != null && !hit.locked && context.selectedIds.contains(hit.id);
   }
 
   /// True when the user is actively dragging a point or segment handle.
@@ -123,10 +125,12 @@ class SelectTool implements Tool {
     ToolContext context, {
     bool shift = false,
     double? pressure,
+    double dragThreshold = _clickThreshold,
   }) {
     _downPoint = point;
     _current = point;
     _isDragging = false;
+    _dragThreshold = dragThreshold;
     _shiftDown = shift;
     _dragMode = _DragMode.none;
 
@@ -246,7 +250,7 @@ class SelectTool implements Tool {
     final distance = down.distanceTo(point);
 
     // Check if we've started dragging
-    if (!_isDragging && distance >= _clickThreshold) {
+    if (!_isDragging && distance >= _dragThreshold) {
       _isDragging = true;
 
       // If we haven't committed to a mode yet, determine it now
