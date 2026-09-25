@@ -28,4 +28,5 @@
 - Widget 测试额外复现双指缩放识别前的原始指针事件误拖图片；第二根手指落下时取消单指编辑，已完成的移动仍保留撤销记录。
 - 14 项定向测试通过；全量 Flutter 测试 1781 项通过、6 项既有跳过。
 - 静态检查无新增问题；本地忽略的 `build/nav_compact_screenshot_test.dart:199` 仍有既有 `invalid_use_of_protected_member` 警告。
+- 浏览器实际打开本地 release 网页，创建空白笔记并用鼠标直接拖动未选中矩形，选择框和位移正常；[界面截图](../evidence/touch-selection/web-mouse-regression.png) 仅用于鼠标回归，不作为手指真机验证。
 - 自动验证覆盖分页和无限画布；Android 实机手感、鸿蒙触控笔与防误触仍需设备回归，模拟指针测试不等同于真机验收。
