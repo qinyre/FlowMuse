@@ -4,3 +4,10 @@ raw/
 references/
 output/*
 !output/FlowMuse-分镜预演.mp4
+!output/FlowMuse-电影感样片-v2.mp4
+!output/FlowMuse-电影感预演-v2.mp4
+!output/FlowMuse-叙事样片-v3.mp4
+!output/FlowMuse-叙事预演-v3.mp4
+!output/FlowMuse-纸面样片-v4.mp4
+!output/FlowMuse-纸面预演-v4.mp4
+intro/snapshots/

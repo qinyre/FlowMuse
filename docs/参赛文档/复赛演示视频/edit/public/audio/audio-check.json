@@ -1,0 +1,26 @@
+[
+  {
+    "file": "emerald-ambient-demo.wav",
+    "duration_seconds": 32.0,
+    "sample_rate": 48000,
+    "channels": 2,
+    "peak_dbfs": -6.94,
+    "rms_dbfs": -17.92,
+    "seam_delta": 0.00259399,
+    "seam_slope_error": 0.0,
+    "loop": true,
+    "sha256": "e7839ed6622e62cf5cb29f1239650c64860207f7246e0cf7594f4e1d94a1cf2a"
+  },
+  {
+    "file": "soft-reveal-demo.wav",
+    "duration_seconds": 1.4,
+    "sample_rate": 48000,
+    "channels": 2,
+    "peak_dbfs": -6.94,
+    "rms_dbfs": -20.03,
+    "seam_delta": 0.0,
+    "seam_slope_error": 0.0,
+    "loop": false,
+    "sha256": "7e3cf26428f5c25a2113c1483e3f07c569b4fb3759a9469fc1db644f3c8c7ba2"
+  }
+]

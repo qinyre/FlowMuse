@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/prepare.mjs && remotion studio --no-open",
-    "check": "node scripts/prepare.mjs && tsc --noEmit",
-    "render:preview": "node scripts/prepare.mjs && remotion render src/index.ts FlowMusePreview ../output/FlowMuse-分镜预演.mp4 --scale=0.6666666666666666 --codec=h264 --crf=23 --concurrency=4",
+    "check": "node scripts/prepare.mjs && tsc --noEmit && node scripts/check-timing.mjs",
+    "render:preview": "node scripts/prepare.mjs && remotion render src/index.ts FlowMusePreview ../output/FlowMuse-纸面预演-v4.mp4 --scale=0.6666666666666666 --codec=h264 --crf=23 --concurrency=4",
+    "render:sample": "node scripts/prepare.mjs && remotion render src/index.ts FlowMuseStyleSample ../output/FlowMuse-纸面样片-v4.mp4 --codec=h264 --crf=20 --concurrency=3",
     "check:final": "node scripts/prepare.mjs --final",
     "render:clean": "node scripts/prepare.mjs --render-clean"
   },

@@ -1,42 +1,44 @@
 <!doctype html>
 <html lang="zh-CN"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=1920, height=1080">
-<title>FlowMuse · 流形白板</title><script src="gsap.min.js"></script>
+<title>FlowMuse · 想法开始成形</title><script src="gsap.min.js"></script>
 <style>
 @font-face{font-family:'DM Sans';src:url('dm-sans-latin-400-normal.woff2')}@font-face{font-family:'DM Sans';src:url('dm-sans-latin-700-normal.woff2');font-weight:700}
-@font-face{font-family:'Microsoft YaHei';src:local('Microsoft YaHei')}
-*{box-sizing:border-box;margin:0}html,body{width:1920px;height:1080px;overflow:hidden;background:#FAFAF9}
-#root{width:100%;height:100%;font-family:'DM Sans','Microsoft YaHei',sans-serif;color:#1C1917}
-.scene-content{width:100%;height:100%;padding:100px 120px 190px;display:flex;flex-direction:column;gap:54px}
-.top{display:flex;justify-content:space-between;align-items:center;font-size:28px;letter-spacing:3px;color:#57534E}
-.rule{height:2px;background:#E7E5E4;transform-origin:left}.main{display:flex;align-items:center;gap:88px;flex:1}
-.copy{display:flex;flex-direction:column;gap:30px;flex:1}h1{font-size:160px;letter-spacing:-7px;font-weight:700;line-height:1.1}
-h2{font-size:76px;font-weight:500;line-height:1.25;letter-spacing:6px}.tagline{font-size:50px;line-height:1.5;color:#57534E;max-width:1040px}
-.icon{width:420px;height:420px;border-radius:88px;box-shadow:0 28px 70px #1C191714}
-.bottom{display:flex;align-items:center;gap:32px;font-size:34px;color:#57534E}.dot{width:10px;height:10px;border-radius:50%;background:#059669}
-.accent{height:5px;width:180px;background:#059669;transform-origin:left}.underline{color:#059669}
+@font-face{font-family:'MiSans';src:local('MiSans Regular'),local('MiSans')}@font-face{font-family:'Microsoft YaHei';src:local('Microsoft YaHei')}
+*{box-sizing:border-box;margin:0}html,body{width:1920px;height:1080px;overflow:hidden;background:#F6F5F0}
+#root{width:100%;height:100%;position:relative;overflow:hidden;font-family:'DM Sans','MiSans','Microsoft YaHei',sans-serif;color:#171A18}
+.brand{position:absolute;left:104px;top:100px;display:flex;align-items:center;gap:18px;font-size:30px}.logo{width:54px;height:54px;border-radius:12px}
+.edition{position:absolute;right:108px;top:114px;font-size:25px;color:#536259}
+.word-mask{position:absolute;left:94px;top:220px;width:1350px;height:325px;overflow:hidden}.word{font-size:262px;line-height:1.15;font-weight:700;letter-spacing:-13px}
+.headline{position:absolute;left:103px;top:586px;font-size:108px;font-weight:500;line-height:1.2;letter-spacing:-3px}
+.tagline{position:absolute;left:108px;top:827px;display:flex;gap:54px;font-size:31px;color:#536259}.tagline span{display:block}
+.ink{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.caption{position:absolute;right:108px;bottom:158px;color:#087D5D;font-size:27px}
 </style></head><body>
 <div id="root" data-composition-id="flowmuse-intro" data-start="0" data-duration="10.4" data-width="1920" data-height="1080">
-<div class="scene-content">
-<div class="top"><span id="eyebrow">2026 鸿蒙高校创新赛</span><span id="kind">作品演示</span></div>
-<div class="rule" id="rule"></div>
-<div class="main"><div class="copy"><div id="accent" class="accent"></div>
-<h1 id="brand">FlowMuse<span class="underline">.</span></h1><h2 id="name">流形白板</h2>
-<p id="tagline" class="tagline">让思考，留在同一块白板上。</p></div>
-<img id="icon" class="icon" src="logo.png" alt="FlowMuse 应用图标"></div>
-<div class="bottom" id="bottom"><span>手写记录</span><i class="dot"></i><span>AI 辅助整理</span><i class="dot"></i><span>多端协作</span></div>
-</div></div>
+<svg class="ink" viewBox="0 0 1920 1080" fill="none" data-layout-ignore aria-hidden="true">
+<path id="underline" d="M115 510 C411 497 825 520 1260 505" stroke="#42DD91" stroke-width="31" stroke-linecap="round"/>
+<path id="ink-loop" d="M1460 277 C1602 170 1795 364 1654 444 C1530 515 1390 391 1488 338 C1600 278 1620 427 1526 495 C1469 536 1428 553 1428 611 L1428 847 L1770 847 L1770 521 L1709 460 L1565 460" stroke="#171A18" stroke-width="9" stroke-linecap="round"/>
+<path id="ink-tip" d="M1709 460 V521 H1770 M1487 625 H1707 M1487 673 H1707 M1487 721 H1627" stroke="#087D5D" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+<div id="brand" class="brand"><img id="logo" class="logo" src="logo.png" alt="FlowMuse 应用图标"><span>流形白板</span></div>
+<div id="edition" class="edition">2026 鸿蒙高校创新赛</div>
+<div class="word-mask"><div id="word" class="word">FlowMuse</div></div>
+<h1 id="headline" class="headline">想法，开始成形。</h1>
+<div id="tagline" class="tagline"><span>写下来。</span><span>排整齐。</span><span>一起改。</span></div>
+</div>
 <script>
 window.__timelines=window.__timelines||{};
 const tl=gsap.timeline({paused:true});
-tl.from('#rule',{scaleX:0,duration:.7,ease:'power3.out'},.1)
-.from('#eyebrow',{opacity:0,x:-22,duration:.45,ease:'power2.out'},.18)
-.from('#kind',{opacity:0,x:20,duration:.5,ease:'sine.out'},.25)
-.from('#accent',{scaleX:0,duration:.6,ease:'expo.out'},.25)
-.from('#brand',{opacity:0,x:-48,duration:.7,ease:'power3.out'},.3)
-.from('#icon',{opacity:0,scale:.93,rotation:2,duration:.75,ease:'sine.out'},.4)
-.from('#name',{opacity:0,y:24,duration:.6,ease:'power2.out'},.5)
-.from('#tagline',{opacity:0,y:18,duration:.5,ease:'expo.out'},.65)
-.from('#bottom',{opacity:0,duration:.7,ease:'sine.inOut'},.8);
+tl.fromTo('#brand',{opacity:0,y:-18},{opacity:1,y:0,duration:.45,ease:'power2.out'},0)
+.fromTo('#word',{y:315},{y:0,duration:.8,ease:'expo.out'},.1)
+.fromTo('#headline',{opacity:0,x:-40},{opacity:1,x:0,duration:.6,ease:'power3.out'},.55)
+.fromTo('#tagline span',{opacity:0,y:20},{opacity:1,y:0,duration:.4,stagger:.1,ease:'power2.out'},1.1)
+.fromTo('#edition',{opacity:0},{opacity:1,duration:.35,ease:'sine.out'},.4);
+// Registry marker-highlight principle: measure once, reveal a deterministic SVG stroke.
+[['underline',.65,.55],['ink-loop',.6,1.4],['ink-tip',1.95,.4]].forEach(([id,start,duration])=>{
+ const el=document.getElementById(id),length=el.getTotalLength();
+ el.style.strokeDasharray=String(length);
+ tl.fromTo(el,{strokeDashoffset:length,opacity:0},{strokeDashoffset:0,opacity:1,duration,ease:'power2.inOut'},start);
+});
 window.__timelines['flowmuse-intro']=tl;
 </script></body></html>

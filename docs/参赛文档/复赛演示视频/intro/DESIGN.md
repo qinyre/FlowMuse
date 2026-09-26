@@ -1,7 +1,7 @@
-# Visual identity
+# FlowMuse v4 品牌片头
 
-本片头采用上级 `../DESIGN.md` 中用户已确认的 FlowMuse 浅色风格。
-背景 #FAFAF9，正文 #1C1917，强调 #059669，次要字 #57534E，边线 #E7E5E4。
-使用 FlowMuse 原有应用图标。英文 DM Sans，中文 Microsoft YaHei。
-标题 160 px，说明 60 px；不加入假界面或未经验证的性能数字。
-标题从左、图标从缩放、说明从下方错峰出现；内容停留至交接。
+用户要求重新设计主题，采用“正在创作的纸面”：#F6F5F0 纸白、#171A18 石墨、#42DD91 鲜绿、#087D5D 深绿说明。英文 DM Sans，中文本机 MiSans Regular，回退 Microsoft YaHei；系统中文字体不入库。
+
+主视觉是大幅 FlowMuse 字样、绿色笔迹与一笔收成的页面。先出现品牌字，再描线、进入中文主句与三个动作。保留真实应用图标，不使用旧翡翠玻璃图。参考 registry marker-highlight 的测量路径长度/描线原理，沿用本地 GSAP；10.4秒容器供主剪辑截取品牌段，结束保持结果。
+
+导出：../edit/public/intro-v4.mp4；旧 intro-v2.mp4 保留。不要把艺术笔迹和页面图案当成实机运行画面。
