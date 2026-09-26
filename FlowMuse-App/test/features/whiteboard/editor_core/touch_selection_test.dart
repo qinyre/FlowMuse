@@ -126,7 +126,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
-    testWidgets('$layout：画笔工具下手指直接拖动图片，空白仍导航', (tester) async {
+    testWidgets('$layout：画笔工具下图片滑动翻页，轻点选中后可拖动', (tester) async {
       final controller = MarkdrawController(
         config: MarkdrawEditorConfig(initialLayout: CanvasLayout(type: layout)),
       );
@@ -147,12 +147,34 @@ void main() {
         start,
         kind: PointerDeviceKind.touch,
       );
-      await gesture.moveBy(const Offset(40, -40));
+      await gesture.moveBy(const Offset(0, -60));
       await gesture.up();
       await tester.pump();
 
       expect(controller.editorState.activeToolType, ToolType.freedraw);
+      expect(controller.editorState.selectedIds, isEmpty);
+      expect(controller.currentScene.getElementById(image.id), same(image));
+      expect(controller.editorState.viewport.offset, isNot(viewport.offset));
+
+      controller.setViewport(viewport);
+      await tester.pump();
+      final tap = await tester.startGesture(
+        start,
+        kind: PointerDeviceKind.touch,
+      );
+      await tap.moveBy(const Offset(4, 4));
+      await tap.up();
+      await tester.pump();
       expect(controller.editorState.selectedIds, {image.id});
+      expect(controller.currentScene.getElementById(image.id), same(image));
+
+      final drag = await tester.startGesture(
+        start,
+        kind: PointerDeviceKind.touch,
+      );
+      await drag.moveBy(const Offset(40, -40));
+      await drag.up();
+      await tester.pump();
       expect(
         controller.currentScene.getElementById(image.id)!.x,
         greaterThan(image.x),
@@ -175,7 +197,7 @@ void main() {
     });
   }
 
-  test('画笔和橡皮下手指首次接触即可拖动图片，空白处仍平移', () {
+  test('画笔和橡皮下图片首次滑动只平移，轻点后再次触碰才拖动', () {
     for (final tool in [ToolType.freedraw, ToolType.eraser]) {
       final controller = MarkdrawController();
       addTearDown(controller.dispose);
@@ -188,7 +210,19 @@ void main() {
       _move(controller, start, end);
       _up(controller, end);
       expect(controller.editorState.activeToolType, tool);
+      expect(controller.editorState.selectedIds, isEmpty);
+      expect(controller.currentScene.getElementById(image.id), same(image));
+      expect(controller.editorState.viewport.offset, const Offset(-40, 40));
+
+      controller.setViewport(const ViewportState());
+      _down(controller, start);
+      _up(controller, start);
       expect(controller.editorState.selectedIds, {image.id});
+      expect(controller.currentScene.getElementById(image.id), same(image));
+
+      _down(controller, start);
+      _move(controller, start, end);
+      _up(controller, end);
       expect(controller.currentScene.getElementById(image.id)!.x, 140);
       expect(controller.currentScene.getElementById(image.id)!.y, 60);
       expect(controller.editorState.viewport.offset, Offset.zero);

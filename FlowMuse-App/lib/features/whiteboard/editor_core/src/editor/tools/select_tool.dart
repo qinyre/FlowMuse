@@ -69,16 +69,12 @@ class SelectTool implements Tool {
   @override
   ToolType get type => ToolType.select;
 
-  /// In selection mode only previously selected objects and handles start a
-  /// touch drag. Other tools may route a touch on an unselected object here.
+  /// Only previously selected objects and handles can start a touch drag.
+  /// An unselected object must first be selected by a completed tap.
   ///
   /// This is intentionally side-effect free: the actual hit-test state is
   /// captured by [onPointerDown] after the canvas has chosen this route.
-  bool hitTestForTouch(
-    Point point,
-    ToolContext context, {
-    bool includeUnselected = false,
-  }) {
+  bool hitTestForTouch(Point point, ToolContext context) {
     final selectedElements = _getSelectedElements(context);
     final allLocked =
         selectedElements.isNotEmpty && selectedElements.every((e) => e.locked);
@@ -113,9 +109,7 @@ class SelectTool implements Tool {
       return true;
     }
     final hit = _selectableElementAtPoint(point, context);
-    return hit != null &&
-        !hit.locked &&
-        (includeUnselected || context.selectedIds.contains(hit.id));
+    return hit != null && !hit.locked && context.selectedIds.contains(hit.id);
   }
 
   /// True when the user is actively dragging a point or segment handle.

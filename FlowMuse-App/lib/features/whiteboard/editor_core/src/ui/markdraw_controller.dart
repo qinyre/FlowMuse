@@ -2289,11 +2289,7 @@ class MarkdrawController extends ChangeNotifier {
     final tool = _activeTool is SelectTool
         ? _activeTool as SelectTool
         : SelectTool();
-    return tool.hitTestForTouch(
-      point,
-      toolContext,
-      includeUnselected: _activeTool is! SelectTool,
-    );
+    return tool.hitTestForTouch(point, toolContext);
   }
 
   bool shouldPanTouch(Offset localPosition) {
