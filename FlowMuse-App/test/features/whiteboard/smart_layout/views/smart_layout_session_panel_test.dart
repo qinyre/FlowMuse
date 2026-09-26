@@ -217,7 +217,7 @@ void main() {
       SmartLayoutSessionPanel(scope: scope, onClose: () {}),
     );
 
-    expect(find.text('智能排版（v3 实时预览）'), findsOneWidget);
+    expect(find.text('智能排版'), findsOneWidget);
     expect(find.text('开始智能排版'), findsOneWidget);
     expect(find.textContaining('整理当前页'), findsOneWidget);
   });

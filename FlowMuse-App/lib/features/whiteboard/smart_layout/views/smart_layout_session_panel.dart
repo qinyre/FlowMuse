@@ -104,10 +104,7 @@ class _PanelHeader extends ConsumerWidget {
     return Row(
       children: [
         const Expanded(
-          child: Text(
-            '智能排版（v3 实时预览）',
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
+          child: Text('智能排版', style: TextStyle(fontWeight: FontWeight.w600)),
         ),
         IconButton(
           tooltip: '关闭排版面板',

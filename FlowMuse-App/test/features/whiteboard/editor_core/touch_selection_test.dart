@@ -125,41 +125,88 @@ void main() {
       );
       await tester.pumpWidget(const SizedBox.shrink());
     });
+
+    testWidgets('$layout：画笔工具下手指直接拖动图片，空白仍导航', (tester) async {
+      final controller = MarkdrawController(
+        config: MarkdrawEditorConfig(initialLayout: CanvasLayout(type: layout)),
+      );
+      addTearDown(controller.dispose);
+      final image = layout == CanvasLayoutType.paged
+          ? _image().copyWith(x: 600)
+          : _image();
+      controller.loadScene(Scene().addElement(image));
+      controller.switchTool(ToolType.freedraw);
+      await tester.pumpWidget(
+        MaterialApp(home: EditorCanvas(controller: controller)),
+      );
+      await tester.pump();
+      final viewport = controller.editorState.viewport;
+      final start = viewport.sceneToScreen(Offset(image.x + 100, image.y + 75));
+
+      final gesture = await tester.startGesture(
+        start,
+        kind: PointerDeviceKind.touch,
+      );
+      await gesture.moveBy(const Offset(40, -40));
+      await gesture.up();
+      await tester.pump();
+
+      expect(controller.editorState.activeToolType, ToolType.freedraw);
+      expect(controller.editorState.selectedIds, {image.id});
+      expect(
+        controller.currentScene.getElementById(image.id)!.x,
+        greaterThan(image.x),
+      );
+      expect(controller.editorState.viewport.offset, viewport.offset);
+      controller.undo();
+      expect(controller.currentScene.getElementById(image.id)!.x, image.x);
+
+      final blank = viewport.sceneToScreen(const Offset(400, 400));
+      final pan = await tester.startGesture(
+        blank,
+        kind: PointerDeviceKind.touch,
+      );
+      await pan.moveBy(const Offset(0, -60));
+      await pan.up();
+      await tester.pump();
+      expect(controller.currentScene.getElementById(image.id)!.x, image.x);
+      expect(controller.editorState.viewport.offset, isNot(viewport.offset));
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   }
 
-  test('非选择工具下手指只移动页面，轻点也不更改选择', () {
-    final controller = MarkdrawController();
-    addTearDown(controller.dispose);
-    final image = _image();
-    controller.loadScene(Scene().addElement(image));
-    for (final tool in ToolType.values.where(
-      (tool) => tool != ToolType.select,
-    )) {
+  test('画笔和橡皮下手指首次接触即可拖动图片，空白处仍平移', () {
+    for (final tool in [ToolType.freedraw, ToolType.eraser]) {
+      final controller = MarkdrawController();
+      addTearDown(controller.dispose);
+      final image = _image();
+      controller.loadScene(Scene().addElement(image));
       controller.switchTool(tool);
-      controller.applyResult(SetSelectionResult({image.id}));
-      controller.setViewport(const ViewportState());
       const start = Offset(200, 175);
       const end = Offset(240, 135);
       _down(controller, start);
       _move(controller, start, end);
       _up(controller, end);
-      expect(
-        controller.currentScene.getElementById(image.id),
-        same(image),
-        reason: tool.name,
-      );
+      expect(controller.editorState.activeToolType, tool);
+      expect(controller.editorState.selectedIds, {image.id});
+      expect(controller.currentScene.getElementById(image.id)!.x, 140);
+      expect(controller.currentScene.getElementById(image.id)!.y, 60);
+      expect(controller.editorState.viewport.offset, Offset.zero);
+      controller.undo();
+      expect(controller.currentScene.getElementById(image.id)!.x, image.x);
+      _down(controller, const Offset(500, 400));
+      _move(controller, const Offset(500, 400), const Offset(540, 360));
+      _up(controller, const Offset(540, 360));
       expect(
         controller.editorState.viewport.offset,
         const Offset(-40, 40),
         reason: tool.name,
       );
-      _down(controller, const Offset(500, 400));
-      _up(controller, const Offset(500, 400));
-      expect(controller.editorState.selectedIds, {image.id}, reason: tool.name);
+      expect(controller.currentScene.getElementById(image.id)!.x, image.x);
     }
   });
 
-  test('笔选中的笔画可以直接手指拖动，空白滑动保留选区，空白轻点清除', () {
+  test('手写笔画点按不选中，框选后仍可手指拖动', () {
     final controller = MarkdrawController();
     addTearDown(controller.dispose);
     final stroke = FreedrawElement(
@@ -174,6 +221,17 @@ void main() {
     const start = Offset(200, 150);
     _down(controller, start, kind: PointerDeviceKind.stylus);
     _up(controller, start, kind: PointerDeviceKind.stylus);
+    _down(controller, start);
+    _up(controller, start);
+    expect(controller.editorState.selectedIds, isEmpty);
+    _down(controller, const Offset(80, 80), kind: PointerDeviceKind.stylus);
+    _move(
+      controller,
+      const Offset(80, 80),
+      const Offset(320, 220),
+      kind: PointerDeviceKind.stylus,
+    );
+    _up(controller, const Offset(320, 220), kind: PointerDeviceKind.stylus);
     expect(controller.editorState.selectedIds, {stroke.id});
     _down(controller, start);
     _move(controller, start, start + const Offset(50, 50));
@@ -186,6 +244,42 @@ void main() {
     _down(controller, const Offset(500, 400));
     _up(controller, const Offset(500, 400));
     expect(controller.editorState.selectedIds, isEmpty);
+  });
+
+  test('手写笔迹覆盖图片时可穿透点选图片，键盘文本仍可点选', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    final image = _image();
+    final stroke = FreedrawElement(
+      id: ElementId('ink-on-image'),
+      x: 150,
+      y: 130,
+      width: 100,
+      height: 60,
+      points: const [Point(0, 0), Point(50, 30), Point(100, 60)],
+    );
+    controller.loadScene(Scene().addElement(image).addElement(stroke));
+    controller.switchTool(ToolType.eraser);
+    const start = Offset(200, 160);
+    _down(controller, start);
+    _up(controller, start);
+    expect(controller.editorState.selectedIds, {image.id});
+    expect(controller.editorState.activeToolType, ToolType.eraser);
+
+    final text = TextElement(
+      id: ElementId('typed-text'),
+      x: 400,
+      y: 100,
+      width: 100,
+      height: 40,
+      text: '键盘文字',
+      fontFamily: 'Excalifont',
+    );
+    controller.loadScene(Scene().addElement(text));
+    controller.switchTool(ToolType.select);
+    _down(controller, const Offset(420, 120), kind: PointerDeviceKind.stylus);
+    _up(controller, const Offset(420, 120), kind: PointerDeviceKind.stylus);
+    expect(controller.editorState.selectedIds, {text.id});
   });
 
   test('手指轻点容差按屏幕距离计算，选中前后均容忍轻微抖动', () {

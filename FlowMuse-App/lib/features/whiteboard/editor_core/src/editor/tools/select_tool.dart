@@ -69,12 +69,16 @@ class SelectTool implements Tool {
   @override
   ToolType get type => ToolType.select;
 
-  /// Only previously selected objects and their handles can start a touch
-  /// drag. An unselected object must first be selected by a completed tap.
+  /// In selection mode only previously selected objects and handles start a
+  /// touch drag. Other tools may route a touch on an unselected object here.
   ///
   /// This is intentionally side-effect free: the actual hit-test state is
   /// captured by [onPointerDown] after the canvas has chosen this route.
-  bool hitTestForTouch(Point point, ToolContext context) {
+  bool hitTestForTouch(
+    Point point,
+    ToolContext context, {
+    bool includeUnselected = false,
+  }) {
     final selectedElements = _getSelectedElements(context);
     final allLocked =
         selectedElements.isNotEmpty && selectedElements.every((e) => e.locked);
@@ -108,8 +112,10 @@ class SelectTool implements Tool {
             null) {
       return true;
     }
-    final hit = context.scene.getElementAtPoint(point);
-    return hit != null && !hit.locked && context.selectedIds.contains(hit.id);
+    final hit = _selectableElementAtPoint(point, context);
+    return hit != null &&
+        !hit.locked &&
+        (includeUnselected || context.selectedIds.contains(hit.id));
   }
 
   /// True when the user is actively dragging a point or segment handle.
@@ -232,7 +238,7 @@ class SelectTool implements Tool {
     }
 
     // 3. Element body hit-test
-    _hitElement = context.scene.getElementAtPoint(point);
+    _hitElement = _selectableElementAtPoint(point, context);
     return null;
   }
 
@@ -2068,6 +2074,14 @@ class SelectTool implements Tool {
         .where((e) => context.selectedIds.contains(e.id))
         .toList();
   }
+
+  Element? _selectableElementAtPoint(Point point, ToolContext context) =>
+      context.scene.getElementAtPoint(
+        point,
+        where: (element) =>
+            element is! FreedrawElement ||
+            context.selectedIds.contains(element.id),
+      );
 
   void _captureStartState(List<Element> elements, {ToolContext? context}) {
     _startElements = List.of(elements);
