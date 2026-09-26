@@ -149,11 +149,12 @@ class Scene {
   ///
   /// Bound text elements (containerId != null) are skipped — hit the parent
   /// shape instead.
+  /// [where] can skip elements without changing the hit order for other tools.
   /// Default hit tolerance for lines/arrows (in scene units).
   /// Matches Excalidraw's ~7px threshold.
   static const double _lineHitThreshold = 8.0;
 
-  Element? getElementAtPoint(Point point) {
+  Element? getElementAtPoint(Point point, {bool Function(Element)? where}) {
     final ordered = orderedElements.where((e) => !e.isDeleted).toList();
     // Iterate in reverse to find topmost (highest index) first.
     for (var i = ordered.length - 1; i >= 0; i--) {
@@ -161,12 +162,13 @@ class Scene {
       if (e.isCanvasPage || e.isPdfBackground) continue;
       // Skip bound text — users interact with the parent shape
       if (e is TextElement && e.containerId != null) continue;
+      if (where != null && !where(e)) continue;
 
       if (e is LineElement) {
         if (_isPointNearLine(point, e, _lineHitThreshold)) return e;
       } else if (e is FreedrawElement) {
-        // 自由笔画命中含笔刷可见半径（A20：最大荧光笔可见外缘可
-        // 选择/擦除）；保留 AABB 语义，不做逐段精确 hit-test。
+        // 自由笔画命中含笔刷可见半径（A20：最大荧光笔可见外缘
+        // 仍可被橡皮等工具命中）；保留 AABB 语义，不做逐段精确 hit-test。
         final bounds = elementVisualBounds(e);
         if (bounds.containsPoint(point)) return e;
       } else {

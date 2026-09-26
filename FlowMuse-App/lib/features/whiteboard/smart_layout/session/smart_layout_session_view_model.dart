@@ -407,8 +407,7 @@ class RegionCorrectionIntent {
 final smartLayoutSessionDependenciesProvider =
     Provider<SmartLayoutSessionDependencies>((ref) {
       throw UnimplementedError(
-        'smartLayoutSessionDependenciesProvider 必须由入口覆盖注入'
-        '（真实接线：V3-505C）',
+        'smartLayoutSessionDependenciesProvider 必须由入口覆盖注入',
       );
     });
 

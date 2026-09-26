@@ -114,7 +114,7 @@ void main() {
     controller.dispose();
   });
 
-  test('关闭手指绘制时，画笔状态下手指命中对象也只平移页面', () {
+  test('关闭手指绘制时，画笔状态下手指滑动对象先平移，轻点后可拖动', () {
     final controller = MarkdrawController();
     controller.applyEditorPreferences(
       defaultTool: ToolType.freedraw,
@@ -175,6 +175,27 @@ void main() {
     expect(moved?.x, 10);
     expect(moved?.y, 10);
     expect(controller.editorState.viewport.offset, const Offset(-20, -10));
+
+    controller.setViewport(const ViewportState());
+    controller.onPointerDown(
+      const PointerDownEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.touch,
+        position: Offset(30, 30),
+      ),
+    );
+    controller.onPointerUp(
+      const PointerUpEvent(
+        pointer: 1,
+        kind: PointerDeviceKind.touch,
+        position: Offset(30, 30),
+      ),
+    );
+    expect(controller.editorState.selectedIds, {ElementId('rect-touch')});
+    expect(
+      controller.shouldRouteTouchToSelection(const Offset(30, 30)),
+      isTrue,
+    );
     controller.dispose();
   });
 

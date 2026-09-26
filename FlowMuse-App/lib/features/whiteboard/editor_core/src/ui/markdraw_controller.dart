@@ -2279,14 +2279,17 @@ class MarkdrawController extends ChangeNotifier {
 
   bool get _canSelectWithTouch =>
       !_fingerDrawingEnabled &&
-      _activeTool is SelectTool &&
+      _editorState.activeToolType != ToolType.hand &&
       !_isViewportGesture &&
       _canAcceptTouchInteraction();
 
   bool shouldRouteTouchToSelection(Offset localPosition) {
     if (!_canSelectWithTouch) return false;
     final point = toScene(localPosition);
-    return (_activeTool as SelectTool).hitTestForTouch(point, toolContext);
+    final tool = _activeTool is SelectTool
+        ? _activeTool as SelectTool
+        : SelectTool();
+    return tool.hitTestForTouch(point, toolContext);
   }
 
   bool shouldPanTouch(Offset localPosition) {
@@ -2305,7 +2308,9 @@ class MarkdrawController extends ChangeNotifier {
     restoreKeyboardFocusWhenStable();
     if (_editingTextElementId != null) commitTextEditing();
     final point = toScene(localPosition);
-    final tool = _activeTool as SelectTool;
+    final tool = _activeTool is SelectTool
+        ? _activeTool as SelectTool
+        : SelectTool();
     applyResult(tool.onPointerDown(point, toolContext));
     applyResult(tool.onPointerUp(point, toolContext));
   }
@@ -2327,7 +2332,9 @@ class MarkdrawController extends ChangeNotifier {
         commitTextEditing();
       }
       _activeTouchSelectionPointerId = event.pointer;
-      _activeTouchSelectionTool = _activeTool as SelectTool;
+      _activeTouchSelectionTool = _activeTool is SelectTool
+          ? _activeTool as SelectTool
+          : SelectTool();
       _sceneBeforeDrag = _editorState.scene;
       final point = toScene(event.localPosition);
       applyResult(
