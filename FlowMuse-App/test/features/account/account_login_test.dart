@@ -254,6 +254,64 @@ void main() {
         ),
       ),
     );
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) async => throw PlatformException(
+        code: 'authorization_failed',
+        details: 1001500001,
+      ),
+    );
+    await expectLater(
+      adapter.authorize(),
+      throwsA(
+        isA<StateError>().having((e) => e.message, '签名配置提示', contains('证书指纹')),
+      ),
+    );
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) async => throw PlatformException(
+        code: 'authorization_failed',
+        details: 1001502014,
+      ),
+    );
+    await expectLater(
+      adapter.authorize(),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          '原生错误码',
+          contains('1001502014'),
+        ),
+      ),
+    );
+  });
+
+  test('华为登录响应带来的头像昵称进入账户资料', () async {
+    final tokens = _MemoryTokens();
+    final repository = AccountRepository(
+      config: _config,
+      tokenStore: tokens,
+      client: MockClient((request) async {
+        expect(request.url.path, '/api/auth/huawei/login');
+        expect(jsonDecode(request.body), {'code': 'test-code'});
+        return _response(
+          jsonEncode({
+            'token': 'test-session',
+            'user': {
+              ..._huawei,
+              'displayName': '华为昵称',
+              'avatarUrl': 'https://example.test/avatar.jpg',
+            },
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(repository.close);
+    final session = await repository.loginHuawei('test-code');
+    expect(session.user.displayName, '华为昵称');
+    expect(session.user.avatarUrl, 'https://example.test/avatar.jpg');
+    expect(tokens.value, 'test-session');
   });
 
   test('绑定失败与取消华为授权保留已有登录状态', () async {

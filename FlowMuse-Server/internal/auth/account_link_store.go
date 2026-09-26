@@ -31,6 +31,22 @@ RETURNING id`, uuid.NewString(), unionID).Scan(&userID)
 	return s.Load(ctx, userID)
 }
 
+// FillHuaweiProfile replaces the placeholder name and Huawei-hosted avatar.
+// FlowMuse profile edits and uploaded avatars take precedence on later logins.
+func (s *UserStore) FillHuaweiProfile(ctx context.Context, userID, displayName, avatarURL string) (User, error) {
+	_, err := s.db.Exec(ctx, `
+UPDATE users SET
+  display_name = CASE WHEN display_name = '华为用户' AND $2 <> '' THEN $2 ELSE display_name END,
+  avatar_url = CASE WHEN (avatar_url = '' OR avatar_url LIKE 'https://%') AND $3 <> '' THEN $3 ELSE avatar_url END,
+  updated_at = now()
+WHERE id = $1 AND ((display_name = '华为用户' AND $2 <> '') OR ((avatar_url = '' OR avatar_url LIKE 'https://%') AND $3 <> ''))`,
+		userID, displayName, avatarURL)
+	if err != nil {
+		return User{}, err
+	}
+	return s.Load(ctx, userID)
+}
+
 // lockLinkAccount serializes binding changes and session revocation. Email
 // proof alone must never grant a session or move an existing account.
 func lockLinkAccount(ctx context.Context, tx pgx.Tx, userID, sessionID string) (email, unionID string, err error) {

@@ -28,6 +28,14 @@ class HuaweiAccountChannel {
       throw StateError(switch (error.code) {
         'network' => '无法连接华为账号服务，请检查网络后重试',
         'busy' => '华为登录正在进行，请稍候',
+        'authorization_failed' when error.details == 1001500001 =>
+          '华为登录配置或应用签名验证失败，请联系开发者检查 Client ID 和证书指纹',
+        'authorization_failed' when error.details == 1001502001 =>
+          '请先在设备上登录华为账号，然后重试',
+        'authorization_failed' when error.details == 12300001 =>
+          '华为账号服务暂不可用，请稍后重试',
+        'authorization_failed' when error.details is int =>
+          '华为登录失败（错误码 ${error.details}），请重试或联系开发者',
         _ => '华为登录未完成，请重试或使用邮箱登录',
       });
     }

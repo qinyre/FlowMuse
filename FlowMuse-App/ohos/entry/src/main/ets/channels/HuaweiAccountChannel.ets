@@ -36,16 +36,18 @@ export class HuaweiAccountChannel {
     this.pending = result;
     try {
       const provider = new authentication.HuaweiIDProvider();
-      const request = provider.createLoginWithHuaweiIDRequest();
+      const request = provider.createAuthorizationWithHuaweiIDRequest();
       const state = util.generateRandomUUID();
-      request.forceLogin = true;
+      request.scopes = ['profile'];
+      request.permissions = ['serviceauthcode'];
+      request.forceAuthorization = true;
       request.state = state;
       const controller = new authentication.AuthenticationController(this.context);
-      const response = await controller.executeRequest(request) as authentication.LoginWithHuaweiIDResponse;
+      const response = await controller.executeRequest(request) as authentication.AuthorizationWithHuaweiIDResponse;
       if (this.pending !== result) {
         return;
       }
-      if (response.state !== state || !response.data?.authorizationCode) {
+      if ((response.state && response.state !== state) || !response.data?.authorizationCode) {
         result.error('invalid_response', 'Invalid Huawei response', null);
       } else {
         result.success(response.data.authorizationCode);
@@ -58,7 +60,7 @@ export class HuaweiAccountChannel {
       if (code === 1001502012) {
         result.success(null);
       } else {
-        result.error(code === 1001502005 ? 'network' : 'authorization_failed', 'Huawei login failed', null);
+        result.error(code === 1001502005 ? 'network' : 'authorization_failed', 'Huawei login failed', code);
       }
     } finally {
       if (this.pending === result) {

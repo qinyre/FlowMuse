@@ -101,6 +101,14 @@ func TestAccountMigrationAndBindings(t *testing.T) {
 			if owner.Email != "" || owner.EmailVerified || owner.HasPassword || !owner.HuaweiLinked {
 				t.Fatal("incorrect Huawei-only flags")
 			}
+			owner, err = s.FillHuaweiProfile(ctx, owner.ID, "华为昵称", "https://example.test/huawei-avatar.jpg")
+			if err != nil || owner.DisplayName != "华为昵称" || owner.AvatarURL != "https://example.test/huawei-avatar.jpg" {
+				t.Fatal("Huawei profile not filled", err)
+			}
+			owner, err = s.FillHuaweiProfile(ctx, owner.ID, "新华为昵称", "https://example.test/new-avatar.jpg")
+			if err != nil || owner.DisplayName != "华为昵称" || owner.AvatarURL != "https://example.test/new-avatar.jpg" {
+				t.Fatal("Huawei avatar not refreshed", err)
+			}
 			var wg sync.WaitGroup
 			for i := 0; i < 4; i++ {
 				wg.Add(1)
@@ -134,6 +142,10 @@ func TestAccountMigrationAndBindings(t *testing.T) {
 			}
 			if _, err := s.SetAvatarURL(ctx, owner.ID, "/test/avatar"); err != nil {
 				t.Fatal(err)
+			}
+			owner, err = s.FillHuaweiProfile(ctx, owner.ID, "新华为昵称", "https://example.test/changed-avatar.jpg")
+			if err != nil || owner.DisplayName != "Harmony User" || owner.AvatarURL != "/test/avatar" {
+				t.Fatal("Huawei login overwrote FlowMuse profile", err)
 			}
 			if err := s.ChangePassword(ctx, owner.ID, "test-password", "new-password"); !errors.Is(err, ErrInvalidCredentials) {
 				t.Fatal("Huawei-only password change accepted")
