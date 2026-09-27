@@ -1,8 +1,8 @@
-import {Video} from '@remotion/media';
-import {AbsoluteFill, Easing, interpolate, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import timeline from '../../../timeline.json';
 import media from '../media.generated.json';
 import {FeatureVisual} from './FeatureVisual';
+import {RecordedClip} from './RecordedClip';
 
 export const Footage = ({scene}: {scene: typeof timeline.scenes[number]}) => {
   const frame = useCurrentFrame();
@@ -31,11 +31,18 @@ export const Footage = ({scene}: {scene: typeof timeline.scenes[number]}) => {
     {!clip && <div style={{display: 'flex', gap: 10}}>{scene.steps.map((item, i) => <div key={item.at} style={{height: 6, width: i === active ? 54 : 24, backgroundColor: i <= active ? '#171A18' : '#D9DFD6'}} />)}</div>}
   </div>;
 
-  if (clip) return <AbsoluteFill style={{backgroundColor: '#F6F5F0'}}>
-    <Video src={staticFile(clip)} muted style={{width: '100%', height: '100%', objectFit: 'contain'}} />
-    <div style={{position: 'absolute', top: 42, left: 70, borderLeft: '4px solid #42DD91', padding: '13px 24px', backgroundColor: '#F6F5F0F2', fontSize: 26, color: '#171A18', opacity: interpolate(seconds, [0, .3, 2.6, 3], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}}>{scene.title}</div>
-    {guide}
-  </AbsoluteFill>;
+  if (clip) {
+    const compressed = scene.id === 'layout' && seconds < 6 || scene.id === 'ai' && (seconds >= 8.7 && seconds < 12.3 || seconds >= 24 && seconds < 28.2);
+    const zoom = scene.id === 'brushes' ? interpolate(seconds, [0, 5.8, 6.8, 12.8, 13.8, 27, 28], [1, 1, 1.18, 1.18, 1.08, 1.08, 1], {extrapolateRight: 'clamp'}) : scene.id === 'layout' ? interpolate(seconds, [0, 12.7, 13.4, 22.8, 23.5], [1, 1, 1.1, 1.1, 1], {extrapolateRight: 'clamp'}) : scene.id === 'recognition' ? interpolate(seconds, [0, 7.8, 8.6, 17.8, 18.7], [1, 1, 1.15, 1.15, 1], {extrapolateRight: 'clamp'}) : scene.id === 'harmony' ? interpolate(seconds, [0, 11, 12, 13.2, 14, 17, 18], [1, 1, 1.5, 1.5, 1, 1, 1.5], {extrapolateRight: 'clamp'}) : 1;
+    return <AbsoluteFill style={{backgroundColor: '#D6E1D9'}}>
+      <div style={{position: 'absolute', left: 100, top: 26, display: 'flex', gap: 22, alignItems: 'center', fontSize: 27, color: '#171A18'}}><span style={{padding: '4px 10px', backgroundColor: '#42DD91', fontWeight: 700}}>{chapter}</span>{scene.title.split(' / ')[1]}</div>
+      <div style={{position: 'absolute', left: 100, top: 98, width: 1720, height: 842}}>
+        <RecordedClip id={scene.id} clip={clip} zoom={zoom} origin={scene.id === 'harmony' ? '63% 32%' : '50% 45%'} />
+      </div>
+      <div style={{position: 'absolute', top: 75, left: 100, fontSize: 21, color: '#536259', opacity: guideOpacity}}>{action}{step.badge ? `  ·  ${step.badge}` : ''}</div>
+      {compressed && <div style={{position: 'absolute', right: 100, top: 76, color: '#087D5D', fontSize: 23}}>等待已压缩</div>}
+    </AbsoluteFill>;
+  }
 
   return <AbsoluteFill style={{backgroundColor: '#F6F5F0', color: '#171A18', overflow: 'hidden'}}>
     <div style={{position: 'absolute', left: 100, top: 141, right: 100, height: 2, backgroundColor: '#D9DFD6'}} />

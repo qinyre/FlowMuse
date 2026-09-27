@@ -1,0 +1,10 @@
+[
+  {"id":"library","source":"01-library-pdf.mp4","file":"01-library-pdf-v5.mp4","duration":28,"cuts":[[4.3,9.3],[10.1,13.1],[17,20.1],[22.5,28],[33,38.7],[39,43.7,1]]},
+  {"id":"brushes","source":"02-natural-ink.mp4","file":"02-natural-ink-v5.mp4","duration":32,"cuts":[[0.5,6.7],[6.9,13.8],[15.2,23.2],[25,31.9],[35.2,38.2,1]]},
+  {"id":"recognition","source":"03-recognition-voice.mp4","file":"03-recognition-voice-v5.mp4","duration":27,"cuts":[[1.2,8],[11.5,12.5],[13.5,24.4],[25.5,29.4],[35.5,37.9,2]]},
+  {"id":"layout","source":"04-smart-layout.mp4","file":"04-smart-layout-v5.mp4","duration":40,"cuts":[[0.3,3],[3,4.3],[9.3,18],[18,24.8,4],[24.8,30.5],[30.5,36.3],[36.3,40.2,1.1]]},
+  {"id":"ai","source":"05-ai-mindmap.mp4","file":"05-ai-mindmap-v5.mp4","duration":36,"cuts":[[1,10.5],[27.5,32.5],[32.5,39.5],[43.5,47],[60.3,63.4],[64.7,69.4,3.2]]},
+  {"id":"collab","source":"06-social-collaboration.mp4","file":"06-social-collaboration-v5.mp4","duration":44,"cuts":[[0.5,3],[4.1,7.4],[12,17.6,0.7],[18.4,49.8,0.5]]},
+  {"id":"openness","source":"07-markdraw-export.mp4","file":"07-markdraw-export-v5.mp4","duration":25,"cuts":[[0.5,4.5],[6,15],[16,23.5],[25,28.7,0.8]]},
+  {"id":"harmony","source":"08-harmony.mp4","file":"08-harmony-v5.mp4","duration":22,"cuts":[[0.5,4],[7.5,10],[11.5,14],[15,20.5],[21.5,26.8,2.7]]}
+]

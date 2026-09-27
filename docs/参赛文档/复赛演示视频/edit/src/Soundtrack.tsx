@@ -8,7 +8,7 @@ export const Soundtrack = ({sample = false, narration = false}: {sample?: boolea
   const reveals = sample ? [4, 14, 29] : timeline.scenes.flatMap(scene => {
     const at = start;
     start += scene.duration;
-    return scene.id === 'opening' ? [Math.min(6, Math.max(0, scene.duration - 3))] : ['layout', 'collab', 'closing'].includes(scene.id) ? [at] : [];
+    return scene.id === 'opening' ? [Math.min(4, Math.max(0, scene.duration - 4))] : ['layout', 'collab', 'closing'].includes(scene.id) ? [at] : [];
   });
   return <>
     <Audio src={staticFile('audio/emerald-ambient-demo.wav')} loop loopVolumeCurveBehavior="extend" volume={frame => interpolate(frame, [0, 1.2 * fps, durationInFrames - 1.5 * fps, durationInFrames - 1], [0, narration ? .2 : .4, narration ? .2 : .4, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})} />

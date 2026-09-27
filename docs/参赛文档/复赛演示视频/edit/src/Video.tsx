@@ -12,7 +12,6 @@ import captions from './captions.generated.json';
 import {Opening} from './scenes/Opening';
 import {Footage} from './scenes/Footage';
 import {Closing} from './scenes/Closing';
-import {Soundtrack} from './Soundtrack';
 
 void loadFont({family: 'DM Sans', url: staticFile('dm-sans-latin-400-normal.woff2'), weight: '400'});
 void loadFont({family: 'DM Sans', url: staticFile('dm-sans-latin-700-normal.woff2'), weight: '700'});
@@ -33,9 +32,8 @@ export const DemoVideo = ({preview}: {preview: boolean}) => {
       </Fragment>)}
     </TransitionSeries>
     {media.narration && <Audio src={staticFile(media.narration)} />}
-    <Soundtrack narration={Boolean(media.narration)} />
     {preview && <>
-      <div style={{position: 'absolute', top: 24, right: 35, fontSize: 22, letterSpacing: 1, color: '#536259', backgroundColor: '#F6F5F0F5', border: '1px solid #D9DFD6', borderRadius: 3, padding: '9px 15px'}}>分镜预演 · {media.narration ? '旁白字幕草案' : '尚未录音'}</div>
+      <div style={{position: 'absolute', top: 24, right: 35, fontSize: 22, letterSpacing: 1, color: '#536259', backgroundColor: '#F6F5F0F5', border: '1px solid #D9DFD6', borderRadius: 3, padding: '9px 15px'}}>实录审片 · {media.narration ? '字幕草案' : '待配音'}</div>
       {cue && <div style={{position: 'absolute', bottom: 44, left: 125, right: 125, display: 'flex', justifyContent: 'center'}}><div style={{fontSize: 36, lineHeight: 1.5, textAlign: 'center', color: '#171A18', backgroundColor: '#F6F5F0F5', borderTop: '2px solid #D9DFD6', padding: '15px 30px', maxWidth: 1610}}>{cue.text}</div></div>}
       <div style={{position: 'absolute', bottom: 0, left: 0, height: 3, backgroundColor: '#087D5D', width: `${frame / (durationInFrames - 1) * 100}%`}} />
     </>}

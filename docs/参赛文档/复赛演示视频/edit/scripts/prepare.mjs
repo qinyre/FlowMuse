@@ -19,7 +19,7 @@ for (const fps of [15, 30]) {
   assert.equal(frameCounts.reduce((a, b) => a + b, 0) - overlap * (data.scenes.length - 1), duration * fps);
 }
 const stamp = s => new Date(Math.round(s * 1000)).toISOString().slice(11, 23).replace('.', ',');
-const short = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+const short = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${(s % 60).toFixed(1).padStart(4, '0')}`;
 const probe = file => {
   const result = spawnSync(resolve(root, 'node_modules/@ffprobe-installer/win32-x64/ffprobe.exe'), ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', file], {encoding: 'utf8', windowsHide: true});
   assert.equal(result.status, 0, `无法读取媒体 ${file}: ${result.stderr}`);
@@ -30,7 +30,7 @@ const missing = [];
 const clips = {};
 let start = 0;
 const cues = [];
-let guide = `# FlowMuse 复赛视频：逐镜脚本与录制清单\n\n当前剪辑计划 ${short(duration)}；时码是剪辑参考，不是录屏时长要求。正式母版 1920 × 1080、30 fps，分镜预演导出为 1280 × 720、15 fps。按功能分段录，允许停顿和重录，每段前后留约 3–5 秒。拿到素材后修改 timeline.json 对应场景的 duration（剪后正文秒数），后续章节和字幕自动顺延；当前场景的 steps.at 与 cues 均从本段 0 秒起算，按实际剪辑校准。当前是无配音的分镜预演，不能作为实际功能演示提交。完整功能及取舍见《功能盘点与镜头取舍.md》。\n\n`;
+let guide = `# FlowMuse 复赛视频：实录剪辑与旁白草案\n\n当前剪辑 ${short(duration)}，1920 × 1080、30 fps。八段实录已按 cuts-v5.json 剪辑，保留源素材。此稿按实际镜头重写，不承诺未拍到的功能；字幕尚未与正式配音对齐。timeline.json 的 duration 控制章节净时长，steps.at 与 cues 从本段0秒起算，后续章节自动顺延。正式提交前须完成配音与字幕校准。历史功能盘点见《功能盘点与镜头取舍.md》，本轮取舍以此稿和实录剪辑计划为准。\n\n`;
 for (const scene of data.scenes) {
   assert(Number.isInteger(scene.duration) && scene.duration > 0, `${scene.id} 的 duration 须为正整数秒（剪辑计划，不是原始录屏长度）`);
   assert(scene.steps.every((step, i) => step.at >= 0 && step.at < scene.duration && (i === 0 || step.at > scene.steps[i - 1].at)), `${scene.id} 的步骤超出本段或顺序错误，请按剪辑结果调整 steps.at`);
@@ -66,7 +66,7 @@ for (const scene of data.scenes) {
 const captions = cues.map(([at, length, text], i) => {
   assert(at >= 0 && length > 0 && at + length <= duration && typeof text === 'string' && text.trim());
   if (i) assert(at >= cues[i - 1][0] + cues[i - 1][1], '字幕不可相互重叠');
-  return {text, startMs: at * 1000, endMs: (at + length) * 1000, timestampMs: null, confidence: null};
+  return {text: text.replace(/。/g, ''), startMs: at * 1000, endMs: (at + length) * 1000, timestampMs: null, confidence: null};
 });
 const narration = ['narration.wav', 'narration.mp3'].find(f => existsSync(resolve(root, 'public', f))) || null;
 if (!narration) missing.push('narration.wav 或 narration.mp3');
@@ -80,7 +80,7 @@ assert(existsSync(resolve(root, 'public/intro-v4.mp4')), '请先渲染 HyperFram
 const intro = probe(resolve(root, 'public/intro-v4.mp4'));
 assert(intro.streams.some(s => s.codec_type === 'video'), '片头没有视频轨');
 const openingSeconds = data.scenes.find(s => s.id === 'opening').duration + .4;
-const brandSeconds = openingSeconds - Math.min(6, Math.max(0, openingSeconds - 3.4));
+const brandSeconds = openingSeconds - Math.min(4, Math.max(0, openingSeconds - 4));
 assert(Number(intro.format.duration) >= brandSeconds - 1 / 30, '品牌片头视频短于当前计划，请重新渲染更长片头或缩短 opening.duration');
 writeFileSync(resolve(root, 'src/media.generated.json'), JSON.stringify({clips, narration, ready: missing.length === 0}, null, 2));
 writeFileSync(resolve(root, 'src/captions.generated.json'), JSON.stringify(captions, null, 2));
