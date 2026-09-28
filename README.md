@@ -131,13 +131,17 @@ GitHub Actions 入口是 [.github/workflows/quality.yml](.github/workflows/quali
 
 ## 代码和文档位置
 
+- [文档导航](docs/README.md)：按需求、设计、研发记录、演示视频和本地验收材料查找
 - FlowMuse-App：Flutter 客户端、Markdraw 内核和 HarmonyOS 原生适配
 - FlowMuse-Server：Go 协作、账户、文件和识别服务
 - [项目需求](docs/项目说明/项目需求.md)和[架构约束](docs/项目说明/架构约束.md)
 - [技术设计](docs/技术设计/前端架构.md)：前端架构、接口、数据模型和部署说明
 - [研发记录](docs/研发记录/)：功能计划、调研、审查和落地记录
+- [复赛演示视频](docs/参赛文档/复赛演示视频/README.md)：当前成片、历史版本、素材与重建方法
 - [.agent/decisions.md](.agent/decisions.md)：架构决策记录
 - [AGENTS.md](AGENTS.md)：开发流程、跨端约束和完成前验证清单
+
+历史安装包、临时截图、排障日志和一次性脚本统一保存在本地 `docs/验收材料/本地归档/`，按日期保留原目录层级与迁移清单。`FlowMuse-App/build/` 保留正常构建输出及现有测试使用的产物目录。
 
 ## 当前边界
 
@@ -145,7 +149,7 @@ GitHub Actions 入口是 [.github/workflows/quality.yml](.github/workflows/quali
 - 创建者归属只用于显示，不作为权限、锁定或鉴权依据。
 - 外部导出会剥离创建者元数据，协作密文和内部本地存储保留。
 - 鸿蒙真机 Profile/GPU 验收仍需完成，自动化测试不能替代真实设备测试。
-- docs/周报与总结报告、docs/验收材料和 docs/参赛文档属于本地忽略材料，不作为 GitHub 公共文档。
+- docs/周报与总结报告、docs/验收材料和其他参赛过程材料本地忽略；docs/参赛文档/复赛演示视频的工程及选定成片由 Git 管理，原始录屏、配音和缓存本地保留。
 
 ## 团队
 

@@ -1,6 +1,6 @@
 # FlowMuse 复赛演示视频
 
-最新交付为 [无配音、三端完整画面版](output/FlowMuse-无配音-三端完整画面.mp4)：以v5.3无声版为基础，去掉右上角审片标识，并修正三端共创画面的裁切。片头、协作正文与片尾均按原比例完整展示原始三端合成画面，保留素材自带的平台标签，将界面外的黑色空白改为模板浅灰绿底；字幕和时码沿用v5.3，**4分30秒，1920×1080、30 fps，无音轨**。此前的 [去标识版](output/FlowMuse-无配音-无审片标识.mp4) 和原v5.3文件保留。
+最新交付为 [无配音、三端完整画面版](output/FlowMuse-无配音-三端完整画面.mp4)：以v5.3无声版为基础，去掉右上角审片标识，并修正三端共创画面的裁切。片头、协作正文与片尾均按原比例完整展示原始三端合成画面，保留素材自带的平台标签，将界面外的黑色空白改为模板浅灰绿底；字幕和时码沿用v5.3，**4分30秒，1920×1080、30 fps，无音轨**。此前的 [去标识版](output/history/FlowMuse-无配音-无审片标识.mp4) 和原v5.3文件保留。
 
 旁白工程仍保留 **v6**，队名 **青天小老爷**。已接入八段录屏和用户提供的35段TTS，保持 **4分30秒，1920×1080、30 fps**。字幕按音频落点更新，句末不显示句号、句内句号转为换行，保留逗号和顿号；旁白稿保留正常标点。仅有人声，无背景音乐和提示音。此前导出的v6文件仍带审片标识，正式提交前仍须完整审听。
 
@@ -95,15 +95,22 @@ v6成片已通过完整解码、音轨同步及关键帧检查：1920×1080、30
 
 切点与输出片段校验、Remotion类型检查及时间轴回归已通过；关键帧检查覆盖十个章节，复核字幕安全区、协作裁切、取色书写与团队署名。v5.1另检查录屏外框及放大后的裁切；v5.2通过流复制移除音轨；v5.3重新渲染去句号字幕，时间轴仍为8100帧／270秒。35条字幕的JSON与SRT均已核对无句号，旁白原稿标点保留。各版验收见本地 `output/verification-v5.1.json`、`verification-v5.2.json`、`verification-v5.3.json`，完整记录见上述计划文档。
 
+## 输出目录
+
+- output 根目录：当前无配音完整画面版、对应 ZIP、v6 旁白版和 v5.3 制作底片，以及当前核验数据
+- output/history：历代样片、预演与已被替代的实录版本
+- output/history/review-files：历次审片日志和截图
+- cuts-v5、narration-v6、collab-full-frame 等工作目录：保留制作清单及当前成片的核验资料
+
 ## 历史版本
 
 保留 [v5.3无音乐版（待配音、字幕无句号）](output/FlowMuse-实录审片-v5.3-无音乐.mp4)。
 
-保留 [v5.2无音乐版（字幕含句号）](output/FlowMuse-实录审片-v5.2-无音乐.mp4)。
+保留 [v5.2无音乐版（字幕含句号）](output/history/FlowMuse-实录审片-v5.2-无音乐.mp4)。
 
-保留 [v5.1含音乐实录](output/FlowMuse-实录审片-v5.1.mp4)，可与当前无音乐版对照。
+保留 [v5.1含音乐实录](output/history/FlowMuse-实录审片-v5.1.mp4)，可与当前无音乐版对照。
 
-保留 [v5纸白背景实录](output/FlowMuse-实录审片-v5.mp4)。更早的 [v4纸面样片](output/FlowMuse-纸面样片-v4.mp4)、[v4完整预演](output/FlowMuse-纸面预演-v4.mp4)、[v3叙事样片](output/FlowMuse-叙事样片-v3.mp4)、[v3完整预演](output/FlowMuse-叙事预演-v3.mp4)、[v2电影感样片](output/FlowMuse-电影感样片-v2.mp4)、[v2完整预演](output/FlowMuse-电影感预演-v2.mp4) 和 [最初分镜预演](output/FlowMuse-分镜预演.mp4) 含历史截图或功能示意，不代表本次实录。
+保留 [v5纸白背景实录](output/history/FlowMuse-实录审片-v5.mp4)。更早的 [v4纸面样片](output/history/FlowMuse-纸面样片-v4.mp4)、[v4完整预演](output/history/FlowMuse-纸面预演-v4.mp4)、[v3叙事样片](output/history/FlowMuse-叙事样片-v3.mp4)、[v3完整预演](output/history/FlowMuse-叙事预演-v3.mp4)、[v2电影感样片](output/history/FlowMuse-电影感样片-v2.mp4)、[v2完整预演](output/history/FlowMuse-电影感预演-v2.mp4) 和 [最初分镜预演](output/history/FlowMuse-分镜预演.mp4) 含历史截图或功能示意，不代表本次实录。
 
 ## 提交约束
 
