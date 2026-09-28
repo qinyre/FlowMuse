@@ -6,8 +6,9 @@
   "scripts": {
     "start": "node scripts/prepare.mjs && remotion studio --no-open",
     "check": "node scripts/prepare.mjs && tsc --noEmit && node scripts/check-timing.mjs",
-    "render:preview": "node scripts/prepare.mjs && remotion render src/index.ts FlowMusePreview ../output/FlowMuse-实录预览-v5.3-无音乐.mp4 --scale=0.6666666666666666 --codec=h264 --crf=23 --concurrency=4",
-    "render:review": "node scripts/prepare.mjs && remotion render src/index.ts FlowMuseReview ../output/FlowMuse-实录审片-v5.3-无音乐.mp4 --codec=h264 --crf=20 --concurrency=3",
+    "render:preview": "node scripts/prepare.mjs && remotion render src/index.ts FlowMusePreview ../output/FlowMuse-实录预览-v6-旁白.mp4 --scale=0.6666666666666666 --codec=h264 --crf=23 --concurrency=4 --muted && node scripts/mux-narration.mjs ../output/FlowMuse-实录预览-v6-旁白.mp4",
+    "render:review": "node scripts/prepare.mjs && remotion render src/index.ts FlowMuseReview ../output/FlowMuse-实录审片-v6-旁白.mp4 --codec=h264 --crf=20 --concurrency=4 --muted && node scripts/mux-narration.mjs ../output/FlowMuse-实录审片-v6-旁白.mp4",
+    "narration": "node scripts/assemble-narration.mjs",
     "render:sample": "node scripts/prepare.mjs && remotion render src/index.ts FlowMuseStyleSample ../output/FlowMuse-历史风格参考.mp4 --codec=h264 --crf=20 --concurrency=3",
     "cut": "node scripts/cut-footage.mjs",
     "check:final": "node scripts/prepare.mjs --final",

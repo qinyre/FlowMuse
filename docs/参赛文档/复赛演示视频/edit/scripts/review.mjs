@@ -22,7 +22,7 @@ try {
   });
   const requested = process.argv.slice(2).map(Number).filter(Number.isFinite);
   for (const seconds of requested.length ? requested : sample ? [1, 3, 5.5, 10, 17, 24, 28, 30.5] : secondsToReview) {
-    await renderStill({serveUrl, composition, inputProps, frame: Math.floor(seconds * composition.fps), output: `../output/stills/v5.3-${sample ? 'sample-' : ''}${seconds.toFixed(1)}.png`, puppeteerInstance: browser});
+    await renderStill({serveUrl, composition, inputProps, frame: Math.floor(seconds * composition.fps), output: `../output/stills/v6-${sample ? 'sample-' : ''}${seconds.toFixed(1)}.png`, puppeteerInstance: browser});
     console.log(`已渲染 ${seconds}s`);
   }
 } finally {

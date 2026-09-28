@@ -33,8 +33,7 @@ export const DemoVideo = ({preview}: {preview: boolean}) => {
     </TransitionSeries>
     {media.narration && <Audio src={staticFile(media.narration)} />}
     {preview && <>
-      <div style={{position: 'absolute', top: 24, right: 35, fontSize: 22, letterSpacing: 1, color: '#536259', backgroundColor: '#F6F5F0F5', border: '1px solid #D9DFD6', borderRadius: 3, padding: '9px 15px'}}>实录审片 · {media.narration ? '字幕草案' : '待配音'}</div>
-      {cue && <div style={{position: 'absolute', bottom: 44, left: 125, right: 125, display: 'flex', justifyContent: 'center'}}><div style={{fontSize: 36, lineHeight: 1.5, textAlign: 'center', color: '#171A18', backgroundColor: '#F6F5F0F5', borderTop: '2px solid #D9DFD6', padding: '15px 30px', maxWidth: 1610}}>{cue.text}</div></div>}
+      {cue && <div style={{position: 'absolute', bottom: 22, left: 125, right: 125, display: 'flex', justifyContent: 'center'}}><div style={{fontSize: 36, lineHeight: 1.25, whiteSpace: 'pre-line', textAlign: 'center', color: '#171A18', backgroundColor: '#F6F5F0F5', borderTop: '2px solid #D9DFD6', padding: '8px 24px', maxWidth: 1670, boxSizing: 'border-box'}}>{cue.text}</div></div>}
       <div style={{position: 'absolute', bottom: 0, left: 0, height: 3, backgroundColor: '#087D5D', width: `${frame / (durationInFrames - 1) * 100}%`}} />
     </>}
   </AbsoluteFill>;

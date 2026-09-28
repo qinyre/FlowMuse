@@ -27,6 +27,8 @@ try {
   const original = source.scenes.find(s => s.id === 'library').duration;
   assert.equal(run(original).status, 0);
   const baseline = captions();
+  assert(baseline.every(caption => !caption.text.includes('。')), '字幕不得显示句号');
+  assert(baseline.some(caption => caption.text.includes('\n')), '句内句号须转为换行，不能把两句粘在一起');
   assert.equal(run(original + 7).status, 0);
   const shifted = captions();
   assert.equal(shifted[0].startMs, baseline[0].startMs);

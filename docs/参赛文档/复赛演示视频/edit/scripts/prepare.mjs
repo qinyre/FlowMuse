@@ -30,7 +30,7 @@ const missing = [];
 const clips = {};
 let start = 0;
 const cues = [];
-let guide = `# FlowMuse 复赛视频：实录剪辑与旁白草案\n\n当前剪辑 ${short(duration)}，1920 × 1080、30 fps。八段实录已按 cuts-v5.json 剪辑，保留源素材。此稿按实际镜头重写，不承诺未拍到的功能；字幕尚未与正式配音对齐。timeline.json 的 duration 控制章节净时长，steps.at 与 cues 从本段0秒起算，后续章节自动顺延。正式提交前须完成配音与字幕校准。历史功能盘点见《功能盘点与镜头取舍.md》，本轮取舍以此稿和实录剪辑计划为准。\n\n`;
+let guide = `# FlowMuse 复赛视频：实录剪辑与旁白\n\n当前剪辑 ${short(duration)}，1920 × 1080、30 fps。八段实录已按 cuts-v5.json 剪辑，保留源素材。此稿按实际镜头重写，不承诺未拍到的功能。timeline.json 的 duration 控制章节净时长，steps.at 与 cues 从本段0秒起算，后续章节自动顺延；v6的35条字幕已按用户提供的分段旁白落点校准。修改章节时长后须重新对齐旁白音轨，正式提交前仍须完整审听。历史功能盘点见《功能盘点与镜头取舍.md》，本轮取舍以此稿和实录剪辑计划为准。\n\n`;
 for (const scene of data.scenes) {
   assert(Number.isInteger(scene.duration) && scene.duration > 0, `${scene.id} 的 duration 须为正整数秒（剪辑计划，不是原始录屏长度）`);
   assert(scene.steps.every((step, i) => step.at >= 0 && step.at < scene.duration && (i === 0 || step.at > scene.steps[i - 1].at)), `${scene.id} 的步骤超出本段或顺序错误，请按剪辑结果调整 steps.at`);
@@ -66,7 +66,7 @@ for (const scene of data.scenes) {
 const captions = cues.map(([at, length, text], i) => {
   assert(at >= 0 && length > 0 && at + length <= duration && typeof text === 'string' && text.trim());
   if (i) assert(at >= cues[i - 1][0] + cues[i - 1][1], '字幕不可相互重叠');
-  return {text: text.replace(/。/g, ''), startMs: at * 1000, endMs: (at + length) * 1000, timestampMs: null, confidence: null};
+  return {text: text.replace(/。\s*$/, '').replace(/。/g, '\n'), startMs: at * 1000, endMs: (at + length) * 1000, timestampMs: null, confidence: null};
 });
 const narration = ['narration.wav', 'narration.mp3'].find(f => existsSync(resolve(root, 'public', f))) || null;
 if (!narration) missing.push('narration.wav 或 narration.mp3');
@@ -87,12 +87,14 @@ writeFileSync(resolve(root, 'src/captions.generated.json'), JSON.stringify(capti
 writeFileSync(resolve(project, '录制脚本.md'), guide.trimEnd() + '\n');
 writeFileSync(resolve(project, '旁白草案.srt'), captions.map((c, i) => `${i + 1}\n${stamp(c.startMs / 1000)} --> ${stamp(c.endMs / 1000)}\n${c.text}\n`).join('\n'));
 console.log(`时间轴通过：${duration} 秒，${data.scenes.length} 场景，${captions.length} 条旁白字幕。`);
-console.log(missing.length ? `尚缺：${missing.join('；')}` : '素材齐全，可以导出无字幕母版交给 Yaps。');
+console.log(missing.length ? `尚缺：${missing.join('；')}` : '素材齐全，可以导出旁白审片或无字幕母版。');
 if (final) assert.equal(missing.length, 0, '还不能导出成片：请补齐以上素材');
 if (process.argv.includes('--render-clean')) {
   assert(!/[<>:"/\\|?*\x00-\x1f]/.test(data.team), '队名包含 Windows 文件名不允许的字符');
   const output = resolve(project, 'output', `02-演示视频${data.team}-无字幕审片.mp4`);
   assert(!existsSync(output), '输出已存在，请先更名保留旧版本');
-  const result = spawnSync(process.execPath, [resolve(root, 'node_modules/@remotion/cli/remotion-cli.js'), 'render', 'src/index.ts', 'FlowMuseClean', output, '--codec=h264', '--crf=18', '--concurrency=3'], {cwd: root, stdio: 'inherit', windowsHide: true});
-  process.exit(result.status ?? 1);
+  const result = spawnSync(process.execPath, [resolve(root, 'node_modules/@remotion/cli/remotion-cli.js'), 'render', 'src/index.ts', 'FlowMuseClean', output, '--codec=h264', '--crf=18', '--concurrency=3', '--muted'], {cwd: root, stdio: 'inherit', windowsHide: true});
+  if (result.status !== 0) process.exit(result.status ?? 1);
+  const mux = spawnSync(process.execPath, [resolve(root, 'scripts/mux-narration.mjs'), output], {cwd: root, stdio: 'inherit', windowsHide: true});
+  process.exit(mux.status ?? 1);
 }
