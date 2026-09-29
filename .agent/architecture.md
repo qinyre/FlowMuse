@@ -124,7 +124,6 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | 手写笔压感 | `editor_core/src/input/` | `InputPolicySelector` 按设备分策略 |
 | 敏感数据存储 | `flutter_secure_storage_ohos` facade + `flutter_secure_storage` 平台实现 | 鸿蒙 facade 负责识别 `ohos`；标准包继续为其他端注册实现 |
 | 文件/PDF | service 层抽象接口 | 鸿蒙 Platform Channel,其他 pdfx/file_picker |
-| shader | `PencilShader`(构建期 impellerc 编译,pubspec `shaders:` 段) | 不支持的平台静默降级为确定性颗粒 Path |
 | fork 包 | `tool/vendor/` + `dependency_overrides` | code_assets 加 ohos 枚举,path_provider 含 ohos 支持 |
 
 **铁律**:共享代码(`lib/features/*`、`lib/shared/*`)禁止 `Platform.is*` 判断。详见 `conventions.md` 第 7 节。
@@ -169,18 +168,18 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 
 1. `main()` 调用 `WidgetsFlutterBinding.ensureInitialized()`。
 2. `dotenv.load(isOptional: true)` 加载可选 `.env` 配置。
-3. `PencilShader.init()` 初始化 shader,鸿蒙等不支持平台需要静默降级。
-4. `loadSavedThemePreset()` 从 SQLite 读取已保存主题。
-5. `runApp()` 启动 `ProviderScope`,并通过 `initialThemePresetProvider.overrideWithValue(...)` 注入初始主题。
-6. `FlowMuseApp` 构建 `MaterialApp.router`。
-7. `GoRouter` 以 `/library` 作为初始路由。
-8. `ShellRoute` 挂载 `AppShell`。
-9. `LibraryHomePage` 通过 `ref.watch(libraryIndexProvider)` 触发 `loadIndex()`。
+3. `loadSavedThemePreset()` 从 SQLite 读取已保存主题，与可选环境配置并行加载。
+4. `runApp()` 启动 `ProviderScope`,并通过 `initialThemePresetProvider.overrideWithValue(...)` 注入初始主题。
+5. `FlowMuseApp` 构建 `MaterialApp.router`。
+6. `GoRouter` 以 `/library` 作为初始路由。
+7. `ShellRoute` 挂载 `AppShell`。
+8. `LibraryHomePage` 通过 `ref.watch(libraryIndexProvider)` 触发 `loadIndex()`。
+
+经典铅笔统一用确定性颗粒 Path，新铅笔 V2 继续走自然介质渲染；不再打包或加载 Saber 铅笔 shader（2026-09-29）。
 
 启动卡顿/白屏排查优先级:
 1. **数据库迁移是否崩溃**(onUpgrade 抛异常 → openDatabase 失败)—— 见 `decisions.md` ADR-001
-2. PencilShader 是否在不支持平台未降级
-3. `loadSavedThemePreset()` 的 SQLite 读取是否异常
+2. `loadSavedThemePreset()` 的 SQLite 读取是否异常
 
 ---
 

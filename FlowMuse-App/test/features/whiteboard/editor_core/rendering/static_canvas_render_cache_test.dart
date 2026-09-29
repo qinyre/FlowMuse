@@ -3,14 +3,11 @@ import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/pencil_shader.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('静态缓存 miss/hit 与直绘逐像素相同，背景、叠色、视口和聚焦及时失效', () async {
-    await PencilShader.init();
-    addTearDown(PencilShader.resetForTesting);
     final adapter = RoughCanvasAdapter();
     final cache = StaticCanvasRenderCache();
     addTearDown(cache.dispose);

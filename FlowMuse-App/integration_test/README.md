@@ -41,7 +41,7 @@ Stop-Process -Id $capture.Id # 只结束本次主机日志采集器
 - Android：使用 `flutter devices` 返回的真机 deviceId，禁止用模拟器形成性能结论。
 - iOS/macOS/Windows/Web：当前只要求代码可编译；它们不能替代路线图规定的 HarmonyOS/Android 真机矩阵。
 - 只有结果中的 `measurementEligible=true` 才可能进入性能报告；Debug 结果仅用于排错。
-- 使用 `fullyLive` 绘帧、无测试指针十字的合成设备事件，并与正常启动一样初始化 `PencilShader`。这仍不是物理触控笔延迟测量。报告记录绘帧策略、输入来源和 shader 状态，汇总时不混用这些条件不同的场景。
+- 使用 `fullyLive` 绘帧、无测试指针十字的合成设备事件。这仍不是物理触控笔延迟测量。2026年9月29日起，正常启动与测试入口均不再加载铅笔 shader；新报告不输出 shader 可用状态。汇总器仍读取旧报告的 `pencilShaderAvailable` 字段（缺失按 false 处理），以免将历史 shader 渲染结果与颗粒 Path 结果混合比较；绘帧策略和输入来源也必须一致。
 
 ## 先校准，再跑矩阵
 

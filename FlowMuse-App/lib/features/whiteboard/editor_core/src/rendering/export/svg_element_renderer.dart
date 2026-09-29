@@ -403,7 +403,7 @@ class SvgElementRenderer {
 
     // 铅笔颗粒：小尺寸确定性 pattern（按元素 id 唯一，尺寸随笔宽），
     // 作为覆盖层叠加；查看器不支持 pattern 时主体轮廓仍可见。
-    // tile 与画布 shader 频率同源：freq = 4/size（场景坐标）→ 间距 size/4。
+    // 保留经典 SVG 纹理间距 size/4；画布颗粒使用独立的弧长采样 Path。
     if (profile.usesPencilTexture) {
       final tile = math.max(1.5, size / 4);
       buf.write('<defs>');

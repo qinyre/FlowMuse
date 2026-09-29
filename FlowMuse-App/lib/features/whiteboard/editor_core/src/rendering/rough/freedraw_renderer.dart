@@ -10,7 +10,6 @@ import '../../core/elements/brush_type.dart';
 import '../../input/outline_render_mode.dart';
 import '../../input/stroke_render_metrics.dart';
 import 'draw_style.dart';
-import 'pencil_shader.dart';
 
 /// Renders freehand drawing paths.
 ///
@@ -210,7 +209,6 @@ class FreedrawRenderer {
     BrushType brushType = BrushType.fountainPen,
     FreedrawTaperPhase taperPhase = FreedrawTaperPhase.full,
     double? wholeStrokeRawLength,
-    double? deviceScale,
   }) {
     if (points.isEmpty) return;
 
@@ -219,7 +217,7 @@ class FreedrawRenderer {
     // 是期望的笔迹宽度。直接用 strokeWidth 作为 size 基准。
     final size = profile.renderSize(style.strokeWidth);
     // 整条可见笔迹的原始折线长：本地/静态渲染即本列表弧长。draw 内算
-    // 一次供 buildOutline 与铅笔颗粒 skip 门共用（降级路径逐帧热路径，
+    // 一次供 buildOutline 与铅笔颗粒 skip 门共用（逐帧热路径，
     // 避免同一 O(n) 扫描重复 3 次）；远端分段渲染传入的整笔长原样透传。
     final visibleRawLength = wholeStrokeRawLength ?? _polylineLength(points);
 
@@ -274,39 +272,10 @@ class FreedrawRenderer {
       // 不隐式创建 saveLayer。
       ..blendMode = _blendModeOf(profile);
 
-    // 铅笔纹理（T5）：
-    // - shader 可用：复用应用级单实例，纹理频率按“画布（场景）坐标 +
-    //   笔宽”派生（freq = 4/size，除以当前设备缩放，视口缩放不改变
-    //   场景内的颗粒尺度），每元素 set uniform 后立即 drawPath（engine
-    //   逐 draw 快照 uniform，跨元素安全），保持一次主要轮廓绘制；
-    // - shader 不可用：确定性降级——由首点坐标、笔宽和点序号派生的
-    //   伪随机扰动生成一条复合颗粒 Path，最多一次额外 drawPath，
-    //   同输入两次重绘逐笔一致，禁止每帧随机与逐点 draw。
-    final usePencilTexture =
-        brushType == BrushType.pencil && profile.usesPencilTexture;
-    var pencilShaderApplied = false;
-    if (usePencilTexture) {
-      final shader = PencilShader.acquire();
-      final uniforms = PencilShader.uniforms();
-      if (shader != null && uniforms != null) {
-        final c = paint.color;
-        // [deviceScale]：录制离屏 Picture（远端湿墨冻结块）时 canvas 是
-        // 恒等矩阵，由调用方传入真实回放缩放，保证 shader 颗粒频率与
-        // 直接绘制同源；直接绘制传 null，按当前 canvas 矩阵推算。
-        final effectiveScale = deviceScale ?? canvasScale(canvas);
-        // apply 内部自捕获引擎层异常：失败返回 false 时实例已被永久
-        // 清理，本次与后续绘制都走下方确定性颗粒降级。
-        if (uniforms.apply(c, c.a, 4.0 / size / effectiveScale)) {
-          paint.shader = shader;
-          paint.color = const Color(0xFFFFFFFF); // shader 负责着色
-          pencilShaderApplied = true;
-        }
-      }
-    }
-
     canvas.drawPath(path, paint);
 
-    if (usePencilTexture && !pencilShaderApplied) {
+    // 经典铅笔统一使用确定性颗粒 Path：同输入同纹理，最多一次额外绘制。
+    if (brushType == BrushType.pencil && profile.usesPencilTexture) {
       final wholeLength = visibleRawLength;
       final grainPath = buildPencilGrainPath(
         points,
@@ -330,14 +299,7 @@ class FreedrawRenderer {
     );
   }
 
-  /// 当前画布的设备缩放（transform 的 X 轴向量模长），0 时兜底 1。
-  static double canvasScale(Canvas canvas) {
-    final m = canvas.getTransform();
-    final scale = math.sqrt(m[0] * m[0] + m[1] * m[1]);
-    return scale <= 0 ? 1.0 : scale;
-  }
-
-  /// 降级铅笔颗粒：沿中心线折线按弧长等距布点——基础步长为 size/3
+  /// 经典铅笔颗粒：沿中心线折线按弧长等距布点——基础步长为 size/3
   /// 场景距离，位置插值到精确弧长处。输入链只有最小距离过滤、点距
   /// 不均，按输入点下标取样会使颗粒密度随报点率/书写速度漂移，故必
   /// 须按实际弧长。超长笔迹（外部导入/无限画布）受 [maxGrainCount]
@@ -366,10 +328,7 @@ class FreedrawRenderer {
     // 执行，首轮后 nextAt=Infinity 且 Infinity<=Infinity 恒真——死循环。
     // 常规轨迹不受影响；Infinity/NaN 一律立即返回空 Path。
     if (!totalLength.isFinite) return path;
-    final step = math.max(
-      math.max(0.5, size / 3),
-      totalLength / maxGrainCount,
-    );
+    final step = math.max(math.max(0.5, size / 3), totalLength / maxGrainCount);
     final first = points.first;
     var grainIndex = 0;
     var segStartArc = 0.0;
@@ -382,18 +341,21 @@ class FreedrawRenderer {
       final segEndArc = segStartArc + segLen;
       final tx = dx / segLen;
       final ty = dy / segLen;
-      while (
-        grainIndex < maxGrainCount &&
-        nextAt <= segEndArc &&
-        nextAt <= totalLength + 1e-9
-      ) {
+      while (grainIndex < maxGrainCount &&
+          nextAt <= segEndArc &&
+          nextAt <= totalLength + 1e-9) {
         final t = (nextAt - segStartArc) / segLen;
         final cx = points[i].x + dx * t;
         final cy = points[i].y + dy * t;
         final remaining = totalLength - nextAt;
         if (nextAt >= skipStart && remaining >= skipEnd) {
           final h1 = PencilGrainHash.hash(first.x, first.y, size, grainIndex);
-          final h2 = PencilGrainHash.hash(first.y, size, first.x, grainIndex + 1);
+          final h2 = PencilGrainHash.hash(
+            first.y,
+            size,
+            first.x,
+            grainIndex + 1,
+          );
           final half = size / 2 * (0.3 + 0.6 * h1);
           final shift = (h2 - 0.5) * step * 0.5;
           final px = cx + tx * shift;
@@ -449,5 +411,14 @@ class FreedrawRenderer {
     }
 
     return path;
+  }
+}
+
+/// 由首点坐标、笔宽与点序号派生，保持经典铅笔颗粒的既有分布。
+abstract final class PencilGrainHash {
+  static double hash(double a, double b, double c, int index) {
+    final x = a * 12.9898 + b * 78.233 + c * 37.719 + index * 3.717;
+    final s = math.sin(x) * 43758.5453;
+    return s - s.floorToDouble();
   }
 }

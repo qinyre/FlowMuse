@@ -7,7 +7,6 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/editor/tool_type.d
 import 'package:flow_muse/features/whiteboard/editor_core/src/editor/tools/freedraw_tool.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/element_renderer.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/freedraw_renderer.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/pencil_shader.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/rough_canvas_adapter.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/outline_render_mode.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/ui/markdraw_controller.dart';
@@ -26,20 +25,9 @@ import '../fixtures/brush_stroke_fixtures.dart';
 /// - 提交侧以 `copyWithFreedraw(isComplete: false)` 归一化（收针差异是
 ///   书写固有，见计划书 §2.2），其余字段渲染入参等价；
 /// - 像素回读一律裸 test()（testWidgets 的 fake-async 内 toImage 永不
-///   完成，先例 highlighter_rendering_test.dart）；铅笔用 PencilShader
-///   真实加载，tearDown 恢复（先例 pencil_rendering_test.dart）。
+///   完成，先例 highlighter_rendering_test.dart）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUp(() async {
-    PencilShader.resetForTesting();
-    await PencilShader.init();
-  });
-  tearDown(() {
-    PencilShader.loader = (assetKey) => throw StateError('forced unavailable');
-    PencilShader.resetForTesting();
-    PencilShader.loader = ui.FragmentProgram.fromAsset;
-  });
 
   Future<void> pumpModeler() =>
       Future<void>.delayed(const Duration(milliseconds: 150));
@@ -167,7 +155,7 @@ void main() {
       expect(r1.digest, r2.digest, reason: '$brush 同入参下预览与提交管线必须一致');
       if (brush == BrushType.pencil) {
         // T4 起 pencil 走 v2：基底+最多三密度桶 ≤4 draw、0 saveLayer。
-        // v1 的 shader/颗粒互斥分支由 C2 显式锁 classicV1。
+        // v1 的颗粒路径由 C2 显式锁 classicV1。
         expect(
           r2.spy.drawCallCount,
           lessThanOrEqualTo(4),
@@ -279,10 +267,7 @@ void main() {
     }
   });
 
-  test('C2: v1 铅笔渲染分支互斥门禁（classicV1：shader 可用=1 次；降级=2 次）', () async {
-    // 锁定 v1 FreedrawRenderer 的 shader 分支（v1 元素永远走 classic，
-    // §3.1）。T4 起新 pencil 元素为 v2（无 shader、≤4 Path），由
-    // pencil_stroke_renderer_v2_test 断言。
+  test('C2: v1 铅笔预览与提交都用颗粒 Path，不依赖 shader', () async {
     v1StrokePair() async {
       final pair = await strokePair(BrushType.pencil);
       FreedrawElement toV1(FreedrawElement e) => e.copyWith(
@@ -299,19 +284,16 @@ void main() {
       );
     }
 
-    // shader 可用：主绘挂 shader，无颗粒第二 path、无 saveLayer。
-    final onPair = await v1StrokePair();
-    final on = renderCommands(onPair.preview);
-    expect(on.spy.shaderPathCount, 1, reason: 'shader 可用时主绘挂 shader');
-    expect(on.spy.drawCallCount, 1, reason: '互斥：不触发颗粒 Path');
-    expect(on.spy.saveLayerCount, 0);
-
-    // 强制降级：主绘 + 一次颗粒 drawPath，无 shader。
-    PencilShader.loader = (assetKey) => throw StateError('forced unavailable');
-    PencilShader.resetForTesting();
-    final offPair = await v1StrokePair();
-    final off = renderCommands(offPair.preview);
-    expect(off.spy.shaderPathCount, 0);
-    expect(off.spy.drawCallCount, 2, reason: '主绘 + 一次颗粒 drawPath');
+    final pair = await v1StrokePair();
+    final preview = renderCommands(pair.preview);
+    final committed = renderCommands(pair.committedAtPreviewInputs);
+    expect(preview.digest, committed.digest);
+    expect(preview.spy.shaderPathCount, 0);
+    expect(preview.spy.drawCallCount, 2, reason: '主绘 + 一次颗粒 drawPath');
+    expect(preview.spy.saveLayerCount, 0);
+    expect(
+      await pixelDigest(pair.preview),
+      await pixelDigest(pair.committedAtPreviewInputs),
+    );
   });
 }

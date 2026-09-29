@@ -24,7 +24,7 @@ enum FreedrawTaperPhase { full, headOnly, tailOnly, none }
 /// 五种笔刷的渲染描述单一真源。
 ///
 /// Raster、SVG、湿墨边界计算、命中/导出边界都读取本类；配置层只保存
-/// 无状态常量，shader 可用性、Path 缓存、Paint 等运行时对象不得放入。
+/// 无状态常量，Path 缓存、Paint 等运行时对象不得放入。
 ///
 /// 压力烘焙等价性前提：perfect_freehand 的半径公式为
 /// `size × easing(0.5 + thinning×(pressure−0.5))`，[encodePressure] 与
@@ -82,7 +82,7 @@ final class BrushRenderProfile {
   final BrushCapStyle capStyle;
   final BrushCompositeMode compositeMode;
 
-  /// 是否使用铅笔纹理（只表示“可使用”，不保证 shader 可用）。
+  /// 是否使用经典铅笔颗粒纹理。
   final bool usesPencilTexture;
 
   /// perfect_freehand 包默认（stroke_options.dart：0.5/0.5/0.5），
@@ -192,8 +192,7 @@ final class BrushRenderProfile {
   static const double _kDefaultStreamline = 0.5;
 
   static BrushRenderProfile forType(BrushType type) => switch (type) {
-    // 铅笔：半透明 + 低延迟跟手；纹理由 PencilShader/降级路径提供。
-    // 铅笔：半透明 + 低延迟跟手；纹理由 PencilShader/降级路径提供。
+    // 铅笔：半透明 + 低延迟跟手；经典纹理由确定性颗粒 Path 提供。
     // 起笔 taper 因包内 runningLength<size 丢点，可见渐变需 ≥3×size。
     BrushType.pencil => const BrushRenderProfile(
       sizeScale: 0.82,

@@ -6,13 +6,12 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dar
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/outline_render_mode.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/draw_style.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/freedraw_renderer.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/pencil_shader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'canvas_spy.dart';
 import '../fixtures/brush_stroke_fixtures.dart';
 
-/// 铅笔纹理与确定性降级（Issue #5 T5 / A9、A10）。
+/// 经典铅笔确定性颗粒纹理（Issue #5 T5 / A9、A10）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -56,22 +55,11 @@ void main() {
     return bytes!.buffer.asUint8List();
   }
 
-  tearDown(() {
-    PencilShader.loader = (assetKey) => throw StateError('forced unavailable');
-    PencilShader.resetForTesting();
-    PencilShader.loader = ui.FragmentProgram.fromAsset;
-  });
-
-  group('shader 路径（测试环境真实编译产物）', () {
-    setUp(() async {
-      PencilShader.resetForTesting();
-      await PencilShader.init();
-    });
-
+  group('经典铅笔颗粒纹理', () {
     test('A9: 同一元素连续重绘像素摘要逐字节一致', () async {
       final a = await render(slowArc.points, 4);
       final b = await render(slowArc.points, 4);
-      expect(a, equals(b), reason: 'shader 纹理必须确定（无每帧随机）');
+      expect(a, equals(b), reason: '颗粒纹理必须确定（无每帧随机）');
     });
 
     test('A9: 连续 100 次命令摘要一致（drawCall/blend/shader 计数）', () {
@@ -90,7 +78,8 @@ void main() {
         }
       }
       expect(first[0], lessThanOrEqualTo(2), reason: '铅笔最多 1 主绘 + 1 纹理');
-      expect(first[1], 1, reason: 'shader 路径挂 shader 的绘制恰一次');
+      expect(first[0], 2, reason: '主体和颗粒各绘制一次');
+      expect(first[1], 0, reason: '经典铅笔不再使用 shader');
       recorder.endRecording().dispose();
     });
 
@@ -120,34 +109,13 @@ void main() {
         reason: '主体轮廓不因纹理失控',
       );
     });
-
-    test('P1: 实例创建失败永久降级，不逐帧重试', () {
-      var calls = 0;
-      PencilShader.instanceFactoryForTesting = (program) {
-        calls++;
-        throw StateError('forced instance failure');
-      };
-      for (var i = 0; i < 3; i++) {
-        expect(PencilShader.acquire(), isNull);
-        expect(PencilShader.uniforms(), isNull);
-      }
-      expect(calls, 1, reason: '实例创建失败后不得再次尝试创建');
-      expect(PencilShader.isAvailable, isFalse, reason: 'program 已清空，永久降级');
-    });
   });
 
-  group('降级路径（shader 强制失败）', () {
-    setUp(() {
-      PencilShader.loader = (assetKey) =>
-          throw StateError('forced unavailable');
-      PencilShader.resetForTesting();
-    });
-
-    test('A10: shader 失败仍可绘制且确定（逐字节一致）', () async {
-      expect(PencilShader.isAvailable, isFalse);
+  group('经典铅笔绘制边界', () {
+    test('A10: 无需初始化即可绘制且确定（逐字节一致）', () async {
       final a = await render(slowArc.points, 4);
       final b = await render(slowArc.points, 4);
-      expect(a, equals(b), reason: '降级颗粒必须确定（无每帧随机）');
+      expect(a, equals(b), reason: '颗粒必须确定（无每帧随机）');
       // 有实际内容（非空白）
       expect(a.any((byte) => byte != 255), isTrue, reason: '必须画出笔迹');
     });
@@ -167,7 +135,7 @@ void main() {
       recorder.endRecording().dispose();
     });
 
-    test('A10: 降级颗粒不越出主体轮廓（bounds 受控）', () {
+    test('A10: 颗粒不越出主体轮廓（bounds 受控）', () {
       final recorder = ui.PictureRecorder();
       final spy = SpyCanvas(ui.Canvas(recorder));
       drawPencil(spy, slowArc.points, 6);
@@ -184,13 +152,7 @@ void main() {
       recorder.endRecording().dispose();
     });
 
-    test('A10: 降级纹理与光滑钢笔线可区分（非完全光滑）', () async {
-      PencilShader.loader = ui.FragmentProgram.fromAsset;
-      PencilShader.resetForTesting();
-      // 用降级口径渲染铅笔
-      PencilShader.loader = (assetKey) =>
-          throw StateError('forced unavailable');
-      PencilShader.resetForTesting();
+    test('A10: 颗粒纹理与光滑钢笔线可区分（非完全光滑）', () async {
       final pencilBytes = await render(slowArc.points, 4);
 
       // 同几何同宽的钢笔（无纹理）对照
@@ -222,7 +184,7 @@ void main() {
       }
 
       final fountainBytes = await renderFountain();
-      // 尺寸不同（sizeScale 0.82 vs 1.0）本就不同；关键是降级铅笔自身
+      // 尺寸不同（sizeScale 0.82 vs 1.0）本就不同；关键是经典铅笔自身
       // 有颗粒（与自身主体光滑面差异）——已由“颗粒 path 存在”与确定性
       // 用例证明，这里再锁一道：两者字节不同且铅笔侧有中间调像素。
       expect(pencilBytes, isNot(equals(fountainBytes)));
@@ -231,7 +193,7 @@ void main() {
         final v = pencilBytes[i];
         if (v > 60 && v < 220) midTonePencil++;
       }
-      expect(midTonePencil, greaterThan(0), reason: '降级铅笔必须有颗粒中间调（不完全光滑）');
+      expect(midTonePencil, greaterThan(0), reason: '铅笔必须有颗粒中间调（不完全光滑）');
     });
   });
 
