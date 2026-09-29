@@ -12,7 +12,6 @@ import '../core/math/math.dart';
 import 'natural_media/brush_pen_stroke_renderer_v2.dart';
 import 'natural_media/pencil_stroke_renderer_v2.dart';
 import 'rough/draw_style.dart';
-import 'rough/freedraw_renderer.dart';
 import 'rough/rough_adapter.dart';
 import 'viewport_state.dart';
 
@@ -64,11 +63,7 @@ class RemoteWetInkRenderCache {
               (1 << (pointIndex & 7))) !=
           0;
 
-  void sync(
-    List<RemoteWetInkStrokeSnapshot> snapshots,
-    RoughAdapter adapter, {
-    double? deviceScale,
-  }) {
+  void sync(List<RemoteWetInkStrokeSnapshot> snapshots, RoughAdapter adapter) {
     final activeIds = {for (final snapshot in snapshots) snapshot.strokeId};
     final removedIds = [
       for (final strokeId in _strokes.keys)
@@ -86,11 +81,7 @@ class RemoteWetInkRenderCache {
         snapshot.strokeId,
         _RemoteStrokePictureCache.new,
       );
-      recordedGeometryPointCount += cache.sync(
-        snapshot,
-        adapter,
-        deviceScale: deviceScale,
-      );
+      recordedGeometryPointCount += cache.sync(snapshot, adapter);
     }
   }
 
@@ -210,14 +201,7 @@ class RemoteWetInkPainter extends CustomPainter {
     canvas.scale(viewport.zoom);
     canvas.translate(-viewport.offset.dx, -viewport.offset.dy);
     _clipToPages(canvas);
-    // 缓存同步/冻结块录制放在视口变换之后：录制离屏 Picture 时 canvas
-    // 是恒等矩阵，显式取真实回放缩放传入，铅笔 shader 颗粒频率与直接
-    // 绘制同源（缩放/像素密度不改变场景内颗粒尺度）。
-    cache.sync(
-      strokes,
-      adapter,
-      deviceScale: FreedrawRenderer.canvasScale(canvas),
-    );
+    cache.sync(strokes, adapter);
     if (strokes.isEmpty) {
       canvas.restore();
       return;
@@ -356,11 +340,7 @@ class _RemoteStrokePictureCache {
           .map((block) => block.minStartIndex)
           .toList(growable: false);
 
-  int sync(
-    RemoteWetInkStrokeSnapshot snapshot,
-    RoughAdapter adapter, {
-    double? deviceScale,
-  }) {
+  int sync(RemoteWetInkStrokeSnapshot snapshot, RoughAdapter adapter) {
     var recordedPoints = 0;
     final activeLevels = {
       for (final block in snapshot.frozenBlocks) block.level,
@@ -400,8 +380,6 @@ class _RemoteStrokePictureCache {
               ? FreedrawTaperPhase.headOnly
               : FreedrawTaperPhase.none,
           wholeStrokeRawLength: wholeLength,
-          // 离屏录制 canvas 恒等：显式传回放缩放，铅笔颗粒频率与直接绘制同源。
-          deviceScale: deviceScale,
           ownsStrokeHead: ownsHead,
           ownsStrokeTail: ownsTail,
         );
@@ -480,7 +458,6 @@ void _drawSegment(
   RoughAdapter adapter, {
   FreedrawTaperPhase taperPhase = FreedrawTaperPhase.none,
   double? wholeStrokeRawLength,
-  double? deviceScale,
   bool ownsStrokeHead = false,
   bool ownsStrokeTail = false,
 }) {
@@ -584,6 +561,5 @@ void _drawSegment(
     pressureEncoded: true,
     taperPhase: taperPhase,
     wholeStrokeRawLength: wholeStrokeRawLength,
-    deviceScale: deviceScale,
   );
 }

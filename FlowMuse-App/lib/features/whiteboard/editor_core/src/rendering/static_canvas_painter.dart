@@ -15,7 +15,6 @@ import '../input/active_preview_metrics_probe.dart';
 import 'collaboration_focus_alpha.dart';
 import 'element_renderer.dart';
 import 'rough/rough_adapter.dart';
-import 'rough/pencil_shader.dart';
 import 'text_renderer.dart';
 import 'viewport_culling.dart';
 import 'viewport_state.dart';
@@ -840,17 +839,14 @@ class StaticCanvasRenderCache {
   Size? _size;
   List<double>? _transform;
   Matrix4? _inverseTransform;
-  bool? _shaderAvailable;
 
   void paint(Canvas canvas, Size size, StaticCanvasPainter painter) {
     final previous = _painter;
     final transform = canvas.getTransform();
-    final shaderAvailable = PencilShader.isAvailable;
     if (_picture == null ||
         _size != size ||
         previous == null ||
         !listEquals(_transform, transform) ||
-        _shaderAvailable != shaderAvailable ||
         painter.shouldRepaint(previous)) {
       final inverse = Matrix4.copy(Matrix4.fromFloat64List(transform));
       if (inverse.invert() == 0) {
@@ -858,8 +854,7 @@ class StaticCanvasRenderCache {
         return;
       }
       final recorder = ui.PictureRecorder();
-      // Preserve the incoming transform: classic pencil shader frequency reads
-      // Canvas.getTransform(), including device/ancestor scaling and rotation.
+      // Record with the same transform as direct painting; invert it on replay.
       final recordingCanvas = Canvas(recorder)..transform(transform);
       painter._paintScene(recordingCanvas, size);
       final picture = recorder.endRecording();
@@ -869,7 +864,6 @@ class StaticCanvasRenderCache {
       _size = size;
       _transform = transform;
       _inverseTransform = inverse;
-      _shaderAvailable = shaderAvailable;
     }
     canvas.save();
     canvas.transform(_inverseTransform!.storage);
@@ -884,6 +878,5 @@ class StaticCanvasRenderCache {
     _size = null;
     _transform = null;
     _inverseTransform = null;
-    _shaderAvailable = null;
   }
 }

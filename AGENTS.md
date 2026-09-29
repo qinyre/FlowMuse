@@ -214,7 +214,7 @@ lib/
 | ------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------- |
 | Platform Channel 调用     | catch `PlatformException` + `MissingPluginException`，返回 `null` 或默认值 | `try { ... } on PlatformException { return null; }`   |
 | 数据库操作                | 让异常向上抛到 ViewModel 层，由 UI 展示 SnackBar                           | `catch (error) { _showCreateError(context, error); }` |
-| 非关键初始化（如 shader） | try-catch + 静默降级，**不能阻塞启动**                                     | `try { await init(); } catch (_) { /* 降级 */ }`      |
+| 非关键初始化 | try-catch + 静默降级，**不能阻塞启动**                                     | `try { await init(); } catch (_) { /* 降级 */ }`      |
 | 网络请求                  | catch 后区分超时/连接拒绝/其他，分别给用户可理解的提示                     | 见 `ink_recognition_repository.dart`                  |
 | 用户操作失败              | 用 `ScaffoldMessenger.showSnackBar` 提示，**不要用 dialog 打断用户**       | 见 `library_sidebar.dart` 的 `_showCreateError`       |
 | 不可恢复的致命错误        | 在 `main()` 初始化阶段才允许崩溃，其余位置必须兜底                         | —                                                     |
@@ -249,7 +249,6 @@ lib/
 | 手写笔压感            | 通过 `InputPolicySelector` 按设备分策略                     | 在 Tool 里硬编码设备判断                 |
 | 文件选择/保存/PDF渲染 | 鸿蒙走 Platform Channel，封装在 service 层                  | UI 层直接调平台 API                      |
 | 路径提供器            | 通过 `dependency_overrides` 指向 vendor 版本                | 在 pubspec 直接锁版本                    |
-| shader 不支持         | `PencilShader` 静默降级                                     | 抛异常崩溃                               |
 
 **铁律：共享代码（`lib/features/*`、`lib/shared/*`）里禁止出现 `Platform.is*` / `if (operatingSystem == ...)` 的分支判断。** 平台差异一律走条件导入或抽象接口 + 平台实现。
 

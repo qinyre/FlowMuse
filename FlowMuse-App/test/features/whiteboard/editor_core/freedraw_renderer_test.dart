@@ -2,7 +2,6 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/elem
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/math/math.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/outline_render_mode.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/freedraw_renderer.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/pencil_shader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fixtures/brush_stroke_fixtures.dart';
@@ -98,19 +97,6 @@ void main() {
   });
 
   group('T0 缺陷探针（复现证据，后续任务修复后反转）', () {
-    test('P1(已修复): shaders 段注册后 test 环境加载成功（T1）', () async {
-      // Given/When: 测试环境加载 flutter.shaders 注册的编译产物
-      await PencilShader.init();
-
-      // Then: impellerc 编译产物可被 FragmentProgram.fromAsset 加载。
-      // 修复前注册在 assets 段（GLSL 源文本原样拷贝），加载必失败。
-      expect(
-        PencilShader.isAvailable,
-        isTrue,
-        reason: 'shaders 段产物应编译并可加载（原缺陷：assets 段死代码）',
-      );
-    });
-
     test('P4: 单点输入可见性（T2 后 taper 暂关已可见；T3 引入 taper 后由 <3×size 门控保持）', () {
       for (final brush in [BrushType.pencil, BrushType.brushPen]) {
         final outline = FreedrawRenderer.buildOutline(

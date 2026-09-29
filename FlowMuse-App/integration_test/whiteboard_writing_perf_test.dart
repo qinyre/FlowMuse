@@ -15,7 +15,6 @@ import 'package:flow_muse/features/whiteboard/editor_core/src/input/stroke_rende
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_report.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/input/writing_performance_manifest.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/config/writing_feature_flags.dart';
-import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/rough/pencil_shader.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'fixtures/scene_fixtures.dart';
@@ -51,7 +50,6 @@ void main() {
   // Let app-requested frames run, without test pointer crosshairs/decay frames.
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
   binding.shouldPropagateDevicePointerEvents = true;
-  setUpAll(PencilShader.init);
   if (_calibrateReplay) {
     _registerCalibration(binding);
     return;
@@ -252,7 +250,6 @@ void main() {
                   : 'debug',
               'framePolicy': binding.framePolicy.name,
               'inputSource': 'synthetic_device_events',
-              'pencilShaderAvailable': PencilShader.isAvailable,
               'platform': defaultTargetPlatform.name,
               'deviceClass': _deviceClass,
               'deviceId': _deviceId,

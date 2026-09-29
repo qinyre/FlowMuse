@@ -336,9 +336,11 @@ local_database_path.dart           # 条件导出(编译期选择)
 
 ## ADR-011:PencilShader 在不支持平台静默降级,不阻塞启动
 
-- **状态**:已采纳
+- **状态**:已取代（2026-09-29 移除 shader，见下方说明；后文保留历史决策）
 - **日期**:2026-07-11
 - **关联文件**:`lib/main.dart`、`lib/features/whiteboard/editor_core/src/rendering/rough/pencil_shader.dart`
+
+2026-09-29：依用户明确要求移除 Saber shader 及加载器，经典铅笔统一使用已有颗粒 Path，无需 shader 初始化或降级状态。后文的加载要求仅为历史记录，不适用于当前版本。见 `docs/研发记录/plans/2026-09-29-remove-saber-pencil-shader.md`。
 
 ### 背景
 
@@ -626,7 +628,7 @@ Issue #8 需要元素创建者分组视图（归属显示与聚焦）。游客�
 - 新增 `BrushRenderProfile.forType` 作为五笔渲染配置单一真源(sizeScale/opacityScale/thinningBase+Span/simulatedThinning/taper 距离/capStyle/compositeMode),Raster(含本地/远端湿墨)与 SVG 导出、命中边界共用。
 - 压感灵敏度在笔迹创建时由 `_encodeStrokePressure` 烘焙进点序列,`customData.flowMuse.pressureEncoding="1"` 标记;渲染端对带标记笔迹按全灵敏度重放,旧笔迹按出厂默认灵敏度;全局灵敏度的渲染依赖删除(工具栏滑块仅对压感笔形可见,偏好仍保留)。
 - 收锋(taper)按绝对距离判据(距端点 1×size 内 65%、2×size 内 85%),远端湿墨分段描边用 FreedrawTaperPhase(full/headOnly/tailOnly/none)保证整笔收针不被分段破坏。
-- 荧光笔用包原生平头端帽(StrokeEndOptions cap:false)+ BlendMode.darken(禁 multiply/modulate,其 alpha 语义会吞噬透明层);铅笔纹理走构建期编译的 Fragment Shader(pubspec `shaders:` 段),不支持的端降级为确定性颗粒 Path(收锋区跳过)。
+- 荧光笔用包原生平头端帽(StrokeEndOptions cap:false)+ BlendMode.darken(禁 multiply/modulate,其 alpha 语义会吞噬透明层);经典铅笔纹理自 2026-09-29 起统一采用确定性颗粒 Path(收锋区跳过)，原 Saber Fragment Shader 已移除。
 - 可视边界收敛 `elementVisualBounds`(size×(0.5+maxThinning×0.5)+2),Scene 命中/sceneBounds/ExportBounds/湿墨 margin 共用,删除 kMaxBrushSizeScale 第二套宽度表。
 
 ### 理由
@@ -671,7 +673,7 @@ T0 目标纸(用户确认)锁定 HB 铅笔与软头毛笔的自然介质质感:�
 ### 遗留约束
 
 - 新增笔形走 v2 必须同时落六处:BrushRenderProfile 常数、sampler 分支、Canvas 渲染器、SVG `_render*V2`、elementVisualBounds 分支、LiveInkStyle renderVersion 白名单;缺一处即三处口径漂移。
-- 改几何/种子/曲线常数必须 bump `NaturalMediaPathCache.geometryVersion`,跑 natural_media 全套(687 测试,含 v1-lock)与验收矩阵;v1 任何像素变化都是回归。
+- 改 V2 几何/种子/曲线常数必须 bump `NaturalMediaPathCache.geometryVersion`,跑 natural_media 全套与验收矩阵。V1 像素保持稳定；唯一已授权例外是 2026-09-29 移除 Saber shader，经典铅笔改用原有颗粒 Path，见对应移除计划。其他笔形与 V2 不受该例外影响。
 - `strokeSeedOf(strokeId)` 是笔迹视觉身份:live strokeId 必须等于最终 ElementId(`ToolOverlay.creationStrokeId` 通路),预览/提交/远端三链路不得各自造 id,否则同笔三帧颗粒不一致。
 - 缓存只对整笔静态渲染(isComplete=true)生效:调用方传 ownedEdgeStart、让渡起收所有权或元素未完成即自动绕过;不得手工构造缓存键,键字段变更须同步 keyFor 与注释里的"烘进 Picture"清单。
 

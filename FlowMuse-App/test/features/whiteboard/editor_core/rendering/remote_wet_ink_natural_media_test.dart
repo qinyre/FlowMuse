@@ -425,7 +425,6 @@ class _V1SpyAdapter extends RoughCanvasAdapter {
     bool pressureEncoded = false,
     dynamic taperPhase,
     double? wholeStrokeRawLength,
-    double? deviceScale,
   }) {
     calls++;
     super.drawFreedraw(
@@ -439,7 +438,6 @@ class _V1SpyAdapter extends RoughCanvasAdapter {
       pressureEncoded: pressureEncoded,
       taperPhase: taperPhase,
       wholeStrokeRawLength: wholeStrokeRawLength,
-      deviceScale: deviceScale,
     );
   }
 }

@@ -5,7 +5,6 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'app/flow_muse_app.dart';
 import 'app/view_models/theme_view_model.dart';
-import 'features/whiteboard/editor_core/src/rendering/rough/pencil_shader.dart';
 
 Future<void> main() async {
   // 房间密钥保留在 fragment；SDK 在非 Web 平台自动使用 no-op。
@@ -14,10 +13,7 @@ Future<void> main() async {
 
   // 并行初始化，减少 runApp 前的等待时间，缩小 OnPreDrawListener 触发窗口
   final (_, initialThemePreset) = await (
-    Future.wait([
-      dotenv.load(fileName: 'assets/config/app.env', isOptional: true),
-      PencilShader.init(), // 铅笔纹理 shader（不支持的平台静默降级）
-    ]),
+    dotenv.load(fileName: 'assets/config/app.env', isOptional: true),
     loadSavedThemePreset(),
   ).wait;
   runApp(
