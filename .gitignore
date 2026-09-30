@@ -71,6 +71,10 @@ docs/验收材料/
 docs/参赛文档/*
 !docs/参赛文档/复赛演示视频/
 
+# Software copyright application materials are local-only.
+/docs/软件著作权申请资料/
+/docs/FlowMuse-软著申请资料-*.zip
+
 # Crash dumps (may contain sensitive memory content)
 *.dmp
 
