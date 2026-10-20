@@ -75,3 +75,11 @@
 - 兼容性：保留 JSON v2 备份、SQLite schema v5、现有 SCENE_INIT/SCENE_UPDATE 与端到端加密；未新增依赖，未修改原生平台或 vendor。
 - 已知边界：原场景文件已丢失的旧引用备份无法补回正文；失败恢复可能留下无引用暂存文件；持续慢写盘暂不合并排队快照。代码旁标记了后两项 shortcut。
 - 未进行鸿蒙/Android 真机与现场弱网验收，未部署或推送。五项修复按功能小步提交，撤销重做版本修正单列一次提交。
+
+### PR #64 CI 依赖一致性修复
+
+- 失败运行：Quality #282，Go 与 Flutter analyze 通过；Flutter test 在测试开始前编译 `objective_c` hook 失败，提示 `Architecture.arm64e` 不存在。
+- CI 使用默认 pub.dev，而已提交锁文件使用 pub.flutter-io.cn，切换源导致重新解析依赖，`objective_c` 从本地验证的 9.4.1 升到 9.6.2，与现有 `code_assets` 鸿蒙 fork 不兼容。
+- Flutter job 对齐锁文件源，并使用 `flutter pub get --enforce-lockfile`；analyze/test 加 `--no-pub`，保持获取依赖后版本不变。沿用已有依赖和 vendor，不修改应用逻辑、不跳过检查。
+- 锁文件校验方式参见 [Dart pub get 文档](https://dart.dev/tools/pub/cmd/pub-get#enforce-lockfile)，源配置参见 [pub 环境变量](https://dart.dev/tools/pub/environment-variables#pub_hosted_url)。
+- 本地复核：`flutter pub get --enforce-lockfile` 成功且锁文件无差异；`flutter analyze --no-pub` 无问题；`flutter test --no-pub --reporter expanded` 1803 项通过、5 项既有跳过。日志位于 `FlowMuse-App/build/ci-pub-get.log`、`ci-fixed-analyze.log`、`ci-fixed-all-tests.log`。本机检查使用与 CI 一致的 SDK 占位目录，不作为 HAP 构建证据。
