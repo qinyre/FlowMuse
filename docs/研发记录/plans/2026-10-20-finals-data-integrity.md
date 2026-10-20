@@ -9,7 +9,7 @@
 
 1. 协作期间撤销、重做保留远端新增、修改和删除，包括落笔期间收到的更新。
 2. 本地与 WebDAV 备份包含独立场景文件的实际内容；缺失引用不得静默覆盖现有资料。
-3. 快照正在保存时退出协作可完成，失败不得伪装成功或丢弃待保存状态。
+3. 快照正在保存时退出协作可完成，上传成功和失败都能释放等待，保持原有错误通道上报。
 4. 强制全量同步能够补回已标为发送、但对端没有收到的元素。
 5. 本地自动保存失败保留待保存状态、可重试，保存状态正确显示。
 
@@ -48,3 +48,8 @@
 - 本地/WebDAV 共用的 JSON v2 导出展开实际正文；恢复在清库前验证引用，大场景采用独立暂存文件，不覆盖现有正文文件。
 - `flutter test --no-pub test/features/settings test/features/whiteboard/whiteboard_scene_repository_test.dart`：8 项通过。覆盖新设备恢复、缺失文件拒绝、事务失败保留原库与文件、旧 v2 本机引用兼容。
 - 修改文件的 `flutter analyze --no-pub ...` 无问题；备份 v2、数据库 schema 和 WebDAV 上传协议不变。
+
+### 3. 保存中退出协作
+
+- 删除提前使会话失效的操作；由既有 reset 在快照等待结束后统一递增会话代次，保存任务的 finally 可以正常清理标记。
+- `flutter test --no-pub test/features/whiteboard/collaboration/collaboration_snapshot_retry_test.dart test/features/whiteboard/collaboration/collaboration_join_cancel_test.dart`：5 项通过，覆盖上传成功/失败退出及现有退避、旧房隔离。

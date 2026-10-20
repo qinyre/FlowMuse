@@ -1376,7 +1376,6 @@ class CollaborationRepository {
       fileId.length > 8 ? fileId.substring(0, 8) : fileId;
 
   Future<void> stop() async {
-    _roomSessionGeneration++;
     await forceFlushSnapshot();
     await _resetLocalState();
     await _transport.disconnect();
