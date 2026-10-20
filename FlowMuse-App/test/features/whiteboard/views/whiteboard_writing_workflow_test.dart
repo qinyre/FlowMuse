@@ -914,7 +914,7 @@ void main() {
     controller.undo();
     await tester.pump(const Duration(milliseconds: 200));
     await _drainIo(tester, container);
-    expect(_ink(controller), isEmpty);
+    expect(_ink(controller).single.id.value, 'workflow-long-remote');
     expect(
       received
           .expand((message) => message.elements)
@@ -925,50 +925,60 @@ void main() {
           ),
       isTrue,
     );
+    expect(
+      received
+          .expand((message) => message.elements)
+          .any(
+            (element) =>
+                element['id'] == 'workflow-long-remote' &&
+                element['isDeleted'] == true,
+          ),
+      isFalse,
+    );
+    controller.redo();
+    await tester.pump(const Duration(milliseconds: 200));
+    await _drainIo(tester, container);
+    expect(_ink(controller), hasLength(2));
     await tester.pumpWidget(const SizedBox.shrink());
     await _drainIo(tester, container);
   });
 
-  test(
-    'known_remote_undo_preserves_new_elements',
-    () {
-      final controller = MarkdrawController()..switchTool(ToolType.freedraw);
-      addTearDown(controller.dispose);
-      controller.onPointerDown(
-        const PointerDownEvent(
-          position: Offset(100, 100),
-          kind: PointerDeviceKind.stylus,
-        ),
-      );
-      controller.onPointerMove(
-        const PointerMoveEvent(
-          position: Offset(150, 150),
-          kind: PointerDeviceKind.stylus,
-        ),
-      );
-      controller.applyRemoteElements([
-        RectangleElement(
-          id: const ElementId('remote-during-stroke'),
-          x: 300,
-          y: 300,
-          width: 40,
-          height: 40,
-        ),
-      ]);
-      controller.onPointerUp(
-        const PointerUpEvent(
-          position: Offset(150, 150),
-          kind: PointerDeviceKind.stylus,
-        ),
-      );
-      controller.undo();
-      expect(
-        controller.currentScene.activeElements.whereType<RectangleElement>(),
-        hasLength(1),
-      );
-    },
-    skip: '既有协作历史问题：整场景快照撤销会回退远端新增；用 --run-skipped 单独复现，见第二轮验证记录。',
-  );
+  test('known_remote_undo_preserves_new_elements', () {
+    final controller = MarkdrawController()..switchTool(ToolType.freedraw);
+    addTearDown(controller.dispose);
+    controller.onPointerDown(
+      const PointerDownEvent(
+        position: Offset(100, 100),
+        kind: PointerDeviceKind.stylus,
+      ),
+    );
+    controller.onPointerMove(
+      const PointerMoveEvent(
+        position: Offset(150, 150),
+        kind: PointerDeviceKind.stylus,
+      ),
+    );
+    controller.applyRemoteElements([
+      RectangleElement(
+        id: const ElementId('remote-during-stroke'),
+        x: 300,
+        y: 300,
+        width: 40,
+        height: 40,
+      ),
+    ]);
+    controller.onPointerUp(
+      const PointerUpEvent(
+        position: Offset(150, 150),
+        kind: PointerDeviceKind.stylus,
+      ),
+    );
+    controller.undo();
+    expect(
+      controller.currentScene.activeElements.whereType<RectangleElement>(),
+      hasLength(1),
+    );
+  });
 }
 
 class _TrackedCollaborationRepository extends CollaborationRepository {

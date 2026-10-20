@@ -781,6 +781,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _collaborationAdapter.applyRemoteScene(
         bumpedScene,
         closeTransientUi: false,
+        recordRemoteChanges: false,
       );
     } finally {
       _applyingRemoteScene = false;

@@ -257,6 +257,7 @@ dependency_overrides:
 - `Tool`(工具)不直接改状态,而是产出 `ToolResult`(sealed class)。
 - `EditorState.applyResult(result)` 用 switch 表达式把 result 折叠成新状态。
 - `HistoryManager` 存 Scene 快照(非 diff),undo/redo 靠快照切换。
+- 远端胜出元素和附件另作只读覆盖记录，撤销/重做按 version/nonce 合入，避免回退其他成员；本地撤销的版本规范化不记为远端编辑。
 
 ### 理由
 

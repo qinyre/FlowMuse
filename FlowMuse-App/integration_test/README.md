@@ -72,7 +72,7 @@ flutter test test/features/whiteboard/views/whiteboard_writing_workflow_test.dar
 flutter test test/features/whiteboard/views/whiteboard_writing_workflow_test.dart --dart-define=FLOWMUSE_LAYERED_WET_INK=true
 ```
 
-该文件有一个显式跳过的既有协作撤销缺陷，不能把其他场景通过解释成这个问题已解决。可用 `--run-skipped --plain-name known_remote_undo_preserves_new_elements` 单独复现；第二轮验证记录说明其影响和后续验收条件。
+协作撤销回归 `known_remote_undo_preserves_new_elements` 已纳入默认运行；`test/features/whiteboard/editor_core/collaboration_undo_test.dart` 同时覆盖远端新增、修改、删除、重复快照和重做。
 
 协作 CPU 使用独立 target，输出不得解释为 UI 帧率：
 
