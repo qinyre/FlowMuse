@@ -58,3 +58,10 @@
 
 - 显式全量同步沿原发送队列发送所有可同步元素，保留 SCENE_UPDATE 类型；普通增量继续去重。完整场景取代未发送批次，不改变 LWW 或加密协议。
 - `flutter test --no-pub test/features/whiteboard/collaboration`：118 项通过，新增漏收后同版本补发、删除墓碑、恢复快照后本地变更补发和普通重复包去重验证。
+
+### 5. 保存失败恢复
+
+- 写盘/封面/元数据保存作为串行队列执行，捕获提交时场景；失败恢复待保存标记，仅最后一版完成才能标记已保存。
+- 接通未保存、保存中、已保存、保存失败及重试；返回等待已排队保存，失败保留页面。关闭自动保存、后台与 dispose 原有保存路径保留。
+- `flutter test --no-pub test/features/whiteboard/views/whiteboard_writing_workflow_test.dart`：13 项通过，新增磁盘失败/退出失败/重试恢复和慢写盘串行及新旧状态隔离；修改文件 analyze 无问题。
+- Go `test ./...` 与 `vet ./...` 通过；数据库集成测试未配置独立测试数据库，未将跳过项计为真实数据库验收。

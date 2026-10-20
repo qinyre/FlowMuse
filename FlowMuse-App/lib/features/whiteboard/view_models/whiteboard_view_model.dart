@@ -17,7 +17,7 @@ import '../collaboration/services/scene_reconciler.dart';
 import '../collaboration/services/socket_io_realtime_transport.dart';
 import '../repositories/whiteboard_scene_repository.dart';
 
-enum WhiteboardSaveStatus { idle, saving, saved }
+enum WhiteboardSaveStatus { idle, saving, saved, failed }
 
 enum WhiteboardCollaborationStatus {
   idle,
@@ -133,6 +133,14 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
       return;
     }
     state = state.copyWith(saveStatus: WhiteboardSaveStatus.saving);
+  }
+
+  void markUnsaved() {
+    state = state.copyWith(saveStatus: WhiteboardSaveStatus.idle);
+  }
+
+  void markSaveFailed() {
+    state = state.copyWith(saveStatus: WhiteboardSaveStatus.failed);
   }
 
   void markSaved() {
