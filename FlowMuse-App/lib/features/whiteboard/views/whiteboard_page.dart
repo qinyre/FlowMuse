@@ -632,6 +632,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       format: DocumentFormat.excalidraw,
     );
     final thumbnail = _markdrawController.exportCoverThumbnail();
+    // shortcut: 慢写盘逐批排队，实测持续积压时合并未开始的快照。
     final previous = _localDraftSave ?? Future<void>.value();
     _localDraftDirty = false;
     _runAfterStableFrame(() {

@@ -81,6 +81,7 @@ class LocalBackupRepository {
       }
       final content = await _resolveContent(rawRow['content']);
       // Stage under a new name so a failed DB transaction leaves live files intact.
+      // shortcut: 失败恢复可能遗留无引用暂存文件，统一回收场景文件时清理。
       final stored = content.length > SceneContentStore.inlineContentLimit
           ? await _sceneContentStore.write(
               '${rawRow['note_id']}-restore-${const Uuid().v4()}',

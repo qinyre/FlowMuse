@@ -191,7 +191,7 @@ debugPrint('[FlowMuseCreateNote] LocalDatabase.open path=$databasePath');
 | 笔记/笔记本/标签/关联/场景 | SQLite(`flowmuse_local.db`) | 结构化数据 |
 | 应用设置(主题/侧边栏/访客名/最近封面/笔迹开关) | SQLite `local_settings` 表(key-value) | **不是** shared_preferences |
 | 账户 token、协作房主密钥 | `flutter_secure_storage` | 敏感数据 |
-| 白板场景内容 | SQLite `note_scenes.content`(Excalidraw JSON) | 非独立文件 |
+| 白板场景内容 | SQLite `note_scenes.content`(Excalidraw JSON 或 `@scene-file:` 引用) | 原生大场景保存独立文件，JSON v2 备份展开实际正文 |
 
 > 虽然 pubspec 依赖了 `shared_preferences`,但 settings/account/theme 三模块实际全部走 `LocalSettingsRepository`(SQLite)。**新设置项也走这里**,不要混用。
 

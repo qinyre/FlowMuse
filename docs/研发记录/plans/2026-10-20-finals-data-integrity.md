@@ -65,3 +65,13 @@
 - 接通未保存、保存中、已保存、保存失败及重试；返回等待已排队保存，失败保留页面。关闭自动保存、后台与 dispose 原有保存路径保留。
 - `flutter test --no-pub test/features/whiteboard/views/whiteboard_writing_workflow_test.dart`：13 项通过，新增磁盘失败/退出失败/重试恢复和慢写盘串行及新旧状态隔离；修改文件 analyze 无问题。
 - Go `test ./...` 与 `vet ./...` 通过；数据库集成测试未配置独立测试数据库，未将跳过项计为真实数据库验收。
+
+### 最终验证
+
+- `flutter test --no-pub --reporter expanded`：1803 项通过、5 项既有跳过；日志 `FlowMuse-App/build/finals-all-tests.log`。
+- `flutter analyze --no-pub`：No issues found；日志 `FlowMuse-App/build/finals-analyze.log`。
+- `flutter build web --no-pub`：构建成功；第三方依赖的 WASM 试编译兼容提示、CupertinoIcons 字体提示未在本任务扩展处理，常规 JavaScript Web 构建通过。日志 `FlowMuse-App/build/finals-web-build.log`。
+- Go `test ./...` 与 `vet ./...` 均退出 0；`git diff --check` 通过。
+- 兼容性：保留 JSON v2 备份、SQLite schema v5、现有 SCENE_INIT/SCENE_UPDATE 与端到端加密；未新增依赖，未修改原生平台或 vendor。
+- 已知边界：原场景文件已丢失的旧引用备份无法补回正文；失败恢复可能留下无引用暂存文件；持续慢写盘暂不合并排队快照。代码旁标记了后两项 shortcut。
+- 未进行鸿蒙/Android 真机与现场弱网验收，未部署或推送。五项修复按功能小步提交，撤销重做版本修正单列一次提交。
