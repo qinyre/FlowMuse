@@ -53,3 +53,8 @@
 
 - 删除提前使会话失效的操作；由既有 reset 在快照等待结束后统一递增会话代次，保存任务的 finally 可以正常清理标记。
 - `flutter test --no-pub test/features/whiteboard/collaboration/collaboration_snapshot_retry_test.dart test/features/whiteboard/collaboration/collaboration_join_cancel_test.dart`：5 项通过，覆盖上传成功/失败退出及现有退避、旧房隔离。
+
+### 4. 强制补同步
+
+- 显式全量同步沿原发送队列发送所有可同步元素，保留 SCENE_UPDATE 类型；普通增量继续去重。完整场景取代未发送批次，不改变 LWW 或加密协议。
+- `flutter test --no-pub test/features/whiteboard/collaboration`：118 项通过，新增漏收后同版本补发、删除墓碑、恢复快照后本地变更补发和普通重复包去重验证。

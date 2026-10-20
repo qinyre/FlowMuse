@@ -397,11 +397,12 @@ class CollaborationRepository {
     final syncableScene = scene.copyWith(elements: syncableElements);
     _latestScene = syncableScene;
 
-    _accumulator.schedule(
-      syncableScene,
-      bypass: initial || syncAll,
-      isInitial: initial,
-    );
+    if (syncAll) {
+      _accumulator.dispose();
+      await _onAccumulatorFlush(syncableElements, initial, syncAll: true);
+      return;
+    }
+    _accumulator.schedule(syncableScene, bypass: initial, isInitial: initial);
   }
 
   Future<void> broadcastElements({
@@ -489,15 +490,16 @@ class CollaborationRepository {
 
   Future<void> _onAccumulatorFlush(
     List<Map<String, Object?>> elements,
-    bool isInitial,
-  ) {
+    bool isInitial, {
+    bool syncAll = false,
+  }) {
     // Serialize sends: chain onto queue so the next flush can't start until
     // _rememberBroadcasted has completed, preventing duplicate sends.
     final generation = _sendGeneration;
     _sendQueue = _sendQueue
         .then<void>((_) async {
           if (generation != _sendGeneration) return;
-          await _doAccumulatorFlush(elements, isInitial);
+          await _doAccumulatorFlush(elements, isInitial, syncAll: syncAll);
         })
         .catchError(_handleSendQueueError);
     return _sendQueue;
@@ -516,12 +518,15 @@ class CollaborationRepository {
     List<Map<String, Object?>> elements,
     bool isInitial, {
     bool volatile = false,
+    bool syncAll = false,
   }) async {
     final room = _activeRoom;
     if (room == null) return;
     final sessionGeneration = _roomSessionGeneration;
 
-    final changed = isInitial ? elements : _changedElements(elements);
+    final changed = isInitial || syncAll
+        ? elements
+        : _changedElements(elements);
     if (changed.isEmpty && !isInitial) return;
 
     final message = isInitial

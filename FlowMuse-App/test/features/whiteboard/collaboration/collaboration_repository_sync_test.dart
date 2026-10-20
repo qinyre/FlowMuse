@@ -15,6 +15,80 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
 
 void main() {
+  test('强制同步补回漏收的同版本元素，恢复快照后仍可补发本地变更', () async {
+    final crypto = CollaborationCrypto();
+    final room = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    final hub = MemoryRealtimeRoomHub();
+    final transport = _DroppingTransport(hub: hub, socketId: 'sender');
+    final peer = MemoryRealtimeTransport(hub: hub, socketId: 'peer');
+    final repository = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+    );
+    await store.createRoom(
+      room: room,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'fixture',
+    );
+    await repository.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    await peer.connect(room.roomId);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    addTearDown(repository.stop);
+    addTearDown(peer.disconnect);
+    final messages = <CollaborationMessage>[];
+    final subscription = peer.messages.listen((payload) async {
+      messages.add(
+        CollaborationMessage.fromBytes(
+          await crypto.decrypt(
+            roomKey: room.roomKey,
+            encryptedPayload: payload,
+          ),
+        ),
+      );
+    });
+    addTearDown(subscription.cancel);
+
+    final scene = _scene([
+      _element('lost', 1),
+      {
+        ..._element('deleted', 2),
+        'isDeleted': true,
+        'updated': DateTime.now().millisecondsSinceEpoch,
+      },
+    ]);
+    transport.drop = true;
+    await repository.broadcastElements(room: room, elements: scene.elements);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(transport.dropped, 1);
+    expect(messages, isEmpty);
+    transport.drop = false;
+    await repository.broadcastScene(room: room, scene: scene, syncAll: true);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(messages, hasLength(1));
+    expect(messages.single.type, CollaborationMessageType.sceneUpdate);
+    expect(
+      messages.single.elements.map((element) => element['id']),
+      containsAll(['lost', 'deleted']),
+    );
+
+    await repository.broadcastScene(room: room, scene: scene);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(messages, hasLength(1), reason: '普通增量仍然去重');
+    final restored = await repository.refreshFromSnapshot(
+      room: room,
+      localScene: _scene([_element('lost', 3)]),
+    );
+    await repository.broadcastScene(
+      room: room,
+      scene: restored!,
+      syncAll: true,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(messages, hasLength(2));
+    expect(messages.last.elements.single['version'], 3);
+  });
+
   test('正式发送阻塞时合并跨窗口更新，完整点压数据和独立删除仍送达', () async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
@@ -509,6 +583,21 @@ void main() {
     await repository.stop();
     await transport.close();
   });
+}
+
+class _DroppingTransport extends MemoryRealtimeTransport {
+  _DroppingTransport({required super.hub, required super.socketId});
+  bool drop = false;
+  int dropped = 0;
+
+  @override
+  Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {
+    if (drop) {
+      dropped++;
+      return;
+    }
+    await super.send(payload, volatile: volatile);
+  }
 }
 
 class _LifecycleTransport implements RealtimeTransport {
