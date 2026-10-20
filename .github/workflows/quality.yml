@@ -16,6 +16,9 @@ jobs:
   flutter:
     name: Flutter analyze and test
     runs-on: ubuntu-latest
+    env:
+      # Match the hosted source in pubspec.lock to keep the tested versions.
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
     defaults:
       run:
         working-directory: FlowMuse-App
@@ -46,9 +49,9 @@ jobs:
           # ponytail: static checks only; install the real SDK before enabling HAP builds.
           mkdir -p "$RUNNER_TEMP/hos-sdk/hmscore" "$RUNNER_TEMP/hos-sdk/openharmony"
           echo "HOS_SDK_HOME=$RUNNER_TEMP/hos-sdk" >> "$GITHUB_ENV"
-      - run: flutter pub get
-      - run: flutter analyze --no-fatal-warnings --no-fatal-infos
-      - run: flutter test
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
+      - run: flutter test --no-pub
 
   server:
     name: Go test and vet
