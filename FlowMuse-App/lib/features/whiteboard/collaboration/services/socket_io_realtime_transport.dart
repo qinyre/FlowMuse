@@ -42,7 +42,11 @@ class SocketIoLiveInkVolatileChannel implements LiveInkVolatileChannel {
 
 class SocketIoRealtimeTransport
     implements RealtimeTransport, LiveInkNegotiationDiagnostics {
-  SocketIoRealtimeTransport({required this.serverUrl, required this.identity});
+  SocketIoRealtimeTransport({
+    required this.serverUrl,
+    required this.identity,
+    io.Socket Function(String, Map<String, dynamic>) socketFactory = io.io,
+  }) : _socketFactory = socketFactory;
 
   static const String _eventJoinRoom = 'join-room';
   static const String _eventInitRoom = 'init-room';
@@ -63,6 +67,7 @@ class SocketIoRealtimeTransport
 
   final String serverUrl;
   final CollaborationIdentity identity;
+  final io.Socket Function(String, Map<String, dynamic>) _socketFactory;
   final StreamController<EncryptedPayload> _messages =
       StreamController<EncryptedPayload>.broadcast();
   final StreamController<ReceivedLiveInkFrame> _liveInkFrames =
@@ -149,6 +154,8 @@ class SocketIoRealtimeTransport
     final options = io.OptionBuilder()
         .setTransports(['websocket', 'polling'])
         .disableAutoConnect()
+        // Disposed root sockets stay cached with their previous credentials.
+        .enableForceNew()
         .enableReconnection();
     final token = identity.token;
     if (token != null && token.isNotEmpty) {
@@ -160,7 +167,7 @@ class SocketIoRealtimeTransport
         'guestAvatarUrl': identity.avatarUrl,
       });
     }
-    final socket = io.io(serverUrl, options.build());
+    final socket = _socketFactory(serverUrl, options.build());
     _socket = socket;
 
     final connected = Completer<void>();

@@ -14,6 +14,51 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/socket_io_r
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 void main() {
+  for (final authenticated in [true, false]) {
+    test('重建协作连接不复用旧登录凭据，当前登录=$authenticated', () async {
+      const url = 'https://socket-auth-fixture.invalid';
+      final previous = io.io(
+        url,
+        io.OptionBuilder()
+            .disableAutoConnect()
+            .setAuth({'token': 'fixture-previous'})
+            .setExtraHeaders({'Authorization': 'Bearer fixture-previous'})
+            .build(),
+      );
+      previous.dispose();
+      final identity = authenticated
+          ? const CollaborationIdentity(
+              username: 'fixture',
+              isGuest: false,
+              token: 'fixture-current',
+            )
+          : CollaborationIdentity.guest('fixture');
+      final transport = SocketIoRealtimeTransport(
+        serverUrl: url,
+        identity: identity,
+        socketFactory: (serverUrl, options) {
+          final selected = io.io(serverUrl, options);
+          expect(
+            authenticated
+                ? selected.auth is Map &&
+                      selected.auth['token'] == identity.token
+                : selected.auth == null,
+            isTrue,
+            reason: '登录更新或退出后必须使用当前身份',
+          );
+          expect(identical(selected.io, previous.io), isFalse);
+          return _ConnectedSocket(selected);
+        },
+      );
+      addTearDown(() async {
+        await transport.disconnect();
+        previous.dispose();
+        io.cache.remove('$url:443');
+      });
+      await transport.connect('fixture-room');
+    });
+  }
+
   for (final localEnd in [false, true]) {
     test('结束通知停止同步，主动结束=$localEnd 时不重复提示', () async {
       FlutterSecureStorage.setMockInitialValues({});
@@ -24,13 +69,12 @@ void main() {
           io.OptionBuilder().disableAutoConnect().enableForceNew().build(),
         ),
       );
-      io.cache[url] = client.io;
-      client.io.nsps['/'] = client;
       final store = _EndingSceneStore();
       final repository = CollaborationRepository(
         transport: SocketIoRealtimeTransport(
           serverUrl: url,
           identity: CollaborationIdentity.guest('fixture'),
+          socketFactory: (_, _) => client,
         ),
         sceneStore: store,
       );
@@ -39,7 +83,6 @@ void main() {
       addTearDown(() async {
         await subscription.cancel();
         await repository.stop();
-        io.cache.remove(url);
       });
       final room = await repository.startNewRoom(
         initialScene: ExcalidrawScene.empty(),
@@ -114,8 +157,6 @@ void main() {
         io.OptionBuilder().disableAutoConnect().enableForceNew().build(),
       ),
     );
-    io.cache[url] = client.io;
-    client.io.nsps['/'] = client;
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
     final store = MemoryEncryptedSceneStore();
@@ -128,6 +169,7 @@ void main() {
       transport: SocketIoRealtimeTransport(
         serverUrl: url,
         identity: CollaborationIdentity.guest('fixture'),
+        socketFactory: (_, _) => client,
       ),
       sceneStore: store,
       crypto: crypto,
@@ -135,7 +177,6 @@ void main() {
     addTearDown(() async {
       client.onPacket = null;
       await repository.stop();
-      io.cache.remove(url);
     });
     await repository.joinRoom(room: room, localScene: ExcalidrawScene.empty());
     client.packets.clear();
@@ -211,15 +252,13 @@ void main() {
       ),
       autoReady: false,
     );
-    io.cache[url] = client.io;
-    client.io.nsps['/'] = client;
     final transport = SocketIoRealtimeTransport(
       serverUrl: url,
       identity: CollaborationIdentity.guest('fixture'),
+      socketFactory: (_, _) => client,
     );
     addTearDown(() async {
       await transport.disconnect();
-      io.cache.remove(url);
     });
     final connected = transport.connect('room');
     await Future<void>.delayed(Duration.zero);
@@ -239,26 +278,19 @@ void main() {
   });
   test('生产 send 在不可写时丢弃光标，随后正式内容仍交给 transport', () async {
     const url = 'http://collaboration-fixture.invalid:1';
-    final previous = io.cache[url];
     final client = _ConnectedSocket(
       io.io(
         url,
         io.OptionBuilder().disableAutoConnect().enableForceNew().build(),
       ),
     );
-    io.cache[url] = client.io;
-    client.io.nsps['/'] = client;
     final transport = SocketIoRealtimeTransport(
       serverUrl: url,
       identity: CollaborationIdentity.guest('fixture'),
+      socketFactory: (_, _) => client,
     );
     addTearDown(() async {
       await transport.disconnect();
-      if (previous == null) {
-        io.cache.remove(url);
-      } else {
-        io.cache[url] = previous;
-      }
     });
     await transport.connect('fixture-room');
     client.packets.clear();
