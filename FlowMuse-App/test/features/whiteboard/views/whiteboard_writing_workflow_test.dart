@@ -939,6 +939,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     await _drainIo(tester, container);
     expect(_ink(controller), hasLength(2));
+    final localUpdates = received
+        .expand((message) => message.elements)
+        .where((element) => element['id'] == stroke.id.value)
+        .toList();
+    final deletion = localUpdates.lastWhere(
+      (element) => element['isDeleted'] == true,
+    );
+    expect(localUpdates.last['isDeleted'], isFalse);
+    expect(
+      localUpdates.last['version'] as int,
+      greaterThan(deletion['version'] as int),
+    );
     await tester.pumpWidget(const SizedBox.shrink());
     await _drainIo(tester, container);
   });

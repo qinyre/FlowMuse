@@ -2649,14 +2649,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       case SceneChangeSource.undo:
                       case SceneChangeSource.redo:
                       case SceneChangeSource.reset:
+                        final previousEditorScene = _previousEditorScene;
+                        _previousEditorScene = editorScene;
                         unawaited(
                           _broadcastUndoRedoScene(
-                            _previousEditorScene,
+                            previousEditorScene,
                             _collaborationAdapter.currentScene(),
                           ),
                         );
                         _scheduleLocalDraft();
-                        _previousEditorScene = editorScene;
                         break;
                       case SceneChangeSource.remoteApply:
                         _scheduleLocalDraft();

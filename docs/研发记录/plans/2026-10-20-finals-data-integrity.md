@@ -41,3 +41,4 @@
 - 保留快照栈，远端胜出元素在撤销/重做时懒合并；本地版本规范化明确不记录成远端操作。
 - 移除已修复用例的 skip，修正工作流中“撤销应同时清空远端笔迹”的旧断言，并检查远端笔迹不被广播删除。
 - `flutter test --no-pub test/features/whiteboard/editor_core/collaboration_undo_test.dart test/features/whiteboard/editor_core/ui/markdraw_controller_test.dart test/features/whiteboard/views/whiteboard_writing_workflow_test.dart test/features/whiteboard/smart_layout/recognition/apply_undo_reopen_test.dart`：25 项通过。
+- 追加重做广播校验：先更新本地历史基线，再触发版本规范化回调，保证重做版本严格高于删除版本，避免同版本随机 nonce 导致重做被远端丢弃；该真实页面协作测试通过。
