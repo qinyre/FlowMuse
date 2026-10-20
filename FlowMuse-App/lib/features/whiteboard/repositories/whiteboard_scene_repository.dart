@@ -31,8 +31,6 @@ class SqliteWhiteboardSceneRepository implements WhiteboardSceneRepository {
     SceneContentStore? sceneContentStore,
   }) : _sceneContentStore = sceneContentStore ?? SceneContentStore();
 
-  static const _inlineContentLimit = 1024 * 1024;
-
   final Future<Database> Function() _openDatabase;
   final SceneContentStore _sceneContentStore;
 
@@ -75,7 +73,7 @@ class SqliteWhiteboardSceneRepository implements WhiteboardSceneRepository {
       '[FlowMuseCreateNote] WhiteboardSceneRepository.saveScene '
       '$noteId length=${content.length}',
     );
-    final storedContent = content.length > _inlineContentLimit
+    final storedContent = content.length > SceneContentStore.inlineContentLimit
         ? await _sceneContentStore.write(noteId, content)
         : content;
     final db = await _openDatabase();

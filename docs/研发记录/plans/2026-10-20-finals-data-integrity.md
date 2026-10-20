@@ -42,3 +42,9 @@
 - 移除已修复用例的 skip，修正工作流中“撤销应同时清空远端笔迹”的旧断言，并检查远端笔迹不被广播删除。
 - `flutter test --no-pub test/features/whiteboard/editor_core/collaboration_undo_test.dart test/features/whiteboard/editor_core/ui/markdraw_controller_test.dart test/features/whiteboard/views/whiteboard_writing_workflow_test.dart test/features/whiteboard/smart_layout/recognition/apply_undo_reopen_test.dart`：25 项通过。
 - 追加重做广播校验：先更新本地历史基线，再触发版本规范化回调，保证重做版本严格高于删除版本，避免同版本随机 nonce 导致重做被远端丢弃；该真实页面协作测试通过。
+
+### 2. 完整备份
+
+- 本地/WebDAV 共用的 JSON v2 导出展开实际正文；恢复在清库前验证引用，大场景采用独立暂存文件，不覆盖现有正文文件。
+- `flutter test --no-pub test/features/settings test/features/whiteboard/whiteboard_scene_repository_test.dart`：8 项通过。覆盖新设备恢复、缺失文件拒绝、事务失败保留原库与文件、旧 v2 本机引用兼容。
+- 修改文件的 `flutter analyze --no-pub ...` 无问题；备份 v2、数据库 schema 和 WebDAV 上传协议不变。

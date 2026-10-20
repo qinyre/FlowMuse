@@ -2,6 +2,7 @@ class SceneContentStore {
   SceneContentStore({this.rootPath});
 
   static const referencePrefix = '@scene-file:';
+  static const inlineContentLimit = 1024 * 1024;
 
   final String? rootPath;
 
