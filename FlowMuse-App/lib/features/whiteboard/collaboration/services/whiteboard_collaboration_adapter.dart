@@ -27,10 +27,15 @@ class WhiteboardCollaborationAdapter {
     ];
   }
 
-  void applyRemoteScene(ExcalidrawScene scene, {bool closeTransientUi = true}) {
+  void applyRemoteScene(
+    ExcalidrawScene scene, {
+    bool closeTransientUi = true,
+    bool recordRemoteChanges = true,
+  }) {
     controller.applyRemoteExcalidrawSceneJson(
       scene.toJson(),
       closeTransientUi: closeTransientUi,
+      recordRemoteChanges: recordRemoteChanges,
     );
   }
 

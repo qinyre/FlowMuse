@@ -3500,16 +3500,24 @@ class MarkdrawController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Applies a scene received from collaboration without touching undo history.
+  /// Applies collaboration without adding an undo entry.
   void applyRemoteScene(
     Scene scene, {
     String? background,
     bool closeTransientUi = true,
+    bool recordRemoteChanges = true,
   }) {
     if (closeTransientUi) {
       closeTransientUiForSceneReplace();
     }
     final validated = TextBoundsValidator.validateScene(scene);
+    if (recordRemoteChanges) {
+      _historyManager.recordRemoteElements(
+        _editorState.scene,
+        validated.elements,
+      );
+      _historyManager.recordRemoteFiles(validated.files);
+    }
     _editorState = _editorState.copyWith(scene: validated);
     _syncLayoutFromScene();
     _editorState = _editorState.copyWith(
@@ -3534,6 +3542,7 @@ class MarkdrawController extends ChangeNotifier {
           element,
     ];
     if (updates.isEmpty) return;
+    _historyManager.recordRemoteElements(_editorState.scene, updates);
     _editorState = _editorState.copyWith(
       scene: _editorState.scene.upsertRemoteElements(updates),
     );
@@ -5392,7 +5401,11 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   /// Applies Excalidraw JSON received from collaboration.
-  void applyRemoteContent(String content, {bool closeTransientUi = true}) {
+  void applyRemoteContent(
+    String content, {
+    bool closeTransientUi = true,
+    bool recordRemoteChanges = true,
+  }) {
     final parseResult = ExcalidrawJsonCodec.parse(content);
     _canvasBackgroundColor = parseResult.value.settings.background;
     _canvasBackgroundFollowsTheme =
@@ -5408,6 +5421,7 @@ class MarkdrawController extends ChangeNotifier {
         regenerateIndices: false,
       ),
       closeTransientUi: closeTransientUi,
+      recordRemoteChanges: recordRemoteChanges,
     );
   }
 
@@ -5415,10 +5429,12 @@ class MarkdrawController extends ChangeNotifier {
   void applyRemoteExcalidrawSceneJson(
     Map<String, Object?> sceneJson, {
     bool closeTransientUi = true,
+    bool recordRemoteChanges = true,
   }) {
     applyRemoteContent(
       jsonEncode(sceneJson),
       closeTransientUi: closeTransientUi,
+      recordRemoteChanges: recordRemoteChanges,
     );
   }
 

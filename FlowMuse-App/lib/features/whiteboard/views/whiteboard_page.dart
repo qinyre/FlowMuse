@@ -170,6 +170,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   // LocalDraftScheduler — debounce duration comes from editor preferences.
   Timer? _localDraftTimer;
   bool _localDraftDirty = false;
+  int _localDraftRevision = 0;
+  Future<void>? _localDraftSave;
   Timer? _readingPositionTimer;
   String? _readingNoteId;
   (ViewportState, Size, CanvasLayout)? _readingView;
@@ -600,7 +602,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   void _scheduleLocalDraft() {
+    if (widget.temporaryCollaboration) return;
     _localDraftDirty = true;
+    _localDraftRevision++;
+    _runAfterStableFrame(() {
+      ref.read(whiteboardViewModelProvider.notifier).markUnsaved();
+    });
     _localDraftTimer?.cancel();
     final interval = ref
         .read(editorPreferencesProvider)
@@ -610,41 +617,99 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     // null interval = auto-save disabled; the draft is still flushed on exit
     // and on lifecycle pause via _flushLocalDraftOnExit.
     if (interval == null) return;
-    _localDraftTimer = Timer(interval, _flushLocalDraft);
+    _localDraftTimer = Timer(interval, _flushLocalDraftInBackground);
   }
 
-  Future<void> _flushLocalDraft() async {
+  Future<void> _flushLocalDraft() {
+    _localDraftTimer?.cancel();
     _localDraftTimer = null;
-    if (!_localDraftDirty || !mounted) return;
-    _localDraftDirty = false;
-
-    if (widget.temporaryCollaboration) return;
-
+    if (!_localDraftDirty || !mounted || widget.temporaryCollaboration) {
+      return _localDraftSave ?? Future<void>.value();
+    }
     final noteId = widget.noteId;
+    final revision = _localDraftRevision;
     final content = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
     );
-    // Capture the picture before disposal or a note switch can change the scene.
-    final (_, coverThumbnailBytes) = await (
-      _localSceneRepository.saveScene(noteId, content),
-      _markdrawController.exportCoverThumbnail(),
-    ).wait;
-    await _localLibraryRepository.touchNote(
-      noteId,
-      coverThumbnailBytes: coverThumbnailBytes,
-      clearCoverThumbnail: coverThumbnailBytes == null,
-    );
-    if (!_canMutateWhiteboard || noteId != widget.noteId) return;
-    await ref.read(libraryIndexProvider.notifier).refresh();
-    if (!_canMutateWhiteboard || noteId != widget.noteId) return;
-    final latestIndex = ref.read(libraryIndexProvider).value;
-    final latestNote = latestIndex == null
-        ? null
-        : _noteById(latestIndex.notes, noteId);
-    if (latestNote != null) {
-      unawaited(_recentWhiteboardSync.syncFromNote(latestNote));
+    final thumbnail = _markdrawController.exportCoverThumbnail();
+    // shortcut: 慢写盘逐批排队，实测持续积压时合并未开始的快照。
+    final previous = _localDraftSave ?? Future<void>.value();
+    _localDraftDirty = false;
+    _runAfterStableFrame(() {
+      ref.read(whiteboardViewModelProvider.notifier).markSaving();
+    });
+
+    Future<void> save() async {
+      try {
+        final (_, coverThumbnailBytes) = await (
+          previous
+              .catchError((Object error) {
+                debugPrint(
+                  '[FlowMuseCreateNote] retry after draft failure: ${error.runtimeType}',
+                );
+              })
+              .then((_) => _localSceneRepository.saveScene(noteId, content)),
+          thumbnail,
+        ).wait;
+        await _localLibraryRepository.touchNote(
+          noteId,
+          coverThumbnailBytes: coverThumbnailBytes,
+          clearCoverThumbnail: coverThumbnailBytes == null,
+        );
+        if (!_canMutateWhiteboard || noteId != widget.noteId) return;
+        await ref.read(libraryIndexProvider.notifier).refresh();
+        if (!_canMutateWhiteboard || noteId != widget.noteId) return;
+        final latestIndex = ref.read(libraryIndexProvider).value;
+        final latestNote = latestIndex == null
+            ? null
+            : _noteById(latestIndex.notes, noteId);
+        if (latestNote != null) {
+          unawaited(_recentWhiteboardSync.syncFromNote(latestNote));
+        }
+        if (revision == _localDraftRevision && !_localDraftDirty) {
+          _runAfterStableFrame(() {
+            if (revision == _localDraftRevision && !_localDraftDirty) {
+              ref.read(whiteboardViewModelProvider.notifier).markSaved();
+            }
+          });
+        }
+      } catch (_) {
+        if (noteId == widget.noteId && revision == _localDraftRevision) {
+          _localDraftDirty = true;
+          _runAfterStableFrame(() {
+            if (revision == _localDraftRevision) {
+              ref.read(whiteboardViewModelProvider.notifier).markSaveFailed();
+            }
+          });
+        }
+        rethrow;
+      }
     }
-    ref.read(whiteboardViewModelProvider.notifier).markSaved();
+
+    return _localDraftSave = save();
+  }
+
+  Future<void> _flushLocalDraftInBackground() async {
+    try {
+      await _flushLocalDraft();
+    } catch (error) {
+      debugPrint(
+        '[FlowMuseCreateNote] draft save failed: ${error.runtimeType}',
+      );
+      _runAfterStableFrame(() {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('保存失败，内容仍保留在当前页面'),
+            action: SnackBarAction(
+              label: '重试',
+              onPressed: () {
+                unawaited(_flushLocalDraftInBackground());
+              },
+            ),
+          ),
+        );
+      });
+    }
   }
 
   Future<void> _finalizeLocalDraftBeforeLeaving() async {
@@ -662,9 +727,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       return;
     }
 
-    if (_localDraftDirty) {
-      await _flushLocalDraft();
-    }
+    await _flushLocalDraft();
   }
 
   Future<bool> _shouldDiscardUnchangedDraft() async {
@@ -688,7 +751,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _localDraftTimer?.cancel();
     _localDraftTimer = null;
     if (_localDraftDirty) {
-      _flushLocalDraft();
+      unawaited(_flushLocalDraftInBackground());
     }
   }
 
@@ -781,6 +844,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _collaborationAdapter.applyRemoteScene(
         bumpedScene,
         closeTransientUi: false,
+        recordRemoteChanges: false,
       );
     } finally {
       _applyingRemoteScene = false;
@@ -1461,8 +1525,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final state = ref.read(whiteboardViewModelProvider);
     try {
       if (state.collaborating) {
+        await _finalizeLocalDraftBeforeLeaving();
         await _leaveCollaboration();
-        if (!widget.temporaryCollaboration && mounted) {
+        if (!widget.temporaryCollaboration && mounted && _disposingOrLeaving) {
           _popWhenStable();
         }
         return;
@@ -1471,6 +1536,21 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _disposingOrLeaving = true;
       _markdrawController.closeTransientUiForSceneReplace();
       _popWhenStable();
+    } catch (error) {
+      debugPrint('[FlowMuseCreateNote] leaving failed: ${error.runtimeType}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('保存或退出失败，已保留在当前页面'),
+            action: SnackBarAction(
+              label: '重试',
+              onPressed: () {
+                unawaited(_handleBack());
+              },
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted && !_disposingOrLeaving) {
         _handlingBack = false;
@@ -2558,7 +2638,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   collaborationParticipants: participants,
                   isCollaborationOwner: state.isRoomOwner,
                   onSave: () {
-                    unawaited(_saveMarkdrawScene());
+                    unawaited(_flushLocalDraftInBackground());
                   },
                   onSaveAs: () {
                     unawaited(_fileHandler.saveAs());
@@ -2648,14 +2728,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       case SceneChangeSource.undo:
                       case SceneChangeSource.redo:
                       case SceneChangeSource.reset:
+                        final previousEditorScene = _previousEditorScene;
+                        _previousEditorScene = editorScene;
                         unawaited(
                           _broadcastUndoRedoScene(
-                            _previousEditorScene,
+                            previousEditorScene,
                             _collaborationAdapter.currentScene(),
                           ),
                         );
                         _scheduleLocalDraft();
-                        _previousEditorScene = editorScene;
                         break;
                       case SceneChangeSource.remoteApply:
                         _scheduleLocalDraft();
@@ -2747,6 +2828,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       WhiteboardSaveStatus.idle => '未保存',
       WhiteboardSaveStatus.saving => '保存中',
       WhiteboardSaveStatus.saved => '已保存',
+      WhiteboardSaveStatus.failed => '保存失败',
     };
   }
 

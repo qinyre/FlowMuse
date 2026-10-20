@@ -9,6 +9,62 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_s
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
 
 void main() {
+  for (final fail in [false, true]) {
+    test('保存中退出协作：上传${fail ? '失败' : '成功'}也能释放等待并断开', () async {
+      final store = _SnapshotStore();
+      final room = CollaborationRoom.newRoom(crypto: CollaborationCrypto());
+      await store.createRoom(
+        room: room,
+        scene: ExcalidrawScene.empty(),
+        ownerKeyHash: 'fixture',
+      );
+      final transport = MemoryRealtimeTransport(
+        hub: MemoryRealtimeRoomHub(),
+        socketId: 'fixture',
+      );
+      final repository = CollaborationRepository(
+        sceneStore: store,
+        transport: transport,
+      );
+      final statuses = <RealtimeConnectionStatus>[];
+      final errors = <String>[];
+      final statusSubscription = repository.connectionStatus.listen(
+        statuses.add,
+      );
+      final errorSubscription = repository.errors.listen(errors.add);
+      addTearDown(statusSubscription.cancel);
+      addTearDown(errorSubscription.cancel);
+      await repository.joinRoom(
+        room: room,
+        localScene: ExcalidrawScene.empty(),
+      );
+      await repository.broadcastElements(
+        room: room,
+        elements: _scene(1).elements,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      store.gate = Completer<void>();
+      store.fail = fail;
+      final flushing = repository.forceFlushSnapshot();
+      await Future<void>.delayed(Duration.zero);
+      final stopping = repository.stop();
+      store.gate!.complete();
+      await Future.wait([
+        flushing,
+        stopping,
+      ]).timeout(const Duration(seconds: 2));
+      await Future<void>.delayed(Duration.zero);
+      expect(statuses.last, RealtimeConnectionStatus.disconnected);
+      if (fail) {
+        expect(errors, isNotEmpty, reason: '失败仍通过原错误通道上报');
+      } else {
+        expect((await store.loadScene(room))!.elements.single['version'], 1);
+        expect(errors, isEmpty);
+      }
+      await repository.stop();
+    });
+  }
+
   testWidgets('快照失败退避不被新编辑绕过，恢复后保存最新内容', (tester) async {
     final store = _SnapshotStore();
     final room = CollaborationRoom.newRoom(crypto: CollaborationCrypto());

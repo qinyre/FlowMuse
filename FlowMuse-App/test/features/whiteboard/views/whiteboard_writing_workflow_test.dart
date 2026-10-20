@@ -79,6 +79,105 @@ void main() {
     );
   });
 
+  testWidgets('自动保存失败保留草稿，退出失败不离页，手动重试可恢复', (tester) async {
+    final note = await tester.runAsync(
+      () => library.createNote(title: 'workflow-save-failure'),
+    );
+    final storage = _FaultySceneRepository(library)..failures = 1;
+    final container = _container(library: library, sceneRepository: storage);
+    final controller = await _open(tester, container, note!);
+    controller.switchTool(ToolType.freedraw);
+    await _stroke(tester, const Offset(650, 350));
+    expect(
+      container.read(whiteboardViewModelProvider).saveStatus,
+      WhiteboardSaveStatus.idle,
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await _drainIo(tester, container);
+    expect(
+      container.read(whiteboardViewModelProvider).saveStatus,
+      WhiteboardSaveStatus.failed,
+    );
+    expect(
+      tester
+          .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+          .saveStatusLabel,
+      '保存失败',
+    );
+
+    storage.failures = 1;
+    tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onBack!();
+    await _drainIo(tester, container);
+    expect(find.byType(WhiteboardPage), findsOneWidget);
+    expect(
+      container.read(whiteboardViewModelProvider).saveStatus,
+      WhiteboardSaveStatus.failed,
+    );
+    expect(storage.attempts, 2, reason: '退出仍重试未保存的内容');
+
+    tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onSave!();
+    await _drainIo(
+      tester,
+      container,
+      until: () =>
+          container.read(whiteboardViewModelProvider).saveStatus ==
+          WhiteboardSaveStatus.saved,
+    );
+    expect(storage.attempts, 3);
+    final content = await tester.runAsync(() => scenes.loadScene(note.id));
+    final reopened = MarkdrawController()
+      ..loadFromContent(content!, 'saved.excalidraw');
+    addTearDown(reopened.dispose);
+    expect(_ink(reopened), hasLength(1));
+  });
+
+  testWidgets('慢写盘时串行保存，旧保存完成不能把新草稿显示为已保存', (tester) async {
+    final note = await tester.runAsync(
+      () => library.createNote(title: 'workflow-serialized-save'),
+    );
+    final first = Completer<void>();
+    final second = Completer<void>();
+    final storage = _FaultySceneRepository(library)
+      ..gates.addAll([first, second]);
+    addTearDown(() {
+      if (!first.isCompleted) first.complete();
+      if (!second.isCompleted) second.complete();
+    });
+    final container = _container(library: library, sceneRepository: storage);
+    final controller = await _open(tester, container, note!);
+    controller.switchTool(ToolType.freedraw);
+    await _stroke(tester, const Offset(650, 350));
+    await tester.pump(const Duration(milliseconds: 600));
+    await _waitForSave(tester, () => storage.attempts == 1);
+    expect(
+      container.read(whiteboardViewModelProvider).saveStatus,
+      WhiteboardSaveStatus.saving,
+    );
+    await _stroke(tester, const Offset(650, 450));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(storage.attempts, 1, reason: '第二次写盘等待第一次结束');
+    first.complete();
+    await _waitForSave(tester, () => storage.attempts == 2);
+    expect(storage.maxConcurrent, 1);
+    expect(
+      container.read(whiteboardViewModelProvider).saveStatus,
+      isNot(WhiteboardSaveStatus.saved),
+    );
+    second.complete();
+    await _drainIo(
+      tester,
+      container,
+      until: () =>
+          container.read(whiteboardViewModelProvider).saveStatus ==
+          WhiteboardSaveStatus.saved,
+    );
+    final content = await tester.runAsync(() => scenes.loadScene(note.id));
+    final reopened = MarkdrawController()
+      ..loadFromContent(content!, 'latest.excalidraw');
+    addTearDown(reopened.dispose);
+    expect(_ink(reopened), hasLength(2));
+  });
+
   testWidgets('五笔经过真实画布：SQLite 自动保存、撤销重做、取消和重开', (tester) async {
     final note = await tester.runAsync(
       () => library.createNote(title: 'workflow-five-brushes'),
@@ -914,7 +1013,7 @@ void main() {
     controller.undo();
     await tester.pump(const Duration(milliseconds: 200));
     await _drainIo(tester, container);
-    expect(_ink(controller), isEmpty);
+    expect(_ink(controller).single.id.value, 'workflow-long-remote');
     expect(
       received
           .expand((message) => message.elements)
@@ -925,50 +1024,72 @@ void main() {
           ),
       isTrue,
     );
+    expect(
+      received
+          .expand((message) => message.elements)
+          .any(
+            (element) =>
+                element['id'] == 'workflow-long-remote' &&
+                element['isDeleted'] == true,
+          ),
+      isFalse,
+    );
+    controller.redo();
+    await tester.pump(const Duration(milliseconds: 200));
+    await _drainIo(tester, container);
+    expect(_ink(controller), hasLength(2));
+    final localUpdates = received
+        .expand((message) => message.elements)
+        .where((element) => element['id'] == stroke.id.value)
+        .toList();
+    final deletion = localUpdates.lastWhere(
+      (element) => element['isDeleted'] == true,
+    );
+    expect(localUpdates.last['isDeleted'], isFalse);
+    expect(
+      localUpdates.last['version'] as int,
+      greaterThan(deletion['version'] as int),
+    );
     await tester.pumpWidget(const SizedBox.shrink());
     await _drainIo(tester, container);
   });
 
-  test(
-    'known_remote_undo_preserves_new_elements',
-    () {
-      final controller = MarkdrawController()..switchTool(ToolType.freedraw);
-      addTearDown(controller.dispose);
-      controller.onPointerDown(
-        const PointerDownEvent(
-          position: Offset(100, 100),
-          kind: PointerDeviceKind.stylus,
-        ),
-      );
-      controller.onPointerMove(
-        const PointerMoveEvent(
-          position: Offset(150, 150),
-          kind: PointerDeviceKind.stylus,
-        ),
-      );
-      controller.applyRemoteElements([
-        RectangleElement(
-          id: const ElementId('remote-during-stroke'),
-          x: 300,
-          y: 300,
-          width: 40,
-          height: 40,
-        ),
-      ]);
-      controller.onPointerUp(
-        const PointerUpEvent(
-          position: Offset(150, 150),
-          kind: PointerDeviceKind.stylus,
-        ),
-      );
-      controller.undo();
-      expect(
-        controller.currentScene.activeElements.whereType<RectangleElement>(),
-        hasLength(1),
-      );
-    },
-    skip: '既有协作历史问题：整场景快照撤销会回退远端新增；用 --run-skipped 单独复现，见第二轮验证记录。',
-  );
+  test('known_remote_undo_preserves_new_elements', () {
+    final controller = MarkdrawController()..switchTool(ToolType.freedraw);
+    addTearDown(controller.dispose);
+    controller.onPointerDown(
+      const PointerDownEvent(
+        position: Offset(100, 100),
+        kind: PointerDeviceKind.stylus,
+      ),
+    );
+    controller.onPointerMove(
+      const PointerMoveEvent(
+        position: Offset(150, 150),
+        kind: PointerDeviceKind.stylus,
+      ),
+    );
+    controller.applyRemoteElements([
+      RectangleElement(
+        id: const ElementId('remote-during-stroke'),
+        x: 300,
+        y: 300,
+        width: 40,
+        height: 40,
+      ),
+    ]);
+    controller.onPointerUp(
+      const PointerUpEvent(
+        position: Offset(150, 150),
+        kind: PointerDeviceKind.stylus,
+      ),
+    );
+    controller.undo();
+    expect(
+      controller.currentScene.activeElements.whereType<RectangleElement>(),
+      hasLength(1),
+    );
+  });
 }
 
 class _TrackedCollaborationRepository extends CollaborationRepository {
@@ -997,12 +1118,13 @@ ProviderContainer _container({
   required _TrackedLibraryRepository library,
   InkRecognitionRepository? recognition,
   CollaborationRepository? collaboration,
+  WhiteboardSceneRepository? sceneRepository,
 }) {
   final container = ProviderContainer(
     overrides: [
       libraryRepositoryProvider.overrideWithValue(library),
       whiteboardSceneRepositoryProvider.overrideWithValue(
-        _TrackedSceneRepository(library),
+        sceneRepository ?? _TrackedSceneRepository(library),
       ),
       accountViewModelProvider.overrideWith(_GuestAccount.new),
       collaborationRepositoryProvider.overrideWithValue(
@@ -1171,6 +1293,43 @@ class _TrackedSceneRepository extends SqliteWhiteboardSceneRepository {
       rethrow;
     }
   }
+}
+
+class _FaultySceneRepository extends _TrackedSceneRepository {
+  _FaultySceneRepository(super.library);
+  int failures = 0;
+  int attempts = 0;
+  int concurrent = 0;
+  int maxConcurrent = 0;
+  final gates = <Completer<void>>[];
+
+  @override
+  Future<void> saveScene(String noteId, String content) async {
+    attempts++;
+    concurrent++;
+    if (concurrent > maxConcurrent) maxConcurrent = concurrent;
+    try {
+      if (failures > 0) {
+        failures--;
+        throw StateError('fixture storage unavailable');
+      }
+      if (gates.isNotEmpty) await gates.removeAt(0).future;
+      await super.saveScene(noteId, content);
+    } finally {
+      concurrent--;
+    }
+  }
+}
+
+Future<void> _waitForSave(WidgetTester tester, bool Function() ready) async {
+  for (var i = 0; i < 100 && !ready(); i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(tester.takeException(), isNull);
+  }
+  expect(ready(), isTrue);
 }
 
 class _PendingRecognition extends InkRecognitionRepository {

@@ -257,6 +257,7 @@ dependency_overrides:
 - `Tool`(工具)不直接改状态,而是产出 `ToolResult`(sealed class)。
 - `EditorState.applyResult(result)` 用 switch 表达式把 result 折叠成新状态。
 - `HistoryManager` 存 Scene 快照(非 diff),undo/redo 靠快照切换。
+- 远端胜出元素和附件另作只读覆盖记录，撤销/重做按 version/nonce 合入，避免回退其他成员；本地撤销的版本规范化不记为远端编辑。
 
 ### 理由
 
@@ -517,7 +518,7 @@ try {
 
 ### 遗留约束
 
-- 现有本地备份**不含 `.scene` 溢出文件**（场景 >1MB 落到 `databases/scenes/` 目录），网盘备份必须补上这部分，打包格式为「6 张表 JSON + scenes 目录 → zip → 加密 → 上传」。
+- 2026-10-20：本地与 WebDAV 备份继续使用 JSON v2；导出时将 `.scene` 溢出引用展开为实际正文。恢复先校验所有引用，大场景写入独立新文件后事务恢复，缺失文件拒绝恢复并保留原库。未实现的 zip/备份加密方案不作为当前格式要求。
 - 坚果云免费账户有流量限制（上传 1GB/月），需在 UI 提示用户。
 - 凭证（邮箱 + 应用密码）用 `flutter_secure_storage` 存储，不存明文。
 - 实施前需确认大文件上传的断点/重试机制。
