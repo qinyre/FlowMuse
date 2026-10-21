@@ -6,6 +6,7 @@ ENV GOPROXY=https://goproxy.cn|https://proxy.golang.org|direct \
 WORKDIR /src
 RUN apk add --no-cache ca-certificates git
 COPY go.mod go.sum ./
+COPY third_party/engine.io ./third_party/engine.io
 RUN go mod download
 COPY . .
 RUN go build -o /out/flowmuse-collab-server ./cmd/flowmuse-collab-server

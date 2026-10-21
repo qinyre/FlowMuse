@@ -2,6 +2,9 @@ module flowmuse/server
 
 go 1.25.0
 
+// v2.5.0 drops packets after a prepared WebSocket frame in the same batch.
+replace github.com/zishang520/engine.io/v2 => ./third_party/engine.io
+
 require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.4.3
