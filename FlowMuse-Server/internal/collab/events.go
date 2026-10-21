@@ -34,6 +34,7 @@ type ReceivedLiveInkFrame struct {
 type LiveInkReady struct {
 	RoomID                 string `json:"roomId"`
 	LiveInkProtocolVersion int    `json:"liveInkProtocolVersion"`
+	ReliableAck            bool   `json:"reliableAck"`
 }
 
 type RoomUser struct {

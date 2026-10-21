@@ -14,6 +14,91 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/socket_io_r
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 void main() {
+  test('确认丢失只重发同一密文，下一次确认后停止重试', () async {
+    final client = _ConnectedSocket(
+      io.io(
+        'http://retry-fixture.invalid:1',
+        io.OptionBuilder().disableAutoConnect().enableForceNew().build(),
+      ),
+    );
+    final transport = SocketIoRealtimeTransport(
+      serverUrl: 'http://retry-fixture.invalid:1',
+      identity: CollaborationIdentity.guest('fixture'),
+      socketFactory: (_, _) => client,
+    );
+    addTearDown(transport.disconnect);
+    await transport.connect('room');
+    client.emitEvent([
+      'live-ink-ready',
+      {'roomId': 'room', 'liveInkProtocolVersion': 2, 'reliableAck': true},
+    ]);
+    final attempts = <Map>[];
+    client.onPacket = (packet) {
+      attempts.add(packet);
+      if (attempts.length == 2) {
+        scheduleMicrotask(
+          () => client.onack({
+            'id': packet['id'],
+            'data': [
+              {'accepted': true},
+            ],
+          }),
+        );
+      }
+    };
+    await transport.send(
+      EncryptedPayload(encryptedBuffer: [1], iv: List.filled(12, 0)),
+    );
+    expect(attempts, hasLength(2));
+    expect(attempts[0]['data'], attempts[1]['data']);
+    expect(transport.reliableRetryCount, 1);
+    expect(client.acks, isEmpty);
+  });
+  for (final accepted in [true, false]) {
+    test('正式消息等待服务端确认，accepted=$accepted', () async {
+      final client = _ConnectedSocket(
+        io.io(
+          'http://ack-fixture.invalid:1',
+          io.OptionBuilder().disableAutoConnect().enableForceNew().build(),
+        ),
+      );
+      final transport = SocketIoRealtimeTransport(
+        serverUrl: 'http://ack-fixture.invalid:1',
+        identity: CollaborationIdentity.guest('fixture'),
+        socketFactory: (_, _) => client,
+      );
+      addTearDown(transport.disconnect);
+      await transport.connect('room');
+      client.emitEvent([
+        'live-ink-ready',
+        {'roomId': 'room', 'liveInkProtocolVersion': 2, 'reliableAck': true},
+      ]);
+      Map? pending;
+      client.onPacket = (packet) {
+        pending = packet;
+      };
+      var completed = false;
+      final sending = transport
+          .send(EncryptedPayload(encryptedBuffer: [1], iv: List.filled(12, 0)))
+          .then((_) {
+            completed = true;
+          });
+      final expectation = accepted
+          ? expectLater(sending, completes)
+          : expectLater(sending, throwsStateError);
+      await Future<void>.delayed(Duration.zero);
+      expect(completed, isFalse);
+      expect(pending?['id'], isNotNull);
+      client.onack({
+        'id': pending!['id'],
+        'data': [
+          {'accepted': accepted},
+        ],
+      });
+      await expectation;
+      expect(completed, accepted);
+    });
+  }
   for (final authenticated in [true, false]) {
     test('重建协作连接不复用旧登录凭据，当前登录=$authenticated', () async {
       const url = 'https://socket-auth-fixture.invalid';

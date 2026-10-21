@@ -480,7 +480,10 @@ class CollaborationRepository {
           _pendingLatestElements.clear();
           await _doAccumulatorFlush(elements, false, volatile: true);
         })
-        .catchError(_handleSendQueueError)
+        .catchError((Object error, StackTrace stack) {
+          if (_sendGeneration == generation)
+            _handleSendQueueError(error, stack);
+        })
         .whenComplete(() {
           if (_sendGeneration != generation) return;
           _latestSendQueued = false;
@@ -501,7 +504,10 @@ class CollaborationRepository {
           if (generation != _sendGeneration) return;
           await _doAccumulatorFlush(elements, isInitial, syncAll: syncAll);
         })
-        .catchError(_handleSendQueueError);
+        .catchError((Object error, StackTrace stack) {
+          if (_sendGeneration == generation)
+            _handleSendQueueError(error, stack);
+        });
     return _sendQueue;
   }
 

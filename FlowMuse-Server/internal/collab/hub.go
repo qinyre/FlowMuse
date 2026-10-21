@@ -222,6 +222,7 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 	client.Emit(EventLiveInkReady, LiveInkReady{
 		RoomID:                 roomID,
 		LiveInkProtocolVersion: liveInkProtocolVersion,
+		ReliableAck:            true,
 	})
 }
 
@@ -358,6 +359,12 @@ func (h *Hub) liveInkNow() time.Time {
 }
 
 func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
+	accepted := false
+	defer func() {
+		if !volatile {
+			acknowledgeBroadcast(args, accepted)
+		}
+	}()
 	roomID, frame, ok := parseBroadcastArgs(args)
 	if !ok {
 		log.Printf(
@@ -384,7 +391,16 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	if volatile {
 		operator = operator.Volatile()
 	}
-	operator.Emit(EventClientBroadcast, frame.EncryptedBuffer, frame.IV)
+	accepted = operator.Emit(EventClientBroadcast, frame.EncryptedBuffer, frame.IV) == nil
+}
+
+func acknowledgeBroadcast(args []any, accepted bool) {
+	if len(args) == 0 {
+		return
+	}
+	if ack, ok := args[len(args)-1].(socket.Ack); ok {
+		ack([]any{map[string]any{"accepted": accepted}}, nil)
+	}
 }
 
 func (h *Hub) leaveRoom(client *socket.Socket, roomID string) {

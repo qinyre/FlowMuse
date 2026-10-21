@@ -18,6 +18,59 @@ import (
 
 const enginePacketSeparator = "\x1e"
 
+func TestSocketIOReliableBroadcastAcknowledgesMembership(t *testing.T) {
+	for _, member := range []bool{true, false} {
+		t.Run(fmt.Sprint(member), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			server := socket.NewServer(nil, nil)
+			hub := NewHub(server, nil, nil, nil, nil)
+			hub.roomExistsOverride = func(string) bool { return true }
+			hub.roomEndedOverride = func(string) bool { return false }
+			hub.Register()
+			local := httptest.NewServer(server.ServeHandler(nil))
+			defer local.Close()
+			defer server.Close(nil)
+			client, err := newPollingSocketClient(ctx, local.URL, "fixture")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := client.emit(ctx, EventJoinRoom, "fixture-room"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := client.waitEvent(ctx, EventLiveInkReady); err != nil {
+				t.Fatal(err)
+			}
+			room := "fixture-room"
+			if !member {
+				room = "other-room"
+			}
+			data, _ := json.Marshal([]any{EventServerBroadcast, room, map[string]any{"encryptedBuffer": []int{1, 2, 3}, "iv": make([]int, 12)}})
+			if err := client.post(ctx, "421"+string(data)); err != nil {
+				t.Fatal(err)
+			}
+			for {
+				packets, err := client.poll(ctx)
+				if err != nil {
+					t.Fatal("broadcast acknowledgement missing")
+				}
+				for _, packet := range packets {
+					if !strings.HasPrefix(packet, "431") {
+						continue
+					}
+					var ack []struct {
+						Accepted bool `json:"accepted"`
+					}
+					if json.Unmarshal([]byte(packet[3:]), &ack) != nil || len(ack) != 1 || ack[0].Accepted != member {
+						t.Fatal("acknowledgement did not reflect validated membership")
+					}
+					return
+				}
+			}
+		})
+	}
+}
+
 type pollingSocketClient struct {
 	baseURL   string
 	engineSID string

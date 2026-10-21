@@ -89,6 +89,8 @@ class SocketIoRealtimeTransport
   final LiveInkNegotiation _liveInkNegotiation = LiveInkNegotiation();
   int _joinSentGeneration = -1;
   int _liveInkTransportNotWritableDrops = 0;
+  bool _supportsReliableAck = false;
+  int reliableRetryCount = 0;
 
   @override
   Stream<EncryptedPayload> get messages => _messages.stream;
@@ -411,16 +413,41 @@ class SocketIoRealtimeTransport
     if (roomId == null || socket == null || !socket.connected) {
       throw StateError('协作连接未建立');
     }
-    (volatile ? socket.volatile : socket).emit(
-      volatile ? _eventServerVolatileBroadcast : _eventServerBroadcast,
-      [
-        roomId,
-        {
-          'encryptedBuffer': Uint8List.fromList(payload.encryptedBuffer),
-          'iv': Uint8List.fromList(payload.iv),
-        },
-      ],
-    );
+    final data = [
+      roomId,
+      {
+        'encryptedBuffer': Uint8List.fromList(payload.encryptedBuffer),
+        'iv': Uint8List.fromList(payload.iv),
+      },
+    ];
+    if (!volatile && _supportsReliableAck) {
+      for (var attempt = 0; ; attempt++) {
+        if (!identical(_socket, socket) ||
+            _roomId != roomId ||
+            !socket.connected) {
+          throw StateError('协作连接已改变，请重新同步');
+        }
+        dynamic result;
+        try {
+          result = await socket
+              .timeout(1500)
+              .emitWithAckAsync(_eventServerBroadcast, data);
+        } catch (_) {
+          if (attempt >= 2) throw StateError('协作发送确认超时，请重新同步');
+          reliableRetryCount++;
+          continue;
+        }
+        if (result is! Map || result['accepted'] != true) {
+          throw StateError('服务端未接受协作消息，请重新加入房间');
+        }
+        break;
+      }
+    } else {
+      (volatile ? socket.volatile : socket).emit(
+        volatile ? _eventServerVolatileBroadcast : _eventServerBroadcast,
+        data,
+      );
+    }
     CollaborationDebugLog.write('wire', 'send', {
       'room': _shortRoomId(roomId),
       'event': volatile ? _eventServerVolatileBroadcast : _eventServerBroadcast,
@@ -482,6 +509,7 @@ class SocketIoRealtimeTransport
   }
 
   void _beginConnection(String roomId) {
+    _supportsReliableAck = false;
     _roomId = roomId;
     _liveInkNegotiation.begin(roomId);
     _joinSentGeneration = -1;
@@ -496,11 +524,13 @@ class SocketIoRealtimeTransport
 
   void _handleLiveInkReady(Object? data) {
     if (_liveInkNegotiation.accept(data)) {
+      _supportsReliableAck = data is Map && data['reliableAck'] == true;
       _emitStatus(RealtimeConnectionStatus.joined);
     }
   }
 
   void _resetLiveInkNegotiation() {
+    _supportsReliableAck = false;
     _liveInkNegotiation.reset();
   }
 
