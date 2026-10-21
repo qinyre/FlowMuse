@@ -6,7 +6,13 @@ on:
     paths:
       - "FlowMuse-App/lib/features/whiteboard/smart_layout/**"
       - "FlowMuse-App/tool/smart_layout_v3/platform/**"
+      - "FlowMuse-App/pubspec.yaml"
+      - "FlowMuse-App/pubspec.lock"
+      - "FlowMuse-App/tool/vendor/code_assets/**"
       - ".github/workflows/smart-layout-v3-platform.yml"
+
+env:
+  PUB_HOSTED_URL: https://pub.flutter-io.cn
 
 permissions:
   contents: read
@@ -59,7 +65,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Cross-platform smoke (entry→commit→undo→reopen)
         run: flutter test tool/smart_layout_v3/platform
       - name: Build matrix (available targets build; unavailable release_deferred)
