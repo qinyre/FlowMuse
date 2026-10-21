@@ -11,6 +11,8 @@ class LiveInkSender {
   final LiveInkChunkEmitter _emit;
   final Stopwatch _clock = Stopwatch()..start();
   Timer? _retryTimer;
+  Timer? _activityTimer;
+  _LiveInkCandidate? _lastAccepted;
   static const _maxCandidateAge = Duration(milliseconds: 250);
 
   String? _strokeId;
@@ -34,6 +36,18 @@ class LiveInkSender {
     cancel();
     _strokeId = strokeId;
     _style = style;
+    _activityTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final accepted = _lastAccepted;
+      if (accepted == null || _closing || _inFlight || _pending != null) return;
+      _pending = _LiveInkCandidate(
+        totalCount: accepted.totalCount,
+        tailStart: accepted.totalCount - 1,
+        tail: [accepted.tail.last],
+        createdAtMicros: _clock.elapsedMicroseconds,
+        activityOnly: true,
+      );
+      _drain();
+    });
   }
 
   void offer(List<LiveInkPoint> points) {
@@ -71,6 +85,9 @@ class LiveInkSender {
   }
 
   void cancel() {
+    _activityTimer?.cancel();
+    _activityTimer = null;
+    _lastAccepted = null;
     _retryTimer?.cancel();
     _retryTimer = null;
     _generation++;
@@ -128,7 +145,7 @@ class LiveInkSender {
       return;
     }
     _pending = null;
-    if (candidate.totalCount <= _lastSentIndex) {
+    if (!candidate.activityOnly && candidate.totalCount <= _lastSentIndex) {
       if (_closing) cancel();
       return;
     }
@@ -139,7 +156,9 @@ class LiveInkSender {
     }
 
     final cycleStart = _lastSentIndex;
-    final requestedStart = _recentCycleStarts.fold(cycleStart, math.min);
+    final requestedStart = candidate.activityOnly
+        ? candidate.tailStart
+        : _recentCycleStarts.fold(cycleStart, math.min);
     final startIndex = math.max(candidate.tailStart, requestedStart);
     final offset = startIndex - candidate.tailStart;
     final chunk = LiveInkChunk(
@@ -163,9 +182,12 @@ class LiveInkSender {
       _inFlight = false;
       if (emitted) {
         emittedChunks++;
-        _lastSentIndex = candidate.totalCount;
-        _recentCycleStarts.add(cycleStart);
-        if (_recentCycleStarts.length > 2) _recentCycleStarts.removeAt(0);
+        if (!candidate.activityOnly) {
+          _lastAccepted = candidate;
+          _lastSentIndex = candidate.totalCount;
+          _recentCycleStarts.add(cycleStart);
+          if (_recentCycleStarts.length > 2) _recentCycleStarts.removeAt(0);
+        }
       } else {
         notWritableCount++;
         _pending ??= candidate;
@@ -185,10 +207,12 @@ class _LiveInkCandidate {
     required this.tailStart,
     required this.tail,
     required this.createdAtMicros,
+    this.activityOnly = false,
   });
 
   final int totalCount;
   final int tailStart;
   final List<LiveInkPoint> tail;
   final int createdAtMicros;
+  final bool activityOnly;
 }

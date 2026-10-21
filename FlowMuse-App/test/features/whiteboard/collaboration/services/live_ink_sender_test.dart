@@ -12,6 +12,27 @@ void main() {
     opacity: 100,
   );
 
+  test('停笔未抬时重复单点保持活动，结束后停止心跳', () async {
+    final sent = <LiveInkChunk>[];
+    final sender = LiveInkSender(
+      emit: (chunk) async {
+        sent.add(chunk);
+        return true;
+      },
+    )..start(strokeId: 'paused', style: style);
+    addTearDown(sender.cancel);
+    sender.offer(_points(2));
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    expect(sent, hasLength(2));
+    expect(sent.last.startIndex, 1);
+    expect(sent.last.points, hasLength(1));
+    sender.finish(_points(2));
+    expect(sender.active, isFalse);
+    final count = sent.length;
+    await Future<void>.delayed(const Duration(milliseconds: 1050));
+    expect(sent, hasLength(count));
+  });
+
   test('不可写不推进窗口，停止移动后恢复仍发送首段', () async {
     var writable = false;
     final sent = <LiveInkChunk>[];
@@ -22,6 +43,7 @@ void main() {
         return true;
       },
     )..start(strokeId: 'fixture', style: style);
+    addTearDown(sender.cancel);
     sender.offer(_points(2));
     await _flushAsync();
     expect(sender.emittedChunks, 0);
@@ -42,6 +64,7 @@ void main() {
         return false;
       },
     )..start(strokeId: 'fixture', style: style);
+    addTearDown(sender.cancel);
     sender.offer(_points(1));
     await Future<void>.delayed(const Duration(milliseconds: 350));
     final stoppedAt = attempts;
@@ -55,12 +78,14 @@ void main() {
   });
 
   LiveInkSender senderFor(List<LiveInkChunk> sent) {
-    return LiveInkSender(
+    final sender = LiveInkSender(
       emit: (chunk) async {
         sent.add(chunk);
         return true;
       },
     )..start(strokeId: 'stroke-1', style: style);
+    addTearDown(sender.cancel);
+    return sender;
   }
 
   for (final count in [1, 7, 8, 64, 65]) {
@@ -117,6 +142,7 @@ void main() {
         return sent.length == 1 ? firstDone.future : Future<bool>.value(true);
       },
     )..start(strokeId: 'stroke-1', style: style);
+    addTearDown(sender.cancel);
 
     sender.offer(_points(1));
     await _flushMicrotasks();
@@ -145,6 +171,7 @@ void main() {
           return true;
         },
       )..start(strokeId: 'stroke-1', style: style);
+      addTearDown(sender.cancel);
 
       sender.offer(_points(1));
       sender.offer(_points(3));
@@ -166,6 +193,7 @@ void main() {
         return sent.length == 1 ? firstDone.future : Future<bool>.value(true);
       },
     )..start(strokeId: 'stroke-1', style: style);
+    addTearDown(sender.cancel);
 
     sender.offer(_points(1));
     await _flushMicrotasks();
@@ -188,6 +216,7 @@ void main() {
         return firstDone.future;
       },
     )..start(strokeId: 'stroke-1', style: style);
+    addTearDown(sender.cancel);
 
     sender.offer(_points(1));
     await _flushMicrotasks();
