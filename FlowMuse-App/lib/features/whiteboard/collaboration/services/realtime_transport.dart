@@ -198,7 +198,6 @@ class MemoryRealtimeRoomHub {
 }
 
 class LiveInkNegotiation {
-  Timer? _timer;
   String? _roomId;
   bool _accepting = false;
   int _generation = 0;
@@ -213,30 +212,21 @@ class LiveInkNegotiation {
     _roomId = roomId;
     _version = 0;
     _accepting = false;
-    _timer?.cancel();
-    _timer = null;
   }
 
-  void arm({Duration timeout = const Duration(seconds: 1)}) {
+  void arm() {
     _accepting = true;
-    _timer?.cancel();
-    final generation = _generation;
-    _timer = Timer(timeout, () {
-      if (generation == _generation) _accepting = false;
-    });
   }
 
   bool accept(Object? data) {
     if (!_accepting) return false;
-    _accepting = false;
-    _timer?.cancel();
-    _timer = null;
     if (data is! Map) return false;
     final roomId = data['roomId'];
     final version = data['liveInkProtocolVersion'];
     if (roomId != _roomId || version is! num || version.toInt() < 2) {
       return false;
     }
+    _accepting = false;
     _version = version.toInt();
     return true;
   }
@@ -246,8 +236,6 @@ class LiveInkNegotiation {
     _roomId = null;
     _version = 0;
     _accepting = false;
-    _timer?.cancel();
-    _timer = null;
   }
 }
 

@@ -341,7 +341,9 @@ class SocketIoRealtimeTransport
         }
       }
     });
-    socket.on(_eventLiveInkReady, _handleLiveInkReady);
+    socket.on(_eventLiveInkReady, (data) {
+      if (identical(_socket, socket)) _handleLiveInkReady(data);
+    });
     socket.on(_eventClientLiveInk, (data) {
       try {
         final frame = _liveInkFrameFromEventData(data);
@@ -492,7 +494,9 @@ class SocketIoRealtimeTransport
   }
 
   void _handleLiveInkReady(Object? data) {
-    _liveInkNegotiation.accept(data);
+    if (_liveInkNegotiation.accept(data)) {
+      _emitStatus(RealtimeConnectionStatus.joined);
+    }
   }
 
   void _resetLiveInkNegotiation() {
