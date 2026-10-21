@@ -412,8 +412,9 @@ void main() {
       final message = CollaborationMessage.fromBytes(
         await crypto.decrypt(roomKey: room.roomKey, encryptedPayload: payload),
       );
-      if (message.type == CollaborationMessageType.sceneUpdate)
+      if (message.type == CollaborationMessageType.sceneUpdate) {
         batches.add(message);
+      }
     });
     addTearDown(sub.cancel);
     transport.blockNextSend();

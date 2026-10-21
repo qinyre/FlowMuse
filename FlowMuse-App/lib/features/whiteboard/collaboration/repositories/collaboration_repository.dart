@@ -637,8 +637,9 @@ class CollaborationRepository {
           _pendingReliableElements[id] = element;
         }
       }
-      if (_reliableSendQueued || _pendingReliableElements.isEmpty)
+      if (_reliableSendQueued || _pendingReliableElements.isEmpty) {
         return _sendQueue;
+      }
       _reliableSendQueued = true;
       final generation = _sendGeneration;
       _sendQueue = _sendQueue
@@ -651,14 +652,16 @@ class CollaborationRepository {
             }
           })
           .catchError((Object error, StackTrace stack) {
-            if (_sendGeneration == generation)
+            if (_sendGeneration == generation) {
               _handleSendQueueError(error, stack);
+            }
           })
           .whenComplete(() {
             if (_sendGeneration != generation) return;
             _reliableSendQueued = false;
-            if (_pendingReliableElements.isNotEmpty)
+            if (_pendingReliableElements.isNotEmpty) {
               unawaited(_onAccumulatorFlush(const [], false));
+            }
           });
       return _sendQueue;
     }
