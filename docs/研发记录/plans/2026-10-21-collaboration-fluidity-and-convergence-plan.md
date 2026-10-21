@@ -377,3 +377,8 @@ Provider 随账号身份改变可能重建 Repository，而页面存在长期持
 
 - Android ARM64配套测试包已构建，源代码/构建ID同Web：`2a39652`；APK SHA-256：`724773a624bd7d6a4672caa907a4f028a4495f32918d79eca547012018ae9c99`，179297442字节；9个原有ARM64原生库齐全，构建ID已在libapp.so核对。apksigner验证通过，证书SHA-256与原安装包一致：`e67952adb86936a9f49406c274f92ee65c35d2706f91dd19436eeaf2b8072ecf`。APK和机器可读回执留在忽略的build目录，未卸载/清理用户数据，也尚未安装。
 - 后端运行的Compose覆盖配置为`/opt/flowmuse/releases/collaboration-eb6d365/deploy.override.json`。后续维护需继续同时指定原compose与该覆盖配置；在正式源码部署更新前，单独使用旧源码目录的默认构建会回到旧服务端实现。
+
+
+### CI依赖一致性修复
+
+Smart Layout V3 CI及三宿主Platform流水线原先没有配置锁文件对应的PUB_HOSTED_URL，也没有--enforce-lockfile；此次触发后将objective_c从已锁定9.4.1漂移到pub.dev的9.6.2，其build hook使用了本项目固定code_assets API中不存在的Architecture.arm64e，四个job同样在测试开始前失败。两组流程现与Quality保持镜像源及强制锁文件一致，并将pubspec和本地code_assets变化加入触发范围。没有升级/降级客户端依赖，也没有改变已发布Web和APK的代码或依赖。
