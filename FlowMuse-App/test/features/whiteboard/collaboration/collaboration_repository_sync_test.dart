@@ -383,6 +383,47 @@ void main() {
     await peerTransport.disconnect();
   });
 
+  test('正式内容未获网络确认时仍可保存快照，临时预览不单独触发快照', () async {
+    final room = CollaborationRoom.newRoom();
+    final store = MemoryEncryptedSceneStore();
+    await store.createRoom(
+      room: room,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'fixture',
+    );
+    final transport = _GatedMemoryRealtimeTransport(
+      hub: MemoryRealtimeRoomHub(),
+      socketId: 'sender',
+    );
+    final repo = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+    );
+    addTearDown(repo.stop);
+    await repo.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await repo.broadcastElements(
+      room: room,
+      elements: [_element('pending', 1)],
+      latestOnly: true,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await repo.forceFlushSnapshot();
+    expect((await store.loadScene(room))!.elements, isEmpty);
+    transport.blockNextSend();
+    await repo.broadcastElements(
+      room: room,
+      elements: [_element('pending', 2)],
+    );
+    await transport.waitForBlockedSend();
+    try {
+      await repo.forceFlushSnapshot();
+      expect((await store.loadScene(room))!.elements.single['version'], 2);
+    } finally {
+      transport.releaseSend();
+    }
+  });
+
   test('可靠确认阻塞时按元素合并待发批次，保留最后版本与独立墓碑', () async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
