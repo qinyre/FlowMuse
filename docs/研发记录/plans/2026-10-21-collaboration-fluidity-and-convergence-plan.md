@@ -363,3 +363,17 @@ Provider 随账号身份改变可能重建 Repository，而页面存在长期持
 发送频率维持20Hz。没有证据支持现在改30/60Hz、迁移加密worker、重写渲染或扩大服务端锁优化，因此未引入这些改动。2/5人实机、受限网络、断线1/5/15秒、长稳运行和GPU验收尚待用户设备接入；用户明确先完成代码和Web，自行体验测试。H10责任人：本轮实现者；人工审查人：待指定。
 
 补充：正式更改在等待网络ACK之前即标记快照为脏，切后台显式刷新不再依赖网络确认先完成；临时预览不单独触发快照。新增阻塞发送期间保存与预览触发隔离回归。
+
+
+### 发布回执（2026-10-21）
+
+- 代码发布基线：`2a39652a0ecd6f3f52b257c97c347deb6ee15683`，测试Web显示构建ID `2a39652`；湿墨分层与实时墨迹V2均启用。
+- 最终全量复测1818通过、5项既有跳过；analyze无问题。并行Web构建时静态绘制性能门禁曾出现ratio=3.03的超线样本，未改动阈值；独占复核ratio=2.96通过，停止构建后的全量复核ratio=2.73通过。不得将这些debug CPU数字当作设备帧耗时。
+- 测试Web：[入口](https://app.flowmuse.cloud/wet-ink-v2/library)，[发布清单](https://app.flowmuse.cloud/wet-ink-v2/flowmuse-release.json)。main.dart.js SHA-256：`33a65101984c2faaeb8bdc6e985eb610f2ebd886e5b9b9d426d4538d7f248007`；已公网回读匹配，SPA深链接通过。正式Web前端仍为`main-20260927-393566f`。
+- 后端镜像：`flowmuse-collab:fluidity-eb6d365`，镜像ID：`sha256:1af39d9f7003b9c506ca6361dfa7c37adc24802a89e557fc57794ae4e490673b`；Linux二进制由Go1.25.6从本轮代码交叉编译并校验SHA-256，沿用alpine:3.22运行层，避免在生产小内存主机编译。
+- 服务端环境变量逐键值核对、端口保持；旧镜像保留为`flowmuse-collab:before-fluidity-20261021`，回滚覆盖配置位于`/opt/flowmuse/releases/collaboration-eb6d365/rollback.override.json`。首次校验曾将变量排列顺序误判为变化，自动回滚后修正为键值比较，第二次发布通过。公网`/health`与Socket.IO Engine.IO握手正常。
+- Nginx测试路径根目录为`/var/www/flowmuse-collaboration-fluidity-20261021`，备份为`/etc/nginx/sites-available/flowmuse-app.before-collaboration-fluidity-20261021`。只切换测试前缀，正式前端根目录保持。
+- 尚未覆盖安装平板；ADB当前无设备。真实用户房间绘制、GPU时延和长稳验收由后续配套设备测试完成。
+
+- Android ARM64配套测试包已构建，源代码/构建ID同Web：`2a39652`；APK SHA-256：`724773a624bd7d6a4672caa907a4f028a4495f32918d79eca547012018ae9c99`，179297442字节；9个原有ARM64原生库齐全，构建ID已在libapp.so核对。apksigner验证通过，证书SHA-256与原安装包一致：`e67952adb86936a9f49406c274f92ee65c35d2706f91dd19436eeaf2b8072ecf`。APK和机器可读回执留在忽略的build目录，未卸载/清理用户数据，也尚未安装。
+- 后端运行的Compose覆盖配置为`/opt/flowmuse/releases/collaboration-eb6d365/deploy.override.json`。后续维护需继续同时指定原compose与该覆盖配置；在正式源码部署更新前，单独使用旧源码目录的默认构建会回到旧服务端实现。
