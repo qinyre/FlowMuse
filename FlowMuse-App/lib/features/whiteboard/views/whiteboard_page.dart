@@ -2090,11 +2090,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
   }
 
-  Future<void> _sendLiveInkChunk(LiveInkChunk chunk) async {
+  Future<bool> _sendLiveInkChunk(LiveInkChunk chunk) async {
     final state = ref.read(whiteboardViewModelProvider);
     final room = state.activeRoom;
-    if (!state.collaborating || room == null) return;
-    await _collaborationRepository.sendLiveInkChunk(room: room, chunk: chunk);
+    if (!state.collaborating || room == null) return false;
+    return _collaborationRepository.sendLiveInkChunk(room: room, chunk: chunk);
   }
 
   Iterable<String> _freedrawIds(Iterable<Map<String, Object?>> elements) sync* {

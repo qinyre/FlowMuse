@@ -432,12 +432,12 @@ class SocketIoRealtimeTransport
   }
 
   @override
-  Future<void> sendLiveInk(EncryptedPayload payload) async {
+  Future<bool> sendLiveInk(EncryptedPayload payload) async {
     final roomId = _roomId;
     final socket = _socket;
     if (roomId == null || socket == null) {
       _liveInkTransportNotWritableDrops++;
-      return;
+      return false;
     }
     final emitted = emitLiveInkIfWritable(
       SocketIoLiveInkVolatileChannel(socket),
@@ -451,6 +451,7 @@ class SocketIoRealtimeTransport
       ],
     );
     if (!emitted) _liveInkTransportNotWritableDrops++;
+    return emitted;
   }
 
   @override

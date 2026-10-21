@@ -41,7 +41,7 @@ abstract interface class RealtimeTransport {
 
   Future<void> send(EncryptedPayload payload, {bool volatile = false});
 
-  Future<void> sendLiveInk(EncryptedPayload payload);
+  Future<bool> sendLiveInk(EncryptedPayload payload);
 
   Future<void> endRoom({String? ownerKey});
 
@@ -102,7 +102,7 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {}
 
   @override
-  Future<void> sendLiveInk(EncryptedPayload payload) async {}
+  Future<bool> sendLiveInk(EncryptedPayload payload) async => false;
 }
 
 class MemoryRealtimeRoomHub {
@@ -336,13 +336,14 @@ class MemoryRealtimeTransport
   }
 
   @override
-  Future<void> sendLiveInk(EncryptedPayload payload) async {
+  Future<bool> sendLiveInk(EncryptedPayload payload) async {
     final roomId = _roomId;
     if (roomId == null) {
       _liveInkTransportNotWritableDrops++;
-      return;
+      return false;
     }
     hub.broadcastLiveInk(roomId: roomId, sender: this, payload: payload);
+    return true;
   }
 
   @override

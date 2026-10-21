@@ -145,23 +145,23 @@ class CollaborationRepository {
 
   Stream<String> get newUsers => _transport.newUsers;
 
-  Future<void> sendLiveInk(EncryptedPayload payload) async {
-    if (!effectiveLiveInk) return;
-    await _transport.sendLiveInk(payload);
+  Future<bool> sendLiveInk(EncryptedPayload payload) async {
+    if (!effectiveLiveInk) return false;
+    return _transport.sendLiveInk(payload);
   }
 
-  Future<void> sendLiveInkChunk({
+  Future<bool> sendLiveInkChunk({
     required CollaborationRoom room,
     required LiveInkChunk chunk,
   }) async {
-    if (!effectiveLiveInk || _activeRoom?.roomId != room.roomId) return;
+    if (!effectiveLiveInk || _activeRoom?.roomId != room.roomId) return false;
     final sessionGeneration = _roomSessionGeneration;
     final encrypted = await _crypto.encrypt(
       roomKey: room.roomKey,
       plainBytes: CollaborationMessage.inkChunk(chunk).toBytes(),
     );
-    if (!_isCurrentRoomSession(room, sessionGeneration)) return;
-    await sendLiveInk(encrypted);
+    if (!_isCurrentRoomSession(room, sessionGeneration)) return false;
+    return sendLiveInk(encrypted);
   }
 
   Stream<List<RoomCollaborator>> get roomUsers => _transport.roomUsers;

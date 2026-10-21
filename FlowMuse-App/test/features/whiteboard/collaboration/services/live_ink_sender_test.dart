@@ -12,10 +12,53 @@ void main() {
     opacity: 100,
   );
 
+  test('不可写不推进窗口，停止移动后恢复仍发送首段', () async {
+    var writable = false;
+    final sent = <LiveInkChunk>[];
+    final sender = LiveInkSender(
+      emit: (chunk) async {
+        if (!writable) return false;
+        sent.add(chunk);
+        return true;
+      },
+    )..start(strokeId: 'fixture', style: style);
+    sender.offer(_points(2));
+    await _flushAsync();
+    expect(sender.emittedChunks, 0);
+    expect(sender.hasPending, isTrue);
+    writable = true;
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    expect(sent.single.startIndex, 0);
+    expect(sent.single.points.length, 2);
+    expect(sender.emittedChunks, 1);
+    sender.cancel();
+  });
+
+  test('不可写候选在250ms后过期，取消后不再重试', () async {
+    var attempts = 0;
+    final sender = LiveInkSender(
+      emit: (_) async {
+        attempts++;
+        return false;
+      },
+    )..start(strokeId: 'fixture', style: style);
+    sender.offer(_points(1));
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    final stoppedAt = attempts;
+    expect(sender.hasPending, isFalse);
+    expect(stoppedAt, lessThanOrEqualTo(6));
+    sender.offer(_points(2));
+    sender.cancel();
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    expect(attempts, lessThanOrEqualTo(stoppedAt + 1));
+    expect(sender.hasPending, isFalse);
+  });
+
   LiveInkSender senderFor(List<LiveInkChunk> sent) {
     return LiveInkSender(
       emit: (chunk) async {
         sent.add(chunk);
+        return true;
       },
     )..start(strokeId: 'stroke-1', style: style);
   }
@@ -66,12 +109,12 @@ void main() {
   );
 
   test('keeps one in-flight send and replaces the pending candidate', () async {
-    final firstDone = Completer<void>();
+    final firstDone = Completer<bool>();
     final sent = <LiveInkChunk>[];
     final sender = LiveInkSender(
       emit: (chunk) {
         sent.add(chunk);
-        return sent.length == 1 ? firstDone.future : Future<void>.value();
+        return sent.length == 1 ? firstDone.future : Future<bool>.value(true);
       },
     )..start(strokeId: 'stroke-1', style: style);
 
@@ -84,7 +127,7 @@ void main() {
     expect(sender.hasPending, isTrue);
     expect(sent, hasLength(1));
 
-    firstDone.complete();
+    firstDone.complete(true);
     await _flushAsync();
 
     expect(sent, hasLength(2));
@@ -99,12 +142,14 @@ void main() {
         emit: (chunk) async {
           sent.add(chunk);
           if (sent.length == 1) throw StateError('offline');
+          return true;
         },
       )..start(strokeId: 'stroke-1', style: style);
 
       sender.offer(_points(1));
       sender.offer(_points(3));
       await _flushAsync();
+      await Future<void>.delayed(const Duration(milliseconds: 60));
 
       expect(sender.errorCount, 1);
       expect(sent, hasLength(2));
@@ -113,12 +158,12 @@ void main() {
   );
 
   test('finish snapshots the final accepted point without waiting', () async {
-    final firstDone = Completer<void>();
+    final firstDone = Completer<bool>();
     final sent = <LiveInkChunk>[];
     final sender = LiveInkSender(
       emit: (chunk) {
         sent.add(chunk);
-        return sent.length == 1 ? firstDone.future : Future<void>.value();
+        return sent.length == 1 ? firstDone.future : Future<bool>.value(true);
       },
     )..start(strokeId: 'stroke-1', style: style);
 
@@ -127,7 +172,7 @@ void main() {
     sender.finish(_points(3));
     expect(sender.hasPending, isTrue);
 
-    firstDone.complete();
+    firstDone.complete(true);
     await _flushAsync();
 
     expect(sent.last.points.last.x, 2);
@@ -135,7 +180,7 @@ void main() {
   });
 
   test('cancel drops pending work and ignores an old completion', () async {
-    final firstDone = Completer<void>();
+    final firstDone = Completer<bool>();
     final sent = <LiveInkChunk>[];
     final sender = LiveInkSender(
       emit: (chunk) {
@@ -148,7 +193,7 @@ void main() {
     await _flushMicrotasks();
     sender.offer(_points(3));
     sender.cancel();
-    firstDone.complete();
+    firstDone.complete(true);
     await _flushAsync();
 
     expect(sent, hasLength(1));

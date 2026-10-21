@@ -648,7 +648,7 @@ class _LifecycleTransport implements RealtimeTransport {
   }
 
   @override
-  Future<void> sendLiveInk(EncryptedPayload payload) async {}
+  Future<bool> sendLiveInk(EncryptedPayload payload) async => false;
 
   @override
   Future<void> endRoom({String? ownerKey}) async {}
