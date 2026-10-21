@@ -193,7 +193,11 @@ Future<CollaborationPerformanceResult> runCollaborationPerformanceScenario(
               message.elements.isEmpty) {
             return;
           }
-          final version = (message.elements.single['version'] as num).toInt();
+          final target = message.elements.where(
+            (element) => element['id'] == initial.elements.first['id'],
+          );
+          if (target.isEmpty) return;
+          final version = (target.first['version'] as num).toInt();
           scenes[receiverIndex] = repositories[receiverIndex]
               .reconcileRemoteScene(
                 localScene: scenes[receiverIndex],
@@ -223,10 +227,9 @@ Future<CollaborationPerformanceResult> runCollaborationPerformanceScenario(
         ],
       );
       scenes[0] = scene;
-      await repositories.first.broadcastScene(
+      await repositories.first.broadcastElements(
         room: room,
-        scene: scene,
-        syncAll: true,
+        elements: [scene.elements.first],
       );
       try {
         await delivery!.future.timeout(const Duration(seconds: 5));
