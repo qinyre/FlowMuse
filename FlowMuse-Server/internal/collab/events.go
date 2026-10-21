@@ -23,6 +23,7 @@ const (
 type EncryptedFrame struct {
 	EncryptedBuffer []byte `json:"encryptedBuffer"`
 	IV              []byte `json:"iv"`
+	TargetSocketID  string `json:"targetSocketId,omitempty"`
 }
 
 type ReceivedLiveInkFrame struct {

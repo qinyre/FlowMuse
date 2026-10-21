@@ -53,6 +53,10 @@ abstract interface class LiveInkNegotiationDiagnostics {
   String? get liveInkNegotiatedRoomId;
 }
 
+abstract interface class TargetedRealtimeTransport {
+  Future<void> sendTo(EncryptedPayload payload, String targetSocketId);
+}
+
 class DisconnectedRealtimeTransport implements RealtimeTransport {
   const DisconnectedRealtimeTransport();
 

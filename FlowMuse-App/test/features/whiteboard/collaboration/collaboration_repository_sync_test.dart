@@ -418,6 +418,7 @@ void main() {
       }
     });
 
+    await Future<void>.delayed(const Duration(milliseconds: 30));
     repositoryTransport.blockNextSend();
     await repository.broadcastElements(
       room: room,
@@ -683,7 +684,7 @@ class _GatedMemoryRealtimeTransport extends MemoryRealtimeTransport {
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {
     final gate = _sendGate;
     if (gate != null) {
-      _sendStarted?.complete();
+      if (_sendStarted?.isCompleted == false) _sendStarted!.complete();
       await gate.future;
       if (identical(_sendGate, gate)) {
         _sendGate = null;

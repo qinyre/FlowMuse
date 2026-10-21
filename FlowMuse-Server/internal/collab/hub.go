@@ -377,9 +377,13 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	socketID := string(client.Id())
 	h.mu.Lock()
 	currentRoomID := h.socketRooms[socketID]
+	targetInRoom := frame.TargetSocketID == "" || h.socketRooms[frame.TargetSocketID] == roomID
 	h.mu.Unlock()
 	if currentRoomID != roomID {
 		client.Emit(EventRoomError, "当前连接不在目标房间")
+		return
+	}
+	if !targetInRoom {
 		return
 	}
 	if len(frame.EncryptedBuffer)+len(frame.IV) > maxEncryptedFrameBytes {
@@ -388,6 +392,9 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	}
 	logForward(socketID, roomID, frame, volatile)
 	operator := client.To(socket.Room(roomID))
+	if frame.TargetSocketID != "" {
+		operator = client.To(socket.Room(frame.TargetSocketID))
+	}
 	if volatile {
 		operator = operator.Volatile()
 	}
@@ -699,7 +706,15 @@ func asFrame(value any) (EncryptedFrame, bool) {
 	if !ok {
 		return EncryptedFrame{}, false
 	}
-	return EncryptedFrame{EncryptedBuffer: encryptedBuffer, IV: iv}, true
+	target := ""
+	if raw, exists := values["targetSocketId"]; exists {
+		var valid bool
+		target, valid = raw.(string)
+		if !valid || len(target) > 256 {
+			return EncryptedFrame{}, false
+		}
+	}
+	return EncryptedFrame{EncryptedBuffer: encryptedBuffer, IV: iv, TargetSocketID: target}, true
 }
 
 func asBytes(value any) ([]byte, bool) {

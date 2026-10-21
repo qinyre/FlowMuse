@@ -9,6 +9,8 @@ enum CollaborationMessageType {
   idleStatus('IDLE_STATUS'),
   userVisibleSceneBounds('USER_VISIBLE_SCENE_BOUNDS'),
   inkChunk('INK_CHUNK'),
+  syncStatus('SYNC_STATUS'),
+  inkCancel('INK_CANCEL'),
   invalidResponse('INVALID_RESPONSE');
 
   const CollaborationMessageType(this.wireName);

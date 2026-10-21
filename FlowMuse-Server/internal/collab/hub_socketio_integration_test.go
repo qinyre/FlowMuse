@@ -71,6 +71,99 @@ func TestSocketIOReliableBroadcastAcknowledgesMembership(t *testing.T) {
 	}
 }
 
+func TestSocketIOTargetedBroadcastStaysInsideRoom(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	server := socket.NewServer(nil, nil)
+	hub := NewHub(server, nil, nil, nil, nil)
+	hub.roomExistsOverride = func(string) bool { return true }
+	hub.roomEndedOverride = func(string) bool { return false }
+	hub.Register()
+	local := httptest.NewServer(server.ServeHandler(nil))
+	defer local.Close()
+	defer server.Close(nil)
+	clients := make([]*pollingSocketClient, 4)
+	for i := range clients {
+		client, err := newPollingSocketClient(ctx, local.URL, "fixture")
+		if err != nil {
+			t.Fatal(err)
+		}
+		clients[i] = client
+		room := "target-room"
+		if i == 3 {
+			room = "other-room"
+		}
+		if err := client.emit(ctx, EventJoinRoom, room); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.waitEvent(ctx, EventLiveInkReady); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, target := range []int{1, 3} {
+		data, _ := json.Marshal([]any{EventServerBroadcast, "target-room", map[string]any{
+			"encryptedBuffer": []int{1, 2, 3}, "iv": make([]int, 12), "targetSocketId": clients[target].socketSID,
+		}})
+		if err := clients[0].post(ctx, "421"+string(data)); err != nil {
+			t.Fatal(err)
+		}
+		accepted := false
+		acked := false
+		for !acked {
+			packets, err := clients[0].poll(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, packet := range packets {
+				if strings.HasPrefix(packet, "431") {
+					var ack []struct {
+						Accepted bool `json:"accepted"`
+					}
+					if json.Unmarshal([]byte(packet[3:]), &ack) != nil || len(ack) != 1 {
+						t.Fatal("invalid ack")
+					}
+					accepted = ack[0].Accepted
+					acked = true
+				}
+			}
+		}
+		if accepted != (target == 1) {
+			t.Fatal("target membership was not enforced")
+		}
+		for i := 1; i < len(clients); i++ {
+			server.To(socket.Room(clients[i].socketSID)).Emit("target-test-marker", "done")
+			forwarded := 0
+			done := false
+			for !done {
+				packets, err := clients[i].poll(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, packet := range packets {
+					if strings.HasPrefix(packet, "452-") {
+						packet = "42" + packet[4:]
+					}
+					name, _, event, err := socketEvent(packet)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if event && name == EventClientBroadcast {
+						forwarded++
+					}
+					done = done || (event && name == "target-test-marker")
+				}
+			}
+			expected := 0
+			if target == 1 && i == 1 {
+				expected = 1
+			}
+			if forwarded != expected {
+				t.Fatalf("target=%d receiver=%d forwarded=%d expected=%d", target, i, forwarded, expected)
+			}
+		}
+	}
+}
+
 type pollingSocketClient struct {
 	baseURL   string
 	engineSID string

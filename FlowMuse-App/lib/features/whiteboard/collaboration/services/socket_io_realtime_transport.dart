@@ -41,7 +41,10 @@ class SocketIoLiveInkVolatileChannel implements LiveInkVolatileChannel {
 }
 
 class SocketIoRealtimeTransport
-    implements RealtimeTransport, LiveInkNegotiationDiagnostics {
+    implements
+        RealtimeTransport,
+        LiveInkNegotiationDiagnostics,
+        TargetedRealtimeTransport {
   SocketIoRealtimeTransport({
     required this.serverUrl,
     required this.identity,
@@ -408,6 +411,18 @@ class SocketIoRealtimeTransport
 
   @override
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {
+    await _sendPayload(payload, volatile: volatile);
+  }
+
+  @override
+  Future<void> sendTo(EncryptedPayload payload, String targetSocketId) =>
+      _sendPayload(payload, targetSocketId: targetSocketId);
+
+  Future<void> _sendPayload(
+    EncryptedPayload payload, {
+    bool volatile = false,
+    String? targetSocketId,
+  }) async {
     final roomId = _roomId;
     final socket = _socket;
     if (roomId == null || socket == null || !socket.connected) {
@@ -418,6 +433,7 @@ class SocketIoRealtimeTransport
       {
         'encryptedBuffer': Uint8List.fromList(payload.encryptedBuffer),
         'iv': Uint8List.fromList(payload.iv),
+        'targetSocketId': ?targetSocketId,
       },
     ];
     if (!volatile && _supportsReliableAck) {

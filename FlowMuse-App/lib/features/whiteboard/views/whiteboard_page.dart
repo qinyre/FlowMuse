@@ -761,6 +761,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         state == AppLifecycleState.inactive) {
       _flushLocalDraftOnExit();
       _saveReadingPosition(force: true);
+      unawaited(_collaborationRepository.forceFlushSnapshot());
+    } else if (state == AppLifecycleState.resumed) {
+      unawaited(_collaborationRepository.checkSynchronization());
     }
   }
 
@@ -1886,6 +1889,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           final previous = _lastRealtimeStatus;
           _lastRealtimeStatus = status;
           _runAfterStableFrame(() {
+            if (mounted && status == RealtimeConnectionStatus.joined) {
+              setState(() {});
+            }
             ref
                 .read(whiteboardViewModelProvider.notifier)
                 .applyConnectionStatus(status);
@@ -2027,7 +2033,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   bool _shouldUseLiveInkV2() {
     return ref.read(whiteboardViewModelProvider).collaborating &&
-        _collaborationRepository.effectiveLiveInk;
+        _collaborationRepository.shouldUseLiveInkV2;
   }
 
   void _broadcastLiveInk(
@@ -2085,6 +2091,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   void _cancelLiveInk(String strokeId) {
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room != null) {
+      unawaited(
+        _collaborationRepository.cancelLiveInk(room: room, strokeId: strokeId),
+      );
+    }
     if (_liveInkSender.strokeId == strokeId) {
       _liveInkSender.cancel();
     }
@@ -2165,6 +2177,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             }
           }
         }
+      case CollaborationMessageType.inkCancel:
+        final strokeId = message.payload['strokeId'];
+        if (strokeId is String &&
+            strokeId.isNotEmpty &&
+            strokeId.length <= 256) {
+          _remoteWetInkStore.finalizeStroke(strokeId);
+        }
+        return;
+      case CollaborationMessageType.syncStatus:
       case CollaborationMessageType.inkChunk:
       case CollaborationMessageType.invalidResponse:
         break;
@@ -2693,6 +2714,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onLeaveCollaboration: _leaveCollaboration,
                   onEndCollaboration: _endCollaboration,
                   onShareCollaboration: _shareCollaborationInvitation,
+                  onCheckCollaboration: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    await _collaborationRepository.checkSynchronization();
+                    if (mounted) {
+                      messenger.showSnackBar(const SnackBar(content: Text('已发起同步校验')));
+                    }
+                  },
                   socialAction: SocialMessagesAction(
                     prepareToOpenInvitation: _prepareToOpenFriendInvitation,
                   ),
@@ -2842,8 +2870,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       WhiteboardCollaborationStatus.failed => '协作失败',
       WhiteboardCollaborationStatus.connected
           when state.collaborators.isNotEmpty =>
-        '协作中 ${state.collaborators.length}',
-      WhiteboardCollaborationStatus.connected => '协作中',
+        '${_collaborationRepository.collaborationMode} · ${state.collaborators.length}人',
+      WhiteboardCollaborationStatus.connected =>
+        _collaborationRepository.collaborationMode,
       WhiteboardCollaborationStatus.idle => null,
     };
   }
