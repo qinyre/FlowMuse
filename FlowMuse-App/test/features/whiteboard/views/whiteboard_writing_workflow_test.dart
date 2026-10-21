@@ -35,6 +35,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage_ohos/flutter_secure_storage_ohos.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 // Real page, controller and SQLite; no account/server/platform service calls.
 // Run this file with FLOWMUSE_LAYERED_WET_INK=false and true.
@@ -176,6 +177,88 @@ void main() {
       ..loadFromContent(content!, 'latest.excalidraw');
     addTearDown(reopened.dispose);
     expect(_ink(reopened), hasLength(2));
+  });
+
+  testWidgets('保存失败重试成功后返回首页，重新打开仍有笔迹', (tester) async {
+    // Given：白板是栈底路由，首次自动保存失败。
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'workflow-retry-and-exit'),
+    ))!;
+    final storage = _FaultySceneRepository(library)..failures = 1;
+    final container = _container(library: library, sceneRepository: storage);
+    final router = GoRouter(
+      initialLocation: '/whiteboard',
+      routes: [
+        GoRoute(
+          path: '/library',
+          builder: (_, _) => const Scaffold(body: Text('测试资料库')),
+        ),
+        GoRoute(
+          path: '/whiteboard',
+          builder: (_, _) => WhiteboardPage(noteId: note.id),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    final controller = await _open(tester, container, note, router: router);
+    controller.switchTool(ToolType.freedraw);
+    await _stroke(tester, const Offset(650, 350));
+    await tester.pump(const Duration(milliseconds: 600));
+    await _drainIo(tester, container);
+    expect(find.text('保存失败，内容仍保留在当前页面'), findsOneWidget);
+
+    // When：使用真正的提示重试按钮，然后点击返回。
+    await tester.tap(find.widgetWithText(SnackBarAction, '重试'));
+    await _drainIo(
+      tester,
+      container,
+      until: () =>
+          container.read(whiteboardViewModelProvider).saveStatus ==
+          WhiteboardSaveStatus.saved,
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('保存失败，内容仍保留在当前页面'), findsNothing);
+    tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onBack!();
+    await _drainIo(tester, container);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // Then：真实路由离开白板，磁盘内容可以完整恢复。
+    expect(find.text('测试资料库'), findsOneWidget);
+    expect(find.byType(WhiteboardPage), findsNothing);
+    final content = (await tester.runAsync(() => scenes.loadScene(note.id)))!;
+    final reopened = MarkdrawController()
+      ..loadFromContent(content, 'reopened.excalidraw');
+    addTearDown(reopened.dispose);
+    expect(_ink(reopened), hasLength(1));
+  });
+
+  testWidgets('列表刷新失败不应把已落盘正文标成保存失败', (tester) async {
+    // Given：打开后模拟资料库列表查询失败，场景写盘仍正常。
+    final faultyLibrary = _FailingIndexLibrary();
+    final note = (await tester.runAsync(
+      () => faultyLibrary.createNote(title: 'workflow-index-failure'),
+    ))!;
+    final container = _container(library: faultyLibrary);
+    final controller = await _open(tester, container, note);
+    faultyLibrary.failIndex = true;
+
+    // When：书写触发自动保存和列表刷新。
+    controller.switchTool(ToolType.freedraw);
+    await _stroke(tester, const Offset(650, 350));
+    await tester.pump(const Duration(milliseconds: 600));
+    await _drainIo(tester, container);
+
+    // Then：列表错误保留在自身状态中，正文保存成功且可重开。
+    expect(container.read(libraryIndexProvider).hasError, isTrue);
+    expect(
+      container.read(whiteboardViewModelProvider).saveStatus,
+      WhiteboardSaveStatus.saved,
+    );
+    final content = (await tester.runAsync(() => scenes.loadScene(note.id)))!;
+    final reopened = MarkdrawController()
+      ..loadFromContent(content, 'saved.excalidraw');
+    addTearDown(reopened.dispose);
+    expect(_ink(reopened), hasLength(1));
   });
 
   testWidgets('五笔经过真实画布：SQLite 自动保存、撤销重做、取消和重开', (tester) async {
@@ -1141,15 +1224,18 @@ ProviderContainer _container({
 Future<MarkdrawController> _open(
   WidgetTester tester,
   ProviderContainer container,
-  NoteItem note,
-) async {
+  NoteItem note, {
+  GoRouter? router,
+}) async {
   await tester.binding.setSurfaceSize(const Size(1200, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: MaterialApp(home: WhiteboardPage(noteId: note.id)),
+      child: router == null
+          ? MaterialApp(home: WhiteboardPage(noteId: note.id))
+          : MaterialApp.router(routerConfig: router),
     ),
   );
   await _drainIo(
@@ -1265,6 +1351,16 @@ class _TrackedLibraryRepository extends SqliteLibraryRepository {
     } finally {
       pendingWrites--;
     }
+  }
+}
+
+class _FailingIndexLibrary extends _TrackedLibraryRepository {
+  bool failIndex = false;
+
+  @override
+  Future<LibraryIndex> loadIndex() async {
+    if (failIndex) throw StateError('fixture index unavailable');
+    return super.loadIndex();
   }
 }
 
