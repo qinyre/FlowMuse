@@ -2718,7 +2718,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                     final messenger = ScaffoldMessenger.of(context);
                     await _collaborationRepository.checkSynchronization();
                     if (mounted) {
-                      messenger.showSnackBar(const SnackBar(content: Text('已发起同步校验')));
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('已发起同步校验')),
+                      );
                     }
                   },
                   socialAction: SocialMessagesAction(
@@ -2861,6 +2863,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   String? _collaborationStatusLabel(WhiteboardState state) {
+    const buildId = String.fromEnvironment('FLOWMUSE_BUILD_ID');
+    final mode =
+        '${_collaborationRepository.collaborationMode}${buildId.isEmpty ? '' : ' · $buildId'}';
     return switch (state.collaborationStatus) {
       WhiteboardCollaborationStatus.connecting => '连接中',
       WhiteboardCollaborationStatus.initializing => '初始化中',
@@ -2870,9 +2875,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       WhiteboardCollaborationStatus.failed => '协作失败',
       WhiteboardCollaborationStatus.connected
           when state.collaborators.isNotEmpty =>
-        '${_collaborationRepository.collaborationMode} · ${state.collaborators.length}人',
-      WhiteboardCollaborationStatus.connected =>
-        _collaborationRepository.collaborationMode,
+        '$mode · ${state.collaborators.length}人',
+      WhiteboardCollaborationStatus.connected => mode,
       WhiteboardCollaborationStatus.idle => null,
     };
   }

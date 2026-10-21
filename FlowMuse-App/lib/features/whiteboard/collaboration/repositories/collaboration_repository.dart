@@ -73,6 +73,8 @@ class CollaborationRepository {
   final math.Random _random = math.Random();
   final Map<String, _VersionRecord> _broadcastedElementVersions = {};
   final Map<String, Map<String, Object?>> _pendingLatestElements = {};
+  final Map<String, Map<String, Object?>> _pendingReliableElements = {};
+  bool _reliableSendQueued = false;
   final StreamController<String> _repositoryErrors =
       StreamController<String>.broadcast();
   final StreamController<RealtimeConnectionStatus> _modeStatus =
@@ -628,6 +630,38 @@ class CollaborationRepository {
     bool isInitial, {
     bool syncAll = false,
   }) {
+    if (!isInitial && !syncAll) {
+      for (final element in elements) {
+        final id = _id(element);
+        if (_isAtLeastAsNew(element, _pendingReliableElements[id])) {
+          _pendingReliableElements[id] = element;
+        }
+      }
+      if (_reliableSendQueued || _pendingReliableElements.isEmpty)
+        return _sendQueue;
+      _reliableSendQueued = true;
+      final generation = _sendGeneration;
+      _sendQueue = _sendQueue
+          .then<void>((_) async {
+            while (_sendGeneration == generation &&
+                _pendingReliableElements.isNotEmpty) {
+              final batch = _pendingReliableElements.values.toList();
+              _pendingReliableElements.clear();
+              await _doAccumulatorFlush(batch, false);
+            }
+          })
+          .catchError((Object error, StackTrace stack) {
+            if (_sendGeneration == generation)
+              _handleSendQueueError(error, stack);
+          })
+          .whenComplete(() {
+            if (_sendGeneration != generation) return;
+            _reliableSendQueued = false;
+            if (_pendingReliableElements.isNotEmpty)
+              unawaited(_onAccumulatorFlush(const [], false));
+          });
+      return _sendQueue;
+    }
     // Serialize sends: chain onto queue so the next flush can't start until
     // _rememberBroadcasted has completed, preventing duplicate sends.
     final generation = _sendGeneration;
@@ -911,6 +945,8 @@ class CollaborationRepository {
     await _stopRoomSession();
     _sendGeneration++;
     _pendingLatestElements.clear();
+    _pendingReliableElements.clear();
+    _reliableSendQueued = false;
     _latestSendQueued = false;
     _sendQueue = Future<void>.value();
     final sessionGeneration = _roomSessionGeneration;
@@ -1608,6 +1644,8 @@ class CollaborationRepository {
     _latestScene = ExcalidrawScene.empty();
     _broadcastedElementVersions.clear();
     _pendingLatestElements.clear();
+    _pendingReliableElements.clear();
+    _reliableSendQueued = false;
     _fileManager.reset();
     _accumulator.dispose();
     _sendGeneration++;

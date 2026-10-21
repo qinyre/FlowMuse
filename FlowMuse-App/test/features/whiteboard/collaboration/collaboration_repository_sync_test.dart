@@ -383,6 +383,64 @@ void main() {
     await peerTransport.disconnect();
   });
 
+  test('可靠确认阻塞时按元素合并待发批次，保留最后版本与独立墓碑', () async {
+    final crypto = CollaborationCrypto();
+    final room = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    await store.createRoom(
+      room: room,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'fixture',
+    );
+    final hub = MemoryRealtimeRoomHub();
+    final transport = _GatedMemoryRealtimeTransport(
+      hub: hub,
+      socketId: 'sender',
+    );
+    final peer = MemoryRealtimeTransport(hub: hub, socketId: 'peer');
+    final repo = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+    );
+    addTearDown(repo.stop);
+    addTearDown(peer.disconnect);
+    await repo.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    await peer.connect(room.roomId);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final batches = <CollaborationMessage>[];
+    final sub = peer.messages.listen((payload) async {
+      final message = CollaborationMessage.fromBytes(
+        await crypto.decrypt(roomKey: room.roomKey, encryptedPayload: payload),
+      );
+      if (message.type == CollaborationMessageType.sceneUpdate)
+        batches.add(message);
+    });
+    addTearDown(sub.cancel);
+    transport.blockNextSend();
+    await repo.broadcastElements(room: room, elements: [_element('stroke', 1)]);
+    await transport.waitForBlockedSend();
+    for (var v = 2; v <= 12; v++) {
+      await repo.broadcastElements(
+        room: room,
+        elements: [
+          _element('stroke', v),
+          {..._element('deleted', v), 'isDeleted': true},
+        ],
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    transport.releaseSend();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(batches, hasLength(2));
+    expect(batches.last.elements.map((e) => e['version']), everyElement(12));
+    expect(
+      batches.last.elements.firstWhere(
+        (e) => e['id'] == 'deleted',
+      )['isDeleted'],
+      true,
+    );
+  });
+
   test('实时笔迹发送阻塞时只保留最新帧且不丢最终帧', () async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
