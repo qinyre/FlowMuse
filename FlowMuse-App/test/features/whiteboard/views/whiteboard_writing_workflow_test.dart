@@ -18,6 +18,7 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/collaborati
 import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_scene_store.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/live_ink_receive_scheduler.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/services/whiteboard_collaboration_adapter.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/ink_recognition/ink_recognition_repository.dart';
 import 'package:flow_muse/features/whiteboard/models/editor_preferences.dart';
@@ -35,6 +36,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage_ohos/flutter_secure_storage_ohos.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 // Real page, controller and SQLite; no account/server/platform service calls.
 // Run this file with FLOWMUSE_LAYERED_WET_INK=false and true.
@@ -686,6 +688,207 @@ void main() {
     await _drainIo(tester, container);
   });
 
+  for (final template in [
+    CanvasPageTemplate.blank,
+    CanvasPageTemplate.grid,
+    CanvasPageTemplate.ancientBook,
+  ]) {
+    testWidgets('有限协作 ${template.name} 加入、续页和保存重开保持房主版式', (tester) async {
+      // Given: 房主已有两页，加入方通过临时协作入口进入。
+      FlutterSecureStorage.setMockInitialValues({});
+      final flow = template == CanvasPageTemplate.ancientBook
+          ? CanvasPageFlow.rightToLeft
+          : CanvasPageFlow.topToBottom;
+      final hostController = MarkdrawController()
+        ..setLayout(
+          CanvasLayout(
+            type: CanvasLayoutType.paged,
+            template: template,
+            pageFlow: flow,
+          ),
+        )
+        ..insertBlankPage();
+      addTearDown(hostController.dispose);
+      final store = _MemberJoinSceneStore();
+      final hub = MemoryRealtimeRoomHub();
+      final host = CollaborationRepository(
+        transport: MemoryRealtimeTransport(hub: hub, socketId: 'layout-host'),
+        sceneStore: store,
+      );
+      final local = CollaborationRepository(
+        transport: MemoryRealtimeTransport(hub: hub, socketId: 'layout-guest'),
+        sceneStore: store,
+      );
+      addTearDown(host.stop);
+      addTearDown(local.stop);
+      final room = (await tester.runAsync(
+        () => host.startNewRoom(
+          initialScene: WhiteboardCollaborationAdapter(
+            hostController,
+          ).currentScene(),
+        ),
+      ))!;
+      final before = (await tester.runAsync(
+        library.loadIndex,
+      ))!.notes.map((note) => note.id).toSet();
+      final container = _container(library: library, collaboration: local);
+      await tester.binding.setSurfaceSize(const Size(1200, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final router = GoRouter(
+        initialLocation: '/room',
+        routes: [
+          GoRoute(path: '/library', builder: (_, _) => const SizedBox.shrink()),
+          GoRoute(
+            path: '/room',
+            builder: (_, _) =>
+                WhiteboardPage.collaborationRoom(initialRoom: room),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await _drainIo(
+        tester,
+        container,
+        until: () =>
+            container.read(whiteboardViewModelProvider).collaborationStatus ==
+            WhiteboardCollaborationStatus.connected,
+      );
+      final controller = tester
+          .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+          .controller!;
+
+      // When/Then: 页面标记和默认版式一致，新增页面也不能退回空白模板。
+      expect(controller.layout.type, CanvasLayoutType.paged);
+      expect(
+        controller.layout.pages.map((p) => p.bounds),
+        hostController.layout.pages.map((p) => p.bounds),
+      );
+      expect(controller.layout.template, template);
+      expect(controller.layout.pageFlow, flow);
+      final visible = controller.editorState.viewport.visibleRect(
+        controller.canvasSize,
+      );
+      expect(
+        visible.contains(controller.layout.pages.first.bounds.topLeft),
+        isTrue,
+        reason: '平板加入后应看得到首张纸的边界，而不是只看见纸内局部',
+      );
+      expect(
+        visible.contains(controller.layout.pages.first.bounds.bottomRight),
+        isTrue,
+      );
+      controller.zoomIn(controller.canvasSize);
+      await tester.pump();
+      final zoom = controller.editorState.viewport.zoom;
+      final firstMarker = WhiteboardCollaborationAdapter(
+        hostController,
+      ).currentScene().elements.first;
+      await tester.runAsync(
+        () => host.broadcastElements(
+          room: room,
+          elements: [
+            {...firstMarker, 'version': (firstMarker['version']! as int) + 1},
+          ],
+        ),
+      );
+      await _drainIo(tester, container);
+      expect(
+        controller.editorState.viewport.zoom,
+        zoom,
+        reason: '后续远端页面更新不得反复重置本机缩放',
+      );
+      controller.insertBlankPage();
+      await tester.pump();
+      expect(controller.layout.pages.last.template, template);
+      expect(controller.layout.pages.last.pageFlow, flow);
+
+      // When: 加入方退出时保存临时协作。
+      tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onBack!();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('保存到本地'));
+      await _drainIo(
+        tester,
+        container,
+        until: () => !container.read(whiteboardViewModelProvider).collaborating,
+      );
+      final saved = (await tester.runAsync(
+        library.loadIndex,
+      ))!.notes.singleWhere((note) => !before.contains(note.id));
+      expect(saved.noteType, NoteType.paged);
+      expect(saved.pageTemplate.name, template.name);
+      expect(saved.pageFlow.name, flow.name);
+
+      // Then: 重开后继续插页仍沿用同一模板和方向。
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _drainIo(tester, container);
+      final reopened = await _open(tester, container, saved);
+      expect(reopened.layout.pages, hasLength(3));
+      expect(reopened.layout.template, template);
+      expect(reopened.layout.pageFlow, flow);
+      reopened.insertBlankPage();
+      expect(reopened.layout.pages.last.template, template);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _drainIo(tester, container);
+    });
+  }
+
+  testWidgets('本机有限笔记加入空白无限房间后不残留本机页面', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(
+        title: 'workflow-join-empty-room',
+        noteType: NoteType.paged,
+        pageTemplate: PageTemplate.grid,
+      ),
+    ))!;
+    final store = MemoryEncryptedSceneStore();
+    final room = CollaborationRoom.newRoom(crypto: CollaborationCrypto());
+    await tester.runAsync(
+      () => store.createRoom(
+        room: room,
+        scene: ExcalidrawScene.empty(),
+        ownerKeyHash: 'fixture',
+      ),
+    );
+    final local = CollaborationRepository(
+      transport: MemoryRealtimeTransport(
+        hub: MemoryRealtimeRoomHub(),
+        socketId: 'empty-guest',
+      ),
+      sceneStore: store,
+    );
+    addTearDown(local.stop);
+    final container = _container(library: library, collaboration: local);
+    final controller = await _open(tester, container, note);
+    expect(controller.layout.isPaged, isTrue);
+
+    final joining = tester
+        .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+        .onJoinCollaboration!();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.enterText(find.byType(TextField), room.toRoomValue());
+    await tester.tap(find.text('加入'));
+    await _drainIo(
+      tester,
+      container,
+      until: () =>
+          container.read(whiteboardViewModelProvider).collaborationStatus ==
+          WhiteboardCollaborationStatus.connected,
+    );
+    await joining;
+
+    expect(controller.layout.type, CanvasLayoutType.unbounded);
+    expect(controller.layout.pages, isEmpty);
+    expect(controller.currentScene.elements, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
+  });
+
   testWidgets('内存加密协作：落笔中接收远端元素，终笔与撤销仍广播', (tester) async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
@@ -1090,6 +1293,16 @@ void main() {
       hasLength(1),
     );
   });
+}
+
+class _MemberJoinSceneStore extends MemoryEncryptedSceneStore {
+  @override
+  Future<CollaborationRoomMetadata> joinRoom(CollaborationRoom room) async =>
+      CollaborationRoomMetadata(
+        roomId: room.roomId,
+        role: CollaborationRoomRole.editor,
+        ended: false,
+      );
 }
 
 class _TrackedCollaborationRepository extends CollaborationRepository {
