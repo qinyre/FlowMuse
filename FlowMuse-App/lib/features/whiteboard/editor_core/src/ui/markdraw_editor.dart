@@ -1946,7 +1946,7 @@ class _CollaborationChipState extends State<_CollaborationChip> {
             value: _CollaborationAction.share,
             child: ListTile(
               leading: Icon(Icons.ios_share),
-              title: Text('分享房间码'),
+              title: Text('分享房间'),
               contentPadding: EdgeInsets.zero,
             ),
           ),

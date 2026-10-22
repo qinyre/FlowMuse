@@ -32,6 +32,10 @@ void main() {
       '/#/auth/reset-password?token=test-only':
           '/auth/reset-password?token=test-only',
       roomPath: roomPath,
+      room.toLink(
+        origin: 'https://app.flowmuse.cloud',
+        path: '/whiteboard/collaboration',
+      ): 'https://app.flowmuse.cloud$roomPath',
       '/#$roomPath': roomPath,
       '/#room=${room.toRoomValue()}': roomPath,
     };
@@ -49,7 +53,7 @@ void main() {
         isTrue,
         reason: 'case $caseIndex',
       );
-      if (entry.value == roomPath) {
+      if (Uri.parse(entry.value).path == '/whiteboard/collaboration') {
         final parsed = CollaborationRoom.parse(matches.uri.toString());
         expect(parsed.room?.roomKey == room.roomKey, isTrue);
         expect(matches.uri.query, isEmpty);
