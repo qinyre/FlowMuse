@@ -30,3 +30,11 @@
 - `flutter test --no-pub --reporter expanded`：1841 通过、5 跳过（原有跳过）；包含 PDF、撤销、归属、外部导出净化与协作补偿的既有测试。
 - `flutter analyze --no-pub`：无问题。
 - 代码和自动化核查覆盖远端场景 UI 应用；未改 LWW、墓碑、customData 深拷贝、加密及导出净化。H10 人工责任人/审查人待项目组指定，安卓双端实际效果尚未验收。
+
+## 构建与交付状态
+
+- 应用代码提交：`be71e89a39a869d3cdeefc9780fa86dd5fc23620`，分支 `fix/collaboration-canvas-layout`。
+- 与当前增强配置一致，开启 `FLOWMUSE_LAYERED_WET_INK=true`、`FLOWMUSE_LIVE_INK_V2=true` 时，完整书写流程文件 17 项全部通过。
+- Web release 构建通过：`FlowMuse-App/build/issue65/web`；`main.dart.js` SHA-256 为 `1a320746063cd57a26009a7f68ef432a454764d0bb1bb8a1f1a19b9ec9131b7c`。
+- Android ARM64 release 构建通过：`FlowMuse-App/build/issue65/flowmuse-canvas-layout-be71e89-arm64.apk`；SHA-256 为 `6ec0d7530d55ee00bf2411223b6ad998b9a53c47a8ba322c6dbd785b2d35a5e0`。已验证构建标识、原生库 ELF 架构、与原安装包一致的引擎及签名；用户表示安卓包不着急，保留本地产物。
+- 构建回执：`FlowMuse-App/build/issue65/artifact-receipt.json`。本轮未部署线上 Web、未改后端、未安装平板；ADB 当前没有设备。Issue #65 保留开放，等待安卓真机复测确认实际现象消除。
