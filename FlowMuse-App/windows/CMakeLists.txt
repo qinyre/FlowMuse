@@ -55,6 +55,10 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# pdfx spawns a legacy CMake download project; CMake 4 child processes need this policy floor.
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0" AND NOT DEFINED ENV{CMAKE_POLICY_VERSION_MINIMUM})
+  set(ENV{CMAKE_POLICY_VERSION_MINIMUM} "3.5")
+endif()
 include(flutter/generated_plugins.cmake)
 
 

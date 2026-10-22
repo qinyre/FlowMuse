@@ -115,6 +115,11 @@ class PlatformBuildMatrix {
       final sw = Stopwatch()..start();
       final outcome = await _runCommand(recipe.command);
       sw.stop();
+      if (outcome.exitCode != 0) {
+        // 报告尾部可能被依赖解析输出占满，CI 日志保留完整构建错误。
+        stdout.write(outcome.stdout);
+        stderr.write(outcome.stderr);
+      }
       final artifactFile = File(recipe.artifactPath);
       final artifactExists = artifactFile.existsSync();
       final sha = artifactExists ? _sha256File(artifactFile) : null;
@@ -135,7 +140,7 @@ class PlatformBuildMatrix {
           // 生成文件不入提交：仅哈希入证据。
         },
         if (outcome.exitCode != 0)
-          'diagnostics_tail': _tail(outcome.stderr + outcome.stdout, 2000),
+          'diagnostics_tail': _tail(outcome.stdout + outcome.stderr, 6000),
       });
       stdout.writeln(
         '[platform] ${recipe.id}: ${outcome.exitCode == 0 && artifactExists ? 'built' : 'failed'} '

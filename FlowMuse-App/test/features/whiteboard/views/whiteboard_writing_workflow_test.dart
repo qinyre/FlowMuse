@@ -19,6 +19,7 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_s
 import 'package:flow_muse/features/whiteboard/collaboration/services/live_ink_receive_scheduler.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/services/whiteboard_collaboration_adapter.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/widgets/room_invite_qr.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/ink_recognition/ink_recognition_repository.dart';
 import 'package:flow_muse/features/whiteboard/models/editor_preferences.dart';
@@ -654,10 +655,11 @@ void main() {
     await _drainIo(
       tester,
       container,
-      until: () => find.text('协作房间已创建').evaluate().isNotEmpty,
+      until: () => find.text('分享协作房间').evaluate().isNotEmpty,
     );
     final room = container.read(whiteboardViewModelProvider).activeRoom;
     expect(room != null, isTrue);
+    expect(find.byType(RoomInviteQr), findsOneWidget);
     expect(container.read(whiteboardViewModelProvider).isRoomOwner, isTrue);
     await tester.binding.setSurfaceSize(const Size(390, 500));
     await tester.pump(const Duration(milliseconds: 400));
@@ -665,7 +667,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('邀请好友'));
     await tester.pumpAndSettle();
-    expect(find.text('协作房间已创建'), findsNothing);
+    expect(find.text('分享协作房间'), findsNothing);
     expect(
       tester.widget<SocialPage>(find.byType(SocialPage)).inviteFriends,
       isTrue,
@@ -682,6 +684,19 @@ void main() {
     expect(
       tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).controller,
       same(controller),
+    );
+    final sharing = tester
+        .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+        .onShareCollaboration!();
+    await tester.pumpAndSettle();
+    expect(find.byType(RoomInviteQr), findsOneWidget);
+    expect(find.text('分享协作房间'), findsOneWidget);
+    await tester.tap(find.text('知道了'));
+    await tester.pumpAndSettle();
+    await sharing;
+    expect(
+      identical(container.read(whiteboardViewModelProvider).activeRoom, room),
+      isTrue,
     );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

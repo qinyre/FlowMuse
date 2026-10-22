@@ -40,6 +40,7 @@ import '../collaboration/services/remote_wet_ink_store.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
+import '../collaboration/widgets/room_invite_qr.dart';
 import '../ink_recognition/ink_recognition_repository.dart';
 import '../pdf_note_import/pdf_note_consumer.dart';
 import '../pdf_note_import/pending_pdf_import_provider.dart';
@@ -1207,7 +1208,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
     await _listenToRoom(room);
     if (mounted) {
-      await _showCreatedCollaborationRoom(room);
+      await _showCollaborationInvitation(room);
     }
   }
 
@@ -1248,7 +1249,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     );
   }
 
-  Future<void> _showCreatedCollaborationRoom(CollaborationRoom room) async {
+  Future<void> _showCollaborationInvitation(CollaborationRoom room) async {
     final state = ref.read(whiteboardViewModelProvider);
     final roomLink = state.roomLink;
     final roomValue = state.roomValue ?? room.toRoomValue();
@@ -1256,7 +1257,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final inviteFriends = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('协作房间已创建'),
+        title: const Text('分享协作房间'),
         scrollable: true,
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -1264,7 +1265,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('把下面的信息发给协作者，对方即可加入当前白板。'),
+              const Text('让对方扫码或打开邀请链接，即可加入当前白板。'),
+              if (roomLink != null) ...[
+                const SizedBox(height: 16),
+                RoomInviteQr(roomLink: roomLink),
+              ],
               const SizedBox(height: 16),
               _RoomInfoBlock(label: '房间号', value: roomValue),
               if (roomLink != null) ...[
@@ -1278,9 +1283,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                 ),
               ],
               const SizedBox(height: 16),
-              const Text(
-                '加入指引：在笔记库首页或白板右上协作菜单选择“加入房间”，粘贴完整链接、#room=房间号,密钥 或 房间号,密钥。',
-              ),
+              const Text('安卓 App 和 Web 可在“加入房间”中扫码，也可粘贴邀请链接或房间码。'),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -2738,7 +2741,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onJoinCollaboration: _promptJoinCollaboration,
                   onLeaveCollaboration: _leaveCollaboration,
                   onEndCollaboration: _endCollaboration,
-                  onShareCollaboration: _shareCollaborationInvitation,
+                  onShareCollaboration: () async {
+                    final room = ref
+                        .read(whiteboardViewModelProvider)
+                        .activeRoom;
+                    if (room != null) await _showCollaborationInvitation(room);
+                  },
                   onCheckCollaboration: () async {
                     final messenger = ScaffoldMessenger.of(context);
                     await _collaborationRepository.checkSynchronization();
