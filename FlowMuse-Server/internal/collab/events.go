@@ -23,6 +23,7 @@ const (
 type EncryptedFrame struct {
 	EncryptedBuffer []byte `json:"encryptedBuffer"`
 	IV              []byte `json:"iv"`
+	TargetSocketID  string `json:"targetSocketId,omitempty"`
 }
 
 type ReceivedLiveInkFrame struct {
@@ -34,6 +35,7 @@ type ReceivedLiveInkFrame struct {
 type LiveInkReady struct {
 	RoomID                 string `json:"roomId"`
 	LiveInkProtocolVersion int    `json:"liveInkProtocolVersion"`
+	ReliableAck            bool   `json:"reliableAck"`
 }
 
 type RoomUser struct {

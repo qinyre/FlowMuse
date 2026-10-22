@@ -11,10 +11,10 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/encrypted_s
 import 'package:flow_muse/features/whiteboard/collaboration/services/realtime_transport.dart';
 
 void main() {
-  test('ready 仅在当前房间窗口内接受一次', () async {
+  test('当前连接迟到ready仍可生效，错误房间不消耗确认机会', () async {
     final negotiation = LiveInkNegotiation();
     negotiation.begin('room-a');
-    negotiation.arm(timeout: const Duration(milliseconds: 10));
+    negotiation.arm();
 
     expect(
       negotiation.accept({'roomId': 'room-b', 'liveInkProtocolVersion': 2}),
@@ -23,15 +23,15 @@ void main() {
     expect(negotiation.version, 0);
     expect(
       negotiation.accept({'roomId': 'room-a', 'liveInkProtocolVersion': 2}),
-      isFalse,
+      isTrue,
     );
 
     negotiation.begin('room-a');
-    negotiation.arm(timeout: const Duration(milliseconds: 10));
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    negotiation.arm();
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
     expect(
       negotiation.accept({'roomId': 'room-a', 'liveInkProtocolVersion': 2}),
-      isFalse,
+      isTrue,
     );
 
     negotiation.begin('room-a');

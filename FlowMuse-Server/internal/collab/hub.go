@@ -222,6 +222,7 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 	client.Emit(EventLiveInkReady, LiveInkReady{
 		RoomID:                 roomID,
 		LiveInkProtocolVersion: liveInkProtocolVersion,
+		ReliableAck:            true,
 	})
 }
 
@@ -358,6 +359,12 @@ func (h *Hub) liveInkNow() time.Time {
 }
 
 func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
+	accepted := false
+	defer func() {
+		if !volatile {
+			acknowledgeBroadcast(args, accepted)
+		}
+	}()
 	roomID, frame, ok := parseBroadcastArgs(args)
 	if !ok {
 		log.Printf(
@@ -370,9 +377,13 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	socketID := string(client.Id())
 	h.mu.Lock()
 	currentRoomID := h.socketRooms[socketID]
+	targetInRoom := frame.TargetSocketID == "" || h.socketRooms[frame.TargetSocketID] == roomID
 	h.mu.Unlock()
 	if currentRoomID != roomID {
 		client.Emit(EventRoomError, "当前连接不在目标房间")
+		return
+	}
+	if !targetInRoom {
 		return
 	}
 	if len(frame.EncryptedBuffer)+len(frame.IV) > maxEncryptedFrameBytes {
@@ -381,10 +392,22 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	}
 	logForward(socketID, roomID, frame, volatile)
 	operator := client.To(socket.Room(roomID))
+	if frame.TargetSocketID != "" {
+		operator = client.To(socket.Room(frame.TargetSocketID))
+	}
 	if volatile {
 		operator = operator.Volatile()
 	}
-	operator.Emit(EventClientBroadcast, frame.EncryptedBuffer, frame.IV)
+	accepted = operator.Emit(EventClientBroadcast, frame.EncryptedBuffer, frame.IV) == nil
+}
+
+func acknowledgeBroadcast(args []any, accepted bool) {
+	if len(args) == 0 {
+		return
+	}
+	if ack, ok := args[len(args)-1].(socket.Ack); ok {
+		ack([]any{map[string]any{"accepted": accepted}}, nil)
+	}
 }
 
 func (h *Hub) leaveRoom(client *socket.Socket, roomID string) {
@@ -683,7 +706,15 @@ func asFrame(value any) (EncryptedFrame, bool) {
 	if !ok {
 		return EncryptedFrame{}, false
 	}
-	return EncryptedFrame{EncryptedBuffer: encryptedBuffer, IV: iv}, true
+	target := ""
+	if raw, exists := values["targetSocketId"]; exists {
+		var valid bool
+		target, valid = raw.(string)
+		if !valid || len(target) > 256 {
+			return EncryptedFrame{}, false
+		}
+	}
+	return EncryptedFrame{EncryptedBuffer: encryptedBuffer, IV: iv, TargetSocketID: target}, true
 }
 
 func asBytes(value any) ([]byte, bool) {

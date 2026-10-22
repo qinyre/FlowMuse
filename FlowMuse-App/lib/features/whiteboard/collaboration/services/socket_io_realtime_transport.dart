@@ -41,8 +41,15 @@ class SocketIoLiveInkVolatileChannel implements LiveInkVolatileChannel {
 }
 
 class SocketIoRealtimeTransport
-    implements RealtimeTransport, LiveInkNegotiationDiagnostics {
-  SocketIoRealtimeTransport({required this.serverUrl, required this.identity});
+    implements
+        RealtimeTransport,
+        LiveInkNegotiationDiagnostics,
+        TargetedRealtimeTransport {
+  SocketIoRealtimeTransport({
+    required this.serverUrl,
+    required this.identity,
+    io.Socket Function(String, Map<String, dynamic>) socketFactory = io.io,
+  }) : _socketFactory = socketFactory;
 
   static const String _eventJoinRoom = 'join-room';
   static const String _eventInitRoom = 'init-room';
@@ -63,6 +70,7 @@ class SocketIoRealtimeTransport
 
   final String serverUrl;
   final CollaborationIdentity identity;
+  final io.Socket Function(String, Map<String, dynamic>) _socketFactory;
   final StreamController<EncryptedPayload> _messages =
       StreamController<EncryptedPayload>.broadcast();
   final StreamController<ReceivedLiveInkFrame> _liveInkFrames =
@@ -84,6 +92,8 @@ class SocketIoRealtimeTransport
   final LiveInkNegotiation _liveInkNegotiation = LiveInkNegotiation();
   int _joinSentGeneration = -1;
   int _liveInkTransportNotWritableDrops = 0;
+  bool _supportsReliableAck = false;
+  int reliableRetryCount = 0;
 
   @override
   Stream<EncryptedPayload> get messages => _messages.stream;
@@ -149,6 +159,8 @@ class SocketIoRealtimeTransport
     final options = io.OptionBuilder()
         .setTransports(['websocket', 'polling'])
         .disableAutoConnect()
+        // Disposed root sockets stay cached with their previous credentials.
+        .enableForceNew()
         .enableReconnection();
     final token = identity.token;
     if (token != null && token.isNotEmpty) {
@@ -160,7 +172,7 @@ class SocketIoRealtimeTransport
         'guestAvatarUrl': identity.avatarUrl,
       });
     }
-    final socket = io.io(serverUrl, options.build());
+    final socket = _socketFactory(serverUrl, options.build());
     _socket = socket;
 
     final connected = Completer<void>();
@@ -334,7 +346,9 @@ class SocketIoRealtimeTransport
         }
       }
     });
-    socket.on(_eventLiveInkReady, _handleLiveInkReady);
+    socket.on(_eventLiveInkReady, (data) {
+      if (identical(_socket, socket)) _handleLiveInkReady(data);
+    });
     socket.on(_eventClientLiveInk, (data) {
       try {
         final frame = _liveInkFrameFromEventData(data);
@@ -397,21 +411,59 @@ class SocketIoRealtimeTransport
 
   @override
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {
+    await _sendPayload(payload, volatile: volatile);
+  }
+
+  @override
+  Future<void> sendTo(EncryptedPayload payload, String targetSocketId) =>
+      _sendPayload(payload, targetSocketId: targetSocketId);
+
+  Future<void> _sendPayload(
+    EncryptedPayload payload, {
+    bool volatile = false,
+    String? targetSocketId,
+  }) async {
     final roomId = _roomId;
     final socket = _socket;
     if (roomId == null || socket == null || !socket.connected) {
       throw StateError('协作连接未建立');
     }
-    (volatile ? socket.volatile : socket).emit(
-      volatile ? _eventServerVolatileBroadcast : _eventServerBroadcast,
-      [
-        roomId,
-        {
-          'encryptedBuffer': Uint8List.fromList(payload.encryptedBuffer),
-          'iv': Uint8List.fromList(payload.iv),
-        },
-      ],
-    );
+    final data = [
+      roomId,
+      {
+        'encryptedBuffer': Uint8List.fromList(payload.encryptedBuffer),
+        'iv': Uint8List.fromList(payload.iv),
+        'targetSocketId': ?targetSocketId,
+      },
+    ];
+    if (!volatile && _supportsReliableAck) {
+      for (var attempt = 0; ; attempt++) {
+        if (!identical(_socket, socket) ||
+            _roomId != roomId ||
+            !socket.connected) {
+          throw StateError('协作连接已改变，请重新同步');
+        }
+        dynamic result;
+        try {
+          result = await socket
+              .timeout(1500)
+              .emitWithAckAsync(_eventServerBroadcast, data);
+        } catch (_) {
+          if (attempt >= 2) throw StateError('协作发送确认超时，请重新同步');
+          reliableRetryCount++;
+          continue;
+        }
+        if (result is! Map || result['accepted'] != true) {
+          throw StateError('服务端未接受协作消息，请重新加入房间');
+        }
+        break;
+      }
+    } else {
+      (volatile ? socket.volatile : socket).emit(
+        volatile ? _eventServerVolatileBroadcast : _eventServerBroadcast,
+        data,
+      );
+    }
     CollaborationDebugLog.write('wire', 'send', {
       'room': _shortRoomId(roomId),
       'event': volatile ? _eventServerVolatileBroadcast : _eventServerBroadcast,
@@ -423,12 +475,12 @@ class SocketIoRealtimeTransport
   }
 
   @override
-  Future<void> sendLiveInk(EncryptedPayload payload) async {
+  Future<bool> sendLiveInk(EncryptedPayload payload) async {
     final roomId = _roomId;
     final socket = _socket;
     if (roomId == null || socket == null) {
       _liveInkTransportNotWritableDrops++;
-      return;
+      return false;
     }
     final emitted = emitLiveInkIfWritable(
       SocketIoLiveInkVolatileChannel(socket),
@@ -442,6 +494,7 @@ class SocketIoRealtimeTransport
       ],
     );
     if (!emitted) _liveInkTransportNotWritableDrops++;
+    return emitted;
   }
 
   @override
@@ -472,6 +525,7 @@ class SocketIoRealtimeTransport
   }
 
   void _beginConnection(String roomId) {
+    _supportsReliableAck = false;
     _roomId = roomId;
     _liveInkNegotiation.begin(roomId);
     _joinSentGeneration = -1;
@@ -485,10 +539,14 @@ class SocketIoRealtimeTransport
   }
 
   void _handleLiveInkReady(Object? data) {
-    _liveInkNegotiation.accept(data);
+    if (_liveInkNegotiation.accept(data)) {
+      _supportsReliableAck = data is Map && data['reliableAck'] == true;
+      _emitStatus(RealtimeConnectionStatus.joined);
+    }
   }
 
   void _resetLiveInkNegotiation() {
+    _supportsReliableAck = false;
     _liveInkNegotiation.reset();
   }
 

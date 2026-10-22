@@ -117,11 +117,11 @@ class FaultInjectingRealtimeTransport
       _delegate.send(payload, volatile: volatile);
 
   @override
-  Future<void> sendLiveInk(EncryptedPayload payload) async {
+  Future<bool> sendLiveInk(EncryptedPayload payload) async {
     acceptedCount++;
     if (_random.nextDouble() < _model.dropRate) {
       droppedCount++;
-      return;
+      return true;
     }
     _pending.add(_PendingLiveFrame(payload, _generation));
     if (_random.nextDouble() < _model.duplicateRate) {
@@ -132,6 +132,7 @@ class FaultInjectingRealtimeTransport
     if (_pending.length >= _model.reorderWindow) {
       _scheduleOne();
     }
+    return true;
   }
 
   Future<void> flushLiveInk() async {

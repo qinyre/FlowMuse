@@ -351,6 +351,8 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
         );
       case CollaborationMessageType.sceneInit:
       case CollaborationMessageType.sceneUpdate:
+      case CollaborationMessageType.syncStatus:
+      case CollaborationMessageType.inkCancel:
       case CollaborationMessageType.inkChunk:
       case CollaborationMessageType.invalidResponse:
         return;

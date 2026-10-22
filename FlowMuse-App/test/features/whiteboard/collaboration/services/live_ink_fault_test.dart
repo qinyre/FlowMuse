@@ -317,7 +317,12 @@ Future<_FlagResult> _runFlagCase({
 
 Future<_SenderResult> _runSender(int count) async {
   final chunks = <LiveInkChunk>[];
-  final sender = LiveInkSender(emit: (chunk) async => chunks.add(chunk));
+  final sender = LiveInkSender(
+    emit: (chunk) async {
+      chunks.add(chunk);
+      return true;
+    },
+  );
   sender.start(strokeId: 'stroke', style: _style);
   final points = <LiveInkPoint>[];
   for (var index = 0; index < count; index++) {

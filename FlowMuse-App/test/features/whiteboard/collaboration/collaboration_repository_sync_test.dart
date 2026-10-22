@@ -383,6 +383,106 @@ void main() {
     await peerTransport.disconnect();
   });
 
+  test('正式内容未获网络确认时仍可保存快照，临时预览不单独触发快照', () async {
+    final room = CollaborationRoom.newRoom();
+    final store = MemoryEncryptedSceneStore();
+    await store.createRoom(
+      room: room,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'fixture',
+    );
+    final transport = _GatedMemoryRealtimeTransport(
+      hub: MemoryRealtimeRoomHub(),
+      socketId: 'sender',
+    );
+    final repo = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+    );
+    addTearDown(repo.stop);
+    await repo.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await repo.broadcastElements(
+      room: room,
+      elements: [_element('pending', 1)],
+      latestOnly: true,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await repo.forceFlushSnapshot();
+    expect((await store.loadScene(room))!.elements, isEmpty);
+    transport.blockNextSend();
+    await repo.broadcastElements(
+      room: room,
+      elements: [_element('pending', 2)],
+    );
+    await transport.waitForBlockedSend();
+    try {
+      await repo.forceFlushSnapshot();
+      expect((await store.loadScene(room))!.elements.single['version'], 2);
+    } finally {
+      transport.releaseSend();
+    }
+  });
+
+  test('可靠确认阻塞时按元素合并待发批次，保留最后版本与独立墓碑', () async {
+    final crypto = CollaborationCrypto();
+    final room = CollaborationRoom.newRoom(crypto: crypto);
+    final store = MemoryEncryptedSceneStore();
+    await store.createRoom(
+      room: room,
+      scene: ExcalidrawScene.empty(),
+      ownerKeyHash: 'fixture',
+    );
+    final hub = MemoryRealtimeRoomHub();
+    final transport = _GatedMemoryRealtimeTransport(
+      hub: hub,
+      socketId: 'sender',
+    );
+    final peer = MemoryRealtimeTransport(hub: hub, socketId: 'peer');
+    final repo = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+    );
+    addTearDown(repo.stop);
+    addTearDown(peer.disconnect);
+    await repo.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    await peer.connect(room.roomId);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final batches = <CollaborationMessage>[];
+    final sub = peer.messages.listen((payload) async {
+      final message = CollaborationMessage.fromBytes(
+        await crypto.decrypt(roomKey: room.roomKey, encryptedPayload: payload),
+      );
+      if (message.type == CollaborationMessageType.sceneUpdate) {
+        batches.add(message);
+      }
+    });
+    addTearDown(sub.cancel);
+    transport.blockNextSend();
+    await repo.broadcastElements(room: room, elements: [_element('stroke', 1)]);
+    await transport.waitForBlockedSend();
+    for (var v = 2; v <= 12; v++) {
+      await repo.broadcastElements(
+        room: room,
+        elements: [
+          _element('stroke', v),
+          {..._element('deleted', v), 'isDeleted': true},
+        ],
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    transport.releaseSend();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(batches, hasLength(2));
+    expect(batches.last.elements.map((e) => e['version']), everyElement(12));
+    expect(
+      batches.last.elements.firstWhere(
+        (e) => e['id'] == 'deleted',
+      )['isDeleted'],
+      true,
+    );
+  });
+
   test('实时笔迹发送阻塞时只保留最新帧且不丢最终帧', () async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
@@ -418,6 +518,7 @@ void main() {
       }
     });
 
+    await Future<void>.delayed(const Duration(milliseconds: 30));
     repositoryTransport.blockNextSend();
     await repository.broadcastElements(
       room: room,
@@ -648,7 +749,7 @@ class _LifecycleTransport implements RealtimeTransport {
   }
 
   @override
-  Future<void> sendLiveInk(EncryptedPayload payload) async {}
+  Future<bool> sendLiveInk(EncryptedPayload payload) async => false;
 
   @override
   Future<void> endRoom({String? ownerKey}) async {}
@@ -683,7 +784,7 @@ class _GatedMemoryRealtimeTransport extends MemoryRealtimeTransport {
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {
     final gate = _sendGate;
     if (gate != null) {
-      _sendStarted?.complete();
+      if (_sendStarted?.isCompleted == false) _sendStarted!.complete();
       await gate.future;
       if (identical(_sendGate, gate)) {
         _sendGate = null;
