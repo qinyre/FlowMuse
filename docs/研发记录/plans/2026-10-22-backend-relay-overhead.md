@@ -25,3 +25,12 @@
 - `go test ./internal/collab -run '^$' -bench BenchmarkForwardLogging -benchmem -benchtime=200ms -count=3`：本机临时文件写入场景中，旧逐包诊断为 6898～6967ns/次、1 次分配；采样后的热点调用为 15.19～15.55ns/次、0 次分配。这仅测日志路径，不是整条转发或公网延迟，生产 stderr 的开销也可能不同。
 - 发布前公网隔离双端仍能补回丢失元素，确认重试 0、50 个批次最大帧 16348 字节；本轮延迟 P95 基线 760ms、单项补偿 65ms、双向补偿 816ms（最大 2205ms），波动明显。不能用单轮前后差异证明服务器 CPU 或日志是剩余卡顿的主因。
 - 本地证据：`FlowMuse-App/build/backend-relay-logging-before.log`、`backend-relay-go-test.log`、`backend-relay-race.log`、`backend-relay-log-benchmark.log`、`backend-relay-e2e-before.json`。
+
+## 后端单独发布
+
+- 18:35 已发布服务端提交 `20a232afc8a5a414b91b7abdb27c3cbd1254c858`，镜像 `flowmuse-collab:relay-20a232a`，镜像 ID `sha256:c22c9465537e8e0b556dc98dfb4f80dad71dd39594787bdf63a5d44de0d695c5`。只替换协作服务，环境变量、端口、挂载、网络和重启策略与原实例比较保留；健康 200、重启 0。
+- 公网隔离房间复测通过：漏收一元素仅补 2830 字节，双向补偿仍为 50 个批次、最大 16348 字节，确认重试 0。该轮 P95 为基线 38ms、单项补偿 78ms、双向补偿 248ms（最大 317ms）。与发布前的波动不能作因果比较，尤其基线也明显变化。
+- 实际日志观察窗口输出 7 条普通转发采样，末条累计 91 次正常转发调用，同一个墙钟秒最多 1 条。这里的累计值是诊断调用次数，不是接收端确认的交付率；真实丢帧原因和错误诊断没有关闭。
+- 正式 Web 与平板继续使用 c8504b4 包，应用目录与该提交无差异。正式 Web 的构建清单也仍描述原配套发布，当前后端版本以本次部署回执为准，不为更新版本文字重新构建客户端。
+- 发布目录 `/opt/flowmuse/releases/backend-relay-20261022-20a232a/` 保存 `deploy.override.json`、`rollback.override.json` 和脱敏回执；后者与原 Compose 文件配合可退回 `flowmuse-collab:repair-c8504b4`。旧镜像、九月对照版本、数据均保留。
+- 本地回执 `FlowMuse-App/build/backend-relay-final-receipt.json`。剩余轻微卡顿是否改善尚未做真机对照，也未采集生产高峰 CPU/堆/阻塞剖析，不能宣称已经定位或消除。
