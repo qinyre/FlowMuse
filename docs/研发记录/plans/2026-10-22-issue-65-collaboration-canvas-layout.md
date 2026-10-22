@@ -38,3 +38,9 @@
 - Web release 构建通过：`FlowMuse-App/build/issue65/web`；`main.dart.js` SHA-256 为 `1a320746063cd57a26009a7f68ef432a454764d0bb1bb8a1f1a19b9ec9131b7c`。
 - Android ARM64 release 构建通过：`FlowMuse-App/build/issue65/flowmuse-canvas-layout-be71e89-arm64.apk`；SHA-256 为 `6ec0d7530d55ee00bf2411223b6ad998b9a53c47a8ba322c6dbd785b2d35a5e0`。已验证构建标识、原生库 ELF 架构、与原安装包一致的引擎及签名；用户表示安卓包不着急，保留本地产物。
 - 构建回执：`FlowMuse-App/build/issue65/artifact-receipt.json`。本轮未部署线上 Web、未改后端、未安装平板；ADB 当前没有设备。Issue #65 保留开放，等待安卓真机复测确认实际现象消除。
+
+## 页面显示证据
+
+下面是 1200×900 自动化场景中加入网格有限画布后的实际渲染，显示首张纸的范围。文字和图标使用测试字体，不代表正式版本字体，也不作为安卓真机验收。
+
+![加入后首张网格纸的边界](../images/issue65-collaboration-canvas.png)
