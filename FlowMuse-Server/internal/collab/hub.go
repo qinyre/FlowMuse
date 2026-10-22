@@ -75,6 +75,8 @@ type Hub struct {
 	liveInkSocketBuckets map[string]*tokenBucket
 	liveInkRoomBuckets   map[string]*tokenBucket
 	liveInkDropCounts    map[liveInkDropReason]uint64
+	forwardLogBucket     tokenBucket
+	forwardLogCount      uint64
 	now                  func() time.Time
 	roomExistsOverride   func(string) bool
 	roomEndedOverride    func(string) bool
@@ -390,7 +392,7 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 		client.Emit(EventRoomError, "协作消息过大")
 		return
 	}
-	logForward(socketID, roomID, frame, volatile)
+	h.logForward(socketID, roomID, frame, volatile)
 	operator := client.To(socket.Room(roomID))
 	if frame.TargetSocketID != "" {
 		operator = client.To(socket.Room(frame.TargetSocketID))
@@ -520,16 +522,26 @@ func (h *Hub) removeSocket(socketID string) (string, []RoomUser) {
 	return roomID, users
 }
 
-func logForward(socketID, roomID string, frame EncryptedFrame, volatile bool) {
+func (h *Hub) logForward(socketID, roomID string, frame EncryptedFrame, volatile bool) {
 	if volatile {
 		return
 	}
+	// Normal relay diagnostics must not perform one stderr write per packet.
+	h.mu.Lock()
+	h.forwardLogCount++
+	count := h.forwardLogCount
+	allowed := h.forwardLogBucket.allow(h.liveInkNow(), 1, 1)
+	h.mu.Unlock()
+	if !allowed {
+		return
+	}
 	log.Printf(
-		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=false",
+		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=false sampled=true totalFrames=%d",
 		socketID,
 		roomID,
 		len(frame.EncryptedBuffer),
 		len(frame.IV),
+		count,
 	)
 }
 

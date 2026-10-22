@@ -358,15 +358,16 @@ func TestLogForwardSkipsVolatileFrames(t *testing.T) {
 	log.SetOutput(&output)
 	log.SetFlags(0)
 	frame := EncryptedFrame{EncryptedBuffer: []byte{1, 2, 3}, IV: []byte{4}}
+	hub := &Hub{}
 
 	for range 100 {
-		logForward("socket", "room", frame, true)
+		hub.logForward("socket", "room", frame, true)
 	}
 	if output.Len() != 0 {
 		t.Fatalf("volatile frames produced per-frame logs: %q", output.String())
 	}
 
-	logForward("socket", "room", frame, false)
+	hub.logForward("socket", "room", frame, false)
 	if !strings.Contains(output.String(), "encryptedBytes=3") {
 		t.Fatalf("reliable frame summary was not logged: %q", output.String())
 	}
