@@ -42,3 +42,13 @@
 - 使用独立 Playwright 会话检查正式 Web：资料库截图正常，Flutter 已初始化，控制台错误 0。启动截图 `FlowMuse-App/build/repair-formal-web-startup.png`；完整回执 `FlowMuse-App/build/repair-deployment-receipt.json`。
 - 后端部署文件位于 `/opt/flowmuse/releases/collaboration-repair-20261022-c8504b4/`。回退到发布前镜像使用同目录 `rollback.override.json`，与 `/opt/flowmuse/source/FlowMuse-Server/docker-compose.yml` 配合执行 `up -d --no-deps --no-build collab-server`。Nginx 发布前配置保存为 `/etc/nginx/sites-available/flowmuse-app.before-repair-20261022-c8504b4`，恢复时先检查配置再 reload。上一版和九月版镜像、Web 目录及 Git 分支均保留。
 - 平板本轮未连接、未覆盖安装；旧客户端仍会走兼容补偿，单个超长元素也仍可能超过分包预算。Android/Web 真机连续书写、长笔画和多人压力体验尚未验证。
+
+## 2026-10-22 平板补充部署
+
+- 17:30 已在重新连接的 OPD2404 平板覆盖安装配套修复版，设备 `d6810bf2`，应用 `com.example.flowmuse`。应用代码与正式 Web 的 `c8504b4` 一致（构建 HEAD `257809d` 仅比它多发布记录文档，应用目录无差异）。
+- Release 构建使用 `flutter build apk --release --target-platform android-arm64`，显式定义 `FLOWMUSE_LAYERED_WET_INK=true`、`FLOWMUSE_LIVE_INK_V2=true`、`FLOWMUSE_SHARE_ORIGIN=https://app.flowmuse.cloud`、`FLOWMUSE_BUILD_ID=c8504b4`。
+- 本机直接 Gradle 与 `--no-pub` 构建曾因 GeneratedPluginRegistrant 残留 integration_test 注册失败；允许 Flutter 执行依赖检查及 release 注册生成后成功，依赖锁文件及业务代码均未改变。复现正式构建应保留此生成步骤，不能直接沿用测试运行留下的注册文件。
+- APK：`FlowMuse-App/build/local-writing-tablet-20261020/flowmuse-collaboration-repair-c8504b4-release-arm64.apk`，SHA256 `e0421560f3f4fddc55c23b9fc43be00d08404d82ec0ffa9a24125f4927d2a06d`。包内 native ELF 架构均验证，arm64 Flutter 引擎与已安装的上一包相同，应用 AOT 已更新并包含构建标识。
+- 签名 SHA256 仍为 `e67952adb86936a9f49406c274f92ee65c35d2706f91dd19436eeaf2b8072ecf`。使用 `adb install -r` 保留数据覆盖，设备安装包哈希与构建一致，首次安装时间仍为 `2026-09-21 23:20:41`，没有卸载或清空数据。
+- Activity 冷启动状态 ok、耗时 453ms；启动后进程存活，FATAL EXCEPTION、UnsatisfiedLinkError、Unhandled Exception、MissingPluginException、重复数据库列错误计数均为 0。截图确认已进入资料库并显示原有笔记，没有停留在启动页。
+- 本地回执：`FlowMuse-App/build/repair-android-receipt.json`。用户自行测试实际书写；Android/Web 连续协作的手感、长笔画和多人压力效果仍未实测，不把启动检查当作流畅度验收。
