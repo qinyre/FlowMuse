@@ -178,7 +178,6 @@ class CanvasLayout {
   }) {
     final pages = <CanvasPage>[];
     final pageIds = <String>{};
-    var pageFlow = fallbackPageFlow;
     for (final element in elements) {
       if (element.isDeleted ||
           !element.x.isFinite ||
@@ -193,7 +192,8 @@ class CanvasLayout {
       if (flowMuse?['role'] != 'page') {
         continue;
       }
-      pageFlow = _pageFlowFromName(flowMuse?['pageFlow']) ?? pageFlow;
+      final pageFlow =
+          _pageFlowFromName(flowMuse?['pageFlow']) ?? fallbackPageFlow;
       final rawId = flowMuse?['pageId'];
       final id = rawId is String && rawId.isNotEmpty ? rawId : element.id.value;
       if (!pageIds.add(id)) continue;
@@ -270,8 +270,8 @@ class CanvasLayout {
     if (pages.isNotEmpty) {
       return CanvasLayout(
         type: CanvasLayoutType.paged,
-        template: fallbackTemplate,
-        pageFlow: pageFlow,
+        template: pages.first.template,
+        pageFlow: pages.first.pageFlow,
         pages: pages,
       );
     }

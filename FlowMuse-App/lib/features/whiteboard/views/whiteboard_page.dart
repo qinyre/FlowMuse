@@ -1393,9 +1393,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       if (!_canMutateWhiteboard) {
         return;
       }
-      if (reconciledScene.elements.isNotEmpty) {
-        await _enqueueRemoteScene(reconciledScene, reconcile: false);
-      }
+      await _enqueueRemoteScene(
+        reconciledScene,
+        reconcile: false,
+        replaceLayout: true,
+      );
       if (_canMutateWhiteboard) {
         ref
             .read(whiteboardViewModelProvider.notifier)
@@ -1665,7 +1667,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _saveTemporaryRoomAsLocalNote() async {
-    final note = await ref.read(libraryIndexProvider.notifier).createNote();
+    final layout = _markdrawController.layout;
+    final note = await ref
+        .read(libraryIndexProvider.notifier)
+        .createNote(
+          noteType: layout.isPaged ? NoteType.paged : NoteType.unbounded,
+          pageTemplate: PageTemplate.values.byName(layout.template.name),
+          pageFlow: PageFlow.values.byName(layout.pageFlow.name),
+        );
     final content = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
     );
@@ -2255,6 +2264,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     ExcalidrawScene remoteScene, {
     bool loadImages = true,
     bool reconcile = true,
+    bool replaceLayout = false,
   }) {
     final generation = _remoteApplyGeneration;
     CollaborationDebugLog.write('scene', 'remote_scene_queued', {
@@ -2267,7 +2277,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         .then<void>((_) async {
           await _runAfterStableFrameAsync(() async {
             if (generation != _remoteApplyGeneration) return;
+            if (replaceLayout) {
+              // 房间没有页面标记时是无限画布，不能沿用加入前的本机版式。
+              _markdrawController.setLayout(
+                const CanvasLayout(type: CanvasLayoutType.unbounded),
+              );
+            }
             await _applyRemoteScene(remoteScene, reconcile: reconcile);
+            if (generation != _remoteApplyGeneration || !_canMutateWhiteboard) {
+              return;
+            }
+            if (replaceLayout && _markdrawController.layout.isPaged) {
+              _markdrawController.navigateToPage(
+                _markdrawController.layout.pages.first.id,
+                fit: true,
+              );
+            }
             if (loadImages) {
               _scheduleLoadImageFiles();
             }

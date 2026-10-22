@@ -41,6 +41,81 @@ CanvasLayout _layout({CanvasPageFlow flow = CanvasPageFlow.topToBottom}) =>
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  for (final template in CanvasPageTemplate.values) {
+    test('页面标记恢复 ${template.name} 模板和续页方向', () {
+      final host = MarkdrawController()
+        ..setLayout(
+          CanvasLayout(
+            type: CanvasLayoutType.paged,
+            template: template,
+            pageFlow: CanvasPageFlow.rightToLeft,
+          ),
+        );
+      final guest = MarkdrawController();
+      addTearDown(host.dispose);
+      addTearDown(guest.dispose);
+
+      guest.applyRemoteExcalidrawSceneJson(host.serializeExcalidrawSceneJson());
+
+      expect(guest.layout.type, CanvasLayoutType.paged);
+      expect(guest.layout.template, template);
+      expect(guest.layout.pageFlow, CanvasPageFlow.rightToLeft);
+      guest.insertBlankPage();
+      expect(guest.layout.pages.last.template, template);
+      expect(
+        guest.layout.pages.last.bounds.size,
+        CanvasLayout.pageSizeForTemplate(template),
+      );
+      expect(guest.layout.pages.last.bounds.right, -CanvasLayout.pageGap);
+
+      final incremental = MarkdrawController();
+      addTearDown(incremental.dispose);
+      incremental.applyRemoteElements(host.currentScene.elements);
+      expect(incremental.layout.template, template);
+      expect(incremental.layout.pageFlow, CanvasPageFlow.rightToLeft);
+    });
+  }
+
+  test('页面标记乱序或缺失旧字段时仍按阅读顺序恢复默认版式', () {
+    RectangleElement marker(CanvasPage page) => RectangleElement(
+      id: ElementId(page.id),
+      x: page.bounds.left,
+      y: page.bounds.top,
+      width: page.bounds.width,
+      height: page.bounds.height,
+      customData: CanvasLayout.pageCustomData(page),
+    );
+    final first = _layout(flow: CanvasPageFlow.rightToLeft).pages.first;
+    final last = _layout().pages.last;
+    final layout = CanvasLayout.fromScene([
+      marker(last),
+      marker(first).copyWith(
+        customData: {
+          'flowMuse': {
+            ...CanvasLayout.flowMuseData(CanvasLayout.pageCustomData(first))!,
+            'template': CanvasPageTemplate.grid.name,
+          },
+        },
+      ),
+    ]);
+    expect(layout.template, CanvasPageTemplate.grid);
+    expect(layout.pageFlow, CanvasPageFlow.rightToLeft);
+
+    final legacy = CanvasLayout.fromScene(
+      [
+        marker(first).copyWith(
+          customData: {
+            'flowMuse': {'role': 'page', 'pageId': first.id},
+          },
+        ),
+      ],
+      fallbackTemplate: CanvasPageTemplate.dotGrid,
+      fallbackPageFlow: CanvasPageFlow.rightToLeft,
+    );
+    expect(legacy.template, CanvasPageTemplate.dotGrid);
+    expect(legacy.pageFlow, CanvasPageFlow.rightToLeft);
+  });
+
   test('deleted and invalid page markers do not become navigable pages', () {
     final page = _layout().pages.first;
     RectangleElement marker(
