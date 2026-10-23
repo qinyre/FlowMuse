@@ -9,7 +9,7 @@
 - 派生修改：生成 400、600、700 静态字重，保留 GB2312、界面源码所用字形及常用拉丁/标点字符，重命名为 FlowMuse Sans。罕见字、扩展文字及 Emoji 继续由字体回退处理；并未限制用户输入。
 - 每个文件约 2.36 MB，避免将 17.77 MB 的完整可变字体引入初次加载。
 
-在装有 Python fontTools 的开发环境，将固定上游的 `NotoSansSC[wght].ttf`、`OFL.txt` 下载到构建目录后执行：
+在装有 Python fontTools 的开发环境（本次生成使用 4.66.0），将固定上游的 `NotoSansSC[wght].ttf`、`OFL.txt` 下载到构建目录后执行：
 
 ```powershell
 python tool/prepare_ui_fonts.py 'build/ui-polish-round-one/NotoSansSC.ttf' 'build/ui-polish-round-one/OFL.txt'
