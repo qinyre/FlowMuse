@@ -51,6 +51,7 @@ import '../share/models/share_result.dart';
 import '../share/services/share_export_coordinator.dart';
 import '../share/services/share_service_selector.dart';
 import '../view_models/whiteboard_view_model.dart';
+import '../view_models/local_draft_persistence.dart';
 import '../repositories/whiteboard_scene_repository.dart';
 import '../models/editor_preferences.dart';
 import '../view_models/editor_preferences_view_model.dart';
@@ -176,6 +177,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _localDraftDirty = false;
   int _localDraftRevision = 0;
   Future<void>? _localDraftSave;
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>?
+  _localSaveFailureNotice;
   Timer? _readingPositionTimer;
   String? _readingNoteId;
   (ViewportState, Size, CanvasLayout)? _readingView;
@@ -646,25 +649,18 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
     Future<void> save() async {
       try {
-        final (_, coverThumbnailBytes) = await (
-          previous
-              .catchError((Object error) {
-                debugPrint(
-                  '[FlowMuseCreateNote] retry after draft failure: ${error.runtimeType}',
-                );
-              })
-              .then((_) => _localSceneRepository.saveScene(noteId, content)),
-          thumbnail,
-        ).wait;
-        await _localLibraryRepository.touchNote(
-          noteId,
-          coverThumbnailBytes: coverThumbnailBytes,
-          clearCoverThumbnail: coverThumbnailBytes == null,
+        await persistLocalDraft(
+          noteId: noteId,
+          content: content,
+          scenes: _localSceneRepository,
+          library: _localLibraryRepository,
+          previousSave: previous,
+          thumbnail: thumbnail,
         );
         if (!_canMutateWhiteboard || noteId != widget.noteId) return;
         await ref.read(libraryIndexProvider.notifier).refresh();
         if (!_canMutateWhiteboard || noteId != widget.noteId) return;
-        final latestIndex = ref.read(libraryIndexProvider).value;
+        final latestIndex = ref.read(libraryIndexProvider).asData?.value;
         final latestNote = latestIndex == null
             ? null
             : _noteById(latestIndex.notes, noteId);
@@ -675,6 +671,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           _runAfterStableFrame(() {
             if (revision == _localDraftRevision && !_localDraftDirty) {
               ref.read(whiteboardViewModelProvider.notifier).markSaved();
+              _localSaveFailureNotice?.close();
+              _localSaveFailureNotice = null;
             }
           });
         }
@@ -697,24 +695,34 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   Future<void> _flushLocalDraftInBackground() async {
     try {
       await _flushLocalDraft();
-    } catch (error) {
+    } catch (error, stackTrace) {
       debugPrint(
-        '[FlowMuseCreateNote] draft save failed: ${error.runtimeType}',
+        '[FlowMuseCreateNote] draft save failed: ${error.runtimeType}\n$stackTrace',
       );
-      _runAfterStableFrame(() {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('保存失败，内容仍保留在当前页面'),
-            action: SnackBarAction(
-              label: '重试',
-              onPressed: () {
-                unawaited(_flushLocalDraftInBackground());
-              },
-            ),
-          ),
-        );
+      _showLocalSaveFailure('保存失败，内容仍保留在当前页面', () {
+        unawaited(_flushLocalDraftInBackground());
       });
     }
+  }
+
+  void _showLocalSaveFailure(String message, VoidCallback retry) {
+    _runAfterStableFrame(() {
+      _localSaveFailureNotice?.close();
+      final notice = ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: SnackBarAction(label: '重试', onPressed: retry),
+        ),
+      );
+      _localSaveFailureNotice = notice;
+      unawaited(
+        notice.closed.then((_) {
+          if (identical(_localSaveFailureNotice, notice)) {
+            _localSaveFailureNotice = null;
+          }
+        }),
+      );
+    });
   }
 
   Future<void> _finalizeLocalDraftBeforeLeaving() async {
@@ -1555,19 +1563,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _popWhenStable();
     } catch (error) {
       debugPrint('[FlowMuseCreateNote] leaving failed: ${error.runtimeType}');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('保存或退出失败，已保留在当前页面'),
-            action: SnackBarAction(
-              label: '重试',
-              onPressed: () {
-                unawaited(_handleBack());
-              },
-            ),
-          ),
-        );
-      }
+      _showLocalSaveFailure('保存或退出失败，已保留在当前页面', () {
+        unawaited(_handleBack());
+      });
     } finally {
       if (mounted && !_disposingOrLeaving) {
         _handlingBack = false;
