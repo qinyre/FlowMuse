@@ -52,7 +52,7 @@ void main() {
     await openCreate(tester, (value) => result = value);
     await tester.tap(find.byType(AnchoredDropdownField<int>));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('4 人').last);
+    await tester.tap(find.widgetWithText(CheckedPopupMenuItem<int>, '4 人'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('创建房间'));
     await tester.pumpAndSettle();

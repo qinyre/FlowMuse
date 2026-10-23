@@ -143,9 +143,9 @@ Future<T?> showAnchoredPopupMenu<T extends Object>({
       overlay.size.height - anchorRect.bottom - 4,
     ),
     AnchoredPopupPlacement.left => RelativeRect.fromLTRB(
-      anchorRect.left,
+      anchorRect.left - 4,
       anchorRect.bottom + 4,
-      overlay.size.width - anchorRect.left,
+      overlay.size.width - anchorRect.left + 4,
       overlay.size.height - anchorRect.bottom - 4,
     ),
   };
@@ -216,7 +216,11 @@ Future<T?> _showAnchoredPanel<T extends Object>({
       position: position,
       items: items,
       growth: growth,
-      capturedThemes: InheritedTheme.capture(from: context, to: null),
+      capturedThemes: InheritedTheme.capture(
+        from: context,
+        to: navigator.context,
+      ),
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
     ),
   );
 }

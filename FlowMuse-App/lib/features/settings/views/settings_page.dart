@@ -1692,7 +1692,7 @@ class _SettingsPopupMenu<T extends Object> extends StatelessWidget {
                   options: options,
                   label: label,
                 );
-                if (selected != null) {
+                if (selected != null && context.mounted) {
                   onSelected?.call(selected);
                 }
               },

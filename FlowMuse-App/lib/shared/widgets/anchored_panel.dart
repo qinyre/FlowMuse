@@ -18,6 +18,7 @@ class AnchoredPanelRoute<T> extends PopupRoute<T> {
     required this.items,
     this.growth = AnchoredPanelGrowth.down,
     this.capturedThemes,
+    this.barrierLabel,
     super.settings,
   });
 
@@ -33,7 +34,7 @@ class AnchoredPanelRoute<T> extends PopupRoute<T> {
   bool get barrierDismissible => true;
 
   @override
-  String? get barrierLabel => null;
+  final String? barrierLabel;
 
   @override
   Duration get transitionDuration => const Duration(milliseconds: 200);
@@ -56,6 +57,13 @@ class AnchoredPanelRoute<T> extends PopupRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
+    final page = Builder(
+      builder: (context) => _buildPanelPage(context, animation),
+    );
+    return capturedThemes?.wrap(page) ?? page;
+  }
+
+  Widget _buildPanelPage(BuildContext context, Animation<double> animation) {
     final theme = Theme.of(context);
     // 与工具栏一致的纸面容器：亮底、大圆角、细边框与三层轻阴影。
     final panel = DecoratedBox(
@@ -96,23 +104,32 @@ class AnchoredPanelRoute<T> extends PopupRoute<T> {
         ),
       ),
     );
-    return Semantics(
-      role: SemanticsRole.menu,
-      scopesRoute: true,
-      namesRoute: true,
-      explicitChildNodes: true,
-      child: CustomSingleChildLayout(
-        delegate: _AnchoredPanelLayoutDelegate(position),
-        child: capturedThemes?.wrap(panel) ?? panel,
+    return CustomSingleChildLayout(
+      delegate: _AnchoredPanelLayoutDelegate(
+        position,
+        growth,
+        Directionality.of(context),
+        MediaQuery.paddingOf(context),
+        MediaQuery.viewInsetsOf(context),
+      ),
+      child: _animatePanel(
+        context,
+        animation,
+        Semantics(
+          role: SemanticsRole.menu,
+          label: MaterialLocalizations.of(context).popupMenuLabel,
+          scopesRoute: true,
+          namesRoute: true,
+          explicitChildNodes: true,
+          child: panel,
+        ),
       ),
     );
   }
 
-  @override
-  Widget buildTransitions(
+  Widget _animatePanel(
     BuildContext context,
     Animation<double> animation,
-    Animation<double> secondaryAnimation,
     Widget child,
   ) {
     if (MediaQuery.disableAnimationsOf(context)) {
@@ -143,34 +160,63 @@ class AnchoredPanelRoute<T> extends PopupRoute<T> {
 /// 将面板放进锚点矩形附近的可用空间内（参照框架 PopupMenu 的布局语义：
 /// 先按 position 放置，越界时向内收缩，四周保留安全边距）。
 class _AnchoredPanelLayoutDelegate extends SingleChildLayoutDelegate {
-  _AnchoredPanelLayoutDelegate(this.position);
+  _AnchoredPanelLayoutDelegate(
+    this.position,
+    this.growth,
+    this.textDirection,
+    this.padding,
+    this.viewInsets,
+  );
 
   final RelativeRect position;
+  final AnchoredPanelGrowth growth;
+  final TextDirection textDirection;
+  final EdgeInsets padding;
+  final EdgeInsets viewInsets;
 
   static const double _margin = 10.0;
 
+  EdgeInsets get _insets => EdgeInsets.fromLTRB(
+    _margin + math.max(padding.left, viewInsets.left),
+    _margin + math.max(padding.top, viewInsets.top),
+    _margin + math.max(padding.right, viewInsets.right),
+    _margin + math.max(padding.bottom, viewInsets.bottom),
+  );
+
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
-    return BoxConstraints.loose(
-      constraints.biggest,
-    ).deflate(const EdgeInsets.all(_margin));
+    return BoxConstraints.loose(constraints.biggest).deflate(_insets);
   }
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    var y = position.top;
-    if (y + childSize.height > size.height - _margin) {
-      y = math.max(_margin, size.height - _margin - childSize.height);
-    }
+    final insets = _insets;
     var x = position.left;
-    if (x + childSize.width > size.width - _margin) {
-      x = math.max(_margin, size.width - _margin - childSize.width);
+    if (growth == AnchoredPanelGrowth.left ||
+        (growth == AnchoredPanelGrowth.down &&
+            (position.left > position.right ||
+                (position.left == position.right &&
+                    textDirection == TextDirection.rtl)))) {
+      x = size.width - position.right - childSize.width;
     }
-    return Offset(x, y);
+    return Offset(
+      x.clamp(
+        insets.left,
+        math.max(insets.left, size.width - insets.right - childSize.width),
+      ),
+      position.top.clamp(
+        insets.top,
+        math.max(insets.top, size.height - insets.bottom - childSize.height),
+      ),
+    );
   }
 
   @override
   bool shouldRelayout(_AnchoredPanelLayoutDelegate oldDelegate) {
-    return position != oldDelegate.position;
+    return position != oldDelegate.position ||
+        growth != oldDelegate.growth ||
+        textDirection != oldDelegate.textDirection ||
+        padding != oldDelegate.padding ||
+        viewInsets != oldDelegate.viewInsets;
   }
 }

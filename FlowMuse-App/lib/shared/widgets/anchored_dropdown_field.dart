@@ -26,7 +26,7 @@ class AnchoredDropdownField<T extends Object> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canOpen = enabled && options.isNotEmpty;
+    final canOpen = enabled && onChanged != null && options.isNotEmpty;
     return InputDecorator(
       decoration: (decoration ?? const InputDecoration()).copyWith(
         enabled: canOpen,
@@ -43,7 +43,7 @@ class AnchoredDropdownField<T extends Object> extends StatelessWidget {
                     options: options,
                     label: labelOf,
                   );
-                  if (selected == null) {
+                  if (selected == null || !fieldContext.mounted) {
                     return;
                   }
                   onChanged?.call(selected);
