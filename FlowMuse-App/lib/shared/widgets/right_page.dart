@@ -5,20 +5,14 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/app_router.dart';
 import 'app_shell.dart';
 import 'app_spacing.dart';
-
-const _headerEnterDuration = Duration(milliseconds: 340);
-const _headerExitDuration = Duration(milliseconds: 260);
+import 'app_motion.dart';
 
 Duration _headerMotionDuration(BuildContext context) {
-  return MediaQuery.disableAnimationsOf(context)
-      ? Duration.zero
-      : _headerEnterDuration;
+  return AppMotion.resolve(context, AppMotion.standard);
 }
 
 Duration _headerReverseDuration(BuildContext context) {
-  return MediaQuery.disableAnimationsOf(context)
-      ? Duration.zero
-      : _headerExitDuration;
+  return AppMotion.resolve(context, AppMotion.exit);
 }
 
 class RightPageScaffold extends StatelessWidget {
@@ -101,6 +95,12 @@ class RightPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => _buildHeader(context, constraints),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, BoxConstraints constraints) {
     final chrome = AppShellScope.maybeOf(context);
     final showSidebarControls = chrome?.showSidebarControls ?? false;
     final centerTitle = forceCenterTitle || (chrome?.contentFullWidth ?? false);
@@ -109,6 +109,51 @@ class RightPageHeader extends StatelessWidget {
         : null;
     final leading = _RightPageActions(actions: leadingActions);
     final trailing = _RightPageActions(actions: actions);
+
+    final compact =
+        constraints.maxWidth < 520 ||
+        (constraints.maxWidth < 760 &&
+            MediaQuery.textScalerOf(context).scale(16) > 22);
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.listGap),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (sidebarLeading != null ||
+                leadingActions.isNotEmpty ||
+                actions.isNotEmpty) ...[
+              Wrap(
+                alignment: sidebarLeading == null && leadingActions.isEmpty
+                    ? WrapAlignment.end
+                    : WrapAlignment.spaceBetween,
+                spacing: AppSpacing.controlGap,
+                runSpacing: AppSpacing.controlGap,
+                children: [
+                  if (sidebarLeading != null || leadingActions.isNotEmpty)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ?sidebarLeading,
+                        if (sidebarLeading != null && leadingActions.isNotEmpty)
+                          const SizedBox(width: AppSpacing.controlGap),
+                        if (leadingActions.isNotEmpty) leading,
+                      ],
+                    ),
+                  if (actions.isNotEmpty) trailing,
+                ],
+              ),
+              const SizedBox(height: AppSpacing.controlGap),
+            ],
+            header ??
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: _AnimatedRightPageTitle(title: title!, maxLines: 2),
+                ),
+          ],
+        ),
+      );
+    }
 
     if (header != null) {
       return SizedBox(
@@ -233,7 +278,7 @@ class _RightPageIconButtonTheme extends StatelessWidget {
               AppSpacing.shellHeaderIconSize,
             ),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
+            visualDensity: VisualDensity.standard,
           ),
         ),
         child: child,
@@ -263,10 +308,15 @@ class _AnimatedHeaderSlot extends StatelessWidget {
 }
 
 class _AnimatedRightPageTitle extends StatelessWidget {
-  const _AnimatedRightPageTitle({required this.title, this.textAlign});
+  const _AnimatedRightPageTitle({
+    required this.title,
+    this.textAlign,
+    this.maxLines = 1,
+  });
 
   final String title;
   final TextAlign? textAlign;
+  final int maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -296,22 +346,29 @@ class _AnimatedRightPageTitle extends StatelessWidget {
         key: ValueKey(title),
         title: title,
         textAlign: textAlign,
+        maxLines: maxLines,
       ),
     );
   }
 }
 
 class _RightPageTitle extends StatelessWidget {
-  const _RightPageTitle({super.key, required this.title, this.textAlign});
+  const _RightPageTitle({
+    super.key,
+    required this.title,
+    this.textAlign,
+    this.maxLines = 1,
+  });
 
   final String title;
   final TextAlign? textAlign;
+  final int maxLines;
 
   @override
   Widget build(BuildContext context) {
     return Text(
       title,
-      maxLines: 1,
+      maxLines: maxLines,
       overflow: TextOverflow.ellipsis,
       textAlign: textAlign,
       style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -328,9 +385,8 @@ class _RightPageSidebarControls extends StatelessWidget {
   final VoidCallback? onOpenSidebar;
   static final _noHoverOverlay = ButtonStyle(
     overlayColor: WidgetStateProperty.resolveWith(
-      (states) => states.contains(WidgetState.hovered)
-          ? Colors.transparent
-          : null,
+      (states) =>
+          states.contains(WidgetState.hovered) ? Colors.transparent : null,
     ),
   );
 

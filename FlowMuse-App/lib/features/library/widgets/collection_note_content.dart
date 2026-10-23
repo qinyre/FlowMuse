@@ -83,10 +83,7 @@ class _CollectionNoteContentState extends State<CollectionNoteContent> {
   }
 
   Future<void> _moveSelected(String? notebookId) async {
-    await widget.onMoveNotesToNotebook(
-      _selectedNoteIds.toList(),
-      notebookId,
-    );
+    await widget.onMoveNotesToNotebook(_selectedNoteIds.toList(), notebookId);
     if (mounted) {
       _clearSelection();
     }
@@ -276,9 +273,7 @@ class _CollectionNoteContentState extends State<CollectionNoteContent> {
           const SizedBox(height: AppSpacing.controlGap),
         ],
       ],
-      body: _viewMode == LibraryViewMode.list
-          ? _buildList()
-          : _buildGrid(),
+      body: _viewMode == LibraryViewMode.list ? _buildList() : _buildGrid(),
     );
   }
 
@@ -302,7 +297,11 @@ class _CollectionNoteContentState extends State<CollectionNoteContent> {
           child: ListTile(
             leading: ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: SizedBox(width: 48, height: 58, child: NoteCover(item: item)),
+              child: SizedBox(
+                width: 48,
+                height: 58,
+                child: NoteCover(item: item),
+              ),
             ),
             title: Text(item.title),
             subtitle: Text(item.date),
@@ -334,7 +333,7 @@ class _CollectionNoteContentState extends State<CollectionNoteContent> {
           itemCount: widget.notes.length + 1,
           gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
             maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
-            mainAxisExtent: NoteCard.gridMainAxisExtent,
+            mainAxisExtent: NoteCard.gridHeight(context),
             crossAxisSpacing: compact
                 ? NoteCard.compactGridCrossGap
                 : NoteCard.gridCrossGap,

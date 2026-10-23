@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../shared/widgets/app_spacing.dart';
 import 'note_card.dart';
 
 class CreateNoteCard extends StatelessWidget {
@@ -9,13 +10,15 @@ class CreateNoteCard extends StatelessWidget {
     required this.onTap,
     this.icon = LucideIcons.plus,
     this.title = '新建笔记',
-    this.subtitle = '轻点两下，创建快捷笔记',
+    this.subtitle = '记录想法，开始书写',
+    this.isPrimary = true,
   });
 
   final VoidCallback onTap;
   final IconData icon;
   final String title;
   final String subtitle;
+  final bool isPrimary;
 
   Key get _tapKey {
     return title == '加入房间'
@@ -35,15 +38,29 @@ class CreateNoteCard extends StatelessWidget {
           child: Card.outlined(
             margin: EdgeInsets.zero,
             clipBehavior: Clip.antiAlias,
-            color: colorScheme.surfaceContainerLow,
-            shape: const RoundedRectangleBorder(),
+            color: isPrimary
+                ? Color.alphaBlend(
+                    colorScheme.primary.withValues(alpha: 0.06),
+                    colorScheme.surface,
+                  )
+                : colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppSpacing.radius),
+              side: BorderSide(
+                color: isPrimary
+                    ? colorScheme.primary.withValues(alpha: 0.3)
+                    : colorScheme.outlineVariant,
+              ),
+            ),
             child: InkWell(
               key: _tapKey,
               onTap: onTap,
               child: Center(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: colorScheme.primary.withValues(alpha: 0.06),
+                    color: colorScheme.primary.withValues(
+                      alpha: isPrimary ? 0.12 : 0.06,
+                    ),
                     shape: BoxShape.circle,
                   ),
                   child: Padding(
@@ -51,7 +68,9 @@ class CreateNoteCard extends StatelessWidget {
                     child: Icon(
                       icon,
                       size: 28,
-                      color: colorScheme.primary.withValues(alpha: 0.72),
+                      color: isPrimary
+                          ? colorScheme.primary
+                          : colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -62,15 +81,18 @@ class CreateNoteCard extends StatelessWidget {
         const SizedBox(height: 13),
         Text(
           title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
             color: colorScheme.onSurface,
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           subtitle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
           style: Theme.of(
             context,

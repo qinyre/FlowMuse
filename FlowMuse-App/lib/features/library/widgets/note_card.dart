@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../shared/widgets/app_spacing.dart';
 import '../models/note_item.dart';
 
 class NoteCard extends StatelessWidget {
@@ -20,6 +21,15 @@ class NoteCard extends StatelessWidget {
   static const gridCrossGap = 22.0;
   static const compactGridMainGap = 20.0;
   static const gridMainGap = 26.0;
+
+  static double gridHeight(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    return coverHeight +
+        20 +
+        scaler.scale(14) * 2 * 1.45 +
+        4 +
+        scaler.scale(12) * 1.5;
+  }
 
   final NoteItem item;
   final VoidCallback onTap;
@@ -60,51 +70,65 @@ class NoteCard extends StatelessWidget {
                 ),
                 if (selectionControl != null)
                   Positioned(top: -8, right: -8, child: selectionControl!),
+                if (onActionsTap != null && selectionControl == null)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: SizedBox(
+                      key: actionsKey,
+                      width: AppSpacing.shellHeaderIconButtonSize,
+                      height: AppSpacing.shellHeaderIconButtonSize,
+                      child: IconButton(
+                        key: ValueKey('note-card-actions-${item.id}'),
+                        tooltip: '更多操作：${item.title}',
+                        onPressed: showActions,
+                        iconSize: 28,
+                        style: IconButton.styleFrom(
+                          foregroundColor: colorScheme.onSurface,
+                          visualDensity: VisualDensity.standard,
+                        ),
+                        icon: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: colorScheme.surface.withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.radius,
+                            ),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Icon(LucideIcons.chevronDown, size: 16),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 13),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Flexible(
-              child: Text(
-                item.title,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: colorScheme.onSurface,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            if (onActionsTap != null)
-              GestureDetector(
-                key: actionsKey,
-                behavior: HitTestBehavior.opaque,
-                onTap: showActions,
-                child: SizedBox(
-                  key: ValueKey('note-card-actions-${item.id}'),
-                  width: 24,
-                  height: 24,
-                  child: Center(
-                    child: Icon(
-                      LucideIcons.chevronDown,
-                      color: colorScheme.onSurfaceVariant,
-                      size: 16,
-                    ),
-                  ),
-                ),
-              ),
-          ],
+        const SizedBox(height: 12),
+        Text(
+          item.title,
+          maxLines: 2,
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            color: colorScheme.onSurface,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            height: 1.45,
+          ),
         ),
-        const SizedBox(height: 5),
+        const SizedBox(height: 4),
         Text(
           item.date,
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+            fontSize: 12,
+            height: 1.5,
+          ),
         ),
       ],
     );
@@ -119,6 +143,7 @@ class NoteCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final thumbnailBytes = item.coverThumbnailBytes;
+    final placeholder = _NoteCoverPlaceholder(item: item);
     if (thumbnailBytes != null && thumbnailBytes.isNotEmpty) {
       return DecoratedBox(
         decoration: BoxDecoration(color: item.coverColor),
@@ -127,11 +152,79 @@ class NoteCover extends StatelessWidget {
           fit: BoxFit.cover,
           gaplessPlayback: true,
           errorBuilder: (context, error, stackTrace) {
-            return const SizedBox.expand();
+            return placeholder;
           },
         ),
       );
     }
-    return const SizedBox.expand();
+    return placeholder;
+  }
+}
+
+class _NoteCoverPlaceholder extends StatelessWidget {
+  const _NoteCoverPlaceholder({required this.item});
+
+  final NoteItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = Color.alphaBlend(
+      item.coverColor,
+      Theme.of(context).colorScheme.surface,
+    );
+    final foreground =
+        ThemeData.estimateBrightnessForColor(background) == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF263C36);
+    return ExcludeSemantics(
+      child: DecoratedBox(
+        key: ValueKey('note-cover-placeholder-${item.id}'),
+        decoration: BoxDecoration(
+          color: background,
+          border: Border(
+            left: BorderSide(
+              width: 5,
+              color: foreground.withValues(alpha: 0.14),
+            ),
+          ),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final showTitle =
+                constraints.maxWidth >= 100 && constraints.maxHeight >= 140;
+            return Padding(
+              padding: EdgeInsets.all(showTitle ? 16 : 8),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    item.kind == LibraryFilter.pdf
+                        ? LucideIcons.fileText
+                        : LucideIcons.notebookPen,
+                    size: showTitle ? 24 : 18,
+                    color: foreground.withValues(alpha: 0.75),
+                  ),
+                  if (showTitle) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      item.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: foreground,
+                        fontSize: 14,
+                        height: 1.45,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }
