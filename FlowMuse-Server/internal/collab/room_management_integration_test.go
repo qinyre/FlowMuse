@@ -24,10 +24,24 @@ func TestRoomCapacityAndOwnerRemoval(t *testing.T) {
 		t.Fatal(err)
 	}
 	rooms := storage.NewRoomStore(db)
+	if err := rooms.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rooms.CreateRoom(ctx, "legacy-room", "", hashOwnerKey("legacy-room", ownerKeyForMigration), 0); err != nil {
+		t.Fatal(err)
+	}
+	// Only the isolated disposable schema is changed to reproduce the old layout.
+	if _, err := db.Exec(ctx, `ALTER TABLE collaboration_rooms DROP COLUMN max_participants`); err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 2; i++ {
 		if err := rooms.EnsureSchema(ctx); err != nil {
 			t.Fatal(err)
 		}
+	}
+	legacy, err := rooms.FindRoom(ctx, "legacy-room", "")
+	if err != nil || legacy.MaxParticipants != 0 || legacy.OwnerKeyHash != hashOwnerKey("legacy-room", ownerKeyForMigration) {
+		t.Fatal("legacy migration changed existing room")
 	}
 	const roomID, ownerKey = "limited-room", "synthetic-owner-key"
 	if _, err := rooms.CreateRoom(ctx, roomID, "", hashOwnerKey(roomID, ownerKey), 2); err != nil {
@@ -153,6 +167,9 @@ func TestRoomCapacityAndOwnerRemoval(t *testing.T) {
 		t.Fatal("unauthorized removal changed membership")
 	}
 	post(roomID, admitted.socketSID, ownerKey, http.StatusNoContent)
+	if _, err := admitted.waitEvent(ctx, EventRoomRemoved); err != nil {
+		t.Fatal("removed client did not receive its departure reason", err)
+	}
 	if reason := hub.consumeLiveInkToken(admitted.socketSID, roomID); reason != liveInkDropNotMember {
 		t.Fatal("removed member retains live ink permissions")
 	}
@@ -195,6 +212,8 @@ func TestRoomCapacityAndOwnerRemoval(t *testing.T) {
 		t.Fatal("left seat was not released", e)
 	}
 }
+
+const ownerKeyForMigration = "synthetic-migration-owner"
 
 func TestCreateRoomRejectsInvalidCapacityBeforeStorage(t *testing.T) {
 	api := NewHTTPAPI(nil, nil, nil, nil, guestRoomIdentity{}, time.Second)
