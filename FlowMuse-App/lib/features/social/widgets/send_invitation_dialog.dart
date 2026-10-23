@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../shared/widgets/anchored_dropdown_field.dart';
 import '../models/invitation_models.dart';
 import '../models/social_models.dart';
 import '../repositories/social_repository.dart';
@@ -116,18 +117,14 @@ class _SendInvitationDialogState extends ConsumerState<SendInvitationDialog> {
                 TextButton(onPressed: _load, child: const Text('刷新')),
               ],
               if (supplement && _devices.isNotEmpty)
-                DropdownButton<SocialDevice>(
-                  isExpanded: true,
+                AnchoredDropdownField<SocialDevice>(
                   value: _target,
-                  items: _devices
-                      .map(
-                        (d) => DropdownMenuItem(
-                          value: d,
-                          child: Text(d.label, overflow: TextOverflow.ellipsis),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: _busy ? null : (d) => setState(() => _target = d),
+                  options: _devices,
+                  labelOf: (d) => d.label,
+                  enabled: !_busy,
+                  onChanged: _busy
+                      ? null
+                      : (d) => setState(() => _target = d),
                 ),
               if (_busy) const LinearProgressIndicator(),
               if (_error != null)

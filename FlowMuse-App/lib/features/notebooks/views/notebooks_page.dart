@@ -845,7 +845,7 @@ Future<void> _showCollectionActions(
     );
   }
 
-  final selected = await showMenu<_CollectionAction>(
+  final selected = await showAnchoredPopupMenuAt<_CollectionAction>(
     context: context,
     position: position,
     items: [

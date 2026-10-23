@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../account/widgets/account_avatar.dart';
@@ -378,14 +379,32 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
                 : () => _open(f.conversationId, f.person),
             trailing: widget.inviteFriends
                 ? const Icon(LucideIcons.chevronRight, size: 20)
-                : PopupMenuButton<String>(
-                    tooltip: '管理好友',
-                    enabled: !_busy,
-                    onSelected: (action) => _manage(f, action),
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'remove', child: Text('删除好友')),
-                      PopupMenuItem(value: 'block', child: Text('屏蔽')),
-                    ],
+                : Builder(
+                    builder: (menuContext) => IconButton(
+                      tooltip: '管理好友',
+                      icon: const Icon(LucideIcons.moreVertical, size: 20),
+                      onPressed: _busy
+                          ? null
+                          : () async {
+                              final action = await showAnchoredPopupMenu<String>(
+                                context: menuContext,
+                                items: const [
+                                  PopupMenuItem(
+                                    value: 'remove',
+                                    child: Text('删除好友'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'block',
+                                    child: Text('屏蔽'),
+                                  ),
+                                ],
+                              );
+                              if (action == null || !menuContext.mounted) {
+                                return;
+                              }
+                              _manage(f, action);
+                            },
+                    ),
                   ),
           ),
       ],

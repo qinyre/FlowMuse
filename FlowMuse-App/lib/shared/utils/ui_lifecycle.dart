@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../widgets/anchored_panel.dart';
+import 'app_haptics.dart';
+
 /// Runs UI mutations after the current overlay/menu route finishes its own
 /// close/layout work.
 void runAfterUiFrame(VoidCallback action) {
@@ -95,9 +98,8 @@ void removeOverlayEntryAfterTeardown(
 
 /// Shows a popup menu anchored to the widget identified by [context].
 ///
-/// This intentionally uses [showMenu], which is backed by a popup route and
-/// normal OverlayEntries. It avoids MenuAnchor/OverlayPortal for menus whose
-/// content does not need to inherit live state from the anchor subtree.
+/// 统一走 [AnchoredPanelRoute]：纸面容器 + 从锚点侧展开的方向性动画。
+/// 仍然渲染调用方传入的 [PopupMenuEntry]，菜单项语义与既有测试不变。
 enum AnchoredPopupPlacement { automatic, below, right, left }
 
 Future<T?> showAnchoredPopupMenu<T extends Object>({
@@ -147,6 +149,74 @@ Future<T?> showAnchoredPopupMenu<T extends Object>({
       overlay.size.height - anchorRect.bottom - 4,
     ),
   };
+  final growth = switch (placement) {
+    AnchoredPopupPlacement.automatic ||
+    AnchoredPopupPlacement.below => AnchoredPanelGrowth.down,
+    AnchoredPopupPlacement.right => AnchoredPanelGrowth.right,
+    AnchoredPopupPlacement.left => AnchoredPanelGrowth.left,
+  };
 
-  return showMenu<T>(context: context, position: position, items: items);
+  return _showAnchoredPanel<T>(
+    context: context,
+    position: position,
+    items: items,
+    growth: growth,
+  );
+}
+
+/// 按调用方计算的屏幕坐标弹出统一面板（长按上下文菜单等没有按钮锚点的场景）。
+Future<T?> showAnchoredPopupMenuAt<T extends Object>({
+  required BuildContext context,
+  required RelativeRect position,
+  required List<PopupMenuEntry<T>> items,
+  AnchoredPanelGrowth growth = AnchoredPanelGrowth.down,
+}) {
+  if (items.isEmpty) return Future<T?>.value();
+  return _showAnchoredPanel<T>(
+    context: context,
+    position: position,
+    items: items,
+    growth: growth,
+  );
+}
+
+/// 值选择面板：替代 DropdownButton / 设置行 PopupMenuButton 的弹出部分。
+/// 当前值显示为勾选项；触发器外观由调用方保持。
+Future<T?> showAnchoredValuePicker<T extends Object>({
+  required BuildContext context,
+  required T? value,
+  required Iterable<T> options,
+  required String Function(T option) label,
+  AnchoredPopupPlacement placement = AnchoredPopupPlacement.below,
+}) {
+  return showAnchoredPopupMenu<T>(
+    context: context,
+    placement: placement,
+    items: [
+      for (final option in options)
+        CheckedPopupMenuItem<T>(
+          value: option,
+          checked: option == value,
+          child: Text(label(option)),
+        ),
+    ],
+  );
+}
+
+Future<T?> _showAnchoredPanel<T extends Object>({
+  required BuildContext context,
+  required RelativeRect position,
+  required List<PopupMenuEntry<T>> items,
+  required AnchoredPanelGrowth growth,
+}) {
+  final navigator = Navigator.of(context);
+  AppHaptics.panelOpen();
+  return navigator.push(
+    AnchoredPanelRoute<T>(
+      position: position,
+      items: items,
+      growth: growth,
+      capturedThemes: InheritedTheme.capture(from: context, to: null),
+    ),
+  );
 }

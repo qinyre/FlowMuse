@@ -602,7 +602,7 @@ class _LibraryItemsContent extends StatelessWidget {
               ),
             ),
           ];
-    final selected = await showMenu<_NoteAction>(
+    final selected = await showAnchoredPopupMenuAt<_NoteAction>(
       context: context,
       position: position,
       items: menuItems,

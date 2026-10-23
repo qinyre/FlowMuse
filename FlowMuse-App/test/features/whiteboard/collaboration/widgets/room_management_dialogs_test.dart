@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/room_collaborator.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/widgets/create_room_dialog.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/widgets/room_members_dialog.dart';
+import 'package:flow_muse/shared/widgets/anchored_dropdown_field.dart';
 
 void main() {
   Future<void> openCreate(
@@ -49,7 +50,7 @@ void main() {
   testWidgets('创建可选择含房主的在线上限', (tester) async {
     int? result;
     await openCreate(tester, (value) => result = value);
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.tap(find.byType(AnchoredDropdownField<int>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('4 人').last);
     await tester.pumpAndSettle();
