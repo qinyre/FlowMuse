@@ -6,6 +6,7 @@ const (
 	EventLeaveRoom            = "leave-room"
 	EventEndRoom              = "end-room"
 	EventRoomEnded            = "room-ended"
+	EventRoomRemoved          = "room-removed"
 	EventRoomError            = "room-error"
 	EventNewUser              = "new-user"
 	EventFirstInRoom          = "first-in-room"
@@ -39,6 +40,7 @@ type LiveInkReady struct {
 }
 
 type RoomUser struct {
+	Role      string `json:"role,omitempty"`
 	SocketID  string `json:"socketId"`
 	UserID    string `json:"userId,omitempty"`
 	Username  string `json:"username"`

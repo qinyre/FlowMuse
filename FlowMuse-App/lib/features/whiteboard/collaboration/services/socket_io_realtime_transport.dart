@@ -89,6 +89,12 @@ class SocketIoRealtimeTransport
 
   io.Socket? _socket;
   String? _roomId;
+  String? _ownerKey;
+  final StreamController<String> _roomRemoved =
+      StreamController<String>.broadcast();
+
+  @override
+  Stream<String> get roomRemoved => _roomRemoved.stream;
   final LiveInkNegotiation _liveInkNegotiation = LiveInkNegotiation();
   int _joinSentGeneration = -1;
   int _liveInkTransportNotWritableDrops = 0;
@@ -136,7 +142,8 @@ class SocketIoRealtimeTransport
   int get liveInkTransportNotWritableDrops => _liveInkTransportNotWritableDrops;
 
   @override
-  Future<void> connect(String roomId) async {
+  Future<void> connect(String roomId, {String? ownerKey}) async {
+    _ownerKey = ownerKey;
     _beginConnection(roomId);
     CollaborationDebugLog.write('socket', 'connect_begin', {
       'room': _shortRoomId(roomId),
@@ -298,6 +305,18 @@ class SocketIoRealtimeTransport
       if (!_roomUsers.isClosed) {
         _roomUsers.add(const []);
       }
+      _emitStatus(RealtimeConnectionStatus.disconnected);
+    });
+    socket.on('room-removed', (data) {
+      if (data is! Map || data['roomId'] != _roomId) return;
+      final removedRoomId = _roomId!;
+      _roomId = null;
+      _ownerKey = null;
+      _resetLiveInkNegotiation();
+      socket.dispose();
+      _socket = null;
+      if (!joined.isCompleted) joined.completeError(StateError('你已被房主移出房间'));
+      if (!_roomRemoved.isClosed) _roomRemoved.add(removedRoomId);
       _emitStatus(RealtimeConnectionStatus.disconnected);
     });
     socket.onConnectError((error) {
@@ -517,6 +536,7 @@ class SocketIoRealtimeTransport
     _roomId = null;
     _resetLiveInkNegotiation();
     _socket = null;
+    _ownerKey = null;
     socket?.dispose();
     CollaborationDebugLog.write('socket', 'dispose', {
       'room': _shortRoomId(roomId),
@@ -535,7 +555,14 @@ class SocketIoRealtimeTransport
     if (_joinSentGeneration == _liveInkNegotiation.generation) return;
     _joinSentGeneration = _liveInkNegotiation.generation;
     _liveInkNegotiation.arm();
-    socket.emit(_eventJoinRoom, roomId);
+    if (_ownerKey == null) {
+      socket.emit(_eventJoinRoom, roomId);
+    } else {
+      socket.emit(_eventJoinRoom, [
+        roomId,
+        {'ownerKey': _ownerKey},
+      ]);
+    }
   }
 
   void _handleLiveInkReady(Object? data) {

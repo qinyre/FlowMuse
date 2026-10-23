@@ -25,6 +25,8 @@ abstract interface class RealtimeTransport {
 
   Stream<CollaborationRoomMetadata> get roomEnded;
 
+  Stream<String> get roomRemoved;
+
   Stream<void> get firstInRoom;
 
   Stream<String> get errors;
@@ -37,7 +39,7 @@ abstract interface class RealtimeTransport {
 
   int get liveInkTransportNotWritableDrops;
 
-  Future<void> connect(String roomId);
+  Future<void> connect(String roomId, {String? ownerKey});
 
   Future<void> send(EncryptedPayload payload, {bool volatile = false});
 
@@ -76,6 +78,9 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
   Stream<CollaborationRoomMetadata> get roomEnded => const Stream.empty();
 
   @override
+  Stream<String> get roomRemoved => const Stream.empty();
+
+  @override
   Stream<void> get firstInRoom => const Stream.empty();
 
   @override
@@ -94,7 +99,7 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
   int get liveInkTransportNotWritableDrops => 0;
 
   @override
-  Future<void> connect(String roomId) async {}
+  Future<void> connect(String roomId, {String? ownerKey}) async {}
 
   @override
   Future<void> disconnect() async {}
@@ -285,6 +290,9 @@ class MemoryRealtimeTransport
   Stream<CollaborationRoomMetadata> get roomEnded => _roomEnded.stream;
 
   @override
+  Stream<String> get roomRemoved => const Stream.empty();
+
+  @override
   Stream<void> get firstInRoom => _firstInRoom.stream;
 
   @override
@@ -310,7 +318,7 @@ class MemoryRealtimeTransport
   int get liveInkTransportNotWritableDrops => _liveInkTransportNotWritableDrops;
 
   @override
-  Future<void> connect(String roomId) async {
+  Future<void> connect(String roomId, {String? ownerKey}) async {
     _liveInkNegotiation.begin(roomId);
     _connectionStatus.add(RealtimeConnectionStatus.connecting);
     final previousRoomId = _roomId;

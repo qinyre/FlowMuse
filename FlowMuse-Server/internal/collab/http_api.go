@@ -84,8 +84,9 @@ func (api *HTTPAPI) roomsRoot(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := contextWithTimeout(r, api.requestTimeout)
 		defer cancel()
 		var request struct {
-			RoomID       string `json:"roomId"`
-			OwnerKeyHash string `json:"ownerKeyHash"`
+			RoomID          string `json:"roomId"`
+			OwnerKeyHash    string `json:"ownerKeyHash"`
+			MaxParticipants int    `json:"maxParticipants"`
 		}
 		if !decodeJSON(w, r, &request, maxMetadataBytes, false) {
 			return
@@ -98,12 +99,16 @@ func (api *HTTPAPI) roomsRoot(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid ownerKeyHash", http.StatusBadRequest)
 			return
 		}
+		if request.MaxParticipants != 0 && (request.MaxParticipants < 2 || request.MaxParticipants > 50) {
+			http.Error(w, "invalid maxParticipants", http.StatusBadRequest)
+			return
+		}
 		identity, _ := api.identityFromRequest(r)
 		ownerID := ""
 		if !identity.IsGuest {
 			ownerID = identity.UserID
 		}
-		metadata, err := api.roomStore.CreateRoom(ctx, request.RoomID, ownerID, request.OwnerKeyHash)
+		metadata, err := api.roomStore.CreateRoom(ctx, request.RoomID, ownerID, request.OwnerKeyHash, request.MaxParticipants)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -130,6 +135,10 @@ func (api *HTTPAPI) rooms(w http.ResponseWriter, r *http.Request) {
 	}
 	if suffix == "end" {
 		api.endRoom(w, r, roomID)
+		return
+	}
+	if suffix == "remove-member" {
+		api.removeMember(w, r, roomID)
 		return
 	}
 	if suffix == "access" {
@@ -223,6 +232,49 @@ func (api *HTTPAPI) endRoom(w http.ResponseWriter, r *http.Request, roomID strin
 	writeJSON(w, http.StatusOK, metadata)
 }
 
+func (api *HTTPAPI) removeMember(w http.ResponseWriter, r *http.Request, roomID string) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, "POST")
+		return
+	}
+	var request struct {
+		SocketID string `json:"socketId"`
+		OwnerKey string `json:"ownerKey"`
+	}
+	if !decodeJSON(w, r, &request, maxMetadataBytes, false) {
+		return
+	}
+	if !safeIDPattern.MatchString(request.SocketID) {
+		http.Error(w, "invalid socketId", http.StatusBadRequest)
+		return
+	}
+	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
+	defer cancel()
+	identity, _ := api.identityFromRequest(r)
+	metadata, err := api.roomStore.FindRoom(ctx, roomID, identity.UserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, "加载房间失败", http.StatusInternalServerError)
+		return
+	}
+	if !metadata.CanManage(identity.UserID, hashOwnerKey(roomID, request.OwnerKey)) {
+		http.Error(w, "只有房主可以移出成员", http.StatusForbidden)
+		return
+	}
+	if metadata.Ended {
+		http.Error(w, "协作房间已结束", http.StatusGone)
+		return
+	}
+	if err := api.hub.removeMember(roomID, request.SocketID); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string) {
 	ctx, cancel := contextWithTimeout(r, api.requestTimeout)
 	defer cancel()
@@ -303,7 +355,7 @@ func (api *HTTPAPI) scene(w http.ResponseWriter, r *http.Request, roomID string)
 		if !identity.IsGuest {
 			ownerID = identity.UserID
 		}
-		if _, err := api.roomStore.CreateRoom(ctx, roomID, ownerID, snapshot.OwnerKeyHash); err != nil {
+		if _, err := api.roomStore.CreateRoom(ctx, roomID, ownerID, snapshot.OwnerKeyHash, 0); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

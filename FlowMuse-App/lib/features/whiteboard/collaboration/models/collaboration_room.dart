@@ -114,6 +114,7 @@ class CollaborationRoomMetadata {
     this.ownerId = '',
     this.endedBy = '',
     this.endedAt = 0,
+    this.maxParticipants = 0,
   });
 
   final String roomId;
@@ -122,6 +123,7 @@ class CollaborationRoomMetadata {
   final bool ended;
   final String endedBy;
   final int endedAt;
+  final int maxParticipants;
 
   bool get isOwner => role.isOwner;
 
@@ -133,14 +135,19 @@ class CollaborationRoomMetadata {
       ended: json['ended'] as bool? ?? false,
       endedBy: json['endedBy'] as String? ?? '',
       endedAt: (json['endedAt'] as num?)?.toInt() ?? 0,
+      maxParticipants: (json['maxParticipants'] as num?)?.toInt() ?? 0,
     );
   }
 
-  static CollaborationRoomMetadata localOwner(String roomId) {
+  static CollaborationRoomMetadata localOwner(
+    String roomId, {
+    int maxParticipants = 0,
+  }) {
     return CollaborationRoomMetadata(
       roomId: roomId,
       role: CollaborationRoomRole.owner,
       ended: false,
+      maxParticipants: maxParticipants,
     );
   }
 }

@@ -14,17 +14,18 @@ var ErrRoomAccessDenied = errors.New("room access denied")
 var ErrRoomEnded = errors.New("room ended")
 
 type RoomMetadata struct {
-	RoomID        string `json:"roomId"`
-	OwnerID       string `json:"ownerId,omitempty"`
-	OwnerKeyHash  string `json:"-"`
-	AccessPolicy  string `json:"accessPolicy"`
-	CreatedAt     int64  `json:"createdAt"`
-	EndedAt       int64  `json:"endedAt,omitempty"`
-	EndedBy       string `json:"endedBy,omitempty"`
-	LastJoinedAt  int64  `json:"lastJoinedAt,omitempty"`
-	MemberRole    string `json:"memberRole,omitempty"`
-	Authenticated bool   `json:"authenticated"`
-	Ended         bool   `json:"ended"`
+	RoomID          string `json:"roomId"`
+	OwnerID         string `json:"ownerId,omitempty"`
+	OwnerKeyHash    string `json:"-"`
+	AccessPolicy    string `json:"accessPolicy"`
+	CreatedAt       int64  `json:"createdAt"`
+	EndedAt         int64  `json:"endedAt,omitempty"`
+	EndedBy         string `json:"endedBy,omitempty"`
+	LastJoinedAt    int64  `json:"lastJoinedAt,omitempty"`
+	MemberRole      string `json:"memberRole,omitempty"`
+	Authenticated   bool   `json:"authenticated"`
+	Ended           bool   `json:"ended"`
+	MaxParticipants int    `json:"maxParticipants"`
 }
 
 type RoomStore struct {
@@ -63,19 +64,25 @@ CREATE TABLE IF NOT EXISTS room_invites (
 	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 	expires_at TIMESTAMPTZ
 )`)
+	if err == nil {
+		_, err = s.db.Exec(ctx, `ALTER TABLE collaboration_rooms ADD COLUMN IF NOT EXISTS max_participants INTEGER NOT NULL DEFAULT 0`)
+	}
 	return err
 }
 
-func (s *RoomStore) CreateRoom(ctx context.Context, roomID string, ownerID string, ownerKeyHash string) (RoomMetadata, error) {
+func (s *RoomStore) CreateRoom(ctx context.Context, roomID string, ownerID string, ownerKeyHash string, maxParticipants int) (RoomMetadata, error) {
+	if maxParticipants != 0 && (maxParticipants < 2 || maxParticipants > 50) {
+		return RoomMetadata{}, errors.New("invalid maxParticipants")
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return RoomMetadata{}, err
 	}
 	defer tx.Rollback(ctx)
 	_, err = tx.Exec(ctx, `
-INSERT INTO collaboration_rooms (room_id, owner_id, owner_key_hash)
-VALUES ($1, NULLIF($2, ''), $3)
-ON CONFLICT (room_id) DO NOTHING`, roomID, ownerID, ownerKeyHash)
+INSERT INTO collaboration_rooms (room_id, owner_id, owner_key_hash, max_participants)
+VALUES ($1, NULLIF($2, ''), $3, $4)
+ON CONFLICT (room_id) DO NOTHING`, roomID, ownerID, ownerKeyHash, maxParticipants)
 	if err != nil {
 		return RoomMetadata{}, err
 	}
@@ -115,7 +122,7 @@ const roomMetadataQuery = `
 SELECT r.room_id, COALESCE(r.owner_id, ''), COALESCE(r.owner_key_hash, ''), r.access_policy, r.created_at,
 	COALESCE(r.ended_by, ''), r.ended_at,
 	CASE WHEN r.owner_id = NULLIF($2, '') THEN 'owner'
-	     WHEN m.role = 'owner' THEN 'editor' ELSE COALESCE(m.role, '') END, m.joined_at
+	     WHEN m.role = 'owner' THEN 'editor' ELSE COALESCE(m.role, '') END, m.joined_at, r.max_participants
 FROM collaboration_rooms r
 LEFT JOIN room_members m ON m.room_id = r.room_id AND m.user_id = NULLIF($2, '')
 WHERE r.room_id = $1`
@@ -134,6 +141,7 @@ func scanRoom(row pgx.Row, userID string) (RoomMetadata, error) {
 		&endedAt,
 		&metadata.MemberRole,
 		&joinedAt,
+		&metadata.MaxParticipants,
 	)
 	if err != nil {
 		return RoomMetadata{}, err
@@ -174,9 +182,7 @@ func (s *RoomStore) EndRoom(ctx context.Context, roomID, userID, ownerKeyHash st
 	if metadata.Ended {
 		return metadata, nil
 	}
-	ownsByAccount := userID != "" && metadata.OwnerID != "" && metadata.OwnerID == userID
-	ownsByKey := ownerKeyHashesEqual(metadata.OwnerKeyHash, ownerKeyHash)
-	if !ownsByAccount && !ownsByKey {
+	if !metadata.CanManage(userID, ownerKeyHash) {
 		return RoomMetadata{}, ErrRoomAccessDenied
 	}
 	var endedAt time.Time
@@ -192,6 +198,10 @@ RETURNING ended_at`, roomID, userID).Scan(&endedAt)
 	metadata.EndedAt = endedAt.UnixMilli()
 	metadata.EndedBy = userID
 	return metadata, nil
+}
+
+func (m RoomMetadata) CanManage(userID, ownerKeyHash string) bool {
+	return (userID != "" && m.OwnerID != "" && m.OwnerID == userID) || ownerKeyHashesEqual(m.OwnerKeyHash, ownerKeyHash)
 }
 
 func ownerKeyHashesEqual(expected, supplied string) bool {

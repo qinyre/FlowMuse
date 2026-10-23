@@ -36,7 +36,7 @@ func TestHTTPEndRoomRevokesLiveMembersWithoutClientEndEvent(t *testing.T) {
 	const roomID = "room-e2e"
 	const ownerKey = "synthetic-owner-key"
 	for _, id := range []string{roomID, "other-room"} {
-		if _, err := rooms.CreateRoom(ctx, id, "", hashOwnerKey(id, ownerKey)); err != nil {
+		if _, err := rooms.CreateRoom(ctx, id, "", hashOwnerKey(id, ownerKey), 0); err != nil {
 			t.Fatal(err)
 		}
 	}

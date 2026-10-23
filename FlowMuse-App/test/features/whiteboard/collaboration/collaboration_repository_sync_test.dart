@@ -723,6 +723,9 @@ class _LifecycleTransport implements RealtimeTransport {
   Stream<CollaborationRoomMetadata> get roomEnded => const Stream.empty();
 
   @override
+  Stream<String> get roomRemoved => const Stream.empty();
+
+  @override
   Stream<void> get firstInRoom => const Stream.empty();
 
   @override
@@ -741,7 +744,7 @@ class _LifecycleTransport implements RealtimeTransport {
   int get liveInkTransportNotWritableDrops => 0;
 
   @override
-  Future<void> connect(String roomId) async {}
+  Future<void> connect(String roomId, {String? ownerKey}) async {}
 
   @override
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {
