@@ -29,6 +29,10 @@
       "value": "显示最近白板并继续创作"
     },
     {
+      "name": "camera_reason",
+      "value": "用于扫描房间二维码加入协作"
+    },
+    {
       "name": "microphone_reason",
       "value": "用于将语音转换为白板文字"
     }

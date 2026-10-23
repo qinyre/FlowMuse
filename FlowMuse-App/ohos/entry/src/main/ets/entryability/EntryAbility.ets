@@ -14,6 +14,7 @@ import { ServiceWidgetChannel } from '../channels/ServiceWidgetChannel';
 import { SpeechRecognitionChannel } from '../channels/SpeechRecognitionChannel';
 import { UrlLauncherChannel } from '../channels/UrlLauncherChannel';
 import { HuaweiAccountChannel } from '../channels/HuaweiAccountChannel';
+import { RoomQrScannerChannel } from '../channels/RoomQrScannerChannel';
 
 export default class EntryAbility extends FlutterAbility {
   private huaweiAccountChannel: HuaweiAccountChannel | undefined;
@@ -74,6 +75,7 @@ export default class EntryAbility extends FlutterAbility {
     new HttpChannel().register(flutterEngine)
     new SystemShareChannel(this.context).register(flutterEngine)
     new ExternalDocumentChannel().register(flutterEngine)
+    new RoomQrScannerChannel(this.context).register(flutterEngine)
     new PenColorPickerChannel().register(flutterEngine)
     new ServiceWidgetChannel(this.context).register(flutterEngine)
     new SpeechRecognitionChannel(this.context).register(flutterEngine)
