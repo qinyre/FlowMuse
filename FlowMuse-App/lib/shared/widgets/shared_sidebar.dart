@@ -8,6 +8,7 @@ import '../../app/view_models/theme_view_model.dart';
 import '../../features/account/view_models/account_view_model.dart';
 import '../../features/account/widgets/account_avatar.dart';
 import 'app_spacing.dart';
+import 'app_motion.dart';
 import 'app_shell.dart';
 
 class SharedSidebar extends ConsumerWidget {
@@ -38,7 +39,9 @@ class SharedSidebar extends ConsumerWidget {
     return Container(
       width: sharedSidebarWidth,
       decoration: BoxDecoration(
-        color: preset.usesMonochromeBackground ? colorScheme.surfaceContainer : null,
+        color: preset.usesMonochromeBackground
+            ? colorScheme.surfaceContainer
+            : null,
         gradient: hasSidebarWallpaper || preset.usesMonochromeBackground
             ? null
             : LinearGradient(
@@ -49,9 +52,7 @@ class SharedSidebar extends ConsumerWidget {
                   colorScheme.primary.withValues(alpha: 0.11),
                 ],
               ),
-        border: Border(
-          right: BorderSide(color: colorScheme.outlineVariant),
-        ),
+        border: Border(right: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: Material(
         color: colorScheme.surfaceContainer,
@@ -244,7 +245,8 @@ class SharedSidebarIconButton extends StatelessWidget {
       color: Theme.of(context).colorScheme.onSurfaceVariant,
       style: ButtonStyle(
         overlayColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.hovered) ||
+          (states) =>
+              states.contains(WidgetState.hovered) ||
                   states.contains(WidgetState.focused)
               ? Colors.transparent
               : null,
@@ -407,9 +409,7 @@ class SharedSidebarItem extends StatelessWidget {
                         padding: EdgeInsets.zero,
                         onPressed: onTrailingTap,
                         icon: AnimatedSwitcher(
-                          duration: MediaQuery.disableAnimationsOf(context)
-                              ? Duration.zero
-                              : const Duration(milliseconds: 220),
+                          duration: AppMotion.resolve(context, AppMotion.quick),
                           switchInCurve: Curves.easeOutCubic,
                           switchOutCurve: Curves.easeInCubic,
                           transitionBuilder: (child, animation) {
@@ -461,24 +461,17 @@ class SharedSidebarChildren extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final animationsDisabled = MediaQuery.disableAnimationsOf(context);
-    final duration = animationsDisabled
-        ? Duration.zero
-        : const Duration(milliseconds: 300);
+    final duration = AppMotion.resolve(context, AppMotion.standard);
 
     return ClipRect(
       child: AnimatedSize(
         duration: duration,
-        reverseDuration: animationsDisabled
-            ? Duration.zero
-            : const Duration(milliseconds: 240),
+        reverseDuration: AppMotion.resolve(context, AppMotion.exit),
         curve: Curves.easeOutCubic,
         alignment: Alignment.topCenter,
         child: AnimatedSwitcher(
           duration: duration,
-          reverseDuration: animationsDisabled
-              ? Duration.zero
-              : const Duration(milliseconds: 240),
+          reverseDuration: AppMotion.resolve(context, AppMotion.exit),
           switchInCurve: Curves.easeOutCubic,
           switchOutCurve: Curves.easeInCubic,
           transitionBuilder: (child, animation) {

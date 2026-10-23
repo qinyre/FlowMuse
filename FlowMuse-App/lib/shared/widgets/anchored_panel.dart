@@ -4,6 +4,7 @@ import 'dart:ui' show SemanticsRole;
 import 'package:flutter/material.dart';
 
 import '../utils/app_haptics.dart';
+import 'app_motion.dart';
 
 /// 面板从锚点哪一侧展开，决定进入动画的生长方向。
 enum AnchoredPanelGrowth { down, right, left }
@@ -37,10 +38,10 @@ class AnchoredPanelRoute<T> extends PopupRoute<T> {
   final String? barrierLabel;
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 200);
+  Duration get transitionDuration => AppMotion.standard;
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 150);
+  Duration get reverseTransitionDuration => AppMotion.exit;
 
   @override
   Animation<double> createAnimation() {

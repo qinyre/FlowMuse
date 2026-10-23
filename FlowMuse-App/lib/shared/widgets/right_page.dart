@@ -5,20 +5,14 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../app/app_router.dart';
 import 'app_shell.dart';
 import 'app_spacing.dart';
-
-const _headerEnterDuration = Duration(milliseconds: 340);
-const _headerExitDuration = Duration(milliseconds: 260);
+import 'app_motion.dart';
 
 Duration _headerMotionDuration(BuildContext context) {
-  return MediaQuery.disableAnimationsOf(context)
-      ? Duration.zero
-      : _headerEnterDuration;
+  return AppMotion.resolve(context, AppMotion.standard);
 }
 
 Duration _headerReverseDuration(BuildContext context) {
-  return MediaQuery.disableAnimationsOf(context)
-      ? Duration.zero
-      : _headerExitDuration;
+  return AppMotion.resolve(context, AppMotion.exit);
 }
 
 class RightPageScaffold extends StatelessWidget {
@@ -140,7 +134,7 @@ class RightPageHeader extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (sidebarLeading != null) sidebarLeading,
+                        ?sidebarLeading,
                         if (sidebarLeading != null && leadingActions.isNotEmpty)
                           const SizedBox(width: AppSpacing.controlGap),
                         if (leadingActions.isNotEmpty) leading,

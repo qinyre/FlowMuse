@@ -5,6 +5,7 @@ import '../../app/app_theme_preset.dart';
 import '../../app/view_models/theme_view_model.dart';
 import '../../features/library/widgets/library_sidebar.dart';
 import '../storage/local_settings_repository.dart';
+import 'app_motion.dart';
 
 enum ShellSection { library, search, notebooks, tags, trash, settings, social }
 
@@ -169,15 +170,14 @@ class _AppShellState extends ConsumerState<AppShell> {
                     ClipRect(
                       child: AnimatedContainer(
                         width: showDockedSidebar ? sharedSidebarWidth : 0,
-                        duration: MediaQuery.disableAnimationsOf(context)
-                            ? Duration.zero
-                            : const Duration(milliseconds: 240),
+                        duration: AppMotion.resolve(
+                          context,
+                          AppMotion.standard,
+                        ),
                         curve: Curves.easeOutCubic,
                         child: AnimatedOpacity(
                           opacity: showDockedSidebar ? 1 : 0,
-                          duration: MediaQuery.disableAnimationsOf(context)
-                              ? Duration.zero
-                              : const Duration(milliseconds: 180),
+                          duration: AppMotion.resolve(context, AppMotion.exit),
                           curve: Curves.easeOutCubic,
                           child: OverflowBox(
                             alignment: Alignment.centerLeft,

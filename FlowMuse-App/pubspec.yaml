@@ -132,8 +132,17 @@ flutter:
     - assets/covers/notebooks/
     - assets/covers/tags/
     - assets/themes/
+    - assets/fonts/ui/OFL.txt
 
   fonts:
+    - family: FlowMuseSans
+      fonts:
+        - asset: assets/fonts/ui/FlowMuseSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/ui/FlowMuseSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/ui/FlowMuseSans-Bold.ttf
+          weight: 700
     - family: Excalifont
       fonts:
         - asset: assets/fonts/markdraw/Excalifont-Regular.ttf

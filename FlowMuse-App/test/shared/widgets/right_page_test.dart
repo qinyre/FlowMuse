@@ -4,6 +4,24 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('减少动画时标题替换不残留旧页面标题', (tester) async {
+    Widget page(String title) => MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: RightPageScaffold(title: title, body: const SizedBox.shrink()),
+      ),
+    );
+    await tester.pumpWidget(page('全部笔记'));
+    await tester.pumpWidget(page('回收站'));
+    await tester.pump();
+    expect(find.text('全部笔记'), findsNothing);
+    expect(find.text('回收站'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final scale in [1.0, 2.0]) {
     testWidgets('360px 页头在 $scale 倍字号下保留标题与全部操作', (tester) async {
       tester.view.physicalSize = const Size(360, 740);

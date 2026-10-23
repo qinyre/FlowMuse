@@ -4,14 +4,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('featured theme exposes its secondary and tertiary colors to Material', () {
-    final preset = appThemePresetById(AppThemeId.starryBlue);
-    final theme = AppTheme.fromPreset(preset);
+  test(
+    'featured theme exposes its secondary and tertiary colors to Material',
+    () {
+      final preset = appThemePresetById(AppThemeId.starryBlue);
+      final theme = AppTheme.fromPreset(preset);
 
-    expect(theme.colorScheme.secondary, preset.secondaryColor);
-    expect(theme.colorScheme.tertiary, preset.tertiaryColor);
-    expect(theme.dialogTheme.backgroundColor, theme.colorScheme.surface);
-  });
+      expect(theme.colorScheme.secondary, preset.secondaryColor);
+      expect(theme.colorScheme.tertiary, preset.tertiaryColor);
+      expect(theme.dialogTheme.backgroundColor, theme.colorScheme.surface);
+      expect(
+        theme.dialogTheme.titleTextStyle?.fontSize,
+        greaterThan(theme.dialogTheme.contentTextStyle!.fontSize!),
+      );
+      expect(theme.textTheme.bodyMedium?.fontFamily, 'FlowMuseSans');
+    },
+  );
 
   testWidgets('night Material surfaces resolve from the active color scheme', (
     tester,
@@ -36,11 +44,17 @@ void main() {
 
     final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
     final card = tester.widget<Material>(
-      find.descendant(of: find.byType(AlertDialog), matching: find.byType(Material)),
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(Material),
+      ),
     );
     final dialogTitle = tester.widget<DefaultTextStyle>(
       find
-          .ancestor(of: find.text('Dialog'), matching: find.byType(DefaultTextStyle))
+          .ancestor(
+            of: find.text('Dialog'),
+            matching: find.byType(DefaultTextStyle),
+          )
           .first,
     );
 
@@ -50,7 +64,10 @@ void main() {
       theme.inputDecorationTheme.fillColor,
       theme.colorScheme.surfaceContainerHighest,
     );
-    expect(theme.filledButtonTheme.style?.foregroundColor?.resolve({}), theme.colorScheme.onPrimary);
+    expect(
+      theme.filledButtonTheme.style?.foregroundColor?.resolve({}),
+      theme.colorScheme.onPrimary,
+    );
     expect(
       theme.searchBarTheme.backgroundColor?.resolve({}),
       theme.colorScheme.surfaceContainerHighest,

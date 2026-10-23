@@ -8,6 +8,7 @@ import 'package:flow_muse/app/app_theme_preset.dart';
 import 'package:flow_muse/app/view_models/theme_view_model.dart';
 import 'package:flow_muse/features/library/repositories/library_repository.dart';
 import 'package:flow_muse/features/library/view_models/library_home_view_model.dart';
+import 'package:flow_muse/features/library/widgets/note_card.dart';
 
 import 'support/test_library_index_notifier.dart';
 
@@ -32,8 +33,18 @@ void main() {
     await tester.pump();
 
     expect(find.text('全部笔记'), findsWidgets);
-    expect(find.text('操作系统'), findsOneWidget);
-    expect(find.text('LectureNotes'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is NoteCard && widget.item.title == '操作系统',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is NoteCard && widget.item.title == 'LectureNotes',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('filters PDF notebooks through the library view model', (
@@ -44,9 +55,12 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.text('PDF'));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
 
-    expect(find.text('LectureNotes'), findsOneWidget);
+    final cards = tester.widgetList<NoteCard>(find.byType(NoteCard));
+    expect(cards.map((card) => card.item.title), ['LectureNotes']);
     final container = ProviderScope.containerOf(
       tester.element(find.text('全部笔记').first),
     );

@@ -82,14 +82,23 @@ class NoteCard extends StatelessWidget {
                         key: ValueKey('note-card-actions-${item.id}'),
                         tooltip: '更多操作：${item.title}',
                         onPressed: showActions,
+                        iconSize: 28,
                         style: IconButton.styleFrom(
-                          backgroundColor: colorScheme.surface.withValues(
-                            alpha: 0.94,
-                          ),
                           foregroundColor: colorScheme.onSurface,
                           visualDensity: VisualDensity.standard,
                         ),
-                        icon: const Icon(LucideIcons.chevronDown, size: 18),
+                        icon: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: colorScheme.surface.withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.radius,
+                            ),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(6),
+                            child: Icon(LucideIcons.chevronDown, size: 16),
+                          ),
+                        ),
                       ),
                     ),
                   ),
