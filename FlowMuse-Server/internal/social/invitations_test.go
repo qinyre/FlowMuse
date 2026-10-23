@@ -18,7 +18,7 @@ func inviteFixture(t *testing.T) (*Store, []Person, InvitationRequest) {
 	s, p := socialStore(t)
 	ctx := context.Background()
 	friendConversation(t, s, p[0], p[1])
-	if _, err := storage.NewRoomStore(s.db).CreateRoom(ctx, "invite-room", p[0].ID, "test-owner-hash"); err != nil {
+	if _, err := storage.NewRoomStore(s.db).CreateRoom(ctx, "invite-room", p[0].ID, "test-owner-hash", 0); err != nil {
 		t.Fatal(err)
 	}
 	a, err := s.RegisterDevice(ctx, p[0].ID, testDevice("sender-device", 19))
