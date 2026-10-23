@@ -40,6 +40,8 @@ import '../collaboration/services/remote_wet_ink_store.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
+import '../collaboration/widgets/create_room_dialog.dart';
+import '../collaboration/widgets/room_members_dialog.dart';
 import '../collaboration/widgets/room_invite_qr.dart';
 import '../ink_recognition/ink_recognition_repository.dart';
 import '../pdf_note_import/pdf_note_consumer.dart';
@@ -129,6 +131,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   StreamSubscription<ExcalidrawScene>? _fileStatusSceneSubscription;
   StreamSubscription<List<RoomCollaborator>>? _roomUsersSubscription;
   StreamSubscription<CollaborationRoomMetadata>? _roomEndedSubscription;
+  StreamSubscription<String>? _roomRemovedSubscription;
   StreamSubscription<String>? _roomErrorSubscription;
   StreamSubscription<RealtimeConnectionStatus>? _connectionStatusSubscription;
   late final _activityTimer = CollaborationActivityTimer(_broadcastIdleState);
@@ -267,6 +270,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     unawaited(_fileStatusSceneSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
     unawaited(_roomEndedSubscription?.cancel());
+    unawaited(_roomRemovedSubscription?.cancel());
     unawaited(_roomErrorSubscription?.cancel());
     unawaited(_connectionStatusSubscription?.cancel());
     unawaited(_liveInkSubscription?.cancel());
@@ -1188,8 +1192,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         ref.read(whiteboardViewModelProvider).collaborating) {
       return;
     }
-    final confirmed = await _confirmCreateCollaborationRoom();
-    if (confirmed != true || !mounted) {
+    final maxParticipants = await _confirmCreateCollaborationRoom();
+    if (maxParticipants == null || !mounted) {
       return;
     }
     _remoteWetInkStore
@@ -1201,7 +1205,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       );
     await ref
         .read(whiteboardViewModelProvider.notifier)
-        .startCollaboration(initialScene: _collaborationAdapter.currentScene());
+        .startCollaboration(
+          initialScene: _collaborationAdapter.currentScene(),
+          maxParticipants: maxParticipants,
+        );
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
       return;
@@ -1229,22 +1236,24 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _joinCollaboration(room);
   }
 
-  Future<bool?> _confirmCreateCollaborationRoom() {
-    return showDialog<bool>(
+  Future<int?> _confirmCreateCollaborationRoom() {
+    return showDialog<int>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('创建协作房间'),
-        content: const Text('将当前笔记白板同步到协作房间。拥有房间信息的人可以加入并一起编辑。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('创建房间'),
-          ),
-        ],
+      builder: (_) => const CreateRoomDialog(),
+    );
+  }
+
+  Future<void> _manageCollaborationMembers() async {
+    final state = ref.read(whiteboardViewModelProvider);
+    if (!state.collaborating || !state.isRoomOwner) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => RoomMembersDialog(
+        users: _collaborationRepository.roomUsers,
+        initialUsers: _collaborationRepository.roomMembers,
+        selfSocketId: _collaborationRepository.socketId,
+        maxParticipants: state.roomMetadata?.maxParticipants ?? 0,
+        onRemove: _collaborationRepository.removeMember,
       ),
     );
   }
@@ -1608,6 +1617,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _roomUsersSubscription = null;
     await _roomEndedSubscription?.cancel();
     _roomEndedSubscription = null;
+    await _roomRemovedSubscription?.cancel();
+    _roomRemovedSubscription = null;
     await _roomErrorSubscription?.cancel();
     _roomErrorSubscription = null;
     await _connectionStatusSubscription?.cancel();
@@ -1887,6 +1898,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     ) {
       unawaited(_handleRoomEnded(metadata));
     });
+    await _roomRemovedSubscription?.cancel();
+    _roomRemovedSubscription = _collaborationRepository.roomRemoved.listen((_) {
+      unawaited(_handleRoomEnded(null, removed: true));
+    });
     await _roomErrorSubscription?.cancel();
     _roomErrorSubscription = _collaborationRepository.errors.listen((message) {
       _runAfterStableFrame(() {
@@ -1920,16 +1935,24 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _broadcastIdleState(_lastIdleState ?? 'active', force: true);
   }
 
-  Future<void> _handleRoomEnded(CollaborationRoomMetadata metadata) async {
+  Future<void> _handleRoomEnded(
+    CollaborationRoomMetadata? metadata, {
+    bool removed = false,
+  }) async {
     _markdrawController.closeTransientUiForSceneReplace();
     await _cancelCollaborationStreams();
     if (!mounted) {
       return;
     }
     await _runAfterStableFrameAsync(() async {
-      ref.read(whiteboardViewModelProvider.notifier).applyRoomEnded(metadata);
+      final notifier = ref.read(whiteboardViewModelProvider.notifier);
+      if (removed) {
+        notifier.applyRoomRemoved();
+      } else {
+        notifier.applyRoomEnded(metadata!);
+      }
     });
-    final save = await _showRoomEndedDialog();
+    final save = await _showRoomEndedDialog(removed: removed);
     if (save == true) {
       await _saveTemporaryRoomAsLocalNote();
     }
@@ -1940,13 +1963,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
   }
 
-  Future<bool?> _showRoomEndedDialog() {
+  Future<bool?> _showRoomEndedDialog({bool removed = false}) {
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('协作已结束'),
-        content: const Text('房主已结束协作。你可以把当前白板保存为本地笔记，或直接返回。'),
+        title: Text(removed ? '已被移出房间' : '协作已结束'),
+        content: Text(
+          removed
+              ? '房主已将你移出房间，已停止同步。你可以把当前白板保存为本地笔记，或直接返回。'
+              : '房主已结束协作。你可以把当前白板保存为本地笔记，或直接返回。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -2741,6 +2768,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onJoinCollaboration: _promptJoinCollaboration,
                   onLeaveCollaboration: _leaveCollaboration,
                   onEndCollaboration: _endCollaboration,
+                  onManageCollaboration: _manageCollaborationMembers,
                   onShareCollaboration: () async {
                     final room = ref
                         .read(whiteboardViewModelProvider)
