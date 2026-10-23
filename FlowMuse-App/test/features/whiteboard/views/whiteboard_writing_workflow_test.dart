@@ -785,6 +785,184 @@ void main() {
     await _drainIo(tester, container);
   });
 
+  for (final saveRemoved in [false, true]) {
+    testWidgets('被移出后${saveRemoved ? '保存本地' : '直接返回'}，其他笔记可重新创建房间', (
+      tester,
+    ) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final nextNote = (await tester.runAsync(
+        () => library.createNote(title: 'after-room-removal'),
+      ))!;
+      final before = (await tester.runAsync(
+        library.loadIndex,
+      ))!.notes.map((note) => note.id).toSet();
+      final hub = MemoryRealtimeRoomHub();
+      final store = _MemberJoinSceneStore();
+      final host = CollaborationRepository(
+        transport: MemoryRealtimeTransport(hub: hub, socketId: 'removal-host'),
+        sceneStore: store,
+      );
+      final transport = _RemovableRealtimeTransport(
+        hub: hub,
+        socketId: 'removal-guest',
+      );
+      final local = CollaborationRepository(
+        transport: transport,
+        sceneStore: store,
+      );
+      addTearDown(host.stop);
+      addTearDown(local.stop);
+      addTearDown(transport.close);
+      final room = (await tester.runAsync(
+        () => host.startNewRoom(initialScene: ExcalidrawScene.empty()),
+      ))!;
+      final container = _container(library: library, collaboration: local);
+      final router = GoRouter(
+        initialLocation: '/room',
+        routes: [
+          GoRoute(path: '/library', builder: (_, _) => const SizedBox.shrink()),
+          GoRoute(
+            path: '/room',
+            builder: (_, _) =>
+                WhiteboardPage.collaborationRoom(initialRoom: room),
+          ),
+          GoRoute(
+            path: '/next',
+            builder: (_, _) => WhiteboardPage(noteId: nextNote.id),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+      await tester.binding.setSurfaceSize(const Size(1200, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await _drainIo(
+        tester,
+        container,
+        until: () =>
+            container.read(whiteboardViewModelProvider).collaborationStatus ==
+            WhiteboardCollaborationStatus.connected,
+      );
+      final controller = tester
+          .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+          .controller!;
+      controller.applyRemoteElements([
+        RectangleElement(
+          id: const ElementId('retained-after-removal'),
+          x: 200,
+          y: 200,
+          width: 100,
+          height: 80,
+        ),
+      ]);
+      transport.removed.add(room.roomId);
+      transport.statuses.add(RealtimeConnectionStatus.disconnected);
+      await _drainIo(
+        tester,
+        container,
+        until: () => find.text('已被移出房间').evaluate().isNotEmpty,
+      );
+      await tester.tap(find.text(saveRemoved ? '保存到本地' : '直接返回'));
+      await _drainIo(
+        tester,
+        container,
+        until: () =>
+            router.routeInformationProvider.value.uri.path == '/library',
+      );
+      if (saveRemoved) {
+        final saved = (await tester.runAsync(
+          library.loadIndex,
+        ))!.notes.where((note) => !before.contains(note.id)).single;
+        final content = await tester.runAsync(() => scenes.loadScene(saved.id));
+        expect(content, contains('retained-after-removal'));
+      }
+      router.go('/next');
+      await _drainIo(
+        tester,
+        container,
+        until: () =>
+            container.read(whiteboardViewModelProvider).noteId == nextNote.id &&
+            find.byType(CircularProgressIndicator).evaluate().isEmpty,
+      );
+      expect(find.text('创建房间'), findsOneWidget);
+      expect(
+        container.read(whiteboardViewModelProvider).collaborationStatus,
+        WhiteboardCollaborationStatus.idle,
+      );
+      expect(
+        container.read(whiteboardViewModelProvider).exitReason,
+        WhiteboardCollaborationExitReason.none,
+      );
+      final creating = tester
+          .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+          .onStartCollaboration!();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.widgetWithText(FilledButton, '创建房间'),
+        ),
+      );
+      await _drainIo(
+        tester,
+        container,
+        until: () => find.text('分享协作房间').evaluate().isNotEmpty,
+      );
+      final newRoom = container.read(whiteboardViewModelProvider).activeRoom!;
+      expect(newRoom.roomId == room.roomId, isFalse);
+      expect(container.read(whiteboardViewModelProvider).isRoomOwner, isTrue);
+      await tester.tap(find.text('知道了'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await creating;
+      transport.statuses.add(RealtimeConnectionStatus.reconnecting);
+      await tester.pump();
+      expect(
+        container.read(whiteboardViewModelProvider).collaborationStatus,
+        WhiteboardCollaborationStatus.reconnecting,
+      );
+      transport.statuses.add(RealtimeConnectionStatus.joined);
+      await _drainIo(
+        tester,
+        container,
+        until: () =>
+            container.read(whiteboardViewModelProvider).collaborationStatus ==
+            WhiteboardCollaborationStatus.connected,
+      );
+      expect(
+        container.read(whiteboardViewModelProvider).activeRoom,
+        same(newRoom),
+      );
+      var queued = false;
+      tester.binding.addPostFrameCallback((_) {
+        queued = true;
+        transport.statuses.add(RealtimeConnectionStatus.disconnected);
+        unawaited(
+          container
+              .read(whiteboardViewModelProvider.notifier)
+              .openNote(noteId: nextNote.id),
+        );
+      });
+      tester.binding.scheduleFrame();
+      await tester.pump();
+      expect(queued, isTrue);
+      tester.binding.scheduleFrame();
+      await tester.pump();
+      expect(
+        container.read(whiteboardViewModelProvider).collaborationStatus,
+        WhiteboardCollaborationStatus.idle,
+        reason: '旧会话已排队的断线回调不能覆盖重新进入笔记后的状态',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _drainIo(tester, container);
+    });
+  }
+
   for (final template in [
     CanvasPageTemplate.blank,
     CanvasPageTemplate.grid,
@@ -1390,6 +1568,22 @@ void main() {
       hasLength(1),
     );
   });
+}
+
+class _RemovableRealtimeTransport extends MemoryRealtimeTransport {
+  _RemovableRealtimeTransport({required super.hub, required super.socketId});
+  final removed = StreamController<String>.broadcast(sync: true);
+  final statuses = StreamController<RealtimeConnectionStatus>.broadcast(
+    sync: true,
+  );
+  @override
+  Stream<String> get roomRemoved => removed.stream;
+  @override
+  Stream<RealtimeConnectionStatus> get connectionStatus => statuses.stream;
+  Future<void> close() async {
+    await removed.close();
+    await statuses.close();
+  }
 }
 
 class _MemberJoinSceneStore extends MemoryEncryptedSceneStore {

@@ -127,9 +127,11 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
   }
 
   Future<void> openNote({required String noteId}) async {
-    state = state.copyWith(
+    state = WhiteboardState(
       noteId: noteId,
       saveStatus: WhiteboardSaveStatus.saved,
+      shareOrigin: state.shareOrigin,
+      shareOriginConfigured: state.shareOriginConfigured,
     );
   }
 
