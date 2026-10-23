@@ -21,7 +21,9 @@
 
 ## 本轮产物
 
-鸿蒙调试包位于 `FlowMuse-App/build/ohos/hap/entry-default-signed.hap`，大小 199508195 字节，SHA-256 为 `5CF96D4ED56B607699EC205D944A7E6E2F4435951256B7994B2C4F7AF15B8C89`。该包已通过 `hdc install -r` 覆盖安装到 SLG-W50 鸿蒙平板，保留原应用数据，并成功启动 FlowMuse。
+真机测试使用同步主分支前的调试包，大小 199508195 字节，SHA-256 为 `5CF96D4ED56B607699EC205D944A7E6E2F4435951256B7994B2C4F7AF15B8C89`。该包已通过 `hdc install -r` 覆盖安装到 SLG-W50 鸿蒙平板，保留原应用数据，并成功启动 FlowMuse。
+
+同步主分支 `7dd0cab2`（房间人数限制和房主管理成员）后，重新构建的调试包仍位于 `FlowMuse-App/build/ohos/hap/entry-default-signed.hap`，大小 199577826 字节，SHA-256 为 `AC28353B10576CD8072A8DBDBE7B837B2B885A70DD507CF0C137FF314F023F8F`；此集成包未重复安装到设备。
 
 本轮日志位于 `FlowMuse-App/build/harmony-native-qr-*.log`，均为本地忽略文件。未修改依赖或锁文件。
 
@@ -36,3 +38,9 @@
 3. 扫码期间后台/锁屏后恢复，关闭扫码后相机资源释放，粘贴入口保持可用。
 
 本轮无需部署域名文件或配置 AGC App Linking。
+
+## 主分支同步与合并检查
+
+同步 `7dd0cab2` 时只有需求表相邻条目冲突，已同时保留房间管理和鸿蒙扫码需求。集成后的 27 项扫码/房间管理弹窗相关测试、`flutter analyze --no-pub`、`flutter build hap --debug --no-pub`、`go test ./...` 和 `go vet ./...` 均通过。Go 命令为普通测试运行，未重新启用真实 PostgreSQL 集成环境；不重复宣称主分支已有记录中的数据库实测。
+
+集成后的全量 Flutter 回归及远程 Quality 检查结果见 [PR #72](https://github.com/qinyre/FlowMuse/pull/72) 的最终验证记录。
