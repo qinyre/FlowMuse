@@ -354,7 +354,7 @@ class _FilterTabsState extends State<_FilterTabs> {
                         tween: ColorTween(
                           end: widget.selected == filter
                               ? colorScheme.primary
-                              : const Color(0xFF151918),
+                              : colorScheme.onSurfaceVariant,
                         ),
                         builder: (context, color, child) => Text(
                           _FilterTabs._labels[filter]!,
@@ -649,6 +649,13 @@ class _LibraryItemsContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (notes.isEmpty) {
+      return _EmptyLibrary(
+        specialView: specialView,
+        onCreate: onCreate,
+        onJoinRoom: onJoinRoom,
+      );
+    }
     if (state.viewMode == LibraryViewMode.list) {
       return ListView.separated(
         itemCount:
@@ -684,20 +691,12 @@ class _LibraryItemsContent extends StatelessWidget {
       );
     }
 
-    if (notes.isEmpty && specialView != LibrarySpecialView.none) {
-      return _EmptyLibrary(
-        specialView: specialView,
-        onCreate: onCreate,
-        onJoinRoom: onJoinRoom,
-      );
-    }
-
     return GridView.builder(
       itemCount:
           notes.length + (specialView == LibrarySpecialView.none ? 2 : 0),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
-        mainAxisExtent: NoteCard.gridMainAxisExtent,
+        mainAxisExtent: NoteCard.gridHeight(context),
         crossAxisSpacing: compact
             ? NoteCard.compactGridCrossGap
             : NoteCard.gridCrossGap,
@@ -715,6 +714,7 @@ class _LibraryItemsContent extends StatelessWidget {
             icon: LucideIcons.logIn,
             title: '加入房间',
             subtitle: '粘贴协作链接，进入实时白板',
+            isPrimary: false,
           );
         }
         final noteIndex = specialView == LibrarySpecialView.none
@@ -843,64 +843,77 @@ class _EmptyLibrary extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              LucideIcons.bookOpen,
-              size: 42,
-              color: colorScheme.primary.withValues(alpha: 0.62),
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: AppSpacing.sectionGap,
             ),
-            const SizedBox(height: 18),
-            Text(
-              switch (specialView) {
-                LibrarySpecialView.none => '还没有笔记',
-                LibrarySpecialView.unnotebooked => '没有未归类笔记',
-                LibrarySpecialView.untagged => '没有未标签笔记',
-                LibrarySpecialView.trash => '回收站为空',
-              },
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 360),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      LucideIcons.bookOpen,
+                      size: 42,
+                      color: colorScheme.primary.withValues(alpha: 0.62),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      switch (specialView) {
+                        LibrarySpecialView.none => '从第一笔，开始',
+                        LibrarySpecialView.unnotebooked => '没有未归类笔记',
+                        LibrarySpecialView.untagged => '没有未标签笔记',
+                        LibrarySpecialView.trash => '回收站为空',
+                      },
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      switch (specialView) {
+                        LibrarySpecialView.none => '写下想法，或加入协作房间，与他人一起创作。',
+                        LibrarySpecialView.unnotebooked => '所有笔记都已经归入笔记本。',
+                        LibrarySpecialView.untagged => '所有笔记都已经添加标签。',
+                        LibrarySpecialView.trash => '删除的笔记会先进入这里。',
+                      },
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    if (specialView == LibrarySpecialView.none)
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          FilledButton.icon(
+                            key: const ValueKey('create-notebook-card'),
+                            onPressed: onCreate,
+                            icon: const Icon(LucideIcons.plus),
+                            label: const Text('新建笔记'),
+                          ),
+                          OutlinedButton.icon(
+                            key: const ValueKey('join-room-card'),
+                            onPressed: onJoinRoom,
+                            icon: const Icon(LucideIcons.logIn),
+                            label: const Text('加入房间'),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              switch (specialView) {
-                LibrarySpecialView.none => '新建第一块白板后，这里会显示真实保存的笔记。',
-                LibrarySpecialView.unnotebooked => '所有笔记都已经归入笔记本。',
-                LibrarySpecialView.untagged => '所有笔记都已经添加标签。',
-                LibrarySpecialView.trash => '删除的笔记会先进入这里。',
-              },
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 22),
-            if (specialView == LibrarySpecialView.none)
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  FilledButton.icon(
-                    key: const ValueKey('create-notebook-card'),
-                    onPressed: onCreate,
-                    icon: const Icon(LucideIcons.plus),
-                    label: const Text('新建笔记'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: onJoinRoom,
-                    icon: const Icon(LucideIcons.logIn),
-                    label: const Text('加入房间'),
-                  ),
-                ],
-              ),
-          ],
+          ),
         ),
       ),
     );
