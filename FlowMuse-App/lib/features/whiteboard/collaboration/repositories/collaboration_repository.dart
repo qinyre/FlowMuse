@@ -529,6 +529,26 @@ class CollaborationRepository {
 
   Stream<List<RoomCollaborator>> get roomUsers => _transport.roomUsers;
 
+  List<RoomCollaborator> _roomMembers = const [];
+  List<RoomCollaborator> get roomMembers => _roomMembers;
+
+  Stream<String> get roomRemoved => _transport.roomRemoved
+      .where((roomId) => roomId == _activeRoom?.roomId)
+      .asyncMap((roomId) async {
+        await _resetLocalState();
+        await _transport.disconnect();
+        return roomId;
+      });
+
+  Future<void> removeMember(String socketId) async {
+    final room = _activeRoom;
+    if (room == null) throw StateError('协作连接未建立');
+    if (socketId == _transport.socketId) throw StateError('不能移出自己');
+    final ownerKey = await _ownerKeyStore.readOwnerKey(room.roomId);
+    if (!identical(room, _activeRoom)) throw StateError('协作房间已切换');
+    await _sceneStore.removeMember(room, socketId, ownerKey: ownerKey);
+  }
+
   Stream<CollaborationRoomMetadata> get roomEnded => _transport.roomEnded
       .where(
         (metadata) =>
@@ -589,7 +609,11 @@ class CollaborationRepository {
 
   Future<CollaborationRoom> startNewRoom({
     required ExcalidrawScene initialScene,
+    int maxParticipants = 0,
   }) async {
+    if (maxParticipants != 0 && (maxParticipants < 2 || maxParticipants > 50)) {
+      throw ArgumentError.value(maxParticipants, 'maxParticipants');
+    }
     final room = CollaborationRoom.newRoom(crypto: _crypto);
     final ownerKey = _crypto.generateRoomKey();
     final ownerKeyHash = _crypto.hashOwnerKey(
@@ -604,6 +628,7 @@ class CollaborationRepository {
       room: room,
       scene: syncableScene.copyWith(files: const {}),
       ownerKeyHash: ownerKeyHash,
+      maxParticipants: maxParticipants,
     );
     await _ownerKeyStore.writeOwnerKey(room.roomId, ownerKey);
     _activeRoom = room;
@@ -618,9 +643,10 @@ class CollaborationRepository {
     });
     await _startRoomSession(room);
     try {
-      await _transport.connect(room.roomId);
+      await _transport.connect(room.roomId, ownerKey: ownerKey);
     } catch (_) {
       await _resetLocalState();
+      await _transport.disconnect();
       rethrow;
     }
     await _send(
@@ -1230,6 +1256,7 @@ class CollaborationRepository {
       );
     });
     _roomUsersSubscription = _transport.roomUsers.listen((users) {
+      _roomMembers = List.unmodifiable(users);
       _memberIds
         ..clear()
         ..addAll(users.map((user) => user.socketId));
@@ -1845,6 +1872,7 @@ class CollaborationRepository {
   }
 
   Future<void> _resetLocalState() async {
+    _roomMembers = const [];
     _fullSceneSyncTimer?.cancel();
     _fullSceneSyncTimer = null;
     _fileUploadTimer?.cancel();

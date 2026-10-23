@@ -14,6 +14,106 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/socket_io_r
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 void main() {
+  test('移出清理取消后续快照，已收到的画布对象保持可保存', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final client = _ConnectedSocket(
+      io.io(
+        'http://removed-repo.invalid:1',
+        io.OptionBuilder().disableAutoConnect().enableForceNew().build(),
+      ),
+    );
+    final transport = SocketIoRealtimeTransport(
+      serverUrl: 'http://removed-repo.invalid:1',
+      identity: CollaborationIdentity.guest('fixture'),
+      socketFactory: (_, _) => client,
+    );
+    final store = _EndingSceneStore();
+    final repository = CollaborationRepository(
+      transport: transport,
+      sceneStore: store,
+    );
+    addTearDown(repository.stop);
+    final scene = ExcalidrawScene.empty().copyWith(
+      elements: const [
+        {
+          'id': 'fixture-element',
+          'type': 'rectangle',
+          'version': 1,
+          'versionNonce': 1,
+          'isDeleted': false,
+          'x': 0,
+          'y': 0,
+          'width': 100,
+          'height': 100,
+          'index': 'a',
+          'updated': 1,
+        },
+      ],
+    );
+    final room = await repository.startNewRoom(
+      initialScene: scene,
+      maxParticipants: 2,
+    );
+    final localCopy = await store.loadScene(room);
+    expect(localCopy!.elements, hasLength(1));
+    await repository.broadcastScene(room: room, scene: scene);
+    final removed = repository.roomRemoved.first;
+    client.emitEvent([
+      'room-removed',
+      {'roomId': room.roomId},
+    ]);
+    await removed;
+    final saves = store.saves;
+    await Future<void>.delayed(const Duration(milliseconds: 2100));
+    expect(store.saves, saves);
+    expect(localCopy.elements.single['id'], 'fixture-element');
+    expect(repository.roomMembers, isEmpty);
+    expect(transport.socketId, isNull);
+  });
+  test('被移出后停止连接和自动入房，忽略其他房间的移出通知', () async {
+    final client = _ConnectedSocket(
+      io.io(
+        'http://removed-fixture.invalid:1',
+        io.OptionBuilder().disableAutoConnect().enableForceNew().build(),
+      ),
+    );
+    final transport = SocketIoRealtimeTransport(
+      serverUrl: 'http://removed-fixture.invalid:1',
+      identity: CollaborationIdentity.guest('fixture'),
+      socketFactory: (_, _) => client,
+    );
+    addTearDown(transport.disconnect);
+    await transport.connect('fixture-room', ownerKey: 'synthetic-owner');
+    final join =
+        client.packets.firstWhere(
+              (p) => (p['data'] as List).first == 'join-room',
+            )['data']
+            as List;
+    expect(join[1], 'fixture-room');
+    expect((join[2] as Map).containsKey('ownerKey'), isTrue);
+    client.emitEvent([
+      'room-removed',
+      {'roomId': 'other-room'},
+    ]);
+    expect(transport.socketId, isNotNull);
+    final removed = transport.roomRemoved.first;
+    client.emitEvent([
+      'room-removed',
+      {'roomId': 'fixture-room'},
+    ]);
+    expect(await removed, 'fixture-room');
+    expect(transport.socketId, isNull);
+    expect(client.connected, isFalse);
+    client.packets.clear();
+    client.emitEvent(['init-room', null]);
+    expect(client.packets, isEmpty);
+    await expectLater(
+      transport.send(
+        EncryptedPayload(encryptedBuffer: [1], iv: List.filled(12, 0)),
+      ),
+      throwsStateError,
+    );
+  });
   test('确认丢失只重发同一密文，下一次确认后停止重试', () async {
     final client = _ConnectedSocket(
       io.io(

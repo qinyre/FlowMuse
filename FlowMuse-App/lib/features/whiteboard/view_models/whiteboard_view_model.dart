@@ -30,7 +30,12 @@ enum WhiteboardCollaborationStatus {
   failed,
 }
 
-enum WhiteboardCollaborationExitReason { none, leftBySelf, endedByHost }
+enum WhiteboardCollaborationExitReason {
+  none,
+  leftBySelf,
+  endedByHost,
+  removedByHost,
+}
 
 class WhiteboardState {
   const WhiteboardState({
@@ -152,16 +157,23 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
 
   Future<void> startCollaboration({
     required ExcalidrawScene initialScene,
+    int maxParticipants = 0,
   }) async {
     state = state.copyWith(
       collaborationStatus: WhiteboardCollaborationStatus.connecting,
       clearError: true,
     );
     try {
-      final room = await _repository.startNewRoom(initialScene: initialScene);
+      final room = await _repository.startNewRoom(
+        initialScene: initialScene,
+        maxParticipants: maxParticipants,
+      );
       state = state.copyWith(
         activeRoom: room,
-        roomMetadata: CollaborationRoomMetadata.localOwner(room.roomId),
+        roomMetadata: CollaborationRoomMetadata.localOwner(
+          room.roomId,
+          maxParticipants: maxParticipants,
+        ),
         exitReason: WhiteboardCollaborationExitReason.none,
         collaborating: true,
         collaborationStatus: WhiteboardCollaborationStatus.connected,
@@ -245,6 +257,17 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
       clearError: true,
       roomMetadata: metadata,
       exitReason: WhiteboardCollaborationExitReason.endedByHost,
+      collaborationStatus: WhiteboardCollaborationStatus.disconnected,
+    );
+  }
+
+  void applyRoomRemoved() {
+    state = state.copyWith(
+      collaborating: false,
+      clearRoom: true,
+      clearError: true,
+      clearMetadata: true,
+      exitReason: WhiteboardCollaborationExitReason.removedByHost,
       collaborationStatus: WhiteboardCollaborationStatus.disconnected,
     );
   }
