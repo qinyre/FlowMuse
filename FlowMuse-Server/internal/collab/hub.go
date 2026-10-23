@@ -75,6 +75,8 @@ type Hub struct {
 	liveInkSocketBuckets map[string]*tokenBucket
 	liveInkRoomBuckets   map[string]*tokenBucket
 	liveInkDropCounts    map[liveInkDropReason]uint64
+	forwardLogBucket     tokenBucket
+	forwardLogCount      uint64
 	now                  func() time.Time
 	roomExistsOverride   func(string) bool
 	roomEndedOverride    func(string) bool
@@ -127,7 +129,13 @@ func (h *Hub) Register() {
 			if !ok {
 				return
 			}
-			h.joinRoom(client, roomID)
+			ownerKey := ""
+			if len(args) > 1 {
+				if options, ok := args[1].(map[string]any); ok {
+					ownerKey, _ = options["ownerKey"].(string)
+				}
+			}
+			h.joinRoomWithOwner(client, roomID, ownerKey)
 		})
 
 		client.On(EventLeaveRoom, func(args ...any) {
@@ -172,6 +180,10 @@ func (h *Hub) Register() {
 }
 
 func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
+	h.joinRoomWithOwner(client, roomID, "")
+}
+
+func (h *Hub) joinRoomWithOwner(client *socket.Socket, roomID, ownerKey string) {
 	if !h.roomExists(roomID) {
 		client.Emit(EventRoomError, "房间不存在或尚未创建")
 		return
@@ -182,8 +194,24 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 	}
 	socketID := string(client.Id())
 	room := socket.Room(roomID)
+	metadata := storage.RoomMetadata{}
+	if h.roomStore != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		var err error
+		metadata, err = h.roomStore.LoadRoom(ctx, roomID, "")
+		if err != nil {
+			client.Emit(EventRoomError, "加载房间信息失败，请重试")
+			return
+		}
+	}
 
 	h.mu.Lock()
+	if _, alreadyJoined := h.roomUsers[roomID][socketID]; !alreadyJoined && metadata.MaxParticipants > 0 && len(h.roomUsers[roomID]) >= metadata.MaxParticipants {
+		h.mu.Unlock()
+		client.Emit(EventRoomError, "协作房间人数已满")
+		return
+	}
 	if previousRoomID := h.socketRooms[socketID]; previousRoomID != "" && previousRoomID != roomID {
 		h.removeFromRoomLocked(socketID, previousRoomID)
 		client.Leave(socket.Room(previousRoomID))
@@ -197,8 +225,12 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 	user := h.socketUsers[socketID]
 	if user.SocketID == "" {
 		user = roomUserFromSocket(client, h.identityFromSocket(client))
-		h.socketUsers[socketID] = user
 	}
+	user.Role = "editor"
+	if metadata.CanManage(user.UserID, hashOwnerKey(roomID, ownerKey)) {
+		user.Role = "owner"
+	}
+	h.socketUsers[socketID] = user
 	users[socketID] = user
 	h.socketRooms[socketID] = roomID
 	currentUsers := roomUserList(users)
@@ -213,6 +245,14 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 		client.Emit(EventRoomError, "协作房间已结束")
 		return
 	}
+	// Membership may have been revoked while recordRoomJoin performed I/O.
+	h.mu.Lock()
+	if h.socketRooms[socketID] != roomID {
+		client.Leave(room)
+		h.mu.Unlock()
+		return
+	}
+	currentUsers = roomUserList(h.roomUsers[roomID])
 	if first {
 		client.Emit(EventFirstInRoom)
 	} else {
@@ -222,7 +262,9 @@ func (h *Hub) joinRoom(client *socket.Socket, roomID string) {
 	client.Emit(EventLiveInkReady, LiveInkReady{
 		RoomID:                 roomID,
 		LiveInkProtocolVersion: liveInkProtocolVersion,
+		ReliableAck:            true,
 	})
+	h.mu.Unlock()
 }
 
 func (h *Hub) forwardLiveInk(client *socket.Socket, args []any) {
@@ -358,6 +400,12 @@ func (h *Hub) liveInkNow() time.Time {
 }
 
 func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
+	accepted := false
+	defer func() {
+		if !volatile {
+			acknowledgeBroadcast(args, accepted)
+		}
+	}()
 	roomID, frame, ok := parseBroadcastArgs(args)
 	if !ok {
 		log.Printf(
@@ -370,21 +418,37 @@ func (h *Hub) forward(client *socket.Socket, args []any, volatile bool) {
 	socketID := string(client.Id())
 	h.mu.Lock()
 	currentRoomID := h.socketRooms[socketID]
+	targetInRoom := frame.TargetSocketID == "" || h.socketRooms[frame.TargetSocketID] == roomID
 	h.mu.Unlock()
 	if currentRoomID != roomID {
 		client.Emit(EventRoomError, "当前连接不在目标房间")
+		return
+	}
+	if !targetInRoom {
 		return
 	}
 	if len(frame.EncryptedBuffer)+len(frame.IV) > maxEncryptedFrameBytes {
 		client.Emit(EventRoomError, "协作消息过大")
 		return
 	}
-	logForward(socketID, roomID, frame, volatile)
+	h.logForward(socketID, roomID, frame, volatile)
 	operator := client.To(socket.Room(roomID))
+	if frame.TargetSocketID != "" {
+		operator = client.To(socket.Room(frame.TargetSocketID))
+	}
 	if volatile {
 		operator = operator.Volatile()
 	}
-	operator.Emit(EventClientBroadcast, frame.EncryptedBuffer, frame.IV)
+	accepted = operator.Emit(EventClientBroadcast, frame.EncryptedBuffer, frame.IV) == nil
+}
+
+func acknowledgeBroadcast(args []any, accepted bool) {
+	if len(args) == 0 {
+		return
+	}
+	if ack, ok := args[len(args)-1].(socket.Ack); ok {
+		ack([]any{map[string]any{"accepted": accepted}}, nil)
+	}
 }
 
 func (h *Hub) leaveRoom(client *socket.Socket, roomID string) {
@@ -419,6 +483,29 @@ func (h *Hub) endRoom(client *socket.Socket, roomID string, ownerKey string) {
 	h.closeRoom(metadata)
 }
 
+func (h *Hub) removeMember(roomID, socketID string) error {
+	h.mu.Lock()
+	user, exists := h.roomUsers[roomID][socketID]
+	if !exists {
+		h.mu.Unlock()
+		return errors.New("成员已离开当前房间")
+	}
+	if user.Role == "owner" {
+		h.mu.Unlock()
+		return errors.New("不能移出房主")
+	}
+	h.removeFromRoomLocked(socketID, roomID)
+	users := roomUserList(h.roomUsers[roomID])
+	// Leave the adapter room while membership is locked, before admitting a rejoin.
+	h.server.In(socket.Room(socketID)).SocketsLeave(socket.Room(roomID))
+	h.server.To(socket.Room(socketID)).Emit(EventRoomRemoved, map[string]string{"roomId": roomID})
+	h.server.To(socket.Room(roomID)).Emit(EventRoomUserChange, users)
+	h.mu.Unlock()
+	// Server disconnect also stops old clients, which do not know room-removed.
+	h.server.In(socket.Room(socketID)).DisconnectSockets(true)
+	return nil
+}
+
 // closeRoom revokes live membership after either end endpoint persists success.
 func (h *Hub) closeRoom(metadata storage.RoomMetadata) {
 	roomID := metadata.RoomID
@@ -451,6 +538,10 @@ func (h *Hub) userFollow(client *socket.Socket, args []any) {
 	followRoomID := fmt.Sprintf("%s:%s", roomID, followedSocketID)
 
 	h.mu.Lock()
+	if h.socketRooms[socketID] != roomID || h.socketRooms[followedSocketID] != roomID {
+		h.mu.Unlock()
+		return
+	}
 	followers := h.followRooms[followRoomID]
 	if followers == nil {
 		followers = map[string]struct{}{}
@@ -497,16 +588,26 @@ func (h *Hub) removeSocket(socketID string) (string, []RoomUser) {
 	return roomID, users
 }
 
-func logForward(socketID, roomID string, frame EncryptedFrame, volatile bool) {
+func (h *Hub) logForward(socketID, roomID string, frame EncryptedFrame, volatile bool) {
 	if volatile {
 		return
 	}
+	// Normal relay diagnostics must not perform one stderr write per packet.
+	h.mu.Lock()
+	h.forwardLogCount++
+	count := h.forwardLogCount
+	allowed := h.forwardLogBucket.allow(h.liveInkNow(), 1, 1)
+	h.mu.Unlock()
+	if !allowed {
+		return
+	}
 	log.Printf(
-		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=false",
+		"[FlowMuseCollab][server][broadcast_forward] socket=%s room=%s encryptedBytes=%d ivBytes=%d volatile=false sampled=true totalFrames=%d",
 		socketID,
 		roomID,
 		len(frame.EncryptedBuffer),
 		len(frame.IV),
+		count,
 	)
 }
 
@@ -683,7 +784,15 @@ func asFrame(value any) (EncryptedFrame, bool) {
 	if !ok {
 		return EncryptedFrame{}, false
 	}
-	return EncryptedFrame{EncryptedBuffer: encryptedBuffer, IV: iv}, true
+	target := ""
+	if raw, exists := values["targetSocketId"]; exists {
+		var valid bool
+		target, valid = raw.(string)
+		if !valid || len(target) > 256 {
+			return EncryptedFrame{}, false
+		}
+	}
+	return EncryptedFrame{EncryptedBuffer: encryptedBuffer, IV: iv, TargetSocketID: target}, true
 }
 
 func asBytes(value any) ([]byte, bool) {

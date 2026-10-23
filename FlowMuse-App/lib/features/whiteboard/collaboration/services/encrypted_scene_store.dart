@@ -16,6 +16,12 @@ abstract interface class EncryptedSceneStore {
 
   Future<CollaborationRoomMetadata> joinRoom(CollaborationRoom room);
 
+  Future<void> removeMember(
+    CollaborationRoom room,
+    String socketId, {
+    String? ownerKey,
+  });
+
   Future<CollaborationRoomMetadata> endRoom(
     CollaborationRoom room, {
     String? ownerKey,
@@ -32,6 +38,7 @@ abstract interface class EncryptedSceneStore {
     required CollaborationRoom room,
     required ExcalidrawScene scene,
     required String ownerKeyHash,
+    int maxParticipants = 0,
   });
 }
 
@@ -47,6 +54,16 @@ class StaleSceneSnapshotException implements Exception {
 class MemoryEncryptedSceneStore implements EncryptedSceneStore {
   final Map<String, ExcalidrawScene> _scenes = {};
   final Set<String> _endedRooms = {};
+  final Map<String, int> _limits = {};
+
+  @override
+  Future<void> removeMember(
+    CollaborationRoom room,
+    String socketId, {
+    String? ownerKey,
+  }) async {
+    throw StateError('内存协作不支持服务端成员管理');
+  }
 
   @override
   Future<CollaborationRoomMetadata> loadMetadata(CollaborationRoom room) async {
@@ -54,6 +71,7 @@ class MemoryEncryptedSceneStore implements EncryptedSceneStore {
       roomId: room.roomId,
       role: CollaborationRoomRole.owner,
       ended: _endedRooms.contains(room.roomId),
+      maxParticipants: _limits[room.roomId] ?? 0,
     );
   }
 
@@ -91,7 +109,9 @@ class MemoryEncryptedSceneStore implements EncryptedSceneStore {
     required CollaborationRoom room,
     required ExcalidrawScene scene,
     required String ownerKeyHash,
+    int maxParticipants = 0,
   }) {
+    _limits.putIfAbsent(room.roomId, () => maxParticipants);
     return saveScene(room: room, scene: scene);
   }
 }
@@ -118,6 +138,33 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   final SceneReconciler _reconciler;
   final Map<String, _SceneSnapshotMeta> _snapshotMetaByRoom = {};
   static const Duration _requestTimeout = Duration(seconds: 15);
+
+  @override
+  Future<void> removeMember(
+    CollaborationRoom room,
+    String socketId, {
+    String? ownerKey,
+  }) async {
+    final response = await _requestWithRetry(
+      stage: 'remove_member',
+      request: (headers) => _client.post(
+        _serverUri.replace(
+          path: _joinPath(
+            _serverUri.path,
+            '/api/rooms/${room.roomId}/remove-member',
+          ),
+        ),
+        headers: headers,
+        body: jsonEncode({'socketId': socketId, 'ownerKey': ?ownerKey}),
+      ),
+    );
+    if (response.statusCode == 403) throw StateError('只有房主可以移出成员');
+    if (response.statusCode == 409) throw StateError('成员已离开或不能移出房主');
+    if (response.statusCode == 410) throw StateError('协作房间已结束');
+    if (response.statusCode != 204) {
+      throw StateError('移出成员失败：HTTP ${response.statusCode}');
+    }
+  }
 
   @override
   Future<CollaborationRoomMetadata> loadMetadata(CollaborationRoom room) async {
@@ -262,12 +309,17 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
     required CollaborationRoom room,
     required ExcalidrawScene scene,
     required String ownerKeyHash,
+    int maxParticipants = 0,
   }) async {
     final payload = await _crypto.encrypt(
       roomKey: room.roomKey,
       plainBytes: utf8.encode(scene.toCollaborationContent()),
     );
-    await _createRoomMetadata(room.roomId, ownerKeyHash: ownerKeyHash);
+    await _createRoomMetadata(
+      room.roomId,
+      ownerKeyHash: ownerKeyHash,
+      maxParticipants: maxParticipants,
+    );
     final response = await _requestWithRetry(
       stage: 'create_scene',
       request: (headers) => _client.post(
@@ -325,17 +377,29 @@ class HttpEncryptedSceneStore implements EncryptedSceneStore {
   Future<void> _createRoomMetadata(
     String roomId, {
     required String ownerKeyHash,
+    int maxParticipants = 0,
   }) async {
     final response = await _requestWithRetry(
       stage: 'create_metadata',
       request: (headers) => _client.post(
         _serverUri.replace(path: _joinPath(_serverUri.path, '/api/rooms')),
         headers: headers,
-        body: jsonEncode({'roomId': roomId, 'ownerKeyHash': ownerKeyHash}),
+        body: jsonEncode({
+          'roomId': roomId,
+          'ownerKeyHash': ownerKeyHash,
+          'maxParticipants': maxParticipants,
+        }),
       ),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('创建协作房间元数据失败：HTTP ${response.statusCode}');
+    }
+    if (maxParticipants > 0 &&
+        CollaborationRoomMetadata.fromJson(
+              jsonDecode(response.body) as Map<String, Object?>,
+            ).maxParticipants !=
+            maxParticipants) {
+      throw StateError('服务端尚未支持人数限制，请更新后端后重试');
     }
   }
 

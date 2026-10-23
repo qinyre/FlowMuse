@@ -1,3 +1,4 @@
+export 'canonical_json.dart';
 export 'canvas_settings.dart';
 export 'clipboard_codec.dart';
 export 'document_parser.dart';

@@ -71,6 +71,9 @@ class FaultInjectingRealtimeTransport
   Stream<CollaborationRoomMetadata> get roomEnded => _delegate.roomEnded;
 
   @override
+  Stream<String> get roomRemoved => _delegate.roomRemoved;
+
+  @override
   Stream<void> get firstInRoom => _delegate.firstInRoom;
 
   @override
@@ -105,11 +108,11 @@ class FaultInjectingRealtimeTransport
       _delegate.liveInkTransportNotWritableDrops;
 
   @override
-  Future<void> connect(String roomId) async {
+  Future<void> connect(String roomId, {String? ownerKey}) async {
     _dropPending();
     connectionGeneration++;
     _roomId = roomId;
-    await _delegate.connect(roomId);
+    await _delegate.connect(roomId, ownerKey: ownerKey);
   }
 
   @override
@@ -117,11 +120,11 @@ class FaultInjectingRealtimeTransport
       _delegate.send(payload, volatile: volatile);
 
   @override
-  Future<void> sendLiveInk(EncryptedPayload payload) async {
+  Future<bool> sendLiveInk(EncryptedPayload payload) async {
     acceptedCount++;
     if (_random.nextDouble() < _model.dropRate) {
       droppedCount++;
-      return;
+      return true;
     }
     _pending.add(_PendingLiveFrame(payload, _generation));
     if (_random.nextDouble() < _model.duplicateRate) {
@@ -132,6 +135,7 @@ class FaultInjectingRealtimeTransport
     if (_pending.length >= _model.reorderWindow) {
       _scheduleOne();
     }
+    return true;
   }
 
   Future<void> flushLiveInk() async {

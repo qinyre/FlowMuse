@@ -25,6 +25,8 @@ abstract interface class RealtimeTransport {
 
   Stream<CollaborationRoomMetadata> get roomEnded;
 
+  Stream<String> get roomRemoved;
+
   Stream<void> get firstInRoom;
 
   Stream<String> get errors;
@@ -37,11 +39,11 @@ abstract interface class RealtimeTransport {
 
   int get liveInkTransportNotWritableDrops;
 
-  Future<void> connect(String roomId);
+  Future<void> connect(String roomId, {String? ownerKey});
 
   Future<void> send(EncryptedPayload payload, {bool volatile = false});
 
-  Future<void> sendLiveInk(EncryptedPayload payload);
+  Future<bool> sendLiveInk(EncryptedPayload payload);
 
   Future<void> endRoom({String? ownerKey});
 
@@ -51,6 +53,10 @@ abstract interface class RealtimeTransport {
 abstract interface class LiveInkNegotiationDiagnostics {
   int get liveInkNegotiationGeneration;
   String? get liveInkNegotiatedRoomId;
+}
+
+abstract interface class TargetedRealtimeTransport {
+  Future<void> sendTo(EncryptedPayload payload, String targetSocketId);
 }
 
 class DisconnectedRealtimeTransport implements RealtimeTransport {
@@ -72,6 +78,9 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
   Stream<CollaborationRoomMetadata> get roomEnded => const Stream.empty();
 
   @override
+  Stream<String> get roomRemoved => const Stream.empty();
+
+  @override
   Stream<void> get firstInRoom => const Stream.empty();
 
   @override
@@ -90,7 +99,7 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
   int get liveInkTransportNotWritableDrops => 0;
 
   @override
-  Future<void> connect(String roomId) async {}
+  Future<void> connect(String roomId, {String? ownerKey}) async {}
 
   @override
   Future<void> disconnect() async {}
@@ -102,7 +111,7 @@ class DisconnectedRealtimeTransport implements RealtimeTransport {
   Future<void> send(EncryptedPayload payload, {bool volatile = false}) async {}
 
   @override
-  Future<void> sendLiveInk(EncryptedPayload payload) async {}
+  Future<bool> sendLiveInk(EncryptedPayload payload) async => false;
 }
 
 class MemoryRealtimeRoomHub {
@@ -198,7 +207,6 @@ class MemoryRealtimeRoomHub {
 }
 
 class LiveInkNegotiation {
-  Timer? _timer;
   String? _roomId;
   bool _accepting = false;
   int _generation = 0;
@@ -213,30 +221,21 @@ class LiveInkNegotiation {
     _roomId = roomId;
     _version = 0;
     _accepting = false;
-    _timer?.cancel();
-    _timer = null;
   }
 
-  void arm({Duration timeout = const Duration(seconds: 1)}) {
+  void arm() {
     _accepting = true;
-    _timer?.cancel();
-    final generation = _generation;
-    _timer = Timer(timeout, () {
-      if (generation == _generation) _accepting = false;
-    });
   }
 
   bool accept(Object? data) {
     if (!_accepting) return false;
-    _accepting = false;
-    _timer?.cancel();
-    _timer = null;
     if (data is! Map) return false;
     final roomId = data['roomId'];
     final version = data['liveInkProtocolVersion'];
     if (roomId != _roomId || version is! num || version.toInt() < 2) {
       return false;
     }
+    _accepting = false;
     _version = version.toInt();
     return true;
   }
@@ -246,8 +245,6 @@ class LiveInkNegotiation {
     _roomId = null;
     _version = 0;
     _accepting = false;
-    _timer?.cancel();
-    _timer = null;
   }
 }
 
@@ -293,6 +290,9 @@ class MemoryRealtimeTransport
   Stream<CollaborationRoomMetadata> get roomEnded => _roomEnded.stream;
 
   @override
+  Stream<String> get roomRemoved => const Stream.empty();
+
+  @override
   Stream<void> get firstInRoom => _firstInRoom.stream;
 
   @override
@@ -318,7 +318,7 @@ class MemoryRealtimeTransport
   int get liveInkTransportNotWritableDrops => _liveInkTransportNotWritableDrops;
 
   @override
-  Future<void> connect(String roomId) async {
+  Future<void> connect(String roomId, {String? ownerKey}) async {
     _liveInkNegotiation.begin(roomId);
     _connectionStatus.add(RealtimeConnectionStatus.connecting);
     final previousRoomId = _roomId;
@@ -348,13 +348,14 @@ class MemoryRealtimeTransport
   }
 
   @override
-  Future<void> sendLiveInk(EncryptedPayload payload) async {
+  Future<bool> sendLiveInk(EncryptedPayload payload) async {
     final roomId = _roomId;
     if (roomId == null) {
       _liveInkTransportNotWritableDrops++;
-      return;
+      return false;
     }
     hub.broadcastLiveInk(roomId: roomId, sender: this, payload: payload);
+    return true;
   }
 
   @override

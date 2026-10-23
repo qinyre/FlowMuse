@@ -6,14 +6,23 @@ on:
       - "FlowMuse-App/lib/features/whiteboard/smart_layout/**"
       - "FlowMuse-App/test/features/whiteboard/smart_layout/**"
       - "FlowMuse-App/tool/smart_layout_v3/ci/**"
+      - "FlowMuse-App/pubspec.yaml"
+      - "FlowMuse-App/pubspec.lock"
+      - "FlowMuse-App/tool/vendor/code_assets/**"
       - ".github/workflows/smart-layout-v3-ci.yml"
   pull_request:
     paths:
       - "FlowMuse-App/lib/features/whiteboard/smart_layout/**"
       - "FlowMuse-App/test/features/whiteboard/smart_layout/**"
       - "FlowMuse-App/tool/smart_layout_v3/ci/**"
+      - "FlowMuse-App/pubspec.yaml"
+      - "FlowMuse-App/pubspec.lock"
+      - "FlowMuse-App/tool/vendor/code_assets/**"
       - ".github/workflows/smart-layout-v3-ci.yml"
   workflow_dispatch:
+
+env:
+  PUB_HOSTED_URL: https://pub.flutter-io.cn
 
 permissions:
   contents: read
@@ -53,7 +62,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/hos-sdk/hmscore" "$RUNNER_TEMP/hos-sdk/openharmony"
           echo "HOS_SDK_HOME=$RUNNER_TEMP/hos-sdk" >> "$GITHUB_ENV"
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Run reproducible CI matrix
         # 字体=仓库捆绑（Excalifont 等）零网络；fixture server=测试内自建
         # loopback；workdir/报告均在 clone 内（仓库相对，策略禁 ..），

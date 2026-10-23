@@ -4,6 +4,18 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/collaborati
 import '../../../../../integration_test/fixtures/collaboration_scenarios.dart';
 
 void main() {
+  test('历史场景基准使用增量更新，不依赖全量消息只有一个元素', () async {
+    final result = await runCollaborationPerformanceScenario(
+      const CollaborationPerformanceScenario(
+        memberCount: 2,
+        warmupIterations: 1,
+        measuredIterations: 2,
+        backgroundElementCount: 100,
+      ),
+    );
+    expect(result.errors, 0);
+    expect(result.converged, isTrue);
+  });
   test('probe 使用单调时钟记录旁路样本', () {
     var now = 10;
     final probe = CollaborationPerformanceProbe(nowMicros: () => now);

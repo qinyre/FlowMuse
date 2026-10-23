@@ -40,6 +40,9 @@ import '../collaboration/services/remote_wet_ink_store.dart';
 import '../collaboration/services/realtime_transport.dart';
 import '../collaboration/services/whiteboard_collaboration_adapter.dart';
 import '../collaboration/widgets/join_room_dialog.dart';
+import '../collaboration/widgets/create_room_dialog.dart';
+import '../collaboration/widgets/room_members_dialog.dart';
+import '../collaboration/widgets/room_invite_qr.dart';
 import '../ink_recognition/ink_recognition_repository.dart';
 import '../pdf_note_import/pdf_note_consumer.dart';
 import '../pdf_note_import/pending_pdf_import_provider.dart';
@@ -129,6 +132,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   StreamSubscription<ExcalidrawScene>? _fileStatusSceneSubscription;
   StreamSubscription<List<RoomCollaborator>>? _roomUsersSubscription;
   StreamSubscription<CollaborationRoomMetadata>? _roomEndedSubscription;
+  StreamSubscription<String>? _roomRemovedSubscription;
   StreamSubscription<String>? _roomErrorSubscription;
   StreamSubscription<RealtimeConnectionStatus>? _connectionStatusSubscription;
   late final _activityTimer = CollaborationActivityTimer(_broadcastIdleState);
@@ -269,6 +273,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     unawaited(_fileStatusSceneSubscription?.cancel());
     unawaited(_roomUsersSubscription?.cancel());
     unawaited(_roomEndedSubscription?.cancel());
+    unawaited(_roomRemovedSubscription?.cancel());
     unawaited(_roomErrorSubscription?.cancel());
     unawaited(_connectionStatusSubscription?.cancel());
     unawaited(_liveInkSubscription?.cancel());
@@ -769,6 +774,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         state == AppLifecycleState.inactive) {
       _flushLocalDraftOnExit();
       _saveReadingPosition(force: true);
+      unawaited(_collaborationRepository.forceFlushSnapshot());
+    } else if (state == AppLifecycleState.resumed) {
+      unawaited(_collaborationRepository.checkSynchronization());
     }
   }
 
@@ -1192,8 +1200,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         ref.read(whiteboardViewModelProvider).collaborating) {
       return;
     }
-    final confirmed = await _confirmCreateCollaborationRoom();
-    if (confirmed != true || !mounted) {
+    final maxParticipants = await _confirmCreateCollaborationRoom();
+    if (maxParticipants == null || !mounted) {
       return;
     }
     _remoteWetInkStore
@@ -1205,14 +1213,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       );
     await ref
         .read(whiteboardViewModelProvider.notifier)
-        .startCollaboration(initialScene: _collaborationAdapter.currentScene());
+        .startCollaboration(
+          initialScene: _collaborationAdapter.currentScene(),
+          maxParticipants: maxParticipants,
+        );
     final room = ref.read(whiteboardViewModelProvider).activeRoom;
     if (room == null) {
       return;
     }
     await _listenToRoom(room);
     if (mounted) {
-      await _showCreatedCollaborationRoom(room);
+      await _showCollaborationInvitation(room);
     }
   }
 
@@ -1233,27 +1244,29 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _joinCollaboration(room);
   }
 
-  Future<bool?> _confirmCreateCollaborationRoom() {
-    return showDialog<bool>(
+  Future<int?> _confirmCreateCollaborationRoom() {
+    return showDialog<int>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('创建协作房间'),
-        content: const Text('将当前笔记白板同步到协作房间。拥有房间信息的人可以加入并一起编辑。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('创建房间'),
-          ),
-        ],
+      builder: (_) => const CreateRoomDialog(),
+    );
+  }
+
+  Future<void> _manageCollaborationMembers() async {
+    final state = ref.read(whiteboardViewModelProvider);
+    if (!state.collaborating || !state.isRoomOwner) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => RoomMembersDialog(
+        users: _collaborationRepository.roomUsers,
+        initialUsers: _collaborationRepository.roomMembers,
+        selfSocketId: _collaborationRepository.socketId,
+        maxParticipants: state.roomMetadata?.maxParticipants ?? 0,
+        onRemove: _collaborationRepository.removeMember,
       ),
     );
   }
 
-  Future<void> _showCreatedCollaborationRoom(CollaborationRoom room) async {
+  Future<void> _showCollaborationInvitation(CollaborationRoom room) async {
     final state = ref.read(whiteboardViewModelProvider);
     final roomLink = state.roomLink;
     final roomValue = state.roomValue ?? room.toRoomValue();
@@ -1261,7 +1274,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final inviteFriends = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('协作房间已创建'),
+        title: const Text('分享协作房间'),
         scrollable: true,
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -1269,7 +1282,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('把下面的信息发给协作者，对方即可加入当前白板。'),
+              const Text('让对方扫码或打开邀请链接，即可加入当前白板。'),
+              if (roomLink != null) ...[
+                const SizedBox(height: 16),
+                RoomInviteQr(roomLink: roomLink),
+              ],
               const SizedBox(height: 16),
               _RoomInfoBlock(label: '房间号', value: roomValue),
               if (roomLink != null) ...[
@@ -1283,9 +1300,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                 ),
               ],
               const SizedBox(height: 16),
-              const Text(
-                '加入指引：在笔记库首页或白板右上协作菜单选择“加入房间”，粘贴完整链接、#room=房间号,密钥 或 房间号,密钥。',
-              ),
+              const Text('安卓 App 和 Web 可在“加入房间”中扫码，也可粘贴邀请链接或房间码。'),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -1398,9 +1413,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       if (!_canMutateWhiteboard) {
         return;
       }
-      if (reconciledScene.elements.isNotEmpty) {
-        await _enqueueRemoteScene(reconciledScene, reconcile: false);
-      }
+      await _enqueueRemoteScene(
+        reconciledScene,
+        reconcile: false,
+        replaceLayout: true,
+      );
       if (_canMutateWhiteboard) {
         ref
             .read(whiteboardViewModelProvider.notifier)
@@ -1598,6 +1615,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _roomUsersSubscription = null;
     await _roomEndedSubscription?.cancel();
     _roomEndedSubscription = null;
+    await _roomRemovedSubscription?.cancel();
+    _roomRemovedSubscription = null;
     await _roomErrorSubscription?.cancel();
     _roomErrorSubscription = null;
     await _connectionStatusSubscription?.cancel();
@@ -1660,7 +1679,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _saveTemporaryRoomAsLocalNote() async {
-    final note = await ref.read(libraryIndexProvider.notifier).createNote();
+    final layout = _markdrawController.layout;
+    final note = await ref
+        .read(libraryIndexProvider.notifier)
+        .createNote(
+          noteType: layout.isPaged ? NoteType.paged : NoteType.unbounded,
+          pageTemplate: PageTemplate.values.byName(layout.template.name),
+          pageFlow: PageFlow.values.byName(layout.pageFlow.name),
+        );
     final content = _markdrawController.serializeScene(
       format: DocumentFormat.excalidraw,
     );
@@ -1870,6 +1896,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     ) {
       unawaited(_handleRoomEnded(metadata));
     });
+    await _roomRemovedSubscription?.cancel();
+    _roomRemovedSubscription = _collaborationRepository.roomRemoved.listen((_) {
+      unawaited(_handleRoomEnded(null, removed: true));
+    });
     await _roomErrorSubscription?.cancel();
     _roomErrorSubscription = _collaborationRepository.errors.listen((message) {
       _runAfterStableFrame(() {
@@ -1884,6 +1914,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           final previous = _lastRealtimeStatus;
           _lastRealtimeStatus = status;
           _runAfterStableFrame(() {
+            if (mounted && status == RealtimeConnectionStatus.joined) {
+              setState(() {});
+            }
             ref
                 .read(whiteboardViewModelProvider.notifier)
                 .applyConnectionStatus(status);
@@ -1900,16 +1933,24 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _broadcastIdleState(_lastIdleState ?? 'active', force: true);
   }
 
-  Future<void> _handleRoomEnded(CollaborationRoomMetadata metadata) async {
+  Future<void> _handleRoomEnded(
+    CollaborationRoomMetadata? metadata, {
+    bool removed = false,
+  }) async {
     _markdrawController.closeTransientUiForSceneReplace();
     await _cancelCollaborationStreams();
     if (!mounted) {
       return;
     }
     await _runAfterStableFrameAsync(() async {
-      ref.read(whiteboardViewModelProvider.notifier).applyRoomEnded(metadata);
+      final notifier = ref.read(whiteboardViewModelProvider.notifier);
+      if (removed) {
+        notifier.applyRoomRemoved();
+      } else {
+        notifier.applyRoomEnded(metadata!);
+      }
     });
-    final save = await _showRoomEndedDialog();
+    final save = await _showRoomEndedDialog(removed: removed);
     if (save == true) {
       await _saveTemporaryRoomAsLocalNote();
     }
@@ -1920,13 +1961,17 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
   }
 
-  Future<bool?> _showRoomEndedDialog() {
+  Future<bool?> _showRoomEndedDialog({bool removed = false}) {
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('协作已结束'),
-        content: const Text('房主已结束协作。你可以把当前白板保存为本地笔记，或直接返回。'),
+        title: Text(removed ? '已被移出房间' : '协作已结束'),
+        content: Text(
+          removed
+              ? '房主已将你移出房间，已停止同步。你可以把当前白板保存为本地笔记，或直接返回。'
+              : '房主已结束协作。你可以把当前白板保存为本地笔记，或直接返回。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -2025,7 +2070,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   bool _shouldUseLiveInkV2() {
     return ref.read(whiteboardViewModelProvider).collaborating &&
-        _collaborationRepository.effectiveLiveInk;
+        _collaborationRepository.shouldUseLiveInkV2;
   }
 
   void _broadcastLiveInk(
@@ -2083,16 +2128,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   void _cancelLiveInk(String strokeId) {
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    if (room != null) {
+      unawaited(
+        _collaborationRepository.cancelLiveInk(room: room, strokeId: strokeId),
+      );
+    }
     if (_liveInkSender.strokeId == strokeId) {
       _liveInkSender.cancel();
     }
   }
 
-  Future<void> _sendLiveInkChunk(LiveInkChunk chunk) async {
+  Future<bool> _sendLiveInkChunk(LiveInkChunk chunk) async {
     final state = ref.read(whiteboardViewModelProvider);
     final room = state.activeRoom;
-    if (!state.collaborating || room == null) return;
-    await _collaborationRepository.sendLiveInkChunk(room: room, chunk: chunk);
+    if (!state.collaborating || room == null) return false;
+    return _collaborationRepository.sendLiveInkChunk(room: room, chunk: chunk);
   }
 
   Iterable<String> _freedrawIds(Iterable<Map<String, Object?>> elements) sync* {
@@ -2163,6 +2214,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             }
           }
         }
+      case CollaborationMessageType.inkCancel:
+        final strokeId = message.payload['strokeId'];
+        if (strokeId is String &&
+            strokeId.isNotEmpty &&
+            strokeId.length <= 256) {
+          _remoteWetInkStore.finalizeStroke(strokeId);
+        }
+        return;
+      case CollaborationMessageType.syncStatus:
       case CollaborationMessageType.inkChunk:
       case CollaborationMessageType.invalidResponse:
         break;
@@ -2232,6 +2292,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     ExcalidrawScene remoteScene, {
     bool loadImages = true,
     bool reconcile = true,
+    bool replaceLayout = false,
   }) {
     final generation = _remoteApplyGeneration;
     CollaborationDebugLog.write('scene', 'remote_scene_queued', {
@@ -2244,7 +2305,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         .then<void>((_) async {
           await _runAfterStableFrameAsync(() async {
             if (generation != _remoteApplyGeneration) return;
+            if (replaceLayout) {
+              // 房间没有页面标记时是无限画布，不能沿用加入前的本机版式。
+              _markdrawController.setLayout(
+                const CanvasLayout(type: CanvasLayoutType.unbounded),
+              );
+            }
             await _applyRemoteScene(remoteScene, reconcile: reconcile);
+            if (generation != _remoteApplyGeneration || !_canMutateWhiteboard) {
+              return;
+            }
+            if (replaceLayout && _markdrawController.layout.isPaged) {
+              _markdrawController.navigateToPage(
+                _markdrawController.layout.pages.first.id,
+                fit: true,
+              );
+            }
             if (loadImages) {
               _scheduleLoadImageFiles();
             }
@@ -2690,7 +2766,22 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onJoinCollaboration: _promptJoinCollaboration,
                   onLeaveCollaboration: _leaveCollaboration,
                   onEndCollaboration: _endCollaboration,
-                  onShareCollaboration: _shareCollaborationInvitation,
+                  onManageCollaboration: _manageCollaborationMembers,
+                  onShareCollaboration: () async {
+                    final room = ref
+                        .read(whiteboardViewModelProvider)
+                        .activeRoom;
+                    if (room != null) await _showCollaborationInvitation(room);
+                  },
+                  onCheckCollaboration: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    await _collaborationRepository.checkSynchronization();
+                    if (mounted) {
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('已发起同步校验')),
+                      );
+                    }
+                  },
                   socialAction: SocialMessagesAction(
                     prepareToOpenInvitation: _prepareToOpenFriendInvitation,
                   ),
@@ -2831,6 +2922,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   String? _collaborationStatusLabel(WhiteboardState state) {
+    const buildId = String.fromEnvironment('FLOWMUSE_BUILD_ID');
+    final mode =
+        '${_collaborationRepository.collaborationMode}${buildId.isEmpty ? '' : ' · $buildId'}';
     return switch (state.collaborationStatus) {
       WhiteboardCollaborationStatus.connecting => '连接中',
       WhiteboardCollaborationStatus.initializing => '初始化中',
@@ -2840,8 +2934,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       WhiteboardCollaborationStatus.failed => '协作失败',
       WhiteboardCollaborationStatus.connected
           when state.collaborators.isNotEmpty =>
-        '协作中 ${state.collaborators.length}',
-      WhiteboardCollaborationStatus.connected => '协作中',
+        '$mode · ${state.collaborators.length}人',
+      WhiteboardCollaborationStatus.connected => mode,
       WhiteboardCollaborationStatus.idle => null,
     };
   }

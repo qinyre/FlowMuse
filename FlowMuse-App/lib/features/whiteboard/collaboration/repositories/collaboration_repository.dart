@@ -4,6 +4,9 @@ import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:crypto/crypto.dart';
+
+import '../../editor_core/src/core/serialization/canonical_json.dart';
 
 import '../models/collaboration_message.dart';
 import '../config/live_ink_flags.dart';
@@ -72,6 +75,8 @@ class CollaborationRepository {
   final Map<String, Map<String, Object?>> _pendingLatestElements = {};
   final StreamController<String> _repositoryErrors =
       StreamController<String>.broadcast();
+  final StreamController<RealtimeConnectionStatus> _modeStatus =
+      StreamController<RealtimeConnectionStatus>.broadcast();
   final StreamController<CollaborationMessage> _messages =
       StreamController<CollaborationMessage>.broadcast();
   final StreamController<ExcalidrawScene> _fileStatusScenes =
@@ -105,6 +110,24 @@ class CollaborationRepository {
   StreamSubscription<ReceivedLiveInkFrame>? _liveInkFrameSubscription;
   StreamSubscription<DecodedLiveInkChunk>? _liveInkChunkSubscription;
   StreamSubscription<String>? _newUserSubscription;
+  StreamSubscription<List<RoomCollaborator>>? _roomUsersSubscription;
+  StreamSubscription<RealtimeConnectionStatus>? _connectionSubscription;
+  final Set<String> _memberIds = {};
+  final Map<String, bool> _peerLiveInk = {};
+  final Map<String, String> _peerSceneHashes = {};
+  final Map<String, String> _peerVersionHashes = {};
+  final Map<String, int> _lastRepairRequests = {};
+  final Set<String> _repairsInFlight = {};
+  final Stopwatch _repairClock = Stopwatch()..start();
+  static const _repairCooldown = Duration(seconds: 20);
+  static const _repairPacketBytes = 16 * 1024;
+  Timer? _repairTimer;
+  ExcalidrawScene? _hashedScene;
+  String? _sceneHash;
+  ExcalidrawScene? _versionHashedScene;
+  String? _versionHash;
+  int sceneRepairCount = 0;
+  bool _needsReconnectRepair = false;
   LiveInkReceiveScheduler? _liveInkScheduler;
   Future<void> _messageDecodeQueue = Future<void>.value();
   int _roomSessionGeneration = 0;
@@ -119,6 +142,346 @@ class CollaborationRepository {
 
   bool get effectiveLiveInk =>
       flags.effectiveFor(_transport.serverLiveInkProtocolVersion);
+
+  // Unknown/legacy peers must still see the ordinary in-progress elements.
+  bool get shouldUseLiveInkV2 =>
+      effectiveLiveInk &&
+      _memberIds
+          .where((id) => id != socketId)
+          .every((id) => _peerLiveInk[id] == true);
+
+  String get collaborationMode => shouldUseLiveInkV2 ? '实时墨迹 V2' : '兼容同步';
+
+  String _currentSceneHash() {
+    if (!identical(_hashedScene, _latestScene)) {
+      final elements = List<Map<String, Object?>>.of(_latestScene.elements)
+        ..sort((a, b) => _id(a).compareTo(_id(b)));
+      _sceneHash = sha256
+          .convert(utf8.encode(canonicalValue(elements)))
+          .toString();
+      _hashedScene = _latestScene;
+    }
+    return _sceneHash!;
+  }
+
+  Map<String, List<int>> _elementVersions() => {
+    for (final element in _latestScene.elements)
+      _id(element): [
+        (element['version'] as num).toInt(),
+        (element['versionNonce'] as num).toInt(),
+      ],
+  };
+
+  String _currentVersionHash() {
+    if (!identical(_versionHashedScene, _latestScene)) {
+      _versionHash = sha256
+          .convert(utf8.encode(canonicalValue(_elementVersions())))
+          .toString();
+      _versionHashedScene = _latestScene;
+    }
+    return _versionHash!;
+  }
+
+  Future<void> cancelLiveInk({
+    required CollaborationRoom room,
+    required String strokeId,
+  }) async {
+    if (strokeId.isEmpty || strokeId.length > 256) return;
+    try {
+      await _send(
+        room: room,
+        message: CollaborationMessage(
+          type: CollaborationMessageType.inkCancel,
+          payload: {'strokeId': strokeId},
+        ),
+      );
+    } catch (error) {
+      if (_activeRoom?.roomId == room.roomId) {
+        _addRepositoryError('取消笔迹同步失败：$error');
+      }
+    }
+  }
+
+  Future<void> _sendSyncStatus(
+    CollaborationRoom room, {
+    String? targetSocketId,
+    bool includeVersions = false,
+    bool requestVersions = false,
+  }) async {
+    final generation = _roomSessionGeneration;
+    try {
+      await _send(
+        room: room,
+        targetSocketId: targetSocketId,
+        message: CollaborationMessage(
+          type: CollaborationMessageType.syncStatus,
+          payload: {
+            'protocol': 1,
+            'socketId': socketId,
+            'liveInkV2': flags.layeredWetInk && flags.liveInkV2,
+            'sceneHash': _currentSceneHash(),
+            'versionHash': _currentVersionHash(),
+            'targetSocketId': ?targetSocketId,
+            if (includeVersions) 'elementVersions': _elementVersions(),
+            if (requestVersions) 'requestVersions': true,
+          },
+        ),
+      );
+    } catch (error) {
+      if (_isCurrentRoomSession(room, generation)) {
+        _addRepositoryError('协作校验发送失败：$error');
+      }
+    }
+  }
+
+  Future<void> checkSynchronization() async {
+    final room = _activeRoom;
+    if (room == null) return;
+    final generation = _roomSessionGeneration;
+    await _sendSyncStatus(room);
+    if (!_isCurrentRoomSession(room, generation)) return;
+    _scheduleRepairCheck(room);
+  }
+
+  void _receiveSyncStatus(
+    CollaborationRoom room,
+    CollaborationMessage message,
+  ) {
+    final peer = message.payload['socketId'];
+    final hash = message.payload['sceneHash'];
+    final versionHash = message.payload['versionHash'];
+    if (message.payload['protocol'] != 1 ||
+        peer is! String ||
+        peer == socketId ||
+        !_memberIds.contains(peer) ||
+        hash is! String ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(hash)) {
+      return;
+    }
+    if (versionHash != null &&
+        (versionHash is! String ||
+            !RegExp(r'^[a-f0-9]{64}$').hasMatch(versionHash))) {
+      return;
+    }
+    final rawVersions = message.payload['elementVersions'];
+    final versions = rawVersions == null
+        ? null
+        : _parseElementVersions(rawVersions);
+    if (rawVersions != null && (versions == null || versionHash == null)) {
+      return;
+    }
+    final firstStatus = !_peerLiveInk.containsKey(peer);
+    final previousMode = shouldUseLiveInkV2;
+    _peerLiveInk[peer] = message.payload['liveInkV2'] == true;
+    _peerSceneHashes[peer] = hash;
+    if (versionHash is String) {
+      _peerVersionHashes[peer] = versionHash;
+      if (versionHash == _currentVersionHash()) {
+        _lastRepairRequests.remove(peer);
+      }
+    }
+    if (previousMode != shouldUseLiveInkV2) {
+      _modeStatus.add(RealtimeConnectionStatus.joined);
+    }
+    if (firstStatus) unawaited(_sendSyncStatus(room));
+    if (versions != null) {
+      unawaited(
+        _repairFromVersions(
+          room,
+          peer,
+          versions,
+          reply: message.payload['requestVersions'] == true,
+        ),
+      );
+      return;
+    }
+    _scheduleRepairCheck(room);
+  }
+
+  Map<String, _VersionRecord>? _parseElementVersions(Object raw) {
+    if (raw is! Map || raw.length > 100000) return null;
+    final result = <String, _VersionRecord>{};
+    for (final entry in raw.entries) {
+      final id = entry.key;
+      final values = entry.value;
+      if (id is! String ||
+          id.isEmpty ||
+          id.length > 256 ||
+          values is! List ||
+          values.length != 2) {
+        return null;
+      }
+      final version = values[0];
+      final nonce = values[1];
+      if (!_validWireVersion(version) || !_validWireVersion(nonce)) return null;
+      result[id] = _VersionRecord(
+        (version as num).toInt(),
+        (nonce as num).toInt(),
+      );
+    }
+    return result;
+  }
+
+  bool _validWireVersion(Object? value) =>
+      value is num &&
+      value.isFinite &&
+      value >= 0 &&
+      value <= 9007199254740991 &&
+      value == value.toInt();
+
+  void _scheduleRepairCheck(CollaborationRoom room) {
+    if (_repairTimer != null) return;
+    final generation = _roomSessionGeneration;
+    // A delayed hash is only a hint: compare current element versions first.
+    _repairTimer = Timer(const Duration(milliseconds: 600), () async {
+      _repairTimer = null;
+      for (final peer in _memberIds.where((id) => id != socketId).toList()) {
+        if (!_isCurrentRoomSession(room, generation)) return;
+        final hash = _peerVersionHashes[peer];
+        if (hash != null
+            ? hash == _currentVersionHash()
+            : _peerSceneHashes[peer] == _currentSceneHash()) {
+          continue;
+        }
+        if (hash == null) {
+          final providers =
+              _memberIds
+                  .where(
+                    (id) =>
+                        id != peer &&
+                        (id == socketId || _peerVersionHashes.containsKey(id)),
+                  )
+                  .toList()
+                ..sort();
+          if (providers.isNotEmpty && providers.first != socketId) continue;
+        } else if (socketId.compareTo(peer) > 0) {
+          // One requester exchanges both catalogues, avoiding mirrored repairs.
+          continue;
+        }
+        final now = _repairClock.elapsedMicroseconds;
+        final last = _lastRepairRequests[peer];
+        if (last != null && now - last < _repairCooldown.inMicroseconds) {
+          continue;
+        }
+        _lastRepairRequests[peer] = now;
+        if (hash != null) {
+          await _sendSyncStatus(
+            room,
+            targetSocketId: peer,
+            includeVersions: true,
+            requestVersions: true,
+          );
+        } else {
+          await _repairFromVersions(room, peer, const {});
+        }
+      }
+    });
+  }
+
+  Future<void> _repairFromVersions(
+    CollaborationRoom room,
+    String peer,
+    Map<String, _VersionRecord> versions, {
+    bool reply = false,
+  }) async {
+    if (!_repairsInFlight.add(peer)) return;
+    final generation = _roomSessionGeneration;
+    try {
+      if (reply) {
+        await _sendSyncStatus(
+          room,
+          targetSocketId: peer,
+          includeVersions: true,
+        );
+      }
+      if (!_isCurrentRoomSession(room, generation) ||
+          !_memberIds.contains(peer)) {
+        return;
+      }
+      final changed = [
+        for (final element in _latestScene.elements)
+          if (versions[_id(element)] == null ||
+              (element['version'] as num).toInt() >
+                  versions[_id(element)]!.version ||
+              ((element['version'] as num).toInt() ==
+                      versions[_id(element)]!.version &&
+                  (element['versionNonce'] as num).toInt() <
+                      versions[_id(element)]!.versionNonce))
+            element,
+      ];
+      if (changed.isEmpty) return;
+      sceneRepairCount++;
+      await _sendElementBatches(
+        room: room,
+        elements: changed,
+        targetSocketId: peer,
+      );
+    } catch (error) {
+      if (_isCurrentRoomSession(room, generation)) {
+        _addRepositoryError('协作增量补偿失败：$error');
+      }
+    } finally {
+      if (_isCurrentRoomSession(room, generation)) {
+        _repairsInFlight.remove(peer);
+      }
+    }
+  }
+
+  Future<int> _sendElementBatches({
+    required CollaborationRoom room,
+    required List<Map<String, Object?>> elements,
+    bool initial = false,
+    String? targetSocketId,
+  }) async {
+    final generation = _roomSessionGeneration;
+    var first = initial;
+    var bytes = 0;
+    final batches = elements.isEmpty && initial
+        ? [<Map<String, Object?>>[]]
+        : _elementBatches(elements, targetSocketId);
+    for (final batch in batches) {
+      if (!_isCurrentRoomSession(room, generation)) break;
+      bytes += await _send(
+        room: room,
+        targetSocketId: targetSocketId,
+        message: CollaborationMessage(
+          type: first
+              ? CollaborationMessageType.sceneInit
+              : CollaborationMessageType.sceneUpdate,
+          payload: {'elements': batch, 'targetSocketId': ?targetSocketId},
+        ),
+      );
+      first = false;
+      await Future<void>.delayed(Duration.zero);
+    }
+    return bytes;
+  }
+
+  Iterable<List<Map<String, Object?>>> _elementBatches(
+    List<Map<String, Object?>> elements,
+    String? targetSocketId,
+  ) sync* {
+    final overhead =
+        CollaborationMessage(
+          type: CollaborationMessageType.sceneUpdate,
+          payload: {'elements': const [], 'targetSocketId': ?targetSocketId},
+        ).toBytes().length +
+        28;
+    var batch = <Map<String, Object?>>[];
+    var bytes = overhead;
+    for (final element in elements) {
+      final size = utf8.encode(jsonEncode(element)).length + 1;
+      if (batch.isNotEmpty && bytes + size > _repairPacketBytes) {
+        yield batch;
+        batch = [];
+        bytes = overhead;
+      }
+      // shortcut: 单个超限元素保持完整，超长单笔实测拥堵时再引入分片。
+      batch.add(element);
+      bytes += size;
+    }
+    if (batch.isNotEmpty) yield batch;
+  }
 
   Stream<ReceivedLiveInkFrame> get liveInkFrames => _transport.liveInkFrames;
 
@@ -145,26 +508,46 @@ class CollaborationRepository {
 
   Stream<String> get newUsers => _transport.newUsers;
 
-  Future<void> sendLiveInk(EncryptedPayload payload) async {
-    if (!effectiveLiveInk) return;
-    await _transport.sendLiveInk(payload);
+  Future<bool> sendLiveInk(EncryptedPayload payload) async {
+    if (!effectiveLiveInk) return false;
+    return _transport.sendLiveInk(payload);
   }
 
-  Future<void> sendLiveInkChunk({
+  Future<bool> sendLiveInkChunk({
     required CollaborationRoom room,
     required LiveInkChunk chunk,
   }) async {
-    if (!effectiveLiveInk || _activeRoom?.roomId != room.roomId) return;
+    if (!effectiveLiveInk || _activeRoom?.roomId != room.roomId) return false;
     final sessionGeneration = _roomSessionGeneration;
     final encrypted = await _crypto.encrypt(
       roomKey: room.roomKey,
       plainBytes: CollaborationMessage.inkChunk(chunk).toBytes(),
     );
-    if (!_isCurrentRoomSession(room, sessionGeneration)) return;
-    await sendLiveInk(encrypted);
+    if (!_isCurrentRoomSession(room, sessionGeneration)) return false;
+    return sendLiveInk(encrypted);
   }
 
   Stream<List<RoomCollaborator>> get roomUsers => _transport.roomUsers;
+
+  List<RoomCollaborator> _roomMembers = const [];
+  List<RoomCollaborator> get roomMembers => _roomMembers;
+
+  Stream<String> get roomRemoved => _transport.roomRemoved
+      .where((roomId) => roomId == _activeRoom?.roomId)
+      .asyncMap((roomId) async {
+        await _resetLocalState();
+        await _transport.disconnect();
+        return roomId;
+      });
+
+  Future<void> removeMember(String socketId) async {
+    final room = _activeRoom;
+    if (room == null) throw StateError('协作连接未建立');
+    if (socketId == _transport.socketId) throw StateError('不能移出自己');
+    final ownerKey = await _ownerKeyStore.readOwnerKey(room.roomId);
+    if (!identical(room, _activeRoom)) throw StateError('协作房间已切换');
+    await _sceneStore.removeMember(room, socketId, ownerKey: ownerKey);
+  }
 
   Stream<CollaborationRoomMetadata> get roomEnded => _transport.roomEnded
       .where(
@@ -194,7 +577,14 @@ class CollaborationRepository {
   }
 
   Stream<RealtimeConnectionStatus> get connectionStatus =>
-      _transport.connectionStatus;
+      Stream.multi((controller) {
+        final connection = _transport.connectionStatus.listen(controller.add);
+        final modes = _modeStatus.stream.listen(controller.add);
+        controller.onCancel = () async {
+          await connection.cancel();
+          await modes.cancel();
+        };
+      });
 
   Stream<CollaborationMessage> encryptedMessages(CollaborationRoom room) {
     return Stream.multi((controller) {
@@ -219,7 +609,11 @@ class CollaborationRepository {
 
   Future<CollaborationRoom> startNewRoom({
     required ExcalidrawScene initialScene,
+    int maxParticipants = 0,
   }) async {
+    if (maxParticipants != 0 && (maxParticipants < 2 || maxParticipants > 50)) {
+      throw ArgumentError.value(maxParticipants, 'maxParticipants');
+    }
     final room = CollaborationRoom.newRoom(crypto: _crypto);
     final ownerKey = _crypto.generateRoomKey();
     final ownerKeyHash = _crypto.hashOwnerKey(
@@ -234,6 +628,7 @@ class CollaborationRepository {
       room: room,
       scene: syncableScene.copyWith(files: const {}),
       ownerKeyHash: ownerKeyHash,
+      maxParticipants: maxParticipants,
     );
     await _ownerKeyStore.writeOwnerKey(room.roomId, ownerKey);
     _activeRoom = room;
@@ -248,9 +643,10 @@ class CollaborationRepository {
     });
     await _startRoomSession(room);
     try {
-      await _transport.connect(room.roomId);
+      await _transport.connect(room.roomId, ownerKey: ownerKey);
     } catch (_) {
       await _resetLocalState();
+      await _transport.disconnect();
       rethrow;
     }
     await _send(
@@ -393,9 +789,11 @@ class CollaborationRepository {
     bool initial = false,
     bool syncAll = false,
   }) async {
+    if (_activeRoom?.roomId != room.roomId) return;
     final syncableElements = _reconciler.getSyncableElements(scene.elements);
     final syncableScene = scene.copyWith(elements: syncableElements);
     _latestScene = syncableScene;
+    _scheduleSnapshot();
 
     if (syncAll) {
       _accumulator.dispose();
@@ -449,6 +847,8 @@ class CollaborationRepository {
     for (final element in syncable) {
       _pendingLatestElements.remove(_id(element));
     }
+    // Persist final edits even while the socket is waiting for an ACK.
+    _scheduleSnapshot();
     _accumulator.scheduleElements(syncable);
   }
 
@@ -480,7 +880,11 @@ class CollaborationRepository {
           _pendingLatestElements.clear();
           await _doAccumulatorFlush(elements, false, volatile: true);
         })
-        .catchError(_handleSendQueueError)
+        .catchError((Object error, StackTrace stack) {
+          if (_sendGeneration == generation) {
+            _handleSendQueueError(error, stack);
+          }
+        })
         .whenComplete(() {
           if (_sendGeneration != generation) return;
           _latestSendQueued = false;
@@ -501,7 +905,11 @@ class CollaborationRepository {
           if (generation != _sendGeneration) return;
           await _doAccumulatorFlush(elements, isInitial, syncAll: syncAll);
         })
-        .catchError(_handleSendQueueError);
+        .catchError((Object error, StackTrace stack) {
+          if (_sendGeneration == generation) {
+            _handleSendQueueError(error, stack);
+          }
+        });
     return _sendQueue;
   }
 
@@ -533,11 +941,13 @@ class CollaborationRepository {
         ? CollaborationMessage.sceneInit(elements: changed)
         : CollaborationMessage.sceneUpdate(elements: changed);
 
-    final sentBytes = await _send(
-      room: room,
-      message: message,
-      volatile: volatile,
-    );
+    final sentBytes = isInitial || syncAll
+        ? await _sendElementBatches(
+            room: room,
+            elements: changed,
+            initial: isInitial,
+          )
+        : await _send(room: room, message: message, volatile: volatile);
     if (!_isCurrentRoomSession(room, sessionGeneration)) return;
     // A dropped preview must not suppress a later reliable send of this version.
     if (!volatile) _rememberBroadcasted(changed);
@@ -574,7 +984,7 @@ class CollaborationRepository {
       _lastMetricsReport = now;
     }
 
-    _scheduleSnapshot();
+    if (!volatile) _scheduleSnapshot();
   }
 
   Future<void> broadcastMouseLocation({
@@ -828,14 +1238,47 @@ class CollaborationRepository {
         _addRepositoryError('协作消息接收失败：$error');
       },
     );
-    _newUserSubscription = _transport.newUsers.listen((_) {
+    _newUserSubscription = _transport.newUsers.listen((newSocketId) {
       final activeRoom = _activeRoom;
       if (activeRoom == null ||
           activeRoom.roomId != room.roomId ||
           _latestScene.elements.isEmpty) {
         return;
       }
-      unawaited(_sendSceneInitToNewUser(activeRoom));
+      unawaited(
+        Future<void>.delayed(Duration.zero, () async {
+          if (!_isCurrentRoomSession(room, sessionGeneration)) return;
+          final providers = _memberIds.where((id) => id != newSocketId).toList()
+            ..sort();
+          if (providers.isNotEmpty && providers.first != socketId) return;
+          await _sendSceneInitToNewUser(activeRoom, newSocketId);
+        }),
+      );
+    });
+    _roomUsersSubscription = _transport.roomUsers.listen((users) {
+      _roomMembers = List.unmodifiable(users);
+      _memberIds
+        ..clear()
+        ..addAll(users.map((user) => user.socketId));
+      _peerLiveInk.removeWhere((id, _) => !_memberIds.contains(id));
+      _peerSceneHashes.removeWhere((id, _) => !_memberIds.contains(id));
+      _peerVersionHashes.removeWhere((id, _) => !_memberIds.contains(id));
+      _lastRepairRequests.removeWhere((id, _) => !_memberIds.contains(id));
+      unawaited(_sendSyncStatus(room));
+    });
+    _connectionSubscription = _transport.connectionStatus.listen((status) {
+      if (status == RealtimeConnectionStatus.disconnected ||
+          status == RealtimeConnectionStatus.reconnecting) {
+        _needsReconnectRepair = true;
+        _peerLiveInk.clear();
+        _peerSceneHashes.clear();
+        _peerVersionHashes.clear();
+        _lastRepairRequests.clear();
+      } else if (status == RealtimeConnectionStatus.joined &&
+          _needsReconnectRepair) {
+        _needsReconnectRepair = false;
+        unawaited(checkSynchronization());
+      }
     });
   }
 
@@ -902,6 +1345,14 @@ class CollaborationRepository {
         );
       }
       if (!_isCurrentRoomSession(room, sessionGeneration)) return;
+      final target = message.payload['targetSocketId'];
+      if (target is String && target != socketId) {
+        return;
+      }
+      if (message.type == CollaborationMessageType.syncStatus) {
+        _receiveSyncStatus(room, message);
+        return;
+      }
       CollaborationDebugLog.write('crypto', 'decoded', {
         'room': _shortRoomId(room.roomId),
         'type': message.type.wireName,
@@ -947,9 +1398,17 @@ class CollaborationRepository {
     return chunk;
   }
 
-  Future<void> _sendSceneInitToNewUser(CollaborationRoom room) async {
+  Future<void> _sendSceneInitToNewUser(
+    CollaborationRoom room,
+    String targetSocketId,
+  ) async {
     try {
-      await broadcastScene(room: room, scene: _latestScene, initial: true);
+      await _sendElementBatches(
+        room: room,
+        elements: _latestScene.elements,
+        targetSocketId: targetSocketId,
+        initial: true,
+      );
     } catch (error) {
       _addRepositoryError('协作初始化同步失败：$error');
     }
@@ -957,6 +1416,19 @@ class CollaborationRepository {
 
   Future<void> _stopRoomSession() async {
     _roomSessionGeneration++;
+    _repairTimer?.cancel();
+    _repairTimer = null;
+    _memberIds.clear();
+    _peerLiveInk.clear();
+    _peerSceneHashes.clear();
+    _peerVersionHashes.clear();
+    _lastRepairRequests.clear();
+    _repairsInFlight.clear();
+    _hashedScene = null;
+    _sceneHash = null;
+    _versionHashedScene = null;
+    _versionHash = null;
+    _needsReconnectRepair = false;
     _snapshotTimer?.cancel();
     _snapshotTimer = null;
     _snapshotSaving = false;
@@ -974,11 +1446,15 @@ class CollaborationRepository {
     final newUsers = _newUserSubscription;
     _newUserSubscription = null;
     await Future.wait([
+      if (_roomUsersSubscription != null) _roomUsersSubscription!.cancel(),
+      if (_connectionSubscription != null) _connectionSubscription!.cancel(),
       if (transportMessages != null) transportMessages.cancel(),
       if (liveInkFrames != null) liveInkFrames.cancel(),
       if (liveInkChunks != null) liveInkChunks.cancel(),
       if (newUsers != null) newUsers.cancel(),
     ]);
+    _roomUsersSubscription = null;
+    _connectionSubscription = null;
     if (liveInkScheduler != null) await liveInkScheduler.close();
     _messageDecodeQueue = Future<void>.value();
     _messageBacklog.clear();
@@ -998,6 +1474,7 @@ class CollaborationRepository {
     required CollaborationRoom room,
     required CollaborationMessage message,
     bool volatile = false,
+    String? targetSocketId,
   }) async {
     final sessionGeneration = _roomSessionGeneration;
     if (!_isCurrentRoomSession(room, sessionGeneration)) return 0;
@@ -1068,7 +1545,15 @@ class CollaborationRepository {
             },
           ));
     try {
-      await _transport.send(encrypted, volatile: volatile);
+      final transport = _transport;
+      if (targetSocketId != null && transport is TargetedRealtimeTransport) {
+        await (transport as TargetedRealtimeTransport).sendTo(
+          encrypted,
+          targetSocketId,
+        );
+      } else {
+        await transport.send(encrypted, volatile: volatile);
+      }
     } finally {
       transportTask?.finish();
     }
@@ -1358,7 +1843,7 @@ class CollaborationRepository {
     _fullSceneSyncTimer?.cancel();
     _fullSceneSyncTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       final room = _activeRoom;
-      if (room == null || _latestScene.elements.isEmpty) return;
+      if (room == null) return;
       if (!fullSceneSyncEnabled) return;
       if (_snapshotSaving) return;
 
@@ -1368,7 +1853,7 @@ class CollaborationRepository {
         'count': _fullSceneSyncCount,
         'elements': _latestScene.elements.length,
       });
-      unawaited(broadcastScene(room: room, scene: _latestScene, syncAll: true));
+      unawaited(checkSynchronization());
     });
   }
 
@@ -1387,6 +1872,7 @@ class CollaborationRepository {
   }
 
   Future<void> _resetLocalState() async {
+    _roomMembers = const [];
     _fullSceneSyncTimer?.cancel();
     _fullSceneSyncTimer = null;
     _fileUploadTimer?.cancel();

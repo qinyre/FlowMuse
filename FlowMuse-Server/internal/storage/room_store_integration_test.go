@@ -30,12 +30,12 @@ func TestRoomCreationPreservesRealOwner(t *testing.T) {
 	if err := rooms.EnsureSchema(ctx); err != nil {
 		t.Fatal(err)
 	}
-	first, err := rooms.CreateRoom(ctx, "room-test", a.ID, "test-owner-hash")
+	first, err := rooms.CreateRoom(ctx, "room-test", a.ID, "test-owner-hash", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, caller := range []string{a.ID, b.ID, ""} {
-		got, err := rooms.CreateRoom(ctx, "room-test", caller, "different-test-hash")
+		got, err := rooms.CreateRoom(ctx, "room-test", caller, "different-test-hash", 0)
 		if err != nil || got.OwnerID != a.ID || got.OwnerKeyHash != first.OwnerKeyHash || got.CreatedAt != first.CreatedAt {
 			t.Fatal("room ownership changed", err)
 		}
@@ -56,17 +56,17 @@ func TestRoomCreationPreservesRealOwner(t *testing.T) {
 	if _, err := rooms.FindRoom(ctx, "missing", a.ID); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatal("missing room treated as existing")
 	}
-	if _, err := rooms.CreateRoom(ctx, "guest-room", "", ""); err != nil {
+	if _, err := rooms.CreateRoom(ctx, "guest-room", "", "", 0); err != nil {
 		t.Fatal(err)
 	}
-	got, err = rooms.CreateRoom(ctx, "guest-room", b.ID, "new-test-hash")
+	got, err = rooms.CreateRoom(ctx, "guest-room", b.ID, "new-test-hash", 0)
 	if err != nil || got.OwnerID != "" || got.OwnerKeyHash != "" {
 		t.Fatal("guest room claimed by retry")
 	}
 	if _, err := rooms.EndRoom(ctx, "room-test", a.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	got, err = rooms.CreateRoom(ctx, "room-test", a.ID, first.OwnerKeyHash)
+	got, err = rooms.CreateRoom(ctx, "room-test", a.ID, first.OwnerKeyHash, 0)
 	if err != nil || !got.Ended {
 		t.Fatal("retry reopened ended room")
 	}

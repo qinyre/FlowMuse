@@ -498,10 +498,14 @@ Future<Map<String, Object?>> _runScenario(
     for (var senderIndex = 0; senderIndex < senders.length; senderIndex++)
       LiveInkSender(
         emit: (chunk) async {
-          await senders[senderIndex].sendLiveInkChunk(room: room, chunk: chunk);
+          final emitted = await senders[senderIndex].sendLiveInkChunk(
+            room: room,
+            chunk: chunk,
+          );
           if (reliableLoadActive) {
             liveEmitsWhileReliablePending++;
           }
+          return emitted;
         },
       ),
   ];
@@ -757,7 +761,12 @@ Future<Map<String, Object?>> _measureSenderScaleEvidence() async {
   final rows = <Map<String, Object?>>[];
   for (final count in [250, 500, 1000, 2000]) {
     final chunks = <LiveInkChunk>[];
-    final sender = LiveInkSender(emit: (chunk) async => chunks.add(chunk));
+    final sender = LiveInkSender(
+      emit: (chunk) async {
+        chunks.add(chunk);
+        return true;
+      },
+    );
     sender.start(strokeId: 'scale-$count', style: _style);
     final points = <LiveInkPoint>[];
     for (var index = 0; index < count; index++) {

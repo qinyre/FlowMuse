@@ -6,6 +6,7 @@ const (
 	EventLeaveRoom            = "leave-room"
 	EventEndRoom              = "end-room"
 	EventRoomEnded            = "room-ended"
+	EventRoomRemoved          = "room-removed"
 	EventRoomError            = "room-error"
 	EventNewUser              = "new-user"
 	EventFirstInRoom          = "first-in-room"
@@ -23,6 +24,7 @@ const (
 type EncryptedFrame struct {
 	EncryptedBuffer []byte `json:"encryptedBuffer"`
 	IV              []byte `json:"iv"`
+	TargetSocketID  string `json:"targetSocketId,omitempty"`
 }
 
 type ReceivedLiveInkFrame struct {
@@ -34,9 +36,11 @@ type ReceivedLiveInkFrame struct {
 type LiveInkReady struct {
 	RoomID                 string `json:"roomId"`
 	LiveInkProtocolVersion int    `json:"liveInkProtocolVersion"`
+	ReliableAck            bool   `json:"reliableAck"`
 }
 
 type RoomUser struct {
+	Role      string `json:"role,omitempty"`
 	SocketID  string `json:"socketId"`
 	UserID    string `json:"userId,omitempty"`
 	Username  string `json:"username"`
