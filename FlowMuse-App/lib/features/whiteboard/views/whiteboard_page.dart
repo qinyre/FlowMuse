@@ -318,6 +318,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _openingMessage = importingPdf ? '正在导入 PDF…' : '正在打开笔记…';
     });
     // Let the loading state paint before parsing or native PDF work starts.
+    await _cancelCollaborationStreams();
+    if (!_isCurrentOpen(generation)) return;
     await WidgetsBinding.instance.endOfFrame;
     if (!_isCurrentOpen(generation)) return;
     try {
@@ -1846,6 +1848,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _listenToRoom(CollaborationRoom room) async {
     _resetRemoteUpdates();
+    final generation = _remoteApplyGeneration;
+    bool current() =>
+        _canMutateWhiteboard &&
+        generation == _remoteApplyGeneration &&
+        identical(ref.read(whiteboardViewModelProvider).activeRoom, room);
     _disposingOrLeaving = false;
     if (_collaborationIdentity.isGuest && _guestCreatorSessionId == null) {
       _guestCreatorSessionId = const Uuid().v4();
@@ -1857,6 +1864,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           _handleCollaborationMessage,
           onError: (Object error) {
             _runAfterStableFrame(() {
+              if (!current()) return;
               ref
                   .read(whiteboardViewModelProvider.notifier)
                   .applyCollaborationError(error.toString());
@@ -1866,10 +1874,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _fileStatusSceneSubscription?.cancel();
     _fileStatusSceneSubscription = _collaborationRepository.fileStatusScenes
         .listen((scene) {
+          if (!current()) return;
           _enqueueRemoteScene(scene, loadImages: false, reconcile: false);
         });
     await _roomUsersSubscription?.cancel();
     _roomUsersSubscription = _collaborationRepository.roomUsers.listen((users) {
+      if (!current()) return;
       final nextSocketIds = {for (final user in users) user.socketId};
       final joinedSocketIds = newlyJoinedSocketIds(
         _roomSocketIds,
@@ -1887,6 +1897,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         _broadcastIdleState(_lastIdleState ?? 'active', force: true);
       }
       _runAfterStableFrame(() {
+        if (!current()) return;
         ref.read(whiteboardViewModelProvider.notifier).applyRoomUsers(users);
       });
     });
@@ -1894,15 +1905,16 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     _roomEndedSubscription = _collaborationRepository.roomEnded.listen((
       metadata,
     ) {
-      unawaited(_handleRoomEnded(metadata));
+      if (current()) unawaited(_handleRoomEnded(metadata));
     });
     await _roomRemovedSubscription?.cancel();
     _roomRemovedSubscription = _collaborationRepository.roomRemoved.listen((_) {
-      unawaited(_handleRoomEnded(null, removed: true));
+      if (current()) unawaited(_handleRoomEnded(null, removed: true));
     });
     await _roomErrorSubscription?.cancel();
     _roomErrorSubscription = _collaborationRepository.errors.listen((message) {
       _runAfterStableFrame(() {
+        if (!current()) return;
         ref
             .read(whiteboardViewModelProvider.notifier)
             .applyCollaborationError(message);
@@ -1911,9 +1923,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _connectionStatusSubscription?.cancel();
     _connectionStatusSubscription = _collaborationRepository.connectionStatus
         .listen((status) {
+          if (!current()) return;
           final previous = _lastRealtimeStatus;
           _lastRealtimeStatus = status;
           _runAfterStableFrame(() {
+            if (!current()) return;
             if (mounted && status == RealtimeConnectionStatus.joined) {
               setState(() {});
             }
@@ -1937,20 +1951,33 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     CollaborationRoomMetadata? metadata, {
     bool removed = false,
   }) async {
+    final generation = _openGeneration;
+    final room = ref.read(whiteboardViewModelProvider).activeRoom;
+    bool current() =>
+        _canMutateWhiteboard &&
+        generation == _openGeneration &&
+        identical(ref.read(whiteboardViewModelProvider).activeRoom, room);
     _markdrawController.closeTransientUiForSceneReplace();
     await _cancelCollaborationStreams();
-    if (!mounted) {
+    if (!current()) {
       return;
     }
+    var applied = false;
     await _runAfterStableFrameAsync(() async {
+      if (!current()) return;
       final notifier = ref.read(whiteboardViewModelProvider.notifier);
       if (removed) {
         notifier.applyRoomRemoved();
       } else {
         notifier.applyRoomEnded(metadata!);
       }
+      applied = true;
     });
+    if (!applied || !_canMutateWhiteboard || generation != _openGeneration) {
+      return;
+    }
     final save = await _showRoomEndedDialog(removed: removed);
+    if (!_canMutateWhiteboard || generation != _openGeneration) return;
     if (save == true) {
       await _saveTemporaryRoomAsLocalNote();
     }
@@ -1987,6 +2014,12 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _refreshCollaborationSnapshot(CollaborationRoom room) async {
+    final generation = _remoteApplyGeneration;
+    bool current() =>
+        _canMutateWhiteboard &&
+        generation == _remoteApplyGeneration &&
+        identical(ref.read(whiteboardViewModelProvider).activeRoom, room);
+    if (!current()) return;
     ref
         .read(whiteboardViewModelProvider.notifier)
         .applySnapshotRestoreStarted();
@@ -1995,8 +2028,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         room: room,
         localScene: _currentScene(),
       );
-      if (refreshed == null || !_canMutateWhiteboard) {
-        if (_canMutateWhiteboard) {
+      if (refreshed == null || !current()) {
+        if (current()) {
           ref
               .read(whiteboardViewModelProvider.notifier)
               .applyCollaborationInitialized();
@@ -2004,14 +2037,15 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
         return;
       }
       await _enqueueRemoteScene(refreshed);
+      if (!current()) return;
       await _broadcastCurrentScene(syncAll: true);
-      if (_canMutateWhiteboard) {
+      if (current()) {
         ref
             .read(whiteboardViewModelProvider.notifier)
             .applyCollaborationInitialized();
       }
     } catch (error) {
-      if (_canMutateWhiteboard) {
+      if (current()) {
         ref
             .read(whiteboardViewModelProvider.notifier)
             .applyCollaborationError('协作快照恢复失败：$error');

@@ -746,8 +746,10 @@ class CollaborationRepository {
     required CollaborationRoom room,
     required ExcalidrawScene localScene,
   }) async {
+    final generation = _roomSessionGeneration;
+    if (!_isCurrentRoomSession(room, generation)) return null;
     final storedScene = await _sceneStore.loadScene(room);
-    if (storedScene == null) {
+    if (storedScene == null || !_isCurrentRoomSession(room, generation)) {
       return null;
     }
     final reconcileStarted = _performanceProbe?.nowMicros();

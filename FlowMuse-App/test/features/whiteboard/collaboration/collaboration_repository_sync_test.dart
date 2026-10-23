@@ -15,6 +15,54 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/core/elements/collaboration_element_owner.dart';
 
 void main() {
+  test('旧房间的快照迟到不能覆盖新房间的缓存和保存', () async {
+    final crypto = CollaborationCrypto();
+    final oldRoom = CollaborationRoom.newRoom(crypto: crypto);
+    final newRoom = CollaborationRoom.newRoom(crypto: crypto);
+    final oldScene = _scene([_element('old-room-element', 1)]);
+    final newScene = _scene([_element('new-room-element', 1)]);
+    final store = _DelayedSnapshotStore();
+    for (final room in [oldRoom, newRoom]) {
+      await store.createRoom(
+        room: room,
+        scene: room == oldRoom ? oldScene : newScene,
+        ownerKeyHash: 'fixture',
+      );
+    }
+    final repository = CollaborationRepository(
+      transport: MemoryRealtimeTransport(
+        hub: MemoryRealtimeRoomHub(),
+        socketId: 'snapshot-session',
+      ),
+      sceneStore: store,
+    );
+    addTearDown(repository.stop);
+    await repository.joinRoom(
+      room: oldRoom,
+      localScene: ExcalidrawScene.empty(),
+    );
+    final gate = Completer<ExcalidrawScene?>();
+    store.pending = gate;
+    final refreshing = repository.refreshFromSnapshot(
+      room: oldRoom,
+      localScene: oldScene,
+    );
+    store.pending = null;
+    await repository.stop();
+    await repository.joinRoom(
+      room: newRoom,
+      localScene: ExcalidrawScene.empty(),
+    );
+    await repository.broadcastScene(room: newRoom, scene: newScene);
+    gate.complete(oldScene);
+    expect(await refreshing, isNull);
+    await repository.forceFlushSnapshot();
+    expect(
+      (await store.loadScene(newRoom))!.elements.single['id'],
+      'new-room-element',
+    );
+  });
+
   test('强制同步补回漏收的同版本元素，恢复快照后仍可补发本地变更', () async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);
@@ -684,6 +732,13 @@ void main() {
     await repository.stop();
     await transport.close();
   });
+}
+
+class _DelayedSnapshotStore extends MemoryEncryptedSceneStore {
+  Completer<ExcalidrawScene?>? pending;
+  @override
+  Future<ExcalidrawScene?> loadScene(CollaborationRoom room) =>
+      pending?.future ?? super.loadScene(room);
 }
 
 class _DroppingTransport extends MemoryRealtimeTransport {
