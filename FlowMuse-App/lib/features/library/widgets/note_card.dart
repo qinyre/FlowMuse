@@ -26,7 +26,10 @@ class NoteCard extends StatelessWidget {
     final scaler = MediaQuery.textScalerOf(context);
     return coverHeight +
         20 +
-        scaler.scale(14) * 2 * 1.45 +
+        (scaler.scale(14) * 2 * 1.45).clamp(
+          AppSpacing.shellHeaderIconButtonSize,
+          double.infinity,
+        ) +
         4 +
         scaler.scale(12) * 1.5;
   }
@@ -70,54 +73,45 @@ class NoteCard extends StatelessWidget {
                 ),
                 if (selectionControl != null)
                   Positioned(top: -8, right: -8, child: selectionControl!),
-                if (onActionsTap != null && selectionControl == null)
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: SizedBox(
-                      key: actionsKey,
-                      width: AppSpacing.shellHeaderIconButtonSize,
-                      height: AppSpacing.shellHeaderIconButtonSize,
-                      child: IconButton(
-                        key: ValueKey('note-card-actions-${item.id}'),
-                        tooltip: '更多操作：${item.title}',
-                        onPressed: showActions,
-                        iconSize: 28,
-                        style: IconButton.styleFrom(
-                          foregroundColor: colorScheme.onSurface,
-                          visualDensity: VisualDensity.standard,
-                        ),
-                        icon: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: colorScheme.surface.withValues(alpha: 0.94),
-                            borderRadius: BorderRadius.circular(
-                              AppSpacing.radius,
-                            ),
-                          ),
-                          child: const Padding(
-                            padding: EdgeInsets.all(6),
-                            child: Icon(LucideIcons.chevronDown, size: 16),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          item.title,
-          maxLines: 2,
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            color: colorScheme.onSurface,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-            height: 1.45,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                item.title,
+                maxLines: 2,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  height: 1.45,
+                ),
+              ),
+            ),
+            if (onActionsTap != null && selectionControl == null)
+              SizedBox(
+                key: actionsKey,
+                width: AppSpacing.shellHeaderIconButtonSize,
+                height: AppSpacing.shellHeaderIconButtonSize,
+                child: IconButton(
+                  key: ValueKey('note-card-actions-${item.id}'),
+                  tooltip: '更多操作：${item.title}',
+                  onPressed: showActions,
+                  style: IconButton.styleFrom(
+                    foregroundColor: colorScheme.onSurfaceVariant,
+                    visualDensity: VisualDensity.standard,
+                  ),
+                  icon: const Icon(LucideIcons.chevronDown, size: 16),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 4),
         Text(

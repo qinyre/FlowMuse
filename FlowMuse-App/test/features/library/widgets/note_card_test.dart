@@ -48,38 +48,52 @@ void main() {
     });
   }
 
-  testWidgets('大字号长标题封面与卡片不溢出且更多操作可从边缘点击', (tester) async {
-    var tapped = false;
-    final item = note.copyWith(title: '长标题的笔记也应完整保持布局与操作');
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: const TextScaler.linear(2)),
-          child: child!,
-        ),
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => Center(
-              child: SizedBox(
-                width: 160,
-                height: NoteCard.gridHeight(context),
-                child: NoteCard(
-                  item: item,
-                  onTap: () {},
-                  onActionsTap: (_) => tapped = true,
+  for (final scale in [0.8, 1.0, 2.0]) {
+    testWidgets('$scale倍字号的下拉按钮位于笔记名旁且可从边缘点击', (tester) async {
+      var tapped = false;
+      var opened = false;
+      final item = note.copyWith(title: '长标题的笔记也应完整保持布局与操作');
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: SizedBox(
+                  width: 160,
+                  height: NoteCard.gridHeight(context),
+                  child: NoteCard(
+                    item: item,
+                    onTap: () => opened = true,
+                    onActionsTap: (_) => tapped = true,
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    final action = find.byKey(const ValueKey('note-card-actions-placeholder'));
-    expect(tester.getSize(action), const Size(48, 48));
-    await tester.tapAt(tester.getCenter(action) + const Offset(20, 0));
-    expect(tapped, isTrue);
-    expect(tester.takeException(), isNull);
-  });
+      );
+      final action = find.byKey(
+        const ValueKey('note-card-actions-placeholder'),
+      );
+      expect(tester.getSize(action), const Size(48, 48));
+      final actionRect = tester.getRect(action);
+      final titleRect = tester.getRect(find.text(item.title).last);
+      final coverRect = tester.getRect(
+        find.byKey(const ValueKey('note-card-placeholder')),
+      );
+      expect(actionRect.left, greaterThanOrEqualTo(titleRect.right));
+      expect(actionRect.center.dy, closeTo(titleRect.center.dy, 0.01));
+      expect(actionRect.top, greaterThanOrEqualTo(coverRect.bottom + 12));
+      await tester.tapAt(tester.getCenter(action) + const Offset(20, 0));
+      expect(tapped, isTrue);
+      expect(opened, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

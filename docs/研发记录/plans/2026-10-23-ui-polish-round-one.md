@@ -45,3 +45,12 @@ Web 使用独立版本目录并保留旧目录及 Nginx 配置，发布后核对
 ![360px 组件预览](../images/ui-polish-mobile.png)
 ![空资料库](../images/ui-polish-empty.png)
 ![200% 字号](../images/ui-polish-large-text.png)
+
+## 用户复核：恢复笔记名旁的下拉菜单
+
+用户指出第一轮优化将单条笔记的下拉菜单移到了封面右上角，要求恢复原位置。共享 `NoteCard` 改回封面下方的“笔记名 + 下拉箭头”，保留 48px 触控区域、长按菜单锚点、双行长标题和字号缩放。网格高度为同行按钮预留最小高度；全部笔记、笔记本及标签内的笔记卡片共用修正，列表视图保持原布局。
+
+相关 11 项测试通过，覆盖 80%/100%/200% 字号的菜单位置、触控边缘、避免误打开笔记、长按锚点及回收站菜单操作。`flutter analyze --no-pub` 无问题，全量 1904 项通过、5 项既有跳过。使用生产组件与真实字体复核日间、夜间、360px 和大字号预览。
+
+![修正后日间](../images/note-title-actions-desktop.png)
+![修正后窄屏](../images/note-title-actions-mobile.png)
