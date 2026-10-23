@@ -29,7 +29,7 @@
 - 使用真实汉堡菜单、建房对话框及生产主题生成桌面、360px 窄屏、夜间预览；截图仅使用空白/合成内容，已检查中文、边界和滚动。组件截图的中文字体替换只用于测试渲染，不修改生产字体配置。
 - 本轮未重新构建或安装移动端，也未进行平板真机验收。PR 保持待审；Web 按用户要求发布该分支版本，部署回执保存在本地构建目录。
 
-![桌面 Web](../images/anchored-panel-web-desktop.png)
+![桌面真实组件](../images/anchored-panel-desktop.png)
 ![窄屏 Web](../images/anchored-panel-web-mobile.png)
 ![建房下拉](../images/anchored-panel-mobile.png)
 ![夜间菜单](../images/anchored-panel-night.png)
