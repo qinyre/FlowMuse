@@ -153,7 +153,7 @@ class _CollectionNoteContentState extends State<CollectionNoteContent> {
         overlay.size.height - bottomRight.dy - 4,
       );
     }
-    final selected = await showMenu<_CollectionNoteAction>(
+    final selected = await showAnchoredPopupMenuAt<_CollectionNoteAction>(
       context: context,
       position: position,
       items: const [

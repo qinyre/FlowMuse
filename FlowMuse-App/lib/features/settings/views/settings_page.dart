@@ -17,6 +17,7 @@ import '../../../app/app_theme_preset.dart';
 import '../../../app/view_models/theme_view_model.dart';
 import '../../../shared/storage/local_database_path.dart';
 import '../../../shared/url_launcher/app_url_launcher.dart';
+import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/right_page.dart';
@@ -1679,21 +1680,32 @@ class _SettingsPopupMenu<T extends Object> extends StatelessWidget {
         ? Theme.of(context).colorScheme.onSurface
         : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38);
 
-    return PopupMenuButton<T>(
-      enabled: enabled,
-      position: PopupMenuPosition.under,
-      offset: const Offset(0, 4),
-      onSelected: onSelected,
-      itemBuilder: (context) => [
-        for (final option in options)
-          PopupMenuItem(value: option, child: Text(label(option))),
-      ],
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label(value), style: TextStyle(color: color)),
-          Icon(Icons.arrow_drop_down, color: color),
-        ],
+    return Builder(
+      builder: (context) => InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: !enabled
+            ? null
+            : () async {
+                final selected = await showAnchoredValuePicker<T>(
+                  context: context,
+                  value: value,
+                  options: options,
+                  label: label,
+                );
+                if (selected != null && context.mounted) {
+                  onSelected?.call(selected);
+                }
+              },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label(value), style: TextStyle(color: color)),
+              Icon(Icons.arrow_drop_down, color: color),
+            ],
+          ),
+        ),
       ),
     );
   }

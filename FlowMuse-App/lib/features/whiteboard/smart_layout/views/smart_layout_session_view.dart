@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../shared/widgets/anchored_dropdown_field.dart';
 import '../session/smart_layout_session_state.dart';
 import '../session/smart_layout_session_view_model.dart';
 import '../recognition/source_ledger.dart';
@@ -588,20 +589,13 @@ class _BlockCorrection extends StatelessWidget {
       title: Text('调整内容块（${blocks.length}）'),
       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       children: [
-        DropdownButton<String>(
-          isExpanded: true,
+        AnchoredDropdownField<String>(
           value: selected.id,
-          items: [
-            for (final block in blocks)
-              DropdownMenuItem(
-                value: block.id,
-                child: Text(
-                  '${roleLabel(block.role)} · ${block.text ?? '${block.sourceIds.length} 个源元素'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
+          options: [for (final block in blocks) block.id],
+          labelOf: (id) {
+            final block = blocks.firstWhere((b) => b.id == id);
+            return '${roleLabel(block.role)} · ${block.text ?? '${block.sourceIds.length} 个源元素'}';
+          },
           onChanged: onSelect,
         ),
         Text(

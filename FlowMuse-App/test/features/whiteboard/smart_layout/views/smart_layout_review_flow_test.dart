@@ -18,6 +18,7 @@ import 'package:flow_muse/features/whiteboard/smart_layout/session/smart_layout_
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/scene_fingerprint.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/snapshot/source_coverage_ledger.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/views/smart_layout_session_panel.dart';
+import 'package:flow_muse/shared/widgets/anchored_dropdown_field.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/views/smart_layout_session_view.dart';
 import 'package:flow_muse/features/whiteboard/smart_layout/validation/validated_candidate.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -218,7 +219,9 @@ void main() {
       }
 
       Future<void> openCorrections() async {
-        if (find.byType(DropdownButton<String>).evaluate().isNotEmpty) return;
+        if (find.byType(AnchoredDropdownField<String>).evaluate().isNotEmpty) {
+          return;
+        }
         await tester.ensureVisible(find.textContaining('调整内容块'));
         await tester.tap(find.textContaining('调整内容块'));
         await tester.pumpAndSettle();
@@ -226,7 +229,9 @@ void main() {
 
       await openCorrections();
       tester
-          .widget<DropdownButton<String>>(find.byType(DropdownButton<String>))
+          .widget<AnchoredDropdownField<String>>(
+            find.byType(AnchoredDropdownField<String>),
+          )
           .onChanged!(sourceBlock.id);
       await tester.pump();
       final roleButton = find.text(
@@ -265,7 +270,9 @@ void main() {
       await openCorrections();
       expect(
         tester
-            .widget<DropdownButton<String>>(find.byType(DropdownButton<String>))
+            .widget<AnchoredDropdownField<String>>(
+              find.byType(AnchoredDropdownField<String>),
+            )
             .value,
         sourceBlock.id,
         reason: '重跑后仍选中同一块，不误操作第一页首块',
