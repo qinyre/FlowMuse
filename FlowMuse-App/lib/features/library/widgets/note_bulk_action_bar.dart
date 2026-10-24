@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/utils/ui_lifecycle.dart';
+import '../../../shared/widgets/app_spacing.dart';
 import '../models/library_index.dart';
 
 class NoteBulkActionBar extends StatelessWidget {
@@ -12,9 +13,9 @@ class NoteBulkActionBar extends StatelessWidget {
     required this.onDeleteSelected,
     required this.onMoveSelectedToNotebook,
     required this.onAddTagsToSelected,
-  })  : _trash = false,
-        onRestoreSelected = null,
-        onDeleteSelectedForever = null;
+  }) : _trash = false,
+       onRestoreSelected = null,
+       onDeleteSelectedForever = null;
 
   const NoteBulkActionBar.trash({
     super.key,
@@ -22,11 +23,11 @@ class NoteBulkActionBar extends StatelessWidget {
     required this.onClearSelection,
     required this.onRestoreSelected,
     required this.onDeleteSelectedForever,
-  })  : _trash = true,
-        libraryIndex = null,
-        onDeleteSelected = null,
-        onMoveSelectedToNotebook = null,
-        onAddTagsToSelected = null;
+  }) : _trash = true,
+       libraryIndex = null,
+       onDeleteSelected = null,
+       onMoveSelectedToNotebook = null,
+       onAddTagsToSelected = null;
 
   final bool _trash;
   final int selectedCount;
@@ -40,42 +41,87 @@ class NoteBulkActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final destructive = TextButton.styleFrom(
+      foregroundColor: Theme.of(context).colorScheme.error,
+      minimumSize: const Size(48, 48),
+    );
+    final count = Semantics(
+      liveRegion: true,
+      child: Text(
+        '已选 $selectedCount 项',
+        style: Theme.of(context).textTheme.titleSmall,
+      ),
+    );
+    final cancel = TextButton(
+      onPressed: onClearSelection,
+      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      child: const Text('取消'),
+    );
+    final actions = Wrap(
+      spacing: AppSpacing.controlGap,
+      runSpacing: AppSpacing.controlGap,
+      children: [
+        if (_trash) ...[
+          TextButton(
+            onPressed: selectedCount == 0 ? null : onRestoreSelected,
+            style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+            child: const Text('恢复'),
+          ),
+          TextButton(
+            onPressed: selectedCount == 0 ? null : onDeleteSelectedForever,
+            style: destructive,
+            child: const Text('永久删除'),
+          ),
+        ] else ...[
+          _NotebookMoveMenu(
+            enabled: selectedCount > 0,
+            libraryIndex: libraryIndex!,
+            onSelected: onMoveSelectedToNotebook!,
+          ),
+          _TagAddMenu(
+            enabled: selectedCount > 0,
+            libraryIndex: libraryIndex!,
+            onSelected: onAddTagsToSelected!,
+          ),
+          TextButton(
+            onPressed: selectedCount == 0 ? null : onDeleteSelected,
+            style: destructive,
+            child: const Text('删除'),
+          ),
+        ],
+      ],
+    );
     return Card.outlined(
+      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Text('已选 $selectedCount 项'),
-            const Spacer(),
-            TextButton(onPressed: onClearSelection, child: const Text('取消')),
-            if (_trash) ...[
-              TextButton(
-                onPressed: selectedCount == 0 ? null : onRestoreSelected,
-                child: const Text('恢复'),
-              ),
-              TextButton(
-                onPressed: selectedCount == 0
-                    ? null
-                    : onDeleteSelectedForever,
-                child: const Text('永久删除'),
-              ),
-            ] else ...[
-              _NotebookMoveMenu(
-                enabled: selectedCount > 0,
-                libraryIndex: libraryIndex!,
-                onSelected: onMoveSelectedToNotebook!,
-              ),
-              _TagAddMenu(
-                enabled: selectedCount > 0,
-                libraryIndex: libraryIndex!,
-                onSelected: onAddTagsToSelected!,
-              ),
-              TextButton(
-                onPressed: selectedCount == 0 ? null : onDeleteSelected,
-                child: const Text('删除'),
-              ),
-            ],
-          ],
+        padding: const EdgeInsets.all(AppSpacing.listGap),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 640 ||
+                MediaQuery.textScalerOf(context).scale(16) > 22) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: count),
+                      cancel,
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.controlGap),
+                  actions,
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: count),
+                cancel,
+                actions,
+              ],
+            );
+          },
         ),
       ),
     );
@@ -156,6 +202,7 @@ class _LibraryPopupMenuButton<T extends Object> extends StatelessWidget {
   Widget build(BuildContext context) {
     return Builder(
       builder: (context) => TextButton(
+        style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
         onPressed: !enabled || items.isEmpty
             ? null
             : () async {
