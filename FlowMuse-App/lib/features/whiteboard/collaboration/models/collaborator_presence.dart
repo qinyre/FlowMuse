@@ -8,6 +8,7 @@ class CollaboratorPresence {
     this.button = 'up',
     this.selectedElementIds = const {},
     this.sceneBounds,
+    this.followingSocketId,
     this.idleState = CollaboratorIdleState.active,
     this.isCurrentUser = false,
     this.userId,
@@ -26,6 +27,7 @@ class CollaboratorPresence {
   final String button;
   final Map<String, bool> selectedElementIds;
   final Map<String, Object?>? sceneBounds;
+  final String? followingSocketId;
   final CollaboratorIdleState idleState;
   final bool isCurrentUser;
 
@@ -35,6 +37,8 @@ class CollaboratorPresence {
     String? button,
     Map<String, bool>? selectedElementIds,
     Map<String, Object?>? sceneBounds,
+    String? followingSocketId,
+    bool clearFollowingSocketId = false,
     CollaboratorIdleState? idleState,
     bool? isCurrentUser,
     String? userId,
@@ -53,6 +57,9 @@ class CollaboratorPresence {
       button: button ?? this.button,
       selectedElementIds: selectedElementIds ?? this.selectedElementIds,
       sceneBounds: sceneBounds ?? this.sceneBounds,
+      followingSocketId: clearFollowingSocketId
+          ? null
+          : followingSocketId ?? this.followingSocketId,
       idleState: idleState ?? this.idleState,
       isCurrentUser: isCurrentUser ?? this.isCurrentUser,
     );

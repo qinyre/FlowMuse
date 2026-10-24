@@ -12,6 +12,7 @@
 | 服务接口与部署 | [接口设计](技术设计/接口设计.md)、[四设备协作部署指南](技术设计/四设备协作部署指南.md) |
 | 复赛视频、脚本与重建 | [演示视频工程](参赛文档/复赛演示视频/README.md) |
 | 智能排版比赛演示 | [交付 Runbook](研发记录/competition-demo-runbook.md) |
+| 决赛优化优先级与实施计划 | [决赛产品优化计划书](研发记录/plans/2026-10-24-finals-product-optimization-plan.md) |
 | 架构决策与开发规范 | [架构决策](../.agent/decisions.md)、[编码约定](../.agent/conventions.md) |
 
 ## 目录用途

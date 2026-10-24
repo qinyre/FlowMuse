@@ -64,6 +64,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.collaborators = const [],
     this.collaboratorsListenable,
     this.collaborationParticipants = const [],
+    this.collaborationViewNotice,
     this.isCollaborationOwner = false,
     this.onStartCollaboration,
     this.onJoinCollaboration,
@@ -74,6 +75,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onCheckCollaboration,
     this.socialAction,
     this.onPointerPresence,
+    this.onCanvasInteraction,
     this.onVisibleSceneBoundsChanged,
     this.onDocumentRenamed,
     this.onRecognizeInk,
@@ -143,6 +145,7 @@ class MarkdrawEditor extends StatefulWidget {
   final ValueListenable<List<RemoteCollaboratorOverlay>>?
   collaboratorsListenable;
   final List<CollaborationParticipantBadge> collaborationParticipants;
+  final Widget? collaborationViewNotice;
   final bool isCollaborationOwner;
   final Future<void> Function()? onStartCollaboration;
   final Future<void> Function()? onJoinCollaboration;
@@ -154,6 +157,7 @@ class MarkdrawEditor extends StatefulWidget {
   final Widget? socialAction;
   final void Function(Offset localPosition, bool pointerDown)?
   onPointerPresence;
+  final VoidCallback? onCanvasInteraction;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
   final VoidCallback? onDocumentRenamed;
   final Future<InkRecognitionResult> Function(InkRecognitionRequest)?
@@ -200,6 +204,7 @@ class CollaborationParticipantBadge {
     this.creatorKey,
     this.focused = false,
     this.onTap,
+    this.onMenu,
   });
 
   final String username;
@@ -207,10 +212,11 @@ class CollaborationParticipantBadge {
   final bool isCurrentUser;
   final bool idle;
 
-  /// 该参与者的 creatorKey；null = 旧客户端游客，禁用按归属聚焦（v4 §6.2）。
+  /// null 只禁用归属聚焦；旧客户端仍可使用可用的视角菜单。
   final String? creatorKey;
   final bool focused;
   final VoidCallback? onTap;
+  final ValueChanged<BuildContext>? onMenu;
 }
 
 class _MarkdrawEditorState extends State<MarkdrawEditor>
@@ -825,6 +831,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                         collaboratorsListenable: widget.collaboratorsListenable,
                         remoteWetInkStore: widget.remoteWetInkStore,
                         onPointerPresence: widget.onPointerPresence,
+                        onUserInteraction: widget.onCanvasInteraction,
                         onVisibleSceneBoundsChanged:
                             widget.onVisibleSceneBoundsChanged,
                         attributionActionResolver:
@@ -1017,6 +1024,19 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+        if (widget.collaborationViewNotice != null)
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: bottomChromeOffset + _controlGroupReservedExtent,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: widget.collaborationViewNotice!,
               ),
             ),
           ),
@@ -1679,8 +1699,10 @@ class _ParticipantAvatar extends StatelessWidget {
         ? cs.primary
         : cs.surfaceContainerHighest;
     final label = participant.username.isEmpty ? '协' : participant.username;
-    final disabled =
-        participant.creatorKey == null && participant.onTap == null;
+    final onTap = participant.onMenu == null
+        ? participant.onTap
+        : () => participant.onMenu!(context);
+    final disabled = onTap == null;
 
     final avatar = Opacity(
       opacity: participant.idle ? 0.56 : 1,
@@ -1712,10 +1734,10 @@ class _ParticipantAvatar extends StatelessWidget {
     );
 
     return HoverTooltip(
-      message: disabled ? '暂不可按归属聚焦' : participant.username,
-      child: participant.onTap != null
+      message: disabled ? '暂不可按归属聚焦' : '${participant.username} · 协作操作',
+      child: onTap != null
           ? InkWell(
-              onTap: participant.onTap,
+              onTap: onTap,
               customBorder: const CircleBorder(),
               child: avatar,
             )
@@ -1788,16 +1810,24 @@ class _ParticipantOverflowAvatar extends StatelessWidget {
                   radius: 14,
                 ),
                 title: Text(participant.username),
-                subtitle: participant.creatorKey == null
+                subtitle:
+                    participant.creatorKey == null && participant.onMenu == null
                     ? const Text('暂不可按归属聚焦')
                     : null,
-                enabled: participant.onTap != null,
+                enabled:
+                    participant.onTap != null || participant.onMenu != null,
                 trailing: participant.focused ? const Icon(Icons.check) : null,
-                onTap: participant.onTap == null
+                onTap: participant.onTap == null && participant.onMenu == null
                     ? null
                     : () {
                         Navigator.of(sheetContext).pop();
-                        participant.onTap!();
+                        if (participant.onMenu != null) {
+                          runAfterUiFrame(() {
+                            if (context.mounted) participant.onMenu!(context);
+                          });
+                        } else {
+                          participant.onTap!();
+                        }
                       },
               ),
           ],

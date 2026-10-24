@@ -361,6 +361,7 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
         );
       case CollaborationMessageType.userVisibleSceneBounds:
         final sceneBounds = message.payload['sceneBounds'];
+        final following = message.payload['followingSocketId'];
         collaborators[socketId] = current.copyWith(
           username: message.payload['username'] as String?,
           userId: message.payload['userId'] as String?,
@@ -373,6 +374,13 @@ class WhiteboardViewModel extends Notifier<WhiteboardState> {
           sceneBounds: sceneBounds is Map
               ? Map<String, Object?>.from(sceneBounds)
               : null,
+          followingSocketId: following is String && following.length <= 256
+              ? following
+              : null,
+          clearFollowingSocketId:
+              following is! String ||
+              following.isEmpty ||
+              following.length > 256,
         );
       case CollaborationMessageType.sceneInit:
       case CollaborationMessageType.sceneUpdate:

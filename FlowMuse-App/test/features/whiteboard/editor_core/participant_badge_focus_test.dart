@@ -3,6 +3,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('无创建者标识的成员仍可打开协作菜单', (tester) async {
+    var opened = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: ParticipantAvatarStack(
+              participants: [
+                CollaborationParticipantBadge(
+                  username: '客',
+                  onMenu: (_) => opened++,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('客'));
+    expect(opened, 1);
+  });
   testWidgets('badge 点击触发 onTap；禁用态（无 creatorKey）不触发', (tester) async {
     var tapped = 0;
     await tester.pumpWidget(

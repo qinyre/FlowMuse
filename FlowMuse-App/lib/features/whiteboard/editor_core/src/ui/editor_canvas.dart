@@ -26,6 +26,7 @@ class EditorCanvas extends StatefulWidget {
   final void Function(Offset localPosition, bool pointerDown)?
   onPointerPresence;
   final void Function(Size canvasSize)? onVisibleSceneBoundsChanged;
+  final VoidCallback? onUserInteraction;
   final RemoteWetInkStore? remoteWetInkStore;
   final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
   Function(Element element)?
@@ -44,6 +45,7 @@ class EditorCanvas extends StatefulWidget {
     this.collaboratorsListenable,
     this.onPointerPresence,
     this.onVisibleSceneBoundsChanged,
+    this.onUserInteraction,
     this.remoteWetInkStore,
     this.attributionActionResolver,
     this.focusedCreatorKey,
@@ -378,6 +380,7 @@ class _EditorCanvasState extends State<EditorCanvas>
           pointer: collaborator.pointer,
           selectedElementIds: collaborator.selectedElementIds,
           idle: collaborator.idle,
+          editingText: collaborator.editingText,
           selectionBounds: [
             for (final id in collaborator.selectedElementIds)
               if (controller.editorState.scene.getElementById(ElementId(id))
@@ -500,6 +503,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       );
                     },
                     onPointerDown: (event) {
+                      widget.onUserInteraction?.call();
                       if (_beginTouch(event)) return;
                       if (_shouldHandlePagedTouch(event)) {
                         _startPagedTouch(event);
@@ -559,6 +563,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                       );
                     },
                     onPointerSignal: (event) {
+                      widget.onUserInteraction?.call();
                       controller.onPointerSignal(event);
                       widget.onVisibleSceneBoundsChanged?.call(canvasSize);
                     },

@@ -1044,6 +1044,8 @@ class CollaborationRepository {
     String? userId,
     String? avatarUrl,
     String? creatorKey,
+    String? followingSocketId,
+    String? attentionId,
   }) {
     return _send(
       room: room,
@@ -1055,6 +1057,8 @@ class CollaborationRepository {
         userId: userId,
         avatarUrl: avatarUrl,
         creatorKey: creatorKey,
+        followingSocketId: followingSocketId,
+        attentionId: attentionId,
       ),
     );
   }
