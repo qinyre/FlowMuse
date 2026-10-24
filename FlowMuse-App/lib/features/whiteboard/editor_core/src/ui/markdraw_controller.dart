@@ -4249,7 +4249,15 @@ class MarkdrawController extends ChangeNotifier {
   /// Clears the canvas, pushing the current scene to undo history.
   void resetCanvas() {
     _historyManager.push(_editorState.scene);
-    _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
+    // 页面标记承载可同步版式；重置内容时不能仅保留本机的 _layout。
+    final scene = _sceneWithLayoutPages(
+      Scene().upsertRemoteElements([
+        if (_layout.isPaged)
+          for (final element in _editorState.scene.elements)
+            if (element.isCanvasPage && !element.isDeleted) element,
+      ]),
+    );
+    _editorState = _editorState.copyWith(scene: scene, selectedIds: {});
     _documentName = null;
     _lastChangedElements = null;
     _notifySceneChanged(_editorState.scene, SceneChangeSource.reset);

@@ -1039,12 +1039,16 @@ void main() {
     });
   }
 
-  for (final template in [
-    CanvasPageTemplate.blank,
-    CanvasPageTemplate.grid,
-    CanvasPageTemplate.ancientBook,
+  for (final (template, resetFirst) in [
+    (CanvasPageTemplate.blank, false),
+    (CanvasPageTemplate.grid, false),
+    (CanvasPageTemplate.ancientBook, false),
+    (CanvasPageTemplate.blank, true),
+    (CanvasPageTemplate.grid, true),
+    (CanvasPageTemplate.ancientBook, true),
   ]) {
-    testWidgets('有限协作 ${template.name} 加入、续页和保存重开保持房主版式', (tester) async {
+    final label = '有限协作 ${template.name}${resetFirst ? ' 重置后' : ''}';
+    testWidgets('$label 加入、续页和保存重开保持房主版式', (tester) async {
       // Given: 房主已有两页，加入方通过临时协作入口进入。
       FlutterSecureStorage.setMockInitialValues({});
       final flow = template == CanvasPageTemplate.ancientBook
@@ -1060,6 +1064,7 @@ void main() {
         )
         ..insertBlankPage();
       addTearDown(hostController.dispose);
+      if (resetFirst) hostController.resetCanvas();
       final store = _MemberJoinSceneStore();
       final hub = MemoryRealtimeRoomHub();
       final host = CollaborationRepository(
@@ -1236,6 +1241,160 @@ void main() {
     expect(controller.layout.type, CanvasLayoutType.unbounded);
     expect(controller.layout.pages, isEmpty);
     expect(controller.currentScene.elements, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _drainIo(tester, container);
+  });
+
+  testWidgets('菜单重置后创建房间保持版式，双向笔迹和协作中再次重置正常', (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final note = (await tester.runAsync(
+      () => library.createNote(
+        title: 'reset-before-create-room',
+        noteType: NoteType.paged,
+        pageTemplate: PageTemplate.grid,
+      ),
+    ))!;
+    final store = _MemberJoinSceneStore();
+    final hub = MemoryRealtimeRoomHub();
+    final host = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'reset-host'),
+      sceneStore: store,
+    );
+    final peer = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'reset-guest'),
+      sceneStore: store,
+    );
+    addTearDown(host.stop);
+    addTearDown(peer.stop);
+    final guest = MarkdrawController();
+    addTearDown(guest.dispose);
+    final guestAdapter = WhiteboardCollaborationAdapter(guest);
+    final container = _container(library: library, collaboration: host);
+    final controller = await _open(tester, container, note);
+    controller.insertBlankPage();
+    controller.applyResult(
+      AddElementResult(
+        RectangleElement(
+          id: const ElementId('before-menu-reset'),
+          x: 100,
+          y: 100,
+          width: 40,
+          height: 30,
+        ),
+      ),
+    );
+    final bounds = controller.layout.pages.map((page) => page.bounds).toList();
+
+    Future<void> resetFromMenu() async {
+      await tester.tap(find.byIcon(Icons.menu));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('重置画布'));
+      await tester.tap(find.text('重置画布'));
+      await _drainIo(tester, container);
+    }
+
+    await resetFromMenu();
+    expect(
+      controller.currentScene.getElementById(
+        const ElementId('before-menu-reset'),
+      ),
+      isNull,
+    );
+    final creating = tester
+        .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+        .onStartCollaboration!();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.widgetWithText(FilledButton, '创建房间'),
+      ),
+    );
+    await _drainIo(
+      tester,
+      container,
+      until: () => find.text('分享协作房间').evaluate().isNotEmpty,
+    );
+    final room = container.read(whiteboardViewModelProvider).activeRoom!;
+    await tester.tap(find.text('知道了'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await creating;
+    final joined = (await tester.runAsync(
+      () => peer.joinRoom(room: room, localScene: ExcalidrawScene.empty()),
+    ))!;
+    guestAdapter.applyRemoteScene(joined.scene);
+    expect(guest.layout.type, CanvasLayoutType.paged);
+    expect(guest.layout.template, CanvasPageTemplate.grid);
+    expect(guest.layout.pages.map((page) => page.bounds), bounds);
+    final subscription = peer.encryptedMessages(room).listen((message) {
+      if (message.type == CollaborationMessageType.sceneInit ||
+          message.type == CollaborationMessageType.sceneUpdate) {
+        guestAdapter.applyRemoteElements(
+          peer.reconcileRemoteElements(
+            remoteElements: message.elements,
+            protectedElementIds: guestAdapter.protectedElementIds(),
+          ),
+        );
+      }
+    });
+    addTearDown(subscription.cancel);
+
+    controller.switchTool(ToolType.freedraw);
+    await _stroke(tester, const Offset(600, 400));
+    await _drainIo(tester, container, until: () => _ink(guest).isNotEmpty);
+    expect(_ink(guest).single.id, _ink(controller).single.id);
+    final hostStrokeId = _ink(controller).single.id;
+    final guestStroke = FreedrawElement(
+      id: const ElementId('guest-after-reset'),
+      x: 200,
+      y: 300,
+      width: 40,
+      height: 20,
+      points: const [Point(0, 0), Point(40, 20)],
+    );
+    guest.applyResult(AddElementResult(guestStroke));
+    await tester.runAsync(
+      () => peer.broadcastScene(
+        room: room,
+        scene: guestAdapter.currentScene(),
+        syncAll: true,
+      ),
+    );
+    await _drainIo(
+      tester,
+      container,
+      until: () => _ink(controller).length == 2,
+    );
+    controller.undo();
+    await _drainIo(tester, container, until: () => _ink(guest).length == 1);
+    expect(_ink(controller).single.id, guestStroke.id);
+    expect(_ink(guest).single.id, guestStroke.id);
+    controller.redo();
+    await _drainIo(tester, container, until: () => _ink(guest).length == 2);
+    expect(
+      _ink(controller).any((element) => element.id == hostStrokeId),
+      isTrue,
+    );
+
+    await resetFromMenu();
+    await _drainIo(tester, container, until: () => _ink(guest).isEmpty);
+    expect(guest.layout.type, CanvasLayoutType.paged);
+    expect(guest.layout.pages.map((page) => page.bounds), bounds);
+    expect(guest.currentScene.activeElements, hasLength(2));
+    final nextStroke = guestStroke.copyWith(
+      id: const ElementId('guest-after-second-reset'),
+    );
+    guest.applyResult(AddElementResult(nextStroke));
+    await tester.runAsync(
+      () => peer.broadcastScene(
+        room: room,
+        scene: guestAdapter.currentScene(),
+        syncAll: true,
+      ),
+    );
+    await _drainIo(tester, container, until: () => _ink(controller).isNotEmpty);
+    expect(_ink(controller).single.id, nextStroke.id);
+    expect(controller.layout.pages.map((page) => page.bounds), bounds);
     await tester.pumpWidget(const SizedBox.shrink());
     await _drainIo(tester, container);
   });
