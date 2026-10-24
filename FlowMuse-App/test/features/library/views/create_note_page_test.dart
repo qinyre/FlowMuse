@@ -64,6 +64,31 @@ Widget _page({
 );
 
 void main() {
+  testWidgets('跨断点缩放窗口保留标题输入连接和焦点', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_page());
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '课堂');
+    final inputState = tester.state<EditableTextState>(
+      find.byType(EditableText),
+    );
+    await tester.binding.setSurfaceSize(const Size(360, 900));
+    await tester.pumpAndSettle();
+    expect(
+      tester.state<EditableTextState>(find.byType(EditableText)),
+      same(inputState),
+    );
+    expect(inputState.widget.focusNode.hasFocus, isTrue);
+    tester.testTextInput.enterText('课堂笔记');
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '课堂笔记',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   for (final (width, scale, theme) in [
     (360.0, 1.0, AppThemeId.day),
     (360.0, 2.0, AppThemeId.night),

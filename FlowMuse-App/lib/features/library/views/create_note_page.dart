@@ -274,20 +274,37 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (wide)
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Expanded(child: Center(child: preview)),
-                              const SizedBox(width: AppSpacing.sectionGap),
-                              Expanded(flex: 2, child: setup),
-                            ],
-                          )
-                        else ...[
-                          setup,
-                          const SizedBox(height: AppSpacing.listGap),
-                          preview,
-                        ],
+                        // 跨断点保留表单元素，避免重建正在输入的文本连接。
+                        Flex(
+                          direction: wide ? Axis.horizontal : Axis.vertical,
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: wide
+                              ? CrossAxisAlignment.center
+                              : CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(
+                              width: wide
+                                  ? (constraints.maxWidth -
+                                            AppSpacing.sectionGap) *
+                                        2 /
+                                        3
+                                  : constraints.maxWidth,
+                              child: setup,
+                            ),
+                            SizedBox(
+                              width: wide ? AppSpacing.sectionGap : 0,
+                              height: wide ? 0 : AppSpacing.listGap,
+                            ),
+                            SizedBox(
+                              width: wide
+                                  ? (constraints.maxWidth -
+                                            AppSpacing.sectionGap) /
+                                        3
+                                  : constraints.maxWidth,
+                              child: Center(child: preview),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: AppSpacing.sectionGap),
                         const _SectionTitle(text: '选择页面模板'),
                         const SizedBox(height: AppSpacing.listGap),
