@@ -47,3 +47,7 @@
 - `flutter test --no-pub --reporter compact`：1779 个通过，6 个既有跳过。随后补充长按与光标保持断言，定向运行 `keyboard_focus_recovery_test.dart` 和 `editor_canvas_test.dart`，12 个通过；新增用例覆盖普通输入框、搜索框、底层 `EditableText`、拖动、长按、切换焦点、已有局部修复和两类白板编辑器。
 - `flutter build hap --no-pub`：先因当前终端缺少 `java` 命令而失败；进程内设置 `JAVA_HOME` 指向本机 JDK 17 并补全 PATH 后构建成功，产出 `entry-default-signed.hap`。
 - 鸿蒙真机尚未执行交互验收。需在平板上分别重复“点输入框 → 收回键盘 → 再点同一输入框”，重点覆盖登录、资料库重命名、搜索、聊天、白板文字与画框标签；检查光标位置和未提交内容保持不变。Widget 测试模拟的是焦点与输入连接生命周期，无法证明设备输入法行为。
+
+## 2026-10-24 新建页收口
+
+第二轮 UI 优化移除新建标题遗留的全端切焦及恢复排除标记，标题在鸿蒙复用本计划的应用层恢复，其他端采用标准 TextField 行为。补充标准重复点击不失焦、统一恢复及跨断点输入保留回归；详见 [第二轮界面优化](2026-10-24-ui-polish-round-two.md)。

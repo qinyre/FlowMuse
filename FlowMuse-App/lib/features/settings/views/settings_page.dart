@@ -64,31 +64,42 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final selectedPreset = ref.watch(themeViewModelProvider);
     final themeViewModel = ref.read(themeViewModelProvider.notifier);
+    void selectSection(_SettingsSection section) =>
+        setState(() => _section = section);
+    void back() {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(AppRoutes.library);
+      }
+    }
 
     return AppShell(
       section: ShellSection.settings,
       showSidebar: false,
-      child: Row(
-        children: [
-          _SettingsSidebar(
-            selected: _section,
-            onSelected: (section) => setState(() => _section = section),
-            onBack: () {
-              if (context.canPop()) {
-                context.pop();
-                return;
-              }
-              context.go(AppRoutes.library);
-            },
-          ),
-          Expanded(
-            child: _SettingsContent(
-              section: _section,
-              selectedPreset: selectedPreset,
-              onPresetChanged: themeViewModel.changePreset,
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < shellCompactBreakpoint;
+          return Row(
+            children: [
+              if (!compact)
+                _SettingsSidebar(
+                  selected: _section,
+                  onSelected: selectSection,
+                  onBack: back,
+                ),
+              Expanded(
+                child: _SettingsContent(
+                  section: _section,
+                  selectedPreset: selectedPreset,
+                  onPresetChanged: themeViewModel.changePreset,
+                  onBack: compact ? back : null,
+                  onSectionChanged: compact ? selectSection : null,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -220,11 +231,15 @@ class _SettingsContent extends StatelessWidget {
     required this.section,
     required this.selectedPreset,
     required this.onPresetChanged,
+    this.onBack,
+    this.onSectionChanged,
   });
 
   final _SettingsSection section;
   final AppThemePreset selectedPreset;
   final ValueChanged<AppThemePreset> onPresetChanged;
+  final VoidCallback? onBack;
+  final ValueChanged<_SettingsSection>? onSectionChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +250,40 @@ class _SettingsContent extends StatelessWidget {
       child: RightPageScaffold(
         title: section.label,
         forceCenterTitle: true,
+        leadingActions: [
+          if (onBack != null)
+            IconButton(
+              tooltip: '返回',
+              onPressed: onBack,
+              icon: const Icon(LucideIcons.chevronLeft),
+            ),
+          if (onSectionChanged != null)
+            Builder(
+              builder: (context) => IconButton(
+                tooltip: '设置分类',
+                icon: const Icon(LucideIcons.list),
+                onPressed: () async {
+                  final selected =
+                      await showAnchoredPopupMenu<_SettingsSection>(
+                        context: context,
+                        placement: AnchoredPopupPlacement.below,
+                        items: [
+                          for (final option in _SettingsSection.values)
+                            CheckedPopupMenuItem(
+                              value: option,
+                              checked: option == section,
+                              child: Text(option.label),
+                            ),
+                        ],
+                      );
+                  if (selected == null || !context.mounted) return;
+                  runAfterUiTeardown(() {
+                    if (context.mounted) onSectionChanged?.call(selected);
+                  });
+                },
+              ),
+            ),
+        ],
         topContent: [
           if (section == _SettingsSection.theme) ...[
             const ThemeHero(semanticLabel: '当前主题背景'),
@@ -274,16 +323,13 @@ class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.pageInset,
-        0,
-        AppSpacing.pageInset,
-        0,
-      ),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sectionGap),
       children: [
-        _SectionCaption(
-          title: widget.section.label,
-          subtitle: widget.section.description,
+        Text(
+          widget.section.description,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: AppSpacing.sectionGap),
         switch (widget.section) {
@@ -1559,8 +1605,7 @@ class _ToolsSettingsSection extends ConsumerWidget {
           _SettingsCard(
             child: Column(
               children: [
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                _SettingsChoiceTile(
                   leading: const Icon(LucideIcons.mousePointer2),
                   title: const Text('默认工具'),
                   subtitle: const Text('打开白板时自动选择'),
@@ -1573,8 +1618,7 @@ class _ToolsSettingsSection extends ConsumerWidget {
                   ),
                 ),
                 const Divider(height: 1),
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                _SettingsChoiceTile(
                   leading: const Icon(LucideIcons.penTool),
                   title: const Text('默认笔形'),
                   subtitle: const Text('颜色和粗细会按每支笔分别记忆'),
@@ -1660,6 +1704,57 @@ class _ToolsSettingsSection extends ConsumerWidget {
   }
 }
 
+class _SettingsChoiceTile extends StatelessWidget {
+  const _SettingsChoiceTile({
+    required this.leading,
+    required this.title,
+    required this.subtitle,
+    required this.trailing,
+    this.enabled = true,
+  });
+
+  final Widget leading;
+  final Widget title;
+  final Widget subtitle;
+  final Widget trailing;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked =
+            constraints.maxWidth < 460 ||
+            MediaQuery.textScalerOf(context).scale(16) > 22;
+        final text = ListTile(
+          contentPadding: stacked
+              ? EdgeInsets.zero
+              : const EdgeInsets.symmetric(horizontal: AppSpacing.sectionGap),
+          enabled: enabled,
+          leading: leading,
+          title: title,
+          subtitle: subtitle,
+          trailing: stacked ? null : trailing,
+        );
+        if (!stacked) return text;
+        return Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.compactPageInset,
+            vertical: AppSpacing.controlGap,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              text,
+              Align(alignment: AlignmentDirectional.centerEnd, child: trailing),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _SettingsPopupMenu<T extends Object> extends StatelessWidget {
   const _SettingsPopupMenu({
     required this.value,
@@ -1681,9 +1776,12 @@ class _SettingsPopupMenu<T extends Object> extends StatelessWidget {
         : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.38);
 
     return Builder(
-      builder: (context) => InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: !enabled
+      builder: (context) => OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          minimumSize: const Size(48, 48),
+        ),
+        onPressed: !enabled
             ? null
             : () async {
                 final selected = await showAnchoredValuePicker<T>(
@@ -1696,15 +1794,12 @@ class _SettingsPopupMenu<T extends Object> extends StatelessWidget {
                   onSelected?.call(selected);
                 }
               },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label(value), style: TextStyle(color: color)),
-              Icon(Icons.arrow_drop_down, color: color),
-            ],
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label(value), style: TextStyle(color: color)),
+            Icon(Icons.arrow_drop_down, color: color),
+          ],
         ),
       ),
     );
@@ -1720,8 +1815,7 @@ class _DocumentSettingsSection extends ConsumerWidget {
       return _SettingsCard(
         child: Column(
           children: [
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            _SettingsChoiceTile(
               leading: const Icon(LucideIcons.save),
               title: const Text('自动保存间隔'),
               subtitle: Text(
@@ -1738,8 +1832,7 @@ class _DocumentSettingsSection extends ConsumerWidget {
               ),
             ),
             const Divider(height: 1),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            _SettingsChoiceTile(
               leading: const Icon(LucideIcons.fileText),
               title: const Text('默认文档类型'),
               subtitle: const Text('新建笔记时预先选择'),
@@ -1752,8 +1845,7 @@ class _DocumentSettingsSection extends ConsumerWidget {
               ),
             ),
             const Divider(height: 1),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            _SettingsChoiceTile(
               leading: const Icon(LucideIcons.layoutTemplate),
               title: const Text('默认页面模板'),
               subtitle: const Text('仅用于以后新建的文档'),
@@ -1766,8 +1858,7 @@ class _DocumentSettingsSection extends ConsumerWidget {
               ),
             ),
             const Divider(height: 1),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            _SettingsChoiceTile(
               leading: const Icon(LucideIcons.rows3),
               title: const Text('默认页面排列'),
               subtitle: const Text('分页文档的新页面排列方向'),
@@ -1838,9 +1929,8 @@ class _StylusSettingsSection extends ConsumerWidget {
               },
             ),
             const Divider(height: 1),
-            ListTile(
+            _SettingsChoiceTile(
               enabled: preferences.pressureEnabled,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
               leading: const Icon(LucideIcons.activity),
               title: const Text('压感曲线'),
               subtitle: const Text('控制轻压和重压之间的变化幅度'),
@@ -2206,43 +2296,6 @@ class _SettingsCard extends StatelessWidget {
   }
 }
 
-class _SectionCaption extends StatelessWidget {
-  const _SectionCaption({required this.title, this.subtitle});
-
-  final String title;
-  final String? subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final mutedColor = Theme.of(context).colorScheme.onSurfaceVariant;
-
-    return Padding(
-      padding: const EdgeInsets.only(left: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: mutedColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: AppSpacing.controlGap),
-            Text(
-              subtitle!,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: mutedColor),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 class _ThemePresetSection extends StatelessWidget {
   const _ThemePresetSection({
     required this.selectedPreset,
@@ -2257,11 +2310,6 @@ class _ThemePresetSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionCaption(
-          title: '主题设置',
-          subtitle: '主题是一整套视觉方案，包含明暗、强调色和背景',
-        ),
-        const SizedBox(height: 16),
         _ThemePresetGroup(
           title: '基础主题',
           presets: appThemePresets.take(3).toList(),
@@ -2297,33 +2345,43 @@ class _ThemePresetGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SettingsCard(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 88,
-              child: Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-            ),
-            Expanded(
-              child: Wrap(
-                spacing: AppSpacing.controlGap,
-                runSpacing: AppSpacing.controlGap,
+        padding: const EdgeInsets.all(AppSpacing.compactPageInset),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final heading = Text(
+              title,
+              style: Theme.of(context).textTheme.titleSmall,
+            );
+            final choices = Wrap(
+              spacing: AppSpacing.controlGap,
+              runSpacing: AppSpacing.controlGap,
+              children: [
+                for (final preset in presets)
+                  _ThemePresetChip(
+                    preset: preset,
+                    selected: preset.id == selectedPreset.id,
+                    onSelected: () => onPresetChanged(preset),
+                  ),
+              ],
+            );
+            if (constraints.maxWidth < 540 ||
+                MediaQuery.textScalerOf(context).scale(16) > 22) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final preset in presets)
-                    _ThemePresetChip(
-                      preset: preset,
-                      selected: preset.id == selectedPreset.id,
-                      onSelected: () => onPresetChanged(preset),
-                    ),
+                  heading,
+                  const SizedBox(height: AppSpacing.listGap),
+                  choices,
                 ],
-              ),
-            ),
-          ],
+              );
+            }
+            return Row(
+              children: [
+                SizedBox(width: 88, child: heading),
+                Expanded(child: choices),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -2357,8 +2415,10 @@ class _ThemePresetChip extends StatelessWidget {
           onTap: onSelected,
           borderRadius: BorderRadius.circular(AppSpacing.radius),
           child: Container(
-            width: 116,
-            height: 44,
+            width: MediaQuery.textScalerOf(
+              context,
+            ).scale(116).clamp(116, double.infinity),
+            constraints: const BoxConstraints(minHeight: 48),
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppSpacing.radius),

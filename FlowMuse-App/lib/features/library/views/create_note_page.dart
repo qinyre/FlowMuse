@@ -13,7 +13,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_spacing.dart';
-import '../../../shared/widgets/keyboard_focus_recovery.dart';
+import '../../../shared/widgets/app_motion.dart';
+import '../../../shared/widgets/right_page.dart';
 import '../../whiteboard/editor_core/markdraw.dart'
     show
         CanvasLayout,
@@ -212,71 +213,122 @@ class _CreateNotePageState extends ConsumerState<CreateNotePage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.pageInset),
-          child: Column(
-            children: [
-              _TopBar(creating: _creating, onCreate: _createNote),
-              const SizedBox(height: 34),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Wrap(
-                          alignment: WrapAlignment.center,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 28,
-                          runSpacing: 18,
+        child: RightPageScaffold(
+          title: '新建笔记',
+          forceCenterTitle: true,
+          leadingActions: [
+            TextButton(
+              onPressed: () => context.pop(),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              child: const Text('取消'),
+            ),
+          ],
+          actions: [
+            FilledButton(
+              onPressed: _creating ? null : _createNote,
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_creating) ...[
+                    const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: AppSpacing.controlGap),
+                  ],
+                  Text(_creating ? '处理中…' : '创建'),
+                ],
+              ),
+            ),
+          ],
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.listGap),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1040),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final wide =
+                        constraints.maxWidth >= 760 &&
+                        MediaQuery.textScalerOf(context).scale(16) <= 22;
+                    final setup = _NoteSetupPanel(
+                      creating: _creating,
+                      titleController: _titleController,
+                      titleFocusNode: _titleFocusNode,
+                      titleChanged: (value) => _title = value,
+                      noteType: noteType,
+                      onNoteTypeChanged: (value) =>
+                          setState(() => _noteType = value),
+                      pageFlow: pageFlow,
+                      onPageFlowChanged: (value) =>
+                          setState(() => _pageFlow = value),
+                      onImport: () => unawaited(_importPdf()),
+                      onSubmitted: _createNote,
+                    );
+                    final preview = _LargePaperPreview(
+                      template: pageTemplate,
+                      compact: !wide,
+                    );
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // 跨断点保留表单元素，避免重建正在输入的文本连接。
+                        Flex(
+                          direction: wide ? Axis.horizontal : Axis.vertical,
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: wide
+                              ? CrossAxisAlignment.center
+                              : CrossAxisAlignment.stretch,
                           children: [
-                            _LargePaperPreview(template: pageTemplate),
-                            _NoteSetupPanel(
-                              titleController: _titleController,
-                              titleFocusNode: _titleFocusNode,
-                              titleChanged: (value) => _title = value,
-                              noteType: noteType,
-                              onNoteTypeChanged: (value) {
-                                setState(() => _noteType = value);
-                              },
-                              pageFlow: pageFlow,
-                              onPageFlowChanged: (value) {
-                                setState(() => _pageFlow = value);
-                              },
-                              onImport: () {
-                                unawaited(_importPdf());
-                              },
-                              onSubmitted: _createNote,
+                            SizedBox(
+                              width: wide
+                                  ? (constraints.maxWidth -
+                                            AppSpacing.sectionGap) *
+                                        2 /
+                                        3
+                                  : constraints.maxWidth,
+                              child: setup,
+                            ),
+                            SizedBox(
+                              width: wide ? AppSpacing.sectionGap : 0,
+                              height: wide ? 0 : AppSpacing.listGap,
+                            ),
+                            SizedBox(
+                              width: wide
+                                  ? (constraints.maxWidth -
+                                            AppSpacing.sectionGap) /
+                                        3
+                                  : constraints.maxWidth,
+                              child: Center(child: preview),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 36),
-                      _SectionTitle(text: '选择页面模板'),
-                      const SizedBox(height: 16),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                        const SizedBox(height: AppSpacing.sectionGap),
+                        const _SectionTitle(text: '选择页面模板'),
+                        const SizedBox(height: AppSpacing.listGap),
+                        Wrap(
+                          spacing: AppSpacing.listGap,
+                          runSpacing: AppSpacing.listGap,
                           children: [
-                            for (final template in PageTemplate.values) ...[
+                            for (final template in PageTemplate.values)
                               _TemplateCard(
                                 template: template,
                                 selected: pageTemplate == template,
-                                onTap: () {
-                                  setState(() => _pageTemplate = template);
-                                },
+                                onTap: _creating
+                                    ? null
+                                    : () => setState(
+                                        () => _pageTemplate = template,
+                                      ),
                               ),
-                              if (template != PageTemplate.values.last)
-                                const SizedBox(width: 22),
-                            ],
                           ],
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    );
+                  },
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -312,106 +364,57 @@ PageFlow _pageFlowFor(CanvasPageFlow flow) => PageFlow.values.firstWhere(
   orElse: () => PageFlow.topToBottom,
 );
 
-class _TopBar extends StatelessWidget {
-  const _TopBar({required this.creating, required this.onCreate});
+class _LargePaperPreview extends StatelessWidget {
+  const _LargePaperPreview({required this.template, required this.compact});
 
-  final bool creating;
-  final VoidCallback onCreate;
+  final PageTemplate template;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
+    final paper = SizedBox(
+      width: compact ? 64 : 140,
+      height: compact ? 90 : 198,
+      child: _PaperSurface(template: template),
+    );
+    final caption = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: compact
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       children: [
-        Row(
-          children: [
-            TextButton(
-              onPressed: () => context.pop(),
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-                textStyle: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppSpacing.radius),
-                ),
-              ),
-              child: const Text('取消'),
-            ),
-            const Spacer(),
-            ElevatedButton(
-              onPressed: creating
-                  ? null
-                  : () {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      onCreate();
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                textStyle: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 10,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppSpacing.radius),
-                ),
-              ),
-              child: Text(creating ? '创建中' : '创建'),
-            ),
-          ],
-        ),
+        Text('模板预览', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: AppSpacing.controlGap),
         Text(
-          '新建笔记',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurface,
-            fontWeight: FontWeight.w700,
-          ),
+          template.displayName,
+          style: Theme.of(context).textTheme.titleMedium,
         ),
       ],
     );
-  }
-}
-
-class _LargePaperPreview extends StatelessWidget {
-  const _LargePaperPreview({required this.template});
-
-  final PageTemplate template;
-
-  @override
-  Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppSpacing.radius),
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 94,
-              height: 133,
-              child: _PaperSurface(template: template),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              template.displayName,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface,
-                fontWeight: FontWeight.w700,
+        padding: const EdgeInsets.all(AppSpacing.sectionGap),
+        child: compact
+            ? Row(
+                children: [
+                  paper,
+                  const SizedBox(width: AppSpacing.sectionGap),
+                  Expanded(child: caption),
+                ],
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  paper,
+                  const SizedBox(height: AppSpacing.listGap),
+                  caption,
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -419,6 +422,7 @@ class _LargePaperPreview extends StatelessWidget {
 
 class _NoteSetupPanel extends StatelessWidget {
   const _NoteSetupPanel({
+    required this.creating,
     required this.titleController,
     required this.titleFocusNode,
     required this.titleChanged,
@@ -430,6 +434,7 @@ class _NoteSetupPanel extends StatelessWidget {
     required this.onSubmitted,
   });
 
+  final bool creating;
   final TextEditingController titleController;
   final FocusNode titleFocusNode;
   final ValueChanged<String> titleChanged;
@@ -446,31 +451,37 @@ class _NoteSetupPanel extends StatelessWidget {
     final segmentedStyle = ButtonStyle(
       backgroundColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected)
-            ? colorScheme.surfaceContainerLow
+            ? colorScheme.primaryContainer
             : colorScheme.surface,
       ),
-      foregroundColor: WidgetStatePropertyAll(colorScheme.onSurface),
+      foregroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? colorScheme.onPrimaryContainer
+            : null,
+      ),
+      minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
       side: WidgetStatePropertyAll(
         BorderSide(color: colorScheme.outlineVariant),
       ),
     );
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 430, minWidth: 360),
+      constraints: const BoxConstraints(maxWidth: 680),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
           border: Border.all(
             color: Theme.of(context).colorScheme.outlineVariant,
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(AppSpacing.compactPageInset),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               _TitleInput(
+                enabled: !creating,
                 controller: titleController,
                 focusNode: titleFocusNode,
                 onChanged: titleChanged,
@@ -495,9 +506,9 @@ class _NoteSetupPanel extends StatelessWidget {
                     ),
                   ],
                   selected: {noteType},
-                  onSelectionChanged: (value) {
-                    onNoteTypeChanged(value.first);
-                  },
+                  onSelectionChanged: creating
+                      ? null
+                      : (value) => onNoteTypeChanged(value.first),
                 ),
               ),
               const SizedBox(height: 10),
@@ -519,24 +530,35 @@ class _NoteSetupPanel extends StatelessWidget {
                     ),
                   ],
                   selected: {pageFlow},
-                  onSelectionChanged: noteType == NoteType.paged
+                  onSelectionChanged: !creating && noteType == NoteType.paged
                       ? (value) {
                           onPageFlowChanged(value.first);
                         }
                       : null,
                 ),
               ),
-              const SizedBox(height: 10),
-              _PanelRow(
-                label: '导入',
-                child: IconButton.outlined(
-                  tooltip: '导入文件',
-                  onPressed: onImport,
-                  style: IconButton.styleFrom(
-                    foregroundColor: colorScheme.onSurfaceVariant,
-                    side: BorderSide(color: colorScheme.outlineVariant),
+              const SizedBox(height: AppSpacing.listGap),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  noteType == NoteType.paged
+                      ? '分页画布，适合逐页书写与整理。'
+                      : '无界画布，可向四周自由延展。',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const Divider(height: AppSpacing.sectionGap),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: OutlinedButton.icon(
+                  onPressed: creating ? null : onImport,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(48, 48),
                   ),
                   icon: const Icon(LucideIcons.upload),
+                  label: const Text('导入 PDF'),
                 ),
               ),
             ],
@@ -549,12 +571,14 @@ class _NoteSetupPanel extends StatelessWidget {
 
 class _TitleInput extends StatelessWidget {
   const _TitleInput({
+    required this.enabled,
     required this.controller,
     required this.focusNode,
     required this.onChanged,
     required this.onSubmitted,
   });
 
+  final bool enabled;
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
@@ -562,62 +586,45 @@ class _TitleInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 48,
-      child: KeyboardFocusRecoveryExclusion(
-        child: TextField(
-          controller: controller,
-          focusNode: focusNode,
-          keyboardType: TextInputType.text,
-          textInputAction: TextInputAction.done,
-          maxLines: 1,
-          cursorHeight: 18,
-          onTapAlwaysCalled: true,
-          onTap: () {
-            if (!focusNode.hasFocus) {
-              FocusScope.of(context).requestFocus(focusNode);
-              return;
-            }
-            focusNode.unfocus();
-            Future<void>.delayed(const Duration(milliseconds: 50), () {
-              if (context.mounted) {
-                FocusScope.of(context).requestFocus(focusNode);
-              }
-            });
-          },
-          onChanged: onChanged,
-          onSubmitted: (_) => onSubmitted(),
-          textAlign: TextAlign.start,
-          textAlignVertical: TextAlignVertical.center,
-          decoration: InputDecoration(
-            hintText: '输入笔记标题',
-            filled: true,
-            fillColor: Theme.of(context).colorScheme.surfaceContainer,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppSpacing.radius),
-              borderSide: BorderSide(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppSpacing.radius),
-              borderSide: BorderSide(
-                color: Theme.of(context).colorScheme.primary,
-                width: 1.5,
-              ),
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppSpacing.radius),
-              borderSide: BorderSide(
-                color: Theme.of(context).colorScheme.outlineVariant,
-              ),
-            ),
-            isDense: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 4,
-            ),
+    return TextField(
+      enabled: enabled,
+      controller: controller,
+      focusNode: focusNode,
+      keyboardType: TextInputType.text,
+      textInputAction: TextInputAction.done,
+      maxLines: 1,
+      onChanged: onChanged,
+      onSubmitted: (_) => onSubmitted(),
+      textAlign: TextAlign.start,
+      textAlignVertical: TextAlignVertical.center,
+      decoration: InputDecoration(
+        labelText: '笔记标题',
+        hintText: '留空则自动命名',
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surfaceContainer,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
           ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.primary,
+            width: 1.5,
+          ),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 16,
         ),
       ),
     );
@@ -632,18 +639,28 @@ class _PanelRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final title = Text(
           label,
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
             color: Theme.of(context).colorScheme.onSurface,
             fontWeight: FontWeight.w700,
           ),
-        ),
-        const Spacer(),
-        child,
-      ],
+        );
+        if (constraints.maxWidth < 360 ||
+            MediaQuery.textScalerOf(context).scale(16) > 22) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              title,
+              const SizedBox(height: AppSpacing.controlGap),
+              child,
+            ],
+          );
+        }
+        return Row(children: [title, const Spacer(), child]);
+      },
     );
   }
 }
@@ -674,60 +691,81 @@ class _TemplateCard extends StatelessWidget {
 
   final PageTemplate template;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 126,
-      height: 222,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppSpacing.radius),
-        onTap: onTap,
-        child: Column(
-          children: [
-            Container(
-              width: 106,
-              height: 150,
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: selected
-                    ? Theme.of(context).colorScheme.surfaceContainerLow
-                    : Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(AppSpacing.radius),
-                border: Border.all(
-                  color: selected
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outlineVariant,
-                  width: selected ? 1.5 : 1,
-                ),
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: onTap != null,
+      child: AnimatedContainer(
+        width: 126,
+        duration: AppMotion.resolve(context, AppMotion.quick),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          color: selected ? colors.primaryContainer : colors.surface,
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          border: Border.all(
+            color: selected ? colors.primary : colors.outlineVariant,
+          ),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppSpacing.radius),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.controlGap),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 106,
+                    height: 150,
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? Theme.of(context).colorScheme.surfaceContainerLow
+                          : Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(AppSpacing.radius),
+                      border: Border.all(
+                        color: selected
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.outlineVariant,
+                        width: selected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: _PaperSurface(template: template),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    template.displayName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: selected
+                          ? colors.onPrimaryContainer
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 20,
+                    child: selected
+                        ? Icon(
+                            LucideIcons.circleCheck,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 20,
+                          )
+                        : null,
+                  ),
+                ],
               ),
-              child: _PaperSurface(template: template),
             ),
-            const SizedBox(height: 10),
-            Text(
-              template.displayName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: selected
-                    ? Theme.of(context).colorScheme.onSurface
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 20,
-              child: selected
-                  ? Icon(
-                      LucideIcons.circleCheck,
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 20,
-                    )
-                  : null,
-            ),
-          ],
+          ),
         ),
       ),
     );
