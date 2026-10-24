@@ -14,7 +14,6 @@ import '../../../app/app_router.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/app_motion.dart';
-import '../../../shared/widgets/keyboard_focus_recovery.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../whiteboard/editor_core/markdraw.dart'
     show
@@ -587,60 +586,45 @@ class _TitleInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return KeyboardFocusRecoveryExclusion(
-      child: TextField(
-        enabled: enabled,
-        controller: controller,
-        focusNode: focusNode,
-        keyboardType: TextInputType.text,
-        textInputAction: TextInputAction.done,
-        maxLines: 1,
-        onTapAlwaysCalled: true,
-        onTap: () {
-          if (!focusNode.hasFocus) {
-            FocusScope.of(context).requestFocus(focusNode);
-            return;
-          }
-          focusNode.unfocus();
-          Future<void>.delayed(const Duration(milliseconds: 50), () {
-            if (context.mounted) {
-              FocusScope.of(context).requestFocus(focusNode);
-            }
-          });
-        },
-        onChanged: onChanged,
-        onSubmitted: (_) => onSubmitted(),
-        textAlign: TextAlign.start,
-        textAlignVertical: TextAlignVertical.center,
-        decoration: InputDecoration(
-          labelText: '笔记标题',
-          hintText: '留空则自动命名',
-          filled: true,
-          fillColor: Theme.of(context).colorScheme.surfaceContainer,
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppSpacing.radius),
-            borderSide: BorderSide(
-              color: Theme.of(context).colorScheme.outlineVariant,
-            ),
+    return TextField(
+      enabled: enabled,
+      controller: controller,
+      focusNode: focusNode,
+      keyboardType: TextInputType.text,
+      textInputAction: TextInputAction.done,
+      maxLines: 1,
+      onChanged: onChanged,
+      onSubmitted: (_) => onSubmitted(),
+      textAlign: TextAlign.start,
+      textAlignVertical: TextAlignVertical.center,
+      decoration: InputDecoration(
+        labelText: '笔记标题',
+        hintText: '留空则自动命名',
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surfaceContainer,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppSpacing.radius),
-            borderSide: BorderSide(
-              color: Theme.of(context).colorScheme.primary,
-              width: 1.5,
-            ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.primary,
+            width: 1.5,
           ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppSpacing.radius),
-            borderSide: BorderSide(
-              color: Theme.of(context).colorScheme.outlineVariant,
-            ),
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
           ),
-          isDense: true,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 16,
-          ),
+        ),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 16,
         ),
       ),
     );

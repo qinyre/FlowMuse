@@ -7,6 +7,7 @@ import 'package:flow_muse/features/library/repositories/library_repository.dart'
 import 'package:flow_muse/features/library/views/create_note_page.dart';
 import 'package:flow_muse/features/whiteboard/models/editor_preferences.dart';
 import 'package:flow_muse/features/whiteboard/view_models/editor_preferences_view_model.dart';
+import 'package:flow_muse/shared/widgets/keyboard_focus_recovery.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +44,7 @@ Widget _page({
   double scale = 1,
   AppThemeId theme = AppThemeId.day,
   bool reduceMotion = false,
+  bool recoverKeyboard = false,
   LibraryRepository? repository,
 }) => ProviderScope(
   overrides: [
@@ -59,11 +61,43 @@ Widget _page({
       ),
       child: child!,
     ),
-    home: const CreateNotePage(),
+    home: recoverKeyboard
+        ? const KeyboardFocusRecovery(child: CreateNotePage())
+        : const CreateNotePage(),
   ),
 );
 
 void main() {
+  for (final recover in [false, true]) {
+    testWidgets('标题重复点击${recover ? '复用鸿蒙统一恢复' : '维持标准输入连接'}并保留内容', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_page(recoverKeyboard: recover));
+      await tester.pumpAndSettle();
+      final field = find.byType(TextField);
+      await tester.enterText(field, '课堂笔记');
+      final input = tester.widget<TextField>(field);
+      var losses = 0;
+      void focusChanged() {
+        if (!input.focusNode!.hasFocus) losses++;
+      }
+
+      input.focusNode!.addListener(focusChanged);
+      addTearDown(() {
+        if (input.focusNode!.context != null) {
+          input.focusNode!.removeListener(focusChanged);
+        }
+      });
+      await tester.tap(field);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      expect(losses, recover ? greaterThan(0) : 0);
+      expect(input.focusNode!.hasFocus, isTrue);
+      expect(input.controller!.text, '课堂笔记');
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('跨断点缩放窗口保留标题输入连接和焦点', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
