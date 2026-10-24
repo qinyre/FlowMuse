@@ -20,6 +20,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'studio_rail_icon_button.dart';
 import 'page_navigation_controls.dart';
 import 'page_overview.dart';
+import 'stylus_double_tap_channel.dart';
 
 /// A full-featured drawing editor widget.
 ///
@@ -236,6 +237,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   String _propertyPanelContext = '';
   late final SpeechRecognitionService _speechService;
   StreamSubscription<SpeechRecognitionEvent>? _speechSubscription;
+  StreamSubscription<void>? _stylusDoubleTapSubscription;
   SpeechRecognitionState _speechState = SpeechRecognitionState.idle;
   bool _speechAvailable = false;
   String _speechPreview = '';
@@ -249,6 +251,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _stylusDoubleTapSubscription = StylusDoubleTapChannel.instance.events
+        .listen((_) => _onStylusDoubleTap());
     _speechService =
         widget.speechRecognitionService ?? createSpeechRecognitionService();
     _speechSubscription = _speechService.events.listen(_onSpeechEvent);
@@ -280,6 +284,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _speechFinalCommitted = false;
     }
     if (widget.controller != oldWidget.controller) {
+      (oldWidget.controller ?? _ownController)
+          ?.cancelPendingStylusEraserToggle();
       oldWidget.controller?.chromeChanges.removeListener(_onControllerChanged);
       _controller.chromeChanges.addListener(_onControllerChanged);
       _controller.onSceneChanged = widget.onSceneChanged;
@@ -313,6 +319,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_stylusDoubleTapSubscription?.cancel());
+    _controller.cancelPendingStylusEraserToggle();
     unawaited(_speechSubscription?.cancel());
     unawaited(_speechService.dispose());
     _controller.chromeChanges.removeListener(_onControllerChanged);
@@ -334,8 +342,19 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
+      _controller.cancelPendingStylusEraserToggle();
       unawaited(_cancelSpeech());
     }
+  }
+
+  void _onStylusDoubleTap() {
+    if (!mounted ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        ModalRoute.of(context)?.isCurrent == false ||
+        !_controller.keyboardFocusNode.hasPrimaryFocus) {
+      return;
+    }
+    _controller.toggleStylusEraser();
   }
 
   Future<void> _checkSpeechAvailability() async {
@@ -741,7 +760,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                   }
                 });
               }
-              return _buildBody();
+              return _buildBody(
+                isCompact: isCompact,
+                width: constraints.maxWidth,
+              );
             },
           ),
         ),
@@ -749,8 +771,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     );
   }
 
-  Widget _buildBody() {
-    final isCompact = _controller.isCompact;
+  Widget _buildBody({required bool isCompact, required double width}) {
     final showChrome = !_controller.zenMode;
     final showEditChrome = showChrome && !_controller.viewMode;
     final overview = showChrome && widget.pageNavigationEnabled
@@ -933,6 +954,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                                       null) ...[
                                 const SizedBox(width: 4),
                                 _FingerDrawingSwitch(
+                                  showLabel:
+                                      width >= 480 ||
+                                      !widget.collaborating ||
+                                      widget.collaborationParticipants.isEmpty,
                                   value: widget.fingerDrawingEnabled,
                                   onChanged:
                                       widget.onFingerDrawingEnabledChanged!,
@@ -962,6 +987,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _RightChrome(
+                                compact: isCompact,
                                 saveStatusLabel: widget.saveStatusLabel,
                                 showSaveStatus: false,
                                 collaborating: widget.collaborating,
@@ -1419,21 +1445,31 @@ class _LeftChrome extends StatelessWidget {
 }
 
 class _FingerDrawingSwitch extends StatelessWidget {
-  const _FingerDrawingSwitch({required this.value, required this.onChanged});
+  const _FingerDrawingSwitch({
+    required this.value,
+    required this.onChanged,
+    this.showLabel = true,
+  });
 
   final bool value;
   final ValueChanged<bool> onChanged;
+  final bool showLabel;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('手指绘制', style: Theme.of(context).textTheme.labelMedium),
-        const SizedBox(width: 4),
+        if (showLabel) ...[
+          Text('手指绘制', style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(width: 4),
+        ],
         HoverTooltip(
-          message: '开启后单指绘制，双指缩放或移动画布',
-          child: Switch(value: value, onChanged: onChanged),
+          message: '手指绘制：开启后单指绘制，双指缩放或移动画布',
+          child: Semantics(
+            label: '手指绘制',
+            child: Switch(value: value, onChanged: onChanged),
+          ),
         ),
       ],
     );
@@ -1489,6 +1525,7 @@ class _DocumentTitle extends StatelessWidget {
 
 class _RightChrome extends StatelessWidget {
   const _RightChrome({
+    required this.compact,
     required this.saveStatusLabel,
     this.showSaveStatus = true,
     required this.collaborating,
@@ -1518,6 +1555,7 @@ class _RightChrome extends StatelessWidget {
     this.toolbarExpandButton,
   });
 
+  final bool compact;
   final String? saveStatusLabel;
   final bool showSaveStatus;
   final bool collaborating;
@@ -1548,7 +1586,6 @@ class _RightChrome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 720;
     final canCollaborate =
         onStartCollaboration != null && onLeaveCollaboration != null;
 
