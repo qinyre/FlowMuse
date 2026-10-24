@@ -57,7 +57,7 @@
 - Android 在线构建停在 Gradle 依赖元数据网络连接阶段，停止本次构建后用本机缓存执行 `gradlew --offline ... assembleDebug`，81 秒成功、641 个任务。未更改依赖、仓库源、系统代理或原生 SDK 版本。debug APK 位于 `FlowMuse-App/build/app/outputs/apk/debug/app-debug.apk`，仅证明原生编译与打包，不作为书写/协作性能结论。
 - 本机配置的 `build/ci-hos-sdk` 为既有空目录占位，不具备完整鸿蒙 SDK；未声称 HAP 已编译。ArkTS 代码按本地官方开发指南与官方 API 19+ 接口实现，仍需真实 SDK 编译与设备验收。
 - ADB 未检测到连接设备。一加 Pad Pro 的实际笔型、系统双击设置、广播权限授予及鸿蒙真实手势均未验收。其他 Android 厂商接口未接入。
-- 本轮尚未推送、合并或发布；轻捏菜单、预测和振动 SDK 均未实施。
+- 初次实现完成时仅保存本地提交，后续发布结果见下文；轻捏菜单、预测和振动 SDK 均未实施。
 
 ## 发布前的窄画布回归修正
 
@@ -72,3 +72,14 @@
 ![协作状态名称与视角跟随](../images/f2-follow-desktop.png)
 
 ![360px 协作顶栏及主动位置提示](../images/f2-attention-mobile.png)
+
+## 正式 Web、PR 与一加平板发布结果
+
+- 发布代码：`1980830acf8ec033376464d98643acdcc3e223c4`，包含发布前的窄画布修正；后续记录提交仅改文档。
+- 2026-10-24 21:23（北京时间）正式 Web 更新到 `f2-stylus-20261024-1980830`，入口 `https://app.flowmuse.cloud/library`。8 项公网资源与哈希校验通过；Chrome 桌面/360px 菜单、新建入口、加入对话框基础检查通过，页面异常为 0。未据此声明完整输入法或真实公网双端协作验收。
+- Nginx 上一版本 `f2-stylus-20261024-78b36cb` 和更早版本保留；配置备份为 `/etc/nginx/sites-available/flowmuse-app.before-f2-stylus-20261024-1980830`，发布凭据位于 `/opt/flowmuse/releases/f2-stylus-20261024-1980830/web-deployment.json`。后端运行代码无变更，复用现有镜像，健康检查为 `ok`。
+- 按用户顺序先发布 Web，再创建 [PR #81](https://github.com/qinyre/FlowMuse/pull/81)，之后覆盖安装平板。PR 尚未合并，不等待 CI 结果。
+- 一加 OPD2404（Android 16）已执行 `adb install -r` 成功，保留应用数据；旧 APK 已留档。配套为 arm64 release，继续开启湿墨分层和实时墨迹 V2，分享域名为正式 Web。
+- APK SHA-256：`cdbf27640a0a847a28e88aa0c87d6e85d21cace4180338bf25488c822ecd9a5c`，安装后设备端文件哈希与本地产物一致；证书与旧安装包一致，官方双击广播权限 `granted=true`，系统 `ipe_pencil_double_click=1`。
+- 冷启动成功，已确认进入资料库；启动日志未见本应用的致命异常或手写笔通道警告。设备截图仅保留在本地忽略的 `build/` 下，不进入仓库或 PR。
+- 真实笔身双击由用户实际拿笔验收，不能用安装、权限或启动检查替代。鸿蒙 HAP 编译与鸿蒙真机仍待完整 SDK / 设备，其他 Android 厂商接口未接入。
