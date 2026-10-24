@@ -34,4 +34,14 @@
 - `flutter test --no-pub --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true test/features/whiteboard/editor_core/canvas_reset_test.dart test/features/whiteboard/views/whiteboard_writing_workflow_test.dart test/features/whiteboard/editor_core/scene_dirty_elements_test.dart test/features/whiteboard/editor_core/collaboration_undo_test.dart test/features/whiteboard/smart_layout/snapshot/scene_revision_test.dart --reporter expanded`：60 项通过。
 - `flutter test --no-pub --reporter expanded`：1964 项通过，5 项原有跳过；`flutter analyze --no-pub`：无问题；`git diff --check`：通过。
 - 脱敏测试输出保留在忽略目录 `FlowMuse-App/build/issue65-reset-*.log`，不提交日志或真实笔记数据。
-- 本轮未推送、未发布 Web/后端、未安装安卓包。安卓/Web 公网双端仍需部署后新建房间实机复测；旧房间中已经丢失的版式不会由本次改动自动恢复。
+- 修复验证阶段未发布。随后按用户要求推送并部署正式 Web，见下方记录；平板更新按用户最新指示取消，本轮未覆盖安装。
+
+## 正式 Web 发布（2026-10-24）
+
+- 应用源码 `7572010d38a373b015bf31c92bede988e126da24`，分支 `fix/issue65-reset-before-collaboration` 已推送；正式 Web 于北京时间 22:03:03 发布至 https://app.flowmuse.cloud/library，版本标识 `7572010`，湿墨分层和实时墨迹 V2 保持开启。
+- Web release 构建成功；`main.dart.js` SHA-256：`541bb5ade323eb35ea6785572c8ff80fb41046477b915c59e0ddc40661f2ba91`。发布包 SHA-256：`10c94f562a785455a7895bd55bbfed2a6e200744a87b3261afaf143c89c55d76`。
+- Nginx 根目录切换为 `/var/www/flowmuse-app-releases/issue65-reset-20261024-7572010`，语法检查和 reload 成功；保留旧版本 `/var/www/flowmuse-app-releases/f2-stylus-20261024-1980830` 与配置备份 `/etc/nginx/sites-available/flowmuse-app.before-issue65-reset-20261024-7572010`。服务器回执：`/opt/flowmuse/releases/issue65-reset-20261024-7572010/web-deployment.json`。
+- 公网 8 项资源状态/哈希校验通过（发布清单、资料库入口、主脚本、扫码解码器、三款字体及许可证），均使用 `no-cache`；Chrome 桌面、360px 窄屏的视图菜单、新建入口与加入房间弹窗检查通过，页面异常为 0。
+- 本次只有客户端重置入口变动，后端复用现有 `flowmuse-collab:room-management-4e92510`，发布前后容器身份一致，公网 `/health` 为 `{"status":"ok"}`。
+- PR #81 尚未合并，修复 PR 以 `feature/f2-stylus-eraser` 为目标，仅包含本次 #65 改动。合并顺序为先修复 PR、再 #81；若 #81 先合入主线，则应先将修复 PR 的目标改为 `main`。
+- 公网检查仅使用独立浏览器环境，不读取真实笔记。用户要求暂不更新平板，安卓/Web 双端协作仍待实机复测；复测需刷新 Web 后新建房间，旧异常房间的版式不会自动补回。
