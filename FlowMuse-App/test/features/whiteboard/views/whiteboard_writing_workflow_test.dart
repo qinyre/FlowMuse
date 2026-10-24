@@ -1164,6 +1164,156 @@ void main() {
     await _drainIo(tester, container);
   });
 
+  testWidgets('F1 加密协作：查看、跟随、主动操作、位置邀请和离线清理', (tester) async {
+    final room = CollaborationRoom.newRoom(crypto: CollaborationCrypto());
+    final store = MemoryEncryptedSceneStore();
+    final hub = MemoryRealtimeRoomHub();
+    final peer = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'f1-peer'),
+      sceneStore: store,
+    );
+    final local = _TrackedCollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'f1-local'),
+      sceneStore: store,
+    );
+    addTearDown(peer.stop);
+    await tester.runAsync(() async {
+      await store.createRoom(
+        room: room,
+        scene: ExcalidrawScene.empty(),
+        ownerKeyHash: 'test',
+      );
+      await peer.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    });
+    final received = <CollaborationMessage>[];
+    final subscription = peer.encryptedMessages(room).listen(received.add);
+    addTearDown(subscription.cancel);
+    final container = _container(library: library, collaboration: local);
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: WhiteboardPage.collaborationRoom(initialRoom: room),
+        ),
+      ),
+    );
+    await _drainIo(
+      tester,
+      container,
+      until: () =>
+          container.read(whiteboardViewModelProvider).collaborationStatus ==
+          WhiteboardCollaborationStatus.connected,
+    );
+    final controller = tester
+        .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+        .controller!;
+    Future<void> bounds(
+      double x, {
+      String? following,
+      String? attention,
+    }) async {
+      await tester.runAsync(
+        () => peer.broadcastVisibleSceneBounds(
+          room: room,
+          username: '同伴',
+          followingSocketId: following,
+          attentionId: attention,
+          sceneBounds: {'x': x, 'y': 2000, 'width': 800, 'height': 600},
+        ),
+      );
+      await _drainIo(tester, container);
+    }
+
+    Future<void> action(String label) async {
+      await tester.tap(find.text('同'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+      await _drainIo(tester, container);
+    }
+
+    final originalScene = controller.currentScene;
+    final originalView = controller.editorState.viewport;
+    expect(
+      container.read(whiteboardViewModelProvider).collaborators.keys,
+      contains('f1-peer'),
+      reason: '页面订阅前到达的初始成员列表仍须展示',
+    );
+    await bounds(1000);
+    expect(controller.editorState.viewport, originalView, reason: '接收视口不会自动跳转');
+    await action('查看位置');
+    expect(
+      controller.editorState.viewport.screenToScene(
+        controller.canvasSize.center(Offset.zero),
+      ),
+      const Offset(1400, 2300),
+    );
+    final oneShot = controller.editorState.viewport;
+    await bounds(2000);
+    expect(controller.editorState.viewport, oneShot);
+    await action('跟随视角');
+    expect(find.textContaining('正在跟随 同伴'), findsOneWidget);
+    final editor = tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor));
+    await bounds(3000);
+    expect(
+      controller.editorState.viewport.screenToScene(
+        controller.canvasSize.center(Offset.zero),
+      ),
+      const Offset(3400, 2300),
+    );
+    expect(
+      tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)),
+      same(editor),
+      reason: '跟随移动不重建整个编辑器和工具栏',
+    );
+    expect(controller.currentScene, same(originalScene));
+    expect(
+      received.any((m) => m.payload['followingSocketId'] == 'f1-peer'),
+      isTrue,
+    );
+
+    controller.setViewport(
+      controller.editorState.viewport.pan(const Offset(30, 20)),
+    );
+    await tester.pump();
+    expect(find.textContaining('正在跟随'), findsNothing);
+    final manual = controller.editorState.viewport;
+    await bounds(4000);
+    expect(controller.editorState.viewport, manual);
+    await action('跟随视角');
+    controller.switchTool(ToolType.freedraw);
+    await _stroke(tester, const Offset(600, 450));
+    expect(find.textContaining('正在跟随'), findsNothing);
+    expect(_ink(controller), hasLength(1));
+    final afterWriting = controller.editorState.viewport;
+    await bounds(5000, attention: 'request-1');
+    expect(find.text('同伴 邀请你看这里'), findsOneWidget);
+    expect(controller.editorState.viewport, afterWriting);
+    await tester.tap(find.text('查看位置'));
+    await tester.pumpAndSettle();
+    expect(find.text('同伴 邀请你看这里'), findsNothing);
+    expect(
+      controller.editorState.viewport.screenToScene(
+        controller.canvasSize.center(Offset.zero),
+      ),
+      const Offset(5400, 2300),
+    );
+    await bounds(6000, attention: 'request-1');
+    expect(find.text('同伴 邀请你看这里'), findsNothing, reason: '重复提示不再次打断用户');
+    await action('跟随视角');
+    await bounds(6000, following: local.socketId);
+    expect(find.textContaining('正在跟随'), findsNothing, reason: '互相跟随时自动解除循环');
+    await bounds(6000);
+    await action('跟随视角');
+    await tester.runAsync(peer.stop);
+    await _drainIo(tester, container);
+    expect(find.textContaining('正在跟随'), findsNothing);
+    expect(_ink(controller), hasLength(1));
+  });
+
   testWidgets('内存加密协作：落笔中接收远端元素，终笔与撤销仍广播', (tester) async {
     final crypto = CollaborationCrypto();
     final room = CollaborationRoom.newRoom(crypto: crypto);

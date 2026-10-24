@@ -34,6 +34,7 @@ class RemoteCollaboratorOverlay {
     required this.selectedElementIds,
     this.selectionBounds = const [],
     this.idle = false,
+    this.editingText = false,
   });
 
   final String socketId;
@@ -42,6 +43,7 @@ class RemoteCollaboratorOverlay {
   final Set<String> selectedElementIds;
   final List<ElementSelectionBounds> selectionBounds;
   final bool idle;
+  final bool editingText;
 }
 
 /// A [CustomPainter] that renders the interactive overlay layer.
@@ -242,7 +244,7 @@ class InteractiveCanvasPainter extends CustomPainter {
     }
 
     for (var i = 0; i < remoteCollaborators.length; i++) {
-      _drawRemoteCollaborator(canvas, remoteCollaborators[i], i);
+      _drawRemoteCollaborator(canvas, remoteCollaborators[i]);
     }
 
     canvas.restore();
@@ -256,10 +258,12 @@ class InteractiveCanvasPainter extends CustomPainter {
   void _drawRemoteCollaborator(
     Canvas canvas,
     RemoteCollaboratorOverlay collaborator,
-    int index,
   ) {
     final color = _remoteColor(
-      index,
+      collaborator.socketId.codeUnits.fold(
+        0,
+        (hash, unit) => (hash * 31 + unit) & 0x7fffffff,
+      ),
     ).withValues(alpha: collaborator.idle ? 0.45 : 1);
     final selectionPaint = Paint()
       ..color = color
@@ -307,7 +311,7 @@ class InteractiveCanvasPainter extends CustomPainter {
         : collaborator.username;
     final textPainter = TextPainter(
       text: TextSpan(
-        text: name,
+        text: collaborator.editingText ? '$name · 正在编辑文字' : name,
         style: const TextStyle(
           color: Color(0xFFFFFFFF),
           fontSize: 12,
@@ -317,9 +321,14 @@ class InteractiveCanvasPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
       maxLines: 1,
     )..layout(maxWidth: 160);
+    final editingBounds = collaborator.editingText
+        ? collaborator.selectionBounds.firstOrNull?.bounds
+        : null;
     final labelRect = Rect.fromLTWH(
-      pointer.x + 14,
-      pointer.y + 8,
+      editingBounds?.left ?? pointer.x + 14,
+      editingBounds == null
+          ? pointer.y + 8
+          : editingBounds.top - textPainter.height - 10,
       textPainter.width + 10,
       textPainter.height + 6,
     );

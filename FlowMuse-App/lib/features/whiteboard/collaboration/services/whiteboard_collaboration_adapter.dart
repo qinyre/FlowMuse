@@ -56,7 +56,10 @@ class WhiteboardCollaborationAdapter {
   }
 
   Set<String> selectedElementIds() {
-    return controller.editorState.selectedIds.map((id) => id.value).toSet();
+    return {
+      for (final id in controller.editorState.selectedIds) id.value,
+      if (controller.editingTextElementId case final id?) id.value,
+    };
   }
 
   Set<String> protectedElementIds() {
@@ -82,6 +85,8 @@ class WhiteboardCollaborationAdapter {
       'x': point.x,
       'y': point.y,
       'tool': controller.editorState.activeToolType.name,
+      if (controller.editingTextElementId case final id?)
+        'editingElementId': id.value,
     };
   }
 
