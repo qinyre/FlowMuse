@@ -115,6 +115,8 @@ class CollaborationMessage {
     String? userId,
     String? avatarUrl,
     String? creatorKey,
+    String? followingSocketId,
+    String? attentionId,
   }) {
     return CollaborationMessage(
       type: CollaborationMessageType.userVisibleSceneBounds,
@@ -122,6 +124,8 @@ class CollaborationMessage {
         'socketId': socketId,
         'username': username,
         'sceneBounds': sceneBounds,
+        'followingSocketId': ?followingSocketId,
+        'attentionId': ?attentionId,
         'userId': userId,
         'avatarUrl': avatarUrl,
         'creatorKey': ?creatorKey,

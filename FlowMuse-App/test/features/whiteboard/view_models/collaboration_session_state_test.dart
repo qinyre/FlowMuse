@@ -1,11 +1,63 @@
 import 'package:flow_muse/features/whiteboard/collaboration/collaboration_config.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_room.dart';
+import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_message.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
 import 'package:flow_muse/features/whiteboard/view_models/whiteboard_view_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('旧视口消息清除跟随关系，普通光标更新保留关系', () {
+    final repository = CollaborationRepository();
+    final container = ProviderContainer(
+      overrides: [
+        collaborationRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+    addTearDown(repository.stop);
+    final notifier = container.read(whiteboardViewModelProvider.notifier);
+    void bounds({String? following}) => notifier.applyPresenceMessage(
+      CollaborationMessage.userVisibleSceneBounds(
+        socketId: 'peer',
+        username: '同伴',
+        sceneBounds: const {},
+        followingSocketId: following,
+      ),
+    );
+    bounds(following: 'other');
+    expect(
+      container
+          .read(whiteboardViewModelProvider)
+          .collaborators['peer']!
+          .followingSocketId,
+      'other',
+    );
+    notifier.applyPresenceMessage(
+      CollaborationMessage.mouseLocation(
+        socketId: 'peer',
+        pointer: const {'x': 0, 'y': 0},
+        button: 'up',
+        selectedElementIds: const {},
+        username: '同伴',
+      ),
+    );
+    expect(
+      container
+          .read(whiteboardViewModelProvider)
+          .collaborators['peer']!
+          .followingSocketId,
+      'other',
+    );
+    bounds();
+    expect(
+      container
+          .read(whiteboardViewModelProvider)
+          .collaborators['peer']!
+          .followingSocketId,
+      isNull,
+    );
+  });
   for (final sameNote in [false, true]) {
     test('被移出后${sameNote ? '重开原笔记' : '打开其他笔记'}恢复空闲状态并保留分享配置', () async {
       final repository = CollaborationRepository();
