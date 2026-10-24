@@ -20,6 +20,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'studio_rail_icon_button.dart';
 import 'page_navigation_controls.dart';
 import 'page_overview.dart';
+import 'stylus_double_tap_channel.dart';
 
 /// A full-featured drawing editor widget.
 ///
@@ -236,6 +237,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   String _propertyPanelContext = '';
   late final SpeechRecognitionService _speechService;
   StreamSubscription<SpeechRecognitionEvent>? _speechSubscription;
+  StreamSubscription<void>? _stylusDoubleTapSubscription;
   SpeechRecognitionState _speechState = SpeechRecognitionState.idle;
   bool _speechAvailable = false;
   String _speechPreview = '';
@@ -249,6 +251,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _stylusDoubleTapSubscription = StylusDoubleTapChannel.instance.events
+        .listen((_) => _onStylusDoubleTap());
     _speechService =
         widget.speechRecognitionService ?? createSpeechRecognitionService();
     _speechSubscription = _speechService.events.listen(_onSpeechEvent);
@@ -280,6 +284,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _speechFinalCommitted = false;
     }
     if (widget.controller != oldWidget.controller) {
+      (oldWidget.controller ?? _ownController)
+          ?.cancelPendingStylusEraserToggle();
       oldWidget.controller?.chromeChanges.removeListener(_onControllerChanged);
       _controller.chromeChanges.addListener(_onControllerChanged);
       _controller.onSceneChanged = widget.onSceneChanged;
@@ -313,6 +319,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_stylusDoubleTapSubscription?.cancel());
+    _controller.cancelPendingStylusEraserToggle();
     unawaited(_speechSubscription?.cancel());
     unawaited(_speechService.dispose());
     _controller.chromeChanges.removeListener(_onControllerChanged);
@@ -334,8 +342,19 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
+      _controller.cancelPendingStylusEraserToggle();
       unawaited(_cancelSpeech());
     }
+  }
+
+  void _onStylusDoubleTap() {
+    if (!mounted ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
+        ModalRoute.of(context)?.isCurrent == false ||
+        !_controller.keyboardFocusNode.hasPrimaryFocus) {
+      return;
+    }
+    _controller.toggleStylusEraser();
   }
 
   Future<void> _checkSpeechAvailability() async {

@@ -82,6 +82,75 @@ void main() {
     );
   });
 
+  testWidgets('笔身双击只切当前画布，弹窗、后台和离页不误触发', (tester) async {
+    const channel = MethodChannel('flow_muse/stylus_double_tap');
+    const codec = StandardMethodCodec();
+    var generation = 0;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      generation = (call.arguments as Map)['generation'] as int;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'barrel-shortcut'),
+    ))!;
+    final container = _container(library: library);
+    final controller = await _open(tester, container, note);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    controller.selectBrush(BrushType.pencil);
+    controller.keyboardFocusNode.requestFocus();
+    await tester.pump();
+    final scene = controller.currentScene;
+    expect(generation, greaterThan(0));
+    expect(controller.keyboardFocusNode.hasPrimaryFocus, isTrue);
+    Future<void> emit(int timestamp) async {
+      final done = Completer<void>();
+      messenger.handlePlatformMessage(
+        channel.name,
+        codec.encodeMethodCall(
+          MethodCall('doubleTap', {
+            'generation': generation,
+            'timestamp': timestamp,
+          }),
+        ),
+        (_) => done.complete(),
+      );
+      await done.future;
+      await tester.pump();
+    }
+
+    await emit(1000);
+    expect(controller.editorState.activeToolType, ToolType.eraser);
+    await emit(1500);
+    expect(controller.editorState.activeToolType, ToolType.freedraw);
+    expect(controller.activeBrushType, BrushType.pencil);
+    unawaited(
+      showDialog<void>(
+        context: tester.element(find.byType(MarkdrawEditor)),
+        builder: (_) => const AlertDialog(content: Text('shortcut-dialog')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await emit(2000);
+    expect(controller.editorState.activeToolType, ToolType.freedraw);
+    Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await emit(2500);
+    expect(controller.editorState.activeToolType, ToolType.freedraw);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    controller.keyboardFocusNode.requestFocus();
+    await tester.pump();
+    await emit(3000);
+    expect(controller.editorState.activeToolType, ToolType.eraser);
+    expect(controller.currentScene, same(scene));
+    expect(controller.historyManager.undoCount, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await emit(3500);
+    expect(tester.takeException(), isNull);
+    await _drainIo(tester, container);
+  });
+
   testWidgets('自动保存失败保留草稿，退出失败不离页，手动重试可恢复', (tester) async {
     final note = await tester.runAsync(
       () => library.createNote(title: 'workflow-save-failure'),

@@ -162,6 +162,7 @@ class MarkdrawController extends ChangeNotifier {
   int? _activeTouchSelectionPointerId;
   SelectTool? _activeTouchSelectionTool;
   int? _activeStylusPointerId;
+  bool _pendingStylusEraserToggle = false;
   final Set<int> _rejectedTouchPointers = {};
   bool _pressureEnabled = true;
   double _pressureExponent = 1.0;
@@ -951,6 +952,33 @@ class MarkdrawController extends ChangeNotifier {
     _hasSelectedBrush = true;
     _restoreBrushState(type);
     switchTool(ToolType.freedraw);
+  }
+
+  /// A barrel gesture must not cancel an unfinished pen stroke.
+  void toggleStylusEraser() {
+    if (_disposed || _viewMode || _editingTextElementId != null) return;
+    final type = _editorState.activeToolType;
+    if (type != ToolType.freedraw && type != ToolType.eraser) return;
+    if (_activeStylusPointerId != null) {
+      _pendingStylusEraserToggle = !_pendingStylusEraserToggle;
+      return;
+    }
+    if (pageNavigationBusy) return;
+    if (type == ToolType.eraser) {
+      selectBrush(_activeBrushType);
+    } else {
+      switchTool(ToolType.eraser);
+    }
+  }
+
+  void cancelPendingStylusEraserToggle() {
+    _pendingStylusEraserToggle = false;
+  }
+
+  void _flushPendingStylusEraserToggle() {
+    if (!_pendingStylusEraserToggle) return;
+    _pendingStylusEraserToggle = false;
+    toggleStylusEraser();
   }
 
   void requestBrushPalette() {
@@ -2707,6 +2735,7 @@ class MarkdrawController extends ChangeNotifier {
         _historyManager.push(_sceneBeforeDrag!);
       }
       _sceneBeforeDrag = null;
+      _flushPendingStylusEraserToggle();
       return;
     }
 
@@ -2772,6 +2801,7 @@ class MarkdrawController extends ChangeNotifier {
       _historyManager.push(_sceneBeforeDrag!);
     }
     _sceneBeforeDrag = null;
+    _flushPendingStylusEraserToggle();
   }
 
   /// Handles pointer cancel: discards uncommitted stroke for modeler path,
@@ -2914,6 +2944,7 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   void _cancelActiveToolInteraction(ActivePreviewTerminalReason reason) {
+    cancelPendingStylusEraserToggle();
     _finishActivePreviewStroke(reason);
     if (_activeTool is FreedrawTool) {
       final tool = _activeTool as FreedrawTool;
