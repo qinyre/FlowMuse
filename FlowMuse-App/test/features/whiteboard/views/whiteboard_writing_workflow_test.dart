@@ -103,6 +103,13 @@ void main() {
     final scene = controller.currentScene;
     expect(generation, greaterThan(0));
     expect(controller.keyboardFocusNode.hasPrimaryFocus, isTrue);
+    await tester.binding.setSurfaceSize(const Size(360, 780));
+    await tester.pumpAndSettle();
+    expect(
+      find.widgetWithText(FilledButton, '创建房间'),
+      findsNothing,
+      reason: '窄画布按实际布局约束使用紧凑入口，不沿用外围窗口宽度',
+    );
     Future<void> emit(int timestamp) async {
       final done = Completer<void>();
       messenger.handlePlatformMessage(
@@ -1311,6 +1318,18 @@ void main() {
       contains('f1-peer'),
       reason: '页面订阅前到达的初始成员列表仍须展示',
     );
+    await tester.binding.setSurfaceSize(const Size(360, 780));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('实时协作'), findsNothing);
+    expect(
+      tester
+          .getRect(find.byType(Switch))
+          .overlaps(tester.getRect(find.byType(ParticipantAvatarStack))),
+      isFalse,
+      reason: '窄画布的协作头像不能遮住手指绘制开关',
+    );
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    await tester.pumpAndSettle();
     await bounds(1000);
     expect(controller.editorState.viewport, originalView, reason: '接收视口不会自动跳转');
     await action('查看位置');

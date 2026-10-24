@@ -760,7 +760,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                   }
                 });
               }
-              return _buildBody();
+              return _buildBody(
+                isCompact: isCompact,
+                width: constraints.maxWidth,
+              );
             },
           ),
         ),
@@ -768,8 +771,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     );
   }
 
-  Widget _buildBody() {
-    final isCompact = _controller.isCompact;
+  Widget _buildBody({required bool isCompact, required double width}) {
     final showChrome = !_controller.zenMode;
     final showEditChrome = showChrome && !_controller.viewMode;
     final overview = showChrome && widget.pageNavigationEnabled
@@ -952,6 +954,10 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                                       null) ...[
                                 const SizedBox(width: 4),
                                 _FingerDrawingSwitch(
+                                  showLabel:
+                                      width >= 480 ||
+                                      !widget.collaborating ||
+                                      widget.collaborationParticipants.isEmpty,
                                   value: widget.fingerDrawingEnabled,
                                   onChanged:
                                       widget.onFingerDrawingEnabledChanged!,
@@ -981,6 +987,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               _RightChrome(
+                                compact: isCompact,
                                 saveStatusLabel: widget.saveStatusLabel,
                                 showSaveStatus: false,
                                 collaborating: widget.collaborating,
@@ -1438,21 +1445,31 @@ class _LeftChrome extends StatelessWidget {
 }
 
 class _FingerDrawingSwitch extends StatelessWidget {
-  const _FingerDrawingSwitch({required this.value, required this.onChanged});
+  const _FingerDrawingSwitch({
+    required this.value,
+    required this.onChanged,
+    this.showLabel = true,
+  });
 
   final bool value;
   final ValueChanged<bool> onChanged;
+  final bool showLabel;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('手指绘制', style: Theme.of(context).textTheme.labelMedium),
-        const SizedBox(width: 4),
+        if (showLabel) ...[
+          Text('手指绘制', style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(width: 4),
+        ],
         HoverTooltip(
-          message: '开启后单指绘制，双指缩放或移动画布',
-          child: Switch(value: value, onChanged: onChanged),
+          message: '手指绘制：开启后单指绘制，双指缩放或移动画布',
+          child: Semantics(
+            label: '手指绘制',
+            child: Switch(value: value, onChanged: onChanged),
+          ),
         ),
       ],
     );
@@ -1508,6 +1525,7 @@ class _DocumentTitle extends StatelessWidget {
 
 class _RightChrome extends StatelessWidget {
   const _RightChrome({
+    required this.compact,
     required this.saveStatusLabel,
     this.showSaveStatus = true,
     required this.collaborating,
@@ -1537,6 +1555,7 @@ class _RightChrome extends StatelessWidget {
     this.toolbarExpandButton,
   });
 
+  final bool compact;
   final String? saveStatusLabel;
   final bool showSaveStatus;
   final bool collaborating;
@@ -1567,7 +1586,6 @@ class _RightChrome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 720;
     final canCollaborate =
         onStartCollaboration != null && onLeaveCollaboration != null;
 
