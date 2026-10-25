@@ -95,6 +95,13 @@
 - 新旧包签名一致，沿用 `adb install -r`；原始安装时间保持，旧 APK 留档，应用数据保留。已核对前台 Activity 和界面就绪标签，启动致命异常、Flutter 错误及手写笔通道警告均为 0，笔身双击权限与系统模式保持原值。未采集实际笔记截图。
 - 封包、安装与启动回执在忽略目录 `FlowMuse-App/build/issue84-feel/`；湿墨分层和实时墨迹 V2 继续开启。新阈值的实际舒适度与笔下显示效果仍由用户持笔复测，尚未推送分支或发布正式 Web。
 
+### 手感调整版的正式 Web 发布
+
+- 后续按用户指令推送 `fix/stylus-eraser-feel`，2026-10-25 **20:40（北京时间）**发布正式 Web，源码与平板包同为 `2250e12cb1c241405a016e8433f5062d809d4dc4`，发布 ID `eraser-feel-20261025-2250e12`。主脚本 SHA-256：`6fb94d191ba773fceffc84669ea93b295e800df00e414be8d578fbeb499cc634`，归档 SHA-256：`57d4fb9c6ba8ec25fb8b6d23389cf6f1af08348faa87353b12c1402af20cb4e2`。
+- 公网 8 项资源核对通过，返回 200、内容散列一致并保持 no-cache；隔离 Chrome 用 0.6 压感验证擦除、抬笔、撤销、悬停/离开和半透明光标，六张截图及像素核验通过，页面新增异常 0。本次正式 Web 的目标墨迹暗像素为 123 → 0 → Undo 后 123，工具栏像素不变。
+- 后端容器与镜像保持原值，API 健康。新站点目录 `/var/www/flowmuse-app-releases/eraser-feel-20261025-2250e12`；上一版 `issue84-pressure-20261025-7de11ef` 与配置备份 `/etc/nginx/sites-available/flowmuse-app.before-eraser-feel-20261025-2250e12` 保留。部署回执在服务器 `/opt/flowmuse/releases/eraser-feel-20261025-2250e12/web-deployment.json`，本地封包与核验日志在忽略目录 `FlowMuse-App/build/eraser-feel-release/`。
+- 发布回执仅修改文档，应用源码保持与已验证构建一致；随后提交面向 main 的 PR，不等待 CI 或审查。真实手写笔的新版力度舒适度仍待用户复测。
+
 较轻压力触发后的主题色光标，工具栏仍为钢笔：
 
 ![较轻压力触发后的光标](../images/issue84-eraser-feel.png)
