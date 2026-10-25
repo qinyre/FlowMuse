@@ -339,6 +339,151 @@ void main() {
     expect(_ink(reopened), hasLength(1));
   });
 
+  testWidgets('重压经过真实画布与加密房间：擦除、撤销保留远端新元素', (tester) async {
+    final room = CollaborationRoom.newRoom(crypto: CollaborationCrypto());
+    final store = MemoryEncryptedSceneStore();
+    final hub = MemoryRealtimeRoomHub();
+    final peer = CollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'pressure-peer'),
+      sceneStore: store,
+    );
+    final local = _TrackedCollaborationRepository(
+      transport: MemoryRealtimeTransport(hub: hub, socketId: 'pressure-page'),
+      sceneStore: store,
+    );
+    addTearDown(peer.stop);
+    await tester.runAsync(() async {
+      await store.createRoom(
+        room: room,
+        scene: ExcalidrawScene.empty(),
+        ownerKeyHash: 'test',
+      );
+      await peer.joinRoom(room: room, localScene: ExcalidrawScene.empty());
+    });
+    final received = <CollaborationMessage>[];
+    final subscription = peer.encryptedMessages(room).listen(received.add);
+    addTearDown(subscription.cancel);
+    final container = _container(library: library, collaboration: local);
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: WhiteboardPage.collaborationRoom(initialRoom: room),
+        ),
+      ),
+    );
+    await _drainIo(
+      tester,
+      container,
+      until: () =>
+          find.byType(MarkdrawEditor).evaluate().isNotEmpty &&
+          container.read(whiteboardViewModelProvider).collaborationStatus ==
+              WhiteboardCollaborationStatus.connected,
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final controller = tester
+        .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+        .controller!;
+    controller.selectBrush(BrushType.fountainPen);
+    await tester.pump();
+    final canvasOrigin = tester.getTopLeft(find.byType(EditorCanvas));
+    const position = Offset(650, 400);
+    final point = controller.toScene(position - canvasOrigin);
+    final target = RectangleElement(
+      id: const ElementId('pressure-target'),
+      x: point.x - 20,
+      y: point.y - 20,
+      width: 40,
+      height: 40,
+    );
+    Future<void> send(RectangleElement element) async {
+      await tester.runAsync(
+        () => peer.broadcastElements(
+          room: room,
+          elements: [
+            Map<String, Object?>.from(
+              ExcalidrawJsonCodec.elementToJson(element),
+            ),
+          ],
+        ),
+      );
+      await _drainIo(tester, container);
+    }
+
+    await send(target);
+    controller.keyboardFocusNode.requestFocus();
+    await tester.pump();
+    expect(controller.canUseStylusGesture!(), isTrue);
+    await tester.sendEventToBinding(
+      const PointerDownEvent(
+        pointer: 410,
+        kind: PointerDeviceKind.stylus,
+        position: position,
+        pressure: .9,
+        pressureMin: 0,
+        pressureMax: 1,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(controller.editorState.activeToolType, ToolType.freedraw);
+    expect(controller.eraserCursorPosition, isNotNull);
+    expect(
+      controller.currentScene.getElementById(target.id)!.isDeleted,
+      isTrue,
+    );
+    await tester.sendEventToBinding(
+      const PointerUpEvent(
+        pointer: 410,
+        kind: PointerDeviceKind.stylus,
+        position: position,
+      ),
+    );
+    await _drainIo(tester, container);
+    expect(_ink(controller), isEmpty);
+    bool observed(bool deleted) => received
+        .expand((message) => message.elements)
+        .any(
+          (element) =>
+              element['id'] == 'pressure-target' &&
+              element['isDeleted'] == deleted,
+        );
+    expect(observed(true), isTrue);
+    await send(
+      target.copyWith(
+        id: const ElementId('pressure-remote-new'),
+        x: point.x + 100,
+      ),
+    );
+    controller.undo();
+    await _drainIo(tester, container);
+    expect(
+      controller.currentScene.getElementById(target.id)!.isDeleted,
+      isFalse,
+    );
+    expect(
+      controller.currentScene
+          .getElementById(const ElementId('pressure-remote-new'))!
+          .isDeleted,
+      isFalse,
+    );
+    expect(observed(false), isTrue);
+    controller.redo();
+    await _drainIo(tester, container);
+    expect(
+      controller.currentScene.getElementById(target.id)!.isDeleted,
+      isTrue,
+    );
+    expect(
+      controller.currentScene
+          .getElementById(const ElementId('pressure-remote-new'))!
+          .isDeleted,
+      isFalse,
+    );
+  });
+
   testWidgets('五笔经过真实画布：SQLite 自动保存、撤销重做、取消和重开', (tester) async {
     final note = await tester.runAsync(
       () => library.createNote(title: 'workflow-five-brushes'),

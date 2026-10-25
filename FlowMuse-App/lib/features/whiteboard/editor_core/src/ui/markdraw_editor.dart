@@ -271,6 +271,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
     _controller.onRecognizeInk = widget.onRecognizeInk;
     _controller.onMindmapOperationError = _showMindmapOperationError;
+    _controller.canUseStylusGesture = _canUseStylusGesture;
     _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     _controller.restoreKeyboardFocusWhenStable();
     unawaited(_restoreEditorChrome());
@@ -290,8 +291,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _speechFinalCommitted = false;
     }
     if (widget.controller != oldWidget.controller) {
-      (oldWidget.controller ?? _ownController)
-          ?.cancelPendingStylusEraserToggle();
+      (oldWidget.controller ?? _ownController)?.cancelStylusInteractions();
+      (oldWidget.controller ?? _ownController)?.canUseStylusGesture = null;
       oldWidget.controller?.chromeChanges.removeListener(_onControllerChanged);
       _controller.chromeChanges.addListener(_onControllerChanged);
       _controller.onSceneChanged = widget.onSceneChanged;
@@ -301,6 +302,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
       _controller.onLiveInkCancelled = widget.onLiveInkCancelled;
       _controller.onRecognizeInk = widget.onRecognizeInk;
       _controller.onMindmapOperationError = _showMindmapOperationError;
+      _controller.canUseStylusGesture = _canUseStylusGesture;
       _controller.setThemeCanvasBackground(widget.canvasThemeBackground);
     } else if (widget.onRecognizeInk != oldWidget.onRecognizeInk) {
       _controller.onRecognizeInk = widget.onRecognizeInk;
@@ -326,7 +328,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_stylusDoubleTapSubscription?.cancel());
-    _controller.cancelPendingStylusEraserToggle();
+    _controller.cancelStylusInteractions();
+    _controller.canUseStylusGesture = null;
     unawaited(_speechSubscription?.cancel());
     unawaited(_speechService.dispose());
     _controller.chromeChanges.removeListener(_onControllerChanged);
@@ -348,20 +351,21 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
-      _controller.cancelPendingStylusEraserToggle();
+      _controller.cancelStylusInteractions();
       unawaited(_cancelSpeech());
     }
   }
 
   void _onStylusDoubleTap() {
-    if (!mounted ||
-        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed ||
-        ModalRoute.of(context)?.isCurrent == false ||
-        !_controller.keyboardFocusNode.hasPrimaryFocus) {
-      return;
-    }
+    if (!_canUseStylusGesture()) return;
     _controller.toggleStylusEraser();
   }
+
+  bool _canUseStylusGesture() =>
+      mounted &&
+      WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+      ModalRoute.of(context)?.isCurrent != false &&
+      _controller.keyboardFocusNode.hasPrimaryFocus;
 
   Future<void> _checkSpeechAvailability() async {
     final available = await _speechService.isAvailable();

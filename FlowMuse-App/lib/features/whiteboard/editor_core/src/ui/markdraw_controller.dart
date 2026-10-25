@@ -108,6 +108,7 @@ class MarkdrawController extends ChangeNotifier {
     _canvasBackgroundColor = config.initialBackground;
 
     _textFocusNode.addListener(_onTextFocusChanged);
+    keyboardFocusNode.addListener(_onCanvasFocusChanged);
 
     _imageCache.onImageDecoded = () {
       if (!_disposed) {
@@ -165,6 +166,14 @@ class MarkdrawController extends ChangeNotifier {
   SelectTool? _activeTouchSelectionTool;
   int? _activeStylusPointerId;
   int? _activeEraserPointerId;
+  EraserTool? _temporaryEraser;
+  ({int pointer, Offset origin, Offset position, bool hasPressure})?
+  _pressureHoldCandidate;
+  Timer? _pressureHoldTimer;
+  // shortcut: 保守初值，实际触发力度与停留时间仍需手写笔真机校准。
+  static const _pressureHoldLevel = 0.8;
+  static const _pressureHoldDelay = Duration(milliseconds: 550);
+  static const _pressureHoldSlop = 4.0;
   bool _pendingStylusEraserToggle = false;
   final Set<int> _rejectedTouchPointers = {};
   bool _pressureEnabled = true;
@@ -304,7 +313,7 @@ class MarkdrawController extends ChangeNotifier {
   Offset? mousePosition;
 
   Offset? get eraserCursorPosition {
-    if (_activeTool is! EraserTool) return null;
+    if (_activeTool is! EraserTool && _temporaryEraser == null) return null;
     if (!_policySelector.eraserCursorOnHover &&
         (_activeStylusPointerId == null ||
             _activeStylusPointerId != _activeEraserPointerId)) {
@@ -784,6 +793,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// The mouse cursor appropriate for the active tool.
   MouseCursor get cursorForTool {
+    if (_temporaryEraser != null) return SystemMouseCursors.none;
     return switch (_editorState.activeToolType) {
       ToolType.select || ToolType.hand => SystemMouseCursors.basic,
       ToolType.eraser =>
@@ -845,6 +855,9 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   void setLayout(CanvasLayout layout) {
+    if (_pressureHoldCandidate != null || _temporaryEraser != null) {
+      _cancelActiveToolInteraction(ActivePreviewTerminalReason.viewportGesture);
+    }
     _layout = layout.ensurePage();
     _editorState = _editorState.copyWith(
       scene: _sceneWithLayoutPages(_editorState.scene),
@@ -863,6 +876,10 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   set canvasSize(Size value) {
+    if (value != _canvasSize &&
+        (_pressureHoldCandidate != null || _temporaryEraser != null)) {
+      _cancelActiveToolInteraction(ActivePreviewTerminalReason.viewportGesture);
+    }
     _canvasSize = value;
     _applyViewportConstraints();
   }
@@ -973,6 +990,8 @@ class MarkdrawController extends ChangeNotifier {
   /// A barrel gesture must not cancel an unfinished pen stroke.
   void toggleStylusEraser() {
     if (_disposed || _viewMode || _editingTextElementId != null) return;
+    _cancelPressureHold();
+    if (_temporaryEraser != null) return;
     final type = _editorState.activeToolType;
     if (type != ToolType.freedraw && type != ToolType.eraser) return;
     if (_activeStylusPointerId != null) {
@@ -989,6 +1008,138 @@ class MarkdrawController extends ChangeNotifier {
 
   void cancelPendingStylusEraserToggle() {
     _pendingStylusEraserToggle = false;
+  }
+
+  /// Host guard for route, focus and foreground state; absent in headless use.
+  bool Function()? canUseStylusGesture;
+
+  bool get _canUsePressureEraser =>
+      !_disposed &&
+      !_viewMode &&
+      _editingTextElementId == null &&
+      _editingFrameLabelId == null &&
+      !_fontPickerOpen &&
+      !_isViewportGesture &&
+      !pagedTouchActive &&
+      _temporaryTouchPanPointerId == null &&
+      _activeTouchSelectionPointerId == null &&
+      textEditingController.value.composing.isCollapsed &&
+      (canUseStylusGesture?.call() ?? true);
+
+  void _onCanvasFocusChanged() {
+    if (keyboardFocusNode.context != null &&
+        !keyboardFocusNode.hasPrimaryFocus &&
+        (_pressureHoldCandidate != null || _temporaryEraser != null)) {
+      cancelStylusInteractions();
+    }
+  }
+
+  void _cancelPressureHold() {
+    _pressureHoldTimer?.cancel();
+    _pressureHoldTimer = null;
+    _pressureHoldCandidate = null;
+  }
+
+  void _updatePressureHold(PointerEvent event, {bool begin = false}) {
+    if (begin) {
+      _cancelPressureHold();
+      if (event.kind != PointerDeviceKind.stylus || !_canUsePressureEraser) {
+        return;
+      }
+      _pressureHoldCandidate = (
+        pointer: event.pointer,
+        origin: event.localPosition,
+        position: event.localPosition,
+        hasPressure: false,
+      );
+    }
+    final held = _pressureHoldCandidate;
+    if (held == null || held.pointer != event.pointer) return;
+    final hasRange = event.pressureMax > event.pressureMin;
+    if (!_canUsePressureEraser ||
+        !event.pressure.isFinite ||
+        !event.pressureMin.isFinite ||
+        !event.pressureMax.isFinite ||
+        event.pressureMax < event.pressureMin ||
+        (hasRange
+            ? event.pressure < event.pressureMin ||
+                  event.pressure > event.pressureMax
+            : event.pressure < 0 || event.pressure > 1) ||
+        !event.localPosition.dx.isFinite ||
+        !event.localPosition.dy.isFinite ||
+        (event.localPosition - held.origin).distance > _pressureHoldSlop) {
+      _cancelPressureHold();
+      return;
+    }
+    final pressure = reliableStylusPressure(
+      kind: event.kind,
+      pressure: event.pressure,
+      pressureMin: event.pressureMin,
+      pressureMax: event.pressureMax,
+    );
+    if (pressure == null) {
+      _cancelPressureHold();
+      return;
+    }
+    // A default, constant full-pressure stream does not prove pressure support.
+    final hasPressure = held.hasPressure || (pressure > 0 && pressure < 1);
+    _pressureHoldCandidate = (
+      pointer: held.pointer,
+      origin: held.origin,
+      position: event.localPosition,
+      hasPressure: hasPressure,
+    );
+    if (pressure < _pressureHoldLevel || !hasPressure) {
+      _pressureHoldTimer?.cancel();
+      _pressureHoldTimer = null;
+      return;
+    }
+    _pressureHoldTimer ??= Timer(_pressureHoldDelay, _beginTemporaryEraser);
+  }
+
+  void _beginTemporaryEraser() {
+    final held = _pressureHoldCandidate;
+    if (held == null ||
+        !_canUsePressureEraser ||
+        _activeTool is! FreedrawTool ||
+        _activeDrawPointerId != held.pointer ||
+        _activeStylusPointerId != held.pointer) {
+      _cancelPressureHold();
+      return;
+    }
+    _cancelActiveToolInteraction(ActivePreviewTerminalReason.cancel);
+    _temporaryEraser = EraserTool();
+    _activeEraserPointerId = held.pointer;
+    _sceneBeforeDrag = _editorState.scene;
+    mousePosition = held.position;
+    applyResult(
+      _temporaryEraser!.onPointerDown(toScene(held.position), toolContext),
+    );
+    notifyListeners();
+  }
+
+  void _finishEraserInteraction() {
+    if (_sceneBeforeDrag != null &&
+        !identical(_editorState.scene, _sceneBeforeDrag)) {
+      _historyManager.push(_sceneBeforeDrag!);
+    }
+    _sceneBeforeDrag = null;
+    _activeEraserPointerId = null;
+    _temporaryEraser?.reset();
+    _temporaryEraser = null;
+    if (!_policySelector.eraserCursorOnHover || _activeTool is! EraserTool) {
+      mousePosition = null;
+    }
+  }
+
+  /// Cancels pending/active pointer input on host interruption, keeping erasure undoable.
+  void cancelStylusInteractions() {
+    if (_disposed) return;
+    _cancelActiveInteraction(ActivePreviewTerminalReason.toolSwitch);
+    mousePosition = null;
+    runWhenUiStable(() {
+      if (!_disposed) notifyListeners();
+    });
   }
 
   void _flushPendingStylusEraserToggle() {
@@ -1014,6 +1165,9 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Undoes the last scene change.
   void undo() {
+    if (_pressureHoldCandidate != null || _temporaryEraser != null) {
+      _cancelActiveToolInteraction(ActivePreviewTerminalReason.toolSwitch);
+    }
     final undone = _historyManager.undo(_editorState.scene);
     if (undone != null) {
       _editorState = _editorState.copyWith(
@@ -1029,6 +1183,9 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Redoes the last undone scene change.
   void redo() {
+    if (_pressureHoldCandidate != null || _temporaryEraser != null) {
+      _cancelActiveToolInteraction(ActivePreviewTerminalReason.toolSwitch);
+    }
     final redone = _historyManager.redo(_editorState.scene);
     if (redone != null) {
       _editorState = _editorState.copyWith(
@@ -1229,6 +1386,10 @@ class MarkdrawController extends ChangeNotifier {
   /// 避免 sticky 默认样式二次覆盖识别产物。
   void applyResult(ToolResult? result, {bool applyDefaultStyle = true}) {
     if (result == null) return;
+    if (result is UpdateViewportResult &&
+        (_pressureHoldCandidate != null || _temporaryEraser != null)) {
+      _cancelActiveToolInteraction(ActivePreviewTerminalReason.viewportGesture);
+    }
 
     final constrained = _constrainViewport(result);
     final styled = applyDefaultStyle && isCreationTool
@@ -2364,6 +2525,11 @@ class MarkdrawController extends ChangeNotifier {
   void onPointerDown(PointerEvent event) {
     if (_isViewportGesture) return;
     if (_activeEraserPointerId != null) return;
+    if (_pressureHoldCandidate != null &&
+        event.pointer != _pressureHoldCandidate!.pointer &&
+        _isStylus(event.kind)) {
+      return;
+    }
     if (event.kind == PointerDeviceKind.touch &&
         _palmRejectionEnabled &&
         _activeStylusPointerId != null) {
@@ -2508,6 +2674,7 @@ class MarkdrawController extends ChangeNotifier {
       if (freedrawTool.activeView?.strokeLiveMode ?? false) {
         _emitLiveFreedraw();
       }
+      _updatePressureHold(event, begin: true);
       return;
     }
 
@@ -2576,6 +2743,22 @@ class MarkdrawController extends ChangeNotifier {
       return;
     }
     if (_rejectedTouchPointers.contains(event.pointer)) return;
+    if (_temporaryEraser != null) {
+      if (!_canUsePressureEraser) {
+        cancelStylusInteractions();
+        return;
+      }
+      mousePosition = event.localPosition;
+      applyResult(
+        _temporaryEraser!.onPointerMove(
+          toScene(event.localPosition),
+          toolContext,
+        ),
+      );
+      notifyListeners();
+      return;
+    }
+    _updatePressureHold(event);
     if (event.pointer == _temporaryTouchPanPointerId) {
       final start = _temporaryTouchPanStartPosition;
       var delta = event.delta;
@@ -2674,6 +2857,21 @@ class MarkdrawController extends ChangeNotifier {
         event.pointer != _activeEraserPointerId) {
       return;
     }
+    if (_temporaryEraser != null) {
+      if (_canUsePressureEraser) {
+        applyResult(
+          _temporaryEraser!.onPointerUp(
+            toScene(event.localPosition),
+            toolContext,
+          ),
+        );
+      }
+      _finishEraserInteraction();
+      _activeStylusPointerId = null;
+      notifyListeners();
+      return;
+    }
+    if (_pressureHoldCandidate?.pointer == event.pointer) _cancelPressureHold();
     if (event.pointer == _temporaryTouchPanPointerId) {
       final start = _temporaryTouchPanStartPosition;
       if (!_temporaryTouchPanMoved &&
@@ -2833,8 +3031,7 @@ class MarkdrawController extends ChangeNotifier {
     }
     _sceneBeforeDrag = null;
     if (_activeEraserPointerId != null) {
-      _activeEraserPointerId = null;
-      if (!_policySelector.eraserCursorOnHover) mousePosition = null;
+      _finishEraserInteraction();
       notifyListeners();
     }
     _flushPendingStylusEraserToggle();
@@ -2865,6 +3062,9 @@ class MarkdrawController extends ChangeNotifier {
         _historyManager.push(_sceneBeforeDrag!);
       }
       _sceneBeforeDrag = null;
+      return;
+    }
+    if (_activeDrawPointerId != null && event.pointer != _activeDrawPointerId) {
       return;
     }
     if (_isStylus(event.kind) && event.pointer == _activeStylusPointerId) {
@@ -2974,7 +3174,10 @@ class MarkdrawController extends ChangeNotifier {
   /// Releases any tool interaction once a two-finger viewport gesture wins.
   /// This keeps raw pointer events from applying a second pan or mutating a
   /// shape while [GestureDetector] owns the viewport transform.
-  void _cancelActiveInteractionForViewportGesture() {
+  void _cancelActiveInteractionForViewportGesture() =>
+      _cancelActiveInteraction(ActivePreviewTerminalReason.viewportGesture);
+
+  void _cancelActiveInteraction(ActivePreviewTerminalReason reason) {
     _modeler?.reset(reason: 'viewport gesture');
     _modeler = null;
     _activeDrawPointerId = null;
@@ -2985,20 +3188,19 @@ class MarkdrawController extends ChangeNotifier {
     _activeTouchSelectionPointerId = null;
     _activeTouchSelectionTool = null;
     _activeStylusPointerId = null;
-    _cancelActiveToolInteraction(ActivePreviewTerminalReason.viewportGesture);
+    _cancelActiveToolInteraction(reason);
     _sceneBeforeDrag = null;
   }
 
   void _cancelActiveToolInteraction(ActivePreviewTerminalReason reason) {
-    if (_activeTool is EraserTool) {
-      if (_sceneBeforeDrag != null &&
-          !identical(_editorState.scene, _sceneBeforeDrag)) {
-        _historyManager.push(_sceneBeforeDrag!);
-      }
-      _sceneBeforeDrag = null;
-      _activeEraserPointerId = null;
-      mousePosition = null;
+    _cancelPressureHold();
+    if (_activeTool is EraserTool || _temporaryEraser != null) {
+      _finishEraserInteraction();
     }
+    _modeler?.reset(reason: reason.name);
+    _modeler = null;
+    _activeDrawPointerId = null;
+    _sceneBeforeDrag = null;
     cancelPendingStylusEraserToggle();
     _finishActivePreviewStroke(reason);
     if (_activeTool is FreedrawTool) {
@@ -3530,6 +3732,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Loads a new scene, clearing undo history. Use for file-open operations.
   void loadScene(Scene scene, {String? background}) {
+    _cancelActiveInteraction(ActivePreviewTerminalReason.toolSwitch);
     closeTransientUiForSceneReplace();
     _historyManager.clear();
     final validated = TextBoundsValidator.validateScene(scene);
@@ -3551,6 +3754,7 @@ class MarkdrawController extends ChangeNotifier {
   /// Unlike [loadScene], this pushes the current scene onto the undo stack
   /// so the change can be undone. Used by the split-pane text editor.
   void applyScene(Scene scene, {String? background}) {
+    _cancelActiveInteraction(ActivePreviewTerminalReason.toolSwitch);
     closeTransientUiForSceneReplace();
     _historyManager.push(_editorState.scene);
     final validated = TextBoundsValidator.validateScene(scene);
@@ -3572,6 +3776,7 @@ class MarkdrawController extends ChangeNotifier {
   /// into a single undo entry. Call [applyScene] first to create the undo
   /// point, then [replaceScene] for subsequent updates in the same session.
   void replaceScene(Scene scene, {String? background}) {
+    _cancelActiveInteraction(ActivePreviewTerminalReason.toolSwitch);
     closeTransientUiForSceneReplace();
     final validated = TextBoundsValidator.validateScene(scene);
     _editorState = _editorState.copyWith(scene: validated, selectedIds: {});
@@ -3652,6 +3857,7 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Clears the scene and undo history.
   void clear() {
+    _cancelActiveInteraction(ActivePreviewTerminalReason.toolSwitch);
     closeTransientUiForSceneReplace();
     _historyManager.clear();
     _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
@@ -5809,6 +6015,7 @@ class MarkdrawController extends ChangeNotifier {
     }
 
     if (asBackground) {
+      _cancelActiveInteraction(ActivePreviewTerminalReason.toolSwitch);
       closeTransientUiForSceneReplace();
       _historyManager.clear();
       _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
