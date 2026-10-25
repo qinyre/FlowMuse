@@ -657,9 +657,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
     final noteId = widget.noteId;
     final revision = _localDraftRevision;
-    final content = _markdrawController.serializeScene(
-      format: DocumentFormat.excalidraw,
-    );
+    final content = _markdrawController.serializeSceneForPersistence();
     final thumbnail = _markdrawController.exportCoverThumbnail();
     // shortcut: 慢写盘逐批排队，实测持续积压时合并未开始的快照。
     final previous = _localDraftSave ?? Future<void>.value();

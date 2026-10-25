@@ -5578,6 +5578,36 @@ class MarkdrawController extends ChangeNotifier {
 
   // --- Convenience methods for serialization / export / import ---
 
+  MarkdrawDocument _sceneDocument({bool includeDeleted = false}) {
+    return SceneDocumentConverter.sceneToDocument(
+      _editorState.scene,
+      settings: CanvasSettings(
+        background: _canvasBackgroundColor,
+        backgroundFollowsTheme: _canvasBackgroundFollowsTheme,
+        grid: _gridSize,
+        name: _documentName,
+      ),
+      includeDeleted: includeDeleted,
+    );
+  }
+
+  /// Capture before yielding so edits during encoding belong to the next save.
+  Future<String> serializeSceneForPersistence() {
+    final doc = _sceneDocument();
+    final imageBytes = doc.files.values.fold<int>(
+      0,
+      (total, file) => total + file.bytes.length,
+    );
+    if (imageBytes >= 1024 * 1024) {
+      return compute(
+        ExcalidrawJsonCodec.serialize,
+        doc,
+        debugLabel: 'whiteboard.serialize_draft',
+      );
+    }
+    return Future.sync(() => ExcalidrawJsonCodec.serialize(doc));
+  }
+
   /// Serializes the current scene to a string in the given [format].
   String serializeScene({
     DocumentFormat format = DocumentFormat.markdraw,
@@ -5597,16 +5627,7 @@ class MarkdrawController extends ChangeNotifier {
     DocumentFormat format = DocumentFormat.markdraw,
     bool includeDeleted = false,
   }) {
-    final doc = SceneDocumentConverter.sceneToDocument(
-      _editorState.scene,
-      settings: CanvasSettings(
-        background: _canvasBackgroundColor,
-        backgroundFollowsTheme: _canvasBackgroundFollowsTheme,
-        grid: _gridSize,
-        name: _documentName,
-      ),
-      includeDeleted: includeDeleted,
-    );
+    final doc = _sceneDocument(includeDeleted: includeDeleted);
     final text = switch (format) {
       DocumentFormat.excalidraw => ExcalidrawJsonCodec.serialize(doc),
       _ => DocumentSerializer.serialize(doc),

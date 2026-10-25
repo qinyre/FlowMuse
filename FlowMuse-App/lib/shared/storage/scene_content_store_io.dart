@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 
 import 'local_database_path.dart';
@@ -18,9 +19,16 @@ class SceneContentStore {
   Future<String> write(String noteId, String content) async {
     final fileName =
         '${base64Url.encode(utf8.encode(noteId)).replaceAll('=', '')}.scene';
+    final bytes = content.length > inlineContentLimit
+        ? await compute(
+            utf8.encode,
+            content,
+            debugLabel: 'whiteboard.encode_file',
+          )
+        : utf8.encode(content);
     await File(
       path.join((await _root()).path, fileName),
-    ).writeAsString(content, flush: true);
+    ).writeAsBytes(bytes, flush: true);
     return '$referencePrefix$fileName';
   }
 
