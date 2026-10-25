@@ -90,22 +90,29 @@ class DiagonalLinePainter extends CustomPainter {
 
 /// 20x20 circle cursor for the eraser tool.
 class EraserCursorPainter extends CustomPainter {
+  final Color color;
+  EraserCursorPainter({required this.color});
+
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    canvas.drawCircle(center, 5, Paint()..color = Colors.white);
     canvas.drawCircle(
       center,
-      5,
+      6,
+      Paint()..color = color.withValues(alpha: 0.16),
+    );
+    canvas.drawCircle(
+      center,
+      6,
       Paint()
-        ..color = Colors.black
+        ..color = color.withValues(alpha: 0.8)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
+        ..strokeWidth = 1.1,
     );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(EraserCursorPainter old) => old.color != color;
 }
 
 /// Fill style icon (solid, hachure, cross-hatch, zigzag).

@@ -170,8 +170,8 @@ class MarkdrawController extends ChangeNotifier {
   ({int pointer, Offset origin, Offset position, bool hasPressure})?
   _pressureHoldCandidate;
   Timer? _pressureHoldTimer;
-  // shortcut: 保守初值，实际触发力度与停留时间仍需手写笔真机校准。
-  static const _pressureHoldLevel = 0.8;
+  // shortcut: 一加实测后下调，其他手写笔的舒适度仍需真机校准。
+  static const _pressureHoldLevel = 0.55;
   static const _pressureHoldDelay = Duration(milliseconds: 550);
   static const _pressureHoldSlop = 4.0;
   bool _pendingStylusEraserToggle = false;
