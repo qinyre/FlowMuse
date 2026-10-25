@@ -5333,9 +5333,14 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Renders the scene to an offscreen image for pixel sampling.
   ///
-  /// Call once when entering eyedropper mode, then use [sampleColorFromImage]
-  /// to read pixels without re-rendering.
+  /// The caller owns the image and reads its pixels once per picker session.
   Future<ui.Image?> renderSceneImage(Size canvasSize) async {
+    if (_disposed ||
+        canvasSize.isEmpty ||
+        !canvasSize.width.isFinite ||
+        !canvasSize.height.isFinite) {
+      return null;
+    }
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
@@ -5355,12 +5360,14 @@ class MarkdrawController extends ChangeNotifier {
     painter.paint(canvas, canvasSize);
 
     final picture = recorder.endRecording();
-    final image = await picture.toImage(
-      canvasSize.width.ceil(),
-      canvasSize.height.ceil(),
-    );
-    picture.dispose();
-    return image;
+    try {
+      return await picture.toImage(
+        canvasSize.width.ceil(),
+        canvasSize.height.ceil(),
+      );
+    } finally {
+      picture.dispose();
+    }
   }
 
   /// Exports a card-sized cover thumbnail for the current note.
@@ -5567,32 +5574,6 @@ class MarkdrawController extends ChangeNotifier {
     // Later decodes may evict earlier ones: report the final availability so
     // exporters never mistake missing page images for a successful prewarm.
     return intersecting.keys.where((id) => !_imageCache.contains(id)).length;
-  }
-
-  /// Reads the pixel color at [screenPosition] from a pre-rendered [image].
-  ///
-  /// Returns a hex color string like '#ff0000', or null if out of bounds.
-  Future<String?> sampleColorFromImage(
-    ui.Image image,
-    Offset screenPosition,
-  ) async {
-    final px = screenPosition.dx.round();
-    final py = screenPosition.dy.round();
-    if (px < 0 || py < 0 || px >= image.width || py >= image.height) {
-      return null;
-    }
-
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-    if (byteData == null) return null;
-
-    final offset = (py * image.width + px) * 4;
-    final r = byteData.getUint8(offset);
-    final g = byteData.getUint8(offset + 1);
-    final b = byteData.getUint8(offset + 2);
-
-    return '#${r.toRadixString(16).padLeft(2, '0')}'
-        '${g.toRadixString(16).padLeft(2, '0')}'
-        '${b.toRadixString(16).padLeft(2, '0')}';
   }
 
   // --- Convenience methods for serialization / export / import ---
