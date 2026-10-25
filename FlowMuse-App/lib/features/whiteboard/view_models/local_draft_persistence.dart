@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 
@@ -7,7 +9,7 @@ import '../repositories/whiteboard_scene_repository.dart';
 /// 场景正文决定保存是否成功，封面和列表元数据失败不应困住已保存的白板。
 Future<void> persistLocalDraft({
   required String noteId,
-  required String content,
+  required FutureOr<String> content,
   required WhiteboardSceneRepository scenes,
   required LibraryRepository library,
   required Future<void> previousSave,
@@ -21,11 +23,16 @@ Future<void> persistLocalDraft({
       return (null, false);
     },
   );
-  await previousSave.catchError((Object error, StackTrace stackTrace) {
+  final previous = previousSave.catchError((
+    Object error,
+    StackTrace stackTrace,
+  ) {
     _reportFailure('previous', error, stackTrace);
   });
   try {
-    await scenes.saveScene(noteId, content);
+    final preparedContent = await content;
+    await previous;
+    await scenes.saveScene(noteId, preparedContent);
   } catch (error, stackTrace) {
     _reportFailure('scene', error, stackTrace);
     rethrow;

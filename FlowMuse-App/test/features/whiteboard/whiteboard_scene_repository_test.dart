@@ -28,7 +28,7 @@ void main() {
       () async => database,
       sceneContentStore: SceneContentStore(rootPath: sceneDirectory.path),
     );
-    final content = '{"files":"${'x' * (2 * 1024 * 1024)}"}';
+    final content = '{"files":"${'x' * (2 * 1024 * 1024)}中文𝑥"}';
 
     const noteId = 'note-00000000-0000-0000-0000-000000000000';
     await repository.saveScene(noteId, content);

@@ -7,6 +7,59 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('后一个正文先准备好仍按保存顺序落盘', () async {
+    final scenes = InMemoryWhiteboardSceneRepository();
+    final library = _Library();
+    final firstContent = Completer<String>();
+    final secondContent = Completer<String>();
+    final first = persistLocalDraft(
+      noteId: 'test-note',
+      content: firstContent.future,
+      scenes: scenes,
+      library: library,
+      previousSave: Future<void>.value(),
+      thumbnail: Future<Uint8List?>.value(),
+    );
+    final second = persistLocalDraft(
+      noteId: 'test-note',
+      content: secondContent.future,
+      scenes: scenes,
+      library: library,
+      previousSave: first,
+      thumbnail: Future<Uint8List?>.value(),
+    );
+    secondContent.complete('new-body');
+    await Future<void>.delayed(Duration.zero);
+    expect(library.touches, 0);
+    firstContent.complete('old-body');
+    await Future.wait([first, second]);
+    expect(await scenes.loadScene('test-note'), 'new-body');
+    expect(library.touches, 2);
+  });
+
+  test('正文准备失败保留原错误，同时接管封面与前次失败', () async {
+    final previous = Completer<void>();
+    final prepared = Completer<String>();
+    final library = _Library();
+    final failure = StateError('synthetic encoding failure');
+    final saving = persistLocalDraft(
+      noteId: 'test-note',
+      content: prepared.future,
+      scenes: InMemoryWhiteboardSceneRepository(),
+      library: library,
+      previousSave: previous.future,
+      thumbnail: Future<Uint8List?>.error(
+        StateError('synthetic cover failure'),
+      ),
+    );
+    final checked = expectLater(saving, throwsA(same(failure)));
+    prepared.completeError(failure);
+    await checked;
+    previous.completeError(StateError('synthetic previous failure'));
+    await Future<void>.delayed(Duration.zero);
+    expect(library.touches, 0);
+  });
+
   test('封面生成失败仍保存正文，并保留已有封面', () async {
     // Given：已有封面，新封面渲染失败。
     final scenes = InMemoryWhiteboardSceneRepository();
