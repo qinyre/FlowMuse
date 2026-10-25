@@ -488,6 +488,7 @@ class _EditorCanvasState extends State<EditorCanvas>
           }
           return MouseRegion(
             cursor: controller.cursorForTool,
+            onExit: (_) => controller.onPointerExit(),
             child: Stack(
               children: [
                 GestureDetector(
@@ -656,11 +657,10 @@ class _EditorCanvasState extends State<EditorCanvas>
                       ),
                     ),
                   ),
-                if (controller.editorState.activeToolType == ToolType.eraser &&
-                    controller.mousePosition != null)
+                if (controller.eraserCursorPosition != null)
                   Positioned(
-                    left: controller.mousePosition!.dx - 10,
-                    top: controller.mousePosition!.dy - 10,
+                    left: controller.eraserCursorPosition!.dx - 10,
+                    top: controller.eraserCursorPosition!.dy - 10,
                     child: IgnorePointer(
                       child: CustomPaint(
                         size: const Size(20, 20),

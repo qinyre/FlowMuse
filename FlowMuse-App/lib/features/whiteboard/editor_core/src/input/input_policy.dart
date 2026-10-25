@@ -74,9 +74,19 @@ class InputPolicy {
 }
 
 class InputPolicySelector {
-  const InputPolicySelector({TargetPlatform? platform}) : _platform = platform;
+  const InputPolicySelector({TargetPlatform? platform, bool isWeb = kIsWeb})
+    : _platform = platform,
+      _isWeb = isWeb;
 
   final TargetPlatform? _platform;
+  final bool _isWeb;
+
+  bool get eraserCursorOnHover =>
+      _isWeb ||
+      switch ((_platform ?? defaultTargetPlatform).name) {
+        'android' || 'iOS' || 'ohos' => false,
+        _ => true,
+      };
 
   InputPolicy select(StrokeInputKind kind) {
     return switch (kind) {

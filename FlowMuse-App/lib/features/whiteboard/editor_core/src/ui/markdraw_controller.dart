@@ -91,9 +91,11 @@ typedef LiveInkFreedrawCallback =
 class MarkdrawController extends ChangeNotifier {
   MarkdrawController({
     MarkdrawEditorConfig config = const MarkdrawEditorConfig(),
+    InputPolicySelector inputPolicySelector = const InputPolicySelector(),
     this.activePreviewMetricsProbe,
     this.writingFlags = writingFeatureFlags,
-  }) : _config = config {
+  }) : _config = config,
+       _policySelector = inputPolicySelector {
     _layout = config.initialLayout.ensurePage();
     _editorState = EditorState(
       scene: _sceneWithLayoutPagesForLayout(Scene(), _layout),
@@ -153,7 +155,7 @@ class MarkdrawController extends ChangeNotifier {
   final _harmonyStylusStrokeSmoother = HarmonyStylusStrokeSmoother();
   final _normalizer = StrokeInputNormalizer();
   StrokeInputModeler? _modeler;
-  final _policySelector = const InputPolicySelector();
+  final InputPolicySelector _policySelector;
   int? _activeDrawPointerId;
   int? _temporaryTouchPanPointerId;
   Offset? _temporaryTouchPanStartPosition;
@@ -162,6 +164,7 @@ class MarkdrawController extends ChangeNotifier {
   int? _activeTouchSelectionPointerId;
   SelectTool? _activeTouchSelectionTool;
   int? _activeStylusPointerId;
+  int? _activeEraserPointerId;
   bool _pendingStylusEraserToggle = false;
   final Set<int> _rejectedTouchPointers = {};
   bool _pressureEnabled = true;
@@ -299,6 +302,16 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Current mouse position in screen coordinates; used for eraser cursor.
   Offset? mousePosition;
+
+  Offset? get eraserCursorPosition {
+    if (_activeTool is! EraserTool) return null;
+    if (!_policySelector.eraserCursorOnHover &&
+        (_activeStylusPointerId == null ||
+            _activeStylusPointerId != _activeEraserPointerId)) {
+      return null;
+    }
+    return mousePosition;
+  }
 
   // Pinch-to-zoom state
   double _pinchStartZoom = 1.0;
@@ -773,7 +786,10 @@ class MarkdrawController extends ChangeNotifier {
   MouseCursor get cursorForTool {
     return switch (_editorState.activeToolType) {
       ToolType.select || ToolType.hand => SystemMouseCursors.basic,
-      ToolType.eraser => SystemMouseCursors.none,
+      ToolType.eraser =>
+        _policySelector.eraserCursorOnHover || _activeStylusPointerId != null
+            ? SystemMouseCursors.none
+            : SystemMouseCursors.precise,
       ToolType.laser => SystemMouseCursors.precise,
       _ => SystemMouseCursors.precise,
     };
@@ -2347,6 +2363,7 @@ class MarkdrawController extends ChangeNotifier {
   /// link-to-element mode and link icon clicks.
   void onPointerDown(PointerEvent event) {
     if (_isViewportGesture) return;
+    if (_activeEraserPointerId != null) return;
     if (event.kind == PointerDeviceKind.touch &&
         _palmRejectionEnabled &&
         _activeStylusPointerId != null) {
@@ -2408,6 +2425,12 @@ class MarkdrawController extends ChangeNotifier {
     }
     // Frame label editing is committed by the overlay itself on submit/blur.
     // We don't force-commit here since the TextField handles its own focus.
+
+    if (_activeTool is EraserTool) {
+      _activeEraserPointerId = event.pointer;
+      mousePosition = event.localPosition;
+      notifyListeners();
+    }
 
     if (_activeTool is FreedrawTool) _cancelPendingLiveFreedraw();
     if (_useUnifiedModeler && _activeTool is FreedrawTool) {
@@ -2548,6 +2571,10 @@ class MarkdrawController extends ChangeNotifier {
   /// Handles pointer move: dispatches to the active tool.
   void onPointerMove(PointerEvent event) {
     if (_isViewportGesture) return;
+    if (_activeEraserPointerId != null &&
+        event.pointer != _activeEraserPointerId) {
+      return;
+    }
     if (_rejectedTouchPointers.contains(event.pointer)) return;
     if (event.pointer == _temporaryTouchPanPointerId) {
       final start = _temporaryTouchPanStartPosition;
@@ -2643,6 +2670,10 @@ class MarkdrawController extends ChangeNotifier {
   void onPointerUp(PointerEvent event) {
     if (_isViewportGesture) return;
     if (_rejectedTouchPointers.remove(event.pointer)) return;
+    if (_activeEraserPointerId != null &&
+        event.pointer != _activeEraserPointerId) {
+      return;
+    }
     if (event.pointer == _temporaryTouchPanPointerId) {
       final start = _temporaryTouchPanStartPosition;
       if (!_temporaryTouchPanMoved &&
@@ -2801,6 +2832,11 @@ class MarkdrawController extends ChangeNotifier {
       _historyManager.push(_sceneBeforeDrag!);
     }
     _sceneBeforeDrag = null;
+    if (_activeEraserPointerId != null) {
+      _activeEraserPointerId = null;
+      if (!_policySelector.eraserCursorOnHover) mousePosition = null;
+      notifyListeners();
+    }
     _flushPendingStylusEraserToggle();
   }
 
@@ -2809,6 +2845,10 @@ class MarkdrawController extends ChangeNotifier {
   void onPointerCancel(PointerEvent event) {
     if (_isViewportGesture) return;
     if (_rejectedTouchPointers.remove(event.pointer)) return;
+    if (_activeEraserPointerId != null &&
+        event.pointer != _activeEraserPointerId) {
+      return;
+    }
     if (event.pointer == _temporaryTouchPanPointerId) {
       _temporaryTouchPanPointerId = null;
       _temporaryTouchPanStartPosition = null;
@@ -2845,6 +2885,12 @@ class MarkdrawController extends ChangeNotifier {
     final point = toScene(localPosition);
     _activeTool.onPointerMove(point, toolContext);
     mousePosition = localPosition;
+    notifyListeners();
+  }
+
+  void onPointerExit() {
+    if (mousePosition == null) return;
+    mousePosition = null;
     notifyListeners();
   }
 
@@ -2944,6 +2990,15 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   void _cancelActiveToolInteraction(ActivePreviewTerminalReason reason) {
+    if (_activeTool is EraserTool) {
+      if (_sceneBeforeDrag != null &&
+          !identical(_editorState.scene, _sceneBeforeDrag)) {
+        _historyManager.push(_sceneBeforeDrag!);
+      }
+      _sceneBeforeDrag = null;
+      _activeEraserPointerId = null;
+      mousePosition = null;
+    }
     cancelPendingStylusEraserToggle();
     _finishActivePreviewStroke(reason);
     if (_activeTool is FreedrawTool) {
