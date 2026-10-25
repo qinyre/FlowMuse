@@ -45,4 +45,15 @@ CanvasKit `Image.readPixels` 计数，视口 1280×900，取色截图 1280×788�
 
 开启可访问性并创建合成笔记时，两个版本均记录到一条已有 Web 文本输入路径的初始化异常；本次不声称修复该问题。调色板十六进制文本的可访问性 DOM value 为空，但画面正常显示色值；选色成功通过点击后弹层退出验证，具体像素颜色由 widget 回归覆盖。
 
-脱敏日志、浏览器对照脚本与合成截图保存在忽略目录 `FlowMuse-App/build/eyedropper/`，不提交构建产物。本轮没有推送、部署或安装平板。
+脱敏日志、浏览器对照脚本与合成截图保存在忽略目录 `FlowMuse-App/build/eyedropper/`，不提交构建产物。首次修复提交时尚未推送或部署，随后发布见下方记录；平板保持不更新。
+
+## 正式 Web 发布（2026-10-25）
+
+- 应用源码 `d78b532816618db964ae819a5e831c88460de829`，分支 `fix/web-eyedropper-performance` 已推送。北京时间 18:35 发布至 https://app.flowmuse.cloud/library，保留湿墨分层和实时墨迹 V2 开关。
+- 公网 `main.dart.js` SHA-256：`2b06efd48af5b6edd784207d337cb7266b6e438835dda5e6c38fcc3006e11bb6`；发布包 SHA-256：`3188766e39863a97f45e3c313300327e688912fce7e355e98731825da8695456`。发布清单、资料库入口、主脚本、扫码解码器、三款字体及许可证共 8 项公网检查通过，资源状态/哈希一致，使用 `no-cache`。
+- Nginx 根目录切换为 `/var/www/flowmuse-app-releases/eyedropper-20261025-d78b532`；语法检查和 reload 成功。保留旧目录 `/var/www/flowmuse-app-releases/collab-status-20261025-b500c60` 及配置备份 `/etc/nginx/sites-available/flowmuse-app.before-eyedropper-20261025-d78b532`。服务器发布回执位于 `/opt/flowmuse/releases/eyedropper-20261025-d78b532/web-deployment.json`。
+- 后端容器、镜像身份和运行状态与发布前一致，`/health` 返回 `{"status":"ok"}`；本轮没有重启或更新后端，也没有覆盖安装平板。
+- 正式域名下使用独立浏览器和合成笔记完成实际取色：120 次移动期间整图读取为 0，准备阶段仍为固定 2 次 CanvasKit 操作，点击确认后弹层退出。取色阶段新增页面异常为 0；此前记录的文本输入初始化异常仍存在，不计为本次已修复。
+- 公网检查日志、脚本与回执保存在忽略目录 `FlowMuse-App/build/eyedropper-release/`。仅将下方合成画布截图收入文档，未使用真实笔记、账号或协作房间数据；原浏览器、原笔记体验仍待用户确认。
+
+![正式 Web 合成画布取色验证](../images/web-eyedropper-performance.png)
