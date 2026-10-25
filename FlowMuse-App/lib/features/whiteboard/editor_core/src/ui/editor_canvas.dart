@@ -664,7 +664,9 @@ class _EditorCanvasState extends State<EditorCanvas>
                     child: IgnorePointer(
                       child: CustomPaint(
                         size: const Size(20, 20),
-                        painter: EraserCursorPainter(),
+                        painter: EraserCursorPainter(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                       ),
                     ),
                   ),

@@ -80,7 +80,15 @@ void main() {
     });
   }
 
-  for (final pressure in [.5, 1.0, double.nan, double.infinity, -1.0, 2.0]) {
+  for (final pressure in [
+    .5,
+    .549,
+    1.0,
+    double.nan,
+    double.infinity,
+    -1.0,
+    2.0,
+  ]) {
     testWidgets('低压、恒定满压或非法压感 $pressure 不擦除', (tester) async {
       final c = _controller();
       addTearDown(c.dispose);
@@ -94,6 +102,26 @@ void main() {
       c.onPointerCancel(
         const PointerCancelEvent(pointer: 1, kind: PointerDeviceKind.stylus),
       );
+    });
+  }
+
+  for (final pressure in [.55, .6]) {
+    testWidgets('中等力度 $pressure 停留后可擦除，抬笔恢复原笔', (tester) async {
+      final c = _controller();
+      addTearDown(c.dispose);
+      _down(c, pressure: pressure);
+      await tester.pump(const Duration(milliseconds: 549));
+      expect(c.eraserCursorPosition, isNull);
+      expect(c.currentScene.activeElements, hasLength(1));
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(c.eraserCursorPosition, const Offset(5, 5));
+      expect(c.currentScene.activeElements, isEmpty);
+      expect(c.editorState.activeToolType, ToolType.freedraw);
+      _up(c);
+      expect(c.eraserCursorPosition, isNull);
+      expect(c.activeBrushType, BrushType.fountainPen);
+      c.undo();
+      expect(c.currentScene.activeElements, hasLength(1));
     });
   }
 
