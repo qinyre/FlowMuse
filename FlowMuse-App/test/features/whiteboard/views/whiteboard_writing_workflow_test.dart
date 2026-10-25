@@ -1503,6 +1503,20 @@ void main() {
     expect(controller.editorState.viewport, oneShot);
     await action('跟随视角');
     expect(find.textContaining('正在跟随 同伴'), findsOneWidget);
+    expect(
+      tester
+          .getRect(find.byKey(const ValueKey('collaboration-follow-status')))
+          .bottom,
+      lessThanOrEqualTo(56),
+      reason: '跟随状态应收在顶栏，不能浮在画布中下方',
+    );
+    expect(
+      tester
+          .widget<MarkdrawEditor>(find.byType(MarkdrawEditor))
+          .collaborationViewNotice,
+      isNull,
+      reason: '只有位置邀请继续使用确认提示，跟随本身没有画布浮层',
+    );
     final editor = tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor));
     await bounds(3000);
     expect(

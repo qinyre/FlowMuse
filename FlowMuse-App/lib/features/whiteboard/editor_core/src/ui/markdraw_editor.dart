@@ -90,7 +90,10 @@ class MarkdrawEditor extends StatefulWidget {
     this.onAiPressed,
     this.onSmartLayoutPressed,
     this.collaborationFocusLabel,
+    this.collaborationFocusDescription,
     this.onExitCollaborationFocus,
+    this.collaborationFollowLabel,
+    this.onExitCollaborationFollow,
     this.attributionActionResolver,
     this.focusedCreatorKey,
     this.focusHistoricalContent = false,
@@ -177,9 +180,12 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onAiPressed;
   final VoidCallback? onSmartLayoutPressed;
 
-  /// 协作聚焦状态提示（本机视图态；null = 不显示 pill）。
+  /// 协作聚焦状态（本机视图态；完整说明放在悬停或紧凑菜单中）。
   final String? collaborationFocusLabel;
+  final String? collaborationFocusDescription;
   final VoidCallback? onExitCollaborationFocus;
+  final String? collaborationFollowLabel;
+  final VoidCallback? onExitCollaborationFollow;
 
   /// §6.3 元素入口 resolver：由宿主根据选中元素返回归属文案与聚焦回调。
   final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
@@ -890,163 +896,129 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _GlassNavigationBar(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: LayoutBuilder(
-                            builder: (context, constraints) {
-                              if (isCompact && constraints.maxWidth < 480) {
-                                return const SizedBox.shrink();
-                              }
-                              final titleInset = isCompact
-                                  ? constraints.maxWidth / 3
-                                  : 320.0;
-                              if (constraints.maxWidth <= titleInset * 2 + 32) {
-                                return const SizedBox.shrink();
-                              }
-                              return Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: titleInset,
-                                ),
-                                child: Center(
-                                  child: _DocumentTitle(
-                                    controller: _controller,
-                                    onDocumentRenamed: widget.onDocumentRenamed,
-                                    maxWidth: isCompact ? 160 : 260,
-                                  ),
-                                ),
-                              );
-                            },
+                    child: NavigationToolbar(
+                      middleSpacing: 8,
+                      middle: isCompact && width < 480
+                          ? null
+                          : _DocumentTitle(
+                              controller: _controller,
+                              onDocumentRenamed: widget.onDocumentRenamed,
+                              maxWidth: isCompact ? 160 : 260,
+                            ),
+                      leading: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (showEditChrome)
+                            _LeftChrome(
+                              controller: _controller,
+                              compact: isCompact,
+                              showMenu: widget.config.showMenu,
+                              showTitle: false,
+                              onBack: widget.onBack,
+                              onOpen: widget.onOpen,
+                              onSave: widget.onSave,
+                              onSaveAs: widget.onSaveAs,
+                              onExportPng: widget.onExportPng,
+                              onExportSvg: widget.onExportSvg,
+                              onExportSmartMarkdown:
+                                  widget.onExportSmartMarkdown,
+                              onExportSmartLatex: widget.onExportSmartLatex,
+                              onShare: widget.onShare,
+                              onImportImage: widget.onImportImage,
+                              onImportLibrary: widget.onImportLibrary,
+                              onExportLibrary: widget.onExportLibrary,
+                              onThemeModeChanged: widget.onThemeModeChanged,
+                              currentThemeMode: widget.currentThemeMode,
+                              onDocumentRenamed: widget.onDocumentRenamed,
+                              onChooseControlGroupPosition:
+                                  _showControlGroupPositionDialog,
+                            ),
+                          if (isCompact &&
+                              widget.onFingerDrawingEnabledChanged != null) ...[
+                            const SizedBox(width: 4),
+                            _FingerDrawingSwitch(
+                              showLabel:
+                                  width >= 480 ||
+                                  !widget.collaborating ||
+                                  widget.collaborationParticipants.isEmpty,
+                              value: widget.fingerDrawingEnabled,
+                              onChanged: widget.onFingerDrawingEnabledChanged!,
+                            ),
+                          ],
+                          if (!isCompact && widget.saveStatusLabel != null) ...[
+                            const SizedBox(width: 8),
+                            _StatusPill(label: widget.saveStatusLabel!),
+                          ],
+                          if (!isCompact &&
+                              widget.onFingerDrawingEnabledChanged != null) ...[
+                            const SizedBox(width: 8),
+                            _FingerDrawingSwitch(
+                              value: widget.fingerDrawingEnabled,
+                              onChanged: widget.onFingerDrawingEnabledChanged!,
+                            ),
+                          ],
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _RightChrome(
+                            compact: isCompact,
+                            saveStatusLabel: widget.saveStatusLabel,
+                            showSaveStatus: false,
+                            collaborating: widget.collaborating,
+                            collaborationConnecting:
+                                widget.collaborationConnecting,
+                            collaborationError: widget.collaborationError,
+                            collaborationStatusLabel:
+                                widget.collaborationStatusLabel,
+                            roomLink: widget.roomLink,
+                            roomValue: widget.roomValue,
+                            shareOriginConfigured: widget.shareOriginConfigured,
+                            collaboratorCount: widget.collaboratorCount,
+                            collaborationParticipants:
+                                widget.collaborationParticipants,
+                            isCollaborationOwner: widget.isCollaborationOwner,
+                            onStartCollaboration: widget.onStartCollaboration,
+                            onJoinCollaboration: widget.onJoinCollaboration,
+                            onLeaveCollaboration: widget.onLeaveCollaboration,
+                            onEndCollaboration: widget.onEndCollaboration,
+                            onShareCollaboration: widget.onShareCollaboration,
+                            onManageCollaboration: widget.onManageCollaboration,
+                            onCheckCollaboration: widget.onCheckCollaboration,
+                            socialAction: widget.socialAction,
+                            viewMode: _controller.viewMode,
+                            zenMode: _controller.zenMode,
+                            collaborationFocusLabel:
+                                widget.collaborationFocusLabel,
+                            collaborationFocusDescription:
+                                widget.collaborationFocusDescription,
+                            onExitCollaborationFocus:
+                                widget.onExitCollaborationFocus,
+                            collaborationFollowLabel:
+                                widget.collaborationFollowLabel,
+                            onExitCollaborationFollow:
+                                widget.onExitCollaborationFollow,
+                            onExitViewMode: _controller.toggleViewMode,
+                            onExitZenMode: _controller.toggleZenMode,
+                            toolbarExpandButton:
+                                showNavigationTools &&
+                                    _toolbarDock == ToolbarDock.top &&
+                                    _toolbarCollapsed
+                                ? _buildToolbarExpandButton()
+                                : null,
                           ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (showEditChrome)
-                                _LeftChrome(
-                                  controller: _controller,
-                                  compact: isCompact,
-                                  showMenu: widget.config.showMenu,
-                                  showTitle: false,
-                                  onBack: widget.onBack,
-                                  onOpen: widget.onOpen,
-                                  onSave: widget.onSave,
-                                  onSaveAs: widget.onSaveAs,
-                                  onExportPng: widget.onExportPng,
-                                  onExportSvg: widget.onExportSvg,
-                                  onExportSmartMarkdown:
-                                      widget.onExportSmartMarkdown,
-                                  onExportSmartLatex: widget.onExportSmartLatex,
-                                  onShare: widget.onShare,
-                                  onImportImage: widget.onImportImage,
-                                  onImportLibrary: widget.onImportLibrary,
-                                  onExportLibrary: widget.onExportLibrary,
-                                  onThemeModeChanged: widget.onThemeModeChanged,
-                                  currentThemeMode: widget.currentThemeMode,
-                                  onDocumentRenamed: widget.onDocumentRenamed,
-                                  onChooseControlGroupPosition:
-                                      _showControlGroupPositionDialog,
-                                ),
-                              if (isCompact &&
-                                  widget.onFingerDrawingEnabledChanged !=
-                                      null) ...[
-                                const SizedBox(width: 4),
-                                _FingerDrawingSwitch(
-                                  showLabel:
-                                      width >= 480 ||
-                                      !widget.collaborating ||
-                                      widget.collaborationParticipants.isEmpty,
-                                  value: widget.fingerDrawingEnabled,
-                                  onChanged:
-                                      widget.onFingerDrawingEnabledChanged!,
-                                ),
-                              ],
-                              if (!isCompact &&
-                                  widget.saveStatusLabel != null) ...[
-                                const SizedBox(width: 8),
-                                _StatusPill(label: widget.saveStatusLabel!),
-                              ],
-                              if (!isCompact &&
-                                  widget.onFingerDrawingEnabledChanged !=
-                                      null) ...[
-                                const SizedBox(width: 8),
-                                _FingerDrawingSwitch(
-                                  value: widget.fingerDrawingEnabled,
-                                  onChanged:
-                                      widget.onFingerDrawingEnabledChanged!,
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _RightChrome(
-                                compact: isCompact,
-                                saveStatusLabel: widget.saveStatusLabel,
-                                showSaveStatus: false,
-                                collaborating: widget.collaborating,
-                                collaborationConnecting:
-                                    widget.collaborationConnecting,
-                                collaborationError: widget.collaborationError,
-                                collaborationStatusLabel:
-                                    widget.collaborationStatusLabel,
-                                roomLink: widget.roomLink,
-                                roomValue: widget.roomValue,
-                                shareOriginConfigured:
-                                    widget.shareOriginConfigured,
-                                collaboratorCount: widget.collaboratorCount,
-                                collaborationParticipants:
-                                    widget.collaborationParticipants,
-                                isCollaborationOwner:
-                                    widget.isCollaborationOwner,
-                                onStartCollaboration:
-                                    widget.onStartCollaboration,
-                                onJoinCollaboration: widget.onJoinCollaboration,
-                                onLeaveCollaboration:
-                                    widget.onLeaveCollaboration,
-                                onEndCollaboration: widget.onEndCollaboration,
-                                onShareCollaboration:
-                                    widget.onShareCollaboration,
-                                onManageCollaboration:
-                                    widget.onManageCollaboration,
-                                onCheckCollaboration:
-                                    widget.onCheckCollaboration,
-                                socialAction: widget.socialAction,
-                                viewMode: _controller.viewMode,
-                                zenMode: _controller.zenMode,
-                                collaborationFocusLabel:
-                                    widget.collaborationFocusLabel,
-                                onExitCollaborationFocus:
-                                    widget.onExitCollaborationFocus,
-                                onExitViewMode: _controller.toggleViewMode,
-                                onExitZenMode: _controller.toggleZenMode,
-                                toolbarExpandButton:
-                                    showNavigationTools &&
-                                        _toolbarDock == ToolbarDock.top &&
-                                        _toolbarCollapsed
-                                    ? _buildToolbarExpandButton()
-                                    : null,
-                              ),
-                              if (!isCompact &&
-                                  widget.config.showHelpButton) ...[
-                                const SizedBox(width: 8),
-                                VerticalDivider(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.outlineVariant,
-                                ),
-                                const HelpButton(),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
+                          if (!isCompact && widget.config.showHelpButton) ...[
+                            const SizedBox(width: 8),
+                            VerticalDivider(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant,
+                            ),
+                            const HelpButton(),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -1078,9 +1050,39 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: _StatusPill(
-                      label: '退出专注模式',
-                      onTap: _controller.toggleZenMode,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.collaborationFocusLabel != null) ...[
+                          _CollaborationStatusControl(
+                            key: const ValueKey('collaboration-focus-status'),
+                            label: widget.collaborationFocusLabel!,
+                            description: widget.collaborationFocusDescription,
+                            icon: Icons.filter_center_focus,
+                            actionLabel: '退出聚焦',
+                            onExit: widget.onExitCollaborationFocus,
+                            compact: true,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        if (widget.collaborationFollowLabel != null) ...[
+                          _CollaborationStatusControl(
+                            key: const ValueKey('collaboration-follow-status'),
+                            label: widget.collaborationFollowLabel!,
+                            description:
+                                '${widget.collaborationFollowLabel} · 操作画布可退出',
+                            icon: Icons.visibility_outlined,
+                            actionLabel: '退出跟随',
+                            onExit: widget.onExitCollaborationFollow,
+                            compact: true,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        _StatusPill(
+                          label: '退出专注模式',
+                          onTap: _controller.toggleZenMode,
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -1551,7 +1553,10 @@ class _RightChrome extends StatelessWidget {
     required this.onExitViewMode,
     required this.onExitZenMode,
     this.collaborationFocusLabel,
+    this.collaborationFocusDescription,
     this.onExitCollaborationFocus,
+    this.collaborationFollowLabel,
+    this.onExitCollaborationFollow,
     this.toolbarExpandButton,
   });
 
@@ -1581,17 +1586,45 @@ class _RightChrome extends StatelessWidget {
   final VoidCallback onExitViewMode;
   final VoidCallback onExitZenMode;
   final String? collaborationFocusLabel;
+  final String? collaborationFocusDescription;
   final VoidCallback? onExitCollaborationFocus;
+  final String? collaborationFollowLabel;
+  final VoidCallback? onExitCollaborationFollow;
   final Widget? toolbarExpandButton;
 
   @override
   Widget build(BuildContext context) {
     final canCollaborate =
         onStartCollaboration != null && onLeaveCollaboration != null;
+    final inlineViewStatus = !compact || !canCollaborate || viewMode || zenMode;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (inlineViewStatus && collaborationFocusLabel != null) ...[
+          _CollaborationStatusControl(
+            key: const ValueKey('collaboration-focus-status'),
+            label: collaborationFocusLabel!,
+            description: collaborationFocusDescription,
+            icon: Icons.filter_center_focus,
+            actionLabel: '退出聚焦',
+            onExit: onExitCollaborationFocus,
+            compact: compact,
+          ),
+          const SizedBox(width: 4),
+        ],
+        if (inlineViewStatus && collaborationFollowLabel != null) ...[
+          _CollaborationStatusControl(
+            key: const ValueKey('collaboration-follow-status'),
+            label: collaborationFollowLabel!,
+            description: '$collaborationFollowLabel · 操作画布可退出',
+            icon: Icons.visibility_outlined,
+            actionLabel: '退出跟随',
+            onExit: onExitCollaborationFollow,
+            compact: compact,
+          ),
+          const SizedBox(width: 4),
+        ],
         if (viewMode)
           _StatusPill(label: '退出查看模式', onTap: onExitViewMode)
         else if (zenMode)
@@ -1605,13 +1638,9 @@ class _RightChrome extends StatelessWidget {
               canCollaborate)
             const SizedBox(width: 8),
           if (collaborating && collaborationParticipants.isNotEmpty) ...[
-            ParticipantAvatarStack(participants: collaborationParticipants),
-            const SizedBox(width: 8),
-          ],
-          if (collaborationFocusLabel != null) ...[
-            _StatusPill(
-              label: collaborationFocusLabel!,
-              onTap: onExitCollaborationFocus,
+            ParticipantAvatarStack(
+              participants: collaborationParticipants,
+              maxVisible: compact ? 2 : 5,
             ),
             const SizedBox(width: 8),
           ],
@@ -1638,10 +1667,91 @@ class _RightChrome extends StatelessWidget {
               onShare: onShareCollaboration,
               onManage: onManageCollaboration,
               onCheck: onCheckCollaboration,
+              focusLabel: compact
+                  ? (collaborationFocusDescription ?? collaborationFocusLabel)
+                  : null,
+              onExitFocus: onExitCollaborationFocus,
+              followLabel: compact && collaborationFollowLabel != null
+                  ? '$collaborationFollowLabel · 操作画布可退出'
+                  : null,
+              onExitFollow: onExitCollaborationFollow,
             ),
           ?socialAction,
         ],
       ],
+    );
+  }
+}
+
+class _CollaborationStatusControl extends StatelessWidget {
+  const _CollaborationStatusControl({
+    super.key,
+    required this.label,
+    this.description,
+    required this.icon,
+    required this.actionLabel,
+    required this.onExit,
+    required this.compact,
+  });
+
+  final String label;
+  final String? description;
+  final IconData icon;
+  final String actionLabel;
+  final VoidCallback? onExit;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    if (compact) {
+      return StudioRailIconButton(
+        tooltip: '${description ?? label} · $actionLabel',
+        selected: true,
+        onPressed: onExit,
+        child: Icon(icon, size: 18),
+      );
+    }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 184),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.primaryContainer.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 10, right: 4, top: 4, bottom: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: colors.primary),
+              const SizedBox(width: 6),
+              Flexible(
+                child: HoverTooltip(
+                  message: description ?? label,
+                  child: Text(
+                    label,
+                    semanticsLabel: description ?? label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: colors.onSurface,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              StudioRailIconButton(
+                tooltip: actionLabel,
+                onPressed: onExit,
+                child: const Icon(Icons.close, size: 16),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1669,18 +1779,21 @@ class _ChromeIconButton extends StatelessWidget {
 }
 
 class ParticipantAvatarStack extends StatelessWidget {
-  const ParticipantAvatarStack({super.key, required this.participants});
+  const ParticipantAvatarStack({
+    super.key,
+    required this.participants,
+    this.maxVisible = 5,
+  });
 
   static const _avatarSize = 26.0;
   static const _avatarRadius = 11.0;
   static const _overlapStep = 18.0;
-  static const _maxVisible = 5;
-
   final List<CollaborationParticipantBadge> participants;
+  final int maxVisible;
 
   @override
   Widget build(BuildContext context) {
-    final visible = participants.take(_maxVisible).toList();
+    final visible = participants.take(maxVisible).toList();
     final hiddenCount = participants.length - visible.length;
     final itemCount = visible.length + (hiddenCount > 0 ? 1 : 0);
     final width = itemCount <= 1
@@ -1928,6 +2041,10 @@ class _CollaborationChip extends StatefulWidget {
     required this.onShare,
     required this.onManage,
     required this.onCheck,
+    this.focusLabel,
+    this.onExitFocus,
+    this.followLabel,
+    this.onExitFollow,
   });
 
   final bool compact;
@@ -1947,6 +2064,10 @@ class _CollaborationChip extends StatefulWidget {
   final Future<void> Function()? onShare;
   final Future<void> Function()? onManage;
   final Future<void> Function()? onCheck;
+  final String? focusLabel;
+  final VoidCallback? onExitFocus;
+  final String? followLabel;
+  final VoidCallback? onExitFollow;
 
   @override
   State<_CollaborationChip> createState() => _CollaborationChipState();
@@ -1966,19 +2087,37 @@ class _CollaborationChipState extends State<_CollaborationChip> {
                   ? '协作中 ${widget.collaboratorCount}'
                   : '协作中')
             : '创建房间');
-    return FilledButton.icon(
-      onPressed: () => _showCollaborationMenu(context, label),
-      icon: Icon(
-        widget.collaborating ? Icons.sensors : Icons.add_link,
-        size: 18,
-      ),
-      label: widget.compact ? const SizedBox.shrink() : Text(label),
-      style: FilledButton.styleFrom(
-        minimumSize: widget.compact ? const Size(44, 44) : const Size(0, 44),
-        padding: widget.compact
-            ? EdgeInsets.zero
-            : const EdgeInsets.symmetric(horizontal: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    final description = [
+      label,
+      ?widget.focusLabel,
+      ?widget.followLabel,
+    ].join(' · ');
+    return HoverTooltip(
+      message: description,
+      child: FilledButton.icon(
+        key: const ValueKey('collaboration-room-control'),
+        onPressed: () => _showCollaborationMenu(context, label),
+        icon: Icon(
+          widget.followLabel != null
+              ? Icons.visibility_outlined
+              : widget.focusLabel != null
+              ? Icons.filter_center_focus
+              : widget.collaborating
+              ? Icons.sensors
+              : Icons.add_link,
+          size: 18,
+          semanticLabel: widget.compact ? description : null,
+        ),
+        label: widget.compact ? const SizedBox.shrink() : Text(label),
+        style: FilledButton.styleFrom(
+          minimumSize: widget.compact ? const Size(44, 44) : const Size(0, 44),
+          padding: widget.compact
+              ? EdgeInsets.zero
+              : const EdgeInsets.symmetric(horizontal: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
       ),
     );
   }
@@ -2007,6 +2146,36 @@ class _CollaborationChipState extends State<_CollaborationChip> {
             usesRoomCode: widget.roomLink == null,
           ),
         ),
+        if (widget.focusLabel != null)
+          PopupMenuItem<_CollaborationAction>(
+            value: _CollaborationAction.exitFocus,
+            enabled: widget.onExitFocus != null,
+            child: ListTile(
+              leading: const Icon(Icons.filter_center_focus),
+              title: const Text('退出聚焦'),
+              subtitle: Text(
+                widget.focusLabel!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        if (widget.followLabel != null)
+          PopupMenuItem<_CollaborationAction>(
+            value: _CollaborationAction.exitFollow,
+            enabled: widget.onExitFollow != null,
+            child: ListTile(
+              leading: const Icon(Icons.visibility_outlined),
+              title: const Text('退出跟随'),
+              subtitle: Text(
+                widget.followLabel!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
         if (widget.roomLink != null || widget.roomValue != null)
           PopupMenuItem<_CollaborationAction>(
             value: _CollaborationAction.copy,
@@ -2090,6 +2259,10 @@ class _CollaborationChipState extends State<_CollaborationChip> {
       return;
     }
     switch (selected) {
+      case _CollaborationAction.exitFocus:
+        if (widget.onExitFocus case final exit?) runAfterUiTeardown(exit);
+      case _CollaborationAction.exitFollow:
+        if (widget.onExitFollow case final exit?) runAfterUiTeardown(exit);
       case _CollaborationAction.copy:
         await Clipboard.setData(
           ClipboardData(text: widget.roomLink ?? widget.roomValue!),
@@ -2132,6 +2305,8 @@ class _CollaborationChipState extends State<_CollaborationChip> {
 }
 
 enum _CollaborationAction {
+  exitFocus,
+  exitFollow,
   copy,
   share,
   manage,

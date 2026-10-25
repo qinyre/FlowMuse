@@ -2709,6 +2709,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final participants = state.collaborating
         ? _collaborationParticipantBadges(state, identity)
         : const <CollaborationParticipantBadge>[];
+    final following = state.collaborators[_followingSocketId];
+    final focusStatus = _focusStatus();
     final statusBarBrightness = ThemeData.estimateBrightnessForColor(
       effectivePreset.backgroundEnd,
     );
@@ -2748,8 +2750,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
               children: [
                 MarkdrawEditor(
                   controller: _markdrawController,
-                  collaborationFocusLabel: _focusPillLabel(),
+                  collaborationFocusLabel: focusStatus?.label,
+                  collaborationFocusDescription: focusStatus?.description,
                   onExitCollaborationFocus: _exitFocus,
+                  collaborationFollowLabel: following == null
+                      ? null
+                      : '正在跟随 ${following.username.isEmpty ? '协作者' : following.username}',
+                  onExitCollaborationFollow: _stopFollowing,
                   attributionActionResolver: _attributionFor,
                   focusedCreatorKey: _focusTarget is CreatorFocus
                       ? (_focusTarget as CreatorFocus).creatorKey
@@ -3343,39 +3350,26 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Widget? _buildCollaborationViewNotice(WhiteboardState state) {
     final pending = _pendingAttention;
-    final target = state.collaborators[_followingSocketId];
-    if (pending == null && target == null) return null;
-    String name(CollaboratorPresence? presence) =>
-        presence?.username.isNotEmpty == true ? presence!.username : '协作者';
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (target != null)
-          CollaborationViewNotice(
-            label: '正在跟随 ${name(target)} · 操作画布可退出',
-            actionLabel: '退出跟随',
-            onAction: _stopFollowing,
-          ),
-        if (pending != null) ...[
-          if (target != null) const SizedBox(height: 8),
-          CollaborationViewNotice(
-            label: '${name(state.collaborators[pending.socketId])} 邀请你看这里',
-            actionLabel: '查看位置',
-            onDismiss: _dismissAttention,
-            onAction: () {
-              if (!_markdrawController.preparePageNavigation()) return;
-              final viewport = viewportForCollaborationBounds(
-                pending.bounds,
-                _markdrawController.canvasSize,
-              );
-              if (viewport == null) return;
-              _stopFollowing();
-              _dismissAttention();
-              _markdrawController.setViewport(viewport);
-            },
-          ),
-        ],
-      ],
+    if (pending == null) return null;
+    final presence = state.collaborators[pending.socketId];
+    final name = presence?.username.isNotEmpty == true
+        ? presence!.username
+        : '协作者';
+    return CollaborationViewNotice(
+      label: '$name 邀请你看这里',
+      actionLabel: '查看位置',
+      onDismiss: _dismissAttention,
+      onAction: () {
+        if (!_markdrawController.preparePageNavigation()) return;
+        final viewport = viewportForCollaborationBounds(
+          pending.bounds,
+          _markdrawController.canvasSize,
+        );
+        if (viewport == null) return;
+        _stopFollowing();
+        _dismissAttention();
+        _markdrawController.setViewport(viewport);
+      },
     );
   }
 
@@ -3751,24 +3745,28 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     return candidates.isEmpty ? null : candidates.first;
   }
 
-  String? _focusPillLabel() {
+  ({String label, String description})? _focusStatus() {
     final target = _focusTarget;
     if (target == null) return null;
     if (target is HistoricalFocus) {
-      return _historyFocusIsEmpty() ? '正在聚焦：历史内容（暂无已提交的历史内容）' : '正在聚焦：历史内容';
+      return (
+        label: '聚焦 · 历史内容',
+        description: _historyFocusIsEmpty()
+            ? '正在聚焦：历史内容（暂无已提交的历史内容）'
+            : '正在聚焦：历史内容',
+      );
     }
     if (target is! CreatorFocus) return null;
     final online = _onlinePresenceFor(target.creatorKey);
-    if (online != null) {
-      return _creatorFocusIsEmpty(target.creatorKey)
-          ? '正在聚焦：${online.username}（该创建者暂无已提交内容）'
-          : '正在聚焦：${online.username}';
-    }
-    final suffix = target.isGuest ? '（历史会话）' : '';
-    final base = '正在聚焦：${target.labelSnapshot}$suffix';
-    return _creatorFocusIsEmpty(target.creatorKey)
-        ? '$base（该创建者暂无已提交内容）'
-        : base;
+    final name = online?.username ?? target.labelSnapshot;
+    final suffix = online == null && target.isGuest ? '（历史会话）' : '';
+    final base = '正在聚焦：$name$suffix';
+    return (
+      label: '聚焦 · $name',
+      description: _creatorFocusIsEmpty(target.creatorKey)
+          ? '$base（该创建者暂无已提交内容）'
+          : base,
+    );
   }
 
   /// 空态按整个 Scene 的已提交（未删除、非系统）普通元素判断。
