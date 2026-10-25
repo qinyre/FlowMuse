@@ -150,7 +150,7 @@ class CollaborationRepository {
           .where((id) => id != socketId)
           .every((id) => _peerLiveInk[id] == true);
 
-  String get collaborationMode => shouldUseLiveInkV2 ? '实时墨迹 V2' : '兼容同步';
+  String get collaborationMode => shouldUseLiveInkV2 ? '实时协作' : '实时协作（兼容）';
 
   String _currentSceneHash() {
     if (!identical(_hashedScene, _latestScene)) {

@@ -3002,9 +3002,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   String? _collaborationStatusLabel(WhiteboardState state) {
-    const buildId = String.fromEnvironment('FLOWMUSE_BUILD_ID');
-    final mode =
-        '${_collaborationRepository.collaborationMode}${buildId.isEmpty ? '' : ' · $buildId'}';
+    final mode = _collaborationRepository.collaborationMode;
     return switch (state.collaborationStatus) {
       WhiteboardCollaborationStatus.connecting => '连接中',
       WhiteboardCollaborationStatus.initializing => '初始化中',

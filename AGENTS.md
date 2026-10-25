@@ -280,6 +280,7 @@ lib/
 - PDF 导入进度：`platform_pdf_page_renderer.dart` + `PdfImportChannel.ets`，每次导入使用独立 `flow_muse/pdf_import/progress/<id>` 回调通道，返回 `false` 在页间取消，完成后释放 handler。
 - 语音识别：`speech_recognition_service_io.dart` + `SpeechRecognitionChannel.ets`（通道 `flow_muse/speech_recognition`）
 - 鸿蒙房间扫码：`room_qr_scanner_channel_ohos.dart` + `RoomQrScannerChannel.ets`（`flow_muse/room_qr_scanner`，Scan Kit 默认界面，仅返回待校验内容）。
+- 笔身双击：`stylus_double_tap_channel.dart` + 鸿蒙/Android `StylusDoubleTapChannel`（`flow_muse/stylus_double_tap`；鸿蒙 Pen Kit 与一加/OPPO 官方广播，带代次隔离，前后台注册/注销，不识别笔尖双击）。
 
 ### 5.5 改动前的跨端自检
 

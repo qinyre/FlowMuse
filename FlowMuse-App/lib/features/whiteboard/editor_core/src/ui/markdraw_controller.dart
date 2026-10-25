@@ -162,6 +162,7 @@ class MarkdrawController extends ChangeNotifier {
   int? _activeTouchSelectionPointerId;
   SelectTool? _activeTouchSelectionTool;
   int? _activeStylusPointerId;
+  bool _pendingStylusEraserToggle = false;
   final Set<int> _rejectedTouchPointers = {};
   bool _pressureEnabled = true;
   double _pressureExponent = 1.0;
@@ -951,6 +952,33 @@ class MarkdrawController extends ChangeNotifier {
     _hasSelectedBrush = true;
     _restoreBrushState(type);
     switchTool(ToolType.freedraw);
+  }
+
+  /// A barrel gesture must not cancel an unfinished pen stroke.
+  void toggleStylusEraser() {
+    if (_disposed || _viewMode || _editingTextElementId != null) return;
+    final type = _editorState.activeToolType;
+    if (type != ToolType.freedraw && type != ToolType.eraser) return;
+    if (_activeStylusPointerId != null) {
+      _pendingStylusEraserToggle = !_pendingStylusEraserToggle;
+      return;
+    }
+    if (pageNavigationBusy) return;
+    if (type == ToolType.eraser) {
+      selectBrush(_activeBrushType);
+    } else {
+      switchTool(ToolType.eraser);
+    }
+  }
+
+  void cancelPendingStylusEraserToggle() {
+    _pendingStylusEraserToggle = false;
+  }
+
+  void _flushPendingStylusEraserToggle() {
+    if (!_pendingStylusEraserToggle) return;
+    _pendingStylusEraserToggle = false;
+    toggleStylusEraser();
   }
 
   void requestBrushPalette() {
@@ -2707,6 +2735,7 @@ class MarkdrawController extends ChangeNotifier {
         _historyManager.push(_sceneBeforeDrag!);
       }
       _sceneBeforeDrag = null;
+      _flushPendingStylusEraserToggle();
       return;
     }
 
@@ -2772,6 +2801,7 @@ class MarkdrawController extends ChangeNotifier {
       _historyManager.push(_sceneBeforeDrag!);
     }
     _sceneBeforeDrag = null;
+    _flushPendingStylusEraserToggle();
   }
 
   /// Handles pointer cancel: discards uncommitted stroke for modeler path,
@@ -2914,6 +2944,7 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   void _cancelActiveToolInteraction(ActivePreviewTerminalReason reason) {
+    cancelPendingStylusEraserToggle();
     _finishActivePreviewStroke(reason);
     if (_activeTool is FreedrawTool) {
       final tool = _activeTool as FreedrawTool;
@@ -4218,7 +4249,15 @@ class MarkdrawController extends ChangeNotifier {
   /// Clears the canvas, pushing the current scene to undo history.
   void resetCanvas() {
     _historyManager.push(_editorState.scene);
-    _editorState = _editorState.copyWith(scene: Scene(), selectedIds: {});
+    // 页面标记承载可同步版式；重置内容时不能仅保留本机的 _layout。
+    final scene = _sceneWithLayoutPages(
+      Scene().upsertRemoteElements([
+        if (_layout.isPaged)
+          for (final element in _editorState.scene.elements)
+            if (element.isCanvasPage && !element.isDeleted) element,
+      ]),
+    );
+    _editorState = _editorState.copyWith(scene: scene, selectedIds: {});
     _documentName = null;
     _lastChangedElements = null;
     _notifySceneChanged(_editorState.scene, SceneChangeSource.reset);

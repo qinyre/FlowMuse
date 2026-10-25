@@ -21,6 +21,7 @@ import java.io.FileOutputStream
 import java.util.ArrayDeque
 
 class MainActivity : FlutterActivity() {
+    private var stylusDoubleTapChannel: StylusDoubleTapChannel? = null
     private val pendingDocuments = ArrayDeque<Map<String, Any>>()
     private var documentChannel: MethodChannel? = null
 
@@ -35,6 +36,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        stylusDoubleTapChannel?.dispose()
+        stylusDoubleTapChannel = StylusDoubleTapChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         documentChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "flow_muse/external_document",
@@ -201,10 +204,22 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        stylusDoubleTapChannel?.dispose()
+        stylusDoubleTapChannel = null
         releaseSpeechRecognizer(cancel = true)
         speechChannel?.setMethodCallHandler(null)
         speechChannel = null
         super.onDestroy()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        stylusDoubleTapChannel?.setForeground(true)
+    }
+
+    override fun onPause() {
+        stylusDoubleTapChannel?.setForeground(false)
+        super.onPause()
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -15,14 +15,28 @@ import { SpeechRecognitionChannel } from '../channels/SpeechRecognitionChannel';
 import { UrlLauncherChannel } from '../channels/UrlLauncherChannel';
 import { HuaweiAccountChannel } from '../channels/HuaweiAccountChannel';
 import { RoomQrScannerChannel } from '../channels/RoomQrScannerChannel';
+import { StylusDoubleTapChannel } from '../channels/StylusDoubleTapChannel';
 
 export default class EntryAbility extends FlutterAbility {
   private huaweiAccountChannel: HuaweiAccountChannel | undefined;
+  private stylusDoubleTapChannel: StylusDoubleTapChannel | undefined;
 
   onDestroy(): void {
+    this.stylusDoubleTapChannel?.dispose();
+    this.stylusDoubleTapChannel = undefined;
     this.huaweiAccountChannel?.dispose();
     this.huaweiAccountChannel = undefined;
     super.onDestroy();
+  }
+
+  onForeground(): void {
+    super.onForeground();
+    this.stylusDoubleTapChannel?.setForeground(true);
+  }
+
+  onBackground(): void {
+    this.stylusDoubleTapChannel?.setForeground(false);
+    super.onBackground();
   }
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onCreate(want, launchParam)
@@ -77,6 +91,9 @@ export default class EntryAbility extends FlutterAbility {
     new ExternalDocumentChannel().register(flutterEngine)
     new RoomQrScannerChannel(this.context).register(flutterEngine)
     new PenColorPickerChannel().register(flutterEngine)
+    this.stylusDoubleTapChannel?.dispose();
+    this.stylusDoubleTapChannel = new StylusDoubleTapChannel();
+    this.stylusDoubleTapChannel.register(flutterEngine);
     new ServiceWidgetChannel(this.context).register(flutterEngine)
     new SpeechRecognitionChannel(this.context).register(flutterEngine)
     new UrlLauncherChannel(this.context).register(flutterEngine)
