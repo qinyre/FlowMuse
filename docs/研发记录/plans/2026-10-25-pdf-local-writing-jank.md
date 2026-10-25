@@ -39,4 +39,13 @@
 
 - 按用户指令推送 `fix/pdf-local-writing-jank` 并向 main 提交 PR。发布前确认 #87 已合并、同分支没有重复的开放 PR，并将 main `fe679598` 同步进本分支。
 - 同步只增加主线合并关系，应用代码树与已验证的 `c2693e682dae8ba834e5953852c329bed363542e` 完全一致；复用上述 2059 项完整回归、补强后的 13 项相关回归、静态分析及 Android/Web release 验证。
-- 本次交付只推送代码和发起 PR，不部署正式 Web/后端、不重新安装平板，不等待 CI 或审查，不自动合并。真实 PDF 书写帧率和手感仍待用户复测。
+- 初次 PR 交付只推送代码和发起 PR，未部署正式 Web/后端或重新安装平板，未等待 CI 或审查，未自动合并；随后用户另行要求部署 Web，回执见下节。真实 PDF 书写帧率和手感仍待用户复测。
+
+## 正式 Web 发布回执
+
+- 按用户指令于 2026-10-25 **21:35（北京时间）**发布至 <https://app.flowmuse.cloud/library>，发布 ID `pdf-writing-20261025-c2693e6`，应用源码 `c2693e682dae8ba834e5953852c329bed363542e`，关联 PR #88。发布前再次确认 PR 头为 `bdf2422d`，应用代码与已验证构建一致；本次没有合并 PR。
+- 复用原 Web release 构建，主脚本 SHA-256 为 `4c0c32ceaab0e97c3b776ecc521e232b2538ef587be80b69488f43bf721bb1a9`。临时上传归档 SHA-256 为 `fd22602cf6fb9ab405e9aebd5adc3c052ba4aba4be8184f3914b364c429f8da0`，湿墨分层、实时墨迹 V2 与正式分享域名保持原配置。
+- 公网发布清单、入口、主脚本、扫码解码器、三种字重和字体许可共 8 项核对通过：返回 200、内容散列匹配、no-cache，应压缩资源返回 gzip。隔离 Chrome 确认保存状态到达“已保存”，六张截图及像素核验通过：目标形状暗像素 122 → 擦除后 0 → Undo 后 122，工具栏像素一致、半透明光标与离开画布行为正常，页面新增异常 0。
+- 后端容器 ID、镜像和运行状态与发布前相同，API 健康检查正常。站点目录 `/var/www/flowmuse-app-releases/pdf-writing-20261025-c2693e6`，上一版目录 `/var/www/flowmuse-app-releases/eraser-feel-20261025-2250e12` 与配置备份 `/etc/nginx/sites-available/flowmuse-app.before-pdf-writing-20261025-c2693e6` 保留供回滚，部署回执在服务器 `/opt/flowmuse/releases/pdf-writing-20261025-c2693e6/web-deployment.json`。
+- 沿用 `build/web` 直接封包，没有额外复制整份 Web 目录；验证后已清除本地和服务器 `/tmp` 的本次临时上传归档。小型发布清单、脚本、日志与合成截图留在忽略目录 `FlowMuse-App/build/pdf-writing-release/`，正常编译缓存保留。
+- Web 的 compute 仍在原事件循环，本次 Web 的直接收益来自 PDF 静态画面缓存复用；原生后台编码收益由此前平板包承载。真实 PDF 连续书写的帧率和舒适度仍待用户实测。
