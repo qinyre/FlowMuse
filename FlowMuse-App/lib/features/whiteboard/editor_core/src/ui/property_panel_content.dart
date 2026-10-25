@@ -314,7 +314,6 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           onRenderScene: canvasSize != null
               ? controller.renderSceneImage
               : null,
-          onSampleColor: controller.sampleColorFromImage,
           canvasSize: canvasSize,
           canvasGlobalOffset: controller.canvasGlobalOffset,
           autoOpen: shouldAutoOpen,

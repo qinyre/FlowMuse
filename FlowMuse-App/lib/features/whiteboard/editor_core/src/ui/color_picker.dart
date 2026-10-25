@@ -60,12 +60,8 @@ class ColorPickerButton extends StatefulWidget {
   final bool isActive;
   final ValueChanged<String> onColorSelected;
 
-  /// Callback for eyedropper pixel sampling; null hides the eyedropper button.
+  /// Callback for the eyedropper snapshot; null hides the eyedropper button.
   final Future<ui.Image?> Function(Size canvasSize)? onRenderScene;
-
-  /// Callback to sample a color from a pre-rendered image.
-  final Future<String?> Function(ui.Image image, Offset position)?
-  onSampleColor;
 
   /// Canvas size for eyedropper rendering.
   final Size? canvasSize;
@@ -91,7 +87,6 @@ class ColorPickerButton extends StatefulWidget {
     required this.isActive,
     required this.onColorSelected,
     this.onRenderScene,
-    this.onSampleColor,
     this.canvasSize,
     this.canvasGlobalOffset = Offset.zero,
     this.autoOpen = false,
@@ -202,7 +197,6 @@ class _ColorPickerButtonState extends State<ColorPickerButton> {
         },
         onDismiss: _removeOverlay,
         onRenderScene: widget.onRenderScene,
-        onSampleColor: widget.onSampleColor,
         canvasSize: widget.canvasSize,
         canvasGlobalOffset: widget.canvasGlobalOffset,
         autoActivateEyedropper: widget.autoActivateEyedropper,
@@ -250,10 +244,6 @@ class ColorPaletteOverlay extends StatefulWidget {
   /// Callback to render scene to an image for eyedropper; null hides button.
   final Future<ui.Image?> Function(Size canvasSize)? onRenderScene;
 
-  /// Callback to sample a color from a pre-rendered image.
-  final Future<String?> Function(ui.Image image, Offset position)?
-  onSampleColor;
-
   /// Canvas size for eyedropper rendering.
   final Size? canvasSize;
 
@@ -273,7 +263,6 @@ class ColorPaletteOverlay extends StatefulWidget {
     required this.onSelect,
     required this.onDismiss,
     this.onRenderScene,
-    this.onSampleColor,
     this.canvasSize,
     this.canvasGlobalOffset = Offset.zero,
     this.autoActivateEyedropper = false,
@@ -291,7 +280,9 @@ class _ColorPaletteOverlayState extends State<ColorPaletteOverlay> {
   bool _eyedropperActive = false;
   Offset? _cursorPosition;
   String? _previewColor;
-  ui.Image? _cachedImage;
+  ({ByteData bytes, int width, int height})? _cachedPixels;
+  int _eyedropperGeneration = 0;
+  Offset? _pendingPickPosition;
 
   @override
   void initState() {
@@ -315,49 +306,105 @@ class _ColorPaletteOverlayState extends State<ColorPaletteOverlay> {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     _hexController.dispose();
-    _cachedImage?.dispose();
+    ++_eyedropperGeneration;
+    _cachedPixels = null;
     super.dispose();
   }
 
   bool get _hasEyedropper =>
-      widget.onRenderScene != null &&
-      widget.onSampleColor != null &&
-      widget.canvasSize != null;
+      widget.onRenderScene != null && widget.canvasSize != null;
 
   Future<void> _activateEyedropper() async {
-    if (!_hasEyedropper) return;
-    final image = await widget.onRenderScene!(widget.canvasSize!);
-    if (image == null || !mounted) return;
+    if (!_hasEyedropper || _eyedropperActive) return;
+    final generation = ++_eyedropperGeneration;
     setState(() {
-      _cachedImage = image;
       _eyedropperActive = true;
       _previewColor = null;
       _cursorPosition = null;
+      _pendingPickPosition = null;
     });
+    ui.Image? image;
+    try {
+      image = await widget.onRenderScene!(widget.canvasSize!);
+      if (image == null || !mounted || generation != _eyedropperGeneration) {
+        return;
+      }
+      // Read the whole image once, never on the pointer-move path.
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (bytes == null || !mounted || generation != _eyedropperGeneration) {
+        return;
+      }
+      setState(() {
+        _cachedPixels = (
+          bytes: bytes,
+          width: image!.width,
+          height: image.height,
+        );
+      });
+      final pendingPick = _pendingPickPosition;
+      _pendingPickPosition = null;
+      if (pendingPick != null) {
+        _onPointerUp(pendingPick);
+      } else if (_cursorPosition case final position?) {
+        _onPointerMove(position);
+      }
+    } catch (error) {
+      debugPrint(
+        '[FlowMuseCreateNote] Eyedropper snapshot failed: ${error.runtimeType}',
+      );
+    } finally {
+      image?.dispose();
+      if (mounted &&
+          generation == _eyedropperGeneration &&
+          _cachedPixels == null) {
+        _deactivateEyedropper();
+      }
+    }
   }
 
   void _deactivateEyedropper() {
-    _cachedImage?.dispose();
+    ++_eyedropperGeneration;
     setState(() {
-      _cachedImage = null;
+      _cachedPixels = null;
       _eyedropperActive = false;
       _previewColor = null;
       _cursorPosition = null;
+      _pendingPickPosition = null;
     });
   }
 
-  Future<void> _onPointerMove(Offset position) async {
-    if (!_eyedropperActive || _cachedImage == null) return;
-    setState(() => _cursorPosition = position);
+  String? _sampleColor(Offset globalPosition) {
+    final pixels = _cachedPixels;
+    if (pixels == null) return null;
+    final position = globalPosition - widget.canvasGlobalOffset;
+    if (!position.dx.isFinite ||
+        !position.dy.isFinite ||
+        position.dx < 0 ||
+        position.dy < 0 ||
+        position.dx >= widget.canvasSize!.width ||
+        position.dy >= widget.canvasSize!.height) {
+      return null;
+    }
+    final px = position.dx.floor();
+    final py = position.dy.floor();
+    if (px >= pixels.width || py >= pixels.height) return null;
+    final offset = (py * pixels.width + px) * 4;
+    final r = pixels.bytes.getUint8(offset);
+    final g = pixels.bytes.getUint8(offset + 1);
+    final b = pixels.bytes.getUint8(offset + 2);
+    return '#${r.toRadixString(16).padLeft(2, '0')}'
+        '${g.toRadixString(16).padLeft(2, '0')}'
+        '${b.toRadixString(16).padLeft(2, '0')}';
+  }
 
-    final color = await widget.onSampleColor!(
-      _cachedImage!,
-      position - widget.canvasGlobalOffset,
-    );
-    if (!mounted || !_eyedropperActive) return;
+  void _onPointerMove(Offset position) {
+    if (!_eyedropperActive) return;
+    final color = _sampleColor(position);
+    if (_cursorPosition == position && _previewColor == color) return;
     setState(() {
+      _cursorPosition = position;
       _previewColor = color;
-      if (color != null) {
+      if (color != null && color != _hexController.text) {
         _hexController.text = color;
       }
     });
@@ -365,6 +412,11 @@ class _ColorPaletteOverlayState extends State<ColorPaletteOverlay> {
 
   void _onPointerUp(Offset position) {
     if (!_eyedropperActive) return;
+    if (_cachedPixels == null) {
+      _pendingPickPosition = position;
+      return;
+    }
+    _onPointerMove(position);
     final color = _previewColor;
     if (color != null) {
       _deactivateEyedropper();
