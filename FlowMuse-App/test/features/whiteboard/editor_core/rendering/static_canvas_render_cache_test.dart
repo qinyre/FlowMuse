@@ -7,6 +7,35 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('相同 PDF 图片的新表不使静态层失效，图片变化仍重绘', () async {
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(recorder).drawColor(const ui.Color(0xff5684aa), ui.BlendMode.src);
+    final picture = recorder.endRecording();
+    final first = await picture.toImage(2, 2);
+    final replacement = await picture.toImage(2, 2);
+    picture.dispose();
+    addTearDown(first.dispose);
+    addTearDown(replacement.dispose);
+    final scene = Scene();
+    final adapter = RoughCanvasAdapter();
+    StaticCanvasPainter painter(Map<String, ui.Image>? images) =>
+        StaticCanvasPainter(
+          scene: scene,
+          adapter: adapter,
+          viewport: const ViewportState(),
+          resolvedImages: images,
+        );
+    final previous = painter({'page': first});
+    expect(painter({'page': first}).shouldRepaint(previous), isFalse);
+    expect(painter({'page': replacement}).shouldRepaint(previous), isTrue);
+    expect(painter({'other': first}).shouldRepaint(previous), isTrue);
+    expect(
+      painter({'page': first, 'other': replacement}).shouldRepaint(previous),
+      isTrue,
+    );
+    expect(painter(null).shouldRepaint(previous), isTrue);
+  });
+
   test('静态缓存 miss/hit 与直绘逐像素相同，背景、叠色、视口和聚焦及时失效', () async {
     final adapter = RoughCanvasAdapter();
     final cache = StaticCanvasRenderCache();

@@ -813,7 +813,7 @@ class StaticCanvasPainter extends CustomPainter {
         !identical(layout, oldDelegate.layout) ||
         !identical(previewElement, oldDelegate.previewElement) ||
         !identical(pendingElements, oldDelegate.pendingElements) ||
-        !identical(resolvedImages, oldDelegate.resolvedImages) ||
+        !mapEquals(resolvedImages, oldDelegate.resolvedImages) ||
         editingElementId != oldDelegate.editingElementId ||
         gridSize != oldDelegate.gridSize ||
         isDarkBackground != oldDelegate.isDarkBackground ||
