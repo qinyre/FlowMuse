@@ -31,7 +31,17 @@
 - 相关 4 个测试文件 21 项通过；真实字体预览 2 项通过；完整 Flutter 回归 1977 项通过、5 项原有跳过；`flutter analyze --no-pub` 无问题。收尾的无障碍检查将完整状态合入紧凑按钮的图标语义，避免桌面标签重复朗读。
 - 收尾补充桌面短标签的完整语义说明后，13 项顶栏用例再次通过；桌面与窄屏均保留空内容说明的可访问性。
 - 预览数据为合成名称与本地测试画布，不包含实际账号、笔记或房间链接。日志和预览生成脚本保存在忽略的 `FlowMuse-App/build/collaboration-status*` 中。
-- 未推送、未部署正式 Web，也未覆盖安装平板；真实设备的触控体验仍需复测。
+- 上述实现先在本地提交，随后按用户要求推送并部署正式 Web，见下方发布记录；平板保持不更新，真实设备的触控体验仍需复测。
+
+## 正式 Web 发布（2026-10-25）
+
+- 已推送 `fix/collaboration-status-header`。本次从修复分支发布，应用源码为 `b500c6067a4f096c36029c8a17c5991489da299a`；未合并至 `main`，未创建新 PR。
+- 正式入口 https://app.flowmuse.cloud/library ，版本 `b500c60`，北京时间 13:08 完成切换；湿墨分层、实时墨迹 V2 保持开启。
+- Web release 构建通过；主脚本 SHA-256：`557d1a720cda7fa5f4300443a9ae8fc2c0a8fe3815f074565ed9ee90c26c4ff6`。已检查编译结果包含聚焦、跟随及协作入口的新控件标识。
+- 压缩包 SHA-256：`7ceb4c2e3282a73f05eb77ceee55011577d5d59cbcf86d684a3a2163ef568da9`；Nginx 根目录为 `/var/www/flowmuse-app-releases/collab-status-20261025-b500c60`，语法检查和 reload 成功。旧目录 `issue65-reset-20261024-7572010` 及 `/etc/nginx/sites-available/flowmuse-app.before-collab-status-20261025-b500c60` 已保留供回滚。
+- 公网 8 项资源状态与哈希核验通过，缓存策略为 `no-cache`；独立 Chrome 环境的桌面及 360px 视图菜单、新建入口、加入房间弹窗检查通过，页面异常为 0。此检查没有创建真实协作房间，不替代双端体验验收。
+- 后端容器身份和镜像 `flowmuse-collab:room-management-4e92510` 在发布前后保持一致，公网健康检查为 `{"status":"ok"}`。按用户要求，本轮没有更新平板。
+- 服务器回执：`/opt/flowmuse/releases/collab-status-20261025-b500c60/web-deployment.json`；本地压缩包、资源校验和浏览器检查记录保留在忽略的 `FlowMuse-App/build/collaboration-status-release/`。
 
 ## 界面预览
 
