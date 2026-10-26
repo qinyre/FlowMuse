@@ -1,11 +1,10 @@
 library;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 /// Shows the keyboard shortcuts help dialog.
 void showHelpDialog(BuildContext context) {
-  final isMac = Theme.of(context).platform == TargetPlatform.macOS || kIsWeb;
+  final isMac = Theme.of(context).platform == TargetPlatform.macOS;
   final mod = isMac ? 'Cmd' : 'Ctrl';
   showDialog<void>(
     context: context,
@@ -62,6 +61,7 @@ void showHelpDialog(BuildContext context) {
                     _helpSection(context, '视图', [
                       _shortcutRow(context, '放大', '$mod + +'),
                       _shortcutRow(context, '缩小', '$mod + \u2212'),
+                      _shortcutRow(context, '光标处放大 / 缩小', '$mod + 滚轮上 / 下'),
                       _shortcutRow(context, '重置缩放', '$mod + 0'),
                       _shortcutRow(context, '缩放至适应', 'Shift + 1'),
                       _shortcutRow(context, '缩放至所选内容', 'Shift + 2'),
