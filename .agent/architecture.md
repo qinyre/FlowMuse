@@ -19,8 +19,8 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 
 ### 关键架构特征
 
-1. **离线优先**:所有用户数据本地 SQLite,无网络也能用。
-2. **服务端零知识**:协作内容端到端加密,服务端只存密文、只转发密文。
+1. **笔记离线优先**:笔记与设置保存在本机 SQLite,基础编辑无需网络；账号、私聊及协作服务有独立的服务端数据。
+2. **协作内容端到端加密**:白板协作只存/转发密文；私聊和主动发起的识别/AI 有独立的数据处理边界。
 3. **一份 Dart 代码多端运行**:平台差异收敛到适配层(见第 5 节)。
 4. **Excalidraw 兼容**:数据模型、场景 JSON、协作协议对齐 Excalidraw(硬约束,见 `docs/项目说明/架构约束.md`)。
 
@@ -48,9 +48,10 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `search` | 笔记搜索(内存过滤,非 SQL) | `views/search_page.dart` |
 | `settings` | 设置 / 本地备份 | `views/settings_page.dart` |
 | `account` | 账户认证(注册/登录/资料) | `repositories/account_repository.dart` |
-| `whiteboard` | 白板编辑器(含 6 个子模块,见下) | — |
+| `social` | 好友、私聊和设备加密邀请 | `repositories/social_repository.dart` |
+| `whiteboard` | 白板编辑器及协作、导入、内容加工能力 | — |
 
-### whiteboard 的六个子模块
+### whiteboard 的主要子模块
 
 | 子模块 | 职责 |
 |--------|------|
@@ -60,6 +61,9 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `pdf_note_import/` | PDF 作为白板背景导入 |
 | `speech_recognition/` | 跨平台语音转文字，最终写入普通文本元素 |
 | `ai_assistant/` | 受限 AI 动作的请求、校验、预览与确认 |
+| `smart_layout/` | V3 识别、布局、校验、审阅及提交 |
+| `share/` | 导入导出、分享产物与外部数据净化 |
+| `service_widget/` | 鸿蒙服务卡片与快捷入口 |
 
 ### 协作归属与聚焦边界
 
@@ -120,7 +124,7 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | 差异 | 收敛位置 | 策略 |
 |------|----------|------|
 | SQLite | `shared/storage/local_database_path*.dart` | 条件导入:移动端原生 sqflite,鸿蒙/桌面 FFI |
-| HTTP | `features/whiteboard/ink_recognition/native_http_client.dart` | 鸿蒙走 Platform Channel,其他走 http |
+| HTTP | `shared/network/native_http_client.dart` | 鸿蒙走 Platform Channel,其他走 http；识别目录旧路径保留兼容 export |
 | 手写笔压感 | `editor_core/src/input/` | `InputPolicySelector` 按设备分策略 |
 | 敏感数据存储 | `flutter_secure_storage_ohos` facade + `flutter_secure_storage` 平台实现 | 鸿蒙 facade 负责识别 `ohos`；标准包继续为其他端注册实现 |
 | 文件/PDF | service 层抽象接口 | 鸿蒙 Platform Channel,其他 pdfx/file_picker |
@@ -128,7 +132,7 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 
 **铁律**:共享代码(`lib/features/*`、`lib/shared/*`)禁止 `Platform.is*` 判断。详见 `conventions.md` 第 7 节。
 
-> ⚠️ **鸿蒙 Flutter 是社区移植版(`flutter_ohos`)**,不是官方 Flutter。部分 API 不支持(FragmentProgram/Shader)、部分插件需 fork(`path_provider`/`shared_preferences`)、路径约定与标准 Flutter 不同(`ohos/` 替代 `android/`/`ios/`)。编写鸿蒙相关代码时需查 `harmonyos-guides/` 确认 API 可用性,不假设现有实现能在鸿蒙直接运行。
+> **鸿蒙 Flutter 是社区移植版(`flutter_ohos`)**。部分 API 不支持(FragmentProgram/Shader)、部分插件需 fork(`path_provider` 等)、工程含独立的 `ohos/` 目录。编写鸿蒙相关代码时需查 `harmonyos-guides/` 确认 API 可用性,不假设现有实现能在鸿蒙直接运行。
 
 ---
 
@@ -140,7 +144,9 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `FlowMuse-Server/internal/config/` | 环境变量与配置 |
 | `FlowMuse-Server/internal/auth/` | 账户认证,包括 HTTP API、token、邮件、user_store |
 | `FlowMuse-Server/internal/collab/` | 协作房间,包括 hub、events、http_api |
+| `FlowMuse-Server/internal/social/` | 好友、私聊、设备目录与加密邀请 |
 | `FlowMuse-Server/internal/recognition/` | 手写识别代理,对接 MyScript |
+| `FlowMuse-Server/internal/layoutrecognitionv3/` | 独立的 V3 识别服务 |
 | `FlowMuse-Server/internal/storage/` | 持久化,包括 room_store、scene_store、file_store |
 
 | 组件 | 技术 |
@@ -154,19 +160,19 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 
 ### 服务端职责边界
 
-服务端是**零知识中转站**:
+对白板协作，服务端是**密文中转站**:
 - 转发协作实时消息(密文,不解密)
 - 存储加密快照(密文 + 乐观锁版本号)
 - 管理房间元数据、用户账户、文件存储
 - 代理手写识别请求(转发给 MyScript)
 
-**服务端永远看不到明文画板内容**。
+协作链不解密白板内容；用户主动请求的识别/AI 可处理选定笔迹、截图或文本。社交文字消息正文在服务器保存，不属于白板端到端加密范围。
 
 ---
 
 ## 7. 启动流程
 
-1. `main()` 调用 `WidgetsFlutterBinding.ensureInitialized()`。
+1. `main()` 注册保留 fragment 的 Web 路径路由（非 Web 为 no-op），再调用 `WidgetsFlutterBinding.ensureInitialized()`。
 2. `dotenv.load(isOptional: true)` 加载可选 `.env` 配置。
 3. `loadSavedThemePreset()` 从 SQLite 读取已保存主题，与可选环境配置并行加载。
 4. `runApp()` 启动 `ProviderScope`,并通过 `initialThemePresetProvider.overrideWithValue(...)` 注入初始主题。

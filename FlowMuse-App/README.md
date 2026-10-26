@@ -1,71 +1,86 @@
-# flow_muse
+# FlowMuse 客户端
 
-A new Flutter project.
+Flutter 应用，包含本地资料库、Markdraw 编辑器、加密协作、PDF 批注、识别和 AI 助手。产品说明、环境准备与本地服务启动见[仓库首页](../README.md)，开发前先读 [AGENTS.md](../AGENTS.md)。以下命令除图标脚本外均在本目录执行。
 
-## Getting Started
+## 目录与配置
 
-This project is a starting point for a Flutter application.
+| 目录 | 职责 |
+| --- | --- |
+| `lib/app/` | 路由、主题和应用装配 |
+| `lib/features/` | 资料库、账户、社交、设置与白板功能 |
+| `lib/features/whiteboard/editor_core/` | 内置 Markdraw 编辑器及公开导出入口 |
+| `lib/shared/` | 存储、网络、平台适配与共享组件 |
+| `test/`、`integration_test/` | 单元/Widget 测试与设备性能回放 |
+| `android/`、`ohos/` 等 | 各平台工程与原生通道 |
+| `tool/` | Web 发布自检、性能和智能排版工具 |
+| `tool/vendor/` | 仍在使用的依赖适配，原因见 `pubspec.yaml` |
 
-A few resources to get you started if this is your first Flutter project:
+应用设置保存在 SQLite `local_settings`，敏感凭据走安全存储。`assets/config/app.env` 只放可以随应用公开的配置；AI、识别、签名与服务端密钥不得打入资源。
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+| 构建参数 | 用途 | 默认 |
+| --- | --- | --- |
+| `FLOWMUSE_COLLAB_SERVER_URL` | 账户、协作、附件与识别 API | `https://api.flowmuse.cloud` |
+| `FLOWMUSE_SHARE_ORIGIN` | 房间分享 Web 入口 | `https://app.flowmuse.cloud` |
+| `FLOWMUSE_LAYERED_WET_INK` | 湿墨分层 | `true` |
+| `FLOWMUSE_LIVE_INK_V2` | 实时墨迹协议 | `true`，还需分层开关及服务端支持 |
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+前两个地址优先读取 `--dart-define`，其次为随包 `app.env`。后两个是编译期开关，普通构建默认开启；可显式传入 `--dart-define=FLOWMUSE_LAYERED_WET_INK=false` 或 `--dart-define=FLOWMUSE_LIVE_INK_V2=false` 做关闭对照。参与测试的 Web、原生客户端仍需核对配置及协议能力。
 
-## Web 发布与首屏加载
-
-在 `FlowMuse-App` 下构建后预压缩资源（Python 3.11+ 标准库，无额外依赖）：
+## 本地开发与检查
 
 ```sh
-flutter build web --release --no-web-resources-cdn --pwa-strategy=none \
-  --dart-define=FLOWMUSE_COLLAB_SERVER_URL=https://api.flowmuse.cloud \
-  --dart-define=FLOWMUSE_SHARE_ORIGIN=https://app.flowmuse.cloud
-python tool/precompress_web.py build/web
+flutter pub get --enforce-lockfile
+flutter run -d chrome --web-port=8080 --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true
+flutter analyze --no-pub
+flutter test --no-pub
 ```
 
-将整个 `build/web`（包括 `.gz`）一并发布。Nginx Web 站点采用
-`tool/nginx_web_resources.conf` 中的静态资源配置，并在已有 HTTPS listen 上开启 HTTP/2；
-保留证书、`/api/`、`/socket.io/` 配置。先 `nginx -t` 再 reload。
-预压缩覆盖字体，入口和未版本化资源保留 `no-cache` 校验，防止发布后资源版本混用。
+依赖变更后先更新锁文件，再按锁文件重新验证；不要顺带升级无关依赖。插件注册文件由 Flutter 生成，不手工编辑或强制入库。
 
-Web 加载提示直接来自 HTML，不依赖 Flutter 或网络字体；显示真实启动阶段，在第一帧出现后移除。
-慢加载提供手动重试，不自动刷新或清理浏览器数据。验证入口：
+移除插件后，旧 `.dart_tool/flutter_build` 可能仍缓存原注册结果；可指定新的 Web 输出目录（例如 `--output=build/web-check`）触发重新生成，或只清理对应目标的生成缓存，无需删除全部编译中间产物。
+
+## Web 发布
 
 ```sh
+flutter build web --release --no-web-resources-cdn --pwa-strategy=none --base-href / --dart-define=FLOWMUSE_COLLAB_SERVER_URL=https://api.flowmuse.cloud --dart-define=FLOWMUSE_SHARE_ORIGIN=https://app.flowmuse.cloud --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true
+python tool/precompress_web.py build/web
 node --test tool/web_startup_test.mjs
 python tool/precompress_web_test.py
 ```
 
-## Android / 鸿蒙 / Web 应用图标
+发布整个 `build/web`，包含 `.gz`；`tool/precompress_web.py` 仅使用 Python 3.11+ 标准库。使用 [Nginx 静态资源配置](tool/nginx_web_resources.conf) 并保留现有 HTTPS、API 与 WebSocket 代理；`nginx -t` 通过后再 reload。页面路径需回退到 `index.html`，确保 `/library`、`/whiteboard/collaboration` 和邮件路由可以直接访问及刷新，保留房间 fragment。
 
-唯一原图为 `assets/images/flowmuse-app-icon.png`，保留原有绿色笔触、星光和米黄色底色。
-Android 使用五档密度的桌面图标，API 26+ 使用独立自适应前景层；Web 使用 favicon、
-Apple 主屏幕图标及 192/512px PWA 图标。Maskable 图标单独留边，避免圆形裁切损伤主体。
-鸿蒙沿用单层 PNG 图标，同时替换 AppScope 应用图标和 EntryAbility 桌面/启动图标，
-保留已有资源名、bundleName 和入口配置；桌面卡片没有独立图片引用，无需改动布局。
-浏览器主题色沿用应用日间主题的 `#4F8F84`。此次不更改 iOS/macOS/Windows 或官网仓库。
+`--no-web-resources-cdn` 随包提供 CanvasKit，避免外部 CDN 导致白屏；当前不启用 Flutter 离线 Service Worker，未版本化资源返回 `Cache-Control: no-cache`。若发布到子路径，需同步调整 base href 与站点路由，不能复用根路径配方。
 
-在仓库根目录使用 Windows 自带 PowerShell/.NET 重新生成或只读检查，无需安装图像工具：
+发布后核对实际入口、主脚本、CanvasKit、UI 字体、扫码解码脚本、缓存/压缩响应，并用干净浏览器验证启动、保存及必要协作流程。记录源提交、构建参数和资源哈希；临时上传包验证后清除，不累积整包归档。纯客户端更新无需重启 Go 服务。
+
+Web 上 `compute` 仍在原事件循环执行；原生端的大 PDF 后台编码优化不能直接当成 Web 的线程优化。书写流畅度需使用真实 PDF 复测。
+
+## 原生构建
+
+Android：
+
+```sh
+flutter build apk --release --target=lib/main.dart --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true
+```
+
+HarmonyOS（OHOS Flutter SDK、完整 DevEco SDK 和签名配置齐备时）：
+
+```sh
+flutter build hap --release --target=lib/main.dart --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true
+```
+
+不要将 CI 为静态检查创建的空 SDK 目录当成可用的 HarmonyOS SDK。HAP/APK 编译通过也不等于笔压、双击、扫码、授权和性能已通过实机验证。[性能 runner 说明](integration_test/README.md)包含 Profile 回放、设备身份与历史数据隔离要求。
+
+## 图标与字体维护
+
+图标原图为 `assets/images/flowmuse-app-icon.png`。在**仓库根目录**生成 Android、OHOS 和 Web 派生图，或只读检查：
 
 ```powershell
 powershell -NoProfile -File scripts/Generate-AppIcons.ps1
 powershell -NoProfile -File scripts/Generate-AppIcons.ps1 -Check
 ```
 
-派生 PNG 需入库。更新原图后重新生成，同时递增 `web/index.html`、`web/manifest.json`
-中的图标缓存版本。不修改 manifest 的 `start_url`，避免改变已有 PWA 的安装身份。
-Android / 鸿蒙需重新打包安装，Web 需发布新构建；不需要修改或重启 Go 后端。
+派生图入库；更新图标后同步 Web 入口与 manifest 中的图标版本，保留现有 `start_url`。原生需重新打包，Web 需发布新构建。
 
-裁切规则参考 [Android 自适应图标](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive)
-与 [Web maskable 图标](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/How_to/Define_app_icons#support_masking)，
-鸿蒙引用优先级见[配置应用图标和名称](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/layered-image)。
-
-本次验证（2026-09-22）：13 张派生图检查通过，Flutter analyze 无问题，全量测试
-1697 通过、5 跳过；Android/Web release 构建通过，安装包中的前景像素与 Web 图标文件
-均已核对。鸿蒙 HAP 已尝试，但本机 Flutter SDK 的 `packages/flutter_tools/hvigor/`
-有 8 个既有删除文件，导致找不到 `flutter-hvigor-plugin`；未擅自恢复 SDK，尚未完成
-HAP 构建或鸿蒙实机验证。本次尚未重新安装平板客户端或发布线上 Web。
+界面字体及授权见 [FlowMuse Sans](assets/fonts/ui/README.md)。只有重新裁剪字体时需要 `fontTools`；正常构建不需要重新下载字体。白板内容字体与界面字体分开维护，保留许可证及格式兼容。

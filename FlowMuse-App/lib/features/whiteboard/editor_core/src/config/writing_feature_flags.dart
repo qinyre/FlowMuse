@@ -6,7 +6,7 @@ class WritingFeatureFlags {
 
 const layeredWetInkEnabled = bool.fromEnvironment(
   'FLOWMUSE_LAYERED_WET_INK',
-  defaultValue: false,
+  defaultValue: true,
 );
 
 const writingFeatureFlags = WritingFeatureFlags(

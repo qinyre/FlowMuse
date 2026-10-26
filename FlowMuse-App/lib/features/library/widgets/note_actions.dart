@@ -1,104 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../shared/utils/ui_lifecycle.dart';
 import '../repositories/library_repository.dart';
-
-// ---------------------------------------------------------------------------
-// 笔记操作菜单
-// ---------------------------------------------------------------------------
-
-enum _NoteAction { rename, moveToNotebook, selectTags, delete }
 
 class MoveToNotebookResult {
   final String? notebookId;
   const MoveToNotebookResult({this.notebookId});
-}
-
-class NoteActionsMenu extends StatelessWidget {
-  const NoteActionsMenu({
-    super.key,
-    required this.onRename,
-    required this.onMoveToNotebook,
-    required this.onSelectTags,
-    required this.onDelete,
-  });
-
-  final VoidCallback onRename;
-  final VoidCallback onMoveToNotebook;
-  final VoidCallback onSelectTags;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return Builder(
-      builder: (context) => Tooltip(
-        message: '更多操作',
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () async {
-            final selected = await showAnchoredPopupMenu<_NoteAction>(
-              context: context,
-              placement: AnchoredPopupPlacement.below,
-              items: const [
-                PopupMenuItem<_NoteAction>(
-                  value: _NoteAction.rename,
-                  child: ListTile(
-                    leading: Icon(LucideIcons.penLine),
-                    title: Text('重命名'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                PopupMenuItem<_NoteAction>(
-                  value: _NoteAction.moveToNotebook,
-                  child: ListTile(
-                    leading: Icon(LucideIcons.bookOpen),
-                    title: Text('移动至'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                PopupMenuItem<_NoteAction>(
-                  value: _NoteAction.selectTags,
-                  child: ListTile(
-                    leading: Icon(LucideIcons.tag),
-                    title: Text('选择标签'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                PopupMenuItem<_NoteAction>(
-                  value: _NoteAction.delete,
-                  child: ListTile(
-                    leading: Icon(LucideIcons.trash2),
-                    title: Text('删除'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
-            );
-            if (selected == null || !context.mounted) {
-              return;
-            }
-            switch (selected) {
-              case _NoteAction.rename:
-                runAfterUiTeardown(onRename);
-              case _NoteAction.moveToNotebook:
-                runAfterUiTeardown(onMoveToNotebook);
-              case _NoteAction.selectTags:
-                runAfterUiTeardown(onSelectTags);
-              case _NoteAction.delete:
-                runAfterUiTeardown(onDelete);
-            }
-          },
-          child: const SizedBox(
-            width: 24,
-            height: 24,
-            child: Icon(LucideIcons.chevronDown, size: 18),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -106,10 +13,7 @@ class NoteActionsMenu extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class MoveToNotebookDialog extends StatefulWidget {
-  const MoveToNotebookDialog({
-    super.key,
-    required this.currentNotebookId,
-  });
+  const MoveToNotebookDialog({super.key, required this.currentNotebookId});
 
   final String? currentNotebookId;
 
@@ -187,9 +91,9 @@ class _MoveToNotebookDialogState extends State<MoveToNotebookDialog> {
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(context).pop(
-                MoveToNotebookResult(notebookId: _selectedNotebookId),
-              ),
+              onPressed: () => Navigator.of(
+                context,
+              ).pop(MoveToNotebookResult(notebookId: _selectedNotebookId)),
               child: const Text('完成'),
             ),
           ],
@@ -204,10 +108,7 @@ class _MoveToNotebookDialogState extends State<MoveToNotebookDialog> {
 // ---------------------------------------------------------------------------
 
 class SelectTagsDialog extends StatefulWidget {
-  const SelectTagsDialog({
-    super.key,
-    required this.currentTagIds,
-  });
+  const SelectTagsDialog({super.key, required this.currentTagIds});
 
   final List<String> currentTagIds;
 
@@ -296,9 +197,9 @@ class _SelectTagsDialogState extends State<SelectTagsDialog> {
               child: const Text('取消'),
             ),
             FilledButton(
-              onPressed: () => Navigator.of(context).pop(
-                _untaggedSelected ? <String>[] : _selectedTagIds.toList(),
-              ),
+              onPressed: () => Navigator.of(
+                context,
+              ).pop(_untaggedSelected ? <String>[] : _selectedTagIds.toList()),
               child: const Text('完成'),
             ),
           ],

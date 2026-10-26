@@ -212,22 +212,6 @@ func parseMyScriptResponse(raw map[string]any, bounds InkBounds, contentType str
 	return RecognizeResponse{}
 }
 
-func looksLikeMath(latex string) bool {
-	latex = strings.TrimSpace(latex)
-	if latex == "" {
-		return false
-	}
-	if strings.ContainsAny(latex, `=+\-*/^_{}\()[]<>∫√ΣΠ`) {
-		return true
-	}
-	for _, token := range []string{`\frac`, `\sqrt`, `\int`, `\sum`, `\prod`, `\lim`, `\sin`, `\cos`, `\tan`, `\log`, `\ln`, `\alpha`, `\beta`, `\theta`} {
-		if strings.Contains(latex, token) {
-			return true
-		}
-	}
-	return false
-}
-
 // parseRawElements 解析假想的顶层 elements 数组。该响应形状来自 issue #15 验收夹具
 // （官方 iink Batch API 未见顶层 elements 数组，真实 JIIX 走 exports jiix 字符串，
 // 见 parseJiixExport）。toMyScriptRequest 提交笔画前已减去 inkBounds.X/Y，此路径的
