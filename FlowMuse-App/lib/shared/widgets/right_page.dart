@@ -325,6 +325,9 @@ class _AnimatedRightPageTitle extends StatelessWidget {
       reverseDuration: _headerReverseDuration(context),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
+      // Outgoing headings must not stack during rapid navigation.
+      layoutBuilder: (currentChild, _) =>
+          currentChild ?? const SizedBox.shrink(),
       transitionBuilder: (child, animation) {
         final curved = CurvedAnimation(
           parent: animation,
