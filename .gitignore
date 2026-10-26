@@ -59,6 +59,9 @@ app.*.map.json
 
 # HarmonyOS auto-generated
 ohos/entry/src/main/ets/plugins/GeneratedPluginRegistrant.ets
+**/ohos/oh_modules/
+**/tool/vendor/**/BuildProfile.ets
+**/tool/vendor/**/oh-package-lock.json5
 
 # Vendor fork build artifacts (copied from local Flutter OHOS SDK)
 **/tool/vendor/**/libs/
