@@ -2,7 +2,7 @@
 
 ## Context
 
-用户要求先清理冗余分支，再完善 Web 笔记的 Ctrl＋滚轮缩放。工作区干净，从当前主线 `9d7f93a5` 创建独立分支 `fix/web-ctrl-wheel-zoom`；尚未合并的 PR #89（`chore/project-cleanup`）保持独立。
+用户要求先清理冗余分支，再完善 Web 笔记的 Ctrl＋滚轮缩放。初始工作区干净，从主线 `9d7f93a5` 创建独立分支 `fix/web-ctrl-wheel-zoom`；当时尚未合并的 PR #89（`chore/project-cleanup`）保持独立。
 
 ## 分支清理
 
@@ -39,7 +39,7 @@
 - 8 项新增回归覆盖倍率、锚点、边界、非法值、分页/修饰键、Canvas 局部坐标和帮助文字；19 项相关测试通过。
 - Flutter analyze 无问题，全量 **2067 项通过、5 项既有跳过**。验证日志在本地忽略目录 `FlowMuse-App/build/web-ctrl-wheel/`。
 
-## 最终浏览器与构建验证
+## 第一轮浏览器与构建验证（发布前）
 
 - 源码提交 `41a2a179`，Web release 构建成功（94.1 秒）。使用独立验证输出目录 `FlowMuse-App/build/web-ctrl-wheel/web`，没有打发布归档或覆盖线上站点；墨迹两项 define 显式为 true，与线上模式一致。
 - 标准 JavaScript/CanvasKit 产物验证通过；构建仍提示部分现有依赖不支持 Wasm 和缺少 Cupertino 字体，本轮未改构建目标、字体或依赖。
@@ -56,3 +56,16 @@
 - 结束前再次核对远端，仅保留 `main`、`gh-pages`、`chore/project-cleanup`；本轮修复分支仅本地提交，未推送、部署或创建 PR。
 
 ![Windows Web 快捷键帮助](../images/web-ctrl-wheel-help.png)
+
+## 正式 Web 发布
+
+用户随后要求依次部署、推送并提交 PR。发布前获取到主线已合并 PR #89，因此将本分支 rebase 到 `889f7a4d`，保留清理结果和默认开启的两个墨迹开关，重新完成全部验证。
+
+- Flutter analyze 无问题；最新主线上的全量测试 **2067 项通过、5 项既有跳过**；Web release 构建成功（94.2 秒）。
+- 本次构建源提交 `78df6d03504ee03cd8ac53bb43704e24240a0187`，产物 ID `web-ctrl-wheel-20261026-78df6d0`；JS SHA-256 为 `4a5939e488ee6a0338670ed111aff4ac940367ec1f8801fcb3b4918c32665f35`。
+- 参数：release、`--no-web-resources-cdn`、`--pwa-strategy=none`、根路径 `/`；协作入口 `https://api.flowmuse.cloud`，分享入口 `https://app.flowmuse.cloud`，两个墨迹 define 显式为 true。使用独立目录 `FlowMuse-App/build/web-ctrl-wheel/release-web`，预压缩静态资源。
+- **2026-10-26 15:36（北京时间）** 上线 [正式 Web](https://app.flowmuse.cloud/library)。Nginx 配置校验及 reload 成功，切换前后 Go 容器 ID/镜像相同，健康检查通过。
+- 公网 10 项资源（入口、版本信息、主脚本、扫码脚本、三套 UI 字体、字体许可证和 Chromium CanvasKit JS/Wasm）全部返回 200，资源哈希一致，缓存策略为 `no-cache`。
+- 本地发布包及线上 Chrome 均实际发送 Ctrl＋滚轮：**50% → 67% → 50%**；松开 Ctrl 后普通滚轮保持 111%，浏览器缩放/DPR/宽度不变，无未捕获页面错误。帮助面板截图已更新为线上匿名空白笔记。
+- 本地和服务器临时上传归档均已删除；保留编译输出、脱敏收据和必要发布回退目录，不创建 APK 备份。
+- 下面的推送包含本次发布记录；应用源码与上述已发布源提交相同。PR 目标为 main，创建后不等待审查或 CI，不自动合并。Mac 实机及原生端未在本轮验证。
