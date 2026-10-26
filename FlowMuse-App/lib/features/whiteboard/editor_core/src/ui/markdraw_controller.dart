@@ -3094,9 +3094,14 @@ class MarkdrawController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Handles scroll-wheel zoom.
+  /// Handles scroll-wheel zoom and browser Ctrl+wheel scale signals.
   void onPointerSignal(PointerSignalEvent event) {
-    if (event is PointerScrollEvent) {
+    final double factor;
+    if (event is PointerScaleEvent) {
+      // Flutter Web converts Ctrl+wheel and trackpad pinch into scale signals.
+      factor = event.scale;
+    } else if (event is PointerScrollEvent) {
+      if (event.scrollDelta.dy == 0) return;
       final ctrl =
           HardwareKeyboard.instance.isControlPressed ||
           HardwareKeyboard.instance.isMetaPressed;
@@ -3104,15 +3109,18 @@ class MarkdrawController extends ChangeNotifier {
         scrollPagedViewportBy(event.scrollDelta.dy);
         return;
       }
-      final factor = event.scrollDelta.dy < 0 ? 1.1 : 0.9;
-      final newViewport = _editorState.viewport.zoomAt(
-        factor,
-        event.localPosition,
-        minZoom: _config.minZoom,
-        maxZoom: _config.maxZoom,
-      );
-      applyResult(UpdateViewportResult(newViewport));
+      factor = event.scrollDelta.dy < 0 ? 1.1 : 0.9;
+    } else {
+      return;
     }
+    if (!factor.isFinite || factor <= 0 || factor == 1) return;
+    final newViewport = _editorState.viewport.zoomAt(
+      factor,
+      event.localPosition,
+      minZoom: _config.minZoom,
+      maxZoom: _config.maxZoom,
+    );
+    applyResult(UpdateViewportResult(newViewport));
   }
 
   /// Records the starting zoom and offset for a pinch gesture.
