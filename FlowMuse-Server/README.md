@@ -22,7 +22,7 @@ sudo docker compose ps
 curl -i http://127.0.0.1:48931/health
 ```
 
-健康接口返回 `HTTP/1.1 200 OK` 与 `{"status":"ok"}` 表示服务已就绪。
+健康接口返回 `HTTP/1.1 200 OK` 与 `{"status":"ok"}` 表示 HTTP 进程可达；它不替代数据库、对象存储和真实协作流程验证。
 
 ## 日常操作
 
@@ -68,13 +68,14 @@ sudo docker compose down
 代码更新后执行：
 
 ```bash
-cd ~/FlowMuse-new
-git remote set-url origin git@github.com:qinyre/FlowMuse.git
+# 在实际检出目录的 FlowMuse-Server 下运行
 git pull --ff-only
 sudo docker compose up -d --build
 sudo docker compose ps
 curl -i http://127.0.0.1:48931/health
 ```
+
+服务端只需使用 Go 1.25+ 即可运行 `go test ./...` 和 `go vet ./...`。`go.mod` 对 `third_party/engine.io` 的 replace 修复了批量 WebSocket 帧丢包，不能当成无用 vendor 删除或直接换回未修复上游版本。前端构建与发布参数统一见[客户端 README](../FlowMuse-App/README.md)；纯客户端更新不需要重建后端容器。
 
 ## 配置说明
 
@@ -126,12 +127,7 @@ FLOWMUSE_PUBLIC_APP_URL=https://app.flowmuse.cloud
 - Nginx 需保留 WebSocket Upgrade 转发；API 代理请求体上限至少为 V3 所需的 `16m`，识别读取超时不得短于后端 120 秒上限。
 - 证书由 Certbot 管理，`certbot.timer` 自动续期；可执行 `sudo certbot renew --dry-run --no-random-sleep-on-renew` 验证。
 
-Web 构建时显式覆盖旧的 HTTP 构建参数：
-
-```bash
-cd FlowMuse-App
-flutter build web --release --no-web-resources-cdn --pwa-strategy=none --dart-define=FLOWMUSE_COLLAB_SERVER_URL=https://api.flowmuse.cloud --dart-define=FLOWMUSE_SHARE_ORIGIN=https://app.flowmuse.cloud
-```
+Web 构建统一使用[客户端发布配方](../FlowMuse-App/README.md#web-发布)，显式指定 HTTPS API、分享地址与配套的湿墨/实时墨迹开关，避免两端使用不同编译配置。
 
 `--no-web-resources-cdn` 让 CanvasKit 等渲染资源使用随包文件，避免 Google CDN 不可达导致白屏；保持现有不启用 Flutter 离线缓存的策略，静态入口返回 `Cache-Control: no-cache`，避免缓存旧的 HTTP 构建配置。
 
@@ -151,7 +147,7 @@ location / {
 
 验证 `curl -I -H 'Accept-Encoding: gzip' https://app.flowmuse.cloud/main.dart.js` 返回 `Content-Encoding: gzip` 和 `Vary: Accept-Encoding`；浏览器不支持 gzip 时仍返回原文件。
 
-部署前备份已有静态目录，并在浏览器验证加载、API 和 WSS。仅修改服务器上的 `app.env` 不能覆盖旧 Web 包编译进去的 `--dart-define`。HTTP 与 HTTPS 的 IndexedDB/本地笔记不共享；保留原 HTTP 入口供用户导出备份，不配置强制跳转或 HSTS，待迁移完成后另行收口。
+部署前确认当前可回退的发布版本与配置，切换后在浏览器验证加载、API 和 WSS，完成后清理临时上传归档。仅修改服务器上的 `app.env` 不能覆盖旧 Web 包编译进去的 `--dart-define`。HTTP 与 HTTPS 的 IndexedDB/本地笔记不共享；保留原 HTTP 入口供用户导出备份，不配置强制跳转或 HSTS，待迁移完成后另行收口。
 
 本地 Web 联调建议固定 `flutter run -d chrome --web-port=8080`；访问本地后端时同时使用上述两个 `--dart-define` 覆盖为本机地址，并设置服务端 `FLOWMUSE_PUBLIC_APP_URL=http://localhost:8080`。CORS 必须包含浏览器实际 origin（含端口），不能填带页面路径的 URL。Compose 未配置来源时的 `*` 仅用于开发，生产按 `.env.example` 的明确列表部署。
 

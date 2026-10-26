@@ -200,7 +200,7 @@ dependency_overrides:
 - 应用设置(主题、侧边栏、访客名、最近封面等):SQLite 的 `local_settings` 表(key-value TEXT)。
 - 敏感数据(token、ownerKey):`flutter_secure_storage`。
 
-**不使用 shared_preferences**(虽然 pubspec 有依赖)。
+**不使用 shared_preferences**。2026-10-26 清理已移除无调用的依赖、平台注册与 OHOS fork；不迁移或删除现有 SQLite 设置。
 
 ### 理由
 

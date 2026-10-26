@@ -27,7 +27,7 @@
 | 数据库表名 | snake_case | `note_tags`、`note_scenes` |
 | 数据库字段 | snake_case | `cover_color`、`updated_at`、`deleted_at` |
 | 实体 ID 前缀 | `实体名-{uuid}` | `notebook-a1b2c3...`、`tag-d4e5f6...` |
-| 调试日志前缀 | `[FlowMuseCreateNote]` | `debugPrint('[FlowMuseCreateNote] ...')` |
+| 调试日志前缀 | 沿用模块已有前缀 | `[FlowMuseCreateNote]`、`[recognition-v3]` |
 | 安全存储 key | `flowmuse.*` | `flowmuse.auth.token`、`flowmuse.collaboration.ownerKey.{roomId}` |
 | 本地设置 key | 见下方"持久化"小节 | `theme_preset`、`shell_sidebar_collapsed` |
 
@@ -169,7 +169,7 @@ GoRoute(
 debugPrint('[FlowMuseCreateNote] LocalDatabase.open path=$databasePath');
 ```
 
-- 统一 `debugPrint`,带 `[FlowMuseCreateNote]` 前缀。
+- 统一 `debugPrint`,沿用模块前缀，不在 pointer/实时墨迹热路径逐事件打印。
 - **禁止 `print`**。
 - 关键流程(数据库打开、协作连接、场景广播)必须有日志。
 - 日志、异常信息、测试失败输出和截图中不得出现 token、ownerKey、roomKey、AES 密钥、白板明文或可还原协作密文；排障只记录脱敏标识、长度、状态码或哈希前缀。
@@ -177,7 +177,7 @@ debugPrint('[FlowMuseCreateNote] LocalDatabase.open path=$databasePath');
 ### 3.6 异常处理
 
 - 数据库迁移等"可能部分失败"的操作用 try-catch 静默降级(参考 `_safeAddColumn`)。
-- HTTP 非 2xx 抛 `StateError`,消息含响应体或状态码。
+- HTTP 非 2xx 抛给调用方处理，诊断保留状态码和脱敏错误码，不直接附带响应正文或密钥。
 - 不要吞掉异常而不记日志。
 
 ---
@@ -193,7 +193,7 @@ debugPrint('[FlowMuseCreateNote] LocalDatabase.open path=$databasePath');
 | 账户 token、协作房主密钥 | `flutter_secure_storage` | 敏感数据 |
 | 白板场景内容 | SQLite `note_scenes.content`(Excalidraw JSON 或 `@scene-file:` 引用) | 原生大场景保存独立文件，JSON v2 备份展开实际正文 |
 
-> 虽然 pubspec 依赖了 `shared_preferences`,但 settings/account/theme 三模块实际全部走 `LocalSettingsRepository`(SQLite)。**新设置项也走这里**,不要混用。
+> settings/account/theme 等模块统一走 `LocalSettingsRepository`(SQLite)。2026-10-26 已移除无调用的 `shared_preferences` 及其 OHOS 适配。**新设置项也走 SQLite**,不要另建第二套存储。
 
 ### 4.2 `local_settings` 已用 key
 
@@ -284,7 +284,7 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 | 构建产物 | `**/build/`、`**/.dart_tool/`、`**/coverage/` |
 | 鸿蒙签名配置 | `**/ohos/build-profile.json5`(本地签名) |
 | 鸿蒙自动生成(忽略) | `GeneratedPluginRegistrant.ets` |
-| — | 注意:`tool/vendor/path_provider_ohos/ohos/` 下的 `oh-package-lock.json5` 和 `BuildProfile.ets` **不是**自动生成的,是 vendor fork 的必要构建文件,**必须追踪**(vendor 自带的 `.gitignore` 会误忽略它们,用 `git add -f` 添加) |
+| vendor 本机生成物 | `BuildProfile.ets`、`oh-package-lock.json5` 含本机模式/引擎路径，不强制追踪；源码 `oh-package.json5` 按需维护 |
 | 插件注册 | `**/flutter/generated_plugin_registrant.*` |
 | IDE | `.idea/`、`*.iml` |
 
@@ -317,7 +317,7 @@ import 'local_database_path_stub.dart'
 | 差异 | 位置 |
 |------|------|
 | SQLite FFI | `shared/storage/local_database_path_io.dart`(预加载 `libharmony_sqlite.z.so`) |
-| HTTP | `features/whiteboard/ink_recognition/native_http_client.dart`(Platform Channel → @ohos.net.http) |
+| HTTP | `shared/network/native_http_client.dart`(Platform Channel → @ohos.net.http)；识别目录的旧路径只保留兼容 export |
 | 手写笔 | `editor_core/src/ui/harmony_stylus_stroke_smoother.dart` + `editor_core/src/input/` |
 | 安全存储 | 直接使用安全存储 API 时导入 `flutter_secure_storage_ohos` facade；保留 `flutter_secure_storage` 依赖以注册其他平台实现 |
 | 文件选择/保存 | Platform Channel → DocumentViewPicker |

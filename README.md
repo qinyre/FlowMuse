@@ -1,156 +1,124 @@
-# FlowMuse（流形白板）
+# FlowMuse · 跨平台协作笔记
 
-FlowMuse 是一个面向课堂笔记、会议协作和灵感记录的跨平台协同白板。客户端基于 Flutter 和自研 Markdraw 白板内核，服务端使用 Go，支持 Android、HarmonyOS、Web、Windows、macOS 和 iOS。
+FlowMuse 将手写笔记、PDF 批注和多人白板放在同一个工作空间。一个人可以离线记录和整理，多个人可以扫码进入房间，边写边讨论；需要加工内容时，再使用识别、智能排版或 AI 助手。
 
-它适合三类场景：一个人手写和整理笔记、多人一起在白板上讨论、把手写内容交给识别和 AI 工具继续加工。协作消息和快照使用 AES-GCM 端到端加密；在协作数据上，服务端只负责转发和保存密文。
+客户端使用 Flutter 与内置 Markdraw 编辑器，服务端使用 Go。目标平台为 **HarmonyOS、Android、Web、Windows、macOS 和 iOS**；平台能力与实机验证范围分别记录，不把一端的结果视为六端全部通过。
 
-当前主线已经包含协作元素归属显示和按创建者聚焦；鸿蒙真机 Profile/GPU 验收仍待完成。
+[在线使用](https://app.flowmuse.cloud/library) · [功能需求](docs/项目说明/项目需求.md) · [文档导航](docs/README.md) · [开发约定](AGENTS.md)
 
-## 主要功能
+## 能做什么
 
-- 手写笔迹、压感、自然介质铅笔/毛笔（颗粒浓淡、提按出锋）、形状、文本、图片、Frame、绑定箭头、分页、撤销和重做
-- 笔记本、标签、搜索、封面和 SQLite 本地保存，断网也可以使用基础白板功能
-- PDF 分页导入，以及 .markdraw、.excalidraw 文件导入导出
-- 多端实时协作、在线成员、远端光标和 AES-GCM 端到端加密
-- 按元素创建者查看协作内容；聚焦只改变本机显示，不改变文档层级或其他人的编辑
-- 手写识别、公式/形状识别、智能排版和跨端语音转文字
-- AI 问答、文本生成、思维导图和智能排版；AI 写入前会先展示预览
-- AI 可在用户主动操作后附带框选截图或当前 PDF 页
-- HarmonyOS 手写笔、原生 HTTP、文件、PDF、语音和 Pen Kit 能力适配
+| 场景 | 当前能力 |
+| --- | --- |
+| 手写与编辑 | 压感书写、五种笔形、自然介质铅笔/毛笔、整笔擦除、形状、文本、图片、绑定箭头、Frame、撤销与重做 |
+| PDF 批注 | 分页导入、纸张与模板、页码导航、页面预览、可见区域图片加载；批注继续使用同一套编辑和协作工具 |
+| 实时协作 | 加密房间、链接/二维码入房、实时笔迹、远端光标、在线成员、人数限制与房主移出成员 |
+| 协作阅读 | 查看元素创建者、按创建者聚焦、定位成员、持续跟随视角；聚焦和跟随只改变自己的视图 |
+| 笔记管理 | 笔记本、标签、搜索、封面、回收站、自动保存、本地备份及 WebDAV 备份 |
+| 内容加工 | 手写转文字、公式/形状识别、智能排版审阅、语音转文字；结果成为可以继续编辑的白板元素 |
+| AI 助手 | 问答、生成文字、思维导图及排版；支持主动附带选区截图或 PDF 页，修改前先预览确认 |
+| 账号与交流 | 邮箱/华为账号、好友、文字私聊和定向协作邀请；社交模块由服务端开关控制 |
 
-## 运行前准备
+Android 和 HarmonyOS 接入各自的原生文件、输入与语音能力。支持的鸿蒙设备及一加/OPPO 手写笔可使用笔身双击切换笔/橡皮；实际能力取决于设备、手写笔及系统授权，Web 保留普通工具栏操作。
 
-普通平台使用 Flutter 3.41.10 和 Dart 3.11.1。HarmonyOS 使用 flutter_ohos 3.41.10-ohos-0.0.1-canary1，并需要 DevEco Studio。
+## 数据与隐私边界
 
-如果只想查看或编辑本地白板，不启动服务端即可。实时协作、账号、手写识别和服务端智能排版需要启动 FlowMuse-Server。
+- 笔记正文和设置优先保存在本机。登录账号不等于所有本地笔记自动上传；基础编辑不需要后端。
+- 协作消息、附件和快照使用 AES-GCM 端到端加密，协作服务转发和保存密文。房间链接中的密钥保留在 URL fragment（`#` 后），分享链接仍应仅交给预期成员。
+- 私聊正文保存在服务端，**不属于白板的端到端加密通道**。识别与 AI 会把用户选定的内容发送给相应服务，不能把整个后端描述为“永远看不到任何笔记内容”。
+- 支持 `.markdraw`、`.excalidraw` / `.json` 导入导出。外部导出会移除协作创建者元数据，内部保存和协作保留。
+- 浏览器数据按 origin 隔离；更换域名、协议或清理站点数据前，先导出备份。
 
-## 最快启动
+## 开发环境
 
-### 运行客户端
+| 部分 | 工具链 |
+| --- | --- |
+| Flutter 客户端 | Dart `^3.11.1`；仓库 CI 固定 `flutter_ohos 3.41.10-ohos-0.0.1-canary1`，基于 Flutter 3.41.10 |
+| HarmonyOS | 上述 OHOS Flutter SDK、DevEco Studio、完整 HarmonyOS SDK 及本机签名配置 |
+| Android / 桌面 / Web | 对应平台的 Flutter 构建依赖；Web 使用 Chrome，Android 需要 Android SDK/JDK |
+| Go 服务端 | Go 1.25+；版本以 [go.mod](FlowMuse-Server/go.mod) 为准 |
+| 本地服务环境 | Docker Engine、Docker Compose v2；PostgreSQL 17、MinIO、Mailpit 由 Compose 启动 |
 
-~~~bash
+HarmonyOS 构建必须使用 OHOS Flutter SDK；其余平台也建议使用 CI 同款 SDK，避免工具链与平台插件解析不一致。不要删除 `pubspec.yaml` 中仍在使用的 vendor overrides，也不要用升级全部依赖来解决环境问题。
+
+## 启动客户端
+
+在仓库根目录执行：
+
+```sh
 cd FlowMuse-App
-flutter pub get
+flutter pub get --enforce-lockfile
 flutter devices
-flutter run -d <device-id>
-~~~
-
-Web：
-
-~~~bash
-cd FlowMuse-App
 flutter run -d chrome --web-port=8080
-~~~
+```
 
-Windows 桌面端：
+将 `chrome` 替换为设备 ID 或 `windows` 可启动其他客户端。默认后端为 `https://api.flowmuse.cloud`，分享页面为 `https://app.flowmuse.cloud`；本地编辑可离线进行，网络功能默认访问这组服务。
 
-~~~powershell
-cd FlowMuse-App
-flutter run -d windows
-~~~
+**调试实时墨迹时，两端需要使用配套构建参数。** 源码中的湿墨分层与实时墨迹 V2 开关默认均为 `false`，裸 `flutter run` 不代表已启用它们：
 
-客户端默认读取 FlowMuse-App/assets/config/app.env，随包配置与内置回退后端均为 `https://api.flowmuse.cloud`，房间分享入口为 `https://app.flowmuse.cloud`。账号、识别、快照、附件和 Socket.IO 复用后端配置，后者自动使用 WSS。连接局域网或自建服务时，可在启动命令中覆盖地址：
+```sh
+flutter run -d chrome --web-port=8080 --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true
+```
 
-~~~bash
-flutter run -d <device-id> \
-  --dart-define=FLOWMUSE_COLLAB_SERVER_URL=http://<server-ip>:48931 \
-  --dart-define=FLOWMUSE_SHARE_ORIGIN=http://<web-origin>
-~~~
+同样的两个参数用于配套 Android/OHOS 构建；是否进入实时模式还取决于服务端协议能力。对外界面显示产品状态，不应把内部协议版本当成功能名称。
 
-真机不能通过 127.0.0.1 访问电脑服务，请使用电脑局域网 IP 或可访问的公网地址。
+## 启动本地后端
 
-生产 Web 入口为 [app.flowmuse.cloud](https://app.flowmuse.cloud/)。HTTPS 页面必须连接 HTTPS 后端，不能继续使用 HTTP IP 地址；修改配置后需要重新构建部署，旧包的 `--dart-define` 优先于环境文件。HTTP 与 HTTPS 页面使用不同的浏览器本地存储，旧 Web 用户应先在原 HTTP 入口导出备份，再到 HTTPS 入口导入，不要清理浏览器数据。
+在 `FlowMuse-Server` 目录，首次将 `.env.example` 复制为 `.env`，已有配置不要覆盖。然后运行：
 
-房间链接采用 `https://app.flowmuse.cloud/whiteboard/collaboration#room=<房间码>`，密钥仍只在 `#` 后，不进入 HTTP 请求。Web 使用保留 fragment 的路径路由，服务器必须将页面路径回退到 `index.html`；旧 `/#/...` 书签和粘贴旧站点房间链接仍兼容。分享链接指向 Web，不是 API 域名。自建服务需同步设置客户端 `FLOWMUSE_SHARE_ORIGIN` 和后端 `FLOWMUSE_PUBLIC_APP_URL`。
+```sh
+docker compose up -d --build
+docker compose ps
+```
 
-HarmonyOS 必须使用 flutter_ohos，不能用标准 Flutter SDK 构建 HAP：
+检查 `http://127.0.0.1:48931/health`，应返回 `{"status":"ok"}`。本地开发默认密码、端口映射及 CORS 不能直接作为公网部署方案，配置项和日常运维见[后端说明](FlowMuse-Server/README.md)。
 
-~~~bash
-cd FlowMuse-App
-flutter build hap
-~~~
+客户端需同时覆盖 API 与分享地址，例如同机 Web 调试：
 
-### 启动服务端
+```sh
+flutter run -d chrome --web-port=8080 --dart-define=FLOWMUSE_COLLAB_SERVER_URL=http://127.0.0.1:48931 --dart-define=FLOWMUSE_SHARE_ORIGIN=http://localhost:8080 --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true
+```
 
-需要 Docker 和 Docker Compose：
+服务端配置 `FLOWMUSE_PUBLIC_APP_URL=http://localhost:8080`，并让 `FLOWMUSE_ALLOWED_ORIGINS` 包含浏览器实际 origin。真机联调时，将 loopback 地址换成设备可访问的电脑局域网地址；HTTPS 页面必须连接 HTTPS API。客户端配置优先级为 `--dart-define` → `assets/config/app.env` → 内置默认值，修改编译参数后必须重新构建。
 
-~~~bash
-cd FlowMuse-Server
-cp .env.example .env
-docker compose up --build
-~~~
+## 验证改动
 
-Windows PowerShell：
+客户端，在 `FlowMuse-App` 下：
 
-~~~powershell
-cd FlowMuse-Server
-Copy-Item .env.example .env
-docker compose up --build
-~~~
+```sh
+flutter analyze --no-pub
+flutter test --no-pub
+```
 
-服务默认监听 http://127.0.0.1:48931。启动后先检查：
+服务端，在 `FlowMuse-Server` 下：
 
-~~~text
-http://127.0.0.1:48931/health
-~~~
-
-手写识别和服务端智能排版需要在 FlowMuse-Server/.env 配置 MyScript 或 OpenAI 兼容服务。密钥不要提交到仓库；部署 Web 时还要设置正确的 FLOWMUSE_ALLOWED_ORIGINS。
-
-### 两个客户端测试协作
-
-1. 启动服务端，确认 health 地址返回正常。
-2. 在 Chrome 和 Windows 客户端使用同一个服务地址启动。
-3. 一端创建房间，另一端通过完整房间链接加入。
-4. 两端分别创建笔迹、文本和形状，确认内容、光标和成员状态同步。
-5. 点击协作者头像或元素属性面板中的创建者入口，确认聚焦只改变当前客户端的透明度，并保持原来的遮挡顺序。
-6. 导出 .markdraw、.excalidraw 或 .json，确认外部文件不包含 collaborationOwner。
-
-## AI 助手
-
-客户端进入“设置 → 实验室”，填写 OpenAI 兼容 Base URL、API Key 和模型名称。API Key 保存在平台安全存储中，AI 返回动作后会先展示预览，确认后才修改笔记。
-
-## 开发检查
-
-Flutter：
-
-~~~bash
-cd FlowMuse-App
-flutter analyze
-flutter test
-~~~
-
-Go：
-
-~~~bash
-cd FlowMuse-Server
+```sh
 go test ./...
 go vet ./...
-~~~
+```
 
-GitHub Actions 入口是 [.github/workflows/quality.yml](.github/workflows/quality.yml)，会执行 Flutter 依赖解析、分析、测试以及 Go 测试和 vet。涉及 HarmonyOS 原生代码、Platform Channel 或 vendor 包时，还需要运行 flutter build hap，并记录真机验证结果。
+数据库集成测试需要独立、名称以 `_test` 结尾的数据库，通过 `FLOWMUSE_SOCIAL_TEST_DATABASE_URL` 指定；未配置时会明确跳过，不能当作迁移已验证。不要使用生产数据库。
 
-## 代码和文档位置
+CI 包括[基础质量检查](.github/workflows/quality.yml)、[智能排版矩阵](.github/workflows/smart-layout-v3-ci.yml)与[平台构建矩阵](.github/workflows/smart-layout-v3-platform.yml)。书写性能和鸿蒙能力仍需真实设备验证，参见[性能测试说明](FlowMuse-App/integration_test/README.md)。发布构建、Web 资源验证和图标维护见[客户端说明](FlowMuse-App/README.md)。
 
-- [文档导航](docs/README.md)：按需求、设计、研发记录、演示视频和本地验收材料查找
-- FlowMuse-App：Flutter 客户端、Markdraw 内核和 HarmonyOS 原生适配
-- FlowMuse-Server：Go 协作、账户、文件和识别服务
-- [项目需求](docs/项目说明/项目需求.md)和[架构约束](docs/项目说明/架构约束.md)
-- [技术设计](docs/技术设计/前端架构.md)：前端架构、接口、数据模型和部署说明
-- [研发记录](docs/研发记录/)：功能计划、调研、审查和落地记录
-- [复赛演示视频](docs/参赛文档/复赛演示视频/README.md)：当前成片、历史版本、素材与重建方法
-- [.agent/decisions.md](.agent/decisions.md)：架构决策记录
-- [AGENTS.md](AGENTS.md)：开发流程、跨端约束和完成前验证清单
+## 仓库导航
 
-历史安装包、临时截图、排障日志和一次性脚本统一保存在本地 `docs/验收材料/本地归档/`，按日期保留原目录层级与迁移清单。`FlowMuse-App/build/` 保留正常构建输出及现有测试使用的产物目录。
+```text
+FlowMuse-App/       Flutter 客户端、编辑器、平台适配与测试
+FlowMuse-Server/    Go 账户、协作、社交、存储和识别服务
+scripts/           图标生成及智能排版辅助脚本
+docs/              需求、设计、研发记录与演示工程
+.agent/            架构地图、决策与开发约定
+AGENTS.md          编码助手的项目入口与验证要求
+```
 
-## 当前边界
+- [架构约束](docs/项目说明/架构约束.md)：Excalidraw 格式、归属、加密与平台边界。
+- [技术设计](docs/技术设计/前端架构.md)：客户端分层与数据流；[接口](docs/技术设计/接口设计.md)和[数据模型](docs/技术设计/数据模型.md)。
+- [决赛优化计划](docs/研发记录/plans/2026-10-24-finals-product-optimization-plan.md)：产品演进与验收方向。
+- [演示视频工程](docs/参赛文档/复赛演示视频/README.md)：脚本、重建方法与选定成片。
 
-- 不做语音/视频会议，也不定位为复杂矢量设计工具。
-- 创建者归属只用于显示，不作为权限、锁定或鉴权依据。
-- 外部导出会剥离创建者元数据，协作密文和内部本地存储保留。
-- 鸿蒙真机 Profile/GPU 验收仍需完成，自动化测试不能替代真实设备测试。
-- docs/周报与总结报告、docs/验收材料和其他参赛过程材料本地忽略；docs/参赛文档/复赛演示视频的工程及选定成片由 Git 管理，原始录屏、配音和缓存本地保留。
+`build/`、本机签名、密钥和运行日志不入库；编译缓存不作为源码清理对象。周报、验收材料和大部分参赛过程材料本地保留，分类见[文档导航](docs/README.md)。
 
 ## 团队
 
-陈宏宇、任逸青、李天宇
+陈宏宇、任逸青、李天宇 · 武汉大学 2024 级软件工程实训项目

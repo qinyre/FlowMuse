@@ -66,6 +66,7 @@ lib/
 │   ├── search/                   # 笔记搜索（内存过滤）
 │   ├── settings/                 # 设置 / 本地备份
 │   ├── account/                  # 账户认证
+│   ├── social/                   # 好友、私聊与加密邀请
 │   └── whiteboard/               # 白板编辑器
 │       ├── editor_core/          # ★自研编辑器内核（对外名 markdraw）
 │       ├── collaboration/        # 端到端加密实时协作
@@ -206,7 +207,7 @@ lib/
 
 ### 4.3 调试日志
 
-项目统一用 `debugPrint`，带 `[FlowMuseCreateNote]` 前缀。新增日志遵循此格式，便于过滤。**不要用 `print`**。
+项目统一用 `debugPrint`，沿用所在模块的日志前缀（如 `[FlowMuseCreateNote]`、`[recognition-v3]`）。**不要用 `print`**，也不要在每次 pointer 更新或实时墨迹帧中打印日志。
 
 ### 4.4 错误处理模式
 
@@ -232,6 +233,14 @@ lib/
 - 合并提交：`Merge ...` 或 `merge:合并...到主分支`
 - 提交信息用中文，简洁描述"做了什么"。
 
+### 4.6 冗余清理与依赖变更
+
+- 删除前检查调用方、测试、工具、条件导入、公开导出、字符串引用及原生声明；“没在 main.dart 里找到”或文本只出现一次，不构成删除依据。
+- 插件可通过生成器注册，Go 的 `Error`/`Unwrap` 等可由接口调用；迁移、历史笔刷和协议降级可用于旧数据/旧客户端，不能当成死代码。
+- 删除依赖要同步 `pubspec.yaml`、锁文件及原生直接依赖，检查传递依赖，不顺带升级保留的包。仍使用的 `tool/vendor/` 和 `FlowMuse-Server/third_party/engine.io` 均有适配/修复用途，不能整目录清除。
+- 生成的插件注册文件和 `generated_plugins.cmake` 不入库；已被跟踪时停止跟踪，保留本地生成结果，交由 Flutter 更新。
+- 源码历史交给 Git，不另存 `.bak` 副本；不把用户笔记、测试夹具、许可证、仍使用的编译缓存当成冗余。临时 APK/Web 上传归档验证后清除，发布回退按需保留可核验版本。
+
 ---
 
 ## 5. 跨端约束（对某端的调整不能影响其他端）
@@ -256,7 +265,7 @@ lib/
 
 - 鸿蒙相关代码在 `FlowMuse-App/ohos/`（ArkTS）与 `tool/vendor/`（fork 包）。
 - **自动生成文件**（`GeneratedPluginRegistrant.ets`）已在 `.gitignore` 忽略，**不要提交**。
-- **vendor fork 包的本机构建产物**（`BuildProfile.ets`、`oh-package-lock.json5`）**不要提交、不要强制追踪**：内容是本机生成物（debug/release 构建模式与本机引擎 .har 路径），入库后任何一台机器的内容对其他机器都是错的，会互相污染构建。hvigor/ohpm 在首次构建时自动生成；上游包的 `.gitignore` 已覆盖它们，与兄弟插件 `shared_preferences_ohos` 和 App 级 `ohos/` 工程的实践一致。
+- **vendor fork 包的本机构建产物**（`BuildProfile.ets`、`oh-package-lock.json5`）**不要提交、不要强制追踪**：内容是本机生成物（debug/release 构建模式与本机引擎 .har 路径），入库后会互相污染构建。hvigor/ohpm 在首次构建时自动生成；上游包的 `.gitignore` 已覆盖它们，与 App 级 `ohos/` 工程的实践一致。源码配置 `oh-package.json5` 不属于此类产物，变更原生直接依赖时必须同步。
 - 改 `tool/vendor/` 下的 fork 包时，在 pubspec.yaml 注释里记录"为什么 fork"（已有范例），方便后续上游同步。
 - 鸿蒙网络安全：生产协作服务使用 HTTPS；`network_config.json` 的 cleartext HTTP 放行保留用于局域网/自建服务调试。
 - **涉及鸿蒙 API / 原生能力时，先查 `harmonyos-guides/` 目录里的官方文档或联网搜索**，确认有对应的 API 和用法后再写代码，不要凭经验猜测鸿蒙侧的实现。**（harmonyos-guides 目录在项目仓库外，和项目于同级目录下，本地可用）**
@@ -319,6 +328,14 @@ lib/
 | 独立运行  | 每个 `test()` 用例不依赖其他用例的执行结果，**不得共享可变状态**                                                                |
 | Mock 隔离 | 数据库/网络/Platform Channel 用 mock 隔离，单元测试**不访问真实的文件系统或网络**                                               |
 | 运行      | 提交前跑全量 `flutter test`；开发中可用 `flutter test --name="关键词"` 只跑相关测试                                             |
+
+### 6.2 书写、协作与发布验证
+
+- Pointer/实时墨迹热路径不得新增同步 I/O、全场景序列化或重复全量点复制。PDF 静态缓存比较图片内容与实例，不能仅因临时 Map 换对象就重绘。
+- 本地保存必须先捕获 noteId、revision 与内容快照，再异步准备和按序落盘；保留失败重试、退出保存与防止旧内容覆盖新内容的保护。原生 `compute` 的收益不能直接套到 Web，Web 仍在原事件循环执行。
+- 调试或发布湿墨分层/实时墨迹时，核对两端 `FLOWMUSE_LAYERED_WET_INK`、`FLOWMUSE_LIVE_INK_V2` 和后端协议能力；两个编译开关源码默认均为 `false`。构建配方见 `FlowMuse-App/README.md`。
+- 构建、部署、健康探测、功能冒烟、真实手写性能是不同证据。发布记录包含源提交、参数与产物哈希；不能沿用上次构建结果声称本次已发布或实测。
+- 纯客户端发布不重启后端。缺 SDK、签名或实机时说明未验证范围，不修改工具链或删除数据来换取“通过”；用户要求只提交 PR 时，创建后停止，不轮询审查。
 
 ---
 
@@ -398,6 +415,7 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 - **端到端加密**：协作的实时消息与快照全程 AES-GCM-128 加密，服务端只见密文。改协作层时**不得**让明文落库或明文传输。
 - **token 安全**：账户 token 存 `flutter_secure_storage`（key `flowmuse.auth.token`），**不要**存到 `local_settings` 表或明文文件。
 - **日志与测试脱敏**：不得向 `debugPrint`、异常消息、测试失败输出、截图或提交记录写入 token、ownerKey、roomKey、AES 密钥、白板明文或可还原的协作密文。排障日志只记录脱敏后的标识、长度、状态码或哈希前缀。
+- **加密范围如实描述**：端到端加密限定于白板协作与加密邀请；私聊正文保存在服务端，识别/AI 在用户发起后处理选定内容，不得把所有模块统称为零知识服务。
 - **乐观锁**：协作快照用 `baseSceneVersion/baseSceneHash`，冲突返回 409 时走 reconcile 重试，不要直接覆盖。
 - **创建者归属只用于显示**：元素的 `customData.flowMuse.collaborationOwner` 是不可变创建者快照，不得用于权限、锁定或鉴权；聚焦状态只存在本机内存，不写 Scene、History、SQLite 或网络消息。
 - **归属数据要保护出口**：协作密文和内部本地存储保留 `collaborationOwner`；所有外部导出和分享产物必须经过 sanitizer，剥离该字段但保留其他 `flowMuse` 扩展键。
