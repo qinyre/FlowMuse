@@ -50,56 +50,55 @@ class LibraryHomePage extends ConsumerWidget {
         ref.watch(libraryIndexProvider).asData?.value ?? const LibraryIndex();
     final notes = _notesForSpecialView(specialView, state, libraryIndex);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 820;
-        return LibraryContent(
-          compact: compact,
-          state: state,
-          title: _titleForSpecialView(specialView),
-          notes: notes,
-          libraryIndex: libraryIndex,
-          specialView: specialView,
-          onFilterChanged: viewModel.selectFilter,
-          onViewModeChanged: viewModel.changeViewMode,
-          onSortDirectionChanged: viewModel.toggleSortDirection,
-          onSelectionModeChanged: viewModel.toggleSelectionMode,
-          onSelectionChanged: viewModel.toggleNoteSelection,
-          onClearSelection: viewModel.clearSelection,
-          onDeleteSelected: viewModel.deleteSelectedNotes,
-          onRestoreSelected: viewModel.restoreSelectedNotes,
-          onRestoreNote: (noteId) =>
-              ref.read(libraryIndexProvider.notifier).restoreNotes([noteId]),
-          onDeleteNoteForever: (noteId) => ref
-              .read(libraryIndexProvider.notifier)
-              .deleteNotesForever([noteId]),
-          onDeleteSelectedForever: viewModel.deleteSelectedNotesForever,
-          onMoveSelectedToNotebook: viewModel.moveSelectedNotesToNotebook,
-          onAddTagsToSelected: viewModel.addTagsToSelectedNotes,
-          onCreate: () {
-            context.push(AppRoutes.createNote);
-          },
-          onJoinRoom: () {
-            _joinRoom(context);
-          },
-          onOpenNote: specialView == LibrarySpecialView.trash
-              ? (NoteItem item) => viewModel.toggleNoteSelection(item.id)
-              : (NoteItem item) {
-                  _openWhiteboard(context, noteId: item.id);
-                },
-          onRenameNote: (noteId, newName) => ref
-              .read(libraryIndexProvider.notifier)
-              .renameNote(noteId, newName),
-          onMoveNoteToNotebook: (noteId, notebookId) => ref
-              .read(libraryIndexProvider.notifier)
-              .moveNotesToNotebook([noteId], notebookId),
-          onSetNoteTags: (noteId, tagIds) => ref
-              .read(libraryIndexProvider.notifier)
-              .setNoteTags(noteId, tagIds),
-          onDeleteNote: (noteId) =>
-              ref.read(libraryIndexProvider.notifier).deleteNotes([noteId]),
-        );
+    Widget content(bool compact) => LibraryContent(
+      compact: compact,
+      state: state,
+      title: _titleForSpecialView(specialView),
+      notes: notes,
+      libraryIndex: libraryIndex,
+      specialView: specialView,
+      onFilterChanged: viewModel.selectFilter,
+      onViewModeChanged: viewModel.changeViewMode,
+      onSortDirectionChanged: viewModel.toggleSortDirection,
+      onSelectionModeChanged: viewModel.toggleSelectionMode,
+      onSelectionChanged: viewModel.toggleNoteSelection,
+      onClearSelection: viewModel.clearSelection,
+      onDeleteSelected: viewModel.deleteSelectedNotes,
+      onRestoreSelected: viewModel.restoreSelectedNotes,
+      onRestoreNote: (noteId) =>
+          ref.read(libraryIndexProvider.notifier).restoreNotes([noteId]),
+      onDeleteNoteForever: (noteId) =>
+          ref.read(libraryIndexProvider.notifier).deleteNotesForever([noteId]),
+      onDeleteSelectedForever: viewModel.deleteSelectedNotesForever,
+      onMoveSelectedToNotebook: viewModel.moveSelectedNotesToNotebook,
+      onAddTagsToSelected: viewModel.addTagsToSelectedNotes,
+      onCreate: () {
+        context.push(AppRoutes.createNote);
       },
+      onJoinRoom: () {
+        _joinRoom(context);
+      },
+      onOpenNote: specialView == LibrarySpecialView.trash
+          ? (NoteItem item) => viewModel.toggleNoteSelection(item.id)
+          : (NoteItem item) {
+              _openWhiteboard(context, noteId: item.id);
+            },
+      onRenameNote: (noteId, newName) =>
+          ref.read(libraryIndexProvider.notifier).renameNote(noteId, newName),
+      onMoveNoteToNotebook: (noteId, notebookId) => ref
+          .read(libraryIndexProvider.notifier)
+          .moveNotesToNotebook([noteId], notebookId),
+      onSetNoteTags: (noteId, tagIds) =>
+          ref.read(libraryIndexProvider.notifier).setNoteTags(noteId, tagIds),
+      onDeleteNote: (noteId) =>
+          ref.read(libraryIndexProvider.notifier).deleteNotes([noteId]),
+    );
+    // Reuse content while the sidebar changes constraints every frame.
+    final compactContent = content(true);
+    final wideContent = content(false);
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          constraints.maxWidth < 820 ? compactContent : wideContent,
     );
   }
 }

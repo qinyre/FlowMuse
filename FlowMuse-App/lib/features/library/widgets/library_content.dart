@@ -14,6 +14,7 @@ import 'create_note_card.dart';
 import 'note_actions.dart';
 import 'note_bulk_action_bar.dart';
 import 'note_card.dart';
+import 'note_grid.dart';
 
 enum _NoteAction {
   rename,
@@ -702,19 +703,10 @@ class _LibraryItemsContent extends StatelessWidget {
       );
     }
 
-    return GridView.builder(
+    return NoteGrid(
+      compact: compact,
       itemCount:
           notes.length + (specialView == LibrarySpecialView.none ? 2 : 0),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
-        mainAxisExtent: NoteCard.gridHeight(context),
-        crossAxisSpacing: compact
-            ? NoteCard.compactGridCrossGap
-            : NoteCard.gridCrossGap,
-        mainAxisSpacing: compact
-            ? NoteCard.compactGridMainGap
-            : NoteCard.gridMainGap,
-      ),
       itemBuilder: (context, index) {
         if (specialView == LibrarySpecialView.none && index == 0) {
           return CreateNoteCard(onTap: onCreate);
