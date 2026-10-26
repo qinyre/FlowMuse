@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_spacing.dart';
@@ -41,20 +42,39 @@ class NoteBulkActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final destructive = TextButton.styleFrom(
-      foregroundColor: Theme.of(context).colorScheme.error,
+      foregroundColor: colorScheme.error,
       minimumSize: const Size(48, 48),
     );
     final count = Semantics(
       liveRegion: true,
-      child: Text(
-        '已选 $selectedCount 项',
-        style: Theme.of(context).textTheme.titleSmall,
+      child: Row(
+        children: [
+          Icon(
+            selectedCount == 0 ? LucideIcons.square : LucideIcons.squareCheck,
+            size: 20,
+            color: selectedCount == 0
+                ? colorScheme.onSurfaceVariant
+                : colorScheme.primary,
+          ),
+          const SizedBox(width: AppSpacing.controlGap),
+          Flexible(
+            child: Text(
+              selectedCount == 0 ? '选择笔记' : '已选 $selectedCount 项',
+              style: theme.textTheme.titleSmall,
+            ),
+          ),
+        ],
       ),
     );
     final cancel = TextButton(
       onPressed: onClearSelection,
-      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        foregroundColor: colorScheme.onSurfaceVariant,
+      ),
       child: const Text('取消'),
     );
     final actions = Wrap(
@@ -62,15 +82,17 @@ class NoteBulkActionBar extends StatelessWidget {
       runSpacing: AppSpacing.controlGap,
       children: [
         if (_trash) ...[
-          TextButton(
+          TextButton.icon(
             onPressed: selectedCount == 0 ? null : onRestoreSelected,
             style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-            child: const Text('恢复'),
+            icon: const Icon(LucideIcons.rotateCcw, size: 16),
+            label: const Text('恢复'),
           ),
-          TextButton(
+          TextButton.icon(
             onPressed: selectedCount == 0 ? null : onDeleteSelectedForever,
             style: destructive,
-            child: const Text('永久删除'),
+            icon: const Icon(LucideIcons.trash2, size: 16),
+            label: const Text('永久删除'),
           ),
         ] else ...[
           _NotebookMoveMenu(
@@ -83,45 +105,64 @@ class NoteBulkActionBar extends StatelessWidget {
             libraryIndex: libraryIndex!,
             onSelected: onAddTagsToSelected!,
           ),
-          TextButton(
+          TextButton.icon(
             onPressed: selectedCount == 0 ? null : onDeleteSelected,
             style: destructive,
-            child: const Text('删除'),
+            icon: const Icon(LucideIcons.trash2, size: 16),
+            label: const Text('删除'),
           ),
         ],
       ],
     );
-    return Card.outlined(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.listGap),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 640 ||
-                MediaQuery.textScalerOf(context).scale(16) > 22) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
+    return Align(
+      alignment: Alignment.center,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Card.outlined(
+          margin: EdgeInsets.zero,
+          color: Color.alphaBlend(
+            colorScheme.primary.withValues(alpha: 0.03),
+            colorScheme.surface,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radius),
+            side: BorderSide(color: colorScheme.outlineVariant),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.listGap,
+              vertical: AppSpacing.controlGap,
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth < 640 ||
+                    MediaQuery.textScalerOf(context).scale(16) > 22) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(child: count),
-                      cancel,
+                      Row(
+                        children: [
+                          Expanded(child: count),
+                          cancel,
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.controlGap),
+                      actions,
                     ],
-                  ),
-                  const SizedBox(height: AppSpacing.controlGap),
-                  actions,
-                ],
-              );
-            }
-            return Row(
-              children: [
-                Expanded(child: count),
-                cancel,
-                actions,
-              ],
-            );
-          },
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: count),
+                    actions,
+                    const SizedBox(width: AppSpacing.controlGap),
+                    cancel,
+                  ],
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -146,6 +187,7 @@ class _NotebookMoveMenu extends StatelessWidget {
     return _LibraryPopupMenuButton<String>(
       enabled: enabled,
       label: '移动到',
+      icon: LucideIcons.folderInput,
       items: [
         const PopupMenuItem<String>(
           value: _unfiledNotebookId,
@@ -176,6 +218,7 @@ class _TagAddMenu extends StatelessWidget {
     return _LibraryPopupMenuButton<String>(
       enabled: enabled && libraryIndex.tags.isNotEmpty,
       label: '添加标签',
+      icon: LucideIcons.tag,
       items: [
         for (final tag in libraryIndex.tags)
           PopupMenuItem<String>(value: tag.id, child: Text(tag.name)),
@@ -189,19 +232,21 @@ class _LibraryPopupMenuButton<T extends Object> extends StatelessWidget {
   const _LibraryPopupMenuButton({
     required this.enabled,
     required this.label,
+    required this.icon,
     required this.items,
     required this.onSelected,
   });
 
   final bool enabled;
   final String label;
+  final IconData icon;
   final List<PopupMenuEntry<T>> items;
   final Future<void> Function(T value) onSelected;
 
   @override
   Widget build(BuildContext context) {
     return Builder(
-      builder: (context) => TextButton(
+      builder: (context) => TextButton.icon(
         style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
         onPressed: !enabled || items.isEmpty
             ? null
@@ -216,7 +261,8 @@ class _LibraryPopupMenuButton<T extends Object> extends StatelessWidget {
                 }
                 runAfterUiTeardown(() => onSelected(selected));
               },
-        child: Text(label),
+        icon: Icon(icon, size: 16),
+        label: Text(label),
       ),
     );
   }

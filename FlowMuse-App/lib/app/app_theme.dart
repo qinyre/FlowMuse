@@ -167,8 +167,18 @@ class AppTheme {
       ),
       searchBarTheme: SearchBarThemeData(
         elevation: const WidgetStatePropertyAll(0),
-        backgroundColor: WidgetStatePropertyAll(
-          colorScheme.surfaceContainerHighest,
+        backgroundColor: WidgetStatePropertyAll(colorScheme.surface),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        side: WidgetStateProperty.resolveWith(
+          (states) => BorderSide(
+            color: states.contains(WidgetState.focused)
+                ? colorScheme.primary
+                : colorScheme.outlineVariant,
+            width: states.contains(WidgetState.focused) ? 1.5 : 1,
+          ),
+        ),
+        hintStyle: WidgetStatePropertyAll(
+          TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant),
         ),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
