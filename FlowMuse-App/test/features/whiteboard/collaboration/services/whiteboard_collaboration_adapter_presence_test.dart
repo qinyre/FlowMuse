@@ -15,6 +15,8 @@ void main() {
       width: 120,
       height: 40,
       text: '共同编辑',
+      // Presence assertions must not depend on downloading a font.
+      fontFamily: 'Excalifont',
     );
     controller.applyResult(AddElementResult(text), applyDefaultStyle: false);
     controller.startTextEditingExisting(text);
