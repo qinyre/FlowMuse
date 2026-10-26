@@ -86,18 +86,20 @@ class _NoteGridState extends State<NoteGrid>
               ? NoteCard.compactGridMainGap
               : NoteCard.gridMainGap,
         );
+        final changedHeight =
+            _target != null && _target!.mainAxisExtent != height;
         if (_target == null) {
           _target = target;
         } else if (target.shouldRelayout(_target!)) {
           _from = _current;
           _target = target;
-          if (duration != Duration.zero && !_windowResized) {
+          if (duration != Duration.zero && !_windowResized && !changedHeight) {
             _animation.duration = duration;
             _animation.forward(from: 0);
           }
         }
-        // Direct window resizing must not squeeze old columns into a narrow viewport.
-        if (duration == Duration.zero || _windowResized) {
+        // Window/font changes must not squeeze content into the previous layout.
+        if (duration == Duration.zero || _windowResized || changedHeight) {
           _animation.stop();
           _animation.value = 1;
         }

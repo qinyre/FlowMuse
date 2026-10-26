@@ -1,4 +1,6 @@
 import 'package:flow_muse/features/library/widgets/note_grid.dart';
+import 'package:flow_muse/features/library/models/note_item.dart';
+import 'package:flow_muse/features/library/widgets/note_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,6 +97,45 @@ void main() {
     await tester.pump();
     await tester.pumpWidget(const SizedBox.shrink());
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('字号变大立即留足卡片高度，不在过渡中挤压文字', (tester) async {
+    final note = NoteItem(
+      id: 'large-text',
+      title: '字号变化测试笔记',
+      updatedAt: DateTime(2026, 10, 26),
+      kind: LibraryFilter.notes,
+      coverColor: Colors.teal,
+    );
+    Future<void> pump(double scale) => tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+          child: SizedBox(
+            width: 600,
+            child: NoteGrid(
+              itemCount: 8,
+              itemBuilder: (context, index) =>
+                  NoteCard(item: note, onTap: () {}),
+            ),
+          ),
+        ),
+      ),
+    );
+    await pump(1);
+    await pump(2);
+    expect(tester.takeException(), isNull);
+    final sliver = tester.renderObject<RenderSliverGrid>(
+      find.byType(SliverGrid),
+    );
+    final grid = tester.widget<GridView>(find.byType(GridView));
+    expect(
+      grid.gridDelegate
+          .getLayout(sliver.constraints)
+          .getGeometryForChildIndex(0)
+          .mainAxisExtent,
+      NoteCard.gridHeight(tester.element(find.byType(NoteGrid))),
+    );
   });
 
   testWidgets('十万条笔记深滚动换列仍按需构建，几何边界正确', (tester) async {
