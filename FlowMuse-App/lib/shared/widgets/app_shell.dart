@@ -100,6 +100,7 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool? _compact;
 
   @override
   Widget build(BuildContext context) {
@@ -146,6 +147,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < shellCompactBreakpoint;
+              final changedCompact = _compact != null && _compact != compact;
+              _compact = compact;
               final showDockedSidebar =
                   widget.showSidebar && !compact && !sidebarCollapsed;
               final chrome = AppShellChrome(
@@ -168,27 +171,39 @@ class _AppShellState extends ConsumerState<AppShell> {
                 child: Row(
                   children: [
                     ClipRect(
-                      child: AnimatedContainer(
-                        width: showDockedSidebar ? sharedSidebarWidth : 0,
-                        duration: AppMotion.resolve(
-                          context,
-                          AppMotion.standard,
-                        ),
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(end: showDockedSidebar ? 1 : 0),
+                        duration: changedCompact
+                            ? Duration.zero
+                            : AppMotion.resolve(context, AppMotion.standard),
                         curve: Curves.easeOutCubic,
-                        child: AnimatedOpacity(
-                          opacity: showDockedSidebar ? 1 : 0,
-                          duration: AppMotion.resolve(context, AppMotion.exit),
-                          curve: Curves.easeOutCubic,
+                        child: ExcludeFocus(
+                          excluding: !showDockedSidebar,
+                          child: ExcludeSemantics(
+                            excluding: !showDockedSidebar,
+                            child: IgnorePointer(
+                              ignoring: !showDockedSidebar,
+                              child: RepaintBoundary(
+                                child: LibrarySidebar(
+                                  section: widget.section,
+                                  onCollapse: layoutViewModel.collapseSidebar,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        builder: (context, progress, child) => SizedBox(
+                          width: sharedSidebarWidth * progress,
                           child: OverflowBox(
                             alignment: Alignment.centerLeft,
                             minWidth: sharedSidebarWidth,
                             maxWidth: sharedSidebarWidth,
-                            child: IgnorePointer(
-                              ignoring: !showDockedSidebar,
-                              child: LibrarySidebar(
-                                section: widget.section,
-                                onCollapse: layoutViewModel.collapseSidebar,
+                            child: Transform.translate(
+                              offset: Offset(
+                                sharedSidebarWidth * (progress - 1),
+                                0,
                               ),
+                              child: Opacity(opacity: progress, child: child),
                             ),
                           ),
                         ),
