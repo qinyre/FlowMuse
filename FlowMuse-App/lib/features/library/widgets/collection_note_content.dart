@@ -11,6 +11,7 @@ import 'create_note_card.dart';
 import 'note_actions.dart';
 import 'note_bulk_action_bar.dart';
 import 'note_card.dart';
+import 'note_grid.dart';
 
 enum _CollectionNoteAction { rename, moveToNotebook, selectTags, delete }
 
@@ -326,42 +327,27 @@ class _CollectionNoteContentState extends State<CollectionNoteContent> {
   }
 
   Widget _buildGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 820;
-        return GridView.builder(
-          itemCount: widget.notes.length + 1,
-          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: NoteCard.gridMaxCrossAxisExtent,
-            mainAxisExtent: NoteCard.gridHeight(context),
-            crossAxisSpacing: compact
-                ? NoteCard.compactGridCrossGap
-                : NoteCard.gridCrossGap,
-            mainAxisSpacing: compact
-                ? NoteCard.compactGridMainGap
-                : NoteCard.gridMainGap,
-          ),
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return CreateNoteCard(onTap: widget.onCreate);
-            }
-            final item = widget.notes[index - 1];
-            return NoteCard(
-              item: item,
-              onTap: _selectionMode
-                  ? () => _toggleNoteSelection(item.id)
-                  : () => widget.onOpenNote(item),
-              onActionsTap: _selectionMode
-                  ? null
-                  : (context) => _showNoteActions(context, item),
-              selectionControl: _selectionMode
-                  ? CoverSelectionCheckbox(
-                      selected: _selectedNoteIds.contains(item.id),
-                      onChanged: () => _toggleNoteSelection(item.id),
-                    )
-                  : null,
-            );
-          },
+    return NoteGrid(
+      itemCount: widget.notes.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return CreateNoteCard(onTap: widget.onCreate);
+        }
+        final item = widget.notes[index - 1];
+        return NoteCard(
+          item: item,
+          onTap: _selectionMode
+              ? () => _toggleNoteSelection(item.id)
+              : () => widget.onOpenNote(item),
+          onActionsTap: _selectionMode
+              ? null
+              : (context) => _showNoteActions(context, item),
+          selectionControl: _selectionMode
+              ? CoverSelectionCheckbox(
+                  selected: _selectedNoteIds.contains(item.id),
+                  onChanged: () => _toggleNoteSelection(item.id),
+                )
+              : null,
         );
       },
     );
