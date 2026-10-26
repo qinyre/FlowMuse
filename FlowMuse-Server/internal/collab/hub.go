@@ -939,13 +939,6 @@ func (h *Hub) recordRoomJoin(roomID string, user RoomUser) {
 	_ = h.roomStore.UpsertMember(ctx, roomID, user.UserID, "editor")
 }
 
-func requestHeader(client *socket.Socket, key string) string {
-	if client == nil || client.Request() == nil || client.Request().Request() == nil {
-		return ""
-	}
-	return client.Request().Request().Header.Get(key)
-}
-
 func requestQuery(client *socket.Socket, key string) string {
 	if client == nil || client.Request() == nil || client.Request().Request() == nil {
 		return ""

@@ -97,12 +97,4 @@ class LibraryIndex {
     }
     return null;
   }
-
-  List<LibraryTag> tagsOfNote(NoteItem note) {
-    final ids = note.tagIds.toSet();
-    return [
-      for (final tag in tags)
-        if (ids.contains(tag.id)) tag,
-    ];
-  }
 }

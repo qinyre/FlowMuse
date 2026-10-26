@@ -68,33 +68,5 @@ Future<CacheCleanupResult> clearRebuildableCache() async {
     // Defensive: imageCache is always present, but never let cleanup fail.
   }
 
-  return CacheCleanupResult(
-    filesRemoved: filesRemoved,
-    bytesFreed: bytesFreed,
-  );
-}
-
-/// Returns the current size (in bytes) of the temporary share/export cache,
-/// for display before the user confirms cleanup.  The in-memory image cache
-/// size is intentionally excluded — it is transient and not worth surfacing.
-Future<int> temporaryCacheSizeBytes() async {
-  var total = 0;
-  try {
-    final temp = await getTemporaryDirectory();
-    final shareDir = Directory(p.join(temp.path, 'flowmuse-share'));
-    if (shareDir.existsSync()) {
-      await for (final entity in shareDir.list()) {
-        if (entity is File) {
-          try {
-            total += await entity.length();
-          } catch (_) {
-            // Skip unreadable files.
-          }
-        }
-      }
-    }
-  } catch (_) {
-    // Platform without a temporary directory.
-  }
-  return total;
+  return CacheCleanupResult(filesRemoved: filesRemoved, bytesFreed: bytesFreed);
 }
