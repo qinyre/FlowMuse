@@ -12,11 +12,33 @@ import '../../library/repositories/library_repository.dart';
 import '../../library/widgets/note_card.dart';
 import '../view_models/search_view_model.dart';
 
-class SearchPage extends ConsumerWidget {
+class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SearchPage> createState() => _SearchPageState();
+}
+
+class _SearchPageState extends ConsumerState<SearchPage> {
+  late final TextEditingController _queryController;
+
+  @override
+  void initState() {
+    super.initState();
+    // The responsive shell may remount the field while its query survives.
+    _queryController = TextEditingController(
+      text: ref.read(searchViewModelProvider).query,
+    );
+  }
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final state = ref.watch(searchViewModelProvider);
     final viewModel = ref.read(searchViewModelProvider.notifier);
@@ -43,6 +65,7 @@ class SearchPage extends ConsumerWidget {
         children: [
           Expanded(
             child: SearchBar(
+              controller: _queryController,
               constraints: const BoxConstraints(minHeight: 48),
               padding: const WidgetStatePropertyAll(
                 EdgeInsets.symmetric(horizontal: AppSpacing.sidebarInset),

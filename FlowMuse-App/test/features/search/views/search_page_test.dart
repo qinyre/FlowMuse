@@ -83,6 +83,29 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('重建搜索页后保留查询文字，输入框与结果一致', (tester) async {
+    await _pump(tester);
+    await tester.enterText(find.byType(TextField), '复习');
+    await tester.pumpAndSettle();
+    final navigator = Navigator.of(tester.element(find.byType(SearchPage)));
+    navigator.pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => const Scaffold(body: SizedBox())),
+    );
+    await tester.pumpAndSettle();
+    navigator.pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: SearchPage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+      '复习',
+    );
+    expect(find.text('找到 2 条笔记'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('搜索数量随输入及笔记本、标签范围同步，空输入回到说明', (tester) async {
     await _pump(tester);
     await tester.enterText(find.byType(TextField), '复习');
