@@ -28,3 +28,12 @@
 - SearchBar 的默认 focus overlay 会再次盖上灰色，需同时清除 overlay，使用描边表示聚焦。
 - 窄屏切换壳布局后，SearchBar 内部控制器重建为空，而 provider 保留旧查询，出现输入框空白但结果仍存在。搜索页改为持有并释放文字控制器，初始值来自现有查询，不改变查询算法和筛选状态。
 - 浏览器已复现输入框空白却仍显示匹配笔记。追加“重建页面保留查询”回归，检查实际 EditableText 的文字与查询结果一致；修复后通过。
+
+## 最终 Web 验收
+
+- 源码 `cd638e69`，Web release 构建通过；两个墨迹构建开关保持 true。
+- 全新访客浏览器上下文，仅创建一条合成笔记：搜索输入与匹配数量、筛选菜单打开/退出、多选零状态、选择一项、取消多选及保留笔记均通过。
+- 1280×900 下批量栏实际宽度 760，居中展示；600×900 下操作换行，搜索输入仍显示原有关键字且与结果一致。浏览器无未捕获 JS 错误。
+- 已检查聚焦与未聚焦的浅底描边、窄屏布局，截图只保留内容区：[桌面搜索](../images/2026-10-26-search-polish-desktop.png)、[窄屏搜索](../images/2026-10-26-search-polish-compact.png)、[桌面多选](../images/2026-10-26-note-selection-polish-desktop.png)、[窄屏多选](../images/2026-10-26-note-selection-polish-compact.png)。
+- 实测输出：`FlowMuse-App/build/search-selection-polish/browser-results.json`；构建、测试与浏览器日志留在同目录。
+- 未推送部署、未创建 PR、未做安卓/鸿蒙实机验证。
