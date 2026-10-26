@@ -30,3 +30,12 @@
 - `flutter analyze --no-pub`：通过，无问题。
 - `flutter test --no-pub --reporter expanded`：2076 通过、5 个既有跳过，无失败；静态自然媒体性能门禁 ratio=2.46，通过既定阈值。
 - 日志：`FlowMuse-App/build/settings-motion/{baseline,targeted,analyze,full-tests}.log`（本地构建目录，不入库）。
+
+### Web 构建与浏览器结果
+
+- 源码提交 `15dfd8eb`；本地 Web release 构建通过，输出 `FlowMuse-App/build/settings-motion/web`。湿墨分层与实时墨迹 V2 构建参数均保持 true。
+- 使用全新访客浏览器上下文验证。1280×900 下，侧栏标题中心 x≈133.5（可用宽度 267），返回按钮保持左侧，原生鼠标点击可返回资料库。
+- 原生鼠标连续选择文档→手写笔→手势→隐私，最终落到隐私；102 次浏览器动画帧采样中，内容页头最多只有一个标题。软件渲染的语义帧采样只用于判断叠字，不代表实机帧率。
+- 600×900 窄屏文档设置页头完整可见；减少动画偏好环境下可完成分类切换，立即切换的时序由 widget 测试单独验证。浏览器无未捕获 JS 错误。
+- 已目视检查截图：[桌面设置](../images/2026-10-26-settings-motion-desktop.png)、[窄屏设置](../images/2026-10-26-settings-motion-compact.png)。
+- 本轮仅本地构建与验证，未推送、部署、创建 PR，未进行安卓或鸿蒙实机测试。
