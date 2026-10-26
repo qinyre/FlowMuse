@@ -21,10 +21,10 @@ Flutter 应用，包含本地资料库、Markdraw 编辑器、加密协作、PDF
 | --- | --- | --- |
 | `FLOWMUSE_COLLAB_SERVER_URL` | 账户、协作、附件与识别 API | `https://api.flowmuse.cloud` |
 | `FLOWMUSE_SHARE_ORIGIN` | 房间分享 Web 入口 | `https://app.flowmuse.cloud` |
-| `FLOWMUSE_LAYERED_WET_INK` | 湿墨分层 | `false` |
-| `FLOWMUSE_LIVE_INK_V2` | 实时墨迹协议 | `false`，还需分层开关及服务端支持 |
+| `FLOWMUSE_LAYERED_WET_INK` | 湿墨分层 | `true` |
+| `FLOWMUSE_LIVE_INK_V2` | 实时墨迹协议 | `true`，还需分层开关及服务端支持 |
 
-前两个地址优先读取 `--dart-define`，其次为随包 `app.env`。后两个是编译期开关，应在参与对照的 Web、原生客户端中一致设置。
+前两个地址优先读取 `--dart-define`，其次为随包 `app.env`。后两个是编译期开关，普通构建默认开启；可显式传入 `--dart-define=FLOWMUSE_LAYERED_WET_INK=false` 或 `--dart-define=FLOWMUSE_LIVE_INK_V2=false` 做关闭对照。参与测试的 Web、原生客户端仍需核对配置及协议能力。
 
 ## 本地开发与检查
 

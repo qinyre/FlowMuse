@@ -54,13 +54,13 @@ flutter run -d chrome --web-port=8080
 
 将 `chrome` 替换为设备 ID 或 `windows` 可启动其他客户端。默认后端为 `https://api.flowmuse.cloud`，分享页面为 `https://app.flowmuse.cloud`；本地编辑可离线进行，网络功能默认访问这组服务。
 
-**调试实时墨迹时，两端需要使用配套构建参数。** 源码中的湿墨分层与实时墨迹 V2 开关默认均为 `false`，裸 `flutter run` 不代表已启用它们：
+**湿墨分层与实时墨迹 V2 默认开启。** 普通 `flutter run` 和发布构建无需额外参数即可启用；现有发布配方仍显式写出参数，便于核对两端配置：
 
 ```sh
 flutter run -d chrome --web-port=8080 --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true
 ```
 
-同样的两个参数用于配套 Android/OHOS 构建；是否进入实时模式还取决于服务端协议能力。对外界面显示产品状态，不应把内部协议版本当成功能名称。
+Android/OHOS 使用相同默认值；是否进入实时模式还取决于服务端及房间成员的协议能力。需要关闭做对照时，显式传入 `--dart-define=FLOWMUSE_LAYERED_WET_INK=false` 或 `--dart-define=FLOWMUSE_LIVE_INK_V2=false`，任一关闭均不进入 V2 协作链。对外界面显示产品状态，不应把内部协议版本当成功能名称。
 
 ## 启动本地后端
 

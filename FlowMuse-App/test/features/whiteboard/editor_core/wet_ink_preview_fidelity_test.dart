@@ -163,6 +163,8 @@ void main() {
       addTearDown(controller.dispose);
       var notifications = 0;
       controller.addListener(() => notifications++);
+      // 分层模式只通知湿墨层，兼容模式通过 controller 请求绘制。
+      controller.localWetInkState.addListener(() => notifications++);
       controller.onPointerDown(downEvent(1));
       expect(notifications, greaterThan(0), reason: '$brush 落笔即请求绘制');
       final preview = controller.buildPreviewElement(

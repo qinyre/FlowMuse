@@ -68,8 +68,8 @@ dart run tool/writing_perf/summarize_results.dart --phase p0 --input build/writi
 完整页面功能回归（真实 SQLite；PDF 栅格、识别服务和协作传输的模拟边界见测试注释）：
 
 ```powershell
+flutter test test/features/whiteboard/views/whiteboard_writing_workflow_test.dart --dart-define=FLOWMUSE_LAYERED_WET_INK=false
 flutter test test/features/whiteboard/views/whiteboard_writing_workflow_test.dart
-flutter test test/features/whiteboard/views/whiteboard_writing_workflow_test.dart --dart-define=FLOWMUSE_LAYERED_WET_INK=true
 ```
 
 协作撤销回归 `known_remote_undo_preserves_new_elements` 已纳入默认运行；`test/features/whiteboard/editor_core/collaboration_undo_test.dart` 同时覆盖远端新增、修改、删除、重复快照和重做。

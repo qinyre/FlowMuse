@@ -12,5 +12,5 @@ class LiveInkFlags {
 
 const liveInkFlags = LiveInkFlags(
   layeredWetInk: layeredWetInkEnabled,
-  liveInkV2: bool.fromEnvironment('FLOWMUSE_LIVE_INK_V2', defaultValue: false),
+  liveInkV2: bool.fromEnvironment('FLOWMUSE_LIVE_INK_V2', defaultValue: true),
 );
