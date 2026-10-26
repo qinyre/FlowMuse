@@ -91,3 +91,15 @@
 最终全量 Flutter 测试 **2059 通过、5 个既有跳过**，Flutter analyze 无问题；文档链接、代码围栏与 diff 空白检查通过。
 
 这是源码默认值变更，已发布 Web 与已安装 App 不会因此自动更新；本轮未重建发布包或部署。
+
+## 正式 Web 发布（2026-10-26 14:46，北京时间）
+
+- 按用户要求部署、推送并提交 PR；发布源码为 `e4ab33b09c4cd02b2902a0d66c22be681490838c`，分支 `chore/project-cleanup`，基线 `origin/main` 为 `9d7f93a5da5c30413b03ecdae370cf35d3cac9a9`。
+- 正式入口：`https://app.flowmuse.cloud/library`；发布标识 `project-cleanup-20261026-e4ab33b`。本次 Web release 构建通过（53.1 秒），仅显式指定 HTTPS API 与分享地址，湿墨分层/V2 采用源码默认 `true`，不依赖额外开启参数。
+- 主脚本 SHA256：`c7b83a7c1e9498f62a057587686d240109c9ba4413873ce844424cb49146fa62`。与清理阶段显式开启两开关的产物一致；字体、扫码解码器与授权文件校验通过。
+- Nginx 配置检查与 reload 成功，根目录切到 `/var/www/flowmuse-app-releases/project-cleanup-20261026-e4ab33b`；前一发布 `pdf-writing-20261025-c2693e6` 与小型 Nginx 回退配置保留。
+- 公网清单、`/library`、主脚本、扫码解码器和 4 个字体/授权文件共 **8 项均返回 200**，哈希一致、缓存策略为 `no-cache`。Web 启动自检 2 项、预压缩自检 1 项通过。
+- 干净 Chrome 中新建合成笔记，启动和操作异常均为 0，自动保存完成；重压擦除/撤销暗像素 **123 → 0 → 123**，工具栏保持、悬停退出及底线可见性均通过。没有使用真实账户、用户笔记或生产协作房间形成结论。
+- 正式后端保持现有 `flowmuse-collab:room-management-4e92510` 容器，ID 和镜像未变，健康接口正常；本分支 Go 变更仅删除无调用辅助函数，本次没有重启后端或安装平板。
+- 临时上传包 SHA256 为 `acc3963556ee08e431cd4908178f6e45195c4c772f933e3e39917ccbecaf3f41`。公网及浏览器检查后，已清除本地/远端临时压缩包和远端上传脚本；未新增永久 Web 发布归档或 APK 备份。
+- 发布回执在服务器 `/opt/flowmuse/releases/project-cleanup-20261026-e4ab33b/web-deployment.json`；本地校验记录与合成截图在忽略目录 `FlowMuse-App/build/project-cleanup-release/`。实机表现与真实网络协作延迟本轮未测。
