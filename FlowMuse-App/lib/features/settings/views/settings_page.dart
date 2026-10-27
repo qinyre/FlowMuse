@@ -433,11 +433,14 @@ class _SettingsContent extends StatelessWidget {
     return Theme(
       data: theme.copyWith(
         inputDecorationTheme: theme.inputDecorationTheme.copyWith(
-          fillColor: colors.surfaceContainerLowest,
+          fillColor: colors.surfaceContainer,
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: (theme.outlinedButtonTheme.style ?? const ButtonStyle())
               .copyWith(
+                backgroundColor: WidgetStatePropertyAll(
+                  colors.surfaceContainer,
+                ),
                 shape: WidgetStatePropertyAll(
                   RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppSpacing.radius),
