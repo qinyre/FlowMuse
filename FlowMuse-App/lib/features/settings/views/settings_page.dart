@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../app/app_router.dart';
+import '../../../app/app_theme.dart';
 import '../../../app/app_theme_preset.dart';
 import '../../../app/view_models/theme_view_model.dart';
 import '../../../shared/storage/local_database_path.dart';
@@ -23,7 +24,6 @@ import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../../shared/widgets/shared_sidebar.dart';
-import '../../../shared/widgets/theme_hero.dart';
 import '../../account/view_models/account_view_model.dart';
 import '../../social/view_models/social_view_model.dart';
 import '../../social/views/social_page.dart' show SocialFriendCode;
@@ -235,7 +235,7 @@ class _SettingsContentTransitionState extends State<_SettingsContentTransition>
 enum _SettingsSection {
   account(LucideIcons.userRound, '账户与协作', '邮箱账号、匿名身份与协作房间身份'),
   localBackup(LucideIcons.download, '本地备份', '导出和恢复本机库索引、白板场景与主题设置'),
-  cloudBackup(LucideIcons.database, '网盘备份', '云端同步入口预留'),
+  cloudBackup(LucideIcons.database, '网盘备份', '连接 WebDAV 网盘，备份与恢复笔记'),
   theme(LucideIcons.palette, '主题设置', '切换当前工作区视觉主题'),
   document(LucideIcons.fileCog, '文档设置', '自动保存与新建文档默认值'),
   tools(LucideIcons.wrench, '工具设置', '默认工具与每种笔形的颜色、粗细'),
@@ -262,6 +262,26 @@ enum _SettingsSection {
     return _SettingsSection.account;
   }
 }
+
+const _settingsGroups = {
+  '账户与数据': [
+    _SettingsSection.account,
+    _SettingsSection.localBackup,
+    _SettingsSection.cloudBackup,
+  ],
+  '外观与书写': [
+    _SettingsSection.theme,
+    _SettingsSection.document,
+    _SettingsSection.tools,
+    _SettingsSection.stylus,
+    _SettingsSection.gestures,
+  ],
+  '应用与隐私': [
+    _SettingsSection.lab,
+    _SettingsSection.privacy,
+    _SettingsSection.other,
+  ],
+};
 
 class _SettingsSidebar extends StatelessWidget {
   const _SettingsSidebar({
@@ -325,18 +345,30 @@ class _SettingsSidebar extends StatelessWidget {
         ),
       ),
       children: [
-        SharedSidebarBlock(
-          children: [
-            for (final section in _SettingsSection.values)
-              _SettingsNavItem(
-                icon: section.icon,
-                label: section.label,
-                selected: section == selected,
-                trailing: section == _SettingsSection.lab ? 'Beta AI' : null,
-                onTap: () => onSelected(section),
+        for (final group in _settingsGroups.entries) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.sectionGap,
+              AppSpacing.sidebarInset,
+              AppSpacing.sidebarInset,
+              AppSpacing.controlGap,
+            ),
+            child: Text(
+              group.key,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
               ),
-          ],
-        ),
+            ),
+          ),
+          for (final section in group.value)
+            _SettingsNavItem(
+              icon: section.icon,
+              label: section.label,
+              selected: section == selected,
+              trailing: section == _SettingsSection.lab ? 'Beta AI' : null,
+              onTap: () => onSelected(section),
+            ),
+        ],
       ],
     );
   }
@@ -359,12 +391,21 @@ class _SettingsNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SharedSidebarItem(
-      icon: icon,
-      label: label,
-      selected: selected,
-      emptyLabel: trailing,
-      onTap: onTap,
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.controlGap,
+        vertical: 2,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppSpacing.radius),
+        child: SharedSidebarItem(
+          icon: icon,
+          label: label,
+          selected: selected,
+          emptyLabel: trailing,
+          onTap: onTap,
+        ),
+      ),
     );
   }
 }
@@ -386,57 +427,77 @@ class _SettingsContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedColor = Theme.of(context).colorScheme.primary;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
 
-    return ColoredBox(
-      color: selectedColor.withValues(alpha: 0.035),
-      child: RightPageScaffold(
-        title: section.label,
-        forceCenterTitle: true,
-        leadingActions: [
-          if (onBack != null)
-            IconButton(
-              tooltip: '返回',
-              onPressed: onBack,
-              icon: const Icon(LucideIcons.chevronLeft),
-            ),
-          if (onSectionChanged != null)
-            Builder(
-              builder: (context) => IconButton(
-                tooltip: '设置分类',
-                icon: const Icon(LucideIcons.list),
-                onPressed: () async {
-                  final selected =
-                      await showAnchoredPopupMenu<_SettingsSection>(
-                        context: context,
-                        placement: AnchoredPopupPlacement.below,
-                        items: [
-                          for (final option in _SettingsSection.values)
-                            CheckedPopupMenuItem(
-                              value: option,
-                              checked: option == section,
-                              child: Text(option.label),
-                            ),
-                        ],
-                      );
-                  if (selected == null || !context.mounted) return;
-                  runAfterUiTeardown(() {
-                    if (context.mounted) onSectionChanged?.call(selected);
-                  });
-                },
+    return Theme(
+      data: theme.copyWith(
+        inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+          fillColor: colors.surfaceContainer,
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: (theme.outlinedButtonTheme.style ?? const ButtonStyle())
+              .copyWith(
+                backgroundColor: WidgetStatePropertyAll(
+                  colors.surfaceContainer,
+                ),
+                shape: WidgetStatePropertyAll(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppSpacing.radius),
+                  ),
+                ),
               ),
-            ),
-        ],
-        topContent: [
-          if (section == _SettingsSection.theme) ...[
-            const ThemeHero(semanticLabel: '当前主题背景'),
-            const SizedBox(height: AppSpacing.controlGap),
+        ),
+        dividerTheme: DividerThemeData(
+          color: colors.outlineVariant.withValues(alpha: 0.55),
+          indent: AppSpacing.sectionGap,
+          endIndent: AppSpacing.sectionGap,
+        ),
+      ),
+      child: ColoredBox(
+        color: colors.primary.withValues(alpha: 0.025),
+        child: RightPageScaffold(
+          title: section.label,
+          forceCenterTitle: true,
+          leadingActions: [
+            if (onBack != null)
+              IconButton(
+                tooltip: '返回',
+                onPressed: onBack,
+                icon: const Icon(LucideIcons.chevronLeft),
+              ),
+            if (onSectionChanged != null)
+              Builder(
+                builder: (context) => IconButton(
+                  tooltip: '设置分类',
+                  icon: const Icon(LucideIcons.list),
+                  onPressed: () async {
+                    final selected =
+                        await showAnchoredPopupMenu<_SettingsSection>(
+                          context: context,
+                          placement: AnchoredPopupPlacement.below,
+                          items: [
+                            for (final option in _SettingsSection.values)
+                              CheckedPopupMenuItem(
+                                value: option,
+                                checked: option == section,
+                                child: Text(option.label),
+                              ),
+                          ],
+                        );
+                    if (selected == null || !context.mounted) return;
+                    runAfterUiTeardown(() {
+                      if (context.mounted) onSectionChanged?.call(selected);
+                    });
+                  },
+                ),
+              ),
           ],
-        ],
-        body: _SettingsSectionBody(
-          section: section,
-          selectedPreset: selectedPreset,
-          onPresetChanged: onPresetChanged,
+          body: _SettingsSectionBody(
+            section: section,
+            selectedPreset: selectedPreset,
+            onPresetChanged: onPresetChanged,
+          ),
         ),
       ),
     );
@@ -460,44 +521,99 @@ class _SettingsSectionBody extends ConsumerStatefulWidget {
 }
 
 class _SettingsSectionBodyState extends ConsumerState<_SettingsSectionBody> {
+  final _scrollController = ScrollController();
   bool _backupBusy = false;
   String? _backupMessage;
 
   @override
+  void didUpdateWidget(covariant _SettingsSectionBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.section != widget.section) {
+      final section = widget.section;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            widget.section == section &&
+            _scrollController.hasClients) {
+          _scrollController.jumpTo(0);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListView(
+      controller: _scrollController,
       padding: const EdgeInsets.only(bottom: AppSpacing.sectionGap),
       children: [
-        Text(
-          widget.section.description,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+        Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 960),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppSpacing.listGap,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        widget.section.icon,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: AppSpacing.controlGap),
+                      Expanded(
+                        child: Text(
+                          widget.section.description,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sectionGap),
+                switch (widget.section) {
+                  _SettingsSection.account => const _AccountSettingsSection(),
+                  _SettingsSection.localBackup => _LocalBackupSection(
+                    busy: _backupBusy,
+                    message: _backupMessage,
+                    onExport: _exportBackup,
+                    onImport: _importBackup,
+                  ),
+                  _SettingsSection.cloudBackup => const _CloudBackupSection(),
+                  _SettingsSection.theme => _ThemePresetSection(
+                    selectedPreset: widget.selectedPreset,
+                    onPresetChanged: widget.onPresetChanged,
+                  ),
+                  _SettingsSection.document => const _DocumentSettingsSection(),
+                  _SettingsSection.tools => const _ToolsSettingsSection(),
+                  _SettingsSection.stylus => const _StylusSettingsSection(),
+                  _SettingsSection.gestures => const _GestureSettingsSection(),
+                  _SettingsSection.lab => const _AiSettingsSection(),
+                  _SettingsSection.privacy => const _PrivacySettingsSection(),
+                  _SettingsSection.other => const _OtherSettingsSection(),
+                  // ignore: unreachable_switch_case
+                  _ => _PlaceholderSettingsSection(section: widget.section),
+                },
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
-        switch (widget.section) {
-          _SettingsSection.account => const _AccountSettingsSection(),
-          _SettingsSection.localBackup => _LocalBackupSection(
-            busy: _backupBusy,
-            message: _backupMessage,
-            onExport: _exportBackup,
-            onImport: _importBackup,
-          ),
-          _SettingsSection.cloudBackup => const _CloudBackupSection(),
-          _SettingsSection.theme => _ThemePresetSection(
-            selectedPreset: widget.selectedPreset,
-            onPresetChanged: widget.onPresetChanged,
-          ),
-          _SettingsSection.document => const _DocumentSettingsSection(),
-          _SettingsSection.tools => const _ToolsSettingsSection(),
-          _SettingsSection.stylus => const _StylusSettingsSection(),
-          _SettingsSection.gestures => const _GestureSettingsSection(),
-          _SettingsSection.lab => const _AiSettingsSection(),
-          _SettingsSection.privacy => const _PrivacySettingsSection(),
-          _SettingsSection.other => const _OtherSettingsSection(),
-          // ignore: unreachable_switch_case
-          _ => _PlaceholderSettingsSection(section: widget.section),
-        },
       ],
     );
   }
@@ -1922,7 +2038,7 @@ class _SettingsPopupMenu<T extends Object> extends StatelessWidget {
       builder: (context) => OutlinedButton(
         style: OutlinedButton.styleFrom(
           foregroundColor: color,
-          minimumSize: const Size(48, 48),
+          minimumSize: const Size(152, 48),
         ),
         onPressed: !enabled
             ? null
@@ -1940,8 +2056,15 @@ class _SettingsPopupMenu<T extends Object> extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(label(value), style: TextStyle(color: color)),
-            Icon(Icons.arrow_drop_down, color: color),
+            Flexible(
+              child: Text(
+                label(value),
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: color),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.controlGap),
+            Icon(LucideIcons.chevronDown, size: 16, color: color),
           ],
         ),
       ),
@@ -2429,11 +2552,32 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Card.outlined(
-      color: Theme.of(context).colorScheme.surface,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 72),
-        child: Center(child: child),
+      margin: EdgeInsets.zero,
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSpacing.radius),
+        side: BorderSide(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ListTileTheme(
+        data: ListTileTheme.of(context).copyWith(
+          minVerticalPadding: AppSpacing.listGap,
+          iconColor: theme.colorScheme.onSurfaceVariant,
+          titleTextStyle: theme.textTheme.bodyLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+          subtitleTextStyle: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 72),
+          child: Center(child: child),
+        ),
       ),
     );
   }
@@ -2459,7 +2603,7 @@ class _ThemePresetSection extends StatelessWidget {
           selectedPreset: selectedPreset,
           onPresetChanged: onPresetChanged,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.sectionGap),
         _ThemePresetGroup(
           title: '特色主题',
           presets: appThemePresets.skip(3).toList(),
@@ -2486,53 +2630,47 @@ class _ThemePresetGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _SettingsCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.compactPageInset),
-        child: LayoutBuilder(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+        ),
+        const SizedBox(height: AppSpacing.listGap),
+        LayoutBuilder(
           builder: (context, constraints) {
-            final heading = Text(
-              title,
-              style: Theme.of(context).textTheme.titleSmall,
-            );
-            final choices = Wrap(
-              spacing: AppSpacing.controlGap,
-              runSpacing: AppSpacing.controlGap,
+            const gap = AppSpacing.listGap;
+            final minimum = MediaQuery.textScalerOf(context).scale(140);
+            final columns = ((constraints.maxWidth + gap) / (minimum + gap))
+                .floor()
+                .clamp(1, 3);
+            final width =
+                (constraints.maxWidth - gap * (columns - 1)) / columns;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
               children: [
                 for (final preset in presets)
-                  _ThemePresetChip(
-                    preset: preset,
-                    selected: preset.id == selectedPreset.id,
-                    onSelected: () => onPresetChanged(preset),
+                  SizedBox(
+                    width: width,
+                    child: _ThemePresetCard(
+                      preset: preset,
+                      selected: preset.id == selectedPreset.id,
+                      onSelected: () => onPresetChanged(preset),
+                    ),
                   ),
-              ],
-            );
-            if (constraints.maxWidth < 540 ||
-                MediaQuery.textScalerOf(context).scale(16) > 22) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  heading,
-                  const SizedBox(height: AppSpacing.listGap),
-                  choices,
-                ],
-              );
-            }
-            return Row(
-              children: [
-                SizedBox(width: 88, child: heading),
-                Expanded(child: choices),
               ],
             );
           },
         ),
-      ),
+      ],
     );
   }
 }
 
-class _ThemePresetChip extends StatelessWidget {
-  const _ThemePresetChip({
+class _ThemePresetCard extends StatelessWidget {
+  const _ThemePresetCard({
     required this.preset,
     required this.selected,
     required this.onSelected,
@@ -2544,51 +2682,85 @@ class _ThemePresetChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final captionStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final captionHeight =
+        MediaQuery.textScalerOf(context).scale(captionStyle?.fontSize ?? 12) *
+        (captionStyle?.height ?? 1.5) *
+        2;
     final borderColor = selected
         ? Theme.of(context).colorScheme.primary
         : Theme.of(context).colorScheme.outlineVariant;
 
-    return Tooltip(
-      message: preset.description,
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: '${preset.label} ${preset.isDark ? '深色' : '浅色'}',
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: preset.label,
+      hint: preset.description,
+      onTap: onSelected,
+      excludeSemantics: true,
+      child: Material(
+        color: theme.colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radius),
+          side: BorderSide(color: borderColor, width: selected ? 1.5 : 1),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onSelected,
           borderRadius: BorderRadius.circular(AppSpacing.radius),
-          child: Container(
-            width: MediaQuery.textScalerOf(
-              context,
-            ).scale(116).clamp(116, double.infinity),
-            constraints: const BoxConstraints(minHeight: 48),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppSpacing.radius),
-              border: Border.all(color: borderColor, width: selected ? 1.5 : 1),
-              color: selected
-                  ? preset.seedColor.withValues(alpha: 0.10)
-                  : Theme.of(context).cardTheme.color,
-            ),
-            child: Row(
-              children: [
-                _ThemeSwatch(preset: preset),
-                const SizedBox(width: AppSpacing.controlGap),
-                Expanded(
-                  child: Text(
-                    preset.label,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _ThemePreview(preset: preset),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.listGap),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            preset.label,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.controlGap),
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: selected
+                              ? Icon(
+                                  LucideIcons.circleCheck,
+                                  size: 20,
+                                  color: theme.colorScheme.primary,
+                                )
+                              : null,
+                        ),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: AppSpacing.controlGap),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: captionHeight),
+                      child: Text(
+                        preset.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: captionStyle,
+                      ),
+                    ),
+                  ],
                 ),
-                Icon(
-                  preset.isDark ? LucideIcons.moon : LucideIcons.sun,
-                  size: 14,
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2596,37 +2768,103 @@ class _ThemePresetChip extends StatelessWidget {
   }
 }
 
-class _ThemeSwatch extends StatelessWidget {
-  const _ThemeSwatch({required this.preset});
+class _ThemePreview extends StatelessWidget {
+  const _ThemePreview({required this.preset});
 
   final AppThemePreset preset;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: preset.usesMonochromeBackground ? preset.backgroundEnd : null,
-        gradient: preset.hasWallpaper || preset.usesMonochromeBackground
-            ? null
-            : LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  preset.backgroundStart,
-                  preset.seedColor,
-                  preset.backgroundEnd,
+    final effective = effectiveAppThemePreset(
+      preset,
+      MediaQuery.platformBrightnessOf(context),
+    );
+    final colors = AppTheme.fromPreset(effective).colorScheme;
+    return ExcludeSemantics(
+      child: RepaintBoundary(
+        child: SizedBox(
+          height: 96,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ColoredBox(color: colors.surfaceContainerLow),
+              if (effective.hasWallpaper)
+                Image.asset(
+                  effective.wallpaperAsset!,
+                  fit: BoxFit.cover,
+                  cacheWidth: 480,
+                  color: effective.wallpaperOverlay,
+                  colorBlendMode: BlendMode.srcOver,
+                ),
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    padding: const EdgeInsets.all(AppSpacing.controlGap),
+                    color: colors.surface.withValues(alpha: 0.9),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          height: 8,
+                          color: colors.primary.withValues(alpha: 0.25),
+                        ),
+                        const SizedBox(height: AppSpacing.controlGap),
+                        for (var i = 0; i < 3; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Container(
+                              height: 3,
+                              color: colors.outlineVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.listGap),
+                      child: Container(
+                        padding: const EdgeInsets.all(AppSpacing.controlGap),
+                        decoration: BoxDecoration(
+                          color: colors.surface.withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: Container(
+                                width: 28,
+                                height: 5,
+                                color: colors.primary,
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.controlGap),
+                            for (final factor in [0.9, 0.65])
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: FractionallySizedBox(
+                                  widthFactor: factor,
+                                  alignment: AlignmentDirectional.centerStart,
+                                  child: Container(
+                                    height: 3,
+                                    color: colors.outlineVariant,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
-        image: preset.hasWallpaper
-            ? DecorationImage(
-                image: AssetImage(preset.wallpaperAsset!),
-                fit: BoxFit.cover,
-              )
-            : null,
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+            ],
+          ),
+        ),
       ),
-      child: const SizedBox(width: 22, height: 22),
     );
   }
 }
