@@ -26,6 +26,7 @@ runs:
       run: |
         echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
         echo "PUB_CACHE=$RUNNER_TEMP/pub-cache" >> "$GITHUB_ENV"
+        echo "PUB_HOSTED_URL=https://pub.flutter-io.cn" >> "$GITHUB_ENV"
         # Static checks only; HAP builds require a real HarmonyOS SDK.
         mkdir -p "$RUNNER_TEMP/hos-sdk/hmscore" "$RUNNER_TEMP/hos-sdk/openharmony"
         echo "HOS_SDK_HOME=$RUNNER_TEMP/hos-sdk" >> "$GITHUB_ENV"
@@ -37,6 +38,4 @@ runs:
     - name: Resolve locked dependencies
       shell: bash
       working-directory: FlowMuse-App
-      env:
-        PUB_HOSTED_URL: https://pub.flutter-io.cn
       run: flutter pub get --enforce-lockfile

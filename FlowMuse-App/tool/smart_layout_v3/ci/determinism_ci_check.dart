@@ -41,7 +41,10 @@ class DeterminismRunOutcome {
   final List<String> errorSummaries;
 
   bool get allPassed =>
-      exitCode == 0 && testResults.values.every((r) => r == 'success');
+      exitCode == 0 &&
+      testResults.isNotEmpty &&
+      errorSummaries.isEmpty &&
+      testResults.values.every((r) => r == 'success');
 }
 
 class DeterminismReport {
@@ -69,13 +72,13 @@ class DeterminismReport {
     'run_exit_codes': [for (final o in outcomes) o.exitCode],
     'per_run_test_counts': [
       for (final o in outcomes)
-        {'passed': o.testResults.values.where((r) => r == 'success').length,
-         'failed': o.testResults.values.where((r) => r != 'success').length},
+        {
+          'passed': o.testResults.values.where((r) => r == 'success').length,
+          'failed': o.testResults.values.where((r) => r != 'success').length,
+        },
     ],
     'drifted_tests': driftedTests,
-    'error_summaries': [
-      for (final o in outcomes) o.errorSummaries,
-    ],
+    'error_summaries': [for (final o in outcomes) o.errorSummaries],
   };
 }
 
@@ -87,9 +90,7 @@ abstract final class DeterminismCiCheck {
   }) async {
     final outcomes = <DeterminismRunOutcome>[];
     for (var i = 0; i < runs; i++) {
-      outcomes.add(
-        await (runOnce ?? _runMachineOnce)(),
-      );
+      outcomes.add(await (runOnce ?? _runMachineOnce)());
     }
     final drifted = <String>[];
     final first = outcomes.first;
@@ -120,16 +121,14 @@ abstract final class DeterminismCiCheck {
     final repoRoot = _repoRootFromCwd(cwd);
     final result = await Process.run(
       CiCommandResolver.flutter,
-      [
-        'test', '--machine',
-        ...defaultDeterminismTargets,
-      ],
+      ['test', '--no-pub', '--machine', ...defaultDeterminismTargets],
       workingDirectory: cwd,
       stdoutEncoding: utf8,
       stderrEncoding: utf8,
     );
     return parseMachineStream(
       stdout: result.stdout.toString(),
+      stderr: result.stderr.toString(),
       exitCode: result.exitCode,
       repoRoot: repoRoot,
     );
@@ -138,6 +137,7 @@ abstract final class DeterminismCiCheck {
   /// 解析 `flutter test --machine` 事件流为逐测试结果（可测纯函数）。
   static DeterminismRunOutcome parseMachineStream({
     required String stdout,
+    String stderr = '',
     required int exitCode,
     required String repoRoot,
   }) {
@@ -171,7 +171,7 @@ abstract final class DeterminismCiCheck {
       } else if (type == 'error') {
         final detail = CiPathPolicy.redactRepoRoot(
           '${event['errorType'] ?? ''}: ${event['error'] ?? ''} '
-          '${event['stackTrace'] ?? ''}'
+                  '${event['stackTrace'] ?? ''}'
               .replaceAll(RegExp(r'\s+'), ' ')
               .trim(),
           repoRoot,
@@ -182,6 +182,17 @@ abstract final class DeterminismCiCheck {
           errors.add(detail);
         }
       }
+    }
+    if (results.isEmpty && errors.isEmpty) {
+      final detail = CiPathPolicy.redactRepoRoot(
+        'No test results reported by flutter test (exit $exitCode). $stderr'
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim(),
+        repoRoot,
+      );
+      errors.add(
+        detail.length > 300 ? '${detail.substring(0, 300)}...' : detail,
+      );
     }
     return DeterminismRunOutcome(
       exitCode: exitCode,
