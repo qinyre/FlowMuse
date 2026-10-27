@@ -22,3 +22,17 @@ PR #92 已合并至 main `350e5510`。按用户要求清理本地/远端已合�
 - 设置布局、切换动效、主题卡片及账户相关测试 26 通过；既有状态身份保留及快速切换/销毁用例保持通过。
 - analyze 无问题；完整 Flutter 测试 **2095 通过、5 个既有跳过**。
 - 本地日志位于 `FlowMuse-App/build/settings-visual-polish/`，不入库。分支清理通过提交祖先关系、无待审 PR 与远端 lease 校验；没有删除 gh-pages 或未合并提交。
+
+## 本地 Web 验收
+
+- 最终源码 `c0298a23855ab4239ad793fbc1313b304e7d5b35` 的 Web release 构建通过，生产 API/分享域名及两个墨迹开关保持现有配置；构建仅用于本地检查，本轮未发布。
+- 使用隔离的访客浏览器环境，在 1600×1000 与 600×900 下检查分组导航、主题预览及文档设置；选择夜间并刷新后，选中语义仍为 `aria-current=true`，原有文档类型选择器正常回调。
+- 600px 下六张主题卡均为 186px 高，说明换行时保持对齐；浏览器未出现 pageerror。浅色、深色及窄屏截图已人工检查，360px 双倍字号由 widget 测试覆盖。
+- 本轮未构建安卓/鸿蒙包，未检查实机帧率。
+
+### 截图
+
+- [日间主题预览](../images/2026-10-27-settings-ui-theme-day.png)
+- [夜间主题预览](../images/2026-10-27-settings-ui-theme-night.png)
+- [普通设置卡片与选择器](../images/2026-10-27-settings-ui-document.png)
+- [窄屏主题预览](../images/2026-10-27-settings-ui-compact.png)
