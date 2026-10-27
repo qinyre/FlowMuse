@@ -1,5 +1,7 @@
 # 源码授权范围与第三方许可核对
 
+> 当前方案：用户后续选择采用官方 PolyForm Noncommercial 1.0.0，接受不一概禁止非商业参赛。下述初版定制许可的实施记录属于变更历史，以文末的现成许可调整记录和当前根 `LICENSE` 为准。
+
 ## Context
 
 用户希望限制未经授权的商业二次利用及直接作为他人参赛作品提交，并已要求检查、分析后修改。基于合并 PR #95 后的 main `1b955b32` 创建 `docs/source-license-policy`，不混入 CI 优化分支。
@@ -41,3 +43,13 @@
 3. 未建立全部贡献者、学校/单位的完整权属链或商业转授权协议。新的限制不能套给上游 MIT/OFL 等材料，正式发布与对外商业/参赛授权前应核对团队授权能力并安排法律审阅。
 
 以上声明用于如实记录许可边界，不宣称仓库全部权属或发行合规问题均已解决。
+
+## 后续调整：采用现成非商业许可
+
+用户希望减少自定义条款和维护负担，经说明后选择 PolyForm Noncommercial 1.0.0，并明确接受它不一概禁止非商业参赛。实施时保留官方英文正文，不附加参赛限制；普通工具使用继续通过独立补充许可保留权限，不缩减标准许可已授予的权利。
+
+同步 README、第三方声明、用户协议、Agent 约定和 App/Server 发行通知；上游代码、字体、模型、二进制及既有授权保持原状。本轮只核对官方原文、各处表述、通知收集与文档链接，不重复运行上一轮已通过且本轮未影响的应用/后端功能测试。
+
+参考：[官方正文](https://github.com/polyformproject/polyform-licenses/blob/1.0.0/PolyForm-Noncommercial-1.0.0.md)、[许可证维护规则](https://github.com/polyformproject/polyform-licenses#license)、[SPDX 标识](https://spdx.org/licenses/PolyForm-Noncommercial-1.0.0.html)。PolyForm 要求修改其许可证时去除其名称和网址，因此本轮保持正文原样，中文说明与补充授权在正文之外单独标明。
+
+验证：根文件与下载的官方原文逐字节一致，SHA-256 为 `c0ea4a896d2c8c394b29f9427589996db826cd501c512279ff0ed3ef48fabbe5`；App/Server 通知的第三方段落与上一提交逐段一致。Flutter SDK 实际收集到标准许可、Required Notice 和独立补充许可；新增链接、HTML 锚点及 diff 检查通过。未改动应用逻辑、测试、依赖或二进制，不新增 CI 任务，未触发发布。采用现成文本减少自定义维护，但不能消除上文记录的权属与来源缺口。
