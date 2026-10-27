@@ -22,7 +22,7 @@
 | perfect-freehand | 根据点列生成轮廓，区分真实与模拟压力，可调整 smoothing、streamline、taper。[官方仓库](https://github.com/steveruizok/perfect-freehand) | 项目已经使用 Dart 移植版，不需要替换库来获得这些能力。更应该检查调用频率、输入质量和轮廓是否被重复计算。 |
 | HarmonyOS Pen Kit | 提供独立 PointPredictor，以及更完整的手写套件；公开预测入口需要原生 TouchEvent。[报点预测](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/pen-point-prediction) | 可作为后期平台适配试验。现有 Flutter 指针事件并不自动满足其原生入口条件，不能只加一条每点 MethodChannel 调用就假定能降低延迟。 |
 
-鸿蒙依据还核对了本地官方文档镜像：[接入报点预测](<D:/Program/HarmonyOS/harmonyos-guides/系统/硬件/Pen Kit（手写笔服务）/手写功能开发/pen-point-prediction.md>)。当前工程可见的 Pen Kit channel 主要是取色，不能据此认定已经接入原生低延迟书写。
+鸿蒙依据还核对了本地官方文档镜像：接入报点预测（本机参考：`D:/Program/HarmonyOS/harmonyos-guides/系统/硬件/Pen Kit（手写笔服务）/手写功能开发/pen-point-prediction.md`）。当前工程可见的 Pen Kit channel 主要是取色，不能据此认定已经接入原生低延迟书写。
 
 **二、项目实际链路与已有基础**
 
@@ -49,7 +49,7 @@ flowchart LR
 - 保存已做 debounce，协作预览已有 50ms 节流，不能简单描述为“每个 move 都同步写数据库/发送整场景”。
 - 最近 `3766a2f` 已修复 V3 排版监听释放与重复整页指纹计算。此项应做回归保护，不再作为尚未实现的优化。
 
-主要入口：[Controller](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart:2184)、[FreedrawTool](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/editor/tools/freedraw_tool.dart:52)、[笔刷参数](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/core/elements/brush_render_profile.dart:27)。
+主要入口：[Controller](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart#L2184)、[FreedrawTool](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/editor/tools/freedraw_tool.dart#L52)、[笔刷参数](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/core/elements/brush_render_profile.dart#L27)。
 
 **三、当前问题与可改进点**
 
@@ -57,16 +57,16 @@ flowchart LR
 
 | 编号 | 等级 | 发现与影响 | 代码依据 |
 | --- | --- | --- | --- |
-| F1 | B | 默认路径每个被接受的 move 调用 Controller.notifyListeners，编辑器监听后 setState；静态 painter 同时包含活动预览。笔迹变化会带动与笔尖无关的构建及绘制工作。 | [通知分支](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart:2405)、[编辑器监听](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_editor.dart:428)、[默认开关](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/config/writing_feature_flags.dart:6) |
-| F2 | A | 开启本地湿墨后虽然减少了 Controller 通知，但静态和湿墨 CustomPaint 是父子关系，缺少两者之间的独立重绘边界。本轮仅更新活动圆珠笔时，背景中静态铅笔在 down、move 各被重放一次。 | [画层创建](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/editor_canvas.dart:335)、[静态 painter 的 child](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/editor_canvas.dart:510) |
-| F3 | B | 默认预览要求至少两个点。down 本身的 ToolResult 为 null，不能依赖 applyResult 触发默认预览。轻点、落笔等待、很慢的首段可能先无墨，再突然出现。 | [预览门限](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart:3088)、[null result](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart:1115) |
-| F4 | A | 铅笔 v2 的单点及两个完全重合点渲染为 0 个非透明像素；同环境短线为 303 像素、毛笔点为 90 像素。采样器的退化点发成 brushTeardrop，但铅笔 renderer 依赖 samples 基底与 pencilGrain，没有消费这个点。句号、点画、轻点标记属于实际缺陷。 | [退化点](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/natural_media_stroke_sampler.dart:278)、[铅笔基底](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/pencil_stroke_renderer_v2.dart:139) |
-| F5 | A/B | minDistance 判定早于压力输出；原地从 0.2 加压到 0.8、间隔 16ms 的事件被丢弃。慢起笔的压力变化因此可能未及时呈现。超过 200ms 的间隔又会走另一分支，表现并非永久冻结；实际可感知程度需真机确认。 | [距离门限](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/input/stroke_input_modeler.dart:166)、[设备参数](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/input/input_policy.dart:39) |
-| F6 | B | 本地活动笔迹每次 paint 仍整笔处理。classic 重做 PointVector/getStroke/Path；v2 重做绝对点列、采样和几何。路径随笔增长；按固定报点率持续绘制时，累计工作可能呈近似二次增长。尚无当前真机数据证明何时达到掉帧阈值。 | [本地湿墨](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/local_wet_ink_painter.dart:65)、[classic 轮廓](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/rough/freedraw_renderer.dart:55)、[v2 铅笔](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/pencil_stroke_renderer_v2.dart:41) |
-| F7 | B | v2 的 sampleCap/particleCap 是生成候选之后才裁减，限制的是结果数量，不是生成过程的峰值成本。铅笔超过 cap 时按整笔数量重选颗粒，追加点可能改变前段保留集合，存在纹理闪动风险；本轮只确认算法，未伪称已看到真机闪动。 | [samples 后置限额](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/natural_media_stroke_sampler.dart:222)、[颗粒生成与限额](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/natural_media_stroke_sampler.dart:451) |
-| F8 | B | 自然介质静态缓存命中前，铅笔和毛笔仍先生成绝对坐标列表；这是可以移到 miss 分支的无效分配。静态重绘还会重新复制/排序 Scene，部分绑定查询为线性扫描。后一项应测量后再加派生缓存。 | [铅笔查缓存前分配](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/pencil_stroke_renderer_v2.dart:41)、[毛笔](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/brush_pen_stroke_renderer_v2.dart:42)、[Scene 排序](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/core/scene/scene.dart:35) |
-| F9 | B | 每次 presence 回调先 _markUserActive，再做网络节流；它取消并重建两个分钟级 Timer。离线时回调也接线，检查房间发生得更晚。自动保存中仍有同步场景序列化及后续封面更新，可能在下一笔期间执行，需单独测量。 | [presence](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart:3089)、[Timer](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart:3162)、[草稿 flush](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart:469) |
-| F10 | B | 笔刷面板主要展示图标和压力滑块，没有使用实际 renderer 的试写预览。用户不容易在切换前判断当前颜色、粗细、浓淡与端帽；这可以在设置交互内改善，无需增加画布每帧成本。 | [笔刷面板](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/toolbar_palette_buttons.dart:174) |
+| F1 | B | 默认路径每个被接受的 move 调用 Controller.notifyListeners，编辑器监听后 setState；静态 painter 同时包含活动预览。笔迹变化会带动与笔尖无关的构建及绘制工作。 | [通知分支](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart#L2405)、[编辑器监听](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_editor.dart#L428)、[默认开关](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/config/writing_feature_flags.dart#L6) |
+| F2 | A | 开启本地湿墨后虽然减少了 Controller 通知，但静态和湿墨 CustomPaint 是父子关系，缺少两者之间的独立重绘边界。本轮仅更新活动圆珠笔时，背景中静态铅笔在 down、move 各被重放一次。 | [画层创建](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/editor_canvas.dart#L335)、[静态 painter 的 child](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/editor_canvas.dart#L510) |
+| F3 | B | 默认预览要求至少两个点。down 本身的 ToolResult 为 null，不能依赖 applyResult 触发默认预览。轻点、落笔等待、很慢的首段可能先无墨，再突然出现。 | [预览门限](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart#L3088)、[null result](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart#L1115) |
+| F4 | A | 铅笔 v2 的单点及两个完全重合点渲染为 0 个非透明像素；同环境短线为 303 像素、毛笔点为 90 像素。采样器的退化点发成 brushTeardrop，但铅笔 renderer 依赖 samples 基底与 pencilGrain，没有消费这个点。句号、点画、轻点标记属于实际缺陷。 | [退化点](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/natural_media_stroke_sampler.dart#L278)、[铅笔基底](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/pencil_stroke_renderer_v2.dart#L139) |
+| F5 | A/B | minDistance 判定早于压力输出；原地从 0.2 加压到 0.8、间隔 16ms 的事件被丢弃。慢起笔的压力变化因此可能未及时呈现。超过 200ms 的间隔又会走另一分支，表现并非永久冻结；实际可感知程度需真机确认。 | [距离门限](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/input/stroke_input_modeler.dart#L166)、[设备参数](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/input/input_policy.dart#L39) |
+| F6 | B | 本地活动笔迹每次 paint 仍整笔处理。classic 重做 PointVector/getStroke/Path；v2 重做绝对点列、采样和几何。路径随笔增长；按固定报点率持续绘制时，累计工作可能呈近似二次增长。尚无当前真机数据证明何时达到掉帧阈值。 | [本地湿墨](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/local_wet_ink_painter.dart#L65)、[classic 轮廓](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/rough/freedraw_renderer.dart#L55)、[v2 铅笔](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/pencil_stroke_renderer_v2.dart#L41) |
+| F7 | B | v2 的 sampleCap/particleCap 是生成候选之后才裁减，限制的是结果数量，不是生成过程的峰值成本。铅笔超过 cap 时按整笔数量重选颗粒，追加点可能改变前段保留集合，存在纹理闪动风险；本轮只确认算法，未伪称已看到真机闪动。 | [samples 后置限额](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/natural_media_stroke_sampler.dart#L222)、[颗粒生成与限额](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/natural_media_stroke_sampler.dart#L451) |
+| F8 | B | 自然介质静态缓存命中前，铅笔和毛笔仍先生成绝对坐标列表；这是可以移到 miss 分支的无效分配。静态重绘还会重新复制/排序 Scene，部分绑定查询为线性扫描。后一项应测量后再加派生缓存。 | [铅笔查缓存前分配](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/pencil_stroke_renderer_v2.dart#L41)、[毛笔](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/rendering/natural_media/brush_pen_stroke_renderer_v2.dart#L42)、[Scene 排序](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/core/scene/scene.dart#L35) |
+| F9 | B | 每次 presence 回调先 _markUserActive，再做网络节流；它取消并重建两个分钟级 Timer。离线时回调也接线，检查房间发生得更晚。自动保存中仍有同步场景序列化及后续封面更新，可能在下一笔期间执行，需单独测量。 | [presence](../../../FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart#L3089)、[Timer](../../../FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart#L3162)、[草稿 flush](../../../FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart#L469) |
+| F10 | B | 笔刷面板主要展示图标和压力滑块，没有使用实际 renderer 的试写预览。用户不容易在切换前判断当前颜色、粗细、浓淡与端帽；这可以在设置交互内改善，无需增加画布每帧成本。 | [笔刷面板](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/toolbar_palette_buttons.dart#L174) |
 
 F2 同时符合 Flutter 官方机制：共享 Layer 的子节点脏绘制会传播；`shouldRepaint=false` 不等于永不重绘。[RepaintBoundary 文档](https://api.flutter.dev/flutter/widgets/RepaintBoundary-class.html)
 
@@ -81,10 +81,10 @@ F2 同时符合 Flutter 官方机制：共享 Layer 的子节点脏绘制会传�
 
 现有基建可以继续用，但不能原样承担本次全部承诺：
 
-1. [书写 runner](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/integration_test/whiteboard_writing_perf_test.dart:43) 挂载 MarkdrawEditor，隐藏工具栏，没有挂载真实 WhiteboardPage 的保存、presence、页面监听等完整链路。
+1. [书写 runner](../../../FlowMuse-App/integration_test/whiteboard_writing_perf_test.dart#L43) 挂载 MarkdrawEditor，隐藏工具栏，没有挂载真实 WhiteboardPage 的保存、presence、页面监听等完整链路。
 2. runner 未逐笔刷选择当前五笔；场景 fixture 中的自由笔画缺少 v2 元数据，图片是 placeholder。应新增真实压感的铅笔/毛笔、解码图片和 PDF 背景场景，不能只用旧混合场景证明新笔性能。
-3. [ActivePreviewMetricsProbe](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/editor_core/src/input/active_preview_metrics_probe.dart:114) 从 accepted 时刻记录，是 accepted-to-paint 代理指标。它不包含接受之前的过滤耗时和等第二点的等待，更不等于屏幕像素已经亮起。
-4. 旧 [P0 基线](D:/Program/HarmonyOS/2024-se-17/docs/研发记录/research/writing-performance-p0-baseline.md) 与 [P1 门禁](D:/Program/HarmonyOS/2024-se-17/docs/研发记录/research/writing-performance-p1-gates.md) 仍标记 `deferred_device/not_evaluated`；本轮没有找到该默认 raw 目录下的有效当前基线。别处可能存在旧设备证据，不能由此推断项目从未测过真机。
+3. [ActivePreviewMetricsProbe](../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/input/active_preview_metrics_probe.dart#L114) 从 accepted 时刻记录，是 accepted-to-paint 代理指标。它不包含接受之前的过滤耗时和等第二点的等待，更不等于屏幕像素已经亮起。
+4. 旧 [P0 基线](../research/writing-performance-p0-baseline.md) 与 [P1 门禁](../research/writing-performance-p1-gates.md) 仍标记 `deferred_device/not_evaluated`；本轮没有找到该默认 raw 目录下的有效当前基线。别处可能存在旧设备证据，不能由此推断项目从未测过真机。
 5. 8 月自然笔刷方案存在允许一定性能退化的验收门槛。它服务于当时的画质改造，本轮明确不沿用其退化额度，也不覆盖或改写旧记录。
 
 **五、实施方案与顺序**
@@ -237,7 +237,7 @@ AUDIT stationary pressure: minDistance
 3 observation tests passed
 ```
 
-诊断源文件：[observations_test.dart](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/build/freehand-audit-20260921/observations_test.dart)。日志：[observations.log](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/build/freehand-audit-20260921/observations.log)。这些仅在被 Git 忽略的 build 目录，清理构建目录会删除；核心输出已记录在本报告。
+诊断源文件：observations_test.dart（`FlowMuse-App/build/freehand-audit-20260921/observations_test.dart`，历史临时产物未入库）。日志：observations.log（`FlowMuse-App/build/freehand-audit-20260921/observations.log`，历史临时产物未入库）。这些仅在被 Git 忽略的 build 目录，清理构建目录会删除；核心输出已记录在本报告。
 
 复现命令（工作目录为 FlowMuse-App）：
 

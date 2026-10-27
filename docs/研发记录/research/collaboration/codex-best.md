@@ -1,5 +1,7 @@
 # FlowMuse 协作性能与稳定性优化方案（综合评审版）
 
+> 历史综合调研：保留为当时设计依据，不是当前实施指令。重复输入草稿已精简，[原始材料保存在 Git 历史](https://github.com/qinyre/FlowMuse/tree/97c2a6c498d96c7b6573a489882b4d67bd9b0629/docs/%E7%A0%94%E5%8F%91%E8%AE%B0%E5%BD%95/research/collaboration)；现行约束和已交付进度见项目需求、AGENTS 与决赛计划。
+
 > 日期：2026-07-12  
 > 整合：`claude-best.md`、`zcode-best.md`、原 `codex-best.md` 及当前 Flutter / Go 源码。  
 > 评审目标：在不破坏端到端加密、Excalidraw 兼容和跨端行为的前提下，解决实时同步慢、短断线易失步和恢复状态不可信的问题。

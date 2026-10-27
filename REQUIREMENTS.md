@@ -6,3 +6,4 @@
 - [架构与格式约束](docs/项目说明/架构约束.md)
 - [市场分析与商业价值](docs/项目说明/市场分析与商业价值.md)
 - [全部文档导航](docs/README.md)
+- [决赛增量与验收进度](docs/研发记录/plans/2026-10-24-finals-product-optimization-plan.md)

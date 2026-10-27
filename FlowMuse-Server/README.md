@@ -2,6 +2,8 @@
 
 本目录提供 FlowMuse 协作、账号、文件与手写识别相关的后端服务。服务通过 Docker Compose 运行。
 
+> 2026-10-27 按 main `97c2a6c4` 核对；具体发布版本见对应研发记录，本文维护通用操作。跨端配套参数和验收步骤见[协作部署与联调](../docs/技术设计/协作部署与联调.md)。
+
 ## 运行环境
 
 - Docker Engine 及 Docker Compose v2
@@ -99,7 +101,7 @@ curl -i http://127.0.0.1:48931/health
 
 ### Resend 验证邮件
 
-真实邮箱投递使用 Resend 免费方案，复用现有 SMTP 发信实现。默认配置仍连接本地 Mailpit，其收件箱仅用于开发测试。
+部署示例使用 Resend SMTP，限额与计费以服务方当时规则为准，应用复用通用 SMTP 实现。默认配置仍连接本地 Mailpit，其收件箱仅用于开发测试。
 
 先在 Resend 添加并验证自有发信域名，建议使用 `notify.flowmuse.cloud` 子域名；在域名的 DNS 管理处添加 Resend 页面给出的记录，等待状态变为 `Verified`。创建仅有发送权限且限定该域名的 API Key，然后在部署机器的 `.env` 中替换以下设置：
 

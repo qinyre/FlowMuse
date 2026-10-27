@@ -1,5 +1,7 @@
 # architecture.md — 架构速览
 
+> 核对基线：2026-10-27 main `97c2a6c4`。最新功能状态见决赛计划；日期化研发稿是历史依据，不作为现行待办直接执行。
+
 > 本文件是 `.agent/` 知识库的一部分,给 Agent 一个**快速建立全局认知**的架构地图。
 > 完整设计见 `docs/技术设计/前端架构.md`(前端)与 `FlowMuse-Server/`(后端代码)。
 > 本文件只讲"骨架与边界",不讲字段细节(那些在 `docs/技术设计/数据模型.md`)。
@@ -8,13 +10,13 @@
 
 ## 1. 系统全景
 
-FlowMuse 是跨平台协同白板应用,三层架构:
+FlowMuse 是以手写与画布为载体的跨平台协作笔记应用，系统由以下层次组成：
 
 | 层级 | 组件 | 职责 |
 |------|------|------|
 | 客户端 | `FlowMuse-App`(Flutter 前端) | 面向 Android / iOS / macOS / Windows / Web / 鸿蒙 6 端;提供本地 SQLite 离线优先、自研编辑器内核、E2E 加密协作客户端 |
 | 通信 | HTTP REST + Socket.IO(WebSocket) | HTTP 承载账户、识别、快照等请求;Socket.IO 承载实时协作消息 |
-| 服务端 | `FlowMuse-Server`(Go 后端) | 协作房间中转、账户认证、手写识别代理、加密快照存储;服务端只见密文,不解密 |
+| 服务端 | `FlowMuse-Server`(Go 后端) | 账户、协作、社交及识别；白板协作仅处理密文，私聊与识别另有明文处理边界 |
 | 基础设施 | PostgreSQL 17 / MinIO / Mailpit | PostgreSQL 存用户与房间元数据;MinIO 存加密快照与图片;Mailpit 用于开发环境注册邮件 |
 
 ### 关键架构特征
@@ -46,7 +48,7 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `notebooks` | 笔记本集合视图 | `view_models/notebooks_view_model.dart` |
 | `tags` | 标签集合视图 | `view_models/tags_view_model.dart` |
 | `search` | 笔记搜索(内存过滤,非 SQL) | `views/search_page.dart` |
-| `settings` | 设置 / 本地备份 | `views/settings_page.dart` |
+| `settings` | 分组设置、主题预览、本地/WebDAV 备份 | `views/settings_page.dart` |
 | `account` | 账户认证(注册/登录/资料) | `repositories/account_repository.dart` |
 | `social` | 好友、私聊和设备加密邀请 | `repositories/social_repository.dart` |
 | `whiteboard` | 白板编辑器及协作、导入、内容加工能力 | — |
@@ -132,7 +134,7 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 
 **铁律**:共享代码(`lib/features/*`、`lib/shared/*`)禁止 `Platform.is*` 判断。详见 `conventions.md` 第 7 节。
 
-> **鸿蒙 Flutter 是社区移植版(`flutter_ohos`)**。部分 API 不支持(FragmentProgram/Shader)、部分插件需 fork(`path_provider` 等)、工程含独立的 `ohos/` 目录。编写鸿蒙相关代码时需查 `harmonyos-guides/` 确认 API 可用性,不假设现有实现能在鸿蒙直接运行。
+> **鸿蒙 Flutter 使用社区移植版 `flutter_ohos`**。图形 API 和插件支持取决于具体版本；当前已移除旧 Saber Shader，仍使用必要的插件 fork。原生能力需查本地官方指南、使用完整 SDK 编译，并在目标设备验证，不能从 Dart 接口存在推断可用性。
 
 ---
 
@@ -145,8 +147,7 @@ FlowMuse 是跨平台协同白板应用,三层架构:
 | `FlowMuse-Server/internal/auth/` | 账户认证,包括 HTTP API、token、邮件、user_store |
 | `FlowMuse-Server/internal/collab/` | 协作房间,包括 hub、events、http_api |
 | `FlowMuse-Server/internal/social/` | 好友、私聊、设备目录与加密邀请 |
-| `FlowMuse-Server/internal/recognition/` | 手写识别代理,对接 MyScript |
-| `FlowMuse-Server/internal/layoutrecognitionv3/` | 独立的 V3 识别服务 |
+| `FlowMuse-Server/internal/recognition/` | MyScript 手写识别及独立 V3 识别管线；共用包目录，使用各自配置 |
 | `FlowMuse-Server/internal/storage/` | 持久化,包括 room_store、scene_store、file_store |
 
 | 组件 | 技术 |
