@@ -44,7 +44,7 @@ void main() {
 
     await tester.tap(find.byTooltip('多选'));
     await tester.pump();
-    expect(find.text('已选 0 项'), findsOneWidget);
+    expect(find.text('选择笔记'), findsOneWidget);
 
     await tester.tap(find.text('测试笔记'));
     await tester.pump();

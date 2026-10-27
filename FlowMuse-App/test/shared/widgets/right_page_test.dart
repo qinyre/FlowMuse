@@ -4,6 +4,25 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('快速替换页头始终只布局当前标题', (tester) async {
+    Widget page(String title) => MaterialApp(
+      home: Scaffold(
+        body: RightPageScaffold(title: title, body: const SizedBox.shrink()),
+      ),
+    );
+    for (final title in ['主题设置', '文档设置', '手势设置', '隐私设置']) {
+      await tester.pumpWidget(page(title));
+      await tester.pump(const Duration(milliseconds: 20));
+      final titles = find.descendant(
+        of: find.byType(RightPageHeader),
+        matching: find.byType(Text),
+      );
+      expect(tester.widgetList<Text>(titles).map((text) => text.data), [title]);
+    }
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('减少动画时标题替换不残留旧页面标题', (tester) async {
     Widget page(String title) => MaterialApp(
       builder: (context, child) => MediaQuery(

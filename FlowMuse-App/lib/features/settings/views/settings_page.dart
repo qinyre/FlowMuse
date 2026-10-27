@@ -18,6 +18,7 @@ import '../../../app/view_models/theme_view_model.dart';
 import '../../../shared/storage/local_database_path.dart';
 import '../../../shared/url_launcher/app_url_launcher.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
+import '../../../shared/widgets/app_motion.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/app_spacing.dart';
 import '../../../shared/widgets/right_page.dart';
@@ -64,8 +65,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final selectedPreset = ref.watch(themeViewModelProvider);
     final themeViewModel = ref.read(themeViewModelProvider.notifier);
-    void selectSection(_SettingsSection section) =>
-        setState(() => _section = section);
+    void selectSection(_SettingsSection section) {
+      if (section != _section) setState(() => _section = section);
+    }
+
     void back() {
       if (context.canPop()) {
         context.pop();
@@ -89,17 +92,141 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   onBack: back,
                 ),
               Expanded(
-                child: _SettingsContent(
+                child: _SettingsContentTransition(
                   section: _section,
-                  selectedPreset: selectedPreset,
-                  onPresetChanged: themeViewModel.changePreset,
-                  onBack: compact ? back : null,
-                  onSectionChanged: compact ? selectSection : null,
+                  child: _SettingsContent(
+                    section: _section,
+                    selectedPreset: selectedPreset,
+                    onPresetChanged: themeViewModel.changePreset,
+                    onBack: compact ? back : null,
+                    onSectionChanged: compact ? selectSection : null,
+                  ),
                 ),
               ),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _SettingsContentTransition extends StatefulWidget {
+  const _SettingsContentTransition({
+    required this.section,
+    required this.child,
+  });
+
+  final _SettingsSection section;
+  final Widget child;
+
+  @override
+  State<_SettingsContentTransition> createState() =>
+      _SettingsContentTransitionState();
+}
+
+class _SettingsContentTransitionState extends State<_SettingsContentTransition>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final CurvedAnimation _opacity;
+  late final Animation<Offset> _position;
+  late _SettingsSection _displayedSection;
+  late Widget _displayedChild;
+  var _generation = 0;
+  var _reducedMotion = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayedSection = widget.section;
+    _displayedChild = widget.child;
+    _controller = AnimationController(
+      vsync: this,
+      value: 1,
+      duration: AppMotion.standard,
+      reverseDuration: AppMotion.quick,
+    );
+    _opacity = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    _position = Tween<Offset>(
+      begin: const Offset(0, 0.012),
+      end: Offset.zero,
+    ).animate(_opacity);
+  }
+
+  void _showLatest() {
+    _generation++;
+    _controller.value = 1;
+    _displayedSection = widget.section;
+    _displayedChild = widget.child;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reducedMotion = MediaQuery.disableAnimationsOf(context);
+    if (_reducedMotion) _showLatest();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SettingsContentTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_reducedMotion) {
+      _showLatest();
+    } else if (_displayedSection == widget.section) {
+      _displayedChild = widget.child;
+      if (oldWidget.section != widget.section) {
+        _generation++;
+        _controller.forward();
+      }
+    } else if (oldWidget.section != widget.section) {
+      unawaited(_switchSection());
+    }
+  }
+
+  Future<void> _switchSection() async {
+    final generation = ++_generation;
+    try {
+      await _controller.reverse().orCancel;
+    } on TickerCanceled {
+      return;
+    }
+    if (!mounted || generation != _generation) return;
+    setState(() {
+      _displayedSection = widget.section;
+      _displayedChild = widget.child;
+    });
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    _opacity.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final leaving = _displayedSection != widget.section;
+    return ExcludeFocus(
+      excluding: leaving,
+      child: IgnorePointer(
+        ignoring: leaving,
+        child: ClipRect(
+          child: FadeTransition(
+            opacity: _opacity,
+            child: SlideTransition(
+              position: _position,
+              // Keep the settings body mounted so in-flight backup state survives.
+              child: RepaintBoundary(child: _displayedChild),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -154,20 +281,36 @@ class _SettingsSidebar extends StatelessWidget {
     return SharedSidebar(
       showWallpaper: false,
       header: SharedSidebarHeader(
-        leading: SharedSidebarIconButton(
-          tooltip: '返回',
-          onPressed: onBack,
-          icon: const Icon(LucideIcons.chevronLeft),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sidebarInset,
         ),
-        trailing: [
-          Text(
-            '设置',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: colorScheme.onSurface,
+        leading: Stack(
+          fit: StackFit.expand,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.shellHeaderIconButtonSize,
+              ),
+              child: Center(
+                child: Text(
+                  '设置',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ),
             ),
-          ),
-        ],
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SharedSidebarIconButton(
+                tooltip: '返回',
+                onPressed: onBack,
+                icon: const Icon(LucideIcons.chevronLeft),
+              ),
+            ),
+          ],
+        ),
       ),
       footer: Padding(
         padding: const EdgeInsets.fromLTRB(0, AppSpacing.controlGap, 0, 16),

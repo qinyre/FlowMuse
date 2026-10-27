@@ -12,11 +12,33 @@ import '../../library/repositories/library_repository.dart';
 import '../../library/widgets/note_card.dart';
 import '../view_models/search_view_model.dart';
 
-class SearchPage extends ConsumerWidget {
+class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SearchPage> createState() => _SearchPageState();
+}
+
+class _SearchPageState extends ConsumerState<SearchPage> {
+  late final TextEditingController _queryController;
+
+  @override
+  void initState() {
+    super.initState();
+    // The responsive shell may remount the field while its query survives.
+    _queryController = TextEditingController(
+      text: ref.read(searchViewModelProvider).query,
+    );
+  }
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final state = ref.watch(searchViewModelProvider);
     final viewModel = ref.read(searchViewModelProvider.notifier);
@@ -43,13 +65,21 @@ class SearchPage extends ConsumerWidget {
         children: [
           Expanded(
             child: SearchBar(
-              leading: const Icon(LucideIcons.search),
+              controller: _queryController,
+              constraints: const BoxConstraints(minHeight: 48),
+              padding: const WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: AppSpacing.sidebarInset),
+              ),
+              leading: Icon(
+                LucideIcons.search,
+                size: 20,
+                color: colorScheme.onSurfaceVariant,
+              ),
               hintText: '请输入关键字搜索笔记',
               onChanged: viewModel.changeQuery,
-              trailing: const [_LocalSearchChip()],
             ),
           ),
-          const SizedBox(width: AppSpacing.sectionGap),
+          const SizedBox(width: AppSpacing.controlGap),
           TextButton(
             onPressed: () => context.go(AppRoutes.library),
             child: const Text('取消'),
@@ -57,20 +87,14 @@ class SearchPage extends ConsumerWidget {
         ],
       ),
       topContent: [
-        Text(
-          '搜索范围',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 16),
         Wrap(
-          spacing: AppSpacing.sectionGap,
-          runSpacing: 16,
+          spacing: AppSpacing.listGap,
+          runSpacing: AppSpacing.controlGap,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Text('笔记本'),
             _ScopeMenu(
+              icon: LucideIcons.notebook,
+              tooltip: '选择笔记本范围',
               label: notebookLabel,
               options: [
                 const _ScopeOption(id: null, label: '全部笔记本'),
@@ -79,8 +103,9 @@ class SearchPage extends ConsumerWidget {
               ],
               onSelected: viewModel.selectNotebookScope,
             ),
-            const Text('标签'),
             _ScopeMenu(
+              icon: LucideIcons.tag,
+              tooltip: '选择标签范围',
               label: tagLabel,
               options: [
                 const _ScopeOption(id: null, label: '全部标签'),
@@ -89,23 +114,20 @@ class SearchPage extends ConsumerWidget {
               ],
               onSelected: viewModel.selectTagScope,
             ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  LucideIcons.fileSearch,
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                state.query.trim().isEmpty
+                    ? '本地搜索 · 标题与副标题'
+                    : '找到 ${results.length} 条笔记',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
-                const SizedBox(width: AppSpacing.controlGap),
-                Text(
-                  state.query.isEmpty ? '已选搜索范围' : '搜索：${state.query}',
-                  style: TextStyle(color: colorScheme.onSurfaceVariant),
-                ),
-              ],
+              ),
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.controlGap),
+        const SizedBox(height: AppSpacing.listGap),
       ],
       body: _SearchResults(
         query: state.query,
@@ -123,28 +145,6 @@ class SearchPage extends ConsumerWidget {
   }
 }
 
-class _LocalSearchChip extends StatelessWidget {
-  const _LocalSearchChip();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primary,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Text(
-        '本地标题',
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onPrimary,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
 class _ScopeOption {
   const _ScopeOption({required this.id, required this.label});
 
@@ -155,11 +155,15 @@ class _ScopeOption {
 class _ScopeMenu extends StatelessWidget {
   const _ScopeMenu({
     required this.label,
+    required this.icon,
+    required this.tooltip,
     required this.options,
     required this.onSelected,
   });
 
   final String label;
+  final IconData icon;
+  final String tooltip;
   final List<_ScopeOption> options;
   final ValueChanged<String?> onSelected;
 
@@ -167,33 +171,45 @@ class _ScopeMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return Builder(
       builder: (context) {
-        return ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 168),
-          child: OutlinedButton(
-            onPressed: () async {
-              final selected = await showAnchoredPopupMenu<_ScopeOption>(
-                context: context,
-                placement: AnchoredPopupPlacement.below,
-                items: [
-                  for (final option in options)
-                    PopupMenuItem<_ScopeOption>(
-                      value: option,
-                      child: Text(option.label),
-                    ),
+        return Tooltip(
+          message: tooltip,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 240),
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                foregroundColor: Theme.of(context).colorScheme.onSurface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSpacing.radius),
+                ),
+              ),
+              onPressed: () async {
+                final selected = await showAnchoredPopupMenu<_ScopeOption>(
+                  context: context,
+                  placement: AnchoredPopupPlacement.below,
+                  items: [
+                    for (final option in options)
+                      PopupMenuItem<_ScopeOption>(
+                        value: option,
+                        child: Text(option.label),
+                      ),
+                  ],
+                );
+                if (selected == null || !context.mounted) {
+                  return;
+                }
+                runAfterUiTeardown(() => onSelected(selected.id));
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 16),
+                  const SizedBox(width: AppSpacing.controlGap),
+                  Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+                  const SizedBox(width: AppSpacing.controlGap),
+                  const Icon(LucideIcons.chevronDown, size: 16),
                 ],
-              );
-              if (selected == null || !context.mounted) {
-                return;
-              }
-              runAfterUiTeardown(() => onSelected(selected.id));
-            },
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-                const SizedBox(width: AppSpacing.controlGap),
-                const Icon(LucideIcons.chevronDown, size: 16),
-              ],
+              ),
             ),
           ),
         );
@@ -219,7 +235,7 @@ class _SearchResults extends StatelessWidget {
       return const _SearchEmptyState(
         icon: LucideIcons.search,
         title: '输入标题关键字',
-        message: '搜索会匹配本地保存的笔记标题。',
+        message: '按标题或副标题查找本地笔记。',
       );
     }
     if (results.isEmpty) {

@@ -70,7 +70,7 @@ void main() {
     );
     expect(
       theme.searchBarTheme.backgroundColor?.resolve({}),
-      theme.colorScheme.surfaceContainerHighest,
+      theme.colorScheme.surface,
     );
   });
 }
