@@ -1,0 +1,42 @@
+name: Set up pinned OHOS Flutter
+description: Restore the existing SDK and locked Pub dependencies for checks/builds
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      id: sdk
+      with:
+        path: ${{ runner.temp }}/flutter
+        key: ohos-flutter-${{ runner.os }}-${{ runner.arch }}-3.41.10-ohos-0.0.1-canary1-${{ hashFiles('.github/actions/setup-flutter/action.yml') }}
+    - name: Fetch pinned SDK on cache miss
+      if: steps.sdk.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        for attempt in 1 2 3; do
+          if git -c http.version=HTTP/1.1 clone --depth 1 --branch 3.41.10-ohos-0.0.1-canary1 https://gitcode.com/CPF-Flutter/flutter_flutter.git "$RUNNER_TEMP/flutter"; then
+            exit 0
+          fi
+          rm -rf "$RUNNER_TEMP/flutter"
+          if [ "$attempt" -lt 3 ]; then sleep $((attempt * 5)); fi
+        done
+        echo "OpenHarmony Flutter mirror clone failed after 3 attempts" >&2
+        exit 1
+    - name: Configure paths for checks
+      shell: bash
+      run: |
+        echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+        echo "PUB_CACHE=$RUNNER_TEMP/pub-cache" >> "$GITHUB_ENV"
+        # Static checks only; HAP builds require a real HarmonyOS SDK.
+        mkdir -p "$RUNNER_TEMP/hos-sdk/hmscore" "$RUNNER_TEMP/hos-sdk/openharmony"
+        echo "HOS_SDK_HOME=$RUNNER_TEMP/hos-sdk" >> "$GITHUB_ENV"
+    - uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/pub-cache
+        key: pub-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('FlowMuse-App/pubspec.lock') }}
+        restore-keys: pub-${{ runner.os }}-${{ runner.arch }}-
+    - name: Resolve locked dependencies
+      shell: bash
+      working-directory: FlowMuse-App
+      env:
+        PUB_HOSTED_URL: https://pub.flutter-io.cn
+      run: flutter pub get --enforce-lockfile
