@@ -16,7 +16,6 @@ class AppThemePreset {
     required this.canvasBackground,
     required this.wallpaperAsset,
     required this.wallpaperOverlay,
-    required this.heroOverlay,
     required this.secondaryColor,
     required this.tertiaryColor,
   });
@@ -33,7 +32,6 @@ class AppThemePreset {
   final String canvasBackground;
   final String? wallpaperAsset;
   final Color wallpaperOverlay;
-  final Color heroOverlay;
   final Color secondaryColor;
   final Color tertiaryColor;
 
@@ -57,7 +55,6 @@ const appThemePresets = <AppThemePreset>[
     canvasBackground: '#ffffff',
     wallpaperAsset: null,
     wallpaperOverlay: Color(0x00000000),
-    heroOverlay: Color(0x00000000),
     secondaryColor: Color(0xFF5D91B8),
     tertiaryColor: Color(0xFFA56F4E),
   ),
@@ -74,7 +71,6 @@ const appThemePresets = <AppThemePreset>[
     canvasBackground: '#121212',
     wallpaperAsset: null,
     wallpaperOverlay: Color(0x00000000),
-    heroOverlay: Color(0x00000000),
     secondaryColor: Color(0xFF91A5A1),
     tertiaryColor: Color(0xFFE0B070),
   ),
@@ -91,7 +87,6 @@ const appThemePresets = <AppThemePreset>[
     canvasBackground: '#ffffff',
     wallpaperAsset: null,
     wallpaperOverlay: Color(0x00000000),
-    heroOverlay: Color(0x00000000),
     secondaryColor: Color(0xFF5D91B8),
     tertiaryColor: Color(0xFFA56F4E),
   ),
@@ -108,7 +103,6 @@ const appThemePresets = <AppThemePreset>[
     canvasBackground: '#060a12',
     wallpaperAsset: 'assets/themes/starry-blue.png',
     wallpaperOverlay: Color(0x8A07111F),
-    heroOverlay: Color(0x6607111F),
     secondaryColor: Color(0xFF74C7EC),
     tertiaryColor: Color(0xFFCBA6F7),
   ),
@@ -125,7 +119,6 @@ const appThemePresets = <AppThemePreset>[
     canvasBackground: '#fafcfd',
     wallpaperAsset: 'assets/themes/mist-blue.png',
     wallpaperOverlay: Color(0x4DEFF7FB),
-    heroOverlay: Color(0x33EFF7FB),
     secondaryColor: Color(0xFF4E9E9A),
     tertiaryColor: Color(0xFF86789C),
   ),
@@ -142,7 +135,6 @@ const appThemePresets = <AppThemePreset>[
     canvasBackground: '#fffcf6',
     wallpaperAsset: 'assets/themes/aurora-green.png',
     wallpaperOverlay: Color(0x4DF4FBF2),
-    heroOverlay: Color(0x33F4FBF2),
     secondaryColor: Color(0xFF5E9E6F),
     tertiaryColor: Color(0xFFC18B5D),
   ),

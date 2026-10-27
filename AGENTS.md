@@ -313,7 +313,7 @@ lib/
 
 1. **静态检查**：`cd FlowMuse-App && flutter analyze`——不得新增 error。
 2. **依赖解析**：改了 pubspec 要跑 `flutter pub get` 确认无冲突。
-3. **测试**：`flutter test`——已有测试不能挂。如果改了被测试覆盖的模块，**先跑相关测试**。
+3. **测试**：开发中先跑相关测试，提交前按影响范围检查，不要求每个小提交重复跑整套。普通 UI 改动覆盖相关交互及直接调用方；保存/迁移/撤销/协作/加密、共享内核、依赖或测试选路变更必须跑完整回归。App 源码 PR 仍由 CI 全量覆盖，两分片全部成功才通过；详见 `FlowMuse-App/test/README.md`。
    - 涉及 `FlowMuse-Server/` 时，额外运行 `cd FlowMuse-Server && go test ./...` 与 `go vet ./...`。
    - 涉及 Flutter 与服务端共同使用的 HTTP/Socket.IO/协作消息格式时，补充前后端字段兼容性验证；不能只验证其中一端。
 4. **受影响功能回归**：手动或在脑中过一遍改动影响的用户流程，确认没破坏。例如改了 `libraryIndexProvider`，要确认笔记列表、笔记本页、标签页、搜索页都正常。
@@ -331,7 +331,7 @@ lib/
 | 覆盖率    | 不要求 100%，但 **Repository 层和工具函数必须有测试**；UI widget 测试覆盖关键交互路径即可                                       |
 | 独立运行  | 每个 `test()` 用例不依赖其他用例的执行结果，**不得共享可变状态**                                                                |
 | Mock 隔离 | 数据库/网络/Platform Channel 用 mock 隔离，单元测试**不访问真实的文件系统或网络**                                               |
-| 运行      | 提交前跑全量 `flutter test`；开发中可用 `flutter test --name="关键词"` 只跑相关测试                                             |
+| 运行      | 本地按第 6 节的影响范围运行；完整回归可用 `flutter test --no-pub` 或两个原生分片，禁止只跑一个分片便宣称全量通过 |
 
 ### 6.2 书写、协作与发布验证
 
@@ -405,7 +405,7 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
    - 共享代码中是否有平台判断（违反铁律）
    - 数据库迁移是否幂等（`_safeAddColumn`）
    - 自动生成文件是否误提交
-4. **合并前**：本地确认 `flutter analyze` 通过 + `flutter test` 通过 + 与最新 main 无冲突。
+4. **合并前**：确认适用的静态检查、相关测试及 CI 全量回归通过，并与最新 main 无冲突。普通文档无需重编应用；原生能力变更还需对应平台构建/实机证据，不能用 Dart 单测替代。
 
 ### 8.4 提交粒度
 
