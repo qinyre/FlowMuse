@@ -2680,6 +2680,13 @@ class _ThemePresetCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final captionStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final captionHeight =
+        MediaQuery.textScalerOf(context).scale(captionStyle?.fontSize ?? 12) *
+        (captionStyle?.height ?? 1.5) *
+        2;
     final borderColor = selected
         ? Theme.of(context).colorScheme.primary
         : Theme.of(context).colorScheme.outlineVariant;
@@ -2738,12 +2745,13 @@ class _ThemePresetCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: AppSpacing.controlGap),
-                    Text(
-                      preset.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                    ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: captionHeight),
+                      child: Text(
+                        preset.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: captionStyle,
                       ),
                     ),
                   ],

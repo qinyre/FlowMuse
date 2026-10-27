@@ -126,6 +126,25 @@ void main() {
     });
   }
 
+  testWidgets('窄屏同排主题卡在说明换行时仍然等高', (tester) async {
+    await _pump(tester, size: const Size(600, 900));
+    final heights = [
+      for (final label in ['日间', '夜间', '系统'])
+        tester
+            .getSize(
+              find.byWidgetPredicate(
+                (w) => w is Semantics && w.properties.label == label,
+              ),
+            )
+            .height,
+    ];
+    expect(
+      heights.every((height) => (height - heights.first).abs() < 0.01),
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('滚动主题后切换分类回到顶部，长设置页仍可继续滚动', (tester) async {
     await _pump(tester, size: const Size(1280, 420));
     await tester.drag(_bodyList(), const Offset(0, -600));
