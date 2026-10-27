@@ -10,12 +10,36 @@ void main() {
 
   test('机器流解析：testStart/testDone 逐测试结果映射', () {
     final stream = [
-      event({'type': 'testStart', 'test': {'id': 1, 'name': 'loadSuite'}}),
-      event({'type': 'testStart', 'test': {'id': 2, 'name': 'group 用例A'}}),
-      event({'type': 'testDone', 'testID': 2, 'result': 'success', 'hidden': false}),
-      event({'type': 'testStart', 'test': {'id': 3, 'name': 'group 用例B'}}),
-      event({'type': 'testDone', 'testID': 3, 'result': 'failure', 'hidden': false}),
-      event({'type': 'testDone', 'testID': 1, 'result': 'success', 'hidden': true}),
+      event({
+        'type': 'testStart',
+        'test': {'id': 1, 'name': 'loadSuite'},
+      }),
+      event({
+        'type': 'testStart',
+        'test': {'id': 2, 'name': 'group 用例A'},
+      }),
+      event({
+        'type': 'testDone',
+        'testID': 2,
+        'result': 'success',
+        'hidden': false,
+      }),
+      event({
+        'type': 'testStart',
+        'test': {'id': 3, 'name': 'group 用例B'},
+      }),
+      event({
+        'type': 'testDone',
+        'testID': 3,
+        'result': 'failure',
+        'hidden': false,
+      }),
+      event({
+        'type': 'testDone',
+        'testID': 1,
+        'result': 'success',
+        'hidden': true,
+      }),
     ].join('\n');
     final outcome = DeterminismCiCheck.parseMachineStream(
       stdout: stream,
@@ -24,8 +48,7 @@ void main() {
     );
     expect(outcome.testResults['group 用例A'], 'success');
     expect(outcome.testResults['group 用例B'], 'failure');
-    expect(outcome.testResults['loadSuite'], isNull,
-        reason: 'hidden 事件不计入');
+    expect(outcome.testResults['loadSuite'], isNull, reason: 'hidden 事件不计入');
     expect(outcome.allPassed, isFalse);
   });
 
@@ -46,6 +69,22 @@ void main() {
     expect(outcome.errorSummaries.single, contains('TestFailure'));
     expect(outcome.errorSummaries.single.contains('/repo'), isFalse);
     expect(outcome.errorSummaries.single.contains('x.dart:9'), isTrue);
+
+    for (final exitCode in [0, 1]) {
+      final noTests = DeterminismCiCheck.parseMachineStream(
+        stdout: 'Running build hooks...',
+        stderr: 'Dependency startup failed /repo/FlowMuse-App/pubspec.yaml',
+        exitCode: exitCode,
+        repoRoot: '/repo',
+      );
+      expect(noTests.allPassed, isFalse);
+      expect(noTests.errorSummaries.single, contains('No test results'));
+      expect(
+        noTests.errorSummaries.single,
+        contains('Dependency startup failed'),
+      );
+      expect(noTests.errorSummaries.single.contains('/repo'), isFalse);
+    }
   });
 
   test('双跑一致 → deterministic=true；结果漂移 → 漂移清单非空', () async {
@@ -97,9 +136,11 @@ void main() {
     expect(json['deterministic'], isTrue);
     expect(json['targets'], defaultDeterminismTargets);
     for (final target in defaultDeterminismTargets) {
-      expect(target.startsWith('/') || RegExp(r'^[A-Za-z]:').hasMatch(target),
-          isFalse,
-          reason: 'target 须仓库相对: $target');
+      expect(
+        target.startsWith('/') || RegExp(r'^[A-Za-z]:').hasMatch(target),
+        isFalse,
+        reason: 'target 须仓库相对: $target',
+      );
     }
   });
 }

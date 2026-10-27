@@ -2,6 +2,7 @@ name: Quality
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -9,60 +10,100 @@ permissions:
   contents: read
 
 concurrency:
-  group: quality-${{ github.workflow }}-${{ github.ref }}
+  group: quality-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  flutter:
-    name: Flutter analyze and test
+  changes:
+    name: Select checks
     runs-on: ubuntu-latest
-    env:
-      # Match the hosted source in pubspec.lock to keep the tested versions.
-      PUB_HOSTED_URL: https://pub.flutter-io.cn
+    outputs:
+      flutter: ${{ steps.scope.outputs.flutter }}
+      server: ${{ steps.scope.outputs.server }}
+      layout: ${{ steps.scope.outputs.layout }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - run: node --test .github/scripts/ci-scope.test.mjs
+      - id: scope
+        name: Select checks from the actual Git diff
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node .github/scripts/ci-scope.mjs
+
+  flutter-tests:
+    name: Flutter tests (${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.flutter == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
     defaults:
       run:
         working-directory: FlowMuse-App
     steps:
       - uses: actions/checkout@v4
-      - name: Set up OpenHarmony Flutter
-        run: |
-          # GitCode can drop long packfile transfers; retry the external fetch
-          # without weakening any project checks that run after it.
-          cloned=false
-          for attempt in 1 2 3; do
-            if git -c http.version=HTTP/1.1 clone --depth 1 --branch 3.41.10-ohos-0.0.1-canary1 https://gitcode.com/CPF-Flutter/flutter_flutter.git "$RUNNER_TEMP/flutter"; then
-              cloned=true
-              break
-            fi
-            rm -rf "$RUNNER_TEMP/flutter"
-            if [ "$attempt" -lt 3 ]; then
-              sleep $((attempt * 5))
-            fi
-          done
-          if [ "$cloned" != true ]; then
-            echo "OpenHarmony Flutter mirror clone failed after 3 attempts" >&2
-            exit 1
-          fi
-          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
-      - name: Provide HarmonyOS SDK layout for checks
-        run: |
-          # ponytail: static checks only; install the real SDK before enabling HAP builds.
-          mkdir -p "$RUNNER_TEMP/hos-sdk/hmscore" "$RUNNER_TEMP/hos-sdk/openharmony"
-          echo "HOS_SDK_HOME=$RUNNER_TEMP/hos-sdk" >> "$GITHUB_ENV"
-      - run: flutter pub get --enforce-lockfile
-      - run: flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
-      - run: flutter test --no-pub
+      - uses: ./.github/actions/setup-flutter
+      - name: Analyze once
+        if: matrix.shard == 0
+        run: flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
+      - name: Preserve strict smart layout lint checks
+        if: matrix.shard == 1 && needs.changes.outputs.layout == 'true'
+        run: flutter analyze --no-pub lib/features/whiteboard/smart_layout test/features/whiteboard/smart_layout tool/smart_layout_v3/ci
+      - name: Run every app test across two shards
+        run: flutter test --no-pub --total-shards=2 --shard-index=${{ matrix.shard }}
+      - name: Smart layout determinism (not repeated by the app suite)
+        if: matrix.shard == 1 && needs.changes.outputs.layout == 'true'
+        run: dart run tool/smart_layout_v3/ci/determinism_ci_check.dart --runs 2
+      - name: Smart layout CI tool tests
+        if: matrix.shard == 1 && needs.changes.outputs.layout == 'true'
+        run: flutter test --no-pub tool/smart_layout_v3/ci
+
+  flutter:
+    name: Flutter analyze and test
+    needs: [changes, flutter-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Require all selected shards to succeed
+        env:
+          SCOPE_RESULT: ${{ needs.changes.result }}
+          FLUTTER_REQUIRED: ${{ needs.changes.outputs.flutter }}
+          SHARD_RESULT: ${{ needs.flutter-tests.result }}
+        run: node .github/scripts/ci-scope.mjs gate
 
   server:
     name: Go test and vet
+    needs: changes
+    if: always()
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: FlowMuse-Server
     steps:
+      - name: Require successful scope detection
+        working-directory: .
+        env:
+          SCOPE_RESULT: ${{ needs.changes.result }}
+          SERVER_REQUIRED: ${{ needs.changes.outputs.server }}
+        run: |
+          test "$SCOPE_RESULT" = success
+          test "$SERVER_REQUIRED" = true || test "$SERVER_REQUIRED" = false
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.server == 'true'
       - uses: actions/setup-go@v5
+        if: needs.changes.outputs.server == 'true'
         with:
           go-version-file: FlowMuse-Server/go.mod
+          cache-dependency-path: FlowMuse-Server/go.sum
       - run: go test ./...
+        if: needs.changes.outputs.server == 'true'
       - run: go vet ./...
+        if: needs.changes.outputs.server == 'true'

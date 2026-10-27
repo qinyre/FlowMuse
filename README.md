@@ -101,7 +101,9 @@ go vet ./...
 
 数据库集成测试需要独立、名称以 `_test` 结尾的数据库，通过 `FLOWMUSE_SOCIAL_TEST_DATABASE_URL` 指定；未配置时会明确跳过，不能当作迁移已验证。不要使用生产数据库。
 
-CI 包括[基础质量检查](.github/workflows/quality.yml)、[智能排版矩阵](.github/workflows/smart-layout-v3-ci.yml)与[平台构建矩阵](.github/workflows/smart-layout-v3-platform.yml)。书写性能和鸿蒙能力仍需真实设备验证，参见[性能测试说明](FlowMuse-App/integration_test/README.md)。发布构建、Web 资源验证和图标维护见[客户端说明](FlowMuse-App/README.md)。
+[基础质量检查](.github/workflows/quality.yml)在 PR、main push 或手动运行：普通文档只做轻量检查，App/Server 按 Git diff 独立选路；App 源码仍跑全量测试，分为两片并行，V3 严格分析与独立检查不重复跑普通测试。固定 SDK 与依赖缓存可复用，命中缓存仍执行检查命令。[完整排版矩阵](.github/workflows/smart-layout-v3-ci.yml)保留手动诊断，[平台构建矩阵](.github/workflows/smart-layout-v3-platform.yml)在相关 main 更新或手动运行。日常测试范围及手动命令见[测试说明](FlowMuse-App/test/README.md)。
+
+书写性能和鸿蒙能力仍需真实设备验证，参见[性能测试说明](FlowMuse-App/integration_test/README.md)。发布构建、Web 资源验证和图标维护见[客户端说明](FlowMuse-App/README.md)。
 
 ## 仓库导航
 

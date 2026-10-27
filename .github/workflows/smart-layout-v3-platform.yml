@@ -3,16 +3,22 @@ name: Smart Layout V3 Platform
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - "FlowMuse-App/lib/features/whiteboard/smart_layout/**"
       - "FlowMuse-App/tool/smart_layout_v3/platform/**"
       - "FlowMuse-App/pubspec.yaml"
       - "FlowMuse-App/pubspec.lock"
       - "FlowMuse-App/tool/vendor/code_assets/**"
+      - "FlowMuse-App/android/**"
+      - "FlowMuse-App/ios/**"
+      - "FlowMuse-App/macos/**"
+      - "FlowMuse-App/windows/**"
+      - "FlowMuse-App/linux/**"
+      - "FlowMuse-App/web/**"
+      - "FlowMuse-App/ohos/**"
+      - ".github/actions/setup-flutter/**"
       - ".github/workflows/smart-layout-v3-platform.yml"
-
-env:
-  PUB_HOSTED_URL: https://pub.flutter-io.cn
 
 permissions:
   contents: read
@@ -37,35 +43,11 @@ jobs:
         working-directory: FlowMuse-App
     steps:
       - uses: actions/checkout@v4
-      - name: Set up OpenHarmony Flutter (pinned, same as quality.yml)
-        shell: bash
-        run: |
-          cloned=false
-          for attempt in 1 2 3; do
-            if git -c http.version=HTTP/1.1 clone --depth 1 --branch 3.41.10-ohos-0.0.1-canary1 https://gitcode.com/CPF-Flutter/flutter_flutter.git "$RUNNER_TEMP/flutter"; then
-              cloned=true
-              break
-            fi
-            rm -rf "$RUNNER_TEMP/flutter"
-            if [ "$attempt" -lt 3 ]; then
-              sleep $((attempt * 5))
-            fi
-          done
-          if [ "$cloned" != true ]; then
-            echo "OpenHarmony Flutter mirror clone failed after 3 attempts" >&2
-            exit 1
-          fi
-          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
-      - name: Provide HarmonyOS SDK layout for checks
-        shell: bash
-        run: |
-          mkdir -p "$RUNNER_TEMP/hos-sdk/hmscore" "$RUNNER_TEMP/hos-sdk/openharmony"
-          echo "HOS_SDK_HOME=$RUNNER_TEMP/hos-sdk" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-flutter
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-      - run: flutter pub get --enforce-lockfile
       - name: Cross-platform smoke (entry→commit→undo→reopen)
         run: flutter test tool/smart_layout_v3/platform
       - name: Build matrix (available targets build; unavailable release_deferred)
