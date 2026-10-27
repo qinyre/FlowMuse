@@ -406,6 +406,10 @@ flutter test test/features/library/   # 指定目录
 
 ## 10. 静态检查与完成标准
 
+文档入口与生命周期见 `docs/README.md`。现行说明按源码核对，日期化研发记录保留当时结论，旧待办不直接作为当前实施要求。清理前核对引用和工具依赖；更新导航、清除死链接，不把协议、fixture、许可证或验收证据当作冗余。
+
+仅人读 Markdown 的改动执行事实/链接/路径与 diff 检查；若修改机读文档、脚本或测试数据，按实际影响运行对应检查。文档维护不能宣称新增实机或发布证据。
+
 ```bash
 cd FlowMuse-App
 flutter analyze     # 不得新增 error(warning/info 尽量避免)

@@ -1,5 +1,8 @@
 # 鸿蒙压感笔笔迹柔顺优化：综合调研与最优方案
 
+> 历史综合调研：保留为当时设计依据，不是当前实施指令。重复输入草稿已精简，[原始材料保存在 Git 历史](https://github.com/qinyre/FlowMuse/tree/97c2a6c498d96c7b6573a489882b4d67bd9b0629/docs/%E7%A0%94%E5%8F%91%E8%AE%B0%E5%BD%95/research/pen)；现行约束和已交付进度见项目需求、AGENTS 与决赛计划。
+> 下文“不承担历史兼容”属于早期实验前提，当前须保留历史笔迹与 Excalidraw 兼容，不能据此删除降级路径。
+
 > 整合日期：2026-07-09  
 > 输入材料：`codex-research.md`、`claude-research.md`、`zcode-research.md`  
 > 适用目标：FlowMuse / Markdraw 在 HarmonyOS、Android、iOS、Windows、macOS、Linux 和 Web 上的自由书写  
@@ -293,7 +296,7 @@ B：二次中点曲线路径（`OutlineRenderMode.quadratic`）。
 
 ### 阶段 3：跨平台 One Euro + 转角保护 + 统一 Pointer 输入层
 
-**前置事实**：当前 `HarmonyStylusStrokeSmoother` 是 **Dart 侧文件**（[harmony_stylus_stroke_smoother.dart](FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/harmony_stylus_stroke_smoother.dart)），由 [markdraw_controller.dart](FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart) 调用，不是 native 层代码。因此不需要绕过 native EMA，但需要重构 pointer 路由。
+**前置事实**：当前 `HarmonyStylusStrokeSmoother` 是 **Dart 侧文件**（[harmony_stylus_stroke_smoother.dart](../../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/harmony_stylus_stroke_smoother.dart)），由 [markdraw_controller.dart](../../../../FlowMuse-App/lib/features/whiteboard/editor_core/src/ui/markdraw_controller.dart) 调用，不是 native 层代码。因此不需要绕过 native EMA，但需要重构 pointer 路由。
 
 **新的 pointer 输入层路由**：
 

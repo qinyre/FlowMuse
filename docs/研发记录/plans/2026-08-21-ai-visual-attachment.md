@@ -1,7 +1,7 @@
 # FlowMuse AI 视觉附件（选区截图）实施计划
 
 > 分支：`feature/ai-visual-attachment`（基于 `feature/ai-content-placement`，其插入/落位改进是本任务的依赖）
-> 对应参赛计划书：`docs/参赛文档/FlowMuse-鸿蒙高校创新赛发展方向计划书.md` 阶段 B「AI 视觉附件 MVP」
+> 历史范围源于[2026-08-20 参赛构想](https://github.com/qinyre/FlowMuse/blob/97c2a6c498d96c7b6573a489882b4d67bd9b0629/docs/%E5%8F%82%E8%B5%9B%E6%96%87%E6%A1%A3/FlowMuse-%E9%B8%BF%E8%92%99%E9%AB%98%E6%A0%A1%E5%88%9B%E6%96%B0%E8%B5%9B%E5%8F%91%E5%B1%95%E6%96%B9%E5%90%91%E8%AE%A1%E5%88%92%E4%B9%A6.md)的视觉附件阶段；当前产品方向以决赛计划为准。
 
 ## Context
 

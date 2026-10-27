@@ -23,12 +23,12 @@
 
 | 当前依据 | 结论 | 对应工作包 |
 | --- | --- | --- |
-| [候选卡片](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_candidate_view.dart:62)只有 64×48 的预览，直接展示 candidateId、排名、分数与指标名 | 用户难以判断排版是否合适，界面仍偏调试用途 | C |
-| [审阅面板](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_view.dart:352)的合并按钮传空 subjectIds；[接线](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_real_wiring.dart:982)拒绝，ViewModel 静默返回 | 已确认的无效操作，不是单纯文案问题 | C |
-| [候选适用性](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/composition/layout_composition_planner.dart:86)已有短纯文字页限制，但存在图/图注时不走该稀疏限制 | 不能重复开发“短页单栏”；应验证短文字加小图、列表归组和推荐结果 | B |
-| [识别链](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart:550)按批串行；已有阶段计时、缓存与超时重试修复 | 仍有性能检查空间，但缺少本轮真实耗时数据，不能直接认定并发就是答案 | D |
-| [资料库空状态](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/library/widgets/library_content.dart:860)主要引导创建空白笔记；已有纸张模板不是内容示例 | 缺的是让新用户直接尝试真实流程的示例，不是再增加纸张背景 | E |
-| [视觉附件](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart)有来源标签，但没有结构化页/区域定位字段 | “回到原文”有实际价值，但需要补真实定位数据，不能只解析标签 | F |
+| [候选卡片](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_candidate_view.dart#L62)只有 64×48 的预览，直接展示 candidateId、排名、分数与指标名 | 用户难以判断排版是否合适，界面仍偏调试用途 | C |
+| [审阅面板](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_view.dart#L352)的合并按钮传空 subjectIds；[接线](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_real_wiring.dart#L982)拒绝，ViewModel 静默返回 | 已确认的无效操作，不是单纯文案问题 | C |
+| [候选适用性](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/composition/layout_composition_planner.dart#L86)已有短纯文字页限制，但存在图/图注时不走该稀疏限制 | 不能重复开发“短页单栏”；应验证短文字加小图、列表归组和推荐结果 | B |
+| [识别链](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart#L550)按批串行；已有阶段计时、缓存与超时重试修复 | 仍有性能检查空间，但缺少本轮真实耗时数据，不能直接认定并发就是答案 | D |
+| [资料库空状态](../../../FlowMuse-App/lib/features/library/widgets/library_content.dart#L860)主要引导创建空白笔记；已有纸张模板不是内容示例 | 缺的是让新用户直接尝试真实流程的示例，不是再增加纸张背景 | E |
+| [视觉附件](../../../FlowMuse-App/lib/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart)有来源标签，但没有结构化页/区域定位字段 | “回到原文”有实际价值，但需要补真实定位数据，不能只解析标签 | F |
 
 已具备的摘要、待办、导图、语音指令、页面导航、只读/简洁模式和 PNG/SVG 导出，不列为从零新增。用户此前展示的标题加三项列表截图作为历史问题场景，不据此断言最新 V3 仍有同一根因。
 
@@ -62,7 +62,7 @@
 
 **控制工程量**：先修排名最前的 2–3 类复现缺陷。不重建 OCR/V4、不训练模型、不全面重做公式/表格。若基线显示根因在识别而不是排版，只对现有 V3 分区、资产、结构恢复做有样例支撑的局部修复；超出此范围的根因单独报出，不能隐去或用 UI 美化冒充解决。
 
-**落点**：[语义适配](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/recognition/semantic_adapter.dart)、[候选适用性](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/composition/layout_composition_planner.dart)、[块装配](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/composition/layout_block_assembler.dart)、[评分](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/validation/layout_scorer.dart)。这些是排查入口，不要求全部改动。
+**落点**：[语义适配](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/recognition/semantic_adapter.dart)、[候选适用性](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/composition/layout_composition_planner.dart)、[块装配](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/composition/layout_block_assembler.dart)、[评分](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/validation/layout_scorer.dart)。这些是排查入口，不要求全部改动。
 
 ### C. 看得清、能纠正的排版审阅
 
@@ -78,7 +78,7 @@
 
 **明确限度**：第一版不支持在预览中逐字改 OCR 正文；识别错误可保留原件，应用后的可编辑文本走现有编辑能力。不得宣传为“完整识别纠错编辑器”。放大预览不能只把低清位图拉伸：先核查现有真实渲染图分辨率，不足时仅为选中的候选补按需渲染，限制资源并在失效/关闭时释放。
 
-**落点**：[面板](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_panel.dart)、[审阅视图](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_view.dart)、[ViewModel](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_session_view_model.dart)、[真实接线](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_real_wiring.dart)、[语义纠错](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/correction/semantic_correction.dart)。UI 优先用现有主题、间距与组件。
+**落点**：[面板](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_panel.dart)、[审阅视图](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/views/smart_layout_session_view.dart)、[ViewModel](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_session_view_model.dart)、[真实接线](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/session/smart_layout_real_wiring.dart)、[语义纠错](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/correction/semantic_correction.dart)。UI 优先用现有主题、间距与组件。
 
 ### D. 等待、失败恢复与实测提速
 
@@ -93,7 +93,7 @@
 
 **不做**：新流式协议、任务队列、后台跨会话任务、全套可观测平台、自动多模型路由；也不默认更换模型或进一步拉长现有 180s/130s 操作/请求超时。
 
-**落点**：[pipeline](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart)、[repository](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/smart_layout/recognition/recognition_repository.dart)、C 的状态展示；仅在数据证明需要时调整 [服务端 V3](D:/Program/HarmonyOS/2024-se-17/FlowMuse-Server/internal/layoutrecognitionv3)。
+**落点**：[pipeline](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/recognition/recognition_pipeline.dart)、[repository](../../../FlowMuse-App/lib/features/whiteboard/smart_layout/recognition/recognition_repository.dart)、C 的状态展示；仅在数据证明需要时调整 [服务端 V3](../../../FlowMuse-Server/internal/layoutrecognitionv3)。
 
 ### E. 两份可编辑场景示例
 
@@ -103,7 +103,7 @@
 
 **完成标准**：从入口两步内进入可编辑示例；离线可打开与书写；保存重开有效；重复创建互不影响。写入中途失败不留下标为成功的空壳，不覆盖用户笔记。AI 未配置或不可用时显示实际原因，本地内容仍可继续编辑。
 
-**落点**：[资料库 UI](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/library/widgets/library_content.dart)、[现有创建 API](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/library/repositories/library_repository.dart)、[Scene 保存 API](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/repositories/whiteboard_scene_repository.dart)。不新增数据库表。
+**落点**：[资料库 UI](../../../FlowMuse-App/lib/features/library/widgets/library_content.dart)、[现有创建 API](../../../FlowMuse-App/lib/features/library/repositories/library_repository.dart)、[Scene 保存 API](../../../FlowMuse-App/lib/features/whiteboard/repositories/whiteboard_scene_repository.dart)。不新增数据库表。
 
 ### F. AI 结果回看来源（可选）
 
@@ -113,7 +113,7 @@
 
 **完成标准**：选区与 PDF 两条路径能定位；页面/元素被删除或上下文失效时说明无法定位，不跳错页；定位不修改笔记、不重新请求模型。旧附件仍可使用。第一版不承诺重开应用后的永久链接、跨笔记全库索引、逐句引用或 RAG。
 
-**落点**：[捕获函数](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/ai_assistant/repositories/visual_attachment_capture.dart)、[附件模型](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart)、[助手面板](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/ai_assistant/views/ai_agent_dialog.dart)、[白板宿主](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart)。不变更识别或协作协议。
+**落点**：[捕获函数](../../../FlowMuse-App/lib/features/whiteboard/ai_assistant/repositories/visual_attachment_capture.dart)、[附件模型](../../../FlowMuse-App/lib/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart)、[助手面板](../../../FlowMuse-App/lib/features/whiteboard/ai_assistant/views/ai_agent_dialog.dart)、[白板宿主](../../../FlowMuse-App/lib/features/whiteboard/views/whiteboard_page.dart)。不变更识别或协作协议。
 
 ## 4. 其他方向为什么暂不排进去
 
@@ -136,7 +136,7 @@
 
 ## 6. 验证只保留必要内容
 
-**开发中**：只跑受影响测试目录；对已确认缺陷补最小可复现测试，复用现有测试设施。B 的实际平板场景从 [既有回归](D:/Program/HarmonyOS/2024-se-17/FlowMuse-App/test/features/whiteboard/smart_layout/recognition/tablet_scene_repro_test.dart)扩展，不能把 fake transport 回放叫在线实测。
+**开发中**：只跑受影响测试目录；对已确认缺陷补最小可复现测试，复用现有测试设施。B 的实际平板场景从 [既有回归](../../../FlowMuse-App/test/features/whiteboard/smart_layout/recognition/tablet_scene_repro_test.dart)扩展，不能把 fake transport 回放叫在线实测。
 
 ```powershell
 Set-Location 'D:\Program\HarmonyOS\2024-se-17\FlowMuse-App'
