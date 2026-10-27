@@ -7,6 +7,7 @@
 | 内容 | 唯一维护入口 |
 | --- | --- |
 | 产品与启动 | [仓库首页](../README.md)、[客户端](../FlowMuse-App/README.md)、[服务端](../FlowMuse-Server/README.md) |
+| 源码授权与第三方来源 | [项目许可](../LICENSE)、[第三方声明](../THIRD_PARTY_NOTICES.md)、[依赖核对](研发记录/third_party/2026-10-27-dependency-license-inventory.md) |
 | 功能、边界与演进 | [项目需求](项目说明/项目需求.md)、[决赛路线图与进度](研发记录/plans/2026-10-24-finals-product-optimization-plan.md) |
 | 产品价值与验证假设 | [定位与应用价值](项目说明/市场分析与商业价值.md) |
 | 架构与兼容 | [前端架构](技术设计/前端架构.md)、[架构约束](项目说明/架构约束.md)、[数据模型](技术设计/数据模型.md) |

@@ -1,1 +1,4 @@
 FlowMuse-App/android/app/src/main/assets/speech/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+# Flutter splits multi-component notices using LF-only separators.
+FlowMuse-App/NOTICES text eol=lf
+FlowMuse-Server/NOTICES text eol=lf

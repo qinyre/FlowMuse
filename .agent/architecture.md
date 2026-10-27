@@ -14,7 +14,7 @@ FlowMuse 是以手写与画布为载体的跨平台协作笔记应用，系统�
 
 | 层级 | 组件 | 职责 |
 |------|------|------|
-| 客户端 | `FlowMuse-App`(Flutter 前端) | 面向 Android / iOS / macOS / Windows / Web / 鸿蒙 6 端;提供本地 SQLite 离线优先、自研编辑器内核、E2E 加密协作客户端 |
+| 客户端 | `FlowMuse-App`(Flutter 前端) | 面向 Android / iOS / macOS / Windows / Web / 鸿蒙 6 端;提供本地 SQLite 离线优先、基于 MIT markdraw 演进的编辑器内核、E2E 加密协作客户端 |
 | 通信 | HTTP REST + Socket.IO(WebSocket) | HTTP 承载账户、识别、快照等请求;Socket.IO 承载实时协作消息 |
 | 服务端 | `FlowMuse-Server`(Go 后端) | 账户、协作、社交及识别；白板协作仅处理密文，私聊与识别另有明文处理边界 |
 | 基础设施 | PostgreSQL 17 / MinIO / Mailpit | PostgreSQL 存用户与房间元数据;MinIO 存加密快照与图片;Mailpit 用于开发环境注册邮件 |
@@ -57,7 +57,7 @@ FlowMuse 是以手写与画布为载体的跨平台协作笔记应用，系统�
 
 | 子模块 | 职责 |
 |--------|------|
-| `editor_core/` | 自研编辑器内核(对外名 **markdraw**),Excalidraw 风格 |
+| `editor_core/` | 基于 MIT markdraw 演进的编辑器内核，兼容 Excalidraw 格式 |
 | `collaboration/` | 端到端加密实时协作(AES-GCM + Socket.IO + LWW 合并) |
 | `ink_recognition/` | 手写识别(HTTP 调后端) |
 | `pdf_note_import/` | PDF 作为白板背景导入 |

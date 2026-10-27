@@ -26,6 +26,14 @@ Flutter 应用，包含本地资料库、Markdraw 编辑器、加密协作、PDF
 
 前两个地址优先读取 `--dart-define`，其次为随包 `app.env`。后两个是编译期开关，普通构建默认开启；可显式传入 `--dart-define=FLOWMUSE_LAYERED_WET_INK=false` 或 `--dart-define=FLOWMUSE_LIVE_INK_V2=false` 做关闭对照。参与测试的 Web、原生客户端仍需核对配置及协议能力。
 
+## 源码与发行许可
+
+原创部分适用仓库根的 [FlowMuse 源码使用许可](../LICENSE)，商业二次利用和将软件作为作品参赛需书面授权；第三方代码及用户内容的权利边界见[第三方声明](../THIRD_PARTY_NOTICES.md)。内置编辑器源自 MIT 许可的 markdraw，并由本项目持续修改维护。
+
+发行时保留 `NOTICES`。Flutter 会收集本包 `NOTICES` 及各依赖的许可，写入 App/Web 的 `NOTICES` / `NOTICES.Z`；设置中的“软件与第三方许可”可查看。它包含完整的原创许可、markdraw、字体、内置 KaTeX 和 Web ZXing 通知，不将它们统一改为受限许可。实际语音权重、原生 SDK 与预编译库仍须按第三方声明核对来源和再分发权利，通知不能替代授权证明。
+
+修改根 `LICENSE` 或更新依赖/内置材料时，同步本包通知中的相应文本并核对原许可；不要清空 Flutter 自动收集的依赖许可。该政策适用于随附它的新版本，不能据此追溯变更旧发行版。
+
 ## 本地开发与检查
 
 ```sh

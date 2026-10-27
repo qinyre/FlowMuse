@@ -1614,7 +1614,7 @@ class _OtherSettingsSectionState extends State<_OtherSettingsSection> {
               ),
               ListTile(
                 leading: const Icon(LucideIcons.scrollText),
-                title: const Text('开源许可'),
+                title: const Text('软件与第三方许可'),
                 trailing: const Icon(LucideIcons.chevronRight, size: 18),
                 onTap: () {
                   showLicensePage(
