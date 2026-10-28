@@ -14,5 +14,6 @@ RUN go build -o /out/flowmuse-collab-server ./cmd/flowmuse-collab-server
 FROM alpine:3.22
 WORKDIR /app
 COPY --from=builder /out/flowmuse-collab-server /app/flowmuse-collab-server
+COPY NOTICES /app/NOTICES
 EXPOSE 48931
 ENTRYPOINT ["/app/flowmuse-collab-server"]

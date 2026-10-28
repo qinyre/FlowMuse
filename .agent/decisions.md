@@ -66,7 +66,7 @@ static Future<void> _safeAddColumn(db, table, column, type) async {
 
 ### 背景
 
-FlowMuse 的白板内核自研(对外名 markdraw),但产品定位要求与 Excalidraw 生态互通(导入/导出/协作)。
+FlowMuse 的白板内核基于 MIT 许可的 markdraw 内置并持续演进,但产品定位要求与 Excalidraw 生态互通(导入/导出/协作)。
 
 ### 决策
 

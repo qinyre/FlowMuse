@@ -184,3 +184,9 @@ V3 对已实测支持的 `doubao-seed-2-1-turbo-260628` 型号发送 `reasoning_
 `FLOWMUSE_SOCIAL_INVITATIONS_ENABLED` 默认 `false`；与总开关同时开启后，`/api/social/me` 返回 `invitations=true` 并开放设备公钥、邀请信封和状态接口。客户端登录后自动准备设备，普通邀请使用已鉴权的好友设备目录，无需手动交换安全卡；独立设备核验保留为可选操作，云端仍不保存设备私钥或白板明文密钥。支持接受、拒绝、撤销、新设备补发，真实加入房间后才记录 joined。迁移扩展 `users`、`room_invites` 与 `direct_messages`，新增设备/信封表，保留原有数据。
 
 2026-09-23 已按用户要求在生产启用两个开关，Web/API 已部署。发布版本、备份与检查结果见 [上线记录](../docs/研发记录/research/2026-09-23-social-deployment.md)；跨端与鸿蒙验收范围见 [阶段验证记录](../docs/研发记录/research/2026-09-23-social-validation.md)。
+
+## 源码授权与发行通知
+
+有权许可的原创部分采用仓库根的 [PolyForm Noncommercial 1.0.0](../LICENSE)，允许其规定的非商业使用、修改和再分发，超出范围的商业使用需另行授权；不附加统一参赛限制。第三方依赖、已有授权及普通工具使用补充许可见[第三方声明](../THIRD_PARTY_NOTICES.md)。
+
+发布独立服务端二进制时一并携带 `NOTICES`；Dockerfile 将该文件复制至 `/app/NOTICES`。更新根许可、Go 版本、依赖或本地替换时，同步其对应许可文本，核对 `go.mod`/`go.sum`、SDK 和实际构建目标。该文件不替代基础镜像、系统组件及外部服务自己的许可。
