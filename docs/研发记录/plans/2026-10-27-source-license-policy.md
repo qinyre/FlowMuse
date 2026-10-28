@@ -53,3 +53,14 @@
 参考：[官方正文](https://github.com/polyformproject/polyform-licenses/blob/1.0.0/PolyForm-Noncommercial-1.0.0.md)、[许可证维护规则](https://github.com/polyformproject/polyform-licenses#license)、[SPDX 标识](https://spdx.org/licenses/PolyForm-Noncommercial-1.0.0.html)。PolyForm 要求修改其许可证时去除其名称和网址，因此本轮保持正文原样，中文说明与补充授权在正文之外单独标明。
 
 验证：根文件与下载的官方原文逐字节一致，SHA-256 为 `c0ea4a896d2c8c394b29f9427589996db826cd501c512279ff0ed3ef48fabbe5`；App/Server 通知的第三方段落与上一提交逐段一致。Flutter SDK 实际收集到标准许可、Required Notice 和独立补充许可；新增链接、HTML 锚点及 diff 检查通过。未改动应用逻辑、测试、依赖或二进制，不新增 CI 任务，未触发发布。采用现成文本减少自定义维护，但不能消除上文记录的权属与来源缺口。
+
+## 发布记录（2026-10-28）
+
+- 用户要求推送、部署并提交 PR。分支已推送，13:44（北京时间）完成正式 Web 与官网用户协议更新；构建源为 `ef91d8c9258bc858acf92eb2e617ddde4b8e1284`，发布 ID `license-20261028-ef91d8c`。本节及截图是部署后的记录，不改变已发布应用代码。
+- Web 按客户端 README 使用正式 API/分享域名、根路径、本地 CanvasKit、禁用离线 Service Worker，显式开启湿墨分层和实时墨迹 V2。构建与预压缩成功，Web 启动脚本 2 项、预压缩脚本 1 项测试通过。
+- 公网版本、资料库入口、主脚本、完整 NOTICES、扫码库及许可、三套 UI 字体/OFL、CanvasKit JS/Wasm、用户协议和 API 健康共 14 项检查通过；应用资源的哈希与构建产物一致，缓存策略为 no-cache。主脚本 SHA-256 为 `cbe59aa28b6e6bbf96863c6a4c107efd2c4dbddfadc6ca4ea560096b4414737f`，Web NOTICES 为 `f551b6961f7759a4a7430f2ba561f6245ff5ec79965e064adc6763c57a5b9e6f`。
+- [官网用户协议](https://flowmuse.cloud/user-agreement/)按本次已提交正文部署，SHA-256 为 `e4573a99e12e80ea9d0c497d5a23b401b7e6db6ea62d9a6f9c4af19d2586ac0c`；保留原站点结构，不追溯撤销历史授权。
+- 后端本轮只同步运行容器与服务器源码目录中的 NOTICES，并在服务器构建文件中补入对应 COPY。通知 SHA-256 为 `8048c8e08acf573470920cb9ef2bcb1944957122184b2ee47321524fa02434ca`。容器 ID、启动时间与 Go 二进制哈希前后相同，协作进程没有重启；未构建或切换后端业务镜像，未修改数据库、配置密钥或数据卷。
+- 使用 Edge 的全新访客上下文完成启动、进入“软件与第三方许可”、选择项目组件并显示 PolyForm 正文，未捕获页面异常。浏览器验证只检查本次授权入口，不宣称新增协作性能或实机手写验收；[线上入口截图](../images/source-license-settings.png)随 PR 提供。
+- 服务器保留必要的原配置、原用户协议和上一 Web 根目录用于回退；本地及服务器临时上传归档、远端临时脚本已清除，编译缓存与验证日志保留在忽略的 `FlowMuse-App/build/license-release/`。
+- 安卓和鸿蒙安装包本轮未更新。待发出 PR 后停止，不轮询审查或自动合并。
