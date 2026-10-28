@@ -1370,18 +1370,32 @@ class _AttributionSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
+          HoverTooltip(
+            message: attributionLabel,
+            showOnLongPress: true,
             child: Text(
               attributionLabel,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-          TextButton.icon(
-            onPressed: onPressed,
-            icon: const Icon(Icons.center_focus_strong, size: 16),
-            label: Text(actionLabel),
+          HoverTooltip(
+            message: actionLabel,
+            showOnLongPress: true,
+            child: TextButton.icon(
+              onPressed: onPressed,
+              style: TextButton.styleFrom(alignment: Alignment.centerLeft),
+              icon: const Icon(Icons.center_focus_strong, size: 16),
+              label: Text(
+                actionLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
         ],
       ),
