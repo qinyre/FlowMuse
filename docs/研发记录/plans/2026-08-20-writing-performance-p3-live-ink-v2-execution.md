@@ -25,7 +25,7 @@ effectiveLiveInk = FLOWMUSE_LAYERED_WET_INK
 
 ## 3. Task P3-0A：服务端专用事件和 ready
 
-**负责人/复核：** Enchograph / Hongyu Chen；**估时：** 0.75d；**前置：** P0-4。
+**负责人/复核：** 协作服务开发 / 安全审查；**估时：** 0.75d；**前置：** P0-4。
 
 **执行状态：** 已完成；新增独立 ready/live 事件，服务端校验房间归属、外层类型、12-byte IV 与 64KiB ciphertext，并以服务端 socketId 构造 volatile 下行帧。真实 Engine.IO v4 polling 集成测试已覆盖 connect、join、ready、二进制附件转发，以及接收端不可写时不进入缓冲区。
 
@@ -52,7 +52,7 @@ live-ink-ready   server → joined socket，普通独立事件
 
 ## 4. Task P3-0B：客户端开关、transport 分流和握手
 
-**负责人/复核：** Enchograph / qinyre；**估时：** 1d；**前置：** P0-4。
+**负责人/复核：** 协作服务开发 / 客户端开发；**估时：** 1d；**前置：** P0-4。
 
 **执行状态：** 已完成；增加 effective flag、独立 live stream/send API 与 1 秒 ready 门禁；连接、重连、换房和断开均清零版本，Socket.IO 直接使用 `volatile.emit` 且不可写时不缓冲。
 
@@ -79,7 +79,7 @@ live-ink-ready   server → joined socket，普通独立事件
 
 ## 5. Task P3-1：加密 INK_CHUNK 模型
 
-**负责人/复核：** Enchograph / Hongyu Chen；**估时：** 0.75d；**前置：** P0-4。
+**负责人/复核：** 协作服务开发 / 安全审查；**估时：** 0.75d；**前置：** P0-4。
 
 **执行状态：** 已完成；`INK_CHUNK` 复用现有大写消息包络与 AES-GCM，严格验证 v2、UTF-8 ID、绝对索引/坐标、1～64 点、压力及固定样式，并支持按绝对索引去重乱序重叠点。
 
@@ -115,7 +115,7 @@ live-ink-ready   server → joined socket，普通独立事件
 
 ## 6. Task P3-2：发送端 delta、冻结模式和背压
 
-**负责人/复核：** qinyre / Enchograph；**估时：** 1.25d；**前置：** P1-1、P3-0B、P3-1。
+**负责人/复核：** 客户端开发 / 协作服务开发；**估时：** 1.25d；**前置：** P1-1、P3-0B、P3-1。
 
 **执行状态：** 已完成；PointerDown 按笔冻结 V1/V2，20Hz 聚合发送最近三次实际周期的最多 64 点窗口，并以单笔 1 in-flight + 1 覆盖式 pending 控制背压；PointerUp 在清点前交出最后 accepted 点且不等待可靠 final，Cancel/切工具/dispose/离房均清理 sender。真机时延仍按既定条件门禁延期。
 
@@ -144,7 +144,7 @@ live-ink-ready   server → joined socket，普通独立事件
 
 ## 7. Task P3-3A：独立接收调度和公平队列
 
-**负责人/复核：** Enchograph / qinyre；**估时：** 1d；**前置：** P3-0B、P3-1。
+**负责人/复核：** 协作服务开发 / 客户端开发；**估时：** 1d；**前置：** P3-0B、P3-1。
 
 **执行状态：** 已完成；live 帧进入独立异步解密/校验 scheduler，同时仅解密 1 帧、每 sender 覆盖保留最新密文、最多 8 个 pending sender，并按 sender 轮转且每 2ms 主动 yield；坏密文和 sender 上限只聚合计数，不进入可靠 Scene 队列。
 
@@ -162,7 +162,7 @@ live-ink-ready   server → joined socket，普通独立事件
 
 ## 8. Task P3-3B：RemoteWetInkStore 与有界 Painter
 
-**负责人/复核：** qinyre / Tiax；**估时：** 1.5d；**前置：** P1-2、P3-1、P3-3A。
+**负责人/复核：** 客户端开发 / 测试与性能验证；**估时：** 1.5d；**前置：** P1-2、P3-1、P3-3A。
 
 **执行状态：** 已完成；RemoteWetInkStore 固定执行 8 sender、64 stroke、16384 点/笔、65536 点/房间、5s TTL 和 10s completed cache，并以房间生命周期 finalized set 阻止 final 后复活；远端画层以 64 点为基础块做最多 8 层的二进制合并，同块 segment 按绝对索引合并、活跃 Picture 按最小绝对索引播放、跨块连续边由后到点携带锚点，冻结快照持久复用、Picture 不嵌套，活动 tail 最多 127 点，final 到达先清湿墨再进入 Scene。
 
@@ -201,7 +201,7 @@ P3-3B 创建并独占房间生命周期的 `finalizedStrokeIds`：初始 Scene �
 
 ## 9. Task P3-4：服务端外层安全边界
 
-**负责人/复核：** Enchograph / Hongyu Chen；**估时：** 1d；**前置：** P3-0A、P3-1。
+**负责人/复核：** 协作服务开发 / 安全审查；**估时：** 1d；**前置：** P3-0A、P3-1。
 
 **执行状态：** 已完成；live 事件先校验当前房间成员，再以标准库令牌桶执行每 socket 60/s、burst 120 和每 room 300/s、burst 600；IV、ciphertext 与不安全 `[]any` 在复制和广播前拒绝，leave/disconnect/end-room 同步清理 bucket，可靠消息与 Presence 不受限流影响。
 
@@ -213,7 +213,7 @@ P3-3B 创建并独占房间生命周期的 `finalizedStrokeIds`：初始 Scene �
 
 ## 10. Task P3-5：故障、兼容和负载门禁
 
-**负责人/复核：** Tiax / Enchograph；**估时：** 1.5d；**前置：** P3-0A/0B/1/2/3A/3B/4 全部完成。
+**负责人/复核：** 测试与性能验证 / 协作服务开发；**估时：** 1.5d；**前置：** P3-0A/0B/1/2/3A/3B/4 全部完成。
 
 **执行状态：** 可在当前环境完成的部分已完成；新增固定 seed 的 drop/duplicate/reorder/delay 与断线故障注入，自动覆盖 flag/legacy、final 先到与迟到防复活、N 矩阵线性约束、5000 finalized ID 和真实 repository→store→painter Profile 入口。可靠 queue-wait 样本记录接收端入队瞬间是否存在 live in-flight/pending，同轮 no-live 基线替代可手填的外部 P1 值；driver 写出 raw 后对非唯一真机、模拟器或 dirty checkout 以非零退出阻断。当前无真机，且 Windows 缺少 Visual Studio 工具链、Web 不支持 integration test，因此三组 Profile 命令及 5 分钟真机阈值保持为发布前延期门禁，不生成伪造性能结论。
 

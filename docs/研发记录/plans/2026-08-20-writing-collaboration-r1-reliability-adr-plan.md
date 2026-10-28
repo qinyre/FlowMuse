@@ -13,7 +13,7 @@ R1 与 P0/P1/P3 无实现依赖；只有产品明确批准可靠性项目才启�
 
 ## 2. Task R1-0：现状和威胁模型
 
-**负责人/复核：** Hongyu Chen / Enchograph；**估时：** 0.5d。
+**负责人/复核：** 安全审查 / 协作服务开发；**估时：** 0.5d。
 
 **执行状态：** `not_triggered`；尚未获得产品对“最终协作操作可靠交付”独立项目的明确批准，按硬约束不启动 ADR 工作。
 
@@ -35,7 +35,7 @@ R1 与 P0/P1/P3 无实现依赖；只有产品明确批准可靠性项目才启�
 
 ## 3. Task R1-1：提交语义 ADR
 
-**负责人/复核：** Hongyu Chen / Enchograph；**估时：** 0.5～1d；**前置：** R1-0。
+**负责人/复核：** 安全审查 / 协作服务开发；**估时：** 0.5～1d；**前置：** R1-0。
 
 **执行状态：** `not_triggered`；R1-0 未启动，未修改 ACK、wire 语义或 `.agent/decisions.md`。
 
@@ -57,7 +57,7 @@ ADR 至少比较：A 保持现状；B 客户端 outbox+服务端接收 ACK；C �
 
 ## 4. Task R1-2：不透明 envelope/AAD/幂等 POC（条件）
 
-**负责人/复核：** Enchograph / Hongyu Chen；**timebox：** 0.5～2d；**前置：** ADR 候选需要服务端去重。
+**负责人/复核：** 协作服务开发 / 安全审查；**timebox：** 0.5～2d；**前置：** ADR 候选需要服务端去重。
 
 **执行状态：** `not_triggered`；没有已批准 ADR 候选与冻结边界，不创建 POC 或生产类型。
 
@@ -90,7 +90,7 @@ Pop-Location
 
 ## 5. Task R1-3：journal/checkpoint 设计（条件，仅文档）
 
-**负责人/复核：** Hongyu Chen / Enchograph；**估时：** 0.5～1d；**前置：** ADR 选择 durable 服务端语义且 R1-2 Go。
+**负责人/复核：** 安全审查 / 协作服务开发；**估时：** 0.5～1d；**前置：** ADR 选择 durable 服务端语义且 R1-2 Go。
 
 **执行状态：** `not_triggered`；没有 durable 服务端语义决策。
 
@@ -98,7 +98,7 @@ Pop-Location
 
 ## 6. Task R1-4：客户端 outbox 设计（条件，仅文档）
 
-**负责人/复核：** Hongyu Chen / 任逸青；**估时：** 0.5～1d；**前置：** ADR **明确选择客户端 outbox/retry**，并且 R1-2 Go（若使用外层幂等 ID）。
+**负责人/复核：** 安全审查 / 文档复核；**估时：** 0.5～1d；**前置：** ADR **明确选择客户端 outbox/retry**，并且 R1-2 Go（若使用外层幂等 ID）。
 
 **执行状态：** `not_triggered`；没有 outbox/retry 决策，生产客户端保持现状。
 
@@ -108,7 +108,7 @@ Pop-Location
 
 ## 7. Task R1-5：确定性故障规格（条件，仅测试规范）
 
-**负责人/复核：** Hongyu Chen / 任逸青；**估时：** 0.5d；**前置：** ADR 批准。
+**负责人/复核：** 安全审查 / 文档复核；**估时：** 0.5d；**前置：** ADR 批准。
 
 **执行状态：** `not_triggered`；ADR 未批准；P3 的 live-ink 故障夹具不反向扩展最终提交语义。
 

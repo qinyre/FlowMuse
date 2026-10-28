@@ -38,44 +38,44 @@ R1 与性能主线无实现依赖，单独审批。
 
 P3-0A、P3-0B、P3-1 可在 P0 完成后并行，P3-4 等 P3-0A/P3-1；P3-2 不得在 P1-1 前修改 `FreedrawTool`/Controller，P3-3B 不得在 P1-2 前接入 `EditorCanvas`。
 
-## 4. 执行身份与叶子任务分配
+## 4. 职责与叶子任务分配
 
-以下身份来自仓库提交记录，是本计划的明确初始分配；项目负责人可在开工前以一次计划变更整体替换，但不得用 `TBD` 开工。每个任务的复核人必须不是作者。
+公开版本按岗位保留原有分工，实际负责人由项目组内部确认；每个任务仍须由不同成员分别实施和复核。
 
-| 身份 | 本计划职责 |
+| 岗位 | 本计划职责 |
 | --- | --- |
-| `qinyre` | Flutter 性能、输入和渲染 |
-| `Enchograph` | 协作协议、Flutter transport、Go hub |
-| `Tiax` | 真机自动化、跨平台回归、负载测试 |
-| `任逸青` | 研究记录、验收证据和文档复核 |
-| `Hongyu Chen` | 密码边界、可靠性交付和安全复核 |
+| `客户端开发` | Flutter 性能、输入和渲染 |
+| `协作服务开发` | 协作协议、Flutter transport、Go hub |
+| `测试与性能验证` | 真机自动化、跨平台回归、负载测试 |
+| `文档复核` | 研究记录、验收证据和文档复核 |
+| `安全审查` | 密码边界、可靠性交付和安全复核 |
 
-| 叶子任务 | 前置 | 估时 | 唯一负责人 | 非作者复核人 |
+| 叶子任务 | 前置 | 估时 | 责任岗位 | 独立复核岗位 |
 | --- | --- | ---: | --- | --- |
-| P0-0 runner | 无 | 1d | Tiax | qinyre |
-| P0-1 probe | P0-0 | 1d | qinyre | Tiax |
-| P0-2 timing/report schema | P0-0 | 0.75d | qinyre | Tiax |
-| P0-3 fixture | P0-0 | 0.75d | Tiax | qinyre |
-| P0-3B 2/5 人协作 CPU 基线 | P0-0/P0-2/P0-3 | 1d | Enchograph | qinyre |
-| P0-4 基线与冻结门槛 | P0-0/1/2/3/3B | 0.5d | Tiax | 任逸青 |
-| P1-0 开关 | P0-4 | 0.25d | qinyre | Tiax |
-| P1-1 活动状态 | P1-0 | 1d | qinyre | Tiax |
-| P1-2 本地画层 | P1-1 | 1.5d | qinyre | Tiax |
-| P1-3/G1/G2 条件优化判定或实现 | P1-2，同一 fixture/门槛 | 0.25～2d/项 | qinyre | Tiax |
-| P1-4 Timer/日志 | P0-4 | 0.5d | Enchograph | qinyre |
-| P3-0A 服务端事件 | P0-4 | 0.75d | Enchograph | Hongyu Chen |
-| P3-0B 开关/transport/ready | P0-4 | 1d | Enchograph | qinyre |
-| P3-1 模型/校验 | P0-4 | 0.75d | Enchograph | Hongyu Chen |
-| P3-2 delta sender | P1-1/P3-0B/P3-1 | 1.25d | qinyre | Enchograph |
-| P3-3A 接收调度 | P3-0B/P3-1 | 1d | Enchograph | qinyre |
-| P3-3B remote store/painter | P1-2/P3-1/P3-3A | 1.5d | qinyre | Tiax |
-| P3-4 安全边界 | P3-0A/P3-1 | 1d | Enchograph | Hongyu Chen |
-| P3-5 故障/兼容/负载 | 全部 P3 叶子 | 1.5d | Tiax | Enchograph |
-| P2-0/1/2 | P1 completed 且门禁触发 | 1.5～2.5d | qinyre | Tiax |
-| P2-3 Pen Kit spike | P2-1/2 后仍触发 | ≤2d | Tiax | qinyre |
-| R1-0/1 ADR | 独立立项 | 1～1.5d | Hongyu Chen | Enchograph |
-| R1-2 POC | ADR 候选要求 | 0.5～2d | Enchograph | Hongyu Chen |
-| R1-3/4/5 条件设计 | ADR 选择对应语义 | 1～2d | Hongyu Chen | 任逸青 |
+| P0-0 runner | 无 | 1d | 测试与性能验证 | 客户端开发 |
+| P0-1 probe | P0-0 | 1d | 客户端开发 | 测试与性能验证 |
+| P0-2 timing/report schema | P0-0 | 0.75d | 客户端开发 | 测试与性能验证 |
+| P0-3 fixture | P0-0 | 0.75d | 测试与性能验证 | 客户端开发 |
+| P0-3B 2/5 人协作 CPU 基线 | P0-0/P0-2/P0-3 | 1d | 协作服务开发 | 客户端开发 |
+| P0-4 基线与冻结门槛 | P0-0/1/2/3/3B | 0.5d | 测试与性能验证 | 文档复核 |
+| P1-0 开关 | P0-4 | 0.25d | 客户端开发 | 测试与性能验证 |
+| P1-1 活动状态 | P1-0 | 1d | 客户端开发 | 测试与性能验证 |
+| P1-2 本地画层 | P1-1 | 1.5d | 客户端开发 | 测试与性能验证 |
+| P1-3/G1/G2 条件优化判定或实现 | P1-2，同一 fixture/门槛 | 0.25～2d/项 | 客户端开发 | 测试与性能验证 |
+| P1-4 Timer/日志 | P0-4 | 0.5d | 协作服务开发 | 客户端开发 |
+| P3-0A 服务端事件 | P0-4 | 0.75d | 协作服务开发 | 安全审查 |
+| P3-0B 开关/transport/ready | P0-4 | 1d | 协作服务开发 | 客户端开发 |
+| P3-1 模型/校验 | P0-4 | 0.75d | 协作服务开发 | 安全审查 |
+| P3-2 delta sender | P1-1/P3-0B/P3-1 | 1.25d | 客户端开发 | 协作服务开发 |
+| P3-3A 接收调度 | P3-0B/P3-1 | 1d | 协作服务开发 | 客户端开发 |
+| P3-3B remote store/painter | P1-2/P3-1/P3-3A | 1.5d | 客户端开发 | 测试与性能验证 |
+| P3-4 安全边界 | P3-0A/P3-1 | 1d | 协作服务开发 | 安全审查 |
+| P3-5 故障/兼容/负载 | 全部 P3 叶子 | 1.5d | 测试与性能验证 | 协作服务开发 |
+| P2-0/1/2 | P1 completed 且门禁触发 | 1.5～2.5d | 客户端开发 | 测试与性能验证 |
+| P2-3 Pen Kit spike | P2-1/2 后仍触发 | ≤2d | 测试与性能验证 | 客户端开发 |
+| R1-0/1 ADR | 独立立项 | 1～1.5d | 安全审查 | 协作服务开发 |
+| R1-2 POC | ADR 候选要求 | 0.5～2d | 协作服务开发 | 安全审查 |
+| R1-3/4/5 条件设计 | ADR 选择对应语义 | 1～2d | 安全审查 | 文档复核 |
 
 ## 5. 实现所有权边界
 
