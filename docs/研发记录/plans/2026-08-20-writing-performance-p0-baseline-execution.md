@@ -26,7 +26,7 @@ P0 必须在固定提交 SHA、真机 Profile、固定 Dart fixture 和固定算
 
 ## 3. Task P0-0：真机 Profile runner
 
-**负责人/复核：** Tiax / qinyre；**估时：** 1d；**前置：** 无。
+**负责人/复核：** 测试与性能验证 / 客户端开发；**估时：** 1d；**前置：** 无。
 
 **执行状态：** runner、host driver、依赖和文档已实现；真机 Profile 运行与原始结果为 `deferred_device`。
 
@@ -55,7 +55,7 @@ Pop-Location
 
 ## 4. Task P0-1：ActivePreviewMetricsProbe
 
-**负责人/复核：** qinyre / Tiax；**估时：** 1d；**前置：** P0-0。
+**负责人/复核：** 客户端开发 / 测试与性能验证；**估时：** 1d；**前置：** P0-0。
 
 **执行状态：** 已实现并通过单元/Widget 测试；真机 Profile 数据仍按总约束记为 `deferred_device`。
 
@@ -83,7 +83,7 @@ Pop-Location
 
 ## 5. Task P0-2：FrameTiming、Timeline 与报告 schema
 
-**负责人/复核：** qinyre / Tiax；**估时：** 0.75d；**前置：** P0-0。
+**负责人/复核：** 客户端开发 / 测试与性能验证；**估时：** 0.75d；**前置：** P0-0。
 
 **执行状态：** 已实现并通过报告 schema、活动预览和协作仓库回归测试；真机 FrameTiming 结果为 `deferred_device`。
 
@@ -107,7 +107,7 @@ Pop-Location
 
 ## 6. Task P0-3：可打包的固定 fixture
 
-**负责人/复核：** Tiax / qinyre；**估时：** 0.75d；**前置：** P0-0。
+**负责人/复核：** 测试与性能验证 / 客户端开发；**估时：** 0.75d；**前置：** P0-0。
 
 **执行状态：** 已实现 5 类书写 recording 与 100/1000/5000 元素场景；确定性、modeler accepted 数、JSON round-trip 和真实编辑器 codec 加载测试通过。
 
@@ -125,7 +125,7 @@ fixture 使用编译进测试 bundle 的 Dart 常量/固定 seed 生成器，不
 
 ## 7. Task P0-3B：2/5 人协作 CPU 基线
 
-**负责人/复核：** Enchograph / qinyre；**估时：** 1d；**前置：** P0-0/P0-2/P0-3。
+**负责人/复核：** 协作服务开发 / 客户端开发；**估时：** 1d；**前置：** P0-0/P0-2/P0-3。
 
 **执行状态：** 真实 2/5 人 repository 内存流水线、分段 probe、100/1000 次正式场景和非 UI 报告已实现；缩短迭代的单元回归通过，完整 Profile 基线为 `deferred_device`。
 
@@ -146,7 +146,7 @@ fixture 使用编译进测试 bundle 的 Dart 常量/固定 seed 生成器，不
 
 ## 8. Task P0-4：基线、门槛与不可变证据
 
-**负责人/复核：** Tiax / 任逸青；**估时：** 0.5d；**前置：** P0-0/1/2/3/3B。
+**负责人/复核：** 测试与性能验证 / 文档复核；**估时：** 0.5d；**前置：** P0-0/1/2/3/3B。
 
 **执行状态：** 版本化 manifest 已冻结正式 fixture/hash/时长/场景 hash/刷新率目标及每笔 accepted 样本数；runner 使用设备实测刷新率，driver 完整扫描设备列表并要求唯一匹配真机。raw 携带 canonical final Scene，汇总器按 `--phase p0|p1` 独立 round-trip Scene、重算 canonical/semantic hash、Freedraw 数量、唯一 `(strokeEpoch,inputSeq)`、逐笔样本基数、覆盖率和帧覆盖。非真机测试已通过；所有真机数值保持 `not_measured/deferred_device`。
 

@@ -11,7 +11,7 @@
    "severity": "medium",
    "blocking": false,
    "location": "tasks/V3-004B/artifacts/change_control_drill.py:20-21",
-   "issue": "演练依赖 C:\\Users\\86184\\AppData\\Local\\Temp\\canonical_check.py（仓库外临时文件）提供 canonical_sha；Temp 清理或 fresh clone 重跑将 ImportError。〔执行者已修复：canonical 实现vendored 为 artifacts/canonical.py（对拍 benchmark-spec 内部 content_sha256 验证一致），演练自包含。〕"
+   "issue": "演练依赖 C:\\Users\\developer\\AppData\\Local\\Temp\\canonical_check.py（仓库外临时文件）提供 canonical_sha；Temp 清理或 fresh clone 重跑将 ImportError。〔执行者已修复：canonical 实现vendored 为 artifacts/canonical.py（对拍 benchmark-spec 内部 content_sha256 验证一致），演练自包含。〕"
   },
   {
    "id": "F2",
