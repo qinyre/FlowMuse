@@ -391,6 +391,10 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace>
         for (final c in state.conversations)
           ListTile(
             selected: _selected?.id == c.id,
+            selectedTileColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHigh,
+            selectedColor: Theme.of(context).colorScheme.onSurface,
             leading: AccountAvatar(
               label: c.person.name,
               avatarUrl: c.person.avatarUrl,
@@ -437,6 +441,12 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace>
       children: [
         for (final f in friends)
           ListTile(
+            selected:
+                !widget.inviteFriends && _selected?.id == f.conversationId,
+            selectedTileColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHigh,
+            selectedColor: Theme.of(context).colorScheme.onSurface,
             leading: AccountAvatar(
               label: f.person.name,
               avatarUrl: f.person.avatarUrl,

@@ -5,6 +5,8 @@ import 'package:flow_muse/features/social/widgets/conversation_panel.dart';
 import 'package:flow_muse/features/social/widgets/add_friend_dialog.dart';
 import 'package:flow_muse/features/social/widgets/invitation_actions.dart';
 import 'package:flow_muse/features/social/views/social_page.dart';
+import 'package:flow_muse/app/app_theme.dart';
+import 'package:flow_muse/app/app_theme_preset.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,6 +82,113 @@ const testPerson = SocialPerson(
 );
 
 void main() {
+  testWidgets('当前聊天对象在好友和消息列表中保持唯一选中背景，切换对象同步更新', (tester) async {
+    tester.view.physicalSize = const Size(1200, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const peers = [
+      testPerson,
+      SocialPerson(id: 'C', name: '小周', friendCode: 'JKLM2345NPQR'),
+    ];
+    final state = SocialState(
+      status: SocialStatus.ready,
+      me: const SocialMe(
+        person: SocialPerson(id: 'A', name: '我'),
+        unreadCount: 0,
+        pendingRequestCount: 0,
+        textMessages: true,
+      ),
+      friends: [
+        for (final p in peers)
+          SocialRelationship(
+            id: 'friend-${p.id}',
+            person: p,
+            requesterId: 'A',
+            clientRequestId: p.id,
+            status: 'accepted',
+            version: BigInt.one,
+            conversationId: 'chat-${p.id}',
+          ),
+      ],
+      conversations: [
+        for (final p in peers)
+          SocialConversation(
+            id: 'chat-${p.id}',
+            person: p,
+            canSend: true,
+            lastSeq: BigInt.zero,
+            readSeq: BigInt.zero,
+            unreadCount: 0,
+            updatedAt: 0,
+          ),
+      ],
+    );
+    Finder row(String name) =>
+        find.widgetWithText(ListTile, name).hitTestable();
+    void expectSelection(String selected, String other) {
+      final tile = tester.widget<ListTile>(row(selected));
+      expect(tile.selected, isTrue);
+      expect(
+        tile.selectedTileColor?.a,
+        greaterThan(0),
+        reason: '选中行需有可见背景，不能仅改文字颜色',
+      );
+      expect(tester.widget<ListTile>(row(other)).selected, isFalse);
+      expect(
+        tester
+            .widget<ConversationPanel>(find.byType(ConversationPanel))
+            .person
+            .name,
+        selected,
+      );
+    }
+
+    for (final preset in appThemePresets.where(
+      (p) => p.id == AppThemeId.day || p.id == AppThemeId.night,
+    )) {
+      await tester.pumpWidget(
+        ProviderScope(
+          key: ValueKey(preset.id),
+          overrides: [
+            socialSessionProvider.overrideWithValue((
+              userId: 'A',
+              token: 'test',
+            )),
+            socialViewModelProvider.overrideWith(() => TestInbox(state)),
+            for (final p in peers)
+              conversationViewModelProvider(
+                'chat-${p.id}',
+              ).overrideWith(() => TestChat('chat-${p.id}')),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.fromPreset(preset),
+            home: const Scaffold(body: SocialPage()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('好友 · 2'));
+      await tester.pumpAndSettle();
+      await tester.tap(row('小林'));
+      await tester.pumpAndSettle();
+      expectSelection('小林', '小周');
+      await tester.tap(row('小周'));
+      await tester.pumpAndSettle();
+      expectSelection('小周', '小林');
+      await tester.tap(find.widgetWithText(Tab, '消息'));
+      await tester.pumpAndSettle();
+      expectSelection('小周', '小林');
+      await tester.tap(row('小林'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('好友 · 2'));
+      await tester.pumpAndSettle();
+      expectSelection('小林', '小周');
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final width in [390.0, 1200.0]) {
     testWidgets('邀请好友在 $width 宽度直接选人，不需要打开聊天', (tester) async {
       tester.view.physicalSize = Size(width, 844);
