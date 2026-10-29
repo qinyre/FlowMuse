@@ -7,20 +7,31 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../app/app_router.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../../shared/widgets/app_shell.dart';
+import '../../../shared/widgets/app_motion.dart';
 import '../../../shared/widgets/right_page.dart';
 import '../../account/widgets/account_avatar.dart';
 import '../models/social_models.dart';
 import '../repositories/social_repository.dart';
 import '../view_models/social_view_model.dart';
+import '../view_models/social_notice_view_model.dart';
+import '../widgets/social_notice_settings.dart';
 import '../widgets/add_friend_dialog.dart';
 import '../widgets/conversation_panel.dart';
 import '../widgets/device_security_dialog.dart';
 import '../widgets/invitation_actions.dart';
 
 class SocialPage extends ConsumerWidget {
-  const SocialPage({super.key, this.onClose, this.inviteFriends = false});
+  const SocialPage({
+    super.key,
+    this.onClose,
+    this.inviteFriends = false,
+    this.initialConversationId,
+    this.initialTab = 0,
+  });
   final VoidCallback? onClose;
   final bool inviteFriends;
+  final String? initialConversationId;
+  final int initialTab;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,6 +39,15 @@ class SocialPage extends ConsumerWidget {
     return RightPageScaffold(
       title: inviteFriends ? '邀请好友' : '好友与消息',
       actions: [
+        if (!inviteFriends)
+          IconButton(
+            tooltip: '消息提醒设置',
+            icon: const Icon(LucideIcons.bell, size: 20),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => const SocialNoticeSettingsDialog(),
+            ),
+          ),
         if (!inviteFriends && state.me?.invitations == true)
           IconButton(
             tooltip: '我的设备安全',
@@ -83,6 +103,8 @@ class SocialPage extends ConsumerWidget {
                   key: ValueKey(ref.watch(socialSessionProvider)),
                   state: state,
                   inviteFriends: inviteFriends,
+                  initialConversationId: initialConversationId,
+                  initialTab: initialTab,
                 ),
       },
     );
@@ -94,16 +116,68 @@ class _SocialWorkspace extends ConsumerStatefulWidget {
     super.key,
     required this.state,
     required this.inviteFriends,
+    this.initialConversationId,
+    this.initialTab = 0,
   });
   final SocialState state;
   final bool inviteFriends;
+  final String? initialConversationId;
+  final int initialTab;
   @override
   ConsumerState<_SocialWorkspace> createState() => _SocialWorkspaceState();
 }
 
-class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
+class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace>
+    with SingleTickerProviderStateMixin {
   ({String id, SocialPerson person})? _selected;
   bool _busy = false;
+  late final TabController _tabs;
+  late final SocialNoticeActivity _noticeActivity;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(
+      length: 3,
+      initialIndex: widget.initialTab,
+      vsync: this,
+    );
+    _noticeActivity = ref.read(socialNoticeActivityProvider);
+    if (!widget.inviteFriends) {
+      _noticeActivity.inboxes[this] = (notice) {
+        if (!mounted ||
+            !TickerMode.valuesOf(context).enabled ||
+            !(ModalRoute.of(context)?.isCurrent ?? true)) {
+          return false;
+        }
+        final target = widget.state.conversations
+            .where((c) => c.id == notice.conversationId)
+            .firstOrNull;
+        if (!notice.friendRequest && target == null) return false;
+        setState(
+          () => _selected = target == null
+              ? null
+              : (id: target.id, person: target.person),
+        );
+        _tabs.animateTo(
+          notice.friendRequest ? 2 : 0,
+          duration: AppMotion.resolve(context, AppMotion.standard),
+        );
+        return true;
+      };
+    }
+    final target = widget.state.conversations
+        .where((c) => c.id == widget.initialConversationId)
+        .firstOrNull;
+    if (target != null) _selected = (id: target.id, person: target.person);
+  }
+
+  @override
+  void dispose() {
+    _noticeActivity.inboxes.remove(this);
+    _tabs.dispose();
+    super.dispose();
+  }
 
   void _open(String id, SocialPerson person) {
     if (id.isNotEmpty) setState(() => _selected = (id: id, person: person));
@@ -212,7 +286,7 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
                     state.friends.any((f) => f.conversationId == selection.id),
                 onBack: wide ? null : () => setState(() => _selected = null),
               );
-        final list = Column(
+        final listContent = Column(
           children: [
             if (state.me != null) SocialFriendCode(person: state.me!.person),
             if (state.error != null)
@@ -224,32 +298,31 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
                 ),
               ),
             Expanded(
-              child: DefaultTabController(
-                length: 3,
-                child: Column(
-                  children: [
-                    TabBar(
-                      isScrollable: true,
-                      tabAlignment: TabAlignment.start,
-                      tabs: [
-                        Tab(
-                          text:
-                              '消息${state.me?.unreadCount == 0 ? '' : ' · ${state.me?.unreadCount ?? 0}'}',
-                        ),
-                        Tab(text: '好友 · ${state.friends.length}'),
-                        Tab(
-                          text:
-                              '新的好友${state.me?.pendingRequestCount == 0 ? '' : ' · ${state.me?.pendingRequestCount ?? 0}'}',
-                        ),
-                      ],
-                    ),
-                    Expanded(
-                      child: TabBarView(
-                        children: [_conversations(), _friends(), _requests()],
+              child: Column(
+                children: [
+                  TabBar(
+                    controller: _tabs,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    tabs: [
+                      Tab(
+                        text:
+                            '消息${state.me?.unreadCount == 0 ? '' : ' · ${state.me?.unreadCount ?? 0}'}',
                       ),
+                      Tab(text: '好友 · ${state.friends.length}'),
+                      Tab(
+                        text:
+                            '新的好友${state.me?.pendingRequestCount == 0 ? '' : ' · ${state.me?.pendingRequestCount ?? 0}'}',
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabs,
+                      children: [_conversations(), _friends(), _requests()],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             Padding(
@@ -275,6 +348,11 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
               ),
             ),
           ],
+        );
+        // Keep tile ink above AppShell backgrounds and inside the message panel.
+        final list = Material(
+          type: MaterialType.transparency,
+          child: listContent,
         );
         return PopScope(
           canPop: wide || selection == null,
@@ -318,6 +396,10 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
         for (final c in state.conversations)
           ListTile(
             selected: _selected?.id == c.id,
+            selectedTileColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHigh,
+            selectedColor: Theme.of(context).colorScheme.onSurface,
             leading: AccountAvatar(
               label: c.person.name,
               avatarUrl: c.person.avatarUrl,
@@ -364,6 +446,12 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
       children: [
         for (final f in friends)
           ListTile(
+            selected:
+                !widget.inviteFriends && _selected?.id == f.conversationId,
+            selectedTileColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHigh,
+            selectedColor: Theme.of(context).colorScheme.onSurface,
             leading: AccountAvatar(
               label: f.person.name,
               avatarUrl: f.person.avatarUrl,
@@ -386,19 +474,20 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace> {
                       onPressed: _busy
                           ? null
                           : () async {
-                              final action = await showAnchoredPopupMenu<String>(
-                                context: menuContext,
-                                items: const [
-                                  PopupMenuItem(
-                                    value: 'remove',
-                                    child: Text('删除好友'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'block',
-                                    child: Text('屏蔽'),
-                                  ),
-                                ],
-                              );
+                              final action =
+                                  await showAnchoredPopupMenu<String>(
+                                    context: menuContext,
+                                    items: const [
+                                      PopupMenuItem(
+                                        value: 'remove',
+                                        child: Text('删除好友'),
+                                      ),
+                                      PopupMenuItem(
+                                        value: 'block',
+                                        child: Text('屏蔽'),
+                                      ),
+                                    ],
+                                  );
                               if (action == null || !menuContext.mounted) {
                                 return;
                               }

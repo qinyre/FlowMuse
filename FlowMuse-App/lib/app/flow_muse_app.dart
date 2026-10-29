@@ -18,6 +18,7 @@ import 'adapters/ohos_keyboard_focus_recovery.dart';
 import 'app_router.dart';
 import 'app_theme.dart';
 import 'app_theme_preset.dart';
+import 'social_notice_host.dart';
 import 'view_models/theme_view_model.dart';
 
 class FlowMuseApp extends ConsumerStatefulWidget {
@@ -200,7 +201,13 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
       darkTheme: AppTheme.fromPreset(darkThemePreset),
       themeMode: themePreset.themeMode,
       routerConfig: widget._router,
-      builder: wrapOhosKeyboardFocusRecovery,
+      builder: (context, child) => wrapOhosKeyboardFocusRecovery(
+        context,
+        SocialNoticeHost(
+          router: widget._router,
+          child: child ?? const SizedBox.shrink(),
+        ),
+      ),
     );
   }
 }

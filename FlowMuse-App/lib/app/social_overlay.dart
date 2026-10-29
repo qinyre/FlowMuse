@@ -6,11 +6,39 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../features/social/view_models/social_view_model.dart';
+import '../features/social/models/social_notice.dart';
 import '../features/social/views/social_page.dart';
 import '../features/whiteboard/editor_core/src/ui/studio_rail_icon_button.dart';
 import '../shared/widgets/app_shell.dart';
 import 'app_router.dart';
 import 'social_invitation_host.dart';
+
+final socialInboxPresenterProvider = Provider((ref) => SocialInboxPresenter());
+
+/// The mounted whiteboard supplies its existing save/leave guard.
+class SocialInboxPresenter {
+  final _boards = <Object, Future<void> Function(SocialNotice)>{};
+  Future<void> Function(SocialNotice)? get openFromWhiteboard =>
+      _boards.values.lastOrNull;
+
+  void attach(
+    Object owner,
+    BuildContext context,
+    Future<bool> Function() prepare,
+  ) {
+    _boards[owner] = (notice) async {
+      if (!context.mounted) return;
+      await showSocialOverlay(
+        context,
+        initialConversationId: notice.conversationId,
+        initialTab: notice.friendRequest ? 2 : 0,
+        prepareToOpenInvitation: prepare,
+      );
+    };
+  }
+
+  void detach(Object owner) => _boards.remove(owner);
+}
 
 /// Host-owned action: inbox updates rebuild this button, never the canvas.
 class SocialMessagesAction extends ConsumerWidget {
@@ -42,6 +70,8 @@ class SocialMessagesAction extends ConsumerWidget {
 Future<void> showSocialOverlay(
   BuildContext context, {
   bool inviteFriends = false,
+  String? initialConversationId,
+  int initialTab = 0,
   Future<bool> Function()? prepareToOpenInvitation,
 }) => showDialog<void>(
   context: context,
@@ -50,18 +80,21 @@ Future<void> showSocialOverlay(
     final body = Scaffold(
       body: SafeArea(
         child: SocialInvitationHost(
-          onOpen: (id) async {
-            // Close the inbox only after the whiteboard has confirmed and saved.
-            if (prepareToOpenInvitation == null ||
-                !await prepareToOpenInvitation()) {
-              return;
-            }
-            if (!context.mounted || !dialogContext.mounted) return;
-            Navigator.pop(dialogContext);
-            context.go(AppRoutes.socialInvitationPath(id));
-          },
+          onOpen: prepareToOpenInvitation == null
+              ? null
+              : (id) async {
+                  // Close the inbox only after the whiteboard has confirmed and saved.
+                  if (!await prepareToOpenInvitation()) {
+                    return;
+                  }
+                  if (!context.mounted || !dialogContext.mounted) return;
+                  Navigator.pop(dialogContext);
+                  context.go(AppRoutes.socialInvitationPath(id));
+                },
           child: SocialPage(
             inviteFriends: inviteFriends,
+            initialConversationId: initialConversationId,
+            initialTab: initialTab,
             onClose: () => Navigator.of(dialogContext).pop(),
           ),
         ),

@@ -10,6 +10,7 @@ import '../models/social_models.dart';
 import '../repositories/social_repository.dart';
 import '../view_models/conversation_view_model.dart';
 import '../view_models/social_view_model.dart';
+import '../view_models/social_notice_view_model.dart';
 import 'device_security_dialog.dart';
 import 'invitation_actions.dart';
 import 'invitation_card.dart';
@@ -37,6 +38,7 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
   final _historyKey = GlobalKey();
   final _latestMessageKey = GlobalKey();
   bool _atBottom = true;
+  late final SocialNoticeActivity _noticeActivity;
 
   ConversationViewModel get _vm =>
       ref.read(conversationViewModelProvider(widget.id).notifier);
@@ -45,10 +47,17 @@ class _ConversationPanelState extends ConsumerState<ConversationPanel> {
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
+    _noticeActivity = ref.read(socialNoticeActivityProvider);
+    _noticeActivity.conversations[this] = (id) =>
+        mounted &&
+        widget.id == id &&
+        TickerMode.valuesOf(context).enabled &&
+        (ModalRoute.of(context)?.isCurrent ?? true);
   }
 
   @override
   void dispose() {
+    _noticeActivity.conversations.remove(this);
     _scroll.dispose();
     _text.dispose();
     super.dispose();
