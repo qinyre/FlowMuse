@@ -11,9 +11,22 @@ class SocialNoticePreferences {
     this.enabled = true,
     this.preview = true,
     this.doNotDisturb = false,
+    this.systemEnabled = false,
   });
 
-  final bool enabled, preview, doNotDisturb;
+  final bool enabled, preview, doNotDisturb, systemEnabled;
+
+  SocialNoticePreferences copyWith({
+    bool? enabled,
+    bool? preview,
+    bool? doNotDisturb,
+    bool? systemEnabled,
+  }) => SocialNoticePreferences(
+    enabled: enabled ?? this.enabled,
+    preview: preview ?? this.preview,
+    doNotDisturb: doNotDisturb ?? this.doNotDisturb,
+    systemEnabled: systemEnabled ?? this.systemEnabled,
+  );
 }
 
 final socialNoticeSettingsRepositoryProvider = Provider(
@@ -41,6 +54,7 @@ class SocialNoticePreferencesViewModel
         enabled: json['enabled'] != false,
         preview: json['preview'] != false,
         doNotDisturb: json['doNotDisturb'] == true,
+        systemEnabled: json['systemEnabled'] == true,
       );
     } catch (_) {
       debugPrint(
@@ -59,6 +73,7 @@ class SocialNoticePreferencesViewModel
             'enabled': value.enabled,
             'preview': value.preview,
             'doNotDisturb': value.doNotDisturb,
+            'systemEnabled': value.systemEnabled,
           }),
         );
     if (ref.mounted) state = AsyncData(value);

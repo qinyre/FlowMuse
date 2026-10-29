@@ -29,7 +29,9 @@ class SocialNoticeViewModel extends Notifier<List<SocialNotice>> {
   List<SocialNotice> build() {
     ref.listen(socialNoticePreferencesProvider, (_, next) {
       final prefs = next.asData?.value;
-      if (prefs == null || !prefs.enabled || prefs.doNotDisturb) {
+      if (prefs == null ||
+          (!prefs.enabled && !prefs.systemEnabled) ||
+          prefs.doNotDisturb) {
         state = const [];
       }
     });
@@ -39,18 +41,26 @@ class SocialNoticeViewModel extends Notifier<List<SocialNotice>> {
 
   void _observe(SocialState? before, SocialState next) {
     final user = next.me?.person.id;
+    final prefs = ref.read(socialNoticePreferencesProvider).asData?.value;
+    final background =
+        prefs?.systemEnabled == true && prefs?.doNotDisturb == false;
     if (next.status != SocialStatus.ready ||
-        !next.foreground ||
+        (!next.foreground && !background) ||
         user == null ||
         before?.me?.person.id != user ||
-        before?.foreground != true ||
+        (before?.foreground != true && !background) ||
         (next.connected && before?.connected != true)) {
       _baselinePending = true;
       _seen.clear();
       state = const [];
     }
-    if (next.status != SocialStatus.ready || !next.foreground || user == null) {
+    if (next.status != SocialStatus.ready ||
+        (!next.foreground && !background) ||
+        user == null) {
       return;
+    }
+    if (next.foreground && before?.foreground == false) {
+      state = const [];
     }
     final previousSeq = Map<String, BigInt>.of(_seen);
     for (final c in next.conversations) {
@@ -62,8 +72,11 @@ class SocialNoticeViewModel extends Notifier<List<SocialNotice>> {
       _baselinePending = false;
       return;
     }
-    final prefs = ref.read(socialNoticePreferencesProvider).asData?.value;
-    if (prefs == null || !prefs.enabled || prefs.doNotDisturb) return;
+    if (prefs == null ||
+        (!prefs.enabled && !prefs.systemEnabled) ||
+        prefs.doNotDisturb) {
+      return;
+    }
     final activity = ref.read(socialNoticeActivityProvider);
     final conversations = {for (final c in next.conversations) c.id: c};
     final requests = {for (final r in next.requests) r.id};
@@ -73,7 +86,7 @@ class SocialNoticeViewModel extends Notifier<List<SocialNotice>> {
         return requests.contains(n.key.substring('request:'.length));
       }
       final c = conversations[n.conversationId];
-      return !activity.isViewing(n.conversationId!) &&
+      return !(next.foreground && activity.isViewing(n.conversationId!)) &&
           (c == null ||
               (c.canSend && c.readSeq < n.seq! && c.unreadCount > 0)) &&
           (n.expiresAt == null ||
@@ -98,7 +111,7 @@ class SocialNoticeViewModel extends Notifier<List<SocialNotice>> {
           m.senderId == user ||
           m.seq <= (previousSeq[c.id] ?? BigInt.zero) ||
           m.seq <= c.readSeq ||
-          activity.isViewing(c.id)) {
+          (next.foreground && activity.isViewing(c.id))) {
         continue;
       }
       final invite = m.invitation;

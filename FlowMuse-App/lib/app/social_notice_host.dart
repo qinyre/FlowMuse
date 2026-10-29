@@ -10,6 +10,7 @@ import '../features/social/models/social_notice.dart';
 import '../features/social/view_models/social_notice_preferences.dart';
 import '../features/social/view_models/social_notice_view_model.dart';
 import '../features/social/view_models/social_view_model.dart';
+import '../features/social/view_models/system_notice_view_model.dart';
 import '../shared/widgets/app_motion.dart';
 import '../shared/widgets/app_spacing.dart';
 import 'social_overlay.dart';
@@ -31,6 +32,7 @@ class _SocialNoticeHostState extends ConsumerState<SocialNoticeHost> {
   Timer? _timer;
   SocialNotice? _displayed;
   bool _opening = false, _hovered = false, _focused = false;
+  bool _tapScheduled = false;
 
   void _scheduleDismiss() {
     _timer?.cancel();
@@ -96,13 +98,37 @@ class _SocialNoticeHostState extends ConsumerState<SocialNoticeHost> {
   @override
   Widget build(BuildContext context) {
     final notices = ref.watch(socialNoticeProvider);
-    final notice = notices.lastOrNull;
     final visibility = ref.watch(
       socialViewModelProvider.select((s) => (s.me?.person.id, s.foreground)),
     );
     final preview =
         ref.watch(socialNoticePreferencesProvider).asData?.value.preview ??
         false;
+    final preferences = ref
+        .watch(socialNoticePreferencesProvider)
+        .asData
+        ?.value;
+    final notice =
+        visibility.$2 &&
+            preferences?.enabled == true &&
+            preferences?.doNotDisturb == false
+        ? notices.lastOrNull
+        : null;
+    final tap = ref.watch(systemNoticeProvider);
+    if (tap != null &&
+        !_tapScheduled &&
+        visibility.$2 &&
+        tap.userId == ref.read(socialSessionProvider)?.userId) {
+      _tapScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _tapScheduled = false;
+        if (!mounted || ref.read(systemNoticeProvider) != tap) return;
+        ref.read(systemNoticeProvider.notifier).consumeTap();
+        if (tap.expiresAt > DateTime.now().millisecondsSinceEpoch) {
+          unawaited(_open(tap.toNotice()));
+        }
+      });
+    }
     if (!identical(_displayed, notice)) {
       _displayed = notice;
       _hovered = false;

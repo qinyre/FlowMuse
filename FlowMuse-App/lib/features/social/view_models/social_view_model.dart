@@ -7,6 +7,7 @@ import '../../whiteboard/view_models/whiteboard_view_model.dart';
 import '../models/social_models.dart';
 import '../repositories/social_repository.dart';
 import '../services/social_realtime_transport.dart';
+import 'social_notice_preferences.dart';
 
 final socialSessionProvider = Provider(
   (ref) => ref.watch(
@@ -104,6 +105,16 @@ class SocialViewModel extends Notifier<SocialState> {
     final generation = ++_generation;
     _repo = ref.watch(socialRepositoryProvider);
     final session = ref.watch(socialSessionProvider);
+    ref.listen(socialNoticePreferencesProvider, (_, next) {
+      if (_foreground) return;
+      if (_backgroundNotices) {
+        _startRealtime();
+      } else {
+        _realtime?.close();
+        _debounce?.cancel();
+        state = state.copyWith(connected: false);
+      }
+    });
     _refreshing = false;
     _refreshAgain = false;
     _conversationPages = 1;
@@ -131,15 +142,27 @@ class SocialViewModel extends Notifier<SocialState> {
 
   bool _current(int generation) => ref.mounted && generation == _generation;
 
+  bool get _backgroundNotices {
+    final prefs = ref.read(socialNoticePreferencesProvider).asData?.value;
+    return prefs?.systemEnabled == true && prefs?.doNotDisturb == false;
+  }
+
   void _startRealtime() {
-    if (!_foreground || state.status != SocialStatus.ready) return;
+    if ((!_foreground && !_backgroundNotices) ||
+        state.status != SocialStatus.ready) {
+      return;
+    }
     final generation = _generation;
     _realtime?.start(
       onHint: () {
-        if (!_current(generation)) return;
+        if (!_current(generation) || (!_foreground && !_backgroundNotices)) {
+          return;
+        }
         _debounce?.cancel();
         _debounce = Timer(const Duration(milliseconds: 180), () {
-          if (_current(generation)) unawaited(refresh());
+          if (_current(generation) && (_foreground || _backgroundNotices)) {
+            unawaited(refresh());
+          }
         });
       },
       onRevoked: () {
@@ -155,10 +178,13 @@ class SocialViewModel extends Notifier<SocialState> {
 
   void setForeground(bool value) {
     _foreground = value;
-    state = state.copyWith(foreground: value, connected: value ? null : false);
+    state = state.copyWith(
+      foreground: value,
+      connected: value || _backgroundNotices ? null : false,
+    );
     if (value) {
       unawaited(refresh());
-    } else {
+    } else if (!_backgroundNotices) {
       _realtime?.close();
       _debounce?.cancel();
     }

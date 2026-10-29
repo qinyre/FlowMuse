@@ -6,10 +6,13 @@ import 'package:flow_muse/features/account/view_models/account_view_model.dart';
 import 'package:flow_muse/features/social/repositories/social_repository.dart';
 import 'package:flow_muse/features/social/services/social_realtime_transport.dart';
 import 'package:flow_muse/features/social/view_models/social_view_model.dart';
+import 'package:flow_muse/features/social/view_models/social_notice_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
+import 'social_notice_test.dart' show NoticeMemorySettings;
 
 class TestSocialAccount extends AccountViewModel {
   @override
@@ -71,6 +74,61 @@ http.Response socialResponse(Object body, [int status = 200]) => http.Response(
 );
 
 void main() {
+  test('系统提醒保留后台实时连接，免打扰后关闭且迟到提示不刷新', () async {
+    var requests = 0;
+    late TestSocialRealtime realtime;
+    final repo = SocialRepository(
+      serverUrl: 'https://example.test',
+      token: 'test',
+      client: MockClient((request) async {
+        requests++;
+        return socialResponse(
+          request.url.path.endsWith('/me') ? meJson('A') : {'items': []},
+        );
+      }),
+    );
+    addTearDown(repo.close);
+    final container = ProviderContainer(
+      overrides: [
+        socialSessionProvider.overrideWithValue((userId: 'A', token: 'test')),
+        socialRepositoryProvider.overrideWithValue(repo),
+        socialNoticeSettingsRepositoryProvider.overrideWithValue(
+          NoticeMemorySettings(),
+        ),
+        socialRealtimeFactoryProvider.overrideWithValue(
+          (url, token) => realtime = TestSocialRealtime(url, token),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final vm = container.read(socialViewModelProvider.notifier);
+    await container.read(socialNoticePreferencesProvider.future);
+    await Future<void>.delayed(Duration.zero);
+    await container
+        .read(socialNoticePreferencesProvider.notifier)
+        .save(const SocialNoticePreferences(systemEnabled: true));
+    final beforeClose = realtime.closes;
+    vm.setForeground(false);
+    expect(realtime.closes, beforeClose);
+    final beforeHint = requests;
+    realtime.hint!();
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    expect(requests, greaterThan(beforeHint));
+    await container
+        .read(socialNoticePreferencesProvider.notifier)
+        .save(
+          const SocialNoticePreferences(
+            systemEnabled: true,
+            doNotDisturb: true,
+          ),
+        );
+    expect(realtime.closes, greaterThan(beforeClose));
+    final afterMute = requests;
+    realtime.hint!();
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    expect(requests, afterMute);
+  });
+
   test('刷新覆盖已加载的会话页并保持正确的后续游标', () async {
     var read = false;
     final repo = SocialRepository(

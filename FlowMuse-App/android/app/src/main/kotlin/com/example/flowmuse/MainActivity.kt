@@ -22,6 +22,7 @@ import java.util.ArrayDeque
 
 class MainActivity : FlutterActivity() {
     private var stylusDoubleTapChannel: StylusDoubleTapChannel? = null
+    private var systemNoticeChannel: SystemNoticeChannel? = null
     private val pendingDocuments = ArrayDeque<Map<String, Any>>()
     private var documentChannel: MethodChannel? = null
 
@@ -36,6 +37,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        systemNoticeChannel?.dispose()
+        systemNoticeChannel = SystemNoticeChannel(this, flutterEngine.dartExecutor.binaryMessenger).also { it.consumeIntent(intent) }
         stylusDoubleTapChannel?.dispose()
         stylusDoubleTapChannel = StylusDoubleTapChannel(this, flutterEngine.dartExecutor.binaryMessenger)
         documentChannel = MethodChannel(
@@ -193,6 +196,7 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (systemNoticeChannel?.onPermissionResult(requestCode) == true) return
         if (requestCode != REQUEST_RECORD_AUDIO) return
         val pending = pendingSpeechStart ?: return
         pendingSpeechStart = null
@@ -204,6 +208,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        systemNoticeChannel?.dispose()
+        systemNoticeChannel = null
         stylusDoubleTapChannel?.dispose()
         stylusDoubleTapChannel = null
         releaseSpeechRecognizer(cancel = true)
@@ -225,6 +231,7 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        systemNoticeChannel?.consumeIntent(intent)
         enqueueDocument(intent)
     }
 
