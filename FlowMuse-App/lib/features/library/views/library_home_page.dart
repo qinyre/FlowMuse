@@ -6,6 +6,8 @@ import '../../../app/app_router.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
 import '../../whiteboard/collaboration/models/collaboration_room.dart';
 import '../../whiteboard/collaboration/widgets/join_room_dialog.dart';
+import '../../guide/widgets/guide_welcome_card.dart';
+import '../../guide/view_models/guide_welcome_view_model.dart';
 import '../models/library_special_view.dart';
 import '../models/note_item.dart';
 import '../repositories/library_repository.dart';
@@ -49,6 +51,9 @@ class LibraryHomePage extends ConsumerWidget {
     final libraryIndex =
         ref.watch(libraryIndexProvider).asData?.value ?? const LibraryIndex();
     final notes = _notesForSpecialView(specialView, state, libraryIndex);
+    final showWelcome =
+        specialView == LibrarySpecialView.none &&
+        ref.watch(guideWelcomeProvider).asData?.value == true;
 
     Widget content(bool compact) => LibraryContent(
       compact: compact,
@@ -57,6 +62,12 @@ class LibraryHomePage extends ConsumerWidget {
       notes: notes,
       libraryIndex: libraryIndex,
       specialView: specialView,
+      welcome: showWelcome
+          ? GuideWelcomeCard(
+              onStart: () => context.push(AppRoutes.createNote),
+              onGuide: () => context.push(AppRoutes.userGuide),
+            )
+          : null,
       onFilterChanged: viewModel.selectFilter,
       onViewModeChanged: viewModel.changeViewMode,
       onSortDirectionChanged: viewModel.toggleSortDirection,
