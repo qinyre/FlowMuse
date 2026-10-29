@@ -1,3 +1,6 @@
+import 'dart:ui' as ui;
+
+import 'package:flow_muse/app/social_overlay.dart';
 import 'package:flow_muse/features/social/models/social_models.dart';
 import 'package:flow_muse/features/social/view_models/conversation_view_model.dart';
 import 'package:flow_muse/features/social/view_models/social_view_model.dart';
@@ -8,6 +11,7 @@ import 'package:flow_muse/features/social/views/social_page.dart';
 import 'package:flow_muse/app/app_theme.dart';
 import 'package:flow_muse/app/app_theme_preset.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -126,6 +130,32 @@ void main() {
     );
     Finder row(String name) =>
         find.widgetWithText(ListTile, name).hitTestable();
+    final surfaceKey = GlobalKey();
+    Future<void> expectPaintedSelection(String name, Color expected) async {
+      final boundary =
+          surfaceKey.currentContext!.findRenderObject()
+              as RenderRepaintBoundary;
+      final rect = tester.getRect(row(name));
+      final point =
+          Offset(rect.left + 8, rect.center.dy) -
+          tester.getTopLeft(find.byKey(surfaceKey));
+      final pixel = await tester.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 1);
+        final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+        final offset = (point.dy.floor() * image.width + point.dx.floor()) * 4;
+        final rgba = data!.buffer.asUint8List(data.offsetInBytes);
+        final color = Color.fromARGB(
+          rgba[offset + 3],
+          rgba[offset],
+          rgba[offset + 1],
+          rgba[offset + 2],
+        );
+        image.dispose();
+        return color;
+      });
+      expect(pixel, expected, reason: '当前会话背景必须实际绘制出来，不能被父级背景盖住');
+    }
+
     void expectSelection(String selected, String other) {
       final tile = tester.widget<ListTile>(row(selected));
       expect(tile.selected, isTrue);
@@ -144,12 +174,17 @@ void main() {
       );
     }
 
-    for (final preset in appThemePresets.where(
-      (p) => p.id == AppThemeId.day || p.id == AppThemeId.night,
-    )) {
+    for (final config in [
+      for (final preset in appThemePresets.where(
+        (p) => p.id == AppThemeId.day || p.id == AppThemeId.night,
+      ))
+        for (final dialog in [false, true]) (preset: preset, dialog: dialog),
+    ]) {
+      final preset = config.preset;
+      final theme = AppTheme.fromPreset(preset);
       await tester.pumpWidget(
         ProviderScope(
-          key: ValueKey(preset.id),
+          key: ValueKey((preset.id, config.dialog)),
           overrides: [
             socialSessionProvider.overrideWithValue((
               userId: 'A',
@@ -161,30 +196,63 @@ void main() {
                 'chat-${p.id}',
               ).overrideWith(() => TestChat('chat-${p.id}')),
           ],
-          child: MaterialApp(
-            theme: AppTheme.fromPreset(preset),
-            home: const Scaffold(body: SocialPage()),
+          child: RepaintBoundary(
+            key: surfaceKey,
+            child: MaterialApp(
+              theme: theme,
+              home: Scaffold(
+                body: config.dialog
+                    ? Builder(
+                        builder: (context) => TextButton(
+                          onPressed: () => showSocialOverlay(context),
+                          child: const Text('打开实际消息弹窗'),
+                        ),
+                      )
+                    : ColoredBox(
+                        color: theme.colorScheme.surface,
+                        child: const SocialPage(),
+                      ),
+              ),
+            ),
           ),
         ),
       );
       await tester.pumpAndSettle();
+      if (config.dialog) {
+        await tester.tap(find.text('打开实际消息弹窗'));
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.text('好友 · 2'));
       await tester.pumpAndSettle();
       await tester.tap(row('小林'));
       await tester.pumpAndSettle();
       expectSelection('小林', '小周');
+      await expectPaintedSelection(
+        '小林',
+        theme.colorScheme.surfaceContainerHigh,
+      );
       await tester.tap(row('小周'));
       await tester.pumpAndSettle();
       expectSelection('小周', '小林');
       await tester.tap(find.widgetWithText(Tab, '消息'));
       await tester.pumpAndSettle();
       expectSelection('小周', '小林');
+      await expectPaintedSelection(
+        '小周',
+        theme.colorScheme.surfaceContainerHigh,
+      );
       await tester.tap(row('小林'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('好友 · 2'));
       await tester.pumpAndSettle();
       expectSelection('小林', '小周');
+      await expectPaintedSelection(
+        '小林',
+        theme.colorScheme.surfaceContainerHigh,
+      );
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     }
     await tester.pumpWidget(const SizedBox.shrink());
   });

@@ -286,7 +286,7 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace>
                     state.friends.any((f) => f.conversationId == selection.id),
                 onBack: wide ? null : () => setState(() => _selected = null),
               );
-        final list = Column(
+        final listContent = Column(
           children: [
             if (state.me != null) SocialFriendCode(person: state.me!.person),
             if (state.error != null)
@@ -348,6 +348,11 @@ class _SocialWorkspaceState extends ConsumerState<_SocialWorkspace>
               ),
             ),
           ],
+        );
+        // Keep tile ink above AppShell backgrounds and inside the message panel.
+        final list = Material(
+          type: MaterialType.transparency,
+          child: listContent,
         );
         return PopScope(
           canPop: wide || selection == null,
