@@ -65,8 +65,10 @@
 
 两处 UI 初版于 17:00（北京时间）发布，源提交 `dc2838d1`，目录 `/var/www/flowmuse-app-releases/notification-ui-20261029-dc2838d1`，主脚本 SHA-256 为 `e6b46b7dd1c4f4a9aa13c4474b4f0c773c15591e275d7be32315340e03090f6e`。17 项公网检查通过；干净浏览器最终正常进入资料库，无脚本异常。冷启动中三个 UI 字体请求约耗时 48–50 秒，导致首次 40 秒探测超时，不将该网络条件下的耗时当作帧率或本地书写性能结论。原生端未更新，代码尚未推送。
 
-## 选中背景绘制边界修正（2026-10-29）
+## 选中背景绘制边界修正（2026-10-29，17:17 已发布）
 
 初版虽然正确设置 selected/selectedTileColor，但 ListTile 将墨水背景画到祖先 Material，可能被 AppShell 的不透明背景遮盖。新增真实像素检查先复现：预期日间灰色 `#EBEBEB`，实际读到白色 `#FFFFFF`。为左侧列表共同提供本地透明 Material，让选中背景在页面背景之上、消息面板内部绘制，不给每个好友重复建立 Material。
 
 原交互回归扩展为日间/夜间 × 带不透明背景的页面/真实 showSocialOverlay 弹窗，分别取样好友和消息列表的选中背景像素，并检查切换对象与标签后的唯一选中状态。修复后 42 项相关回归通过、1 项按原条件跳过，修改文件静态分析无问题。截图采用实际字体与隔离样例：[浅色消息弹窗](../images/2026-10-29-social-selection-popup-day.png)、[深色消息弹窗](../images/2026-10-29-social-selection-popup-night.png)。
+
+17:17（北京时间）将源提交 `cad65ffab1bdb6c45d386e38eec83cf383b8b3ef` 发布到正式 Web，运行时标识 `cad65ffa`，目录 `/var/www/flowmuse-app-releases/notification-paint-20261029-cad65ffa`。主脚本 SHA-256：`10415bdaceb1f350ba5c12f3ae1bb3072e4f7e2d41ec8b0c4048d41df3adce15`。17 项公网资源/版本/缓存/健康检查通过，干净浏览器启动成功、遮罩移除，无脚本异常或请求失败。后端容器及启动时间、官网配置保持不变；临时上传归档已清理，保留上一发布目录和回退配置。此次未推送代码或更新原生包。
