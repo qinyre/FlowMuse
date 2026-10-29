@@ -97,7 +97,9 @@ class PrivacyPolicyPage extends StatelessWidget {
             body:
                 '· 网络访问（INTERNET）：用于账户登录、好友私聊、实时协作与用户主动发起的 AI 请求\n'
                 '· 网络状态（GET_NETWORK_INFO，鸿蒙端）：用于检测当前网络连接状态\n'
-                '· 文件读取（按需）：仅在你主动导入图片、PDF 或备份文件时使用',
+                '· 文件读取（按需）：仅在你主动导入图片、PDF 或备份文件时使用\n'
+                '· 通知（按需授权）：开启系统提醒后，在应用仍运行时提醒好友消息、'
+                '协作邀请与好友申请；可关闭消息预览或开启免打扰。未接入关闭应用后的厂商推送',
           ),
           _PolicySection(
             icon: LucideIcons.shieldCheck,

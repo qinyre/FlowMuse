@@ -19,6 +19,8 @@ flutter test --no-pub test/features/settings
 flutter test --no-pub                   # 完整回归
 ```
 
+系统通知的 Web 桥接与 worker 检查使用 Node 内置测试器：`node --test test/web/system_notices_test.cjs`。此检查覆盖子路径、来源校验、点击目标和权限拒绝，不代表真实设备已收到通知；系统通知显示与点击仍需实机验收。
+
 不因测试数量多就删除保存、回滚、合并冲突、加密或格式兼容场景。优先清理无生产调用的组件自测、只复述常量的断言、重复工作流及不准确的测试机性能阈值。组件布局只验证影响交互与无障碍的行为，不逐项冻结样式实现。
 
 ## GitHub CI 选路

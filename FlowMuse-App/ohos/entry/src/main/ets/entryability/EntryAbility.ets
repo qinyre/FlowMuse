@@ -16,12 +16,16 @@ import { UrlLauncherChannel } from '../channels/UrlLauncherChannel';
 import { HuaweiAccountChannel } from '../channels/HuaweiAccountChannel';
 import { RoomQrScannerChannel } from '../channels/RoomQrScannerChannel';
 import { StylusDoubleTapChannel } from '../channels/StylusDoubleTapChannel';
+import { SystemNoticeChannel } from '../channels/SystemNoticeChannel';
 
 export default class EntryAbility extends FlutterAbility {
   private huaweiAccountChannel: HuaweiAccountChannel | undefined;
   private stylusDoubleTapChannel: StylusDoubleTapChannel | undefined;
+  private systemNoticeChannel: SystemNoticeChannel | undefined;
 
   onDestroy(): void {
+    this.systemNoticeChannel?.dispose();
+    this.systemNoticeChannel = undefined;
     this.stylusDoubleTapChannel?.dispose();
     this.stylusDoubleTapChannel = undefined;
     this.huaweiAccountChannel?.dispose();
@@ -40,6 +44,7 @@ export default class EntryAbility extends FlutterAbility {
   }
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onCreate(want, launchParam)
+    SystemNoticeChannel.enqueueWant(want);
     if (want?.parameters?.params) {
       try {
         const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
@@ -56,6 +61,7 @@ export default class EntryAbility extends FlutterAbility {
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     super.onNewWant(want, launchParam)
+    SystemNoticeChannel.enqueueWant(want);
     if (want?.parameters?.params) {
       try {
         const params = JSON.parse(want.parameters.params as string) as Record<string, Object>;
@@ -83,6 +89,9 @@ export default class EntryAbility extends FlutterAbility {
   configureFlutterEngine(flutterEngine: FlutterEngine) {
     super.configureFlutterEngine(flutterEngine)
     GeneratedPluginRegistrant.registerWith(flutterEngine)
+    this.systemNoticeChannel?.dispose();
+    this.systemNoticeChannel = new SystemNoticeChannel(this.context);
+    this.systemNoticeChannel.register(flutterEngine);
     new PdfImportChannel(this.context).register(flutterEngine)
     new FileSaveChannel(this.context).register(flutterEngine)
     new FilePickerChannel(this.context).register(flutterEngine)

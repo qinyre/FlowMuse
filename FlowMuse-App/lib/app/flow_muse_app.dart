@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../features/library/repositories/library_repository.dart';
 import '../features/social/view_models/invitation_view_model.dart';
 import '../features/social/view_models/social_view_model.dart';
+import '../features/social/services/system_notice_service.dart';
 import '../features/whiteboard/share/models/external_document_request.dart';
 import '../features/whiteboard/share/services/external_document_channel.dart';
 import '../features/whiteboard/share/services/imported_document_coordinator.dart';
@@ -60,6 +61,7 @@ class _FlowMuseAppState extends ConsumerState<FlowMuseApp>
         .read(socialViewModelProvider.notifier)
         .setForeground(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed) {
+      ref.invalidate(systemNoticePermissionProvider);
       _enableImmersiveMode();
     }
   }
