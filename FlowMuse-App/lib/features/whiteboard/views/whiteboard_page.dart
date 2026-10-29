@@ -200,10 +200,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Scene? _previousEditorScene;
   final _recentWhiteboardSync = RecentWhiteboardSyncCoordinator();
+  late final SocialInboxPresenter _socialInboxPresenter;
 
   @override
   void initState() {
     super.initState();
+    _socialInboxPresenter = ref.read(socialInboxPresenterProvider);
+    _socialInboxPresenter.attach(this, context, _prepareToOpenFriendInvitation);
     WidgetsBinding.instance.addObserver(this);
     _localSceneRepository = ref.read(whiteboardSceneRepositoryProvider);
     _localLibraryRepository = ref.read(libraryRepositoryProvider);
@@ -276,6 +279,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   @override
   void dispose() {
+    _socialInboxPresenter.detach(this);
     WidgetsBinding.instance.removeObserver(this);
     _closeAiPanel();
     _disposingOrLeaving = true;
