@@ -107,6 +107,8 @@ export class SystemNoticeChannel {
     const request: notificationManager.NotificationRequest = {
       id: id,
       wantAgent: click,
+      notificationSlotType: notificationManager.SlotType.SOCIAL_COMMUNICATION,
+      autoDeletedTime: expiry,
       content: {
         notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
         normal: { title: title, text: body, additionalText: 'FlowMuse' }
