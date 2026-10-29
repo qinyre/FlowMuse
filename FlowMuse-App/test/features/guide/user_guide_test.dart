@@ -268,6 +268,32 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('首页了解功能使用可刷新的章节地址，返回后不再显示欢迎卡', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final container = guideContainer(TestLocalSettingsRepository());
+    addTearDown(container.dispose);
+    final router = guideRouter(initial: '/library');
+    addTearDown(router.dispose);
+    await tester.pumpWidget(guideApp(container, router));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('了解功能'));
+    await tester.pumpAndSettle();
+    expect(router.routeInformationProvider.value.uri.path, '/guide/start');
+    await tester.tap(find.text('实时协作').first);
+    await tester.pumpAndSettle();
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      '/guide/collaboration',
+    );
+    await tester.tap(find.byTooltip('返回应用'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LibraryHomePage), findsOneWidget);
+    expect(find.byType(GuideWelcomeCard), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('指南标准入口及无效章节正确回退，不改变协作或通知的直达路由', (tester) async {
     await tester.pumpWidget(const SizedBox());
     final router = createAppRouter();

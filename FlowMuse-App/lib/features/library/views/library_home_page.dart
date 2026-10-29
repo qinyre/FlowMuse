@@ -65,7 +65,7 @@ class LibraryHomePage extends ConsumerWidget {
       welcome: showWelcome
           ? GuideWelcomeCard(
               onStart: () => context.push(AppRoutes.createNote),
-              onGuide: () => context.push(AppRoutes.userGuide),
+              onGuide: () => context.go(AppRoutes.userGuide),
             )
           : null,
       onFilterChanged: viewModel.selectFilter,
