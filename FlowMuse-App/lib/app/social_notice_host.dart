@@ -196,8 +196,17 @@ class SocialNoticeBanner extends StatelessWidget {
         : notice.friendRequest
         ? '希望添加你为好友'
         : '发来一条新消息';
+    final actionLabel = notice.friendRequest
+        ? '查看申请'
+        : notice.invitation
+        ? '查看邀请'
+        : '查看消息';
+    final label =
+        !notice.friendRequest && !notice.invitation && notice.count > 1
+        ? '${notice.count}条未读'
+        : notice.label;
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 440),
+      constraints: const BoxConstraints(maxWidth: 360),
       child: Semantics(
         liveRegion: true,
         child: Material(
@@ -213,59 +222,74 @@ class SocialNoticeBanner extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: InkWell(
-                  onTap: onOpen,
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.sidebarInset),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ExcludeSemantics(
-                          child: AccountAvatar(
-                            label: notice.person.name,
-                            avatarUrl: notice.person.avatarUrl,
+                child: Semantics(
+                  label: actionLabel,
+                  button: true,
+                  child: InkWell(
+                    onTap: onOpen,
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.listGap),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ExcludeSemantics(
+                            child: AccountAvatar(
+                              label: notice.person.name,
+                              avatarUrl: notice.person.avatarUrl,
+                              radius: 16,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: AppSpacing.listGap),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                notice.label,
-                                style: Theme.of(context).textTheme.labelMedium
-                                    ?.copyWith(color: colors.primary),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                notice.person.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                summary.replaceAll(RegExp(r'\s+'), ' '),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(color: colors.onSurfaceVariant),
-                              ),
-                              const SizedBox(height: AppSpacing.controlGap),
-                              Text(
-                                notice.friendRequest
-                                    ? '查看申请'
-                                    : notice.invitation
-                                    ? '查看邀请'
-                                    : '查看消息',
-                                style: Theme.of(context).textTheme.labelLarge
-                                    ?.copyWith(color: colors.primary),
-                              ),
-                            ],
+                          const SizedBox(width: AppSpacing.listGap),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 3,
+                                      child: Text(
+                                        notice.person.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleSmall,
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      width: AppSpacing.controlGap,
+                                    ),
+                                    Flexible(
+                                      flex: 2,
+                                      child: Text(
+                                        label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelMedium
+                                            ?.copyWith(color: colors.primary),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  summary.replaceAll(RegExp(r'\s+'), ' '),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: colors.onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

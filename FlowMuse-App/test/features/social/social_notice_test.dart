@@ -22,6 +22,13 @@ import 'social_widgets_test.dart' show TestInbox, TestChat;
 
 const peer = SocialPerson(id: 'B', name: '协作伙伴');
 
+Finder noticeOpenTarget() => find
+    .descendant(
+      of: find.byType(SocialNoticeBanner),
+      matching: find.byType(InkWell),
+    )
+    .first;
+
 class NoticeMemorySettings extends LocalSettingsRepository {
   NoticeMemorySettings()
     : super(() => throw StateError('must not open database'));
@@ -295,16 +302,21 @@ void main() {
       summary: '私密消息正文',
       conversationId: 'chat',
     );
-    for (final dark in [false, true]) {
+    for (final config in [
+      (width: 1440.0, scale: 1.0, dark: false),
+      (width: 375.0, scale: 1.0, dark: true),
+      (width: 320.0, scale: 2.0, dark: true),
+    ]) {
+      tester.view.physicalSize = Size(config.width, 812);
       await tester.pumpWidget(
         ProviderScope(
           child: MaterialApp(
             theme: ThemeData(
-              brightness: dark ? Brightness.dark : Brightness.light,
+              brightness: config.dark ? Brightness.dark : Brightness.light,
             ),
             home: MediaQuery(
-              data: const MediaQueryData(
-                textScaler: TextScaler.linear(2),
+              data: MediaQueryData(
+                textScaler: TextScaler.linear(config.scale),
                 disableAnimations: true,
               ),
               child: Scaffold(
@@ -323,7 +335,13 @@ void main() {
         ),
       );
       expect(find.text('私密消息正文'), findsNothing);
-      await tester.tap(find.text('查看消息'));
+      if (config.scale == 1) {
+        final size = tester.getSize(find.byType(SocialNoticeBanner));
+        expect(size.width, lessThanOrEqualTo(360));
+        expect(size.height, lessThanOrEqualTo(96), reason: '短消息不应撑成四行大卡片');
+      }
+      expect(tester.getSemantics(noticeOpenTarget()).label, contains('查看消息'));
+      await tester.tap(noticeOpenTarget());
       final close = find.descendant(
         of: find.byType(SocialNoticeBanner),
         matching: find.byType(IconButton),
@@ -332,8 +350,8 @@ void main() {
       await tester.tap(close);
       expect(tester.takeException(), isNull);
     }
-    expect(opened, 2);
-    expect(closed, 2);
+    expect(opened, 3);
+    expect(closed, 3);
     semantics.dispose();
   });
 
@@ -376,7 +394,7 @@ void main() {
     inbox.update(snapshot(4, conversations: [chat(3)]));
     await tester.pumpAndSettle();
     // Use the real inbox while keeping its chat HTTP isolated.
-    await tester.tap(find.text('查看消息'));
+    await tester.tap(noticeOpenTarget());
     await tester.pumpAndSettle();
     expect(find.byType(ConversationPanel), findsOneWidget);
     expect(find.text('原笔记页面'), findsOneWidget);
@@ -384,8 +402,14 @@ void main() {
       snapshot(5, conversations: [chat(4)], requests: [request('new')]),
     );
     await tester.pumpAndSettle();
-    expect(find.text('查看消息'), findsNothing);
-    await tester.tap(find.text('查看申请'));
+    expect(
+      tester
+          .widget<SocialNoticeBanner>(find.byType(SocialNoticeBanner))
+          .notice
+          .friendRequest,
+      isTrue,
+    );
+    await tester.tap(noticeOpenTarget());
     await tester.pumpAndSettle();
     expect(find.byType(Dialog), findsOneWidget);
     expect(find.text('一起学习吧'), findsOneWidget);
@@ -448,7 +472,7 @@ void main() {
     inbox.update(snapshot(1));
     inbox.update(snapshot(2, conversations: [chat(1, invite: invitation())]));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('查看邀请'));
+    await tester.tap(noticeOpenTarget());
     await tester.pumpAndSettle();
     expect(guarded, 0);
     expect(find.text('仍在协作的画布'), findsOneWidget);
