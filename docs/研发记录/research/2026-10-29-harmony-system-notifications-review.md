@@ -36,3 +36,11 @@
 ## 待实机验收
 
 首次授权与拒绝后重新开启、系统通知栏/锁屏展示、前后台切换时实际接收、同会话更新及声音策略、点击保留白板状态、账号切换清除、应用暂停期间的到期清除。应用被系统冻结或终止后不保证收到新消息；未接入厂商推送或后台保活。
+
+## 2026-10-30 构建与安装补充
+
+- 按用户新的更新安装要求，将主线快进至 `caf10625b61546e49627eeefe5aff3e5f9fbc81e`。首次 HAP 构建发现通知授权分支直接重抛 catch 变量触发 `arkts-limited-throw`；改为 `new Error('Notification permission unavailable')`，继续交由外层返回原有 `notification_unavailable`，拒绝授权码的处理保持不变。修复在 `codex/fix-harmony-notice-build` 分支进行，仅涉及鸿蒙通道一行。
+- 依据 [ArkTS 官方 throw 限制](https://github.com/openharmony/docs/blob/master/en/application-dev/quick-start/typescript-to-arkts-migration-guide.md#throw-statements-do-not-accept-values-of-arbitrary-types)，不再重抛未明确为 Error 类的对象；本机编译器同样拒绝对 catch 变量断言为 `BusinessError` 后重抛。
+- 本轮 `flutter pub get --enforce-lockfile`、`flutter analyze --no-pub` 和通知相关 19 项测试通过。最终 `flutter build hap --release --target=lib/main.dart` 通过，正式 API 为 `https://api.flowmuse.cloud`，分享入口为 `https://app.flowmuse.cloud`，湿墨分层及实时墨迹 V2 均显式开启。日志在 `FlowMuse-App/build/install-20261030/`，未运行全量测试。
+- HAP SHA-256：`6f7b456ba445758a1451020d79a7dcd4a16f5d9da64ad21014cb88960a6b88a4`。北京时间 14:20:50 已通过 `hdc install -r` 覆盖安装到 SLG-W50；首次安装时间保持不变，未卸载或清除应用数据。系统确认 EntryAbility 启动成功且处于前台，进程持续存在。
+- 此次补齐编译与启动证据，尚未实测上述通知授权、收发、点击及到期清除流程；不将启动成功等同于系统通知功能完整验收。

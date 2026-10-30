@@ -42,7 +42,7 @@ export class SystemNoticeChannel {
           try {
             await notificationManager.requestEnableNotification(this.context);
           } catch (error) {
-            if ((error as BusinessError).code !== 1600004) throw error;
+            if ((error as BusinessError).code !== 1600004) throw new Error('Notification permission unavailable');
           }
         }
         result.success(await notificationManager.isNotificationEnabled() ? 'granted' : 'denied');
