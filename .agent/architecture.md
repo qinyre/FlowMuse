@@ -49,6 +49,7 @@ FlowMuse 是以手写与画布为载体的跨平台协作笔记应用，系统�
 | `tags` | 标签集合视图 | `view_models/tags_view_model.dart` |
 | `search` | 笔记搜索(内存过滤,非 SQL) | `views/search_page.dart` |
 | `settings` | 分组设置、主题预览、本地/WebDAV 备份 | `views/settings_page.dart` |
+| `guide` | 分章使用指南、首次空资料库欢迎卡；偏好复用 LocalSettingsRepository | `views/user_guide_page.dart` |
 | `account` | 账户认证(注册/登录/资料) | `repositories/account_repository.dart` |
 | `social` | 好友、私聊和设备加密邀请 | `repositories/social_repository.dart` |
 | `whiteboard` | 白板编辑器及协作、导入、内容加工能力 | — |

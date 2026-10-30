@@ -1,3 +1,5 @@
+import 'package:flow_muse/features/guide/view_models/guide_welcome_view_model.dart';
+import '../../support/test_local_settings_repository.dart';
 import 'package:flow_muse/app/flow_muse_app.dart';
 import 'package:flow_muse/features/account/view_models/account_view_model.dart';
 import 'package:flow_muse/features/library/models/note_item.dart';
@@ -46,6 +48,9 @@ Future<ProviderContainer> _pumpHome(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        guideSettingsRepositoryProvider.overrideWithValue(
+          TestLocalSettingsRepository(),
+        ),
         accountViewModelProvider.overrideWith(_Account.new),
         libraryIndexProvider.overrideWith(_Index.new),
         shellLayoutViewModelProvider.overrideWith(_Shell.new),

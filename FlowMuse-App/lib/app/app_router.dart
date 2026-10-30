@@ -12,6 +12,8 @@ import '../features/search/views/search_page.dart';
 import '../features/social/views/social_page.dart';
 import '../features/settings/views/settings_page.dart';
 import '../features/settings/views/privacy_policy_page.dart';
+import '../features/guide/models/guide_topic.dart';
+import '../features/guide/views/user_guide_page.dart';
 import '../features/notebooks/views/notebooks_page.dart';
 import '../features/tags/views/tags_page.dart';
 import '../features/whiteboard/collaboration/models/collaboration_room.dart';
@@ -38,6 +40,9 @@ class AppRoutes {
   static const tags = '/tags';
   static const tagDetail = '/tags/:tagId';
   static const settings = '/settings';
+  static const userGuide = '/guide';
+  static String guideTopicPath(String topic) =>
+      '$userGuide/${Uri.encodeComponent(topic)}';
   static const accountSettings = '/settings?section=account';
   static const privacyPolicy = '/settings/privacy-policy';
   static const verifyEmail = '/auth/verify-email';
@@ -230,6 +235,23 @@ GoRouter createAppRouter() {
         },
       ),
       GoRoute(
+        path: AppRoutes.userGuide,
+        redirect: (_, _) => AppRoutes.guideTopicPath(GuideTopic.start.name),
+      ),
+      GoRoute(
+        path: '${AppRoutes.userGuide}/:topic',
+        redirect: (_, state) =>
+            GuideTopic.fromSlug(state.pathParameters['topic']) == null
+            ? AppRoutes.guideTopicPath(GuideTopic.start.name)
+            : null,
+        pageBuilder: (context, state) => _detailPage(
+          state,
+          UserGuidePage(
+            topic: GuideTopic.fromSlug(state.pathParameters['topic'])!,
+          ),
+        ),
+      ),
+      GoRoute(
         path: AppRoutes.settings,
         pageBuilder: (context, state) {
           return _modalPage(
@@ -322,7 +344,6 @@ Page<void> _contentPage(GoRouterState state, Widget child) {
   return NoTransitionPage<void>(key: state.pageKey, child: child);
 }
 
-// ignore: unused_element
 Page<void> _detailPage(GoRouterState state, Widget child) {
   return _motionPage(
     state,

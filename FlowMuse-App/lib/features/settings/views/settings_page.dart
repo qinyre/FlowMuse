@@ -369,6 +369,15 @@ class _SettingsSidebar extends StatelessWidget {
               onTap: () => onSelected(section),
             ),
         ],
+        const Divider(
+          indent: AppSpacing.sidebarInset,
+          endIndent: AppSpacing.sidebarInset,
+        ),
+        _SettingsNavItem(
+          icon: LucideIcons.bookOpen,
+          label: '使用指南',
+          onTap: () => context.push(AppRoutes.userGuide),
+        ),
       ],
     );
   }
@@ -472,22 +481,33 @@ class _SettingsContent extends StatelessWidget {
                   tooltip: '设置分类',
                   icon: const Icon(LucideIcons.list),
                   onPressed: () async {
-                    final selected =
-                        await showAnchoredPopupMenu<_SettingsSection>(
-                          context: context,
-                          placement: AnchoredPopupPlacement.below,
-                          items: [
-                            for (final option in _SettingsSection.values)
-                              CheckedPopupMenuItem(
-                                value: option,
-                                checked: option == section,
-                                child: Text(option.label),
-                              ),
-                          ],
-                        );
+                    final selected = await showAnchoredPopupMenu<String>(
+                      context: context,
+                      placement: AnchoredPopupPlacement.below,
+                      items: [
+                        for (final option in _SettingsSection.values)
+                          CheckedPopupMenuItem(
+                            value: option.name,
+                            checked: option == section,
+                            child: Text(option.label),
+                          ),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: AppRoutes.userGuide,
+                          child: Text('使用指南'),
+                        ),
+                      ],
+                    );
                     if (selected == null || !context.mounted) return;
                     runAfterUiTeardown(() {
-                      if (context.mounted) onSectionChanged?.call(selected);
+                      if (!context.mounted) return;
+                      if (selected == AppRoutes.userGuide) {
+                        context.push(AppRoutes.userGuide);
+                      } else {
+                        onSectionChanged?.call(
+                          _SettingsSection.fromName(selected),
+                        );
+                      }
                     });
                   },
                 ),
