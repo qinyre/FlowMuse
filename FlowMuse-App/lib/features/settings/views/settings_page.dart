@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
     show Clipboard, ClipboardData, PlatformException;
@@ -30,6 +30,7 @@ import '../../social/views/social_page.dart' show SocialFriendCode;
 import '../../account/widgets/account_avatar.dart';
 import '../../library/models/note_item.dart';
 import '../../library/repositories/library_repository.dart';
+import '../../whiteboard/ai_assistant/models/ai_agent_presets.dart';
 import '../../whiteboard/ai_assistant/repositories/ai_agent_config_store.dart';
 import '../../whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
 import '../../whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
@@ -2389,6 +2390,7 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
   Future<void> _load() async {
     try {
       final config = await defaultAiAgentConfigStore.read();
+      if (!mounted) return;
       if (config != null) {
         _baseUrlController.text = config.baseUrl;
         _apiKeyController.text = config.apiKey;
@@ -2430,8 +2432,14 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
       _testResult = null;
     });
     try {
-      await AiAgentRepository(config: _currentConfig()).testConnection();
-      if (mounted) setState(() => _testResult = '连接成功，模型支持所需的工具调用');
+      final vision = await AiAgentRepository(
+        config: _currentConfig(),
+      ).testConnection();
+      if (mounted) {
+        setState(() {
+          _testResult = vision ? '连接成功，已验证图片输入和工具调用' : '连接成功，已验证工具调用';
+        });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = '连接测试失败：$error');
     } finally {
@@ -2451,9 +2459,46 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
     );
   }
 
+  AiAgentProvider? get _provider {
+    try {
+      return AiAgentProvider.forEndpoint(_currentConfig().chatCompletionsUri);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  void _choosePreset((AiAgentProvider, String)? preset) {
+    if (preset == null) return;
+    final (provider, model) = preset;
+    final oldUrl = Uri.tryParse(_baseUrlController.text.trim());
+    final newUrl = Uri.parse(provider.baseUrl);
+    final clearKey =
+        oldUrl?.scheme != newUrl.scheme ||
+        oldUrl?.host != newUrl.host ||
+        oldUrl?.port != newUrl.port;
+    _baseUrlController.text = provider.baseUrl;
+    _modelController.text = model;
+    if (clearKey) {
+      _apiKeyController.clear();
+      _hideApiKey = true;
+    }
+    _clearFeedback();
+  }
+
+  void _clearFeedback() => setState(() {
+    _error = null;
+    _testResult = null;
+  });
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+    final enabled = !_saving && !_testing;
+    final provider = _provider;
+    final model = _modelController.text.trim();
+    final selected = provider != null && provider.models.contains(model)
+        ? (provider, model)
+        : null;
     return _SettingsCard(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -2465,12 +2510,55 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Base URL 可省略 /chat/completions；API Key 保存在本机。Web 端的密钥保护受浏览器限制，目标服务还必须允许 CORS。',
-            ),
+            const Text('预设支持图片输入和工具调用。选择后填入该服务的 API Key，再测试连接并保存。也可手动填写兼容接口。'),
             const SizedBox(height: 20),
+            InputDecorator(
+              decoration: const InputDecoration(
+                labelText: '多模态模型预设',
+                border: OutlineInputBorder(),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<(AiAgentProvider, String)>(
+                  isExpanded: true,
+                  value: selected,
+                  hint: const Text('选择服务商与模型'),
+                  onChanged: enabled ? _choosePreset : null,
+                  items: [
+                    for (final provider in AiAgentProvider.values)
+                      for (final model in provider.models)
+                        DropdownMenuItem(
+                          value: (provider, model),
+                          child: Text(
+                            '${provider.label} · $model',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+            ),
+            if (provider != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final opened = await AppUrlLauncher.launch(
+                      Uri.parse(provider.docsUrl),
+                    );
+                    if (!opened && mounted) {
+                      setState(() => _error = '无法打开服务商文档');
+                    }
+                  },
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: Text('${provider.label} 官方文档'),
+                ),
+              )
+            else
+              const SizedBox(height: 12),
             TextField(
               controller: _baseUrlController,
+              enabled: enabled,
+              onChanged: (_) => _clearFeedback(),
               keyboardType: TextInputType.url,
               decoration: const InputDecoration(
                 labelText: 'Base URL',
@@ -2481,6 +2569,8 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
             const SizedBox(height: 12),
             TextField(
               controller: _apiKeyController,
+              enabled: enabled,
+              onChanged: (_) => _clearFeedback(),
               obscureText: _hideApiKey,
               decoration: InputDecoration(
                 labelText: 'API Key',
@@ -2497,11 +2587,19 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
             const SizedBox(height: 12),
             TextField(
               controller: _modelController,
+              enabled: enabled,
+              onChanged: (_) => _clearFeedback(),
               decoration: const InputDecoration(
                 labelText: '模型名称',
-                hintText: 'gpt-4.1-mini',
+                hintText: '选择预设或输入模型 ID',
                 border: OutlineInputBorder(),
               ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              kIsWeb
+                  ? 'API Key 保存在当前浏览器。若服务商限制浏览器跨域请求（CORS），可使用原生端或自己信任的兼容网关。'
+                  : 'API Key 保存在本机。切换到其他服务商时请填写对应密钥。',
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -2518,8 +2616,10 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
               ),
             ],
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 OutlinedButton.icon(
                   onPressed: _testing || _saving ? null : _testConnection,
@@ -2531,7 +2631,6 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
                       : const Icon(Icons.network_check),
                   label: Text(_testing ? '测试中…' : '测试连接'),
                 ),
-                const SizedBox(width: 12),
                 FilledButton.icon(
                   onPressed: _saving || _testing ? null : _save,
                   icon: const Icon(Icons.save_outlined),

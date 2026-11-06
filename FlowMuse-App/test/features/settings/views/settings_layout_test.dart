@@ -4,6 +4,7 @@ import 'package:flow_muse/app/view_models/theme_view_model.dart';
 import 'package:flow_muse/features/account/view_models/account_view_model.dart';
 import 'package:flow_muse/features/library/repositories/library_repository.dart';
 import 'package:flow_muse/features/settings/views/settings_page.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_config_store.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     show CanvasLayoutType;
 import 'package:flow_muse/features/whiteboard/models/editor_preferences.dart';
@@ -13,6 +14,7 @@ import 'package:flow_muse/shared/widgets/right_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage_ohos/flutter_secure_storage_ohos.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Preferences extends EditorPreferencesViewModel {
@@ -42,6 +44,60 @@ class _Shell extends ShellLayoutViewModel {
 
 void main() {
   WidgetController.hitTestWarningShouldBeFatal = true;
+  testWidgets('选择官方预设填入地址和模型并隔离不同服务商的密钥', (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    addTearDown(() => FlutterSecureStorage.setMockInitialValues({}));
+    await defaultAiAgentConfigStore.write(
+      const AiAgentConfig(
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'test-old-key',
+        model: 'gpt-6-luna',
+      ),
+    );
+    await tester.binding.setSurfaceSize(const Size(1000, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          initialThemePresetProvider.overrideWithValue(
+            appThemePresetById(AppThemeId.night),
+          ),
+          editorPreferencesProvider.overrideWith(_Preferences.new),
+          libraryIndexProvider.overrideWith(_Library.new),
+          accountViewModelProvider.overrideWith(_Account.new),
+          shellLayoutViewModelProvider.overrideWith(_Shell.new),
+        ],
+        child: const MaterialApp(home: SettingsPage(initialSection: 'lab')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    String input(String label) => tester
+        .widget<TextField>(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField && widget.decoration?.labelText == label,
+          ),
+        )
+        .controller!
+        .text;
+
+    await tester.tap(find.text('OpenAI · gpt-6-luna'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OpenAI · gpt-6-sol').last);
+    await tester.pumpAndSettle();
+    expect(input('API Key'), 'test-old-key');
+    expect(input('模型名称'), 'gpt-6-sol');
+
+    await tester.tap(find.text('OpenAI · gpt-6-sol'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('DeepSeek · deepseek-flash').last);
+    await tester.pumpAndSettle();
+    expect(input('Base URL'), 'https://api.deepseek.com');
+    expect(input('模型名称'), 'deepseek-flash');
+    expect(input('API Key'), isEmpty);
+    expect((await defaultAiAgentConfigStore.read())!.model, 'gpt-6-luna');
+  });
+
   for (final (width, scale) in [(360.0, 1.0), (360.0, 2.0), (1280.0, 1.0)]) {
     testWidgets('设置 ${width}px / ${scale}x 分类导航可用且内容不被侧栏挤压', (tester) async {
       await tester.binding.setSurfaceSize(Size(width, 900));

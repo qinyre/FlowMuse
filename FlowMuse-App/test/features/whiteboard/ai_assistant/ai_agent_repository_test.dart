@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_presets.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_config_store.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
@@ -16,8 +17,9 @@ final Uint8List basePng = Uint8List.fromList(
 );
 
 class _FakePost {
-  _FakePost(this.statusCode);
+  _FakePost(this.statusCode, {this.insertedText});
   final int statusCode;
+  final String? insertedText;
   String? url;
   Map<String, String>? headers;
   Object? body;
@@ -38,7 +40,20 @@ class _FakePost {
       body: jsonEncode({
         'choices': [
           {
-            'message': {'role': 'assistant', 'content': '好的'},
+            'message': {
+              'role': 'assistant',
+              'content': '好的',
+              if (insertedText != null)
+                'tool_calls': [
+                  {
+                    'type': 'function',
+                    'function': {
+                      'name': 'insert_text',
+                      'arguments': jsonEncode({'text': insertedText}),
+                    },
+                  },
+                ],
+            },
           },
         ],
       }),
@@ -47,15 +62,59 @@ class _FakePost {
 }
 
 AiAgentRepository _repositoryWith(_FakePost post) => AiAgentRepository(
-      config: const AiAgentConfig(
-        baseUrl: 'https://api.example.com/v1',
-        apiKey: 'test-key',
-        model: 'test-model',
-      ),
-      post: post.call,
-    );
+  config: const AiAgentConfig(
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'test-key',
+    model: 'test-model',
+  ),
+  post: post.call,
+);
 
 void main() {
+  test('官方预设测试发送图片并按服务商添加兼容参数', () async {
+    for (final provider in AiAgentProvider.values) {
+      final post = _FakePost(200, insertedText: 'Blue');
+      final repository = AiAgentRepository(
+        config: AiAgentConfig(
+          baseUrl: provider.baseUrl,
+          apiKey: 'test-key',
+          model: provider.models.first,
+        ),
+        post: post.call,
+      );
+      expect(await repository.testConnection(), isTrue);
+      expect(post.url, '${provider.baseUrl}/chat/completions');
+      final body = post.body as Map;
+      expect(body['model'], provider.models.first);
+      expect(body['messages'].last['content'].last['type'], 'image_url');
+      if (provider == AiAgentProvider.openai) {
+        expect(body['reasoning_effort'], 'none');
+      }
+      if (provider == AiAgentProvider.anthropic) {
+        expect(body['max_tokens'], greaterThan(0));
+      }
+      if (provider == AiAgentProvider.anthropic ||
+          provider == AiAgentProvider.gemini) {
+        expect(body.containsKey('temperature'), isFalse);
+      }
+    }
+  });
+
+  test('连接返回普通文本时不误报支持工具调用', () async {
+    final post = _FakePost(200);
+    await expectLater(
+      _repositoryWith(post).testConnection(),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('未返回所需的工具调用'),
+        ),
+      ),
+    );
+    expect((post.body as Map)['messages'].last['content'], isA<String>());
+  });
+
   test('纯文本请求保持字符串 content 且携带鉴权头', () async {
     final post = _FakePost(200);
     await _repositoryWith(post).run(
