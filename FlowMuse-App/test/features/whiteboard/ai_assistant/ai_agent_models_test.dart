@@ -3,6 +3,29 @@ import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('整理稿保留标题与列表，并拒绝空稿和混合写入', () {
+    const text = '# 课堂笔记\n## 关键概念\n- 保留使用条件';
+    const draft = {
+      'tool': 'draft_note',
+      'arguments': {'text': text},
+    };
+    expect(AiAgentAction.fromJson(draft).toJson(), draft);
+    expect(
+      () => AiAgentAction.edited(tool: AiAgentTool.draftNote, value: '# 只有标题'),
+      throwsFormatException,
+    );
+    expect(
+      () => AiAgentResponse.fromJson({
+        'message': '草稿',
+        'actions': [
+          draft,
+          {'tool': 'rename_note', 'arguments': {'title': '新标题'}},
+        ],
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('超长笔记上下文按单段和总长度限制安全裁剪', () {
     final context = AiNoteContext.fromTexts([
       AiNoteText(

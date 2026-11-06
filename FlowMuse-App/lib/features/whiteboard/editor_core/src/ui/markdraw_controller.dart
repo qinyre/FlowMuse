@@ -40,7 +40,11 @@ const String _logTag = 'InkRecognition';
 /// Which color picker to open programmatically.
 enum ColorPickerTarget { stroke, background, font }
 
-Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
+Scene _sceneWithLayoutPagesForLayout(
+  Scene scene,
+  CanvasLayout layout, {
+  bool materializePdfPages = false,
+}) {
   if (!layout.isPaged) {
     return scene;
   }
@@ -49,7 +53,7 @@ Scene _sceneWithLayoutPagesForLayout(Scene scene, CanvasLayout layout) {
     for (final element in scene.elements)
       if (element.isCanvasPage) element.pageId ?? element.id.value,
   };
-  final legacyPdfIds = existingPageIds.isEmpty
+  final legacyPdfIds = existingPageIds.isEmpty && !materializePdfPages
       ? {
           for (final element in scene.elements)
             if (!element.isDeleted && element.isPdfBackground) element.pageId,
@@ -4242,8 +4246,9 @@ class MarkdrawController extends ChangeNotifier {
             for (final text in normalized)
               ..._splitAdaptiveText(
                 text,
-                insertionAreas.first.rect.width,
                 insertionAreas.first.rect.height * 0.8,
+                (chunk) =>
+                    _adaptiveTextHeight(chunk, insertionAreas.first.rect.width),
               ),
           ]
         : normalized;
@@ -4334,6 +4339,191 @@ class MarkdrawController extends ChangeNotifier {
     );
   }
 
+  /// Appends a typeset draft as a single undoable edit.
+  void insertNoteDraft(List<NoteDraftBlock> blocks) {
+    if (blocks.isEmpty) return;
+    if (pageNavigationBusy || _editingTextElementId != null) {
+      throw StateError('请先完成当前画布操作，再写入整理稿');
+    }
+    final scene = _editorState.scene;
+    var layout = _layout;
+    final before = _sceneWithLayoutPagesForLayout(
+      scene,
+      layout,
+      materializePdfPages: true,
+    );
+    final elements = before.elements.skip(scene.elements.length).toList();
+    final visible = _editorState.viewport.visibleRect(_canvasSize);
+    final existing = layout.isPaged ? null : ExportBounds.compute(scene);
+    final paperSize = CanvasLayout.pageSizeForTemplate(
+      CanvasPageTemplate.blank,
+    );
+    final paperLeft = existing == null
+        ? visible.left + 24
+        : existing.right + 80;
+    final paperTop = visible.top + 24;
+    const margin = 120.0;
+    const headerHeight = 106.0;
+    const accent = '#285D56';
+    var sheet = 0;
+    String? pageId;
+    String? firstPageId;
+    late Rect area;
+    late double y;
+
+    Map<String, Object?>? pageData() =>
+        pageId == null ? null : CanvasLayout.elementCustomData(pageId!);
+
+    void beginSheet() {
+      Rect paper;
+      if (layout.isPaged) {
+        final next = _buildTextPage(layout, CanvasPageTemplate.blank);
+        layout = layout.copyWith(pages: [...layout.pages, next.page]);
+        pageId = next.page.id;
+        firstPageId ??= pageId;
+        paper = next.page.bounds;
+        elements.add(next.element);
+      } else {
+        paper = Rect.fromLTWH(
+          paperLeft,
+          paperTop + sheet * (paperSize.height + 40),
+          paperSize.width,
+          paperSize.height,
+        );
+        elements.add(
+          RectangleElement(
+            id: ElementId.generate(),
+            x: paper.left,
+            y: paper.top,
+            width: paper.width,
+            height: paper.height,
+            strokeColor: '#DFE7E1',
+            backgroundColor: '#FAFBF7',
+            fillStyle: FillStyle.solid,
+            roughness: 0,
+            locked: true,
+          ),
+        );
+      }
+      sheet++;
+      final inner = paper.deflate(margin);
+      final columnWidth = math.min(inner.width, 1120.0);
+      area = Rect.fromLTWH(
+        inner.center.dx - columnWidth / 2,
+        inner.top,
+        columnWidth,
+        inner.height,
+      );
+      elements.addAll([
+        TextElement(
+          id: ElementId.generate(),
+          x: area.left,
+          y: area.top,
+          width: area.width,
+          height: 42,
+          text: '整理笔记  /  ${sheet.toString().padLeft(2, '0')}',
+          fontSize: 26,
+          fontFamily: 'Helvetica',
+          strokeColor: accent,
+          customData: pageData(),
+        ),
+        RectangleElement(
+          id: ElementId.generate(),
+          x: area.left,
+          y: area.top + 54,
+          width: area.width,
+          height: 3,
+          strokeColor: 'transparent',
+          backgroundColor: '#9CBEB1',
+          fillStyle: FillStyle.solid,
+          roughness: 0,
+          locked: true,
+          customData: pageData(),
+        ),
+      ]);
+      y = area.top + headerHeight;
+    }
+
+    beginSheet();
+    for (final block in blocks) {
+      final (fontSize, gap, color) = switch (block.role) {
+        NoteDraftRole.title => (68.0, 48.0, '#173C35'),
+        NoteDraftRole.section => (46.0, 24.0, accent),
+        _ => (36.0, 22.0, '#293631'),
+      };
+      final bullet = block.role == NoteDraftRole.bullet;
+      final indent = bullet ? 38.0 : 0.0;
+      final width = area.width - indent;
+      final prototype = TextElement(
+        id: const ElementId('draft-measure'),
+        x: 0,
+        y: 0,
+        width: width,
+        height: 0,
+        text: bullet ? '•  ${block.text}' : block.text,
+        fontFamily: 'Helvetica',
+        fontSize: fontSize,
+        lineHeight: 1.45,
+        strokeColor: color,
+        autoResize: false,
+      );
+      double measure(String text) => TextRenderer.measure(
+        prototype.copyWithText(text: text),
+        maxWidth: width,
+      ).$2;
+      final keepWithNext = block.role == NoteDraftRole.section ? 72.0 : 0.0;
+      for (final chunk in _splitAdaptiveText(
+        prototype.text,
+        area.height - headerHeight,
+        measure,
+      )) {
+        final height = measure(chunk);
+        if (y > area.top + headerHeight &&
+            y + height + keepWithNext > area.bottom) {
+          beginSheet();
+        }
+        elements.add(
+          TextElement(
+            id: ElementId.generate(),
+            text: chunk,
+            x: area.left + indent,
+            y: y,
+            width: width,
+            height: height,
+            fontFamily: prototype.fontFamily,
+            fontSize: fontSize,
+            lineHeight: prototype.lineHeight,
+            strokeColor: color,
+            autoResize: false,
+            customData: pageData(),
+          ),
+        );
+        y += height + gap;
+      }
+    }
+    // Legacy PDF page markers must survive undo so a peer can still find the original pages.
+    _historyManager.push(before);
+    _layout = layout;
+    applyResult(
+      CompoundResult([
+        for (final element in elements) AddElementResult(element),
+        SetSelectionResult({}),
+      ]),
+      applyDefaultStyle: false,
+    );
+    if (firstPageId != null) {
+      navigateToPage(firstPageId!, fit: true);
+    } else if (!_canvasSize.isEmpty) {
+      setViewport(
+        _editorState.viewport.fitToBounds(
+          Bounds.fromLTWH(paperLeft, paperTop, paperSize.width, paperSize.height),
+          _canvasSize,
+          padding: math.min(24, _canvasSize.shortestSide / 8),
+        ),
+      );
+    }
+  }
+
   List<({Rect rect, String? pageId})> _adaptiveTextInsertionAreas(
     Size canvasSize,
   ) {
@@ -4356,7 +4546,11 @@ class MarkdrawController extends ChangeNotifier {
     ];
   }
 
-  List<String> _splitAdaptiveText(String text, double width, double maxHeight) {
+  List<String> _splitAdaptiveText(
+    String text,
+    double maxHeight,
+    double Function(String text) measureHeight,
+  ) {
     final runes = text.runes.toList();
     final chunks = <String>[];
     var offset = 0;
@@ -4368,7 +4562,7 @@ class MarkdrawController extends ChangeNotifier {
         final candidate = String.fromCharCodes(
           runes.sublist(offset, offset + mid),
         );
-        if (_adaptiveTextHeight(candidate, width) <= maxHeight) {
+        if (measureHeight(candidate) <= maxHeight) {
           low = mid;
         } else {
           high = mid - 1;
@@ -4407,11 +4601,24 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   ({Rect rect, String pageId, Element element}) _appendAdaptiveTextPage() {
-    final index = _layout.pages.length;
+    final next = _buildTextPage(_layout, _layout.template);
+    _layout = _layout.copyWith(pages: [..._layout.pages, next.page]);
+    return (
+      rect: next.page.bounds.deflate(72),
+      pageId: next.page.id,
+      element: next.element,
+    );
+  }
+
+  ({CanvasPage page, Element element}) _buildTextPage(
+    CanvasLayout layout,
+    CanvasPageTemplate template,
+  ) {
+    final index = layout.pages.length;
     final pageId = 'page-${ElementId.generate().value}';
-    final size = CanvasLayout.pageSizeForTemplate(_layout.template);
-    final lastPage = _layout.pages.lastOrNull;
-    final bounds = switch (_layout.pageFlow) {
+    final size = CanvasLayout.pageSizeForTemplate(template);
+    final lastPage = layout.pages.lastOrNull;
+    final bounds = switch (layout.pageFlow) {
       CanvasPageFlow.topToBottom => Rect.fromLTWH(
         lastPage?.bounds.left ?? 0,
         lastPage == null ? 0 : lastPage.bounds.bottom + CanvasLayout.pageGap,
@@ -4431,13 +4638,11 @@ class MarkdrawController extends ChangeNotifier {
       id: pageId,
       index: index,
       bounds: bounds,
-      template: _layout.template,
-      pageFlow: _layout.pageFlow,
+      template: template,
+      pageFlow: layout.pageFlow,
     );
-    _layout = _layout.copyWith(pages: [..._layout.pages, page]);
     return (
-      rect: page.bounds.deflate(72),
-      pageId: pageId,
+      page: page,
       element: RectangleElement(
         id: ElementId(pageId),
         x: page.bounds.left,

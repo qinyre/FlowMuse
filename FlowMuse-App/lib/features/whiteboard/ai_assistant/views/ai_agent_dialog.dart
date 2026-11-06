@@ -7,6 +7,7 @@ import '../../../../shared/utils/ui_lifecycle.dart';
 import '../../../../shared/widgets/app_spacing.dart';
 import '../../../../shared/widgets/keyboard_focus_recovery.dart';
 import '../../ink_recognition/native_http_client.dart';
+import '../../editor_core/src/core/layout/note_draft.dart';
 import '../models/ai_agent_models.dart';
 import '../models/ai_source_location.dart';
 import '../models/ai_visual_attachment.dart';
@@ -141,6 +142,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   int _generation = 0;
   bool _loading = false;
   bool _applying = false;
+  bool _editingDraft = false;
   late final SpeechRecognitionService _speechService;
   late final bool _ownsSpeechService;
   StreamSubscription<SpeechRecognitionEvent>? _speechSubscription;
@@ -607,6 +609,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         AiAgentConversationTurn(instruction: instruction, response: effective),
       ]);
       _response = effective;
+      _editingDraft = false;
       _replyTexts = _context.texts;
       _replyImages = [
         for (final image in attachments)
@@ -656,6 +659,54 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       _ => null,
     };
     _viewSource(location);
+  }
+
+  Widget _draftPreview(int index) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final List<NoteDraftBlock> blocks;
+    try {
+      blocks = parseNoteDraft(_actionControllers[index].text);
+    } on FormatException catch (error) {
+      return Text(error.message, style: TextStyle(color: colors.error));
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(AppSpacing.radius),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '整理稿预览',
+            style: theme.textTheme.labelMedium?.copyWith(color: colors.primary),
+          ),
+          const Divider(),
+          for (final block in blocks)
+            Padding(
+              padding: EdgeInsets.only(
+                top: block.role == NoteDraftRole.section ? 14 : 6,
+              ),
+              child: Text(
+                block.role == NoteDraftRole.bullet
+                    ? '•  ${block.text}'
+                    : block.text,
+                style: switch (block.role) {
+                  NoteDraftRole.title => theme.textTheme.headlineSmall,
+                  NoteDraftRole.section => theme.textTheme.titleSmall?.copyWith(
+                    color: colors.primary,
+                  ),
+                  _ => theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+                },
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   void _clearConversation({bool keepInstruction = false}) {
@@ -1016,12 +1067,14 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                       '解释这里': '解释这里的内容',
                                       '检查公式': '检查这里的公式是否正确，如有错误请指出',
                                       '整理文字': '整理这里的文字内容',
+                                      '整理为笔记': '把这段内容整理为笔记，保留要点，看不清的地方标为待确认',
                                       '整理成导图': '把这里的内容整理成思维导图',
                                     }
                                   : const {
                                       '总结': '总结本次提供的内容',
                                       '待办': '提取待办事项',
                                       '大纲': '生成结构化大纲',
+                                      '整理为笔记': '把本次提供的内容整理为笔记，保留要点，看不清的地方标为待确认',
                                       '思维导图': '根据当前内容生成思维导图',
                                       '手写排版': '智能排版当前手写内容',
                                     })
@@ -1455,13 +1508,38 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                               AiAgentTool.renameNote =>
                                 Icons.drive_file_rename_outline,
                               AiAgentTool.insertText => Icons.note_add_outlined,
+                              AiAgentTool.draftNote => Icons.article_outlined,
                               AiAgentTool.generateMindmap => Icons.account_tree,
                               AiAgentTool.smartLayout => Icons.auto_fix_high,
                             }),
                             title: Text(response.actions[index].label),
                           ),
+                          if (response.actions[index].tool ==
+                              AiAgentTool.draftNote) ...[
+                            if (!_editingDraft) _draftPreview(index),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: _applying || _loading
+                                    ? null
+                                    : () => setState(
+                                        () => _editingDraft = !_editingDraft,
+                                      ),
+                                icon: Icon(
+                                  _editingDraft
+                                      ? Icons.visibility_outlined
+                                      : Icons.edit_outlined,
+                                  size: 16,
+                                ),
+                                label: Text(_editingDraft ? '预览成稿' : '编辑草稿'),
+                              ),
+                            ),
+                          ],
                           if (response.actions[index].tool !=
-                              AiAgentTool.smartLayout)
+                                  AiAgentTool.smartLayout &&
+                              (response.actions[index].tool !=
+                                      AiAgentTool.draftNote ||
+                                  _editingDraft))
                             Padding(
                               padding: const EdgeInsets.only(
                                 left: 40,
@@ -1498,6 +1576,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                       switch (response.actions[index].tool) {
                                         AiAgentTool.renameNote => 2,
                                         AiAgentTool.insertText => 8,
+                                        AiAgentTool.draftNote => 12,
                                         AiAgentTool.generateMindmap => 12,
                                         AiAgentTool.smartLayout => 1,
                                       },
@@ -1505,15 +1584,21 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                       switch (response.actions[index].tool) {
                                         AiAgentTool.renameNote =>
                                           maxAiAgentTitleLength,
-                                        AiAgentTool.insertText =>
+                                        AiAgentTool.insertText ||
+                                        AiAgentTool.draftNote =>
                                           maxAiAgentTextLength,
                                         AiAgentTool.generateMindmap =>
                                           maxAiMindmapJsonLength,
                                         AiAgentTool.smartLayout => 0,
                                       },
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                    border: const OutlineInputBorder(),
                                     isDense: true,
+                                    helperText:
+                                        response.actions[index].tool ==
+                                            AiAgentTool.draftNote
+                                        ? '# 标题，## 分节，- 列表'
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -1564,7 +1649,14 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                   if (response.actions.isNotEmpty)
                     FilledButton(
                       onPressed: _canApply ? _apply : null,
-                      child: Text(_applying ? '正在应用…' : '确认应用'),
+                      child: Text(
+                        _applying
+                            ? '正在应用…'
+                            : response.actions.singleOrNull?.tool ==
+                                  AiAgentTool.draftNote
+                            ? '确认写入整理稿'
+                            : '确认应用',
+                      ),
                     ),
                 ],
               ],

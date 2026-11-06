@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../editor_core/src/core/layout/note_draft.dart';
 import 'ai_source_location.dart';
 import 'ai_visual_attachment.dart';
 
@@ -33,7 +34,13 @@ const int maxAiMindmapDepth = 4;
 const int maxAiMindmapNodeTextLength = 100;
 const int maxAiMindmapJsonLength = 12000;
 
-enum AiAgentTool { renameNote, insertText, generateMindmap, smartLayout }
+enum AiAgentTool {
+  renameNote,
+  insertText,
+  draftNote,
+  generateMindmap,
+  smartLayout,
+}
 
 @immutable
 class AiAgentConversationTurn {
@@ -164,6 +171,7 @@ class AiAgentAction {
   String get label => switch (tool) {
     AiAgentTool.renameNote => '重命名笔记',
     AiAgentTool.insertText => '插入白板文字',
+    AiAgentTool.draftNote => '写入整理稿',
     AiAgentTool.generateMindmap => '生成思维导图',
     AiAgentTool.smartLayout => '智能排版手写内容',
   };
@@ -174,7 +182,7 @@ class AiAgentAction {
   }) {
     final argumentKey = switch (tool) {
       AiAgentTool.renameNote => 'title',
-      AiAgentTool.insertText => 'text',
+      AiAgentTool.insertText || AiAgentTool.draftNote => 'text',
       AiAgentTool.generateMindmap => 'root',
       AiAgentTool.smartLayout => '',
     };
@@ -182,6 +190,7 @@ class AiAgentAction {
       'tool': switch (tool) {
         AiAgentTool.renameNote => 'rename_note',
         AiAgentTool.insertText => 'insert_text',
+        AiAgentTool.draftNote => 'draft_note',
         AiAgentTool.generateMindmap => 'generate_mindmap',
         AiAgentTool.smartLayout => 'smart_layout',
       },
@@ -199,12 +208,13 @@ class AiAgentAction {
     'tool': switch (tool) {
       AiAgentTool.renameNote => 'rename_note',
       AiAgentTool.insertText => 'insert_text',
+      AiAgentTool.draftNote => 'draft_note',
       AiAgentTool.generateMindmap => 'generate_mindmap',
       AiAgentTool.smartLayout => 'smart_layout',
     },
     'arguments': switch (tool) {
       AiAgentTool.renameNote => {'title': value},
-      AiAgentTool.insertText => {'text': value},
+      AiAgentTool.insertText || AiAgentTool.draftNote => {'text': value},
       AiAgentTool.generateMindmap => {'root': _decodeMindmap(value)},
       AiAgentTool.smartLayout => <String, Object?>{},
     },
@@ -243,6 +253,7 @@ class AiAgentAction {
           _requiredText(args, key: 'text', maxLength: maxAiAgentTextLength),
         ),
       ),
+      'draft_note' when args.length == 1 => _draftNote(args),
       'generate_mindmap' => AiAgentAction(
         tool: AiAgentTool.generateMindmap,
         value: _requiredMindmap(args),
@@ -254,6 +265,16 @@ class AiAgentAction {
       'smart_layout' => throw const FormatException('智能排版参数无效'),
       _ => throw FormatException('不支持的 AI 操作：$tool'),
     };
+  }
+
+  static AiAgentAction _draftNote(Map<String, Object?> args) {
+    final text = _requiredText(
+      args,
+      key: 'text',
+      maxLength: maxAiAgentTextLength,
+    );
+    parseNoteDraft(text);
+    return AiAgentAction(tool: AiAgentTool.draftNote, value: text);
   }
 
   static Object? _decodeMindmap(String value) {
@@ -387,6 +408,10 @@ class AiAgentResponse {
       throw const FormatException('AI 返回的操作数量无效');
     }
     final actions = rawActions.map(AiAgentAction.fromJson).toList();
+    if (actions.length > 1 &&
+        actions.any((action) => action.tool == AiAgentTool.draftNote)) {
+      throw const FormatException('整理为笔记必须单独执行');
+    }
     if (actions
             .where((action) => action.tool == AiAgentTool.renameNote)
             .length >
@@ -485,6 +510,7 @@ List<AiAgentAction> sanitizeAiAgentActions({
         }
         result.add(action);
       case AiAgentTool.generateMindmap:
+      case AiAgentTool.draftNote:
         if (action.value.trim().isEmpty) continue;
         result.add(action);
     }

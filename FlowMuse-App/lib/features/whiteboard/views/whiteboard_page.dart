@@ -1190,6 +1190,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   Future<void> _applyAiAgentResponse(AiAgentResponse response) async {
+    if (response.actions.singleOrNull case AiAgentAction(
+      tool: AiAgentTool.draftNote,
+      :final value,
+    )) {
+      _markdrawController.insertNoteDraft(parseNoteDraft(value));
+      _closeAiPanel();
+      return;
+    }
     if (response.actions.any(
       (action) => action.tool == AiAgentTool.smartLayout,
     )) {
@@ -2957,7 +2965,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                     ),
                     '整理为笔记': () => _openAiAgent(
                       AiAgentScope.selection,
-                      instruction: '把这段内容整理成条理清楚的笔记',
+                      instruction: '把这段内容整理为笔记，保留要点和推导步骤，看不清的地方标为待确认',
                     ),
                   },
                   onAskCurrentPage: () => _openAiAgent(

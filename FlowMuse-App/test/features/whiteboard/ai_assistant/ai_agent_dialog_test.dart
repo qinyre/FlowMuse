@@ -325,6 +325,43 @@ void main() {
     expect(repository.receivedTexts.single, isEmpty);
   });
 
+  testWidgets('整理稿分节预览，编辑后才确认写入', (tester) async {
+    AiAgentResponse? applied;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: const AiAgentResponse(
+          message: '整理稿已生成',
+          actions: [
+            AiAgentAction(
+              tool: AiAgentTool.draftNote,
+              value: '# 讲义笔记\n## 结论\n- 定义已核对',
+            ),
+          ],
+        ),
+      ),
+      onApply: (response) async => applied = response,
+    );
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    final edit = find.text('编辑草稿');
+    await tester.ensureVisible(edit);
+    await tester.pumpAndSettle();
+    expect(find.text('整理稿预览'), findsOneWidget);
+    expect(find.text('讲义笔记'), findsOneWidget);
+    expect(find.text('•  定义已核对'), findsOneWidget);
+    expect(applied, isNull);
+
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    final editor = find.byType(TextField).last;
+    await tester.ensureVisible(editor);
+    await tester.enterText(editor, '# 修订笔记\n## 结论\n- 条件仍待确认');
+    await tester.tap(find.text('确认写入整理稿'));
+    await tester.pumpAndSettle();
+    expect(applied?.actions.single.value, '# 修订笔记\n## 结论\n- 条件仍待确认');
+  });
+
   testWidgets('回复引用只能定位本次发送的来源', (tester) async {
     final locations = <AiSourceLocation>[];
     const page = AiPageSource('pdf-page');
