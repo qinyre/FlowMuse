@@ -81,16 +81,21 @@ void main() {
         .controller!
         .text;
 
+    Finder modelOption(String label) => find.ancestor(
+      of: find.text(label),
+      matching: find.byWidgetPredicate((widget) => widget is CheckedPopupMenuItem),
+    );
+
     await tester.tap(find.text('OpenAI · gpt-6-luna'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('OpenAI · gpt-6-sol').last);
+    await tester.tap(modelOption('OpenAI · gpt-6-sol'));
     await tester.pumpAndSettle();
     expect(input('API Key'), 'test-old-key');
     expect(input('模型名称'), 'gpt-6-sol');
 
     await tester.tap(find.text('OpenAI · gpt-6-sol'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('DeepSeek V4.1 Flash · deepseek-flash').last);
+    await tester.tap(modelOption('DeepSeek V4.1 Flash · deepseek-flash'));
     await tester.pumpAndSettle();
     expect(input('Base URL'), 'https://api.deepseek.com');
     expect(input('模型名称'), 'deepseek-flash');

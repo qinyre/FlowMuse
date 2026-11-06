@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
+import '../../../../shared/utils/ui_lifecycle.dart';
 import '../../../../shared/widgets/app_spacing.dart';
 import '../../../../shared/widgets/keyboard_focus_recovery.dart';
 import '../../ink_recognition/native_http_client.dart';
@@ -792,27 +793,66 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                       spacing: AppSpacing.controlGap,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        PopupMenuButton<AiAgentScope>(
-                          enabled: !_loading && !_applying && !_capturing,
-                          tooltip: '选择笔记来源',
-                          onSelected: _selectSource,
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
-                              value: AiAgentScope.selection,
-                              child: Text('当前选区'),
-                            ),
-                            PopupMenuItem(
-                              value: AiAgentScope.page,
-                              child: Text('当前页'),
-                            ),
-                            PopupMenuItem(
-                              value: AiAgentScope.note,
-                              child: Text('整篇笔记（仅文字）'),
-                            ),
-                          ],
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
-                            child: Text('选择来源 ▾'),
+                        Builder(
+                          builder: (anchor) => OutlinedButton.icon(
+                            onPressed: _loading || _applying || _capturing
+                                ? null
+                                : () async {
+                                    final scope =
+                                        await showAnchoredPopupMenu<
+                                          AiAgentScope
+                                        >(
+                                          context: anchor,
+                                          placement:
+                                              AnchoredPopupPlacement.below,
+                                          items: [
+                                            for (final (scope, icon, label)
+                                                in const [
+                                                  (
+                                                    AiAgentScope.selection,
+                                                    Icons.crop_free,
+                                                    '当前选区',
+                                                  ),
+                                                  (
+                                                    AiAgentScope.page,
+                                                    Icons.description_outlined,
+                                                    '当前页',
+                                                  ),
+                                                  (
+                                                    AiAgentScope.note,
+                                                    Icons.notes_outlined,
+                                                    '整篇笔记（仅文字）',
+                                                  ),
+                                                ])
+                                              PopupMenuItem(
+                                                value: scope,
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                      icon,
+                                                      size: 18,
+                                                      color: colors
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                    const SizedBox(
+                                                      width:
+                                                          AppSpacing.controlGap,
+                                                    ),
+                                                    Flexible(
+                                                      child: Text(label),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                          ],
+                                        );
+                                    if (mounted && scope != null) {
+                                      _selectSource(scope);
+                                    }
+                                  },
+                            icon: const Icon(Icons.expand_more, size: 18),
+                            iconAlignment: IconAlignment.end,
+                            label: const Text('选择来源'),
                           ),
                         ),
                         InputChip(

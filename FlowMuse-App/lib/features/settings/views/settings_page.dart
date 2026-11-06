@@ -19,6 +19,7 @@ import '../../../app/view_models/theme_view_model.dart';
 import '../../../shared/storage/local_database_path.dart';
 import '../../../shared/url_launcher/app_url_launcher.dart';
 import '../../../shared/utils/ui_lifecycle.dart';
+import '../../../shared/widgets/anchored_dropdown_field.dart';
 import '../../../shared/widgets/app_motion.dart';
 import '../../../shared/widgets/app_shell.dart';
 import '../../../shared/widgets/app_spacing.dart';
@@ -2512,30 +2513,20 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
             const SizedBox(height: 8),
             const Text('预设支持图片输入和工具调用。选择后填入该服务的 API Key，再测试连接并保存。也可手动填写兼容接口。'),
             const SizedBox(height: 20),
-            InputDecorator(
+            AnchoredDropdownField<(AiAgentProvider, String)>(
               decoration: const InputDecoration(
                 labelText: '多模态模型预设',
+                hintText: '选择服务商与模型',
                 border: OutlineInputBorder(),
               ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<(AiAgentProvider, String)>(
-                  isExpanded: true,
-                  value: selected,
-                  hint: const Text('选择服务商与模型'),
-                  onChanged: enabled ? _choosePreset : null,
-                  items: [
-                    for (final provider in AiAgentProvider.values)
-                      for (final model in provider.models)
-                        DropdownMenuItem(
-                          value: (provider, model),
-                          child: Text(
-                            '${provider.label} · $model',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                  ],
-                ),
-              ),
+              value: selected,
+              enabled: enabled,
+              onChanged: _choosePreset,
+              options: [
+                for (final provider in AiAgentProvider.values)
+                  for (final model in provider.models) (provider, model),
+              ],
+              labelOf: (preset) => '${preset.$1.label} · ${preset.$2}',
             ),
             if (provider != null)
               Align(

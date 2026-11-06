@@ -82,6 +82,25 @@ void main() {
     );
   });
 
+  testWidgets('白板内的 AI 来源菜单显示在助手上层并可选取', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'ai-source-menu'),
+    ))!;
+    await _open(tester, _container(library: library), note);
+
+    tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onAiPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, '选择来源'));
+    await tester.pumpAndSettle();
+
+    final noteSource = find.text('整篇笔记（仅文字）').hitTestable();
+    expect(noteSource, findsOneWidget);
+    await tester.tap(noteSource);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('移除笔记来源'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('笔身双击只切当前画布，弹窗、后台和离页不误触发', (tester) async {
     const channel = MethodChannel('flow_muse/stylus_double_tap');
     const codec = StandardMethodCodec();

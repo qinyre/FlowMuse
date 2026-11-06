@@ -163,7 +163,8 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _disposingOrLeaving = false;
   bool _handlingBack = false;
   bool _editorPreferencesApplied = false;
-  OverlayEntry? _aiPanelEntry;
+  final _aiPanelPortal = OverlayPortalController();
+  AiAgentPanel? _aiPanel;
   bool _aiCaptureModeActive = false;
 
   // V3 智能排版会话（V3-505C 真实入口）：真实依赖装配 + 非模态面板。
@@ -282,7 +283,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void dispose() {
     _socialInboxPresenter.detach(this);
     WidgetsBinding.instance.removeObserver(this);
-    _closeAiPanel();
+    _handleRegionCancel();
     _disposingOrLeaving = true;
     _saveReadingPosition(force: true);
     _readingPositionTimer?.cancel();
@@ -928,7 +929,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   void _toggleAiAgent() {
-    if (_aiPanelEntry != null) {
+    if (_aiPanel != null) {
       _closeAiPanel();
       return;
     }
@@ -949,72 +950,72 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       ).showSnackBar(SnackBar(content: Text(error.message.toString())));
       return;
     }
-    if (_aiPanelEntry != null) _closeAiPanel();
     final initialContext = source.context;
-    final repository = ref.read(aiAgentRepositoryProvider);
-    final entry = OverlayEntry(
-      builder: (overlayContext) {
-        final size = MediaQuery.sizeOf(overlayContext);
-        final padding = MediaQuery.paddingOf(overlayContext);
-        final keyboardInset = MediaQuery.viewInsetsOf(overlayContext).bottom;
-        final safeTop = padding.top + 16;
-        final safeBottom = max(keyboardInset, padding.bottom + 120) + 16;
-        final availableHeight = max(0.0, size.height - safeTop - safeBottom);
-        final panelWidth = size.width >= 900
-            ? 420.0
-            : min(360.0, size.width - 24);
-        final panelHeight = min(520.0, availableHeight);
-        final verticalSpace = availableHeight - panelHeight;
-        final panelTop = safeTop + min(verticalSpace, verticalSpace / 2 + 48);
-        return Positioned(
-          top: panelTop,
-          right: 12,
-          width: panelWidth,
-          height: panelHeight,
-          child: Visibility(
-            visible: !_aiCaptureModeActive,
-            maintainState: true,
-            maintainAnimation: true,
-            child: Material(
-              elevation: 12,
-              shadowColor: Colors.black38,
-              clipBehavior: Clip.antiAlias,
-              borderRadius: BorderRadius.circular(12),
-              child: AiAgentPanel(
-                repository: repository,
-                noteTitle: initialContext.noteTitle,
-                texts: initialContext.texts,
-                contextTruncated: initialContext.truncated,
-                contextLabel: initialContext.label,
-                hasSelection: initialContext.hasSelection,
-                onRegionCapture: _startRegionCapture,
-                initialSourceCapture: source.capture,
-                initialInstruction:
-                    instruction ??
-                    (scope == AiAgentScope.selection ? '解释这段内容' : null),
-                sourceProvider: (scope) =>
-                    readAiAgentSource(_markdrawController, scope),
-                promptStore: defaultAiPromptStore,
-                speechRecognitionService: _speechRecognitionService,
-                onApply: _applyAiAgentResponse,
-                onClose: _closeAiPanel,
-              ),
-            ),
-          ),
-        );
-      },
+    final panel = AiAgentPanel(
+      key: UniqueKey(),
+      repository: ref.read(aiAgentRepositoryProvider),
+      noteTitle: initialContext.noteTitle,
+      texts: initialContext.texts,
+      contextTruncated: initialContext.truncated,
+      contextLabel: initialContext.label,
+      hasSelection: initialContext.hasSelection,
+      onRegionCapture: _startRegionCapture,
+      initialSourceCapture: source.capture,
+      initialInstruction:
+          instruction ?? (scope == AiAgentScope.selection ? '解释这段内容' : null),
+      sourceProvider: (scope) => readAiAgentSource(_markdrawController, scope),
+      promptStore: defaultAiPromptStore,
+      speechRecognitionService: _speechRecognitionService,
+      onApply: _applyAiAgentResponse,
+      onClose: _closeAiPanel,
     );
-    _aiPanelEntry = entry;
-    _aiSpeechInputActive = true;
+    setState(() {
+      _aiPanel = panel;
+      _aiSpeechInputActive = true;
+    });
+    _aiPanelPortal.show();
     unawaited(_speechRecognitionService.cancel());
-    setState(() {});
-    Overlay.of(context).insert(entry);
+  }
+
+  Widget _buildAiPanel(BuildContext overlayContext) {
+    final panel = _aiPanel;
+    if (panel == null) return const SizedBox.shrink();
+    final size = MediaQuery.sizeOf(context);
+    final padding = MediaQuery.paddingOf(context);
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final safeTop = padding.top + 16;
+    final safeBottom = max(keyboardInset, padding.bottom + 120) + 16;
+    final availableHeight = max(0.0, size.height - safeTop - safeBottom);
+    final panelWidth = size.width >= 900 ? 420.0 : min(360.0, size.width - 24);
+    final panelHeight = min(520.0, availableHeight);
+    final verticalSpace = availableHeight - panelHeight;
+    final panelTop = safeTop + min(verticalSpace, verticalSpace / 2 + 48);
+    return Positioned(
+      top: panelTop,
+      right: 12,
+      width: panelWidth,
+      height: panelHeight,
+      child: Visibility(
+        visible: !_aiCaptureModeActive,
+        maintainState: true,
+        maintainAnimation: true,
+        child: Material(
+          elevation: 12,
+          shadowColor: Theme.of(
+            overlayContext,
+          ).colorScheme.shadow.withValues(alpha: 0.24),
+          clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(12),
+          child: panel,
+        ),
+      ),
+    );
   }
 
   void _closeAiPanel() {
     if (_aiCaptureModeActive) _handleRegionCancel();
-    _aiPanelEntry?.remove();
-    _aiPanelEntry = null;
+    _aiPanelPortal.hide();
+    setState(() => _aiPanel = null);
     unawaited(_finishAiSpeechInput());
   }
 
@@ -1024,13 +1025,11 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     final completer = Completer<AiVisualAttachment?>();
     _regionCaptureCompleter = completer;
     setState(() => _aiCaptureModeActive = true);
-    _aiPanelEntry?.markNeedsBuild();
     try {
       return await completer.future;
     } finally {
       _regionCaptureCompleter = null;
       if (mounted) setState(() => _aiCaptureModeActive = false);
-      _aiPanelEntry?.markNeedsBuild();
     }
   }
 
@@ -1062,7 +1061,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _finishAiSpeechInput() async {
     await _speechRecognitionService.cancel();
-    if (mounted && _aiPanelEntry == null) {
+    if (mounted && _aiPanel == null) {
       setState(() => _aiSpeechInputActive = false);
     }
   }
@@ -2690,7 +2689,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           if (didPop) {
             return;
           }
-          if (_aiPanelEntry != null) {
+          if (_aiPanel != null) {
             _closeAiPanel();
             return;
           }
@@ -2706,6 +2705,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             bottom: false,
             child: Stack(
               children: [
+                OverlayPortal(
+                  controller: _aiPanelPortal,
+                  overlayChildBuilder: _buildAiPanel,
+                ),
                 MarkdrawEditor(
                   controller: _markdrawController,
                   collaborationFocusLabel: focusStatus?.label,
