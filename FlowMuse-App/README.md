@@ -60,7 +60,7 @@ flutter test --no-pub
 
 ```sh
 flutter build web --release --no-web-resources-cdn --pwa-strategy=none --base-href / --dart-define=FLOWMUSE_COLLAB_SERVER_URL=https://api.flowmuse.cloud --dart-define=FLOWMUSE_SHARE_ORIGIN=https://app.flowmuse.cloud --dart-define=FLOWMUSE_LAYERED_WET_INK=true --dart-define=FLOWMUSE_LIVE_INK_V2=true
-python tool/precompress_web.py build/web
+python tool/precompress_web.py build/web --optimize-startup-fonts
 node --test tool/web_startup_test.mjs
 python tool/precompress_web_test.py
 ```
@@ -70,6 +70,8 @@ python tool/precompress_web_test.py
 `--no-web-resources-cdn` 随包提供 CanvasKit，避免外部 CDN 导致白屏；当前不启用 Flutter 离线 Service Worker，未版本化资源返回 `Cache-Control: no-cache`。若发布到子路径，需同步调整 base href 与站点路由，不能复用根路径配方。
 
 启动页按资源下载、画布初始化和工作区打开三个阶段展示预计进度。进度随阶段推进，首帧就绪后移除，等待过久或加载失败时可重新加载。
+
+`--optimize-startup-fonts` 让 Web 发布包先注册 FlowMuse Sans 常规字重，半粗和粗体等到首帧后补载。CanvasKit 的 Roboto 回退字体由发布包直接提供，避免启动时等待外部字体服务。发布时保留完整字体文件和许可。
 
 发布后核对实际入口、主脚本、CanvasKit、UI 字体、扫码解码脚本、缓存/压缩响应，并用干净浏览器验证启动、保存及必要协作流程。记录源提交、构建参数和资源哈希；临时上传包验证后清除，不累积整包归档。纯客户端更新无需重启 Go 服务。
 

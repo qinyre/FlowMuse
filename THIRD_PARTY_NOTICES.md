@@ -26,6 +26,7 @@ Required Notice: Project source: https://github.com/qinyre/FlowMuse
 | Excalifont | [原 OFL-1.1](FlowMuse-App/assets/fonts/markdraw/OFL.txt)，保留字体名 Excalifont | 字体保持 OFL，不改为根许可证；未修改本次字体二进制。 |
 | Virgil | 字体自身 name 表第 0、13、14 项含版权、完整 OFL-1.1 和地址；[上游项目](https://github.com/excalidraw/virgil) | 本地字体沿用其随附元数据，不能拿 Excalifont 的版权行代替。随 App 的 NOTICES 另收录其原始声明和完整许可。 |
 | FlowMuse Sans（Noto Sans SC 派生） | [来源与重命名记录](FlowMuse-App/assets/fonts/ui/README.md)、[OFL-1.1](FlowMuse-App/assets/fonts/ui/OFL.txt) | 保留上游版权、OFL 与派生重命名，不把字体改为非商业许可。 |
+| Web 回退字体 Roboto Regular 2.137 | 从 Flutter SDK 的 `engine/src/flutter/txt/third_party/fonts/Roboto-Regular.ttf` 原样取用，[Apache-2.0 与版权声明](FlowMuse-App/web/assets/fonts/LICENSE.roboto.txt) | 仅随 Web 发布，保留原字体及许可。SHA-256 为 `79e851404657dac2106b3d22ad256d47824a9a5765458edb72c9102a45816d95`。 |
 | Android 内置 Zipformer 双语模型 | [上游下载说明](https://github.com/k2-fsa/sherpa/blob/master/docs/source/onnx/pretrained_models/online-transducer/zipformer-transducer-models.rst)指向 `csukuangfj/k2fsa-zipformer-bilingual-zh-en-t`，其[模型卡声明 Apache-2.0](https://huggingface.co/csukuangfj/k2fsa-zipformer-bilingual-zh-en-t/blob/main/README.md) | **权重与 SDK 的许可须分开核对。** 当前文件夹未保存原下载包的校验和与随包授权，尚未完成逐文件上游哈希对应；不得仅凭 sherpa-onnx SDK 的 Apache 许可认定全部权重已核清。根许可证不覆盖这些权重；再发布前补齐来源/许可对应证据。 |
 | 鸿蒙预编译 `FlowMuse-App/ohos/entry/libs/arm64-v8a/libsqlite3.so` | Git 引入记录 `b18764af`；文件中可见版本字符串 `3.53.2`，但未找到可复核的构建/供应来源记录 | **来源待核实。** 维护者仅记得可能来自 SDK，不能作为授权证明；不因 SQLite 项目的一般许可或此版本字符串就认定该特定二进制可再分发。本轮保留文件，不重写其归属；下次发布前补证或从可信来源重建。 |
 
