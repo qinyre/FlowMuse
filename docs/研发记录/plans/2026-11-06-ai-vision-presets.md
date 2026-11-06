@@ -8,7 +8,7 @@
 
 ## 官方核验与本地验证
 
-- DeepSeek Flash 采用官方视觉入口和工具调用格式。[图片输入](https://api-docs.deepseek.com/guides/vision/) · [工具调用](https://api-docs.deepseek.com/guides/tool_calls/)
+- DeepSeek V4.1 Flash 使用官方 API ID `deepseek-flash`。[模型更新日志](https://api-docs.deepseek.com/updates/) · [图片输入](https://api-docs.deepseek.com/guides/vision/) · [工具调用](https://api-docs.deepseek.com/guides/tool_calls/)
 - 智谱选择 GLM-5.3-Flash 与 FlashX。[官方模型说明](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5.3-flash)
 - OpenAI 选择 GPT-6 Luna 与 Sol。Chat Completions 的工具调用使用 `reasoning_effort: none`。[官方迁移指南](https://developers.openai.com/api/docs/guides/latest-model)
 - Anthropic 采用 Claude 5.5 的 Sonnet、Opus、Haiku 与官方兼容端点。服务商密钥须具备相应 API 权限。[模型目录](https://platform.claude.com/docs/en/models/overview) · [兼容接口](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk)

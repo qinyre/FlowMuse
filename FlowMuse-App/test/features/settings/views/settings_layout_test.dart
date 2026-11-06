@@ -90,7 +90,7 @@ void main() {
 
     await tester.tap(find.text('OpenAI · gpt-6-sol'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('DeepSeek · deepseek-flash').last);
+    await tester.tap(find.text('DeepSeek V4.1 Flash · deepseek-flash').last);
     await tester.pumpAndSettle();
     expect(input('Base URL'), 'https://api.deepseek.com');
     expect(input('模型名称'), 'deepseek-flash');

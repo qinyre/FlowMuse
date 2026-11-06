@@ -1,7 +1,7 @@
 /// Official Chat Completions endpoints with documented image and tool support.
 enum AiAgentProvider {
   deepseek(
-    'DeepSeek',
+    'DeepSeek V4.1 Flash',
     'https://api.deepseek.com',
     'https://api-docs.deepseek.com/guides/vision/',
     ['deepseek-flash'],
