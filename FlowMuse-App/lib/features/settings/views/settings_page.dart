@@ -2595,6 +2595,13 @@ class _AiSettingsSectionState extends State<_AiSettingsSection> {
                 border: OutlineInputBorder(),
               ),
             ),
+            const SizedBox(height: AppSpacing.controlGap),
+            Text(
+              '理解手写、图片和 PDF 批注需要支持图片输入的多模态模型。若要将整理结果写回笔记，模型还需支持工具调用。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 12),
             Text(
               kIsWeb
