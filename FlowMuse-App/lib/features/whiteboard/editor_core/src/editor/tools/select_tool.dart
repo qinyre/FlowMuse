@@ -12,6 +12,7 @@ import '../../core/scene/scene_exports.dart';
 import '../../rendering/interactive/interactive.dart';
 import '../bindings/bindings.dart';
 import '../grid_snap.dart';
+import '../mindmap/mindmap_utils.dart';
 import '../object_snap.dart';
 import '../tool_result.dart';
 import '../tool_type.dart';
@@ -50,6 +51,7 @@ class SelectTool implements Tool {
 
   // For multi-element transforms
   List<Element>? _startElements;
+  bool _movingMindmapBranch = false;
   Bounds? _startUnionBounds;
 
   // Binding indicator during point drag
@@ -422,6 +424,19 @@ class SelectTool implements Tool {
 
     final selectedElements = _getSelectedElements(context);
     final isSelected = context.selectedIds.contains(hit.id);
+
+    if (_movingMindmapBranch) {
+      final branch = _startElements!;
+      if (branch.any((node) => node.locked)) return null;
+      final (x, y) = _clampBranchDelta(branch, dx, dy, context.scene);
+      final result = _nudgeElements(branch, x, y, context);
+      return isSelected
+          ? result
+          : CompoundResult([
+              SetSelectionResult({hit.id}),
+              result,
+            ]);
+    }
 
     // Multi-element move
     if (isSelected && selectedElements.length > 1) {
@@ -1617,6 +1632,10 @@ class SelectTool implements Tool {
           if (deletedIds.contains(arrow.id)) continue;
           if (seen.contains(arrow.id)) continue;
           seen.add(arrow.id);
+          if (MindmapUtils.isMindmapEdge(arrow)) {
+            results.add(RemoveElementResult(arrow.id));
+            continue;
+          }
           var updated = arrow;
           if (arrow.startBinding != null &&
               deletedIds.contains(ElementId(arrow.startBinding!.elementId))) {
@@ -1810,6 +1829,13 @@ class SelectTool implements Tool {
           : key == 'ArrowDown'
           ? nudge
           : 0.0;
+      final node = selectedElements.singleOrNull;
+      if (node != null && MindmapUtils.isMindmapNode(node)) {
+        final branch = MindmapUtils.branchNodes(node, context.scene.elements);
+        if (branch.any((element) => element.locked)) return null;
+        final (x, y) = _clampBranchDelta(branch, dx, dy, context.scene);
+        return _nudgeElements(branch, x, y, context);
+      }
       return _nudgeElements(selectedElements, dx, dy, context);
     }
 
@@ -1993,6 +2019,31 @@ class SelectTool implements Tool {
     return CompoundResult(results);
   }
 
+  (double, double) _clampBranchDelta(
+    List<Element> nodes,
+    double dx,
+    double dy,
+    Scene scene,
+  ) {
+    final pageId = nodes.firstOrNull?.pageId;
+    if (pageId == null) return (dx, dy);
+    final page = scene.getElementById(ElementId(pageId));
+    if (page == null || page.isDeleted || !page.isCanvasPage) return (dx, dy);
+    final bounds = nodes
+        .map(AlignmentUtils.visualBounds)
+        .reduce((a, b) => a.union(b));
+    return (
+      dx.clamp(
+        math.min(0.0, page.x - bounds.left),
+        math.max(0.0, page.x + page.width - bounds.right),
+      ),
+      dy.clamp(
+        math.min(0.0, page.y - bounds.top),
+        math.max(0.0, page.y + page.height - bounds.bottom),
+      ),
+    );
+  }
+
   @override
   ToolOverlay? get overlay {
     // Binding / close indicator during point drag
@@ -2054,6 +2105,7 @@ class SelectTool implements Tool {
     _activePointIndex = null;
     _activeSegmentIndex = null;
     _startElements = null;
+    _movingMindmapBranch = false;
     _startUnionBounds = null;
     _bindTarget = null;
     _closeIndicatorCenter = null;
@@ -2073,8 +2125,9 @@ class SelectTool implements Tool {
       context.scene.getElementAtPoint(
         point,
         where: (element) =>
-            element is! FreedrawElement ||
-            context.selectedIds.contains(element.id),
+            !MindmapUtils.isMindmapEdge(element) &&
+            (element is! FreedrawElement ||
+                context.selectedIds.contains(element.id)),
       );
 
   void _captureStartState(List<Element> elements, {ToolContext? context}) {
@@ -2114,7 +2167,12 @@ class SelectTool implements Tool {
     final hit = _hitElement;
     if (hit == null) return;
     final isSelected = context.selectedIds.contains(hit.id);
-    if (isSelected && context.selectedIds.length > 1) {
+    if (MindmapUtils.isMindmapNode(hit) &&
+        !(isSelected && context.selectedIds.length > 1) &&
+        GroupUtils.outermostGroupId(hit) == null) {
+      _movingMindmapBranch = true;
+      _startElements = MindmapUtils.branchNodes(hit, context.scene.elements);
+    } else if (isSelected && context.selectedIds.length > 1) {
       _startElements = _getSelectedElements(context);
     } else if (!isSelected) {
       // Dragging an unselected element: capture group members if grouped
@@ -2164,7 +2222,10 @@ class SelectTool implements Tool {
     for (final elem in movedElements) {
       final arrows = BindingUtils.findBoundArrows(scene, elem.id);
       for (final arrow in arrows) {
-        if (selectedIds.contains(arrow.id)) continue;
+        if (selectedIds.contains(arrow.id) &&
+            !MindmapUtils.isMindmapEdge(arrow)) {
+          continue;
+        }
         if (seen.contains(arrow.id)) continue;
         seen.add(arrow.id);
         final updated = BindingUtils.updateBoundArrowEndpoints(

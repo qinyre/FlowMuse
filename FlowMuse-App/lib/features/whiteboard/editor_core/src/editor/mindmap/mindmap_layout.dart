@@ -4,11 +4,11 @@ import '../../core/elements/arrow_element.dart';
 import '../../core/elements/arrow_type.dart';
 import '../../core/elements/element.dart';
 import '../../core/elements/element_id.dart';
-import '../../core/elements/line_element.dart';
 import '../../core/elements/rectangle_element.dart';
 import '../../core/elements/roundness.dart';
 import '../../core/elements/text_element.dart';
 import '../../core/math/point.dart';
+import '../../rendering/text_renderer.dart';
 import 'mindmap_tree.dart';
 import 'mindmap_utils.dart';
 
@@ -36,7 +36,9 @@ class MindmapLayout {
 
   static const double nodeWidth = 140.0;
   static const double nodeHeight = 48.0;
-  static const double hGap = 80.0;
+  static const double hGap = 64.0;
+  static const double _maxWidth = 232;
+  static const double _labelPadding = 12;
   static const double vGap = 24.0;
 
   /// customData tag identifying mind-map elements.
@@ -45,18 +47,20 @@ class MindmapLayout {
   static const String nodeRole = 'mindmap-node';
   static const String edgeRole = 'mindmap-edge';
 
-  static Map<String, Object?> get nodeCustomData =>
-      {_cdKey: {_roleKey: nodeRole}};
-  static Map<String, Object?> get edgeCustomData =>
-      {_cdKey: {_roleKey: edgeRole}};
+  static Map<String, Object?> get nodeCustomData => {
+    _cdKey: {_roleKey: nodeRole},
+  };
+  static Map<String, Object?> get edgeCustomData => {
+    _cdKey: {_roleKey: edgeRole},
+  };
 
   /// Per-level visual styling. Depth 0 = root, 1 = first-level branch, 2+ =
   /// leaves. Borrowed from mature products (XMind/MindNode): the root is the
   /// heaviest, branches carry colour, leaves recede.
   static const List<_LevelStyle> _levelStyles = [
-    _LevelStyle(backgroundColor: '#1971c2', textColor: '#ffffff', fontSize: 20),
-    _LevelStyle(backgroundColor: '#a5d8ff', textColor: '#1e1e1e', fontSize: 18),
-    _LevelStyle(backgroundColor: '#e7f5ff', textColor: '#1e1e1e', fontSize: 16),
+    _LevelStyle(backgroundColor: '#245750', textColor: '#ffffff', fontSize: 20),
+    _LevelStyle(backgroundColor: '#d9ede5', textColor: '#243631', fontSize: 18),
+    _LevelStyle(backgroundColor: '#edf5f1', textColor: '#243631', fontSize: 16),
   ];
 
   /// Branch colour palette for first-level branches. Each top-level child of
@@ -86,10 +90,8 @@ class MindmapLayout {
   }) {
     final style = _styleForDepth(depth);
     final bg = _backgroundColorFor(depth, branchIndex, style);
-    final stroke = depth == 0 ? '#1864ab' : '#495057';
-    final sw = depth == 0 ? 2.5 : 2.0;
-    final rv = depth == 0 ? 20.0 : 16.0;
-    return (bg, stroke, sw, rv);
+    final stroke = depth == 0 ? bg : '#a9bdb5';
+    return (bg, stroke, 1.2, 14);
   }
 
   /// Public text-style query: `(textColour, fontSize)` by depth.
@@ -108,12 +110,31 @@ class MindmapLayout {
     Element parent,
     Element child,
   ) {
-    final fresh = _curveEdge(_rectFromElement(parent), _rectFromElement(child));
-    // copyWithLine swaps points; copyWith swaps the bounding box. Neither
-    // alone covers both, so chain them. id/bindings/style are preserved.
+    final fresh = _curveEdge(
+      _rectFromElement(parent),
+      _rectFromElement(child),
+      id: edge.id,
+    );
     return edge
-        .copyWithLine(points: fresh.points)
-        .copyWith(x: fresh.x, y: fresh.y, width: fresh.width, height: fresh.height);
+        .copyWithLine(
+          points: fresh.points,
+          clearStartArrowhead: true,
+          clearEndArrowhead: true,
+        )
+        .copyWith(
+          x: fresh.x,
+          y: fresh.y,
+          width: fresh.width,
+          height: fresh.height,
+          angle: 0,
+          strokeColor: fresh.strokeColor,
+          strokeWidth: fresh.strokeWidth,
+          roughness: fresh.roughness,
+        )
+        .copyWithArrow(
+          startBinding: fresh.startBinding,
+          endBinding: fresh.endBinding,
+        );
   }
 
   static _VirtualRect _rectFromElement(Element e) {
@@ -123,6 +144,7 @@ class MindmapLayout {
       y: e.y,
       width: e.width,
       height: e.height,
+      angle: e.angle,
     );
   }
 
@@ -131,11 +153,14 @@ class MindmapLayout {
   /// Builds the complete element list for [tree], rooted at [origin].
   /// Used when inserting a brand-new tree (e.g. AI-generated). For updating
   /// an existing tree in place after an edit, use [reflowTree] instead.
-  static List<Element> treeToElements(MindmapNode tree, {Point? origin}) {
+  static List<Element> treeToElements(
+    MindmapNode tree, {
+    Point? origin,
+    bool anchorRoot = false,
+  }) {
     final o = origin ?? const Point(80, 80);
-    final slots = <_NodeSlot>[];
-    _layoutSubtree(tree, o.x, o.y, 0, -1, slots);
-    return _materialize(slots, isNew: true);
+    final slots = _layoutSlots(tree, o, anchorRoot: anchorRoot);
+    return _materialize(slots);
   }
 
   // --- Auto-reflow (manual editing) -------------------------------------
@@ -150,10 +175,13 @@ class MindmapLayout {
   ///
   /// [origin] is where the root's top-left should sit. To keep the root
   /// visually stable during editing, pass the root's current top-left.
-  static ReflowPlan reflowTree(MindmapNode tree, {Point? origin}) {
+  static ReflowPlan reflowTree(
+    MindmapNode tree, {
+    Point? origin,
+    bool anchorRoot = false,
+  }) {
     final o = origin ?? const Point(80, 80);
-    final slots = <_NodeSlot>[];
-    _layoutSubtree(tree, o.x, o.y, 0, -1, slots);
+    final slots = _layoutSlots(tree, o, anchorRoot: anchorRoot);
 
     final nodeUpdates = <ElementUpdate>[];
     for (final slot in slots) {
@@ -163,6 +191,9 @@ class MindmapLayout {
             nodeId: sourceId,
             x: slot.x,
             y: slot.y,
+            width: slot.width,
+            height: slot.height,
+            text: slot.node.text,
             depth: slot.depth,
             branchIndex: slot.branchIndex,
           ),
@@ -180,16 +211,15 @@ class MindmapLayout {
       idForNewSlot[slot] = ElementId.generate();
     }
     for (final slot in newSlots) {
-      newElements.addAll(
-        _nodeElementsForSlot(slot, id: idForNewSlot[slot]!),
-      );
+      newElements.addAll(_nodeElementsForSlot(slot, id: idForNewSlot[slot]!));
     }
     // Edges from each new node's parent → new node. The parent is found by
     // scanning slots for the node whose children list contains this new node.
     for (final newSlot in newSlots) {
       final parentSlot = _findParentSlot(newSlot, slots);
       if (parentSlot == null) continue;
-      final parentId = parentSlot.node.sourceId ?? idForNewSlot[parentSlot]?.value;
+      final parentId =
+          parentSlot.node.sourceId ?? idForNewSlot[parentSlot]?.value;
       newElements.add(
         _curveEdge(
           _rectForSlot(parentSlot, id: parentId),
@@ -222,71 +252,112 @@ class MindmapLayout {
       id: id ?? slot.node.sourceId,
       x: slot.x,
       y: slot.y,
-      width: nodeWidth,
-      height: nodeHeight,
+      width: slot.width,
+      height: slot.height,
     );
   }
 
   // --- Layout core (shared by both paths) -------------------------------
 
-  /// Recursively lays out [node] at top-left (`x`, `y`) with [depth] and
-  /// [branchIndex] (the index of this node's top-level branch ancestor, or -1
-  /// for the root). Appends a [_NodeSlot] to [slots] and returns the total
-  /// vertical height consumed by this subtree.
-  static double _layoutSubtree(
-    MindmapNode node,
-    double x,
-    double y,
-    int depth,
-    int branchIndex,
-    List<_NodeSlot> slots,
-  ) {
-    // Leaf: place node and return its height.
-    if (node.children.isEmpty) {
+  static List<_NodeSlot> _layoutSlots(
+    MindmapNode tree,
+    Point origin, {
+    required bool anchorRoot,
+  }) {
+    final sizes = <MindmapNode, (double, double)>{};
+    final heights = <MindmapNode, double>{};
+    final columns = <double>[];
+
+    double measure(MindmapNode node, int depth) {
+      final (width, height) = _measureNode(node.text, depth);
+      sizes[node] = (width, height);
+      if (depth == columns.length) columns.add(0);
+      columns[depth] = math.max(columns[depth], width);
+      var childrenHeight = 0.0;
+      for (var i = 0; i < node.children.length; i++) {
+        childrenHeight +=
+            measure(node.children[i], depth + 1) + (i == 0 ? 0 : vGap);
+      }
+      return heights[node] = math.max(height, childrenHeight);
+    }
+
+    measure(tree, 0);
+    final slots = <_NodeSlot>[];
+    void place(
+      MindmapNode node,
+      double x,
+      double y,
+      int depth,
+      int branchIndex,
+    ) {
+      final (width, height) = sizes[node]!;
+      final subtreeHeight = heights[node]!;
+      final childrenHeight = node.children.fold<double>(
+        vGap * math.max(0, node.children.length - 1),
+        (sum, child) => sum + heights[child]!,
+      );
+      var childY = y + (subtreeHeight - childrenHeight) / 2;
+      for (var i = 0; i < node.children.length; i++) {
+        final child = node.children[i];
+        place(
+          child,
+          x + columns[depth] + hGap,
+          childY,
+          depth + 1,
+          depth == 0 ? i : branchIndex,
+        );
+        childY += heights[child]! + vGap;
+      }
       slots.add(
-        _NodeSlot(node: node, x: x, y: y, depth: depth, branchIndex: branchIndex),
+        _NodeSlot(
+          node: node,
+          x: x,
+          y: y + (subtreeHeight - height) / 2,
+          width: width,
+          height: height,
+          depth: depth,
+          branchIndex: branchIndex,
+        ),
       );
-      return nodeHeight;
     }
 
-    // Lay out children to the right, top to bottom.
-    final childX = x + nodeWidth + hGap;
-    var childY = y;
-    var childrenHeight = 0.0;
-    for (var i = 0; i < node.children.length; i++) {
-      final child = node.children[i];
-      // Each top-level child (depth 0 → children at depth 1) starts its own
-      // branch colour lineage. Deeper descendants inherit the branch index.
-      final childBranch = depth == 0 ? i : branchIndex;
-      final subHeight = _layoutSubtree(
-        child,
-        childX,
-        childY,
-        depth + 1,
-        childBranch,
-        slots,
-      );
-      // Accumulate the child's subtree height + the gap *before* it (none for
-      // the first child). This yields N*subHeight + (N-1)*vGap — the exact
-      // vertical span the children block occupies.
-      childrenHeight += subHeight + (i > 0 ? vGap : 0);
-      // Advance childY by subHeight + vGap; the trailing vGap after the last
-      // child is harmless because the loop ends.
-      childY += subHeight + vGap;
-    }
+    final top = anchorRoot
+        ? origin.y - (heights[tree]! - sizes[tree]!.$2) / 2
+        : origin.y;
+    place(tree, origin.x, top, 0, -1);
+    return slots;
+  }
 
-    // Place parent vertically centred over its children block.
-    final parentY = y + (childrenHeight - nodeHeight) / 2;
-    slots.add(
-      _NodeSlot(node: node, x: x, y: parentY, depth: depth, branchIndex: branchIndex),
+  static (double, double) _measureNode(String text, int depth) {
+    final label = TextElement(
+      id: const ElementId('mindmap-measure'),
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      text: text,
+      fontSize: _styleForDepth(depth).fontSize,
+      fontFamily: 'Helvetica',
+      customData: _labelData,
     );
-
-    return math.max(childrenHeight, nodeHeight);
+    final (naturalWidth, _) = TextRenderer.measure(label);
+    final width = (naturalWidth.ceilToDouble() + _labelPadding * 2).clamp(
+      nodeWidth,
+      _maxWidth,
+    );
+    final (_, height) = TextRenderer.measure(
+      label,
+      maxWidth: width - _labelPadding * 2,
+    );
+    return (
+      width,
+      math.max(nodeHeight, height.ceilToDouble() + _labelPadding * 2),
+    );
   }
 
   /// Turns slots into a flat element list (nodes + edges). Used by the
   /// fresh-insertion path [treeToElements].
-  static List<Element> _materialize(List<_NodeSlot> slots, {required bool isNew}) {
+  static List<Element> _materialize(List<_NodeSlot> slots) {
     final out = <Element>[];
 
     // Assign each slot an element id (reuse sourceId for existing nodes,
@@ -324,43 +395,28 @@ class MindmapLayout {
     return out;
   }
 
-  /// Creates a root node centred at [center]. Returns `[rect, text]`.
+  /// Creates a root node centred at [center].
   static List<Element> createRootAt(Point center, [String text = '中心主题']) {
-    return _nodeElements(
+    final (width, height) = _measureNode(text, 0);
+    return _buildPair(
       ElementId.generate(),
-      center.x - nodeWidth / 2,
-      center.y - nodeHeight / 2,
+      _VirtualRect(
+        x: center.x - width / 2,
+        y: center.y - height / 2,
+        width: width,
+        height: height,
+      ),
       text,
-      depth: 0,
-      branchIndex: -1,
+      0,
+      -1,
     );
-  }
-
-  // --- Element factories ------------------------------------------------
-
-  /// Creates `[rect, text]` for a node at (`x`, `y`), styled by [depth]
-  /// (size/colour hierarchy) and [branchIndex] (branch colour for depth ≥ 1).
-  static List<Element> _nodeElements(
-    ElementId id,
-    double x,
-    double y,
-    String text, {
-    int depth = 1,
-    int branchIndex = -1,
-  }) {
-    final slot = _NodeSlot(
-      node: MindmapNode(text: text),
-      x: x,
-      y: y,
-      depth: depth,
-      branchIndex: branchIndex,
-    );
-    final tempRect = _rectForSlot(slot);
-    return _buildPair(id, tempRect, text, depth, branchIndex);
   }
 
   /// Creates `[rect, text]` for a node described by [slot].
-  static List<Element> _nodeElementsForSlot(_NodeSlot slot, {required ElementId id}) {
+  static List<Element> _nodeElementsForSlot(
+    _NodeSlot slot, {
+    required ElementId id,
+  }) {
     final tempRect = _rectForSlot(slot);
     return _buildPair(
       id,
@@ -379,35 +435,67 @@ class MindmapLayout {
     int branchIndex,
   ) {
     final style = _styleForDepth(depth);
-    final bg = _backgroundColorFor(depth, branchIndex, style);
+    final (bg, stroke, strokeWidth, radius) = styleForNode(
+      depth: depth,
+      branchIndex: branchIndex,
+    );
     final textId = ElementId.generate();
     final rect = RectangleElement(
       id: id,
       x: r.x,
       y: r.y,
-      width: nodeWidth,
-      height: nodeHeight,
-      strokeColor: depth == 0 ? '#1864ab' : '#495057',
+      width: r.width,
+      height: r.height,
+      strokeColor: stroke,
       backgroundColor: bg,
-      strokeWidth: depth == 0 ? 2.5 : 2.0,
-      roundness: Roundness.adaptive(value: depth == 0 ? 20 : 16),
+      strokeWidth: strokeWidth,
+      roughness: 0,
+      roundness: Roundness.adaptive(value: radius),
       boundElements: [BoundElement(id: textId.value, type: 'text')],
       customData: nodeCustomData,
     );
-    final textElement = TextElement(
-      id: textId,
-      x: r.x,
-      y: r.y,
-      width: nodeWidth,
-      height: nodeHeight,
-      text: text,
-      fontSize: style.fontSize,
-      strokeColor: style.textColor,
-      containerId: id.value,
-      textAlign: TextAlign.center,
-      verticalAlign: VerticalAlign.middle,
+    final textElement = positionLabel(
+      TextElement(
+        id: textId,
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+        text: text,
+        fontSize: style.fontSize,
+        fontFamily: 'Helvetica',
+        strokeColor: style.textColor,
+        containerId: id.value,
+        textAlign: TextAlign.center,
+        verticalAlign: VerticalAlign.middle,
+      ),
+      rect,
     );
     return [rect, textElement];
+  }
+
+  static const _labelData = {
+    'flowMuse': {'role': TextElement.mindmapLabelRole},
+  };
+
+  static TextElement positionLabel(TextElement label, Element node) {
+    final data = label.customData;
+    final flowMuse = data?['flowMuse'];
+    final inset = math.min(_labelPadding, node.width / 4);
+    return label.copyWith(
+      x: node.x + inset,
+      y: node.y,
+      width: node.width - inset * 2,
+      height: node.height,
+      angle: node.angle,
+      customData: {
+        ...?data,
+        'flowMuse': {
+          if (flowMuse is Map) ...flowMuse.cast<String, Object?>(),
+          'role': TextElement.mindmapLabelRole,
+        },
+      },
+    );
   }
 
   /// Background colour for a node: depth 0 uses the level style; depth ≥ 1
@@ -420,8 +508,7 @@ class MindmapLayout {
   ) {
     if (depth == 0 || branchIndex < 0) return style.backgroundColor;
     final base = _branchPalette[branchIndex % _branchPalette.length];
-    if (depth == 1) return base;
-    return _lighten(base, 0.78);
+    return _lighten(base, depth == 1 ? 0.74 : 0.91);
   }
 
   /// Returns a hex colour lightened towards white by [amount] ∈ [0, 1].
@@ -450,8 +537,7 @@ class MindmapLayout {
     ].whereType<int>().toList();
   }
 
-  /// Creates a smooth-curve edge from [parent] (right edge) to [child]
-  /// (left edge), with bindings so it follows when either node moves.
+  /// Connects the facing sides of [parent] and [child] with a smooth curve.
   ///
   /// Horizontal S-cubic-Bézier: both control handles point horizontally, so
   /// the curve leaves the parent tangent-horizontal and arrives at the child
@@ -462,17 +548,22 @@ class MindmapLayout {
   /// turn them into mandatory waypoints and create a kink. Instead we sample
   /// the true cubic Bézier at ~12 points: Catmull-Rom through dense samples
   /// reproduces the Bézier shape with no visible corner.
-  static ArrowElement _curveEdge(_VirtualRect parent, _VirtualRect child) {
-    final arrowId = ElementId.generate();
-
-    final startAbs = Point(parent.x + parent.width, parent.y + parent.height / 2);
-    final endAbs = Point(child.x, child.y + child.height / 2);
+  static ArrowElement _curveEdge(
+    _VirtualRect parent,
+    _VirtualRect child, {
+    ElementId? id,
+  }) {
+    final direction = child.center.x >= parent.center.x ? 1.0 : -1.0;
+    final startAbs =
+        parent.center + parent.horizontal(direction * parent.width / 2);
+    final endAbs =
+        child.center + child.horizontal(-direction * child.width / 2);
 
     final dxRaw = (endAbs.x - startAbs.x).abs() / 2;
     final dx = dxRaw.clamp(16.0, 80.0);
 
-    final c1 = Point(startAbs.x + dx, startAbs.y);
-    final c2 = Point(endAbs.x - dx, endAbs.y);
+    final c1 = startAbs + parent.horizontal(direction * dx);
+    final c2 = endAbs + child.horizontal(-direction * dx);
 
     const steps = 12;
     final absPoints = <Point>[];
@@ -498,22 +589,29 @@ class MindmapLayout {
     final parentId = parent.id;
     final childId = child.id;
     return ArrowElement(
-      id: arrowId,
+      id: id ?? ElementId.generate(),
       x: minX,
       y: minY,
       width: maxX - minX,
       height: maxY - minY,
       points: relPoints,
-      endArrowhead: Arrowhead.arrow,
+      endArrowhead: null,
       arrowType: ArrowType.round,
-      strokeColor: '#495057',
-      strokeWidth: 2.0,
+      strokeColor: '#728d84',
+      strokeWidth: 1.4,
+      roughness: 0,
       startBinding: parentId == null
           ? null
-          : PointBinding(elementId: parentId, fixedPoint: const Point(1.0, 0.5)),
+          : PointBinding(
+              elementId: parentId,
+              fixedPoint: Point(direction > 0 ? 1 : 0, 0.5),
+            ),
       endBinding: childId == null
           ? null
-          : PointBinding(elementId: childId, fixedPoint: const Point(0.0, 0.5)),
+          : PointBinding(
+              elementId: childId,
+              fixedPoint: Point(direction > 0 ? 0 : 1, 0.5),
+            ),
       customData: edgeCustomData,
     );
   }
@@ -550,12 +648,16 @@ class _NodeSlot {
     required this.node,
     required this.x,
     required this.y,
+    required this.width,
+    required this.height,
     required this.depth,
     required this.branchIndex,
   });
   final MindmapNode node;
   final double x;
   final double y;
+  final double width;
+  final double height;
   final int depth;
   final int branchIndex;
 }
@@ -563,12 +665,25 @@ class _NodeSlot {
 /// Position + size used for edge-anchor maths (internal). Carries the
 /// element id (if the node is existing) so edges can bind to it.
 class _VirtualRect {
-  _VirtualRect({this.id, required this.x, required this.y, required this.width, required this.height});
+  _VirtualRect({
+    this.id,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+    this.angle = 0,
+  });
   final String? id;
   final double x;
   final double y;
   final double width;
   final double height;
+  final double angle;
+
+  Point get center => Point(x + width / 2, y + height / 2);
+
+  Point horizontal(double length) =>
+      Point(length * math.cos(angle), length * math.sin(angle));
 }
 
 /// A description of how to update an existing node element after a reflow.
@@ -579,12 +694,18 @@ class ElementUpdate {
     required this.nodeId,
     required this.x,
     required this.y,
+    required this.width,
+    required this.height,
+    required this.text,
     required this.depth,
     required this.branchIndex,
   });
   final String nodeId;
   final double x;
   final double y;
+  final double width;
+  final double height;
+  final String text;
   final int depth;
   final int branchIndex;
 }

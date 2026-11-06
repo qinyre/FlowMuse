@@ -833,6 +833,12 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             tooltip: '同级节点 (Enter)',
             child: const Icon(Icons.low_priority, size: 18),
           ),
+          IconToggleChip(
+            isSelected: false,
+            onTap: controller.mindmapTidy,
+            tooltip: '整理导图',
+            child: const Icon(Icons.auto_fix_high, size: 18),
+          ),
         ],
         IconToggleChip(
           isSelected: false,

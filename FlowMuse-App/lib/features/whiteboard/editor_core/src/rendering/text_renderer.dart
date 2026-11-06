@@ -59,12 +59,16 @@ class TextRenderer {
         element.height > 0 ? element.height - painter.height : 0.0,
     };
 
-    if (MathTextUtils.explicitLatex(element) != null) {
+    final formula = MathTextUtils.explicitLatex(element) != null;
+    if (formula || element.isMindmapLabel) {
       canvas.save();
       canvas.clipRect(
         Rect.fromLTWH(element.x, element.y, element.width, element.height),
       );
-      painter.paint(canvas, Offset(element.x, element.y));
+      painter.paint(
+        canvas,
+        Offset(element.x, element.y + (formula || dy < 0 ? 0 : dy)),
+      );
       canvas.restore();
     } else {
       painter.paint(canvas, Offset(element.x, element.y + dy));
@@ -113,7 +117,7 @@ class TextRenderer {
     final explicitFormula = MathTextUtils.explicitLatex(element) != null;
     return TextPainter(
       text:
-          element.containerId != null ||
+          (element.containerId != null && !element.isMindmapLabel) ||
               _isVerticalText(element) ||
               MathTextUtils.isMathText(element)
           ? TextSpan(text: element.text, style: style)

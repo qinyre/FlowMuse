@@ -32,7 +32,7 @@ const int maxAiAgentConversationTurns = 6;
 const int maxAiAgentConversationLength = 12000;
 const int maxAiMindmapNodes = 50;
 const int maxAiMindmapDepth = 4;
-const int maxAiMindmapNodeTextLength = 100;
+const int maxAiMindmapNodeTextLength = 180;
 const int maxAiMindmapJsonLength = 12000;
 
 enum AiAgentTool {

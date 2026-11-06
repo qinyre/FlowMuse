@@ -2182,8 +2182,14 @@ class MarkdrawController extends ChangeNotifier {
     } else {
       final element = _editorState.scene.getElementById(id);
       if (element is TextElement) {
+        final parentId = element.containerId;
+        final parent = parentId == null
+            ? null
+            : _editorState.scene.getElementById(ElementId(parentId));
         _applyLocalResult(
-          UpdateElementResult(_textElementWithContent(element, text)),
+          parent != null && MindmapUtils.isMindmapNode(parent)
+              ? _updateMindmapLabel(parent, element, text)
+              : UpdateElementResult(_textElementWithContent(element, text)),
         );
       }
     }
@@ -5276,6 +5282,44 @@ class MarkdrawController extends ChangeNotifier {
     _enterMindmapNodeEditing();
   }
 
+  ToolResult _updateMindmapLabel(
+    Element parent,
+    TextElement label,
+    String text,
+  ) {
+    final scene = _editorState.scene.elements;
+    final root = MindmapUtils.rootOf(parent, scene);
+    final tree = MindmapUtils.treeFromScene(root, scene);
+    final node = _findTreeNode(tree, parent.id.value);
+    if (node != null) {
+      node.text = text;
+      final result = _applyReflow(tree, root);
+      if (result != null) return result;
+      onMindmapOperationError?.call('页面空间不足，已保留文字。可缩短内容后重新整理');
+    }
+    return UpdateElementResult(
+      MindmapLayout.positionLabel(label.copyWithText(text: text), parent),
+    );
+  }
+
+  void mindmapTidy() {
+    final selected = selectedElements.singleOrNull;
+    if (selected == null ||
+        !MindmapUtils.isMindmapNode(selected) ||
+        pageNavigationBusy) {
+      return;
+    }
+    final scene = _editorState.scene.elements;
+    final root = MindmapUtils.rootOf(selected, scene);
+    final result = _applyReflow(MindmapUtils.treeFromScene(root, scene), root);
+    if (result == null) {
+      onMindmapOperationError?.call('当前页面空间不足，无法整理导图');
+      return;
+    }
+    pushHistory();
+    applyResult(result, applyDefaultStyle: false);
+  }
+
   /// Adds a sibling below the single selected mind-map node, then reflows.
   void mindmapAddSibling() {
     final selected = selectedElements;
@@ -5334,7 +5378,11 @@ class MarkdrawController extends ChangeNotifier {
           .firstOrNull;
       if (page == null) return null;
       final content = page.bounds.deflate(72);
-      final preview = MindmapLayout.treeToElements(tree, origin: origin);
+      final preview = MindmapLayout.treeToElements(
+        tree,
+        origin: origin,
+        anchorRoot: true,
+      );
       final previewBounds = preview
           .map(_placementBoundsForElement)
           .reduce((left, right) => left.union(right));
@@ -5359,7 +5407,11 @@ class MarkdrawController extends ChangeNotifier {
         origin.y + placement.top - previewBounds.top,
       );
     }
-    final plan = MindmapLayout.reflowTree(tree, origin: origin);
+    final plan = MindmapLayout.reflowTree(
+      tree,
+      origin: origin,
+      anchorRoot: true,
+    );
     final results = <ToolResult>[];
 
     // Build a lookup of new node positions by sourceId, so we can recompute
@@ -5461,9 +5513,12 @@ class MarkdrawController extends ChangeNotifier {
     final updatedRect = (node as RectangleElement).copyWith(
       x: u.x,
       y: u.y,
+      width: u.width,
+      height: u.height,
       backgroundColor: bg,
       strokeColor: stroke,
       strokeWidth: strokeWidth,
+      roughness: 0,
       roundness: Roundness.adaptive(value: roundnessValue),
     );
 
@@ -5475,18 +5530,23 @@ class MarkdrawController extends ChangeNotifier {
     );
     // copyWithText handles font size; copyWith handles position + text colour
     // (TextElement has no single method covering both).
-    final updatedText = boundText
-        .copyWithText(fontSize: fontSize)
-        .copyWith(x: u.x, y: u.y, strokeColor: textColor);
+    final updatedText = MindmapLayout.positionLabel(
+      boundText
+          .copyWithText(
+            text: u.text,
+            fontSize: fontSize,
+            fontFamily: 'Helvetica',
+          )
+          .copyWith(strokeColor: textColor),
+      updatedRect,
+    );
     return CompoundResult([
       UpdateElementResult(updatedRect),
       UpdateElementResult(updatedText),
     ]);
   }
 
-  /// Recomputes an existing mind-map edge's Bézier points from the post-reflow
-  /// positions of its endpoints. Width/height come from the current element
-  /// (node size is constant); x/y come from the reflow plan.
+  /// Recomputes the curve against both nodes' post-reflow positions and sizes.
   ArrowElement _recomputeEdgeFromPlan(
     ArrowElement edge,
     String startId,
@@ -5497,14 +5557,20 @@ class MarkdrawController extends ChangeNotifier {
     final parent = scene.getElementById(ElementId(startId));
     final child = scene.getElementById(ElementId(endId));
     if (parent == null || child == null) return edge;
-    // Apply the new x/y from the plan (width/height unchanged).
     final pu = newPosByNodeId[startId];
     final cu = newPosByNodeId[endId];
     final parentMoved = parent.copyWith(
       x: pu?.x ?? parent.x,
       y: pu?.y ?? parent.y,
+      width: pu?.width ?? parent.width,
+      height: pu?.height ?? parent.height,
     );
-    final childMoved = child.copyWith(x: cu?.x ?? child.x, y: cu?.y ?? child.y);
+    final childMoved = child.copyWith(
+      x: cu?.x ?? child.x,
+      y: cu?.y ?? child.y,
+      width: cu?.width ?? child.width,
+      height: cu?.height ?? child.height,
+    );
     return MindmapLayout.recomputeEdge(edge, parentMoved, childMoved);
   }
 
