@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_source_location.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_context_source.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/visual_attachment_capture.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
@@ -44,7 +45,12 @@ void main() {
     controller.applyResult(SetSelectionResult({unrelated}));
 
     expect(source.context.texts, isEmpty);
-    expect(await source.capture!(), isNotNull);
+    final attachment = await source.capture!();
+    expect(attachment?.location, same(source.location));
+    expect(
+      resolveAiSourceBounds(controller, source.location!)?.center,
+      const Offset(40, 40),
+    );
     expect(
       readAiAgentSource(
         controller,
@@ -52,6 +58,8 @@ void main() {
       ).context.texts.single.text,
       '不在选区内',
     );
+    controller.applyScene(Scene());
+    expect(resolveAiSourceBounds(controller, source.location!), isNull);
   });
 
   test('PDF 页范围只读页内文字，并把批注合成到截图', () async {
@@ -87,6 +95,31 @@ void main() {
     expect(after.context.label, 'PDF 第 1 页（含批注）');
     final annotated = await after.capture!();
     expect(annotated!.bytes, isNot(orderedEquals(baseline!.bytes)));
+    expect(annotated.location, same(after.location));
+    final layout = controller.layout;
+    final page = layout.pages.single;
+    final region = AiRegionSource(
+      const Rect.fromLTWH(10, 20, 30, 40),
+      pageId: page.id,
+    );
+    final moved = page.bounds.shift(const Offset(0, 1200));
+    controller.setLayout(
+      layout.copyWith(
+        pages: [
+          CanvasPage(
+            id: page.id,
+            index: page.index,
+            bounds: moved,
+            template: page.template,
+          ),
+        ],
+      ),
+    );
+    expect(resolveAiSourceBounds(controller, after.location!), moved);
+    expect(
+      resolveAiSourceBounds(controller, region),
+      region.bounds.shift(moved.topLeft),
+    );
   });
 
   test('已合规 PNG 原样返回（不重编码）', () async {

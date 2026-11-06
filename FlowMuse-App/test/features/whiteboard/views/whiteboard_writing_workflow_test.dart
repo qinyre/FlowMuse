@@ -8,6 +8,8 @@ import 'package:flow_muse/features/social/views/social_page.dart';
 import 'package:flow_muse/features/social/widgets/invitation_actions.dart';
 import 'package:flow_muse/features/library/models/note_item.dart';
 import 'package:flow_muse/features/library/repositories/library_repository.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_config_store.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/views/region_capture_overlay.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/collaboration_config.dart';
@@ -23,6 +25,7 @@ import 'package:flow_muse/features/whiteboard/collaboration/services/whiteboard_
 import 'package:flow_muse/features/whiteboard/collaboration/widgets/room_invite_qr.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/ink_recognition/ink_recognition_repository.dart';
+import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
 import 'package:flow_muse/features/whiteboard/models/editor_preferences.dart';
 import 'package:flow_muse/features/whiteboard/pdf_note_import/pdf_note_import_payload.dart';
 import 'package:flow_muse/features/whiteboard/pdf_note_import/pending_pdf_import_provider.dart';
@@ -100,6 +103,79 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byTooltip('移除笔记来源'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('从 AI 回复点击引用可定位原文并返回同一回复', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'ai-source-return'),
+    ))!;
+    final container = _container(
+      library: library,
+      assistant: AiAgentRepository(
+        config: const AiAgentConfig(
+          baseUrl: 'https://example.com/v1',
+          apiKey: 'test-key',
+          model: 'test-model',
+        ),
+        post:
+            ({
+              required url,
+              headers = const {},
+              required body,
+              connectTimeoutMs = 8000,
+              readTimeoutMs = 130000,
+              cancelToken,
+            }) async => const NativeHttpResponse(
+              statusCode: 200,
+              body:
+                  '{"choices":[{"message":{"content":"[原文 1](flowmuse-source:text-1)"}}]}',
+            ),
+      ),
+    );
+    final controller = await _open(tester, container, note);
+    const id = ElementId('cited-text');
+    const target = Offset(960, 460);
+    controller.setLayout(const CanvasLayout(type: CanvasLayoutType.unbounded));
+    controller.loadScene(
+      Scene().addElement(
+        TextElement(
+          id: id,
+          x: 900,
+          y: 440,
+          width: 120,
+          height: 40,
+          text: '原文示例',
+          fontFamily: 'Excalifont',
+        ),
+      ),
+    );
+    controller.applyResult(SetSelectionResult({id}));
+    final editor = find.byType(MarkdrawEditor);
+    tester.widget<MarkdrawEditor>(editor).onAiPressed!();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    final citation = find.text('原文 1', findRichText: true);
+    await tester.ensureVisible(citation);
+    await tester.pumpAndSettle();
+    await tester.tap(citation);
+    await tester.pumpAndSettle();
+
+    expect(find.text('返回 AI 回复'), findsOneWidget);
+    expect(citation, findsNothing);
+    expect(
+      tester.widget<MarkdrawEditor>(editor).canvasOverlayBuilder,
+      isNotNull,
+    );
+    final center = controller.editorState.viewport
+        .visibleRect(controller.canvasSize)
+        .center;
+    expect((center - target).distance, lessThan(0.01));
+    expect(controller.currentScene.getElementById(id), isNotNull);
+    await tester.tap(find.text('返回 AI 回复'));
+    await tester.pumpAndSettle();
+    expect(citation, findsOneWidget);
+    expect(tester.widget<MarkdrawEditor>(editor).canvasOverlayBuilder, isNull);
   });
 
   testWidgets('AI 框选与偏移缩放后的画布对齐，预览保留上下两端', (tester) async {
@@ -2290,6 +2366,7 @@ ProviderContainer _container({
   InkRecognitionRepository? recognition,
   CollaborationRepository? collaboration,
   WhiteboardSceneRepository? sceneRepository,
+  AiAgentRepository? assistant,
 }) {
   final container = ProviderContainer(
     overrides: [
@@ -2303,6 +2380,8 @@ ProviderContainer _container({
       ),
       if (recognition != null)
         inkRecognitionRepositoryProvider.overrideWithValue(recognition),
+      if (assistant != null)
+        aiAgentRepositoryProvider.overrideWithValue(assistant),
     ],
   );
   addTearDown(container.dispose);

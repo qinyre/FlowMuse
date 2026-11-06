@@ -8,6 +8,7 @@ import '../../../../shared/widgets/app_spacing.dart';
 import '../../../../shared/widgets/keyboard_focus_recovery.dart';
 import '../../ink_recognition/native_http_client.dart';
 import '../models/ai_agent_models.dart';
+import '../models/ai_source_location.dart';
 import '../models/ai_visual_attachment.dart';
 import '../repositories/ai_agent_repository.dart';
 import '../repositories/ai_prompt_store.dart';
@@ -85,6 +86,8 @@ class AiAgentPanel extends StatefulWidget {
     this.contextProvider,
     this.sourceProvider,
     this.initialSourceCapture,
+    this.initialSourceLocation,
+    this.onViewSource,
     this.initialInstruction,
     required this.promptStore,
     this.speechRecognitionService,
@@ -113,6 +116,8 @@ class AiAgentPanel extends StatefulWidget {
   final AiAgentContextProvider? contextProvider;
   final AiAgentSource Function(AiAgentScope scope)? sourceProvider;
   final Future<AiVisualAttachment?> Function()? initialSourceCapture;
+  final AiSourceLocation? initialSourceLocation;
+  final String? Function(AiSourceLocation location)? onViewSource;
   final String? initialInstruction;
   final AiPromptStore promptStore;
   final SpeechRecognitionService? speechRecognitionService;
@@ -145,6 +150,11 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   bool _speechFinalCommitted = false;
   List<AiAgentConversationTurn> _conversation = const [];
   late AiAgentContextSnapshot _context;
+  AiSourceLocation? _sourceLocation;
+  List<AiNoteText> _replyTexts = const [];
+  List<({String label, AiSourceLocation? location})> _replyImages = const [];
+  ({String label, AiSourceLocation location})? _replySource;
+  String? _citationNotice;
   bool _needsSourceImage = false;
   _AiGenerateStage _stage = _AiGenerateStage.generating;
 
@@ -181,6 +191,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     final initialCapture =
         widget.initialSourceCapture ?? widget.onCaptureSelection;
     _needsSourceImage = widget.initialSourceCapture != null;
+    _sourceLocation = widget.initialSourceLocation;
     if (initialCapture != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -325,6 +336,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     final capture = source.capture;
     setState(() {
       _context = source.context;
+      _sourceLocation = source.location;
       _needsSourceImage = capture != null;
     });
     if (capture != null) {
@@ -521,18 +533,23 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       if (_needsSourceImage && _attachments.isEmpty) {
         throw StateError('来源截图不可用，请重新选择来源或添加框选截图');
       }
+      final attachments = _attachments;
       final response = await widget.repository.run(
         instruction: instruction,
         noteTitle: context.noteTitle,
         texts: context.texts,
         conversation: _conversation,
-        attachments: _attachments,
+        attachments: attachments,
         cancelToken: cancelToken,
       );
       if (!mounted || generation != _generation || cancelToken.isCancelled) {
         return;
       }
-      _setResponse(response, instruction: instruction);
+      _setResponse(
+        response,
+        instruction: instruction,
+        attachments: attachments,
+      );
       if (isFollowUp) _instructionController.clear();
     } on NativeHttpCancelledException {
       // 用户主动取消，不显示为失败。
@@ -547,7 +564,11 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     }
   }
 
-  void _setResponse(AiAgentResponse response, {required String instruction}) {
+  void _setResponse(
+    AiAgentResponse response, {
+    required String instruction,
+    required List<AiVisualAttachment> attachments,
+  }) {
     // 防呆：丢弃"不成立"的写动作（空值、与回复同文的说明、无效重命名、
     // 空导图），净化后为空则按纯回复处理，面板不出现确认区块。
     final actions = sanitizeAiAgentActions(
@@ -572,16 +593,69 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     _actionFocusNodes
       ..clear()
       ..addAll(actions.map((_) => FocusNode()));
+    final source = _sourceLocation;
+    final sentTextIds = _context.texts
+        .map((text) => text.sourceElementId)
+        .toSet();
+    final sentSource =
+        attachments.contains(_activeSelectionSlot) ||
+        (source is AiPageSource && sentTextIds.isNotEmpty) ||
+        (source is AiElementSource && sentTextIds.containsAll(source.ids));
     setState(() {
       _conversation = compactAiAgentConversation([
         ..._conversation,
         AiAgentConversationTurn(instruction: instruction, response: effective),
       ]);
       _response = effective;
+      _replyTexts = _context.texts;
+      _replyImages = [
+        for (final image in attachments)
+          (label: image.sourceLabel, location: image.location),
+      ];
+      _replySource = source != null && sentSource
+          ? (label: _context.label, location: source)
+          : null;
+      _citationNotice = null;
       _selectedActions = {
         for (var index = 0; index < actions.length; index++) index,
       };
     });
+  }
+
+  void _viewSource(AiSourceLocation? location) {
+    final notice = location == null
+        ? '此引用未对应本次发送的笔记来源'
+        : widget.onViewSource?.call(location);
+    setState(() => _citationNotice = notice);
+  }
+
+  Widget _sourceButton(String label, AiSourceLocation location) {
+    return ActionChip(
+      avatar: const Icon(Icons.location_searching, size: 16),
+      label: Text(label),
+      tooltip: '定位来源',
+      onPressed: _loading || _applying ? null : () => _viewSource(location),
+    );
+  }
+
+  void _openCitation(String? href) {
+    if (href == null || !href.startsWith('flowmuse-source:')) return;
+    final match = RegExp(
+      r'^flowmuse-source:(text|image)-([1-9][0-9]{0,5})$',
+    ).firstMatch(href);
+    if (match == null) {
+      _viewSource(null);
+      return;
+    }
+    final index = int.parse(match[2]!) - 1;
+    final location = switch (match[1]) {
+      'text' when index < _replyTexts.length => AiElementSource([
+        _replyTexts[index].sourceElementId,
+      ]),
+      'image' when index < _replyImages.length => _replyImages[index].location,
+      _ => null,
+    };
+    _viewSource(location);
   }
 
   void _clearConversation({bool keepInstruction = false}) {
@@ -597,6 +671,10 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     setState(() {
       _conversation = const [];
       _response = null;
+      _replyTexts = const [];
+      _replyImages = const [];
+      _replySource = null;
+      _citationNotice = null;
       _selectedActions = const {};
       _error = null;
       _attachments = const [];
@@ -1292,6 +1370,10 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                       child: MarkdownBody(
                         data: response.message,
                         selectable: true,
+                        onTapLink:
+                            widget.onViewSource == null || _applying || _loading
+                            ? null
+                            : (_, href, _) => _openCitation(href),
                         styleSheet:
                             MarkdownStyleSheet.fromTheme(
                               Theme.of(context),
@@ -1300,6 +1382,43 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                             ),
                       ),
                     ),
+                    if (widget.onViewSource != null) ...[
+                      if (_replySource != null ||
+                          _replyTexts.isNotEmpty ||
+                          _replyImages.any((image) => image.location != null))
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            top: AppSpacing.controlGap,
+                          ),
+                          child: Text(
+                            '本次发送来源',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      Wrap(
+                        spacing: AppSpacing.controlGap,
+                        children: [
+                          if (_replySource case (:final label, :final location))
+                            _sourceButton(label, location)
+                          else if (_replyTexts.isNotEmpty)
+                            _sourceButton(
+                              '第一段原文',
+                              AiElementSource([
+                                _replyTexts.first.sourceElementId,
+                              ]),
+                            ),
+                          for (final image in _replyImages)
+                            if (image.location case final location?)
+                              if (!identical(location, _replySource?.location))
+                                _sourceButton(image.label, location),
+                        ],
+                      ),
+                      if (_citationNotice case final notice?)
+                        Text(
+                          notice,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
                     if (response.actions.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.listGap),
                       const Text(

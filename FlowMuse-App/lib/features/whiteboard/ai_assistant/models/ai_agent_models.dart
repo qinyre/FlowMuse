@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'ai_source_location.dart';
 import 'ai_visual_attachment.dart';
 
 enum AiAgentScope { selection, page, note, none }
@@ -17,6 +18,7 @@ typedef AiAgentContextSnapshot = ({
 typedef AiAgentSource = ({
   AiAgentContextSnapshot context,
   Future<AiVisualAttachment?> Function()? capture,
+  AiSourceLocation? location,
 });
 
 const int maxAiAgentActions = 5;
@@ -86,13 +88,15 @@ class AiNoteText {
     this.pageIndex,
     this.x,
     this.y,
-  });
+    String? sourceElementId,
+  }) : sourceElementId = sourceElementId ?? id;
 
   final String id;
   final String text;
   final int? pageIndex;
   final double? x;
   final double? y;
+  final String sourceElementId;
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -134,6 +138,7 @@ class AiNoteContext {
             pageIndex: item.pageIndex,
             x: item.x,
             y: item.y,
+            sourceElementId: item.sourceElementId,
           ),
         );
         offset += length;

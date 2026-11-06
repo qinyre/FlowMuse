@@ -1,6 +1,8 @@
 // Uint8List/ByteData 经 package:flutter/foundation.dart 重导出提供。
 import 'package:flutter/foundation.dart';
 
+import 'ai_source_location.dart';
+
 const int maxAiVisualAttachments = 3;
 const int maxAiVisualAttachmentBytes = 4 * 1024 * 1024;
 const int maxAiVisualAttachmentLongestSide = 1568;
@@ -19,14 +21,17 @@ class AiVisualAttachment {
     required this.mimeType,
     required this.bytes,
     required this.kind,
+    this.location,
   });
 
   final String sourceLabel;
   final String mimeType;
   final Uint8List bytes;
   final AiVisualAttachmentKind kind;
+  final AiSourceLocation? location;
 
-  String get sizeLabel => '${(bytes.lengthInBytes / 1024).toStringAsFixed(0)} KiB';
+  String get sizeLabel =>
+      '${(bytes.lengthInBytes / 1024).toStringAsFixed(0)} KiB';
 }
 
 /// 发送前的附件校验单点。定稿校验顺序（勿再调整）：

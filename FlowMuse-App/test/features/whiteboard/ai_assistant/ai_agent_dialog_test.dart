@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_source_location.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_prompt_store.dart';
@@ -306,6 +307,7 @@ void main() {
                   hasSelection: false,
                 ),
                 capture: null,
+                location: null,
               );
             },
             promptStore: AiPromptStore(_MemorySettings()),
@@ -321,6 +323,74 @@ void main() {
     await tester.tap(find.text('发送'));
     await tester.pumpAndSettle();
     expect(repository.receivedTexts.single, isEmpty);
+  });
+
+  testWidgets('回复引用只能定位本次发送的来源', (tester) async {
+    final locations = <AiSourceLocation>[];
+    const page = AiPageSource('pdf-page');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: _FakeAiAgentRepository(
+              response: const AiAgentResponse(
+                message: '[原文 1](flowmuse-source:text-1)',
+                actions: [],
+              ),
+            ),
+            noteTitle: '笔记',
+            texts: const [
+              AiNoteText(
+                id: 'segment:1',
+                text: '原文',
+                sourceElementId: 'segment',
+              ),
+            ],
+            contextTruncated: false,
+            contextLabel: '第 2 页',
+            initialSourceLocation: page,
+            initialSourceCapture: () async => AiVisualAttachment(
+              sourceLabel: '第 2 页',
+              mimeType: 'image/png',
+              bytes: base64Decode(kTinyPng),
+              kind: AiVisualAttachmentKind.pdfPage,
+              location: page,
+            ),
+            initialInstruction: '解释这段',
+            promptStore: AiPromptStore(_MemorySettings()),
+            onViewSource: (location) {
+              locations.add(location);
+              return location is AiElementSource ? '来源已删除' : null;
+            },
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+
+    final onLink = tester
+        .widget<MarkdownBody>(find.byType(MarkdownBody))
+        .onTapLink!;
+    onLink('外部链接', 'https://example.com', '');
+    onLink('无效原文', 'flowmuse-source:text-2', '');
+    await tester.pump();
+    expect(locations, isEmpty);
+    expect(find.text('此引用未对应本次发送的笔记来源'), findsOneWidget);
+
+    onLink('原文', 'flowmuse-source:text-1', '');
+    await tester.pump();
+    expect((locations.single as AiElementSource).ids, {'segment'});
+    expect(find.text('来源已删除'), findsOneWidget);
+
+    onLink('图片', 'flowmuse-source:image-1', '');
+    await tester.pump();
+    expect(locations.last, same(page));
+    expect(find.text('来源已删除'), findsNothing);
+    expect(find.widgetWithText(ActionChip, '第 2 页'), findsOneWidget);
   });
 
   testWidgets('思维导图动作展示结构并经确认应用', (tester) async {

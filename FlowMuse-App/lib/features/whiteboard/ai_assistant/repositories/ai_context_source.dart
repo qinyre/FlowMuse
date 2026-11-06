@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
 import '../models/ai_agent_models.dart';
+import '../models/ai_source_location.dart';
 import '../models/ai_visual_attachment.dart';
 import 'visual_attachment_capture.dart';
 
@@ -89,6 +90,15 @@ AiAgentSource readAiAgentSource(
     throw StateError('此范围没有可供提问的内容');
   }
 
+  final location = switch (scope) {
+    AiAgentScope.page => AiPageSource(page!.id),
+    AiAgentScope.selection => AiElementSource(
+      wantsImage
+          ? selected.keys.map((id) => id.value)
+          : text.texts.map((item) => item.sourceElementId),
+    ),
+    _ => null,
+  };
   Future<AiVisualAttachment?> Function()? capture;
   if (wantsImage) {
     var snapshot = Scene().upsertRemoteElements(elements);
@@ -122,6 +132,7 @@ AiAgentSource readAiAgentSource(
         bounds,
         scene: snapshot,
         sourceLabel: label,
+        location: location,
         kind: isPdf
             ? AiVisualAttachmentKind.pdfPage
             : AiVisualAttachmentKind.selection,
@@ -139,5 +150,44 @@ AiAgentSource readAiAgentSource(
       hasSelection: scope == AiAgentScope.selection,
     ),
     capture: capture,
+    location: location,
   );
+}
+
+/// Resolve a snapshot anchor against the current scene, including moved content.
+Rect? resolveAiSourceBounds(
+  MarkdrawController controller,
+  AiSourceLocation source,
+) {
+  final layout = controller.layout;
+  switch (source) {
+    case AiPageSource(:final pageId):
+      return layout.pages
+          .where((page) => page.id == pageId)
+          .firstOrNull
+          ?.bounds;
+    case AiRegionSource(:final bounds, :final pageId):
+      if (pageId == null) return layout.isPaged ? null : bounds;
+      final page = layout.pages.where((page) => page.id == pageId).firstOrNull;
+      if (page == null) return null;
+      final rect = bounds.shift(page.bounds.topLeft).intersect(page.bounds);
+      return rect.isEmpty ? null : rect;
+    case AiElementSource(:final ids):
+      Rect? bounds;
+      var remaining = ids.length;
+      for (final element in controller.currentScene.elements) {
+        if (!ids.contains(element.id.value)) continue;
+        if (element.isDeleted) return null;
+        final visual = elementVisualBounds(element);
+        final rect = Rect.fromLTWH(
+          visual.left,
+          visual.top,
+          visual.size.width,
+          visual.size.height,
+        );
+        bounds = bounds?.expandToInclude(rect) ?? rect;
+        if (--remaining == 0) return bounds;
+      }
+      return null;
+  }
 }

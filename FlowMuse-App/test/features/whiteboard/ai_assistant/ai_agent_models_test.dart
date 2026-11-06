@@ -13,6 +13,7 @@ void main() {
 
     expect(context.truncated, isTrue);
     expect(context.texts, hasLength(6));
+    expect(context.texts.map((text) => text.sourceElementId).toSet(), {'long'});
     expect(
       context.texts.fold<int>(0, (sum, text) => sum + text.text.runes.length),
       maxAiAgentContextLength,

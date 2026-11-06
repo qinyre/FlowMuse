@@ -61,6 +61,7 @@ import '../../../shared/utils/ui_lifecycle.dart';
 import '../../color_picker/pen_color_picker_channel.dart';
 import '../service_widget/recent_whiteboard_sync_coordinator.dart';
 import '../ai_assistant/models/ai_agent_models.dart';
+import '../ai_assistant/models/ai_source_location.dart';
 import '../ai_assistant/repositories/ai_agent_repository.dart';
 import '../ai_assistant/repositories/ai_context_source.dart';
 import '../ai_assistant/repositories/ai_prompt_store.dart';
@@ -166,6 +167,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   final _aiPanelPortal = OverlayPortalController();
   AiAgentPanel? _aiPanel;
   bool _aiCaptureModeActive = false;
+  AiSourceLocation? _viewedAiSource;
 
   // V3 智能排版会话（V3-505C 真实入口）：真实依赖装配 + 非模态面板。
   SmartLayoutRealSessionScope? _smartLayoutV3Scope;
@@ -325,6 +327,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _openNote() async {
     if (!mounted) return;
+    if (_aiPanel != null) _closeAiPanel();
     final generation = ++_openGeneration;
     _readingPositionTimer?.cancel();
     _readingNoteId = null;
@@ -929,6 +932,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   }
 
   void _toggleAiAgent() {
+    if (_viewedAiSource != null) {
+      _returnToAiReply();
+      return;
+    }
     if (_aiPanel != null) {
       _closeAiPanel();
       return;
@@ -961,16 +968,19 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       hasSelection: initialContext.hasSelection,
       onRegionCapture: _startRegionCapture,
       initialSourceCapture: source.capture,
+      initialSourceLocation: source.location,
       initialInstruction:
           instruction ?? (scope == AiAgentScope.selection ? '解释这段内容' : null),
       sourceProvider: (scope) => readAiAgentSource(_markdrawController, scope),
       promptStore: defaultAiPromptStore,
       speechRecognitionService: _speechRecognitionService,
       onApply: _applyAiAgentResponse,
+      onViewSource: _viewAiSource,
       onClose: _closeAiPanel,
     );
     setState(() {
       _aiPanel = panel;
+      _viewedAiSource = null;
       _aiSpeechInputActive = true;
     });
     _aiPanelPortal.show();
@@ -995,19 +1005,93 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       right: 12,
       width: panelWidth,
       height: panelHeight,
-      child: Visibility(
-        visible: !_aiCaptureModeActive,
-        maintainState: true,
-        maintainAnimation: true,
-        child: Material(
-          elevation: 12,
-          shadowColor: Theme.of(
-            overlayContext,
-          ).colorScheme.shadow.withValues(alpha: 0.24),
-          clipBehavior: Clip.antiAlias,
-          borderRadius: BorderRadius.circular(12),
-          child: panel,
-        ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Visibility(
+              visible: !_aiCaptureModeActive && _viewedAiSource == null,
+              maintainState: true,
+              maintainAnimation: true,
+              child: Material(
+                elevation: 12,
+                shadowColor: Theme.of(
+                  overlayContext,
+                ).colorScheme.shadow.withValues(alpha: 0.24),
+                clipBehavior: Clip.antiAlias,
+                borderRadius: BorderRadius.circular(12),
+                child: panel,
+              ),
+            ),
+          ),
+          if (_viewedAiSource != null)
+            Positioned(
+              right: 0,
+              top: 0,
+              child: FilledButton.tonalIcon(
+                onPressed: _returnToAiReply,
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('返回 AI 回复'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _returnToAiReply() => setState(() => _viewedAiSource = null);
+
+  String? _viewAiSource(AiSourceLocation source) {
+    final controller = _markdrawController;
+    if (controller.isDisposed ||
+        controller.canvasSize.isEmpty ||
+        controller.pageNavigationBusy ||
+        controller.editingTextElementId != null) {
+      return '画布正在编辑，请完成当前操作后再定位';
+    }
+    final bounds = resolveAiSourceBounds(controller, source);
+    if (bounds == null || !bounds.isFinite) {
+      return '来源已删除或所在页面已变化';
+    }
+    _stopFollowing();
+    if (source case AiPageSource(:final pageId)) {
+      if (!controller.navigateToPage(pageId, fit: true)) {
+        return '无法打开来源页面';
+      }
+    } else {
+      final viewport = viewportForCollaborationBounds(
+        bounds.inflate(24),
+        controller.canvasSize,
+      );
+      if (viewport == null) return '当前画布无法定位来源';
+      controller.setViewport(viewport);
+    }
+    setState(() => _viewedAiSource = source);
+    return null;
+  }
+
+  Widget _buildAiSourceHighlight(ViewportState viewport) {
+    final source = _viewedAiSource;
+    if (source == null) return const SizedBox.shrink();
+    final bounds = resolveAiSourceBounds(_markdrawController, source);
+    if (bounds == null || !bounds.isFinite) return const SizedBox.shrink();
+    final rect = Rect.fromPoints(
+      viewport.sceneToScreen(bounds.topLeft),
+      viewport.sceneToScreen(bounds.bottomRight),
+    ).inflate(4);
+    final color = Theme.of(context).colorScheme.primary;
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned.fromRect(
+            rect: rect,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(color: color, width: 2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1015,7 +1099,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   void _closeAiPanel() {
     if (_aiCaptureModeActive) _handleRegionCancel();
     _aiPanelPortal.hide();
-    setState(() => _aiPanel = null);
+    setState(() {
+      _aiPanel = null;
+      _viewedAiSource = null;
+    });
     unawaited(_finishAiSpeechInput());
   }
 
@@ -2691,6 +2778,10 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
           if (didPop) {
             return;
           }
+          if (_viewedAiSource != null) {
+            _returnToAiReply();
+            return;
+          }
           if (_aiPanel != null) {
             _closeAiPanel();
             return;
@@ -2849,7 +2940,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                               _handleRegionSelected(viewport, rect),
                           onCancel: _handleRegionCancel,
                         )
-                      : null,
+                      : _viewedAiSource == null
+                      ? null
+                      : _buildAiSourceHighlight,
                   onDocumentRenamed: () {
                     unawaited(_renameAndSaveDocument());
                   },

@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
+import '../models/ai_source_location.dart';
 import '../models/ai_visual_attachment.dart';
 
 /// 将画布局部逻辑像素矩形转换为场景矩形。
@@ -115,7 +116,20 @@ Future<AiVisualAttachment?> captureSceneRectAttachment(
   ui.Rect sceneRect,
 ) async {
   if (sceneRect.width < 0.5 || sceneRect.height < 0.5) return null;
-  return captureAiRegion(controller, sceneRect, sourceLabel: '框选截图');
+  final page = controller.pageForVisibleRect(sceneRect);
+  final location = !controller.layout.isPaged
+      ? AiRegionSource(sceneRect)
+      : page == null || !page.bounds.overlaps(sceneRect)
+      ? null
+      : page.bounds.intersect(sceneRect) == sceneRect
+      ? AiRegionSource(sceneRect.shift(-page.bounds.topLeft), pageId: page.id)
+      : AiPageSource(page.id);
+  return captureAiRegion(
+    controller,
+    sceneRect,
+    sourceLabel: '框选截图',
+    location: location,
+  );
 }
 
 /// 共享私有管线：预热 → 导出 → 归一化 → 附件。失败抛 StateError（复用现语义文案）。
@@ -124,6 +138,7 @@ Future<AiVisualAttachment?> captureAiRegion(
   ui.Rect sceneRect, {
   Scene? scene,
   String sourceLabel = '选区截图',
+  AiSourceLocation? location,
   AiVisualAttachmentKind kind = AiVisualAttachmentKind.selection,
 }) async {
   final layout = controller.layout;
@@ -147,6 +162,7 @@ Future<AiVisualAttachment?> captureAiRegion(
     mimeType: 'image/png',
     bytes: normalized,
     kind: kind,
+    location: location,
   );
 }
 
