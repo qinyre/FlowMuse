@@ -90,6 +90,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.onAiPressed,
     this.selectionActions = const {},
     this.onAskCurrentPage,
+    this.canvasOverlayBuilder,
     this.onSmartLayoutPressed,
     this.collaborationFocusLabel,
     this.collaborationFocusDescription,
@@ -182,6 +183,7 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onAiPressed;
   final Map<String, VoidCallback> selectionActions;
   final VoidCallback? onAskCurrentPage;
+  final Widget Function(ViewportState viewport)? canvasOverlayBuilder;
   final VoidCallback? onSmartLayoutPressed;
 
   /// 协作聚焦状态（本机视图态；完整说明放在悬停或紧凑菜单中）。
@@ -864,6 +866,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                       child: EditorCanvas(
                         controller: _controller,
                         selectionActions: widget.selectionActions,
+                        overlayBuilder: widget.canvasOverlayBuilder,
                         collaborators: widget.collaborators,
                         collaboratorsListenable: widget.collaboratorsListenable,
                         remoteWetInkStore: widget.remoteWetInkStore,

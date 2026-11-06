@@ -6,11 +6,10 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 
 import '../models/ai_visual_attachment.dart';
 
-/// 画布局部（覆盖层 local 坐标）矩形 → 场景矩形。
-/// 与画布同层 Stack 时覆盖层 local 坐标即画布 local 坐标（见计划 §2.1 不变量）。
-ui.Rect sceneRectFromScreenRect(ViewportState viewport, ui.Rect screenRect) {
-  final topLeft = viewport.screenToScenePrecise(screenRect.topLeft);
-  final bottomRight = viewport.screenToScenePrecise(screenRect.bottomRight);
+/// 将画布局部逻辑像素矩形转换为场景矩形。
+ui.Rect sceneRectFromScreenRect(ViewportState viewport, ui.Rect canvasRect) {
+  final topLeft = viewport.screenToScenePrecise(canvasRect.topLeft);
+  final bottomRight = viewport.screenToScenePrecise(canvasRect.bottomRight);
   return ui.Rect.fromPoints(topLeft, bottomRight);
 }
 
@@ -165,7 +164,7 @@ Future<AiVisualAttachment?> captureCurrentPdfPageAttachment(
   final rawSize = controller.canvasSize;
   final canvasSize =
       rawSize.width <= 0 || rawSize.height <= 0
-          ? const ui.Size(800, 600) // 与控制器 :1843 兜底一致
+          ? const ui.Size(800, 600) // 与控制器 :1843 兜底值一致
           : rawSize;
   final visible = controller.editorState.viewport.visibleRect(canvasSize);
   final page = controller.pageForVisibleRect(visible);

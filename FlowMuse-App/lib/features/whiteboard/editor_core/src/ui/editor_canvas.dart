@@ -32,6 +32,7 @@ class EditorCanvas extends StatefulWidget {
   Function(Element element)?
   attributionActionResolver;
   final Map<String, VoidCallback> selectionActions;
+  final Widget Function(ViewportState viewport)? overlayBuilder;
 
   /// 协作聚焦（本机视图态纯数据通道，v4 §7.1）。
   final String? focusedCreatorKey;
@@ -50,6 +51,7 @@ class EditorCanvas extends StatefulWidget {
     this.remoteWetInkStore,
     this.attributionActionResolver,
     this.selectionActions = const {},
+    this.overlayBuilder,
     this.focusedCreatorKey,
     this.focusHistoricalContent = false,
     this.socketIdCreatorKeys = const {},
@@ -704,6 +706,8 @@ class _EditorCanvasState extends State<EditorCanvas>
                 if (_singleSelectedMindmapNode(controller) != null)
                   _MindmapAddButtonOverlay(controller: controller),
                 _PagedProgressIndicator(controller: controller),
+                if (widget.overlayBuilder case final buildOverlay?)
+                  Positioned.fill(child: buildOverlay(paintViewport)),
               ],
             ),
           );

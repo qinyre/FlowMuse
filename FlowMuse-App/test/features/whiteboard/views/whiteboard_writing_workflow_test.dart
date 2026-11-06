@@ -8,6 +8,7 @@ import 'package:flow_muse/features/social/views/social_page.dart';
 import 'package:flow_muse/features/social/widgets/invitation_actions.dart';
 import 'package:flow_muse/features/library/models/note_item.dart';
 import 'package:flow_muse/features/library/repositories/library_repository.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/views/region_capture_overlay.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/repositories/collaboration_repository.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/collaboration_config.dart';
 import 'package:flow_muse/features/whiteboard/collaboration/models/collaboration_message.dart';
@@ -99,6 +100,97 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byTooltip('移除笔记来源'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('AI 框选与偏移缩放后的画布对齐，预览保留上下两端', (tester) async {
+    final note = (await tester.runAsync(
+      () => library.createNote(title: 'ai-region-bounds'),
+    ))!;
+    final container = _container(library: library);
+    final controller = await _open(tester, container, note);
+    const viewport = ViewportState(offset: Offset(170, 420), zoom: 1.5);
+    const region = Rect.fromLTWH(100, 80, 180, 150);
+    const marks = [(Offset(140, 95), '#ff0000'), (Offset(140, 208), '#0000ff')];
+    controller.loadScene(
+      Scene().upsertRemoteElements([
+        for (final (point, color) in marks)
+          RectangleElement(
+            id: ElementId(color),
+            x: viewport.screenToScenePrecise(point).dx - 8,
+            y: viewport.screenToScenePrecise(point).dy - 8,
+            width: 16,
+            height: 16,
+            fillStyle: FillStyle.solid,
+            backgroundColor: color,
+            strokeColor: color,
+            roughness: 0,
+          ),
+      ]),
+    );
+    controller.setViewport(viewport);
+    await tester.pump();
+    tester.widget<MarkdrawEditor>(find.byType(MarkdrawEditor)).onAiPressed!();
+    await tester.pumpAndSettle();
+    final screenshot = find.text('选区截图');
+    await tester.ensureVisible(screenshot);
+    await tester.tap(screenshot);
+    await tester.pump();
+
+    final canvas = tester.getRect(find.byType(EditorCanvas));
+    final overlay = find.byType(RegionCaptureOverlay);
+    expect(canvas.top, greaterThan(0));
+    expect(tester.getRect(overlay), canvas);
+    await tester.runAsync(
+      () => tester.dragFrom(
+        canvas.topLeft + region.topLeft,
+        region.size.bottomRight(Offset.zero),
+      ),
+    );
+    await _drainIo(
+      tester,
+      container,
+      until: () => find.byTooltip('查看截图').evaluate().isNotEmpty,
+    );
+
+    final thumbnail = find.byTooltip('查看截图');
+    await tester.ensureVisible(thumbnail);
+    await tester.pumpAndSettle();
+    await tester.tap(thumbnail);
+    await tester.pumpAndSettle();
+    final preview = find.descendant(
+      of: find.byType(InteractiveViewer),
+      matching: find.byType(Image),
+    );
+    final image = tester.widget<Image>(preview);
+    expect(image.fit, BoxFit.contain);
+    await tester.runAsync(() async {
+      final codec = await ui.instantiateImageCodec(
+        (image.image as MemoryImage).bytes,
+      );
+      final frame = await codec.getNextFrame();
+      try {
+        final rgba = (await frame.image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!;
+        final pixels = <int>[];
+        for (final (point, _) in marks) {
+          final x =
+              ((point.dx - region.left) / region.width * frame.image.width)
+                  .floor();
+          final y =
+              ((point.dy - region.top) / region.height * frame.image.height)
+                  .floor();
+          pixels.add(rgba.getUint32((y * frame.image.width + x) * 4));
+        }
+        expect(pixels, [0xff0000ff, 0x0000ffff]);
+      } finally {
+        frame.image.dispose();
+        codec.dispose();
+      }
+    });
+    await tester.tap(find.byTooltip('关闭截图预览'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('查看截图'), findsOneWidget);
   });
 
   testWidgets('笔身双击只切当前画布，弹窗、后台和离页不误触发', (tester) async {

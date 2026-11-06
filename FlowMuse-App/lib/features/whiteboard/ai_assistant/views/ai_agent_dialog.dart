@@ -688,6 +688,53 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     _ => 'AI 操作失败，请稍后重试',
   };
 
+  Future<void> _previewAttachment(AiVisualAttachment attachment) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return Dialog(
+          insetPadding: const EdgeInsets.all(AppSpacing.compactPageInset),
+          clipBehavior: Clip.antiAlias,
+          child: SizedBox(
+            width: 900,
+            height: 700,
+            child: Column(
+              children: [
+                ListTile(
+                  title: Text(attachment.sourceLabel),
+                  subtitle: Text(attachment.sizeLabel),
+                  trailing: IconButton(
+                    tooltip: '关闭截图预览',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ),
+                Expanded(
+                  child: ColoredBox(
+                    color: theme.colorScheme.surfaceContainerLow,
+                    child: InteractiveViewer(
+                      maxScale: 5,
+                      child: SizedBox.expand(
+                        child: Image.memory(
+                          attachment.bytes,
+                          fit: BoxFit.contain,
+                          semanticLabel: attachment.sourceLabel,
+                          errorBuilder: (_, _, _) =>
+                              const Center(child: Text('无法显示这张图片')),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   BoxDecoration _attachmentTileDecoration(ColorScheme colors) => BoxDecoration(
     border: Border.all(color: colors.outlineVariant),
     borderRadius: BorderRadius.circular(AppSpacing.radius),
@@ -1094,13 +1141,22 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                               decoration: _attachmentTileDecoration(colors),
                               child: Row(
                                 children: [
-                                  Image.memory(
-                                    attachment.bytes,
-                                    width: 44,
-                                    height: 44,
-                                    fit: BoxFit.cover,
-                                    gaplessPlayback: true,
-                                    cacheWidth: 88, // 2x DPR 缩略解码，避免全分辨率位图常驻
+                                  Tooltip(
+                                    message: '查看截图',
+                                    child: InkWell(
+                                      onTap: () =>
+                                          _previewAttachment(attachment),
+                                      borderRadius: BorderRadius.circular(
+                                        AppSpacing.radius,
+                                      ),
+                                      child: Image.memory(
+                                        attachment.bytes,
+                                        width: 44,
+                                        height: 44,
+                                        fit: BoxFit.contain,
+                                        cacheWidth: 88,
+                                      ),
+                                    ),
                                   ),
                                   const SizedBox(width: 6),
                                   Column(

@@ -1033,12 +1033,14 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     }
   }
 
-  /// 覆盖层提交：屏幕矩形 → 场景矩形 → 捕获管线；错误转失败结果（面板错误容器展示）。
-  Future<void> _handleRegionSelected(Rect screenRect) async {
+  /// 将画布局部矩形按实际绘制的视口换算为场景矩形。
+  Future<void> _handleRegionSelected(
+    ViewportState viewport,
+    Rect canvasRect,
+  ) async {
     final completer = _regionCaptureCompleter;
     if (completer == null || completer.isCompleted) return;
-    final viewport = _markdrawController.editorState.viewport;
-    final sceneRect = sceneRectFromScreenRect(viewport, screenRect);
+    final sceneRect = sceneRectFromScreenRect(viewport, canvasRect);
     try {
       final attachment = await captureSceneRectAttachment(
         _markdrawController,
@@ -1047,7 +1049,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       if (completer.isCompleted) return;
       completer.complete(attachment);
     } catch (error) {
-      completer.completeError(error);
+      if (!completer.isCompleted) completer.completeError(error);
     }
   }
 
@@ -2841,6 +2843,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       _openError == null &&
                       !_aiCaptureModeActive &&
                       !_smartLayoutV3PanelVisible,
+                  canvasOverlayBuilder: _aiCaptureModeActive
+                      ? (viewport) => RegionCaptureOverlay(
+                          onCommit: (rect) =>
+                              _handleRegionSelected(viewport, rect),
+                          onCancel: _handleRegionCancel,
+                        )
+                      : null,
                   onDocumentRenamed: () {
                     unawaited(_renameAndSaveDocument());
                   },
@@ -2907,11 +2916,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                     }
                   },
                 ),
-                if (_aiCaptureModeActive)
-                  RegionCaptureOverlay(
-                    onCommit: _handleRegionSelected,
-                    onCancel: _handleRegionCancel,
-                  ),
                 if (_openingMessage != null || _openError != null)
                   Positioned.fill(
                     child: ColoredBox(
