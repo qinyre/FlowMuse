@@ -36,6 +36,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.onSave,
     this.onSaveAs,
     this.onOpen,
+    this.onOpenBeside,
+    this.openBesideDisabledReason,
     this.onExportPng,
     this.onExportSvg,
     this.onExportSmartMarkdown,
@@ -116,6 +118,8 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onSave;
   final VoidCallback? onSaveAs;
   final VoidCallback? onOpen;
+  final VoidCallback? onOpenBeside;
+  final String? openBesideDisabledReason;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
   final VoidCallback? onExportSmartMarkdown;
@@ -929,6 +933,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                               showTitle: false,
                               onBack: widget.onBack,
                               onOpen: widget.onOpen,
+                              onOpenBeside: widget.onOpenBeside,
+                              openBesideDisabledReason:
+                                  widget.openBesideDisabledReason,
                               onSave: widget.onSave,
                               onSaveAs: widget.onSaveAs,
                               onExportPng: widget.onExportPng,
@@ -1357,6 +1364,8 @@ class _LeftChrome extends StatelessWidget {
     this.showTitle = true,
     required this.onBack,
     required this.onOpen,
+    this.onOpenBeside,
+    this.openBesideDisabledReason,
     required this.onSave,
     required this.onSaveAs,
     required this.onExportPng,
@@ -1379,6 +1388,8 @@ class _LeftChrome extends StatelessWidget {
   final bool showTitle;
   final VoidCallback? onBack;
   final VoidCallback? onOpen;
+  final VoidCallback? onOpenBeside;
+  final String? openBesideDisabledReason;
   final VoidCallback? onSave;
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
@@ -1412,6 +1423,8 @@ class _LeftChrome extends StatelessWidget {
               ? CompactMenuButton(
                   controller: controller,
                   onOpen: onOpen,
+                  onOpenBeside: onOpenBeside,
+                  openBesideDisabledReason: openBesideDisabledReason,
                   onSave: onSave,
                   onSaveAs: onSaveAs,
                   onExportPng: onExportPng,
@@ -1434,6 +1447,8 @@ class _LeftChrome extends StatelessWidget {
               : HamburgerMenu(
                   controller: controller,
                   onOpen: onOpen,
+                  onOpenBeside: onOpenBeside,
+                  openBesideDisabledReason: openBesideDisabledReason,
                   onSave: onSave,
                   onSaveAs: onSaveAs,
                   onExportPng: onExportPng,

@@ -86,6 +86,69 @@ void main() {
     );
   });
 
+  testWidgets('本地双开保留参考视图和主画布，并拦截协作入口', (tester) async {
+    final (main, reference) = (await tester.runAsync(() async {
+      final main = await library.createNote(title: '双开主笔记');
+      final reference = await library.createNote(title: '双开测试资料');
+      return (main, reference);
+    }))!;
+    final container = _container(library: library);
+    final controller = await _open(tester, container, main);
+    final editor = find.byType(MarkdrawEditor);
+
+    Future<void> openReference() async {
+      await tester.tap(find.byIcon(Icons.menu));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('并排打开'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '双开测试资料');
+      await tester.pumpAndSettle();
+      expect(find.text(main.title), findsOneWidget);
+      await tester.tap(find.widgetWithText(ListTile, reference.title));
+      await tester.pump();
+      await _drainIo(
+        tester,
+        container,
+        until: () => find.byType(EditorCanvas).evaluate().length == 2,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    MarkdrawController referenceController() => tester
+        .widgetList<EditorCanvas>(find.byType(EditorCanvas))
+        .singleWhere((canvas) => canvas.controller != controller)
+        .controller;
+
+    await openReference();
+    expect(referenceController().viewMode, isTrue);
+    referenceController().setViewport(
+      const ViewportState(zoom: 1.75, offset: Offset(20, 30)),
+    );
+    expect(controller.editorState.viewport.zoom, isNot(1.75));
+    await tester.widget<MarkdrawEditor>(editor).onStartCollaboration!();
+    await tester.widget<MarkdrawEditor>(editor).onJoinCollaboration!();
+    await tester.pumpAndSettle();
+    expect(find.text('请先关闭参考笔记，再开启实时协作'), findsOneWidget);
+    expect(container.read(whiteboardViewModelProvider).activeRoom, isNull);
+
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    await tester.pumpAndSettle();
+    expect(find.text('参考笔记'), findsOneWidget);
+    await tester.tap(find.text('主笔记'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<MarkdrawEditor>(editor).controller, same(controller));
+    await tester.tap(find.text('参考笔记'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('关闭参考笔记'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<MarkdrawEditor>(editor).controller, same(controller));
+
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    await tester.pumpAndSettle();
+    await openReference();
+    expect(referenceController().editorState.viewport.zoom, 1.75);
+  });
+
   testWidgets('白板内的 AI 来源菜单显示在助手上层并可选取', (tester) async {
     final note = (await tester.runAsync(
       () => library.createNote(title: 'ai-source-menu'),

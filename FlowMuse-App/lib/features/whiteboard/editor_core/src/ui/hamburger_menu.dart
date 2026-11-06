@@ -81,6 +81,8 @@ class HamburgerMenu extends StatelessWidget {
   final ThemeMode? currentThemeMode;
   final ValueChanged<ThemeMode>? onThemeModeChanged;
   final VoidCallback? onOpen;
+  final VoidCallback? onOpenBeside;
+  final String? openBesideDisabledReason;
   final VoidCallback? onSave;
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
@@ -98,6 +100,8 @@ class HamburgerMenu extends StatelessWidget {
     this.currentThemeMode,
     this.onThemeModeChanged,
     this.onOpen,
+    this.onOpenBeside,
+    this.openBesideDisabledReason,
     this.onSave,
     this.onSaveAs,
     this.onExportPng,
@@ -154,6 +158,15 @@ class HamburgerMenu extends StatelessWidget {
     return [
       if (onOpen != null)
         _menuItem(context, 'open', Icons.folder_open, '打开', '$mod+O'),
+      if (onOpenBeside != null)
+        _menuItem(
+          context,
+          'open_beside',
+          Icons.vertical_split_outlined,
+          openBesideDisabledReason ?? '并排打开',
+          null,
+          enabled: openBesideDisabledReason == null,
+        ),
       if (onSave != null)
         _menuItem(context, 'save', Icons.save, '保存', '$mod+S'),
       if (onSaveAs != null)
@@ -373,6 +386,8 @@ class HamburgerMenu extends StatelessWidget {
       switch (value) {
         case 'open':
           onOpen?.call();
+        case 'open_beside':
+          onOpenBeside?.call();
         case 'save':
           onSave?.call();
         case 'save_as':

@@ -227,7 +227,10 @@ class _EditorCanvasState extends State<EditorCanvas>
     }
 
     final metrics = controller.pagedViewportMetrics;
-    if (metrics != null && metrics.atEnd && scrollDelta > 0) {
+    if (!controller.viewMode &&
+        metrics != null &&
+        metrics.atEnd &&
+        scrollDelta > 0) {
       _setAppendPageOverscroll(
         _appendPageOverscroll + scrollDelta * _elasticFactor,
       );
@@ -254,7 +257,7 @@ class _EditorCanvasState extends State<EditorCanvas>
     }
     _pagedTouchStartPosition = null;
     _pagedTouchMoved = false;
-    if (_appendPageReady) {
+    if (_appendPageReady && !controller.viewMode) {
       controller.appendPageAfterLastAndScroll();
       _setAppendPageOverscroll(0);
       return;
