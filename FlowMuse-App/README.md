@@ -69,6 +69,8 @@ python tool/precompress_web_test.py
 
 `--no-web-resources-cdn` 随包提供 CanvasKit，避免外部 CDN 导致白屏；当前不启用 Flutter 离线 Service Worker，未版本化资源返回 `Cache-Control: no-cache`。若发布到子路径，需同步调整 base href 与站点路由，不能复用根路径配方。
 
+启动页按资源下载、画布初始化和工作区打开三个阶段展示预计进度。进度随阶段推进，首帧就绪后移除，等待过久或加载失败时可重新加载。
+
 发布后核对实际入口、主脚本、CanvasKit、UI 字体、扫码解码脚本、缓存/压缩响应，并用干净浏览器验证启动、保存及必要协作流程。记录源提交、构建参数和资源哈希；临时上传包验证后清除，不累积整包归档。纯客户端更新无需重启 Go 服务。
 
 Web 上 `compute` 仍在原事件循环执行；原生端的大 PDF 后台编码优化不能直接当成 Web 的线程优化。书写流畅度需使用真实 PDF 复测。
