@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_context_source.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/visual_attachment_capture.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flutter/widgets.dart';
@@ -17,6 +19,75 @@ import 'package:flutter_test/flutter_test.dart';
 /// fire-and-forget，与本模块"读 Scene.files 原始字节"的 PDF 路径无竞态。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('视觉选区快照排除未选文字，改选后仍发送原选区', () async {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    const shape = ElementId('selected');
+    const unrelated = ElementId('unrelated');
+    controller.loadScene(
+      Scene().upsertRemoteElements([
+        RectangleElement(id: shape, x: 0, y: 0, width: 80, height: 80),
+        TextElement(
+          id: unrelated,
+          x: 0,
+          y: 0,
+          width: 80,
+          height: 20,
+          text: '不在选区内',
+          fontFamily: 'Excalifont',
+        ),
+      ]),
+    );
+    controller.applyResult(SetSelectionResult({shape}));
+    final source = readAiAgentSource(controller, AiAgentScope.selection);
+    controller.applyResult(SetSelectionResult({unrelated}));
+
+    expect(source.context.texts, isEmpty);
+    expect(await source.capture!(), isNotNull);
+    expect(
+      readAiAgentSource(
+        controller,
+        AiAgentScope.selection,
+      ).context.texts.single.text,
+      '不在选区内',
+    );
+  });
+
+  test('PDF 页范围只读页内文字，并把批注合成到截图', () async {
+    final controller = _pdfPageController(await _solidPng(100, 50));
+    controller.canvasSize = const Size(800, 600);
+    final before = readAiAgentSource(controller, AiAgentScope.page);
+    final baseline = await before.capture!();
+    controller.applyScene(
+      controller.currentScene.upsertRemoteElements([
+        RectangleElement(
+          id: const ElementId('annotation'),
+          x: 120,
+          y: 100,
+          width: 80,
+          height: 50,
+          strokeColor: '#ff0000',
+          backgroundColor: '#ff0000',
+        ),
+        TextElement(
+          id: const ElementId('outside'),
+          x: 900,
+          y: 0,
+          width: 80,
+          height: 20,
+          text: '页外',
+          fontFamily: 'Excalifont',
+        ),
+      ]),
+    );
+    final after = readAiAgentSource(controller, AiAgentScope.page);
+
+    expect(after.context.texts, isEmpty);
+    expect(after.context.label, 'PDF 第 1 页（含批注）');
+    final annotated = await after.capture!();
+    expect(annotated!.bytes, isNot(orderedEquals(baseline!.bytes)));
+  });
 
   test('已合规 PNG 原样返回（不重编码）', () async {
     // Given: 100×50 合成 PNG（≤byteLimit）

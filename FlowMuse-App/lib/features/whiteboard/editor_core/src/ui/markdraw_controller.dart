@@ -5480,6 +5480,7 @@ class MarkdrawController extends ChangeNotifier {
   /// metadata — the bytes may be sent to external AI services.
   Future<Uint8List?> exportRegionPng(
     Rect sceneBounds, {
+    Scene? scene,
     double maxLongestSide = 1568,
     void Function(Canvas canvas, double zoom)? afterPaint,
   }) async {
@@ -5501,11 +5502,11 @@ class MarkdrawController extends ChangeNotifier {
       Paint()..color = parseColor(_canvasBackgroundColor),
     );
     StaticCanvasPainter(
-      scene: _editorState.scene,
+      scene: scene ?? _editorState.scene,
       adapter: _adapter,
       viewport: viewport,
       layout: _layout,
-      resolvedImages: _peekResolvedImages(),
+      resolvedImages: _peekResolvedImages(scene: scene),
       gridSize: _gridSize,
       isDarkBackground:
           parseColor(_canvasBackgroundColor).computeLuminance() < 0.5,

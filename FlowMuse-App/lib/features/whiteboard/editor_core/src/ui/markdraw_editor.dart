@@ -88,6 +88,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.fingerDrawingEnabled = false,
     this.onFingerDrawingEnabledChanged,
     this.onAiPressed,
+    this.selectionActions = const {},
+    this.onAskCurrentPage,
     this.onSmartLayoutPressed,
     this.collaborationFocusLabel,
     this.collaborationFocusDescription,
@@ -178,6 +180,8 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onEyedropperPressed;
 
   final VoidCallback? onAiPressed;
+  final Map<String, VoidCallback> selectionActions;
+  final VoidCallback? onAskCurrentPage;
   final VoidCallback? onSmartLayoutPressed;
 
   /// 协作聚焦状态（本机视图态；完整说明放在悬停或紧凑菜单中）。
@@ -808,6 +812,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
             PageNavigationControls(
               controller: _controller,
               onOverview: _togglePageOverview,
+              onAskCurrentPage: showEditChrome ? widget.onAskCurrentPage : null,
               enabled: widget.pageNavigationEnabled,
             ),
           )
@@ -858,6 +863,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                     return RepaintBoundary(
                       child: EditorCanvas(
                         controller: _controller,
+                        selectionActions: widget.selectionActions,
                         collaborators: widget.collaborators,
                         collaboratorsListenable: widget.collaboratorsListenable,
                         remoteWetInkStore: widget.remoteWetInkStore,
@@ -1181,6 +1187,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 controller: _controller,
                 onCollapse: _collapsePropertyPanel,
                 dockOnRight: propertyPanelOnRight,
+                selectionActions: widget.selectionActions,
                 attributionActionResolver: widget.attributionActionResolver,
               ),
             ),

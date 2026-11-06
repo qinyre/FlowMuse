@@ -14,14 +14,6 @@ import '../../speech_recognition/models/speech_recognition_event.dart';
 import '../../speech_recognition/services/speech_recognition_service.dart';
 import '../../speech_recognition/services/speech_recognition_service_factory.dart';
 
-typedef AiAgentContextSnapshot = ({
-  String noteTitle,
-  List<AiNoteText> texts,
-  bool truncated,
-  String label,
-  bool hasSelection,
-});
-
 typedef AiAgentContextProvider = Future<AiAgentContextSnapshot> Function();
 
 /// 捕获场景：决定回调返回 null / 抛错时的分流（hybrid 方案 §1.2 三场景表）。
@@ -90,6 +82,9 @@ class AiAgentPanel extends StatefulWidget {
     this.onCaptureCurrentPdfPage,
     this.onRegionCapture,
     this.contextProvider,
+    this.sourceProvider,
+    this.initialSourceCapture,
+    this.initialInstruction,
     required this.promptStore,
     this.speechRecognitionService,
     required this.onApply,
@@ -115,6 +110,9 @@ class AiAgentPanel extends StatefulWidget {
   final Future<AiVisualAttachment?> Function()? onRegionCapture;
 
   final AiAgentContextProvider? contextProvider;
+  final AiAgentSource Function(AiAgentScope scope)? sourceProvider;
+  final Future<AiVisualAttachment?> Function()? initialSourceCapture;
+  final String? initialInstruction;
   final AiPromptStore promptStore;
   final SpeechRecognitionService? speechRecognitionService;
   final Future<void> Function(AiAgentResponse response) onApply;
@@ -146,6 +144,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   bool _speechFinalCommitted = false;
   List<AiAgentConversationTurn> _conversation = const [];
   late AiAgentContextSnapshot _context;
+  bool _needsSourceImage = false;
   _AiGenerateStage _stage = _AiGenerateStage.generating;
 
   // 附件条状态（单一事实源，hybrid §1.1）：仅存于面板内存态。
@@ -163,6 +162,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
   String? _attachmentNotice;
 
   bool get _hasAttachmentSources =>
+      widget.sourceProvider != null ||
       widget.onCaptureSelection != null ||
       widget.onCaptureCurrentPdfPage != null ||
       widget.onRegionCapture != null;
@@ -177,12 +177,15 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       label: widget.contextLabel,
       hasSelection: widget.hasSelection,
     );
-    if (widget.onCaptureSelection != null) {
+    final initialCapture =
+        widget.initialSourceCapture ?? widget.onCaptureSelection;
+    _needsSourceImage = widget.initialSourceCapture != null;
+    if (initialCapture != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           unawaited(
             _captureAndApply(
-              capture: widget.onCaptureSelection!,
+              capture: initialCapture,
               scene: _AiCaptureScene.passive,
             ),
           );
@@ -194,7 +197,9 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
         widget.speechRecognitionService ?? createSpeechRecognitionService();
     _speechSubscription = _speechService.events.listen(_onSpeechEvent);
     unawaited(_checkSpeechAvailability());
-    if (widget.texts.isNotEmpty) {
+    if (widget.initialInstruction case final instruction?) {
+      _instructionController.text = instruction;
+    } else if (widget.texts.isNotEmpty) {
       _instructionController.text = '总结当前笔记，提取待办事项，并生成合适的标题';
     }
     _loadPrompts();
@@ -304,6 +309,28 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       offset: prompt.length,
     );
     setState(() {});
+  }
+
+  void _selectSource(AiAgentScope scope) {
+    if (_loading || _applying || _capturing) return;
+    final AiAgentSource source;
+    try {
+      source = widget.sourceProvider!(scope);
+    } on StateError catch (error) {
+      setState(() => _attachmentNotice = _errorMessage(error));
+      return;
+    }
+    _clearConversation(keepInstruction: true);
+    final capture = source.capture;
+    setState(() {
+      _context = source.context;
+      _needsSourceImage = capture != null;
+    });
+    if (capture != null) {
+      unawaited(
+        _captureAndApply(capture: capture, scene: _AiCaptureScene.passive),
+      );
+    }
   }
 
   /// 统一捕获入口：串行化在途捕获并按场景分流结果。
@@ -490,6 +517,9 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       _stage = _AiGenerateStage.generating;
     });
     try {
+      if (_needsSourceImage && _attachments.isEmpty) {
+        throw StateError('来源截图不可用，请重新选择来源或添加框选截图');
+      }
       final response = await widget.repository.run(
         instruction: instruction,
         noteTitle: context.noteTitle,
@@ -553,7 +583,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     });
   }
 
-  void _clearConversation() {
+  void _clearConversation({bool keepInstruction = false}) {
     for (final controller in _actionControllers) {
       controller.dispose();
     }
@@ -562,7 +592,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     }
     _actionControllers.clear();
     _actionFocusNodes.clear();
-    _instructionController.clear();
+    if (!keepInstruction) _instructionController.clear();
     setState(() {
       _conversation = const [];
       _response = null;
@@ -579,8 +609,10 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
     setState(() {
       if (identical(_attachments[index], _activeSelectionSlot)) {
         _activeSelectionSlot = null;
+        if (_context.texts.isNotEmpty) _needsSourceImage = false;
       }
       _attachments = [..._attachments]..removeAt(index);
+      if (widget.sourceProvider != null) _conversation = const [];
     });
   }
 
@@ -705,15 +737,16 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _context.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
+                      if (widget.sourceProvider == null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          _context.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colors.onSurfaceVariant),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -722,7 +755,14 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     tooltip: '清除对话',
                     onPressed: _loading || _applying || _capturing
                         ? null
-                        : _clearConversation,
+                        : () {
+                            if (widget.sourceProvider != null) {
+                              _selectSource(AiAgentScope.none);
+                              _instructionController.clear();
+                            } else {
+                              _clearConversation();
+                            }
+                          },
                     icon: const Icon(Icons.delete_sweep_outlined),
                   ),
                 IconButton(
@@ -747,6 +787,49 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (widget.sourceProvider != null) ...[
+                    Wrap(
+                      spacing: AppSpacing.controlGap,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        PopupMenuButton<AiAgentScope>(
+                          enabled: !_loading && !_applying && !_capturing,
+                          tooltip: '选择笔记来源',
+                          onSelected: _selectSource,
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: AiAgentScope.selection,
+                              child: Text('当前选区'),
+                            ),
+                            PopupMenuItem(
+                              value: AiAgentScope.page,
+                              child: Text('当前页'),
+                            ),
+                            PopupMenuItem(
+                              value: AiAgentScope.note,
+                              child: Text('整篇笔记（仅文字）'),
+                            ),
+                          ],
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text('选择来源 ▾'),
+                          ),
+                        ),
+                        InputChip(
+                          label: Text(_context.label),
+                          deleteButtonTooltipMessage: '移除笔记来源',
+                          onDeleted:
+                              _loading ||
+                                  _applying ||
+                                  _capturing ||
+                                  _context.noteTitle.isEmpty
+                              ? null
+                              : () => _selectSource(AiAgentScope.none),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.controlGap),
+                  ],
                   Text(
                     '快捷指令',
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -759,7 +842,11 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     runSpacing: 4,
                     children: [
                       for (final shortcut
-                          in (_context.hasSelection
+                          in (widget.sourceProvider != null &&
+                                      _context.noteTitle.isEmpty &&
+                                      _attachments.isEmpty
+                                  ? const <String, String>{}
+                                  : _context.hasSelection
                                   ? const {
                                       '解释这里': '解释这里的内容',
                                       '检查公式': '检查这里的公式是否正确，如有错误请指出',
@@ -767,7 +854,7 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                                       '整理成导图': '把这里的内容整理成思维导图',
                                     }
                                   : const {
-                                      '总结': '总结当前笔记',
+                                      '总结': '总结本次提供的内容',
                                       '待办': '提取待办事项',
                                       '大纲': '生成结构化大纲',
                                       '思维导图': '根据当前内容生成思维导图',
@@ -1035,7 +1122,10 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     ],
                     const SizedBox(height: AppSpacing.controlGap),
                     Text(
-                      _attachments.isEmpty
+                      widget.sourceProvider != null
+                          ? '文字和图片将随请求发送至你配置的模型服务。'
+                                '框选截图包含框内可见内容，发送前请核对。'
+                          : _attachments.isEmpty
                           ? '本次提问仅发送文字上下文'
                           : '选区截图包含选区矩形内的全部可见内容（可能含未选中的相邻内容）；'
                                 '框选截图包含框内全部可见内容；'
@@ -1051,12 +1141,13 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                       ),
                     ),
                   ],
-                  Text(
-                    '发送时读取画布当前选中的文本框；未选择时使用整篇笔记。',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
+                  if (widget.sourceProvider == null)
+                    Text(
+                      '发送时读取画布当前选中的文本框；未选择时使用整篇笔记。',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
                     ),
-                  ),
                   if (_context.truncated)
                     Text(
                       '当前笔记较长，已使用前 $maxAiAgentContextLength 字作为上下文。',

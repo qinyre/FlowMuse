@@ -2,6 +2,23 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'ai_visual_attachment.dart';
+
+enum AiAgentScope { selection, page, note, none }
+
+typedef AiAgentContextSnapshot = ({
+  String noteTitle,
+  List<AiNoteText> texts,
+  bool truncated,
+  String label,
+  bool hasSelection,
+});
+
+typedef AiAgentSource = ({
+  AiAgentContextSnapshot context,
+  Future<AiVisualAttachment?> Function()? capture,
+});
+
 const int maxAiAgentActions = 5;
 const int maxAiAgentTitleLength = 100;
 const int maxAiAgentTextLength = 5000;

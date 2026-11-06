@@ -62,6 +62,7 @@ import '../../color_picker/pen_color_picker_channel.dart';
 import '../service_widget/recent_whiteboard_sync_coordinator.dart';
 import '../ai_assistant/models/ai_agent_models.dart';
 import '../ai_assistant/repositories/ai_agent_repository.dart';
+import '../ai_assistant/repositories/ai_context_source.dart';
 import '../ai_assistant/repositories/ai_prompt_store.dart';
 import '../ai_assistant/repositories/visual_attachment_capture.dart';
 import '../ai_assistant/views/ai_agent_dialog.dart';
@@ -926,13 +927,30 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     await _saveMarkdrawScene();
   }
 
-  Future<void> _toggleAiAgent() async {
+  void _toggleAiAgent() {
     if (_aiPanelEntry != null) {
       _closeAiPanel();
       return;
     }
-    final initialContext = await _currentAiAgentContext();
-    if (!mounted) return;
+    final hasSelection = _markdrawController.selectedElements.any(
+      (element) => !element.isDeleted,
+    );
+    _openAiAgent(hasSelection ? AiAgentScope.selection : AiAgentScope.none);
+  }
+
+  void _openAiAgent(AiAgentScope scope, {String? instruction}) {
+    if (_aiCaptureModeActive || _loadingScene || _openError != null) return;
+    final AiAgentSource source;
+    try {
+      source = readAiAgentSource(_markdrawController, scope);
+    } on StateError catch (error) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message.toString())));
+      return;
+    }
+    if (_aiPanelEntry != null) _closeAiPanel();
+    final initialContext = source.context;
     final repository = ref.read(aiAgentRepositoryProvider);
     final entry = OverlayEntry(
       builder: (overlayContext) {
@@ -969,12 +987,13 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                 contextTruncated: initialContext.truncated,
                 contextLabel: initialContext.label,
                 hasSelection: initialContext.hasSelection,
-                onCaptureSelection: () =>
-                    captureSelectionAttachment(_markdrawController),
-                onCaptureCurrentPdfPage: () =>
-                    captureCurrentPdfPageAttachment(_markdrawController),
-                onRegionCapture: () => _startRegionCapture(),
-                contextProvider: _currentAiAgentContext,
+                onRegionCapture: _startRegionCapture,
+                initialSourceCapture: source.capture,
+                initialInstruction:
+                    instruction ??
+                    (scope == AiAgentScope.selection ? '解释这段内容' : null),
+                sourceProvider: (scope) =>
+                    readAiAgentSource(_markdrawController, scope),
                 promptStore: defaultAiPromptStore,
                 speechRecognitionService: _speechRecognitionService,
                 onApply: _applyAiAgentResponse,
@@ -990,56 +1009,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
     unawaited(_speechRecognitionService.cancel());
     setState(() {});
     Overlay.of(context).insert(entry);
-  }
-
-  Future<AiAgentContextSnapshot> _currentAiAgentContext() async {
-    final selectedElements = _markdrawController.selectedElements
-        .where((element) => !element.isDeleted)
-        .toList();
-    final selectedTexts = selectedElements
-        .whereType<editor_core.TextElement>()
-        .toList();
-    final sourceTexts = selectedTexts.isNotEmpty
-        ? selectedTexts
-        : _markdrawController.editorState.scene.elements
-              .whereType<editor_core.TextElement>()
-              .where((element) => !element.isDeleted)
-              .toList();
-    sourceTexts.sort((left, right) {
-      final page = _aiPageIndex(left).compareTo(_aiPageIndex(right));
-      if (page != 0) return page;
-      final y = left.y.compareTo(right.y);
-      return y != 0 ? y : left.x.compareTo(right.x);
-    });
-    final noteContext = AiNoteContext.fromTexts(
-      sourceTexts.map(
-        (element) => AiNoteText(
-          id: element.id.value,
-          text: element.text,
-          pageIndex: _aiPageIndex(element),
-          x: element.x,
-          y: element.y,
-        ),
-      ),
-    );
-    final visualSelected = selectedElements
-        .where((element) => element is! editor_core.TextElement)
-        .toList();
-    final noteTitle = _markdrawController.documentName ?? '未命名笔记';
-    final contextLabel = selectedTexts.isEmpty
-        ? sourceTexts.isEmpty
-              ? '当前笔记（暂无文字）'
-              : '整篇笔记（${sourceTexts.length} 个文本框）'
-        : '当前选区（${selectedTexts.length} 个文本框）';
-    // 视觉附件由面板经 onCaptureSelection/onCaptureCurrentPdfPage 回调
-    // 驱动捕获并驻留附件条状态（T6'），快照不再承载附件。
-    return (
-      noteTitle: noteTitle,
-      texts: noteContext.texts,
-      truncated: noteContext.truncated,
-      label: contextLabel,
-      hasSelection: selectedTexts.isNotEmpty || visualSelected.isNotEmpty,
-    );
   }
 
   void _closeAiPanel() {
@@ -1093,22 +1062,9 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   Future<void> _finishAiSpeechInput() async {
     await _speechRecognitionService.cancel();
-    if (mounted) setState(() => _aiSpeechInputActive = false);
-  }
-
-  int _aiPageIndex(editor_core.TextElement element) {
-    final pages = _markdrawController.layout.pages;
-    final pageId = element.pageId;
-    if (pageId != null) {
-      final index = pages.indexWhere((page) => page.id == pageId);
-      if (index >= 0) return index;
+    if (mounted && _aiPanelEntry == null) {
+      setState(() => _aiSpeechInputActive = false);
     }
-    final center = Offset(
-      element.x + element.width / 2,
-      element.y + element.height / 2,
-    );
-    final index = pages.indexWhere((page) => page.bounds.contains(center));
-    return index < 0 ? 0 : index;
   }
 
   /// V3 智能排版入口（V3-505C）：以当前页建立真实会话装配（真实
@@ -2889,6 +2845,20 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                       .read(inkRecognitionRepositoryProvider)
                       .recognize(request),
                   onAiPressed: _toggleAiAgent,
+                  selectionActions: {
+                    '解释这段': () => _openAiAgent(
+                      AiAgentScope.selection,
+                      instruction: '解释这段内容',
+                    ),
+                    '整理为笔记': () => _openAiAgent(
+                      AiAgentScope.selection,
+                      instruction: '把这段内容整理成条理清楚的笔记',
+                    ),
+                  },
+                  onAskCurrentPage: () => _openAiAgent(
+                    AiAgentScope.page,
+                    instruction: '解释这一页的内容与批注',
+                  ),
                   onSmartLayoutPressed: _openSmartLayoutV3Panel,
                   onLiveFreedrawChanged: state.collaborating
                       ? _broadcastLiveFreedraw

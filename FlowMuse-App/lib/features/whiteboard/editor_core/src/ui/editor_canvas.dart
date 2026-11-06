@@ -31,6 +31,7 @@ class EditorCanvas extends StatefulWidget {
   final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
   Function(Element element)?
   attributionActionResolver;
+  final Map<String, VoidCallback> selectionActions;
 
   /// 协作聚焦（本机视图态纯数据通道，v4 §7.1）。
   final String? focusedCreatorKey;
@@ -48,6 +49,7 @@ class EditorCanvas extends StatefulWidget {
     this.onUserInteraction,
     this.remoteWetInkStore,
     this.attributionActionResolver,
+    this.selectionActions = const {},
     this.focusedCreatorKey,
     this.focusHistoricalContent = false,
     this.socketIdCreatorKeys = const {},
@@ -692,6 +694,7 @@ class _EditorCanvasState extends State<EditorCanvas>
                     right: 12,
                     child: _CompactPropertyButton(
                       controller: controller,
+                      selectionActions: widget.selectionActions,
                       attributionActionResolver:
                           widget.attributionActionResolver,
                     ),
@@ -1004,7 +1007,9 @@ class _CompactPropertyButton extends StatelessWidget {
   final ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
   Function(Element element)?
   attributionActionResolver;
+  final Map<String, VoidCallback> selectionActions;
   const _CompactPropertyButton({
+    required this.selectionActions,
     required this.controller,
     this.attributionActionResolver,
   });
@@ -1030,6 +1035,7 @@ class _CompactPropertyButton extends StatelessWidget {
             context,
             controller,
             attributionActionResolver: attributionActionResolver,
+            selectionActions: selectionActions,
           ),
         ),
       ),

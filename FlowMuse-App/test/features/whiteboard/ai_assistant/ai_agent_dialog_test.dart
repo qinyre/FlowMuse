@@ -283,6 +283,46 @@ void main() {
     expect(repository.receivedTexts.single.single.text, '新选区');
   });
 
+  testWidgets('移除笔记来源后不读取画布或随请求发送已移除内容', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: repository,
+            noteTitle: '笔记',
+            texts: const [AiNoteText(id: 'source', text: '仅用于原选区')],
+            contextTruncated: false,
+            contextLabel: '当前文字选区',
+            initialInstruction: '解释这段内容',
+            sourceProvider: (scope) {
+              expect(scope, AiAgentScope.none);
+              return (
+                context: (
+                  noteTitle: '',
+                  texts: const <AiNoteText>[],
+                  truncated: false,
+                  label: '未添加笔记来源',
+                  hasSelection: false,
+                ),
+                capture: null,
+              );
+            },
+            promptStore: AiPromptStore(_MemorySettings()),
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('移除笔记来源'));
+    await tester.pumpAndSettle();
+    expect(find.text('未添加笔记来源'), findsOneWidget);
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    expect(repository.receivedTexts.single, isEmpty);
+  });
+
   testWidgets('思维导图动作展示结构并经确认应用', (tester) async {
     final action = AiAgentAction.fromJson({
       'tool': 'generate_mindmap',

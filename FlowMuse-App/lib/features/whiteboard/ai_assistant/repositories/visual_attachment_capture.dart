@@ -121,7 +121,7 @@ Future<AiVisualAttachment?> captureSelectionAttachment(
     bounds.size.width,
     bounds.size.height,
   );
-  return _renderSceneRectAttachment(controller, rect);
+  return captureAiRegion(controller, rect);
 }
 
 /// 捕获任意场景矩形（框选截图入口）。与 [captureSelectionAttachment] 共享管线。
@@ -131,30 +131,38 @@ Future<AiVisualAttachment?> captureSceneRectAttachment(
   ui.Rect sceneRect,
 ) async {
   if (sceneRect.width < 0.5 || sceneRect.height < 0.5) return null;
-  return _renderSceneRectAttachment(controller, sceneRect,
-      sourceLabel: '框选截图');
+  return captureAiRegion(controller, sceneRect, sourceLabel: '框选截图');
 }
 
 /// 共享私有管线：预热 → 导出 → 归一化 → 附件。失败抛 StateError（复用现语义文案）。
-Future<AiVisualAttachment?> _renderSceneRectAttachment(
+Future<AiVisualAttachment?> captureAiRegion(
   MarkdrawController controller,
   ui.Rect sceneRect, {
+  Scene? scene,
   String sourceLabel = '选区截图',
+  AiVisualAttachmentKind kind = AiVisualAttachmentKind.selection,
 }) async {
-  final failedImages = await controller.prewarmRegionImages(sceneRect);
+  final layout = controller.layout;
+  final failedImages = await controller.prewarmRegionImages(
+    sceneRect,
+    scene: scene,
+  );
+  if (controller.isDisposed || !identical(controller.layout, layout)) {
+    throw StateError('画布布局已变化，请重新选择来源');
+  }
   if (failedImages > 0) {
     // _failed 集合本会话粘性（image_cache.dart 不清理），"重试"无法兑现，
     // 文案如实指向重开笔记。
     throw StateError('图片解码失败，请重新打开笔记后重试');
   }
-  final png = await controller.exportRegionPng(sceneRect);
+  final png = await controller.exportRegionPng(sceneRect, scene: scene);
   if (png == null) throw StateError('截图生成失败，请重试');
   final normalized = await normalizeAttachmentPng(png);
   return AiVisualAttachment(
     sourceLabel: sourceLabel,
     mimeType: 'image/png',
     bytes: normalized,
-    kind: AiVisualAttachmentKind.selection,
+    kind: kind,
   );
 }
 

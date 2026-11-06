@@ -23,6 +23,7 @@ class PropertyPanelContent extends StatefulWidget {
   final bool isEditingText;
   final bool textOnly;
   final Size? canvasSize;
+  final Map<String, VoidCallback> selectionActions;
 
   /// 宿主注入的归属动作 resolver（v4 §6.3）：editor_core 不解析
   /// customData，由宿主根据选中元素返回归属文案与聚焦回调。
@@ -41,6 +42,7 @@ class PropertyPanelContent extends StatefulWidget {
     this.textOnly = false,
     this.canvasSize,
     this.attributionActionResolver,
+    this.selectionActions = const {},
   });
 
   @override
@@ -88,6 +90,14 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             );
           }(),
         ],
+        if (elements.isNotEmpty && widget.selectionActions.isNotEmpty)
+          Wrap(
+            spacing: 4,
+            children: [
+              for (final action in widget.selectionActions.entries)
+                TextButton(onPressed: action.value, child: Text(action.key)),
+            ],
+          ),
         IgnorePointer(
           ignoring: isLocked,
           child: Opacity(
