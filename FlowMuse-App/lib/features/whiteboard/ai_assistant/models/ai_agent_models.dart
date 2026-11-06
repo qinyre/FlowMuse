@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../editor_core/src/core/elements/latex_source.dart';
 import '../../editor_core/src/core/layout/note_draft.dart';
 import 'ai_source_location.dart';
 import 'ai_visual_attachment.dart';
@@ -249,7 +250,7 @@ class AiAgentAction {
       ),
       'insert_text' => AiAgentAction(
         tool: AiAgentTool.insertText,
-        value: _markdownToPlainText(
+        value: _normalizeInsertText(
           _requiredText(args, key: 'text', maxLength: maxAiAgentTextLength),
         ),
       ),
@@ -345,15 +346,11 @@ class AiAgentAction {
   }
 }
 
-String _markdownToPlainText(String source) {
-  var text = source
+String _normalizeInsertText(String source) {
+  if (standaloneLatex(source) != null) return source;
+  final text = source
       .replaceAll(RegExp(r'^\s*```[^\n]*$', multiLine: true), '')
-      .replaceAll(RegExp(r'^\s{0,3}#{1,6}\s+', multiLine: true), '')
       .replaceAll(RegExp(r'^\s{0,3}>\s?', multiLine: true), '')
-      .replaceAllMapped(
-        RegExp(r'^(\s*)[-*+]\s+', multiLine: true),
-        (match) => '${match[1]}• ',
-      )
       .replaceAllMapped(
         RegExp(r'!\[([^\]]*)\]\([^)]*\)'),
         (match) => match[1] ?? '',
@@ -362,9 +359,6 @@ String _markdownToPlainText(String source) {
         RegExp(r'\[([^\]]+)\]\([^)]*\)'),
         (match) => match[1] ?? '',
       );
-  for (final marker in ['**', '__', '~~', '`']) {
-    text = text.replaceAll(marker, '');
-  }
   final result = text.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
   if (result.isEmpty) throw const FormatException('AI 插入内容为空');
   return result;

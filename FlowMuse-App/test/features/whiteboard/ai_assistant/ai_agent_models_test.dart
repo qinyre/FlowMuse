@@ -245,7 +245,7 @@ void main() {
     );
   });
 
-  test('Markdown 插入内容转为文本框可显示的纯文本', () {
+  test('AI 插入保留可显示的 Markdown 并移除链接地址', () {
     final action = AiAgentAction.fromJson({
       'tool': 'insert_text',
       'arguments': {
@@ -259,7 +259,10 @@ void main() {
       },
     });
 
-    expect(action.value, '课堂总结\n\n重点：理解 Riverpod\n\n• 完成作业\n• flutter test');
+    expect(
+      action.value,
+      '# 课堂总结\n\n**重点**：理解 Riverpod\n\n- 完成作业\n- `flutter test`',
+    );
 
     expect(
       () => AiAgentAction.fromJson({

@@ -734,11 +734,21 @@ class _MathTextOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visible = viewport.visibleRect(controller.canvasSize);
     final elements = [
       for (final element in controller.editorState.scene.activeElements)
         if (element is TextElement &&
             MathTextUtils.isMathText(element) &&
-            element.id != controller.editingTextElementId)
+            element.id != controller.editingTextElementId &&
+            (element.angle != 0 ||
+                visible.overlaps(
+                  Rect.fromLTWH(
+                    element.x,
+                    element.y,
+                    element.width,
+                    element.height,
+                  ),
+                )))
           element,
     ];
     if (elements.isEmpty) {

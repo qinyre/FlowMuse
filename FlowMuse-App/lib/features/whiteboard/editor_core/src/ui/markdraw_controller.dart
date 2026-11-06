@@ -20,6 +20,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
 
 import '../core/elements/collaboration_element_owner.dart';
+import '../core/elements/latex_source.dart';
 import '../core/serialization/external_export_sanitizer.dart';
 import '../config/writing_feature_flags.dart';
 import 'harmony_stylus_stroke_smoother.dart';
@@ -4244,12 +4245,17 @@ class MarkdrawController extends ChangeNotifier {
     final preparedTexts = adaptiveLayout
         ? [
             for (final text in normalized)
-              ..._splitAdaptiveText(
-                text,
-                insertionAreas.first.rect.height * 0.8,
-                (chunk) =>
-                    _adaptiveTextHeight(chunk, insertionAreas.first.rect.width),
-              ),
+              if (standaloneLatex(text) != null)
+                text
+              else
+                ..._splitAdaptiveText(
+                  text,
+                  insertionAreas.first.rect.height * 0.8,
+                  (chunk) => _adaptiveTextHeight(
+                    chunk,
+                    insertionAreas.first.rect.width,
+                  ),
+                ),
           ]
         : normalized;
     var areaIndex = 0;
@@ -4472,11 +4478,14 @@ class MarkdrawController extends ChangeNotifier {
         maxWidth: width,
       ).$2;
       final keepWithNext = block.role == NoteDraftRole.section ? 72.0 : 0.0;
-      for (final chunk in _splitAdaptiveText(
-        prototype.text,
-        area.height - headerHeight,
-        measure,
-      )) {
+      final chunks = block.role == NoteDraftRole.formula
+          ? [prototype.text]
+          : _splitAdaptiveText(
+              prototype.text,
+              area.height - headerHeight,
+              measure,
+            );
+      for (final chunk in chunks) {
         final height = measure(chunk);
         if (y > area.top + headerHeight &&
             y + height + keepWithNext > area.bottom) {
@@ -5681,7 +5690,8 @@ class MarkdrawController extends ChangeNotifier {
 
   /// Renders an arbitrary scene-space rectangle to PNG bytes, mirroring the
   /// live canvas (background color, grid, dark-mode grid colors, page-union
-  /// clipping, math-text skipping). Pixels only: never embeds markdraw
+  /// clipping). Formula source is retained as text when no widget layer is available.
+  /// Pixels only: never embeds markdraw
   /// metadata — the bytes may be sent to external AI services.
   Future<Uint8List?> exportRegionPng(
     Rect sceneBounds, {
@@ -5717,7 +5727,6 @@ class MarkdrawController extends ChangeNotifier {
           parseColor(_canvasBackgroundColor).computeLuminance() < 0.5,
       contentBounds: _contentBounds,
       renderPageShadows: false,
-      skipMathText: true,
     ).paint(canvas, pixelSize);
     // Set-of-Mark 等叠加层：画在场景之上、导出像素坐标空间。
     afterPaint?.call(canvas, zoom);

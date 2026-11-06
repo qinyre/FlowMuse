@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
 
 import '../../../../shared/utils/ui_lifecycle.dart';
 import '../../../../shared/widgets/app_spacing.dart';
 import '../../../../shared/widgets/keyboard_focus_recovery.dart';
 import '../../ink_recognition/native_http_client.dart';
 import '../../editor_core/src/core/layout/note_draft.dart';
+import '../../editor_core/src/core/elements/latex_source.dart';
+import '../../editor_core/src/rendering/canvas_markdown.dart';
 import '../models/ai_agent_models.dart';
 import '../models/ai_source_location.dart';
 import '../models/ai_visual_attachment.dart';
@@ -691,22 +694,39 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
               padding: EdgeInsets.only(
                 top: block.role == NoteDraftRole.section ? 14 : 6,
               ),
-              child: Text(
-                block.role == NoteDraftRole.bullet
-                    ? '•  ${block.text}'
-                    : block.text,
-                style: switch (block.role) {
-                  NoteDraftRole.title => theme.textTheme.headlineSmall,
-                  NoteDraftRole.section => theme.textTheme.titleSmall?.copyWith(
-                    color: colors.primary,
-                  ),
-                  _ => theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-                },
-              ),
+              child: _previewDraftBlock(block, theme),
             ),
         ],
       ),
     );
+  }
+
+  Widget _previewDraftBlock(NoteDraftBlock block, ThemeData theme) {
+    final style =
+        switch (block.role) {
+          NoteDraftRole.title => theme.textTheme.headlineSmall,
+          NoteDraftRole.section => theme.textTheme.titleSmall?.copyWith(
+            color: theme.colorScheme.primary,
+          ),
+          _ => theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+        } ??
+        const TextStyle();
+    if (standaloneLatex(block.text) case final latex?) {
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Math.tex(
+          latex,
+          mathStyle: MathStyle.display,
+          textStyle: style,
+          onErrorFallback: (_) => Text(block.text, style: style),
+        ),
+      );
+    }
+    final text = block.role == NoteDraftRole.bullet
+        ? '•  ${block.text}'
+        : block.text;
+    return Text.rich(CanvasMarkdown.span(text, style));
   }
 
   void _clearConversation({bool keepInstruction = false}) {

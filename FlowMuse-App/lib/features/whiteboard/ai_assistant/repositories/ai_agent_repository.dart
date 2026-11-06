@@ -17,8 +17,8 @@ const _systemPrompt =
     '(summarize, generate a to-do list/outline, create a mind map, organize or '
     'rearrange existing content, continue or append writing, or suggest a '
     'clearer title). For this kind you must produce concrete content and return '
-    'it as tool action(s): insert_text (plain text only; preserve readable '
-    'headings, lists and line breaks but never use Markdown markers; keep it '
+    'it as tool action(s): insert_text (supports headings, lists, emphasis '
+    r'and inline code; place each standalone formula in its own $$...$$ action; keep it '
     'concise and in Chinese unless asked otherwise), generate_mindmap (content '
     'hierarchy only; never output coordinates, element IDs, bindings, or '
     'Excalidraw data; do not combine with insert_text in one response), '
@@ -39,7 +39,8 @@ const _systemPrompt =
 const _draftPrompt =
     ' For requests to organize source material into a formatted note '
     '(整理为笔记), call draft_note alone. Write one # title, ## section headings, '
-    'plain paragraphs and - list items. Use short sections, only use supplied '
+    r'paragraphs, - list items and standalone $$...$$ formulas on their own lines. '
+    'Use short sections, only use supplied '
     'facts, and mark unclear handwriting as 待确认. Put source links in the '
     'reply, not inside the draft.';
 
