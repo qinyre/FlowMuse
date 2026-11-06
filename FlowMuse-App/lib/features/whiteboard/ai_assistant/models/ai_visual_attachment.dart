@@ -76,6 +76,26 @@ bool _hasPngSignature(Uint8List bytes) {
   return true;
 }
 
+/// Reads IHDR without asking the renderer to decode the image.
+(int, int)? readAiPngDimensions(Uint8List bytes) {
+  // Signature (8) + IHDR length/type/data/CRC (25).
+  if (bytes.length < 33 || !_hasPngSignature(bytes)) return null;
+  final header = ByteData.sublistView(bytes);
+  if (header.getUint32(8) != 13 || header.getUint32(12) != 0x49484452) {
+    return null;
+  }
+  final width = header.getUint32(16);
+  final height = header.getUint32(20);
+  if (width == 0 ||
+      height == 0 ||
+      width > 0x7fffffff ||
+      height > 0x7fffffff ||
+      !_isPngChunkStructureClean(bytes)) {
+    return null;
+  }
+  return (width, height);
+}
+
 /// PNG 纯净性校验：按 chunk 结构解析（8 字节签名后循环「4B 长度 + 4B 类型 +
 /// 数据 + 4B CRC」直至 IEND），禁止携带 tEXt/iTXt/zTXt（防 .markdraw 元数据
 /// 外发）。长度越界、结构截断、IEND 后仍有剩余字节（拼接尾挂）均视为畸形

@@ -22,7 +22,9 @@ Future<Uint8List> normalizeAttachmentPng(
   int byteLimit = maxAiVisualAttachmentBytes,
   int maxPixelCount = 4096 * 4096,
 }) async {
-  final (width, height) = await _pngDimensions(bytes);
+  final dimensions = readAiPngDimensions(bytes);
+  if (dimensions == null) throw StateError('图片处理失败，请重试');
+  final (width, height) = dimensions;
   // 解压炸弹护栏：引擎对 PNG 无原生缩放解码，下方重缩放分支会先全尺寸解码
   // （峰值 ≈ 宽×高×4B），超大维度直接拒绝。该暴露面为存量（打开笔记即解码），
   // 此处不让伪造输入经附件路径放大。
@@ -52,23 +54,6 @@ Future<Uint8List> normalizeAttachmentPng(
     if (png != null && png.length <= byteLimit) return png;
   }
   throw StateError('图片过大，请缩小选区后重试');
-}
-
-/// Reads encoded pixel dimensions without decoding pixels; converts any
-/// decode failure into a user-actionable [StateError].
-Future<(int, int)> _pngDimensions(Uint8List bytes) async {
-  ui.ImmutableBuffer? buffer;
-  ui.ImageDescriptor? descriptor;
-  try {
-    buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-    descriptor = await ui.ImageDescriptor.encoded(buffer);
-    return (descriptor.width, descriptor.height);
-  } catch (_) {
-    throw StateError('图片处理失败，请重试');
-  } finally {
-    descriptor?.dispose();
-    buffer?.dispose();
-  }
 }
 
 Future<Uint8List?> _rescalePng(
