@@ -1193,12 +1193,17 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
               left: propertyPanelOnRight ? null : 12,
               right: propertyPanelOnRight ? 12 : null,
               bottom: 12,
-              child: PropertyPanel(
-                controller: _controller,
-                onCollapse: _collapsePropertyPanel,
-                dockOnRight: propertyPanelOnRight,
-                selectionActions: widget.selectionActions,
-                attributionActionResolver: widget.attributionActionResolver,
+              child: Align(
+                alignment: propertyPanelOnRight
+                    ? Alignment.topRight
+                    : Alignment.topLeft,
+                child: PropertyPanel(
+                  controller: _controller,
+                  onCollapse: _collapsePropertyPanel,
+                  dockOnRight: propertyPanelOnRight,
+                  selectionActions: widget.selectionActions,
+                  attributionActionResolver: widget.attributionActionResolver,
+                ),
               ),
             ),
         if (overview != null)

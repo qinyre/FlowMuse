@@ -2,6 +2,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart' hide Element;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
@@ -52,6 +53,7 @@ class PropertyPanelContent extends StatefulWidget {
 class _PropertyPanelContentState extends State<PropertyPanelContent> {
   OverlayEntry? _fontPickerEntry;
   bool _fontPickerInserted = false;
+  bool _showInkOperations = false;
 
   MarkdrawController get controller => widget.controller;
   ElementStyle get style => widget.style;
@@ -63,6 +65,20 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   Size? get canvasSize => widget.canvasSize;
   bool get isFreedrawTool =>
       controller.editorState.activeToolType == ToolType.freedraw;
+  bool get inkOnly =>
+      elements.isNotEmpty && elements.every((e) => e is FreedrawElement);
+
+  @override
+  void didUpdateWidget(covariant PropertyPanelContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_showInkOperations &&
+        !listEquals(
+          oldWidget.elements.map((e) => e.id).toList(),
+          elements.map((e) => e.id).toList(),
+        )) {
+      _showInkOperations = false;
+    }
+  }
 
   @override
   void dispose() {
@@ -90,7 +106,9 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             );
           }(),
         ],
-        if (elements.isNotEmpty && widget.selectionActions.isNotEmpty)
+        if (!inkOnly &&
+            elements.isNotEmpty &&
+            widget.selectionActions.isNotEmpty)
           Wrap(
             spacing: 4,
             children: [
@@ -105,8 +123,9 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             child: _buildStylePanel(context),
           ),
         ),
-        if (elements.isNotEmpty) ...[
-          const SizedBox(height: 12),
+        if (inkOnly) _buildInkFooter(context),
+        if (elements.isNotEmpty && (!inkOnly || _showInkOperations)) ...[
+          const SizedBox(height: 8),
           _buildSectionLabel(context, '图层顺序'),
           _buildLayerButtons(context),
           const SizedBox(height: 8),
@@ -115,6 +134,48 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           _buildSectionLabel(context, '操作'),
           _buildActionsRow(context),
         ],
+      ],
+    );
+  }
+
+  Widget _buildInkFooter(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 12),
+        Wrap(
+          spacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (widget.selectionActions.isNotEmpty)
+              PopupMenuButton<VoidCallback>(
+                tooltip: 'AI 助手',
+                onSelected: (action) => action(),
+                itemBuilder: (context) => [
+                  for (final action in widget.selectionActions.entries)
+                    PopupMenuItem(value: action.value, child: Text(action.key)),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 12,
+                  ),
+                  child: Text(
+                    'AI 助手',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ),
+            TextButton(
+              onPressed: () => setState(() {
+                _showInkOperations = !_showInkOperations;
+              }),
+              child: Text(_showInkOperations ? '收起操作' : '更多操作'),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -159,10 +220,11 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   }
 
   Widget _buildStylePanel(BuildContext context) {
+    final inkStyle = isFreedrawTool || inkOnly;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionLabel(context, isFreedrawTool ? '颜色' : '描边'),
+        _buildSectionLabel(context, inkStyle ? '颜色' : '描边'),
         _buildColorPickerRow(
           context,
           selected: style.strokeColor,
@@ -172,7 +234,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           target: ColorPickerTarget.stroke,
         ),
         if (!textOnly) ...[
-          if (!isFreedrawTool) ...[
+          if (!inkStyle) ...[
             const SizedBox(height: 8),
             _buildSectionLabel(context, '背景'),
             _buildColorPickerRow(
@@ -188,9 +250,9 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             _buildFillStyleRow(context, style.fillStyle),
           ],
           const SizedBox(height: 8),
-          _buildSectionLabel(context, isFreedrawTool ? '笔迹粗细' : '描边宽度'),
+          _buildSectionLabel(context, inkStyle ? '笔迹粗细' : '描边宽度'),
           _buildStrokeWidthRow(context, style.strokeWidth),
-          if (!isFreedrawTool) ...[
+          if (!inkStyle) ...[
             const SizedBox(height: 8),
             _buildSectionLabel(context, '描边样式'),
             _buildStrokeStyleRow(context, style.strokeStyle),
@@ -810,9 +872,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   Widget _buildActionsRow(BuildContext context) {
     final hasGroup = elements.any((e) => e.groupIds.isNotEmpty);
     final isSingle = elements.length == 1;
-    final canConvertInk =
-        elements.isNotEmpty &&
-        elements.every((element) => element is FreedrawElement);
+    final canConvertInk = inkOnly;
     final isMindmapNode =
         isSingle && MindmapUtils.isMindmapNode(elements.first);
 

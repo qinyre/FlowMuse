@@ -30,6 +30,8 @@ class PropertyPanel extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     final elements = controller.selectedElements;
+    final inkOnly =
+        elements.isNotEmpty && elements.every((e) => e is FreedrawElement);
     final isEditingText = controller.editingTextElementId != null;
 
     ElementStyle style;
@@ -108,33 +110,43 @@ class PropertyPanel extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: ListView(
+            shrinkWrap: true,
             padding: const EdgeInsets.all(12),
             children: [
               if (onCollapse != null)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: HoverTooltip(
-                      message: '收起属性面板',
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints.tightFor(
-                          width: 28,
-                          height: 28,
+                Row(
+                  children: [
+                    Expanded(
+                      child: inkOnly
+                          ? Text(
+                              '笔迹属性',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: HoverTooltip(
+                        message: '收起属性面板',
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 28,
+                            height: 28,
+                          ),
+                          iconSize: 20,
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(
+                            dockOnRight
+                                ? Icons.keyboard_arrow_right
+                                : Icons.keyboard_arrow_left,
+                          ),
+                          onPressed: onCollapse,
                         ),
-                        iconSize: 20,
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(
-                          dockOnRight
-                              ? Icons.keyboard_arrow_right
-                              : Icons.keyboard_arrow_left,
-                        ),
-                        onPressed: onCollapse,
                       ),
                     ),
-                  ),
+                  ],
                 ),
               PropertyPanelContent(
                 controller: controller,

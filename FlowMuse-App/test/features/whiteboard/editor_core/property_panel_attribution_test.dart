@@ -3,6 +3,57 @@ import 'package:flutter/material.dart' hide Element;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('笔迹属性按内容收高，保留 AI 与更多操作入口', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final stroke = FreedrawElement(
+      id: const ElementId('ink'),
+      x: 420,
+      y: 320,
+      width: 120,
+      height: 20,
+      points: const [Point(0, 0), Point(120, 20)],
+    );
+    final controller = MarkdrawController()
+      ..loadScene(Scene().addElement(stroke))
+      ..applyResult(SetSelectionResult({stroke.id}));
+    addTearDown(controller.dispose);
+    var invoked = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarkdrawEditor(
+          controller: controller,
+          selectionActions: {'解释这段': () => invoked = true},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final panel = find.byType(PropertyPanel);
+    final collapsedHeight = tester.getSize(panel).height;
+    expect(collapsedHeight, lessThan(400));
+    expect(find.text('笔迹粗细'), findsOneWidget);
+    expect(find.text('透明度'), findsOneWidget);
+    expect(find.text('填充样式'), findsNothing);
+    expect(find.text('图层顺序'), findsNothing);
+    expect(find.text('解释这段'), findsNothing);
+
+    await tester.tap(find.text('AI 助手'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('解释这段'));
+    await tester.pumpAndSettle();
+    expect(invoked, isTrue);
+
+    await tester.tap(find.text('更多操作'));
+    await tester.pumpAndSettle();
+    expect(find.text('图层顺序'), findsOneWidget);
+    expect(tester.getSize(panel).height, greaterThan(collapsedHeight));
+    await tester.tap(find.text('收起操作'));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(panel).height, collapsedHeight);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('单选元素显示归属与聚焦入口', (tester) async {
     final controller = MarkdrawController();
     addTearDown(controller.dispose);
