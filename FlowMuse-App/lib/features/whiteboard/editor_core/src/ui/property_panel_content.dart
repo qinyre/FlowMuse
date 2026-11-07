@@ -109,13 +109,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
         if (!inkOnly &&
             elements.isNotEmpty &&
             widget.selectionActions.isNotEmpty)
-          Wrap(
-            spacing: 4,
-            children: [
-              for (final action in widget.selectionActions.entries)
-                TextButton(onPressed: action.value, child: Text(action.key)),
-            ],
-          ),
+          _buildSelectionAiMenu(context),
         IgnorePointer(
           ignoring: isLocked,
           child: Opacity(
@@ -148,26 +142,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             if (widget.selectionActions.isNotEmpty)
-              PopupMenuButton<VoidCallback>(
-                tooltip: 'AI 助手',
-                onSelected: (action) => action(),
-                itemBuilder: (context) => [
-                  for (final action in widget.selectionActions.entries)
-                    PopupMenuItem(value: action.value, child: Text(action.key)),
-                ],
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 12,
-                  ),
-                  child: Text(
-                    'AI 助手',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ),
+              _buildSelectionAiMenu(context),
             TextButton(
               onPressed: () => setState(() {
                 _showInkOperations = !_showInkOperations;
@@ -177,6 +152,34 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildSelectionAiMenu(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.primary;
+    return PopupMenuButton<VoidCallback>(
+      tooltip: 'AI 助手',
+      onSelected: (action) => action(),
+      itemBuilder: (context) => [
+        for (final action in widget.selectionActions.entries)
+          PopupMenuItem(value: action.value, child: Text(action.key)),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.auto_awesome_outlined, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(
+              'AI 助手',
+              style: theme.textTheme.labelLarge?.copyWith(color: color),
+            ),
+            Icon(Icons.arrow_drop_down, size: 16, color: color),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1444,36 +1447,54 @@ class _AttributionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          HoverTooltip(
-            message: attributionLabel,
-            showOnLongPress: true,
-            child: Text(
-              attributionLabel,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-          HoverTooltip(
-            message: actionLabel,
-            showOnLongPress: true,
-            child: TextButton.icon(
-              onPressed: onPressed,
-              style: TextButton.styleFrom(alignment: Alignment.centerLeft),
-              icon: const Icon(Icons.center_focus_strong, size: 16),
-              label: Text(
-                actionLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      child: HoverTooltip(
+        message: '$actionLabel\n$attributionLabel',
+        showOnLongPress: true,
+        child: Semantics(
+          button: true,
+          label: actionLabel,
+          child: Material(
+            color: colors.surfaceContainerHighest.withValues(alpha: 0.48),
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              onTap: onPressed,
+              borderRadius: BorderRadius.circular(8),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          attributionLabel,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurface,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.center_focus_strong,
+                        size: 16,
+                        color: colors.primary,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

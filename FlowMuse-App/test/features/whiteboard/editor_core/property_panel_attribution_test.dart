@@ -58,6 +58,7 @@ void main() {
     final controller = MarkdrawController();
     addTearDown(controller.dispose);
     var pressed = 0;
+    var explained = false;
     ({String attributionLabel, String actionLabel, VoidCallback onPressed})?
     resolver(Element element) {
       return element.id == const ElementId('has-owner')
@@ -88,16 +89,30 @@ void main() {
               showFullTextProps: false,
               isEditingText: false,
               attributionActionResolver: resolver,
+              selectionActions: {'解释这段': () => explained = true},
             ),
           ),
         ),
       ),
     );
     expect(find.text('由 张三 创建'), findsOneWidget);
-    expect(find.text('查看张三的内容'), findsOneWidget);
-    await tester.tap(find.text('查看张三的内容'));
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      expect(find.bySemanticsLabel(RegExp('查看张三的内容')), findsOneWidget);
+    } finally {
+      semantics.dispose();
+    }
+    expect(find.text('查看张三的内容'), findsNothing);
+    await tester.tap(find.text('由 张三 创建'));
     await tester.pump();
     expect(pressed, 1);
+    expect(find.text('解释这段'), findsNothing);
+    await tester.tap(find.text('AI 助手'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('解释这段'));
+    await tester.pumpAndSettle();
+    expect(explained, isTrue);
   });
 
   testWidgets('长创建者归属在桌面窄面板和紧凑面板中可读且可聚焦', (tester) async {
@@ -166,14 +181,16 @@ void main() {
 
         expect(tester.takeException(), isNull);
         final labelRect = tester.getRect(find.text(attribution));
-        final buttonRect = tester.getRect(
-          find.widgetWithText(TextButton, action),
+        final card = find.widgetWithText(InkWell, attribution);
+        final icon = find.descendant(
+          of: card,
+          matching: find.byIcon(Icons.center_focus_strong),
         );
-        // 两段内容各有完整的横向空间，按钮不能再挤压创建者说明。
-        expect(labelRect.width, greaterThanOrEqualTo(170));
-        expect(labelRect.bottom, lessThanOrEqualTo(buttonRect.top));
+        expect(tester.getSize(card).height, greaterThanOrEqualTo(44));
+        expect(labelRect.width, greaterThanOrEqualTo(120));
+        expect(labelRect.right, lessThan(tester.getRect(icon).left));
         expect(labelRect.height, lessThan(80));
-        await tester.tap(find.text(action));
+        await tester.tap(card);
         await tester.pump();
         expect(pressed, greaterThan(0));
       }
