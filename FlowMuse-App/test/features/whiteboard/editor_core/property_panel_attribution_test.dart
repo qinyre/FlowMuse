@@ -1,5 +1,6 @@
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flutter/material.dart' hide Element;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -50,6 +51,10 @@ void main() {
     expect(tester.getSize(panel).height, greaterThanOrEqualTo(480));
     expect(find.text('描边宽度'), findsOneWidget);
     expect(find.text('透明度'), findsOneWidget);
+    expect(
+      tester.getCenter(find.text('AI 助手')).dy,
+      tester.getCenter(find.text('更多')).dy,
+    );
     for (final label in ['背景', '填充样式', '字体', '图层顺序', '对齐']) {
       expect(find.text(label), findsNothing);
     }
@@ -60,6 +65,13 @@ void main() {
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();
     }
+
+    await tester.tap(find.text('更多'));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('详细样式'), findsNothing);
+    expect(find.text('字体'), findsNothing);
 
     await openDetails('详细样式');
     expect(find.text('填充样式'), findsOneWidget);
