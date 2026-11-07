@@ -117,9 +117,13 @@ class PropertyPanel extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: inkOnly
+                      child: elements.isNotEmpty
                           ? Text(
-                              '笔迹属性',
+                              inkOnly
+                                  ? '笔迹属性'
+                                  : elements.length == 1
+                                  ? '选区属性'
+                                  : '已选 ${elements.length} 项',
                               style: Theme.of(context).textTheme.titleSmall,
                             )
                           : const SizedBox.shrink(),

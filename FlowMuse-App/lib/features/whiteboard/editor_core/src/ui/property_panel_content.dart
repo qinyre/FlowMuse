@@ -2,7 +2,7 @@ library;
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart' hide Element;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
@@ -50,10 +50,12 @@ class PropertyPanelContent extends StatefulWidget {
   State<PropertyPanelContent> createState() => _PropertyPanelContentState();
 }
 
+enum _SelectionDetails { style, operations }
+
 class _PropertyPanelContentState extends State<PropertyPanelContent> {
   OverlayEntry? _fontPickerEntry;
   bool _fontPickerInserted = false;
-  bool _showInkOperations = false;
+  _SelectionDetails? _details;
 
   MarkdrawController get controller => widget.controller;
   ElementStyle get style => widget.style;
@@ -67,16 +69,33 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
       controller.editorState.activeToolType == ToolType.freedraw;
   bool get inkOnly =>
       elements.isNotEmpty && elements.every((e) => e is FreedrawElement);
+  bool get inkStyle => isFreedrawTool || inkOnly;
+
+  @override
+  void initState() {
+    super.initState();
+    _revealShortcutTarget();
+  }
 
   @override
   void didUpdateWidget(covariant PropertyPanelContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_showInkOperations &&
-        !listEquals(
-          oldWidget.elements.map((e) => e.id).toList(),
-          elements.map((e) => e.id).toList(),
+    if (_details != null &&
+        !setEquals(
+          oldWidget.elements.map((e) => e.id).toSet(),
+          elements.map((e) => e.id).toSet(),
         )) {
-      _showInkOperations = false;
+      _details = null;
+    }
+    _revealShortcutTarget();
+  }
+
+  void _revealShortcutTarget() {
+    if (elements.isEmpty || isEditingText || isLocked) return;
+    final target = controller.pendingColorPicker;
+    if ((target == ColorPickerTarget.background && !textOnly && !inkStyle) ||
+        (target == ColorPickerTarget.font && showFullTextProps)) {
+      _details = _SelectionDetails.style;
     }
   }
 
@@ -106,19 +125,11 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             );
           }(),
         ],
-        if (!inkOnly &&
-            elements.isNotEmpty &&
-            widget.selectionActions.isNotEmpty)
-          _buildSelectionAiMenu(context),
-        IgnorePointer(
-          ignoring: isLocked,
-          child: Opacity(
-            opacity: isLocked ? 0.4 : 1.0,
-            child: _buildStylePanel(context),
-          ),
-        ),
-        if (inkOnly) _buildInkFooter(context),
-        if (elements.isNotEmpty && (!inkOnly || _showInkOperations)) ...[
+        _buildStylePanel(context),
+        if (elements.isNotEmpty) _buildSelectionFooter(context),
+        if (_details == _SelectionDetails.style)
+          _buildStylePanel(context, advancedOnly: true),
+        if (_details == _SelectionDetails.operations) ...[
           const SizedBox(height: 8),
           _buildSectionLabel(context, '图层顺序'),
           _buildLayerButtons(context),
@@ -132,7 +143,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     );
   }
 
-  Widget _buildInkFooter(BuildContext context) {
+  Widget _buildSelectionFooter(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -143,12 +154,46 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           children: [
             if (widget.selectionActions.isNotEmpty)
               _buildSelectionAiMenu(context),
-            TextButton(
-              onPressed: () => setState(() {
-                _showInkOperations = !_showInkOperations;
-              }),
-              child: Text(_showInkOperations ? '收起操作' : '更多操作'),
-            ),
+            if (inkOnly || _details != null)
+              TextButton(
+                onPressed: () => setState(() {
+                  _details = _details == null
+                      ? _SelectionDetails.operations
+                      : null;
+                }),
+                child: Text(
+                  _details == null
+                      ? '更多操作'
+                      : inkOnly
+                      ? '收起操作'
+                      : '收起详情',
+                ),
+              )
+            else
+              PopupMenuButton<_SelectionDetails>(
+                tooltip: '更多选区属性',
+                onSelected: (value) => setState(() => _details = value),
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: _SelectionDetails.style,
+                    child: Text('详细样式'),
+                  ),
+                  PopupMenuItem(
+                    value: _SelectionDetails.operations,
+                    child: Text('排列与操作'),
+                  ),
+                ],
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('更多'),
+                      Icon(Icons.arrow_drop_down, size: 16),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ],
@@ -222,22 +267,27 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     );
   }
 
-  Widget _buildStylePanel(BuildContext context) {
-    final inkStyle = isFreedrawTool || inkOnly;
-    return Column(
+  Widget _buildStylePanel(BuildContext context, {bool advancedOnly = false}) {
+    final showAdvanced = advancedOnly || elements.isEmpty;
+    final showFontSize =
+        style.hasText &&
+        (elements.isEmpty || (textOnly ? !advancedOnly : advancedOnly));
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionLabel(context, inkStyle ? '颜色' : '描边'),
-        _buildColorPickerRow(
-          context,
-          selected: style.strokeColor,
-          onSelect: (c) =>
-              controller.applyStyleChange(ElementStyle(strokeColor: c)),
-          quickPicks: strokeQuickPicks,
-          target: ColorPickerTarget.stroke,
-        ),
+        if (!advancedOnly) ...[
+          _buildSectionLabel(context, inkStyle || textOnly ? '颜色' : '描边'),
+          _buildColorPickerRow(
+            context,
+            selected: style.strokeColor,
+            onSelect: (c) =>
+                controller.applyStyleChange(ElementStyle(strokeColor: c)),
+            quickPicks: strokeQuickPicks,
+            target: ColorPickerTarget.stroke,
+          ),
+        ],
         if (!textOnly) ...[
-          if (!inkStyle) ...[
+          if (showAdvanced && !inkStyle) ...[
             const SizedBox(height: 8),
             _buildSectionLabel(context, '背景'),
             _buildColorPickerRow(
@@ -252,10 +302,12 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             _buildSectionLabel(context, '填充样式'),
             _buildFillStyleRow(context, style.fillStyle),
           ],
-          const SizedBox(height: 8),
-          _buildSectionLabel(context, inkStyle ? '笔迹粗细' : '描边宽度'),
-          _buildStrokeWidthRow(context, style.strokeWidth),
-          if (!inkStyle) ...[
+          if (!advancedOnly) ...[
+            const SizedBox(height: 8),
+            _buildSectionLabel(context, inkStyle ? '笔迹粗细' : '描边宽度'),
+            _buildStrokeWidthRow(context, style.strokeWidth),
+          ],
+          if (showAdvanced && !inkStyle) ...[
             const SizedBox(height: 8),
             _buildSectionLabel(context, '描边样式'),
             _buildStrokeStyleRow(context, style.strokeStyle),
@@ -269,22 +321,22 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             ],
           ],
         ],
-        if (style.hasArrows) ...[
+        if (showAdvanced && style.hasArrows) ...[
           const SizedBox(height: 8),
           _buildSectionLabel(context, '箭头类型'),
           _buildArrowTypeRow(context, style.arrowType),
         ],
-        if (showFullTextProps) ...[
+        if (showAdvanced && showFullTextProps) ...[
           const SizedBox(height: 12),
           _buildSectionLabel(context, '字体'),
           _buildFontPicker(context, style.fontFamily),
         ],
-        if (style.hasText) ...[
+        if (showFontSize) ...[
           const SizedBox(height: 8),
           _buildSectionLabel(context, '字号'),
           _buildFontSizeRow(context, style.fontSize),
         ],
-        if (showFullTextProps) ...[
+        if (showAdvanced && showFullTextProps) ...[
           const SizedBox(height: 8),
           _buildSectionLabel(context, '文字对齐'),
           _buildTextAlignCombinedRow(
@@ -293,7 +345,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             style.verticalAlign,
           ),
         ],
-        if (style.hasArrows) ...[
+        if (showAdvanced && style.hasArrows) ...[
           const SizedBox(height: 8),
           _buildArrowheadRow(
             context,
@@ -331,11 +383,15 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             },
           ),
         ],
-        const SizedBox(height: 8),
-        _buildSectionLabel(context, '透明度'),
-        _buildOpacitySlider(context, style.opacity),
+        if (!advancedOnly) ...[
+          const SizedBox(height: 8),
+          _buildSectionLabel(context, '透明度'),
+          _buildOpacitySlider(context, style.opacity),
+        ],
       ],
     );
+    if (!isLocked) return content;
+    return IgnorePointer(child: Opacity(opacity: 0.4, child: content));
   }
 
   // --- Helper builders ---

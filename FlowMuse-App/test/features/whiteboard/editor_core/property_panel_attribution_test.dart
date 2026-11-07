@@ -3,6 +3,88 @@ import 'package:flutter/material.dart' hide Element;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('混合选区默认紧凑，详细样式与排列操作独立展开', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final rectangle = RectangleElement(
+      id: const ElementId('rectangle'),
+      x: 420,
+      y: 250,
+      width: 120,
+      height: 80,
+    );
+    final text = TextElement(
+      id: const ElementId('text'),
+      x: 460,
+      y: 330,
+      width: 90,
+      height: 36,
+      text: '混合选区',
+    );
+    final stroke = FreedrawElement(
+      id: const ElementId('stroke'),
+      x: 480,
+      y: 390,
+      width: 120,
+      height: 20,
+      points: const [Point(0, 0), Point(120, 20)],
+    );
+    final controller = MarkdrawController()
+      ..loadScene(
+        Scene().addElement(rectangle).addElement(text).addElement(stroke),
+      )
+      ..applyResult(SetSelectionResult({rectangle.id, text.id, stroke.id}));
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MarkdrawEditor(
+          controller: controller,
+          selectionActions: {'解释这段': () {}},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final panel = find.byType(PropertyPanel);
+    expect(find.text('已选 3 项'), findsOneWidget);
+    expect(tester.getSize(panel).height, lessThan(360));
+    expect(find.text('描边宽度'), findsOneWidget);
+    expect(find.text('透明度'), findsOneWidget);
+    for (final label in ['背景', '填充样式', '字体', '图层顺序', '对齐']) {
+      expect(find.text(label), findsNothing);
+    }
+
+    Future<void> openDetails(String label) async {
+      await tester.tap(find.text('更多'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+    }
+
+    await openDetails('详细样式');
+    expect(find.text('填充样式'), findsOneWidget);
+    expect(find.text('字体'), findsOneWidget);
+    expect(find.text('图层顺序'), findsNothing);
+    await tester.tap(find.text('收起详情'));
+    await tester.pumpAndSettle();
+
+    await openDetails('排列与操作');
+    expect(find.text('图层顺序'), findsOneWidget);
+    expect(find.text('对齐'), findsOneWidget);
+    expect(find.text('字体'), findsNothing);
+
+    controller.applyResult(SetSelectionResult({text.id}));
+    await tester.pumpAndSettle();
+    expect(find.text('选区属性'), findsOneWidget);
+    expect(find.text('字号'), findsOneWidget);
+    expect(find.text('图层顺序'), findsNothing);
+    controller.requestColorPicker(ColorPickerTarget.font);
+    await tester.pumpAndSettle();
+    expect(controller.fontPickerOpen, isTrue);
+    expect(find.text('文字对齐'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('笔迹属性按内容收高，保留 AI 与更多操作入口', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
