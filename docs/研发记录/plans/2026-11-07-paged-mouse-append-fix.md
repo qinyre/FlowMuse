@@ -25,3 +25,13 @@
 - 完整 Flutter 回归 2156 项通过，原有 5 项跳过。`lib` 与 `test` 静态分析无问题。全目录分析另有 `build/license-review` 的旧验证脚本依赖缺失错误及旧构建目录提示，本次未修改这些文件。
 - 本地 Chrome 验证页以浏览器输入事件实际触发 wheel 和鼠标抓手拖动，页数依次为 1、2、3，撤销后恢复为 2；反向滚动及只读操作均未误增页，无浏览器异常。验证入口补齐 Flutter 初始化后通过，临时脚本和产物位于忽略的 `build/paged-mouse-append-check/`。
 - 物理鼠标和触控板的惯性滚动手感，以及平板实机尚未人工复测。
+
+## 界面验证截图
+
+本地 Chrome 验证页中，抓手越过末页边界、尚未松开鼠标时的新增页提示。
+
+![鼠标抓手触底新增页提示](../images/2026-11-07-editor-interactions/paged-mouse-append.png)
+
+同分支的选区侧栏样稿，使用虚构笔迹展示面板比例与常用操作。
+
+![选区属性面板](../images/2026-11-07-editor-interactions/selection-panel.png)
