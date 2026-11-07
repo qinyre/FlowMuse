@@ -764,6 +764,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
           return handled ? KeyEventResult.handled : KeyEventResult.ignored;
         },
         child: Scaffold(
+          backgroundColor: parseColor(_controller.canvasBackgroundColor),
           body: LayoutBuilder(
             builder: (context, constraints) {
               final isCompact =
