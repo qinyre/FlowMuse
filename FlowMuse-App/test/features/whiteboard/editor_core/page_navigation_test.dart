@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:convert';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/src/rendering/page_reading_position.dart';
@@ -40,6 +41,214 @@ CanvasLayout _layout({CanvasPageFlow flow = CanvasPageFlow.topToBottom}) =>
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final flow in CanvasPageFlow.values) {
+    test('删除 $flow 首中末页保留其他页内容、旧归属和阅读位置', () {
+      for (var deletedIndex = 0; deletedIndex < 3; deletedIndex++) {
+        final controller = MarkdrawController()..setLayout(_layout(flow: flow));
+        addTearDown(controller.dispose);
+        controller.canvasSize = const Size(800, 700);
+        final pages = controller.layout.pages;
+        final original = <String, Element>{};
+        for (final page in pages) {
+          final text = TextElement(
+            id: ElementId('text-${page.id}'),
+            x: page.bounds.left + 80,
+            y: page.bounds.top + 80,
+            width: 180,
+            height: 50,
+            text: '页面内容',
+            // 模拟没有页归属字段的旧笔记。
+          );
+          original[page.id] = text;
+          controller.applyResult(
+            AddElementResult(text),
+            applyDefaultStyle: false,
+          );
+        }
+        final deleted = pages[deletedIndex];
+        controller.navigateToPage(deleted.id, fit: true);
+        expect(controller.deletePages({deleted.id}), isTrue);
+        final remaining = controller.layout.pages;
+        expect(
+          remaining.map((page) => page.id),
+          pages.where((page) => page.id != deleted.id).map((page) => page.id),
+        );
+        expect(
+          controller.currentScene
+              .getElementById(original[deleted.id]!.id)!
+              .isDeleted,
+          isTrue,
+        );
+        for (final page in remaining) {
+          final before = original[page.id]!;
+          final oldPage = pages.firstWhere(
+            (candidate) => candidate.id == page.id,
+          );
+          final element = controller.currentScene.getElementById(before.id)!;
+          expect(element.isDeleted, isFalse);
+          expect(element.x, before.x + page.bounds.left - oldPage.bounds.left);
+          expect(element.y, before.y + page.bounds.top - oldPage.bounds.top);
+        }
+        expect(
+          remaining[controller.pagedViewportMetrics!.currentPageIndex].id,
+          remaining[deletedIndex.clamp(0, remaining.length - 1)].id,
+        );
+        controller.undo();
+        expect(
+          controller.layout.pages.map((page) => page.id),
+          pages.map((page) => page.id),
+        );
+        expect(
+          controller.currentScene
+              .getElementById(original[deleted.id]!.id)!
+              .isDeleted,
+          isFalse,
+        );
+        expect(controller.historyManager.canUndo, isFalse);
+        controller.redo();
+        expect(controller.layout.pages, hasLength(2));
+      }
+    });
+  }
+
+  test('批量删页一次提交历史和场景，PDF 墓碑可同步且附件保留供撤销', () {
+    final controller = MarkdrawController()..setLayout(_layout());
+    final guest = MarkdrawController();
+    addTearDown(controller.dispose);
+    addTearDown(guest.dispose);
+    final file = ImageFile(
+      mimeType: 'image/png',
+      bytes: base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      ),
+    );
+    controller.applyResult(
+      CompoundResult([
+        AddFileResult(fileId: 'pdf-file', file: file),
+        for (final page in controller.layout.pages)
+          AddElementResult(
+            ImageElement(
+              id: ElementId('pdf-${page.id}'),
+              x: page.bounds.left,
+              y: page.bounds.top,
+              width: page.bounds.width,
+              height: page.bounds.height,
+              fileId: 'pdf-file',
+              locked: true,
+              customData: CanvasLayout.pdfBackgroundCustomData(page.id),
+            ),
+          ),
+        SetSelectionResult({
+          const ElementId('pdf-cover'),
+          const ElementId('pdf-chapter'),
+        }),
+      ]),
+      applyDefaultStyle: false,
+    );
+    guest.applyRemoteExcalidrawSceneJson(
+      controller.serializeExcalidrawSceneJson(includeDeleted: true),
+    );
+    controller.canvasSize = const Size(800, 700);
+    controller.navigateToPage('chapter', fit: true);
+    final zoom = controller.editorState.viewport.zoom;
+    var sceneChanges = 0;
+    controller.sceneChangeListeners.add((_, _) => sceneChanges++);
+    expect(controller.deletePages({'cover', 'end'}), isTrue);
+    expect(sceneChanges, 1);
+    expect(controller.pagedViewportMetrics!.currentPageIndex, 0);
+    expect(controller.editorState.viewport.zoom, zoom);
+    expect(controller.editorState.selectedIds, {
+      const ElementId('pdf-chapter'),
+    });
+    expect(controller.currentScene.files['pdf-file'], same(file));
+    expect(
+      controller.currentScene
+          .getElementById(const ElementId('pdf-cover'))!
+          .isDeleted,
+      isTrue,
+    );
+    expect(
+      controller.currentScene
+          .getElementById(const ElementId('pdf-end'))!
+          .isDeleted,
+      isTrue,
+    );
+    guest.applyRemoteExcalidrawSceneJson(
+      controller.serializeExcalidrawSceneJson(includeDeleted: true),
+    );
+    expect(guest.layout.pages.map((page) => page.id), ['chapter']);
+    expect(
+      guest.currentScene
+          .getElementById(const ElementId('pdf-cover'))!
+          .isDeleted,
+      isTrue,
+    );
+    controller.undo();
+    expect(controller.layout.pages, hasLength(3));
+    expect(
+      controller.currentScene
+          .getElementById(const ElementId('pdf-cover'))!
+          .isDeleted,
+      isFalse,
+    );
+    expect(controller.currentScene.files['pdf-file'], same(file));
+    expect(controller.historyManager.canUndo, isFalse);
+    controller.redo();
+    expect(controller.layout.pages.map((page) => page.id), ['chapter']);
+  });
+
+  test('删页拒绝只读、忙碌、过期选择及删空笔记，不改变历史或场景', () {
+    final controller = MarkdrawController()..setLayout(_layout());
+    addTearDown(controller.dispose);
+    final before = controller.currentScene;
+    expect(controller.deletePages({}), isFalse);
+    expect(controller.deletePages({'missing', 'cover'}), isFalse);
+    expect(controller.deletePages({'cover', 'chapter', 'end'}), isFalse);
+    controller.pagedTouchActive = true;
+    expect(controller.deletePages({'cover'}), isFalse);
+    controller.pagedTouchActive = false;
+    controller.toggleViewMode();
+    expect(controller.deletePages({'cover'}), isFalse);
+    controller.toggleViewMode();
+    expect(controller.currentScene, same(before));
+    expect(controller.historyManager.canUndo, isFalse);
+    controller.deletePage('cover');
+    expect(controller.layout.pages, hasLength(2));
+    expect(controller.deletePages({'chapter'}), isTrue);
+    final last = controller.currentScene;
+    expect(controller.deletePages({'end'}), isFalse);
+    expect(controller.currentScene, same(last));
+  });
+
+  test('批量删除当前页及前页后定位紧邻的存留页', () {
+    final layout = _layout();
+    final controller = MarkdrawController()
+      ..setLayout(
+        layout.copyWith(
+          pages: [
+            ...layout.pages,
+            CanvasPage(
+              id: 'fourth',
+              index: 21,
+              bounds: const Rect.fromLTWH(0, 5288, 1600, 2000),
+              template: CanvasPageTemplate.blank,
+            ),
+          ],
+        ),
+      );
+    addTearDown(controller.dispose);
+    controller.canvasSize = const Size(800, 700);
+    controller.navigateToPage('chapter', fit: true);
+    expect(controller.deletePages({'cover', 'chapter'}), isTrue);
+    expect(
+      controller
+          .layout
+          .pages[controller.pagedViewportMetrics!.currentPageIndex]
+          .id,
+      'end',
+    );
+  });
 
   for (final template in CanvasPageTemplate.values) {
     test('页面标记恢复 ${template.name} 模板和续页方向', () {

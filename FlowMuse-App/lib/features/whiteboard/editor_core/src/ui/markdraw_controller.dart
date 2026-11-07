@@ -6159,26 +6159,54 @@ class MarkdrawController extends ChangeNotifier {
   }
 
   void deletePage(String pageId) {
-    if (!_layout.isPaged || _layout.pages.length <= 1) {
-      return;
+    deletePages({pageId});
+  }
+
+  bool deletePages(Set<String> pageIds) {
+    if (_disposed || _viewMode || !_layout.isPaged || pageIds.isEmpty) {
+      return false;
     }
+    final existing = _layout.pages.map((page) => page.id).toSet();
+    if (!existing.containsAll(pageIds) ||
+        pageIds.length >= existing.length ||
+        !preparePageNavigation()) {
+      return false;
+    }
+    final readingPosition = captureReadingPosition();
     final remaining = [
       for (final page in _layout.pages)
-        if (page.id != pageId) page,
+        if (!pageIds.contains(page.id)) page,
     ];
-    if (remaining.length == _layout.pages.length) {
-      return;
-    }
+    final nextPage =
+        readingPosition != null && pageIds.contains(readingPosition.pageId)
+        ? _layout.pages
+              .skip(readingPosition.ordinal)
+              .firstWhere(
+                (page) => !pageIds.contains(page.id),
+                orElse: () => remaining.last,
+              )
+        : null;
+    final removed = {
+      for (final element in _editorState.scene.activeElements)
+        if (pageIds.contains(_attachCurrentPage(element).pageId) ||
+            (element.isCanvasPage && pageIds.contains(element.id.value)))
+          element.id,
+    };
     final results = <ToolResult>[
-      for (final element in _editorState.scene.elements)
-        if (element.pageId == pageId || element.id.value == pageId)
-          RemoveElementResult(element.id),
+      for (final id in removed) RemoveElementResult(id),
+      SetSelectionResult(_editorState.selectedIds.difference(removed)),
+      ..._pageReorderResults(remaining),
     ];
-    _layout = _layout.copyWith(pages: remaining);
-    results.addAll(_pageReorderResults(remaining));
     pushHistory();
-    applyResult(CompoundResult(results));
+    applyResult(CompoundResult(results), applyDefaultStyle: false);
     _syncLayoutFromScene();
+    if (nextPage != null) {
+      navigateToPage(nextPage.id, fit: true);
+    } else {
+      final viewport = readingPosition?.restore(_layout, _canvasSize);
+      if (viewport != null) setViewport(viewport);
+    }
+    return true;
   }
 
   void reorderPage(String pageId, int newIndex) {
@@ -6204,6 +6232,9 @@ class MarkdrawController extends ChangeNotifier {
 
   List<ToolResult> _pageReorderResults(List<CanvasPage> pages) {
     final oldPagesById = {for (final page in _layout.pages) page.id: page};
+    final elements = _editorState.scene.elements
+        .map(_attachCurrentPage)
+        .toList();
     final nextPages = <CanvasPage>[];
     final deltaByPageId = <String, Offset>{};
 
@@ -6276,7 +6307,7 @@ class MarkdrawController extends ChangeNotifier {
       }
     }
 
-    for (final element in _editorState.scene.elements) {
+    for (final element in elements) {
       if (element.isCanvasPage || element.isDeleted) {
         continue;
       }
