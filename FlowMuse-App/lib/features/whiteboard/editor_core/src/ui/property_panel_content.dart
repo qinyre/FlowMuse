@@ -11,6 +11,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+import 'package:flow_muse/shared/widgets/anchored_panel.dart';
 
 import 'color_picker.dart' as cp;
 
@@ -173,29 +174,23 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
                 ),
               )
             else
-              PopupMenuButton<_SelectionDetails>(
-                tooltip: '更多选区属性',
+              _buildSelectionMenu<_SelectionDetails>(
+                label: '更多',
                 onSelected: (value) => setState(() => _details = value),
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
+                items: [
+                  anchoredActionMenuItem(
+                    context,
                     value: _SelectionDetails.style,
-                    child: Text('详细样式'),
+                    icon: Icons.palette_outlined,
+                    label: '详细样式',
                   ),
-                  PopupMenuItem(
+                  anchoredActionMenuItem(
+                    context,
                     value: _SelectionDetails.operations,
-                    child: Text('排列与操作'),
+                    icon: Icons.layers_outlined,
+                    label: '排列与操作',
                   ),
                 ],
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('更多'),
-                      Icon(Icons.arrow_drop_down, size: 16),
-                    ],
-                  ),
-                ),
               ),
           ],
         ),
@@ -204,27 +199,56 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   }
 
   Widget _buildSelectionAiMenu(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = theme.colorScheme.primary;
-    return PopupMenuButton<VoidCallback>(
-      tooltip: 'AI 助手',
+    return _buildSelectionMenu<VoidCallback>(
+      label: 'AI 助手',
+      icon: Icons.auto_awesome_outlined,
       onSelected: (action) => action(),
-      itemBuilder: (context) => [
+      items: [
         for (final action in widget.selectionActions.entries)
-          PopupMenuItem(value: action.value, child: Text(action.key)),
+          anchoredActionMenuItem(
+            context,
+            value: action.value,
+            icon: switch (action.key) {
+              '解释这段' => Icons.chat_bubble_outline,
+              '整理为笔记' => Icons.edit_note_outlined,
+              _ => Icons.auto_awesome_outlined,
+            },
+            label: action.key,
+          ),
       ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+    );
+  }
+
+  Widget _buildSelectionMenu<T extends Object>({
+    required String label,
+    IconData? icon,
+    required List<PopupMenuEntry<T>> items,
+    required ValueChanged<T> onSelected,
+  }) {
+    return Builder(
+      builder: (buttonContext) => TextButton(
+        style: TextButton.styleFrom(
+          minimumSize: const Size(0, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+        ),
+        onPressed: () async {
+          final selected = await showAnchoredPopupMenu<T>(
+            context: buttonContext,
+            placement: AnchoredPopupPlacement.below,
+            items: items,
+          );
+          if (mounted && selected != null) onSelected(selected);
+        },
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.auto_awesome_outlined, size: 14, color: color),
-            const SizedBox(width: 4),
-            Text(
-              'AI 助手',
-              style: theme.textTheme.labelLarge?.copyWith(color: color),
-            ),
-            Icon(Icons.arrow_drop_down, size: 16, color: color),
+            if (icon != null) ...[
+              Icon(icon, size: 18),
+              const SizedBox(width: 6),
+            ],
+            Text(label),
+            const SizedBox(width: 2),
+            const Icon(Icons.expand_more, size: 16),
           ],
         ),
       ),

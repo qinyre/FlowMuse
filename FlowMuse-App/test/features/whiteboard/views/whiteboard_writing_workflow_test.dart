@@ -121,6 +121,19 @@ void main() {
 
     await openReference();
     expect(referenceController().viewMode, isTrue);
+    final mainX = tester.getCenter(editor).dx;
+    await tester.tap(find.byTooltip('参考笔记选项'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('交换左右'));
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(editor).dx, lessThan(mainX));
+    await tester.tap(find.byTooltip('参考笔记选项'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('更换参考笔记'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
     referenceController().setViewport(
       const ViewportState(zoom: 1.75, offset: Offset(20, 30)),
     );
@@ -138,6 +151,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<MarkdrawEditor>(editor).controller, same(controller));
     await tester.tap(find.text('参考笔记'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('参考笔记选项'));
+    await tester.pumpAndSettle();
+    expect(find.text('更换参考笔记'), findsOneWidget);
+    expect(find.text('交换左右'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('关闭参考笔记'));
     await tester.pumpAndSettle();

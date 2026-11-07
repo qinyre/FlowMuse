@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+import 'package:flow_muse/shared/widgets/anchored_panel.dart';
 
 import '../../library/models/note_item.dart';
 import '../editor_core/flow_muse_whiteboard_editor.dart' hide TextAlign;
@@ -361,20 +363,34 @@ class _ReferenceNotePaneState extends State<_ReferenceNotePane> {
                         : null,
                     icon: const Icon(Icons.search),
                   ),
-                  PopupMenuButton<VoidCallback>(
-                    tooltip: '参考笔记选项',
-                    onSelected: (action) => action(),
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: widget.onReplace,
-                        child: const Text('更换参考笔记'),
-                      ),
-                      if (widget.onSwap != null)
-                        PopupMenuItem(
-                          value: widget.onSwap,
-                          child: const Text('交换左右'),
-                        ),
-                    ],
+                  Builder(
+                    builder: (buttonContext) => IconButton(
+                      tooltip: '参考笔记选项',
+                      icon: const Icon(Icons.more_vert),
+                      onPressed: () async {
+                        final action =
+                            await showAnchoredPopupMenu<VoidCallback>(
+                              context: buttonContext,
+                              placement: AnchoredPopupPlacement.below,
+                              items: [
+                                anchoredActionMenuItem(
+                                  buttonContext,
+                                  value: widget.onReplace,
+                                  icon: Icons.find_replace,
+                                  label: '更换参考笔记',
+                                ),
+                                if (widget.onSwap != null)
+                                  anchoredActionMenuItem(
+                                    buttonContext,
+                                    value: widget.onSwap!,
+                                    icon: Icons.swap_horiz,
+                                    label: '交换左右',
+                                  ),
+                              ],
+                            );
+                        if (mounted) action?.call();
+                      },
+                    ),
                   ),
                   IconButton(
                     tooltip: '关闭参考笔记',
