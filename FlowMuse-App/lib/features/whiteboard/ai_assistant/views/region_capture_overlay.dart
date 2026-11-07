@@ -8,11 +8,11 @@ import 'package:flutter/material.dart';
 class RegionCaptureOverlay extends StatefulWidget {
   const RegionCaptureOverlay({
     super.key,
-    required this.onCommit, // Rect screenRect → Future<void>；页面负责换算+导出+关闭
+    required this.onCommit,
     required this.onCancel, // VoidCallback；页面负责取消+关闭
   });
 
-  final Future<void> Function(Rect screenRect) onCommit;
+  final Future<void> Function(Rect canvasRect) onCommit;
   final VoidCallback onCancel;
 
   @override
@@ -41,24 +41,32 @@ class _RegionCaptureOverlayState extends State<RegionCaptureOverlay> {
   void _onPointerMove(PointerMoveEvent event) {
     final start = _start;
     if (start == null) return;
-    setState(() => _dragRect = Rect.fromPoints(start, event.localPosition));
+    setState(() => _dragRect = _canvasRect(start, event.localPosition));
   }
 
   void _onPointerUp(PointerUpEvent event) {
     final start = _start;
     if (start == null) return;
-    final rect = _dragRect;
+    final rect = _canvasRect(start, event.localPosition);
     _start = null;
-    if (rect == null || rect.width < _minSide || rect.height < _minSide) {
+    if (rect.width < _minSide || rect.height < _minSide) {
       setState(() => _hint = _tooSmallHint);
       return;
     }
     unawaited(_commit(rect));
   }
 
+  Rect _canvasRect(Offset start, Offset end) => Rect.fromPoints(
+    start,
+    end,
+  ).intersect(Offset.zero & (context.size ?? Size.zero));
+
   Future<void> _commit(Rect rect) async {
     if (_committing) return;
-    setState(() => _committing = true);
+    setState(() {
+      _dragRect = rect;
+      _committing = true;
+    });
     await widget.onCommit(rect);
   }
 

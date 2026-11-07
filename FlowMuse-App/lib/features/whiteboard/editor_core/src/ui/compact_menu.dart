@@ -15,6 +15,8 @@ class CompactMenuButton extends StatelessWidget {
   final ThemeMode? currentThemeMode;
   final ValueChanged<ThemeMode>? onThemeModeChanged;
   final VoidCallback? onOpen;
+  final VoidCallback? onOpenBeside;
+  final String? openBesideDisabledReason;
   final VoidCallback? onSave;
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
@@ -33,6 +35,8 @@ class CompactMenuButton extends StatelessWidget {
     this.currentThemeMode,
     this.onThemeModeChanged,
     this.onOpen,
+    this.onOpenBeside,
+    this.openBesideDisabledReason,
     this.onSave,
     this.onSaveAs,
     this.onExportPng,
@@ -88,6 +92,13 @@ class CompactMenuButton extends StatelessWidget {
               _compactMenuItem(Icons.folder_open, '打开', () {
                 closeThen(onOpen!);
               }),
+            if (onOpenBeside != null)
+              _compactMenuItem(
+                Icons.vertical_split_outlined,
+                openBesideDisabledReason ?? '并排打开',
+                () => closeThen(onOpenBeside!),
+                enabled: openBesideDisabledReason == null,
+              ),
             if (onSave != null)
               _compactMenuItem(Icons.save, '保存', () {
                 closeThen(onSave!);

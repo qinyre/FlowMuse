@@ -126,6 +126,13 @@ class FontResolver {
     if (_bundledFonts.contains(fontFamily)) {
       return base.copyWith(fontFamily: fontFamily);
     }
+    if (fontFamily == 'Helvetica') {
+      // Keep the standard Excalidraw font ID while resolving CJK glyphs locally.
+      return base.copyWith(
+        fontFamily: fontFamily,
+        fontFamilyFallback: ['FlowMuseSans', ...?base.fontFamilyFallback],
+      );
+    }
 
     if (_googleFonts.contains(fontFamily)) {
       return GoogleFonts.getFont(fontFamily, textStyle: base);

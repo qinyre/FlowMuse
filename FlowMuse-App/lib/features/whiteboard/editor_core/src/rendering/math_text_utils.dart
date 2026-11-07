@@ -1,16 +1,20 @@
+import '../core/elements/latex_source.dart';
 import '../core/elements/text_element.dart';
 
 class MathTextUtils {
   const MathTextUtils._();
 
-  static bool isMathText(TextElement element) {
+  static bool isMathText(TextElement element) => latex(element) != null;
+
+  static String? explicitLatex(TextElement element) =>
+      element.containerId == null ? standaloneLatex(element.text) : null;
+
+  static String? latex(TextElement element) {
+    final explicit = explicitLatex(element);
+    if (explicit != null) return explicit;
     final flowMuse = element.customData?['flowMuse'];
-    if (flowMuse is Map<String, Object?>) {
-      return flowMuse['smartLayoutType'] == 'math';
-    }
-    if (flowMuse is Map) {
-      return flowMuse['smartLayoutType'] == 'math';
-    }
-    return false;
+    return flowMuse is Map && flowMuse['smartLayoutType'] == 'math'
+        ? element.text
+        : null;
   }
 }

@@ -24,11 +24,13 @@ class PagedAppendPageHint {
     required this.overscrollPx,
     required this.readyToRelease,
     required this.releaseThresholdPx,
+    this.fromScrollWheel = false,
   });
 
   final double overscrollPx;
   final bool readyToRelease;
   final double releaseThresholdPx;
+  final bool fromScrollWheel;
 }
 
 /// A [CustomPainter] that renders all active scene elements with a
@@ -495,7 +497,9 @@ class StaticCanvasPainter extends CustomPainter {
     final progress = (hint.overscrollPx / hint.releaseThresholdPx)
         .clamp(0.0, 1.0)
         .toDouble();
-    final label = hint.readyToRelease ? '松开添加新页面' : '拉动添加新页面';
+    final label = hint.fromScrollWheel
+        ? (hint.readyToRelease ? '停止滚动添加新页面' : '继续滚动添加新页面')
+        : (hint.readyToRelease ? '松开添加新页面' : '拉动添加新页面');
     final center = layout?.isRightToLeft ?? false
         ? Offset(
             lastPage.bounds.left - 48 / viewport.zoom,

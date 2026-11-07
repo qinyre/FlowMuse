@@ -9,11 +9,13 @@ class PageNavigationControls extends StatefulWidget {
     required this.controller,
     required this.onOverview,
     this.enabled = true,
+    this.onAskCurrentPage,
   });
 
   final MarkdrawController controller;
   final VoidCallback onOverview;
   final bool enabled;
+  final VoidCallback? onAskCurrentPage;
 
   @override
   State<PageNavigationControls> createState() => _PageNavigationControlsState();
@@ -132,6 +134,12 @@ class _PageNavigationControlsState extends State<PageNavigationControls> {
                   ? null
                   : () => controller.navigateToPage(pages[index].id, fit: true),
             ),
+            if (widget.onAskCurrentPage != null)
+              button(
+                '问这一页',
+                Icons.auto_awesome_outlined,
+                widget.onAskCurrentPage,
+              ),
             button(
               '返回跳转前位置',
               Icons.undo,

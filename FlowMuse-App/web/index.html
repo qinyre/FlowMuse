@@ -45,11 +45,15 @@
     }
     .startup-content { width: min(100%, 320px); }
     .startup-brand { margin: 0 0 36px; font-size: 44px; font-weight: 400; letter-spacing: -2px; }
-    .startup-line { height: 2px; overflow: hidden; background: #dce9e3; }
-    .startup-line::after {
-      content: ""; display: block; width: 35%; height: 100%; background: #4f8f84;
-      animation: loading 1.6s ease-in-out infinite;
+    #startup-progress {
+      appearance: none; display: block; width: 100%; height: 6px;
+      border: 0; border-radius: 6px; overflow: hidden; background: #dce9e3;
     }
+    #startup-progress::-webkit-progress-bar { background: transparent; }
+    #startup-progress::-webkit-progress-value {
+      background: #4f8f84; border-radius: 6px; transition: width 400ms ease-out;
+    }
+    #startup-progress::-moz-progress-bar { background: #4f8f84; border-radius: 6px; }
     #startup-status { margin: 22px 0 10px; font-size: 17px; }
     #startup-hint { margin: 0; color: #697b74; font-size: 14px; line-height: 1.8; }
     #startup-retry {
@@ -57,23 +61,24 @@
       border: 1px solid #9cb7ab; border-radius: 8px; font: inherit; cursor: pointer;
     }
     #startup-retry:focus-visible { outline: 2px solid #4f8f84; outline-offset: 4px; }
-    #startup[data-failed] .startup-line::after { animation: none; width: 100%; }
-    @keyframes loading { from { transform: translateX(-110%); } to { transform: translateX(390%); } }
-    @media (prefers-reduced-motion: reduce) { .startup-line::after { animation: none; } }
+    #startup[data-failed] #startup-progress { opacity: 0.45; }
+    @media (prefers-reduced-motion: reduce) {
+      #startup-progress::-webkit-progress-value { transition: none; }
+    }
     @media (prefers-color-scheme: dark) {
       html, body, #startup { background: #172420; color: #e1ede6; }
-      .startup-line { background: #30483d; }
+      #startup-progress { background: #30483d; }
       #startup-hint { color: #a6bcb0; }
       #startup-retry { color: #e1ede6; }
     }
   </style>
 </head>
 <body>
-  <div id="startup" role="status" aria-live="polite">
+  <div id="startup">
     <div class="startup-content">
       <h1 class="startup-brand">FlowMuse</h1>
-      <div class="startup-line" aria-hidden="true"></div>
-      <p id="startup-status">正在加载应用…</p>
+      <progress id="startup-progress" value="8" max="100" aria-label="预计启动进度"></progress>
+      <p id="startup-status" role="status">正在下载应用资源…</p>
       <p id="startup-hint">首次打开需要下载应用资源，稍后再次访问会更快。</p>
       <button id="startup-retry" type="button" hidden onclick="location.reload()">重新加载</button>
       <noscript><p>请启用浏览器 JavaScript 后重新打开。</p></noscript>
@@ -98,6 +103,6 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="system-notices.js"></script>
-  <script src="flutter_bootstrap.js" async onerror="document.getElementById('startup-status').textContent='应用加载失败，请检查网络后重试。';document.getElementById('startup-retry').hidden=false;"></script>
+  <script src="flutter_bootstrap.js" async onerror="document.getElementById('startup').dataset.failed='true';document.getElementById('startup-status').textContent='应用加载失败，请检查网络后重试。';document.getElementById('startup-retry').hidden=false;"></script>
 </body>
 </html>

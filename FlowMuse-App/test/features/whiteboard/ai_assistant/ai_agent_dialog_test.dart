@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_models.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_source_location.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_prompt_store.dart';
@@ -281,6 +282,152 @@ void main() {
 
     expect(repository.receivedTexts.single.single.id, 'text-b');
     expect(repository.receivedTexts.single.single.text, '新选区');
+  });
+
+  testWidgets('移除笔记来源后不读取画布或随请求发送已移除内容', (tester) async {
+    final repository = _FakeAiAgentRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: repository,
+            noteTitle: '笔记',
+            texts: const [AiNoteText(id: 'source', text: '仅用于原选区')],
+            contextTruncated: false,
+            contextLabel: '当前文字选区',
+            initialInstruction: '解释这段内容',
+            sourceProvider: (scope) {
+              expect(scope, AiAgentScope.none);
+              return (
+                context: (
+                  noteTitle: '',
+                  texts: const <AiNoteText>[],
+                  truncated: false,
+                  label: '未添加笔记来源',
+                  hasSelection: false,
+                ),
+                capture: null,
+                location: null,
+              );
+            },
+            promptStore: AiPromptStore(_MemorySettings()),
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('移除笔记来源'));
+    await tester.pumpAndSettle();
+    expect(find.text('未添加笔记来源'), findsOneWidget);
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    expect(repository.receivedTexts.single, isEmpty);
+  });
+
+  testWidgets('整理稿分节预览，编辑后才确认写入', (tester) async {
+    AiAgentResponse? applied;
+    await _openDialog(
+      tester,
+      repository: _FakeAiAgentRepository(
+        response: const AiAgentResponse(
+          message: '整理稿已生成',
+          actions: [
+            AiAgentAction(
+              tool: AiAgentTool.draftNote,
+              value: '# 讲义笔记\n## 结论\n- 定义已核对',
+            ),
+          ],
+        ),
+      ),
+      onApply: (response) async => applied = response,
+    );
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+    final edit = find.text('编辑草稿');
+    await tester.ensureVisible(edit);
+    await tester.pumpAndSettle();
+    expect(find.text('整理稿预览'), findsOneWidget);
+    expect(find.text('讲义笔记'), findsOneWidget);
+    expect(find.text('•  定义已核对'), findsOneWidget);
+    expect(applied, isNull);
+
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    final editor = find.byType(TextField).last;
+    await tester.ensureVisible(editor);
+    await tester.enterText(editor, '# 修订笔记\n## 结论\n- 条件仍待确认');
+    await tester.tap(find.text('确认写入整理稿'));
+    await tester.pumpAndSettle();
+    expect(applied?.actions.single.value, '# 修订笔记\n## 结论\n- 条件仍待确认');
+  });
+
+  testWidgets('回复引用只能定位本次发送的来源', (tester) async {
+    final locations = <AiSourceLocation>[];
+    const page = AiPageSource('pdf-page');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiAgentPanel(
+            repository: _FakeAiAgentRepository(
+              response: const AiAgentResponse(
+                message: '[原文 1](flowmuse-source:text-1)',
+                actions: [],
+              ),
+            ),
+            noteTitle: '笔记',
+            texts: const [
+              AiNoteText(
+                id: 'segment:1',
+                text: '原文',
+                sourceElementId: 'segment',
+              ),
+            ],
+            contextTruncated: false,
+            contextLabel: '第 2 页',
+            initialSourceLocation: page,
+            initialSourceCapture: () async => AiVisualAttachment(
+              sourceLabel: '第 2 页',
+              mimeType: 'image/png',
+              bytes: base64Decode(kTinyPng),
+              kind: AiVisualAttachmentKind.pdfPage,
+              location: page,
+            ),
+            initialInstruction: '解释这段',
+            promptStore: AiPromptStore(_MemorySettings()),
+            onViewSource: (location) {
+              locations.add(location);
+              return location is AiElementSource ? '来源已删除' : null;
+            },
+            onApply: (_) async {},
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('发送'));
+    await tester.pumpAndSettle();
+
+    final onLink = tester
+        .widget<MarkdownBody>(find.byType(MarkdownBody))
+        .onTapLink!;
+    onLink('外部链接', 'https://example.com', '');
+    onLink('无效原文', 'flowmuse-source:text-2', '');
+    await tester.pump();
+    expect(locations, isEmpty);
+    expect(find.text('此引用未对应本次发送的笔记来源'), findsOneWidget);
+
+    onLink('原文', 'flowmuse-source:text-1', '');
+    await tester.pump();
+    expect((locations.single as AiElementSource).ids, {'segment'});
+    expect(find.text('来源已删除'), findsOneWidget);
+
+    onLink('图片', 'flowmuse-source:image-1', '');
+    await tester.pump();
+    expect(locations.last, same(page));
+    expect(find.text('来源已删除'), findsNothing);
+    expect(find.widgetWithText(ActionChip, '第 2 页'), findsOneWidget);
   });
 
   testWidgets('思维导图动作展示结构并经确认应用', (tester) async {

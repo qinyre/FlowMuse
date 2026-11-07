@@ -25,13 +25,39 @@ class MindmapUtils {
     return _role(e) == MindmapLayout.edgeRole;
   }
 
+  /// Moving a branch carries its descendants. Edges and labels follow via bindings.
+  static List<Element> branchNodes(Element root, List<Element> elements) {
+    final nodes = <String, Element>{};
+    final children = <String, List<String>>{};
+    for (final element in elements) {
+      if (element.isDeleted) continue;
+      if (isMindmapNode(element)) nodes[element.id.value] = element;
+      if (element is ArrowElement && isMindmapEdge(element)) {
+        final parent = element.startBinding?.elementId;
+        final child = element.endBinding?.elementId;
+        if (parent != null && child != null) {
+          (children[parent] ??= []).add(child);
+        }
+      }
+    }
+    final pending = [root.id.value];
+    final visited = <String>{};
+    final branch = <Element>[];
+    while (pending.isNotEmpty) {
+      final id = pending.removeLast();
+      if (!visited.add(id)) continue;
+      final node = nodes[id];
+      if (node == null) continue;
+      branch.add(node);
+      pending.addAll(children[id] ?? const []);
+    }
+    return branch;
+  }
+
   /// Returns the mind-map children of [parent] — the node rectangles that
   /// [parent] connects to via outgoing mind-map edges, in vertical (top to
   /// bottom) order so layout stacking matches visual order.
-  static List<Element> childrenOf(
-    Element parent,
-    List<Element> elements,
-  ) {
+  static List<Element> childrenOf(Element parent, List<Element> elements) {
     final childIds = <String>{};
     for (final e in elements) {
       if (e.isDeleted) continue;
@@ -45,10 +71,16 @@ class MindmapUtils {
     }
     if (childIds.isEmpty) return const [];
     final children = elements
-        .where((e) => !e.isDeleted && childIds.contains(e.id.value))
+        .where(
+          (e) =>
+              !e.isDeleted && isMindmapNode(e) && childIds.contains(e.id.value),
+        )
         .toList();
     // Sort by current y so the order reflects visual top→bottom.
-    children.sort((a, b) => a.y.compareTo(b.y));
+    children.sort((a, b) {
+      final order = (a.y + a.height / 2).compareTo(b.y + b.height / 2);
+      return order == 0 ? a.id.value.compareTo(b.id.value) : order;
+    });
     return children;
   }
 
@@ -66,7 +98,7 @@ class MindmapUtils {
           (pe) => !pe.isDeleted && pe.id.value == parentId,
           orElse: () => e, // defensive
         );
-        if (parent.id.value == parentId) return parent;
+        if (parent.id.value == parentId && isMindmapNode(parent)) return parent;
       }
     }
     return null;
@@ -81,16 +113,21 @@ class MindmapUtils {
   /// Each returned [MindmapNode] also carries its source element id via
   /// [MindmapNode.sourceId], so the reflow can update existing elements in
   /// place (preserving ids) rather than recreating them.
-  static MindmapNode treeFromScene(
-    Element rootNode,
-    List<Element> elements,
-  ) {
-    final text = _boundText(rootNode, elements);
-    final node = MindmapNode(text: text, sourceId: rootNode.id.value);
-    for (final child in childrenOf(rootNode, elements)) {
-      node.children.add(treeFromScene(child, elements));
+  static MindmapNode treeFromScene(Element rootNode, List<Element> elements) {
+    final visited = <String>{};
+    MindmapNode visit(Element element) {
+      visited.add(element.id.value);
+      return MindmapNode(
+        text: _boundText(element, elements),
+        sourceId: element.id.value,
+        children: [
+          for (final child in childrenOf(element, elements))
+            if (!visited.contains(child.id.value)) visit(child),
+        ],
+      );
     }
-    return node;
+
+    return visit(rootNode);
   }
 
   /// Returns the text of the bound text element for [node], or empty string.
@@ -108,11 +145,13 @@ class MindmapUtils {
   /// Used to reflow the whole tree starting from the root after an edit.
   static Element rootOf(Element node, List<Element> elements) {
     var current = node;
-    while (true) {
+    final visited = <String>{};
+    while (visited.add(current.id.value)) {
       final parent = parentOf(current, elements);
       if (parent == null) return current;
       current = parent;
     }
+    return node;
   }
 
   static String? _role(Element e) {

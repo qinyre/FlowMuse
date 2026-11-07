@@ -3,6 +3,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 import '../rendering/collaboration_focus_alpha.dart';
+import '../rendering/math_text_utils.dart';
 
 class PositionedMathText extends StatelessWidget {
   const PositionedMathText({
@@ -37,25 +38,29 @@ class PositionedMathText extends StatelessWidget {
       element.strokeColor,
     ).withValues(alpha: element.opacity * focusAlpha);
 
-    final child = Align(
-      alignment: Alignment.topLeft,
-      child: Math.tex(
+    final formula = Math.tex(
+      MathTextUtils.latex(element) ?? element.text,
+      mathStyle: MathStyle.display,
+      textStyle: TextStyle(color: color, fontSize: element.fontSize * zoom),
+      onErrorFallback: (_) => Text(
         element.text,
-        mathStyle: MathStyle.display,
-        textStyle: TextStyle(color: color, fontSize: element.fontSize * zoom),
-        onErrorFallback: (_) => Text(
-          element.text,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: color,
-            fontSize: element.fontSize * zoom,
-            height: element.lineHeight,
-            fontFamily: element.fontFamily,
-          ),
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color,
+          fontSize: element.fontSize * zoom,
+          height: element.lineHeight,
+          fontFamily: element.fontFamily,
         ),
       ),
     );
+    final child = MathTextUtils.explicitLatex(element) == null
+        ? Align(alignment: Alignment.topLeft, child: formula)
+        : FittedBox(
+            alignment: Alignment.topLeft,
+            fit: BoxFit.scaleDown,
+            child: formula,
+          );
 
     return Positioned(
       left: left,

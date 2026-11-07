@@ -36,6 +36,8 @@ class MarkdrawEditor extends StatefulWidget {
     this.onSave,
     this.onSaveAs,
     this.onOpen,
+    this.onOpenBeside,
+    this.openBesideDisabledReason,
     this.onExportPng,
     this.onExportSvg,
     this.onExportSmartMarkdown,
@@ -88,6 +90,9 @@ class MarkdrawEditor extends StatefulWidget {
     this.fingerDrawingEnabled = false,
     this.onFingerDrawingEnabledChanged,
     this.onAiPressed,
+    this.selectionActions = const {},
+    this.onAskCurrentPage,
+    this.canvasOverlayBuilder,
     this.onSmartLayoutPressed,
     this.collaborationFocusLabel,
     this.collaborationFocusDescription,
@@ -113,6 +118,8 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onSave;
   final VoidCallback? onSaveAs;
   final VoidCallback? onOpen;
+  final VoidCallback? onOpenBeside;
+  final String? openBesideDisabledReason;
   final VoidCallback? onExportPng;
   final VoidCallback? onExportSvg;
   final VoidCallback? onExportSmartMarkdown;
@@ -178,6 +185,9 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onEyedropperPressed;
 
   final VoidCallback? onAiPressed;
+  final Map<String, VoidCallback> selectionActions;
+  final VoidCallback? onAskCurrentPage;
+  final Widget Function(ViewportState viewport)? canvasOverlayBuilder;
   final VoidCallback? onSmartLayoutPressed;
 
   /// 协作聚焦状态（本机视图态；完整说明放在悬停或紧凑菜单中）。
@@ -808,6 +818,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
             PageNavigationControls(
               controller: _controller,
               onOverview: _togglePageOverview,
+              onAskCurrentPage: showEditChrome ? widget.onAskCurrentPage : null,
               enabled: widget.pageNavigationEnabled,
             ),
           )
@@ -823,6 +834,18 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     final controlGroupOnLeft =
         _controlGroupPosition == ControlGroupPosition.topLeft ||
         _controlGroupPosition == ControlGroupPosition.bottomLeft;
+    final propertyPanelSharesControls =
+        showDetachedControls && propertyPanelOnRight != controlGroupOnLeft;
+    final propertyPanelTop =
+        (propertyPanelOnRight ? rightChromeOffset : topChromeOffset) +
+        (propertyPanelSharesControls && controlGroupAtTop
+            ? _controlGroupReservedExtent
+            : 0);
+    final propertyPanelBottom =
+        bottomChromeOffset +
+        (propertyPanelSharesControls && !controlGroupAtTop
+            ? _controlGroupReservedExtent
+            : 0);
     final controlGroupSharesVerticalToolbar =
         showNavigationTools &&
         _toolbarDock != ToolbarDock.top &&
@@ -858,6 +881,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                     return RepaintBoundary(
                       child: EditorCanvas(
                         controller: _controller,
+                        selectionActions: widget.selectionActions,
+                        overlayBuilder: widget.canvasOverlayBuilder,
                         collaborators: widget.collaborators,
                         collaboratorsListenable: widget.collaboratorsListenable,
                         remoteWetInkStore: widget.remoteWetInkStore,
@@ -920,6 +945,9 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                               showTitle: false,
                               onBack: widget.onBack,
                               onOpen: widget.onOpen,
+                              onOpenBeside: widget.onOpenBeside,
+                              openBesideDisabledReason:
+                                  widget.openBesideDisabledReason,
                               onSave: widget.onSave,
                               onSaveAs: widget.onSaveAs,
                               onExportPng: widget.onExportPng,
@@ -1152,38 +1180,43 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 : (overview != null && !overviewOnLeft ? 304 : 12),
             child: _buildDetachedControlGroups(),
           ),
-        // Floating property panel — desktop left side
+        // Keep the panel anchored below the toolbar as its contents change.
         if (showEditChrome &&
             overview == null &&
             !isCompact &&
             widget.config.showPropertyPanel &&
             (_controller.selectedElements.isNotEmpty ||
                 _controller.isCreationTool))
-          if (_propertyPanelCollapsed)
-            Positioned(
-              top: propertyPanelOnRight ? rightChromeOffset : topChromeOffset,
-              left: propertyPanelOnRight ? null : 0,
-              right: propertyPanelOnRight ? 0 : null,
-              child: StudioRailIconButton(
-                tooltip: '展开属性面板',
-                size: 40,
-                onPressed: _expandPropertyPanel,
-                child: const Icon(Icons.tune, size: 20),
-              ),
-            )
-          else
-            Positioned(
-              top: propertyPanelOnRight ? rightChromeOffset : topChromeOffset,
-              left: propertyPanelOnRight ? null : 12,
-              right: propertyPanelOnRight ? 12 : null,
-              bottom: 12,
-              child: PropertyPanel(
-                controller: _controller,
-                onCollapse: _collapsePropertyPanel,
-                dockOnRight: propertyPanelOnRight,
-                attributionActionResolver: widget.attributionActionResolver,
-              ),
+          Positioned(
+            top: propertyPanelTop,
+            bottom: propertyPanelBottom,
+            left: propertyPanelOnRight
+                ? null
+                : safeArea.left + (_propertyPanelCollapsed ? 0 : 12),
+            right: propertyPanelOnRight
+                ? safeArea.right + (_propertyPanelCollapsed ? 0 : 12)
+                : null,
+            child: Align(
+              alignment: propertyPanelOnRight
+                  ? Alignment.topRight
+                  : Alignment.topLeft,
+              child: _propertyPanelCollapsed
+                  ? StudioRailIconButton(
+                      tooltip: '展开属性面板',
+                      size: 40,
+                      onPressed: _expandPropertyPanel,
+                      child: const Icon(Icons.tune, size: 20),
+                    )
+                  : PropertyPanel(
+                      controller: _controller,
+                      onCollapse: _collapsePropertyPanel,
+                      dockOnRight: propertyPanelOnRight,
+                      selectionActions: widget.selectionActions,
+                      attributionActionResolver:
+                          widget.attributionActionResolver,
+                    ),
             ),
+          ),
         if (overview != null)
           Positioned(
             top: overviewOnLeft ? topChromeOffset : rightChromeOffset,
@@ -1347,6 +1380,8 @@ class _LeftChrome extends StatelessWidget {
     this.showTitle = true,
     required this.onBack,
     required this.onOpen,
+    this.onOpenBeside,
+    this.openBesideDisabledReason,
     required this.onSave,
     required this.onSaveAs,
     required this.onExportPng,
@@ -1369,6 +1404,8 @@ class _LeftChrome extends StatelessWidget {
   final bool showTitle;
   final VoidCallback? onBack;
   final VoidCallback? onOpen;
+  final VoidCallback? onOpenBeside;
+  final String? openBesideDisabledReason;
   final VoidCallback? onSave;
   final VoidCallback? onSaveAs;
   final VoidCallback? onExportPng;
@@ -1402,6 +1439,8 @@ class _LeftChrome extends StatelessWidget {
               ? CompactMenuButton(
                   controller: controller,
                   onOpen: onOpen,
+                  onOpenBeside: onOpenBeside,
+                  openBesideDisabledReason: openBesideDisabledReason,
                   onSave: onSave,
                   onSaveAs: onSaveAs,
                   onExportPng: onExportPng,
@@ -1424,6 +1463,8 @@ class _LeftChrome extends StatelessWidget {
               : HamburgerMenu(
                   controller: controller,
                   onOpen: onOpen,
+                  onOpenBeside: onOpenBeside,
+                  openBesideDisabledReason: openBesideDisabledReason,
                   onSave: onSave,
                   onSaveAs: onSaveAs,
                   onExportPng: onExportPng,

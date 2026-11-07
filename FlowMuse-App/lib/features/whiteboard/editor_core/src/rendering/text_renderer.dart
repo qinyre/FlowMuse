@@ -6,6 +6,8 @@ import '../core/elements/elements.dart'
     as core
     show TextAlign, TextElement, VerticalAlign;
 import 'font_resolver.dart';
+import 'canvas_markdown.dart';
+import 'math_text_utils.dart';
 
 /// Renders text elements using Flutter's [TextPainter].
 ///
@@ -25,7 +27,12 @@ class TextRenderer {
 
     final painter = buildTextPainter(element);
     painter.layout(maxWidth: maxWidth ?? double.infinity);
-    final result = (painter.width, painter.height);
+    final result = (
+      painter.width,
+      MathTextUtils.explicitLatex(element) == null
+          ? painter.height
+          : element.fontSize * 2.4,
+    );
     painter.dispose();
     return result;
   }
@@ -52,7 +59,20 @@ class TextRenderer {
         element.height > 0 ? element.height - painter.height : 0.0,
     };
 
-    painter.paint(canvas, Offset(element.x, element.y + dy));
+    final formula = MathTextUtils.explicitLatex(element) != null;
+    if (formula || element.isMindmapLabel) {
+      canvas.save();
+      canvas.clipRect(
+        Rect.fromLTWH(element.x, element.y, element.width, element.height),
+      );
+      painter.paint(
+        canvas,
+        Offset(element.x, element.y + (formula || dy < 0 ? 0 : dy)),
+      );
+      canvas.restore();
+    } else {
+      painter.paint(canvas, Offset(element.x, element.y + dy));
+    }
     painter.dispose();
   }
 
@@ -94,10 +114,18 @@ class TextRenderer {
       ),
     );
 
+    final explicitFormula = MathTextUtils.explicitLatex(element) != null;
     return TextPainter(
-      text: TextSpan(text: element.text, style: style),
+      text:
+          (element.containerId != null && !element.isMindmapLabel) ||
+              _isVerticalText(element) ||
+              MathTextUtils.isMathText(element)
+          ? TextSpan(text: element.text, style: style)
+          : CanvasMarkdown.span(element.text, style),
       textAlign: _mapTextAlign(element.textAlign),
       textDirection: ui.TextDirection.ltr,
+      maxLines: explicitFormula ? 2 : null,
+      ellipsis: explicitFormula ? '…' : null,
     );
   }
 

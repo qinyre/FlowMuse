@@ -7,6 +7,146 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('拖动分支会移动子树，曲线随节点跨边重新接到正确边缘', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    final elements = MindmapLayout.treeToElements(
+      MindmapNode(
+        text: '根',
+        children: [
+          MindmapNode(
+            text: '分支',
+            children: [MindmapNode(text: '子节点')],
+          ),
+          MindmapNode(text: '另一分支'),
+        ],
+      ),
+    );
+    controller.loadScene(Scene().upsertRemoteElements(elements));
+    Element node(String text) {
+      final label = elements.whereType<TextElement>().singleWhere(
+        (e) => e.text == text,
+      );
+      return controller.currentScene.getElementById(
+        ElementId(label.containerId!),
+      )!;
+    }
+
+    final root = node('根');
+    final branch = node('分支');
+    final child = node('子节点');
+    final other = node('另一分支');
+    final point = Point(
+      branch.x + branch.width / 2,
+      branch.y + branch.height / 2,
+    );
+    final tool = SelectTool();
+    ToolContext context() => ToolContext(
+      scene: controller.currentScene,
+      viewport: const ViewportState(),
+      selectedIds: controller.editorState.selectedIds,
+    );
+    tool.onPointerDown(point, context());
+    controller.applyResult(
+      tool.onPointerMove(point + const Point(-440, 100), context()),
+    );
+    controller.applyResult(
+      tool.onPointerUp(point + const Point(-440, 100), context()),
+    );
+
+    expect(node('根').x, root.x);
+    expect(node('另一分支').y, other.y);
+    expect(node('分支').x, branch.x - 440);
+    expect(node('子节点').y, child.y + 100);
+    final edge = controller.currentScene.activeElements
+        .whereType<ArrowElement>()
+        .singleWhere((arrow) => arrow.endBinding?.elementId == branch.id.value);
+    expect(edge.startBinding!.fixedPoint.x, 0);
+    expect(edge.endBinding!.fixedPoint.x, 1);
+    expect(edge.x + edge.points.first.x, closeTo(root.x, 0.001));
+    expect(
+      edge.x + edge.points.last.x,
+      closeTo(node('分支').x + branch.width, 0.001),
+    );
+    expect(
+      edge.points
+          .skip(1)
+          .take(11)
+          .every(
+            (point) =>
+                edge.x + point.x <= root.x &&
+                edge.x + point.x >= node('分支').x + branch.width,
+          ),
+      isTrue,
+    );
+
+    controller.applyResult(tool.onKeyEvent('ArrowRight', context: context()));
+    expect(node('子节点').x, child.x - 439);
+    controller.mindmapTidy();
+    expect(node('根').y, root.y);
+    expect(node('分支').x, greaterThan(node('根').x));
+    expect(
+      controller.currentScene.activeElements
+          .whereType<ArrowElement>()
+          .singleWhere((arrow) => arrow.id == edge.id)
+          .startBinding!
+          .fixedPoint
+          .x,
+      1,
+    );
+
+    controller.applyResult(tool.onKeyEvent('Delete', context: context()));
+    expect(
+      controller.currentScene.activeElements.whereType<ArrowElement>().any(
+        (arrow) =>
+            arrow.startBinding?.elementId == branch.id.value ||
+            arrow.endBinding?.elementId == branch.id.value,
+      ),
+      isFalse,
+    );
+    expect(node('子节点').isDeleted, isFalse);
+  });
+
+  test('编辑多行节点内容重新测量，保持根的位置并可一次撤销', () {
+    final controller = MarkdrawController();
+    addTearDown(controller.dispose);
+    controller.insertMindmap(
+      MindmapNode(
+        text: '根',
+        children: [MindmapNode(text: '摘要')],
+      ),
+    );
+    final before = controller.currentScene;
+    final root = controller.selectedElements.single;
+    final label = before.activeElements.whereType<TextElement>().singleWhere(
+      (e) => e.text == '摘要',
+    );
+    final node = before.getElementById(ElementId(label.containerId!))!;
+    controller.startBoundTextEditing(node);
+    controller.textEditingController.text = '**摘要**\n- 第一段说明\n- 第二段说明';
+    controller.commitTextEditing();
+
+    final after = controller.currentScene;
+    final updated = after.getElementById(node.id)!;
+    final updatedLabel = after.findBoundText(node.id)!;
+    expect(updated.height, greaterThan(node.height));
+    expect(updatedLabel.isMindmapLabel, isTrue);
+    expect(updatedLabel.text, contains('第二段说明'));
+    expect(updatedLabel.x, greaterThan(updated.x));
+    expect(after.getElementById(root.id)!.y, root.y);
+    final edge = after.activeElements.whereType<ArrowElement>().single;
+    expect(
+      edge.y + edge.points.last.y,
+      closeTo(updated.y + updated.height / 2, 0.001),
+    );
+    controller.undo();
+    expect(controller.currentScene.findBoundText(node.id)!.text, '摘要');
+    expect(
+      controller.currentScene.getElementById(node.id)!.height,
+      node.height,
+    );
+  });
+
   test('AI 思维导图作为一次场景变更插入并可一次撤销', () {
     final controller = MarkdrawController();
     addTearDown(controller.dispose);

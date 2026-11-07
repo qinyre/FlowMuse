@@ -1,10 +1,10 @@
 library;
 
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
+import 'package:flow_muse/shared/widgets/app_spacing.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
-
 
 /// Desktop floating property panel (left side).
 class PropertyPanel extends StatelessWidget {
@@ -15,12 +15,15 @@ class PropertyPanel extends StatelessWidget {
   Function(Element element)?
   attributionActionResolver;
 
+  final Map<String, VoidCallback> selectionActions;
+
   const PropertyPanel({
     super.key,
     required this.controller,
     this.onCollapse,
     this.dockOnRight = false,
     this.attributionActionResolver,
+    this.selectionActions = const {},
   });
 
   @override
@@ -28,7 +31,15 @@ class PropertyPanel extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     final elements = controller.selectedElements;
+    final inkOnly =
+        elements.isNotEmpty && elements.every((e) => e is FreedrawElement);
     final isEditingText = controller.editingTextElementId != null;
+    final activeTool = controller.editorState.activeToolType;
+    final title = switch (elements.length) {
+      0 => activeTool == ToolType.freedraw ? '自由绘制' : null,
+      1 => inkOnly ? '笔迹属性' : '选区属性',
+      _ => inkOnly ? '笔迹属性' : '已选 ${elements.length} 项',
+    };
 
     ElementStyle style;
     bool isLocked;
@@ -89,7 +100,8 @@ class PropertyPanel extends StatelessWidget {
 
     return TextFieldTapRegion(
       child: Container(
-        width: 200,
+        width: 232,
+        constraints: BoxConstraints(minHeight: elements.isEmpty ? 360 : 480),
         decoration: BoxDecoration(
           color: cs.surface,
           borderRadius: BorderRadius.circular(8),
@@ -106,36 +118,49 @@ class PropertyPanel extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: ListView(
-            padding: const EdgeInsets.all(12),
+            shrinkWrap: true,
+            padding: const EdgeInsets.all(AppSpacing.sidebarInset),
             children: [
               if (onCollapse != null)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: HoverTooltip(
-                      message: '收起属性面板',
-                      child: IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints.tightFor(
-                          width: 28,
-                          height: 28,
+                Row(
+                  children: [
+                    Expanded(
+                      child: title != null
+                          ? Text(
+                              title,
+                              style: Theme.of(context).textTheme.titleSmall,
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: HoverTooltip(
+                        message: '收起属性面板',
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 28,
+                            height: 28,
+                          ),
+                          iconSize: 20,
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(
+                            dockOnRight
+                                ? Icons.keyboard_arrow_right
+                                : Icons.keyboard_arrow_left,
+                          ),
+                          onPressed: onCollapse,
                         ),
-                        iconSize: 20,
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(
-                          dockOnRight
-                              ? Icons.keyboard_arrow_right
-                              : Icons.keyboard_arrow_left,
-                        ),
-                        onPressed: onCollapse,
                       ),
                     ),
-                  ),
+                  ],
                 ),
+              if (onCollapse != null)
+                const Divider(height: AppSpacing.sectionGap),
               PropertyPanelContent(
                 controller: controller,
+                comfortable: true,
                 style: style,
                 elements: elements,
                 isLocked: isLocked,
@@ -144,6 +169,7 @@ class PropertyPanel extends StatelessWidget {
                 textOnly: textOnly,
                 canvasSize: controller.canvasSize,
                 attributionActionResolver: attributionActionResolver,
+                selectionActions: selectionActions,
               ),
             ],
           ),

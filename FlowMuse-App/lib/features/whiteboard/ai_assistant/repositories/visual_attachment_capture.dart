@@ -4,13 +4,13 @@ import 'dart:ui' as ui;
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart';
 
+import '../models/ai_source_location.dart';
 import '../models/ai_visual_attachment.dart';
 
-/// 画布局部（覆盖层 local 坐标）矩形 → 场景矩形。
-/// 与画布同层 Stack 时覆盖层 local 坐标即画布 local 坐标（见计划 §2.1 不变量）。
-ui.Rect sceneRectFromScreenRect(ViewportState viewport, ui.Rect screenRect) {
-  final topLeft = viewport.screenToScenePrecise(screenRect.topLeft);
-  final bottomRight = viewport.screenToScenePrecise(screenRect.bottomRight);
+/// 将画布局部逻辑像素矩形转换为场景矩形。
+ui.Rect sceneRectFromScreenRect(ViewportState viewport, ui.Rect canvasRect) {
+  final topLeft = viewport.screenToScenePrecise(canvasRect.topLeft);
+  final bottomRight = viewport.screenToScenePrecise(canvasRect.bottomRight);
   return ui.Rect.fromPoints(topLeft, bottomRight);
 }
 
@@ -22,7 +22,9 @@ Future<Uint8List> normalizeAttachmentPng(
   int byteLimit = maxAiVisualAttachmentBytes,
   int maxPixelCount = 4096 * 4096,
 }) async {
-  final (width, height) = await _pngDimensions(bytes);
+  final dimensions = readAiPngDimensions(bytes);
+  if (dimensions == null) throw StateError('图片处理失败，请重试');
+  final (width, height) = dimensions;
   // 解压炸弹护栏：引擎对 PNG 无原生缩放解码，下方重缩放分支会先全尺寸解码
   // （峰值 ≈ 宽×高×4B），超大维度直接拒绝。该暴露面为存量（打开笔记即解码），
   // 此处不让伪造输入经附件路径放大。
@@ -52,23 +54,6 @@ Future<Uint8List> normalizeAttachmentPng(
     if (png != null && png.length <= byteLimit) return png;
   }
   throw StateError('图片过大，请缩小选区后重试');
-}
-
-/// Reads encoded pixel dimensions without decoding pixels; converts any
-/// decode failure into a user-actionable [StateError].
-Future<(int, int)> _pngDimensions(Uint8List bytes) async {
-  ui.ImmutableBuffer? buffer;
-  ui.ImageDescriptor? descriptor;
-  try {
-    buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-    descriptor = await ui.ImageDescriptor.encoded(buffer);
-    return (descriptor.width, descriptor.height);
-  } catch (_) {
-    throw StateError('图片处理失败，请重试');
-  } finally {
-    descriptor?.dispose();
-    buffer?.dispose();
-  }
 }
 
 Future<Uint8List?> _rescalePng(
@@ -121,7 +106,7 @@ Future<AiVisualAttachment?> captureSelectionAttachment(
     bounds.size.width,
     bounds.size.height,
   );
-  return _renderSceneRectAttachment(controller, rect);
+  return captureAiRegion(controller, rect);
 }
 
 /// 捕获任意场景矩形（框选截图入口）。与 [captureSelectionAttachment] 共享管线。
@@ -131,30 +116,53 @@ Future<AiVisualAttachment?> captureSceneRectAttachment(
   ui.Rect sceneRect,
 ) async {
   if (sceneRect.width < 0.5 || sceneRect.height < 0.5) return null;
-  return _renderSceneRectAttachment(controller, sceneRect,
-      sourceLabel: '框选截图');
+  final page = controller.pageForVisibleRect(sceneRect);
+  final location = !controller.layout.isPaged
+      ? AiRegionSource(sceneRect)
+      : page == null || !page.bounds.overlaps(sceneRect)
+      ? null
+      : page.bounds.intersect(sceneRect) == sceneRect
+      ? AiRegionSource(sceneRect.shift(-page.bounds.topLeft), pageId: page.id)
+      : AiPageSource(page.id);
+  return captureAiRegion(
+    controller,
+    sceneRect,
+    sourceLabel: '框选截图',
+    location: location,
+  );
 }
 
 /// 共享私有管线：预热 → 导出 → 归一化 → 附件。失败抛 StateError（复用现语义文案）。
-Future<AiVisualAttachment?> _renderSceneRectAttachment(
+Future<AiVisualAttachment?> captureAiRegion(
   MarkdrawController controller,
   ui.Rect sceneRect, {
+  Scene? scene,
   String sourceLabel = '选区截图',
+  AiSourceLocation? location,
+  AiVisualAttachmentKind kind = AiVisualAttachmentKind.selection,
 }) async {
-  final failedImages = await controller.prewarmRegionImages(sceneRect);
+  final layout = controller.layout;
+  final failedImages = await controller.prewarmRegionImages(
+    sceneRect,
+    scene: scene,
+  );
+  if (controller.isDisposed || !identical(controller.layout, layout)) {
+    throw StateError('画布布局已变化，请重新选择来源');
+  }
   if (failedImages > 0) {
     // _failed 集合本会话粘性（image_cache.dart 不清理），"重试"无法兑现，
     // 文案如实指向重开笔记。
     throw StateError('图片解码失败，请重新打开笔记后重试');
   }
-  final png = await controller.exportRegionPng(sceneRect);
+  final png = await controller.exportRegionPng(sceneRect, scene: scene);
   if (png == null) throw StateError('截图生成失败，请重试');
   final normalized = await normalizeAttachmentPng(png);
   return AiVisualAttachment(
     sourceLabel: sourceLabel,
     mimeType: 'image/png',
     bytes: normalized,
-    kind: AiVisualAttachmentKind.selection,
+    kind: kind,
+    location: location,
   );
 }
 
@@ -172,7 +180,7 @@ Future<AiVisualAttachment?> captureCurrentPdfPageAttachment(
   final rawSize = controller.canvasSize;
   final canvasSize =
       rawSize.width <= 0 || rawSize.height <= 0
-          ? const ui.Size(800, 600) // 与控制器 :1843 兜底一致
+          ? const ui.Size(800, 600) // 与控制器 :1843 兜底值一致
           : rawSize;
   final visible = controller.editorState.viewport.visibleRect(canvasSize);
   final page = controller.pageForVisibleRect(visible);
