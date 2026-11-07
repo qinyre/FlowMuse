@@ -25,6 +25,7 @@ class PropertyPanelContent extends StatefulWidget {
   final bool textOnly;
   final Size? canvasSize;
   final Map<String, VoidCallback> selectionActions;
+  final bool comfortable;
 
   /// 宿主注入的归属动作 resolver（v4 §6.3）：editor_core 不解析
   /// customData，由宿主根据选中元素返回归属文案与聚焦回调。
@@ -44,6 +45,7 @@ class PropertyPanelContent extends StatefulWidget {
     this.canvasSize,
     this.attributionActionResolver,
     this.selectionActions = const {},
+    this.comfortable = false,
   });
 
   @override
@@ -70,6 +72,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
   bool get inkOnly =>
       elements.isNotEmpty && elements.every((e) => e is FreedrawElement);
   bool get inkStyle => isFreedrawTool || inkOnly;
+  double get sectionGap => widget.comfortable ? 20 : 8;
 
   @override
   void initState() {
@@ -303,7 +306,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             _buildFillStyleRow(context, style.fillStyle),
           ],
           if (!advancedOnly) ...[
-            const SizedBox(height: 8),
+            SizedBox(height: sectionGap),
             _buildSectionLabel(context, inkStyle ? '笔迹粗细' : '描边宽度'),
             _buildStrokeWidthRow(context, style.strokeWidth),
           ],
@@ -384,7 +387,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           ),
         ],
         if (!advancedOnly) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: sectionGap),
           _buildSectionLabel(context, '透明度'),
           _buildOpacitySlider(context, style.opacity),
         ],
@@ -402,7 +405,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: widget.comfortable ? 12 : 11,
           fontWeight: FontWeight.w600,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
@@ -426,10 +429,13 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
         for (final c in quickPicks)
           Padding(
             padding: const EdgeInsets.only(right: 4),
-            child: cp.ColorSwatch(
-              color: c,
-              isSelected: selected == c,
-              onTap: () => onSelect(c),
+            child: SizedBox.square(
+              dimension: widget.comfortable ? 28 : 24,
+              child: cp.ColorSwatch(
+                color: c,
+                isSelected: selected == c,
+                onTap: () => onSelect(c),
+              ),
             ),
           ),
         Container(
@@ -438,21 +444,24 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
           margin: const EdgeInsets.symmetric(horizontal: 4),
           color: Theme.of(context).dividerColor,
         ),
-        cp.ColorPickerButton(
-          color: selected ?? '#000000',
-          isActive: !isQuickPick,
-          onColorSelected: onSelect,
-          onRenderScene: canvasSize != null
-              ? controller.renderSceneImage
-              : null,
-          canvasSize: canvasSize,
-          canvasGlobalOffset: controller.canvasGlobalOffset,
-          autoOpen: shouldAutoOpen,
-          onAutoOpened: controller.clearPendingColorPicker,
-          autoActivateEyedropper:
-              target == ColorPickerTarget.stroke &&
-              controller.pendingEyedropper,
-          onEyedropperActivated: controller.clearPendingEyedropper,
+        SizedBox.square(
+          dimension: widget.comfortable ? 28 : 24,
+          child: cp.ColorPickerButton(
+            color: selected ?? '#000000',
+            isActive: !isQuickPick,
+            onColorSelected: onSelect,
+            onRenderScene: canvasSize != null
+                ? controller.renderSceneImage
+                : null,
+            canvasSize: canvasSize,
+            canvasGlobalOffset: controller.canvasGlobalOffset,
+            autoOpen: shouldAutoOpen,
+            onAutoOpened: controller.clearPendingColorPicker,
+            autoActivateEyedropper:
+                target == ColorPickerTarget.stroke &&
+                controller.pendingEyedropper,
+            onEyedropperActivated: controller.clearPendingEyedropper,
+          ),
         ),
       ],
     );
@@ -463,21 +472,24 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     const displayWidths = [1.0, 2.0, 3.5, 5.0];
     const tooltips = ['细', '中', '粗', '特粗'];
     return Wrap(
-      spacing: 4,
+      spacing: widget.comfortable ? 8 : 4,
       runSpacing: 4,
       children: [
         for (var i = 0; i < widths.length; i++)
-          IconToggleChip(
-            isSelected: current == widths[i],
-            onTap: () => controller.applyStyleChange(
-              ElementStyle(strokeWidth: widths[i]),
-            ),
-            tooltip: tooltips[i],
-            child: CustomPaint(
-              size: const Size(20, 20),
-              painter: StrokeWidthIcon(
-                displayWidths[i],
-                color: Theme.of(context).colorScheme.onSurface,
+          SizedBox.square(
+            dimension: widget.comfortable ? 40 : 32,
+            child: IconToggleChip(
+              isSelected: current == widths[i],
+              onTap: () => controller.applyStyleChange(
+                ElementStyle(strokeWidth: widths[i]),
+              ),
+              tooltip: tooltips[i],
+              child: CustomPaint(
+                size: const Size(20, 20),
+                painter: StrokeWidthIcon(
+                  displayWidths[i],
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
             ),
           ),
@@ -567,7 +579,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
     return Align(
       alignment: Alignment.centerLeft,
       child: SizedBox(
-        width: 160,
+        width: widget.comfortable ? double.infinity : 160,
         child: SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackHeight: 2,

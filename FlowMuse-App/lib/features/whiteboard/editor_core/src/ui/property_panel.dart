@@ -1,6 +1,7 @@
 library;
 
 import 'package:flutter/material.dart' hide Element, SelectionOverlay;
+import 'package:flow_muse/shared/widgets/app_spacing.dart';
 
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
@@ -99,7 +100,8 @@ class PropertyPanel extends StatelessWidget {
 
     return TextFieldTapRegion(
       child: Container(
-        width: 200,
+        width: 232,
+        constraints: BoxConstraints(minHeight: elements.isEmpty ? 360 : 480),
         decoration: BoxDecoration(
           color: cs.surface,
           borderRadius: BorderRadius.circular(8),
@@ -117,7 +119,7 @@ class PropertyPanel extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           child: ListView(
             shrinkWrap: true,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppSpacing.sidebarInset),
             children: [
               if (onCollapse != null)
                 Row(
@@ -154,8 +156,11 @@ class PropertyPanel extends StatelessWidget {
                     ),
                   ],
                 ),
+              if (onCollapse != null)
+                const Divider(height: AppSpacing.sectionGap),
               PropertyPanelContent(
                 controller: controller,
+                comfortable: true,
                 style: style,
                 elements: elements,
                 isLocked: isLocked,

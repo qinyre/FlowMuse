@@ -1180,7 +1180,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 : (overview != null && !overviewOnLeft ? 304 : 12),
             child: _buildDetachedControlGroups(),
           ),
-        // Center the panel within the free space on its docked side.
+        // Keep the panel anchored below the toolbar as its contents change.
         if (showEditChrome &&
             overview == null &&
             !isCompact &&
@@ -1198,8 +1198,8 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 : null,
             child: Align(
               alignment: propertyPanelOnRight
-                  ? Alignment.centerRight
-                  : Alignment.centerLeft,
+                  ? Alignment.topRight
+                  : Alignment.topLeft,
               child: _propertyPanelCollapsed
                   ? StudioRailIconButton(
                       tooltip: '展开属性面板',

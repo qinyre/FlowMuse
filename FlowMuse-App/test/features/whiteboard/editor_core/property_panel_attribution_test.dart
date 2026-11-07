@@ -47,7 +47,7 @@ void main() {
 
     final panel = find.byType(PropertyPanel);
     expect(find.text('已选 3 项'), findsOneWidget);
-    expect(tester.getSize(panel).height, lessThan(360));
+    expect(tester.getSize(panel).height, greaterThanOrEqualTo(480));
     expect(find.text('描边宽度'), findsOneWidget);
     expect(find.text('透明度'), findsOneWidget);
     for (final label in ['背景', '填充样式', '字体', '图层顺序', '对齐']) {
@@ -85,7 +85,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('选中笔迹和自由绘制的属性面板均在画布侧边居中', (tester) async {
+  testWidgets('选中笔迹和自由绘制的属性面板保持上沿与基础高度', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final stroke = FreedrawElement(
@@ -112,17 +112,11 @@ void main() {
     await tester.pumpAndSettle();
 
     final panel = find.byType(PropertyPanel);
-    final canvas = find.byType(EditorCanvas);
-    void expectCentered() {
-      expect(
-        tester.getCenter(panel).dy,
-        closeTo(tester.getCenter(canvas).dy, 1),
-      );
-    }
+    final top = tester.getTopLeft(panel).dy;
 
     final collapsedHeight = tester.getSize(panel).height;
-    expectCentered();
-    expect(collapsedHeight, lessThan(400));
+    expect(top, lessThan(180));
+    expect(collapsedHeight, greaterThanOrEqualTo(480));
     expect(find.text('笔迹粗细'), findsOneWidget);
     expect(find.text('透明度'), findsOneWidget);
     expect(find.text('填充样式'), findsNothing);
@@ -138,8 +132,8 @@ void main() {
     await tester.tap(find.text('更多操作'));
     await tester.pumpAndSettle();
     expect(find.text('图层顺序'), findsOneWidget);
-    expect(tester.getSize(panel).height, greaterThan(collapsedHeight));
-    expectCentered();
+    expect(tester.getSize(panel).height, greaterThanOrEqualTo(collapsedHeight));
+    expect(tester.getTopLeft(panel).dy, top);
     await tester.tap(find.text('收起操作'));
     await tester.pumpAndSettle();
     expect(tester.getSize(panel).height, collapsedHeight);
@@ -148,7 +142,19 @@ void main() {
     controller.switchTool(ToolType.freedraw);
     await tester.pumpAndSettle();
     expect(find.text('自由绘制'), findsOneWidget);
-    expectCentered();
+    expect(tester.getTopLeft(panel).dy, top);
+    expect(tester.getSize(panel).height, greaterThanOrEqualTo(360));
+
+    await tester.binding.setSurfaceSize(const Size(1200, 360));
+    await tester.pumpAndSettle();
+    expect(tester.getBottomLeft(panel).dy, lessThanOrEqualTo(360));
+    await tester.scrollUntilVisible(
+      find.byType(Slider),
+      100,
+      scrollable: find.descendant(of: panel, matching: find.byType(Scrollable)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(Slider).hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
