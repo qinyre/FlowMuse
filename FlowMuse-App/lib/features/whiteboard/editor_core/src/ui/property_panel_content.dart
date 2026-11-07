@@ -11,6 +11,7 @@ import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_e
 import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
     hide TextAlign;
 import 'package:flow_muse/shared/utils/ui_lifecycle.dart';
+import 'package:flow_muse/shared/widgets/anchored_panel.dart';
 
 import 'color_picker.dart' as cp;
 
@@ -177,13 +178,13 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
                 label: '更多',
                 onSelected: (value) => setState(() => _details = value),
                 items: [
-                  _selectionMenuItem(
+                  anchoredActionMenuItem(
                     context,
                     value: _SelectionDetails.style,
                     icon: Icons.palette_outlined,
                     label: '详细样式',
                   ),
-                  _selectionMenuItem(
+                  anchoredActionMenuItem(
                     context,
                     value: _SelectionDetails.operations,
                     icon: Icons.layers_outlined,
@@ -204,7 +205,7 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
       onSelected: (action) => action(),
       items: [
         for (final action in widget.selectionActions.entries)
-          _selectionMenuItem(
+          anchoredActionMenuItem(
             context,
             value: action.value,
             icon: switch (action.key) {
@@ -248,39 +249,6 @@ class _PropertyPanelContentState extends State<PropertyPanelContent> {
             Text(label),
             const SizedBox(width: 2),
             const Icon(Icons.expand_more, size: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  PopupMenuItem<T> _selectionMenuItem<T>(
-    BuildContext context, {
-    required T value,
-    required IconData icon,
-    required String label,
-  }) {
-    final theme = Theme.of(context);
-    return PopupMenuItem<T>(
-      value: value,
-      height: 52,
-      child: SizedBox(
-        width: 192,
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(
-                  alpha: 0.5,
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, size: 18, color: theme.colorScheme.primary),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
           ],
         ),
       ),

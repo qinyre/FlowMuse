@@ -9,6 +9,37 @@ import 'app_motion.dart';
 /// 面板从锚点哪一侧展开，决定进入动画的生长方向。
 enum AnchoredPanelGrowth { down, right, left }
 
+PopupMenuItem<T> anchoredActionMenuItem<T>(
+  BuildContext context, {
+  required T value,
+  required IconData icon,
+  required String label,
+}) {
+  final theme = Theme.of(context);
+  return PopupMenuItem<T>(
+    value: value,
+    height: 52,
+    child: SizedBox(
+      width: 192,
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: theme.colorScheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
+        ],
+      ),
+    ),
+  );
+}
+
 /// 统一锚点弹出面板路由：纸面容器 + 从锚点侧展开的方向性动画。
 ///
 /// 所有下拉/弹出菜单收口到这里，保证六端观感一致；仍然渲染调用方传入的
