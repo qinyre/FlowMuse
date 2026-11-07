@@ -899,11 +899,12 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
       child: Column(
         children: [
           Container(
+            constraints: const BoxConstraints(minHeight: 56),
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.sidebarInset,
-              AppSpacing.listGap,
+              4,
               AppSpacing.controlGap,
-              AppSpacing.listGap,
+              4,
             ),
             decoration: BoxDecoration(
               color: colors.surfaceContainerLow,
@@ -912,8 +913,8 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
             child: Row(
               children: [
                 Container(
-                  width: 36,
-                  height: 36,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
                     color: colors.primaryContainer,
                     borderRadius: BorderRadius.circular(AppSpacing.radius),
@@ -924,15 +925,20 @@ class _AiAgentPanelState extends State<AiAgentPanel> {
                     color: colors.onPrimaryContainer,
                   ),
                 ),
-                const SizedBox(width: AppSpacing.listGap),
+                const SizedBox(width: AppSpacing.controlGap),
                 Expanded(
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'AI 笔记助手',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       if (widget.sourceProvider == null) ...[
                         const SizedBox(height: 2),

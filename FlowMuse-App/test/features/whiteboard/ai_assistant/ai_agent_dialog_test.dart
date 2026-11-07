@@ -5,17 +5,128 @@ import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_agent_model
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_source_location.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/models/ai_visual_attachment.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_agent_repository.dart';
+import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_context_source.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/repositories/ai_prompt_store.dart';
 import 'package:flow_muse/features/whiteboard/ai_assistant/views/ai_agent_dialog.dart';
 import 'package:flow_muse/features/whiteboard/ink_recognition/native_http_client.dart';
+import 'package:flow_muse/features/whiteboard/editor_core/flow_muse_whiteboard_editor.dart'
+    hide Element, TextAlign;
 import 'package:flow_muse/features/whiteboard/speech_recognition/models/speech_recognition_event.dart';
 import 'package:flow_muse/features/whiteboard/speech_recognition/services/speech_recognition_service.dart';
 import 'package:flow_muse/shared/storage/local_settings_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('平板双侧面板对齐，缩窄和键盘不遮挡操作，隐藏后保留输入', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 850));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.view.resetViewInsets);
+    final controller = MarkdrawController()..switchTool(ToolType.rectangle);
+    addTearDown(controller.dispose);
+    final panel = AiAgentPanel(
+      repository: _FakeAiAgentRepository(),
+      noteTitle: '面板布局测试',
+      texts: const [],
+      contextTruncated: false,
+      contextLabel: '未添加笔记来源',
+      sourceProvider: (scope) => readAiAgentSource(controller, scope),
+      promptStore: AiPromptStore(_MemorySettings()),
+      onApply: (_) async {},
+      onClose: () {},
+    );
+    late StateSetter update;
+    var visible = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            update = setState;
+            return Scaffold(
+              body: MarkdrawEditor(
+                controller: controller,
+                assistantPanel: Visibility(
+                  visible: visible,
+                  maintainState: true,
+                  child: panel,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final properties = find.byType(PropertyPanel);
+    final assistant = find.byKey(const ValueKey('editor-assistant-panel'));
+    void expectAligned() {
+      final left = tester.getRect(properties);
+      final right = tester.getRect(assistant);
+      expect(left.top, closeTo(right.top, 1));
+      expect(left.bottom, closeTo(right.bottom, 1));
+      expect(left.overlaps(right), isFalse);
+    }
+
+    expectAligned();
+    expect(tester.getSize(assistant).width, 360);
+    final titleTop = tester.getTopLeft(find.text('工具属性')).dy;
+    await tester.drag(
+      find.descendant(of: properties, matching: find.byType(ListView)),
+      const Offset(0, -400),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('工具属性')).dy, titleTop);
+
+    await tester.enterText(find.byType(TextField).first, '保留正在编辑的指令');
+    await tester.tap(find.text('选择来源'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('整篇笔记'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    update(() => visible = false);
+    await tester.pump();
+    update(() => visible = true);
+    await tester.pumpAndSettle();
+    expect(find.text('保留正在编辑的指令'), findsOneWidget);
+
+    tester
+        .widget<DesktopToolbar>(find.byType(DesktopToolbar))
+        .onDockChanged
+        ?.call(ToolbarDock.left);
+    await tester.pumpAndSettle();
+    expectAligned();
+    expect(
+      tester.getRect(assistant).left,
+      lessThan(tester.getRect(properties).left),
+    );
+    expect(
+      tester
+          .getRect(assistant)
+          .overlaps(tester.getRect(find.byType(DesktopToolbar))),
+      isFalse,
+    );
+
+    await tester.binding.setSurfaceSize(const Size(900, 700));
+    await tester.pumpAndSettle();
+    expectAligned();
+    tester.view.viewInsets = FakeViewPadding(
+      bottom: 350 * tester.view.devicePixelRatio,
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getRect(assistant).bottom, lessThanOrEqualTo(350));
+    expect(tester.getRect(find.text('发送')).bottom, lessThanOrEqualTo(350));
+    tester.view.resetViewInsets();
+    await tester.binding.setSurfaceSize(const Size(375, 700));
+    await tester.pumpAndSettle();
+    expect(properties, findsNothing);
+    expect(tester.getRect(assistant).left, greaterThanOrEqualTo(12));
+    expect(tester.getRect(assistant).right, lessThanOrEqualTo(363));
+    expect(find.text('保留正在编辑的指令'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   const kTinyPng =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 

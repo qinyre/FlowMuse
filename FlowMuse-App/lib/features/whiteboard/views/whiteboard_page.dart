@@ -167,7 +167,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
   bool _disposingOrLeaving = false;
   bool _handlingBack = false;
   bool _editorPreferencesApplied = false;
-  final _aiPanelPortal = OverlayPortalController();
   AiAgentPanel? _aiPanel;
   bool _aiCaptureModeActive = false;
   AiSourceLocation? _viewedAiSource;
@@ -987,58 +986,56 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
       _viewedAiSource = null;
       _aiSpeechInputActive = true;
     });
-    _aiPanelPortal.show();
     unawaited(_speechRecognitionService.cancel());
   }
 
-  Widget _buildAiPanel(BuildContext overlayContext) {
+  Widget? _buildAiPanel() {
     final panel = _aiPanel;
-    if (panel == null) return const SizedBox.shrink();
-    final size = MediaQuery.sizeOf(context);
-    final padding = MediaQuery.paddingOf(context);
-    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
-    final safeTop = padding.top + 16;
-    final safeBottom = max(keyboardInset, padding.bottom + 120) + 16;
-    final availableHeight = max(0.0, size.height - safeTop - safeBottom);
-    final panelWidth = size.width >= 900 ? 420.0 : min(360.0, size.width - 24);
-    final panelHeight = min(520.0, availableHeight);
-    final verticalSpace = availableHeight - panelHeight;
-    final panelTop = safeTop + min(verticalSpace, verticalSpace / 2 + 48);
-    return Positioned(
-      top: panelTop,
-      right: 12,
-      width: panelWidth,
-      height: panelHeight,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Visibility(
-              visible: !_aiCaptureModeActive && _viewedAiSource == null,
-              maintainState: true,
-              maintainAnimation: true,
-              child: Material(
-                elevation: 12,
-                shadowColor: Theme.of(
-                  overlayContext,
-                ).colorScheme.shadow.withValues(alpha: 0.24),
-                clipBehavior: Clip.antiAlias,
+    if (panel == null) return null;
+    final colors = Theme.of(context).colorScheme;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Visibility(
+            visible: !_aiCaptureModeActive && _viewedAiSource == null,
+            maintainState: true,
+            maintainAnimation: true,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.surface,
                 borderRadius: BorderRadius.circular(12),
-                child: panel,
+                border: Border.all(
+                  color: colors.outlineVariant.withValues(alpha: 0.7),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.shadow.withValues(alpha: 0.1),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(1),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(11),
+                  child: panel,
+                ),
               ),
             ),
           ),
-          if (_viewedAiSource != null)
-            Positioned(
-              right: 0,
-              top: 0,
-              child: FilledButton.tonalIcon(
-                onPressed: _returnToAiReply,
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('返回 AI 回复'),
-              ),
+        ),
+        if (_viewedAiSource != null)
+          Positioned(
+            right: 0,
+            top: 0,
+            child: FilledButton.tonalIcon(
+              onPressed: _returnToAiReply,
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('返回 AI 回复'),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -1102,7 +1099,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
 
   void _closeAiPanel() {
     if (_aiCaptureModeActive) _handleRegionCancel();
-    _aiPanelPortal.hide();
     setState(() {
       _aiPanel = null;
       _viewedAiSource = null;
@@ -2921,10 +2917,6 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
             bottom: false,
             child: Stack(
               children: [
-                OverlayPortal(
-                  controller: _aiPanelPortal,
-                  overlayChildBuilder: _buildAiPanel,
-                ),
                 NoteSplitWorkspace(
                   reference: _referenceNote,
                   loadScene: ref
@@ -2934,6 +2926,7 @@ class _WhiteboardPageState extends ConsumerState<WhiteboardPage>
                   onClose: () => setState(() => _referenceNote = null),
                   child: MarkdrawEditor(
                     controller: _markdrawController,
+                    assistantPanel: _buildAiPanel(),
                     collaborationFocusLabel: focusStatus?.label,
                     collaborationFocusDescription: focusStatus?.description,
                     onExitCollaborationFocus: _exitFocus,

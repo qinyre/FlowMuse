@@ -1,6 +1,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' show max, min;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart';
@@ -90,6 +91,7 @@ class MarkdrawEditor extends StatefulWidget {
     this.fingerDrawingEnabled = false,
     this.onFingerDrawingEnabledChanged,
     this.onAiPressed,
+    this.assistantPanel,
     this.selectionActions = const {},
     this.onAskCurrentPage,
     this.canvasOverlayBuilder,
@@ -185,6 +187,7 @@ class MarkdrawEditor extends StatefulWidget {
   final VoidCallback? onEyedropperPressed;
 
   final VoidCallback? onAiPressed;
+  final Widget? assistantPanel;
   final Map<String, VoidCallback> selectionActions;
   final VoidCallback? onAskCurrentPage;
   final Widget Function(ViewportState viewport)? canvasOverlayBuilder;
@@ -784,6 +787,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
               return _buildBody(
                 isCompact: isCompact,
                 width: constraints.maxWidth,
+                height: constraints.maxHeight,
               );
             },
           ),
@@ -792,7 +796,11 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     );
   }
 
-  Widget _buildBody({required bool isCompact, required double width}) {
+  Widget _buildBody({
+    required bool isCompact,
+    required double width,
+    required double height,
+  }) {
     final showChrome = !_controller.zenMode;
     final showEditChrome = showChrome && !_controller.viewMode;
     final overview = showChrome && widget.pageNavigationEnabled
@@ -837,16 +845,54 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
         _controlGroupPosition == ControlGroupPosition.bottomLeft;
     final propertyPanelSharesControls =
         showDetachedControls && propertyPanelOnRight != controlGroupOnLeft;
-    final propertyPanelTop =
+    var propertyPanelTop =
         (propertyPanelOnRight ? rightChromeOffset : topChromeOffset) +
         (propertyPanelSharesControls && controlGroupAtTop
             ? _controlGroupReservedExtent
             : 0);
-    final propertyPanelBottom =
+    var propertyPanelBottom =
         bottomChromeOffset +
         (propertyPanelSharesControls && !controlGroupAtTop
             ? _controlGroupReservedExtent
             : 0);
+    final hasAssistant = widget.assistantPanel != null;
+    final assistantToolbarInset =
+        showNavigationTools && _toolbarDock != ToolbarDock.top ? 52.0 : 0.0;
+    final showProperties =
+        showEditChrome &&
+        overview == null &&
+        !isCompact &&
+        widget.config.showPropertyPanel &&
+        (_controller.selectedElements.isNotEmpty || _controller.isCreationTool);
+    final assistantSharesControls =
+        showDetachedControls && propertyPanelOnRight == controlGroupOnLeft;
+    final assistantTopInset =
+        (propertyPanelOnRight ? topChromeOffset : rightChromeOffset) +
+        (assistantSharesControls && controlGroupAtTop
+            ? _controlGroupReservedExtent
+            : 0);
+    final assistantBottomInset =
+        bottomChromeOffset +
+        (assistantSharesControls && !controlGroupAtTop
+            ? _controlGroupReservedExtent
+            : 0);
+    // Keep the input and footer reachable when the keyboard reduces the editor.
+    final assistantTop = min(
+      showProperties && !_propertyPanelCollapsed
+          ? max(propertyPanelTop, assistantTopInset)
+          : assistantTopInset,
+      max(safeArea.top + 12, height - 252),
+    );
+    final assistantBottom = min(
+      showProperties && !_propertyPanelCollapsed
+          ? max(propertyPanelBottom, assistantBottomInset)
+          : assistantBottomInset,
+      max(bottomChromeOffset, height - assistantTop - 240),
+    );
+    if (hasAssistant && !_propertyPanelCollapsed) {
+      propertyPanelTop = assistantTop;
+      propertyPanelBottom = assistantBottom;
+    }
     final controlGroupSharesVerticalToolbar =
         showNavigationTools &&
         _toolbarDock != ToolbarDock.top &&
@@ -1182,12 +1228,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
             child: _buildDetachedControlGroups(),
           ),
         // Keep the panel anchored below the toolbar as its contents change.
-        if (showEditChrome &&
-            overview == null &&
-            !isCompact &&
-            widget.config.showPropertyPanel &&
-            (_controller.selectedElements.isNotEmpty ||
-                _controller.isCreationTool))
+        if (showProperties)
           Positioned(
             top: propertyPanelTop,
             bottom: propertyPanelBottom,
@@ -1210,6 +1251,7 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                     )
                   : PropertyPanel(
                       controller: _controller,
+                      expand: hasAssistant,
                       onCollapse: _collapsePropertyPanel,
                       dockOnRight: propertyPanelOnRight,
                       selectionActions: widget.selectionActions,
@@ -1261,6 +1303,26 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 onFinish: _speechService.stop,
               ),
             ),
+          ),
+        if (hasAssistant)
+          Positioned(
+            key: const ValueKey('editor-assistant-panel'),
+            top: assistantTop,
+            bottom: assistantBottom,
+            left: propertyPanelOnRight
+                ? safeArea.left + 12 + assistantToolbarInset
+                : null,
+            right: propertyPanelOnRight
+                ? null
+                : safeArea.right + 12 + assistantToolbarInset,
+            width: min(
+              width >= 1400 ? 420.0 : 360.0,
+              max(
+                0.0,
+                width - safeArea.horizontal - 24 - assistantToolbarInset,
+              ),
+            ),
+            child: widget.assistantPanel!,
           ),
       ],
     );
