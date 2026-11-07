@@ -834,6 +834,18 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
     final controlGroupOnLeft =
         _controlGroupPosition == ControlGroupPosition.topLeft ||
         _controlGroupPosition == ControlGroupPosition.bottomLeft;
+    final propertyPanelSharesControls =
+        showDetachedControls && propertyPanelOnRight != controlGroupOnLeft;
+    final propertyPanelTop =
+        (propertyPanelOnRight ? rightChromeOffset : topChromeOffset) +
+        (propertyPanelSharesControls && controlGroupAtTop
+            ? _controlGroupReservedExtent
+            : 0);
+    final propertyPanelBottom =
+        bottomChromeOffset +
+        (propertyPanelSharesControls && !controlGroupAtTop
+            ? _controlGroupReservedExtent
+            : 0);
     final controlGroupSharesVerticalToolbar =
         showNavigationTools &&
         _toolbarDock != ToolbarDock.top &&
@@ -1168,44 +1180,43 @@ class _MarkdrawEditorState extends State<MarkdrawEditor>
                 : (overview != null && !overviewOnLeft ? 304 : 12),
             child: _buildDetachedControlGroups(),
           ),
-        // Floating property panel — desktop left side
+        // Center the panel within the free space on its docked side.
         if (showEditChrome &&
             overview == null &&
             !isCompact &&
             widget.config.showPropertyPanel &&
             (_controller.selectedElements.isNotEmpty ||
                 _controller.isCreationTool))
-          if (_propertyPanelCollapsed)
-            Positioned(
-              top: propertyPanelOnRight ? rightChromeOffset : topChromeOffset,
-              left: propertyPanelOnRight ? null : 0,
-              right: propertyPanelOnRight ? 0 : null,
-              child: StudioRailIconButton(
-                tooltip: '展开属性面板',
-                size: 40,
-                onPressed: _expandPropertyPanel,
-                child: const Icon(Icons.tune, size: 20),
-              ),
-            )
-          else
-            Positioned(
-              top: propertyPanelOnRight ? rightChromeOffset : topChromeOffset,
-              left: propertyPanelOnRight ? null : 12,
-              right: propertyPanelOnRight ? 12 : null,
-              bottom: 12,
-              child: Align(
-                alignment: propertyPanelOnRight
-                    ? Alignment.topRight
-                    : Alignment.topLeft,
-                child: PropertyPanel(
-                  controller: _controller,
-                  onCollapse: _collapsePropertyPanel,
-                  dockOnRight: propertyPanelOnRight,
-                  selectionActions: widget.selectionActions,
-                  attributionActionResolver: widget.attributionActionResolver,
-                ),
-              ),
+          Positioned(
+            top: propertyPanelTop,
+            bottom: propertyPanelBottom,
+            left: propertyPanelOnRight
+                ? null
+                : safeArea.left + (_propertyPanelCollapsed ? 0 : 12),
+            right: propertyPanelOnRight
+                ? safeArea.right + (_propertyPanelCollapsed ? 0 : 12)
+                : null,
+            child: Align(
+              alignment: propertyPanelOnRight
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
+              child: _propertyPanelCollapsed
+                  ? StudioRailIconButton(
+                      tooltip: '展开属性面板',
+                      size: 40,
+                      onPressed: _expandPropertyPanel,
+                      child: const Icon(Icons.tune, size: 20),
+                    )
+                  : PropertyPanel(
+                      controller: _controller,
+                      onCollapse: _collapsePropertyPanel,
+                      dockOnRight: propertyPanelOnRight,
+                      selectionActions: widget.selectionActions,
+                      attributionActionResolver:
+                          widget.attributionActionResolver,
+                    ),
             ),
+          ),
         if (overview != null)
           Positioned(
             top: overviewOnLeft ? topChromeOffset : rightChromeOffset,

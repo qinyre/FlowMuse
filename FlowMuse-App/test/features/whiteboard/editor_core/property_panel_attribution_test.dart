@@ -85,7 +85,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('笔迹属性按内容收高，保留 AI 与更多操作入口', (tester) async {
+  testWidgets('选中笔迹和自由绘制的属性面板均在画布侧边居中', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 850));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final stroke = FreedrawElement(
@@ -112,7 +112,16 @@ void main() {
     await tester.pumpAndSettle();
 
     final panel = find.byType(PropertyPanel);
+    final canvas = find.byType(EditorCanvas);
+    void expectCentered() {
+      expect(
+        tester.getCenter(panel).dy,
+        closeTo(tester.getCenter(canvas).dy, 1),
+      );
+    }
+
     final collapsedHeight = tester.getSize(panel).height;
+    expectCentered();
     expect(collapsedHeight, lessThan(400));
     expect(find.text('笔迹粗细'), findsOneWidget);
     expect(find.text('透明度'), findsOneWidget);
@@ -130,9 +139,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('图层顺序'), findsOneWidget);
     expect(tester.getSize(panel).height, greaterThan(collapsedHeight));
+    expectCentered();
     await tester.tap(find.text('收起操作'));
     await tester.pumpAndSettle();
     expect(tester.getSize(panel).height, collapsedHeight);
+
+    controller.applyResult(SetSelectionResult({}));
+    controller.switchTool(ToolType.freedraw);
+    await tester.pumpAndSettle();
+    expect(find.text('自由绘制'), findsOneWidget);
+    expectCentered();
     expect(tester.takeException(), isNull);
   });
 

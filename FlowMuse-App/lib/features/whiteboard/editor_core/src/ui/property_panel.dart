@@ -33,6 +33,12 @@ class PropertyPanel extends StatelessWidget {
     final inkOnly =
         elements.isNotEmpty && elements.every((e) => e is FreedrawElement);
     final isEditingText = controller.editingTextElementId != null;
+    final activeTool = controller.editorState.activeToolType;
+    final title = switch (elements.length) {
+      0 => activeTool == ToolType.freedraw ? '自由绘制' : null,
+      1 => inkOnly ? '笔迹属性' : '选区属性',
+      _ => inkOnly ? '笔迹属性' : '已选 ${elements.length} 项',
+    };
 
     ElementStyle style;
     bool isLocked;
@@ -117,13 +123,9 @@ class PropertyPanel extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: elements.isNotEmpty
+                      child: title != null
                           ? Text(
-                              inkOnly
-                                  ? '笔迹属性'
-                                  : elements.length == 1
-                                  ? '选区属性'
-                                  : '已选 ${elements.length} 项',
+                              title,
                               style: Theme.of(context).textTheme.titleSmall,
                             )
                           : const SizedBox.shrink(),
